@@ -50,7 +50,7 @@ In priority order. When two values conflict, the higher one wins.
 - **Strict evaluation**, not lazy. Laziness makes memory and performance hard to reason about in backend systems.
 - **A short error-propagation operator** (like Rust's `?`) so `Result` handling stays cheap. Exact syntax to be settled with errors and effects.
 - **No user-defined symbolic operators** (e.g. `|+|`, `>>=`).
-- **No implicit resolution magic** (e.g. Scala 2 implicits).
+- **No hidden resolution magic.** Type class instances are resolved implicitly, but only from an explicitly imported, bounded set of places (see type classes below). Nothing like Scala 2's implicit conversions or whole-program implicit search.
 - **Performance target:** roughly Go-level performance, traded away for guarantees where needed.
 
 ## 2. Type system
@@ -66,10 +66,36 @@ In priority order. When two values conflict, the higher one wins.
 - **Pragmatic local type inference, like Go and Scala.** Function signatures are written out, which doubles as documentation, and local values are inferred.
 - **Scala-style inline lambdas.** Lambda parameter types are inferred from the expected type at the call site, so `users.map(u => u.name)` needs no annotations.
 
+### Type classes
+
+- **Type classes are first-class.** They attach behaviour to a *type*, not just to values of it: type-level operations like `empty`, `decode`, `parse`, or `default` that need no value to call them on.
+- **Instances can be declared for constrained types.** For example, `instance Decode[Int where positive]` decodes an `Int` and proves `positive` in one step, so a request type with refined fields decodes into already-proven values.
+- **More than one instance per (class, type) may exist.** For example, several JSON encodings or orderings of the same type.
+- **The instance search space is explicit.** Instances are looked up only in explicitly imported instance scopes, never by scanning the whole program. Which instance applies is determined by what the file imports.
+- **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
+
+Sketch (syntax not final):
+
+```
+typeclass Monoid[T] {
+  def empty: T
+  def combine(a: T, b: T): T
+}
+
+def sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
+```
+
 ### Open questions
 
 - Scala-style placeholder shorthand for lambdas (e.g. `_.name`), or always named parameters?
 - Can a sealed type's variants be spread over several files in one package, or must they sit in one declaration?
+- Keep structural interfaces alongside type classes (interfaces for value behaviour, type classes for type-level behaviour), or let type classes replace interfaces?
+- What happens when two in-scope instances match: a compile error, with the fix being to narrow the imports or pass the instance explicitly at the call site?
+- Are instances declared next to the type or the type class found without an import (default instances), or must every instance be imported?
+- Instance-dependent data structures: should a `Set` or `Map` capture its ordering or hash instance when it is built, so it cannot be used later with a different instance?
+- Instance choice for constrained types: exact match on the named refined type only, or "most specific wins" using `infer` rules?
+- Automatic derivation (`derive Eq, Show, Decode`) in v0.1?
+- Higher-kinded types (`Functor[List]`): leave out of v0.1 but keep room in the syntax?
 
 ## Open questions
 
