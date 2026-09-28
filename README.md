@@ -11,11 +11,12 @@ Think Go's tooling simplicity, with the functional style of Scala and Haskell, a
 ## Goals
 
 - **Pragmatic high correctness for backend systems.** That is the whole point.
-- **Immutable by default.** Values don't change. Mutation is an explicit opt-in, confined to specific mutable types.
+- **Immutable by default.** Values don't change. In v0.1 there is no mutable state at all; later versions may add explicit opt-in mutable types.
+- **No null, no exceptions.** Optional values must be checked before use, and failures are values. Panics exist, but can't be caught.
 - **Strict rules, trivially easy.** Declaring what must hold ("amount is positive", "user is non-nil", "list is non-empty") should be as cheap as writing an `if`. The compiler proves it at every call site or fails the build. This builds on ideas from [proven](https://github.com/GiGurra/proven).
 - **Functional style.** Algebraic data types, pattern matching, expressions over statements, and first-class functions.
 - **Go-like tooling.** One binary with commands like `bork build`, `bork test`, `bork fmt`. Fast builds. No build-system archaeology.
-- **Compiles to Go** (first version). We reuse Go's runtime, GC, concurrency, and ecosystem, and get the backend language right before worrying about anything else.
+- **Compiles to Go** (first version). Go is only a compilation target: we get its runtime, GC, goroutines, and cross-platform builds without writing our own backend. bork code does not import Go packages, and there is no FFI in v0.1.
 
 ## Non-goals
 
@@ -25,7 +26,7 @@ Think Go's tooling simplicity, with the functional style of Scala and Haskell, a
 
 ## Status
 
-Early design. Requirements and design docs will land under `docs/` as they take shape.
+Early design. See [docs/requirements.md](docs/requirements.md) for what has been decided so far.
 
 ## License
 
