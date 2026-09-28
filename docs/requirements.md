@@ -11,7 +11,7 @@ v0.1 is deliberately feature-sparse. It exists to prove the core idea (below): *
 
 **Values never change, but what we know about them only grows, and that knowledge is part of their type.**
 
-When code discovers a property of a value (by a guard, a `match`, a boundary check, or a function's promised result), the property becomes part of that value's type from that point on. It travels with the value as it is passed forward into other functions, records, and collections.
+When code discovers a property of a value (by a guard, a `match`, a boundary check, or a function's promised result), the property becomes part of that value's type from that point on, as the value is passed forward into other functions, records, and collections. (The compiler derives these facts lazily, only where something needs them; see below.)
 
 ```
 fn handle(raw: Int, name: Option[String]): Result[Receipt, HandleError] = {
@@ -37,6 +37,42 @@ What follows from this:
 - **Facts live inside data.** Once `user.age` is known to satisfy `adult`, that is part of `user`'s type for as long as `user` exists.
 - **Branches merge by intersection.** After an `if`/`else`, only the facts that hold on every path remain.
 - **Zero runtime cost.** Facts are erased when compiling to Go. At runtime, `Int where positive` is just an `int`.
+
+### Facts are derived lazily, on demand
+
+Facts exist only at compile time, and are never computed unless something needs them. The compiler does not carry every known fact forward. It works backwards from requirements:
+
+1. **Compile without constraints.** Ordinary type checking first, ignoring all `where` clauses.
+2. **Collect obligations at the leaves.** Every call to a function with a constrained parameter (or construction of a constrained record) creates an obligation, e.g. "at this call site, `amount` must be `positive`".
+3. **Resolve each obligation backwards** from its call site, through guards, `match`es, bindings, and promised results, until the fact is found (a guard, a literal, a boundary check, a declared result, an inference rule) or it is clear that it cannot be.
+4. **Nothing else is derived.** Facts no one asks for are never computed.
+
+This also settles facts about several values (`start <= end`). Such a fact is only ever asked for where some callee requires it, and resolved from there. A value that goes on alone, without the other, causes no trouble, because nothing asks about the relation.
+
+### Callers prove or declare
+
+When an obligation's backward search reaches one of the calling function's own parameters, the caller must do one of two things:
+
+- **Prove it**, with a guard, a `match`, a boundary check, and so on, before the call; or
+- **Declare the same requirement** on its own parameter, which passes the obligation on to *its* callers.
+
+There are **no inferred preconditions.** A requirement never climbs silently from a callee to its callers. Every function's requirements are written in its signature, so signatures stay complete and trustworthy, packages compile on their own, and recursion needs no special handling.
+
+```
+fn transfer(amount: Money where positive) = ...
+
+fn payOut(amount: Money) = {
+  transfer(amount)              // build error: positive not proven
+}
+
+fn payOutChecked(amount: Money) = {
+  if positive(amount) { transfer(amount) }   // proven here
+}
+
+fn payOutDeclared(amount: Money where positive) = {
+  transfer(amount)              // declared: payOutDeclared's callers must prove it
+}
+```
 
 ## 1. Core values
 
@@ -219,7 +255,6 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 - **Purity:** does the compiler infer which functions are pure, or must they be marked (e.g. `pred` or `pure`)? Either way, predicates may only call pure code.
 - **Compile-time I/O:** may compile-time code read files (as q allows, e.g. baking in a config file), or is it strictly pure for reproducible builds?
 - **Exported return types:** do callers see only the facts a signature declares, or also facts the compiler derives from the body? A proposal: exported functions expose only the declared facts (the signature is the contract), and private functions may expose derived ones.
-- **Relations between several values** (`start <= end`): whose type holds the fact? Both values, the scope, or a record that bundles them?
 - **Widening:** can a type deliberately be widened back to fewer facts (e.g. `x as Int`)?
 
 ## Open questions
