@@ -72,6 +72,7 @@ In priority order. When two values conflict, the higher one wins.
 - **Instances can be declared for constrained types.** For example, `instance Decode[Int where positive]` decodes an `Int` and proves `positive` in one step, so a request type with refined fields decodes into already-proven values.
 - **More than one instance per (class, type) may exist.** For example, several JSON encodings or orderings of the same type.
 - **The instance search space is explicit.** Instances are looked up only in explicitly imported instance scopes, never by scanning the whole program. Which instance applies is determined by what the file imports.
+- **Both structural interfaces and type classes exist**, as different tools for different situations. Structural interfaces describe what a value can do. Type classes attach behaviour to a type, including types you don't own.
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
 Sketch (syntax not final):
@@ -89,7 +90,6 @@ def sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 
 - Scala-style placeholder shorthand for lambdas (e.g. `_.name`), or always named parameters?
 - Can a sealed type's variants be spread over several files in one package, or must they sit in one declaration?
-- Keep structural interfaces alongside type classes (interfaces for value behaviour, type classes for type-level behaviour), or let type classes replace interfaces?
 - What happens when two in-scope instances match: a compile error, with the fix being to narrow the imports or pass the instance explicitly at the call site?
 - Are instances declared next to the type or the type class found without an import (default instances), or must every instance be imported?
 - Instance-dependent data structures: should a `Set` or `Map` capture its ordering or hash instance when it is built, so it cannot be used later with a different instance?
