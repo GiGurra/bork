@@ -1,7 +1,7 @@
 # bork requirements
 
 > Living document. Each section is worked through in discussion and recorded here once agreed.
-> **Decided** items are commitments for v0.1. **Proposed** items are on the table but not yet confirmed.
+> **Decided** items are commitments for v0.1. Open questions are listed per section.
 
 ## Scope of v0.1
 
@@ -45,13 +45,31 @@ In priority order. When two values conflict, the higher one wins.
 - **No access to Go's standard library or Go packages from bork code.** bork code never calls Go directly. bork has its own standard library. The Go code the compiler generates, and the bork standard library's implementation, can freely use Go's standard library under the hood. That is an implementation detail, invisible to bork programs.
 - **No FFI in v0.1.** Calling into Go (or anything else) from bork may come later, as an explicit boundary.
 
-## Proposed (not yet confirmed)
+### General
 
 - **Strict evaluation**, not lazy. Laziness makes memory and performance hard to reason about in backend systems.
-- **A short error-propagation operator** (like Rust's `?`) so `Result` handling stays cheap.
+- **A short error-propagation operator** (like Rust's `?`) so `Result` handling stays cheap. Exact syntax to be settled with errors and effects.
 - **No user-defined symbolic operators** (e.g. `|+|`, `>>=`).
 - **No implicit resolution magic** (e.g. Scala 2 implicits).
 - **Performance target:** roughly Go-level performance, traded away for guarantees where needed.
+
+## 2. Type system
+
+### Decided
+
+- **Records and sum types (ADTs) are the core data types.** Records are product types. Sum types are tagged unions whose variants can carry data.
+- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `Result[T, E]`.
+- **Variance: planned, not in v0.1.** Scala-style declaration-site variance controls (covariant and contravariant type parameters) are planned for a later version. The syntax should leave room for them.
+- **Structural typing for interfaces and constraints.** A type satisfies an interface or generic constraint implicitly, by having the required shape (like Go). No `implements` declarations.
+- **Sealed types and traits are opt-in.** Marking a type sealed closes its set of variants to its own declaration. That is what makes exhaustive matching possible without a default case. Matching on an open (unsealed) type always needs a default case.
+- **Immutable persistent collections** in the standard library: `List`, `Map`, `Set`.
+- **Pragmatic local type inference, like Go and Scala.** Function signatures are written out, which doubles as documentation, and local values are inferred.
+- **Scala-style inline lambdas.** Lambda parameter types are inferred from the expected type at the call site, so `users.map(u => u.name)` needs no annotations.
+
+### Open questions
+
+- Scala-style placeholder shorthand for lambdas (e.g. `_.name`), or always named parameters?
+- Can a sealed type's variants be spread over several files in one package, or must they sit in one declaration?
 
 ## Open questions
 
@@ -62,7 +80,7 @@ In priority order. When two values conflict, the higher one wins.
 ## Topics still to discuss
 
 1. ~~Core values~~ (above)
-2. Type system: ADTs, generics, interfaces or traits, what immutability means for records and collections
+2. ~~Type system~~ (above)
 3. Contract and proof model: bringing proven's ideas into the language
 4. Errors and effects: the `Result` shape and propagation syntax
 5. Concurrency: goroutines, channels, and the (later) isolation model
