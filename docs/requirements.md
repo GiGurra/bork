@@ -73,6 +73,10 @@ In priority order. When two values conflict, the higher one wins.
 - **More than one instance per (class, type) may exist.** For example, several JSON encodings or orderings of the same type.
 - **The instance search space is explicit.** Instances are looked up only in explicitly imported instance scopes, never by scanning the whole program. Which instance applies is determined by what the file imports.
 - **Both structural interfaces and type classes exist**, as different tools for different situations. Structural interfaces describe what a value can do. Type classes attach behaviour to a type, including types you don't own.
+- **No automatic default instances.** The compiler never picks up an instance on its own, not even one declared next to the type or the type class. A library may expose a default set of instances, but it must still be imported explicitly. This is an experiment: we'll try it and see how it feels in practice.
+- **Ambiguous instances are a compile error.** If more than one in-scope instance matches, including several instances for constrained types that a value satisfies, the build fails.
+- **Automatic derivation in v0.1:** `derive Eq, Show, Decode` (and similar) for records and ADTs.
+- **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
 Sketch (syntax not final):
@@ -90,12 +94,8 @@ def sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 
 - Scala-style placeholder shorthand for lambdas (e.g. `_.name`), or always named parameters?
 - Can a sealed type's variants be spread over several files in one package, or must they sit in one declaration?
-- What happens when two in-scope instances match: a compile error, with the fix being to narrow the imports or pass the instance explicitly at the call site?
-- Are instances declared next to the type or the type class found without an import (default instances), or must every instance be imported?
-- Instance-dependent data structures: should a `Set` or `Map` capture its ordering or hash instance when it is built, so it cannot be used later with a different instance?
-- Instance choice for constrained types: exact match on the named refined type only, or "most specific wins" using `infer` rules?
-- Automatic derivation (`derive Eq, Show, Decode`) in v0.1?
-- Higher-kinded types (`Functor[List]`): leave out of v0.1 but keep room in the syntax?
+- How is an instance passed explicitly at a call site, when narrowing imports is not enough (e.g. `xs.sorted(using byName)`)?
+- Instance-dependent collections: a `Set` or `Map` built with one ordering or hash instance could later be used with a different one, and would then silently misbehave. Should collections capture their instance when they are built, so that cannot happen?
 
 ## Open questions
 
