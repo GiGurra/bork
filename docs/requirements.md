@@ -5,7 +5,38 @@
 
 ## Scope of v0.1
 
-v0.1 is deliberately feature-sparse. It exists to prove the core idea: **when everything is immutable, every proven fact stays true**, so correctness checks are cheap, local, and permanent. Anything that doesn't serve that idea waits.
+v0.1 is deliberately feature-sparse. It exists to prove the core idea (below): **when everything is immutable, every proven fact stays true**, so correctness checks are cheap, local, and permanent. Anything that doesn't serve that idea waits.
+
+## The core idea: immutable values, growing knowledge
+
+**Values never change, but what we know about them only grows, and that knowledge is part of their type.**
+
+When code discovers a property of a value (by a guard, a `match`, a boundary check, or a function's promised result), the property becomes part of that value's type from that point on. It travels with the value as it is passed forward into other functions, records, and collections.
+
+```
+fn handle(raw: Int, name: Option[String]): Result[Receipt, HandleError] = {
+  // raw: Int
+  if !positive(raw) { return Err(NotPositive) }
+  // raw: Int where positive
+
+  match name {
+    Some(n) => greet(n)     // n: String
+    None    => greetAnon()
+  }
+
+  transfer(raw)             // transfer needs Int where positive, and raw has it
+}
+```
+
+What follows from this:
+
+- **One mechanism, many sources.** Checking an `Option`, an `if` guard, a `match`, a boundary `prove`, an inference rule, and a function's postcondition all do the same thing: add a fact to a type. The statically checked `Option` is simply the most common case.
+- **Immutability is what makes it sound.** A fact about an immutable value can never become false, so facts are only ever added, never invalidated. There is no need to track writes or aliasing.
+- **More facts means a more specific type.** `Int where positive` can be used anywhere an `Int` is expected. Because nothing is mutable, `List[Int where positive]` is also safely usable as a `List[Int]`.
+- **Facts flow through generics.** Passing `x: Int where positive` through `identity[T]` keeps the fact, because `T` is `Int where positive`.
+- **Facts live inside data.** Once `user.age` is known to satisfy `adult`, that is part of `user`'s type for as long as `user` exists.
+- **Branches merge by intersection.** After an `if`/`else`, only the facts that hold on every path remain.
+- **Zero runtime cost.** Facts are erased when compiling to Go. At runtime, `Int where positive` is just an `int`.
 
 ## 1. Core values
 
@@ -83,11 +114,11 @@ Sketch (syntax not final):
 
 ```
 typeclass Monoid[T] {
-  def empty: T
-  def combine(a: T, b: T): T
+  fn empty: T
+  fn combine(a: T, b: T): T
 }
 
-def sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
+fn sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 ```
 
 ### Open questions
@@ -96,6 +127,100 @@ def sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 - Can a sealed type's variants be spread over several files in one package, or must they sit in one declaration?
 - How is an instance passed explicitly at a call site, when narrowing imports is not enough (e.g. `xs.sorted(using byName)`)?
 - Instance-dependent collections: a `Set` or `Map` built with one ordering or hash instance could later be used with a different one, and would then silently misbehave. Should collections capture their instance when they are built, so that cannot happen?
+
+## 3. Contracts and knowledge (in progress)
+
+> Nothing in this section is decided yet. The examples show the direction; the syntax is a sketch.
+
+### Constrained inputs: examples
+
+Parameters carry their requirements in the signature. One parameter per line, with trailing commas, so the formatter can align columns and diffs stay small.
+
+```
+fn transfer(
+  from:   AccountId,
+  to:     AccountId where notEqual(from),
+  amount: Money where positive and below(10_000),
+  note:   Option[String where nonEmpty and maxLen(280)],
+): Result[Receipt, TransferError] = {
+  ...
+}
+```
+
+Note that the constraint on `note` applies inside the `Option`. The note may be absent, but if it is present, it is non-empty and at most 280 characters.
+
+Named constrained types keep signatures short and give domain concepts a name:
+
+```
+type Port     = Int where between(1, 65535)
+type Email    = String where validEmail
+type UserName = String where nonEmpty and maxLen(100)
+
+fn connect(
+  host: String where nonEmpty,
+  port: Port,
+): Result[Conn, ConnectError]
+```
+
+Records with constrained fields, derived decoding, and knowledge that arrives at the boundary:
+
+```
+type CreateUser = {
+  name:  UserName,
+  email: Email,
+  age:   Option[Int where between(0, 150)],
+} derive (Decode)
+
+fn handleCreate(body: Json): Result[User, ApiError] = {
+  req = CreateUser.decode(body)?      // every field is proven here, once
+  createUser(req)                     // no re-validation downstream
+}
+```
+
+Postconditions: a function's return type can promise facts too.
+
+```
+fn clamp(
+  x:  Int,
+  lo: Int,
+  hi: Int where atLeast(lo),
+): Int where between(lo, hi) = ...
+```
+
+Generic functions that *add* knowledge (the long-term goal; needs predicates usable in type signatures):
+
+```
+fn filter[T](xs: List[T], p: Pred[T]): List[T where p]
+
+positives = numbers.filter(positive)   // List[Int where positive]
+```
+
+### Syntax notes
+
+- **`name: Type` with a colon** is the working assumption. Once constraints are attached, types become phrases (`Money where positive and below(10_000)`), and the colon keeps the name clearly apart from the type. It also matches Scala-style lambdas: `(u: User) => u.name`.
+  The Go-style alternative, `amount Money where positive`, reads well in short signatures but gets harder to scan as constraints grow.
+- **`and` combines predicates**, because a comma would clash with the comma between parameters.
+- **Predicates can take arguments** (`maxLen(280)`, `between(1, 65535)`), including other parameters (`notEqual(from)`, `atLeast(lo)`), which is how relations between values are expressed.
+
+### Compile-time evaluation
+
+bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https://github.com/GiGurra/q) and proven's literal checks, to infer that types and constraints are satisfied:
+
+- **Predicates on compile-time-known values are evaluated during compilation.** `connect("db", 5432)` is accepted because `between(1, 65535)(5432)` is computed at build time. `connect("db", 0)` fails the build. Unlike proven, this works for *any* predicate, not just a built-in set.
+- **Constants and named constrained values.** `defaultPort: Port = 8080` is checked once, when compiled.
+- **Explicit compile-time computation** of lookup tables, constants, and derived data, marked at the call site (as q does), with the result baked into the binary.
+- **Predicates must be pure.** Compile-time evaluation and sound proofs both depend on it: a predicate that reads a file or the clock would make proofs meaningless.
+
+### Open questions
+
+- **Colon or no colon** in parameter lists: `amount: Money` or `amount Money`?
+- **Function keyword:** `fn`, `func`, or `def`? The examples use `fn` for now. `def` is ambiguous (define *what*?), `func` is familiar from Go, and `fn` is the shortest and reads well in long signatures.
+- **Inline predicates:** only named predicates (`positive`), or also inline expressions (`where it > 0`)? Inline expressions require the compiler to recognise equivalent expressions.
+- **Purity:** does the compiler infer which functions are pure, or must they be marked (e.g. `pred` or `pure`)? Either way, predicates may only call pure code.
+- **Compile-time I/O:** may compile-time code read files (as q allows, e.g. baking in a config file), or is it strictly pure for reproducible builds?
+- **Exported return types:** do callers see only the facts a signature declares, or also facts the compiler derives from the body? A proposal: exported functions expose only the declared facts (the signature is the contract), and private functions may expose derived ones.
+- **Relations between several values** (`start <= end`): whose type holds the fact? Both values, the scope, or a record that bundles them?
+- **Widening:** can a type deliberately be widened back to fewer facts (e.g. `x as Int`)?
 
 ## Open questions
 
@@ -107,7 +232,7 @@ def sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 
 1. ~~Core values~~ (above)
 2. ~~Type system~~ (above)
-3. Contract and proof model: bringing proven's ideas into the language
+3. Contract and proof model: bringing proven's ideas into the language (in progress, above)
 4. Errors and effects: the `Result` shape and propagation syntax
 5. Concurrency: goroutines, channels, and the (later) isolation model
 6. Go interop: no FFI in v0.1; what the future boundary looks like
