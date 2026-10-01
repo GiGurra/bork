@@ -11,12 +11,14 @@ fn asValue(amounts: List[Int]): List[Int] {
   map(amounts, transfer)
 }
 
-// A guard in one lambda says nothing about another lambda's parameter.
-fn otherLambda(xs: List[Int]): List[Int] {
-  checked = filter(xs, x => positive(x))
+// Filtering by something else proves nothing about positive.
+pred small(x: Int) { x < 10 }
+
+fn otherCheck(xs: List[Int]): List[Int] {
+  checked = filter(xs, x => small(x))
   map(checked, y => transfer(y))
 }
 
 fn main() {
-  println(unchecked([1]), asValue([1]), otherLambda([1]))
+  println(unchecked([1]), asValue([1]), otherCheck([1]))
 }

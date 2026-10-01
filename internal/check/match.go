@@ -59,6 +59,37 @@ type PatField struct {
 // Narrowed is the type of the value a PatType lets through.
 func (p *Pat) Narrowed() Type { return newUnion(p.Members) }
 
+// patSources records where each name a pattern binds comes from: the
+// matched subject, the path to it, and (at the top) the union member
+// the pattern narrowed it to.
+func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Field, top bool) {
+	if p == nil {
+		return
+	}
+	if p.Bind != "" {
+		src := &PatSource{Subject: subject, Path: path, Field: field}
+		if top && p.Kind == PatType {
+			src.Member = p.Narrowed()
+		}
+		c.info.PatSources[p.BindNode] = src
+	}
+	var fields []*Field
+	switch {
+	case p.Variant != nil:
+		fields = p.Variant.Fields
+	case p.Kind == PatRecord:
+		if r, ok := p.Type.(*Record); ok {
+			fields = r.Fields
+		}
+	}
+	for _, pf := range p.Fields {
+		c.patSources(pf.Pat, subject, path+"."+pf.Name, findField(fields, pf.Name), false)
+	}
+	if p.Sub != nil {
+		c.patSources(p.Sub, subject, path, field, false)
+	}
+}
+
 func (c *checker) match(m *syntax.Match, want Type) Type {
 	st := c.expr(m.X)
 	if len(m.Arms) == 0 {
@@ -86,13 +117,7 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 			ok = false
 		} else {
 			c.info.ArmPats[arm] = p
-			if p.Bind != "" {
-				src := &PatSource{Subject: m.X}
-				if p.Kind == PatType {
-					src.Member = p.Narrowed()
-				}
-				c.info.PatSources[p.BindNode] = src
-			}
+			c.patSources(p, m.X, "", nil, true)
 		}
 		pats = append(pats, p)
 		armTypes = append(armTypes, c.exprWant(arm.Body, want))

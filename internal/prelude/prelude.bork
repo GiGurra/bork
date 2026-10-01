@@ -217,7 +217,10 @@ fn flatMap[A, B](xs: List[A], f: (A) => List[B]): List[B] unsafe go {
   return out
 }
 
-fn filter[T](xs: List[T], keep: (T) => Bool): List[T] unsafe go {
+// filter keeps the elements keep is true for. What keep says about
+// them is known afterwards: filter(xs, positive) is a
+// List[Int where positive].
+fn filter[T](xs: List[T], keep: (T) => Bool): List[T where keep] unsafe go {
   var out []T
   for _, x := range xs {
     if keep(x) {
@@ -237,7 +240,7 @@ fn fold[T, A](xs: List[T], initial: A, f: (A, T) => A): A unsafe go {
   return acc
 }
 
-fn find[T](xs: List[T], matches: (T) => Bool): Option[T] unsafe go {
+fn find[T](xs: List[T], matches: (T) => Bool): Option[T where matches] unsafe go {
   for _, x := range xs {
     if matches(x) {
       return Option_Some[T]{value: x}

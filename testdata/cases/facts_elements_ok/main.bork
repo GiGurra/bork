@@ -1,0 +1,63 @@
+pred positive(x: Int) { x > 0 }
+pred nonNegative(x: Int) { x >= 0 }
+pred small(x: Int) { x < 10 }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+
+rule positiveIsNonNegative(x: Int) { positive(x) => nonNegative(x) }
+
+fn transfer(amount: Int where positive): Int { amount * 100 }
+
+// Facts inside type arguments: every element, or the value in an Option.
+fn total(amounts: List[Int where positive]): Int {
+  amounts |> map(a => transfer(a)) |> fold(0, (sum, x) => sum + x)
+}
+
+fn noteText(note: Option[String where nonEmpty]): String {
+  match (note) {
+    Option.Some { value: text } => text
+    Option.None => "(none)"
+  }
+}
+
+fn sizes(xs: List[Int where nonNegative]): Int { length(xs) }
+
+fn smallPositives(xs: List[Int where positive and small]): Int { length(xs) }
+
+// A refining function of our own: what p says holds for the result.
+fn keepIf[T](xs: List[T], p: (T) => Bool): List[T where p] {
+  filter(xs, p)
+}
+
+fn onlyPositive(xs: List[Int]): List[Int where positive] {
+  keepIf(xs, positive)
+}
+
+type Batch = { amounts: List[Int where positive] }
+
+fn firstTransfer(amounts: List[Int where positive]): Int {
+  // head can only return elements of amounts.
+  match (head(amounts)) {
+    Option.Some { value: a } => transfer(a)
+    Option.None => 0
+  }
+}
+
+fn main() {
+  raw = [3, -1, 7, 0, 12]
+  positives = filter(raw, positive)
+  println(total([1, 2, 3]), total(positives), total(onlyPositive(raw)))
+  // Lambdas give the facts their bodies check.
+  println(smallPositives(filter(raw, x => positive(x) && small(x))))
+  // Rules apply to elements too.
+  println(sizes(positives))
+  // Option values: literals, None, and refining find.
+  println(noteText(Option.Some { value: "hi" }), noteText(Option.None), noteText(find(["", "b"], nonEmpty)))
+  // Facts flow through generic functions: the results can only hold
+  // values from their arguments.
+  println(total(reverse(positives)), total(take(positives, 1)), total(concat(positives, [5])), total(append(positives, 9)))
+  println(firstTransfer(positives), firstTransfer([]))
+  checked: List[Int where positive] = [4, 5]
+  batch = Batch { amounts: positives }
+  println(total(checked), total(batch.amounts))
+  forEach(positives, p => println(transfer(p)))
+}
