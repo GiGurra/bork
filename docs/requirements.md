@@ -113,6 +113,8 @@ In priority order. When two values conflict, the higher one wins.
 - **Compiles to Go.** Go is purely a compilation target, chosen so bork gets Go's runtime, GC, goroutine scheduler, and cross-platform compilation without building its own backend.
 - **No access to Go's standard library or Go packages from bork code.** bork code never calls Go directly. bork has its own standard library. The Go code the compiler generates, and the bork standard library's implementation, can freely use Go's standard library under the hood. That is an implementation detail, invisible to bork programs.
 - **No FFI in v0.1.** Calling into Go (or anything else) from bork may come later, as an explicit boundary.
+- **bork's syntax is independent of Go.** bork has its own grammar and its own hand-written parser. Go is only the language the first compiler is written in, and the first compilation target.
+- **The compiler models bork, not Go.** The compiler's internal model holds the full language and all of its constraints; that is the product. Its Go output is a lowering, not a one-to-one mapping of bork types to Go types. It can drop knowledge once it has been checked (facts are erased entirely), and it can lean on runtime helpers and generated functions where that is simpler. Inspired by TypeScript: the type checker carries the guarantees, and the output just runs. Go is the first target; others may follow.
 
 ### General
 
@@ -398,7 +400,42 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 
 - **Wrap syntax**, e.g. `loadUser(id)?{ e => LoadFailed(id, e) }`, or something else?
 - **`?` inside lambdas** returns from the lambda, which makes the lambda's inferred return type a union. Is that what we want, or should `?` require a declared lambda return type?
-- **Representation in Go:** an interface and a type switch, or a tagged struct?
+- **Representation in Go:** an interface and a type switch, a tagged struct, or a runtime helper. This is a lowering choice inside the compiler, not part of the language.
+
+## Language basics
+
+### Syntax
+
+- **Braces and explicit control symbols.** Blocks use `{ }`. No significant indentation, and no Scala-3-style `then`/`do` syntax. Clear delimiters are preferred over terse keywords.
+- **Everything is an expression.** `if`, `match`, and blocks produce values.
+- **Bindings have no keyword:** `x = ...`. Values are immutable, so there is no `var`/`val` distinction to make.
+- **Go-style statement endings.** Line ends terminate statements where that is unambiguous (automatic semicolon insertion). No semicolons in ordinary code.
+- **A grammar draft (EBNF) comes before the parser.**
+
+### Numbers
+
+- **Fixed-width integers, as in Go.** `Int` is a 64-bit integer with Go's wrapping arithmetic.
+- **Facts respect overflow.** `a > 10` and `b > 10` do not prove `a + b > 10`, because the sum can wrap. Arithmetic implications need upper bounds that rule out overflow.
+- **Native big integers.** An arbitrary-precision integer type is built in, for when wrapping is not acceptable.
+
+### Equality
+
+- **Structural equality is generated** for records and unions. Equality compares values, not identities.
+- **Comparing incompatible types is a compile error.**
+- **Constrained and unconstrained versions of a type are comparable.** `Int == (Int where positive)` is fine, because both are `Int` values.
+
+### Packages and modules
+
+- **Go style.** A directory is a package, a module file at the root names the module, imports use module paths, and there are no circular package dependencies.
+- **Visibility follows Go:** names starting with an upper-case letter are exported.
+
+### Open questions
+
+- **Shadowing:** can a name be rebound in the same scope, and if so, is the result a new value with its own facts?
+- **Parentheses around conditions:** `if (cond) { ... }` and `match (x) { ... }` (or `switch (x) { ... }`), or no parentheses?
+- **A decimal or money type** in the standard library. Backends need exact decimal arithmetic, and `Float` is wrong for money.
+- **Big integer literals and conversions** between `Int` and the big integer type.
+- **Comments and string literals**, including string interpolation.
 
 ## Open questions
 
@@ -414,7 +451,9 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 4. Errors and results: union return types and `?` (in progress, above)
 5. Concurrency: goroutines, channels, structured concurrency, cancellation through scopes, and the (later) isolation model
 6. Go interop: no FFI in v0.1; what the future boundary looks like
-7. Tooling: the `bork` CLI, formatter, tests, and modules/packages
+7. Tooling: the `bork` CLI, formatter, tests, and modules (packages are decided, above)
+
+See also [roadmap.md](roadmap.md) for the implementation plan.
 
 ## Explicitly not in v0.1
 
