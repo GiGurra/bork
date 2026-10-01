@@ -1,0 +1,7 @@
+fn main() {
+  greeting = "Hello, " + "bork"
+  println(greeting)
+  println(greeting == "Hello, bork", "a" < "b", "a" != "a")
+  println(true && !false, false || false, !(1 < 2))
+  println("tab:\tquote:\" backslash:\\")
+}

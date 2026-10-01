@@ -261,8 +261,6 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 
 ### Open questions
 
-- **Colon or no colon** in parameter lists: `amount: Money` or `amount Money`?
-- **Function keyword:** `fn`, `func`, or `def`? The examples use `fn` for now. `def` is ambiguous (define *what*?), `func` is familiar from Go, and `fn` is the shortest and reads well in long signatures.
 - **Inline predicates:** only named predicates (`positive`), or also inline expressions (`where it > 0`)? Inline expressions require the compiler to recognise equivalent expressions.
 - **Exported return types:** do callers see only the facts a signature declares, or also facts the compiler derives from the body? A proposal: exported functions expose only the declared facts (the signature is the contract), and private functions may expose derived ones.
 
@@ -410,7 +408,12 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **Everything is an expression.** `if`, `match`, and blocks produce values.
 - **Bindings have no keyword:** `x = ...`. Values are immutable, so there is no `var`/`val` distinction to make.
 - **Go-style statement endings.** Line ends terminate statements where that is unambiguous (automatic semicolon insertion). No semicolons in ordinary code.
-- **A grammar draft (EBNF) comes before the parser.**
+- **A grammar draft (EBNF) comes before the parser.** See [grammar.md](grammar.md).
+- **`fn` declares functions, and parameters are written `name: Type`.** The colon keeps the name apart from the type once constraints are attached.
+- **Conditions are parenthesized:** `if (cond) { ... } else { ... }`. `else` goes on the same line as the closing `}`, as in Go.
+- **No shadowing.** A name cannot be bound again while it is visible, in the same or an enclosing scope (including function names). Sibling blocks can reuse names.
+- **Comments** are `// ...` and `/* ... */`. **String literals** use double quotes with Go's escape sequences.
+- **Identifiers cannot start with `_`.** That prefix is reserved for the compiler.
 
 ### Numbers
 
@@ -431,11 +434,10 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 
 ### Open questions
 
-- **Shadowing:** can a name be rebound in the same scope, and if so, is the result a new value with its own facts?
-- **Parentheses around conditions:** `if (cond) { ... }` and `match (x) { ... }` (or `switch (x) { ... }`), or no parentheses?
+- **`match (x) { ... }` or `switch (x) { ... }`** for pattern matching (with parentheses, like `if`).
 - **A decimal or money type** in the standard library. Backends need exact decimal arithmetic, and `Float` is wrong for money.
 - **Big integer literals and conversions** between `Int` and the big integer type.
-- **Comments and string literals**, including string interpolation.
+- **String interpolation.**
 
 ## Open questions
 

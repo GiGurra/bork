@@ -1,0 +1,15 @@
+fn noValue(): Int {
+  println("forgot to return")
+}
+
+fn wrongValue(): Int {
+  "text"
+}
+
+fn bareReturn(): Int {
+  return
+}
+
+fn main() {
+  println(noValue(), wrongValue(), bareReturn())
+}

@@ -1,0 +1,8 @@
+fn compute(): Int {
+  42
+}
+
+fn main() {
+  compute()
+  1 + 2
+}

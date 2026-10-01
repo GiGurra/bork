@@ -34,6 +34,8 @@ Each package writes a summary (exported types, signatures with their constraints
 
 ### M0: a plain language
 
+**Status: in progress.** The pipeline works end to end (`bork build`, `run`, `check`, `emit`) for functions, `Int`/`Bool`/`String`, bindings, blocks and `if` as expressions, `return`, operators, and `println`. Next: records, unions and sealed types, `match`, `Option`, and `?`.
+
 Functions, records, unions and sealed types, `match` with exhaustiveness, `Option`, `?` (leftmost), immutable bindings, `Int`/`String`/`Bool`, printing. bork → Go → binary.
 
 *Done when* small programs using all of the above compile, run, and print the expected output, and non-exhaustive matches are rejected.

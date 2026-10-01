@@ -1,0 +1,13 @@
+fn main() {
+  total = {
+    a = 2
+    b = 3
+    a * b
+  }
+  println(total)
+  first = { x = 1
+    x + 1 }
+  second = { x = 10
+    x + 1 }
+  println(first, second)
+}

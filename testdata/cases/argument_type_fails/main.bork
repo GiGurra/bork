@@ -1,0 +1,8 @@
+fn double(n: Int): Int {
+  n * 2
+}
+
+fn main() {
+  println(double("two"))
+  println(double(1, 2))
+}

@@ -1,0 +1,6 @@
+fn main() {
+  // Int is 64-bit with Go's wrapping arithmetic.
+  max = 9_223_372_036_854_775_807
+  println(max + 1)
+  println(-7 / 2, -7 % 2)
+}

@@ -1,0 +1,17 @@
+fn firstPositive(a: Int, b: Int): Int {
+  if (a > 0) { return a }
+  if (b > 0) { return b }
+  0
+}
+
+fn describe(n: Int): String {
+  label = if (n < 0) { return "rejected" } else { "accepted" }
+  label + ": " + if (n > 100) { "large" } else { "small" }
+}
+
+fn main() {
+  println(firstPositive(-1, 7), firstPositive(3, 7), firstPositive(-1, -2))
+  println(describe(-1))
+  println(describe(5))
+  println(describe(500))
+}

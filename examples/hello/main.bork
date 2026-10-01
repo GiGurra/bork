@@ -1,0 +1,33 @@
+// The first bork program.
+fn square(x: Int): Int {
+  x * x
+}
+
+fn classify(n: Int): String {
+  if (n < 0) {
+    "negative"
+  } else if (n == 0) {
+    "zero"
+  } else {
+    "positive"
+  }
+}
+
+fn firstPositive(a: Int, b: Int): Int {
+  if (a > 0) { return a }
+  if (b > 0) { return b }
+  0
+}
+
+fn main() {
+  println("Hello from bork!")
+  answer = square(6) + 6
+  println("answer:", answer)
+  println(classify(-3), classify(0), classify(answer))
+  label = {
+    doubled = answer * 2
+    if (doubled > 100) { "big" } else { "small" }
+  }
+  println(label, firstPositive(-1, 7))
+  println(true && !false, "con" + "cat")
+}

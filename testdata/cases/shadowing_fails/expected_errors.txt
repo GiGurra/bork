@@ -1,0 +1,2 @@
+main.bork:8:5: x is already defined in an enclosing scope (bork does not allow shadowing)
+main.bork:11:3: helper is already the name of a function (bork does not allow shadowing)
