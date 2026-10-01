@@ -231,6 +231,8 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 	switch e := e.(type) {
 	case *syntax.StringLit:
 		return nil, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Value)}
+	case *syntax.Interp:
+		return g.interp(e)
 	case *syntax.BoolLit:
 		return nil, ast.NewIdent(strconv.FormatBool(e.Value))
 	case *syntax.Ident:
@@ -409,13 +411,7 @@ func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 		}
 		return fmtCall("Println", args...)
 	case check.BuiltinToString:
-		switch t := g.info.Types[e.Args[0]]; {
-		case t == check.String:
-			return args[0]
-		case check.IsFloat(t) || isUnion(t):
-			return g.str(args[0], t)
-		}
-		return fmtCall("Sprint", g.typed(args[0], g.info.Types[e.Args[0]]))
+		return g.stringOf(args[0], g.info.Types[e.Args[0]])
 	case check.BuiltinConvert:
 		return g.conversion(e, args[0])
 	case check.BuiltinPanic:
@@ -714,4 +710,48 @@ func (g *gen) str(x ast.Expr, t check.Type) ast.Expr {
 func isUnion(t check.Type) bool {
 	_, ok := t.(*check.Union)
 	return ok
+}
+
+// stringOf renders x, of type t, as toString does.
+func (g *gen) stringOf(x ast.Expr, t check.Type) ast.Expr {
+	switch {
+	case t == check.String:
+		return x
+	case check.IsFloat(t) || isUnion(t):
+		return g.str(x, t)
+	}
+	g.imports["fmt"] = true
+	return &ast.CallExpr{
+		Fun:  &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent("Sprint")},
+		Args: []ast.Expr{g.typed(x, t)},
+	}
+}
+
+// interp lowers s"..." to a string concatenation.
+func (g *gen) interp(e *syntax.Interp) ([]ast.Stmt, ast.Expr) {
+	stmts, xs := g.values(e.Exprs)
+	if xs == nil {
+		return stmts, nil
+	}
+	var out ast.Expr
+	add := func(x ast.Expr) {
+		if out == nil {
+			out = x
+		} else {
+			out = &ast.BinaryExpr{X: out, Op: token.ADD, Y: paren(x)}
+		}
+	}
+	lit := func(s string) ast.Expr { return &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(s)} }
+	for i, part := range e.Parts {
+		if part != "" {
+			add(lit(part))
+		}
+		if i < len(xs) {
+			add(g.stringOf(xs[i], g.info.Types[e.Exprs[i]]))
+		}
+	}
+	if out == nil {
+		return stmts, lit("")
+	}
+	return stmts, out
 }

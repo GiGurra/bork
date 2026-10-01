@@ -1,0 +1,18 @@
+type User = { name: String, age: Int }
+
+fn greet(name: String): String {
+  s"Hello, $name!"
+}
+
+fn main() {
+  u = User { name: "Ada", age: 36 }
+  println(s"${u.name} is ${u.age} and next year ${u.age + 1}")
+  println(s"user: $u")
+  println(s"${greet("Bob")} ${greet(s"${u.name}${u.name}")}")
+  price = 9.5
+  println(s"costs $$$price, or $$${price * 2} for two")
+  println(s"plain", s"", s"tab\there \"quoted\" å")
+  r: Int | String = 7
+  println(s"union: $r, option: ${Option.Some { value: 2.0 }}, rune: ${runeToString('x')}")
+  println("not interpolated: $u ${u}")
+}

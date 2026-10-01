@@ -16,6 +16,7 @@ const (
 	TFloat
 	TRune
 	TString
+	TInterp // s"...": the text from the opening quote to the closing one
 	TGoCode // the raw Go inside `unsafe go { ... }`
 
 	// Keywords
@@ -65,7 +66,7 @@ const (
 
 var kindNames = map[Kind]string{
 	EOF: "end of file", Illegal: "illegal token", Semi: "newline or ';'",
-	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TRune: "rune literal", TGoCode: "Go code", TString: "string literal",
+	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TRune: "rune literal", TGoCode: "Go code", TString: "string literal", TInterp: "interpolated string",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
 	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'",
 	LBrack: "'['", RBrack: "']'", Dot: "'.'", Underscore: "'_'", Pipe: "'|'", Arrow: "'=>'", Quest: "'?'",

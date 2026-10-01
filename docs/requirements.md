@@ -411,6 +411,7 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **`fn` declares functions, and parameters are written `name: Type`.** The colon keeps the name apart from the type once constraints are attached.
 - **Conditions are parenthesized:** `if (cond) { ... } else { ... }`. `else` goes on the same line as the closing `}`, as in Go.
 - **No shadowing.** A name cannot be bound again while it is visible, in the same or an enclosing scope (including function names). Sibling blocks can reuse names.
+- **Scala-style string interpolation, not printf:** `s"Hello, $name! Next year: ${age + 1}"`. Any value can be interpolated, rendered as `toString` renders it. Plain `"..."` strings never interpolate, so `$` needs no escaping there.
 - **Comments** are `// ...` and `/* ... */`. **String literals** use double quotes with Go's escape sequences.
 - **Identifiers cannot start with `_`.** That prefix is reserved for the compiler.
 - **Records have named fields:** `type User = { name: String, age: Int }`, built as `User { name: "Ada", age: 36 }`. There are no positional constructors.
@@ -443,7 +444,6 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 
 - **A decimal or money type** in the standard library. Backends need exact decimal arithmetic, and `Float` is wrong for money.
 - **Big integer literals and conversions** between `Int` and the big integer type.
-- **String interpolation.**
 
 ## Open questions
 

@@ -1,0 +1,6 @@
+fn main() {
+  a = s"cost: $5"
+  d = s"${1 +}"
+  e = s"${}"
+  println(a, d, e)
+}

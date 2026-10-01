@@ -477,6 +477,9 @@ func (p *parser) primary() Expr {
 	case TRune:
 		p.next()
 		return &RuneLit{Pos: t.Pos, Text: t.Text}
+	case TInterp:
+		p.next()
+		return p.interp(t)
 	case TString:
 		p.next()
 		v, err := strconv.Unquote(t.Text)
@@ -589,4 +592,113 @@ func (p *parser) goPos(start diag.Pos, line, col int) diag.Pos {
 		return diag.Pos{File: start.File, Line: start.Line, Col: start.Col + 1 + col}
 	}
 	return diag.Pos{File: start.File, Line: start.Line + line, Col: col + 1}
+}
+
+// interp splits an interpolated string into its text parts and
+// expressions: `$name` is a name, `${...}` any expression, and `$$` a
+// dollar sign.
+func (p *parser) interp(t Token) *Interp {
+	e := &Interp{Pos: t.Pos}
+	raw := t.Text[1 : len(t.Text)-1]
+	// Columns in raw are relative to the opening quote, after the s.
+	col := func(i int) int { return t.Pos.Col + 2 + i }
+	var seg strings.Builder
+	endPart := func() {
+		text, err := strconv.Unquote(`"` + seg.String() + `"`)
+		if err != nil {
+			p.errorf(t.Pos, "invalid string literal s\"%s\"", raw)
+		}
+		e.Parts = append(e.Parts, text)
+		seg.Reset()
+	}
+	for i := 0; i < len(raw); {
+		c := raw[i]
+		next := byte(0)
+		if i+1 < len(raw) {
+			next = raw[i+1]
+		}
+		switch {
+		case c == '\\' && next != 0:
+			seg.WriteString(raw[i : i+2])
+			i += 2
+		case c == '$' && next == '$':
+			seg.WriteByte('$')
+			i += 2
+		case c == '$' && next == '{':
+			end := matchingBrace(raw, i+2)
+			if end < 0 {
+				p.errorf(diag.Pos{File: t.Pos.File, Line: t.Pos.Line, Col: col(i)}, "${ is not closed in interpolated string")
+				return e
+			}
+			endPart()
+			e.Exprs = append(e.Exprs, p.subExpr(raw[i+2:end], diag.Pos{File: t.Pos.File, Line: t.Pos.Line, Col: col(i + 2)}))
+			i = end + 1
+		case c == '$' && next != '_' && isLetter(next):
+			j := i + 1
+			for j < len(raw) && (isLetter(raw[j]) || isDigit(raw[j])) {
+				j++
+			}
+			endPart()
+			e.Exprs = append(e.Exprs, &Ident{Pos: diag.Pos{File: t.Pos.File, Line: t.Pos.Line, Col: col(i + 1)}, Name: raw[i+1 : j]})
+			i = j
+		case c == '$':
+			p.errorf(diag.Pos{File: t.Pos.File, Line: t.Pos.Line, Col: col(i)}, "in an interpolated string, write $name, ${expression}, or $$ for a dollar sign")
+			i++
+		default:
+			seg.WriteByte(c)
+			i++
+		}
+	}
+	endPart()
+	return e
+}
+
+// matchingBrace finds the '}' closing a '${' whose contents start at
+// from, skipping nested braces and string literals. It returns -1 if
+// there is none.
+func matchingBrace(s string, from int) int {
+	depth := 1
+	for i := from; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		case '"':
+			for i++; i < len(s) && s[i] != '"'; i++ {
+				if s[i] == '\\' {
+					i++
+				}
+			}
+		}
+	}
+	return -1
+}
+
+// subExpr parses the expression inside ${...}, starting at pos.
+func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
+	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags)
+	sub := &parser{toks: toks, diags: p.diags}
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(bailout); !ok {
+				panic(r)
+			}
+			x = &StringLit{Pos: pos}
+		}
+	}()
+	sub.skipSemis()
+	if sub.at(EOF) {
+		p.errorf(pos, "empty ${} in interpolated string")
+		return &StringLit{Pos: pos}
+	}
+	x = sub.expr()
+	sub.skipSemis()
+	if !sub.at(EOF) {
+		sub.errorf(sub.tok().Pos, "unexpected %s in interpolated expression", sub.tok().Kind)
+	}
+	return x
 }

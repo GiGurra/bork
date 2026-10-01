@@ -413,6 +413,13 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.record(e, Invalid)
 	case *syntax.StringLit:
 		return c.record(e, String)
+	case *syntax.Interp:
+		for _, x := range e.Exprs {
+			if t := c.expr(x); t != Invalid && !isValue(t) {
+				c.errorf(x.Position(), "cannot put a value of type %s in a string", t)
+			}
+		}
+		return c.record(e, String)
 	case *syntax.BoolLit:
 		return c.record(e, Bool)
 	case *syntax.Ident:

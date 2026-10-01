@@ -124,6 +124,15 @@ type RuneLit struct {
 	Text string
 }
 
+// Interp is an interpolated string: s"Hello $name, ${age + 1}". Parts
+// holds the (unquoted) text around the expressions, so it has one more
+// element than Exprs.
+type Interp struct {
+	Pos   diag.Pos
+	Parts []string
+	Exprs []Expr
+}
+
 type StringLit struct {
 	Pos   diag.Pos
 	Value string // unquoted
@@ -295,6 +304,7 @@ func (e *Try) Position() diag.Pos       { return e.X.Position() }
 
 func (*IntLit) exprNode()    {}
 func (*FloatLit) exprNode()  {}
+func (*Interp) exprNode()    {}
 func (*RuneLit) exprNode()   {}
 func (*StringLit) exprNode() {}
 func (*BoolLit) exprNode()   {}
@@ -308,6 +318,7 @@ func (*Return) exprNode()    {}
 
 func (e *IntLit) Position() diag.Pos    { return e.Pos }
 func (e *FloatLit) Position() diag.Pos  { return e.Pos }
+func (e *Interp) Position() diag.Pos    { return e.Pos }
 func (e *RuneLit) Position() diag.Pos   { return e.Pos }
 func (e *StringLit) Position() diag.Pos { return e.Pos }
 func (e *BoolLit) Position() diag.Pos   { return e.Pos }
