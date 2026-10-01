@@ -44,9 +44,18 @@ Functions, records, unions and sealed types, `match` with exhaustiveness, `Optio
 
 *Done when* the constrained-input examples in the requirements compile, and each kind of unproven call fails with a clear diagnostic. This milestone proves the core idea; if it does not hold up in practice, we find out before building the rest.
 
-#### Baseline: everything proven can do
+#### Baseline
 
-[proven](https://github.com/GiGurra/proven)'s examples and test cases (`example/`, `testdata/cases/`) define the minimum constraint functionality for M1. The concepts carry over; the syntax and implementation do not. bork must support:
+The M1 baseline has two parts, and both must hold:
+
+1. **Every example in [requirements.md](requirements.md)** that involves facts: the core-idea example, the constrained-input examples (`transfer`, `connect` with `Port`, the `CreateUser` request, `clamp`, the refining `filter`), and "callers prove or declare" (`payOut`, `payOutChecked`, `payOutDeclared`). Each becomes a golden test, along with the failing variants it implies.
+2. **Everything proven can do**, described below.
+
+The target example programs (a JSON-over-HTTP endpoint with constrained request fields, a database handler using scopes, a small CLI) must also work by the end of the milestones that cover their features.
+
+#### Everything proven can do
+
+[proven](https://github.com/GiGurra/proven)'s examples and test cases (`example/`, `testdata/cases/`) are part of the minimum constraint functionality for M1. The concepts carry over; the syntax and implementation do not. bork must support:
 
 - **Preconditions on parameters**, with several predicates on one parameter combined with AND.
 - **Fact sources:**
@@ -96,4 +105,4 @@ Concurrency and structured concurrency, crash isolation and supervision, user-de
 
 - The open syntax questions in [requirements.md](requirements.md): the colon in `name: Type`, `fn` vs `func`, shadowing, parentheses around conditions, `match` vs `switch`, comments and string literals.
 - A grammar draft (EBNF).
-- The first example programs that define M0.
+- The first example programs that define M0, and the target example programs: a JSON-over-HTTP endpoint with constrained request fields, a database handler using scopes, and a small CLI.
