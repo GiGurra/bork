@@ -34,7 +34,7 @@ Each package writes a summary (exported types, signatures with their constraints
 
 ### M0: a plain language
 
-**Status: in progress.** The pipeline works end to end (`bork build`, `run`, `check`, `emit`) for functions, `Int`/`Bool`/`String`, bindings, blocks and `if` as expressions, `return`, operators, `println`, records with nested `copy`, sealed types, unions, exhaustive `match`, `Option`, `?`, sized numbers with checked conversions, `unsafe go` function bodies, a prelude of string, rune, and parsing functions, `panic`, and string interpolation (`s"..."`). Next: the example programs that define M0, then M1.
+**Status: done.** Everything below compiles and runs, plus sized numbers with checked conversions, runes, string interpolation, nested patterns, `unsafe go` function bodies, and a prelude of string, rune, and parsing functions. The example programs that define M0 are [calculator](../examples/calculator/main.bork) (a recursive-descent parser and evaluator), [orders](../examples/orders/main.bork) (validation and pricing), [accounts](../examples/accounts/main.bork) (a state machine), and [users](../examples/users/main.bork); their output is checked by the tests.
 
 Functions, records, unions and sealed types, `match` with exhaustiveness, `Option`, `?` (leftmost), immutable bindings, `Int`/`String`/`Bool`, printing. bork → Go → binary.
 
@@ -105,4 +105,4 @@ Concurrency and structured concurrency, crash isolation and supervision, user-de
 
 ## Decisions to settle before or during M0
 
-- The first example programs that define M0, and the target example programs: a JSON-over-HTTP endpoint with constrained request fields, a database handler using scopes, and a small CLI.
+- The target example programs: a JSON-over-HTTP endpoint with constrained request fields, a database handler using scopes, and a small CLI.

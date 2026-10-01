@@ -449,12 +449,13 @@ func (p *parser) pattern() Pattern {
 		}
 		if p.at(LBrace) {
 			p.next()
+			vp.Braces = true
 			p.list(RBrace, "a field pattern", func() {
 				f := p.expect(TIdent, "(field name)")
-				fp := &FieldPat{Pos: f.Pos, Field: f.Text, Bind: f.Text}
+				fp := &FieldPat{Pos: f.Pos, Field: f.Text}
 				if p.at(Colon) {
 					p.next()
-					fp.Bind = p.expect(TIdent, "(name to bind)").Text
+					fp.Pattern = p.pattern()
 				}
 				vp.Fields = append(vp.Fields, fp)
 			})

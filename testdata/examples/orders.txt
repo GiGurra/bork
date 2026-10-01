@@ -1,0 +1,9 @@
+A-1: 2 x coffee @ $4.50 = $9.00, total $9.00
+A-2: 10 x coffee @ $4.50 = $45.00, discount -$4.50, total $40.50
+A-3: 3 x mug @ $12.99 = $38.97, discount -$12.99, total $25.98
+A-4: 1 x sticker @ $1.99 = $1.99, discount -$1.99, total $0.00
+rejected: quantity "zero" invalid syntax
+rejected: quantity "0" must be at least 1
+rejected: unknown coupon FREE
+B-1: 1 x tea @ $3.00 = $3.00, total $3.00
+B-1: 5 x tea @ $3.00 = $15.00, discount -$3.00, total $12.00

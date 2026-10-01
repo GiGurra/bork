@@ -1,0 +1,85 @@
+// A bank account as a state machine. States are a sealed type, and
+// every transition returns the new state or the reason it was refused.
+
+type Account = sealed {
+  Open { owner: String, balance: Int },
+  Frozen { owner: String, balance: Int, reason: String },
+  Closed { owner: String },
+}
+
+type Refused = { reason: String }
+
+type Command = sealed {
+  Deposit { amount: Int },
+  Withdraw { amount: Int },
+  Freeze { reason: String },
+  Unfreeze,
+  Close,
+}
+
+fn apply(account: Account, command: Command): Account | Refused {
+  match (account) {
+    Account.Open { owner, balance } => match (command) {
+      Command.Deposit { amount } => if (amount <= 0) {
+        Refused { reason: "deposits must be positive" }
+      } else {
+        Account.Open { owner: owner, balance: balance + amount }
+      }
+      Command.Withdraw { amount } => if (amount > balance) {
+        Refused { reason: s"cannot withdraw $amount with a balance of $balance" }
+      } else {
+        Account.Open { owner: owner, balance: balance - amount }
+      }
+      Command.Freeze { reason } => Account.Frozen { owner: owner, balance: balance, reason: reason }
+      Command.Unfreeze => Refused { reason: "the account is not frozen" }
+      Command.Close => if (balance == 0) {
+        Account.Closed { owner: owner }
+      } else {
+        Refused { reason: s"withdraw the remaining $balance first" }
+      }
+    }
+    Account.Frozen { owner, balance, reason } => match (command) {
+      Command.Unfreeze => Account.Open { owner: owner, balance: balance }
+      _ => Refused { reason: s"the account is frozen: $reason" }
+    }
+    Account.Closed { owner } => Refused { reason: s"$owner's account is closed" }
+  }
+}
+
+fn describe(account: Account): String {
+  match (account) {
+    Account.Open { owner, balance } => s"$owner: open, balance $balance"
+    Account.Frozen { owner, reason } => s"$owner: frozen ($reason)"
+    Account.Closed { owner } => s"$owner: closed"
+  }
+}
+
+// step applies a command and prints what happened. A refused command
+// leaves the account as it was.
+fn step(account: Account, command: Command): Account {
+  match (apply(account, command)) {
+    next: Account => {
+      println(s"  $command -> ${describe(next)}")
+      next
+    }
+    Refused { reason } => {
+      println(s"  $command refused: $reason")
+      account
+    }
+  }
+}
+
+fn main() {
+  start = Account.Open { owner: "Ada", balance: 0 }
+  println(describe(start))
+  a = step(start, Command.Deposit { amount: 100 })
+  b = step(a, Command.Withdraw { amount: 250 })
+  c = step(b, Command.Freeze { reason: "suspicious activity" })
+  d = step(c, Command.Withdraw { amount: 10 })
+  e = step(d, Command.Unfreeze)
+  f = step(e, Command.Close)
+  g = step(f, Command.Withdraw { amount: 100 })
+  h = step(g, Command.Close)
+  final = step(h, Command.Deposit { amount: 5 })
+  println(describe(final))
+}

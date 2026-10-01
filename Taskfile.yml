@@ -22,9 +22,9 @@ tasks:
       - go test ./... -count=1
 
   test:update:
-    desc: Rewrite expected files under testdata/cases from actual results (review the diff!)
+    desc: Rewrite expected files under testdata/ from actual results (review the diff!)
     cmds:
-      - go test ./internal/driver/ -run TestCases -update -count=1
+      - go test ./internal/driver/ -run 'TestCases|TestExamples' -update -count=1
 
   lint:
     desc: Run golangci-lint

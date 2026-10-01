@@ -1,0 +1,53 @@
+type Point = { x: Int, y: Int }
+type Shape = sealed {
+  Circle { center: Point, radius: Int },
+  Line { from: Point, to: Point },
+}
+type NotFound = { key: String }
+
+fn describe(s: Shape): String {
+  match (s) {
+    Shape.Circle { center: Point { x: 0, y: 0 }, radius } => s"circle of radius $radius at the origin"
+    Shape.Circle { radius: 0 } => "a dot"
+    Shape.Circle { center } => s"circle at $center"
+    Shape.Line { from, to } => if (from == to) { "a dot" } else { "a line" }
+  }
+}
+
+fn lookup(found: Option[Shape] | NotFound): String {
+  match (found) {
+    Option.Some { value: Shape.Line { from: Point { x: 0 } } } => "a line from x = 0"
+    Option.Some { value: other } => s"found ${describe(other)}"
+    Option.None => "nothing"
+    NotFound { key: "" } => "no key given"
+    NotFound { key } => s"no $key"
+  }
+}
+
+fn sign(n: Int): String {
+  match (n) {
+    0 => "zero"
+    positive => if (positive > 0) { "positive" } else { "negative" }
+  }
+}
+
+fn flags(a: Bool, b: Option[Bool]): String {
+  match (b) {
+    Option.Some { value: true } => if (a) { "both" } else { "b" }
+    Option.Some { value: false } => "not b"
+    Option.None => "unknown"
+  }
+}
+
+fn main() {
+  origin = Point { x: 0, y: 0 }
+  println(describe(Shape.Circle { center: origin, radius: 2 }))
+  println(describe(Shape.Circle { center: Point { x: 1, y: 2 }, radius: 0 }))
+  println(describe(Shape.Circle { center: Point { x: 1, y: 2 }, radius: 3 }))
+  println(describe(Shape.Line { from: origin, to: origin }))
+  println(lookup(Option.Some { value: Shape.Line { from: origin, to: Point { x: 5, y: 5 } } }))
+  println(lookup(Option.Some { value: Shape.Line { from: Point { x: 1, y: 0 }, to: origin } }))
+  println(lookup(Option.None), lookup(NotFound { key: "" }), lookup(NotFound { key: "k" }))
+  println(sign(0), sign(5), sign(-5))
+  println(flags(true, Option.Some { value: true }), flags(false, Option.Some { value: false }), flags(true, Option.None))
+}

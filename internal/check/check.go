@@ -88,13 +88,12 @@ type Info struct {
 	// SelectorVariants records selectors that name a field-less variant
 	// (`Shape.Empty`); other selectors are field accesses.
 	SelectorVariants map[*syntax.Selector]*Variant
-	// PatTypes and PatVariants record what each match pattern tests.
-	PatTypes    map[syntax.Pattern]Type
-	PatVariants map[syntax.Pattern]*Variant
+	// ArmPats holds the checked pattern of every match arm.
+	ArmPats map[*syntax.Arm]*Pat
 	// Tries describes every `?`.
 	Tries map[*syntax.Try]*TryInfo
 	// Unused holds bindings whose value is never read: *syntax.Binding,
-	// *syntax.TypePat, or *syntax.FieldPat.
+	// or the pattern node that bound the name.
 	Unused map[any]bool
 	// Consts holds the value of every constant expression (number
 	// literals and arithmetic on them), already converted to the type
@@ -121,8 +120,7 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 			CallBuiltins:     map[*syntax.Call]Builtin{},
 			RecordTargets:    map[*syntax.RecordLit]any{},
 			SelectorVariants: map[*syntax.Selector]*Variant{},
-			PatTypes:         map[syntax.Pattern]Type{},
-			PatVariants:      map[syntax.Pattern]*Variant{},
+			ArmPats:          map[*syntax.Arm]*Pat{},
 			Tries:            map[*syntax.Try]*TryInfo{},
 			Unused:           map[any]bool{},
 			Consts:           map[syntax.Expr]constant.Value{},

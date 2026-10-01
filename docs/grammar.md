@@ -66,10 +66,11 @@ Return     = "return" [ Expr ] .
 Match      = "match" "(" Expr ")" "{" [ Arm { Sep Arm } [ Sep ] ] "}" .
 Arm        = Pattern "=>" Expr .
 Pattern    = "_"                             (* anything *)
-           | Literal                         (* 1, -1, 1.5, "a", true *)
+           | Literal                         (* 1, -1, 1.5, 'a', "a", true *)
            | Ident ":" Type                  (* n: Int, e: NotFound | DbError *)
            | Ident [ "." Ident ] [ "{" FieldPat { Sep FieldPat } [ Sep ] "}" ] .
-FieldPat   = Ident [ ":" Ident ] .           (* radius, or radius: r *)
+                                             (* Shape.Circle { radius }, NotFound, User { name }, n *)
+FieldPat   = Ident [ ":" Pattern ] .         (* radius, radius: r, radius: 0, center: Point { x: 0 } *)
 
 EOL        = newline | ";" .
 ```
@@ -95,7 +96,10 @@ EOL        = newline | ";" .
 - **Sealed types** (`type Shape = sealed { Circle { radius: Int }, Empty }`) list all their variants. Variants are always qualified: `Shape.Circle { radius: 1 }`, `Shape.Empty`.
 - **Unions** (`Int | NotFound | DbError`) hold a value of any one of their types. A value of a member type, or of a smaller union, can be used where the union is expected. `type Lookup = Int | NotFound` names a union.
 - **`Option[T]`** is built in: `sealed { Some { value: T }, None }`. `Option.None` takes its type from where it is used.
-- **`match (x) { ... }`** tries arms in order and must be exhaustive: every variant, union member, or `true`/`false` must be handled, or there must be a `_` or a pattern covering the whole type. An arm that can never match is an error. Arms produce a value, like `if`.
+- **`match (x) { ... }`** tries arms in order. Arms produce a value, like `if`.
+  - **Patterns nest:** a field can be matched against any pattern, as in `Option.Some { value: ')' }` or `Shape.Circle { center: Point { x: 0, y: 0 } }`. `{ radius }` binds the field to its own name, and `{ radius: r }` binds it to `r`.
+  - **A bare name** binds the whole value (`n => n * 2`), unless it is a type, in which case it matches values of that type (`NotFound => ...`).
+  - **Matches must be exhaustive**, also inside nested patterns: the error lists what is missing (`missing Option.Some { value: false }`), with `_` for a field that has values no arm covers. An arm that can never match is an error.
 - **`x?`** on a union keeps the leftmost member and returns every other member from the function, which must be able to return them. On an `Option`, it keeps the `Some` value and returns `Option.None`.
 - **Equality** is structural: records, variants, and Options compare by their fields.
 - **Printing** shows values in bork syntax: `User { name: "Ada", age: 36 }`, `Shape.Empty`.

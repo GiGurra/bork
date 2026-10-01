@@ -198,6 +198,15 @@ func (v Option_Some[T]) String() string { return "Option.Some { value: " + _show
 func (Option_None[T]) String() string { return "Option.None" }
 `
 
+const isRuntime = `package main
+
+// _is reports whether x holds a value of type T.
+func _is[T any](x any) bool {
+	_, ok := x.(T)
+	return ok
+}
+`
+
 const convertRuntime = `package main
 
 import "math"
@@ -287,6 +296,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesOption {
 		g.usesShow = true
 		src = append(src, optionRuntime)
+	}
+	if g.usesIs {
+		src = append(src, isRuntime)
 	}
 	if g.usesConvert {
 		g.usesShow = true

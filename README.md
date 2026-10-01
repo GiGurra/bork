@@ -34,7 +34,7 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 
 ## Getting started
 
-The compiler is at an early stage, covering most of milestone M0: functions, sized integers and floats with checked conversions, `Bool`/`String` with a small prelude of string and parsing functions, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `unsafe go` function bodies for calling Go. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage. Milestone M0 is done: functions, sized integers and floats with checked conversions, `Bool`/`String` with a small prelude of string and parsing functions, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `unsafe go` function bodies for calling Go. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -61,7 +61,7 @@ fn main() {
 }
 ```
 
-A larger example, from [examples/users](examples/users/main.bork):
+More examples: [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
 
 ```
 type Address = { city: String }
