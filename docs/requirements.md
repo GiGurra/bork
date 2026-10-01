@@ -271,7 +271,10 @@ Outside resources (files, sockets, database connections, transactions, locks) ar
 - **Resources belong to scopes.** Opening a resource requires a scope. A resource can be attached to one or more scopes, and it is **closed when the last of them closes**. There is no manual `close`, so there is neither use-after-close nor forgot-to-close.
 - **Scopes are blocks.** `scope s { ... }` opens a scope, which closes when the block ends. Finalizers run in reverse order of acquisition (LIFO), like Go's `defer`.
 - **Scope values can be passed down, never escape.** A scope can be passed as a function argument, but it cannot be returned, stored in a record, or captured by anything that outlives it.
-- **A resource cannot outlive all of its scopes.** Which scopes a resource is attached to is itself a fact, and `attach` adds a fact, so this fits the core idea of only-growing knowledge.
+- **Using a resource requires proof of an open scope managing it.** Every access to a resource is a proof obligation: the compiler must be able to prove, locally, that the resource is attached to a scope that is still open at that point. It is resolved backwards like any other fact. Only scopes visible locally count. If some other scope elsewhere keeps the resource alive at runtime, that does not help the proof.
+- **Otherwise the resource is "possibly released".** When the last locally known scope of a resource has ended, the variable is marked possibly released at type level, and any use is a compile error. Runtime reference counts decide when a resource is actually closed; the compiler only ever relies on what it can prove.
+- **Ordinary calls need no annotations.** A synchronous call runs entirely inside the caller's scope, so a function can simply take `conn: Conn`. Only escapes need checking: returning a resource, storing it in something longer-lived, or handing it to a goroutine.
+- **Attaching happens where the resource is provably alive.** `attach` adds a scope fact, so it is only allowed where the resource is already known to be attached to an open scope. A goroutine therefore gets a resource attached at handover, never after it has started.
 - **Reference counting falls out of the design.** Within one call stack, scopes nest, so the last scope is simply the outermost one. Across goroutines, a resource attached to several scopes stays open until all of them have closed, which is shared ownership without a separate `shared_ptr`-style type.
 - **Scopes are passed explicitly in v0.1.** Acquiring functions take the scope as an ordinary argument. Implicit scope passing may be added later.
 
@@ -287,16 +290,22 @@ fn handle(req: Request, pool: DbPool) = scope request {
   ...
 }                                          // finalizers run LIFO
 
-scope job {
-  conn = db.connect(job)?
-  go worker(conn)                          // conn stays open until job and worker are both done
+fn broken(db: Db): Conn = {
+  c = scope s { db.connect(s)? }
+  c.query(...)                             // build error: c may be released (its scope `s` ended)
 }
 
-fn worker(conn: Conn) = scope w {
-  conn.attach(w)
-  ...
+// Handing a resource to a goroutine that may outlive the spawning scope:
+// the new goroutine's scope is attached at the handover, while conn is provably alive.
+scope job {
+  conn = db.connect(job)?
+  spawn scope w (attach conn) {            // syntax not final
+    worker(conn)                           // conn stays open until job and w have both closed
+  }
 }
 ```
+
+With structured concurrency (see below), a goroutine started inside `job` that must finish before `job` ends needs no attaching at all.
 
 ### To settle with concurrency
 
