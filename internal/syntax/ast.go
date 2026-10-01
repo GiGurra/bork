@@ -260,18 +260,24 @@ type TypePat struct {
 	Type *TypeExpr
 }
 
-// VariantPat is `Shape.Circle { radius }` or `Option.None`, optionally
-// binding fields: `{ radius }` binds radius, `{ radius: r }` binds r.
+// VariantPat is a name pattern: a variant (`Shape.Circle { radius }`,
+// `Option.None`), a type (`NotFound`), a record destructure
+// (`User { name }`), or, for a single name that is not a type, a
+// binding of the whole value (`n`).
 type VariantPat struct {
 	Pos    diag.Pos
 	Path   []string
 	Fields []*FieldPat
+	Braces bool // written with { ... }, possibly empty
 }
 
+// FieldPat is one field of a destructuring pattern: `{ radius }` binds
+// the field to its own name, and `{ radius: p }` matches it against the
+// pattern p (a name to bind, a literal, a nested pattern, ...).
 type FieldPat struct {
-	Pos   diag.Pos
-	Field string
-	Bind  string
+	Pos     diag.Pos
+	Field   string
+	Pattern Pattern // nil for the `{ radius }` shorthand
 }
 
 // LitPat is a literal pattern: a number, String, or Bool literal.

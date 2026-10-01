@@ -1,0 +1,9 @@
+circle of radius 2 at the origin
+a dot
+circle at Point { x: 1, y: 2 }
+a dot
+a line from x = 0
+found a line
+nothing no key given no k
+zero positive negative
+both not b unknown

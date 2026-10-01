@@ -1,0 +1,101 @@
+// Order pricing: validating raw input, applying discounts, and
+// reporting every failure as a value. Money is kept in cents.
+
+type Item = { name: String, unitPrice: Int, quantity: Int }
+
+type Discount = sealed {
+  None,
+  Percent { percent: Int },
+  FixedOff { cents: Int },
+  BuyNGetOneFree { n: Int },
+}
+
+type Order = { id: String, item: Item, discount: Discount, coupon: Option[String] }
+
+type InvalidQuantity = { input: String, reason: String }
+type InvalidDiscount = { reason: String }
+type Priced = { order: Order, subtotal: Int, discountCents: Int, total: Int }
+
+fn parseQuantity(input: String): Int | InvalidQuantity {
+  match (parseInt(trim(input))) {
+    n: Int => if (n <= 0) {
+      InvalidQuantity { input: input, reason: "must be at least 1" }
+    } else if (n > 1000) {
+      InvalidQuantity { input: input, reason: "at most 1000 per order" }
+    } else {
+      n
+    }
+    e: ParseError => InvalidQuantity { input: input, reason: e.message }
+  }
+}
+
+fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
+  match (coupon) {
+    Option.None => Discount.None
+    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
+    Option.Some { value: "FIVEBUCKS" } => Discount.FixedOff { cents: 500 }
+    Option.Some { value: "3FOR2" } => Discount.BuyNGetOneFree { n: 2 }
+    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
+  }
+}
+
+fn discountCents(item: Item, discount: Discount): Int {
+  subtotal = item.unitPrice * item.quantity
+  match (discount) {
+    Discount.None => 0
+    Discount.Percent { percent } => subtotal * percent / 100
+    Discount.FixedOff { cents } => if (cents > subtotal) { subtotal } else { cents }
+    Discount.BuyNGetOneFree { n } => item.quantity / (n + 1) * item.unitPrice
+  }
+}
+
+fn price(order: Order): Priced {
+  subtotal = order.item.unitPrice * order.item.quantity
+  off = discountCents(order.item, order.discount)
+  Priced { order: order, subtotal: subtotal, discountCents: off, total: subtotal - off }
+}
+
+fn money(cents: Int): String {
+  rest = cents % 100
+  pad = if (rest < 10) { "0" } else { "" }
+  s"$$${cents / 100}.$pad$rest"
+}
+
+fn placeOrder(id: String, name: String, unitPrice: Int, quantityInput: String, coupon: Option[String]): Priced | InvalidQuantity | InvalidDiscount {
+  quantity = parseQuantity(quantityInput)?
+  discount = discountFor(coupon)?
+  item = Item { name: name, unitPrice: unitPrice, quantity: quantity }
+  price(Order { id: id, item: item, discount: discount, coupon: coupon })
+}
+
+fn receipt(result: Priced | InvalidQuantity | InvalidDiscount): String {
+  match (result) {
+    p: Priced => {
+      item = p.order.item
+      lines = s"${p.order.id}: ${item.quantity} x ${item.name} @ ${money(item.unitPrice)} = ${money(p.subtotal)}"
+      if (p.discountCents == 0) {
+        s"$lines, total ${money(p.total)}"
+      } else {
+        s"$lines, discount -${money(p.discountCents)}, total ${money(p.total)}"
+      }
+    }
+    InvalidQuantity { input, reason } => s"rejected: quantity \"$input\" $reason"
+    InvalidDiscount { reason } => s"rejected: $reason"
+  }
+}
+
+fn main() {
+  println(receipt(placeOrder("A-1", "coffee", 450, "2", Option.None)))
+  println(receipt(placeOrder("A-2", "coffee", 450, " 10 ", Option.Some { value: "TENOFF" })))
+  println(receipt(placeOrder("A-3", "mug", 1299, "3", Option.Some { value: "3FOR2" })))
+  println(receipt(placeOrder("A-4", "sticker", 199, "1", Option.Some { value: "FIVEBUCKS" })))
+  println(receipt(placeOrder("A-5", "coffee", 450, "zero", Option.None)))
+  println(receipt(placeOrder("A-6", "coffee", 450, "0", Option.None)))
+  println(receipt(placeOrder("A-7", "coffee", 450, "1", Option.Some { value: "free" })))
+
+  // Changing an order means building a new one.
+  first = price(Order { id: "B-1", item: Item { name: "tea", unitPrice: 300, quantity: 1 }, discount: Discount.None, coupon: Option.None })
+  bigger = price(first.order.copy(item.quantity = 5, discount = Discount.Percent { percent: 20 }))
+  println(receipt(first))
+  println(receipt(bigger))
+}

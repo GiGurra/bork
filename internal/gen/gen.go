@@ -105,6 +105,7 @@ type gen struct {
 	usesShow    bool
 	usesOption  bool
 	usesConvert bool
+	usesIs      bool
 }
 
 // reachable lists the functions to emit: every function of the

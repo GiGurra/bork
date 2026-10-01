@@ -1,0 +1,11 @@
+Ada: open, balance 0
+  Command.Deposit { amount: 100 } -> Ada: open, balance 100
+  Command.Withdraw { amount: 250 } refused: cannot withdraw 250 with a balance of 100
+  Command.Freeze { reason: "suspicious activity" } -> Ada: frozen (suspicious activity)
+  Command.Withdraw { amount: 10 } refused: the account is frozen: suspicious activity
+  Command.Unfreeze -> Ada: open, balance 100
+  Command.Close refused: withdraw the remaining 100 first
+  Command.Withdraw { amount: 100 } -> Ada: open, balance 0
+  Command.Close -> Ada: closed
+  Command.Deposit { amount: 5 } refused: Ada's account is closed
+Ada: closed

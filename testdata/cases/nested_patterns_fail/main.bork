@@ -1,0 +1,38 @@
+type Point = { x: Int, y: Int }
+type NotFound = { key: String }
+
+fn a(o: Option[Bool]): Int {
+  match (o) {
+    Option.Some { value: true } => 1
+    Option.None => 0
+  }
+}
+
+fn b(o: Option[Int] | NotFound): Int {
+  match (o) {
+    Option.Some { value: 1 } => 1
+    NotFound { key: "x" } => 2
+    Option.None => 0
+  }
+}
+
+fn c(p: Point): Int {
+  match (p) {
+    Point { x: 0 } => 0
+    Point { x: 0, y: 1 } => 1
+    Point { y: 2 } => 2
+  }
+}
+
+fn d(o: Option[Int]): Int {
+  match (o) {
+    Option.Some { value: n } => n
+    Option.Some { value: 5 } => 5
+    Option.Some { valu: 6 } => 6
+    Option.None => 0
+  }
+}
+
+fn main() {
+  println(a(Option.None), b(Option.None), c(Point { x: 0, y: 0 }), d(Option.None))
+}

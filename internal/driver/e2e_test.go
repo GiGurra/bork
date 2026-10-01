@@ -83,3 +83,31 @@ func compare(t *testing.T, expectedPath, got string) {
 		t.Errorf("mismatch for %s\n--- want ---\n%s--- got ---\n%s", expectedPath, want, got)
 	}
 }
+
+// TestExamples runs every program under examples/ and compares its
+// output with testdata/examples/<name>.txt.
+func TestExamples(t *testing.T) {
+	root := filepath.Join("..", "..", "examples")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		name := e.Name()
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			exe := filepath.Join(t.TempDir(), "program")
+			if err := Build(filepath.Join(root, name), exe); err != nil {
+				t.Fatalf("build failed:\n%v", err)
+			}
+			out, err := exec.Command(exe).Output()
+			if err != nil {
+				t.Fatalf("program failed: %v\n%s", err, out)
+			}
+			compare(t, filepath.Join("..", "..", "testdata", "examples", name+".txt"), string(out))
+		})
+	}
+}

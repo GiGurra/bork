@@ -1,0 +1,7 @@
+(1 + (2 * 3)) = 7
+((1 + 2) * 3) = 9
+((100 / (7 - 2)) - 4) = 16
+(10 / (5 - 5)): division by zero in (10 / (5 - 5))
+"2 * (3 + 4": expected ) at 10
+"2 + x": unexpected x at 4
+"99999999999999999999": bad number 99999999999999999999: value out of range at 0
