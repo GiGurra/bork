@@ -155,7 +155,7 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 	c := &checker{
 		diags:   diags,
 		prelude: map[string]*Func{},
-		decls: map[string]*typeEntry{},
+		decls:   map[string]*typeEntry{},
 		info: &Info{
 			Funcs:            map[string]*Func{},
 			FuncOf:           map[*syntax.FuncDecl]*Func{},

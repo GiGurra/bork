@@ -1,0 +1,11 @@
+pred positive(x: Int) { x > 0 }
+
+type Pair[A, B] = { first: A, second: B }
+
+fn pay(p: Pair[String, Int where positive]): Int { p.second }
+
+fn unchecked(p: Pair[String, Int]): Int { pay(p) }
+
+fn main() {
+  println(pay(Pair { first: "rent", second: 0 }), unchecked(Pair { first: "x", second: 1 }))
+}

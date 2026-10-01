@@ -26,7 +26,7 @@ func (g *gen) recordLit(e *syntax.RecordLit) ([]ast.Stmt, ast.Expr) {
 	var fields []*check.Field
 	switch target := g.info.RecordTargets[e].(type) {
 	case *check.Record:
-		typ, fields = typeName(target.Name), target.Fields
+		typ, fields = g.goType(target), target.Fields
 	case *check.Variant:
 		typ, fields = g.variantType(target), target.Fields
 	}

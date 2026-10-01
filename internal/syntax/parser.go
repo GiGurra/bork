@@ -135,6 +135,13 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 	pos := p.expect(KwType, "").Pos
 	name := p.expect(TIdent, "(type name)")
 	td = &TypeDecl{Pos: pos, Name: name.Text}
+	if p.at(LBrack) {
+		p.next()
+		p.list(RBrack, "a type parameter", func() {
+			t := p.expect(TIdent, "(type parameter name)")
+			td.TypeParams = append(td.TypeParams, &TypeParam{Pos: t.Pos, Name: t.Text})
+		})
+	}
 	p.expect(Assign, "after the type name")
 	switch {
 	case p.at(KwSealed):

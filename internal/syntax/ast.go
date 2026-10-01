@@ -24,12 +24,14 @@ const (
 
 // TypeDecl is `type Name = ...`.
 type TypeDecl struct {
-	Pos      diag.Pos
-	Name     string
-	Kind     TypeKind
-	Fields   []*FieldDecl   // RecordType
-	Variants []*VariantDecl // SealedType
-	Alias    *TypeExpr      // AliasType
+	Pos  diag.Pos
+	Name string
+	// TypeParams lists a generic type's parameters: `type Pair[A, B]`.
+	TypeParams []*TypeParam
+	Kind       TypeKind
+	Fields     []*FieldDecl   // RecordType
+	Variants   []*VariantDecl // SealedType
+	Alias      *TypeExpr      // AliasType
 }
 
 type FieldDecl struct {

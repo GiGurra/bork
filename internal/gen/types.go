@@ -29,15 +29,11 @@ func (g *gen) goType(t check.Type) ast.Expr {
 	case *check.FuncType:
 		return g.funcType(t, nil)
 	case *check.Record:
-		g.usedTypes[t] = true
-		return typeName(t.Name)
+		g.usedTypes[baseOf(t)] = true
+		return g.instantiated(typeName(t.Name), t)
 	case *check.Sealed:
-		if check.IsOption(t) {
-			g.usesOption = true
-			return &ast.IndexExpr{X: ast.NewIdent("Option"), Index: g.goType(t.Args[0])}
-		}
-		g.usedTypes[t] = true
-		return typeName(t.Name)
+		g.usedTypes[baseOf(t)] = true
+		return g.instantiated(typeName(t.Name), t)
 	case *check.Union:
 		for _, m := range t.Members {
 			g.goType(m) // the members' declarations are needed
@@ -74,17 +70,55 @@ var basicGoNames = map[check.Type]string{
 	check.Bool: "bool", check.String: "string",
 }
 
+// baseOf is the declared type t is an instance of (t itself if it is
+// not an instance).
+func baseOf(t check.Type) check.Type {
+	switch t := t.(type) {
+	case *check.Record:
+		if t.Base != nil {
+			return t.Base
+		}
+	case *check.Sealed:
+		if t.Base != nil {
+			return t.Base
+		}
+	}
+	return t
+}
+
+// instantiated is the Go type n, with t's type arguments if t is
+// generic: `Pair[int64, string]`.
+func (g *gen) instantiated(n *ast.Ident, t check.Type) ast.Expr {
+	args := check.TypeArgs(t)
+	if len(args) == 0 {
+		return n
+	}
+	idx := &ast.IndexListExpr{X: n}
+	for _, a := range args {
+		idx.Indices = append(idx.Indices, g.goType(a))
+	}
+	return idx
+}
+
+// typeParamList is a Go type parameter list `[A any, B any]`, or nil.
+func typeParamList(params []*check.TypeParam) *ast.FieldList {
+	if len(params) == 0 {
+		return nil
+	}
+	f := &ast.Field{Type: ast.NewIdent("any")}
+	for _, p := range params {
+		f.Names = append(f.Names, name(p.Name))
+	}
+	return &ast.FieldList{List: []*ast.Field{f}}
+}
+
 // typeName maps a declared bork type name to its Go name.
 func typeName(s string) *ast.Ident { return name(s) }
 
 // variantType is the Go struct type of a sealed type's variant.
 func (g *gen) variantType(v *check.Variant) ast.Expr {
-	g.usedTypes[v.Parent] = true
-	if check.IsOption(v.Parent) {
-		g.usesOption = true
-		return &ast.IndexExpr{X: ast.NewIdent("Option_" + v.Name), Index: g.goType(v.Parent.Args[0])}
-	}
-	return ast.NewIdent(typeName(v.Parent.Name).Name + "_" + v.Name)
+	g.usedTypes[baseOf(v.Parent)] = true
+	return g.instantiated(ast.NewIdent(typeName(v.Parent.Name).Name+"_"+v.Name), v.Parent)
 }
 
 func markerMethod(sealedName string) string { return "is" + typeName(sealedName).Name }
@@ -127,44 +161,53 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 	var decls []ast.Decl
 	switch t := t.(type) {
 	case *check.Record:
-		decls = append(decls, g.structDecl(typeName(t.Name), t.Fields))
-		decls = append(decls, g.stringMethod(typeName(t.Name), t.Name, t.Fields, true))
+		recv := g.instantiated(typeName(t.Name), t)
+		decls = append(decls, g.structDecl(typeName(t.Name), t.TypeParams, t.Fields))
+		decls = append(decls, g.stringMethod(recv, t.Name, t.Fields, true))
 	case *check.Sealed:
+		// The interface's marker method mentions the type parameters, so
+		// that Option[int64] and Option[string] are different types.
 		marker := markerMethod(t.Name)
+		markerType := &ast.FuncType{Params: &ast.FieldList{}}
+		for _, p := range t.TypeParams {
+			markerType.Params.List = append(markerType.Params.List, &ast.Field{Type: name(p.Name)})
+		}
 		decls = append(decls, &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
-			Name: typeName(t.Name),
+			Name:       typeName(t.Name),
+			TypeParams: typeParamList(t.TypeParams),
 			Type: &ast.InterfaceType{Methods: &ast.FieldList{List: []*ast.Field{{
 				Names: []*ast.Ident{ast.NewIdent(marker)},
-				Type:  &ast.FuncType{Params: &ast.FieldList{}},
+				Type:  markerType,
 			}}}},
 		}}})
 		for _, v := range t.Variants {
-			vt := g.variantType(v).(*ast.Ident)
-			decls = append(decls, g.structDecl(vt, v.Fields))
+			vname := ast.NewIdent(typeName(t.Name).Name + "_" + v.Name)
+			recv := g.instantiated(vname, t)
+			decls = append(decls, g.structDecl(vname, t.TypeParams, v.Fields))
 			decls = append(decls, &ast.FuncDecl{
-				Recv: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent(vt.Name)}}},
+				Recv: &ast.FieldList{List: []*ast.Field{{Type: recv}}},
 				Name: ast.NewIdent(marker),
-				Type: &ast.FuncType{Params: &ast.FieldList{}},
+				Type: markerType,
 				Body: &ast.BlockStmt{},
 			})
-			decls = append(decls, g.stringMethod(ast.NewIdent(vt.Name), t.Name+"."+v.Name, v.Fields, false))
+			decls = append(decls, g.stringMethod(recv, t.Name+"."+v.Name, v.Fields, false))
 		}
 	}
 	return decls
 }
 
-func (g *gen) structDecl(n *ast.Ident, fields []*check.Field) ast.Decl {
+func (g *gen) structDecl(n *ast.Ident, params []*check.TypeParam, fields []*check.Field) ast.Decl {
 	st := &ast.StructType{Fields: &ast.FieldList{}}
 	for _, f := range fields {
 		st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{name(f.Name)}, Type: g.goType(f.Type)})
 	}
-	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{Name: ast.NewIdent(n.Name), Type: st}}}
+	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{Name: ast.NewIdent(n.Name), TypeParams: typeParamList(params), Type: st}}}
 }
 
 // stringMethod generates `func (v T) String() string` rendering the
 // value as `Label { field: value, ... }`. String fields are quoted.
 // A variant without fields renders as just its label.
-func (g *gen) stringMethod(recv *ast.Ident, label string, fields []*check.Field, isRecord bool) ast.Decl {
+func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, isRecord bool) ast.Decl {
 	strLit := func(s string) ast.Expr { return &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(s)} }
 	var result ast.Expr
 	switch {
@@ -196,7 +239,7 @@ func (g *gen) stringMethod(recv *ast.Ident, label string, fields []*check.Field,
 		recvName = ast.NewIdent("_")
 	}
 	return &ast.FuncDecl{
-		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{recvName}, Type: ast.NewIdent(recv.Name)}}},
+		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{recvName}, Type: recv}}},
 		Name: ast.NewIdent("String"),
 		Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}}}},
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{result}}}},
@@ -206,24 +249,6 @@ func (g *gen) stringMethod(recv *ast.Ident, label string, fields []*check.Field,
 // The runtime is hand-written Go that generated programs share. It is
 // parsed (not pasted) so it goes through the same printer as everything
 // else.
-const optionRuntime = `package main
-
-// Option is bork's built-in Option[T]: sealed { Some { value: T }, None }.
-type Option[T any] interface{ isOption(T) }
-
-type Option_Some[T any] struct{ value T }
-
-type Option_None[T any] struct{}
-
-func (Option_Some[T]) isOption(T) {}
-
-func (Option_None[T]) isOption(T) {}
-
-func (v Option_Some[T]) String() string { return "Option.Some { value: " + _show(v.value) + " }" }
-
-func (Option_None[T]) String() string { return "Option.None" }
-`
-
 const isRuntime = `package main
 
 // _is reports whether x holds a value of type T.
@@ -332,10 +357,6 @@ func _fmtFloat(f float64, bits int) string {
 // comments print correctly.
 func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
-	if g.usesOption {
-		g.usesShow = true
-		src = append(src, optionRuntime)
-	}
 	if g.usesIs {
 		src = append(src, isRuntime)
 	}

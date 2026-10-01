@@ -1,0 +1,14 @@
+type Pair[A, B] = { first: A, second: B }
+type Tree[T] = sealed { Leaf, Node { left: Tree[T], value: T, right: Tree[T] } }
+type Twice[T, T] = { x: T }
+type Alias[T] = List[T]
+
+fn bare(p: Pair): Int { 1 }
+fn tooFew(p: Pair[Int]): Int { 1 }
+fn notGeneric(x: Int[String]): Int { 1 }
+
+fn main() {
+  p: Pair[Int, String] = Pair { first: "x", second: "y" }
+  t = Tree.Leaf
+  q = Pair { first: [], second: 1 }
+}

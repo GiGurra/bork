@@ -39,8 +39,8 @@ type Query struct {
 	// parameter types with them filled in.
 	TypeArgs []Type
 	Params   []Type
-	Or   []Query
-	And  []Query
+	Or       []Query
+	And      []Query
 	// Via names the function whose result the constant is, when the
 	// query comes from a derived result (see derive).
 	Via string
@@ -1028,6 +1028,13 @@ func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
 		if IsOption(t) {
 			return typeParamPaths(t.Args[0], tp, path+".value")
 		}
+		if mentions(t, tp) {
+			return nil, false // not followed into other generic types yet
+		}
+	case *Record:
+		if mentions(t, tp) {
+			return nil, false
+		}
 	case *Union:
 		if mentions(t, tp) {
 			return nil, false
@@ -1052,8 +1059,8 @@ func mentions(t Type, tp *TypeParam) bool {
 		return t == tp
 	case *List:
 		return mentions(t.Elem, tp)
-	case *Sealed:
-		for _, a := range t.Args {
+	case *Record, *Sealed:
+		for _, a := range TypeArgs(t) {
 			if mentions(a, tp) {
 				return true
 			}
@@ -1793,6 +1800,10 @@ func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
 		}
 		return fmt.Sprintf(" (keep only those that are: filter(%s, %s))", name, keep)
 	}
+	if sel, ok := f.fieldSelector(x, ob.path); ok && name != "this value" {
+		// A field of a record can be checked directly.
+		return fmt.Sprintf(" (check it first with if (%s) { ... })", checkText(name+sel, obligation{pred: ob.pred, args: ob.args, or: ob.or}))
+	}
 	if ob.path != "" || name == "this value" {
 		return " (give it a name and check it first)"
 	}
@@ -1807,6 +1818,23 @@ func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
 		}
 	}
 	return fmt.Sprintf(" (check it first with %s)", check)
+}
+
+// fieldSelector is path as field selectors (".address.zip"), if every
+// step of it is a field of a record.
+func (f *factChecker) fieldSelector(x syntax.Expr, path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	t := f.info.Types[x]
+	for _, step := range strings.Split(path[1:], ".") {
+		rec, ok := t.(*Record)
+		if !ok || rec.Field(step) == nil {
+			return "", false
+		}
+		t = rec.Field(step).Type
+	}
+	return path, true
 }
 
 // checkText is the condition that checks ob for the value called name.
