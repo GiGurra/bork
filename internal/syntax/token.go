@@ -14,6 +14,7 @@ const (
 	TIdent
 	TInt
 	TFloat
+	TRune
 	TString
 	TGoCode // the raw Go inside `unsafe go { ... }`
 
@@ -64,7 +65,7 @@ const (
 
 var kindNames = map[Kind]string{
 	EOF: "end of file", Illegal: "illegal token", Semi: "newline or ';'",
-	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TGoCode: "Go code", TString: "string literal",
+	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TRune: "rune literal", TGoCode: "Go code", TString: "string literal",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
 	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'",
 	LBrack: "'['", RBrack: "']'", Dot: "'.'", Underscore: "'_'", Pipe: "'|'", Arrow: "'=>'", Quest: "'?'",

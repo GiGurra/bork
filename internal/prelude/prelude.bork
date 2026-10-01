@@ -2,7 +2,7 @@
 // package. Functions are implemented in Go (`unsafe go`), in terms of
 // how bork values look in Go:
 //
-//   Int, Int8, ... Uint64  int64, int8, ... uint64
+//   Int, Int8, ... Uint64  int64, int8, ... uint64 (Rune is int32)
 //   Float32, Float         float32, float64
 //   String, Bool           string, bool
 //   a record               a struct with the same field names
@@ -102,4 +102,65 @@ fn replaceAll(s: String, old: String, replacement: String): String unsafe go {
 fn repeat(s: String, count: Int): String unsafe go {
   import "strings"
   return strings.Repeat(s, int(max(count, 0)))
+}
+
+// Runes (Unicode code points). These count and index runes, not bytes.
+
+fn runeCount(s: String): Int unsafe go {
+  import "unicode/utf8"
+  return int64(utf8.RuneCountInString(s))
+}
+
+// runeAt is the rune at index (counting runes from 0), if there is one.
+fn runeAt(s: String, index: Int): Option[Rune] unsafe go {
+  if index >= 0 {
+    i := int64(0)
+    for _, r := range s {
+      if i == index {
+        return Option_Some[int32]{value: r}
+      }
+      i++
+    }
+  }
+  return Option_None[int32]{}
+}
+
+// substring is the runes from index from up to (not including) index
+// to. It is OutOfRange unless 0 <= from <= to <= runeCount(s).
+fn substring(s: String, from: Int, to: Int): String | OutOfRange unsafe go {
+  import "fmt"
+  runes := []rune(s)
+  if from < 0 || to < from || to > int64(len(runes)) {
+    return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: fmt.Sprintf("a String of %d runes", len(runes))}
+  }
+  return string(runes[from:to])
+}
+
+fn runeToString(r: Rune): String unsafe go {
+  return string(r)
+}
+
+fn isDigit(r: Rune): Bool unsafe go {
+  import "unicode"
+  return unicode.IsDigit(r)
+}
+
+fn isLetter(r: Rune): Bool unsafe go {
+  import "unicode"
+  return unicode.IsLetter(r)
+}
+
+fn isSpace(r: Rune): Bool unsafe go {
+  import "unicode"
+  return unicode.IsSpace(r)
+}
+
+fn isUpper(r: Rune): Bool unsafe go {
+  import "unicode"
+  return unicode.IsUpper(r)
+}
+
+fn isLower(r: Rune): Bool unsafe go {
+  import "unicode"
+  return unicode.IsLower(r)
 }

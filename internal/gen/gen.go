@@ -418,6 +418,8 @@ func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 		return fmtCall("Sprint", g.typed(args[0], g.info.Types[e.Args[0]]))
 	case check.BuiltinConvert:
 		return g.conversion(e, args[0])
+	case check.BuiltinPanic:
+		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: args}
 	}
 	fn := g.info.CallFuncs[e]
 	return &ast.CallExpr{Fun: name(fn.Decl.Name), Args: args}

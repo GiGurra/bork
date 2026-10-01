@@ -27,11 +27,13 @@ const (
 	BuiltinPrintln
 	BuiltinToString
 	BuiltinConvert // toInt8(x), toFloat(x), ...
+	BuiltinPanic
 )
 
 var builtins = map[string]Builtin{
 	"println":  BuiltinPrintln,
 	"toString": BuiltinToString,
+	"panic":    BuiltinPanic,
 }
 
 // conversions maps each conversion function to its target type.
@@ -406,6 +408,9 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 	case *syntax.FloatLit:
 		c.errorf(e.Pos, "invalid float literal %s", e.Text)
 		return c.record(e, Invalid)
+	case *syntax.RuneLit:
+		c.errorf(e.Pos, "invalid rune literal %s", e.Text)
+		return c.record(e, Invalid)
 	case *syntax.StringLit:
 		return c.record(e, String)
 	case *syntax.BoolLit:
@@ -619,6 +624,11 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 		return Invalid
 	}
 	switch b {
+	case BuiltinPanic:
+		if t := c.exprWant(e.Args[0], String); t != String && t != Invalid {
+			c.errorf(e.Args[0].Position(), "panic needs a String message, found %s", t)
+		}
+		return Never
 	case BuiltinToString:
 		t := c.expr(e.Args[0])
 		if t != Invalid && !isValue(t) {

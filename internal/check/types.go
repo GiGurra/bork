@@ -68,6 +68,7 @@ var basicTypes = map[string]Type{
 	"Int8": Int8, "Int16": Int16, "Int32": Int32, "Int64": Int,
 	"Uint8": Uint8, "Uint16": Uint16, "Uint32": Uint32, "Uint64": Uint64,
 	"Byte":    Uint8,
+	"Rune":    Int32,
 	"Float32": Float32, "Float64": Float, "Float": Float,
 }
 

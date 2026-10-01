@@ -434,7 +434,7 @@ func (p *parser) pattern() Pattern {
 	case Underscore:
 		p.next()
 		return &WildcardPat{Pos: t.Pos}
-	case TInt, TFloat, TString, KwTrue, KwFalse, Minus:
+	case TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:
 		return &LitPat{Pos: t.Pos, Value: p.unary()}
 	case TIdent:
 		if p.peekKind() == Colon {
@@ -474,6 +474,9 @@ func (p *parser) primary() Expr {
 	case TFloat:
 		p.next()
 		return &FloatLit{Pos: t.Pos, Text: t.Text}
+	case TRune:
+		p.next()
+		return &RuneLit{Pos: t.Pos, Text: t.Text}
 	case TString:
 		p.next()
 		v, err := strconv.Unquote(t.Text)
