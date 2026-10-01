@@ -34,7 +34,7 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 
 ## Status
 
-Early design. See [docs/requirements.md](docs/requirements.md) for what has been decided so far.
+Early design. See [docs/requirements.md](docs/requirements.md) for what has been decided so far, and [docs/roadmap.md](docs/roadmap.md) for the plan towards a first compiler.
 
 ## License
 
