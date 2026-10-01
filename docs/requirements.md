@@ -245,17 +245,101 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 - **Predicates on compile-time-known values are evaluated during compilation.** `connect("db", 5432)` is accepted because `between(1, 65535)(5432)` is computed at build time. `connect("db", 0)` fails the build. Unlike proven, this works for *any* predicate, not just a built-in set.
 - **Constants and named constrained values.** `defaultPort: Port = 8080` is checked once, when compiled.
 - **Explicit compile-time computation** of lookup tables, constants, and derived data, marked at the call site (as q does), with the result baked into the binary.
-- **Predicates must be pure.** Compile-time evaluation and sound proofs both depend on it: a predicate that reads a file or the clock would make proofs meaningless.
+- **Compile-time code should only read files inside the module.** This is a convention, not enforced in v0.1 (see purity below).
+
+### Facts, purity, and the outside world
+
+- **No purity tracking in v0.1.** Immutability by design already covers concurrency and the stability of values. The compiler does not check that predicates are free of side effects (database or file I/O, the clock, randomness).
+- **Predicates are expected to be deterministic, but this is not checked.** A predicate whose answer can change for the same value (e.g. `isOpenNow(store)`, which reads the clock) produces facts that can go stale. That is a bug in the program, not something the compiler catches. The convention is: **effects produce values, and facts are about values.** For example, read `now = clock.now()` once, then use `isOpenAt(store, now)`.
+- **Facts about outside systems are facts about a point in time.** A fact can describe the outside world (a row exists, a file is present), but it is true as of when it was established. Keeping that current is the developer's job, not the compiler's. bork is aimed at typical web backend services, where a request reads its inputs, decides, and writes within a short window. Treating what it loaded as a fixed snapshot is the right model there. Concurrent changes elsewhere are handled with the usual backend tools (transactions, idempotency, optimistic locking), not by the proof system.
+- **Compile-time evaluation runs whatever a predicate does.** Without purity tracking, a predicate that does I/O will do it at build time when evaluated on a literal. A purity check limited to code reachable from predicates and compile-time blocks can be added later without affecting ordinary code.
+- **No widening syntax.** Facts are forgotten simply by passing a value where a less constrained type is expected (`Int where positive` to an `Int` parameter). No `x as Int` is needed.
 
 ### Open questions
 
 - **Colon or no colon** in parameter lists: `amount: Money` or `amount Money`?
 - **Function keyword:** `fn`, `func`, or `def`? The examples use `fn` for now. `def` is ambiguous (define *what*?), `func` is familiar from Go, and `fn` is the shortest and reads well in long signatures.
 - **Inline predicates:** only named predicates (`positive`), or also inline expressions (`where it > 0`)? Inline expressions require the compiler to recognise equivalent expressions.
-- **Purity:** does the compiler infer which functions are pure, or must they be marked (e.g. `pred` or `pure`)? Either way, predicates may only call pure code.
-- **Compile-time I/O:** may compile-time code read files (as q allows, e.g. baking in a config file), or is it strictly pure for reproducible builds?
 - **Exported return types:** do callers see only the facts a signature declares, or also facts the compiler derives from the body? A proposal: exported functions expose only the declared facts (the signature is the contract), and private functions may expose derived ones.
-- **Widening:** can a type deliberately be widened back to fewer facts (e.g. `x as Int`)?
+
+## Resources and scopes
+
+Outside resources (files, sockets, database connections, transactions, locks) are the one place where "facts only grow" is under pressure: the handle value never changes, but closing it changes the world it refers to. bork handles this with scopes, in the style of ZIO, so the open state can never end while a resource is still reachable.
+
+### Decided (v0.1)
+
+- **Resources belong to scopes.** Opening a resource requires a scope. A resource can be attached to one or more scopes, and it is **closed when the last of them closes**. There is no manual `close`, so there is neither use-after-close nor forgot-to-close.
+- **Scopes are blocks.** `scope s { ... }` opens a scope, which closes when the block ends. Finalizers run in reverse order of acquisition (LIFO), like Go's `defer`.
+- **Scope values can be passed down, never escape.** A scope can be passed as a function argument, but it cannot be returned, stored in a record, or captured by anything that outlives it.
+- **Using a resource requires proof of an open scope managing it.** Every access to a resource is a proof obligation: the compiler must be able to prove, locally, that the resource is attached to a scope that is still open at that point. It is resolved backwards like any other fact. Only scopes visible locally count. If some other scope elsewhere keeps the resource alive at runtime, that does not help the proof.
+- **Otherwise the resource is "possibly released".** When the last locally known scope of a resource has ended, the variable is marked possibly released at type level, and any use is a compile error. Runtime reference counts decide when a resource is actually closed; the compiler only ever relies on what it can prove.
+- **Ordinary calls need no annotations.** A synchronous call runs entirely inside the caller's scope, so a function can simply take `conn: Conn`. Only escapes need checking: returning a resource, storing it in something longer-lived, or handing it to a goroutine.
+- **Attaching happens where the resource is provably alive.** `attach` adds a scope fact, so it is only allowed where the resource is already known to be attached to an open scope. A goroutine therefore gets a resource attached at handover, never after it has started.
+- **Reference counting falls out of the design.** Within one call stack, scopes nest, so the last scope is simply the outermost one. Across goroutines, a resource attached to several scopes stays open until all of them have closed, which is shared ownership without a separate `shared_ptr`-style type.
+- **Scopes are passed explicitly in v0.1.** Acquiring functions take the scope as an ordinary argument. Implicit scope passing may be added later.
+
+```
+fn main() = scope app {
+  pool = openDbPool(cfg, app)?             // lives as long as the app
+  serve(pool, app)
+}
+
+fn handle(req: Request, pool: DbPool) = scope request {
+  conn = pool.connect(request)?            // closed when the request scope ends
+  file = openFile(path, request)?
+  ...
+}                                          // finalizers run LIFO
+
+fn broken(db: Db): Conn = {
+  c = scope s { db.connect(s)? }
+  c.query(...)                             // build error: c may be released (its scope `s` ended)
+}
+
+// Handing a resource to a goroutine that may outlive the spawning scope:
+// the new goroutine's scope is attached at the handover, while conn is provably alive.
+scope job {
+  conn = db.connect(job)?
+  spawn scope w (attach conn) {            // syntax not final
+    worker(conn)                           // conn stays open until job and w have both closed
+  }
+}
+```
+
+With structured concurrency (see below), a goroutine started inside `job` that must finish before `job` ends needs no attaching at all.
+
+### Two lifetimes of facts
+
+Facts come in two kinds, distinguished by how long they live:
+
+- **Value facts live forever.** They are about immutable values in the program, so nothing can make them false.
+- **Scoped facts live as long as a scope.** They are about state outside the program, and hold only while the scope is open. "This resource is open" is the first, built-in scoped fact.
+
+### User-defined scoped facts (planned, not v0.1)
+
+Library authors will be able to declare that acquiring a scope grants facts about the outside world, which hold for as long as the scope is open:
+
+```
+fn reserveUnit(unit: UnitId, dc: DcId, s: Scope): Result[Reservation, ReserveError]
+  grants located(unit, dc) in s            // syntax not final
+
+fn powerCycle(unit: UnitId, dc: DcId) where located(unit, dc) = ...
+
+scope maint {
+  reserveUnit(u, dc7, maint)?
+  powerCycle(u, dc7)                       // proven: located(u, dc7) holds in maint
+}                                          // reservation released, fact gone
+```
+
+- **A scoped fact is only honest if acquiring the scope holds something that keeps it true:** a lock, a lease, a reservation, a transaction. Without that, the fact is just an observation at a point in time, which is the developer's responsibility.
+- **Granting functions are trust points**, like `trust` and inference rules. The compiler believes the declared `grants`. They should be few, greppable, and live in libraries rather than business code.
+- **The outside world can still break a promise** (a lease expiring early, hardware moved despite a lock). Handling that at runtime is part of the granting library's responsibility.
+- **Backend examples:** inside a transaction, "this row is locked" or "the balance is at least 100"; within a leader lease, "I am the leader"; on a session, "authenticated as user U"; on an HTTP response, "headers not yet sent".
+- **Limit:** scopes model **nested** states well (connection → transaction → savepoint), but not **sequential** state changes (a protocol going A → B → C, where each step replaces the previous one). Those would need consumable values (affine types), which may be considered later.
+
+### To settle with concurrency
+
+- **Cancellation and deadlines through scopes.** A request scope is the natural carrier for what Go's `context.Context` does today: when a request is cancelled, its scope closes, its resources are released, and its goroutines stop.
+- **Structured concurrency:** must goroutines started inside a scope finish before the scope ends? That would let them use the scope's resources with no extra attaching.
 
 ## Open questions
 
@@ -269,7 +353,7 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 2. ~~Type system~~ (above)
 3. Contract and proof model: bringing proven's ideas into the language (in progress, above)
 4. Errors and effects: the `Result` shape and propagation syntax
-5. Concurrency: goroutines, channels, and the (later) isolation model
+5. Concurrency: goroutines, channels, structured concurrency, cancellation through scopes, and the (later) isolation model
 6. Go interop: no FFI in v0.1; what the future boundary looks like
 7. Tooling: the `bork` CLI, formatter, tests, and modules/packages
 
