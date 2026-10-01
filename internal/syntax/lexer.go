@@ -59,7 +59,7 @@ func (lx *lexer) endsStatement() bool {
 		return false
 	}
 	switch lx.toks[len(lx.toks)-1].Kind {
-	case TIdent, TInt, TFloat, TString, TGoCode, KwTrue, KwFalse, KwReturn, RParen, RBrace, RBrack, Quest, Underscore:
+	case TIdent, TInt, TFloat, TRune, TString, TGoCode, KwTrue, KwFalse, KwReturn, RParen, RBrace, RBrack, Quest, Underscore:
 		return true
 	}
 	return false
@@ -91,6 +91,8 @@ func (lx *lexer) run() {
 			lx.number(pos)
 		case c == '"':
 			lx.string(pos)
+		case c == '\'':
+			lx.runeLit(pos)
 		default:
 			lx.operator(pos)
 		}
@@ -374,3 +376,26 @@ func isLetter(c byte) bool {
 }
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+// runeLit lexes a rune literal: 'a', '\n', '\u00e5'. The checker
+// validates it.
+func (lx *lexer) runeLit(pos diag.Pos) {
+	start := lx.off
+	lx.advance() // opening quote
+	for {
+		if lx.off >= len(lx.src) || lx.peek(0) == '\n' {
+			lx.diags.Add(pos, "rune literal is not terminated")
+			lx.emit(TRune, "'?'", pos)
+			return
+		}
+		c := lx.advance()
+		if c == '\\' && lx.off < len(lx.src) {
+			lx.advance()
+			continue
+		}
+		if c == '\'' {
+			break
+		}
+	}
+	lx.emit(TRune, string(lx.src[start:lx.off]), pos)
+}

@@ -1,0 +1,5 @@
+main.bork:2:7: invalid rune literal 'ab'
+main.bork:3:12: 3.5 is not a whole number, so it cannot be Int
+main.bork:4:14: operator % needs integers, but this constant is a Float
+main.bork:5:14: 433 does not fit in Uint8 (0 to 255)
+main.bork:7:9: panic needs a String message, found Int

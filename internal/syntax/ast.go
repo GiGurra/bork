@@ -118,6 +118,12 @@ type FloatLit struct {
 	Text string
 }
 
+// RuneLit is a rune (Unicode code point) literal: 'a', '\n'.
+type RuneLit struct {
+	Pos  diag.Pos
+	Text string
+}
+
 type StringLit struct {
 	Pos   diag.Pos
 	Value string // unquoted
@@ -289,6 +295,7 @@ func (e *Try) Position() diag.Pos       { return e.X.Position() }
 
 func (*IntLit) exprNode()    {}
 func (*FloatLit) exprNode()  {}
+func (*RuneLit) exprNode()   {}
 func (*StringLit) exprNode() {}
 func (*BoolLit) exprNode()   {}
 func (*Ident) exprNode()     {}
@@ -301,6 +308,7 @@ func (*Return) exprNode()    {}
 
 func (e *IntLit) Position() diag.Pos    { return e.Pos }
 func (e *FloatLit) Position() diag.Pos  { return e.Pos }
+func (e *RuneLit) Position() diag.Pos   { return e.Pos }
 func (e *StringLit) Position() diag.Pos { return e.Pos }
 func (e *BoolLit) Position() diag.Pos   { return e.Pos }
 func (e *Ident) Position() diag.Pos     { return e.Pos }

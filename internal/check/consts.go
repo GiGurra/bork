@@ -4,15 +4,20 @@ import (
 	"go/constant"
 	"go/token"
 	"math"
+	"strconv"
+	"unicode/utf8"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// Number literals, and arithmetic on them, are constants: they are
-// computed exactly at compile time, and take their type from where they
-// are used (`x: Int8 = 100 + 27`). Without a context, an integer
-// constant is an Int and any other constant is a Float. A constant that
+// Number and rune literals, and arithmetic on them, are constants: they
+// are computed exactly at compile time, and take their type from where
+// they are used (`x: Int8 = 100 + 27`). Without a context, a constant
+// with a float literal in it is a Float, one with a rune literal is a
+// Rune, and any other is an Int. A constant is computed as its type
+// computes: `/` divides integers as integers (`7 / 2` is 3 as an Int)
+// and floats exactly (`1 / 3` is 0.333... as a Float). A constant that
 // does not fit its type is a compile error.
 
 var constOps = map[syntax.Kind]token.Token{
@@ -20,21 +25,29 @@ var constOps = map[syntax.Kind]token.Token{
 	syntax.Slash: token.QUO, syntax.Pct: token.REM,
 }
 
-// constValue computes e if it is a constant expression. It reports
-// nothing: an invalid literal or a division by zero makes e
-// non-constant, and the error is reported when e is checked normally.
-func constValue(e syntax.Expr) constant.Value {
+// constValue computes e if it is a constant expression of an integer
+// type, or (asFloat) of a float type. It reports nothing: an invalid
+// literal or a division by zero makes e non-constant, and the error is
+// reported when e is checked normally.
+func constValue(e syntax.Expr) constant.Value { return constValueAs(e, false) }
+
+func constValueAs(e syntax.Expr, asFloat bool) constant.Value {
 	var v constant.Value
 	switch e := e.(type) {
 	case *syntax.IntLit:
 		v = constant.MakeFromLiteral(e.Text, token.INT, 0)
 	case *syntax.FloatLit:
 		v = constant.MakeFromLiteral(e.Text, token.FLOAT, 0)
+	case *syntax.RuneLit:
+		// MakeFromLiteral ignores anything after the first rune.
+		if s, err := strconv.Unquote(e.Text); err == nil && utf8.RuneCountInString(s) == 1 {
+			v = constant.MakeFromLiteral(e.Text, token.CHAR, 0)
+		}
 	case *syntax.Unary:
 		if e.Op != syntax.Minus {
 			return nil
 		}
-		if x := constValue(e.X); x != nil {
+		if x := constValueAs(e.X, asFloat); x != nil {
 			v = constant.UnaryOp(token.SUB, x, 0)
 		}
 	case *syntax.Binary:
@@ -42,7 +55,7 @@ func constValue(e syntax.Expr) constant.Value {
 		if !ok {
 			return nil
 		}
-		x, y := constValue(e.X), constValue(e.Y)
+		x, y := constValueAs(e.X, asFloat), constValueAs(e.Y, asFloat)
 		if x == nil || y == nil {
 			return nil
 		}
@@ -50,10 +63,10 @@ func constValue(e syntax.Expr) constant.Value {
 		switch {
 		case (op == token.QUO || op == token.REM) && constant.Sign(y) == 0:
 			return nil
-		case op == token.REM && !ints:
+		case op == token.REM && (!ints || asFloat):
 			return nil
-		case op == token.QUO && ints:
-			op = token.QUO_ASSIGN // integer division, as in Go
+		case op == token.QUO && ints && !asFloat:
+			op = token.QUO_ASSIGN // integer division
 		}
 		v = constant.BinaryOp(x, op, y)
 	}
@@ -66,12 +79,17 @@ func constValue(e syntax.Expr) constant.Value {
 // constant types the constant expression e, of value v, for the context
 // want, and checks that it fits.
 func (c *checker) constant(e syntax.Expr, v constant.Value, want Type) Type {
-	t := Int
-	if v.Kind() == constant.Float {
-		t = Float
-	}
+	t := defaultConstType(e)
 	if w := numericWant(want, t); w != nil {
 		t = w
+	}
+	if IsFloat(t) {
+		v = constValueAs(e, true)
+		if v == nil {
+			// The only operation integers allow and floats do not.
+			c.errorf(e.Position(), "operator %% needs integers, but this constant is a %s", t)
+			return c.record(e, Invalid)
+		}
 	}
 	v, ok := c.fits(e.Position(), v, t)
 	if !ok {
@@ -146,4 +164,33 @@ func intRange(t Type) (lo, hi constant.Value) {
 	}
 	half := constant.Shift(one, token.SHL, bits-1)
 	return constant.UnaryOp(token.SUB, half, 0), constant.BinaryOp(half, token.SUB, one)
+}
+
+// defaultConstType is the type of a constant expression used without a
+// context: Float if it has a float literal, Rune if it has a rune
+// literal, and Int otherwise.
+func defaultConstType(e syntax.Expr) Type {
+	hasFloat, hasRune := false, false
+	var walk func(e syntax.Expr)
+	walk = func(e syntax.Expr) {
+		switch e := e.(type) {
+		case *syntax.FloatLit:
+			hasFloat = true
+		case *syntax.RuneLit:
+			hasRune = true
+		case *syntax.Unary:
+			walk(e.X)
+		case *syntax.Binary:
+			walk(e.X)
+			walk(e.Y)
+		}
+	}
+	walk(e)
+	switch {
+	case hasFloat:
+		return Float
+	case hasRune:
+		return Int32
+	}
+	return Int
 }
