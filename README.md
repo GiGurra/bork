@@ -88,9 +88,9 @@ fn moveUser(id: Int, city: String): User | NotFound | DbError {
 
 fn describe(id: Int): String {
   match (moveUser(id, "Oslo")) {
-    u: User => u.name + " now lives in " + u.address.city
-    NotFound { id: missing } => "no user with id " + toString(missing)
-    e: DbError => "database error: " + e.message
+    u: User => s"${u.name} now lives in ${u.address.city}"
+    NotFound { id: missing } => s"no user with id $missing"
+    e: DbError => s"database error: ${e.message}"
   }
 }
 

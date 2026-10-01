@@ -11,7 +11,13 @@ import (
 // `return`, `)`, or `}`); the lexer then emits a Semi token. Comments are
 // returned separately.
 func Lex(file string, src []byte, diags *diag.List) ([]Token, []Comment) {
-	lx := &lexer{file: file, src: src, line: 1, col: 1, diags: diags}
+	return lexAt(file, src, 1, 1, diags)
+}
+
+// lexAt lexes src as if it started at line:col of file (used for the
+// expressions inside interpolated strings).
+func lexAt(file string, src []byte, line, col int, diags *diag.List) ([]Token, []Comment) {
+	lx := &lexer{file: file, src: src, line: line, col: col, diags: diags}
 	lx.run()
 	return lx.toks, lx.comments
 }
@@ -59,7 +65,7 @@ func (lx *lexer) endsStatement() bool {
 		return false
 	}
 	switch lx.toks[len(lx.toks)-1].Kind {
-	case TIdent, TInt, TFloat, TRune, TString, TGoCode, KwTrue, KwFalse, KwReturn, RParen, RBrace, RBrack, Quest, Underscore:
+	case TIdent, TInt, TFloat, TRune, TString, TInterp, TGoCode, KwTrue, KwFalse, KwReturn, RParen, RBrace, RBrack, Quest, Underscore:
 		return true
 	}
 	return false
@@ -141,6 +147,10 @@ func (lx *lexer) ident(pos diag.Pos) {
 		lx.advance()
 	}
 	text := string(lx.src[start:lx.off])
+	if text == "s" && lx.peek(0) == '"' {
+		lx.interp(pos)
+		return
+	}
 	if k, ok := keywords[text]; ok {
 		lx.emit(k, text, pos)
 		if k == KwUnsafe {
@@ -398,4 +408,45 @@ func (lx *lexer) runeLit(pos diag.Pos) {
 		}
 	}
 	lx.emit(TRune, string(lx.src[start:lx.off]), pos)
+}
+
+// interp lexes the string part of s"...", right after the s. Inside
+// ${...}, quotes start nested string literals, so s"${f("x")}" is one
+// token. The parser splits the text into literal parts and expressions.
+func (lx *lexer) interp(pos diag.Pos) {
+	start := lx.off
+	lx.advance() // opening quote
+	depth := 0
+	for {
+		if lx.off >= len(lx.src) || lx.peek(0) == '\n' {
+			lx.diags.Add(pos, "string literal is not terminated")
+			lx.emit(TInterp, `""`, pos)
+			return
+		}
+		c := lx.advance()
+		switch {
+		case c == '\\' && lx.off < len(lx.src) && lx.peek(0) != '\n':
+			lx.advance()
+		case depth == 0 && c == '"':
+			lx.emit(TInterp, string(lx.src[start:lx.off]), pos)
+			return
+		case depth == 0 && c == '$' && lx.peek(0) == '{':
+			lx.advance()
+			depth = 1
+		case depth > 0 && c == '{':
+			depth++
+		case depth > 0 && c == '}':
+			depth--
+		case depth > 0 && c == '"':
+			// A string literal inside the expression.
+			for lx.off < len(lx.src) && lx.peek(0) != '"' && lx.peek(0) != '\n' {
+				if lx.advance() == '\\' && lx.off < len(lx.src) {
+					lx.advance()
+				}
+			}
+			if lx.peek(0) == '"' {
+				lx.advance()
+			}
+		}
+	}
 }

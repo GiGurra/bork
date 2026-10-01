@@ -144,3 +144,12 @@ func TestParseGoCodeImports(t *testing.T) {
 		t.Errorf("imports = %q, body = %q", gc.Imports, gc.Body)
 	}
 }
+
+func TestLexInterpolatedString(t *testing.T) {
+	// Quotes inside ${...} start nested strings, not the end of the string.
+	got := kinds(`s"a ${f("}")} $b" + s`)
+	want := "interpolated string '+' identifier newline or ';' end of file"
+	if got != want {
+		t.Errorf("got: %s\nwant: %s", got, want)
+	}
+}
