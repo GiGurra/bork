@@ -1,0 +1,59 @@
+type NotFound = { key: String }
+
+// Generic functions: type parameters are inferred from the arguments.
+fn identity[T](x: T): T { x }
+
+fn twice[T](x: T, f: (T) => T): T { f(f(x)) }
+
+fn pairUp[A, B](xs: List[A], ys: List[B], combine: (A, B) => String): List[String] {
+  if (isEmpty(xs) || isEmpty(ys)) {
+    []
+  } else {
+    match (head(xs)) {
+      Option.Some { value: x } => match (head(ys)) {
+        Option.Some { value: y } => prepend(combine(x, y), pairUp(drop(xs, 1), drop(ys, 1), combine))
+        Option.None => []
+      }
+      Option.None => []
+    }
+  }
+}
+
+// A union with a type parameter: T is what remains.
+fn orElse[T](x: T | NotFound, fallback: T): T {
+  match (x) {
+    n: NotFound => fallback
+    v: T => v
+  }
+}
+
+fn lookup(key: String): Int | NotFound {
+  if (key == "one") { 1 } else { NotFound { key: key } }
+}
+
+fn firstOr[T](xs: List[T], fallback: T): T {
+  match (head(xs)) {
+    Option.Some { value: v } => v
+    Option.None => fallback
+  }
+}
+
+// Functions are values: returned, passed, stored in bindings.
+fn adder(n: Int): (Int) => Int { x => x + n }
+
+fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C { x => g(f(x)) }
+
+fn applyAll(fs: List[(Int) => Int], x: Int): List[Int] { map(fs, f => f(x)) }
+
+fn main() {
+  println(identity(5), identity("s"), twice(3, x => x * x), twice("ab", s => s + s))
+  println(pairUp([1, 2, 3], ["a", "b"], (n, s) => s"$s$n"))
+  println(orElse(lookup("one"), 0), orElse(lookup("two"), 0))
+  println(firstOr([7, 8], 0), firstOr([], "none"))
+  add2 = adder(2)
+  println(add2(40), adder(1)(1))
+  toText = compose(adder(10), x => s"<$x>")
+  println(toText(5), applyAll([adder(1), x => x * 100, identity], 3))
+  printer: (String) => Unit = s => println(s"> $s")
+  printer("hello")
+}

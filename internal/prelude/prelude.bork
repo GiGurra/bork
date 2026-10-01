@@ -8,6 +8,9 @@
 //   a record               a struct with the same field names
 //   Option[T]              Option[T]: Option_Some[T]{value: v} or Option_None[T]{}
 //   a union                any, holding one of the member types
+//   List[T]                []T, never modified once built
+//   (A, B) => C            func(A, B) C (no result for Unit)
+//   a type parameter T     a Go type parameter T (any)
 
 // OutOfRange is returned by a conversion whose value does not fit the
 // target type, such as toInt8(1000).
@@ -163,4 +166,180 @@ fn isUpper(r: Rune): Bool unsafe go {
 fn isLower(r: Rune): Bool unsafe go {
   import "unicode"
   return unicode.IsLower(r)
+}
+
+// Lists. A List is immutable: functions that "change" one build a new
+// list.
+
+fn length[T](xs: List[T]): Int unsafe go {
+  return int64(len(xs))
+}
+
+fn isEmpty[T](xs: List[T]): Bool unsafe go {
+  return len(xs) == 0
+}
+
+// get is the element at index (from 0), if there is one.
+fn get[T](xs: List[T], index: Int): Option[T] unsafe go {
+  if index < 0 || index >= int64(len(xs)) {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[index]}
+}
+
+fn head[T](xs: List[T]): Option[T] unsafe go {
+  if len(xs) == 0 {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[0]}
+}
+
+fn last[T](xs: List[T]): Option[T] unsafe go {
+  if len(xs) == 0 {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[len(xs)-1]}
+}
+
+fn map[A, B](xs: List[A], f: (A) => B): List[B] unsafe go {
+  out := make([]B, len(xs))
+  for i, x := range xs {
+    out[i] = f(x)
+  }
+  return out
+}
+
+fn flatMap[A, B](xs: List[A], f: (A) => List[B]): List[B] unsafe go {
+  var out []B
+  for _, x := range xs {
+    out = append(out, f(x)...)
+  }
+  return out
+}
+
+fn filter[T](xs: List[T], keep: (T) => Bool): List[T] unsafe go {
+  var out []T
+  for _, x := range xs {
+    if keep(x) {
+      out = append(out, x)
+    }
+  }
+  return out
+}
+
+// fold combines the elements from the first to the last, starting
+// from initial: fold([1, 2, 3], 0, (sum, x) => sum + x) is 6.
+fn fold[T, A](xs: List[T], initial: A, f: (A, T) => A): A unsafe go {
+  acc := initial
+  for _, x := range xs {
+    acc = f(acc, x)
+  }
+  return acc
+}
+
+fn find[T](xs: List[T], matches: (T) => Bool): Option[T] unsafe go {
+  for _, x := range xs {
+    if matches(x) {
+      return Option_Some[T]{value: x}
+    }
+  }
+  return Option_None[T]{}
+}
+
+fn any[T](xs: List[T], test: (T) => Bool): Bool unsafe go {
+  for _, x := range xs {
+    if test(x) {
+      return true
+    }
+  }
+  return false
+}
+
+fn all[T](xs: List[T], test: (T) => Bool): Bool unsafe go {
+  for _, x := range xs {
+    if !test(x) {
+      return false
+    }
+  }
+  return true
+}
+
+fn count[T](xs: List[T], test: (T) => Bool): Int unsafe go {
+  n := int64(0)
+  for _, x := range xs {
+    if test(x) {
+      n++
+    }
+  }
+  return n
+}
+
+fn forEach[T](xs: List[T], f: (T) => Unit) unsafe go {
+  for _, x := range xs {
+    f(x)
+  }
+}
+
+// take is the first n elements (all of them if there are fewer).
+fn take[T](xs: List[T], n: Int): List[T] unsafe go {
+  n = max(0, min(n, int64(len(xs))))
+  return xs[:n:n]
+}
+
+// drop is all but the first n elements.
+fn drop[T](xs: List[T], n: Int): List[T] unsafe go {
+  n = max(0, min(n, int64(len(xs))))
+  return xs[n:]
+}
+
+fn reverse[T](xs: List[T]): List[T] unsafe go {
+  out := make([]T, len(xs))
+  for i, x := range xs {
+    out[len(xs)-1-i] = x
+  }
+  return out
+}
+
+fn concat[T](xs: List[T], ys: List[T]): List[T] unsafe go {
+  out := make([]T, 0, len(xs)+len(ys))
+  return append(append(out, xs...), ys...)
+}
+
+fn append[T](xs: List[T], x: T): List[T] unsafe go {
+  out := make([]T, 0, len(xs)+1)
+  return append(append(out, xs...), x)
+}
+
+fn prepend[T](x: T, xs: List[T]): List[T] unsafe go {
+  out := make([]T, 0, len(xs)+1)
+  return append(append(out, x), xs...)
+}
+
+// sortWith sorts by a comparison: less(a, b) says whether a goes
+// before b. Equal elements keep their order.
+fn sortWith[T](xs: List[T], less: (T, T) => Bool): List[T] unsafe go {
+  import "sort"
+  out := make([]T, len(xs))
+  copy(out, xs)
+  sort.SliceStable(out, func(i, j int) bool { return less(out[i], out[j]) })
+  return out
+}
+
+// range is the Ints from start up to (not including) end.
+fn range(start: Int, end: Int): List[Int] unsafe go {
+  var out []int64
+  for i := start; i < end; i++ {
+    out = append(out, i)
+  }
+  return out
+}
+
+fn join(parts: List[String], separator: String): String unsafe go {
+  import "strings"
+  return strings.Join(parts, separator)
+}
+
+fn split(s: String, separator: String): List[String] unsafe go {
+  import "strings"
+  return strings.Split(s, separator)
 }

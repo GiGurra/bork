@@ -1,0 +1,22 @@
+pred positive(x: Int) { x > 0 }
+
+fn transfer(amount: Int where positive): Int { amount * 100 }
+
+fn unchecked(amounts: List[Int]): List[Int] {
+  map(amounts, a => transfer(a))
+}
+
+// Calls through a function value could not be checked.
+fn asValue(amounts: List[Int]): List[Int] {
+  map(amounts, transfer)
+}
+
+// A guard in one lambda says nothing about another lambda's parameter.
+fn otherLambda(xs: List[Int]): List[Int] {
+  checked = filter(xs, x => positive(x))
+  map(checked, y => transfer(y))
+}
+
+fn main() {
+  println(unchecked([1]), asValue([1]), otherLambda([1]))
+}

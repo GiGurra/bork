@@ -10,9 +10,11 @@ import (
 
 // Func is a declared function's signature.
 type Func struct {
-	Decl   *syntax.FuncDecl
-	Params []Type
-	Result Type
+	Decl *syntax.FuncDecl
+	// TypeParams lists a generic function's type parameters.
+	TypeParams []*TypeParam
+	Params     []Type
+	Result     Type
 	// Prelude is set for the built-in functions of prelude.bork.
 	Prelude bool
 	// Calls lists the functions this function's body calls.
@@ -116,6 +118,13 @@ type Info struct {
 	BindingConstraints map[*syntax.Binding][]*Constraint
 	// Rules holds the package's inference rules.
 	Rules []*Rule
+	// Instances describes every call of a declared function, and
+	// FuncRefs every function used as a value, with type arguments for
+	// generic functions.
+	Instances map[*syntax.Call]*Instance
+	FuncRefs  map[*syntax.Ident]*Instance
+	// LambdaParams holds the parameters of lambdas.
+	LambdaParams map[*syntax.Param]bool
 	// PatSources records, for a name bound by the top-level pattern of a
 	// match arm, the matched expression and the union member the pattern
 	// narrowed it to (nil if it did not narrow).
@@ -151,6 +160,9 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 
 			BindingConstraints: map[*syntax.Binding][]*Constraint{},
 			PatSources:         map[any]*PatSource{},
+			Instances:          map[*syntax.Call]*Instance{},
+			FuncRefs:           map[*syntax.Ident]*Instance{},
+			LambdaParams:       map[*syntax.Param]bool{},
 		},
 	}
 	// Pass 1: declare types, then resolve their bodies, so types can
@@ -199,6 +211,11 @@ type checker struct {
 	// Per-function state.
 	fn     *Func
 	scopes []map[string]*local
+	// typeParams holds the type parameters in scope.
+	typeParams map[string]*TypeParam
+	// lambdaDepth counts the lambdas being checked around the current
+	// expression.
+	lambdaDepth int
 }
 
 type local struct {
@@ -217,10 +234,9 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		c.errorf(fd.Pos, "%s is a built-in function and cannot be redefined", fd.Name)
 		return
 	}
-	if prev, ok := c.info.Funcs[fd.Name]; ok && prev.Prelude {
-		c.errorf(fd.Pos, "%s is a built-in function and cannot be redefined", fd.Name)
-		return
-	} else if ok {
+	// A function of the package replaces a prelude function of the
+	// same name, so new prelude functions never break programs.
+	if prev, ok := c.info.Funcs[fd.Name]; ok && !prev.Prelude {
 		c.errorf(fd.Pos, "function %s is already declared at %s", fd.Name, prev.Decl.Pos)
 		return
 	}
@@ -232,18 +248,24 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		c.errorf(fd.Pos, "pred %s needs a parameter: the value it is about", fd.Name)
 		return
 	}
-	fn := &Func{Decl: fd, Result: c.resolveType(fd.Result), Prelude: prelude}
+	fn := &Func{Decl: fd, Prelude: prelude}
+	fn.TypeParams = c.declareTypeParams(fd, prelude)
+	fn.Result = c.resolveType(fd.Result)
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
+	c.typeParams = nil
 	c.info.Funcs[fd.Name] = fn
 }
 
 func (c *checker) checkFunc(fn *Func) {
 	c.fn = fn
+	c.useTypeParams(fn)
+	defer c.useTypeParams(nil)
 	c.scopes = []map[string]*local{{}}
 	for i, p := range fn.Decl.Params {
-		if c.nameTaken(p.Name, p.Pos) {
+		// The prelude's parameter names do not depend on user code.
+		if !fn.Prelude && c.nameTaken(p.Name, p.Pos) {
 			continue
 		}
 		if fn.Params[i] == Unit {
@@ -290,12 +312,10 @@ func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 			return true
 		}
 	}
-	if fn, ok := c.info.Funcs[name]; ok {
-		if fn.Prelude {
-			c.errorf(pos, "%s is a built-in function (bork does not allow shadowing)", name)
-		} else {
-			c.errorf(pos, "%s is already the name of a function (bork does not allow shadowing)", name)
-		}
+	// Prelude functions may be shadowed: their names (count, find,
+	// last, ...) are too useful to take away from locals.
+	if fn, ok := c.info.Funcs[name]; ok && !fn.Prelude {
+		c.errorf(pos, "%s is already the name of a function (bork does not allow shadowing)", name)
 		return true
 	}
 	if _, ok := builtins[name]; ok {
@@ -466,13 +486,17 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 	case *syntax.BoolLit:
 		return c.record(e, Bool)
 	case *syntax.Ident:
-		return c.record(e, c.ident(e))
+		return c.record(e, c.ident(e, want))
 	case *syntax.Unary:
 		return c.record(e, c.unary(e))
 	case *syntax.Binary:
 		return c.record(e, c.binary(e, want))
 	case *syntax.Call:
-		return c.record(e, c.call(e))
+		return c.record(e, c.call(e, want))
+	case *syntax.Lambda:
+		return c.record(e, c.lambda(e, want, nil))
+	case *syntax.ListLit:
+		return c.record(e, c.listLit(e, want))
 	case *syntax.If:
 		return c.record(e, c.ifExpr(e, want))
 	case *syntax.Block:
@@ -494,15 +518,14 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 	panic("unhandled expression")
 }
 
-func (c *checker) ident(e *syntax.Ident) Type {
+func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if l := c.lookup(e.Name); l != nil {
 		l.used = true
 		c.info.Defs[e] = l.decl
 		return l.typ
 	}
-	if _, ok := c.info.Funcs[e.Name]; ok {
-		c.errorf(e.Pos, "function %s must be called (functions as values are not supported yet)", e.Name)
-		return Invalid
+	if fn, ok := c.info.Funcs[e.Name]; ok {
+		return c.funcValue(e, fn, want)
 	}
 	if _, ok := builtins[e.Name]; ok {
 		c.errorf(e.Pos, "built-in %s must be called", e.Name)
@@ -613,19 +636,19 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 			c.errorf(e.Pos, "cannot compare values of type %s", x)
 			return Invalid
 		}
+		if !comparable(x) {
+			c.errorf(e.Pos, "cannot compare values of type %s with %s (lists, functions, and values of type parameters have no ==)", x, op)
+			return Invalid
+		}
 		return Bool
 	}
 	return Invalid
 }
 
-func (c *checker) call(e *syntax.Call) Type {
+func (c *checker) call(e *syntax.Call, want Type) Type {
 	id, ok := e.Fun.(*syntax.Ident)
-	if !ok {
-		c.errorf(e.Fun.Position(), "only named functions can be called")
-		for _, a := range e.Args {
-			c.expr(a)
-		}
-		return Invalid
+	if !ok || c.lookup(id.Name) != nil {
+		return c.callValue(e)
 	}
 	if b, ok := builtins[id.Name]; ok && c.lookup(id.Name) == nil {
 		c.info.CallBuiltins[e] = b
@@ -634,8 +657,6 @@ func (c *checker) call(e *syntax.Call) Type {
 	fn, ok := c.info.Funcs[id.Name]
 	if !ok {
 		switch {
-		case c.lookup(id.Name) != nil:
-			c.errorf(id.Pos, "%s is a value, not a function", id.Name)
 		case c.isTypeName(id.Name):
 			c.errorf(id.Pos, "%s is a type; build a record with %s { field: value, ... }", id.Name, id.Name)
 		default:
@@ -646,24 +667,7 @@ func (c *checker) call(e *syntax.Call) Type {
 		}
 		return Invalid
 	}
-	c.info.CallFuncs[e] = fn
-	if c.fn != nil {
-		c.fn.Calls = append(c.fn.Calls, fn)
-	}
-	if len(e.Args) != len(fn.Params) {
-		c.errorf(e.Pos, "%s takes %d argument(s), but %d were given", id.Name, len(fn.Params), len(e.Args))
-	}
-	for i, a := range e.Args {
-		var want Type
-		if i < len(fn.Params) {
-			want = fn.Params[i]
-		}
-		t := c.exprWant(a, want)
-		if want != nil && !assignable(t, want) {
-			c.errorf(a.Position(), "argument %d to %s must be %s, found %s", i+1, id.Name, want, t)
-		}
-	}
-	return fn.Result
+	return c.callFunc(e, id, fn, want)
 }
 
 func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
@@ -755,6 +759,13 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 }
 
 func (c *checker) returnExpr(e *syntax.Return) {
+	if c.lambdaDepth > 0 {
+		c.errorf(e.Pos, "return cannot be used in a lambda; a lambda's value is its body's value")
+		if e.Value != nil {
+			c.expr(e.Value)
+		}
+		return
+	}
 	want := c.fn.Result
 	if e.Value == nil {
 		if want != Unit {

@@ -17,7 +17,7 @@ type typeEntry struct {
 }
 
 // reservedTypeNames cannot be declared by user code.
-var reservedTypeNames = map[string]bool{"Never": true, "Option": true}
+var reservedTypeNames = map[string]bool{"Never": true, "Option": true, "List": true}
 
 func init() {
 	for name := range basicTypes {
@@ -145,6 +145,50 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 		}
 		return newUnion(members)
 	}
+	if t.Func != nil {
+		ft := &FuncType{Result: c.resolveType(t.Func.Result)}
+		if ft.Result == Invalid {
+			return Invalid
+		}
+		for _, p := range t.Func.Params {
+			pt := c.resolveType(p)
+			switch {
+			case pt == Invalid:
+				return Invalid
+			case !isValue(pt):
+				c.errorf(p.Pos, "a function cannot take a parameter of type %s", pt)
+				return Invalid
+			}
+			ft.Params = append(ft.Params, pt)
+		}
+		if hasWhere(t.Func.Result) || hasWhereIn(t.Func.Params) {
+			c.errorf(t.Pos, "where clauses inside function types are not supported yet")
+			return Invalid
+		}
+		return ft
+	}
+	if tp := c.typeParams[t.Name]; tp != nil {
+		if len(t.Args) > 0 {
+			c.errorf(t.Pos, "type parameter %s does not take type arguments", t.Name)
+			return Invalid
+		}
+		return tp
+	}
+	if t.Name == "List" {
+		if len(t.Args) != 1 {
+			c.errorf(t.Pos, "List needs exactly one type argument, as in List[Int]")
+			return Invalid
+		}
+		elem := c.resolveType(t.Args[0])
+		if elem == Invalid {
+			return Invalid
+		}
+		if !isValue(elem) {
+			c.errorf(t.Args[0].Pos, "List[%s] is not allowed", elem)
+			return Invalid
+		}
+		return &List{Elem: elem}
+	}
 	if t.Name == "Option" {
 		if len(t.Args) != 1 {
 			c.errorf(t.Pos, "Option needs exactly one type argument, as in Option[Int]")
@@ -175,6 +219,23 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 	}
 	c.errorf(t.Pos, "unknown type %s", t.Name)
 	return Invalid
+}
+
+func hasWhere(t *syntax.TypeExpr) bool {
+	if t == nil {
+		return false
+	}
+	return len(t.Where) > 0 || hasWhereIn(t.Union) || hasWhereIn(t.Args) ||
+		(t.Func != nil && (hasWhere(t.Func.Result) || hasWhereIn(t.Func.Params)))
+}
+
+func hasWhereIn(ts []*syntax.TypeExpr) bool {
+	for _, t := range ts {
+		if hasWhere(t) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkRecordCycles reports records that contain themselves directly

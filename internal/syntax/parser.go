@@ -50,6 +50,9 @@ type parser struct {
 	toks  []Token
 	i     int
 	diags *diag.List
+	// noLambda is set while parsing rule premises, where `x =>` ends
+	// the premises instead of starting a lambda.
+	noLambda bool
 }
 
 func (p *parser) tok() Token     { return p.toks[p.i] }
@@ -178,6 +181,13 @@ func (p *parser) funcDecl() (fn *FuncDecl) {
 	pos := p.next().Pos
 	name := p.expect(TIdent, "(function name)")
 	fn = &FuncDecl{Pos: pos, Name: name.Text, IsPred: isPred}
+	if p.at(LBrack) {
+		p.next()
+		p.list(RBrack, "a type parameter", func() {
+			t := p.expect(TIdent, "(type parameter name)")
+			fn.TypeParams = append(fn.TypeParams, &TypeParam{Pos: t.Pos, Name: t.Text})
+		})
+	}
 	p.expect(LParen, "to start the parameter list")
 	p.skipNewlines()
 	for !p.at(RParen) {
@@ -294,10 +304,29 @@ func (p *parser) pred() *PredRef {
 
 func (p *parser) typeAtom() *TypeExpr {
 	if p.at(LParen) {
-		p.next()
-		t := p.typeExpr()
+		// A function type `(A, B) => C`, or a parenthesized type.
+		pos := p.next().Pos
+		var params []*TypeExpr
+		p.skipNewlines()
+		for !p.at(RParen) {
+			params = append(params, p.typeExpr())
+			p.skipNewlines()
+			if !p.at(Comma) {
+				break
+			}
+			p.next()
+			p.skipNewlines()
+		}
 		p.expect(RParen, "to close the type")
-		return t
+		if p.at(Arrow) {
+			p.next()
+			return &TypeExpr{Pos: pos, Func: &FuncTypeExpr{Params: params, Result: p.typeExpr()}}
+		}
+		if len(params) != 1 {
+			p.errorf(pos, "expected => after a function type's parameters")
+			panic(bailout{})
+		}
+		return params[0]
 	}
 	t := p.expect(TIdent, "(type name)")
 	te := &TypeExpr{Pos: t.Pos, Name: t.Text}
@@ -382,11 +411,12 @@ func (p *parser) block() *Block {
 
 // Binary operator precedence, lowest first.
 var precedence = map[Kind]int{
-	OrOr:   1,
-	AndAnd: 2,
-	Eq:     3, NotEq: 3, Lt: 3, LtEq: 3, Gt: 3, GtEq: 3,
-	Plus: 4, Minus: 4,
-	Star: 5, Slash: 5, Pct: 5,
+	PipeGt: 1,
+	OrOr:   2,
+	AndAnd: 3,
+	Eq:     4, NotEq: 4, Lt: 4, LtEq: 4, Gt: 4, GtEq: 4,
+	Plus: 5, Minus: 5,
+	Star: 6, Slash: 6, Pct: 6,
 }
 
 func (p *parser) expr() Expr { return p.binary(1) }
@@ -402,8 +432,21 @@ func (p *parser) binary(minPrec int) Expr {
 		p.next()
 		p.skipNewlines() // an operator at the end of a line continues the expression
 		y := p.binary(prec + 1)
+		if op.Kind == PipeGt {
+			x = pipe(op, x, y)
+			continue
+		}
 		x = &Binary{Pos: op.Pos, Op: op.Kind, X: x, Y: y}
 	}
+}
+
+// pipe desugars `x |> f(a, b)` to `f(x, a, b)`, and `x |> f` to `f(x)`.
+func pipe(op Token, x, y Expr) Expr {
+	if call, ok := y.(*Call); ok {
+		call.Args = append([]Expr{x}, call.Args...)
+		return call
+	}
+	return &Call{Pos: op.Pos, Fun: y, Args: []Expr{x}}
 }
 
 func (p *parser) unary() Expr {
@@ -573,9 +616,23 @@ func (p *parser) primary() Expr {
 		p.next()
 		return &BoolLit{Pos: t.Pos, Value: t.Kind == KwTrue}
 	case TIdent:
+		if p.peekKind() == Arrow && !p.noLambda {
+			return p.lambda()
+		}
 		p.next()
 		return &Ident{Pos: t.Pos, Name: t.Text}
+	case LBrack:
+		p.next()
+		lit := &ListLit{Pos: t.Pos}
+		p.list(RBrack, "a list element", func() {
+			p.skipNewlines()
+			lit.Elems = append(lit.Elems, p.expr())
+		})
+		return lit
 	case LParen:
+		if !p.noLambda && p.lambdaAhead() {
+			return p.lambda()
+		}
 		p.next()
 		p.skipNewlines()
 		x := p.expr()
@@ -598,6 +655,50 @@ func (p *parser) primary() Expr {
 	}
 	p.errorf(t.Pos, "expected an expression, found %s", t.Kind)
 	panic(bailout{})
+}
+
+// lambdaAhead reports whether the '(' at the current token starts a
+// lambda's parameter list: `(a, b: Int) =>`.
+func (p *parser) lambdaAhead() bool {
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case LParen, LBrack:
+			depth++
+		case RParen, RBrack:
+			depth--
+			if depth == 0 {
+				return i+1 < len(p.toks) && p.toks[i+1].Kind == Arrow
+			}
+		case EOF, LBrace, RBrace, Assign:
+			return false
+		}
+	}
+	return false
+}
+
+// lambda parses `x => body` or `(params) => body`.
+func (p *parser) lambda() Expr {
+	l := &Lambda{Pos: p.tok().Pos}
+	if p.at(TIdent) {
+		t := p.next()
+		l.Params = []*Param{{Pos: t.Pos, Name: t.Text}}
+	} else {
+		p.next()
+		p.list(RParen, "a parameter", func() {
+			t := p.expect(TIdent, "(parameter name)")
+			param := &Param{Pos: t.Pos, Name: t.Text}
+			if p.at(Colon) {
+				p.next()
+				param.Type = p.typeExpr()
+			}
+			l.Params = append(l.Params, param)
+		})
+	}
+	p.expect(Arrow, "after the lambda's parameters")
+	p.skipNewlines()
+	l.Body = p.expr()
+	return l
 }
 
 func (p *parser) ifExpr() Expr {
@@ -786,7 +887,7 @@ func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 }
 
 func (p *parser) ruleDecl() (r *RuleDecl) {
-	defer p.recoverDecl(func() { r = nil })
+	defer p.recoverDecl(func() { r = nil; p.noLambda = false })
 	pos := p.next().Pos
 	name := p.expect(TIdent, "(rule name)")
 	r = &RuleDecl{Pos: pos, Name: name.Text}
@@ -798,7 +899,10 @@ func (p *parser) ruleDecl() (r *RuleDecl) {
 	})
 	p.expect(LBrace, "to start the rule")
 	p.skipNewlines()
+	// `a >= b => ...` is not a lambda.
+	p.noLambda = true
 	r.Premises = p.andList()
+	p.noLambda = false
 	p.skipNewlines()
 	p.expect(Arrow, "between the premises and the conclusions (write `premises => conclusions`)")
 	p.skipNewlines()

@@ -15,7 +15,7 @@
 - **Interpolated strings:** `s"Hello, $name! Next year: ${age + 1}"`. `$name` inserts a name and `${...}` any expression (which may contain string literals). `$$` is a dollar sign. Plain strings never interpolate.
 - **String literals:** double-quoted, with Go's escape sequences (`\n`, `\t`, `\"`, `\\`, ...).
 - **`unsafe go { ... }`:** after `unsafe go`, everything up to the matching `}` is raw Go, not bork tokens (braces inside Go strings, runes, and comments do not count).
-- **Statement endings:** a newline ends a statement when the line's last token is an identifier, a literal, `true`/`false`, `return`, `_`, `)`, `]`, `}`, or `?`, as in Go. A `;` can also separate statements on one line. Newlines inside parentheses are ignored, so argument and parameter lists can span lines.
+- **Statement endings:** a newline ends a statement when the line's last token is an identifier, a literal, `true`/`false`, `return`, `_`, `)`, `]`, `}`, or `?`, as in Go. A `;` can also separate statements on one line. Newlines inside parentheses are ignored, so argument and parameter lists can span lines. A line starting with `|>` continues the previous one.
 
 ## Syntax
 
@@ -34,7 +34,8 @@ Sealed     = "sealed" "{" [ Variant { Sep Variant } [ Sep ] ] "}" .
 Variant    = Ident [ Fields ] .
 Sep        = "," | newline .                 (* commas or one item per line *)
 
-FuncDecl   = "fn" Ident "(" [ Params ] ")" [ ":" Type ] ( Block | GoBody ) .
+FuncDecl   = "fn" Ident [ TypeParams ] "(" [ Params ] ")" [ ":" Type ] ( Block | GoBody ) .
+TypeParams = "[" Ident { "," Ident } "]" .   (* fn map[A, B](...) *)
 GoBody     = "unsafe" "go" "{" { GoImport } GoStatements "}" .
 GoImport   = "import" StringLit newline .     (* import "strings" *)
 Params     = Param { "," Param } [ "," ] .
@@ -44,14 +45,16 @@ Constrained = TypeAtom [ "where" Clause { "and" Clause } ] .
 Clause     = PredRef { "or" PredRef }          (* alone: p or q *)
            | "(" PredRef { "or" PredRef } ")" .  (* with and: (p or q) and r *)
 PredRef    = Ident [ "(" Expr { "," Expr } ")" ] .  (* positive, between(1, 65535), atLeast(lo) *)
-TypeAtom   = Ident [ "[" Type { "," Type } "]" ] | "(" Type ")" .
+TypeAtom   = Ident [ "[" Type { "," Type } "]" ] | "(" Type ")" | FuncType .
+FuncType   = "(" [ Type { "," Type } ] ")" "=>" Type .  (* (Int, String) => Bool *)
 
 Block      = "{" { Stmt EOL } [ Expr ] "}" .
 Stmt       = Binding | Trust | Expr .
 Trust      = "trust" Call .                  (* trust positive(x) *)
 Binding    = Ident [ ":" Type ] "=" Expr .   (* x = 1, or x: Int8 = 1 *)
 
-Expr       = OrExpr .
+Expr       = PipeExpr .
+PipeExpr   = OrExpr { "|>" OrExpr } .        (* x |> f(a) is f(x, a); x |> f is f(x) *)
 OrExpr     = AndExpr { "||" AndExpr } .
 AndExpr    = CmpExpr { "&&" CmpExpr } .
 CmpExpr    = AddExpr { ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) AddExpr } .
@@ -69,7 +72,10 @@ Update     = Ident { "." Ident } "=" Expr .  (* u.copy(address.city = "Oslo") *)
 Args       = Expr { "," Expr } [ "," ] .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | "true" | "false" | Ident
-           | "(" Expr ")" | Block | If | Match | Return .
+           | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit .
+Lambda     = ( Ident | "(" [ LParam { "," LParam } ] ")" ) "=>" Expr .  (* x => x + 1 *)
+LParam     = Ident [ ":" Type ] .
+ListLit    = "[" [ Expr { Sep Expr } [ Sep ] ] "]" .
 If         = "if" "(" Expr ")" Block [ "else" ( If | Block ) ] .
 Return     = "return" [ Expr ] .
 Match      = "match" "(" Expr ")" "{" [ Arm { Sep Arm } [ Sep ] ] "}" .
@@ -89,7 +95,7 @@ EOL        = newline | ";" .
 - **Everything is an expression.** A block's value is its last expression. A block that ends with a statement has type `Unit`.
 - **`if` with `else`** produces a value; both branches must have the same type. **`if` without `else`** is only run for its effect.
 - **`return`** has type `Never`, which fits wherever any type is expected, so `x = if (c) { return 0 } else { 1 }` works. Code after a `return` is a compile error.
-- **Bindings are immutable**, and names cannot be shadowed.
+- **Bindings are immutable**, and names cannot be shadowed, except prelude functions: a local may be called `count`, and a package's own `fn find` replaces the prelude's.
 - **A value that is computed but never used is a compile error** (e.g. calling a function that returns `Int` as a statement).
 - **Numbers:** `Int8`, `Int16`, `Int32`, `Int` (= `Int64`), `Uint8` (= `Byte`), `Int32` (= `Rune`), `Uint16`, `Uint32`, `Uint64`, `Float32`, `Float` (= `Float64`). Integers wrap on overflow, like Go.
 - **Operators:** `+ - * /` on two numbers of the same type, `%` on two integers of the same type; `+` also concatenates `String`s; `< <= > >=` on numbers or `String`s; `== !=` on two values of the same type; unary `-` on signed numbers; `&& || !` on `Bool`, with short-circuiting. Types never mix implicitly. Dividing by a constant zero is a compile error.
@@ -98,12 +104,16 @@ EOL        = newline | ";" .
 - **Interpolation** renders each value as `toString` does, so any value can go in a string: `s"user: $u"`. There is no printf-style formatting.
 - **`panic(message)`** stops the program with a message. It is for bugs, not expected failures (those are union results). Its type is `Never`, so it can end any branch.
 - **`println(args...)`** prints its arguments separated by spaces, followed by a newline. **`toString(x)`** renders any value the way `println` prints it. Floats always print as floats: `3.0`, `0.25`, `1e+21`.
-- **The prelude** ([prelude.bork](../internal/prelude/prelude.bork)) is available everywhere: the records `OutOfRange` and `ParseError`; `parseInt`, `parseFloat`, `parseBool` (returning `T | ParseError`); and `byteLength`, `contains`, `startsWith`, `endsWith`, `indexOf` (an `Option[Int]`), `toUpper`, `toLower`, `trim`, `replaceAll`, `repeat`, which count bytes; and `runeCount`, `runeAt` (an `Option[Rune]`), `substring` (a `String | OutOfRange`), `runeToString`, `isDigit`, `isLetter`, `isSpace`, `isUpper`, `isLower`, which count runes. A `Rune` prints as its number; `runeToString` gives the character. Prelude names cannot be redefined or shadowed.
+- **The prelude** ([prelude.bork](../internal/prelude/prelude.bork)) is available everywhere: the records `OutOfRange` and `ParseError`; `parseInt`, `parseFloat`, `parseBool` (returning `T | ParseError`); and `byteLength`, `contains`, `startsWith`, `endsWith`, `indexOf` (an `Option[Int]`), `toUpper`, `toLower`, `trim`, `replaceAll`, `repeat`, which count bytes; and `runeCount`, `runeAt` (an `Option[Rune]`), `substring` (a `String | OutOfRange`), `runeToString`, `isDigit`, `isLetter`, `isSpace`, `isUpper`, `isLower`, which count runes. A `Rune` prints as its number; `runeToString` gives the character. For lists: `length`, `isEmpty`, `get`, `head`, `last` (each an `Option[T]` where it may be missing), `map`, `flatMap`, `filter`, `fold`, `find`, `any`, `all`, `count`, `forEach`, `take`, `drop`, `reverse`, `concat`, `append`, `prepend`, `sortWith`, `range`, and `join`/`split` for Strings. Prelude types and the compiler's own functions (`println`, `toString`, `panic`, `toInt8`, ...) cannot be redefined.
 - **`unsafe go` bodies** are Go statements implementing the function. Parameters are visible under their own names, and values have the Go representations listed at the top of the prelude. Imports go on the first lines (`import "strings"`). bork trusts the function's signature and does not check the body; the Go compiler does, and reports errors at the bork positions.
 - **Records** (`type User = { name: String, age: Int }`) are built with all their fields named: `User { name: "Ada", age: 36 }`. Fields are read with `u.name`. A record cannot contain itself directly.
 - **`copy`** makes a changed copy: `u.copy(age = 37, address.city = "Oslo")`. Paths reach into nested records; two updates may not overlap (`address` and `address.city`).
 - **Sealed types** (`type Shape = sealed { Circle { radius: Int }, Empty }`) list all their variants. Variants are always qualified: `Shape.Circle { radius: 1 }`, `Shape.Empty`.
 - **Unions** (`Int | NotFound | DbError`) hold a value of any one of their types. A value of a member type, or of a smaller union, can be used where the union is expected. `type Lookup = Int | NotFound` names a union.
+- **`List[T]`** is built in and immutable: `[1, 2, 3]`, or `[]` where the type is known (`xs: List[Int] = []`). Lists print as `[1, 2, 3]`.
+- **Functions are values.** `(Int) => String` is a function type; a lambda is `x => x + 1`, `(a, b) => a + b`, or `(x: Int) => ...` where nothing says the parameter's type. Named functions can be passed (`map(xs, double)`) unless they have `where` requirements. Lambdas see the values around them; `return` and `?` are not allowed in them.
+- **Generic functions** take type parameters: `fn first[T](xs: List[T]): Option[T]`. Calls infer them from the arguments (lambdas, `[]` and `Option.None` last, so `fold(xs, 0, (sum, x) => sum + x)` works) or from the expected result. Inside, a type parameter can be passed around, stored, printed, and matched with a type pattern (`v: T`), but not compared with `==`. Lists, functions, and records holding them have no `==` either.
+- **`|>`** passes a value as the first argument: `users |> filter(u => u.age >= 18) |> map(u => u.name)`. With free functions instead of methods, it keeps chains readable left to right.
 - **`Option[T]`** is built in: `sealed { Some { value: T }, None }`. `Option.None` takes its type from where it is used.
 - **`match (x) { ... }`** tries arms in order. Arms produce a value, like `if`.
   - **Patterns nest:** a field can be matched against any pattern, as in `Option.Some { value: ')' }` or `Shape.Circle { center: Point { x: 0, y: 0 } }`. `{ radius }` binds the field to its own name, and `{ radius: r }` binds it to `r`.

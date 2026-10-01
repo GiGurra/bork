@@ -277,6 +277,13 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 	if fn.Result != check.Unit {
 		ftype.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(fn.Result)}}}
 	}
+	if len(fn.TypeParams) > 0 {
+		tps := &ast.Field{Type: ast.NewIdent("any")}
+		for _, tp := range fn.TypeParams {
+			tps.Names = append(tps.Names, name(tp.Name))
+		}
+		ftype.TypeParams = &ast.FieldList{List: []*ast.Field{tps}}
+	}
 	goName := name(fd.Name)
 	if fd.Name == "main" {
 		goName = ast.NewIdent("main")
@@ -313,7 +320,14 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 	case *syntax.BoolLit:
 		return nil, ast.NewIdent(strconv.FormatBool(e.Value))
 	case *syntax.Ident:
+		if inst := g.info.FuncRefs[e]; inst != nil {
+			return nil, g.instance(inst)
+		}
 		return nil, name(e.Name)
+	case *syntax.Lambda:
+		return nil, g.lambda(e)
+	case *syntax.ListLit:
+		return g.listLit(e)
 	case *syntax.Unary:
 		stmts, x := g.value(e.X)
 		if x == nil {
@@ -327,16 +341,10 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 	case *syntax.Binary:
 		return g.binary(e)
 	case *syntax.Call:
-		stmts, args := g.values(e.Args)
-		if args == nil {
+		stmts, call := g.call(e)
+		if call == nil {
 			return stmts, nil
 		}
-		if fn := g.info.CallFuncs[e]; fn != nil {
-			for i := range args {
-				args[i] = g.convert(args[i], g.info.Types[e.Args[i]], fn.Params[i])
-			}
-		}
-		call := g.callExpr(e, args)
 		if t == check.Never {
 			return append(stmts, &ast.ExprStmt{X: call}), nil
 		}
@@ -476,6 +484,80 @@ func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
 	return stmts, &ast.BinaryExpr{X: paren(xs[0]), Op: binaryOps[e.Op], Y: paren(xs[1])}
 }
 
+// call lowers a call: the statements to run first, and the call (nil
+// if an argument never produces a value).
+func (g *gen) call(e *syntax.Call) ([]ast.Stmt, ast.Expr) {
+	exprs := e.Args
+	if g.info.CallFuncs[e] == nil && g.info.CallBuiltins[e] == check.BuiltinNone {
+		// A function value is evaluated before the arguments.
+		exprs = append([]syntax.Expr{e.Fun}, e.Args...)
+	}
+	stmts, xs := g.values(exprs)
+	if xs == nil {
+		return stmts, nil
+	}
+	if len(exprs) > len(e.Args) {
+		ft := g.info.Types[e.Fun].(*check.FuncType)
+		args := xs[1:]
+		for i := range args {
+			args[i] = g.convert(args[i], g.info.Types[e.Args[i]], ft.Params[i])
+		}
+		return stmts, &ast.CallExpr{Fun: xs[0], Args: args}
+	}
+	if inst := g.info.Instances[e]; inst != nil {
+		for i := range xs {
+			xs[i] = g.convert(xs[i], g.info.Types[e.Args[i]], inst.Params[i])
+		}
+	}
+	return stmts, g.callExpr(e, xs)
+}
+
+// instance is the Go expression for a function, instantiated with its
+// type arguments if it is generic.
+func (g *gen) instance(inst *check.Instance) ast.Expr {
+	fun := name(inst.Func.Decl.Name)
+	if len(inst.TypeArgs) == 0 {
+		return fun
+	}
+	idx := &ast.IndexListExpr{X: fun}
+	for _, t := range inst.TypeArgs {
+		idx.Indices = append(idx.Indices, g.goType(t))
+	}
+	return idx
+}
+
+// lambda lowers a lambda to a Go function literal.
+func (g *gen) lambda(e *syntax.Lambda) ast.Expr {
+	ft := g.info.Types[e].(*check.FuncType)
+	names := make([]*ast.Ident, len(e.Params))
+	for i, p := range e.Params {
+		names[i] = name(p.Name)
+	}
+	saved := g.fnResult
+	g.fnResult = ft.Result
+	var body []ast.Stmt
+	if ft.Result == check.Unit {
+		body = g.effect(e.Body)
+	} else {
+		body = g.tailReturn(e.Body)
+	}
+	g.fnResult = saved
+	return &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}
+}
+
+// listLit lowers a list literal to a slice literal.
+func (g *gen) listLit(e *syntax.ListLit) ([]ast.Stmt, ast.Expr) {
+	lt := g.info.Types[e].(*check.List)
+	stmts, xs := g.values(e.Elems)
+	if xs == nil {
+		return stmts, nil
+	}
+	for i := range xs {
+		xs[i] = g.convert(xs[i], g.info.Types[e.Elems[i]], lt.Elem)
+	}
+	return stmts, &ast.CompositeLit{Type: g.goType(lt), Elts: xs}
+}
+
 func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 	fmtCall := func(fn string, args ...ast.Expr) ast.Expr {
 		g.imports["fmt"] = true
@@ -494,24 +576,18 @@ func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 	case check.BuiltinPanic:
 		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: args}
 	}
-	fn := g.info.CallFuncs[e]
-	return &ast.CallExpr{Fun: name(fn.Decl.Name), Args: args}
+	return &ast.CallExpr{Fun: g.instance(g.info.Instances[e]), Args: args}
 }
 
 // effect lowers an expression evaluated only for its effect.
 func (g *gen) effect(e syntax.Expr) []ast.Stmt {
 	switch e := e.(type) {
 	case *syntax.Call:
-		stmts, args := g.values(e.Args)
-		if args == nil {
+		stmts, call := g.call(e)
+		if call == nil {
 			return stmts
 		}
-		if fn := g.info.CallFuncs[e]; fn != nil {
-			for i := range args {
-				args[i] = g.convert(args[i], g.info.Types[e.Args[i]], fn.Params[i])
-			}
-		}
-		return append(stmts, &ast.ExprStmt{X: g.callExpr(e, args)})
+		return append(stmts, &ast.ExprStmt{X: call})
 	case *syntax.If:
 		return g.ifChain(e, sink{})
 	case *syntax.Match:
@@ -777,11 +853,21 @@ func (g *gen) conversion(e *syntax.Call, arg ast.Expr) ast.Expr {
 // go through the runtime's _str, so they print in bork's format.
 func (g *gen) str(x ast.Expr, t check.Type) ast.Expr {
 	x = g.typed(x, t)
-	if check.IsFloat(t) || isUnion(t) {
+	if needsStr(t) {
 		g.usesShow = true
 		return &ast.CallExpr{Fun: ast.NewIdent("_str"), Args: []ast.Expr{x}}
 	}
 	return x
+}
+
+// needsStr reports whether values of type t print differently in bork
+// than Go prints them.
+func needsStr(t check.Type) bool {
+	switch t.(type) {
+	case *check.Union, *check.List, *check.FuncType, *check.TypeParam:
+		return true
+	}
+	return check.IsFloat(t)
 }
 
 func isUnion(t check.Type) bool {
@@ -794,7 +880,7 @@ func (g *gen) stringOf(x ast.Expr, t check.Type) ast.Expr {
 	switch {
 	case t == check.String:
 		return x
-	case check.IsFloat(t) || isUnion(t):
+	case needsStr(t):
 		return g.str(x, t)
 	}
 	g.imports["fmt"] = true

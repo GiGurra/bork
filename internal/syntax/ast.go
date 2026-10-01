@@ -53,10 +53,13 @@ type FuncDecl struct {
 	// IsPred is set for `pred name(x: T, ...) { ... }`: a function
 	// returning Bool that can be used in `where` clauses.
 	IsPred bool
-	Params []*Param
-	Result *TypeExpr
-	Body   *Block
-	GoBody *GoCode
+	// TypeParams lists the type parameters of a generic function:
+	// `fn map[A, B](...)`.
+	TypeParams []*TypeParam
+	Params     []*Param
+	Result     *TypeExpr
+	Body       *Block
+	GoBody     *GoCode
 }
 
 // GoCode is the body of `unsafe go { ... }`: Go statements, preceded
@@ -69,6 +72,14 @@ type GoCode struct {
 	Body string
 }
 
+// TypeParam is a declared type parameter.
+type TypeParam struct {
+	Pos  diag.Pos
+	Name string
+}
+
+// Param is a function's or a lambda's parameter. A lambda's parameter
+// may leave out its type (Type is nil).
 type Param struct {
 	Pos  diag.Pos
 	Name string
@@ -82,9 +93,18 @@ type TypeExpr struct {
 	Name  string
 	Args  []*TypeExpr
 	Union []*TypeExpr // non-nil for a union; Name and Args are then unused
+	// Func is set for a function type `(A, B) => C`; Name and Args are
+	// then unused.
+	Func *FuncTypeExpr
 	// Where lists the clauses of `T where p and (q(1) or r)`, all of
 	// which must hold.
 	Where []*PredRef
+}
+
+// FuncTypeExpr is a function type: `(A, B) => C`.
+type FuncTypeExpr struct {
+	Params []*TypeExpr
+	Result *TypeExpr
 }
 
 // PredRef is one predicate in a where clause: `positive`, or
@@ -339,6 +359,25 @@ func (p *WildcardPat) Position() diag.Pos { return p.Pos }
 func (p *TypePat) Position() diag.Pos     { return p.Pos }
 func (p *VariantPat) Position() diag.Pos  { return p.Pos }
 func (p *LitPat) Position() diag.Pos      { return p.Pos }
+
+// Lambda is a function value: `x => x + 1`, `(a, b) => a + b`, or
+// `(x: Int) => { ... }`.
+type Lambda struct {
+	Pos    diag.Pos
+	Params []*Param
+	Body   Expr
+}
+
+// ListLit is a list literal: `[1, 2, 3]`.
+type ListLit struct {
+	Pos   diag.Pos
+	Elems []Expr
+}
+
+func (*Lambda) exprNode()             {}
+func (*ListLit) exprNode()            {}
+func (e *Lambda) Position() diag.Pos  { return e.Pos }
+func (e *ListLit) Position() diag.Pos { return e.Pos }
 
 func (*Selector) exprNode()  {}
 func (*RecordLit) exprNode() {}

@@ -282,6 +282,12 @@ func (c *checker) copyTarget(rec *Record, u *syntax.CopyUpdate) *Field {
 
 func (c *checker) try(e *syntax.Try) Type {
 	xt := c.expr(e.X)
+	if c.lambdaDepth > 0 {
+		if xt != Invalid {
+			c.errorf(e.Pos, "? cannot be used in a lambda (it would return from the enclosing function); use match")
+		}
+		return Invalid
+	}
 	result := c.fn.Result
 	switch t := xt.(type) {
 	case *Union:

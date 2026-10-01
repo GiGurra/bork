@@ -181,6 +181,41 @@ func findField(fields []*Field, name string) *Field {
 	return nil
 }
 
+// TypeParam is a type parameter of a generic function: `T` in
+// `fn first[T](xs: List[T]): Option[T]`. Inside the function it stands
+// for any type, and callers' arguments decide which.
+type TypeParam struct {
+	Name string
+	Decl *syntax.TypeParam
+}
+
+func (t *TypeParam) String() string { return t.Name }
+
+// FuncType is the type of a function value: `(A, B) => C`.
+type FuncType struct {
+	Params []Type
+	Result Type
+}
+
+func (f *FuncType) String() string {
+	params := make([]string, len(f.Params))
+	for i, p := range f.Params {
+		params[i] = p.String()
+	}
+	result := f.Result.String()
+	if _, ok := f.Result.(*Union); ok {
+		result = "(" + result + ")"
+	}
+	return "(" + strings.Join(params, ", ") + ") => " + result
+}
+
+// List is the built-in immutable list type List[T].
+type List struct {
+	Elem Type
+}
+
+func (l *List) String() string { return "List[" + l.Elem.String() + "]" }
+
 // Union is `A | B | ...`. Members are kept in written order, because
 // `?` keeps the leftmost member. Members are never unions themselves
 // (nested unions are flattened) and never repeat.
@@ -192,6 +227,9 @@ func (u *Union) String() string {
 	parts := make([]string, len(u.Members))
 	for i, m := range u.Members {
 		parts[i] = m.String()
+		if _, ok := m.(*FuncType); ok {
+			parts[i] = "(" + parts[i] + ")"
+		}
 	}
 	return strings.Join(parts, " | ")
 }
@@ -230,6 +268,20 @@ func identical(a, b Type) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *List:
+		b, ok := b.(*List)
+		return ok && identical(a.Elem, b.Elem)
+	case *FuncType:
+		b, ok := b.(*FuncType)
+		if !ok || len(a.Params) != len(b.Params) || !identical(a.Result, b.Result) {
+			return false
+		}
+		for i := range a.Params {
+			if !identical(a.Params[i], b.Params[i]) {
+				return false
+			}
+		}
+		return true
 	case *Sealed:
 		b, ok := b.(*Sealed)
 		if !ok || a.Name != b.Name || a.Decl != b.Decl || len(a.Args) != len(b.Args) {
@@ -294,6 +346,50 @@ func assignable(src, dst Type) bool {
 // or Invalid).
 func isValue(t Type) bool {
 	return t != Unit && t != Never && t != Invalid
+}
+
+// comparable reports whether values of type t can be compared with ==.
+// Lists, functions, and values of a type parameter cannot (nor records,
+// variants, or unions that may hold them).
+func comparable(t Type) bool {
+	return comparableIn(t, map[Type]bool{})
+}
+
+func comparableIn(t Type, seen map[Type]bool) bool {
+	if seen[t] {
+		return true
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *List, *FuncType, *TypeParam:
+		return false
+	case *Record:
+		for _, f := range t.Fields {
+			if !comparableIn(f.Type, seen) {
+				return false
+			}
+		}
+	case *Sealed:
+		for _, a := range t.Args {
+			if !comparableIn(a, seen) {
+				return false
+			}
+		}
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if !comparableIn(f.Type, seen) {
+					return false
+				}
+			}
+		}
+	case *Union:
+		for _, m := range t.Members {
+			if !comparableIn(m, seen) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Option returns the built-in sealed type Option[T]:
