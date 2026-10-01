@@ -101,7 +101,7 @@ In priority order. When two values conflict, the higher one wins.
 
 - **No exceptions. At all.** There is no `throw`, no `try`/`catch`. Expected failures are ordinary values, returned as part of a union return type (see section 4).
 - **Panics exist but are discouraged.** A panic means a bug, not an expected failure.
-- **No `recover`.** A panic cannot be caught in bork code. Erlang-style isolation of routines (a failing routine brought down without taking the rest with it) may be introduced later.
+- **No `recover`.** A panic cannot be caught in bork code. Erlang-style isolation of routines (a failing routine brought down without taking the rest with it) is planned for later. See crash isolation and supervision under resources and scopes.
 
 ### Effects and concurrency
 
@@ -342,6 +342,23 @@ scope maint {
 
 - **Cancellation and deadlines through scopes.** A request scope is the natural carrier for what Go's `context.Context` does today: when a request is cancelled, its scope closes, its resources are released, and its goroutines stop.
 - **Structured concurrency:** must goroutines started inside a scope finish before the scope ends? That would let them use the scope's resources with no extra attaching.
+
+### Crash isolation and supervision (planned, not v0.1)
+
+Erlang-style isolation, where a crashing routine is cleaned up and handled by a supervisor without taking the rest of the program down, becomes cheap in bork, because the two hard parts are solved by design:
+
+- **No shared state can be left half-changed.** Nothing is mutable, so a routine that crashes cannot leave corrupt shared data behind. Its values are simply never used again, and the GC reclaims the memory. No memory tracking is needed.
+- **Every resource is owned by a scope on some routine's stack.** When a routine dies, the runtime unwinds its stack and closes every scope on it, running finalizers in reverse order as usual. A resource also attached to a scope in another routine stays open; its count drops by one. No separate resource tracking is needed.
+- **A supervisor sees a child's crash as an ordinary value** (e.g. `Crashed(reason)`), and decides what to do: restart, give up, or escalate. By then, the child's resources are already released. User code still has no `recover`. Only the runtime catches the crash at the routine boundary and turns it into that value.
+
+Remaining work:
+
+- **Catch Go panics at every routine boundary** in the generated code. An unrecovered Go panic kills the whole process. This is an implementation detail, not a language feature.
+- **Cooperative cancellation.** Go cannot kill a goroutine from outside. A supervisor stops a stuck routine by closing its scope, and the routine stops at its next cancellation point. Since bork owns its standard library, every blocking operation (I/O, sleep, channel receive) can be made cancellation-aware. A CPU-bound loop that never makes such a call cannot be interrupted.
+- **Finalizer failures and timeouts.** Finalizers can fail or hang (e.g. closing a stuck socket). They need timeouts, and a rule for what happens when cleanup itself fails.
+- **Effects in the outside world are not undone.** A message already sent or a half-written file is a consistency problem, not a resource leak. Scopes help: a transaction scope's finalizer rolls back unless the transaction was committed, so a crash mid-transaction rolls back automatically. Beyond that, the usual backend tools apply (idempotency, outbox).
+- **Messages to a dead routine**, and messages still queued for it, need defined semantics once channels or mailboxes are designed.
+- **A supervision API:** restart policies, escalation, and how supervisors relate to scopes and structured concurrency.
 
 ## 4. Errors and results (in progress, to be tried out)
 
