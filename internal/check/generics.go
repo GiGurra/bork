@@ -56,16 +56,30 @@ func (c *checker) useTypeParams(fn *Func) {
 
 // inference solves the type parameters of one use of a generic function.
 type inference struct {
-	fn    *Func
-	bound map[*TypeParam]Type
+	fn     *Func // nil when solving a generic type's parameters
+	params []*TypeParam
+	bound  map[*TypeParam]Type
 }
 
 func newInference(fn *Func) *inference {
-	return &inference{fn: fn, bound: map[*TypeParam]Type{}}
+	return &inference{fn: fn, params: fn.TypeParams, bound: map[*TypeParam]Type{}}
+}
+
+func typeInference(params []*TypeParam) *inference {
+	return &inference{params: params, bound: map[*TypeParam]Type{}}
+}
+
+// args lists the solved type arguments, in order.
+func (in *inference) args() []Type {
+	out := make([]Type, len(in.params))
+	for i, p := range in.params {
+		out[i] = in.bound[p]
+	}
+	return out
 }
 
 func (in *inference) owns(tp *TypeParam) bool {
-	for _, p := range in.fn.TypeParams {
+	for _, p := range in.params {
 		if p == tp {
 			return true
 		}
@@ -88,10 +102,11 @@ func (in *inference) unify(p, a Type) {
 		if a, ok := a.(*List); ok {
 			in.unify(p.Elem, a.Elem)
 		}
-	case *Sealed:
-		if a, ok := a.(*Sealed); ok && a.Name == p.Name && a.Decl == p.Decl && len(a.Args) == len(p.Args) {
-			for i := range p.Args {
-				in.unify(p.Args[i], a.Args[i])
+	case *Record, *Sealed:
+		if base := genericBase(p); base != nil && base == genericBase(a) {
+			pa, aa := TypeArgs(p), TypeArgs(a)
+			for i := range pa {
+				in.unify(pa[i], aa[i])
 			}
 		}
 	case *FuncType:
@@ -150,9 +165,14 @@ func subst(t Type, bound map[*TypeParam]Type) Type {
 			ft.Params = append(ft.Params, subst(p, bound))
 		}
 		return ft
-	case *Sealed:
-		if IsOption(t) {
-			return Option(subst(t.Args[0], bound))
+	case *Record, *Sealed:
+		if base := genericBase(t); base != nil {
+			args := TypeArgs(t)
+			out := make([]Type, len(args))
+			for i, a := range args {
+				out[i] = subst(a, bound)
+			}
+			return instantiate(base, out)
 		}
 	case *Union:
 		members := make([]Type, len(t.Members))
@@ -181,8 +201,8 @@ func (in *inference) open(t Type) bool {
 			}
 		}
 		return in.open(t.Result)
-	case *Sealed:
-		for _, a := range t.Args {
+	case *Record, *Sealed:
+		for _, a := range TypeArgs(t) {
 			if in.open(a) {
 				return true
 			}
@@ -220,13 +240,14 @@ func (in *inference) fits(p, a Type) bool {
 			}
 		}
 		return in.fits(p.Result, a.Result)
-	case *Sealed:
-		a, ok := a.(*Sealed)
-		if !ok || a.Name != p.Name || a.Decl != p.Decl || len(a.Args) != len(p.Args) {
+	case *Record, *Sealed:
+		base := genericBase(p)
+		if base == nil || base != genericBase(a) {
 			return false
 		}
-		for i := range p.Args {
-			if !in.fits(p.Args[i], a.Args[i]) {
+		pa, aa := TypeArgs(p), TypeArgs(a)
+		for i := range pa {
+			if !in.fits(pa[i], aa[i]) {
 				return false
 			}
 		}
@@ -238,7 +259,7 @@ func (in *inference) fits(p, a Type) bool {
 // unsolved lists the type parameters left unbound.
 func (in *inference) unsolved() []string {
 	var out []string
-	for _, tp := range in.fn.TypeParams {
+	for _, tp := range in.params {
 		if in.bound[tp] == nil {
 			out = append(out, tp.Name)
 		}
@@ -296,7 +317,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 		}
 	}
 	for i, a := range e.Args {
-		if !needsContext(a) {
+		if !c.needsContext(a) {
 			check(i, a)
 		}
 	}
@@ -306,7 +327,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 		in.unify(fn.Result, want)
 	}
 	for i, a := range e.Args {
-		if needsContext(a) {
+		if c.needsContext(a) {
 			check(i, a)
 		}
 	}
@@ -341,16 +362,19 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 }
 
 // needsContext reports whether x can only be typed with an expected
-// type: a lambda (for its parameters), an empty list, or Option.None.
-func needsContext(x syntax.Expr) bool {
+// type: a lambda (for its parameters), an empty list, or a variant
+// without fields of a generic type (Option.None).
+func (c *checker) needsContext(x syntax.Expr) bool {
 	switch x := x.(type) {
 	case *syntax.Lambda:
 		return true
 	case *syntax.ListLit:
 		return len(x.Elems) == 0
 	case *syntax.Selector:
-		id, ok := x.X.(*syntax.Ident)
-		return ok && id.Name == "Option" && x.Name == "None"
+		if owner, ok := c.isTypeRef(x.X); ok {
+			s, ok := c.typeNamed(owner).(*Sealed)
+			return ok && len(s.TypeParams) > 0
+		}
 	}
 	return false
 }

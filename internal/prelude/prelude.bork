@@ -12,6 +12,9 @@
 //   (A, B) => C            func(A, B) C (no result for Unit)
 //   a type parameter T     a Go type parameter T (any)
 
+// Option is a value that may be missing.
+type Option[T] = sealed { Some { value: T }, None }
+
 // OutOfRange is returned by a conversion whose value does not fit the
 // target type, such as toInt8(1000).
 type OutOfRange = { value: String, target: String }

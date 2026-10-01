@@ -1,0 +1,73 @@
+pred positive(x: Int) { x > 0 }
+
+type Pair[A, B] = { first: A, second: B }
+
+type Tree[T] = sealed {
+  Leaf,
+  Node { left: Tree[T], value: T, right: Tree[T] },
+}
+
+type Result[T, E] = sealed { Ok { value: T }, Err { error: E } }
+
+fn swap[A, B](p: Pair[A, B]): Pair[B, A] {
+  Pair { first: p.second, second: p.first }
+}
+
+fn insert(t: Tree[Int], x: Int): Tree[Int] {
+  match (t) {
+    Tree.Leaf => Tree.Node { left: Tree.Leaf, value: x, right: Tree.Leaf }
+    Tree.Node { left, value, right } => if (x < value) {
+      Tree.Node { left: insert(left, x), value: value, right: right }
+    } else {
+      Tree.Node { left: left, value: value, right: insert(right, x) }
+    }
+  }
+}
+
+fn toList[T](t: Tree[T]): List[T] {
+  match (t) {
+    Tree.Leaf => []
+    Tree.Node { left, value, right } => concat(append(toList(left), value), toList(right))
+  }
+}
+
+fn parse(s: String): Result[Int, String] {
+  match (parseInt(s)) {
+    n: Int => Result.Ok { value: n }
+    e: ParseError => Result.Err { error: e.message }
+  }
+}
+
+fn describe[T, E](r: Result[T, E]): String {
+  match (r) {
+    Result.Ok { value } => s"ok: $value"
+    Result.Err { error } => s"error: $error"
+  }
+}
+
+// Facts in a generic type's arguments apply to the fields declared with
+// that parameter.
+fn transfer(amount: Int where positive): Int { amount * 100 }
+
+fn pay(p: Pair[String, Int where positive]): String {
+  s"${p.first}: ${transfer(p.second)}"
+}
+
+// Checking the field proves it for the record.
+fn payIfPositive(p: Pair[String, Int]): String {
+  if (positive(p.second)) { pay(p) } else { "nothing" }
+}
+
+fn main() {
+  p = Pair { first: 1, second: "one" }
+  println(p, swap(p), swap(p).first)
+  empty: Tree[Int] = Tree.Leaf
+  t = fold([5, 2, 8, 1], empty, (acc, x) => insert(acc, x))
+  println(toList(t))
+  small: Tree[String] = Tree.Node { left: Tree.Leaf, value: "x", right: Tree.Leaf }
+  println(small)
+  println(describe(parse("42")), describe(parse("x")))
+  println(pay(Pair { first: "rent", second: 12 }), payIfPositive(Pair { first: "tip", second: -1 }))
+  same = Pair { first: 1, second: 2 } == Pair { first: 1, second: 2 }
+  println(same, Option.Some { value: 3 }, head(toList(t)))
+}

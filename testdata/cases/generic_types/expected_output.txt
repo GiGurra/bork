@@ -1,0 +1,6 @@
+Pair { first: 1, second: "one" } Pair { first: "one", second: 1 } one
+[1, 2, 5, 8]
+Tree.Node { left: Tree.Leaf, value: "x", right: Tree.Leaf }
+ok: 42 error: invalid syntax
+rent: 1200 nothing
+true Option.Some { value: 3 } Option.Some { value: 1 }

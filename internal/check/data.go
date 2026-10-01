@@ -7,27 +7,44 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// optionIn finds the Option type that t is, or that t contains as a
-// union member. It returns nil if there is none, or if a union holds
-// several different Options.
-func optionIn(t Type) *Sealed {
-	if IsOption(t) {
-		return t.(*Sealed)
+// instanceIn finds the instance of the generic type base that t is, or
+// that t contains as a union member. It returns nil if there is none,
+// or if a union holds several different instances.
+func instanceIn(t Type, base Type) Type {
+	if t == nil || base == nil {
+		return nil
+	}
+	if genericBase(t) == base {
+		return t
 	}
 	u, ok := t.(*Union)
 	if !ok {
 		return nil
 	}
-	var found *Sealed
+	var found Type
 	for _, m := range u.Members {
-		if IsOption(m) {
+		if genericBase(m) == base {
 			if found != nil {
 				return nil
 			}
-			found = m.(*Sealed)
+			found = m
 		}
 	}
 	return found
+}
+
+// article is "a" or "an", for the word w.
+func article(w string) string {
+	if w != "" && strings.ContainsRune("AEIOUaeiou", rune(w[0])) {
+		return "an"
+	}
+	return "a"
+}
+
+// optionIn finds the Option type that t is or contains (see instanceIn).
+func (c *checker) optionIn(t Type) *Sealed {
+	s, _ := instanceIn(t, c.info.Named["Option"]).(*Sealed)
+	return s
 }
 
 // typeNamed resolves a type name used in an expression or pattern
@@ -42,37 +59,35 @@ func (c *checker) typeNamed(name string) Type {
 	return nil
 }
 
-// variantRef resolves `Owner.Variant`, where Owner is a sealed type name
-// or Option. For Option, the concrete Option[T] comes from ctx (the
-// expected type, or the matched value's type). Returns nil after
+// variantRef resolves `Owner.Variant`, where Owner is a sealed type
+// name. For a generic sealed type (Option), the instance comes from ctx
+// (the expected type, or the matched value's type). Returns nil after
 // reporting an error.
 func (c *checker) variantRef(pos diag.Pos, owner, name string, ctx Type) *Variant {
-	var sealed *Sealed
-	if owner == "Option" {
-		sealed = optionIn(ctx)
-		if sealed == nil {
-			c.errorf(pos, "cannot tell which Option type Option.%s is here; use it where an Option[T] is expected", name)
-			return nil
-		}
-	} else {
-		t := c.typeNamed(owner)
-		if t == nil {
-			c.errorf(pos, "unknown type %s", owner)
-			return nil
-		}
-		s, ok := t.(*Sealed)
-		if !ok {
-			c.errorf(pos, "%s is not a sealed type, so it has no variants", owner)
-			return nil
-		}
-		sealed = s
-	}
-	v := sealed.Variant(name)
-	if v == nil {
-		c.errorf(pos, "%s has no variant %s", sealed, name)
+	t := c.typeNamed(owner)
+	if t == nil {
+		c.errorf(pos, "unknown type %s", owner)
 		return nil
 	}
-	return v
+	sealed, ok := t.(*Sealed)
+	if !ok {
+		c.errorf(pos, "%s is not a sealed type, so it has no variants", owner)
+		return nil
+	}
+	if sealed.Variant(name) == nil {
+		c.errorf(pos, "%s has no variant %s", owner, name)
+		return nil
+	}
+	if len(sealed.TypeParams) > 0 {
+		inst, _ := instanceIn(ctx, sealed).(*Sealed)
+		if inst == nil {
+			generic := owner + "[" + paramNames(sealed.TypeParams) + "]"
+			c.errorf(pos, "cannot tell which %s type %s.%s is here; use it where %s %s is expected", owner, owner, name, article(owner), generic)
+			return nil
+		}
+		sealed = inst
+	}
+	return sealed.Variant(name)
 }
 
 // isTypeRef reports whether x (an identifier) names a type rather than
@@ -130,6 +145,9 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 		}
 		switch typ := typ.(type) {
 		case *Record:
+			if len(typ.TypeParams) > 0 {
+				return c.genericLit(e, typ, "", t.Name, want)
+			}
 			c.info.RecordTargets[e] = typ
 			c.fieldInits(e, typ.Fields, typ.Name)
 			return typ
@@ -142,8 +160,8 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 		return Invalid
 	case *syntax.Selector:
 		owner := t.X.(*syntax.Ident).Name
-		if owner == "Option" && t.Name == "Some" {
-			return c.someLit(e, t, want)
+		if s, ok := c.typeNamed(owner).(*Sealed); ok && len(s.TypeParams) > 0 {
+			return c.genericLit(e, s, t.Name, owner+"."+t.Name, want)
 		}
 		v := c.variantRef(t.Pos, owner, t.Name, want)
 		if v == nil {
@@ -157,49 +175,101 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 	return Invalid
 }
 
-// someLit checks `Option.Some { value: x }`. The element type comes
-// from the expected type when there is one, otherwise from x.
-func (c *checker) someLit(e *syntax.RecordLit, sel *syntax.Selector, want Type) Type {
-	expected := optionIn(want)
-	if len(e.Fields) != 1 || e.Fields[0].Name != "value" {
-		c.errorf(sel.Pos, "Option.Some has exactly one field: Option.Some { value: ... }")
-		c.skipFieldInits(e)
+// genericLit checks a literal of a generic record, or of a variant of a
+// generic sealed type (`Option.Some { value: 1 }`). The type arguments
+// come from the expected type, or else from the fields.
+func (c *checker) genericLit(e *syntax.RecordLit, base Type, variant, label string, want Type) Type {
+	var fields []*Field
+	if s, ok := base.(*Sealed); ok {
+		v := s.Variant(variant)
+		if v == nil {
+			c.errorf(e.Type.Position(), "%s has no variant %s", s.Name, variant)
+			c.skipFieldInits(e)
+			return Invalid
+		}
+		fields = v.Fields
+	} else {
+		fields = base.(*Record).Fields
+	}
+	in := typeInference(typeParamsOf(base))
+	if inst := instanceIn(want, base); inst != nil {
+		for i, a := range TypeArgs(inst) {
+			in.bound[in.params[i]] = a
+		}
+	}
+	types := make([]Type, len(e.Fields))
+	check := func(i int) {
+		fi := e.Fields[i]
+		f := findField(fields, fi.Name)
+		if f == nil {
+			types[i] = c.expr(fi.Value)
+			return
+		}
+		pw := in.subst(f.Type)
+		if in.open(pw) {
+			pw = nil
+		}
+		types[i] = c.exprWant(fi.Value, pw)
+		in.unify(f.Type, types[i])
+	}
+	for i, fi := range e.Fields {
+		if !c.needsContext(fi.Value) {
+			check(i)
+		}
+	}
+	for i, fi := range e.Fields {
+		if c.needsContext(fi.Value) {
+			check(i)
+		}
+	}
+	if missing := in.unsolved(); len(missing) > 0 {
+		for _, t := range types {
+			if t == Invalid {
+				return Invalid
+			}
+		}
+		c.errorf(e.Type.Position(), "cannot tell what %s is in this %s; use it where its type is known", strings.Join(missing, " and "), label)
 		return Invalid
 	}
-	var elemWant Type
-	if expected != nil {
-		elemWant = expected.Args[0]
+	inst := instantiate(base, in.args())
+	if s, ok := inst.(*Sealed); ok {
+		v := s.Variant(variant)
+		c.info.RecordTargets[e] = v
+		c.fieldInitsTyped(e, v.Fields, label, types)
+		return s
 	}
-	vt := c.exprWant(e.Fields[0].Value, elemWant)
-	if vt == Invalid {
-		return Invalid
-	}
-	if !isValue(vt) {
-		c.errorf(e.Fields[0].Value.Position(), "Option.Some cannot hold a value of type %s", vt)
-		return Invalid
-	}
-	opt := Option(vt)
-	if expected != nil && assignable(vt, expected.Args[0]) {
-		opt = expected
-	}
-	c.info.RecordTargets[e] = opt.Variants[0]
-	return opt
+	c.info.RecordTargets[e] = inst
+	c.fieldInitsTyped(e, inst.(*Record).Fields, label, types)
+	return inst
 }
 
 func (c *checker) fieldInits(e *syntax.RecordLit, fields []*Field, owner string) {
+	c.fieldInitsTyped(e, fields, owner, nil)
+}
+
+// fieldInitsTyped checks a literal's fields. If types is not nil, it
+// holds the types of the field values, already checked.
+func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner string, types []Type) {
 	given := map[string]bool{}
-	for _, fi := range e.Fields {
+	for i, fi := range e.Fields {
 		f := findField(fields, fi.Name)
 		if f == nil {
 			c.errorf(fi.Pos, "%s has no field %s", owner, fi.Name)
-			c.expr(fi.Value)
+			if types == nil {
+				c.expr(fi.Value)
+			}
 			continue
 		}
 		if given[fi.Name] {
 			c.errorf(fi.Pos, "field %s is given twice", fi.Name)
 		}
 		given[fi.Name] = true
-		t := c.exprWant(fi.Value, f.Type)
+		var t Type
+		if types != nil {
+			t = types[i]
+		} else {
+			t = c.exprWant(fi.Value, f.Type)
+		}
 		if !assignable(t, f.Type) {
 			c.errorf(fi.Value.Position(), "field %s of %s must be %s, found %s", fi.Name, owner, f.Type, t)
 		}
@@ -306,7 +376,7 @@ func (c *checker) try(e *syntax.Try) Type {
 		return info.Kept
 	case *Sealed:
 		if IsOption(t) {
-			noneOf := optionIn(result)
+			noneOf := c.optionIn(result)
 			if noneOf == nil {
 				c.errorf(e.Pos, "? on %s would return Option.None from %s, but %s returns %s", t, c.fn.Decl.Name, c.fn.Decl.Name, result)
 				return Invalid

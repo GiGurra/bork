@@ -200,7 +200,6 @@ type gen struct {
 	usedTypes map[check.Type]bool
 	// Runtime support the program needs.
 	usesShow    bool
-	usesOption  bool
 	usesConvert bool
 	usesIs      bool
 }

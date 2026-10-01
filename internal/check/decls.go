@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -17,7 +19,7 @@ type typeEntry struct {
 }
 
 // reservedTypeNames cannot be declared by user code.
-var reservedTypeNames = map[string]bool{"Never": true, "Option": true, "List": true}
+var reservedTypeNames = map[string]bool{"Never": true, "List": true}
 
 func init() {
 	for name := range basicTypes {
@@ -50,11 +52,29 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 		return
 	}
 	e := &typeEntry{decl: td, prelude: prelude}
+	var params []*TypeParam
+	seen := map[string]bool{}
+	for _, d := range td.TypeParams {
+		switch {
+		case seen[d.Name]:
+			c.errorf(d.Pos, "type parameter %s is declared twice", d.Name)
+			continue
+		case reservedTypeNames[d.Name]:
+			c.errorf(d.Pos, "type parameter %s has the name of a type", d.Name)
+			continue
+		}
+		seen[d.Name] = true
+		params = append(params, &TypeParam{Name: d.Name, Decl: d})
+	}
 	switch td.Kind {
 	case syntax.RecordType:
-		e.typ = &Record{Name: td.Name, Decl: td, Prelude: prelude}
+		e.typ = &Record{Name: td.Name, Decl: td, Prelude: prelude, TypeParams: params, insts: newInstanceSet()}
 	case syntax.SealedType:
-		e.typ = &Sealed{Name: td.Name, Decl: td, Prelude: prelude}
+		e.typ = &Sealed{Name: td.Name, Decl: td, Prelude: prelude, TypeParams: params, insts: newInstanceSet()}
+	case syntax.AliasType:
+		if len(td.TypeParams) > 0 {
+			c.errorf(td.Pos, "a type alias cannot have type parameters (yet); declare a record or sealed type")
+		}
 	}
 	if e.typ != nil {
 		c.info.TypeOrder = append(c.info.TypeOrder, e.typ)
@@ -73,6 +93,15 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 	}
 	e.resolving = true
 	td := e.decl
+	// A generic type's parameters are visible in its fields.
+	savedParams := c.typeParams
+	if ps := typeParamsOf(e.typ); len(ps) > 0 {
+		c.typeParams = map[string]*TypeParam{}
+		for _, p := range ps {
+			c.typeParams[p.Name] = p
+		}
+	}
+	defer func() { c.typeParams = savedParams }()
 	switch td.Kind {
 	case syntax.RecordType:
 		r := e.typ.(*Record)
@@ -97,11 +126,21 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 			c.errorf(td.Pos, "sealed type %s needs at least one variant", td.Name)
 		}
 	case syntax.AliasType:
-		e.typ = c.resolveType(td.Alias)
+		if len(td.TypeParams) > 0 {
+			e.typ = Invalid // reported when declared
+		} else {
+			e.typ = c.resolveType(td.Alias)
+		}
 	}
 	e.resolving = false
 	e.resolved = true
 	c.info.Named[td.Name] = e.typ
+	switch t := e.typ.(type) {
+	case *Record:
+		t.insts.markResolved()
+	case *Sealed:
+		t.insts.markResolved()
+	}
 	return e.typ
 }
 
@@ -189,20 +228,31 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 		}
 		return &List{Elem: elem}
 	}
-	if t.Name == "Option" {
-		if len(t.Args) != 1 {
-			c.errorf(t.Pos, "Option needs exactly one type argument, as in Option[Int]")
+	if e, ok := c.decls[t.Name]; ok && e.decl.Kind != syntax.AliasType {
+		params := typeParamsOf(e.typ)
+		if len(params) == 0 {
+			if len(t.Args) > 0 {
+				c.errorf(t.Pos, "%s does not take type arguments", t.Name)
+				return Invalid
+			}
+			return e.typ
+		}
+		if len(t.Args) != len(params) {
+			c.errorf(t.Pos, "%s needs %d type argument(s), as in %s[%s]", t.Name, len(params), t.Name, paramNames(params))
 			return Invalid
 		}
-		elem := c.resolveType(t.Args[0])
-		if elem == Invalid {
-			return Invalid
+		args := make([]Type, len(t.Args))
+		for i, a := range t.Args {
+			args[i] = c.resolveType(a)
+			switch {
+			case args[i] == Invalid:
+				return Invalid
+			case !isValue(args[i]):
+				c.errorf(a.Pos, "%s[%s] is not allowed", t.Name, args[i])
+				return Invalid
+			}
 		}
-		if !isValue(elem) {
-			c.errorf(t.Args[0].Pos, "Option[%s] is not allowed", elem)
-			return Invalid
-		}
-		return Option(elem)
+		return instantiate(e.typ, args)
 	}
 	if len(t.Args) > 0 {
 		c.errorf(t.Pos, "%s does not take type arguments", t.Name)
@@ -219,6 +269,14 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 	}
 	c.errorf(t.Pos, "unknown type %s", t.Name)
 	return Invalid
+}
+
+func paramNames(ps []*TypeParam) string {
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = p.Name
+	}
+	return strings.Join(names, ", ")
 }
 
 func hasWhere(t *syntax.TypeExpr) bool {

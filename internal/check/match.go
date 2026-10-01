@@ -235,6 +235,13 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 			c.bindPat(pat, name, p.Pos, p)
 			return pat
 		}
+		if base := genericBase(t); base == t {
+			// A generic type: the instance the matched value holds.
+			if t = instanceIn(st, base); t == nil {
+				c.errorf(p.Pos, "%s does not match a value of type %s", name, st)
+				return nil
+			}
+		}
 		if !p.Braces {
 			return c.typePattern(t, st, p.Pos)
 		}

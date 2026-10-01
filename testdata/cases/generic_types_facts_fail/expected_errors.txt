@@ -1,0 +1,2 @@
+main.bork:7:47: pay requires the second of p to be positive, but that is not proven for p (check it first with if (positive(p.second)) { ... })
+main.bork:10:15: pay requires the second of p to be positive, but positive(0) is false

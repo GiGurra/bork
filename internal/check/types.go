@@ -2,6 +2,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/syntax"
@@ -119,37 +120,249 @@ type Field struct {
 }
 
 // Record is a named record type: `type User = { name: String }`.
+//
+// A generic record (`type Pair[A, B] = { first: A, second: B }`) has
+// TypeParams; its instances (`Pair[Int, String]`) have Base set to it,
+// Args, and Fields with the arguments filled in.
 type Record struct {
 	Name    string
 	Fields  []*Field
 	Decl    *syntax.TypeDecl
 	Prelude bool // declared in prelude.bork
+
+	TypeParams []*TypeParam
+	Base       *Record
+	Args       []Type
+	insts      *instanceSet
 }
 
-func (r *Record) String() string { return r.Name }
+func (r *Record) String() string { return r.Name + argsString(r.Args) }
+
+// Instance is the generic record r with the given type arguments.
+func (r *Record) Instance(args []Type) *Record {
+	if sameParams(r.TypeParams, args) {
+		return r
+	}
+	key := argsKey(args)
+	if t, ok := r.insts.byKey[key]; ok {
+		return t.(*Record)
+	}
+	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Base: r, Args: args}
+	r.insts.byKey[key] = inst
+	r.insts.whenResolved(func() {
+		inst.Fields = substFields(r.Fields, bindParams(r.TypeParams, args))
+	})
+	return inst
+}
+
+// instanceSet holds a generic type's instances. Instances can be made
+// before the generic type's fields are resolved (by a recursive type,
+// or a type declared later); their fields are filled in once they are.
+type instanceSet struct {
+	byKey    map[string]Type
+	resolved bool
+	pending  []func()
+}
+
+func newInstanceSet() *instanceSet { return &instanceSet{byKey: map[string]Type{}} }
+
+func (s *instanceSet) whenResolved(fill func()) {
+	if s.resolved {
+		fill()
+	} else {
+		s.pending = append(s.pending, fill)
+	}
+}
+
+func (s *instanceSet) markResolved() {
+	s.resolved = true
+	for len(s.pending) > 0 {
+		fill := s.pending[0]
+		s.pending = s.pending[1:]
+		fill()
+	}
+}
+
+func argsString(args []Type) string {
+	if len(args) == 0 {
+		return ""
+	}
+	parts := make([]string, len(args))
+	for i, a := range args {
+		parts[i] = a.String()
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// argsKey identifies type arguments for the instance cache. Unlike
+// their names, it tells apart type parameters of different functions
+// that happen to have the same name.
+func argsKey(args []Type) string {
+	parts := make([]string, len(args))
+	for i, a := range args {
+		parts[i] = typeKey(a)
+	}
+	return strings.Join(parts, ",")
+}
+
+func typeKey(t Type) string {
+	switch t := t.(type) {
+	case *TypeParam:
+		return fmt.Sprintf("%s#%p", t.Name, t)
+	case *List:
+		return "List[" + typeKey(t.Elem) + "]"
+	case *FuncType:
+		return "(" + argsKey(t.Params) + ")=>" + typeKey(t.Result)
+	case *Union:
+		return "(" + strings.Join(strings.Split(argsKey(t.Members), ","), "|") + ")"
+	case *Record, *Sealed:
+		return fmt.Sprintf("%p[%s]", genericBaseOrSelf(t), argsKey(TypeArgs(t)))
+	}
+	return t.String()
+}
+
+func genericBaseOrSelf(t Type) Type {
+	if b := genericBase(t); b != nil {
+		return b
+	}
+	return t
+}
+
+func sameParams(params []*TypeParam, args []Type) bool {
+	if len(params) != len(args) {
+		return false
+	}
+	for i, p := range params {
+		if args[i] != Type(p) {
+			return false
+		}
+	}
+	return true
+}
+
+func bindParams(params []*TypeParam, args []Type) map[*TypeParam]Type {
+	bound := map[*TypeParam]Type{}
+	for i, p := range params {
+		bound[p] = args[i]
+	}
+	return bound
+}
+
+func substFields(fields []*Field, bound map[*TypeParam]Type) []*Field {
+	out := make([]*Field, len(fields))
+	for i, f := range fields {
+		out[i] = &Field{Name: f.Name, Type: subst(f.Type, bound), Constraints: f.Constraints}
+	}
+	return out
+}
+
+// TypeArgs is a generic type's type arguments; for the generic type
+// itself (inside its own declaration), its parameters.
+func TypeArgs(t Type) []Type {
+	params := func(ps []*TypeParam) []Type {
+		out := make([]Type, len(ps))
+		for i, p := range ps {
+			out[i] = p
+		}
+		return out
+	}
+	switch t := t.(type) {
+	case *Record:
+		if t.Base != nil {
+			return t.Args
+		}
+		return params(t.TypeParams)
+	case *Sealed:
+		if t.Base != nil {
+			return t.Args
+		}
+		return params(t.TypeParams)
+	}
+	return nil
+}
+
+// genericBase is the generic type t is an instance of (t itself for the
+// generic type), or nil.
+func genericBase(t Type) Type {
+	switch t := t.(type) {
+	case *Record:
+		if t.Base != nil {
+			return t.Base
+		}
+		if len(t.TypeParams) > 0 {
+			return t
+		}
+	case *Sealed:
+		if t.Base != nil {
+			return t.Base
+		}
+		if len(t.TypeParams) > 0 {
+			return t
+		}
+	}
+	return nil
+}
+
+// instantiate makes an instance of the generic type base.
+func instantiate(base Type, args []Type) Type {
+	switch b := base.(type) {
+	case *Record:
+		return b.Instance(args)
+	case *Sealed:
+		return b.Instance(args)
+	}
+	return base
+}
+
+func typeParamsOf(t Type) []*TypeParam {
+	switch t := t.(type) {
+	case *Record:
+		return t.TypeParams
+	case *Sealed:
+		return t.TypeParams
+	}
+	return nil
+}
 
 func (r *Record) Field(name string) *Field { return findField(r.Fields, name) }
 
 // Sealed is a type with a closed set of variants:
 // `type Shape = sealed { Circle { radius: Int }, Empty }`.
-// Option[T] is a built-in sealed type with one type argument.
+//
+// Like records, sealed types can be generic: the prelude's
+// `type Option[T] = sealed { Some { value: T }, None }` is one.
 type Sealed struct {
 	Name     string
-	Args     []Type // type arguments, for Option[T]
 	Variants []*Variant
-	Decl     *syntax.TypeDecl // nil for built-in types
-	Prelude  bool             // declared in prelude.bork
+	Decl     *syntax.TypeDecl
+	Prelude  bool // declared in prelude.bork
+
+	TypeParams []*TypeParam
+	Base       *Sealed
+	Args       []Type
+	insts      *instanceSet
 }
 
-func (s *Sealed) String() string {
-	if len(s.Args) == 0 {
-		return s.Name
+func (s *Sealed) String() string { return s.Name + argsString(s.Args) }
+
+// Instance is the generic sealed type s with the given type arguments.
+func (s *Sealed) Instance(args []Type) *Sealed {
+	if sameParams(s.TypeParams, args) {
+		return s
 	}
-	args := make([]string, len(s.Args))
-	for i, a := range s.Args {
-		args[i] = a.String()
+	key := argsKey(args)
+	if t, ok := s.insts.byKey[key]; ok {
+		return t.(*Sealed)
 	}
-	return s.Name + "[" + strings.Join(args, ", ") + "]"
+	inst := &Sealed{Name: s.Name, Decl: s.Decl, Prelude: s.Prelude, Base: s, Args: args}
+	s.insts.byKey[key] = inst
+	s.insts.whenResolved(func() {
+		bound := bindParams(s.TypeParams, args)
+		for _, v := range s.Variants {
+			inst.Variants = append(inst.Variants, &Variant{Name: v.Name, Fields: substFields(v.Fields, bound), Parent: inst, Index: v.Index})
+		}
+	})
+	return inst
 }
 
 func (s *Sealed) Variant(name string) *Variant {
@@ -282,13 +495,14 @@ func identical(a, b Type) bool {
 			}
 		}
 		return true
-	case *Sealed:
-		b, ok := b.(*Sealed)
-		if !ok || a.Name != b.Name || a.Decl != b.Decl || len(a.Args) != len(b.Args) {
+	case *Record, *Sealed:
+		base := genericBase(a)
+		if base == nil || base != genericBase(b) {
 			return false
 		}
-		for i := range a.Args {
-			if !identical(a.Args[i], b.Args[i]) {
+		aa, ba := TypeArgs(a), TypeArgs(b)
+		for i := range aa {
+			if !identical(aa[i], ba[i]) {
 				return false
 			}
 		}
@@ -392,20 +606,8 @@ func comparableIn(t Type, seen map[Type]bool) bool {
 	return true
 }
 
-// Option returns the built-in sealed type Option[T]:
-// `sealed { Some { value: T }, None }`. Instances are compared
-// structurally by identical, so each call may return a fresh value.
-func Option(elem Type) *Sealed {
-	o := &Sealed{Name: "Option", Args: []Type{elem}}
-	o.Variants = []*Variant{
-		{Name: "Some", Fields: []*Field{{Name: "value", Type: elem}}, Parent: o, Index: 0},
-		{Name: "None", Parent: o, Index: 1},
-	}
-	return o
-}
-
-// IsOption reports whether t is an Option[T].
+// IsOption reports whether t is an Option[T] (the prelude's).
 func IsOption(t Type) bool {
 	s, ok := t.(*Sealed)
-	return ok && s.Decl == nil && s.Name == "Option"
+	return ok && s.Prelude && s.Name == "Option" && s.Base != nil
 }

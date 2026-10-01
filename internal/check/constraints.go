@@ -181,14 +181,41 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 			out = append(out, &cp)
 		}
 	}
-	switch tt := typ.(type) {
-	case *List:
-		if len(t.Args) == 1 {
-			inner(t.Args[0], tt.Elem, ".[]")
+	if tt, ok := typ.(*List); ok && len(t.Args) == 1 {
+		inner(t.Args[0], tt.Elem, ".[]")
+	}
+	// In a generic type, a type argument's constraints apply to the
+	// fields declared with that parameter: `Option[Int where positive]`
+	// to the Some's value.
+	if base := genericBase(typ); base != nil && len(t.Args) == len(typeParamsOf(base)) {
+		args := TypeArgs(typ)
+		for i, tp := range typeParamsOf(base) {
+			for _, path := range fieldPathsOf(base, tp) {
+				inner(t.Args[i], args[i], path)
+			}
 		}
+	}
+	return out
+}
+
+// fieldPathsOf lists the fields of a generic type (in any variant)
+// declared with exactly the type parameter tp.
+func fieldPathsOf(base Type, tp *TypeParam) []string {
+	var fields []*Field
+	switch b := base.(type) {
+	case *Record:
+		fields = b.Fields
 	case *Sealed:
-		if IsOption(tt) && len(t.Args) == 1 {
-			inner(t.Args[0], tt.Args[0], ".value")
+		for _, v := range b.Variants {
+			fields = append(fields, v.Fields...)
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range fields {
+		if f.Type == Type(tp) && !seen[f.Name] {
+			seen[f.Name] = true
+			out = append(out, "."+f.Name)
 		}
 	}
 	return out
