@@ -44,6 +44,38 @@ Functions, records, unions and sealed types, `match` with exhaustiveness, `Optio
 
 *Done when* the constrained-input examples in the requirements compile, and each kind of unproven call fails with a clear diagnostic. This milestone proves the core idea; if it does not hold up in practice, we find out before building the rest.
 
+#### Baseline: everything proven can do
+
+[proven](https://github.com/GiGurra/proven)'s examples and test cases (`example/`, `testdata/cases/`) define the minimum constraint functionality for M1. The concepts carry over; the syntax and implementation do not. bork must support:
+
+- **Preconditions on parameters**, with several predicates on one parameter combined with AND.
+- **Fact sources:**
+  - a preceding check (`if p(x) { ... }`)
+  - checks joined with `&&`
+  - early-return and panic guards (`if !p(x) { return ... }`)
+  - a function's own preconditions, which hold inside its body
+  - a callee's results, including when the call is nested as an argument (`target(normalize(x))`)
+  - boundary validation that yields a union result, where the fact holds only on the success path
+  - trusted injection (`trust`), both for local values and for function results
+- **Promised results:** derived from the body, and pinned in the signature, where a pinned promise is verified against the body so an edit cannot silently drop it.
+- **Derived results through chains of helper functions**, independent of declaration order.
+- **Inference rules:** with conditions (`Given`), several premises and conclusions, chained, and safe against cycles.
+- **OR obligations and OR facts**, alongside AND.
+- **Generic predicates:** one predicate (e.g. `nonEmpty`) applies to every type it fits.
+- **Facts on fields and deeper paths** (`user.address.zip`).
+- **Relations between several values.** proven packs them into a struct; bork can additionally use predicates whose arguments refer to other parameters.
+- **Literals checked at compile time.** In proven this only works for its built-in predicates; in bork it works for every predicate.
+- **Obligations across packages**, through package summaries.
+- **Diagnostics** that name the predicate, the parameter, and the callee, and point at the call site.
+- **Rejected cases:** unproven calls, a boundary check whose failure path is not handled, unknown predicates, and mismatched trusted predicates.
+- **Test support:**
+  - property tests for inference rules, which find counter-examples
+  - a test mode that runs contracts at runtime, so tests can assert that a given input violates a given predicate (proven's drift defense)
+
+What proven needed but bork does not: all mutation handling (invalidating facts on reassignment, field writes, `++`, address escapes). bork's immutability makes it unnecessary. proven's mutation test cases become "cannot happen" in bork, apart from shadowing, which must not affect facts on the outer binding.
+
+proven's `testdata/cases/` (108 cases) are a good source of golden tests: each one, rewritten in bork syntax, is a ready-made test for M1.
+
 ### M2: scopes
 
 `scope` blocks, resources attached to scopes, finalizers in reverse order, the proof-of-open-scope rule, and "possibly released" diagnostics. A minimal file API is the first resource.
