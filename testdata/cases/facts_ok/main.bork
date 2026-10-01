@@ -1,0 +1,130 @@
+pred positive(x: Int) { x > 0 }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+pred atLeast(x: Int, min: Int) { x >= min }
+pred notEqual(x: String, other: String) { x != other }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+
+type Port = Int where between(1, 65535)
+type NotPositive = { value: Int }
+
+// A requirement on a parameter.
+fn transfer(amount: Int where positive): String {
+  s"transferred $amount"
+}
+
+// Callers prove the requirement with a guard...
+fn payOutChecked(amount: Int): String {
+  if (positive(amount)) { transfer(amount) } else { "nothing to pay" }
+}
+
+// ...or declare it, passing it on to their callers.
+fn payOutDeclared(amount: Int where positive): String {
+  transfer(amount)
+}
+
+// Early-return guards.
+fn payOutGuarded(amount: Int): String {
+  if (!positive(amount)) {
+    return "nothing to pay"
+  }
+  transfer(amount)
+}
+
+// A guard joined with &&.
+fn both(a: Int, b: Int): String {
+  if (positive(a) && positive(b)) { s"${transfer(a)} and ${transfer(b)}" } else { "not both" }
+}
+
+// Boundary validation: the fact holds on the success path.
+fn validate(raw: Int): Int where positive | NotPositive {
+  if (positive(raw)) { raw } else { NotPositive { value: raw } }
+}
+
+fn handle(raw: Int): String | NotPositive {
+  amount = validate(raw)?
+  transfer(amount)
+}
+
+fn handleWithMatch(raw: Int): String {
+  match (validate(raw)) {
+    amount: Int => transfer(amount)
+    NotPositive { value } => s"$value is not positive"
+  }
+}
+
+// Promised results are checked against the body, and callers can use them.
+fn abs(x: Int): Int where atLeast(0) {
+  if (atLeast(x, 0)) { x } else { trustedNegate(x) }
+}
+
+fn trustedNegate(x: Int): Int where atLeast(0) {
+  result = 0 - x
+  trust atLeast(result, 0)
+  result
+}
+
+fn clamp(x: Int, lo: Int, hi: Int where atLeast(lo)): Int where between(lo, hi) {
+  if (between(x, lo, hi)) {
+    x
+  } else if (atLeast(x, lo)) {
+    trust between(hi, lo, hi)
+    hi
+  } else {
+    trust between(lo, lo, hi)
+    lo
+  }
+}
+
+fn useClamped(v: Int where between(0, 100)): Int {
+  v
+}
+
+// Relations between parameters.
+fn send(from: String, to: String where notEqual(from)): String {
+  s"$from -> $to"
+}
+
+fn connect(host: String where nonEmpty, port: Port): String {
+  s"$host:$port"
+}
+
+type Request = { name: String where nonEmpty, port: Port }
+
+// A callee's promise, also when the call is an argument.
+fn normalize(x: Int): Int where positive {
+  if (positive(x)) { x } else { 1 }
+}
+
+// Facts on field paths.
+type User = { name: String, age: Int }
+pred adult(age: Int) { age >= 18 }
+
+fn serve(age: Int where adult): String {
+  s"served at $age"
+}
+
+fn visit(u: User): String {
+  if (adult(u.age)) { serve(u.age) } else { s"${u.name} is too young" }
+}
+
+fn main() {
+  println(payOutChecked(5), payOutChecked(-5))
+  println(payOutDeclared(3), payOutGuarded(0), both(1, 2), both(1, -2))
+  println(handle(10), handle(-1), handleWithMatch(7), handleWithMatch(0))
+  println(abs(-4), abs(4))
+  // Literals are checked at compile time.
+  println(transfer(100), connect("db", 5432))
+  hundred: Int where atLeast(100) = 100
+  println(useClamped(clamp(150, 0, 100)), hundred)
+  a = "alice"
+  b = "bob"
+  if (notEqual(b, a)) {
+    println(send(a, b))
+  }
+  // Facts live on fields too.
+  req = Request { name: "api", port: 8080 }
+  println(connect(req.name, req.port))
+  moved = req.copy(port = 9090)
+  println(connect(moved.name, moved.port))
+  println(transfer(normalize(-3)), visit(User { name: "Ada", age: 36 }), visit(User { name: "Tim", age: 9 }))
+}

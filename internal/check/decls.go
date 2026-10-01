@@ -11,6 +11,9 @@ type typeEntry struct {
 	resolving bool // guards against alias cycles
 	resolved  bool
 	prelude   bool
+	// The where clause of a constrained alias (type Port = Int where ...).
+	constraints     []*Constraint
+	constraintsDone bool
 }
 
 // reservedTypeNames cannot be declared by user code.

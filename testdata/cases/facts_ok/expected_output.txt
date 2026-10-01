@@ -1,0 +1,10 @@
+transferred 5 nothing to pay
+transferred 3 nothing to pay transferred 1 and transferred 2 not both
+transferred 10 NotPositive { value: -1 } transferred 7 0 is not positive
+4 4
+transferred 100 db:5432
+100 100
+alice -> bob
+api:8080
+api:9090
+transferred 1 served at 36 Tim is too young

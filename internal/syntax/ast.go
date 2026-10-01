@@ -47,8 +47,11 @@ type VariantDecl struct {
 // the function returns Unit. A function implemented in Go has GoBody
 // instead of Body.
 type FuncDecl struct {
-	Pos    diag.Pos
-	Name   string
+	Pos  diag.Pos
+	Name string
+	// IsPred is set for `pred name(x: T, ...) { ... }`: a function
+	// returning Bool that can be used in `where` clauses.
+	IsPred bool
 	Params []*Param
 	Result *TypeExpr
 	Body   *Block
@@ -78,6 +81,25 @@ type TypeExpr struct {
 	Name  string
 	Args  []*TypeExpr
 	Union []*TypeExpr // non-nil for a union; Name and Args are then unused
+	// Where lists the predicates of `T where p and q(1)`.
+	Where []*PredRef
+}
+
+// PredRef is one predicate in a where clause: `positive`, or
+// `between(1, 65535)`, whose arguments are constants or parameter
+// names. The constrained value itself is the predicate's first argument
+// and is not written.
+type PredRef struct {
+	Pos  diag.Pos
+	Name string
+	Args []Expr
+}
+
+// TrustStmt is `trust p(x, ...)`: from here on, p(x, ...) is taken as
+// a fact without proof.
+type TrustStmt struct {
+	Pos  diag.Pos
+	Call *Call
 }
 
 // Stmt is a statement inside a block.
@@ -97,8 +119,9 @@ type ExprStmt struct {
 	X Expr
 }
 
-func (*Binding) stmtNode()  {}
-func (*ExprStmt) stmtNode() {}
+func (*Binding) stmtNode()   {}
+func (*TrustStmt) stmtNode() {}
+func (*ExprStmt) stmtNode()  {}
 
 // Expr is an expression. Everything that produces a value is an
 // expression, including if, blocks, and return.

@@ -80,7 +80,47 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	check.Facts(files, info, diags, evaluator(path, files, info))
+	if diags.Len() > 0 {
+		return nil, nil, &DiagError{Diags: diags}
+	}
 	return files, info, nil
+}
+
+// evaluator runs predicates on constants at compile time, by building
+// and running a small program made from the package's own code.
+func evaluator(path string, files []*syntax.File, info *check.Info) check.Evaluator {
+	return func(queries []check.Query) ([]bool, error) {
+		goSrc, err := gen.EvalProgram(files, info, queries)
+		if err != nil {
+			return nil, err
+		}
+		dir, err := os.MkdirTemp("", "bork-eval-*")
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		exe := filepath.Join(dir, "eval")
+		if err := buildGo(path, goSrc, exe); err != nil {
+			return nil, err
+		}
+		var stderr strings.Builder
+		cmd := exec.Command(exe)
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("a predicate failed: %s", strings.TrimSpace(stderr.String()))
+		}
+		lines := strings.Fields(string(out))
+		if len(lines) != len(queries) {
+			return nil, fmt.Errorf("expected %d results, got %q", len(queries), out)
+		}
+		results := make([]bool, len(lines))
+		for i, l := range lines {
+			results[i] = l == "true"
+		}
+		return results, nil
+	}
 }
 
 // Emit compiles the package at path to Go source. A program must have
@@ -104,6 +144,12 @@ func Build(path, out string) error {
 	if err != nil {
 		return err
 	}
+	return buildGo(path, goSrc, out)
+}
+
+// buildGo builds generated Go source (for the package at path) into an
+// executable at out.
+func buildGo(path string, goSrc []byte, out string) error {
 	absOut, err := filepath.Abs(out)
 	if err != nil {
 		return err

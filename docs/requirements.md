@@ -170,7 +170,17 @@ fn sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 
 ## 3. Contracts and knowledge (in progress)
 
-> Nothing in this section is decided yet. The examples show the direction; the syntax is a sketch.
+> The examples below show the direction; some of their syntax is still a sketch. What the compiler implements is listed under "Decided so far".
+
+### Decided so far (implemented)
+
+- **Predicates are declared with `pred`:** `pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }`. A predicate is an ordinary function returning `Bool` (callable in code), whose first parameter is the value it is about.
+- **`T where p and q(args)`** constrains parameters, results (also single members of a union result: `Int where positive | NotPositive`), record fields, constrained aliases (`type Port = Int where between(1, 65535)`), and typed bindings. Predicate arguments are constants or parameter names (`hi: Int where atLeast(lo)`).
+- **Fact sources:** a predicate call in an `if` condition (in the branch it guards), guards that end in `return` or `panic` (for the code after them), `&&` and `||` (for their right side), `!`, a function's own requirements, a callee's promised result (also through `?` and `match` on a validated union, where the fact holds only for the promising member), field declarations, typed bindings, and `trust p(x)`.
+- **Facts are found by identity.** A fact about `x` also holds for `y = x`, and for field paths like `u.age`. A computed value (`a - 1`) has no facts unless something promises them.
+- **Promised results are verified** against every path of the body.
+- **Requirements on constants are decided by running the predicate at compile time**, using the program's own code (including `unsafe go`): `transfer(0)` fails the build with "positive(0) is false". This works for any predicate.
+- **Diagnostics** name the requirer, the parameter or field, and the predicate, and suggest a guard or a declaration.
 
 ### Constrained inputs: examples
 

@@ -17,6 +17,10 @@ type Func struct {
 	Prelude bool
 	// Calls lists the functions this function's body calls.
 	Calls []*Func
+	// ParamConstraints holds each parameter's where clause, and
+	// ResultConstraints what the result promises (per union member).
+	ParamConstraints  [][]*Constraint
+	ResultConstraints []MemberConstraints
 }
 
 // Builtin identifies a function provided by the compiler.
@@ -105,6 +109,21 @@ type Info struct {
 	Conversions map[*syntax.Call]*Conversion
 	// OutOfRange is the prelude's OutOfRange record.
 	OutOfRange Type
+	// Defs records what each identifier refers to: a *syntax.Param, a
+	// *syntax.Binding, or the pattern node that bound it.
+	Defs map[*syntax.Ident]any
+	// BindingConstraints holds the where clauses of typed bindings.
+	BindingConstraints map[*syntax.Binding][]*Constraint
+	// PatSources records, for a name bound by the top-level pattern of a
+	// match arm, the matched expression and the union member the pattern
+	// narrowed it to (nil if it did not narrow).
+	PatSources map[any]*PatSource
+}
+
+// PatSource is where a value bound by a match pattern came from.
+type PatSource struct {
+	Subject syntax.Expr
+	Member  Type
 }
 
 // Package type-checks the given files as one package.
@@ -126,6 +145,10 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 			Consts:           map[syntax.Expr]constant.Value{},
 			Bindings:         map[*syntax.Binding]Type{},
 			Conversions:      map[*syntax.Call]*Conversion{},
+			Defs:             map[*syntax.Ident]any{},
+
+			BindingConstraints: map[*syntax.Binding][]*Constraint{},
+			PatSources:         map[any]*PatSource{},
 		},
 	}
 	// Pass 1: declare types, then resolve their bodies, so types can
@@ -151,6 +174,9 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 			c.declareFunc(fd, f.Prelude)
 		}
 	}
+	// Where clauses refer to predicates, so they are resolved once all
+	// functions are declared.
+	c.resolveConstraints(files)
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -175,6 +201,7 @@ type checker struct {
 type local struct {
 	typ  Type
 	node any // the binding's syntax node; nil for parameters
+	decl any // what an identifier refers to (see Info.Defs)
 	used bool
 }
 
@@ -198,6 +225,10 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		c.errorf(fd.Pos, "%s is already the name of a type", fd.Name)
 		return
 	}
+	if fd.IsPred && len(fd.Params) == 0 {
+		c.errorf(fd.Pos, "pred %s needs a parameter: the value it is about", fd.Name)
+		return
+	}
 	fn := &Func{Decl: fd, Result: c.resolveType(fd.Result), Prelude: prelude}
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
@@ -215,7 +246,7 @@ func (c *checker) checkFunc(fn *Func) {
 		if fn.Params[i] == Unit {
 			c.errorf(p.Type.Pos, "parameter %s cannot have type Unit", p.Name)
 		}
-		c.scopes[0][p.Name] = &local{typ: fn.Params[i]}
+		c.scopes[0][p.Name] = &local{typ: fn.Params[i], decl: p}
 	}
 	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Unit) {
 		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
@@ -282,7 +313,7 @@ func (c *checker) bind(name string, pos diag.Pos, t Type, node any) {
 	if c.nameTaken(name, pos) {
 		t = Invalid
 	}
-	c.scopes[len(c.scopes)-1][name] = &local{typ: t, node: node}
+	c.scopes[len(c.scopes)-1][name] = &local{typ: t, node: node, decl: node}
 }
 
 func (c *checker) lookup(name string) *local {
@@ -349,6 +380,8 @@ func stmtPos(s syntax.Stmt) diag.Pos {
 		return s.Pos
 	case *syntax.ExprStmt:
 		return s.X.Position()
+	case *syntax.TrustStmt:
+		return s.Pos
 	}
 	return diag.Pos{}
 }
@@ -377,7 +410,16 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			t = declared
 		}
 		c.info.Bindings[s] = t
+		if s.Type != nil && t != Invalid {
+			c.info.BindingConstraints[s] = c.constraintsOf(s.Type, t, c.paramScope())
+		}
 		c.bind(s.Name, s.Pos, t, s)
+		return Unit
+	case *syntax.TrustStmt:
+		c.expr(s.Call)
+		if fn := c.info.CallFuncs[s.Call]; fn != nil && !fn.Decl.IsPred {
+			c.errorf(s.Call.Position(), "trust needs a predicate call, but %s is a function", fn.Decl.Name)
+		}
 		return Unit
 	case *syntax.ExprStmt:
 		t := c.expr(s.X)
@@ -452,6 +494,7 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 func (c *checker) ident(e *syntax.Ident) Type {
 	if l := c.lookup(e.Name); l != nil {
 		l.used = true
+		c.info.Defs[e] = l.decl
 		return l.typ
 	}
 	if _, ok := c.info.Funcs[e.Name]; ok {
@@ -754,4 +797,15 @@ func (c *checker) conversion(e *syntax.Call, fname string) Type {
 	}
 	c.info.Conversions[e] = &Conversion{From: from, To: to, Checked: true}
 	return newUnion([]Type{to, c.info.OutOfRange})
+}
+
+// paramScope maps the current function's parameters to their types.
+func (c *checker) paramScope() map[string]Type {
+	scope := map[string]Type{}
+	if c.fn != nil {
+		for i, p := range c.fn.Decl.Params {
+			scope[p.Name] = c.fn.Params[i]
+		}
+	}
+	return scope
 }

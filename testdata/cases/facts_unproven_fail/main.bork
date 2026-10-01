@@ -1,0 +1,85 @@
+pred positive(x: Int) { x > 0 }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+pred atLeast(x: Int, min: Int) { x >= min }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+
+type Port = Int where between(1, 65535)
+type NotPositive = { value: Int }
+type Request = { name: String where nonEmpty, port: Port }
+
+fn transfer(amount: Int where positive): Int {
+  amount
+}
+
+// Neither proven nor declared.
+fn payOut(amount: Int): Int {
+  transfer(amount)
+}
+
+// The fact holds only inside the if.
+fn afterIf(amount: Int): Int {
+  if (positive(amount)) {
+    println("positive")
+  }
+  transfer(amount)
+}
+
+// The else branch has the opposite fact.
+fn wrongBranch(amount: Int): Int {
+  if (positive(amount)) { 0 } else { transfer(amount) }
+}
+
+// || does not give the right side the left side's fact.
+fn either(a: Int): Bool {
+  positive(a) || transfer(a) > 0
+}
+
+// A different value.
+fn otherValue(a: Int, b: Int): Int {
+  if (positive(a)) { transfer(b) } else { 0 }
+}
+
+// Computed values are not known to satisfy anything.
+fn computed(a: Int where positive): Int {
+  transfer(a - 1)
+}
+
+// The promise is not kept on every path.
+fn promise(x: Int): Int where positive {
+  if (positive(x)) { x } else { 0 - x }
+}
+
+fn validate(raw: Int): Int | NotPositive {
+  if (positive(raw)) { raw } else { NotPositive { value: raw } }
+}
+
+// validate does not promise anything about its Int.
+fn unvalidated(raw: Int): Int | NotPositive {
+  amount = validate(raw)?
+  transfer(amount)
+}
+
+// trust needs a named value.
+fn trustComputed(a: Int): Int {
+  trust positive(a + 1)
+  a
+}
+
+fn connect(host: String where nonEmpty, port: Port): String {
+  s"$host:$port"
+}
+
+fn useRequest(name: String, port: Int): Request {
+  Request { name: name, port: port }
+}
+
+fn main() {
+  // Literals that fail their predicates.
+  println(transfer(0))
+  println(connect("", 70000))
+  bad: Port = 0
+  req = Request { name: "x", port: 80 }
+  println(req.copy(port = -1), bad)
+  println(payOut(1), afterIf(1), wrongBranch(1), either(1), otherValue(1, 2), computed(1), promise(1))
+  println(unvalidated(1), useRequest("a", 1), trustComputed(1))
+}

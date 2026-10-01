@@ -1,0 +1,83 @@
+// Facts: requirements written in signatures, proven by the compiler.
+// Raw input is validated once, at the boundary; after that, the type
+// carries the knowledge and nothing downstream checks it again.
+
+pred positive(x: Int) { x > 0 }
+pred atMost(x: Int, max: Int) { x <= max }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred differentFrom(x: String, other: String) { x != other }
+
+type AccountId = String where nonEmpty
+type Cents = Int where positive and atMost(1_000_000)
+
+type Transfer = { from: AccountId, to: AccountId, amount: Cents }
+
+type Invalid = { field: String, reason: String }
+
+// The boundary: raw values in, proven values (or a reason) out.
+fn parseAmount(raw: String): Cents | Invalid {
+  match (parseInt(raw)) {
+    n: Int => if (!positive(n)) {
+      Invalid { field: "amount", reason: s"$n is not positive" }
+    } else if (!atMost(n, 1_000_000)) {
+      Invalid { field: "amount", reason: s"$n is over the limit" }
+    } else {
+      n
+    }
+    e: ParseError => Invalid { field: "amount", reason: e.message }
+  }
+}
+
+fn parseAccount(field: String, raw: String): AccountId | Invalid {
+  id = trim(raw)
+  if (nonEmpty(id)) { id } else { Invalid { field: field, reason: "missing" } }
+}
+
+// Relations between parameters: to must differ from from.
+fn makeTransfer(
+  from: AccountId,
+  to: AccountId where differentFrom(from),
+  amount: Cents,
+): Transfer {
+  Transfer { from: from, to: to, amount: amount }
+}
+
+fn request(fromRaw: String, toRaw: String, amountRaw: String): Transfer | Invalid {
+  from = parseAccount("from", fromRaw)?
+  to = parseAccount("to", toRaw)?
+  amount = parseAmount(amountRaw)?
+  if (!differentFrom(to, from)) {
+    return Invalid { field: "to", reason: "cannot transfer to the same account" }
+  }
+  makeTransfer(from, to, amount)
+}
+
+// The fee is promised to stay within the limit; the compiler checks
+// that every path keeps the promise.
+fn withFee(amount: Cents): Int where atMost(1_010_000) {
+  fee = if (atMost(amount, 10_000)) { 100 } else { amount / 100 }
+  total = amount + fee
+  // amount is at most 1_000_000, so the fee is at most 10_000.
+  trust atMost(total, 1_010_000)
+  total
+}
+
+fn describe(result: Transfer | Invalid): String {
+  match (result) {
+    t: Transfer => s"${t.from} -> ${t.to}: ${t.amount} cents (${withFee(t.amount)} with fee)"
+    Invalid { field, reason } => s"invalid $field: $reason"
+  }
+}
+
+fn main() {
+  println(describe(request("alice", "bob", "2500")))
+  println(describe(request("alice", "bob", "50000")))
+  println(describe(request("alice", "alice", "100")))
+  println(describe(request(" ", "bob", "100")))
+  println(describe(request("alice", "bob", "-5")))
+  println(describe(request("alice", "bob", "lots")))
+  println(describe(request("alice", "bob", "2000000")))
+  // Constants are checked at compile time: makeTransfer("a", "b", 0)
+  // would not compile (positive(0) is false).
+  println(makeTransfer("treasury", "alice", 1000))
+}

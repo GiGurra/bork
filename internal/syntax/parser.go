@@ -23,7 +23,7 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 			break
 		}
 		switch {
-		case p.at(KwFn):
+		case p.at(KwFn) || p.at(KwPred):
 			if fn := p.funcDecl(); fn != nil {
 				f.Funcs = append(f.Funcs, fn)
 			}
@@ -32,7 +32,7 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 				f.Types = append(f.Types, td)
 			}
 		default:
-			p.errorf(p.tok().Pos, "expected a declaration ('fn' or 'type'), found %s", p.tok().Kind)
+			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', or 'type'), found %s", p.tok().Kind)
 			p.syncTopLevel()
 		}
 	}
@@ -170,9 +170,10 @@ func (p *parser) fieldDecls() []*FieldDecl {
 
 func (p *parser) funcDecl() (fn *FuncDecl) {
 	defer p.recoverDecl(func() { fn = nil })
-	pos := p.expect(KwFn, "").Pos
+	isPred := p.at(KwPred)
+	pos := p.next().Pos
 	name := p.expect(TIdent, "(function name)")
-	fn = &FuncDecl{Pos: pos, Name: name.Text}
+	fn = &FuncDecl{Pos: pos, Name: name.Text, IsPred: isPred}
 	p.expect(LParen, "to start the parameter list")
 	p.skipNewlines()
 	for !p.at(RParen) {
@@ -187,7 +188,14 @@ func (p *parser) funcDecl() (fn *FuncDecl) {
 		p.skipNewlines()
 	}
 	p.expect(RParen, "to end the parameter list")
-	if p.at(Colon) {
+	if isPred {
+		// A predicate always returns Bool.
+		fn.Result = &TypeExpr{Pos: name.Pos, Name: "Bool"}
+		if p.at(Colon) {
+			p.errorf(p.tok().Pos, "a pred always returns Bool; leave out the result type")
+			panic(bailout{})
+		}
+	} else if p.at(Colon) {
 		p.next()
 		fn.Result = p.typeExpr()
 	}
@@ -207,7 +215,7 @@ func (p *parser) funcDecl() (fn *FuncDecl) {
 
 // typeExpr parses a type: `Name`, `Name[Args]`, or a union `A | B`.
 func (p *parser) typeExpr() *TypeExpr {
-	first := p.typeAtom()
+	first := p.constrainedType()
 	if !p.at(Pipe) {
 		return first
 	}
@@ -215,9 +223,41 @@ func (p *parser) typeExpr() *TypeExpr {
 	for p.at(Pipe) {
 		p.next()
 		p.skipNewlines()
-		u.Union = append(u.Union, p.typeAtom())
+		u.Union = append(u.Union, p.constrainedType())
 	}
 	return u
+}
+
+// constrainedType parses `T`, or `T where p and q(args)`.
+func (p *parser) constrainedType() *TypeExpr {
+	t := p.typeAtom()
+	if !p.at(KwWhere) {
+		return t
+	}
+	p.next()
+	for {
+		name := p.expect(TIdent, "(predicate name)")
+		ref := &PredRef{Pos: name.Pos, Name: name.Text}
+		if p.at(LParen) {
+			p.next()
+			p.skipNewlines()
+			for !p.at(RParen) {
+				ref.Args = append(ref.Args, p.expr())
+				p.skipNewlines()
+				if !p.at(Comma) {
+					break
+				}
+				p.next()
+				p.skipNewlines()
+			}
+			p.expect(RParen, "to end the predicate's arguments")
+		}
+		t.Where = append(t.Where, ref)
+		if !p.at(KwAnd) {
+			return t
+		}
+		p.next()
+	}
 }
 
 func (p *parser) typeAtom() *TypeExpr {
@@ -261,6 +301,15 @@ func (p *parser) block() *Block {
 			name := p.next()
 			p.next() // '='
 			stmt = &Binding{Pos: name.Pos, Name: name.Text, Value: p.expr()}
+		case p.at(KwTrust):
+			pos := p.next().Pos
+			x := p.expr()
+			call, ok := x.(*Call)
+			if !ok {
+				p.errorf(x.Position(), "trust needs a predicate call, as in trust positive(x)")
+				panic(bailout{})
+			}
+			stmt = &TrustStmt{Pos: pos, Call: call}
 		case p.at(TIdent) && p.peekKind() == Colon:
 			name := p.next()
 			p.next() // ':'

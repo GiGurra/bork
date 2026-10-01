@@ -30,6 +30,10 @@ const (
 	KwSealed
 	KwMatch
 	KwUnsafe
+	KwPred
+	KwWhere
+	KwAnd
+	KwTrust
 
 	// Delimiters
 	LParen
@@ -68,7 +72,7 @@ var kindNames = map[Kind]string{
 	EOF: "end of file", Illegal: "illegal token", Semi: "newline or ';'",
 	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TRune: "rune literal", TGoCode: "Go code", TString: "string literal", TInterp: "interpolated string",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
-	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'",
+	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'", KwPred: "'pred'", KwWhere: "'where'", KwAnd: "'and'", KwTrust: "'trust'",
 	LBrack: "'['", RBrack: "']'", Dot: "'.'", Underscore: "'_'", Pipe: "'|'", Arrow: "'=>'", Quest: "'?'",
 	LParen: "'('", RParen: "')'", LBrace: "'{'", RBrace: "'}'", Comma: "','", Colon: "':'",
 	Assign: "'='", Plus: "'+'", Minus: "'-'", Star: "'*'", Slash: "'/'", Pct: "'%'", Not: "'!'",
@@ -93,6 +97,10 @@ var keywords = map[string]Kind{
 	"sealed": KwSealed,
 	"match":  KwMatch,
 	"unsafe": KwUnsafe,
+	"pred":   KwPred,
+	"where":  KwWhere,
+	"and":    KwAnd,
+	"trust":  KwTrust,
 }
 
 // Token is a lexed token. Text holds the source text for identifiers

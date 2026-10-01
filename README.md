@@ -16,6 +16,26 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 - **Facts.** What you check about a value becomes part of its type, and the compiler proves every function's requirements at every call site.
 - **Scopes.** Outside resources (files, connections, transactions, leases) belong to scopes, and using one requires proof that a scope managing it is still open.
 
+Facts already work:
+
+```
+pred positive(x: Int) { x > 0 }
+
+fn transfer(amount: Int where positive): Receipt { ... }
+
+fn payOut(amount: Int) {
+  transfer(amount)       // error: transfer requires amount to be positive, but that is not proven for amount
+}                        //   (check it first with if (positive(amount)) { ... }, or require it: amount: Int where positive)
+
+fn payOutChecked(amount: Int) {
+  if (positive(amount)) { transfer(amount) }   // proven by the guard
+}
+
+transfer(0)              // error: transfer requires amount to be positive, but positive(0) is false
+```
+
+Predicates are ordinary bork functions; on constants, the compiler runs them at build time. See [examples/payments](examples/payments/main.bork).
+
 ## Goals
 
 - **Pragmatic high correctness for backend systems.** That is the whole point.
@@ -24,7 +44,7 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 - **Strict rules, trivially easy.** Declaring what must hold ("amount is positive", "user is non-nil", "list is non-empty") should be as cheap as writing an `if`. The compiler proves it at every call site or fails the build. This builds on ideas from [proven](https://github.com/GiGurra/proven).
 - **Functional style.** Algebraic data types, pattern matching, expressions over statements, and first-class functions.
 - **Go-like tooling.** One binary with commands like `bork build`, `bork test`, `bork fmt`. Fast builds. No build-system archaeology.
-- **Compiles to Go** (first version). Go is only a compilation target: we get its runtime, GC, goroutines, and cross-platform builds without writing our own backend. bork code does not import Go packages, and there is no FFI in v0.1.
+- **Compiles to Go** (first version). Go is only a compilation target: we get its runtime, GC, goroutines, and cross-platform builds without writing our own backend. bork code does not import Go packages; the explicit boundary is `unsafe go` function bodies.
 
 ## Non-goals
 
@@ -34,7 +54,7 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 
 ## Getting started
 
-The compiler is at an early stage. Milestone M0 is done: functions, sized integers and floats with checked conversions, `Bool`/`String` with a small prelude of string and parsing functions, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `unsafe go` function bodies for calling Go. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage. Milestone M0 is done, and M1 (facts) is under way: functions, sized integers and floats with checked conversions, `Bool`/`String` with a small prelude of string and parsing functions, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `unsafe go` function bodies for calling Go. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest

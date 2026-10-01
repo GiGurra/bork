@@ -1,0 +1,22 @@
+pred positive(x: Int) { x > 0 }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+
+fn isPositive(x: Int): Bool {
+  x > 0
+}
+
+type A = Int where missing
+type B = Int where isPositive
+type C = String where positive
+type D = Int where between(1)
+type E = Int where between("a", 2)
+type F = { x: Int where between(1, limit) }
+
+fn g(x: Int, y: Int where between(x, z)): Int {
+  trust isPositive(x)
+  x + y
+}
+
+fn main() {
+  println(g(1, 1))
+}
