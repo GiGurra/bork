@@ -1,0 +1,58 @@
+pred positive(x: Int) { x > 0 }
+
+type NotPositive = { value: Int }
+
+fn add(a: Int, b: Int): Int { a + b }
+
+fn transfer(amount: Int where positive): Int { amount * 100 }
+
+// Trusted, and wrong for 0.
+fn fromUser(raw: Int): Int {
+  trust positive(raw)
+  transfer(raw)
+}
+
+// unsafe go code promising more than it delivers: 0 is not positive.
+fn validate(raw: Int): Int where positive | NotPositive unsafe go {
+  if raw >= 0 {
+    return raw
+  }
+  return NotPositive{value: raw}
+}
+
+fn main() {
+  println(add(1, 2))
+}
+
+test "add adds" {
+  assert(add(1, 2) == 3)
+  assertEqual(add(2, 2), 4)
+}
+
+test "add with a wrong expectation" {
+  assertEqual(add(2, 2), 5)
+}
+
+test "lists" {
+  assertEqual(length(filter([1, -2, 3], positive)), 2)
+  assertEqual(first([7, 8]), 7)
+}
+
+test "a trusted fact that holds" {
+  assertEqual(fromUser(2), 200)
+}
+
+test "a trusted fact that does not hold" {
+  println(fromUser(0))
+}
+
+test "a promise unsafe go breaks" {
+  match (validate(0)) {
+    n: Int => println(n)
+    e: NotPositive => println(e)
+  }
+}
+
+test "panics fail tests" {
+  panic("boom")
+}

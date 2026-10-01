@@ -81,3 +81,22 @@ fn main() {
   // would not compile (positive(0) is false).
   println(makeTransfer("treasury", "alice", 1000))
 }
+
+// Tests run with `bork test`. In test mode the trusted bound in withFee
+// is checked too.
+
+test "valid requests become transfers" {
+  match (request("alice", "bob", "2500")) {
+    t: Transfer => assertEqual(t.amount, 2500)
+    Invalid { field } => panic(s"unexpected invalid $field")
+  }
+}
+
+test "the fee stays within the limit" {
+  assertEqual(withFee(500), 600)
+  assertEqual(withFee(1_000_000), 1_010_000)
+}
+
+test "the same account is rejected" {
+  assertEqual(describe(request("alice", "alice", "100")), "invalid to: cannot transfer to the same account")
+}

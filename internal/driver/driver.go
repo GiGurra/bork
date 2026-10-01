@@ -5,6 +5,7 @@ package driver
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -204,6 +205,53 @@ func Run(path string, args []string) (int, error) {
 		return 1, err
 	}
 	return 0, nil
+}
+
+// Test builds the package's tests in test mode and runs them, with the
+// report going to stdout. It returns the exit code: 0 if every test
+// passed.
+func Test(path string, stdout io.Writer) (int, error) {
+	files, info, err := Check(path)
+	if err != nil {
+		return 1, err
+	}
+	if len(info.Tests) == 0 {
+		diags := &diag.List{}
+		diags.Add(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package has no tests (add `test \"name\" { ... }`)")
+		return 1, &DiagError{Diags: diags}
+	}
+	goSrc, err := gen.Tests(files, info)
+	if err != nil {
+		return 1, err
+	}
+	dir, err := os.MkdirTemp("", "bork-test-*")
+	if err != nil {
+		return 1, err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	exe := filepath.Join(dir, "tests")
+	if err := buildGo(path, goSrc, exe); err != nil {
+		return 1, err
+	}
+	cmd := exec.Command(exe)
+	cmd.Stdout, cmd.Stderr = stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return exitErr.ExitCode(), nil
+		}
+		return 1, err
+	}
+	return 0, nil
+}
+
+// EmitTests is Emit for the test program (see Test).
+func EmitTests(path string) ([]byte, error) {
+	files, info, err := Check(path)
+	if err != nil {
+		return nil, err
+	}
+	return gen.Tests(files, info)
 }
 
 // DefaultOutput is the executable name `bork build` uses when none is

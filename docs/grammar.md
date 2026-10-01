@@ -21,7 +21,8 @@
 
 ```ebnf
 Package    = { File } .
-File       = { ( FuncDecl | PredDecl | TypeDecl | RuleDecl ) EOL } .
+File       = { ( FuncDecl | PredDecl | TypeDecl | RuleDecl | TestDecl ) EOL } .
+TestDecl   = "test" StringLit Block .        (* test "adds numbers" { assert(add(1, 2) == 3) } *)
 PredDecl   = "pred" Ident "(" Params ")" Block .  (* always returns Bool *)
 RuleDecl   = "rule" Ident "(" Params ")" "{" Premises "=>" Conclusions "}" .
 Premises   = Expr { "and" Expr } .  (* predicate calls on the variables, and conditions *)
@@ -114,6 +115,7 @@ EOL        = newline | ";" .
 - **Functions are values.** `(Int) => String` is a function type; a lambda is `x => x + 1`, `(a, b) => a + b`, or `(x: Int) => ...` where nothing says the parameter's type. Named functions can be passed (`map(xs, double)`) unless they have `where` requirements. Lambdas see the values around them; `return` and `?` are not allowed in them.
 - **Generic functions** take type parameters: `fn first[T](xs: List[T]): Option[T]`. Calls infer them from the arguments (lambdas, `[]` and `Option.None` last, so `fold(xs, 0, (sum, x) => sum + x)` works) or from the expected result. Inside, a type parameter can be passed around, stored, printed, and matched with a type pattern (`v: T`), but not compared with `==`. Lists, functions, and records holding them have no `==` either.
 - **`|>`** passes a value as the first argument: `users |> filter(u => u.age >= 18) |> map(u => u.name)`. With free functions instead of methods, it keeps chains readable left to right.
+- **Tests:** `test "name" { ... }` declares a test, run by `bork test` and left out of programs. `assert(cond)` and `assertEqual(actual, expected)` fail a test with the position (and both values); so does a `panic`. Tests run in test mode: facts the compiler takes on trust are checked as they run, so a `trust positive(x)` that does not hold, or an `unsafe go` function that breaks its promise, fails the test with the value. (`test` is not a keyword.)
 - **Generic types:** records and sealed types can take type parameters: `type Pair[A, B] = { first: A, second: B }`, `type Tree[T] = sealed { Leaf, Node { left: Tree[T], value: T, right: Tree[T] } }`. Literals take their type arguments from the expected type or from their fields (`Pair { first: 1, second: "one" }` is a `Pair[Int, String]`); a variant without fields (`Tree.Leaf`) needs an expected type. A `where` in a type argument applies to the fields declared with that parameter: in `Pair[String, Int where positive]`, to `second`. Type aliases cannot have parameters yet.
 - **`Option[T]`** is declared in the prelude as `type Option[T] = sealed { Some { value: T }, None }`, an ordinary generic sealed type. `Option.None` takes its type from where it is used.
 - **`match (x) { ... }`** tries arms in order. Arms produce a value, like `if`.

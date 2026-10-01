@@ -85,10 +85,13 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 			continue
 		}
 		for _, fd := range file.Funcs {
-			if fn := info.Funcs[fd.Name]; fn != nil && fn.Decl == fd && fd.Body != nil {
+			if fn := info.FuncOf[fd]; fn != nil && fd.Body != nil {
 				f.function(fn)
 			}
 		}
+	}
+	for _, fn := range info.Tests {
+		f.function(fn)
 	}
 	f.evaluate(eval)
 }

@@ -20,6 +20,8 @@ type Func struct {
 	// Synthetic is set for a predicate that stands for a function
 	// parameter (see facts.go); it has no body to run.
 	Synthetic bool
+	// Test is set for the function checking a test's body.
+	Test *syntax.TestDecl
 	// Calls lists the functions this function's body calls.
 	Calls []*Func
 	// ParamConstraints holds each parameter's where clause, and
@@ -37,12 +39,16 @@ const (
 	BuiltinToString
 	BuiltinConvert // toInt8(x), toFloat(x), ...
 	BuiltinPanic
+	BuiltinAssert      // assert(cond)
+	BuiltinAssertEqual // assertEqual(actual, expected)
 )
 
 var builtins = map[string]Builtin{
-	"println":  BuiltinPrintln,
-	"toString": BuiltinToString,
-	"panic":    BuiltinPanic,
+	"println":     BuiltinPrintln,
+	"toString":    BuiltinToString,
+	"panic":       BuiltinPanic,
+	"assert":      BuiltinAssert,
+	"assertEqual": BuiltinAssertEqual,
 }
 
 // conversions maps each conversion function to its target type.
@@ -124,6 +130,9 @@ type Info struct {
 	Defs map[*syntax.Ident]any
 	// BindingConstraints holds the where clauses of typed bindings.
 	BindingConstraints map[*syntax.Binding][]*Constraint
+	// Tests holds the package's tests, each checked as a function
+	// without parameters.
+	Tests []*Func
 	// Rules holds the package's inference rules.
 	Rules []*Rule
 	// Instances describes every call of a declared function, and
@@ -213,6 +222,18 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 			if fn := c.info.FuncOf[fd]; fn != nil {
 				c.checkFunc(fn)
 			}
+		}
+	}
+	names := map[string]diag.Pos{}
+	for _, f := range files {
+		for _, td := range f.Tests {
+			if prev, ok := names[td.Name]; ok {
+				c.errorf(td.Pos, "test %q is already declared at %s", td.Name, prev)
+			}
+			names[td.Name] = td.Pos
+			fn := &Func{Decl: &syntax.FuncDecl{Pos: td.Pos, Name: "test", Body: td.Body}, Result: Unit, Test: td}
+			c.info.Tests = append(c.info.Tests, fn)
+			c.checkFunc(fn)
 		}
 	}
 	return c.info
@@ -323,7 +344,11 @@ func (c *checker) checkFunc(fn *Func) {
 	}
 	bodyType := c.block(fn.Decl.Body, want)
 	if fn.Result == Unit && isValue(bodyType) {
-		c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (function %s returns no value)", bodyType, fn.Decl.Name)
+		if fn.Test != nil {
+			c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (a test returns no value)", bodyType)
+		} else {
+			c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (function %s returns no value)", bodyType, fn.Decl.Name)
+		}
 	}
 	if fn.Result != Unit && !assignable(bodyType, fn.Result) {
 		pos := fn.Decl.Body.Pos
@@ -707,6 +732,25 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 }
 
 func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
+	if b == BuiltinAssertEqual {
+		if len(e.Args) != 2 {
+			c.errorf(e.Pos, "assertEqual takes 2 arguments (actual, expected), but %d were given", len(e.Args))
+			for _, a := range e.Args {
+				c.expr(a)
+			}
+			return Unit
+		}
+		actual := c.expr(e.Args[0])
+		expected := c.exprWant(e.Args[1], actual)
+		switch {
+		case actual == Invalid || expected == Invalid:
+		case !identical(actual, expected) && !assignable(expected, actual):
+			c.errorf(e.Args[1].Position(), "cannot compare %s with %s", actual, expected)
+		case !isValue(actual) || !comparable(actual):
+			c.errorf(e.Pos, "cannot compare values of type %s", actual)
+		}
+		return Unit
+	}
 	if b != BuiltinPrintln && len(e.Args) != 1 {
 		c.errorf(e.Pos, "%s takes 1 argument, but %d were given", fname, len(e.Args))
 		for _, a := range e.Args {
@@ -720,6 +764,11 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 			c.errorf(e.Args[0].Position(), "panic needs a String message, found %s", t)
 		}
 		return Never
+	case BuiltinAssert:
+		if t := c.expr(e.Args[0]); t != Bool && t != Invalid {
+			c.errorf(e.Args[0].Position(), "assert needs a Bool, found %s", t)
+		}
+		return Unit
 	case BuiltinToString:
 		t := c.expr(e.Args[0])
 		if t != Invalid && !isValue(t) {

@@ -1,0 +1,13 @@
+ok    add adds
+FAIL  add with a wrong expectation
+      main.bork:33:3: expected 5, got 4
+ok    lists
+ok    a trusted fact that holds
+FAIL  a trusted fact that does not hold
+      main.bork:11:3: trusted fact does not hold: positive(raw) (raw = 0)
+FAIL  a promise unsafe go breaks
+      main.bork:16:1: validate promised a result that is positive, but returned 0
+FAIL  panics fail tests
+      boom
+3 passed, 4 failed
+exit code 1
