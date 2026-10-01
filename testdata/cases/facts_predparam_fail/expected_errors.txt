@@ -2,3 +2,4 @@ main.bork:2:56: g is a parameter of type Int; a predicate parameter must be a fu
 main.bork:3:64: g is a parameter of type (Int) => Int; a predicate parameter must be a function from the value to Bool
 main.bork:4:66: g applies to String, not Int
 main.bork:5:62: g is a parameter and takes no arguments here
+main.bork:8:26: notEmpty applies to List[T], not Int

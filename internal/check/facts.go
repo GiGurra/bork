@@ -30,6 +30,15 @@ import (
 type Query struct {
 	Pred *Func
 	Args []constant.Value // the constrained value first
+	// Subject, when set, is the constrained value as an expression of
+	// constants (a list or record literal), shown as SubjectText; Args
+	// then holds only the other arguments.
+	Subject     syntax.Expr
+	SubjectText string
+	// TypeArgs are a generic predicate's type arguments, and Params its
+	// parameter types with them filled in.
+	TypeArgs []Type
+	Params   []Type
 	Or   []Query
 	And  []Query
 	// Via names the function whose result the constant is, when the
@@ -54,9 +63,12 @@ func (q Query) String() string {
 	case q.And != nil:
 		return join(q.And, " and ")
 	}
-	args := make([]string, len(q.Args))
-	for i, a := range q.Args {
-		args[i] = CArg{Const: a}.String()
+	var args []string
+	if q.Subject != nil {
+		args = append(args, q.SubjectText)
+	}
+	for _, a := range q.Args {
+		args = append(args, CArg{Const: a}.String())
 	}
 	return q.Pred.Decl.Name + "(" + strings.Join(args, ", ") + ")"
 }
@@ -728,9 +740,10 @@ func (f *factChecker) prove(x syntax.Expr, ob obligation, e env, depth int) (boo
 		}
 		return ok1, p1
 	}
-	// A constant: run the predicate at compile time.
-	if v := f.info.constantOf(x); v != nil && ob.path == "" {
-		if q, ok := constQuery(ob, v); ok {
+	// A constant, or a literal of constants: run the predicate at
+	// compile time.
+	if ob.path == "" {
+		if q, ok := f.literalQuery(ob, x); ok {
 			return true, []Query{q}
 		}
 	}
@@ -1145,12 +1158,102 @@ func (f *factChecker) factOf(subject string, k known) fact {
 	return ft
 }
 
-// constQuery is ob on the constant v, if all its arguments are constants.
-func constQuery(ob obligation, v constant.Value) (Query, bool) {
-	if ob.pred == nil || ob.pred.Synthetic {
+// literalQuery is ob on x, if x and ob's arguments are made of constants
+// only, so the predicate can be run at compile time.
+func (f *factChecker) literalQuery(ob obligation, x syntax.Expr) (Query, bool) {
+	if ob.pred == nil || ob.pred.Synthetic || !f.closed(x) {
 		return Query{}, false
 	}
-	q := Query{Pred: ob.pred, Args: []constant.Value{v}}
+	q := Query{Pred: ob.pred, Params: ob.pred.Params}
+	if v := f.info.constantOf(x); v != nil {
+		q.Args = []constant.Value{v}
+	} else {
+		q.Subject, q.SubjectText = x, f.literalText(x)
+	}
+	for _, a := range ob.args {
+		if a.value == nil {
+			return Query{}, false
+		}
+		q.Args = append(q.Args, a.value)
+	}
+	if len(ob.pred.TypeParams) > 0 {
+		in := newInference(ob.pred)
+		in.unify(ob.pred.Params[0], f.info.Types[x])
+		if len(in.unsolved()) > 0 {
+			return Query{}, false
+		}
+		inst := in.instance()
+		q.TypeArgs, q.Params = inst.TypeArgs, inst.Params
+	}
+	return q, true
+}
+
+// closed reports whether x is made of constants only: a constant, or a
+// list, record, or variant literal of them.
+func (f *factChecker) closed(x syntax.Expr) bool {
+	if f.info.constantOf(x) != nil {
+		return true
+	}
+	switch x := x.(type) {
+	case *syntax.ListLit:
+		for _, el := range x.Elems {
+			if !f.closed(el) {
+				return false
+			}
+		}
+		return true
+	case *syntax.RecordLit:
+		for _, fi := range x.Fields {
+			if !f.closed(fi.Value) {
+				return false
+			}
+		}
+		return true
+	case *syntax.Selector:
+		return f.info.SelectorVariants[x] != nil
+	}
+	return false
+}
+
+// literalText shows a closed expression as written.
+func (f *factChecker) literalText(x syntax.Expr) string {
+	if v := f.info.constantOf(x); v != nil {
+		return CArg{Const: v}.String()
+	}
+	switch x := x.(type) {
+	case *syntax.ListLit:
+		parts := make([]string, len(x.Elems))
+		for i, el := range x.Elems {
+			parts[i] = f.literalText(el)
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	case *syntax.RecordLit:
+		var name string
+		switch t := f.info.RecordTargets[x].(type) {
+		case *Record:
+			name = t.Name
+		case *Variant:
+			name = t.Parent.Name + "." + t.Name
+		}
+		parts := make([]string, len(x.Fields))
+		for i, fi := range x.Fields {
+			parts[i] = fi.Name + ": " + f.literalText(fi.Value)
+		}
+		return name + " { " + strings.Join(parts, ", ") + " }"
+	case *syntax.Selector:
+		if v := f.info.SelectorVariants[x]; v != nil {
+			return v.Parent.Name + "." + v.Name
+		}
+	}
+	return "?"
+}
+
+// constQuery is ob on the constant v, if all its arguments are constants.
+func constQuery(ob obligation, v constant.Value) (Query, bool) {
+	if ob.pred == nil || ob.pred.Synthetic || len(ob.pred.TypeParams) > 0 {
+		return Query{}, false // cannot be run on its own
+	}
+	q := Query{Pred: ob.pred, Args: []constant.Value{v}, Params: ob.pred.Params}
 	for _, a := range ob.args {
 		if a.value == nil {
 			return Query{}, false
@@ -1747,7 +1850,7 @@ func (f *factChecker) evaluate(eval Evaluator) {
 	}
 	for _, p := range f.pending {
 		if !results[index[p.query.String()]] {
-			if p.query.Via != "" && p.query.Pred != nil {
+			if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil {
 				f.diags.Add(p.pos, "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: p.query.Args[0]}, p.query)
 				continue
 			}

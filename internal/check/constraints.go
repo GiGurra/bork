@@ -102,10 +102,11 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			fn := c.info.Funcs[fd.Name]
-			if fn == nil || fn.Decl != fd {
+			fn := c.info.FuncOf[fd]
+			if fn == nil {
 				continue
 			}
+			c.inPrelude = fn.Prelude
 			scope := map[string]Type{}
 			for i, p := range fd.Params {
 				scope[p.Name] = fn.Params[i]
@@ -117,6 +118,7 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			}
 			fn.ResultConstraints = c.memberConstraints(fd.Result, fn.Result, scope)
 			c.useTypeParams(nil)
+			c.inPrelude = false
 		}
 	}
 }
@@ -234,7 +236,7 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		}
 		return &Constraint{PredParam: ref.Name, Pos: ref.Pos}
 	}
-	fn, ok := c.info.Funcs[ref.Name]
+	fn, ok := c.funcNamed(ref.Name)
 	if !ok {
 		c.errorf(ref.Pos, "unknown predicate %s", ref.Name)
 		return nil
@@ -246,8 +248,17 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 	if len(fn.Params) == 0 {
 		return nil
 	}
-	if !assignable(subject, fn.Params[0]) {
-		c.errorf(ref.Pos, "%s applies to %s, not %s", ref.Name, fn.Params[0], subject)
+	// A generic predicate (`pred notEmpty[T](xs: List[T])`) takes its
+	// type arguments from the value and the arguments.
+	param := func(i int) Type { return fn.Params[i] }
+	var in *inference
+	if len(fn.TypeParams) > 0 {
+		in = newInference(fn)
+		in.unify(fn.Params[0], subject)
+		param = func(i int) Type { return in.subst(fn.Params[i]) }
+	}
+	if !assignable(subject, param(0)) {
+		c.errorf(ref.Pos, "%s applies to %s, not %s", ref.Name, param(0), subject)
 		return nil
 	}
 	if len(ref.Args) != len(fn.Params)-1 {
@@ -256,12 +267,16 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 	}
 	con := &Constraint{Pred: fn, Pos: ref.Pos}
 	for i, a := range ref.Args {
-		want := fn.Params[i+1]
+		want := param(i + 1)
 		if id, ok := a.(*syntax.Ident); ok {
 			pt, ok := scope[id.Name]
 			if !ok {
 				c.errorf(a.Position(), "%s is not a parameter here; predicate arguments are constants or parameter names", id.Name)
 				return nil
+			}
+			if in != nil {
+				in.unify(fn.Params[i+1], pt)
+				want = param(i + 1)
 			}
 			if !assignable(pt, want) {
 				c.errorf(a.Position(), "argument %d of %s must be %s, found %s", i+1, ref.Name, want, pt)
@@ -270,7 +285,14 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 			con.Args = append(con.Args, CArg{Param: id.Name})
 			continue
 		}
+		if in.open(want) {
+			want = nil
+		}
 		at := c.exprWant(a, want)
+		if in != nil {
+			in.unify(fn.Params[i+1], at)
+			want = param(i + 1)
+		}
 		v := c.info.constantOf(a)
 		switch {
 		case at == Invalid:
@@ -283,6 +305,12 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 			return nil
 		}
 		con.Args = append(con.Args, CArg{Const: v})
+	}
+	if in != nil {
+		if missing := in.unsolved(); len(missing) > 0 {
+			c.errorf(ref.Pos, "cannot tell what %s is for %s here", strings.Join(missing, " and "), ref.Name)
+			return nil
+		}
 	}
 	return con
 }

@@ -1,0 +1,14 @@
+type User = { name: String, age: Int }
+
+pred shortList[T](xs: List[T]) { length(xs) <= 3 }
+pred adult(u: User) { u.age >= 18 }
+
+fn greet(u: User where adult): String { u.name }
+fn few[T](xs: List[T] where shortList): Int { length(xs) }
+
+fn unchecked(xs: List[Int]): Int { first(xs) }
+
+fn main() {
+  none: List[Int] = []
+  println(few([1, 2, 3, 4]), first(none), greet(User { name: "bob", age: 12 }))
+}
