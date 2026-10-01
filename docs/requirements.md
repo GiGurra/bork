@@ -307,6 +307,35 @@ scope job {
 
 With structured concurrency (see below), a goroutine started inside `job` that must finish before `job` ends needs no attaching at all.
 
+### Two lifetimes of facts
+
+Facts come in two kinds, distinguished by how long they live:
+
+- **Value facts live forever.** They are about immutable values in the program, so nothing can make them false.
+- **Scoped facts live as long as a scope.** They are about state outside the program, and hold only while the scope is open. "This resource is open" is the first, built-in scoped fact.
+
+### User-defined scoped facts (planned, not v0.1)
+
+Library authors will be able to declare that acquiring a scope grants facts about the outside world, which hold for as long as the scope is open:
+
+```
+fn reserveUnit(unit: UnitId, dc: DcId, s: Scope): Result[Reservation, ReserveError]
+  grants located(unit, dc) in s            // syntax not final
+
+fn powerCycle(unit: UnitId, dc: DcId) where located(unit, dc) = ...
+
+scope maint {
+  reserveUnit(u, dc7, maint)?
+  powerCycle(u, dc7)                       // proven: located(u, dc7) holds in maint
+}                                          // reservation released, fact gone
+```
+
+- **A scoped fact is only honest if acquiring the scope holds something that keeps it true:** a lock, a lease, a reservation, a transaction. Without that, the fact is just an observation at a point in time, which is the developer's responsibility.
+- **Granting functions are trust points**, like `trust` and inference rules. The compiler believes the declared `grants`. They should be few, greppable, and live in libraries rather than business code.
+- **The outside world can still break a promise** (a lease expiring early, hardware moved despite a lock). Handling that at runtime is part of the granting library's responsibility.
+- **Backend examples:** inside a transaction, "this row is locked" or "the balance is at least 100"; within a leader lease, "I am the leader"; on a session, "authenticated as user U"; on an HTTP response, "headers not yet sent".
+- **Limit:** scopes model **nested** states well (connection → transaction → savepoint), but not **sequential** state changes (a protocol going A → B → C, where each step replaces the previous one). Those would need consumable values (affine types), which may be considered later.
+
 ### To settle with concurrency
 
 - **Cancellation and deadlines through scopes.** A request scope is the natural carrier for what Go's `context.Context` does today: when a request is cancelled, its scope closes, its resources are released, and its goroutines stop.
