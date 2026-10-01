@@ -7,6 +7,8 @@
 
 v0.1 is deliberately feature-sparse. It exists to prove the core idea (below): **when everything is immutable, every proven fact stays true**, so correctness checks are cheap, local, and permanent. Anything that doesn't serve that idea waits.
 
+The main advantages over Go are **immutability, facts, and scopes**. Everything else is there to support those three, or to stay out of their way.
+
 ## The core idea: immutable values, growing knowledge
 
 **Values never change, but what we know about them only grows, and that knowledge is part of their type.**
@@ -14,7 +16,7 @@ v0.1 is deliberately feature-sparse. It exists to prove the core idea (below): *
 When code discovers a property of a value (by a guard, a `match`, a boundary check, or a function's promised result), the property becomes part of that value's type from that point on, as the value is passed forward into other functions, records, and collections. (The compiler derives these facts lazily, only where something needs them; see below.)
 
 ```
-fn handle(raw: Int, name: Option[String]): Result[Receipt, HandleError] = {
+fn handle(raw: Int, name: Option[String]): Receipt | HandleError = {
   // raw: Int
   if !positive(raw) { return Err(NotPositive) }
   // raw: Int where positive
@@ -81,7 +83,7 @@ In priority order. When two values conflict, the higher one wins.
 1. **If it compiles, whole classes of bugs cannot happen.** No null or nil, no unchecked access to optional values, no exceptions, no non-exhaustive matches, no mutable state (v0.1), and no broken contracts.
 2. **Rigor must be cheap.** Declaring a rule should cost about as much as writing an `if`. Haskell-level guarantees without Haskell-level ceremony. If a guarantee is hard to express, that is a language bug.
 3. **Explicit escape hatches, never silent bypasses.** Whenever a guarantee is weakened, it is visible in the code, greppable, and reviewable.
-4. **Readable at 3am during an incident.** Explicit over clever. One obvious way to do common things.
+4. **Readable at 3am during an incident.** Explicit over clever. One obvious way to do common things. **Clarity over conciseness:** agents will write much of the code, so saving keystrokes matters little, while being easy to read and review matters a lot.
 5. **Boring, fast tooling.** One `bork` binary, fast builds, and a formatter with no options.
 6. **Friendly, specific diagnostics.** Errors say what could not be proven, where, and how to fix it.
 
@@ -97,7 +99,7 @@ In priority order. When two values conflict, the higher one wins.
 
 ### Errors and failure
 
-- **No exceptions. At all.** There is no `throw`, no `try`/`catch`. Expected failures are values (a `Result`-style type).
+- **No exceptions. At all.** There is no `throw`, no `try`/`catch`. Expected failures are ordinary values, returned as part of a union return type (see section 4).
 - **Panics exist but are discouraged.** A panic means a bug, not an expected failure.
 - **No `recover`.** A panic cannot be caught in bork code. Erlang-style isolation of routines (a failing routine brought down without taking the rest with it) may be introduced later.
 
@@ -115,7 +117,7 @@ In priority order. When two values conflict, the higher one wins.
 ### General
 
 - **Strict evaluation**, not lazy. Laziness makes memory and performance hard to reason about in backend systems.
-- **A short error-propagation operator** (like Rust's `?`) so `Result` handling stays cheap. Exact syntax to be settled with errors and effects.
+- **A short propagation operator** (like Rust's `?`), so handling failures stays cheap. See section 4.
 - **No user-defined symbolic operators** (e.g. `|+|`, `>>=`).
 - **No hidden resolution magic.** Type class instances are resolved implicitly, but only from an explicitly imported, bounded set of places (see type classes below). Nothing like Scala 2's implicit conversions or whole-program implicit search.
 - **Performance target:** roughly Go-level performance, traded away for guarantees where needed.
@@ -125,7 +127,7 @@ In priority order. When two values conflict, the higher one wins.
 ### Decided
 
 - **Records and sum types (ADTs) are the core data types.** Records are product types. Sum types are tagged unions whose variants can carry data.
-- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `Result[T, E]`.
+- **Generics in v0.1.** User code can declare generic types and functions, not just use built-in ones like `Option[T]` and `List[T]`.
 - **Variance: planned, not in v0.1.** Scala-style declaration-site variance controls (covariant and contravariant type parameters) are planned for a later version. The syntax should leave room for them.
 - **Structural typing for interfaces and constraints.** A type satisfies an interface or generic constraint implicitly, by having the required shape (like Go). No `implements` declarations.
 - **Sealed types and traits are opt-in.** Marking a type sealed closes its set of variants to its own declaration. That is what makes exhaustive matching possible without a default case. Matching on an open (unsealed) type always needs a default case.
@@ -178,7 +180,7 @@ fn transfer(
   to:     AccountId where notEqual(from),
   amount: Money where positive and below(10_000),
   note:   Option[String where nonEmpty and maxLen(280)],
-): Result[Receipt, TransferError] = {
+): Receipt | TransferError = {
   ...
 }
 ```
@@ -195,7 +197,7 @@ type UserName = String where nonEmpty and maxLen(100)
 fn connect(
   host: String where nonEmpty,
   port: Port,
-): Result[Conn, ConnectError]
+): Conn | ConnectError
 ```
 
 Records with constrained fields, derived decoding, and knowledge that arrives at the boundary:
@@ -207,7 +209,7 @@ type CreateUser = {
   age:   Option[Int where between(0, 150)],
 } derive (Decode)
 
-fn handleCreate(body: Json): Result[User, ApiError] = {
+fn handleCreate(body: Json): User | ApiError = {
   req = CreateUser.decode(body)?      // every field is proven here, once
   createUser(req)                     // no re-validation downstream
 }
@@ -319,7 +321,7 @@ Facts come in two kinds, distinguished by how long they live:
 Library authors will be able to declare that acquiring a scope grants facts about the outside world, which hold for as long as the scope is open:
 
 ```
-fn reserveUnit(unit: UnitId, dc: DcId, s: Scope): Result[Reservation, ReserveError]
+fn reserveUnit(unit: UnitId, dc: DcId, s: Scope): Reservation | ReserveError
   grants located(unit, dc) in s            // syntax not final
 
 fn powerCycle(unit: UnitId, dc: DcId) where located(unit, dc) = ...
@@ -341,6 +343,44 @@ scope maint {
 - **Cancellation and deadlines through scopes.** A request scope is the natural carrier for what Go's `context.Context` does today: when a request is cancelled, its scope closes, its resources are released, and its goroutines stop.
 - **Structured concurrency:** must goroutines started inside a scope finish before the scope ends? That would let them use the scope's resources with no extra attaching.
 
+## 4. Errors and results (in progress, to be tried out)
+
+> The direction below is agreed, to be validated by trying it in real code. Syntax is a sketch.
+
+### Direction
+
+- **No separate error concept.** Failures are ordinary types. There is no `error` kind, no `Error` base type, and no `Result` wrapper.
+- **Functions that can fail return union types.** For example: `fn loadUser(id: UserId): User | NotFound | DbError`. Matching on a union is exhaustive, and checking a member narrows the type, just like any other fact.
+- **`?` keeps the leftmost member and returns the rest.** `user = loadUser(id)?` binds `User`, and returns `NotFound` or `DbError` from the enclosing function. By convention, the leftmost member is the main result. What `?` does can be read from the callee's signature alone.
+- **Returned members must fit the enclosing function's return type.** This is checked, so nothing slips through unhandled.
+- **An annotation overrides the default.** `x: B = foo()?` keeps `B` and returns everything else, including what would otherwise be the main result. That is useful for early returns that are not errors (e.g. `miss: CacheMiss = cache.get(k)?` returns a cache hit early).
+- **`a?.b?.c` applies `?` at each step** (the Rust reading), not safe navigation.
+- **`?` also works on sealed types.** `Option[T]` is `Some[T] | None`, so `v = maybeUser?` keeps the value and returns `None`.
+- **Adding context (q's `Wrapf` semantics) is required.** Wrapping attaches to a single `?` and transforms what that `?` returns.
+- **Chaining is not a priority.** Clarity beats conciseness. Writing one step per line is fine.
+
+```
+fn loadUser(id: UserId): User | NotFound | DbError = ...
+fn loadOrders(user: User): List[Order] | DbError | Timeout = ...
+
+fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
+  user   = loadUser(id)?             // keeps User; returns NotFound or DbError
+  orders = loadOrders(user)?         // keeps List[Order]; returns DbError or Timeout
+  Summary(user, orders)
+}
+```
+
+### Consequences
+
+- **Union order has meaning for `?`.** For subtyping, `A | B` and `B | A` are still the same type. But reordering a published signature changes what callers' `?` keeps, so it is an API change. The formatter never reorders unions, and a future API-diff tool should flag it.
+- **Type parameters are not flattened.** In `fn retry[T, E](...): T | E | Timeout`, the leftmost member is `T` as a whole, even if `T` is itself a union at the call site.
+
+### Open questions
+
+- **Wrap syntax**, e.g. `loadUser(id)?{ e => LoadFailed(id, e) }`, or something else?
+- **`?` inside lambdas** returns from the lambda, which makes the lambda's inferred return type a union. Is that what we want, or should `?` require a declared lambda return type?
+- **Representation in Go:** an interface and a type switch, or a tagged struct?
+
 ## Open questions
 
 - Should "rigor must be cheap" rank above "if it compiles, bugs cannot happen", meaning a guarantee is dropped if it cannot be made cheap?
@@ -352,7 +392,7 @@ scope maint {
 1. ~~Core values~~ (above)
 2. ~~Type system~~ (above)
 3. Contract and proof model: bringing proven's ideas into the language (in progress, above)
-4. Errors and effects: the `Result` shape and propagation syntax
+4. Errors and results: union return types and `?` (in progress, above)
 5. Concurrency: goroutines, channels, structured concurrency, cancellation through scopes, and the (later) isolation model
 6. Go interop: no FFI in v0.1; what the future boundary looks like
 7. Tooling: the `bork` CLI, formatter, tests, and modules/packages

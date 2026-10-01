@@ -8,6 +8,14 @@ Think Go's tooling simplicity, with the functional style of Scala and Haskell, a
 
 *Bork bork bork!* The name comes from the Swedish Chef. Strict recipes, cheerfully enforced.
 
+## Why bork over Go
+
+bork compiles to Go and keeps Go's runtime, but adds three things Go can't give you:
+
+- **Immutability.** Values never change, so whatever is known about them stays true.
+- **Facts.** What you check about a value becomes part of its type, and the compiler proves every function's requirements at every call site.
+- **Scopes.** Outside resources (files, connections, transactions, leases) belong to scopes, and using one requires proof that a scope managing it is still open.
+
 ## Goals
 
 - **Pragmatic high correctness for backend systems.** That is the whole point.
