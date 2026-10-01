@@ -10,9 +10,11 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/format"
 	"go/printer"
 	"go/token"
+	"path/filepath"
 	"strconv"
 
 	"github.com/GiGurra/bork/internal/check"
@@ -21,13 +23,29 @@ import (
 
 // Package generates a Go `package main` source file.
 func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
-	g := &gen{info: info, imports: map[string]bool{}}
-	decls := g.typeDecls()
+	g := &gen{info: info, imports: map[string]bool{}, usedTypes: map[check.Type]bool{}}
+	// Prelude functions are only emitted when the program uses them.
+	emit := g.reachable()
+	var funcs []ast.Decl
+	var goFuncs []string
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			decls = append(decls, g.funcDecl(fd))
+			if fn := info.Funcs[fd.Name]; fn == nil || fn.Decl != fd || !emit[fn] {
+				continue
+			}
+			if fd.GoBody != nil {
+				text, err := g.goFunc(fd)
+				if err != nil {
+					return nil, err
+				}
+				goFuncs = append(goFuncs, text)
+				continue
+			}
+			funcs = append(funcs, g.funcDecl(fd))
 		}
 	}
+	// Types come last, once it is known which prelude types are used.
+	decls := append(g.typeDecls(), funcs...)
 	runtime, runtimeFset, err := g.runtimeDecls()
 	if err != nil {
 		return nil, err
@@ -60,6 +78,15 @@ func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
 			return nil, err
 		}
 	}
+	// Functions implemented in Go come last: each starts with a line
+	// directive, so the Go compiler reports errors in them at their bork
+	// positions.
+	if len(goFuncs) > 0 {
+		buf.WriteString("\n// unsafe go functions\n")
+		for _, text := range goFuncs {
+			buf.WriteString("\n" + text)
+		}
+	}
 	out, err := format.Source(buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("generated Go is invalid (compiler bug): %w\n%s", err, buf.String())
@@ -72,9 +99,58 @@ type gen struct {
 	tmp      int
 	fnResult check.Type // result type of the function being generated
 	imports  map[string]bool
+	// usedTypes holds the declared types the generated code refers to.
+	usedTypes map[check.Type]bool
 	// Runtime support the program needs.
-	usesShow   bool
-	usesOption bool
+	usesShow    bool
+	usesOption  bool
+	usesConvert bool
+}
+
+// reachable lists the functions to emit: every function of the
+// program, and the prelude functions they (transitively) call.
+func (g *gen) reachable() map[*check.Func]bool {
+	emit := map[*check.Func]bool{}
+	var visit func(fn *check.Func)
+	visit = func(fn *check.Func) {
+		if emit[fn] {
+			return
+		}
+		emit[fn] = true
+		for _, callee := range fn.Calls {
+			visit(callee)
+		}
+	}
+	for _, fn := range g.info.Funcs {
+		if !fn.Prelude {
+			visit(fn)
+		}
+	}
+	return emit
+}
+
+// goFunc generates a function implemented with `unsafe go { ... }`: the
+// signature is generated, and the body is the Go code as written.
+func (g *gen) goFunc(fd *syntax.FuncDecl) (string, error) {
+	for _, p := range fd.Params {
+		if goReserved[p.Name] {
+			return "", fmt.Errorf("%s: parameter %s of unsafe go function %s is a reserved name in Go; rename it", p.Pos, p.Name, fd.Name)
+		}
+	}
+	for _, path := range fd.GoBody.Imports {
+		g.imports[path] = true
+	}
+	var buf bytes.Buffer
+	if err := printer.Fprint(&buf, token.NewFileSet(), g.signature(fd)); err != nil {
+		return "", err
+	}
+	pos := fd.GoBody.Pos
+	file := pos.File
+	if abs, err := filepath.Abs(file); err == nil {
+		file = abs
+	}
+	fmt.Fprintf(&buf, " {/*line %s:%d:%d*/%s}\n", file, pos.Line, pos.Col+1, fd.GoBody.Body)
+	return buf.String(), nil
 }
 
 // goReserved holds names a bork identifier may not use verbatim in Go:
@@ -111,10 +187,9 @@ func (g *gen) newTmp() *ast.Ident {
 	return ast.NewIdent("_t" + strconv.Itoa(g.tmp))
 }
 
-func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
+// signature generates a function declaration without a body.
+func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 	fn := g.info.Funcs[fd.Name]
-	g.tmp = 0
-	g.fnResult = fn.Result
 	ftype := &ast.FuncType{Params: &ast.FieldList{}}
 	for i, p := range fd.Params {
 		ftype.Params.List = append(ftype.Params.List, &ast.Field{
@@ -122,18 +197,27 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 			Type:  g.goType(fn.Params[i]),
 		})
 	}
-	var body []ast.Stmt
-	if fn.Result == check.Unit {
-		body = g.blockInto(fd.Body, sink{})
-	} else {
+	if fn.Result != check.Unit {
 		ftype.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(fn.Result)}}}
-		body = g.blockInto(fd.Body, sink{ret: true})
 	}
 	goName := name(fd.Name)
 	if fd.Name == "main" {
 		goName = ast.NewIdent("main")
 	}
-	return &ast.FuncDecl{Name: goName, Type: ftype, Body: &ast.BlockStmt{List: body}}
+	return &ast.FuncDecl{Name: goName, Type: ftype}
+}
+
+func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
+	fn := g.info.Funcs[fd.Name]
+	g.tmp = 0
+	g.fnResult = fn.Result
+	decl := g.signature(fd)
+	if fn.Result == check.Unit {
+		decl.Body = &ast.BlockStmt{List: g.blockInto(fd.Body, sink{})}
+	} else {
+		decl.Body = &ast.BlockStmt{List: g.blockInto(fd.Body, sink{ret: true})}
+	}
+	return decl
 }
 
 // value lowers an expression whose result is needed. It returns the
@@ -141,9 +225,10 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 // The expression is nil when e never produces a value (type Never).
 func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 	t := g.info.Types[e]
+	if v, ok := g.info.Consts[e]; ok {
+		return nil, constLit(v, t)
+	}
 	switch e := e.(type) {
-	case *syntax.IntLit:
-		return nil, &ast.BasicLit{Kind: token.INT, Value: strconv.FormatInt(g.info.IntValues[e], 10)}
 	case *syntax.StringLit:
 		return nil, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Value)}
 	case *syntax.BoolLit:
@@ -242,7 +327,31 @@ func stable(x ast.Expr) bool {
 	case *ast.BasicLit, *ast.Ident:
 		return true
 	}
-	return false
+	return isConst(x)
+}
+
+// constLit is the Go literal for a constant of numeric type t.
+func constLit(v constant.Value, t check.Type) ast.Expr {
+	neg := constant.Sign(v) < 0
+	if neg {
+		v = constant.UnaryOp(token.SUB, v, 0)
+	}
+	lit := &ast.BasicLit{Kind: token.INT, Value: v.ExactString()}
+	if check.IsFloat(t) {
+		var text string
+		if t == check.Float32 {
+			f, _ := constant.Float32Val(v)
+			text = strconv.FormatFloat(float64(f), 'g', -1, 32)
+		} else {
+			f, _ := constant.Float64Val(v)
+			text = strconv.FormatFloat(f, 'g', -1, 64)
+		}
+		lit = &ast.BasicLit{Kind: token.FLOAT, Value: text}
+	}
+	if neg {
+		return &ast.UnaryExpr{Op: token.SUB, X: lit}
+	}
+	return lit
 }
 
 var binaryOps = map[syntax.Kind]token.Token{
@@ -289,9 +398,26 @@ func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
 }
 
 func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
-	if b := g.info.CallBuiltins[e]; b == check.BuiltinPrintln {
+	fmtCall := func(fn string, args ...ast.Expr) ast.Expr {
 		g.imports["fmt"] = true
-		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent("Println")}, Args: args}
+		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent(fn)}, Args: args}
+	}
+	switch g.info.CallBuiltins[e] {
+	case check.BuiltinPrintln:
+		for i := range args {
+			args[i] = g.str(args[i], g.info.Types[e.Args[i]])
+		}
+		return fmtCall("Println", args...)
+	case check.BuiltinToString:
+		switch t := g.info.Types[e.Args[0]]; {
+		case t == check.String:
+			return args[0]
+		case check.IsFloat(t) || isUnion(t):
+			return g.str(args[0], t)
+		}
+		return fmtCall("Sprint", g.typed(args[0], g.info.Types[e.Args[0]]))
+	case check.BuiltinConvert:
+		return g.conversion(e, args[0])
 	}
 	fn := g.info.CallFuncs[e]
 	return &ast.CallExpr{Fun: name(fn.Decl.Name), Args: args}
@@ -379,12 +505,13 @@ func (g *gen) stmts(list []syntax.Stmt) []ast.Stmt {
 			if x == nil {
 				return out
 			}
-			if g.info.Types[s.Value] == check.Int && isConst(x) {
-				// An untyped Go constant would default to int, not int64.
-				out = append(out, typedVar(name(s.Name), g.goType(check.Int), x))
+			bt, vt := g.info.Bindings[s], g.info.Types[s.Value]
+			if s.Type != nil || (check.IsNumeric(vt) && isConst(x)) {
+				// A declared type is kept, and an untyped Go constant would
+				// get Go's default type (int, float64).
+				out = append(out, typedVar(name(s.Name), g.goType(bt), g.convert(x, vt, bt)))
 			} else {
-				t := g.info.Types[s.Value]
-				out = append(out, define(name(s.Name), g.convert(x, t, t)))
+				out = append(out, define(name(s.Name), g.convert(x, vt, vt)))
 			}
 			if g.info.Unused[s] {
 				out = append(out, assign(ast.NewIdent("_"), name(s.Name)))
@@ -472,15 +599,15 @@ func (g *gen) returnStmt(e *syntax.Return) []ast.Stmt {
 }
 
 // convert adjusts a Go expression of bork type from for use where type
-// to is expected. Integer constants headed for a union (Go `any`) must be
-// typed explicitly, or Go would store them as int rather than int64.
+// to is expected. Number constants headed for a union (Go `any`) must be
+// typed explicitly, or Go would store an Int as int rather than int64.
 //
 // Likewise, a variant literal (`Shape_Rect{...}`) has its own Go struct
 // type; where the sealed type is meant (a binding, a comparison, a
 // match), it is converted to the sealed type's interface.
 func (g *gen) convert(x ast.Expr, from, to check.Type) ast.Expr {
-	if from == check.Int && to != check.Int && isConst(x) {
-		return &ast.CallExpr{Fun: ast.NewIdent("int64"), Args: []ast.Expr{x}}
+	if to == nil || !check.Identical(from, to) {
+		x = g.typed(x, from)
 	}
 	if _, ok := to.(*check.Sealed); ok {
 		if _, isLit := x.(*ast.CompositeLit); isLit {
@@ -534,4 +661,55 @@ func varDecl(id *ast.Ident, typ ast.Expr) ast.Stmt {
 	return &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{
 		&ast.ValueSpec{Names: []*ast.Ident{id}, Type: typ},
 	}}}
+}
+
+// typed gives a number constant x its Go type explicitly, for contexts
+// where Go would otherwise pick a default type.
+func (g *gen) typed(x ast.Expr, t check.Type) ast.Expr {
+	if check.IsNumeric(t) && isConst(x) {
+		return &ast.CallExpr{Fun: g.goType(t), Args: []ast.Expr{x}}
+	}
+	return x
+}
+
+// conversion lowers `toInt8(x)` and friends. A checked conversion calls
+// the runtime, which produces the value or an OutOfRange.
+func (g *gen) conversion(e *syntax.Call, arg ast.Expr) ast.Expr {
+	conv := g.info.Conversions[e]
+	if conv == nil {
+		// A constant, already checked to fit.
+		return &ast.CallExpr{Fun: g.goType(g.info.Types[e]), Args: []ast.Expr{arg}}
+	}
+	if !conv.Checked {
+		if check.Identical(conv.From, conv.To) {
+			return arg
+		}
+		return &ast.CallExpr{Fun: g.goType(conv.To), Args: []ast.Expr{arg}}
+	}
+	g.usesConvert = true
+	g.goType(g.info.OutOfRange)
+	fn := "_convInt"
+	if check.IsFloat(conv.From) {
+		fn = "_convFloat"
+	}
+	return &ast.CallExpr{
+		Fun:  &ast.IndexExpr{X: ast.NewIdent(fn), Index: g.goType(conv.To)},
+		Args: []ast.Expr{arg, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(conv.To.String())}},
+	}
+}
+
+// str prepares x, of type t, for printing: floats (also inside a union)
+// go through the runtime's _str, so they print in bork's format.
+func (g *gen) str(x ast.Expr, t check.Type) ast.Expr {
+	x = g.typed(x, t)
+	if check.IsFloat(t) || isUnion(t) {
+		g.usesShow = true
+		return &ast.CallExpr{Fun: ast.NewIdent("_str"), Args: []ast.Expr{x}}
+	}
+	return x
+}
+
+func isUnion(t check.Type) bool {
+	_, ok := t.(*check.Union)
+	return ok
 }

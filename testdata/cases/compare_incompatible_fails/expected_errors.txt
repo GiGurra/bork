@@ -1,3 +1,3 @@
 main.bork:2:13: cannot compare Int with String: the types are incompatible
-main.bork:3:16: operator < needs two Ints or two Strings, found Bool and Bool
-main.bork:4:13: operator + needs two Ints or two Strings, found Int and Bool
+main.bork:3:16: operator < needs two numbers of the same type or two Strings, found Bool and Bool
+main.bork:4:13: operator + needs two numbers of the same type or two Strings, found Int and Bool

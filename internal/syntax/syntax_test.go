@@ -97,3 +97,50 @@ func TestParseRecoversAtNextFunction(t *testing.T) {
 		t.Fatalf("expected parsing to recover and find 'ok', got %d funcs", len(f.Funcs))
 	}
 }
+
+func TestLexNumbers(t *testing.T) {
+	cases := map[string]string{
+		"1_000 0xFF 0b10 0o7": "integer literal integer literal integer literal integer literal newline or ';' end of file",
+		"1.5 2e10 1.5e-3":     "float literal float literal float literal newline or ';' end of file",
+		// A '.' needs a digit after it to make a float.
+		"5.copy": "integer literal '.' identifier newline or ';' end of file",
+	}
+	for src, want := range cases {
+		if got := kinds(src); got != want {
+			t.Errorf("Lex(%q)\n got: %s\nwant: %s", src, got, want)
+		}
+	}
+}
+
+func TestLexGoCode(t *testing.T) {
+	src := "fn f(): String unsafe go {\n  s := \"}\" + `{` // }\n  /* { */ if true { return s }\n  return '}'\n}\nx"
+	toks, _ := Lex("t.bork", []byte(src), &diag.List{})
+	var code *Token
+	for i := range toks {
+		if toks[i].Kind == TGoCode {
+			code = &toks[i]
+		}
+	}
+	if code == nil {
+		t.Fatalf("no Go code token in %s", kinds(src))
+	}
+	want := "\n  s := \"}\" + `{` // }\n  /* { */ if true { return s }\n  return '}'\n"
+	if code.Text != want {
+		t.Errorf("Go code = %q, want %q", code.Text, want)
+	}
+	if last := toks[len(toks)-3]; last.Kind != TIdent || last.Text != "x" {
+		t.Errorf("lexing did not resume after the Go code: %s", kinds(src))
+	}
+}
+
+func TestParseGoCodeImports(t *testing.T) {
+	diags := &diag.List{}
+	f := Parse("t.bork", []byte("fn f(): Int unsafe go {\n  import \"math\"\n  return int64(math.Sqrt(4))\n}\n"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	gc := f.Funcs[0].GoBody
+	if len(gc.Imports) != 1 || gc.Imports[0] != "math" || strings.Contains(gc.Body, "import") {
+		t.Errorf("imports = %q, body = %q", gc.Imports, gc.Body)
+	}
+}

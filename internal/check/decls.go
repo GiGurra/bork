@@ -10,11 +10,16 @@ type typeEntry struct {
 	typ       Type // *Record or *Sealed (created up front), or the alias target
 	resolving bool // guards against alias cycles
 	resolved  bool
+	prelude   bool
 }
 
 // reservedTypeNames cannot be declared by user code.
-var reservedTypeNames = map[string]bool{
-	"Int": true, "Bool": true, "String": true, "Unit": true, "Never": true, "Option": true,
+var reservedTypeNames = map[string]bool{"Never": true, "Option": true}
+
+func init() {
+	for name := range basicTypes {
+		reservedTypeNames[name] = true
+	}
 }
 
 func (c *checker) isTypeName(name string) bool {
@@ -25,12 +30,15 @@ func (c *checker) isTypeName(name string) bool {
 	return ok
 }
 
-func (c *checker) declareType(td *syntax.TypeDecl) {
+func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 	if reservedTypeNames[td.Name] {
 		c.errorf(td.Pos, "%s is a built-in type and cannot be redefined", td.Name)
 		return
 	}
-	if prev, ok := c.decls[td.Name]; ok {
+	if prev, ok := c.decls[td.Name]; ok && prev.prelude {
+		c.errorf(td.Pos, "%s is a built-in type and cannot be redefined", td.Name)
+		return
+	} else if ok {
 		c.errorf(td.Pos, "type %s is already declared at %s", td.Name, prev.decl.Pos)
 		return
 	}
@@ -38,12 +46,12 @@ func (c *checker) declareType(td *syntax.TypeDecl) {
 		c.errorf(td.Pos, "%s is a built-in function", td.Name)
 		return
 	}
-	e := &typeEntry{decl: td}
+	e := &typeEntry{decl: td, prelude: prelude}
 	switch td.Kind {
 	case syntax.RecordType:
-		e.typ = &Record{Name: td.Name, Decl: td}
+		e.typ = &Record{Name: td.Name, Decl: td, Prelude: prelude}
 	case syntax.SealedType:
-		e.typ = &Sealed{Name: td.Name, Decl: td}
+		e.typ = &Sealed{Name: td.Name, Decl: td, Prelude: prelude}
 	}
 	if e.typ != nil {
 		c.info.TypeOrder = append(c.info.TypeOrder, e.typ)

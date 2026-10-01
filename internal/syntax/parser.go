@@ -1,7 +1,12 @@
 package syntax
 
 import (
+	"errors"
+	goparser "go/parser"
+	goscanner "go/scanner"
+	gotoken "go/token"
 	"strconv"
+	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
 )
@@ -186,7 +191,13 @@ func (p *parser) funcDecl() (fn *FuncDecl) {
 		p.next()
 		fn.Result = p.typeExpr()
 	}
-	fn.Body = p.block()
+	if p.at(KwUnsafe) {
+		p.next()
+		t := p.expect(TGoCode, "after 'unsafe' (write `unsafe go { ... }`)")
+		fn.GoBody = p.goCode(t)
+	} else {
+		fn.Body = p.block()
+	}
 	if !p.at(Semi) && !p.at(EOF) {
 		p.errorf(p.tok().Pos, "expected end of line after function body, found %s", p.tok().Kind)
 		panic(bailout{})
@@ -245,11 +256,18 @@ func (p *parser) block() *Block {
 			panic(bailout{})
 		}
 		var stmt Stmt
-		if p.at(TIdent) && p.peekKind() == Assign {
+		switch {
+		case p.at(TIdent) && p.peekKind() == Assign:
 			name := p.next()
 			p.next() // '='
 			stmt = &Binding{Pos: name.Pos, Name: name.Text, Value: p.expr()}
-		} else {
+		case p.at(TIdent) && p.peekKind() == Colon:
+			name := p.next()
+			p.next() // ':'
+			typ := p.typeExpr()
+			p.expect(Assign, "after the binding's type")
+			stmt = &Binding{Pos: name.Pos, Name: name.Text, Type: typ, Value: p.expr()}
+		default:
 			stmt = &ExprStmt{X: p.expr()}
 		}
 		if p.at(RBrace) {
@@ -416,7 +434,7 @@ func (p *parser) pattern() Pattern {
 	case Underscore:
 		p.next()
 		return &WildcardPat{Pos: t.Pos}
-	case TInt, TString, KwTrue, KwFalse, Minus:
+	case TInt, TFloat, TString, KwTrue, KwFalse, Minus:
 		return &LitPat{Pos: t.Pos, Value: p.unary()}
 	case TIdent:
 		if p.peekKind() == Colon {
@@ -453,6 +471,9 @@ func (p *parser) primary() Expr {
 	case TInt:
 		p.next()
 		return &IntLit{Pos: t.Pos, Text: t.Text}
+	case TFloat:
+		p.next()
+		return &FloatLit{Pos: t.Pos, Text: t.Text}
 	case TString:
 		p.next()
 		v, err := strconv.Unquote(t.Text)
@@ -512,4 +533,57 @@ func (p *parser) ifExpr() Expr {
 		}
 	}
 	return e
+}
+
+// goCode splits an `unsafe go { ... }` body into its leading
+// `import "path"` lines and the Go statements, and checks that the
+// statements are valid Go syntax. Syntax errors are reported at their
+// bork positions; Go type errors are reported later, by the Go
+// compiler (the generated code maps positions back to bork files).
+func (p *parser) goCode(t Token) *GoCode {
+	gc := &GoCode{Pos: t.Pos}
+	lines := strings.Split(t.Text, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		rest, ok := strings.CutPrefix(trimmed, "import ")
+		if !ok {
+			break
+		}
+		path, err := strconv.Unquote(strings.TrimSpace(rest))
+		if err != nil {
+			p.errorf(p.goPos(t.Pos, i, 0), "expected `import \"path\"` in unsafe go block")
+		} else {
+			gc.Imports = append(gc.Imports, path)
+		}
+		lines[i] = ""
+	}
+	gc.Body = strings.Join(lines, "\n")
+
+	const prefix = "package p\n\nfunc _() {"
+	fset := gotoken.NewFileSet()
+	_, err := goparser.ParseFile(fset, "", prefix+gc.Body+"}\n", 0)
+	var list goscanner.ErrorList
+	if errors.As(err, &list) && len(list) > 0 {
+		// Only the first error: later ones tend to follow from it.
+		e := list[0]
+		line, col := e.Pos.Line-3, e.Pos.Column
+		if line == 0 {
+			col -= len("func _() {")
+		}
+		p.errorf(p.goPos(t.Pos, line, col-1), "in unsafe go block: %s", e.Msg)
+	}
+	return gc
+}
+
+// goPos is the bork position of a place in a Go code token: line lines
+// after the '{' at start, and col columns into that line (or after the
+// '{', on its line).
+func (p *parser) goPos(start diag.Pos, line, col int) diag.Pos {
+	if line == 0 {
+		return diag.Pos{File: start.File, Line: start.Line, Col: start.Col + 1 + col}
+	}
+	return diag.Pos{File: start.File, Line: start.Line + line, Col: col + 1}
 }

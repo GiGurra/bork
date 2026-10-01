@@ -1,0 +1,19 @@
+fn main() {
+  a: Int8 = 128
+  b: Uint8 = -1
+  c: Int = 1.5
+  d: Float32 = 1e100
+  i = 1
+  f = 1.5
+  println(i + f)
+  println(f % 2.0)
+  u: Uint16 = 1
+  println(-u)
+  println(i / 0)
+  println(toInt8("x"))
+  println(toInt8(300))
+  e: String = 5
+  println(1__0, 0xZZ)
+  println(toInt8(1, 2))
+  println(a, b, c, d, e)
+}

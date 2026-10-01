@@ -111,8 +111,8 @@ In priority order. When two values conflict, the higher one wins.
 ### Compilation target and Go
 
 - **Compiles to Go.** Go is purely a compilation target, chosen so bork gets Go's runtime, GC, goroutine scheduler, and cross-platform compilation without building its own backend.
-- **No access to Go's standard library or Go packages from bork code.** bork code never calls Go directly. bork has its own standard library. The Go code the compiler generates, and the bork standard library's implementation, can freely use Go's standard library under the hood. That is an implementation detail, invisible to bork programs.
-- **No FFI in v0.1.** Calling into Go (or anything else) from bork may come later, as an explicit boundary.
+- **Ordinary bork code does not call Go.** bork has its own standard library. The Go code the compiler generates can freely use Go's standard library under the hood; that is an implementation detail, invisible to bork programs.
+- **`unsafe go` is the explicit boundary.** A function's body can be raw Go: `fn f(x: Int): String unsafe go { import "strconv"; return strconv.FormatInt(x, 10) }`. It is allowed anywhere, in user code as well as in the standard library, which is itself written this way (the built-in prelude). bork trusts the signature: the guarantees (immutability, no null, the declared result) hold outside these bodies, and inside them only as far as the Go code keeps them. The Go code sees bork values as the compiler represents them, which is documented in the prelude. Go errors in the body are reported at their bork positions. Importing Go packages as bork modules is not planned for v0.1.
 - **bork's syntax is independent of Go.** bork has its own grammar and its own hand-written parser. Go is only the language the first compiler is written in, and the first compilation target.
 - **The compiler models bork, not Go.** The compiler's internal model holds the full language and all of its constraints; that is the product. Its Go output is a lowering, not a one-to-one mapping of bork types to Go types. It can drop knowledge once it has been checked (facts are erased entirely), and it can lean on runtime helpers and generated functions where that is simpler. Inspired by TypeScript: the type checker carries the guarantees, and the output just runs. Go is the first target; others may follow.
 
@@ -421,6 +421,10 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 ### Numbers
 
 - **Fixed-width integers, as in Go.** `Int` is a 64-bit integer with Go's wrapping arithmetic.
+- **Go's sized numbers, with Go-like names:** `Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Float32`, `Float64`. `Int` is the same type as `Int64`, `Float` the same as `Float64`, and `Byte` the same as `Uint8`. Each sized integer wraps on overflow.
+- **Numbers never mix implicitly.** `Int + Int8` is a compile error. Literals and arithmetic on literals are exact compile-time constants that take their type from where they are used (`x: Int8 = 100`); a constant that does not fit is a compile error.
+- **Conversions are explicit free functions:** `toInt8(x)`, `toFloat(x)`, and so on. A conversion that always fits (widening, or any integer to a float) returns the plain type. One that may not fit (narrowing, signed to unsigned, float to integer) returns `Target | OutOfRange`, so `?` or `match` must handle it. A constant is converted at compile time. Later, facts can let a value proven to be in range convert directly.
+- **Floats print as floats:** `3.0`, `1000000.0`, `0.25`, with an exponent only for very large or small values (`1e+21`). The digits are the shortest that read back as the same value.
 - **Facts respect overflow.** `a > 10` and `b > 10` do not prove `a + b > 10`, because the sum can wrap. Arithmetic implications need upper bounds that rule out overflow.
 - **Native big integers.** An arbitrary-precision integer type is built in, for when wrapping is not acceptable.
 
@@ -454,7 +458,7 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 3. Contract and proof model: bringing proven's ideas into the language (in progress, above)
 4. Errors and results: union return types and `?` (in progress, above)
 5. Concurrency: goroutines, channels, structured concurrency, cancellation through scopes, and the (later) isolation model
-6. Go interop: no FFI in v0.1; what the future boundary looks like
+6. Go interop: `unsafe go` function bodies (above); importing Go packages later?
 7. Tooling: the `bork` CLI, formatter, tests, and modules (packages are decided, above)
 
 See also [roadmap.md](roadmap.md) for the implementation plan.
@@ -462,6 +466,6 @@ See also [roadmap.md](roadmap.md) for the implementation plan.
 ## Explicitly not in v0.1
 
 - Mutable state of any kind
-- FFI and importing Go packages
+- Importing Go packages as bork modules (calling Go goes through `unsafe go` bodies)
 - `recover`
 - Erlang-style routine isolation and supervision

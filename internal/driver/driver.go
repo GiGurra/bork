@@ -8,12 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/gen"
+	"github.com/GiGurra/bork/internal/prelude"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -61,7 +64,7 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 		return nil, nil, err
 	}
 	diags := &diag.List{}
-	var files []*syntax.File
+	files := []*syntax.File{prelude.Parse(diags)}
 	for _, p := range paths {
 		src, err := os.ReadFile(p)
 		if err != nil {
@@ -89,7 +92,7 @@ func Emit(path string) ([]byte, error) {
 	}
 	if _, ok := info.Funcs["main"]; !ok {
 		diags := &diag.List{}
-		diags.Add(diag.Pos{File: files[0].Path, Line: 1, Col: 1}, "package has no main function (add `fn main() { ... }`)")
+		diags.Add(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package has no main function (add `fn main() { ... }`)")
 		return nil, &DiagError{Diags: diags}
 	}
 	return gen.Package(files, info)
@@ -123,6 +126,9 @@ func Build(path, out string) error {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
+			if diags := unsafeGoErrors(path, dir, string(output)); diags != nil {
+				return &DiagError{Diags: diags}
+			}
 			return fmt.Errorf("go build failed on the generated code (this is a bork compiler bug):\n%s", strings.TrimSpace(string(output)))
 		}
 		return fmt.Errorf("running go build (is Go installed?): %w", err)
@@ -166,4 +172,41 @@ func DefaultOutput(path string) string {
 		base = strings.TrimSuffix(base, filepath.Ext(base))
 	}
 	return base
+}
+
+var goErrorLine = regexp.MustCompile(`^(.+\.bork):(\d+):(\d+): (.*)$`)
+
+// unsafeGoErrors turns Go compiler errors located in .bork files (in
+// `unsafe go` code, which the generated Go maps back to its source)
+// into bork diagnostics. It returns nil if there are none.
+func unsafeGoErrors(path, buildDir, output string) *diag.List {
+	paths, _ := Sources(path)
+	paths = append(paths, prelude.Path)
+	original := map[string]string{}
+	for _, p := range paths {
+		if abs, err := filepath.Abs(p); err == nil {
+			original[abs] = p
+		}
+	}
+	diags := &diag.List{}
+	for _, line := range strings.Split(output, "\n") {
+		m := goErrorLine.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		file := m[1]
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(buildDir, file)
+		}
+		if p, ok := original[filepath.Clean(file)]; ok {
+			file = p
+		}
+		ln, _ := strconv.Atoi(m[2])
+		col, _ := strconv.Atoi(m[3])
+		diags.Add(diag.Pos{File: file, Line: ln, Col: col}, "in unsafe go block: %s", m[4])
+	}
+	if diags.Len() == 0 {
+		return nil
+	}
+	return diags
 }

@@ -13,7 +13,9 @@ const (
 
 	TIdent
 	TInt
+	TFloat
 	TString
+	TGoCode // the raw Go inside `unsafe go { ... }`
 
 	// Keywords
 	KwFn
@@ -25,6 +27,7 @@ const (
 	KwType
 	KwSealed
 	KwMatch
+	KwUnsafe
 
 	// Delimiters
 	LParen
@@ -61,9 +64,9 @@ const (
 
 var kindNames = map[Kind]string{
 	EOF: "end of file", Illegal: "illegal token", Semi: "newline or ';'",
-	TIdent: "identifier", TInt: "integer literal", TString: "string literal",
+	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TGoCode: "Go code", TString: "string literal",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
-	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'",
+	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'",
 	LBrack: "'['", RBrack: "']'", Dot: "'.'", Underscore: "'_'", Pipe: "'|'", Arrow: "'=>'", Quest: "'?'",
 	LParen: "'('", RParen: "')'", LBrace: "'{'", RBrace: "'}'", Comma: "','", Colon: "':'",
 	Assign: "'='", Plus: "'+'", Minus: "'-'", Star: "'*'", Slash: "'/'", Pct: "'%'", Not: "'!'",
@@ -87,6 +90,7 @@ var keywords = map[string]Kind{
 	"type":   KwType,
 	"sealed": KwSealed,
 	"match":  KwMatch,
+	"unsafe": KwUnsafe,
 }
 
 // Token is a lexed token. Text holds the source text for identifiers

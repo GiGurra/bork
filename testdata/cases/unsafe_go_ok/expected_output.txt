@@ -1,0 +1,4 @@
+5.0
+2 NotFound { key: "z" }
+Option.Some { value: "hello" } Option.None
+hey!

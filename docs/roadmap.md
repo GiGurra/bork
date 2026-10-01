@@ -34,7 +34,7 @@ Each package writes a summary (exported types, signatures with their constraints
 
 ### M0: a plain language
 
-**Status: in progress.** The pipeline works end to end (`bork build`, `run`, `check`, `emit`) for functions, `Int`/`Bool`/`String`, bindings, blocks and `if` as expressions, `return`, operators, `println`, records with nested `copy`, sealed types, unions, exhaustive `match`, `Option`, and `?`. Next: the example programs that define M0, then M1.
+**Status: in progress.** The pipeline works end to end (`bork build`, `run`, `check`, `emit`) for functions, `Int`/`Bool`/`String`, bindings, blocks and `if` as expressions, `return`, operators, `println`, records with nested `copy`, sealed types, unions, exhaustive `match`, `Option`, `?`, sized numbers with checked conversions, `unsafe go` function bodies, and a prelude of string and parsing functions. Next: the example programs that define M0, then M1.
 
 Functions, records, unions and sealed types, `match` with exhaustiveness, `Option`, `?` (leftmost), immutable bindings, `Int`/`String`/`Bool`, printing. bork → Go → binary.
 

@@ -4,7 +4,9 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
-	Path     string
+	Path string
+	// Prelude is set for the compiler's built-in prelude.bork.
+	Prelude  bool
 	Types    []*TypeDecl
 	Funcs    []*FuncDecl
 	Comments []Comment
@@ -42,13 +44,25 @@ type VariantDecl struct {
 }
 
 // FuncDecl is `fn name(params): Result { body }`. Result is nil when
-// the function returns Unit.
+// the function returns Unit. A function implemented in Go has GoBody
+// instead of Body.
 type FuncDecl struct {
 	Pos    diag.Pos
 	Name   string
 	Params []*Param
 	Result *TypeExpr
 	Body   *Block
+	GoBody *GoCode
+}
+
+// GoCode is the body of `unsafe go { ... }`: Go statements, preceded
+// by optional `import "path"` lines.
+type GoCode struct {
+	Pos     diag.Pos // position of '{'
+	Imports []string
+	// Body is the text between the braces, with the import lines
+	// blanked out, so its lines still match the source.
+	Body string
 }
 
 type Param struct {
@@ -69,10 +83,12 @@ type TypeExpr struct {
 // Stmt is a statement inside a block.
 type Stmt interface{ stmtNode() }
 
-// Binding is `name = value`. Bindings are immutable.
+// Binding is `name = value`, or `name: Type = value`. Bindings are
+// immutable.
 type Binding struct {
 	Pos   diag.Pos
 	Name  string
+	Type  *TypeExpr // nil if not written
 	Value Expr
 }
 
@@ -92,6 +108,12 @@ type Expr interface {
 }
 
 type IntLit struct {
+	Pos  diag.Pos
+	Text string
+}
+
+// FloatLit is a floating-point literal: `1.5`, `2e10`.
+type FloatLit struct {
 	Pos  diag.Pos
 	Text string
 }
@@ -237,7 +259,7 @@ type FieldPat struct {
 	Bind  string
 }
 
-// LitPat is a literal pattern: an Int, String, or Bool literal.
+// LitPat is a literal pattern: a number, String, or Bool literal.
 type LitPat struct {
 	Pos   diag.Pos
 	Value Expr
@@ -266,6 +288,7 @@ func (e *Match) Position() diag.Pos     { return e.Pos }
 func (e *Try) Position() diag.Pos       { return e.X.Position() }
 
 func (*IntLit) exprNode()    {}
+func (*FloatLit) exprNode()  {}
 func (*StringLit) exprNode() {}
 func (*BoolLit) exprNode()   {}
 func (*Ident) exprNode()     {}
@@ -277,6 +300,7 @@ func (*Block) exprNode()     {}
 func (*Return) exprNode()    {}
 
 func (e *IntLit) Position() diag.Pos    { return e.Pos }
+func (e *FloatLit) Position() diag.Pos  { return e.Pos }
 func (e *StringLit) Position() diag.Pos { return e.Pos }
 func (e *BoolLit) Position() diag.Pos   { return e.Pos }
 func (e *Ident) Position() diag.Pos     { return e.Pos }

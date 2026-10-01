@@ -34,7 +34,7 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 
 ## Getting started
 
-The compiler is at an early stage, covering most of milestone M0: functions, `Int`/`Bool`/`String`, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `println`. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage, covering most of milestone M0: functions, sized integers and floats with checked conversions, `Bool`/`String` with a small prelude of string and parsing functions, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `unsafe go` function bodies for calling Go. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -89,7 +89,7 @@ fn moveUser(id: Int, city: String): User | NotFound | DbError {
 fn describe(id: Int): String {
   match (moveUser(id, "Oslo")) {
     u: User => u.name + " now lives in " + u.address.city
-    NotFound => "no such user"
+    NotFound { id: missing } => "no user with id " + toString(missing)
     e: DbError => "database error: " + e.message
   }
 }

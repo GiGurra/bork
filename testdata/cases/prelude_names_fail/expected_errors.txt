@@ -1,0 +1,4 @@
+main.bork:1:1: trim is a built-in function and cannot be redefined
+main.bork:5:1: ParseError is a built-in type and cannot be redefined
+main.bork:7:1: toInt8 is a built-in function and cannot be redefined
+main.bork:12:3: contains is a built-in function (bork does not allow shadowing)

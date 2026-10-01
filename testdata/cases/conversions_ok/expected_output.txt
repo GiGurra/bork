@@ -1,0 +1,9 @@
+-5 -5.0 1000000.0 200
+fits: -5
+out of range: -500 is not an Int8
+fits: -14
+OutOfRange { value: "-5", target: "Uint8" }
+OutOfRange { value: "300", target: "Uint8" } 300
+42 1.5
+127 OutOfRange { value: "128", target: "Int8" }
+1.5! true Option.Some { value: 1 }

@@ -133,7 +133,7 @@ func (g *gen) matchStmt(m *syntax.Match, k sink) []ast.Stmt {
 	if x == nil {
 		return stmts
 	}
-	x = g.convert(x, st, st)
+	x = g.typed(g.convert(x, st, st), st)
 	v := g.newTmp()
 	switch st.(type) {
 	case *check.Sealed, *check.Union:

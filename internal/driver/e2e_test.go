@@ -17,6 +17,7 @@ var update = flag.Bool("update", false, "rewrite expected files with actual resu
 //
 //   - expected_output.txt: the program must build, run, and print exactly this.
 //   - expected_errors.txt: compilation must fail with exactly these diagnostics.
+//     (Errors in unsafe go code come from building the generated Go.)
 func TestCases(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "cases")
 	entries, err := os.ReadDir(root)
@@ -53,6 +54,10 @@ func runOutputCase(t *testing.T, dir string) {
 
 func runErrorCase(t *testing.T, dir string) {
 	_, err := Emit(dir)
+	if err == nil {
+		// Errors in unsafe go code are found by the Go compiler.
+		err = Build(dir, filepath.Join(t.TempDir(), "program"))
+	}
 	var de *DiagError
 	if !errors.As(err, &de) {
 		t.Fatalf("expected compile errors, got: %v", err)

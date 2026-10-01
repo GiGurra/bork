@@ -1,7 +1,6 @@
 package check
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/syntax"
@@ -104,7 +103,7 @@ func (c *checker) pattern(p syntax.Pattern, st Type, cases []matchCase, seenLits
 		return keys, true
 
 	case *syntax.LitPat:
-		lt := c.expr(p.Value)
+		lt := c.exprWant(p.Value, st)
 		if lt == Invalid {
 			return nil, false
 		}
@@ -237,11 +236,10 @@ func (c *checker) bindFieldPats(p *syntax.VariantPat, fields []*Field, owner str
 
 // literalText renders a literal pattern's value, to detect duplicates.
 func literalText(e syntax.Expr, info *Info) string {
+	if v, ok := info.Consts[e]; ok {
+		return v.ExactString()
+	}
 	switch e := e.(type) {
-	case *syntax.IntLit:
-		return strconv.FormatInt(info.IntValues[e], 10)
-	case *syntax.Unary:
-		return "-" + literalText(e.X, info)
 	case *syntax.StringLit:
 		return `"` + e.Value + `"`
 	case *syntax.BoolLit:
