@@ -16,11 +16,20 @@ import (
 //
 // A constraint with alternatives, `positive or zero`, has a nil Pred and
 // the alternatives in Or; at least one of them must hold.
+//
+// A constraint inside a type argument applies at a path into the value:
+// ".[]" for every element of a List, ".value" for the value in an
+// Option.Some (`List[Int where positive]` has Path ".[]").
+//
+// The predicate can also be a parameter of the function, a function
+// value (`List[T where keep]`); PredParam names it, and Pred is nil.
 type Constraint struct {
-	Pred *Func
-	Args []CArg
-	Pos  diag.Pos
-	Or   []*Constraint
+	Pred      *Func
+	PredParam string
+	Args      []CArg
+	Pos       diag.Pos
+	Or        []*Constraint
+	Path      string
 }
 
 // CArg is an argument of a constraint's predicate, after the value
@@ -50,6 +59,9 @@ func (c *Constraint) String() string {
 			alts[i] = a.String()
 		}
 		return strings.Join(alts, " or ")
+	}
+	if c.PredParam != "" {
+		return c.PredParam
 	}
 	if len(c.Args) == 0 {
 		return c.Pred.Decl.Name
@@ -159,6 +171,24 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 			out = append(out, con)
 		}
 	}
+	// Constraints inside type arguments apply to the elements.
+	inner := func(arg *syntax.TypeExpr, elem Type, step string) {
+		for _, con := range c.constraintsOf(arg, elem, scope) {
+			cp := *con
+			cp.Path = step + con.Path
+			out = append(out, &cp)
+		}
+	}
+	switch tt := typ.(type) {
+	case *List:
+		if len(t.Args) == 1 {
+			inner(t.Args[0], tt.Elem, ".[]")
+		}
+	case *Sealed:
+		if IsOption(tt) && len(t.Args) == 1 {
+			inner(t.Args[0], tt.Args[0], ".value")
+		}
+	}
 	return out
 }
 
@@ -188,6 +218,22 @@ func (c *checker) constraint(ref *syntax.PredRef, subject Type, scope map[string
 }
 
 func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {
+	if pt, ok := scope[ref.Name]; ok {
+		// A function parameter used as a predicate.
+		ft, isFunc := pt.(*FuncType)
+		switch {
+		case !isFunc || len(ft.Params) != 1 || ft.Result != Bool:
+			c.errorf(ref.Pos, "%s is a parameter of type %s; a predicate parameter must be a function from the value to Bool", ref.Name, pt)
+			return nil
+		case !assignable(subject, ft.Params[0]):
+			c.errorf(ref.Pos, "%s applies to %s, not %s", ref.Name, ft.Params[0], subject)
+			return nil
+		case len(ref.Args) > 0:
+			c.errorf(ref.Pos, "%s is a parameter and takes no arguments here", ref.Name)
+			return nil
+		}
+		return &Constraint{PredParam: ref.Name, Pos: ref.Pos}
+	}
 	fn, ok := c.info.Funcs[ref.Name]
 	if !ok {
 		c.errorf(ref.Pos, "unknown predicate %s", ref.Name)

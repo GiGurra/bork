@@ -67,7 +67,7 @@ type Evaluator func(queries []Query) ([]bool, error)
 
 // Facts checks the where clauses of a type-checked package.
 func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
-	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*syntax.Param]*syntax.Ident{}}
+	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*syntax.Param]*syntax.Ident{}, predParams: map[*syntax.Param]*Func{}, lambdaArgs: map[*syntax.Param]lambdaArg{}}
 	for _, file := range files {
 		if file.Prelude {
 			continue
@@ -94,6 +94,19 @@ type factChecker struct {
 	// functions whose results are being derived.
 	active map[string]bool
 	params map[*syntax.Param]*syntax.Ident
+	// predParams holds the predicates standing for function parameters.
+	predParams map[*syntax.Param]*Func
+	// lambdaArgs records, for the parameters of lambdas passed to
+	// declared functions, which call and parameter they belong to.
+	lambdaArgs map[*syntax.Param]lambdaArg
+}
+
+// lambdaArg places a lambda's parameter: the lambda is argument arg of
+// call (to fn), and the parameter is its param'th.
+type lambdaArg struct {
+	call       *syntax.Call
+	fn         *Func
+	arg, param int
 }
 
 // A fact is a predicate known to hold: pred(subject, args...), with
@@ -159,25 +172,49 @@ func sameArgs(a, b []argVal) bool {
 }
 
 // known is a fact about some given value: pred(value, args...).
-// A known fact with alternatives has a nil pred and them in or.
+// A known fact with alternatives has a nil pred and them in or. A fact
+// about part of the value (its elements) has the path to it.
 type known struct {
 	pred *Func
 	args []argVal
 	or   []known
+	path string
 }
 
 func (k known) proves(ob obligation) bool {
-	return k.pred != nil && k.pred == ob.pred && sameArgs(k.args, ob.args)
+	return k.pred != nil && k.pred == ob.pred && k.path == ob.path && sameArgs(k.args, ob.args)
+}
+
+// within keeps the facts about the part of the value at path, relative
+// to that part.
+func within(ks []known, path string) []known {
+	if path == "" {
+		return ks
+	}
+	var out []known
+	for _, k := range ks {
+		if rest, ok := strings.CutPrefix(k.path, path); ok && (rest == "" || rest[0] == '.') {
+			k.path = rest
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // obligation is a requirement pred(subject, args...) at some point.
 //
 // An obligation with alternatives (from `where p or q`) has a nil pred
 // and them in or; proving any of them proves it.
+//
+// An obligation about part of the value (every element of a list) has
+// the path to it. One whose predicate could not be determined (a
+// predicate parameter given a complicated lambda) has a nil pred and no
+// alternatives, and cannot be proven.
 type obligation struct {
 	pred *Func
 	args []argVal
 	or   []obligation
+	path string
 	// requirement says who requires what, for messages:
 	// "transfer requires amount to be positive".
 	requirement string
@@ -237,7 +274,7 @@ func (f *factChecker) stmts(list []syntax.Stmt, e env) env {
 		case *syntax.Binding:
 			f.walk(s.Value, e)
 			for _, con := range f.info.BindingConstraints[s] {
-				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", s.Name, con))
+				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Name), con))
 			}
 		case *syntax.ExprStmt:
 			f.walk(s.X, e)
@@ -268,6 +305,15 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 	case *syntax.Call:
 		if _, named := f.info.CallFuncs[x]; !named && f.info.CallBuiltins[x] == BuiltinNone {
 			f.walk(x.Fun, e)
+		}
+		if fn := f.info.CallFuncs[x]; fn != nil {
+			for i, a := range x.Args {
+				if l, ok := a.(*syntax.Lambda); ok {
+					for k, p := range l.Params {
+						f.lambdaArgs[p] = lambdaArg{call: x, fn: fn, arg: i, param: k}
+					}
+				}
+			}
 		}
 		for _, a := range x.Args {
 			f.walk(a, e)
@@ -364,13 +410,32 @@ func (f *factChecker) resultPaths(fn *Func) []branch {
 
 // --- Where obligations arise ---
 
+// pathPhrase describes the part of the value called name that path
+// leads to: "every element of xs", "the value in note".
+func pathPhrase(path, name string) string {
+	if path == "" {
+		return name
+	}
+	for _, step := range strings.Split(path[1:], ".") {
+		switch step {
+		case "[]":
+			name = "every element of " + name
+		case "value":
+			name = "the value in " + name
+		default:
+			name = "the " + step + " of " + name
+		}
+	}
+	return name
+}
+
 func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
 	for i, cons := range fn.ParamConstraints {
 		if i >= len(call.Args) {
 			break
 		}
 		for _, con := range cons {
-			req := fmt.Sprintf("%s requires %s to be %s", fn.Decl.Name, fn.Decl.Params[i].Name, con)
+			req := fmt.Sprintf("%s requires %s to be %s", fn.Decl.Name, pathPhrase(con.Path, fn.Decl.Params[i].Name), con)
 			f.oblige(call.Args[i], con, f.callArgs(call, fn), e, req)
 		}
 	}
@@ -388,7 +453,7 @@ func (f *factChecker) recordObligations(lit *syntax.RecordLit, e env) {
 	for _, fi := range lit.Fields {
 		if fd := findField(fields, fi.Name); fd != nil {
 			for _, con := range fd.Constraints {
-				f.oblige(fi.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", label, fi.Name, con))
+				f.oblige(fi.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con))
 			}
 		}
 	}
@@ -415,7 +480,7 @@ func (f *factChecker) copyObligations(cp *syntax.Copy, e env) {
 		}
 		path := strings.Join(u.Path, ".")
 		for _, con := range fd.Constraints {
-			f.oblige(u.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", rec.Name, path, con))
+			f.oblige(u.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", rec.Name, pathPhrase(con.Path, path), con))
 		}
 	}
 }
@@ -439,6 +504,9 @@ func (f *factChecker) checkResult(x syntax.Expr, e env) {
 		}
 		for _, con := range mc.Constraints {
 			req := fmt.Sprintf("%s promises a result that is %s", f.fn.Decl.Name, con)
+			if con.Path != "" {
+				req = fmt.Sprintf("%s promises that %s is %s", f.fn.Decl.Name, pathPhrase(con.Path, "its result"), con)
+			}
 			ob := f.obligationOf(con, f.ownParams(), req)
 			var ok bool
 			var pending []Query
@@ -481,10 +549,18 @@ func (f *factChecker) settle(x syntax.Expr, ob obligation, ok bool, pending []Qu
 // obligationOf is the obligation to prove con, with the constraint's
 // parameter arguments given by subst.
 func (f *factChecker) obligationOf(con *Constraint, subst func(string) argVal, requirement string) obligation {
-	ob := obligation{requirement: requirement, con: con.String()}
+	ob := obligation{requirement: requirement, con: con.String(), path: con.Path}
 	if con.Or != nil {
 		for _, alt := range con.Or {
-			ob.or = append(ob.or, f.obligationOf(alt, subst, requirement))
+			a := f.obligationOf(alt, subst, requirement)
+			a.path = con.Path
+			ob.or = append(ob.or, a)
+		}
+		return ob
+	}
+	if con.PredParam != "" {
+		if ks := f.predsOf(subst(con.PredParam)); len(ks) == 1 {
+			ob.pred, ob.args = ks[0].pred, ks[0].args
 		}
 		return ob
 	}
@@ -494,15 +570,71 @@ func (f *factChecker) obligationOf(con *Constraint, subst func(string) argVal, r
 
 // knownOf is what con says is known, with the constraint's parameter
 // arguments given by subst.
-func (f *factChecker) knownOf(con *Constraint, subst func(string) argVal) known {
+func (f *factChecker) knownOf(con *Constraint, subst func(string) argVal) []known {
 	if con.Or != nil {
-		k := known{}
+		k := known{path: con.Path}
 		for _, alt := range con.Or {
-			k.or = append(k.or, f.knownOf(alt, subst))
+			alts := f.knownOf(alt, subst)
+			if len(alts) != 1 {
+				return nil // an alternative that says nothing
+			}
+			k.or = append(k.or, alts[0])
 		}
-		return k
+		return []known{k}
 	}
-	return known{pred: con.Pred, args: f.substitute(con, subst)}
+	if con.PredParam != "" {
+		ks := f.predsOf(subst(con.PredParam))
+		for i := range ks {
+			ks[i].path = con.Path
+		}
+		return ks
+	}
+	return []known{{pred: con.Pred, args: f.substitute(con, subst), path: con.Path}}
+}
+
+// predsOf is what a predicate parameter's argument says about a value
+// it returns true for: a predicate (`filter(xs, positive)`), the
+// caller's own predicate parameter, or the facts a lambda's body
+// establishes about its parameter (`x => positive(x) && small(x)`).
+func (f *factChecker) predsOf(arg argVal) []known {
+	switch x := arg.expr.(type) {
+	case *syntax.Ident:
+		if inst := f.info.FuncRefs[x]; inst != nil {
+			if inst.Func.Decl.IsPred && len(inst.Func.Params) == 1 {
+				return []known{{pred: inst.Func}}
+			}
+			return nil
+		}
+		if p, ok := f.info.Defs[x].(*syntax.Param); ok {
+			// A function parameter (the checker made sure of that).
+			return []known{{pred: f.paramPred(p)}}
+		}
+	case *syntax.Lambda:
+		if len(x.Params) != 1 {
+			return nil
+		}
+		subject := fmt.Sprintf("l:%p", x.Params[0])
+		var out []known
+		for _, ft := range f.conditionFacts(x.Body, true) {
+			if ft.pred != nil && ft.subject == subject {
+				out = append(out, known{pred: ft.pred, args: ft.args})
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// paramPred stands for a function parameter used as a predicate, as a
+// predicate of its own: facts about it can be known and required, but
+// it cannot be run.
+func (f *factChecker) paramPred(p *syntax.Param) *Func {
+	if fn, ok := f.predParams[p]; ok {
+		return fn
+	}
+	fn := &Func{Decl: &syntax.FuncDecl{Pos: p.Pos, Name: p.Name, IsPred: true}, Synthetic: true}
+	f.predParams[p] = fn
+	return fn
 }
 
 func (f *factChecker) substitute(con *Constraint, subst func(string) argVal) []argVal {
@@ -577,7 +709,7 @@ type branch struct {
 // not possible; otherwise the proof may still depend on predicates of
 // constants, returned as queries to evaluate at compile time.
 func (f *factChecker) prove(x syntax.Expr, ob obligation, e env, depth int) (bool, []Query) {
-	if depth > maxDepth {
+	if depth > maxDepth || (ob.pred == nil && ob.or == nil) {
 		return false, nil
 	}
 	if ob.or != nil {
@@ -597,7 +729,7 @@ func (f *factChecker) prove(x syntax.Expr, ob obligation, e env, depth int) (boo
 		return ok1, p1
 	}
 	// A constant: run the predicate at compile time.
-	if v := f.info.constantOf(x); v != nil {
+	if v := f.info.constantOf(x); v != nil && ob.path == "" {
 		if q, ok := constQuery(ob, v); ok {
 			return true, []Query{q}
 		}
@@ -614,52 +746,104 @@ func (f *factChecker) prove(x syntax.Expr, ob obligation, e env, depth int) (boo
 // proveCases proves ob for x from how x is computed: what it is bound
 // to, its branches, the callee's body, or by rules or case splits.
 func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int) (bool, []Query) {
+	var cs candidates
 	switch x := x.(type) {
 	case *syntax.Ident:
 		switch d := f.info.Defs[x].(type) {
 		case *syntax.Binding:
-			if ok, pending := f.prove(d.Value, ob, e, depth+1); ok {
-				return true, pending
+			if cs.take(f.prove(d.Value, ob, e, depth+1)) {
+				return true, nil
 			}
-		case *syntax.Param, nil:
+		case *syntax.Param:
+			if la, ok := f.lambdaArgs[d]; ok {
+				if cs.take(f.lambdaParam(la, ob, e, depth)) {
+					return true, nil
+				}
+			}
+		case nil:
 		default:
 			if src := f.info.PatSources[d]; src != nil {
 				var ok bool
 				var pending []Query
 				if src.Member == nil {
-					ok, pending = f.prove(src.Subject, ob, e, depth+1)
+					// A part of the matched value.
+					inner := ob
+					inner.path = src.Path + ob.path
+					ok, pending = f.prove(src.Subject, inner, e, depth+1)
 				} else {
 					ok, pending = f.proveMember(src.Subject, src.Member, ob, e, depth+1)
 				}
-				if ok {
-					return true, pending
+				if cs.take(ok, pending) {
+					return true, nil
 				}
 			}
 		}
 	case *syntax.Call:
 		if fn := f.info.CallFuncs[x]; fn != nil {
-			if ok, pending := f.derive(x, fn, nil, ob, e, depth); ok {
-				return true, pending
+			if cs.take(f.derive(x, fn, nil, ob, e, depth)) {
+				return true, nil
+			}
+			if cs.take(f.parametric(x, fn, ob, e, depth)) {
+				return true, nil
+			}
+		}
+	case *syntax.ListLit:
+		// Every element, one by one.
+		if rest, ok := cutStep(ob.path, ".[]"); ok {
+			inner := ob
+			inner.path = rest
+			var bs []branch
+			for _, el := range x.Elems {
+				bs = append(bs, branch{el, e})
+			}
+			if cs.take(f.all(inner, depth, bs...)) {
+				return true, nil
+			}
+		}
+	case *syntax.RecordLit:
+		// A field of a record or variant built here.
+		for _, fi := range x.Fields {
+			if rest, ok := cutStep(ob.path, "."+fi.Name); ok {
+				inner := ob
+				inner.path = rest
+				if cs.take(f.prove(fi.Value, inner, e, depth+1)) {
+					return true, nil
+				}
+			}
+		}
+		if v, ok := f.info.RecordTargets[x].(*Variant); ok && ob.path != "" && v.Field(firstStep(ob.path)) == nil {
+			return true, nil // a variant without that part: nothing to prove
+		}
+	case *syntax.Selector:
+		if f.info.SelectorVariants[x] != nil {
+			if ob.path != "" {
+				return true, nil // Option.None has no value to constrain
+			}
+		} else if _, isRec := f.info.Types[x.X].(*Record); isRec {
+			inner := ob
+			inner.path = "." + x.Name + ob.path
+			if cs.take(f.prove(x.X, inner, e, depth+1)) {
+				return true, nil
 			}
 		}
 	case *syntax.Try:
 		if info := f.info.Tries[x]; info != nil && info.Option == nil {
-			if ok, pending := f.proveMember(x.X, info.Kept, ob, e, depth+1); ok {
-				return true, pending
+			if cs.take(f.proveMember(x.X, info.Kept, ob, e, depth+1)) {
+				return true, nil
 			}
 		}
 	case *syntax.Block:
 		if x.Tail != nil {
-			if ok, pending := f.prove(x.Tail, ob, f.stmts(x.Stmts, e), depth+1); ok {
-				return true, pending
+			if cs.take(f.prove(x.Tail, ob, f.stmts(x.Stmts, e), depth+1)) {
+				return true, nil
 			}
 		}
 	case *syntax.If:
 		if x.Else != nil {
-			if ok, pending := f.all(ob, depth,
+			if cs.take(f.all(ob, depth,
 				branch{x.Then, e.with(f.conditionFacts(x.Cond, true)...)},
-				branch{x.Else, e.with(f.conditionFacts(x.Cond, false)...)}); ok {
-				return true, pending
+				branch{x.Else, e.with(f.conditionFacts(x.Cond, false)...)})) {
+				return true, nil
 			}
 		}
 	case *syntax.Match:
@@ -667,16 +851,215 @@ func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int)
 		for _, arm := range x.Arms {
 			bs = append(bs, branch{arm.Body, e})
 		}
-		if ok, pending := f.all(ob, depth, bs...); ok {
-			return true, pending
+		if cs.take(f.all(ob, depth, bs...)) {
+			return true, nil
 		}
 	}
 	if ob.or == nil {
-		if ok, pending := f.byRules(f.argOf(x), ob, e, depth); ok {
-			return true, pending
+		if cs.take(f.byRules(f.argOf(x), ob, e, depth)) {
+			return true, nil
 		}
 	}
-	return f.split(x, ob, e, depth)
+	if ob.path == "" {
+		if cs.take(f.split(x, ob, e, depth)) {
+			return true, nil
+		}
+	}
+	return cs.result()
+}
+
+// candidates collects proofs that still depend on compile-time queries.
+// Such a proof may turn out false while another way of proving holds,
+// so every way is tried: one without queries settles it, and otherwise
+// any of the candidates' queries holding is enough.
+type candidates struct{ alts [][]Query }
+
+// take adds a proof attempt, and reports whether it settles the goal.
+func (cs *candidates) take(ok bool, pending []Query) bool {
+	if !ok {
+		return false
+	}
+	if len(pending) == 0 {
+		return true
+	}
+	cs.alts = append(cs.alts, pending)
+	return false
+}
+
+func (cs *candidates) result() (bool, []Query) {
+	switch len(cs.alts) {
+	case 0:
+		return false, nil
+	case 1:
+		return true, cs.alts[0] // each query can fail on its own
+	}
+	or := Query{}
+	for _, alt := range cs.alts {
+		or.Or = append(or.Or, allOf(alt))
+	}
+	return true, []Query{or}
+}
+
+// cutStep removes the first step of path if it is step.
+func cutStep(path, step string) (string, bool) {
+	rest, ok := strings.CutPrefix(path, step)
+	return rest, ok && (rest == "" || rest[0] == '.')
+}
+
+func firstStep(path string) string {
+	step, _, _ := strings.Cut(path[1:], ".")
+	return step
+}
+
+// parametric proves ob for the result of a call of a generic function
+// from its arguments. The function cannot make values of its type
+// parameters, so those in its result come from its arguments, and what
+// holds for all of those holds for them: the head of a list of positive
+// numbers is positive.
+func (f *factChecker) parametric(call *syntax.Call, fn *Func, ob obligation, e env, depth int) (bool, []Query) {
+	type source struct {
+		arg  int
+		path string
+	}
+	for _, tp := range fn.TypeParams {
+		results, ok := typeParamPaths(fn.Result, tp, "")
+		if !ok {
+			continue
+		}
+		var sources []source
+		for i, pt := range fn.Params {
+			paths, ok := typeParamPaths(pt, tp, "")
+			if !ok {
+				sources = nil
+				break
+			}
+			for _, p := range paths {
+				sources = append(sources, source{i, p})
+			}
+		}
+		if len(sources) == 0 {
+			continue
+		}
+		for _, r := range results {
+			rest, ok := strings.CutPrefix(ob.path, r)
+			if !ok || (rest != "" && rest[0] != '.') {
+				continue
+			}
+			var pending []Query
+			proven := true
+			for _, s := range sources {
+				inner := ob
+				inner.path = s.path + rest
+				ok, p := f.prove(call.Args[s.arg], inner, e, depth+1)
+				if !ok {
+					proven = false
+					break
+				}
+				pending = append(pending, p...)
+			}
+			if proven {
+				return true, pending
+			}
+		}
+	}
+	return false, nil
+}
+
+// lambdaParam proves ob for a parameter of a lambda passed to a generic
+// function, where the parameter takes values of a type parameter: the
+// function can only pass it values it was given, so it is proven for
+// those (`map(positives, p => transfer(p))`).
+func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int) (bool, []Query) {
+	ft, ok := la.fn.Params[la.arg].(*FuncType)
+	if !ok || la.param >= len(ft.Params) {
+		return false, nil
+	}
+	tp, ok := ft.Params[la.param].(*TypeParam)
+	if !ok {
+		return false, nil
+	}
+	var pending []Query
+	found := false
+	for i, pt := range la.fn.Params {
+		paths, ok := typeParamPaths(pt, tp, "")
+		if !ok {
+			return false, nil
+		}
+		for _, p := range paths {
+			inner := ob
+			inner.path = p + ob.path
+			ok, more := f.prove(la.call.Args[i], inner, e, depth+1)
+			if !ok {
+				return false, nil
+			}
+			pending = append(pending, more...)
+			found = true
+		}
+	}
+	return found, pending
+}
+
+// typeParamPaths lists the paths at which values of the type parameter
+// tp occur in t. It fails if they occur where facts cannot follow them:
+// in a union, or as what a function value returns. (A function value's
+// parameters only take values of tp.)
+func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
+	switch t := t.(type) {
+	case *TypeParam:
+		if t == tp {
+			return []string{path}, true
+		}
+	case *List:
+		return typeParamPaths(t.Elem, tp, path+".[]")
+	case *Sealed:
+		if IsOption(t) {
+			return typeParamPaths(t.Args[0], tp, path+".value")
+		}
+	case *Union:
+		if mentions(t, tp) {
+			return nil, false
+		}
+	case *FuncType:
+		if mentions(t.Result, tp) {
+			return nil, false
+		}
+		for _, p := range t.Params {
+			if _, isTP := p.(*TypeParam); !isTP && mentions(p, tp) {
+				return nil, false
+			}
+		}
+	}
+	return nil, true
+}
+
+// mentions reports whether t refers to the type parameter tp.
+func mentions(t Type, tp *TypeParam) bool {
+	switch t := t.(type) {
+	case *TypeParam:
+		return t == tp
+	case *List:
+		return mentions(t.Elem, tp)
+	case *Sealed:
+		for _, a := range t.Args {
+			if mentions(a, tp) {
+				return true
+			}
+		}
+	case *Union:
+		for _, m := range t.Members {
+			if mentions(m, tp) {
+				return true
+			}
+		}
+	case *FuncType:
+		for _, p := range t.Params {
+			if mentions(p, tp) {
+				return true
+			}
+		}
+		return mentions(t.Result, tp)
+	}
+	return false
 }
 
 // anyOf proves one of ob's alternatives with try. An alternative proven
@@ -764,6 +1147,9 @@ func (f *factChecker) factOf(subject string, k known) fact {
 
 // constQuery is ob on the constant v, if all its arguments are constants.
 func constQuery(ob obligation, v constant.Value) (Query, bool) {
+	if ob.pred == nil || ob.pred.Synthetic {
+		return Query{}, false
+	}
 	q := Query{Pred: ob.pred, Args: []constant.Value{v}}
 	for _, a := range ob.args {
 		if a.value == nil {
@@ -826,14 +1212,17 @@ func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
 	var out []known
 	if k := f.key(x); k != "" {
 		for _, ft := range e.facts {
-			if ft.pred != nil && ft.subject == k {
-				out = append(out, known{pred: ft.pred, args: ft.args})
+			if ft.pred == nil {
+				continue
+			}
+			if rest, ok := strings.CutPrefix(ft.subject, k); ok && (rest == "" || rest[0] == '.') {
+				out = append(out, known{pred: ft.pred, args: ft.args, path: rest})
 			}
 		}
 	}
 	add := func(cons []*Constraint, subst func(string) argVal) {
 		for _, con := range cons {
-			out = append(out, f.knownOf(con, subst))
+			out = append(out, f.knownOf(con, subst)...)
 		}
 	}
 	switch x := x.(type) {
@@ -853,8 +1242,11 @@ func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
 		case nil:
 		default:
 			if src := f.info.PatSources[d]; src != nil && depth < maxDepth {
+				if src.Field != nil {
+					add(src.Field.Constraints, noParams)
+				}
 				if src.Member == nil {
-					out = append(out, f.declared(src.Subject, e, depth+1)...)
+					out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
 				} else {
 					out = append(out, f.declaredMember(src.Subject, src.Member)...)
 				}
@@ -877,6 +1269,9 @@ func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
 			if fd := rec.Field(x.Name); fd != nil {
 				add(fd.Constraints, noParams)
 			}
+			if depth < maxDepth {
+				out = append(out, within(f.declared(x.X, e, depth+1), "."+x.Name)...)
+			}
 		}
 	}
 	return out
@@ -892,7 +1287,7 @@ func (f *factChecker) declaredMember(x syntax.Expr, m Type) []known {
 			for _, mc := range fn.ResultConstraints {
 				if identical(mc.Type, m) {
 					for _, con := range mc.Constraints {
-						out = append(out, f.knownOf(con, f.callArgs(x, fn)))
+						out = append(out, f.knownOf(con, f.callArgs(x, fn))...)
 					}
 				}
 			}
@@ -1018,7 +1413,7 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 			if !ok {
 				continue
 			}
-			goal := fmt.Sprintf("rule %s %s %s", r.Decl.Name, v.key, ob.pred.Decl.Name)
+			goal := fmt.Sprintf("rule %s %s%s %s", r.Decl.Name, v.key, ob.path, ob.pred.Decl.Name)
 			for _, a := range ob.args {
 				goal += " " + a.key
 			}
@@ -1026,7 +1421,7 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 				continue
 			}
 			f.active[goal] = true
-			proven, pending := f.premises(r, 0, bound, e, depth+1)
+			proven, pending := f.premises(r, 0, bound, ob.path, e, depth+1)
 			delete(f.active, goal)
 			if proven {
 				return true, pending
@@ -1050,7 +1445,9 @@ func bindArg(bound map[string]argVal, a RuleArg, v argVal) bool {
 
 // premises proves the rule's premises from index i on, binding the
 // variables that only premises mention to the facts that match them.
-func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, e env, depth int) (bool, []Query) {
+// With a path, the rule is applied to that part of the values (every
+// element of a list).
+func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, path string, e env, depth int) (bool, []Query) {
 	if i == len(r.Premises) {
 		vars := map[string]constant.Value{}
 		for name, v := range bound {
@@ -1084,17 +1481,21 @@ func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, e env, d
 		}
 	}
 	if !free {
-		ok, pending := f.proveArg(subject, obligation{pred: p.Pred, args: args}, e, depth)
+		ok, pending := f.proveArg(subject, obligation{pred: p.Pred, args: args, path: path}, e, depth)
 		if !ok {
 			return false, nil
 		}
-		rest, more := f.premises(r, i+1, bound, e, depth)
+		rest, more := f.premises(r, i+1, bound, path, e, depth)
 		return rest, append(pending, more...)
 	}
 	// Bind the free variables to a fact about the subject.
 	var candidates []known
 	if subject.expr != nil {
-		candidates = f.declared(subject.expr, e, depth)
+		for _, k := range f.declared(subject.expr, e, depth) {
+			if k.path == path {
+				candidates = append(candidates, k)
+			}
+		}
 	}
 	for _, k := range candidates {
 		if k.pred != p.Pred {
@@ -1111,7 +1512,7 @@ func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, e env, d
 		if !matches {
 			continue
 		}
-		if ok, pending := f.premises(r, i+1, next, e, depth); ok {
+		if ok, pending := f.premises(r, i+1, next, path, e, depth); ok {
 			return true, pending
 		}
 	}
@@ -1123,14 +1524,14 @@ func (f *factChecker) proveArg(v argVal, ob obligation, e env, depth int) (bool,
 	if v.expr != nil {
 		return f.prove(v.expr, ob, e, depth)
 	}
-	if v.value != nil {
+	if v.value != nil && ob.path == "" {
 		if q, ok := constQuery(ob, v.value); ok {
 			return true, []Query{q}
 		}
 	}
 	if v.key != "" {
 		for _, ft := range e.facts {
-			if ft.subject == v.key && (known{pred: ft.pred, args: ft.args}).proves(ob) {
+			if ft.subject == v.key+ob.path && (known{pred: ft.pred, args: ft.args}).proves(obligation{pred: ob.pred, args: ob.args}) {
 				return true, nil
 			}
 		}
@@ -1213,7 +1614,7 @@ func (f *factChecker) key(x syntax.Expr) string {
 		default:
 			if src := f.info.PatSources[d]; src != nil && src.Member == nil {
 				if k := f.aliasKey(src.Subject); k != "" {
-					return k
+					return k + src.Path
 				}
 			}
 			return fmt.Sprintf("n:%p", d)
@@ -1276,7 +1677,20 @@ func (f *factChecker) describe(x syntax.Expr) string {
 // hint suggests how to establish a missing fact.
 func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
 	name := f.describe(x)
-	if name == "this value" {
+	if ob.pred == nil && ob.or == nil {
+		return ""
+	}
+	if ob.path == ".[]" {
+		keep := "x => " + checkText("x", ob)
+		if ob.pred != nil && len(ob.args) == 0 {
+			keep = ob.pred.Decl.Name
+		}
+		if name == "this value" {
+			name = "..."
+		}
+		return fmt.Sprintf(" (keep only those that are: filter(%s, %s))", name, keep)
+	}
+	if ob.path != "" || name == "this value" {
 		return " (give it a name and check it first)"
 	}
 	check := fmt.Sprintf("if (%s) { ... }", checkText(name, ob))

@@ -1,3 +1,3 @@
 main.bork:6:30: transfer requires amount to be positive, but that is not proven for a (check it first with if (positive(a)) { ... })
 main.bork:11:16: transfer requires amount to be positive, so it cannot be used as a value; use a lambda that checks it: x => if (...) { transfer(x) } else { ... }
-main.bork:17:30: transfer requires amount to be positive, but that is not proven for y (check it first with if (positive(y)) { ... })
+main.bork:19:30: transfer requires amount to be positive, but that is not proven for y (check it first with if (positive(y)) { ... })

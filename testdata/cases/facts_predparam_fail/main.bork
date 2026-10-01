@@ -1,0 +1,7 @@
+// A parameter used as a predicate must be a function from the value to Bool.
+fn notAFunction(xs: List[Int], g: Int): List[Int where g] { xs }
+fn wrongResult(xs: List[Int], g: (Int) => Int): List[Int where g] { xs }
+fn wrongType(xs: List[Int], g: (String) => Bool): List[Int where g] { xs }
+fn withArgs(xs: List[Int], g: (Int) => Bool): List[Int where g(1)] { xs }
+
+fn main() {}

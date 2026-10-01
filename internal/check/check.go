@@ -17,6 +17,9 @@ type Func struct {
 	Result     Type
 	// Prelude is set for the built-in functions of prelude.bork.
 	Prelude bool
+	// Synthetic is set for a predicate that stands for a function
+	// parameter (see facts.go); it has no body to run.
+	Synthetic bool
 	// Calls lists the functions this function's body calls.
 	Calls []*Func
 	// ParamConstraints holds each parameter's where clause, and
@@ -132,9 +135,14 @@ type Info struct {
 }
 
 // PatSource is where a value bound by a match pattern came from.
+//
+// A name bound inside the pattern (`Option.Some { value: v }`) has the
+// field path to it from the subject (".value"), and the Field.
 type PatSource struct {
 	Subject syntax.Expr
 	Member  Type
+	Path    string
+	Field   *Field
 }
 
 // Package type-checks the given files as one package.

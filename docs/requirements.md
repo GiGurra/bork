@@ -183,6 +183,9 @@ fn sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 - **OR:** `x: Int where positive or zero` needs one of the alternatives; `and` and `or` mix only with parentheses (`(positive or zero) and small`). A `||` condition gives an OR fact. An OR obligation may be proven by different alternatives on different branches, and a known OR fact is used by cases: a goal that follows from each alternative follows from the fact.
 - **Inference rules** say what follows from what: `rule weaker(x: Int, a: Int, b: Int) { atLeast(x, a) and a >= b => atLeast(x, b) }`. Premises are predicate calls on the rule's variables (constants allowed after the first argument) and conditions on them using only operators and constants, which are decided at compile time. A rule may have several premises and conclusions; rules chain, and cycles between them are harmless. Rules are trusted, like `trust`.
 - **Derived results:** a function that declares no promise still passes on what its body proves. With `fn clamp(x: Int): Int { if (positive(x)) { x } else { 1 } }`, `retry(clamp(n))` proves `positive`: every path of the body is checked against the obligation. A path returning a parameter is checked at the call site, for the argument. Helpers chain, in any declaration order. A declared promise is still the way to make a fact part of the contract (and is verified).
+- **Facts inside type arguments:** `List[Int where positive]` constrains every element, `Option[String where nonEmpty]` the value if there is one. A list literal is checked element by element (`[1, 0]` fails with "positive(0) is false"), `Option.None` needs nothing, and a name bound by `Option.Some { value: v }` has the facts of the value. Rules apply to elements too.
+- **Predicate parameters:** a function parameter can be the predicate: `fn filter[T](xs: List[T], keep: (T) => Bool): List[T where keep]`. What the argument checks is then known: `filter(xs, positive)` is a `List[Int where positive]`, and `filter(xs, x => positive(x) && small(x))` has both facts. `find` refines its `Option` the same way.
+- **Facts flow through generic functions.** A generic function cannot make values of its type parameters, so the ones in its result come from its arguments: what holds for all of those holds for them. `head(positives)` holds a positive number, and so do `reverse`, `take`, `concat(positives, [5])`, and so on; a lambda's parameter gets the facts of the values the function can hand it (`map(positives, p => transfer(p))`). This holds for `unsafe go` generic functions by trust, like their signatures.
 - **Diagnostics** name the requirer, the parameter or field, and the predicate, and suggest a guard or a declaration. A failing constant from inside a helper says where it came from: "sometimes can return 0, and positive(0) is false".
 
 ### Constrained inputs: examples
@@ -240,12 +243,12 @@ fn clamp(
 ): Int where between(lo, hi) = ...
 ```
 
-Generic functions that *add* knowledge (the long-term goal; needs predicates usable in type signatures):
+Generic functions that *add* knowledge, with a predicate parameter (implemented):
 
 ```
-fn filter[T](xs: List[T], p: Pred[T]): List[T where p]
+fn filter[T](xs: List[T], keep: (T) => Bool): List[T where keep]
 
-positives = numbers.filter(positive)   // List[Int where positive]
+positives = numbers |> filter(positive)   // List[Int where positive]
 ```
 
 ### Syntax notes
