@@ -1,0 +1,35 @@
+type Address = { city: String }
+type User = { name: String, address: Address, email: Option[String] }
+
+type NotFound = { id: Int }
+type DbError = { message: String }
+
+fn findUser(id: Int): User | NotFound | DbError {
+  if (id == 1) {
+    User { name: "Ada", address: Address { city: "London" }, email: Option.None }
+  } else if (id < 0) {
+    DbError { message: "negative id" }
+  } else {
+    NotFound { id: id }
+  }
+}
+
+// ? keeps the User and returns NotFound or DbError to the caller.
+fn moveUser(id: Int, city: String): User | NotFound | DbError {
+  user = findUser(id)?
+  user.copy(address.city = city)
+}
+
+fn describe(id: Int): String {
+  match (moveUser(id, "Oslo")) {
+    u: User => u.name + " now lives in " + u.address.city
+    NotFound => "no such user"
+    e: DbError => "database error: " + e.message
+  }
+}
+
+fn main() {
+  println(describe(1))
+  println(describe(2))
+  println(describe(-1))
+}

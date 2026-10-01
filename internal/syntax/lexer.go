@@ -57,7 +57,7 @@ func (lx *lexer) endsStatement() bool {
 		return false
 	}
 	switch lx.toks[len(lx.toks)-1].Kind {
-	case TIdent, TInt, TString, KwTrue, KwFalse, KwReturn, RParen, RBrace:
+	case TIdent, TInt, TString, KwTrue, KwFalse, KwReturn, RParen, RBrace, RBrack, Quest, Underscore:
 		return true
 	}
 	return false
@@ -141,6 +141,10 @@ func (lx *lexer) ident(pos diag.Pos) {
 		lx.emit(k, text, pos)
 		return
 	}
+	if text == "_" {
+		lx.emit(Underscore, text, pos)
+		return
+	}
 	if text[0] == '_' {
 		lx.diags.Add(pos, "identifiers cannot start with '_' (reserved for the compiler)")
 	}
@@ -203,6 +207,14 @@ func (lx *lexer) operator(pos diag.Pos) {
 		lx.emit(RBrace, "", pos)
 	case ',':
 		lx.emit(Comma, "", pos)
+	case '[':
+		lx.emit(LBrack, "", pos)
+	case ']':
+		lx.emit(RBrack, "", pos)
+	case '.':
+		lx.emit(Dot, "", pos)
+	case '?':
+		lx.emit(Quest, "", pos)
 	case ':':
 		lx.emit(Colon, "", pos)
 	case ';':
@@ -218,6 +230,11 @@ func (lx *lexer) operator(pos diag.Pos) {
 	case '%':
 		lx.emit(Pct, "", pos)
 	case '=':
+		if lx.off < len(lx.src) && lx.peek(0) == '>' {
+			lx.advance()
+			lx.emit(Arrow, "", pos)
+			return
+		}
 		two('=', Eq, Assign)
 	case '!':
 		two('=', NotEq, Not)
@@ -238,7 +255,7 @@ func (lx *lexer) operator(pos diag.Pos) {
 			lx.emit(OrOr, "", pos)
 			return
 		}
-		lx.diags.Add(pos, "unexpected character '|' (did you mean '||'?)")
+		lx.emit(Pipe, "", pos)
 	default:
 		lx.diags.Add(pos, "unexpected character %q", c)
 	}

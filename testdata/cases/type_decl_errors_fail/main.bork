@@ -1,0 +1,16 @@
+type User = { name: String }
+type User = { id: Int }
+type Node = { value: Int, next: Node }
+type Int = { x: Int }
+type Thing = { part: Missing }
+type Empty = sealed {}
+
+fn User(): Int {
+  1
+}
+
+fn main() {
+  x = Option.None
+  User = 1
+  println(x, User)
+}

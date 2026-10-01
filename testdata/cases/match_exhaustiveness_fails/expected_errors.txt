@@ -1,0 +1,4 @@
+main.bork:9:3: match is not exhaustive: missing Shape.Rect, Shape.Empty
+main.bork:15:3: match is not exhaustive: missing NotFound
+main.bork:21:3: match is not exhaustive: missing false
+main.bork:27:3: match is not exhaustive: missing Int

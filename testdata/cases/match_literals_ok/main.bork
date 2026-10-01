@@ -1,0 +1,28 @@
+fn grade(n: Int): String {
+  match (n) {
+    1 => "one"
+    -1 => "minus one"
+    _ => "many"
+  }
+}
+
+fn greet(lang: String): String {
+  match (lang) {
+    "sv" => "hej"
+    "en" => "hello"
+    other: String => "?? (" + other + ")"
+  }
+}
+
+fn yesNo(b: Bool): String {
+  match (b) {
+    true => "yes"
+    false => "no"
+  }
+}
+
+fn main() {
+  println(grade(1), grade(-1), grade(3))
+  println(greet("sv"), greet("en"), greet("fi"))
+  println(yesNo(true), yesNo(1 > 2))
+}

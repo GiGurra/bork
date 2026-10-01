@@ -1,0 +1,5 @@
+12 12 0
+true false
+Shape.Circle { radius: 1 } Shape.Empty
+true false
+rect 3 by 4

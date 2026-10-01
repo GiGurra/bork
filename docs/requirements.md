@@ -18,12 +18,12 @@ When code discovers a property of a value (by a guard, a `match`, a boundary che
 ```
 fn handle(raw: Int, name: Option[String]): Receipt | HandleError = {
   // raw: Int
-  if !positive(raw) { return Err(NotPositive) }
+  if (!positive(raw)) { return NotPositive {} }
   // raw: Int where positive
 
-  match name {
-    Some(n) => greet(n)     // n: String
-    None    => greetAnon()
+  match (name) {
+    Option.Some { value: n } => greet(n)     // n: String
+    Option.None              => greetAnon()
   }
 
   transfer(raw)             // transfer needs Int where positive, and raw has it
@@ -398,7 +398,6 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 
 - **Wrap syntax**, e.g. `loadUser(id)?{ e => LoadFailed(id, e) }`, or something else?
 - **`?` inside lambdas** returns from the lambda, which makes the lambda's inferred return type a union. Is that what we want, or should `?` require a declared lambda return type?
-- **Representation in Go:** an interface and a type switch, a tagged struct, or a runtime helper. This is a lowering choice inside the compiler, not part of the language.
 
 ## Language basics
 
@@ -414,6 +413,10 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **No shadowing.** A name cannot be bound again while it is visible, in the same or an enclosing scope (including function names). Sibling blocks can reuse names.
 - **Comments** are `// ...` and `/* ... */`. **String literals** use double quotes with Go's escape sequences.
 - **Identifiers cannot start with `_`.** That prefix is reserved for the compiler.
+- **Records have named fields:** `type User = { name: String, age: Int }`, built as `User { name: "Ada", age: 36 }`. There are no positional constructors.
+- **Sealed variants are always qualified:** `Shape.Circle { radius: 1 }`, `Shape.Empty`, also in patterns. Unqualified variants may come later, through imports.
+- **Pattern matching is `match (x) { pattern => value, ... }`.**
+- **Changed copies use `copy`, with nested paths:** `u.copy(age = 37, address.city = "Oslo")`. This replaces Scala's nested `copy(address = u.address.copy(city = ...))`.
 
 ### Numbers
 
@@ -434,7 +437,6 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 
 ### Open questions
 
-- **`match (x) { ... }` or `switch (x) { ... }`** for pattern matching (with parentheses, like `if`).
 - **A decimal or money type** in the standard library. Backends need exact decimal arithmetic, and `Float` is wrong for money.
 - **Big integer literals and conversions** between `Int` and the big integer type.
 - **String interpolation.**

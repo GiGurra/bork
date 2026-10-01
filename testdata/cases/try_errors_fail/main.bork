@@ -1,0 +1,23 @@
+type NotFound = { id: Int }
+type DbError = { reason: String }
+
+fn find(id: Int): Int | NotFound | DbError {
+  if (id > 0) { id } else { NotFound { id: id } }
+}
+
+fn onlyNotFound(id: Int): Int | NotFound {
+  find(id)? + 1
+}
+
+fn notUnion(x: Int): Int {
+  x?
+}
+
+fn optionInPlainFn(o: Option[Int]): Int {
+  o?
+}
+
+fn main() {
+  x = find(1)?
+  println(x, onlyNotFound(1), notUnion(1), optionInPlainFn(Option.None))
+}

@@ -34,7 +34,7 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 
 ## Getting started
 
-The compiler is at an early stage: the first slice of milestone M0 (functions, `Int`/`Bool`/`String`, bindings, `if` and blocks as expressions, `println`). It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage, covering most of milestone M0: functions, `Int`/`Bool`/`String`, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `println`. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -58,6 +58,46 @@ fn classify(n: Int): String {
 
 fn main() {
   println("Hello from bork!", classify(42))
+}
+```
+
+A larger example, from [examples/users](examples/users/main.bork):
+
+```
+type Address = { city: String }
+type User = { name: String, address: Address, email: Option[String] }
+
+type NotFound = { id: Int }
+type DbError = { message: String }
+
+fn findUser(id: Int): User | NotFound | DbError {
+  if (id == 1) {
+    User { name: "Ada", address: Address { city: "London" }, email: Option.None }
+  } else if (id < 0) {
+    DbError { message: "negative id" }
+  } else {
+    NotFound { id: id }
+  }
+}
+
+// ? keeps the User and returns NotFound or DbError to the caller.
+fn moveUser(id: Int, city: String): User | NotFound | DbError {
+  user = findUser(id)?
+  user.copy(address.city = city)
+}
+
+fn describe(id: Int): String {
+  match (moveUser(id, "Oslo")) {
+    u: User => u.name + " now lives in " + u.address.city
+    NotFound => "no such user"
+    e: DbError => "database error: " + e.message
+  }
+}
+
+fn main() {
+  println(describe(1))
+  println(describe(2))
+  println(describe(-1))
 }
 ```
 

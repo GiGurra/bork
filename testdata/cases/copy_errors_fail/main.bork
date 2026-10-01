@@ -1,0 +1,12 @@
+type Address = { city: String }
+type User = { name: String, address: Address }
+
+fn main() {
+  u = User { name: "Ada", address: Address { city: "London" } }
+  a = u.copy(nickname = "A")
+  b = u.copy(name.first = "A")
+  c = u.copy(address = Address { city: "Oslo" }, address.city = "Paris")
+  d = u.copy(name = 1)
+  e = 5.copy(x = 1)
+  println(a, b, c, d, e)
+}

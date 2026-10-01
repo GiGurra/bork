@@ -1,0 +1,10 @@
+main.bork:8:7: User is missing field(s): age
+main.bork:9:36: User has no field nickname
+main.bork:10:20: field name of User must be String, found Int
+main.bork:11:27: field name is given twice
+main.bork:12:13: User has no field email
+main.bork:13:7: Shape is a sealed type; build one of its variants, such as Shape.Circle { ... }
+main.bork:14:13: Shape.Circle has fields; build it with Shape.Circle { ... }
+main.bork:15:13: Shape has no variant Square
+main.bork:17:13: cannot read radius from a Shape directly; use match to find out which variant it is
+main.bork:18:7: unknown type Circle
