@@ -1,0 +1,20 @@
+pred positive(x: Int) { x > 0 }
+
+fn transfer(amount: Int where positive): Int { amount * 100 }
+
+// Facts known outside a lambda hold inside it: values never change.
+fn repeatTransfer(amount: Int where positive, times: Int): List[Int] {
+  map(range(0, times), i => transfer(amount))
+}
+
+// Guards inside a lambda work as anywhere else.
+fn transferAll(amounts: List[Int]): List[Int] {
+  map(amounts, a => if (positive(a)) { transfer(a) } else { 0 })
+}
+
+// Functions without requirements are fine as values.
+fn cents(x: Int): Int { x * 100 }
+
+fn main() {
+  println(repeatTransfer(2, 3), transferAll([1, -1, 5]), map([1, 2], cents))
+}

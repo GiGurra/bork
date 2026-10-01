@@ -98,11 +98,13 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			for i, p := range fd.Params {
 				scope[p.Name] = fn.Params[i]
 			}
+			c.useTypeParams(fn)
 			fn.ParamConstraints = make([][]*Constraint, len(fd.Params))
 			for i, p := range fd.Params {
 				fn.ParamConstraints[i] = c.constraintsOf(p.Type, fn.Params[i], scope)
 			}
 			fn.ResultConstraints = c.memberConstraints(fd.Result, fn.Result, scope)
+			c.useTypeParams(nil)
 		}
 	}
 }

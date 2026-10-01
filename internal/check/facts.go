@@ -266,11 +266,32 @@ func (f *factChecker) stmts(list []syntax.Stmt, e env) env {
 func (f *factChecker) walk(x syntax.Expr, e env) {
 	switch x := x.(type) {
 	case *syntax.Call:
+		if _, named := f.info.CallFuncs[x]; !named && f.info.CallBuiltins[x] == BuiltinNone {
+			f.walk(x.Fun, e)
+		}
 		for _, a := range x.Args {
 			f.walk(a, e)
 		}
 		if fn := f.info.CallFuncs[x]; fn != nil {
 			f.callObligations(x, fn, e)
+		}
+	case *syntax.Ident:
+		// A function with requirements cannot be a value: calls through
+		// the value could not be checked.
+		if inst := f.info.FuncRefs[x]; inst != nil && f.collect == nil {
+			for i, cons := range inst.Func.ParamConstraints {
+				if len(cons) > 0 {
+					f.diags.Add(x.Pos, "%s requires %s to be %s, so it cannot be used as a value; use a lambda that checks it: x => if (...) { %s(x) } else { ... }", x.Name, inst.Func.Decl.Params[i].Name, cons[0], x.Name)
+					break
+				}
+			}
+		}
+	case *syntax.Lambda:
+		// Facts known here still hold inside: values never change.
+		f.walk(x.Body, e)
+	case *syntax.ListLit:
+		for _, el := range x.Elems {
+			f.walk(el, e)
 		}
 	case *syntax.Unary:
 		f.walk(x.X, e)
@@ -1178,6 +1199,9 @@ func (f *factChecker) key(x syntax.Expr) string {
 	case *syntax.Ident:
 		switch d := f.info.Defs[x].(type) {
 		case *syntax.Param:
+			if f.info.LambdaParams[d] {
+				return fmt.Sprintf("l:%p", d)
+			}
 			return "p:" + d.Name
 		case *syntax.Binding:
 			if k := f.aliasKey(d.Value); k != "" {

@@ -1,0 +1,25 @@
+fn empty[T](): List[T] { [] }
+fn same[T](a: T, b: T): Bool { a == b }
+fn dup[T, T](x: T): T { x }
+
+fn main() {
+  // Nothing says what T is.
+  e = empty()
+  println([])
+  f = x => x
+  // Wrong argument types.
+  println(map([1, 2], "nope"), filter([1], x => x + 1))
+  println(map([1], (a, b) => a))
+  // Lists of different element types.
+  mixed = [1, "a"]
+  // Lists and functions have no ==.
+  println([1] == [1])
+  // return and ? stay in their function.
+  g = map([1], x => { return 1 })
+  h = map(["1"], s => parseInt(s)?)
+  // Calling things that are not functions.
+  n = 1
+  println(n(2))
+  // Generic functions as values need a known type.
+  i = empty
+}

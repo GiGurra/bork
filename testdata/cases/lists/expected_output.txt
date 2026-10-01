@@ -1,0 +1,15 @@
+[1, 2, 3, 4] 4 false
+[10, 20, 30, 40] [2, 4, 6, 8]
+[2, 4]
+10
+Option.Some { value: 2 } Option.None Option.Some { value: 1 } Option.Some { value: 4 }
+Option.Some { value: 3 } true true 3
+[1, 2] [3, 4] [4, 3, 2, 1] [1, 2, 3, 4, 5] [1, 2, 3, 4, 5] [0, 1, 2, 3, 4]
+[0, 1, 2, 3, 4] a-b ["a", "b", "c"]
+[1, 2, 3]
+[] [1, 1, 2, 2]
+item x
+item y
+[User { name: "ann", age: 30 }, User { name: "bob", age: 12 }]
+["ann", "cy"]
+86

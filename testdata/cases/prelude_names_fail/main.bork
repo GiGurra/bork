@@ -1,14 +1,12 @@
-fn trim(s: String): String {
-  s
-}
-
+// Prelude types and compiler built-ins cannot be redefined.
 type ParseError = { input: String }
 
 fn toInt8(x: Int): Int {
   x
 }
 
-fn main() {
-  contains = 1
-  println(contains)
+fn println(x: Int): Int {
+  x
 }
+
+fn main() {}

@@ -72,9 +72,31 @@ func (lx *lexer) endsStatement() bool {
 }
 
 func (lx *lexer) newline(pos diag.Pos) {
-	if lx.endsStatement() {
+	if lx.endsStatement() && !lx.pipeAhead() {
 		lx.emit(Semi, "\n", pos)
 	}
+}
+
+// pipeAhead reports whether the next line (skipping blank and comment
+// lines) starts with `|>`, which continues the expression:
+//
+//	users
+//	  |> filter(u => u.age >= 18)
+func (lx *lexer) pipeAhead() bool {
+	i := lx.off
+	for i < len(lx.src) {
+		switch c := lx.src[i]; {
+		case c == ' ' || c == '\t' || c == '\r' || c == '\n':
+			i++
+		case c == '/' && i+1 < len(lx.src) && lx.src[i+1] == '/':
+			for i < len(lx.src) && lx.src[i] != '\n' {
+				i++
+			}
+		default:
+			return c == '|' && i+1 < len(lx.src) && lx.src[i+1] == '>'
+		}
+	}
+	return false
 }
 
 func (lx *lexer) run() {
@@ -373,6 +395,11 @@ func (lx *lexer) operator(pos diag.Pos) {
 		if lx.off < len(lx.src) && lx.peek(0) == '|' {
 			lx.advance()
 			lx.emit(OrOr, "", pos)
+			return
+		}
+		if lx.off < len(lx.src) && lx.peek(0) == '>' {
+			lx.advance()
+			lx.emit(PipeGt, "", pos)
 			return
 		}
 		lx.emit(Pipe, "", pos)

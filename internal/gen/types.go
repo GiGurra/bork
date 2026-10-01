@@ -17,8 +17,17 @@ import (
 //   - a sealed type becomes an interface, with one struct per variant
 //   - Option[T] becomes the runtime's generic Option[T]
 //   - a union becomes `any`; matching on it uses a type switch
+//   - List[T] becomes a slice []T, never modified once built
+//   - a function type becomes a Go func type
+//   - a type parameter becomes a Go type parameter
 func (g *gen) goType(t check.Type) ast.Expr {
 	switch t := t.(type) {
+	case *check.TypeParam:
+		return name(t.Name)
+	case *check.List:
+		return &ast.ArrayType{Elt: g.goType(t.Elem)}
+	case *check.FuncType:
+		return g.funcType(t, nil)
 	case *check.Record:
 		g.usedTypes[t] = true
 		return typeName(t.Name)
@@ -39,6 +48,23 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		return ast.NewIdent(n)
 	}
 	panic(fmt.Sprintf("no Go type for %s", t))
+}
+
+// funcType is the Go func type for t, with the given parameter names
+// (or none).
+func (g *gen) funcType(t *check.FuncType, names []*ast.Ident) *ast.FuncType {
+	ft := &ast.FuncType{Params: &ast.FieldList{}}
+	for i, p := range t.Params {
+		f := &ast.Field{Type: g.goType(p)}
+		if names != nil {
+			f.Names = []*ast.Ident{names[i]}
+		}
+		ft.Params.List = append(ft.Params.List, f)
+	}
+	if t.Result != check.Unit && t.Result != check.Never {
+		ft.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(t.Result)}}}
+	}
+	return ft
 }
 
 var basicGoNames = map[check.Type]string{
@@ -250,6 +276,7 @@ const showRuntime = `package main
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -272,6 +299,18 @@ func _str(x any) string {
 		return _fmtFloat(x, 64)
 	case float32:
 		return _fmtFloat(float64(x), 32)
+	case fmt.Stringer, string:
+		return fmt.Sprint(x)
+	}
+	switch v := reflect.ValueOf(x); v.Kind() {
+	case reflect.Slice:
+		parts := make([]string, v.Len())
+		for i := range parts {
+			parts[i] = _show(v.Index(i).Interface())
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	case reflect.Func:
+		return "<function>"
 	}
 	return fmt.Sprint(x)
 }
