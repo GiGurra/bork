@@ -86,6 +86,13 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 			ok = false
 		} else {
 			c.info.ArmPats[arm] = p
+			if p.Bind != "" {
+				src := &PatSource{Subject: m.X}
+				if p.Kind == PatType {
+					src.Member = p.Narrowed()
+				}
+				c.info.PatSources[p.BindNode] = src
+			}
 		}
 		pats = append(pats, p)
 		armTypes = append(armTypes, c.exprWant(arm.Body, want))

@@ -114,6 +114,8 @@ func alwaysFits(from, to Type) bool {
 type Field struct {
 	Name string
 	Type Type
+	// Constraints is the field's where clause.
+	Constraints []*Constraint
 }
 
 // Record is a named record type: `type User = { name: String }`.

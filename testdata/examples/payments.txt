@@ -1,0 +1,8 @@
+alice -> bob: 2500 cents (2600 with fee)
+alice -> bob: 50000 cents (50500 with fee)
+invalid to: cannot transfer to the same account
+invalid from: missing
+invalid amount: -5 is not positive
+invalid amount: invalid syntax
+invalid amount: 2000000 is over the limit
+Transfer { from: "treasury", to: "alice", amount: 1000 }

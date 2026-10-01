@@ -23,9 +23,63 @@ import (
 
 // Package generates a Go `package main` source file.
 func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
+	var roots []*check.Func
+	for _, fn := range info.Funcs {
+		if !fn.Prelude {
+			roots = append(roots, fn)
+		}
+	}
+	return generate(files, info, roots, nil)
+}
+
+// EvalProgram generates a program that runs the given predicate calls
+// on constants and prints each result (true or false) on its own line.
+// The compiler uses it to evaluate predicates at compile time.
+func EvalProgram(files []*syntax.File, info *check.Info, queries []check.Query) ([]byte, error) {
+	var roots []*check.Func
+	for _, q := range queries {
+		roots = append(roots, q.Pred)
+	}
+	g := &gen{info: info, imports: map[string]bool{"fmt": true}}
+	body := &ast.BlockStmt{}
+	for _, q := range queries {
+		var args []ast.Expr
+		for i, v := range q.Args {
+			args = append(args, g.constant(v, q.Pred.Params[i]))
+		}
+		call := &ast.CallExpr{Fun: name(q.Pred.Decl.Name), Args: args}
+		body.List = append(body.List, &ast.ExprStmt{X: &ast.CallExpr{
+			Fun:  &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent("Println")},
+			Args: []ast.Expr{call},
+		}})
+	}
+	main := &ast.FuncDecl{Name: ast.NewIdent("main"), Type: &ast.FuncType{Params: &ast.FieldList{}}, Body: body}
+	return generate(files, info, roots, main)
+}
+
+// constant is the Go expression for a constant of bork type t.
+func (g *gen) constant(v constant.Value, t check.Type) ast.Expr {
+	switch v.Kind() {
+	case constant.String:
+		return &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(constant.StringVal(v))}
+	case constant.Bool:
+		return ast.NewIdent(strconv.FormatBool(constant.BoolVal(v)))
+	}
+	return g.typed(constLit(v, t), t)
+}
+
+// generate generates the functions reachable from roots, and the types
+// and runtime they need. With a main, the program's own main is
+// replaced.
+func generate(files []*syntax.File, info *check.Info, roots []*check.Func, main *ast.FuncDecl) ([]byte, error) {
 	g := &gen{info: info, imports: map[string]bool{}, usedTypes: map[check.Type]bool{}}
-	// Prelude functions are only emitted when the program uses them.
-	emit := g.reachable()
+	if main != nil {
+		g.imports["fmt"] = true
+	}
+	emit := g.reachable(roots)
+	if main != nil {
+		emit[info.Funcs["main"]] = false
+	}
 	var funcs []ast.Decl
 	var goFuncs []string
 	for _, f := range files {
@@ -43,6 +97,9 @@ func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
 			}
 			funcs = append(funcs, g.funcDecl(fd))
 		}
+	}
+	if main != nil {
+		funcs = append(funcs, main)
 	}
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)
@@ -108,9 +165,9 @@ type gen struct {
 	usesIs      bool
 }
 
-// reachable lists the functions to emit: every function of the
-// program, and the prelude functions they (transitively) call.
-func (g *gen) reachable() map[*check.Func]bool {
+// reachable lists the functions to emit: the roots, and the functions
+// they (transitively) call.
+func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 	emit := map[*check.Func]bool{}
 	var visit func(fn *check.Func)
 	visit = func(fn *check.Func) {
@@ -122,10 +179,8 @@ func (g *gen) reachable() map[*check.Func]bool {
 			visit(callee)
 		}
 	}
-	for _, fn := range g.info.Funcs {
-		if !fn.Prelude {
-			visit(fn)
-		}
+	for _, fn := range roots {
+		visit(fn)
 	}
 	return emit
 }

@@ -42,6 +42,8 @@ Functions, records, unions and sealed types, `match` with exhaustiveness, `Optio
 
 ### M1: facts
 
+**Status: in progress.** Done: `pred`; `where` on parameters, results (also per union member), record fields, constrained aliases, and typed bindings; predicate arguments that are constants or parameters; guards (`if`, early `return`/`panic`, `&&`, `||`, `!`), callers' own requirements, callees' promised results (also through `?` and `match`), field facts and paths, `trust`; verified result promises; compile-time evaluation of any predicate on constants (by running the program's own code); diagnostics with fixes. Next: inference rules, OR, derived (undeclared) results of private helpers, facts inside `Option` and other type arguments (needs generics), generic predicates, and the test-mode runtime checks.
+
 `pred`, `where` on parameters and returns, constrained type aliases, guards and `match` as fact sources, the backward resolver, "callers prove or declare", inference rules, `trust`, and compile-time checks of literals.
 
 *Done when* the constrained-input examples in the requirements compile, and each kind of unproven call fails with a clear diagnostic. This milestone proves the core idea; if it does not hold up in practice, we find out before building the rest.

@@ -7,7 +7,7 @@
 - **Source files** are UTF-8, with the `.bork` extension. A directory of `.bork` files is one package.
 - **Comments:** `// to end of line` and `/* block */`. They are ignored by the parser, but kept by the lexer for future tooling.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `trust`.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -21,7 +21,8 @@
 
 ```ebnf
 Package    = { File } .
-File       = { ( FuncDecl | TypeDecl ) EOL } .
+File       = { ( FuncDecl | PredDecl | TypeDecl ) EOL } .
+PredDecl   = "pred" Ident "(" Params ")" Block .  (* always returns Bool *)
 
 TypeDecl   = "type" Ident "=" ( Fields | Sealed | Type ) .
 Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
@@ -35,11 +36,14 @@ GoBody     = "unsafe" "go" "{" { GoImport } GoStatements "}" .
 GoImport   = "import" StringLit newline .     (* import "strings" *)
 Params     = Param { "," Param } [ "," ] .
 Param      = Ident ":" Type .
-Type       = TypeAtom { "|" TypeAtom } .     (* a union: Int | NotFound *)
+Type       = Constrained { "|" Constrained } .  (* a union: Int | NotFound *)
+Constrained = TypeAtom [ "where" PredRef { "and" PredRef } ] .
+PredRef    = Ident [ "(" Expr { "," Expr } ")" ] .  (* positive, between(1, 65535), atLeast(lo) *)
 TypeAtom   = Ident [ "[" Type { "," Type } "]" ] | "(" Type ")" .
 
 Block      = "{" { Stmt EOL } [ Expr ] "}" .
-Stmt       = Binding | Expr .
+Stmt       = Binding | Trust | Expr .
+Trust      = "trust" Call .                  (* trust positive(x) *)
 Binding    = Ident [ ":" Type ] "=" Expr .   (* x = 1, or x: Int8 = 1 *)
 
 Expr       = OrExpr .
@@ -103,4 +107,5 @@ EOL        = newline | ";" .
 - **`x?`** on a union keeps the leftmost member and returns every other member from the function, which must be able to return them. On an `Option`, it keeps the `Some` value and returns `Option.None`.
 - **Equality** is structural: records, variants, and Options compare by their fields.
 - **Printing** shows values in bork syntax: `User { name: "Ada", age: 36 }`, `Shape.Empty`.
+- **Facts.** `x: Int where positive` requires every caller to show that `positive(x)` holds: by a guard (`if (positive(a)) { transfer(a) }`, or `if (!positive(a)) { return ... }` before the call), by declaring the same requirement on its own parameter, by a callee that promises it (`fn validate(raw: Int): Int where positive | NotPositive`), or by `trust positive(x)`. On a constant, the predicate is run at compile time. Promised results are checked on every path. Facts are erased in the generated Go. See [requirements.md](requirements.md#3-contracts-and-knowledge-in-progress).
 - **A program** is a package with `fn main()`, which takes no parameters and returns no value.
