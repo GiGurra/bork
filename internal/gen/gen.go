@@ -212,6 +212,7 @@ type gen struct {
 	usesIs      bool
 	usesAssert  bool
 	usesTests   bool
+	usesRules   bool
 	// testMode generates checks of trusted facts (see Tests), and
 	// extraFuncs holds functions to emit besides the reachable ones.
 	testMode   bool

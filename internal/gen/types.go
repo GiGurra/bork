@@ -273,21 +273,28 @@ import (
 
 type _test struct {
 	name string
-	run  func()
+	run  func() // nil for a test that cannot run; name says why
 }
 
 // _runTests runs the tests, each until it fails (panics), and reports.
 func _runTests(tests []_test) {
-	failed := 0
+	failed, skipped := 0, 0
 	for _, t := range tests {
-		if msg := _runTest(t.run); msg != "" {
+		if t.run == nil {
+			skipped++
+			fmt.Printf("skip  %s\n", t.name)
+		} else if msg := _runTest(t.run); msg != "" {
 			failed++
 			fmt.Printf("FAIL  %s\n      %s\n", t.name, msg)
 		} else {
 			fmt.Printf("ok    %s\n", t.name)
 		}
 	}
-	fmt.Printf("%d passed, %d failed\n", len(tests)-failed, failed)
+	if skipped > 0 {
+		fmt.Printf("%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
+	} else {
+		fmt.Printf("%d passed, %d failed\n", len(tests)-failed, failed)
+	}
 	if failed > 0 {
 		os.Exit(1)
 	}
@@ -418,6 +425,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	}
 	if g.usesTests {
 		src = append(src, testRuntime)
+	}
+	if g.usesRules {
+		src = append(src, rulesRuntime)
 	}
 	if g.usesIs {
 		src = append(src, isRuntime)

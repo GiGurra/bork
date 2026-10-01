@@ -1,0 +1,38 @@
+// `bork test` tries every rule on many values of its variables, and
+// reports a counterexample where the premises hold but a conclusion
+// does not.
+
+pred positive(x: Int) { x > 0 }
+pred nonNegative(x: Int) { x >= 0 }
+pred atLeast(x: Int, min: Int) { x >= min }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred short(s: String) { byteLength(s) < 5 }
+pred small8(x: Int8) { x > 0 && x < 120 }
+pred doubles8(x: Int8) { x * 2 > x }
+pred fraction(f: Float) { f > 0.0 && f < 1.0 }
+pred belowOne(f: Float) { f < 1.0 }
+pred on(b: Bool) { b }
+pred notEmpty[T](xs: List[T]) { length(xs) > 0 }
+pred short2[T](xs: List[T]) { length(xs) < 2 }
+
+// These hold.
+rule positiveIsNonNegative(x: Int) { positive(x) => nonNegative(x) }
+rule weakerMin(x: Int, a: Int, b: Int) { atLeast(x, a) and a >= b => atLeast(x, b) }
+rule narrower(x: Int, lo: Int, hi: Int, lo2: Int, hi2: Int) {
+  between(x, lo, hi) and lo >= lo2 and hi <= hi2 => between(x, lo2, hi2)
+}
+rule fractionBelowOne(f: Float) { fraction(f) => belowOne(f) }
+rule onIsOn(b: Bool) { on(b) => on(b) }
+
+// These do not.
+rule nonNegativeIsPositive(x: Int) { nonNegative(x) => positive(x) }
+rule shortIsNonEmpty(s: String) { short(s) => nonEmpty(s) }
+// Overflow: 100 * 2 does not fit in an Int8.
+rule smallDoubles(x: Int8) { small8(x) => doubles8(x) }
+rule wrongWeakening(x: Int, a: Int, b: Int) { atLeast(x, a) and a <= b => atLeast(x, b) }
+
+// No values are generated for lists, so this rule is not tested.
+rule shortLists(xs: List[Int]) { short2(xs) => notEmpty(xs) }
+
+fn main() {}

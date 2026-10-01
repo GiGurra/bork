@@ -156,6 +156,9 @@ func (c *checker) fits(pos diag.Pos, v constant.Value, t Type) (constant.Value, 
 	return iv, true
 }
 
+// IntRange is the smallest and the largest value of the integer type t.
+func IntRange(t Type) (lo, hi constant.Value) { return intRange(t) }
+
 func intRange(t Type) (lo, hi constant.Value) {
 	bits := uint(bitsOf(t))
 	one := constant.MakeInt64(1)

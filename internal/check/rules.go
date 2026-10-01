@@ -11,6 +11,7 @@ import (
 // (and the Conditions on constants are true), the Conclusions hold too.
 type Rule struct {
 	Decl        *syntax.RuleDecl
+	VarTypes    []Type // the types of Decl.Params
 	Premises    []*RuleAtom
 	Conditions  []syntax.Expr
 	Conclusions []*RuleAtom
@@ -48,15 +49,17 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 	c.fn = nil
 	c.scopes = []map[string]*local{{}}
 	vars := map[string]bool{}
+	var types []Type
 	for _, p := range rd.Params {
 		t := c.resolveType(p.Type)
+		types = append(types, t)
 		if vars[p.Name] {
 			c.errorf(p.Pos, "variable %s is declared twice", p.Name)
 		}
 		vars[p.Name] = true
 		c.scopes[0][p.Name] = &local{typ: t, decl: p, used: true}
 	}
-	r := &Rule{Decl: rd}
+	r := &Rule{Decl: rd, VarTypes: types}
 	ok := true
 	bound := map[string]bool{}
 	atom := func(x syntax.Expr, what string) *RuleAtom {

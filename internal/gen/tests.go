@@ -15,6 +15,8 @@ import (
 // reports the results. It is built in test mode: facts the compiler
 // takes on trust (`trust`, and what `unsafe go` functions promise) are
 // checked at runtime, so a wrong one fails the test that reaches it.
+// Inference rules, also taken on trust, get property tests that look
+// for counterexamples (see ruleTest).
 func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 	g := newGen(info)
 	g.testMode = true
@@ -27,6 +29,27 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 		g.extraFuncs = append(g.extraFuncs, g.testFunc(fn, goName))
 		list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
 			&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(fn.Test.Name)},
+			goName,
+		}})
+	}
+	for i, r := range info.Rules {
+		goName := ast.NewIdent("_rule" + strconv.Itoa(i+1))
+		decl, untried := g.ruleTest(r, goName)
+		if decl == nil {
+			list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
+				strLit(fmt.Sprintf("rule %s (no values are generated for %s)", r.Decl.Name, untried)),
+				ast.NewIdent("nil"),
+			}})
+			continue
+		}
+		for _, atoms := range [][]*check.RuleAtom{r.Premises, r.Conclusions} {
+			for _, a := range atoms {
+				roots = append(roots, a.Pred)
+			}
+		}
+		g.extraFuncs = append(g.extraFuncs, decl)
+		list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
+			strLit("rule " + r.Decl.Name),
 			goName,
 		}})
 	}
