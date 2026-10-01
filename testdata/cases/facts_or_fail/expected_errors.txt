@@ -1,0 +1,4 @@
+main.bork:9:65: needPositive requires x to be positive, but that is not proven for x (check it first with if (positive(x)) { ... }, or require it: x: Int where positive)
+main.bork:13:42: sqrtish requires x to be positive or zero, but that is not proven for x (check it first with if (positive(x) || zero(x)) { ... }, or require it: x: Int where positive or zero)
+main.bork:16:37: sqrtish requires x to be positive or zero, but that is not proven for x (check it first with if (positive(x) || zero(x)) { ... }, or require it: x: Int where positive or zero)
+main.bork:19:19: sqrtish requires x to be positive or zero, but positive(-1) or zero(-1) is false

@@ -13,10 +13,14 @@ import (
 // constrained value: `between(1, 65535)` on a port. Constraints are not
 // part of a value's Type: ordinary type checking ignores them, and the
 // facts pass (facts.go) checks them afterwards.
+//
+// A constraint with alternatives, `positive or zero`, has a nil Pred and
+// the alternatives in Or; at least one of them must hold.
 type Constraint struct {
 	Pred *Func
 	Args []CArg
 	Pos  diag.Pos
+	Or   []*Constraint
 }
 
 // CArg is an argument of a constraint's predicate, after the value
@@ -37,8 +41,16 @@ func (a CArg) String() string {
 	return a.Const.String()
 }
 
-// String renders the constraint as written: `positive`, `between(1, 5)`.
+// String renders the constraint as written: `positive`, `between(1, 5)`,
+// `positive or zero`.
 func (c *Constraint) String() string {
+	if c.Or != nil {
+		alts := make([]string, len(c.Or))
+		for i, a := range c.Or {
+			alts[i] = a.String()
+		}
+		return strings.Join(alts, " or ")
+	}
 	if len(c.Args) == 0 {
 		return c.Pred.Decl.Name
 	}
@@ -157,6 +169,23 @@ func (c *checker) aliasConstraints(e *typeEntry) []*Constraint {
 }
 
 func (c *checker) constraint(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {
+	if len(ref.Or) == 0 {
+		return c.constraintAtom(ref, subject, scope)
+	}
+	con := &Constraint{Pos: ref.Pos}
+	first := *ref
+	first.Or = nil
+	for _, alt := range append([]*syntax.PredRef{&first}, ref.Or...) {
+		a := c.constraintAtom(alt, subject, scope)
+		if a == nil {
+			return nil
+		}
+		con.Or = append(con.Or, a)
+	}
+	return con
+}
+
+func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {
 	fn, ok := c.info.Funcs[ref.Name]
 	if !ok {
 		c.errorf(ref.Pos, "unknown predicate %s", ref.Name)

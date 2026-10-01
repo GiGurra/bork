@@ -1,0 +1,32 @@
+pred positive(x: Int) { x > 0 }
+pred atLeast(x: Int, min: Int) { x >= min }
+
+rule weakerMin(x: Int, a: Int, b: Int) { atLeast(x, a) and a >= b => atLeast(x, b) }
+rule atLeastOne(x: Int, a: Int) { atLeast(x, a) and a >= 1 => positive(x) }
+rule positiveAtLeast(x: Int) { positive(x) => atLeast(x, 1) }
+
+fn retry(times: Int where atLeast(5)): Int { times }
+fn needPositive(x: Int where positive): Int { x }
+
+// The conditions do not hold: 3 >= 5 and 0 >= 1 are false.
+fn tooWeak(a: Int where atLeast(3), b: Int where atLeast(0)): Int {
+  retry(a) + needPositive(b)
+}
+
+// Rules form a cycle here, and nothing starts it.
+fn nothingKnown(c: Int): Int {
+  needPositive(c)
+}
+
+// A derived result only holds if every path proves it.
+fn sometimes(x: Int): Int {
+  if (positive(x)) { x } else { 0 }
+}
+
+fn useSometimes(x: Int): Int {
+  needPositive(sometimes(x))
+}
+
+fn main() {
+  println(tooWeak(3, 1), nothingKnown(1), useSometimes(1))
+}

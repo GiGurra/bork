@@ -1,0 +1,41 @@
+pred positive(x: Int) { x > 0 }
+pred zero(x: Int) { x == 0 }
+pred nonNegative(x: Int) { x >= 0 }
+pred small(x: Int) { x < 10 }
+pred even(x: Int) { x % 2 == 0 }
+
+rule positiveNonNegative(x: Int) { positive(x) => nonNegative(x) }
+rule zeroNonNegative(x: Int) { zero(x) => nonNegative(x) }
+
+// At least one alternative must hold.
+fn sqrtish(x: Int where positive or zero): Int { x }
+
+// Any alternative proves it.
+fn fromGuard(x: Int): Int {
+  if (positive(x)) { sqrtish(x) } else { 0 }
+}
+
+// A || condition proves the same alternatives.
+fn fromOr(x: Int): Int {
+  if (zero(x) || positive(x)) { sqrtish(x) } else { 0 }
+}
+
+// Cases: each alternative proves nonNegative by a rule.
+fn needNonNegative(x: Int where nonNegative): Int { x }
+fn byCases(x: Int where positive or zero): Int { needNonNegative(x) }
+
+// Mixed with and, in parentheses.
+fn both(x: Int where (positive or zero) and small): Int { x }
+fn useBoth(x: Int where small and (zero or positive)): Int { both(x) }
+
+// Constants: one alternative is enough.
+fn constants(): Int { sqrtish(0) + sqrtish(3) }
+
+// Derived: every path proves some alternative.
+fn clamp(x: Int): Int {
+  if (positive(x)) { x } else { 0 }
+}
+
+fn main() {
+  println(fromGuard(4), fromOr(-1), byCases(2), useBoth(3), constants(), sqrtish(clamp(-7)))
+}

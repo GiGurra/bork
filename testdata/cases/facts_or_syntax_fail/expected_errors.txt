@@ -1,0 +1,2 @@
+main.bork:5:19: mixing and with or needs parentheses: write (p or q) and r
+main.bork:6:29: mixing and with or needs parentheses: write (p or q) and r

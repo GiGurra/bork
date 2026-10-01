@@ -27,12 +27,16 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 			if fn := p.funcDecl(); fn != nil {
 				f.Funcs = append(f.Funcs, fn)
 			}
+		case p.at(KwRule):
+			if r := p.ruleDecl(); r != nil {
+				f.Rules = append(f.Rules, r)
+			}
 		case p.at(KwType):
 			if td := p.typeDecl(); td != nil {
 				f.Types = append(f.Types, td)
 			}
 		default:
-			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', or 'type'), found %s", p.tok().Kind)
+			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', or 'type'), found %s", p.tok().Kind)
 			p.syncTopLevel()
 		}
 	}
@@ -236,28 +240,56 @@ func (p *parser) constrainedType() *TypeExpr {
 	}
 	p.next()
 	for {
-		name := p.expect(TIdent, "(predicate name)")
-		ref := &PredRef{Pos: name.Pos, Name: name.Text}
+		var clause *PredRef
 		if p.at(LParen) {
 			p.next()
-			p.skipNewlines()
-			for !p.at(RParen) {
-				ref.Args = append(ref.Args, p.expr())
-				p.skipNewlines()
-				if !p.at(Comma) {
-					break
-				}
-				p.next()
-				p.skipNewlines()
+			clause = p.predOr()
+			p.expect(RParen, "to end the alternatives")
+		} else {
+			clause = p.predOr()
+			// `p or q and r` could mean two things; ask for parentheses.
+			if len(clause.Or) > 0 && (len(t.Where) > 0 || p.at(KwAnd)) {
+				p.errorf(clause.Pos, "mixing and with or needs parentheses: write (p or q) and r")
 			}
-			p.expect(RParen, "to end the predicate's arguments")
 		}
-		t.Where = append(t.Where, ref)
+		t.Where = append(t.Where, clause)
 		if !p.at(KwAnd) {
 			return t
 		}
 		p.next()
 	}
+}
+
+// predOr parses predicates joined by `or`.
+func (p *parser) predOr() *PredRef {
+	ref := p.pred()
+	for p.at(KwOr) {
+		p.next()
+		ref.Or = append(ref.Or, p.pred())
+	}
+	return ref
+}
+
+// pred parses one predicate of a where clause: `positive` or
+// `between(1, 65535)`.
+func (p *parser) pred() *PredRef {
+	name := p.expect(TIdent, "(predicate name)")
+	ref := &PredRef{Pos: name.Pos, Name: name.Text}
+	if p.at(LParen) {
+		p.next()
+		p.skipNewlines()
+		for !p.at(RParen) {
+			ref.Args = append(ref.Args, p.expr())
+			p.skipNewlines()
+			if !p.at(Comma) {
+				break
+			}
+			p.next()
+			p.skipNewlines()
+		}
+		p.expect(RParen, "to end the predicate's arguments")
+	}
+	return ref
 }
 
 func (p *parser) typeAtom() *TypeExpr {
@@ -751,4 +783,42 @@ func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 		sub.errorf(sub.tok().Pos, "unexpected %s in interpolated expression", sub.tok().Kind)
 	}
 	return x
+}
+
+func (p *parser) ruleDecl() (r *RuleDecl) {
+	defer p.recoverDecl(func() { r = nil })
+	pos := p.next().Pos
+	name := p.expect(TIdent, "(rule name)")
+	r = &RuleDecl{Pos: pos, Name: name.Text}
+	p.expect(LParen, "to start the rule's variables")
+	p.list(RParen, "a variable", func() {
+		pname := p.expect(TIdent, "(variable name)")
+		p.expect(Colon, "after variable name")
+		r.Params = append(r.Params, &Param{Pos: pname.Pos, Name: pname.Text, Type: p.typeExpr()})
+	})
+	p.expect(LBrace, "to start the rule")
+	p.skipNewlines()
+	r.Premises = p.andList()
+	p.skipNewlines()
+	p.expect(Arrow, "between the premises and the conclusions (write `premises => conclusions`)")
+	p.skipNewlines()
+	r.Conclusions = p.andList()
+	p.skipSemis()
+	p.expect(RBrace, "to end the rule")
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after rule, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return r
+}
+
+// andList parses expressions joined by `and`.
+func (p *parser) andList() []Expr {
+	list := []Expr{p.expr()}
+	for p.at(KwAnd) {
+		p.next()
+		p.skipNewlines()
+		list = append(list, p.expr())
+	}
+	return list
 }

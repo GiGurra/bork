@@ -1,0 +1,18 @@
+pred positive(x: Int) { x > 0 }
+pred atLeast(x: Int, min: Int) { x >= min }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+
+fn double(x: Int): Int { x * 2 }
+
+rule weakerMin(x: Int, a: Int, b: Int) { atLeast(x, a) and a >= b => atLeast(x, b) }
+rule atLeastOne(x: Int, a: Int) { atLeast(x, a) and a >= 1 => positive(x) }
+
+// Declaration errors.
+rule weakerMin(x: Int) { positive(x) => atLeast(x, 0) }
+rule notAPred(x: Int) { positive(x) => double(x) }
+rule unusedVar(x: Int, y: Int) { positive(x) => atLeast(x, 1) }
+rule constSubject(x: Int) { positive(3) => positive(x) }
+rule wrongTypes(s: String) { positive(s) => nonEmpty(s) }
+rule callsInConditions(x: Int, a: Int) { atLeast(x, a) and double(a) > 2 => positive(x) }
+
+fn main() {}

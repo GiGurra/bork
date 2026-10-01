@@ -1,0 +1,6 @@
+main.bork:11:1: rule weakerMin is declared twice
+main.bork:12:40: a rule's conclusions must be predicate calls, as in positive(x)
+main.bork:13:24: variable y is not used in any premise or conclusion
+main.bork:14:38: the first argument to positive must be one of the rule's variables (rules are about any value, not a particular one)
+main.bork:15:39: argument 1 to positive must be Int, found String
+main.bork:16:60: a rule condition may only use the rule's variables, constants, and operators

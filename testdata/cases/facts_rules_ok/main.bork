@@ -1,0 +1,54 @@
+pred positive(x: Int) { x > 0 }
+pred atLeast(x: Int, min: Int) { x >= min }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+pred nonNegative(x: Int) { x >= 0 }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred trimmed(s: String) { true }
+pred clean(s: String) { true }
+
+// Rules say what follows from what. The compiler takes them as given.
+rule positiveIsNonNegative(x: Int) { positive(x) => nonNegative(x) }
+
+// A rule may weaken a fact, with a condition on its constants.
+rule weakerMin(x: Int, a: Int, b: Int) { atLeast(x, a) and a >= b => atLeast(x, b) }
+rule atLeastOne(x: Int, a: Int) { atLeast(x, a) and a >= 1 => positive(x) }
+// Rules may form cycles; the compiler does not loop.
+rule positiveAtLeast(x: Int) { positive(x) => atLeast(x, 1) }
+rule narrower(x: Int, lo: Int, hi: Int, lo2: Int, hi2: Int) {
+  between(x, lo, hi) and lo >= lo2 and hi <= hi2 => between(x, lo2, hi2)
+}
+
+// Several premises, and several conclusions.
+rule cleanText(s: String) { nonEmpty(s) and trimmed(s) => clean(s) }
+
+fn sqrtish(x: Int where nonNegative): Int { x }
+fn retry(times: Int where atLeast(1)): Int { times }
+fn port(p: Int where between(1, 65535)): Int { p }
+fn store(s: String where clean): String { s }
+
+fn useRules(a: Int where positive, b: Int where atLeast(3), c: Int where between(80, 443)): Int {
+  sqrtish(a) + retry(b) + sqrtish(b) + port(c)
+}
+
+fn useGuards(s: String): String {
+  if (nonEmpty(s) && trimmed(s)) { store(s) } else { "dirty" }
+}
+
+// Derived results: a helper without declared facts passes on what its
+// body proves.
+fn clampPositive(x: Int): Int {
+  if (positive(x)) { x } else { 1 }
+}
+
+fn orDefault(x: Int, fallback: Int where positive): Int {
+  if (positive(x)) { x } else { fallback }
+}
+
+fn useDerived(x: Int): Int {
+  y = clampPositive(x)
+  retry(y) + sqrtish(orDefault(x, 5))
+}
+
+fn main() {
+  println(useRules(1, 3, 80), useGuards("hi"), useDerived(-4))
+}

@@ -1,0 +1,20 @@
+pred positive(x: Int) { x > 0 }
+pred zero(x: Int) { x == 0 }
+pred small(x: Int) { x < 10 }
+
+fn sqrtish(x: Int where positive or zero): Int { x }
+fn needPositive(x: Int where positive): Int { x }
+
+// Knowing one of the alternatives is not knowing a particular one.
+fn notEnough(x: Int where positive or zero): Int { needPositive(x) }
+
+// One side of || alone says nothing.
+fn oneSide(x: Int): Int {
+  if (positive(x) || small(x)) { sqrtish(x) } else { 0 }
+}
+
+fn unchecked(x: Int): Int { sqrtish(x) }
+
+fn main() {
+  println(sqrtish(-1), notEnough(1), oneSide(1), unchecked(1))
+}

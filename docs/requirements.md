@@ -180,7 +180,10 @@ fn sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
 - **Facts are found by identity.** A fact about `x` also holds for `y = x`, and for field paths like `u.age`. A computed value (`a - 1`) has no facts unless something promises them.
 - **Promised results are verified** against every path of the body.
 - **Requirements on constants are decided by running the predicate at compile time**, using the program's own code (including `unsafe go`): `transfer(0)` fails the build with "positive(0) is false". This works for any predicate.
-- **Diagnostics** name the requirer, the parameter or field, and the predicate, and suggest a guard or a declaration.
+- **OR:** `x: Int where positive or zero` needs one of the alternatives; `and` and `or` mix only with parentheses (`(positive or zero) and small`). A `||` condition gives an OR fact. An OR obligation may be proven by different alternatives on different branches, and a known OR fact is used by cases: a goal that follows from each alternative follows from the fact.
+- **Inference rules** say what follows from what: `rule weaker(x: Int, a: Int, b: Int) { atLeast(x, a) and a >= b => atLeast(x, b) }`. Premises are predicate calls on the rule's variables (constants allowed after the first argument) and conditions on them using only operators and constants, which are decided at compile time. A rule may have several premises and conclusions; rules chain, and cycles between them are harmless. Rules are trusted, like `trust`.
+- **Derived results:** a function that declares no promise still passes on what its body proves. With `fn clamp(x: Int): Int { if (positive(x)) { x } else { 1 } }`, `retry(clamp(n))` proves `positive`: every path of the body is checked against the obligation. A path returning a parameter is checked at the call site, for the argument. Helpers chain, in any declaration order. A declared promise is still the way to make a fact part of the contract (and is verified).
+- **Diagnostics** name the requirer, the parameter or field, and the predicate, and suggest a guard or a declaration. A failing constant from inside a helper says where it came from: "sometimes can return 0, and positive(0) is false".
 
 ### Constrained inputs: examples
 

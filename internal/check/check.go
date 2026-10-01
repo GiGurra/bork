@@ -114,6 +114,8 @@ type Info struct {
 	Defs map[*syntax.Ident]any
 	// BindingConstraints holds the where clauses of typed bindings.
 	BindingConstraints map[*syntax.Binding][]*Constraint
+	// Rules holds the package's inference rules.
+	Rules []*Rule
 	// PatSources records, for a name bound by the top-level pattern of a
 	// match arm, the matched expression and the union member the pattern
 	// narrowed it to (nil if it did not narrow).
@@ -177,6 +179,7 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 	// Where clauses refer to predicates, so they are resolved once all
 	// functions are declared.
 	c.resolveConstraints(files)
+	c.checkRules(files)
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {

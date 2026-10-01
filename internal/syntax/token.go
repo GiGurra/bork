@@ -34,6 +34,8 @@ const (
 	KwWhere
 	KwAnd
 	KwTrust
+	KwRule
+	KwOr
 
 	// Delimiters
 	LParen
@@ -72,7 +74,7 @@ var kindNames = map[Kind]string{
 	EOF: "end of file", Illegal: "illegal token", Semi: "newline or ';'",
 	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TRune: "rune literal", TGoCode: "Go code", TString: "string literal", TInterp: "interpolated string",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
-	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'", KwPred: "'pred'", KwWhere: "'where'", KwAnd: "'and'", KwTrust: "'trust'",
+	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'", KwPred: "'pred'", KwWhere: "'where'", KwAnd: "'and'", KwTrust: "'trust'", KwRule: "'rule'", KwOr: "'or'",
 	LBrack: "'['", RBrack: "']'", Dot: "'.'", Underscore: "'_'", Pipe: "'|'", Arrow: "'=>'", Quest: "'?'",
 	LParen: "'('", RParen: "')'", LBrace: "'{'", RBrace: "'}'", Comma: "','", Colon: "':'",
 	Assign: "'='", Plus: "'+'", Minus: "'-'", Star: "'*'", Slash: "'/'", Pct: "'%'", Not: "'!'",
@@ -101,6 +103,8 @@ var keywords = map[string]Kind{
 	"where":  KwWhere,
 	"and":    KwAnd,
 	"trust":  KwTrust,
+	"rule":   KwRule,
+	"or":     KwOr,
 }
 
 // Token is a lexed token. Text holds the source text for identifiers

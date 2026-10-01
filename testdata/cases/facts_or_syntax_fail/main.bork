@@ -1,0 +1,8 @@
+pred positive(x: Int) { x > 0 }
+pred zero(x: Int) { x == 0 }
+pred small(x: Int) { x < 10 }
+
+fn a(x: Int where positive or zero and small): Int { x }
+fn b(x: Int where small and positive or zero): Int { x }
+
+fn main() {}
