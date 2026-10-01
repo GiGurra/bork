@@ -1,0 +1,16 @@
+ok    rule positiveIsNonNegative
+ok    rule weakerMin
+ok    rule narrower
+ok    rule fractionBelowOne
+ok    rule onIsOn
+FAIL  rule nonNegativeIsPositive
+      main.bork:29:1: rule nonNegativeIsPositive does not hold for x = 0: the premises hold, but positive(x) is false
+FAIL  rule shortIsNonEmpty
+      main.bork:30:1: rule shortIsNonEmpty does not hold for s = "": the premises hold, but nonEmpty(s) is false
+FAIL  rule smallDoubles
+      main.bork:32:1: rule smallDoubles does not hold for x = 100: the premises hold, but doubles8(x) is false
+FAIL  rule wrongWeakening
+      main.bork:33:1: rule wrongWeakening does not hold for x = 0, a = 0, b = 1: the premises hold, but atLeast(x, b) is false
+skip  rule shortLists (no values are generated for List[Int])
+5 passed, 4 failed, 1 skipped
+exit code 1

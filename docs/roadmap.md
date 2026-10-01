@@ -42,14 +42,14 @@ Functions, records, unions and sealed types, `match` with exhaustiveness, `Optio
 
 ### M1: facts
 
-**Status: nearly done.** Done:
+**Status: done**, apart from two items that need later milestones (below). Done:
 
 - **Constraints:** `pred` (also generic); `where` on parameters, results (also per union member), record fields, constrained aliases, typed bindings, and inside type arguments (`List[Int where positive]`, `Option[...]`, generic records and sealed types); predicate arguments that are constants or parameters; predicate parameters (`List[T where keep]`); OR, with `and` and parentheses.
 - **Fact sources:** guards (`if`, early `return`/`panic`, `&&`, `||`, `!`), callers' own requirements, callees' promises (also through `?` and `match`), derived results of helpers (through chains), fields and paths, `trust`, inference rules (with conditions, chains, and cycles), proofs by cases over OR facts, and parametricity (facts flow through generic functions and into lambdas).
-- **Checking:** verified result promises; compile-time evaluation of any predicate on constants and literals, using the program's own code; diagnostics with fixes; test mode (`bork test`), where trusted facts (`trust`, and promises of `unsafe go` functions) are checked as the tests run.
+- **Checking:** verified result promises; compile-time evaluation of any predicate on constants and literals, using the program's own code; diagnostics with fixes; test mode (`bork test`), where trusted facts (`trust`, and promises of `unsafe go` functions) are checked as the tests run, and every inference rule gets a property test that looks for counterexamples (on Int, the sized numbers, Float, String, and Bool variables).
 - **Groundwork it needed:** generic functions and types, function types and lambdas, `List[T]`, `|>`, `Option` as a prelude type, and `test` declarations with `assert` and `assertEqual`.
 
-Remaining: property tests for inference rules; the `CreateUser` example, which needs decoding (M3); and obligations across packages, which need packages.
+Remaining: the `CreateUser` example, which needs decoding (M3), and obligations across packages, which need packages.
 
 `pred`, `where` on parameters and returns, constrained type aliases, guards and `match` as fact sources, the backward resolver, "callers prove or declare", inference rules, `trust`, and compile-time checks of literals.
 

@@ -215,9 +215,9 @@ func Test(path string, stdout io.Writer) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if len(info.Tests) == 0 {
+	if len(info.Tests) == 0 && len(info.Rules) == 0 {
 		diags := &diag.List{}
-		diags.Add(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package has no tests (add `test \"name\" { ... }`)")
+		diags.Add(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package has no tests or rules (add `test \"name\" { ... }`)")
 		return 1, &DiagError{Diags: diags}
 	}
 	goSrc, err := gen.Tests(files, info)
