@@ -1,0 +1,31 @@
+fn describe(r: Int8 | OutOfRange): String {
+  match (r) {
+    n: Int8 => "fits: " + toString(n)
+    e: OutOfRange => "out of range: " + e.value + " is not an " + e.target
+  }
+}
+
+fn main() {
+  small: Int8 = -5
+  // Widening always fits, so the result is a plain value.
+  wide: Int = toInt(small)
+  f: Float = toFloat(small)
+  println(wide, f, toFloat32(1000000), toUint32(toUint8(200)))
+  // Narrowing may not fit: the result is Int8 | OutOfRange.
+  println(describe(toInt8(wide)))
+  println(describe(toInt8(wide * 100)))
+  println(describe(toInt8(2.9 * f)))
+  println(toUint8(small))
+  n = 300
+  println(toUint8(n), toInt16(n))
+  // A constant is converted at compile time.
+  c: Int8 = toInt8(42)
+  println(c, toFloat(3) / 2)
+  // ? keeps the converted value.
+  println(checkedSum(100, 27), checkedSum(100, 28))
+  println(toString(1.5) + "!", toString(true), toString(Option.Some { value: 1 }))
+}
+
+fn checkedSum(a: Int, b: Int): Int8 | OutOfRange {
+  toInt8(a + b)?
+}

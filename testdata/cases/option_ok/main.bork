@@ -1,0 +1,22 @@
+type User = { name: String, email: Option[String] }
+
+fn emailDomain(u: User): Option[String] {
+  email = u.email?
+  Option.Some { value: "domain of " + email }
+}
+
+fn orDefault(o: Option[Int], fallback: Int): Int {
+  match (o) {
+    Option.Some { value } => value
+    Option.None => fallback
+  }
+}
+
+fn main() {
+  ada = User { name: "Ada", email: Option.Some { value: "ada@example.com" } }
+  bob = User { name: "Bob", email: Option.None }
+  println(emailDomain(ada), emailDomain(bob))
+  println(orDefault(Option.Some { value: 5 }, 0), orDefault(Option.None, 99))
+  println(bob)
+  println(ada.email == Option.Some { value: "ada@example.com" }, bob.email == Option.None)
+}

@@ -1,0 +1,31 @@
+type Shape = sealed {
+  Circle { radius: Int },
+  Empty,
+}
+
+fn a(s: Shape): Int {
+  match (s) {
+    _ => 0
+    Shape.Empty => 1
+  }
+}
+
+fn b(n: Int): Int {
+  match (n) {
+    1 => 1
+    1 => 2
+    _ => 3
+  }
+}
+
+fn c(s: Shape): Int {
+  match (s) {
+    Shape.Circle { radius } => radius
+    Shape.Circle { radius: r } => r
+    Shape.Empty => 0
+  }
+}
+
+fn main() {
+  println(a(Shape.Empty), b(1), c(Shape.Empty))
+}

@@ -1,0 +1,6 @@
+Ada 36 London
+User { name: "Ada", age: 36, address: Address { street: "Main St 1", city: "London" } }
+User { name: "Ada", age: 37, address: Address { street: "Main St 1", city: "Paris" } }
+London
+false true
+true

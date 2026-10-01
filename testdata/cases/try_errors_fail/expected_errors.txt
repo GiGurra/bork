@@ -1,0 +1,4 @@
+main.bork:9:11: ? would return DbError from onlyNotFound, but onlyNotFound returns Int | NotFound
+main.bork:13:4: ? needs a union or an Option, found Int
+main.bork:17:4: ? on Option[Int] would return Option.None from optionInPlainFn, but optionInPlainFn returns Int
+main.bork:21:14: ? would return NotFound | DbError from main, but main returns Unit

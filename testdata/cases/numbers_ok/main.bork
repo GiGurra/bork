@@ -1,0 +1,32 @@
+fn half(x: Float): Float {
+  x / 2
+}
+
+fn small(x: Int8): Int8 {
+  x * 2
+}
+
+fn main() {
+  // Literals take their type from the context.
+  a: Int8 = 100 + 27
+  b: Uint8 = 255
+  c: Float32 = 0.1
+  d: Uint64 = 18446744073709551615
+  e: Byte = 0xFF
+  println(a, b, c, d, e)
+  println(small(5), half(5), half(0.5), 1e3, 2.5e-3)
+  // Integer division truncates; float division does not.
+  println(7 / 2, 7.0 / 2, 7 % 3, -7 / 2)
+  // Each sized type wraps on overflow, like Go.
+  println(a + toInt8(1), b + toUint8(1))
+  x: Int16 = 0b1010
+  y: Int32 = 0o17
+  println(x, y, 1_000_000, -x)
+  f = 1.5
+  println(f * 2, f < 2, f == 1.5)
+  // Constant arithmetic is exact; arithmetic on values is not.
+  g = 0.1
+  println(0.1 + 0.2, g + 0.2)
+  big: Int | String = 42
+  println(big)
+}

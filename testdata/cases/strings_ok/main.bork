@@ -1,0 +1,19 @@
+fn sum(a: String, b: String): Int | ParseError {
+  x = parseInt(a)?
+  y = parseInt(b)?
+  x + y
+}
+
+fn main() {
+  println(sum("40", "2"))
+  println(sum("40", "two"))
+  println(parseFloat("2.5"), parseBool("true"), parseBool("yes"))
+  println(parseInt("99999999999999999999"))
+  s = "  Hello, bork  "
+  t = trim(s)
+  println(t, byteLength(t), byteLength("åäö"))
+  println(contains(t, "bork"), startsWith(t, "Hello"), endsWith(t, "!"))
+  println(indexOf(t, "bork"), indexOf(t, "go"))
+  println(toUpper(t), toLower(t), replaceAll(t, "bork", "world"))
+  println(repeat("ab", 3), repeat("ab", -1) == "")
+}

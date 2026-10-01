@@ -1,6 +1,8 @@
 package syntax
 
 import (
+	"strings"
+
 	"github.com/GiGurra/bork/internal/diag"
 )
 
@@ -57,7 +59,7 @@ func (lx *lexer) endsStatement() bool {
 		return false
 	}
 	switch lx.toks[len(lx.toks)-1].Kind {
-	case TIdent, TInt, TString, KwTrue, KwFalse, KwReturn, RParen, RBrace:
+	case TIdent, TInt, TFloat, TString, TGoCode, KwTrue, KwFalse, KwReturn, RParen, RBrace, RBrack, Quest, Underscore:
 		return true
 	}
 	return false
@@ -139,6 +141,13 @@ func (lx *lexer) ident(pos diag.Pos) {
 	text := string(lx.src[start:lx.off])
 	if k, ok := keywords[text]; ok {
 		lx.emit(k, text, pos)
+		if k == KwUnsafe {
+			lx.goCode()
+		}
+		return
+	}
+	if text == "_" {
+		lx.emit(Underscore, text, pos)
 		return
 	}
 	if text[0] == '_' {
@@ -147,10 +156,39 @@ func (lx *lexer) ident(pos diag.Pos) {
 	lx.emit(TIdent, text, pos)
 }
 
+// number lexes an integer (`42`, `1_000`, `0xFF`, `0b1010`, `0o17`) or
+// a float (`1.5`, `2e10`, `1.5e-3`). The checker validates the digits.
 func (lx *lexer) number(pos diag.Pos) {
 	start := lx.off
-	for lx.off < len(lx.src) && (isDigit(lx.peek(0)) || lx.peek(0) == '_') {
+	kind := TInt
+	digits := func() {
+		for lx.off < len(lx.src) && (isDigit(lx.peek(0)) || lx.peek(0) == '_') {
+			lx.advance()
+		}
+	}
+	if lx.peek(0) == '0' && strings.IndexByte("xXbBoO", lx.peek(1)) >= 0 {
 		lx.advance()
+		lx.advance()
+		for lx.off < len(lx.src) && (isLetter(lx.peek(0)) || isDigit(lx.peek(0))) {
+			lx.advance()
+		}
+	} else {
+		digits()
+		// A '.' must be followed by a digit, so `5.copy(...)` stays a
+		// selector on an Int.
+		if lx.peek(0) == '.' && isDigit(lx.peek(1)) {
+			kind = TFloat
+			lx.advance()
+			digits()
+		}
+		if lx.peek(0) == 'e' || lx.peek(0) == 'E' {
+			kind = TFloat
+			lx.advance()
+			if lx.peek(0) == '+' || lx.peek(0) == '-' {
+				lx.advance()
+			}
+			digits()
+		}
 	}
 	if lx.off < len(lx.src) && isLetter(lx.peek(0)) {
 		lx.diags.Add(lx.pos(), "unexpected character %q in number", lx.peek(0))
@@ -158,7 +196,81 @@ func (lx *lexer) number(pos diag.Pos) {
 			lx.advance()
 		}
 	}
-	lx.emit(TInt, string(lx.src[start:lx.off]), pos)
+	lx.emit(kind, string(lx.src[start:lx.off]), pos)
+}
+
+// goCode lexes the raw Go of `unsafe go { ... }`, right after `unsafe`.
+// The Go code is not split into bork tokens: it becomes one TGoCode
+// token holding the text between the braces, positioned at the '{'.
+// Braces inside Go strings, runes, and comments are skipped.
+func (lx *lexer) goCode() {
+	saveOff, saveLine, saveCol := lx.off, lx.line, lx.col
+	skipSpaces := func() {
+		for lx.peek(0) == ' ' || lx.peek(0) == '\t' {
+			lx.advance()
+		}
+	}
+	skipSpaces()
+	if lx.peek(0) != 'g' || lx.peek(1) != 'o' || isLetter(lx.peek(2)) || isDigit(lx.peek(2)) {
+		lx.off, lx.line, lx.col = saveOff, saveLine, saveCol
+		return
+	}
+	lx.advance()
+	lx.advance()
+	skipSpaces()
+	if lx.peek(0) != '{' {
+		lx.off, lx.line, lx.col = saveOff, saveLine, saveCol
+		return
+	}
+	pos := lx.pos()
+	lx.advance()
+	start := lx.off
+	depth := 1
+	// skipTo consumes up to and including the closing delimiter.
+	skipTo := func(close byte, escapes, multiline bool) {
+		for lx.off < len(lx.src) {
+			c := lx.advance()
+			switch {
+			case c == close:
+				return
+			case c == '\\' && escapes && lx.off < len(lx.src):
+				lx.advance()
+			case c == '\n' && !multiline:
+				return
+			}
+		}
+	}
+	for depth > 0 {
+		if lx.off >= len(lx.src) {
+			lx.diags.Add(pos, "unsafe go block is not closed (missing '}')")
+			return
+		}
+		c := lx.advance()
+		switch {
+		case c == '{':
+			depth++
+		case c == '}':
+			depth--
+		case c == '"':
+			skipTo('"', true, false)
+		case c == '\'':
+			skipTo('\'', true, false)
+		case c == '`':
+			skipTo('`', false, true)
+		case c == '/' && lx.peek(0) == '/':
+			skipTo('\n', false, false)
+		case c == '/' && lx.peek(0) == '*':
+			lx.advance()
+			for lx.off < len(lx.src) && (lx.peek(0) != '*' || lx.peek(1) != '/') {
+				lx.advance()
+			}
+			if lx.off < len(lx.src) {
+				lx.advance()
+				lx.advance()
+			}
+		}
+	}
+	lx.emit(TGoCode, string(lx.src[start:lx.off-1]), pos)
 }
 
 func (lx *lexer) string(pos diag.Pos) {
@@ -203,6 +315,14 @@ func (lx *lexer) operator(pos diag.Pos) {
 		lx.emit(RBrace, "", pos)
 	case ',':
 		lx.emit(Comma, "", pos)
+	case '[':
+		lx.emit(LBrack, "", pos)
+	case ']':
+		lx.emit(RBrack, "", pos)
+	case '.':
+		lx.emit(Dot, "", pos)
+	case '?':
+		lx.emit(Quest, "", pos)
 	case ':':
 		lx.emit(Colon, "", pos)
 	case ';':
@@ -218,6 +338,11 @@ func (lx *lexer) operator(pos diag.Pos) {
 	case '%':
 		lx.emit(Pct, "", pos)
 	case '=':
+		if lx.off < len(lx.src) && lx.peek(0) == '>' {
+			lx.advance()
+			lx.emit(Arrow, "", pos)
+			return
+		}
 		two('=', Eq, Assign)
 	case '!':
 		two('=', NotEq, Not)
@@ -238,7 +363,7 @@ func (lx *lexer) operator(pos diag.Pos) {
 			lx.emit(OrOr, "", pos)
 			return
 		}
-		lx.diags.Add(pos, "unexpected character '|' (did you mean '||'?)")
+		lx.emit(Pipe, "", pos)
 	default:
 		lx.diags.Add(pos, "unexpected character %q", c)
 	}

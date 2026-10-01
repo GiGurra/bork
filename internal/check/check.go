@@ -1,7 +1,7 @@
 package check
 
 import (
-	"math/big"
+	"go/constant"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -13,6 +13,10 @@ type Func struct {
 	Decl   *syntax.FuncDecl
 	Params []Type
 	Result Type
+	// Prelude is set for the built-in functions of prelude.bork.
+	Prelude bool
+	// Calls lists the functions this function's body calls.
+	Calls []*Func
 }
 
 // Builtin identifies a function provided by the compiler.
@@ -21,48 +25,133 @@ type Builtin int
 const (
 	BuiltinNone Builtin = iota
 	BuiltinPrintln
+	BuiltinToString
+	BuiltinConvert // toInt8(x), toFloat(x), ...
 )
 
 var builtins = map[string]Builtin{
-	"println": BuiltinPrintln,
+	"println":  BuiltinPrintln,
+	"toString": BuiltinToString,
+}
+
+// conversions maps each conversion function to its target type.
+var conversions = map[string]Type{}
+
+func init() {
+	for name, t := range basicTypes {
+		if IsNumeric(t) {
+			conversions["to"+name] = t
+			builtins["to"+name] = BuiltinConvert
+		}
+	}
+}
+
+// Conversion describes a numeric conversion of a non-constant value.
+// Checked conversions may go out of range, and produce `To | OutOfRange`.
+type Conversion struct {
+	From, To Type
+	Checked  bool
+}
+
+// TryInfo describes a `?` expression.
+type TryInfo struct {
+	// Kept is the type `?` produces.
+	Kept Type
+	// Rest lists the union members returned from the function (for a
+	// union operand).
+	Rest []Type
+	// Option is the operand's type when it is an Option, and NoneOf the
+	// Option type that `None` is returned as.
+	Option *Sealed
+	NoneOf *Sealed
 }
 
 // Info is what the checker learned about a package. Later passes (code
 // generation) read it instead of re-deriving types.
 type Info struct {
 	Funcs map[string]*Func
+	// Named holds every declared type: *Record, *Sealed, or (for an
+	// alias) the aliased type.
+	Named map[string]Type
+	// TypeOrder lists declared records and sealed types in source order.
+	TypeOrder []Type
 	// Types records the type of every expression.
 	Types map[syntax.Expr]Type
 	// Calls records which function each call targets.
 	CallFuncs    map[*syntax.Call]*Func
 	CallBuiltins map[*syntax.Call]Builtin
-	// UnusedBindings lists bindings whose value is never read.
-	UnusedBindings map[*syntax.Binding]bool
-	// IntValues holds the parsed value of every integer literal.
-	IntValues map[*syntax.IntLit]int64
+	// RecordTargets records what each record literal builds: a *Record
+	// or a *Variant.
+	RecordTargets map[*syntax.RecordLit]any
+	// SelectorVariants records selectors that name a field-less variant
+	// (`Shape.Empty`); other selectors are field accesses.
+	SelectorVariants map[*syntax.Selector]*Variant
+	// PatTypes and PatVariants record what each match pattern tests.
+	PatTypes    map[syntax.Pattern]Type
+	PatVariants map[syntax.Pattern]*Variant
+	// Tries describes every `?`.
+	Tries map[*syntax.Try]*TryInfo
+	// Unused holds bindings whose value is never read: *syntax.Binding,
+	// *syntax.TypePat, or *syntax.FieldPat.
+	Unused map[any]bool
+	// Consts holds the value of every constant expression (number
+	// literals and arithmetic on them), already converted to the type
+	// recorded in Types.
+	Consts map[syntax.Expr]constant.Value
+	// Bindings records the type of every binding.
+	Bindings map[*syntax.Binding]Type
+	// Conversions describes numeric conversions of non-constant values.
+	Conversions map[*syntax.Call]*Conversion
+	// OutOfRange is the prelude's OutOfRange record.
+	OutOfRange Type
 }
 
 // Package type-checks the given files as one package.
 func Package(files []*syntax.File, diags *diag.List) *Info {
 	c := &checker{
 		diags: diags,
+		decls: map[string]*typeEntry{},
 		info: &Info{
-			Funcs:          map[string]*Func{},
-			Types:          map[syntax.Expr]Type{},
-			CallFuncs:      map[*syntax.Call]*Func{},
-			CallBuiltins:   map[*syntax.Call]Builtin{},
-			UnusedBindings: map[*syntax.Binding]bool{},
-			IntValues:      map[*syntax.IntLit]int64{},
+			Funcs:            map[string]*Func{},
+			Named:            map[string]Type{},
+			Types:            map[syntax.Expr]Type{},
+			CallFuncs:        map[*syntax.Call]*Func{},
+			CallBuiltins:     map[*syntax.Call]Builtin{},
+			RecordTargets:    map[*syntax.RecordLit]any{},
+			SelectorVariants: map[*syntax.Selector]*Variant{},
+			PatTypes:         map[syntax.Pattern]Type{},
+			PatVariants:      map[syntax.Pattern]*Variant{},
+			Tries:            map[*syntax.Try]*TryInfo{},
+			Unused:           map[any]bool{},
+			Consts:           map[syntax.Expr]constant.Value{},
+			Bindings:         map[*syntax.Binding]Type{},
+			Conversions:      map[*syntax.Call]*Conversion{},
 		},
 	}
-	// Pass 1: collect function signatures, so functions can call each
+	// Pass 1: declare types, then resolve their bodies, so types can
+	// refer to each other regardless of declaration order.
+	for _, f := range files {
+		for _, td := range f.Types {
+			c.declareType(td, f.Prelude)
+		}
+	}
+	for _, f := range files {
+		for _, td := range f.Types {
+			if e := c.decls[td.Name]; e != nil && e.decl == td {
+				c.resolveDecl(e)
+			}
+		}
+	}
+	c.checkRecordCycles()
+	c.info.OutOfRange = c.info.Named["OutOfRange"]
+	// Pass 2: collect function signatures, so functions can call each
 	// other regardless of declaration order.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			c.declareFunc(fd)
+			c.declareFunc(fd, f.Prelude)
 		}
 	}
-	// Pass 2: check bodies.
+	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
 			if fn := c.info.Funcs[fd.Name]; fn != nil && fn.Decl == fd {
@@ -76,6 +165,7 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 type checker struct {
 	diags *diag.List
 	info  *Info
+	decls map[string]*typeEntry
 
 	// Per-function state.
 	fn     *Func
@@ -83,36 +173,32 @@ type checker struct {
 }
 
 type local struct {
-	typ     Type
-	binding *syntax.Binding // nil for parameters
-	used    bool
+	typ  Type
+	node any // the binding's syntax node; nil for parameters
+	used bool
 }
 
 func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
 	c.diags.Add(pos, format, args...)
 }
 
-func (c *checker) resolveType(t *syntax.TypeExpr) Type {
-	if t == nil {
-		return Unit
-	}
-	if typ, ok := namedTypes[t.Name]; ok {
-		return typ
-	}
-	c.errorf(t.Pos, "unknown type %s", t.Name)
-	return Invalid
-}
-
-func (c *checker) declareFunc(fd *syntax.FuncDecl) {
+func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	if _, ok := builtins[fd.Name]; ok {
 		c.errorf(fd.Pos, "%s is a built-in function and cannot be redefined", fd.Name)
 		return
 	}
-	if prev, ok := c.info.Funcs[fd.Name]; ok {
+	if prev, ok := c.info.Funcs[fd.Name]; ok && prev.Prelude {
+		c.errorf(fd.Pos, "%s is a built-in function and cannot be redefined", fd.Name)
+		return
+	} else if ok {
 		c.errorf(fd.Pos, "function %s is already declared at %s", fd.Name, prev.Decl.Pos)
 		return
 	}
-	fn := &Func{Decl: fd, Result: c.resolveType(fd.Result)}
+	if c.isTypeName(fd.Name) {
+		c.errorf(fd.Pos, "%s is already the name of a type", fd.Name)
+		return
+	}
+	fn := &Func{Decl: fd, Result: c.resolveType(fd.Result), Prelude: prelude}
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
@@ -134,7 +220,16 @@ func (c *checker) checkFunc(fn *Func) {
 	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Unit) {
 		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
 	}
-	bodyType := c.block(fn.Decl.Body)
+	if fn.Decl.GoBody != nil {
+		// The Go code is checked by the Go compiler.
+		c.fn = nil
+		return
+	}
+	var want Type
+	if fn.Result != Unit {
+		want = fn.Result
+	}
+	bodyType := c.block(fn.Decl.Body, want)
 	if fn.Result == Unit && isValue(bodyType) {
 		c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (function %s returns no value)", bodyType, fn.Decl.Name)
 	}
@@ -161,15 +256,33 @@ func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 			return true
 		}
 	}
-	if _, ok := c.info.Funcs[name]; ok {
-		c.errorf(pos, "%s is already the name of a function (bork does not allow shadowing)", name)
+	if fn, ok := c.info.Funcs[name]; ok {
+		if fn.Prelude {
+			c.errorf(pos, "%s is a built-in function (bork does not allow shadowing)", name)
+		} else {
+			c.errorf(pos, "%s is already the name of a function (bork does not allow shadowing)", name)
+		}
 		return true
 	}
 	if _, ok := builtins[name]; ok {
 		c.errorf(pos, "%s is a built-in function (bork does not allow shadowing)", name)
 		return true
 	}
+	if c.isTypeName(name) {
+		c.errorf(pos, "%s is already the name of a type", name)
+		return true
+	}
 	return false
+}
+
+// bind adds a local to the innermost scope. A name that is already
+// taken is still bound, as Invalid, so later uses don't cause follow-up
+// errors.
+func (c *checker) bind(name string, pos diag.Pos, t Type, node any) {
+	if c.nameTaken(name, pos) {
+		t = Invalid
+	}
+	c.scopes[len(c.scopes)-1][name] = &local{typ: t, node: node}
 }
 
 func (c *checker) lookup(name string) *local {
@@ -181,22 +294,27 @@ func (c *checker) lookup(name string) *local {
 	return nil
 }
 
+func (c *checker) pushScope() { c.scopes = append(c.scopes, map[string]*local{}) }
+
+func (c *checker) popScope() {
+	for _, l := range c.scopes[len(c.scopes)-1] {
+		if l.node != nil && !l.used {
+			c.info.Unused[l.node] = true
+		}
+	}
+	c.scopes = c.scopes[:len(c.scopes)-1]
+}
+
 func (c *checker) record(e syntax.Expr, t Type) Type {
 	c.info.Types[e] = t
 	return t
 }
 
-func (c *checker) block(b *syntax.Block) Type {
-	c.scopes = append(c.scopes, map[string]*local{})
-	defer func() {
-		scope := c.scopes[len(c.scopes)-1]
-		for _, l := range scope {
-			if l.binding != nil && !l.used {
-				c.info.UnusedBindings[l.binding] = true
-			}
-		}
-		c.scopes = c.scopes[:len(c.scopes)-1]
-	}()
+// block checks a block. want is the type the block's value is expected
+// to have, or nil if there is no expectation.
+func (c *checker) block(b *syntax.Block, want Type) Type {
+	c.pushScope()
+	defer c.popScope()
 
 	// Statements after one that never finishes (e.g. `return`) are
 	// unreachable. Only the first one is reported.
@@ -214,7 +332,7 @@ func (c *checker) block(b *syntax.Block) Type {
 	t := Unit
 	if b.Tail != nil {
 		if !diverged {
-			t = c.expr(b.Tail)
+			t = c.exprWant(b.Tail, want)
 		} else if !reported {
 			c.errorf(b.Tail.Position(), "unreachable code")
 		}
@@ -239,7 +357,11 @@ func stmtPos(s syntax.Stmt) diag.Pos {
 func (c *checker) stmt(s syntax.Stmt) Type {
 	switch s := s.(type) {
 	case *syntax.Binding:
-		t := c.expr(s.Value)
+		var declared Type
+		if s.Type != nil {
+			declared = c.resolveType(s.Type)
+		}
+		t := c.exprWant(s.Value, declared)
 		switch t {
 		case Unit:
 			c.errorf(s.Value.Position(), "cannot bind %s: the expression produces no value (Unit)", s.Name)
@@ -248,11 +370,14 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			c.errorf(s.Value.Position(), "cannot bind %s: the expression never produces a value", s.Name)
 			return Never
 		}
-		if c.nameTaken(s.Name, s.Pos) {
-			// Bind anyway, as invalid, so later uses don't cause follow-up errors.
-			t = Invalid
+		if declared != nil && t != Invalid {
+			if declared != Invalid && !assignable(t, declared) {
+				c.errorf(s.Value.Position(), "%s must be %s, found %s", s.Name, declared, t)
+			}
+			t = declared
 		}
-		c.scopes[len(c.scopes)-1][s.Name] = &local{typ: t, binding: s}
+		c.info.Bindings[s] = t
+		c.bind(s.Name, s.Pos, t, s)
 		return Unit
 	case *syntax.ExprStmt:
 		t := c.expr(s.X)
@@ -264,54 +389,75 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 	return Unit
 }
 
-func (c *checker) expr(e syntax.Expr) Type {
+func (c *checker) expr(e syntax.Expr) Type { return c.exprWant(e, nil) }
+
+// exprWant checks an expression. want is the type the context expects,
+// or nil. It guides branches that produce different members of a union,
+// and values like `Option.None` whose type comes from the context. It
+// does not report mismatches; the caller does.
+func (c *checker) exprWant(e syntax.Expr, want Type) Type {
+	if v := constValue(e); v != nil {
+		return c.constant(e, v, want)
+	}
 	switch e := e.(type) {
 	case *syntax.IntLit:
-		v, ok := new(big.Int).SetString(strings.ReplaceAll(e.Text, "_", ""), 10)
-		if !ok || strings.HasPrefix(e.Text, "_") || strings.HasSuffix(e.Text, "_") || strings.Contains(e.Text, "__") {
-			c.errorf(e.Pos, "invalid integer literal %s", e.Text)
-			return c.record(e, Invalid)
-		}
-		if !v.IsInt64() {
-			c.errorf(e.Pos, "integer literal %s does not fit in Int (64-bit)", e.Text)
-			return c.record(e, Invalid)
-		}
-		c.info.IntValues[e] = v.Int64()
-		return c.record(e, Int)
+		c.errorf(e.Pos, "invalid integer literal %s", e.Text)
+		return c.record(e, Invalid)
+	case *syntax.FloatLit:
+		c.errorf(e.Pos, "invalid float literal %s", e.Text)
+		return c.record(e, Invalid)
 	case *syntax.StringLit:
 		return c.record(e, String)
 	case *syntax.BoolLit:
 		return c.record(e, Bool)
 	case *syntax.Ident:
-		if l := c.lookup(e.Name); l != nil {
-			l.used = true
-			return c.record(e, l.typ)
-		}
-		if _, ok := c.info.Funcs[e.Name]; ok {
-			c.errorf(e.Pos, "function %s must be called (functions as values are not supported yet)", e.Name)
-			return c.record(e, Invalid)
-		}
-		if _, ok := builtins[e.Name]; ok {
-			c.errorf(e.Pos, "built-in %s must be called", e.Name)
-			return c.record(e, Invalid)
-		}
-		c.errorf(e.Pos, "undefined: %s", e.Name)
-		return c.record(e, Invalid)
+		return c.record(e, c.ident(e))
 	case *syntax.Unary:
 		return c.record(e, c.unary(e))
 	case *syntax.Binary:
-		return c.record(e, c.binary(e))
+		return c.record(e, c.binary(e, want))
 	case *syntax.Call:
 		return c.record(e, c.call(e))
 	case *syntax.If:
-		return c.record(e, c.ifExpr(e))
+		return c.record(e, c.ifExpr(e, want))
 	case *syntax.Block:
-		return c.block(e)
+		return c.block(e, want)
 	case *syntax.Return:
 		c.returnExpr(e)
 		return c.record(e, Never)
+	case *syntax.Selector:
+		return c.record(e, c.selector(e, want))
+	case *syntax.RecordLit:
+		return c.record(e, c.recordLit(e, want))
+	case *syntax.Copy:
+		return c.record(e, c.copyExpr(e))
+	case *syntax.Match:
+		return c.record(e, c.match(e, want))
+	case *syntax.Try:
+		return c.record(e, c.try(e))
 	}
 	panic("unhandled expression")
+}
+
+func (c *checker) ident(e *syntax.Ident) Type {
+	if l := c.lookup(e.Name); l != nil {
+		l.used = true
+		return l.typ
+	}
+	if _, ok := c.info.Funcs[e.Name]; ok {
+		c.errorf(e.Pos, "function %s must be called (functions as values are not supported yet)", e.Name)
+		return Invalid
+	}
+	if _, ok := builtins[e.Name]; ok {
+		c.errorf(e.Pos, "built-in %s must be called", e.Name)
+		return Invalid
+	}
+	if c.isTypeName(e.Name) {
+		c.errorf(e.Pos, "%s is a type, not a value", e.Name)
+		return Invalid
+	}
+	c.errorf(e.Pos, "undefined: %s", e.Name)
+	return Invalid
 }
 
 func (c *checker) unary(e *syntax.Unary) Type {
@@ -321,11 +467,15 @@ func (c *checker) unary(e *syntax.Unary) Type {
 	}
 	switch e.Op {
 	case syntax.Minus:
-		if t != Int {
-			c.errorf(e.Pos, "operator - needs an Int, found %s", t)
+		if isUnsigned(t) {
+			c.errorf(e.Pos, "operator - cannot be used on the unsigned type %s", t)
 			return Invalid
 		}
-		return Int
+		if !IsNumeric(t) {
+			c.errorf(e.Pos, "operator - needs a number, found %s", t)
+			return Invalid
+		}
+		return t
 	case syntax.Not:
 		if t != Bool {
 			c.errorf(e.Pos, "operator ! needs a Bool, found %s", t)
@@ -340,12 +490,33 @@ func opSymbol(k syntax.Kind) string {
 	return strings.Trim(k.String(), "'")
 }
 
-func (c *checker) binary(e *syntax.Binary) Type {
-	x, y := c.expr(e.X), c.expr(e.Y)
+func (c *checker) binary(e *syntax.Binary, want Type) Type {
+	// A constant operand takes its type from the other operand
+	// (`x + 1`, `1 + x`), and the right side may take its type from the
+	// left (`o == Option.None`).
+	var xWant Type
+	if _, arith := constOps[e.Op]; arith {
+		xWant = want
+	}
+	var x, y Type
+	if constValue(e.X) != nil && constValue(e.Y) == nil {
+		y = c.exprWant(e.Y, xWant)
+		x = c.exprWant(e.X, y)
+	} else {
+		x = c.exprWant(e.X, xWant)
+		y = c.exprWant(e.Y, x)
+	}
 	if x == Invalid || y == Invalid {
 		return Invalid
 	}
 	op := opSymbol(e.Op)
+	sameNumbers := IsNumeric(x) && identical(x, y)
+	if e.Op == syntax.Slash || e.Op == syntax.Pct {
+		if v := c.info.Consts[e.Y]; v != nil && constant.Sign(v) == 0 {
+			c.errorf(e.Y.Position(), "division by zero")
+			return Invalid
+		}
+	}
 	switch e.Op {
 	case syntax.AndAnd, syntax.OrOr:
 		if x != Bool || y != Bool {
@@ -354,28 +525,31 @@ func (c *checker) binary(e *syntax.Binary) Type {
 		}
 		return Bool
 	case syntax.Plus:
-		if x == Int && y == Int {
-			return Int
+		if sameNumbers || (x == String && y == String) {
+			return x
 		}
-		if x == String && y == String {
-			return String
-		}
-		c.errorf(e.Pos, "operator + needs two Ints or two Strings, found %s and %s", x, y)
+		c.errorf(e.Pos, "operator + needs two numbers of the same type or two Strings, found %s and %s", x, y)
 		return Invalid
-	case syntax.Minus, syntax.Star, syntax.Slash, syntax.Pct:
-		if x != Int || y != Int {
-			c.errorf(e.Pos, "operator %s needs Int operands, found %s and %s", op, x, y)
+	case syntax.Minus, syntax.Star, syntax.Slash:
+		if !sameNumbers {
+			c.errorf(e.Pos, "operator %s needs two numbers of the same type, found %s and %s", op, x, y)
 			return Invalid
 		}
-		return Int
+		return x
+	case syntax.Pct:
+		if !sameNumbers || !IsInteger(x) {
+			c.errorf(e.Pos, "operator %% needs two integers of the same type, found %s and %s", x, y)
+			return Invalid
+		}
+		return x
 	case syntax.Lt, syntax.LtEq, syntax.Gt, syntax.GtEq:
-		if (x == Int && y == Int) || (x == String && y == String) {
+		if sameNumbers || (x == String && y == String) {
 			return Bool
 		}
-		c.errorf(e.Pos, "operator %s needs two Ints or two Strings, found %s and %s", op, x, y)
+		c.errorf(e.Pos, "operator %s needs two numbers of the same type or two Strings, found %s and %s", op, x, y)
 		return Invalid
 	case syntax.Eq, syntax.NotEq:
-		if x != y {
+		if !identical(x, y) {
 			c.errorf(e.Pos, "cannot compare %s with %s: the types are incompatible", x, y)
 			return Invalid
 		}
@@ -399,13 +573,16 @@ func (c *checker) call(e *syntax.Call) Type {
 	}
 	if b, ok := builtins[id.Name]; ok && c.lookup(id.Name) == nil {
 		c.info.CallBuiltins[e] = b
-		return c.builtinCall(e, b)
+		return c.builtinCall(e, id.Name, b)
 	}
 	fn, ok := c.info.Funcs[id.Name]
 	if !ok {
-		if c.lookup(id.Name) != nil {
+		switch {
+		case c.lookup(id.Name) != nil:
 			c.errorf(id.Pos, "%s is a value, not a function", id.Name)
-		} else {
+		case c.isTypeName(id.Name):
+			c.errorf(id.Pos, "%s is a type; build a record with %s { field: value, ... }", id.Name, id.Name)
+		default:
 			c.errorf(id.Pos, "undefined function: %s", id.Name)
 		}
 		for _, a := range e.Args {
@@ -414,20 +591,42 @@ func (c *checker) call(e *syntax.Call) Type {
 		return Invalid
 	}
 	c.info.CallFuncs[e] = fn
+	if c.fn != nil {
+		c.fn.Calls = append(c.fn.Calls, fn)
+	}
 	if len(e.Args) != len(fn.Params) {
 		c.errorf(e.Pos, "%s takes %d argument(s), but %d were given", id.Name, len(fn.Params), len(e.Args))
 	}
 	for i, a := range e.Args {
-		t := c.expr(a)
-		if i < len(fn.Params) && !assignable(t, fn.Params[i]) {
-			c.errorf(a.Position(), "argument %d to %s must be %s, found %s", i+1, id.Name, fn.Params[i], t)
+		var want Type
+		if i < len(fn.Params) {
+			want = fn.Params[i]
+		}
+		t := c.exprWant(a, want)
+		if want != nil && !assignable(t, want) {
+			c.errorf(a.Position(), "argument %d to %s must be %s, found %s", i+1, id.Name, want, t)
 		}
 	}
 	return fn.Result
 }
 
-func (c *checker) builtinCall(e *syntax.Call, b Builtin) Type {
+func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
+	if b != BuiltinPrintln && len(e.Args) != 1 {
+		c.errorf(e.Pos, "%s takes 1 argument, but %d were given", fname, len(e.Args))
+		for _, a := range e.Args {
+			c.expr(a)
+		}
+		return Invalid
+	}
 	switch b {
+	case BuiltinToString:
+		t := c.expr(e.Args[0])
+		if t != Invalid && !isValue(t) {
+			c.errorf(e.Args[0].Position(), "toString needs a value, found %s", t)
+		}
+		return String
+	case BuiltinConvert:
+		return c.conversion(e, fname)
 	case BuiltinPrintln:
 		for _, a := range e.Args {
 			t := c.expr(a)
@@ -440,12 +639,12 @@ func (c *checker) builtinCall(e *syntax.Call, b Builtin) Type {
 	return Invalid
 }
 
-func (c *checker) ifExpr(e *syntax.If) Type {
+func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 	cond := c.expr(e.Cond)
 	if cond != Bool && cond != Invalid && cond != Never {
 		c.errorf(e.Cond.Position(), "if-condition must be Bool, found %s", cond)
 	}
-	thenT := c.block(e.Then)
+	thenT := c.block(e.Then, want)
 	if e.Else == nil {
 		// Without else, the if is only run for its effect.
 		if isValue(thenT) {
@@ -453,19 +652,45 @@ func (c *checker) ifExpr(e *syntax.If) Type {
 		}
 		return Unit
 	}
-	elseT := c.expr(e.Else)
-	switch {
-	case thenT == Invalid || elseT == Invalid:
-		return Invalid
-	case thenT == Never:
-		return elseT
-	case elseT == Never:
-		return thenT
-	case thenT == elseT:
-		return thenT
+	elseT := c.exprWant(e.Else, want)
+	return c.unify(e.Pos, "if-branches have", []Type{thenT, elseT}, want)
+}
+
+// unify computes the type of a value that comes from one of several
+// branches. Branches that never finish (Never) are ignored. If the
+// context expects a type that every branch fits, that is the result;
+// otherwise all branches must have the same type.
+func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
+	var vals []Type
+	for _, t := range ts {
+		if t == Invalid {
+			return Invalid
+		}
+		if t != Never {
+			vals = append(vals, t)
+		}
 	}
-	c.errorf(e.Pos, "if-branches have different types: %s and %s", thenT, elseT)
-	return Invalid
+	if len(vals) == 0 {
+		return Never
+	}
+	if want != nil && isValue(want) {
+		fits := true
+		for _, t := range vals {
+			if !assignable(t, want) {
+				fits = false
+			}
+		}
+		if fits {
+			return want
+		}
+	}
+	for _, t := range vals[1:] {
+		if !identical(t, vals[0]) {
+			c.errorf(pos, "%s different types: %s and %s", what, vals[0], t)
+			return Invalid
+		}
+	}
+	return vals[0]
 }
 
 func (c *checker) returnExpr(e *syntax.Return) {
@@ -476,12 +701,42 @@ func (c *checker) returnExpr(e *syntax.Return) {
 		}
 		return
 	}
-	t := c.expr(e.Value)
 	if want == Unit {
+		c.expr(e.Value)
 		c.errorf(e.Value.Position(), "function %s does not return a value", c.fn.Decl.Name)
 		return
 	}
+	t := c.exprWant(e.Value, want)
 	if !assignable(t, want) {
 		c.errorf(e.Value.Position(), "function %s returns %s, but this returns %s", c.fn.Decl.Name, want, t)
 	}
+}
+
+// conversion checks a numeric conversion such as `toInt8(x)`. A
+// constant is converted at compile time and must fit. Otherwise the
+// result is the target type if every value of x's type fits, and
+// `Target | OutOfRange` if some may not.
+func (c *checker) conversion(e *syntax.Call, fname string) Type {
+	to := conversions[fname]
+	arg := e.Args[0]
+	if constValue(arg) != nil {
+		if c.exprWant(arg, to) == Invalid {
+			return Invalid
+		}
+		return to
+	}
+	from := c.expr(arg)
+	if from == Invalid {
+		return Invalid
+	}
+	if !IsNumeric(from) {
+		c.errorf(arg.Position(), "%s needs a number, found %s", fname, from)
+		return Invalid
+	}
+	if alwaysFits(from, to) {
+		c.info.Conversions[e] = &Conversion{From: from, To: to}
+		return to
+	}
+	c.info.Conversions[e] = &Conversion{From: from, To: to, Checked: true}
+	return newUnion([]Type{to, c.info.OutOfRange})
 }

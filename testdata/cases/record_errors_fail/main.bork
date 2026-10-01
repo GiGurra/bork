@@ -1,0 +1,20 @@
+type User = { name: String, age: Int }
+type Shape = sealed {
+  Circle { radius: Int },
+  Empty,
+}
+
+fn main() {
+  a = User { name: "Ada" }
+  b = User { name: "Ada", age: 36, nickname: "A" }
+  c = User { name: 1, age: 36 }
+  d = User { name: "Ada", name: "Bob", age: 1 }
+  println(a.email)
+  e = Shape { radius: 1 }
+  f = Shape.Circle
+  g = Shape.Square
+  s = Shape.Empty
+  println(s.radius)
+  h = Circle { radius: 1 }
+  println(b, c, d, e, f, g, h)
+}

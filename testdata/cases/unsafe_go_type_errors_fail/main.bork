@@ -1,0 +1,8 @@
+fn twice(x: Int): Int unsafe go {
+  y := "a"
+  return x * y
+}
+
+fn main() {
+  println(twice(2))
+}

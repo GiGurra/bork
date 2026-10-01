@@ -1,0 +1,14 @@
+main.bork:2:13: 128 does not fit in Int8 (-128 to 127)
+main.bork:3:14: -1 does not fit in Uint8 (0 to 255)
+main.bork:4:12: 1.5 is not a whole number, so it cannot be Int
+main.bork:5:16: 1e+100 does not fit in Float32
+main.bork:8:13: operator + needs two numbers of the same type or two Strings, found Int and Float
+main.bork:9:13: operator % needs two integers of the same type, found Float and Float
+main.bork:11:11: operator - cannot be used on the unsigned type Uint16
+main.bork:12:15: division by zero
+main.bork:13:18: toInt8 needs a number, found String
+main.bork:14:18: 300 does not fit in Int8 (-128 to 127)
+main.bork:15:15: e must be String, found Int
+main.bork:16:11: invalid integer literal 1__0
+main.bork:16:17: invalid integer literal 0xZZ
+main.bork:17:17: toInt8 takes 1 argument, but 2 were given

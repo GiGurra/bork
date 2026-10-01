@@ -1,0 +1,6 @@
+found Ada
+no user with id <= 100
+database error: negative id
+37 NotFound { id: 5 }
+int 43
+problem: DbError { reason: "negative id" }

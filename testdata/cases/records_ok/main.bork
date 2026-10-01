@@ -1,0 +1,32 @@
+type Address = {
+  street: String,
+  city:   String,
+}
+
+type User = {
+  name:    String,
+  age:     Int,
+  address: Address,
+}
+
+fn main() {
+  ada = User {
+    name: "Ada",
+    age: 36,
+    address: Address { street: "Main St 1", city: "London" },
+  }
+  println(ada.name, ada.age, ada.address.city)
+  println(ada)
+
+  // copy creates a new record; nested fields are updated with dotted paths.
+  moved = ada.copy(age = 37, address.city = "Paris")
+  println(moved)
+  println(ada.address.city)
+
+  // Records compare by value.
+  println(ada == moved, ada == moved.copy(age = 36, address.city = "London"))
+
+  // Field order in a literal doesn't matter.
+  same = User { address: ada.address, age: 36, name: "Ada" }
+  println(same == ada)
+}

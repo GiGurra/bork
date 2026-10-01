@@ -1,0 +1,14 @@
+fn trim(s: String): String {
+  s
+}
+
+type ParseError = { input: String }
+
+fn toInt8(x: Int): Int {
+  x
+}
+
+fn main() {
+  contains = 1
+  println(contains)
+}

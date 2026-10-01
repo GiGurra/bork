@@ -13,7 +13,9 @@ const (
 
 	TIdent
 	TInt
+	TFloat
 	TString
+	TGoCode // the raw Go inside `unsafe go { ... }`
 
 	// Keywords
 	KwFn
@@ -22,14 +24,22 @@ const (
 	KwReturn
 	KwTrue
 	KwFalse
+	KwType
+	KwSealed
+	KwMatch
+	KwUnsafe
 
 	// Delimiters
 	LParen
 	RParen
 	LBrace
 	RBrace
+	LBrack
+	RBrack
 	Comma
 	Colon
+	Dot
+	Underscore // the wildcard pattern _
 
 	// Operators
 	Assign // =
@@ -47,12 +57,17 @@ const (
 	LtEq   // <=
 	Gt     // >
 	GtEq   // >=
+	Pipe   // |
+	Arrow  // =>
+	Quest  // ?
 )
 
 var kindNames = map[Kind]string{
 	EOF: "end of file", Illegal: "illegal token", Semi: "newline or ';'",
-	TIdent: "identifier", TInt: "integer literal", TString: "string literal",
+	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TGoCode: "Go code", TString: "string literal",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
+	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'",
+	LBrack: "'['", RBrack: "']'", Dot: "'.'", Underscore: "'_'", Pipe: "'|'", Arrow: "'=>'", Quest: "'?'",
 	LParen: "'('", RParen: "')'", LBrace: "'{'", RBrace: "'}'", Comma: "','", Colon: "':'",
 	Assign: "'='", Plus: "'+'", Minus: "'-'", Star: "'*'", Slash: "'/'", Pct: "'%'", Not: "'!'",
 	AndAnd: "'&&'", OrOr: "'||'", Eq: "'=='", NotEq: "'!='", Lt: "'<'", LtEq: "'<='", Gt: "'>'", GtEq: "'>='",
@@ -72,6 +87,10 @@ var keywords = map[string]Kind{
 	"return": KwReturn,
 	"true":   KwTrue,
 	"false":  KwFalse,
+	"type":   KwType,
+	"sealed": KwSealed,
+	"match":  KwMatch,
+	"unsafe": KwUnsafe,
 }
 
 // Token is a lexed token. Text holds the source text for identifiers

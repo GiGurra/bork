@@ -1,0 +1,33 @@
+type Shape = sealed {
+  Circle { radius: Int },
+  Rect { w: Int, h: Int },
+  Empty,
+}
+
+fn area(s: Shape): Int {
+  match (s) {
+    Shape.Circle { radius } => 3 * radius * radius
+    Shape.Rect { w, h: height } => w * height
+    Shape.Empty => 0
+  }
+}
+
+fn isRound(s: Shape): Bool {
+  match (s) {
+    Shape.Circle { radius } => radius > 0
+    _ => false
+  }
+}
+
+fn main() {
+  shapes = Shape.Rect { w: 3, h: 4 }
+  println(area(Shape.Circle { radius: 2 }), area(shapes), area(Shape.Empty))
+  println(isRound(Shape.Circle { radius: 1 }), isRound(Shape.Empty))
+  println(Shape.Circle { radius: 1 }, Shape.Empty)
+  println(Shape.Circle { radius: 1 } == Shape.Circle { radius: 1 }, Shape.Empty == shapes)
+  // match is an expression, and can be used for effect.
+  match (shapes) {
+    Shape.Rect { w, h } => println("rect", w, "by", h)
+    _ => println("not a rect")
+  }
+}

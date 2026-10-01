@@ -1,0 +1,53 @@
+type User = { name: String, age: Int }
+type NotFound = { id: Int }
+type DbError = { reason: String }
+
+fn findUser(id: Int): User | NotFound | DbError {
+  if (id == 1) {
+    User { name: "Ada", age: 36 }
+  } else if (id < 0) {
+    DbError { reason: "negative id" }
+  } else {
+    NotFound { id: id }
+  }
+}
+
+// ? keeps the leftmost member (User) and returns the rest.
+fn nameOf(id: Int): String | NotFound | DbError {
+  user = findUser(id)?
+  user.name
+}
+
+// ? also works in the middle of an expression.
+fn ageNextYear(id: Int): Int | NotFound | DbError {
+  findUser(id)?.age + 1
+}
+
+fn describe(r: String | NotFound | DbError): String {
+  match (r) {
+    name: String => "found " + name
+    NotFound { id } => "no user with id " + if (id > 100) { "> 100" } else { "<= 100" }
+    e: DbError => "database error: " + e.reason
+  }
+}
+
+// Integer literals stored in a union keep the Int type.
+fn intOrText(flag: Bool): Int | String {
+  if (flag) { 42 } else { "text" }
+}
+
+fn main() {
+  println(describe(nameOf(1)))
+  println(describe(nameOf(7)))
+  println(describe(nameOf(-1)))
+  println(ageNextYear(1), ageNextYear(5))
+  match (intOrText(true)) {
+    n: Int => println("int", n + 1)
+    s: String => println("string", s)
+  }
+  // A type pattern can cover several union members.
+  match (findUser(-1)) {
+    u: User => println("user", u.name)
+    problem: NotFound | DbError => println("problem:", problem)
+  }
+}

@@ -1,0 +1,7 @@
+fn broken(x: Int): Int unsafe go {
+  return x +
+}
+
+fn main() {
+  println(broken(1))
+}

@@ -1,0 +1,35 @@
+type Shape = sealed {
+  Circle { radius: Int },
+  Rect { w: Int, h: Int },
+  Empty,
+}
+type NotFound = { id: Int }
+
+fn a(s: Shape): Int {
+  match (s) {
+    Shape.Circle { radius } => radius
+  }
+}
+
+fn b(r: Int | NotFound): Int {
+  match (r) {
+    n: Int => n
+  }
+}
+
+fn c(flag: Bool): Int {
+  match (flag) {
+    true => 1
+  }
+}
+
+fn d(n: Int): Int {
+  match (n) {
+    1 => 1
+    2 => 2
+  }
+}
+
+fn main() {
+  println(a(Shape.Empty), b(1), c(true), d(1))
+}

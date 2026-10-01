@@ -1,0 +1,38 @@
+type Point = { x: Int, y: Int }
+type NotFound = { key: String }
+
+// unsafe go bodies are Go code, using bork values as Go sees them.
+fn distance(p: Point): Float unsafe go {
+  import "math"
+  return math.Sqrt(float64(p.x*p.x + p.y*p.y))
+}
+
+fn lookup(key: String): Int | NotFound unsafe go {
+  values := map[string]int64{"a": 1, "b": 2}
+  if v, ok := values[key]; ok {
+    return v
+  }
+  return NotFound{key: key}
+}
+
+fn firstWord(s: String): Option[String] unsafe go {
+  import "strings"
+  // Braces in strings and comments are fine: "}" '}' `}` /* } */
+  fields := strings.Fields(s)
+  if len(fields) == 0 {
+    return Option_None[string]{}
+  }
+  return Option_Some[string]{value: fields[0]}
+}
+
+fn shout(s: String) unsafe go {
+  import "fmt"
+  fmt.Println(s + "!")
+}
+
+fn main() {
+  println(distance(Point { x: 3, y: 4 }))
+  println(lookup("b"), lookup("z"))
+  println(firstWord("hello world"), firstWord("   "))
+  shout("hey")
+}
