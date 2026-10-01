@@ -36,25 +36,46 @@ func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
 // on constants and prints each result (true or false) on its own line.
 // The compiler uses it to evaluate predicates at compile time.
 func EvalProgram(files []*syntax.File, info *check.Info, queries []check.Query) ([]byte, error) {
-	var roots []*check.Func
-	for _, q := range queries {
-		roots = append(roots, q.Pred)
-	}
 	g := &gen{info: info, imports: map[string]bool{"fmt": true}}
+	var roots []*check.Func
 	body := &ast.BlockStmt{}
 	for _, q := range queries {
-		var args []ast.Expr
-		for i, v := range q.Args {
-			args = append(args, g.constant(v, q.Pred.Params[i]))
-		}
-		call := &ast.CallExpr{Fun: name(q.Pred.Decl.Name), Args: args}
 		body.List = append(body.List, &ast.ExprStmt{X: &ast.CallExpr{
 			Fun:  &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent("Println")},
-			Args: []ast.Expr{call},
+			Args: []ast.Expr{g.query(q, &roots)},
 		}})
 	}
 	main := &ast.FuncDecl{Name: ast.NewIdent("main"), Type: &ast.FuncType{Params: &ast.FieldList{}}, Body: body}
 	return generate(files, info, roots, main)
+}
+
+// query is the Go expression for a query, adding the predicates it
+// calls to roots.
+func (g *gen) query(q check.Query, roots *[]*check.Func) ast.Expr {
+	join := func(parts []check.Query, op token.Token) ast.Expr {
+		var x ast.Expr
+		for _, p := range parts {
+			px := g.query(p, roots)
+			if x == nil {
+				x = px
+			} else {
+				x = &ast.BinaryExpr{X: x, Op: op, Y: px}
+			}
+		}
+		return &ast.ParenExpr{X: x}
+	}
+	switch {
+	case q.Or != nil:
+		return join(q.Or, token.LOR)
+	case q.And != nil:
+		return join(q.And, token.LAND)
+	}
+	*roots = append(*roots, q.Pred)
+	var args []ast.Expr
+	for i, v := range q.Args {
+		args = append(args, g.constant(v, q.Pred.Params[i]))
+	}
+	return &ast.CallExpr{Fun: name(q.Pred.Decl.Name), Args: args}
 }
 
 // constant is the Go expression for a constant of bork type t.

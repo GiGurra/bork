@@ -7,7 +7,7 @@
 - **Source files** are UTF-8, with the `.bork` extension. A directory of `.bork` files is one package.
 - **Comments:** `// to end of line` and `/* block */`. They are ignored by the parser, but kept by the lexer for future tooling.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `trust`.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -21,8 +21,11 @@
 
 ```ebnf
 Package    = { File } .
-File       = { ( FuncDecl | PredDecl | TypeDecl ) EOL } .
+File       = { ( FuncDecl | PredDecl | TypeDecl | RuleDecl ) EOL } .
 PredDecl   = "pred" Ident "(" Params ")" Block .  (* always returns Bool *)
+RuleDecl   = "rule" Ident "(" Params ")" "{" Premises "=>" Conclusions "}" .
+Premises   = Expr { "and" Expr } .  (* predicate calls on the variables, and conditions *)
+Conclusions = Call { "and" Call } .
 
 TypeDecl   = "type" Ident "=" ( Fields | Sealed | Type ) .
 Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
@@ -37,7 +40,9 @@ GoImport   = "import" StringLit newline .     (* import "strings" *)
 Params     = Param { "," Param } [ "," ] .
 Param      = Ident ":" Type .
 Type       = Constrained { "|" Constrained } .  (* a union: Int | NotFound *)
-Constrained = TypeAtom [ "where" PredRef { "and" PredRef } ] .
+Constrained = TypeAtom [ "where" Clause { "and" Clause } ] .
+Clause     = PredRef { "or" PredRef }          (* alone: p or q *)
+           | "(" PredRef { "or" PredRef } ")" .  (* with and: (p or q) and r *)
 PredRef    = Ident [ "(" Expr { "," Expr } ")" ] .  (* positive, between(1, 65535), atLeast(lo) *)
 TypeAtom   = Ident [ "[" Type { "," Type } "]" ] | "(" Type ")" .
 

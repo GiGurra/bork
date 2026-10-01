@@ -49,11 +49,15 @@ fn promise(x: Int): Int where positive {
   if (positive(x)) { x } else { 0 - x }
 }
 
-fn validate(raw: Int): Int | NotPositive {
-  if (positive(raw)) { raw } else { NotPositive { value: raw } }
+// validate is opaque Go code and does not promise anything about its
+// Int, so nothing is known about it.
+fn validate(raw: Int): Int | NotPositive unsafe go {
+  if raw > 0 {
+    return raw
+  }
+  return NotPositive{value: raw}
 }
 
-// validate does not promise anything about its Int.
 fn unvalidated(raw: Int): Int | NotPositive {
   amount = validate(raw)?
   transfer(amount)

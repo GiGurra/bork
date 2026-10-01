@@ -1,0 +1,4 @@
+main.bork:13:9: retry requires times to be atLeast(5), but that is not proven for a (check it first with if (atLeast(a, 5)) { ... }, or require it: a: Int where atLeast(5))
+main.bork:13:27: needPositive requires x to be positive, but that is not proven for b (check it first with if (positive(b)) { ... }, or require it: b: Int where positive)
+main.bork:18:16: needPositive requires x to be positive, but that is not proven for c (check it first with if (positive(c)) { ... }, or require it: c: Int where positive)
+main.bork:27:16: needPositive requires x to be positive, but sometimes can return 0, and positive(0) is false

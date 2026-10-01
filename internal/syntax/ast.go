@@ -4,7 +4,8 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
-	Path string
+	Path  string
+	Rules []*RuleDecl
 	// Prelude is set for the compiler's built-in prelude.bork.
 	Prelude  bool
 	Types    []*TypeDecl
@@ -81,18 +82,38 @@ type TypeExpr struct {
 	Name  string
 	Args  []*TypeExpr
 	Union []*TypeExpr // non-nil for a union; Name and Args are then unused
-	// Where lists the predicates of `T where p and q(1)`.
+	// Where lists the clauses of `T where p and (q(1) or r)`, all of
+	// which must hold.
 	Where []*PredRef
 }
 
 // PredRef is one predicate in a where clause: `positive`, or
 // `between(1, 65535)`, whose arguments are constants or parameter
 // names. The constrained value itself is the predicate's first argument
-// and is not written.
+// and is not written. A clause with alternatives, `p or q`, has the
+// first in Name and Args and the rest in Or.
 type PredRef struct {
 	Pos  diag.Pos
 	Name string
 	Args []Expr
+	Or   []*PredRef
+}
+
+// RuleDecl is an inference rule:
+//
+//	rule weaken(x: Int, a: Int, b: Int) {
+//	  atLeast(x, a) and a >= b => atLeast(x, b)
+//	}
+//
+// Premises are predicate calls (facts to find) or other Bool
+// expressions (conditions, computed when their variables are constants).
+// Conclusions are predicate calls.
+type RuleDecl struct {
+	Pos         diag.Pos
+	Name        string
+	Params      []*Param
+	Premises    []Expr
+	Conclusions []Expr
 }
 
 // TrustStmt is `trust p(x, ...)`: from here on, p(x, ...) is taken as
