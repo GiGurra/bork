@@ -63,6 +63,7 @@ bork run examples/hello      # compile and run
 bork build examples/hello    # compile to an executable
 bork check examples/hello    # type-check only
 bork emit examples/hello     # show the generated Go
+bork test examples/payments  # run the tests, checking trusted facts
 ```
 
 ```

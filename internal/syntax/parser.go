@@ -35,8 +35,12 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 			if td := p.typeDecl(); td != nil {
 				f.Types = append(f.Types, td)
 			}
+		case p.at(TIdent) && p.tok().Text == "test" && p.peekKind() == TString:
+			if td := p.testDecl(); td != nil {
+				f.Tests = append(f.Tests, td)
+			}
 		default:
-			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', or 'type'), found %s", p.tok().Kind)
+			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', or 'test'), found %s", p.tok().Kind)
 			p.syncTopLevel()
 		}
 	}
@@ -891,6 +895,24 @@ func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 		sub.errorf(sub.tok().Pos, "unexpected %s in interpolated expression", sub.tok().Kind)
 	}
 	return x
+}
+
+// testDecl parses `test "name" { ... }`. (`test` is not a keyword, so
+// it remains a usable name.)
+func (p *parser) testDecl() (td *TestDecl) {
+	defer p.recoverDecl(func() { td = nil })
+	pos := p.next().Pos
+	name := p.next()
+	v, err := strconv.Unquote(name.Text)
+	if err != nil {
+		p.errorf(name.Pos, "invalid string literal %s", name.Text)
+	}
+	td = &TestDecl{Pos: pos, Name: v, Body: p.block()}
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after test, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return td
 }
 
 func (p *parser) ruleDecl() (r *RuleDecl) {

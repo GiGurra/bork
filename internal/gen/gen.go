@@ -128,7 +128,14 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				continue
 			}
 			if fd.GoBody != nil {
-				text, err := g.goFunc(fd)
+				fn := info.FuncOf[fd]
+				goName := g.funcName(fn).Name
+				if g.testMode && len(fn.ResultConstraints) > 0 {
+					// Check what the Go code promises.
+					funcs = append(funcs, g.checkedWrapper(fn))
+					goName = "_unchecked_" + goName
+				}
+				text, err := g.goFunc(fd, goName)
 				if err != nil {
 					return nil, err
 				}
@@ -138,6 +145,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			funcs = append(funcs, g.funcDecl(fd))
 		}
 	}
+	funcs = append(funcs, g.extraFuncs...)
 	if main != nil {
 		funcs = append(funcs, main)
 	}
@@ -202,6 +210,12 @@ type gen struct {
 	usesShow    bool
 	usesConvert bool
 	usesIs      bool
+	usesAssert  bool
+	usesTests   bool
+	// testMode generates checks of trusted facts (see Tests), and
+	// extraFuncs holds functions to emit besides the reachable ones.
+	testMode   bool
+	extraFuncs []ast.Decl
 }
 
 // reachable lists the functions to emit: the roots, and the functions
@@ -226,7 +240,7 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 
 // goFunc generates a function implemented with `unsafe go { ... }`: the
 // signature is generated, and the body is the Go code as written.
-func (g *gen) goFunc(fd *syntax.FuncDecl) (string, error) {
+func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	for _, p := range fd.Params {
 		if goReserved[p.Name] {
 			return "", fmt.Errorf("%s: parameter %s of unsafe go function %s is a reserved name in Go; rename it", p.Pos, p.Name, fd.Name)
@@ -236,7 +250,9 @@ func (g *gen) goFunc(fd *syntax.FuncDecl) (string, error) {
 		g.imports[path] = true
 	}
 	var buf bytes.Buffer
-	if err := printer.Fprint(&buf, token.NewFileSet(), g.signature(fd)); err != nil {
+	sig := g.signature(fd)
+	sig.Name = ast.NewIdent(goName)
+	if err := printer.Fprint(&buf, token.NewFileSet(), sig); err != nil {
 		return "", err
 	}
 	pos := fd.GoBody.Pos
@@ -602,6 +618,18 @@ func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 		return g.conversion(e, args[0])
 	case check.BuiltinPanic:
 		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: args}
+	case check.BuiltinAssert:
+		g.usesAssert = true
+		return &ast.CallExpr{Fun: ast.NewIdent("_assert"), Args: []ast.Expr{args[0], at(e.Fun.Position())}}
+	case check.BuiltinAssertEqual:
+		g.usesAssert = true
+		t := g.info.Types[e.Args[0]]
+		actual := g.typed(args[0], t)
+		expected := g.convert(args[1], g.info.Types[e.Args[1]], t)
+		if check.IsNumeric(t) && isConst(expected) {
+			expected = &ast.CallExpr{Fun: g.goType(t), Args: []ast.Expr{expected}}
+		}
+		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, at(e.Fun.Position())}}
 	}
 	return &ast.CallExpr{Fun: g.instance(g.info.Instances[e]), Args: args}
 }
@@ -696,6 +724,10 @@ func (g *gen) stmts(list []syntax.Stmt) []ast.Stmt {
 			}
 		case *syntax.ExprStmt:
 			out = append(out, g.effect(s.X)...)
+		case *syntax.TrustStmt:
+			if g.testMode {
+				out = append(out, g.trustCheck(s)...)
+			}
 		}
 	}
 	return out

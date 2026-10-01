@@ -1,0 +1,12 @@
+fn main() {}
+
+test "misuse" {
+  assert(1)
+  assertEqual([1], [1])
+  assertEqual(1, "one")
+  assertEqual(1)
+}
+
+test "misuse" {
+  assert(true)
+}

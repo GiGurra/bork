@@ -278,6 +278,21 @@ func (in *inference) instance() *Instance {
 	return inst
 }
 
+// InstanceFor instantiates fn (a predicate) for a value of type
+// subject as its first argument. It returns nil if that does not
+// decide fn's type parameters.
+func (fn *Func) InstanceFor(subject Type) *Instance {
+	if len(fn.TypeParams) == 0 {
+		return &Instance{Func: fn, Params: fn.Params, Result: fn.Result}
+	}
+	in := newInference(fn)
+	in.unify(fn.Params[0], subject)
+	if len(in.unsolved()) > 0 {
+		return nil
+	}
+	return in.instance()
+}
+
 // callFunc checks a call of a declared function. Arguments are checked
 // left to right, except that those that need a type from the context
 // (lambdas, `[]`, `Option.None`) come last, once the other arguments

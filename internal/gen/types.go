@@ -249,6 +249,61 @@ func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, i
 // The runtime is hand-written Go that generated programs share. It is
 // parsed (not pasted) so it goes through the same printer as everything
 // else.
+const assertRuntime = `package main
+
+func _assert(ok bool, at string) {
+	if !ok {
+		panic(at + ": assertion failed")
+	}
+}
+
+func _assertEqual[T comparable](actual, expected T, at string) {
+	if actual != expected {
+		panic(at + ": expected " + _show(expected) + ", got " + _show(actual))
+	}
+}
+`
+
+const testRuntime = `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+type _test struct {
+	name string
+	run  func()
+}
+
+// _runTests runs the tests, each until it fails (panics), and reports.
+func _runTests(tests []_test) {
+	failed := 0
+	for _, t := range tests {
+		if msg := _runTest(t.run); msg != "" {
+			failed++
+			fmt.Printf("FAIL  %s\n      %s\n", t.name, msg)
+		} else {
+			fmt.Printf("ok    %s\n", t.name)
+		}
+	}
+	fmt.Printf("%d passed, %d failed\n", len(tests)-failed, failed)
+	if failed > 0 {
+		os.Exit(1)
+	}
+}
+
+func _runTest(run func()) (msg string) {
+	defer func() {
+		if r := recover(); r != nil {
+			msg = fmt.Sprint(r)
+		}
+	}()
+	run()
+	return ""
+}
+`
+
 const isRuntime = `package main
 
 // _is reports whether x holds a value of type T.
@@ -357,6 +412,13 @@ func _fmtFloat(f float64, bits int) string {
 // comments print correctly.
 func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
+	if g.usesAssert {
+		g.usesShow = true
+		src = append(src, assertRuntime)
+	}
+	if g.usesTests {
+		src = append(src, testRuntime)
+	}
 	if g.usesIs {
 		src = append(src, isRuntime)
 	}

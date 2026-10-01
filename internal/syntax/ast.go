@@ -10,7 +10,16 @@ type File struct {
 	Prelude  bool
 	Types    []*TypeDecl
 	Funcs    []*FuncDecl
+	Tests    []*TestDecl
 	Comments []Comment
+}
+
+// TestDecl is a test: `test "adds numbers" { assert(add(1, 2) == 3) }`.
+// Tests run with `bork test`, and are left out of programs.
+type TestDecl struct {
+	Pos  diag.Pos
+	Name string
+	Body *Block
 }
 
 // TypeKind says what a type declaration declares.

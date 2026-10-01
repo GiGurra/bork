@@ -3,6 +3,7 @@ package driver
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,6 +36,10 @@ func TestCases(t *testing.T) {
 				runErrorCase(t, dir)
 				return
 			}
+			if _, err := os.Stat(filepath.Join(dir, "expected_test_output.txt")); err == nil {
+				runTestCase(t, dir)
+				return
+			}
 			runOutputCase(t, dir)
 		})
 	}
@@ -50,6 +55,18 @@ func runOutputCase(t *testing.T, dir string) {
 		t.Fatalf("program failed: %v\n%s", err, out)
 	}
 	compare(t, filepath.Join(dir, "expected_output.txt"), string(out))
+}
+
+// runTestCase runs a package's tests (bork test) and compares the
+// report, including the exit code.
+func runTestCase(t *testing.T, dir string) {
+	var out strings.Builder
+	code, err := Test(dir, &out)
+	if err != nil {
+		t.Fatalf("test build failed:\n%v", err)
+	}
+	got := strings.ReplaceAll(out.String(), dir+string(filepath.Separator), "")
+	compare(t, filepath.Join(dir, "expected_test_output.txt"), fmt.Sprintf("%sexit code %d\n", got, code))
 }
 
 func runErrorCase(t *testing.T, dir string) {
@@ -108,6 +125,14 @@ func TestExamples(t *testing.T) {
 				t.Fatalf("program failed: %v\n%s", err, out)
 			}
 			compare(t, filepath.Join("..", "..", "testdata", "examples", name+".txt"), string(out))
+			// An example's tests must pass.
+			if _, info, err := Check(filepath.Join(root, name)); err == nil && len(info.Tests) > 0 {
+				var report strings.Builder
+				code, err := Test(filepath.Join(root, name), &report)
+				if err != nil || code != 0 {
+					t.Fatalf("tests failed (%v):\n%s", err, report.String())
+				}
+			}
 		})
 	}
 }

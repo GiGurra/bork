@@ -90,6 +90,20 @@ func main() {
 				},
 			},
 			boa.CmdT[pathParams]{
+				Use:   "test",
+				Short: "run a bork program's tests, checking trusted facts as they run",
+				ValidArgsFunc: func(p *pathParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+					return completeBorkPaths(p, cmd, args, toComplete)
+				},
+				RunFunc: func(p *pathParams, _ *cobra.Command, _ []string) {
+					code, err := driver.Test(p.Path, os.Stdout)
+					if err != nil {
+						fail(err)
+					}
+					os.Exit(code)
+				},
+			},
+			boa.CmdT[pathParams]{
 				Use:   "check",
 				Short: "type-check a bork program without building it",
 				ValidArgsFunc: func(p *pathParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
