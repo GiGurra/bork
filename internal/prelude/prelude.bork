@@ -179,6 +179,15 @@ fn isEmpty[T](xs: List[T]): Bool unsafe go {
   return len(xs) == 0
 }
 
+// notEmpty holds for a list with at least one element.
+pred notEmpty[T](xs: List[T]) { !isEmpty(xs) }
+
+// first is the first element of a list known to have one: no Option
+// needed. Check with if (notEmpty(xs)), or require it.
+fn first[T](xs: List[T] where notEmpty): T unsafe go {
+  return xs[0]
+}
+
 // get is the element at index (from 0), if there is one.
 fn get[T](xs: List[T], index: Int): Option[T] unsafe go {
   if index < 0 || index >= int64(len(xs)) {
@@ -308,12 +317,12 @@ fn concat[T](xs: List[T], ys: List[T]): List[T] unsafe go {
   return append(append(out, xs...), ys...)
 }
 
-fn append[T](xs: List[T], x: T): List[T] unsafe go {
+fn append[T](xs: List[T], x: T): List[T] where notEmpty unsafe go {
   out := make([]T, 0, len(xs)+1)
   return append(append(out, xs...), x)
 }
 
-fn prepend[T](x: T, xs: List[T]): List[T] unsafe go {
+fn prepend[T](x: T, xs: List[T]): List[T] where notEmpty unsafe go {
   out := make([]T, 0, len(xs)+1)
   return append(append(out, x), xs...)
 }
@@ -342,7 +351,8 @@ fn join(parts: List[String], separator: String): String unsafe go {
   return strings.Join(parts, separator)
 }
 
-fn split(s: String, separator: String): List[String] unsafe go {
+// split always gives at least one part.
+fn split(s: String, separator: String): List[String] where notEmpty unsafe go {
   import "strings"
   return strings.Split(s, separator)
 }

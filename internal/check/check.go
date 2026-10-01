@@ -80,7 +80,12 @@ type TryInfo struct {
 // Info is what the checker learned about a package. Later passes (code
 // generation) read it instead of re-deriving types.
 type Info struct {
+	// Funcs holds the functions visible to the package by name: its own,
+	// and the prelude's that it does not replace.
 	Funcs map[string]*Func
+	// FuncOf holds every declared function, including prelude functions
+	// the package replaced (the prelude still uses its own).
+	FuncOf map[*syntax.FuncDecl]*Func
 	// Named holds every declared type: *Record, *Sealed, or (for an
 	// alias) the aliased type.
 	Named map[string]Type
@@ -148,10 +153,12 @@ type PatSource struct {
 // Package type-checks the given files as one package.
 func Package(files []*syntax.File, diags *diag.List) *Info {
 	c := &checker{
-		diags: diags,
+		diags:   diags,
+		prelude: map[string]*Func{},
 		decls: map[string]*typeEntry{},
 		info: &Info{
 			Funcs:            map[string]*Func{},
+			FuncOf:           map[*syntax.FuncDecl]*Func{},
 			Named:            map[string]Type{},
 			Types:            map[syntax.Expr]Type{},
 			CallFuncs:        map[*syntax.Call]*Func{},
@@ -203,7 +210,7 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			if fn := c.info.Funcs[fd.Name]; fn != nil && fn.Decl == fd {
+			if fn := c.info.FuncOf[fd]; fn != nil {
 				c.checkFunc(fn)
 			}
 		}
@@ -219,6 +226,10 @@ type checker struct {
 	// Per-function state.
 	fn     *Func
 	scopes []map[string]*local
+	// prelude holds the prelude's functions by name; inPrelude is set
+	// while prelude code is checked, which sees only those.
+	prelude   map[string]*Func
+	inPrelude bool
 	// typeParams holds the type parameters in scope.
 	typeParams map[string]*TypeParam
 	// lambdaDepth counts the lambdas being checked around the current
@@ -231,6 +242,17 @@ type local struct {
 	node any // the binding's syntax node; nil for parameters
 	decl any // what an identifier refers to (see Info.Defs)
 	used bool
+}
+
+// funcNamed looks up a function by name, as the code being checked
+// sees it: prelude code sees only the prelude.
+func (c *checker) funcNamed(name string) (*Func, bool) {
+	if c.inPrelude {
+		fn, ok := c.prelude[name]
+		return fn, ok
+	}
+	fn, ok := c.info.Funcs[name]
+	return fn, ok
 }
 
 func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
@@ -264,10 +286,16 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	}
 	c.typeParams = nil
 	c.info.Funcs[fd.Name] = fn
+	c.info.FuncOf[fd] = fn
+	if prelude {
+		c.prelude[fd.Name] = fn
+	}
 }
 
 func (c *checker) checkFunc(fn *Func) {
 	c.fn = fn
+	c.inPrelude = fn.Prelude
+	defer func() { c.inPrelude = false }()
 	c.useTypeParams(fn)
 	defer c.useTypeParams(nil)
 	c.scopes = []map[string]*local{{}}
@@ -532,7 +560,7 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 		c.info.Defs[e] = l.decl
 		return l.typ
 	}
-	if fn, ok := c.info.Funcs[e.Name]; ok {
+	if fn, ok := c.funcNamed(e.Name); ok {
 		return c.funcValue(e, fn, want)
 	}
 	if _, ok := builtins[e.Name]; ok {
@@ -662,7 +690,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		c.info.CallBuiltins[e] = b
 		return c.builtinCall(e, id.Name, b)
 	}
-	fn, ok := c.info.Funcs[id.Name]
+	fn, ok := c.funcNamed(id.Name)
 	if !ok {
 		switch {
 		case c.isTypeName(id.Name):

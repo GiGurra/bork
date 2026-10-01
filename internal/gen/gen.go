@@ -29,33 +29,39 @@ func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
 			roots = append(roots, fn)
 		}
 	}
-	return generate(files, info, roots, nil)
+	return generate(newGen(info), files, roots, nil)
+}
+
+func newGen(info *check.Info) *gen {
+	return &gen{info: info, imports: map[string]bool{}, usedTypes: map[check.Type]bool{}}
 }
 
 // EvalProgram generates a program that runs the given predicate calls
 // on constants and prints each result (true or false) on its own line.
 // The compiler uses it to evaluate predicates at compile time.
 func EvalProgram(files []*syntax.File, info *check.Info, queries []check.Query) ([]byte, error) {
-	g := &gen{info: info, imports: map[string]bool{"fmt": true}}
+	g := newGen(info)
 	var roots []*check.Func
 	body := &ast.BlockStmt{}
 	for _, q := range queries {
-		body.List = append(body.List, &ast.ExprStmt{X: &ast.CallExpr{
+		var setup []ast.Stmt
+		x := g.query(q, &roots, &setup)
+		body.List = append(body.List, &ast.BlockStmt{List: append(setup, &ast.ExprStmt{X: &ast.CallExpr{
 			Fun:  &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent("Println")},
-			Args: []ast.Expr{g.query(q, &roots)},
-		}})
+			Args: []ast.Expr{x},
+		}})})
 	}
 	main := &ast.FuncDecl{Name: ast.NewIdent("main"), Type: &ast.FuncType{Params: &ast.FieldList{}}, Body: body}
-	return generate(files, info, roots, main)
+	return generate(g, files, roots, main)
 }
 
 // query is the Go expression for a query, adding the predicates it
-// calls to roots.
-func (g *gen) query(q check.Query, roots *[]*check.Func) ast.Expr {
+// calls to roots, and any statements it needs first to setup.
+func (g *gen) query(q check.Query, roots *[]*check.Func, setup *[]ast.Stmt) ast.Expr {
 	join := func(parts []check.Query, op token.Token) ast.Expr {
 		var x ast.Expr
 		for _, p := range parts {
-			px := g.query(p, roots)
+			px := g.query(p, roots, setup)
 			if x == nil {
 				x = px
 			} else {
@@ -72,10 +78,23 @@ func (g *gen) query(q check.Query, roots *[]*check.Func) ast.Expr {
 	}
 	*roots = append(*roots, q.Pred)
 	var args []ast.Expr
-	for i, v := range q.Args {
-		args = append(args, g.constant(v, q.Pred.Params[i]))
+	if q.Subject != nil {
+		stmts, x := g.value(q.Subject)
+		*setup = append(*setup, stmts...)
+		args = append(args, g.convert(x, g.info.Types[q.Subject], q.Params[0]))
 	}
-	return &ast.CallExpr{Fun: name(q.Pred.Decl.Name), Args: args}
+	for _, v := range q.Args {
+		args = append(args, g.constant(v, q.Params[len(args)]))
+	}
+	fun := ast.Expr(g.funcName(q.Pred))
+	if len(q.TypeArgs) > 0 {
+		idx := &ast.IndexListExpr{X: fun}
+		for _, t := range q.TypeArgs {
+			idx.Indices = append(idx.Indices, g.goType(t))
+		}
+		fun = idx
+	}
+	return &ast.CallExpr{Fun: fun, Args: args}
 }
 
 // constant is the Go expression for a constant of bork type t.
@@ -92,8 +111,8 @@ func (g *gen) constant(v constant.Value, t check.Type) ast.Expr {
 // generate generates the functions reachable from roots, and the types
 // and runtime they need. With a main, the program's own main is
 // replaced.
-func generate(files []*syntax.File, info *check.Info, roots []*check.Func, main *ast.FuncDecl) ([]byte, error) {
-	g := &gen{info: info, imports: map[string]bool{}, usedTypes: map[check.Type]bool{}}
+func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncDecl) ([]byte, error) {
+	info := g.info
 	if main != nil {
 		g.imports["fmt"] = true
 	}
@@ -105,7 +124,7 @@ func generate(files []*syntax.File, info *check.Info, roots []*check.Func, main 
 	var goFuncs []string
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			if fn := info.Funcs[fd.Name]; fn == nil || fn.Decl != fd || !emit[fn] {
+			if fn := info.FuncOf[fd]; fn == nil || !emit[fn] {
 				continue
 			}
 			if fd.GoBody != nil {
@@ -259,6 +278,15 @@ func name(s string) *ast.Ident {
 	return ast.NewIdent(s)
 }
 
+// funcName is the Go name of a function. A prelude function the package
+// replaced (but the prelude still uses) gets a name of its own.
+func (g *gen) funcName(fn *check.Func) *ast.Ident {
+	if fn.Prelude && g.info.Funcs[fn.Decl.Name] != fn {
+		return ast.NewIdent("_prelude_" + fn.Decl.Name)
+	}
+	return name(fn.Decl.Name)
+}
+
 func (g *gen) newTmp() *ast.Ident {
 	g.tmp++
 	return ast.NewIdent("_t" + strconv.Itoa(g.tmp))
@@ -266,7 +294,7 @@ func (g *gen) newTmp() *ast.Ident {
 
 // signature generates a function declaration without a body.
 func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
-	fn := g.info.Funcs[fd.Name]
+	fn := g.info.FuncOf[fd]
 	ftype := &ast.FuncType{Params: &ast.FieldList{}}
 	for i, p := range fd.Params {
 		ftype.Params.List = append(ftype.Params.List, &ast.Field{
@@ -284,7 +312,7 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 		}
 		ftype.TypeParams = &ast.FieldList{List: []*ast.Field{tps}}
 	}
-	goName := name(fd.Name)
+	goName := g.funcName(fn)
 	if fd.Name == "main" {
 		goName = ast.NewIdent("main")
 	}
@@ -292,7 +320,7 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 }
 
 func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
-	fn := g.info.Funcs[fd.Name]
+	fn := g.info.FuncOf[fd]
 	g.tmp = 0
 	g.fnResult = fn.Result
 	decl := g.signature(fd)
@@ -515,7 +543,7 @@ func (g *gen) call(e *syntax.Call) ([]ast.Stmt, ast.Expr) {
 // instance is the Go expression for a function, instantiated with its
 // type arguments if it is generic.
 func (g *gen) instance(inst *check.Instance) ast.Expr {
-	fun := name(inst.Func.Decl.Name)
+	fun := g.funcName(inst.Func)
 	if len(inst.TypeArgs) == 0 {
 		return fun
 	}
