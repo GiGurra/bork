@@ -1,0 +1,4 @@
+negative zero positive
+10
+big small
+side effect only

@@ -1,0 +1,11 @@
+// bork names that are Go keywords or predeclared names still work.
+fn len(string: String): Int {
+  if (string == "") { 0 } else { 1 }
+}
+
+fn main() {
+  int = 1
+  fmt = "fmt is fine"
+  range = len("x")
+  println(int, fmt, range)
+}

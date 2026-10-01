@@ -1,0 +1,8 @@
+fn main() {
+  if (true) {
+    println("yes")
+  }
+  else {
+    println("no")
+  }
+}

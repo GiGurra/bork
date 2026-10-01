@@ -1,0 +1,9 @@
+fn f(): Int {
+  return 1
+  println("never")
+  2
+}
+
+fn main() {
+  println(f())
+}

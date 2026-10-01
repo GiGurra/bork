@@ -1,0 +1,7 @@
+evaluating first
+evaluating second
+evaluating third
+4
+right side runs
+loud was called
+false true true

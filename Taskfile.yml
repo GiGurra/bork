@@ -1,0 +1,32 @@
+version: '3'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build all packages
+    cmds:
+      - go build ./...
+
+  install:
+    desc: Install the bork binary
+    cmds:
+      - go install ./cmd/bork/
+
+  test:
+    desc: Run all tests, including the golden-file cases
+    cmds:
+      - go test ./... -count=1
+
+  test:update:
+    desc: Rewrite expected files under testdata/cases from actual results (review the diff!)
+    cmds:
+      - go test ./internal/driver/ -run TestCases -update -count=1
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run

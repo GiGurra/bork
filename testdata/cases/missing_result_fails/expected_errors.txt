@@ -1,0 +1,3 @@
+main.bork:2:3: function noValue must return a value of type Int, but its body ends without one
+main.bork:6:3: function wrongValue returns Int, but its body produces String
+main.bork:10:3: function bareReturn must return a value of type Int

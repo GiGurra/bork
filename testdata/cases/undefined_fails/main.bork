@@ -1,0 +1,4 @@
+fn main() {
+  println(missing)
+  nothing(1)
+}

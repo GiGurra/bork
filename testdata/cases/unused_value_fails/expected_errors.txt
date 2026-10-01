@@ -1,0 +1,2 @@
+main.bork:6:3: value of type Int is not used
+main.bork:7:3: value of type Int is not used (function main returns no value)

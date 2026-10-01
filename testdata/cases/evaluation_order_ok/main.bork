@@ -1,0 +1,26 @@
+fn log(msg: String, value: Int): Int {
+  println("evaluating", msg)
+  value
+}
+
+fn pick(a: Int, b: Int): Int {
+  a + b
+}
+
+fn loud(): Bool {
+  println("loud was called")
+  true
+}
+
+fn main() {
+  // Arguments are evaluated left to right, even when a later argument
+  // is an if-expression that needs setup code.
+  r = pick(log("first", 1), if (log("second", 2) > 0) { log("third", 3) } else { 0 })
+  println(r)
+
+  // && and || short-circuit, also when the right side is a block.
+  a = false && { println("never printed"); loud() }
+  b = true || { println("never printed"); loud() }
+  c = true && { println("right side runs"); loud() }
+  println(a, b, c)
+}

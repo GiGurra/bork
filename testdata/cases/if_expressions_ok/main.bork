@@ -1,0 +1,19 @@
+fn sign(n: Int): String {
+  if (n < 0) {
+    "negative"
+  } else if (n == 0) {
+    "zero"
+  } else {
+    "positive"
+  }
+}
+
+fn main() {
+  println(sign(-5), sign(0), sign(5))
+  x = if (sign(3) == "positive") { 10 } else { 20 }
+  println(x)
+  println(if (x > 5) { "big" } else { "small" }, if (x > 50) { "big" } else { "small" })
+  if (x == 10) {
+    println("side effect only")
+  }
+}

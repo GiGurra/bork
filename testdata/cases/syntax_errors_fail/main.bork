@@ -1,0 +1,8 @@
+fn main() {
+  x = (1 + 2
+  println(x)
+}
+
+fn other(a Int) {
+  println(a)
+}

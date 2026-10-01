@@ -1,0 +1,6 @@
+fn main() {
+  x = if (true) { 1 } else { "one" }
+  if (1) { println("no") }
+  y = if (true) { 1 }
+  println(x, y)
+}

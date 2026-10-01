@@ -1,6 +1,6 @@
 # bork
 
-> **Pre-alpha / design phase.** Nothing here compiles yet. We are formulating requirements and functionality.
+> **Pre-alpha.** The design is still evolving, and the compiler only handles a small first slice of the language.
 
 **bork** is a pragmatic backend language of guarantees.
 
@@ -32,9 +32,40 @@ bork compiles to Go and keeps Go's runtime, but adds three things Go can't give 
 - Maximum efficiency on embedded devices.
 - Being a proof assistant. Guarantees must stay pragmatic.
 
+## Getting started
+
+The compiler is at an early stage: the first slice of milestone M0 (functions, `Int`/`Bool`/`String`, bindings, `if` and blocks as expressions, `println`). It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+
+```bash
+go install github.com/GiGurra/bork/cmd/bork@latest
+
+bork run examples/hello      # compile and run
+bork build examples/hello    # compile to an executable
+bork check examples/hello    # type-check only
+bork emit examples/hello     # show the generated Go
+```
+
+```
+fn classify(n: Int): String {
+  if (n < 0) {
+    "negative"
+  } else if (n == 0) {
+    "zero"
+  } else {
+    "positive"
+  }
+}
+
+fn main() {
+  println("Hello from bork!", classify(42))
+}
+```
+
+Shell completion (via [boa](https://github.com/GiGurra/boa)): `bork completion bash|zsh|fish|powershell`.
+
 ## Status
 
-Early design. See [docs/requirements.md](docs/requirements.md) for what has been decided so far, and [docs/roadmap.md](docs/roadmap.md) for the plan towards a first compiler.
+Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today.
 
 ## License
 

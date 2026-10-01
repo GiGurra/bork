@@ -1,0 +1,2 @@
+main.bork:3:3: expected ')' to close the parenthesis, found identifier
+main.bork:6:12: expected ':' after parameter name, found identifier
