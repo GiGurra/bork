@@ -183,3 +183,54 @@ func TestFormatCLI(t *testing.T) {
 		t.Fatalf("clean directory: %v\n%s", err, out)
 	}
 }
+
+func TestDescribeCLI(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "bork")
+	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+	path := filepath.Join(dir, "main.bork")
+	source := "pred positive(n: Int) { n > 0 }\nfn example(n: Int) { println(n) }\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	position := path + ":2:30"
+	for _, asJSON := range []bool{false, true} {
+		t.Run(fmt.Sprintf("JSON %t", asJSON), func(t *testing.T) {
+			args := []string{"describe", position, "--where", "positive"}
+			if asJSON {
+				args = append(args, "--json")
+			}
+			cmd := exec.Command(exe, args...)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			if err := cmd.Run(); err != nil || stderr.Len() != 0 {
+				t.Fatalf("an unproven fact is a successful query: %v\n%s", err, &stderr)
+			}
+			if asJSON {
+				var result struct {
+					SchemaVersion int    `json:"schema_version"`
+					Type          string `json:"type"`
+					Proof         struct {
+						Proven bool   `json:"proven"`
+						Reason string `json:"reason"`
+					} `json:"proof"`
+				}
+				if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.SchemaVersion != 1 || result.Type != "Int" || result.Proof.Proven || result.Proof.Reason == "" {
+					t.Fatalf("unexpected JSON description: %s (%v)", &stdout, err)
+				}
+			} else if !strings.Contains(stdout.String(), "type: Int\n") || !strings.Contains(stdout.String(), "not proven: positive\n") || !strings.Contains(stdout.String(), "check it first") {
+				t.Fatalf("unexpected text description: %s", &stdout)
+			}
+		})
+	}
+	t.Run("invalid query", func(t *testing.T) {
+		cmd := exec.Command(exe, "describe", position, "--where", "missing", "--json")
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err == nil || stdout.Len() != 0 || !json.Valid(stderr.Bytes()) {
+			t.Fatalf("invalid query should fail with JSON on stderr: %v\n%s / %s", err, &stdout, &stderr)
+		}
+	})
+}

@@ -117,6 +117,8 @@ type factChecker struct {
 	// lambdaArgs records, for the parameters of lambdas passed to
 	// declared functions, which call and parameter they belong to.
 	lambdaArgs map[*Var]lambdaArg
+	// observe captures the proof context for queries keyed by source position.
+	observe func(diag.Pos, env)
 }
 
 // lambdaArg places a lambda's parameter: the lambda is argument arg of
@@ -257,6 +259,9 @@ func (f *factChecker) function(fn *Func) {
 // tail walks an expression whose value is used by result, passing each
 // branch's value (with the facts known in that branch) to result.
 func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
+	if f.observe != nil && f.collect == nil {
+		f.observe(x.Pos(), e)
+	}
 	switch x := x.(type) {
 	case *Block:
 		e = f.stmts(x.Stmts, e)
@@ -339,6 +344,9 @@ func trustSubjectPos(s *Trust) diag.Pos {
 
 // walk visits an expression, checking the obligations inside it.
 func (f *factChecker) walk(x Expr, e env) {
+	if f.observe != nil && f.collect == nil {
+		f.observe(x.Pos(), e)
+	}
 	switch x := x.(type) {
 	case *Call:
 		for i, a := range x.Args {
@@ -752,7 +760,7 @@ func (f *factChecker) paramRef(p *Var) *VarRef {
 	if ref, ok := f.params[p]; ok {
 		return ref
 	}
-	ref := &VarRef{expr: expr{p.Pos, p.Type}, Var: p}
+	ref := &VarRef{expr: expr{pos: p.Pos, typ: p.Type}, Var: p}
 	f.params[p] = ref
 	return ref
 }

@@ -78,7 +78,7 @@ func (l *lowerer) exprs(xs []syntax.Expr) []Expr {
 }
 
 func (l *lowerer) block(b *syntax.Block) *Block {
-	out := &Block{expr: expr{b.Pos, l.info.types[b]}, End: b.End}
+	out := &Block{expr: expr{pos: b.Pos, typ: l.info.types[b]}, End: b.End}
 	for _, s := range b.Stmts {
 		out.Stmts = append(out.Stmts, l.stmt(s))
 	}
@@ -108,9 +108,15 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 }
 
 func (l *lowerer) expr(x syntax.Expr) Expr {
-	at := expr{x.Position(), l.info.types[x]}
+	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
 	if v := l.info.constantOf(x); v != nil {
-		return &Const{expr: at, Value: v}
+		var span *SourceSpan
+		switch x.(type) {
+		case *syntax.Unary, *syntax.Binary:
+			start, end := constantSpan(x)
+			span = &SourceSpan{Start: start, End: end}
+		}
+		return &Const{expr: at, Value: v, SourceSpan: span}
 	}
 	switch x := x.(type) {
 	case *syntax.Interp:
@@ -143,6 +149,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		if b := l.info.callBuiltins[x]; b != BuiltinNone {
 			return &CallBuiltin{expr: at, Builtin: b, Name: x.Fun.(*syntax.Ident).Name, Args: l.exprs(x.Args), Conv: l.info.conversions[x]}
 		}
+		at.token = x.Pos
 		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args)}
 	case *syntax.Lambda:
 		ft := at.typ.(*FuncType)
@@ -233,6 +240,47 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		return out
 	}
 	panic(fmt.Sprintf("unhandled expression %T", x))
+}
+
+func sourceTokenPos(x syntax.Expr) diag.Pos {
+	switch x := x.(type) {
+	case *syntax.Unary:
+		return x.Pos
+	case *syntax.Binary:
+		return x.Pos
+	case *syntax.Call:
+		if sel, ok := x.Fun.(*syntax.Selector); ok {
+			return sel.Pos
+		}
+		return x.Pos
+	case *syntax.Selector:
+		return x.Pos
+	case *syntax.RecordLit:
+		return sourceTokenPos(x.Type)
+	case *syntax.Copy:
+		return x.Pos
+	case *syntax.Try:
+		return x.Pos
+	}
+	return x.Position()
+}
+
+func constantSpan(x syntax.Expr) (diag.Pos, diag.Pos) {
+	start, end := x.Position(), x.Position()
+	switch x := x.(type) {
+	case *syntax.IntLit:
+		end.Col += len(x.Text)
+	case *syntax.FloatLit:
+		end.Col += len(x.Text)
+	case *syntax.RuneLit:
+		end.Col += len(x.Text)
+	case *syntax.Unary:
+		_, end = constantSpan(x.X)
+	case *syntax.Binary:
+		start, _ = constantSpan(x.X)
+		_, end = constantSpan(x.Y)
+	}
+	return start, end
 }
 
 // patVars makes variables of the names pat binds, from the value

@@ -2,13 +2,16 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/GiGurra/boa/pkg/boa"
+	"github.com/GiGurra/bork/internal/describe"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/driver"
 	borkformat "github.com/GiGurra/bork/internal/format"
@@ -49,6 +52,47 @@ type testParams struct {
 type runParams struct {
 	Path string   `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	Args []string `positional:"true" optional:"true" descr:"arguments passed to the program (put them after --)"`
+}
+
+type describeParams struct {
+	Position string `positional:"true" descr:"source position as file:line:column (one-based byte columns)"`
+	Where    string `optional:"true" descr:"ask whether this where clause is proven for the selected value"`
+	JSON     bool   `optional:"true" descr:"write the compiler description as JSON"`
+}
+
+func printDescription(result *describe.Result) {
+	if result.Expression != "" {
+		fmt.Println("expression:", result.Expression)
+	}
+	fmt.Println("type:", result.Type)
+	if result.Definition != nil {
+		fmt.Println("defined at:", result.Definition)
+	}
+	for _, method := range result.Methods {
+		if method.Ambiguity != "" {
+			fmt.Println("method:", method.Ambiguity)
+		} else {
+			fmt.Printf("method: %s: %s (%s)", method.Name, method.Type, method.Definition)
+			if len(method.Requires) > 0 {
+				fmt.Printf(" requires %s", strings.Join(method.Requires, "; "))
+			}
+			fmt.Println()
+		}
+	}
+	for _, fact := range result.Facts {
+		if fact.Path == "" {
+			fmt.Println("known where:", fact.Constraint)
+		} else {
+			fmt.Printf("known where: %s: %s\n", fact.Path, fact.Constraint)
+		}
+	}
+	if result.Proof != nil {
+		if result.Proof.Proven {
+			fmt.Printf("proven: %s\n", result.Proof.Where)
+		} else {
+			fmt.Printf("not proven: %s\n%s\n", result.Proof.Where, result.Proof.Reason)
+		}
+	}
 }
 
 // completeBorkPaths completes .bork files and directories for the
@@ -116,6 +160,23 @@ func main() {
 					}
 					if p.Check && len(changed) > 0 {
 						os.Exit(1)
+					}
+				},
+			},
+			boa.CmdT[describeParams]{
+				Use:   "describe",
+				Short: "query the compiler for types, definitions, methods, and proven facts",
+				RunFunc: func(p *describeParams, _ *cobra.Command, _ []string) {
+					result, err := driver.Describe(p.Position, p.Where)
+					if err != nil {
+						failDiagnostics(err, p.JSON, os.Stderr)
+					}
+					if p.JSON {
+						if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
+							fail(err)
+						}
+					} else {
+						printDescription(result)
 					}
 				},
 			},

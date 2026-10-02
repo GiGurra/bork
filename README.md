@@ -79,6 +79,7 @@ go install github.com/GiGurra/bork/cmd/bork@latest
 bork run examples/hello      # compile and run
 bork build examples/hello    # compile to an executable
 bork check examples/hello    # type-check only
+bork describe main.bork:3:9 --where notEmpty  # query a type and prove a fact
 bork emit examples/hello     # show the generated Go
 bork test examples/payments  # run the tests, checking trusted facts and rules
 bork test --update .         # run the tests, writing the snapshots assertSnapshot finds missing or changed
@@ -97,6 +98,8 @@ go` bodies are preserved verbatim. Directory traversal skips hidden directories,
 writing files; it exits 0 when all files are already formatted, and 1 otherwise.
 Lexically invalid files are reported and left untouched; directory formatting
 continues with the remaining files and exits 1 after reporting errors.
+
+`bork describe file.bork:line:column` reports the type, definition, visible methods, and known facts at a position. Add `--where 'between(1, 10)'` to ask the compiler whether a requirement is proven there, or `--json` for a structured answer. See [compiler code queries](docs/describe.md).
 
 A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`.
 
