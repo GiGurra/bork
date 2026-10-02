@@ -431,6 +431,12 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			return Invalid
 		}
 	}
+	if fn.Prelude && fn.Decl.Name == "attach" && c.diags.Len() == errorsBefore {
+		if _, ok := inst.TypeArgs[0].(*Resource); !ok {
+			c.errorf(e.Pos, "attach takes a resource (a value of a resource type, such as File), found %s", inst.TypeArgs[0])
+			return Invalid
+		}
+	}
 	if !c.resolveDicts(inst, e.Pos) {
 		return Invalid
 	}

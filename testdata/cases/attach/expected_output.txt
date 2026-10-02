@@ -1,0 +1,10 @@
+open db
+db: in the job
+job ends
+app waits for its task
+db: in a task of app
+close db
+app ended
+open cache
+cache: get
+close cache

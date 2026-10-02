@@ -1,0 +1,5 @@
+fn main() {
+  scope s {
+    _ = attach(1, s)
+  }
+}

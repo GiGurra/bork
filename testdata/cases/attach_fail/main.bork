@@ -1,0 +1,20 @@
+fn use(f: File) {}
+
+fn noAttach(path: String): Unit | IoError {
+  scope app {
+    scope job {
+      f = createFile(path, job)?
+      launch(app, () => use(f))
+    }
+  }
+}
+
+fn tooLate(path: String): Unit | IoError {
+  scope app {
+    f = scope job { createFile(path, job)? }
+    shared = attach(f, app)
+  }
+}
+
+fn main() {}
+

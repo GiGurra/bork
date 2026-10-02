@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -460,6 +461,10 @@ func (l *lifeChecker) call(x *syntax.Call) lifetime {
 		args[i] = l.use(a, l.expr(a))
 		life = life.union(args[i])
 	}
+	// attach(r, s) gives r as a value of s: it stays open until s closes.
+	if fn != nil && fn.Prelude && fn.Decl.Name == "attach" && len(args) == 2 {
+		return args[1]
+	}
 	// Go code given a scope may keep its other arguments until the scope
 	// closes (as a finalizer, say). So may a function value, which could
 	// be such Go code.
@@ -479,7 +484,11 @@ func (l *lifeChecker) call(x *syntax.Call) lifetime {
 				if fn != nil {
 					callee = fn.Decl.Name
 				}
-				l.errorf(b.Position(), "%s may not live as long as scope %s (it depends on %s), but %s may keep it until %s closes", describe(b), scopeName(a), l.scopeText(short), callee, scopeName(a))
+				hint := ""
+				if fn != nil && fn.Prelude && (callee == "launch" || callee == "spawn") {
+					hint = fmt.Sprintf("; to give a task of %s a resource of a shorter scope, attach it first: r2 = attach(r, %s)", scopeName(a), scopeName(a))
+				}
+				l.errorf(b.Position(), "%s may not live as long as scope %s (it depends on %s), but %s may keep it until %s closes%s", describe(b), scopeName(a), l.scopeText(short), callee, scopeName(a), hint)
 			}
 		}
 	}

@@ -182,8 +182,11 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 	var decls []ast.Decl
 	switch t := t.(type) {
 	case *check.Resource:
-		// A handle that unsafe go code fills in: File{handle: f}.
-		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\n", typeName(t.Name, t.Pkg).Name, t.Name)
+		// A handle that unsafe go code fills in, and the owner that
+		// closes it once the last scope it is attached to closes:
+		// File{handle: f, owner: s.Own(func() { f.Close() })}.
+		g.usesScopes = true
+		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any; owner *_Owner }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\nfunc (r %[1]s) _ownerOf() *_Owner { return r.owner }\n", typeName(t.Name, t.Pkg).Name, t.Name)
 		f, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
 		if err != nil {
 			panic(err)
@@ -399,6 +402,46 @@ func (s *_Scope) _sleep(d time.Duration) bool {
 		return true
 	case <-s.ctx.Done():
 		return false
+	}
+}
+
+// _Owner closes a resource once every scope it is attached to has
+// closed: the scope it was opened in, and those attach added.
+type _Owner struct {
+	mu      sync.Mutex
+	count   int
+	closeFn func()
+}
+
+// Own makes closeFn close a resource when the scope closes, or, if the
+// resource is attached to other scopes too, when the last of them does.
+func (s *_Scope) Own(closeFn func()) *_Owner {
+	o := &_Owner{count: 1, closeFn: closeFn}
+	s.Defer(o.release)
+	return o
+}
+
+// attach keeps the resource open until s closes too. It reports false
+// if the resource is already closed.
+func (o *_Owner) attach(s *_Scope) bool {
+	o.mu.Lock()
+	if o.count == 0 {
+		o.mu.Unlock()
+		return false
+	}
+	o.count++
+	o.mu.Unlock()
+	s.Defer(o.release)
+	return true
+}
+
+func (o *_Owner) release() {
+	o.mu.Lock()
+	o.count--
+	last := o.count == 0
+	o.mu.Unlock()
+	if last {
+		o.closeFn()
 	}
 }
 

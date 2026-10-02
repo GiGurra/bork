@@ -1,0 +1,36 @@
+// A connection that says when it opens and closes.
+type Conn = resource
+
+fn connect(name: String, s: Scope): Conn unsafe go {
+  import "fmt"
+  fmt.Println("open " + name)
+  return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}
+}
+
+fn query(c: Conn, q: String): String unsafe go {
+  return c.handle.(string) + ": " + q
+}
+
+fn main() {
+  scope app {
+    scope job {
+      conn = connect("db", job)
+      println(query(conn, "in the job"))
+      // A task of app may outlive job: attach keeps conn open until
+      // app closes too.
+      shared = attach(conn, app)
+      launch(app, () => {
+        sleep(10)
+        println(query(shared, "in a task of app"))
+      })
+      println("job ends")
+    }
+    println("app waits for its task")
+  }
+  println("app ended")
+  // Without attach, a connection closes with its scope.
+  scope s {
+    c = connect("cache", s)
+    println(query(c, "get"))
+  }
+}
