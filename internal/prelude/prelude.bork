@@ -5,6 +5,7 @@
 //   Int, Int8, ... Uint64  int64, int8, ... uint64 (Rune is int32)
 //   Float32, Float         float32, float64
 //   String, Bool           string, bool
+//   Bytes                  a distinct []byte; use _borkBytesFrom/Data to copy
 //   a record               a struct with the same field names
 //   Option[T]              Option[T]: Option_Some[T]{value: v} or Option_None[T]{}
 //   a union                any, holding one of the member types
@@ -1494,4 +1495,40 @@ fn (m: Map[K, V]) inOrder[K: Eq, V](): Map[K, V] unsafe go {
 
 fn (m: Map[K, V]) unordered[K: Eq, V](): Map[K, V] unsafe go {
   return _mapUnordered(m)
+}
+
+// Bytes is immutable binary data, distinct from List[Byte]. There is no
+// byte literal: use bytes([toByte(65)]) or utf8Bytes("A").
+fn bytes(values: List[Byte]): Bytes unsafe go {
+  return _borkBytesFrom(values)
+}
+
+// utf8Bytes gives the UTF-8 bytes of text (including embedded zero bytes).
+fn utf8Bytes(text: String): Bytes unsafe go {
+  return _borkBytesFrom([]byte(text))
+}
+
+// utf8String validates before converting: invalid UTF-8 is an error.
+fn utf8String(data: Bytes): String | ParseError unsafe go {
+  import "unicode/utf8"
+  if !utf8.Valid(data) { return ParseError{input: data.String(), message: "invalid UTF-8"} }
+  return string(data)
+}
+
+fn (data: Bytes) length(): Int unsafe go { return int64(len(data)) }
+fn (data: Bytes) isEmpty(): Bool unsafe go { return len(data) == 0 }
+fn (data: Bytes) get(index: Int): Option[Byte] unsafe go {
+  if index < 0 || index >= int64(len(data)) { return _borkNone[byte]() }
+  return _borkSome(data[index])
+}
+fn (data: Bytes) toList(): List[Byte] unsafe go { return _borkBytesData(data) }
+fn (data: Bytes) slice(from: Int, to: Int): Bytes | OutOfRange unsafe go {
+  import "fmt"
+  if from < 0 || to < from || to > int64(len(data)) {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", from, to), target: "Bytes slice"}
+  }
+  return _borkBytesFrom(data[from:to])
+}
+fn (data: Bytes) concat(other: Bytes): Bytes unsafe go {
+  return _borkBytesFrom(append(_borkBytesData(data), other...))
 }

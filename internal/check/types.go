@@ -36,6 +36,7 @@ var (
 	Int    Type = &Basic{name: "Int", kind: signedInt, bits: 64}
 	Bool   Type = &Basic{name: "Bool"}
 	String Type = &Basic{name: "String"}
+	Bytes  Type = &Basic{name: "Bytes"}
 	// Unit is the type of expressions that produce no meaningful value.
 	Unit Type = &Basic{name: "Unit"}
 	// Never is the type of expressions that never finish normally, such
@@ -67,6 +68,7 @@ var basicTypes = map[string]Type{
 	"Int":    Int,
 	"Bool":   Bool,
 	"String": String,
+	"Bytes":  Bytes,
 	"Unit":   Unit,
 	"Scope":  Scope,
 

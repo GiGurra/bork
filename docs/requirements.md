@@ -745,3 +745,19 @@ See also [roadmap.md](roadmap.md) for the implementation plan.
 - Importing Go packages as bork modules (calling Go goes through `unsafe go` bodies)
 - `recover`
 - Erlang-style routine isolation and supervision
+
+### Binary data and encoding
+
+`Bytes` is built-in immutable binary data, represented by a distinct named Go
+byte slice. It has content equality and may be a map key. It remains distinct
+from `List[Byte]`, including when both appear in a union. Conversions copy at
+Go boundaries; bork has no mutation operations. Construction uses `bytes` or
+`utf8Bytes`, without new literal syntax. `utf8String` validates UTF-8 and
+returns a union error. Immutable access uses `length`, `isEmpty`, `get`,
+`toList`, `slice` (bounds errors are unions), and `concat`. Printing uses
+`Bytes(lowercase hex)` rather than guessing text.
+
+`bork/encoding` supplies hex and padded standard/URL-safe base64 encoders and
+parsers. Invalid encodings return `ParseError` without partial data. The
+base64 parsers enforce zero trailing padding bits and accept CR/LF.
+CSV support follows separately using record field schemas and `Decode`.

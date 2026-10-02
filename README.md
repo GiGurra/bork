@@ -169,3 +169,8 @@ Early design and a first compiler. See [docs/requirements.md](docs/requirements.
 [MIT](LICENSE)
 
 `bork/time` provides instants, durations, formatting/parsing, cancellable sleep, and injectable clocks. `bork/env` loads one environment variable per record field through `Decode`, checking facts and reporting all invalid or missing variables. See [examples/time_env](examples/time_env/main.bork).
+
+Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
+`bytes([toByte(0), toByte(255)])`, and validated `utf8String(data)`.
+Import `bork/encoding` for hex and standard or URL-safe base64; malformed
+input returns `ParseError`. See [the encoding example](examples/bytes_encoding/main.bork).

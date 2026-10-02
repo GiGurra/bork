@@ -1,0 +1,38 @@
+// Package encoding converts immutable Bytes to and from hex and padded
+// standard or URL-safe base64. Invalid input returns ParseError.
+
+fn Hex(data: Bytes): String unsafe go {
+  import "encoding/hex"
+  return hex.EncodeToString(_borkBytesData(data))
+}
+
+fn ParseHex(text: String): Bytes | ParseError unsafe go {
+  import "encoding/hex"
+  data, err := hex.DecodeString(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  return _borkBytesFrom(data)
+}
+
+fn Base64(data: Bytes): String unsafe go {
+  import "encoding/base64"
+  return base64.StdEncoding.EncodeToString(_borkBytesData(data))
+}
+
+fn ParseBase64(text: String): Bytes | ParseError unsafe go {
+  import "encoding/base64"
+  data, err := base64.StdEncoding.Strict().DecodeString(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  return _borkBytesFrom(data)
+}
+
+fn Base64URL(data: Bytes): String unsafe go {
+  import "encoding/base64"
+  return base64.URLEncoding.EncodeToString(_borkBytesData(data))
+}
+
+fn ParseBase64URL(text: String): Bytes | ParseError unsafe go {
+  import "encoding/base64"
+  data, err := base64.URLEncoding.Strict().DecodeString(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  return _borkBytesFrom(data)
+}

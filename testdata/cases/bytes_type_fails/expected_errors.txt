@@ -1,0 +1,2 @@
+main.bork:4:14: argument 1 to wantsBytes must be Bytes, found List[Uint8]
+main.bork:5:13: argument 1 to wantsList must be List[Uint8], found Bytes

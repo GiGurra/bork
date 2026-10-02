@@ -9,6 +9,8 @@ compiler internals; keep dependencies on them inside the helper implementations.
 
 | Helper | Behavior |
 | --- | --- |
+| `_borkBytesFrom(data []byte) Bytes` | Copies Go bytes into immutable bork Bytes; nil becomes empty. |
+| `_borkBytesData(data Bytes) []byte` | Copies Bytes into a Go slice the caller may mutate. |
 | `_borkSome[T](value T) Option[T]` | Constructs the prelude's present option. Go infers `T` from the argument. |
 | `_borkNone[T]() Option[T]` | Constructs the prelude's absent option. Supply `T` explicitly. |
 | `_borkMapOf[K,V](keys []K, values []V)` | Builds a persistent map in insertion order. Duplicate keys keep the last value and first position. Panics when slice lengths differ. |
@@ -72,3 +74,9 @@ They describe fields independently, and do not construct partial records in
 bork. Call the regular `Decode` method to construct a complete proven record.
 `bork/env` consumes this schema; it is also available to other std integrations.
 `_borkOptionGet(option)` returns `(value, present)` without variant-name coupling.
+
+`Bytes` is represented by a distinct named Go slice type, not `[]byte` or
+`List[Byte]`. Use `_borkBytesFrom` for returned data and `_borkBytesData` for
+Go APIs; both copy so later Go mutation cannot change an existing bork value.
+Functions whose signatures or Go bodies use Bytes helpers include the runtime
+automatically. Bytes has no writable fields or elements in bork.

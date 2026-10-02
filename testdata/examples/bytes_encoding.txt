@@ -1,0 +1,6 @@
+68656c6c6f2c20e4b896e7958c
+aGVsbG8sIOS4lueVjA==
+hello, 世界
+Bytes(00ff)
+AP8=
+ParseError { input: "Bytes(00ff)", message: "invalid UTF-8" }

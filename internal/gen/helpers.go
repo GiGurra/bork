@@ -57,3 +57,17 @@ func _borkDecodeFields[T any](dict Decode[T]) ([]_borkDecodeField, bool) {
  return dict.fields(), true
 }
 `
+
+// bytesRuntime keeps binary values distinct from lists in unions and printing.
+const bytesRuntime = `package main
+
+import "encoding/hex"
+
+type _Bytes []byte
+
+func (b _Bytes) String() string { return "Bytes(" + hex.EncodeToString(b) + ")" }
+
+// Stable boundaries copy so Go callers cannot mutate a bork value.
+func _borkBytesFrom(data []byte) _Bytes { return append(_Bytes{}, data...) }
+func _borkBytesData(data _Bytes) []byte { return append([]byte{}, data...) }
+`
