@@ -1,0 +1,1 @@
+main.bork:6:1: type Amount already has a Show instance (first); Show has one renderer per type so printing is consistent everywhere

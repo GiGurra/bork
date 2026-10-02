@@ -1,0 +1,3 @@
+ok    custom rendering
+1 passed, 0 failed
+exit code 0

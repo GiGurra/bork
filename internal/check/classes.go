@@ -66,7 +66,7 @@ type Dict struct {
 	Args     []*Dict
 	// Or a bound of a type parameter in scope:
 	Param *TypeParam
-	// Or built in: Eq, for every type whose values can be compared.
+	// Or built in: Eq for comparable types, or Show for every value.
 	Builtin bool
 }
 
@@ -176,6 +176,10 @@ func (c *checker) instanceConstraints() {
 		c.pkg, c.inPrelude = ci.Pkg, ci.Prelude
 		cons := c.constraintsOf(ci.Decl.Type, ci.Type, nil)
 		if len(cons) == 0 {
+			continue
+		}
+		if IsShow(ci.Class) {
+			c.errorf(ci.Decl.Type.Pos, "Show instances cannot require facts: the renderer must work for every value of the declared type")
 			continue
 		}
 		for _, con := range cons {
@@ -327,6 +331,9 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 	ci.TypeParams = c.declareTypeParamList(id.TypeParams, prelude)
 	ci.Type = c.resolveType(id.Type)
 	if ci.Type == Invalid {
+		return
+	}
+	if IsShow(cl) && !c.validShow(ci) {
 		return
 	}
 	bound := map[*TypeParam]Type{cl.Param: ci.Type}
@@ -669,6 +676,12 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 	if depth > 20 {
 		c.errorf(pos, "cannot find an instance of %s for %s: the search does not end (instances refer to each other in a circle)", class.Name, t)
 		return nil
+	}
+	if IsShow(class) {
+		if tp, ok := t.(*TypeParam); ok && c.inScopeParam(tp) && tp.HasBound(class) {
+			return &Dict{Class: class, Type: t, Param: tp}
+		}
+		return &Dict{Class: class, Type: t, Builtin: true}
 	}
 	if tp, ok := t.(*TypeParam); ok && c.inScopeParam(tp) {
 		if tp.HasBound(class) {

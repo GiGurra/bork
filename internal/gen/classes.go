@@ -21,9 +21,16 @@ import (
 // A call whose instance is known calls the method directly; only code
 // that is generic over the instance goes through the struct.
 
+func className(class *check.Class) *ast.Ident {
+	if check.IsShow(class) {
+		return ast.NewIdent("_Show")
+	}
+	return typeName(class.Name, class.Pkg)
+}
+
 // classType is the Go type of class's dictionary for type t.
 func (g *gen) classType(class *check.Class, t check.Type) ast.Expr {
-	return &ast.IndexExpr{X: typeName(class.Name, class.Pkg), Index: g.goType(t)}
+	return &ast.IndexExpr{X: className(class), Index: g.goType(t)}
 }
 
 // classDecl declares a class's dictionary struct.
@@ -44,7 +51,7 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("optional")}, Type: ast.NewIdent("bool")})
 	}
 	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
-		Name:       typeName(class.Name, class.Pkg),
+		Name:       className(class),
 		TypeParams: typeParamList([]*check.TypeParam{class.Param}),
 		Type:       st,
 	}}}
@@ -141,10 +148,14 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
-		// Eq: Eq[T]{equals: _equalOf[T]}.
-		fun, _ := g.dictMethod(d, "equals")
+		// Built-in equality and rendering dispatch through universal helpers.
+		method := "equals"
+		if check.IsShow(d.Class) {
+			method = "show"
+		}
+		fun, _ := g.dictMethod(d, method)
 		return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{
-			&ast.KeyValueExpr{Key: ast.NewIdent("equals"), Value: fun},
+			&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun},
 		}}
 	}
 	var fun ast.Expr = ast.NewIdent(instName(d.Inst))
@@ -176,6 +187,10 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 		return &ast.SelectorExpr{X: dictParam(d.Param, d.Class), Sel: name(method)}, nil
 	}
 	if d.Builtin {
+		if check.IsShow(d.Class) {
+			g.usesShow = true
+			return &ast.IndexExpr{X: ast.NewIdent("_strOf"), Index: g.goType(d.Type)}, nil
+		}
 		g.usesEqual = true
 		return &ast.IndexExpr{X: ast.NewIdent("_equalOf"), Index: g.goType(d.Type)}, nil
 	}

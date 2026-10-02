@@ -1,0 +1,6 @@
+425 cents
+Invoice { amount: 425 cents }
+425 cents
+Invoice { amount: 425 cents }
+true
+2

@@ -1,0 +1,7 @@
+main.bork:5:22: Show instances require a declared record or sealed type; wrap basic types, lists and maps in a declared type
+main.bork:8:21: Show instances require a declared record or sealed type; wrap basic types, lists and maps in a declared type
+main.bork:11:20: Show instances require a declared record or sealed type; wrap basic types, lists and maps in a declared type
+main.bork:14:23: a Show instance must be declared in the type's own package, so its text is the same everywhere
+main.bork:17:28: Show instances for generic types must cover every instantiation, as in Show[Box[T]]; specialized renderers would make generic printing inconsistent
+main.bork:20:18: a generic Show instance may only have Show bounds: its renderer must work for every instantiation
+main.bork:23:24: Show instances cannot require facts: the renderer must work for every value of the declared type

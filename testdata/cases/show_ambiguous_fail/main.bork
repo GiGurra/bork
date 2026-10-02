@@ -1,0 +1,10 @@
+type Amount = { cents: Int }
+
+instance first: Show[Amount] {
+  fn show(a: Amount): String { s"first ${a.cents}" }
+}
+instance second: Show[Amount] {
+  fn show(a: Amount): String { s"second ${a.cents}" }
+}
+
+fn main() { println(Amount { cents: 425 }) }

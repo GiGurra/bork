@@ -151,11 +151,11 @@ In priority order. When two values conflict, the higher one wins.
 - **Both structural interfaces and type classes exist**, as different tools for different situations. Structural interfaces describe what a value can do. Type classes attach behaviour to a type, including types you don't own.
 - **No automatic default instances.** The compiler never picks up an instance on its own, not even one declared next to the type or the type class. A library may expose a default set of instances, but it must still be imported explicitly. This is an experiment: we'll try it and see how it feels in practice.
 - **Ambiguous instances are a compile error.** If more than one in-scope instance matches, including several instances for constrained types that a value satisfies, the build fails.
-- **Automatic derivation in v0.1:** `derive Eq, Show, Decode` (and similar) for records and ADTs.
+- **Automatic derivation in v0.1:** `derive (Decode, Encode)` for records and ADTs. Structural equality and default text need no derive.
 - **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
-Implemented:
+Implemented: the prelude class `Show[T] { fn show(x: T): String }` customizes `toString`, `println`, interpolation, snapshots, and nested printing. Every type has a default renderer, so `Show` bounds always hold and `show(x)` equals `toString(x)`, even inside unbounded generic code. Custom Show instances follow a special coherence rule: one renderer for a record or sealed type, declared only in that type's own package, with no `use` needed. For a generic type, the instance must be universal (`Show[Box[T]]`) and may have only `Show` bounds. Specialized or fact-constrained instances cannot define a renderer; basic types, `List`, `Map` and `Option` must be wrapped in a declared type to customize their text. This differs from other classes' selectable instances because a value should print consistently everywhere. Other classes, including a user-defined class named Show, retain the ordinary instance rules. Custom text never changes equality or map-key hashing. Show cannot be derived; default rendering needs no derive.
 
 ```
 class Monoid[T] {
@@ -168,12 +168,12 @@ instance sumInt: Monoid[Int] {
   fn combine(a: Int, b: Int): Int { a + b }
 }
 
-instance showList[T: Show]: Show[List[T]] { ... }   // generic, with a bound
+instance showBox[T: Show]: Show[Box[T]] { ... }   // universal renderer for an owned type
 
 fn sum[T: Monoid](xs: List[T]): T { fold(xs, empty[T](), combine) }
 ```
 
-- **Instances are named,** so several can exist per class and type, and `use` can pick them: `use money.ShowAmount`, or every exported one: `use money.*`.
+- **Instances are named,** so several can exist per class and type, and `use` can pick them: `use money.DecodeAmount`, or every exported one: `use money.*`.
 - **A package suggests instances with a named set,** which importers take with one `use`. This is the "default set of instances" a library may expose, still imported explicitly. A set can hold the package's own instances (exported or not: they come with the set), other packages' (`money.*`), and other sets. A `use` applies to the whole package.
 
 ```

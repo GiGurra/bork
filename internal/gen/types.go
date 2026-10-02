@@ -203,7 +203,8 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 	case *check.Record:
 		recv := g.instantiated(typeName(t.Name, t.Pkg), t)
 		decls = append(decls, g.structDecl(typeName(t.Name, t.Pkg), t.TypeParams, t.Fields))
-		decls = append(decls, g.stringMethod(recv, t.Name, t.Fields, true))
+		decls = append(decls, g.showStringMethod(recv, t, t.Name, t.Fields, true))
+		decls = append(decls, g.showMethods(recv, t)...)
 		decls = append(decls, g.valueMethods(recv, t.Fields)...)
 	case *check.Sealed:
 		// The interface's marker method mentions the type parameters, so
@@ -231,7 +232,8 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 				Type: markerType,
 				Body: &ast.BlockStmt{},
 			})
-			decls = append(decls, g.stringMethod(recv, t.Name+"."+v.Name, v.Fields, false))
+			decls = append(decls, g.showStringMethod(recv, t, t.Name+"."+v.Name, v.Fields, false))
+			decls = append(decls, g.showMethods(recv, t)...)
 			decls = append(decls, g.valueMethods(recv, v.Fields)...)
 		}
 	}
@@ -912,6 +914,7 @@ import (
 // _show renders a field value for String methods: strings are quoted,
 // everything else is printed as by _str.
 func _show(x any) string {
+	if v, ok := x.(interface{ _borkShow() string }); ok { return v._borkShow() }
 	if s, ok := x.(string); ok {
 		return strconv.Quote(s)
 	}
@@ -921,14 +924,19 @@ func _show(x any) string {
 // _str renders a value as println and toString show it. Floats always
 // look like floats (3.0, not 3), and use an exponent only when very
 // large or small.
+func _strOf[T any](x T) string { return _str(x) }
+
 func _str(x any) string {
+	if v, ok := x.(interface{ _borkShow() string }); ok { return v._borkShow() }
 	switch x := x.(type) {
 	case float64:
 		return _fmtFloat(x, 64)
 	case float32:
 		return _fmtFloat(float64(x), 32)
-	case fmt.Stringer, string:
-		return fmt.Sprint(x)
+	case fmt.Stringer:
+		return x.String()
+	case string:
+		return x
 	}
 	switch v := reflect.ValueOf(x); v.Kind() {
 	case reflect.Slice:

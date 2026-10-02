@@ -1,0 +1,1 @@
+pretty/pretty.bork:3:27: a Show instance must be declared in the type's own package, so its text is the same everywhere

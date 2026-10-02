@@ -1,0 +1,6 @@
+type Amount = { cents: Int }
+type Invoice = { amount: Amount }
+
+instance ShowAmount: Show[Amount] {
+  fn show(a: Amount): String { s"${a.cents} cents" }
+}
