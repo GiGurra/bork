@@ -2,16 +2,16 @@
 // Instants use signed Unix nanoseconds (1677-09-21 through 2262-04-11).
 type Instant = { unixNanos: Int }
 type Duration = { nanos: Int }
-type Clock = { now: () => Instant }
+type Clock = { now: () uses clock => Instant }
 
 // Now reads the system clock. Use Read with an injected Clock in testable code.
-fn Now(): Instant unsafe go {
+fn Now() uses clock: Instant unsafe go {
   import "time"
   return Instant{unixNanos: time.Now().UnixNano()}
 }
 fn SystemClock(): Clock { Clock { now: () => Now() } }
 fn FixedClock(instant: Instant): Clock { Clock { now: () => instant } }
-fn Read(clock: Clock): Instant { clock.now() }
+fn Read(clock: Clock) uses clock: Instant { clock.now() }
 fn Nanoseconds(n: Int): Duration { Duration { nanos: n } }
 
 // Milliseconds reports OutOfRange instead of wrapping a duration.
@@ -69,7 +69,7 @@ fn Between(start: Instant, end: Instant): Duration | OutOfRange unsafe go {
 }
 
 // Sleep stops when the scope is cancelled. Nonpositive durations finish at once.
-fn Sleep(s: Scope, duration: Duration): Unit | Cancelled unsafe go {
+fn Sleep(s: Scope, duration: Duration) uses clock + state: Unit | Cancelled unsafe go {
   import "time"
   import "context"
   ctx := _borkScopeContext(s)
