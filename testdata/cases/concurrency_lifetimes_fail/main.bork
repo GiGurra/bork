@@ -1,0 +1,23 @@
+fn leak(): Task[Int] {
+  scope s {
+    spawn(s, () => 1)
+  }
+}
+
+fn late(): Int {
+  t = scope s { spawn(s, () => 1) }
+  await(t)
+}
+
+fn inner(path: String): Int {
+  scope outer {
+    scope s {
+      f = openFile(path, s)
+      t = spawn(outer, () => match (f) { x: File => 1, e: IoError => 0 })
+      0
+    }
+  }
+}
+
+
+fn main() {}

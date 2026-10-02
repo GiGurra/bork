@@ -1,0 +1,6 @@
+fn main() {
+  scope s {
+    // spawn is for work that gives a value; launch for the rest.
+    t = spawn(s, () => println("x"))
+  }
+}

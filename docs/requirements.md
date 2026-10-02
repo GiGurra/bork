@@ -399,7 +399,7 @@ scope maint {
 ### To settle with concurrency
 
 - **Cancellation and deadlines through scopes.** A request scope is the natural carrier for what Go's `context.Context` does today: when a request is cancelled, its scope closes, its resources are released, and its goroutines stop.
-- **Structured concurrency:** must goroutines started inside a scope finish before the scope ends? That would let them use the scope's resources with no extra attaching.
+- **Structured concurrency (decided, implemented):** goroutines started inside a scope finish before the scope ends, so they can use its resources with no extra attaching. `spawn(s, () => work())` starts a task of scope `s` and gives a `Task[T]`; `await(task)` waits for its result; `launch(s, () => ...)` starts work that gives no value. Closing a scope first waits for its tasks, then runs its finalizers. A task that panics panics `await`, or, if no one awaited it, the scope's routine when the scope closes. Lifetimes apply as to any value of a scope: a task cannot be returned from its scope or used after it, and its work may only use what lives as long as the scope. Not yet: cancellation (a closing scope telling its tasks to stop), channels, and tasks that outlive their scope (which `attach` is for).
 
 ### Crash isolation and supervision (planned, not v0.1)
 

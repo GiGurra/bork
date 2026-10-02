@@ -28,6 +28,38 @@ type ParseError = { input: String, message: String }
 // when the scope closes: finalizers run in reverse order of
 // registration, when the scope's block ends or panics.
 
+// Concurrency is structured: a task runs on its own goroutine, and the
+// scope that started it waits for it before it closes (and before its
+// finalizers run), so a task can use the scope's resources. A task that
+// panics panics await, or, if no one awaited it, the scope's routine
+// when the scope closes.
+
+// Task is a running computation of a T, started with spawn.
+type Task[T] = { wait: () => T }
+
+// spawn starts work on its own goroutine, as a task of scope s.
+fn spawn[T](s: Scope, work: () => T): Task[T] unsafe go {
+  t := s.Go(func() any { return work() })
+  return Task[T]{wait: func() T { return t.Await().(T) }}
+}
+
+// await waits for a task to finish, and gives its result.
+fn await[T](task: Task[T]): T unsafe go {
+  return task.wait()
+}
+
+// launch starts work that gives no result on its own goroutine, as a
+// task of scope s, which waits for it before it closes.
+fn launch(s: Scope, work: () => Unit) unsafe go {
+  s.Go(func() any { work(); return nil })
+}
+
+// sleep pauses the routine for ms milliseconds.
+fn sleep(ms: Int) unsafe go {
+  import "time"
+  time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
 // onClose runs f when the scope s closes.
 fn onClose(s: Scope, f: () => Unit) unsafe go {
   s.Defer(f)

@@ -2,8 +2,9 @@
 //
 //   bork run examples/wc -- notes.txt todo.txt
 //
-// Each file is open only while it is counted: its scope closes it,
-// whether counting succeeds or not.
+// Files are counted concurrently, each by a task of one scope, which
+// waits for them all. Each file is open only while it is counted: its
+// own scope closes it, whether counting succeeds or not.
 
 type Counts = { lines: Int, words: Int, bytes: Int }
 
@@ -53,7 +54,10 @@ fn main() {
     eprintln("usage: wc FILE...")
     exit(2)
   }
-  counts = map(paths, path => FileCount { path: path, result: countFile(path) })
+  counts = scope s {
+    tasks = map(paths, path => spawn(s, () => FileCount { path: path, result: countFile(path) }))
+    map(tasks, t => await(t))
+  }
   if (!report(counts)) {
     exit(1)
   }
