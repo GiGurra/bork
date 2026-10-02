@@ -17,4 +17,3 @@ fn tooLate(path: String): Unit | IoError {
 }
 
 fn main() {}
-

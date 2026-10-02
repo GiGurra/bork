@@ -1,11 +1,11 @@
 type Address = {
   street: String,
-  city:   String,
+  city: String,
 }
 
 type User = {
-  name:    String,
-  age:     Int,
+  name: String,
+  age: Int,
   address: Address,
 }
 
