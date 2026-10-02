@@ -78,7 +78,7 @@ func (l *lowerer) exprs(xs []syntax.Expr) []Expr {
 }
 
 func (l *lowerer) block(b *syntax.Block) *Block {
-	out := &Block{expr: expr{b.Pos, l.info.types[b]}, End: b.End}
+	out := &Block{expr: expr{pos: b.Pos, typ: l.info.types[b]}, End: b.End}
 	for _, s := range b.Stmts {
 		out.Stmts = append(out.Stmts, l.stmt(s))
 	}
@@ -108,7 +108,7 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 }
 
 func (l *lowerer) expr(x syntax.Expr) Expr {
-	at := expr{x.Position(), l.info.types[x]}
+	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
 	if v := l.info.constantOf(x); v != nil {
 		return &Const{expr: at, Value: v}
 	}
@@ -233,6 +233,29 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		return out
 	}
 	panic(fmt.Sprintf("unhandled expression %T", x))
+}
+
+func sourceTokenPos(x syntax.Expr) diag.Pos {
+	switch x := x.(type) {
+	case *syntax.Unary:
+		return x.Pos
+	case *syntax.Binary:
+		return x.Pos
+	case *syntax.Call:
+		if sel, ok := x.Fun.(*syntax.Selector); ok {
+			return sel.Pos
+		}
+		return x.Pos
+	case *syntax.Selector:
+		return x.Pos
+	case *syntax.RecordLit:
+		return sourceTokenPos(x.Type)
+	case *syntax.Copy:
+		return x.Pos
+	case *syntax.Try:
+		return x.Pos
+	}
+	return x.Position()
 }
 
 // patVars makes variables of the names pat binds, from the value

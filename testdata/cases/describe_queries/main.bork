@@ -1,0 +1,10 @@
+pred positive(n: Int) { n > 0 }
+fn promise(n: Int where positive): Int where positive { n }
+fn scenario(n: Int) {
+  println(n)
+  if (positive(n)) { println(n) }
+  println(promise(1))
+  println(7)
+  println(0)
+}
+fn main() {}

@@ -1,0 +1,6 @@
+{"schema_version":1,"position":{"file":"main.bork","line":4,"column":11},"type":"Int","definition":{"file":"main.bork","line":3,"column":13},"methods":[],"facts":[],"proof":{"where":"positive","proven":false,"reason":"positive is not proven for n (check it first with if (positive(n)) { ... }, or require it: n: Int where positive)"}}
+{"schema_version":1,"position":{"file":"main.bork","line":5,"column":30},"type":"Int","definition":{"file":"main.bork","line":3,"column":13},"methods":[],"facts":[{"constraint":"positive"}],"proof":{"where":"positive","proven":true}}
+{"schema_version":1,"position":{"file":"main.bork","line":6,"column":18},"type":"Int","definition":{"file":"main.bork","line":2,"column":1},"methods":[],"facts":[{"constraint":"positive"}],"proof":{"where":"positive","proven":true}}
+{"schema_version":1,"position":{"file":"main.bork","line":7,"column":11},"type":"Int","methods":[],"facts":[],"proof":{"where":"positive","proven":true}}
+{"schema_version":1,"position":{"file":"main.bork","line":8,"column":11},"type":"Int","methods":[],"facts":[],"proof":{"where":"positive","proven":false,"reason":"positive(0) is false"}}
+{"schema_version":1,"position":{"file":"main.bork","line":6,"column":11},"type":"(Int) =\u003e Int","definition":{"file":"main.bork","line":2,"column":1},"methods":[],"facts":[]}

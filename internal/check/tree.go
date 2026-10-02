@@ -23,19 +23,29 @@ import (
 type Expr interface {
 	// Pos is where the expression starts.
 	Pos() diag.Pos
+	// TokenPos is the operator, call parenthesis, or selected name that
+	// identifies this expression in source queries. Pos remains its start.
+	TokenPos() diag.Pos
 	Type() Type
 	exprNode()
 }
 
 // expr holds what every expression has.
 type expr struct {
-	pos diag.Pos
-	typ Type
+	pos   diag.Pos
+	typ   Type
+	token diag.Pos
 }
 
 func (e *expr) Pos() diag.Pos { return e.pos }
-func (e *expr) Type() Type    { return e.typ }
-func (*expr) exprNode()       {}
+func (e *expr) TokenPos() diag.Pos {
+	if e.token.File != "" {
+		return e.token
+	}
+	return e.pos
+}
+func (e *expr) Type() Type { return e.typ }
+func (*expr) exprNode()    {}
 
 // Const is a constant: a number (or arithmetic on numbers), a String,
 // or a Bool. A number has the value of its type: an Int64 for an

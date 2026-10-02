@@ -12,11 +12,11 @@ import (
 // MethodDescription is a method as seen from the querying package. Ambiguous
 // names are reported separately from callable methods.
 type MethodDescription struct {
-	Name       string   `json:"name"`
-	Type       string   `json:"type,omitempty"`
-	Definition diag.Pos `json:"definition,omitempty"`
-	Ambiguity  string   `json:"ambiguity,omitempty"`
-	Requires   []string `json:"requires,omitempty"`
+	Name       string    `json:"name"`
+	Type       string    `json:"type,omitempty"`
+	Definition *diag.Pos `json:"definition,omitempty"`
+	Ambiguity  string    `json:"ambiguity,omitempty"`
+	Requires   []string  `json:"requires,omitempty"`
 }
 
 // VisibleMethods uses the same precedence and visibility rules as a call.
@@ -42,6 +42,10 @@ func VisibleMethods(info *Info, from *Package, t Type) []MethodDescription {
 		fn, why := c.methodNamed(t, name)
 		if fn == nil {
 			if strings.Contains(why, "is ambiguous:") {
+				prefix, places, _ := strings.Cut(why, ": it is declared in ")
+				parts := strings.Split(places, " and ")
+				sort.Strings(parts)
+				why = prefix + ": it is declared in " + strings.Join(parts, " and ")
 				out = append(out, MethodDescription{Name: name, Ambiguity: why})
 			}
 			continue
@@ -66,7 +70,8 @@ func VisibleMethods(info *Info, from *Package, t Type) []MethodDescription {
 				requires = append(requires, TypeText(in.subst(param), from)+": "+qualify(bound.Name, bound.Pkg, from))
 			}
 		}
-		out = append(out, MethodDescription{Name: name, Type: TypeText(ft, from), Definition: fn.Decl.Pos, Requires: requires})
+		pos := fn.Decl.Pos
+		out = append(out, MethodDescription{Name: name, Type: TypeText(ft, from), Definition: &pos, Requires: requires})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -101,14 +106,14 @@ type Proof struct {
 // DescribeFacts uses the same backward proofs as compilation. It deliberately
 // enumerates only declared/guarded facts: there is no finite list of all
 // predicates and arguments that could be proven about a value.
-func DescribeFacts(info *Info, fn *Func, x syntax.Expr, site diag.Pos, where string, eval Evaluator) ([]KnownFact, *Proof, error) {
-	if fn == nil || fn.Decl.Body == nil {
+func DescribeFacts(info *Info, fn *Func, x Expr, site diag.Pos, where string, eval Evaluator) ([]KnownFact, *Proof, error) {
+	if fn == nil || fn.Body == nil {
 		if where != "" {
 			return nil, nil, fmt.Errorf("fact queries need a value inside a bork function or test")
 		}
 		return nil, nil, nil
 	}
-	f := &factChecker{info: info, diags: &diag.List{}, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*syntax.Param]*syntax.Ident{}, predParams: map[*syntax.Param]*Func{}, lambdaArgs: map[*syntax.Param]lambdaArg{}}
+	f := &factChecker{info: info, diags: &diag.List{}, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
 	var at env
 	found := false
 	f.observe = func(pos diag.Pos, e env) {
@@ -121,7 +126,7 @@ func DescribeFacts(info *Info, fn *Func, x syntax.Expr, site diag.Pos, where str
 	f.fn = fn
 	if !found {
 		if where != "" {
-			return nil, nil, fmt.Errorf("no value to prove a fact about at %s", x.Position())
+			return nil, nil, fmt.Errorf("no value to prove a fact about at %s", x.Pos())
 		}
 		return nil, nil, nil
 	}
@@ -163,7 +168,7 @@ func DescribeFacts(info *Info, fn *Func, x syntax.Expr, site diag.Pos, where str
 	}
 	proof := &Proof{Where: where, Proven: true}
 	for _, ref := range parsed.Funcs[0].Params[0].Type.Where {
-		con := c.constraint(ref, info.Types[x], scope)
+		con := c.constraint(ref, x.Type(), scope)
 		if c.diags.Len() != 0 || con == nil {
 			return nil, nil, fmt.Errorf("invalid where query: %s", c.diags.Error())
 		}
@@ -221,4 +226,9 @@ func knownText(k known, from *Package) string {
 		text += "(" + strings.Join(args, ", ") + ")"
 	}
 	return text
+}
+
+// Reference gives a variable declaration a typed reference for code queries.
+func Reference(v *Var) *VarRef {
+	return &VarRef{expr: expr{pos: v.Pos, typ: v.Type}, Var: v}
 }

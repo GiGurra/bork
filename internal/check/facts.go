@@ -760,7 +760,7 @@ func (f *factChecker) paramRef(p *Var) *VarRef {
 	if ref, ok := f.params[p]; ok {
 		return ref
 	}
-	ref := &VarRef{expr: expr{p.Pos, p.Type}, Var: p}
+	ref := &VarRef{expr: expr{pos: p.Pos, typ: p.Type}, Var: p}
 	f.params[p] = ref
 	return ref
 }

@@ -1,0 +1,31 @@
+[
+  {
+    "line": 4,
+    "column": 11,
+    "where": "positive"
+  },
+  {
+    "line": 5,
+    "column": 30,
+    "where": "positive"
+  },
+  {
+    "line": 6,
+    "column": 18,
+    "where": "positive"
+  },
+  {
+    "line": 7,
+    "column": 11,
+    "where": "positive"
+  },
+  {
+    "line": 8,
+    "column": 11,
+    "where": "positive"
+  },
+  {
+    "line": 6,
+    "column": 11
+  }
+]

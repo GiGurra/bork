@@ -1,6 +1,5 @@
-// Package describe adapts source positions to compiler queries. Syntax and Info
-// accesses live here so the lookup can move to the typed tree independently of
-// the CLI and its output format.
+// Package describe adapts source positions to typed compiler queries. The
+// lookup is isolated from the CLI and its output format.
 package describe
 
 import (
@@ -13,7 +12,6 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// Result is a compiler description of the selected source value.
 type Result struct {
 	SchemaVersion int                       `json:"schema_version"`
 	Position      diag.Pos                  `json:"position"`
@@ -24,17 +22,17 @@ type Result struct {
 	Proof         *check.Proof              `json:"proof,omitempty"`
 }
 
-// Selection is the current adapter's handle on a source value.
+// Selection is a source value and the position at which to query its facts.
 type Selection struct {
-	Expr       syntax.Expr
+	Expr       check.Expr
 	Func       *check.Func
 	Package    *check.Package
 	Type       check.Type
 	Definition *diag.Pos
 	Site       diag.Pos
+	Value      bool
 }
 
-// ParsePosition accepts file:line:column, including colons in the file path.
 func ParsePosition(text string) (diag.Pos, error) {
 	last := strings.LastIndexByte(text, ':')
 	if last < 0 {
@@ -52,15 +50,16 @@ func ParsePosition(text string) (diag.Pos, error) {
 	return diag.Pos{File: text[:before], Line: line, Col: column}, nil
 }
 
-// Lookup selects expression tokens, binding names, and parameter names.
-// Operators select their expression; a call's opening '(' selects its result.
-// Whitespace and comments do not silently select a neighboring expression.
+// Lookup maps a source token to the typed tree. Only the function containing
+// the position is visited, so inserted defaults in other bodies cannot select
+// a declaration in the current file.
 func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*Selection, error) {
 	lines := strings.Split(string(src), "\n")
-	if pos.Line > len(lines) || pos.Col > len(lines[pos.Line-1]) {
+	if pos.Line < 1 || pos.Col < 1 || pos.Line > len(lines) || pos.Col > len(lines[pos.Line-1]) {
 		return nil, fmt.Errorf("position %s is outside the source", pos)
 	}
-	index := &sourceIndex{info: info, pos: pos, src: src}
+	tokens, _ := syntax.Lex(pos.File, src, &diag.List{})
+	index := &sourceIndex{pos: pos, tokens: tokens, lines: lines}
 	for _, file := range files {
 		if file.Path != pos.File {
 			continue
@@ -71,23 +70,23 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 				continue
 			}
 			index.fn = fn
-			for i, param := range fd.Params {
-				if index.contains(param.Pos, len(param.Name)) {
-					index.selectLocal(param, param.Name, param.Pos, fn.Params[i])
-					if fd.Body != nil {
-						index.selected.Site = fd.Body.Pos
+			for _, v := range fn.ParamVars {
+				if index.contains(v.Pos, len(v.Name)) {
+					site := v.Pos
+					if fn.Body != nil {
+						site = fn.Body.Pos()
 					}
+					index.selectVar(v, site)
 				}
-				index.walk(param.Default)
 			}
-			if fd.Body != nil {
-				index.walk(fd.Body)
+			if fn.Body != nil && index.inside(fn.Body) {
+				index.walk(fn.Body)
 			}
 		}
 		for _, fn := range info.Tests {
-			if fn.Test.Pos.File == pos.File {
+			if fn.Test.Pos.File == pos.File && index.inside(fn.Body) {
 				index.fn = fn
-				index.walk(fn.Decl.Body)
+				index.walk(fn.Body)
 			}
 		}
 	}
@@ -98,122 +97,166 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 }
 
 type sourceIndex struct {
-	info     *check.Info
 	pos      diag.Pos
-	src      []byte
+	tokens   []syntax.Token
+	lines    []string
 	fn       *check.Func
 	selected *Selection
+}
+
+func (s *sourceIndex) inside(b *check.Block) bool {
+	start, end := b.Pos(), b.End
+	return start.File == s.pos.File && (s.pos.Line > start.Line || s.pos.Line == start.Line && s.pos.Col >= start.Col) && (s.pos.Line < end.Line || s.pos.Line == end.Line && s.pos.Col <= end.Col)
 }
 
 func (s *sourceIndex) contains(start diag.Pos, width int) bool {
 	return start.File == s.pos.File && start.Line == s.pos.Line && start.Col <= s.pos.Col && s.pos.Col < start.Col+width
 }
 
-func (s *sourceIndex) choose(x syntax.Expr, t check.Type, def *diag.Pos) {
-	if t != nil {
-		s.selected = &Selection{Expr: x, Func: s.fn, Package: s.fn.Pkg, Type: t, Definition: def, Site: x.Position()}
+func tokenWidth(t syntax.Token) int {
+	if t.Text != "" {
+		width := len(t.Text)
+		if t.Kind == syntax.TInterp {
+			width++
+		}
+		return width
 	}
+	return len(strings.Trim(t.Kind.String(), "'"))
 }
 
-func (s *sourceIndex) selectLocal(node any, name string, pos diag.Pos, t check.Type) {
-	id := &syntax.Ident{Pos: pos, Name: name}
-	// Synthetic identifiers give the existing prover the same declaration
-	// identity as references to the local. The typed-tree adapter will use Var.
-	s.info.Defs[id] = node
-	s.info.Types[id] = t
-	s.choose(id, t, &pos)
+func (s *sourceIndex) token(pos diag.Pos) (syntax.Token, int) {
+	for i, token := range s.tokens {
+		if token.Pos == pos {
+			return token, i
+		}
+	}
+	return syntax.Token{}, -1
 }
 
-func (s *sourceIndex) walk(x syntax.Expr) {
+func (s *sourceIndex) choose(x check.Expr, t check.Type, def *diag.Pos) {
+	s.selected = &Selection{Expr: x, Func: s.fn, Package: s.fn.Pkg, Type: t, Definition: def, Site: x.Pos(), Value: true}
+}
+
+func (s *sourceIndex) selectVar(v *check.Var, site diag.Pos) {
+	s.choose(check.Reference(v), v.Type, &v.Pos)
+	s.selected.Site = site
+}
+
+func (s *sourceIndex) walk(x check.Expr) {
 	if x == nil {
 		return
 	}
-	if s.contains(x.Position(), s.width(x)) {
-		s.choose(x, s.info.Types[x], definition(s.info, x))
+	token, i := s.token(x.TokenPos())
+	if i < 0 {
+		at := x.TokenPos()
+		if at.File == s.pos.File && at.Line > 0 && at.Line <= len(s.lines) && at.Col <= len(s.lines[at.Line-1]) {
+			nested, _ := syntax.Lex(at.File, []byte(s.lines[at.Line-1][at.Col-1:]), &diag.List{})
+			if len(nested) > 0 {
+				token = nested[0]
+			}
+		}
+	}
+	width := tokenWidth(token)
+	switch x := x.(type) {
+	case *check.VarRef:
+		width = len(x.Var.Name)
+	case *check.FuncRef:
+		width = len(x.Name)
+	case *check.Select:
+		width = len(x.Name)
+	case *check.RecordLit:
+		_, i := s.token(x.TokenPos())
+		if i >= 0 {
+			for i+2 < len(s.tokens) && s.tokens[i+1].Kind == syntax.Dot && s.tokens[i+2].Kind == syntax.TIdent && s.tokens[i+2].Pos.Line == x.TokenPos().Line {
+				i += 2
+				width = s.tokens[i].Pos.Col + len(s.tokens[i].Text) - x.TokenPos().Col
+			}
+		}
+	}
+	if s.contains(x.TokenPos(), width) {
+		s.choose(x, x.Type(), definition(x))
 	}
 	switch x := x.(type) {
-	case *syntax.Call:
-		if inst := s.info.Instances[x]; inst != nil && s.contains(x.Fun.Position(), s.width(x.Fun)) {
-			params := inst.Params
-			if inst.Func.Decl.IsMethod {
-				params = params[1:]
-			}
-			def := inst.Func.Decl.Pos
-			s.choose(x.Fun, &check.FuncType{Params: params, Result: inst.Result}, &def)
+	case *check.Call:
+		s.callee(x)
+		for _, a := range x.Args {
+			s.walk(a)
 		}
+	case *check.CallBuiltin:
+		for _, a := range x.Args {
+			s.walk(a)
+		}
+	case *check.CallValue:
 		s.walk(x.Fun)
 		for _, a := range x.Args {
 			s.walk(a)
 		}
-	case *syntax.Unary:
+	case *check.Unary:
 		s.walk(x.X)
-	case *syntax.Binary:
+	case *check.Binary:
 		s.walk(x.X)
 		s.walk(x.Y)
-	case *syntax.If:
+	case *check.If:
 		s.walk(x.Cond)
 		s.walk(x.Then)
 		s.walk(x.Else)
-	case *syntax.Block:
+	case *check.Block:
 		for _, stmt := range x.Stmts {
 			switch stmt := stmt.(type) {
-			case *syntax.Binding:
-				if s.contains(stmt.Pos, len(stmt.Name)) {
-					s.selectLocal(stmt, stmt.Name, stmt.Pos, s.info.Bindings[stmt])
-					s.selected.Site = stmt.Value.Position()
+			case *check.Let:
+				if s.contains(stmt.Var.Pos, len(stmt.Var.Name)) {
+					s.selectVar(stmt.Var, stmt.Value.Pos())
 				}
 				s.walk(stmt.Value)
-			case *syntax.ExprStmt:
+			case *check.ExprStmt:
 				s.walk(stmt.X)
-			case *syntax.TrustStmt:
+			case *check.Trust:
 				s.walk(stmt.Call)
 			}
 		}
 		s.walk(x.Tail)
-	case *syntax.Return:
+	case *check.Return:
 		s.walk(x.Value)
-	case *syntax.Selector:
+	case *check.Select:
 		s.walk(x.X)
-	case *syntax.RecordLit:
+	case *check.RecordLit:
 		for _, field := range x.Fields {
 			s.walk(field.Value)
 		}
-	case *syntax.Copy:
+	case *check.Copy:
 		s.walk(x.X)
 		for _, update := range x.Updates {
 			s.walk(update.Value)
 		}
-	case *syntax.Match:
+	case *check.Match:
 		s.walk(x.X)
 		for _, arm := range x.Arms {
+			s.pattern(arm.Pat, arm.Body.Pos())
 			s.walk(arm.Body)
 		}
-	case *syntax.Try:
+	case *check.Try:
 		s.walk(x.X)
-	case *syntax.Interp:
+	case *check.Interp:
 		for _, part := range x.Exprs {
 			s.walk(part)
 		}
-	case *syntax.Lambda:
-		if ft, ok := s.info.Types[x].(*check.FuncType); ok {
-			for i, param := range x.Params {
-				if s.contains(param.Pos, len(param.Name)) {
-					s.selectLocal(param, param.Name, param.Pos, ft.Params[i])
-					s.selected.Site = x.Position()
-				}
+	case *check.Lambda:
+		for _, param := range x.Params {
+			if s.contains(param.Pos, len(param.Name)) {
+				s.selectVar(param, x.Pos())
 			}
 		}
 		s.walk(x.Body)
-	case *syntax.ScopeExpr:
+	case *check.ScopeBlock:
 		for _, policy := range x.Policies {
 			s.walk(policy)
 		}
 		s.walk(x.Body)
-	case *syntax.ListLit:
+	case *check.ListLit:
 		for _, elem := range x.Elems {
 			s.walk(elem)
 		}
-	case *syntax.MapLit:
+	case *check.MapLit:
 		for i, key := range x.Keys {
 			s.walk(key)
 			s.walk(x.Values[i])
@@ -221,97 +264,125 @@ func (s *sourceIndex) walk(x syntax.Expr) {
 	}
 }
 
-func (s *sourceIndex) width(x syntax.Expr) int {
-	switch x := x.(type) {
-	case *syntax.Ident:
-		return len(x.Name)
-	case *syntax.Selector:
-		return len(x.Name)
-	case *syntax.IntLit:
-		return len(x.Text)
-	case *syntax.FloatLit:
-		return len(x.Text)
-	case *syntax.RuneLit:
-		return len(x.Text)
-	case *syntax.BoolLit:
-		if x.Value {
-			return 4
-		}
-		return 5
-	case *syntax.Unary:
-		return len(strings.Trim(x.Op.String(), "'"))
-	case *syntax.Binary:
-		return len(strings.Trim(x.Op.String(), "'"))
-	case *syntax.If:
-		return 2
-	case *syntax.Match:
-		return 5
-	case *syntax.Return:
-		return 6
-	case *syntax.ScopeExpr:
-		return 5
-	case *syntax.Copy:
-		return 4
-	case *syntax.RecordLit:
-		return s.width(x.Type)
+// A declared call contains no FuncRef node. Its written callee is the
+// identifier before '(' (or before explicit type arguments). Its type and
+// definition still come entirely from the resolved call.
+func (s *sourceIndex) callee(call *check.Call) {
+	_, i := s.token(call.TokenPos())
+	if i < 1 {
+		return
 	}
-	// Strings and interpolation need their raw spelling, since their AST
-	// values have already been unquoted. Stop at the first unescaped quote.
-	if _, ok := x.(*syntax.StringLit); ok {
-		start := s.offset(x.Position())
-		for i := start + 1; i < len(s.src); i++ {
-			if s.src[i] == '\\' {
-				i++
-			} else if s.src[i] == '"' {
-				return i - start + 1
+	if !call.Func.Decl.IsMethod {
+		i--
+	}
+	if call.Func.Decl.IsMethod {
+		j := i + 1
+		if j < len(s.tokens) && s.tokens[j].Kind == syntax.LBrack {
+			depth := 1
+			for j++; j < len(s.tokens); j++ {
+				if s.tokens[j].Kind == syntax.LBrack {
+					depth++
+				}
+				if s.tokens[j].Kind == syntax.RBrack {
+					depth--
+				}
+				if depth == 0 {
+					j++
+					break
+				}
+			}
+		}
+		if j < len(s.tokens) && s.tokens[j].Kind == syntax.LParen && s.contains(s.tokens[j].Pos, 1) {
+			pos := call.Func.Decl.Pos
+			s.choose(call, call.Type(), &pos)
+			return
+		}
+	}
+	if s.tokens[i].Kind == syntax.RBrack {
+		depth := 1
+		for i--; i >= 0; i-- {
+			switch s.tokens[i].Kind {
+			case syntax.RBrack:
+				depth++
+			case syntax.LBrack:
+				depth--
+			}
+			if depth == 0 {
+				i--
+				break
 			}
 		}
 	}
-	return 1
-}
-
-func (s *sourceIndex) offset(pos diag.Pos) int {
-	offset := 0
-	for line := 1; line < pos.Line; line++ {
-		offset += strings.IndexByte(string(s.src[offset:]), '\n') + 1
+	if i < 0 || s.tokens[i].Kind != syntax.TIdent {
+		return
 	}
-	return offset + pos.Col - 1
+	name := s.tokens[i]
+	width := len(name.Text)
+	if !call.Func.Decl.IsMethod && i >= 2 && s.tokens[i-1].Kind == syntax.Dot && s.tokens[i-2].Kind == syntax.TIdent {
+		first := s.tokens[i-2]
+		if first.Pos.Line == name.Pos.Line {
+			width = name.Pos.Col + width - first.Pos.Col
+			name = first
+		}
+	}
+	if !s.contains(name.Pos, width) {
+		return
+	}
+	params := call.Inst.Params
+	if call.Func.Decl.IsMethod {
+		params = params[1:]
+	}
+	pos := call.Func.Decl.Pos
+	s.choose(call, &check.FuncType{Params: params, Result: call.Inst.Result}, &pos)
+	s.selected.Value = false
 }
 
-func definition(info *check.Info, x syntax.Expr) *diag.Pos {
+func (s *sourceIndex) pattern(p *check.Pat, site diag.Pos) {
+	if p == nil {
+		return
+	}
+	if p.Var != nil && s.contains(p.Var.Pos, len(p.Var.Name)) {
+		s.selectVar(p.Var, site)
+	}
+	s.pattern(p.Sub, site)
+	for _, field := range p.Fields {
+		s.pattern(field.Pat, site)
+	}
+	for _, elem := range p.Elems {
+		s.pattern(elem, site)
+	}
+	s.pattern(p.Rest, site)
+}
+
+func definition(x check.Expr) *diag.Pos {
 	var pos diag.Pos
 	switch x := x.(type) {
-	case *syntax.Ident:
-		switch d := info.Defs[x].(type) {
-		case *syntax.Param:
-			pos = d.Pos
-		case *syntax.Binding:
-			pos = d.Pos
-		case syntax.Pattern:
-			pos = d.Position()
-		case *syntax.FieldPat:
-			pos = d.Pos
-		case *syntax.ScopeExpr:
-			pos = d.Pos
-		}
-		if inst := info.FuncRefs[x]; inst != nil {
-			pos = inst.Func.Decl.Pos
-		}
-	case *syntax.Call:
-		if fn := info.CallFuncs[x]; fn != nil {
-			pos = fn.Decl.Pos
-		}
-	case *syntax.Selector:
-		if r, ok := info.Types[x.X].(*check.Record); ok {
+	case *check.VarRef:
+		pos = x.Var.Pos
+	case *check.FuncRef:
+		pos = x.Inst.Func.Decl.Pos
+	case *check.Call:
+		pos = x.Func.Decl.Pos
+	case *check.Select:
+		if r, ok := x.X.Type().(*check.Record); ok {
 			for _, field := range r.Decl.Fields {
 				if field.Name == x.Name {
 					pos = field.Pos
 				}
 			}
 		}
-		if v := info.SelectorVariants[x]; v != nil {
-			for _, variant := range v.Parent.Decl.Variants {
-				if variant.Name == v.Name {
+	case *check.VariantValue:
+		for _, variant := range x.Variant.Parent.Decl.Variants {
+			if variant.Name == x.Variant.Name {
+				pos = variant.Pos
+			}
+		}
+	case *check.RecordLit:
+		if x.Record != nil {
+			pos = x.Record.Decl.Pos
+		} else if x.Variant != nil {
+			for _, variant := range x.Variant.Parent.Decl.Variants {
+				if variant.Name == x.Variant.Name {
 					pos = variant.Pos
 				}
 			}

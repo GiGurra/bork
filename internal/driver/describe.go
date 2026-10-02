@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -32,7 +33,13 @@ func Describe(position, where string) (*describe.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	facts, proof, err := check.DescribeFacts(info, selected.Func, selected.Expr, selected.Site, where, evaluator(path, files, info))
+	var facts []check.KnownFact
+	var proof *check.Proof
+	if selected.Value {
+		facts, proof, err = check.DescribeFacts(info, selected.Func, selected.Expr, selected.Site, where, evaluator(path, files, info))
+	} else if where != "" {
+		return nil, fmt.Errorf("where queries need a value expression; select the call's opening parenthesis for its result")
+	}
 	if err != nil {
 		return nil, err
 	}
