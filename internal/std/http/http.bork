@@ -12,30 +12,35 @@ pred ValidStatus(code: Int) { code >= 100 && code <= 599 }
 
 type Status = Int where ValidStatus
 
-type Header = { name: String, value: String }
+// Headers keep every value of each header; names are canonicalized on receipt.
+type Headers = Map[String, List[String]]
+
+// TimeoutMs is a nonnegative timeout that fits Go's nanosecond duration.
+pred ValidTimeout(ms: Int) { ms >= 0 && ms <= 9223372036854 }
+type TimeoutMs = Int where ValidTimeout
 
 type Request = {
   method: String,
   path: String,
   query: String,
-  headers: List[Header],
+  headers: Headers,
   body: String,
 }
 
-type Response = { status: Status, headers: List[Header], body: String }
+type Response = { status: Status, headers: Headers, body: String }
 
 // Server is a running server, stopped when its scope closes.
 type Server = resource
 
 // Text is a plain text response.
 fn Text(status: Status, body: String): Response {
-  Response { status: status, headers: [Header { name: "Content-Type", value: "text/plain; charset=utf-8" }], body: body }
+  Response { status: status, headers: { "Content-Type": ["text/plain; charset=utf-8"] }, body: body }
 }
 
 // JsonReply is a response with a JSON body (already rendered, as encodeJson
 // gives it).
 fn JsonReply(status: Status, body: String): Response {
-  Response { status: status, headers: [Header { name: "Content-Type", value: "application/json" }], body: body }
+  Response { status: status, headers: { "Content-Type": ["application/json"] }, body: body }
 }
 
 // Segments are the non-empty parts of a path: "/users/42/" gives
@@ -46,9 +51,9 @@ fn Segments(path: String): List[String] {
 
 // HeaderOf is the value of the first header with the given name,
 // compared without regard to case.
-fn HeaderOf(headers: List[Header], name: String): Option[String] {
-  match (find(headers, h => toLower(h.name) == toLower(name))) {
-    Option.Some { value } => Option.Some { value: value.value }
+fn HeaderOf(headers: Headers, name: String): Option[String] {
+  match (find(headers.entries(), entry => toLower(entry.key) == toLower(name))) {
+    Option.Some { value } => value.value.get(0)
     Option.None => Option.None
   }
 }
@@ -69,25 +74,27 @@ fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response) uses ne
     return IoError{path: addr, message: err.Error()}
   }
   srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    body, _ := io.ReadAll(r.Body)
-    headers := []Header{}
+    body, readErr := io.ReadAll(r.Body)
+    if readErr != nil { http.Error(w, "could not read request body", http.StatusBadRequest); return }
+    keys, values := []string{}, [][]string{}
     names := make([]string, 0, len(r.Header))
     for name := range r.Header {
       names = append(names, name)
     }
     sort.Strings(names)
     for _, name := range names {
-      for _, v := range r.Header[name] {
-        headers = append(headers, Header{name: name, value: v})
-      }
+      keys = append(keys, name)
+      values = append(values, append([]string(nil), r.Header[name]...))
     }
+    headers := _borkMapOf(keys, values)
     rs := _borkScopeWith(r.Context())
     defer _borkScopeAbort(rs)
     resp := handler(Request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, headers: headers, body: string(body)}, rs)
     _borkScopeClose(rs)
-    for _, h := range resp.headers {
-      w.Header().Add(h.name, h.value)
-    }
+    _borkMapEach(resp.headers, func(name string, values []string) bool {
+      for _, value := range values { w.Header().Add(name, value) }
+      return true
+    })
     w.WriteHeader(int(resp.status))
     io.WriteString(w, resp.body)
   })}
@@ -121,48 +128,46 @@ fn Wait(server: Server) uses net unsafe go {
   }).done
 }
 
-// Get sends a GET request.
-fn Get(url: String) uses net: Response | IoError {
-  Send("GET", url, [], "")
+// Get sends a GET request cancelled with s. timeoutMs bounds the entire request,
+// including reading the body; zero uses only the scope's cancellation/deadline.
+fn Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoError {
+  Send("GET", url, {:}, "", s, timeoutMs)
 }
 
-// Post sends a POST request with a body of the given content type.
-fn Post(url: String, contentType: String, body: String) uses net: Response | IoError {
-  Send("POST", url, [Header { name: "Content-Type", value: contentType }], body)
+// Post sends a POST request with the given content type.
+fn Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoError {
+  Send("POST", url, { "Content-Type": [contentType] }, body, s, timeoutMs)
 }
 
-// Send sends a request, and reads the whole response.
-fn Send(method: String, url: String, headers: List[Header], body: String) uses net: Response | IoError unsafe go {
+// Send sends a request and reads its entire response. Transport, cancellation,
+// and timeout failures return IoError; HTTP error statuses remain responses.
+fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoError unsafe go {
+  import "context"
   import "io"
   import "net/http"
   import "sort"
   import "strings"
-  req, err := http.NewRequest(method, url, strings.NewReader(body))
-  if err != nil {
-    return IoError{path: url, message: err.Error()}
+  import "time"
+  ctx := _borkScopeContext(s)
+  if timeoutMs > 0 {
+    var stop context.CancelFunc
+    ctx, stop = context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+    defer stop()
   }
-  for _, h := range headers {
-    req.Header.Add(h.name, h.value)
-  }
+  req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(body))
+  if err != nil { return IoError{path: url, message: err.Error()} }
+  _borkMapEach(headers, func(name string, values []string) bool {
+    for _, value := range values { req.Header.Add(name, value) }
+    return true
+  })
   resp, err := http.DefaultClient.Do(req)
-  if err != nil {
-    return IoError{path: url, message: err.Error()}
-  }
+  if err != nil { return IoError{path: url, message: err.Error()} }
   defer resp.Body.Close()
   data, err := io.ReadAll(resp.Body)
-  if err != nil {
-    return IoError{path: url, message: err.Error()}
-  }
-  out := []Header{}
-  names := make([]string, 0, len(resp.Header))
-  for name := range resp.Header {
-    names = append(names, name)
-  }
-  sort.Strings(names)
-  for _, name := range names {
-    for _, v := range resp.Header[name] {
-      out = append(out, Header{name: name, value: v})
-    }
-  }
-  return Response{status: int64(resp.StatusCode), headers: out, body: string(data)}
+  if err != nil { return IoError{path: url, message: err.Error()} }
+  keys, values := []string{}, [][]string{}
+  for name := range resp.Header { keys = append(keys, name) }
+  sort.Strings(keys)
+  for _, name := range keys { values = append(values, append([]string(nil), resp.Header[name]...)) }
+  return Response{status: int64(resp.StatusCode), headers: _borkMapOf(keys, values), body: string(data)}
 }

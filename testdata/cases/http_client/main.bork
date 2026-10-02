@@ -1,0 +1,105 @@
+import "bork/http"
+
+type TestServer = resource
+fn openServer(s: Scope): TestServer unsafe go {
+  import "net/http"
+  import "net/http/httptest"
+  import "io"
+  import "strings"
+  started := make(chan struct{}, 10)
+  srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if r.URL.Path == "/wait" || r.URL.Path == "/body" || r.URL.Path == "/cancel" || r.URL.Path == "/close" {
+      if r.URL.Path == "/body" { w.WriteHeader(200); w.(http.Flusher).Flush() }
+      if r.URL.Path == "/cancel" || r.URL.Path == "/close" { started <- struct{}{} }
+      <-r.Context().Done()
+      return
+    }
+    data, _ := io.ReadAll(r.Body)
+    w.Header().Add("X-Many", "one")
+    w.Header().Add("X-Many", "two")
+    w.WriteHeader(418)
+    body := strings.Join(r.Header.Values("X-Many"), ",") + ":" + string(data)
+    if r.URL.Path == "/post" { body += ":" + r.Header.Get("Content-Type") }
+    io.WriteString(w, body)
+  }))
+  state := struct { url string; started chan struct{} }{srv.URL, started}
+  return TestServer{handle: state, owner: s.Own(func() { srv.Close() })}
+}
+fn url(server: TestServer): String unsafe go {
+  return server.handle.(struct { url string; started chan struct{} }).url
+}
+fn started(server: TestServer) unsafe go {
+  import "time"
+  select {
+  case <-server.handle.(struct { url string; started chan struct{} }).started:
+  case <-time.After(5*time.Second): panic("request did not reach server")
+  }
+}
+fn cancelledResult(response: http.Response | IoError): Bool {
+  match (response) {
+    error: IoError => error.message.endsWith(": cancelled") || error.message.endsWith(": the scope ended")
+    _ => false
+  }
+}
+fn timedOut(response: http.Response | IoError): Bool {
+  match (response) {
+    error: IoError => error.message.contains("deadline exceeded")
+    _ => false
+  }
+}
+fn echo(request: http.Request, s: Scope): http.Response {
+  http.Response {
+    status: 200,
+    headers: { "X-Reply": ["one", "two"] },
+    body: http.HeaderOf(request.headers, "x-many").getOr("missing"),
+  }
+}
+fn dynamicTimeout(): Int unsafe go { return 20 }
+fn main() {
+  scope app {
+    remote = openServer(app)
+    base = url(remote)
+    match (http.Send("POST", base, { "x-many": ["a", "b"] }, "payload", app, 2000)) {
+      response: http.Response => {
+        println(response.status, response.body)
+        println(response.headers.get("X-Many"))
+        println(http.HeaderOf(response.headers, "x-many"))
+      }
+      _ => println("unexpected")
+    }
+    match (http.Post(base + "/post", "application/json", "posted", app)) {
+      response: http.Response => println(response.body)
+      _ => println("unexpected")
+    }
+    timeout = dynamicTimeout()
+    if (http.ValidTimeout(timeout)) { println(timedOut(http.Get(base + "/wait", app, timeout))) } else { println("unexpected") }
+    println(timedOut(http.Get(base + "/body", app, 20)))
+    scope request {
+      task = spawn(request, () => http.Get(base + "/cancel", request, 2000))
+      started(remote)
+      cancel(request)
+      println(cancelledResult(await(task)))
+    }
+    observed = atom(false)
+    scope request {
+      launch(request, () => {
+        result = cancelledResult(http.Get(base + "/close", request, 2000))
+        update(observed, previous => result)
+      })
+      started(remote)
+    }
+    println(current(observed))
+    scope request {
+      cancel(request)
+      println(cancelledResult(http.Get(base, request)))
+    }
+    local = http.Listen("127.0.0.1:0", app, echo)
+    match (local) {
+      running: http.Server => match (http.Send("GET", "http://" + http.Address(running), { "X-Many": ["first", "second"] }, "", app)) {
+        response: http.Response => { println(response.body); println(response.headers.get("X-Reply")) }
+        _ => println("unexpected")
+      }
+      _ => println("unexpected")
+    }
+  }
+}

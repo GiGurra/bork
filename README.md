@@ -169,6 +169,8 @@ see the [local bork editor extension](editors/vscode/README.md).
 
 Standard packages may use pinned Go modules. Generated builds use Go's module cache; populate it while online before building with `GOPROXY=off`. See the [dependency and offline build contract](docs/std-go.md).
 
+HTTP clients take a scope (`http.Get(url, s, timeoutMs = 0)`); cancellation and optional timeouts cover the response body too. Request/response headers are `Map[String, List[String]]`, preserving repeated header values.
+
 ## Status
 
 Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today.
