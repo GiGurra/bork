@@ -102,8 +102,8 @@ fn Log(logger: Logger, level: Level, msg: String, attrs: Attrs = {:}) {
 
 fn merge(a: Attrs, b: Attrs): Attrs unsafe go {
   out := a
-  b.each(func(k string, v any) bool {
-    out = out.put(k, v)
+  _borkMapEach(b, func(k string, v any) bool {
+    out = _borkMapPut(out, k, v)
     return true
   })
   return out
@@ -112,8 +112,8 @@ fn merge(a: Attrs, b: Attrs): Attrs unsafe go {
 fn write(level: Int, msg: String, attrs: Attrs) unsafe go {
   import "context"
   import "log/slog"
-  all := make([]slog.Attr, 0, attrs.len())
-  attrs.each(func(k string, v any) bool {
+  all := make([]slog.Attr, 0, _borkMapLen(attrs))
+  _borkMapEach(attrs, func(k string, v any) bool {
     all = append(all, slog.Any(k, v))
     return true
   })

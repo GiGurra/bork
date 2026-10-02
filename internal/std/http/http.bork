@@ -68,7 +68,7 @@ fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response): Server
   if err != nil {
     return IoError{path: addr, message: err.Error()}
   }
-  srv := &http.Server{BaseContext: func(net.Listener) context.Context { return s.ctx }, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     body, _ := io.ReadAll(r.Body)
     headers := []Header{}
     names := make([]string, 0, len(r.Header))
@@ -81,10 +81,10 @@ fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response): Server
         headers = append(headers, Header{name: name, value: v})
       }
     }
-    rs := _scopeWith(r.Context())
-    defer rs.abort()
+    rs := _borkScopeWith(r.Context())
+    defer _borkScopeAbort(rs)
     resp := handler(Request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, headers: headers, body: string(body)}, rs)
-    rs.close()
+    _borkScopeClose(rs)
     for _, h := range resp.headers {
       w.Header().Add(h.name, h.value)
     }

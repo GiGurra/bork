@@ -1,0 +1,8 @@
+import "example.com/helpers/helpers"
+fn main() {
+  scope s {
+    println(helpers.Check(s))
+    println(helpers.Some())
+    println(helpers.None())
+  }
+}
