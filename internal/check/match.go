@@ -40,7 +40,8 @@ type Pat struct {
 	Bind     string
 	BindType Type
 	bindNode any
-	// Var is the variable of the bound name, in the typed tree.
+	// Var is the variable of the bound name in the typed tree, set
+	// when the tree is built (see lower.go).
 	Var *Var
 	// Lit is the value of a PatLit (a number, string, or bool constant).
 	Lit constant.Value

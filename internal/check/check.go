@@ -485,7 +485,7 @@ type checker struct {
 type local struct {
 	typ  Type
 	node any // the binding's syntax node; nil for parameters
-	decl any // what an identifier refers to (see Info.Defs)
+	decl any // what an identifier refers to (see Info.defs)
 	used bool
 }
 

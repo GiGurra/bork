@@ -1,0 +1,27 @@
+// Names bound by list patterns, also inside a record's field, live as
+// long as the matched value.
+type Holder = { items: List[Task[Int]] }
+
+fn fromList(): Int {
+  f = scope s {
+    xs = [spawn(s, () => 1)]
+    match (xs) {
+      [a, ...rest] => () => await(a)
+      [] => () => 0
+    }
+  }
+  f()
+}
+
+fn fromField(): Int {
+  f = scope s {
+    h = Holder { items: [spawn(s, () => 2)] }
+    match (h) {
+      Holder { items: [a, ...] } => () => await(a)
+      Holder { items: [] } => () => 0
+    }
+  }
+  f()
+}
+
+fn main() {}

@@ -143,7 +143,7 @@ func (c *checker) methodNamed(t Type, name string) (*Func, string) {
 
 // methodCallOf checks e if it is a method call, x.m(args), and reports
 // whether it was. The call is left as written: the checker records its
-// arguments as m takes them, x first (see Info.CallArgs).
+// arguments as m takes them, x first (see Info.callArgs).
 func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	sel, ok := e.Fun.(*syntax.Selector)
 	if !ok {

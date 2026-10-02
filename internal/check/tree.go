@@ -57,7 +57,7 @@ type Interp struct {
 type VarKind int
 
 const (
-	VarParam       VarKind = iota // a function's parameter
+	VarParam       VarKind = iota // a function's parameter, or a rule's variable
 	VarLambdaParam                // a lambda's parameter
 	VarLet                        // a binding: name = value
 	VarPattern                    // a name a match pattern binds
@@ -71,7 +71,8 @@ type Var struct {
 	Pos  diag.Pos
 	Type Type
 	Kind VarKind
-	// Index is a VarParam's position among its function's parameters.
+	// Index is a parameter's position among its function's (or
+	// lambda's, or rule's) parameters.
 	Index int
 	// Let is a VarLet's binding.
 	Let *Let
@@ -290,9 +291,10 @@ type ExprStmt struct {
 	X Expr
 }
 
-// Trust is `trust p(x, ...)`: Call is the call (a *Call of a predicate,
-// unless the facts pass reports it). Text is the call as written, and
-// SubjectText its first argument (x).
+// Trust is `trust p(x, ...)`: Call is the call, a *Call of a predicate
+// (or a *CallValue of a predicate parameter, which the facts pass
+// reports). Text is the call as written, and SubjectText its first
+// argument (x).
 type Trust struct {
 	Pos         diag.Pos
 	Call        Expr
