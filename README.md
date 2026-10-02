@@ -6,7 +6,7 @@
 
 Think Go's tooling simplicity, with the functional style of Scala and Haskell, and correctness guarantees that anyone can write, not just the type-theory crowd.
 
-*Bork bork bork!* The name comes from the Swedish Chef. Strict recipes, cheerfully enforced.
+*Bork bork bork!* The name comes from the [Swedish Chef](https://en.wikipedia.org/wiki/Swedish_Chef). Strict recipes, cheerfully enforced.
 
 ## Why bork over Go
 
