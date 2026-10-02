@@ -10,9 +10,9 @@ import (
 	"github.com/GiGurra/bork/internal/diag"
 )
 
-// TestCheckLeavesSyntax checks that type checking, and the passes after
-// it, leave the syntax tree as written: what they work out is recorded
-// in check.Info.
+// TestCheckLeavesSyntax checks that type checking, lifetimes, and facts
+// leave the syntax tree as written: what they work out is recorded in
+// check.Info.
 func TestCheckLeavesSyntax(t *testing.T) {
 	var dirs []string
 	for _, root := range []string{filepath.Join("..", "..", "testdata", "cases"), filepath.Join("..", "..", "examples")} {

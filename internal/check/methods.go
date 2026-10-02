@@ -162,6 +162,9 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	}
 	if r, ok := xt.(*Record); ok && r.Field(sel.Name) != nil {
 		// A field holding a function.
+		if len(e.TypeArgs) > 0 {
+			c.errorf(e.Pos, "only a declared generic function can be given type arguments")
+		}
 		return c.callFuncValue(e, c.record(sel, r.Field(sel.Name).Type)), true
 	}
 	fn, why := c.methodNamed(xt, sel.Name)
