@@ -499,7 +499,14 @@ func (c *checker) notFound(name string) string {
 	return fmt.Sprintf("package %s has no %s", pkg.Path, n)
 }
 
+// errorf reports an error. Types in args are shown as code in the
+// current package would write them (money.Cents).
 func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
+	for i, a := range args {
+		if t, ok := a.(Type); ok && t != nil {
+			args[i] = TypeText(t, c.pkg)
+		}
+	}
 	c.diags.Add(pos, format, args...)
 }
 
