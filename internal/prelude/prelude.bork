@@ -112,6 +112,62 @@ fn delay(s: Scope, ms: Int): Unit | Cancelled unsafe go {
 // (once its buffered values are received).
 type Closed = {}
 
+// Atom holds a value that tasks share and replace, as Clojure's atom:
+// the value itself never changes, but update swaps in a new one,
+// atomically. With persistent maps and lists it is how a server keeps
+// state between requests:
+//
+//   store = atom({:})
+//   update(store, users => maps.Put(users, id, user))
+//
+// update may call f more than once (when another task updated the atom
+// in between), so f should do nothing but compute the new value.
+type Atom[T] = {
+  currentFn: () => T,
+  updateFn: ((T) => T) => T,
+  swapFn: ((T) => T) => T,
+}
+
+// atom makes an atom holding initial.
+fn atom[T](initial: T): Atom[T] unsafe go {
+  import "sync/atomic"
+  var p atomic.Pointer[T]
+  p.Store(&initial)
+  // change gives the old value and the new one.
+  change := func(f func(T) T) (T, T) {
+    for {
+      old := p.Load()
+      next := f(*old)
+      if p.CompareAndSwap(old, &next) {
+        return *old, next
+      }
+    }
+  }
+  return Atom[T]{
+    currentFn: func() T { return *p.Load() },
+    updateFn: func(f func(T) T) T { _, next := change(f); return next },
+    swapFn: func(f func(T) T) T { old, _ := change(f); return old },
+  }
+}
+
+// current is the value a holds now.
+fn current[T](a: Atom[T]): T {
+  a.currentFn()
+}
+
+// update replaces a's value x with f(x), atomically, and gives the new
+// value.
+fn update[T](a: Atom[T], f: (T) => T): T {
+  a.updateFn(f)
+}
+
+// swap is update, but gives the value it replaced: what the change was
+// made to, so the caller can tell what it did (`old = swap(store, s =>
+// remove(s, id))`, then whether old had id).
+fn swap[T](a: Atom[T], f: (T) => T): T {
+  a.swapFn(f)
+}
+
 // Channel passes values of type T between tasks. It belongs to the
 // scope it was made in, and closes when that scope closes; its
 // operations stop with Cancelled when that scope is cancelled.
