@@ -30,6 +30,8 @@ type Package struct {
 	// those its code can use: its own, the prelude's, and those it uses.
 	instances []*ClassInstance
 	inScope   []*ClassInstance
+	// bundles holds the package's named sets of instances.
+	bundles map[string]*bundle
 }
 
 // TypeNamed is the record, sealed, or resource type the package

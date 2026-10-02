@@ -1,0 +1,8 @@
+type Cents = { amount: Int }
+
+class Show[T] { fn show(x: T): String }
+
+instance ShowCents: Show[Cents] { fn show(c: Cents): String { toString(c.amount) } }
+
+instances internal { ShowCents }
+instances Suggested { ShowCents }

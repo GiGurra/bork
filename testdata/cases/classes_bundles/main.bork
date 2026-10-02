@@ -1,0 +1,17 @@
+import "example.com/tc/api"
+import "example.com/tc/money"
+
+// One line brings in everything api suggests.
+use api.Json
+
+fn main() {
+  r: api.Item | JsonError | DecodeError = decodeJson("{\"name\": \"pen\", \"price\": {\"amount\": 250}}")
+  match (r) {
+    i: api.Item => {
+      println(encodeJson(i))
+      println(money.show(i.price))
+    }
+    e: JsonError => println(e)
+    e: DecodeError => println(e)
+  }
+}

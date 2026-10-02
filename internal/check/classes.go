@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -256,59 +257,152 @@ func (c *checker) resolveUses(files []*syntax.File) {
 	for _, pkg := range c.pkgs {
 		pkg.inScope = append(append([]*ClassInstance(nil), pkg.instances...), c.preludePkg.instances...)
 	}
+	c.declareBundles(files)
 	for _, f := range files {
 		if f.Prelude {
 			continue
 		}
 		c.inFile(f)
+		for _, b := range f.Bundles {
+			// Resolved even if unused, for its errors.
+			if declared := c.pkg.bundles[b.Name]; declared != nil && declared.decl == b {
+				c.bundleInstances(declared)
+			}
+		}
 		for _, u := range f.Uses {
-			c.use(u)
+			for _, ci := range c.useItem(u) {
+				c.pkg.inScope = addInstance(c.pkg.inScope, ci)
+			}
 		}
 	}
 }
 
-func (c *checker) use(u *syntax.Use) {
-	add := func(ci *ClassInstance) {
-		for _, have := range c.pkg.inScope {
-			if have == ci {
-				return
-			}
-		}
-		c.pkg.inScope = append(c.pkg.inScope, ci)
+func sortedBundleNames(pkg *Package) []string {
+	var names []string
+	for name := range pkg.bundles {
+		names = append(names, name)
 	}
+	sort.Strings(names)
+	return names
+}
+
+// bundle is a named set of instances: `instances Json { ... }`.
+type bundle struct {
+	decl  *syntax.Bundle
+	pkg   *Package
+	state int // 1 while its items are resolved, 2 when done
+	insts []*ClassInstance
+}
+
+func (c *checker) declareBundles(files []*syntax.File) {
+	for _, f := range files {
+		if len(f.Bundles) == 0 {
+			continue
+		}
+		c.inFile(f)
+		if c.pkg.bundles == nil {
+			c.pkg.bundles = map[string]*bundle{}
+		}
+		for _, b := range f.Bundles {
+			if other := c.pkg.bundles[b.Name]; other != nil {
+				c.errorf(b.Pos, "instances %s is already declared at %s", b.Name, other.decl.Pos)
+				continue
+			}
+			if ci := c.ownInstance(b.Name); ci != nil {
+				c.errorf(b.Pos, "%s is already the name of an instance, declared at %s", b.Name, ci.Decl.Pos)
+				continue
+			}
+			c.pkg.bundles[b.Name] = &bundle{decl: b, pkg: c.pkg}
+		}
+	}
+}
+
+func (c *checker) ownInstance(name string) *ClassInstance {
+	for _, ci := range c.pkg.instances {
+		if ci.Name == name {
+			return ci
+		}
+	}
+	return nil
+}
+
+func addInstance(list []*ClassInstance, ci *ClassInstance) []*ClassInstance {
+	for _, have := range list {
+		if have == ci {
+			return list
+		}
+	}
+	return append(list, ci)
+}
+
+// bundleInstances resolves the instances of a bundle, in its own
+// package.
+func (c *checker) bundleInstances(b *bundle) []*ClassInstance {
+	switch b.state {
+	case 1:
+		c.errorf(b.decl.Pos, "instances %s includes itself (sets of instances cannot include each other in a circle)", b.decl.Name)
+		return nil
+	case 2:
+		return b.insts
+	}
+	b.state = 1
+	saved := c.pkg
+	c.pkg = b.pkg
+	for _, item := range b.decl.Items {
+		for _, ci := range c.useItem(item) {
+			b.insts = addInstance(b.insts, ci)
+		}
+	}
+	c.pkg = saved
+	b.state = 2
+	return b.insts
+}
+
+// useItem resolves what `use` names: an instance, a set of instances,
+// or every exported instance of a package (pkg.*).
+func (c *checker) useItem(u *syntax.Use) []*ClassInstance {
 	pkg, name, ok := c.qualified(u.Name)
 	if !ok {
-		for _, ci := range c.pkg.instances {
-			if ci.Name == u.Name {
-				return // the package's own instances are in scope anyway
-			}
+		if ci := c.ownInstance(u.Name); ci != nil {
+			return []*ClassInstance{ci}
+		}
+		if b := c.pkg.bundles[u.Name]; b != nil {
+			return c.bundleInstances(b)
 		}
 		if i := strings.IndexByte(u.Name, '.'); i >= 0 {
 			c.errorf(u.Pos, "%s is not an imported package", u.Name[:i])
 		} else {
 			c.errorf(u.Pos, "unknown instance %s (an instance of another package is used as pkg.name)", u.Name)
 		}
-		return
+		return nil
 	}
 	if name == "*" {
+		var out []*ClassInstance
 		for _, ci := range pkg.instances {
 			if Exported(ci.Name) {
-				add(ci)
+				out = append(out, ci)
 			}
 		}
-		return
+		return out
 	}
 	for _, ci := range pkg.instances {
 		if ci.Name == name {
 			if !Exported(name) {
 				c.errorf(u.Pos, "%s is not exported by package %s (only names starting with an upper-case letter are)", name, pkg.Path)
-				return
+				return nil
 			}
-			add(ci)
-			return
+			return []*ClassInstance{ci}
 		}
 	}
-	c.errorf(u.Pos, "package %s has no instance %s", pkg.Path, name)
+	if b := pkg.bundles[name]; b != nil {
+		if !Exported(name) {
+			c.errorf(u.Pos, "instances %s is not exported by package %s (only names starting with an upper-case letter are)", name, pkg.Path)
+			return nil
+		}
+		return c.bundleInstances(b)
+	}
+	c.errorf(u.Pos, "package %s has no instance or set of instances %s", pkg.Path, name)
+	return nil
 }
 
 // resolveDicts decides the instances a call of fn (or a use of it as a
@@ -438,6 +532,23 @@ func matchHead(ci *ClassInstance, t Type) ([]Type, bool) {
 // instanceHint suggests instances of other packages that would do.
 func (c *checker) instanceHint(class *Class, t Type) string {
 	var found []string
+	// Sets of instances first: they are what packages suggest.
+	for _, pkg := range c.info.Packages {
+		if pkg == c.pkg {
+			continue
+		}
+		for _, name := range sortedBundleNames(pkg) {
+			if !Exported(name) {
+				continue
+			}
+			for _, ci := range pkg.bundles[name].insts {
+				if _, ok := matchHead(ci, t); ok && ci.Class == class {
+					found = append(found, "use "+qualify(name, pkg, c.pkg))
+					break
+				}
+			}
+		}
+	}
 	for _, pkg := range c.info.Packages {
 		if pkg == c.pkg {
 			continue
@@ -592,7 +703,7 @@ func (c *checker) resolveDerived() {
 			for _, f := range fields {
 				d := c.dictQuiet(ci.Class, f.Type, 0)
 				if d == nil {
-					c.errorf(ci.Decl.Pos, "cannot derive %s for %s: field %s has type %s, which has no %s instance in scope", ci.Class.Name, owners[i], f.Name, f.Type, ci.Class.Name)
+					c.errorf(ci.Decl.Pos, "cannot derive %s for %s: field %s has type %s, which has no %s instance in scope (%s)", ci.Class.Name, owners[i], f.Name, f.Type, ci.Class.Name, c.instanceHint(ci.Class, f.Type))
 				}
 				row = append(row, d)
 			}

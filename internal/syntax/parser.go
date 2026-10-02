@@ -53,6 +53,10 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 				f.Instances = append(f.Instances, id)
 				f.Funcs = append(f.Funcs, id.Methods...)
 			}
+		case p.at(TIdent) && p.tok().Text == "instances" && p.peekKind() == TIdent:
+			if b := p.bundleDecl(); b != nil {
+				f.Bundles = append(f.Bundles, b)
+			}
 		case p.at(TIdent) && p.tok().Text == "use" && p.peekKind() == TIdent:
 			p.errorf(p.tok().Pos, "use must come after the imports, before the declarations")
 			p.syncTopLevel()
@@ -272,12 +276,13 @@ func (p *parser) fieldDecls() []*FieldDecl {
 
 func (p *parser) funcDecl() (fn *FuncDecl) {
 	defer p.recoverDecl(func() { fn = nil })
-	return p.funcDeclIn(true)
+	return p.funcDeclIn(true, false)
 }
 
 // funcDeclIn parses a function declaration; without withBody (a class
-// method), just its signature.
-func (p *parser) funcDeclIn(withBody bool) *FuncDecl {
+// method), just its signature. inBraces (a class's or an instance's
+// method) lets a '}' end it, as in `instance i: C[T] { fn f() { ... } }`.
+func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 	isPred := p.at(KwPred)
 	pos := p.next().Pos
 	name := p.expect(TIdent, "(function name)")
@@ -317,7 +322,7 @@ func (p *parser) funcDeclIn(withBody bool) *FuncDecl {
 	default:
 		fn.Body = p.block()
 	}
-	if !p.at(Semi) && !p.at(EOF) && (withBody || !p.at(RBrace)) {
+	if !p.at(Semi) && !p.at(EOF) && (!inBraces || !p.at(RBrace)) {
 		p.errorf(p.tok().Pos, "expected end of line after function body, found %s", p.tok().Kind)
 		panic(bailout{})
 	}
@@ -366,7 +371,7 @@ func (p *parser) classDecl() (cd *ClassDecl) {
 			p.errorf(p.tok().Pos, "expected a method (fn name(...): Type) or '}', found %s", p.tok().Kind)
 			panic(bailout{})
 		}
-		cd.Methods = append(cd.Methods, p.funcDeclIn(false))
+		cd.Methods = append(cd.Methods, p.funcDeclIn(false, true))
 	}
 	return cd
 }
@@ -395,38 +400,68 @@ func (p *parser) instanceDecl() (id *InstanceDecl) {
 			p.errorf(p.tok().Pos, "expected a method (fn name(...) { ... }) or '}', found %s", p.tok().Kind)
 			panic(bailout{})
 		}
-		m := p.funcDeclIn(true)
+		m := p.funcDeclIn(true, true)
 		m.Instance = id
 		id.Methods = append(id.Methods, m)
 	}
 	return id
 }
 
+// bundleDecl parses `instances Name { item, ... }`, where an item is
+// what `use` takes.
+func (p *parser) bundleDecl() (b *Bundle) {
+	defer p.recoverDecl(func() { b = nil })
+	pos := p.next().Pos
+	b = &Bundle{Pos: pos, Name: p.expect(TIdent, "(name of the set of instances)").Text}
+	p.expect(LBrace, "to start the instances")
+	for {
+		p.skipSemis()
+		if p.at(RBrace) {
+			p.next()
+			return b
+		}
+		u, ended := p.useItem(p.tok().Pos)
+		b.Items = append(b.Items, u)
+		if p.at(Comma) {
+			p.next()
+		} else if !ended && !p.at(Semi) && !p.at(RBrace) {
+			p.errorf(p.tok().Pos, "expected ',' or '}' after an instance, found %s", p.tok().Kind)
+			panic(bailout{})
+		}
+	}
+}
+
 // useDecl parses `use name`, `use pkg.name`, or `use pkg.*`.
 func (p *parser) useDecl() (u *Use) {
 	defer p.recoverDecl(func() { u = nil })
 	pos := p.next().Pos
-	t := p.expect(TIdent, "(instance name)")
-	u = &Use{Pos: pos, Name: t.Text}
-	if p.at(Dot) {
-		p.next()
-		if p.at(Star) {
-			// A line ending after '*' does not end a statement in general
-			// (a * b can span lines), but it ends this one.
-			star := p.next()
-			u.Name += ".*"
-			if p.tok().Pos.Line > star.Pos.Line {
-				return u
-			}
-		} else {
-			u.Name += "." + p.expect(TIdent, "(instance name)").Text
-		}
+	u, ended := p.useItem(pos)
+	if ended {
+		return u
 	}
 	if !p.at(Semi) && !p.at(EOF) {
 		p.errorf(p.tok().Pos, "expected end of line after use, found %s", p.tok().Kind)
 		panic(bailout{})
 	}
 	return u
+}
+
+// useItem parses `name`, `pkg.name`, or `pkg.*`. ended reports a line
+// ending after '*', which does not end a statement in general (a * b
+// can span lines) but ends this one.
+func (p *parser) useItem(pos diag.Pos) (u *Use, ended bool) {
+	t := p.expect(TIdent, "(instance name)")
+	u = &Use{Pos: pos, Name: t.Text}
+	if p.at(Dot) {
+		p.next()
+		if p.at(Star) {
+			star := p.next()
+			u.Name += ".*"
+			return u, p.tok().Pos.Line > star.Pos.Line
+		}
+		u.Name += "." + p.expect(TIdent, "(instance name)").Text
+	}
+	return u, false
 }
 
 // typeExpr parses a type: `Name`, `Name[Args]`, or a union `A | B`.

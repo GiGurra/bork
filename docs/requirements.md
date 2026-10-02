@@ -169,6 +169,16 @@ fn sum[T: Monoid](xs: List[T]): T { fold(xs, empty[T](), combine) }
 ```
 
 - **Instances are named,** so several can exist per class and type, and `use` can pick them: `use money.ShowAmount`, or every exported one: `use money.*`.
+- **A package suggests instances with a named set,** which importers take with one `use`. This is the "default set of instances" a library may expose, still imported explicitly. A set can hold the package's own instances (exported or not: they come with the set), other packages' (`money.*`), and other sets. A `use` applies to the whole package.
+
+```
+// package api
+use money.Defaults                     // what api's own code uses
+instances Json { ItemDecode, ItemEncode, money.Defaults }   // what api suggests
+
+// an importer
+use api.Json
+```
 - **What is in scope:** a package's own instances, the prelude's, and those it uses. Instances of other packages are never picked up without `use`. (A package's own instances being in scope is a pragmatic exception to "no automatic instances"; to offer alternatives, put them in packages and choose with `use`.)
 - **Methods are called like functions** (`show(x)`, `money.show(x)`); the types decide the instance. Methods of an exported class are visible with it. A method can also be passed as a value (`map(xs, show)`). Explicit type arguments decide what the arguments cannot: `empty[Int]()`.
 - **Missing and ambiguous instances are errors,** with hints: which `use` would bring one into scope, or which bound a generic function lacks.

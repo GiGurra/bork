@@ -1,0 +1,8 @@
+main.bork:3:1: instances internal is not exported by package example.com/tc/money (only names starting with an upper-case letter are)
+main.bork:4:1: package example.com/tc/money has no instance or set of instances Missing
+main.bork:10:1: instances A includes itself (sets of instances cannot include each other in a circle)
+main.bork:12:1: instances A is already declared at main.bork:10:1
+main.bork:13:1: showPoint is already the name of an instance, declared at main.bork:8:1
+main.bork:14:15: unknown instance nothing (an instance of another package is used as pkg.name)
+main.bork:14:24: other is not an imported package
+main.bork:18:21: no instance of Show for Cents is in scope (use money.Suggested, or use money.ShowCents)
