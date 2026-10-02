@@ -930,9 +930,15 @@ func (g *gen) scopeInto(e *syntax.ScopeExpr, k sink) []ast.Stmt {
 	g.usesScopes = true
 	s := name(e.Name)
 	closeCall := &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("close")}}
+	// A scope inside another one in the function is cancelled with it.
+	var parent ast.Expr = ast.NewIdent("nil")
+	if n := len(g.openScopes); n > 0 {
+		parent = g.openScopes[n-1]
+	}
 	stmts := []ast.Stmt{
-		define(s, &ast.UnaryExpr{Op: token.AND, X: &ast.CompositeLit{Type: ast.NewIdent("_Scope")}}),
-		&ast.DeferStmt{Call: closeCall},
+		define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent}}),
+		// A panic cancels the scope's tasks, and then closes it.
+		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("abort")}}},
 	}
 	g.openScopes = append(g.openScopes, s)
 	stmts = append(stmts, g.blockInto(e.Body, k)...)

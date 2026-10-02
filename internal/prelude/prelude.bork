@@ -54,6 +54,49 @@ fn launch(s: Scope, work: () => Unit) unsafe go {
   s.Go(func() any { work(); return nil })
 }
 
+// Cancelled is what a cancellation-aware operation gives when its scope
+// is cancelled; reason says why ("cancelled", "deadline exceeded", ...).
+type Cancelled = { reason: String }
+
+// cancel cancels the scope s: its tasks see it at their next
+// cancellation point (delay, checkpoint, channels), and so do scopes
+// nested in it. The scope still waits for them before it closes.
+fn cancel(s: Scope) unsafe go {
+  s.cancel(_errCancelled)
+}
+
+// cancelled reports whether s has been cancelled.
+fn cancelled(s: Scope): Bool unsafe go {
+  return s.ctx.Err() != nil
+}
+
+// cancelAfter cancels s once ms milliseconds have passed, unless it has
+// closed by then: a deadline.
+fn cancelAfter(s: Scope, ms: Int) unsafe go {
+  import "errors"
+  import "time"
+  t := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() { s.cancel(errors.New("deadline exceeded")) })
+  s.Defer(func() { t.Stop() })
+}
+
+// checkpoint gives Cancelled if s has been cancelled: a cancellation
+// point for work that does not otherwise wait, as in checkpoint(s)?.
+fn checkpoint(s: Scope): Unit | Cancelled unsafe go {
+  if r := s._cancelReason(); r != "" {
+    return Cancelled{reason: r}
+  }
+  return _Unit{}
+}
+
+// delay pauses for ms milliseconds, or until s is cancelled.
+fn delay(s: Scope, ms: Int): Unit | Cancelled unsafe go {
+  import "time"
+  if !s._sleep(time.Duration(ms) * time.Millisecond) {
+    return Cancelled{reason: s._cancelReason()}
+  }
+  return _Unit{}
+}
+
 // sleep pauses the routine for ms milliseconds.
 fn sleep(ms: Int) unsafe go {
   import "time"

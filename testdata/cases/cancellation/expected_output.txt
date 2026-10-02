@@ -1,0 +1,7 @@
+a stopped: cancelled
+true
+b stopped: deadline exceeded
+false
+true
+Cancelled { reason: "cancelled" }
+Unit
