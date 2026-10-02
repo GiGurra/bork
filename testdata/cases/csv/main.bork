@@ -4,6 +4,10 @@ pred positive(n: Int) { n > 0 }
 type Item = { code: String, count: Int where positive, active: Bool, note: Option[String] } derive (Decode, Encode)
 type Group = { name: String, tags: List[Int] } derive (Decode, Encode)
 
+type OptionalJson = { value: Option[Json] } derive (Decode, Encode)
+
+type OptionalNull = { count: Option[Int], active: Option[Bool] } derive (Decode, Encode)
+
 type OptionalSingle = { value: Option[String] } derive (Decode, Encode)
 
 type Optional = { name: Option[String], count: Option[Int] } derive (Decode, Encode)
@@ -42,5 +46,7 @@ fn main() {
     text: String => println(encoding.DecodeCsv[OptionalSingle](text))
     error: encoding.CsvError => println(error)
   }
+  println(encoding.DecodeCsv[OptionalNull]("count,active\nnull,null\n"))
+  println(encoding.DecodeCsv[OptionalJson]("value\nnull\n"))
   println(encoding.EncodeCsv[Item]([]))
 }

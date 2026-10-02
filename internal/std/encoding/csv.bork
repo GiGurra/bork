@@ -45,6 +45,7 @@ fn Csv(rows: List[List[String]]): String unsafe go {
 // DecodeCsv reads header-named fields using a derived record's Decode schema.
 // Strings are literal; other fields use JSON syntax. Empty optional cells
 // and missing optional columns become None; nonempty cells become Some.
+// Nonempty null cells are rejected for optional non-String fields.
 // Every bad field is collected, with no partial records returned.
 fn DecodeCsv[T: Decode](text: String): List[T] | CsvError | CsvErrors {
   rows = CsvRows(text)?
@@ -52,7 +53,15 @@ fn DecodeCsv[T: Decode](text: String): List[T] | CsvError | CsvErrors {
 }
 
 fn csvValue(raw: String, kind: String, optional: Bool): Json | JsonError {
-  if (optional && raw == "") { Json.Null } else if (kind == "string") { Json.String { value: raw } } else { parseJson(raw) }
+  if (optional && raw == "") { return Json.Null }
+  if (kind == "string") { return Json.String { value: raw } }
+  parsed = parseJson(raw)?
+  match (parsed) {
+    Json.Null => if (optional) {
+      JsonError { message: "nonempty optional cell cannot be null; use an empty cell for None" }
+    } else { parsed }
+    _ => parsed
+  }
 }
 
 fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bool) => (Json | JsonError), decodeRow: (Json) => (T | DecodeError)): List[T] | CsvErrors unsafe go {

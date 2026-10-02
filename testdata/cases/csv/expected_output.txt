@@ -17,4 +17,6 @@ CsvErrors { errors: [CsvError { row: 2, column: "tags[1]", message: "expected a 
 [Single { value: "" }, Single { value: "x" }, Single { value: "" }, Single { value: "y" }, Single { value: "" }]
 [Optional { name: Option.Some { value: "007" }, count: Option.Some { value: 42 } }, Optional { name: Option.None, count: Option.None }, Optional { name: Option.Some { value: "null" }, count: Option.Some { value: 0 } }]
 [OptionalSingle { value: Option.None }, OptionalSingle { value: Option.Some { value: "hello" } }, OptionalSingle { value: Option.None }]
+CsvErrors { errors: [CsvError { row: 2, column: "count", message: "nonempty optional cell cannot be null; use an empty cell for None" }, CsvError { row: 2, column: "active", message: "nonempty optional cell cannot be null; use an empty cell for None" }] }
+CsvErrors { errors: [CsvError { row: 2, column: "value", message: "nonempty optional cell cannot be null; use an empty cell for None" }] }
 

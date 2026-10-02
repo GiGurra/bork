@@ -1021,7 +1021,10 @@ fields are verbatim; numbers, booleans and compound fields use JSON. Empty
 optional cells and missing optional columns become None. Nonempty optional
 cells become Some, parsed exactly like the required field (no JSON quotes
 for String). Encoding Some("") writes empty like None; Some("") cannot
-round-trip and decodes as None. Header names match fields exactly; unknown,
+round-trip and decodes as None. Nonempty JSON null in optional non-String cells
+is rejected with a per-cell error; use an empty cell for None. The JSON bridge
+cannot preserve Some(Json.Null), which encodes like None. Header names match
+fields exactly; unknown,
 duplicate and missing required headers are errors. Ragged typed rows are
 errors. Facts and field types are checked before constructing records, with
 all field errors collected in `CsvErrors` by row and column. Malformed CSV

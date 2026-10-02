@@ -212,7 +212,10 @@ HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeo
   nonempty optional cells become Some, parsed like the required field. Thus
   an optional String cell `hello` needs no JSON quotes. Encoding None and
   Some("") both writes empty cells, which decode as None: Some("") cannot
-  round-trip. This limitation matches ordinary spreadsheet/tool CSV.
+  round-trip. Optional non-String cells containing nonempty JSON `null` are
+  rejected with a cell error; None must use an empty cell. The JSON bridge
+  also cannot preserve Some(Json.Null), which encodes like None. These are
+  known limitations of the CSV representation.
   Headers match field names exactly; duplicate, unknown, and missing required
   columns are errors. Field types and facts are checked, collecting every
   row/field error without returning partial records. `EncodeCsv[T: Encode + Decode]`
