@@ -26,9 +26,10 @@ type TestDecl struct {
 type TypeKind int
 
 const (
-	RecordType TypeKind = iota // type User = { name: String }
-	SealedType                 // type Shape = sealed { Circle { radius: Int }, Empty }
-	AliasType                  // type Result = User | NotFound
+	RecordType   TypeKind = iota // type User = { name: String }
+	SealedType                   // type Shape = sealed { Circle { radius: Int }, Empty }
+	AliasType                    // type Result = User | NotFound
+	ResourceType                 // type File = resource
 )
 
 // TypeDecl is `type Name = ...`.
@@ -256,6 +257,7 @@ type Block struct {
 	Pos   diag.Pos
 	Stmts []Stmt
 	Tail  Expr
+	End   diag.Pos // position of the closing '}'
 }
 
 // Return is `return` or `return value`. Its own type is Never.
@@ -379,16 +381,26 @@ type Lambda struct {
 	Body   Expr
 }
 
+// ScopeExpr is `scope s { ... }`: a block with a scope named s, which
+// closes (running its finalizers) when the block ends.
+type ScopeExpr struct {
+	Pos  diag.Pos
+	Name string
+	Body *Block
+}
+
 // ListLit is a list literal: `[1, 2, 3]`.
 type ListLit struct {
 	Pos   diag.Pos
 	Elems []Expr
 }
 
-func (*Lambda) exprNode()             {}
-func (*ListLit) exprNode()            {}
-func (e *Lambda) Position() diag.Pos  { return e.Pos }
-func (e *ListLit) Position() diag.Pos { return e.Pos }
+func (*ScopeExpr) exprNode()            {}
+func (e *ScopeExpr) Position() diag.Pos { return e.Pos }
+func (*Lambda) exprNode()               {}
+func (*ListLit) exprNode()              {}
+func (e *Lambda) Position() diag.Pos    { return e.Pos }
+func (e *ListLit) Position() diag.Pos   { return e.Pos }
 
 func (*Selector) exprNode()  {}
 func (*RecordLit) exprNode() {}

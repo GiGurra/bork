@@ -98,6 +98,8 @@ proven's `testdata/cases/` (108 cases) are a good source of golden tests: each o
 
 ### M2: scopes
 
+**Status: done for one routine.** `scope s { ... }` blocks; resource types (`type File = resource`) made in `unsafe go`; finalizers that run last-first when a scope's block ends, returns early (also by `?`), or panics (a failing finalizer does not stop the others); `onClose`; a minimal file API (`openFile`, `createFile`, `readAll`, `write`); and lifetimes, which reject using a possibly released value, returning a value of a scope the function opened (also inside records, lists, and lambdas), and giving a scope something that may not live as long. Remaining: attaching a resource to several scopes (`attach`), which matters once there are goroutines.
+
 `scope` blocks, resources attached to scopes, finalizers in reverse order, the proof-of-open-scope rule, and "possibly released" diagnostics. A minimal file API is the first resource.
 
 *Done when* use-after-scope and escaping resources are rejected at compile time, and finalizers run correctly on normal exit and on panic.

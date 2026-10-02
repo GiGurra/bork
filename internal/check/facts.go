@@ -260,6 +260,8 @@ func (f *factChecker) tail(x syntax.Expr, e env, result func(syntax.Expr, env)) 
 		if x.Tail != nil {
 			f.tail(x.Tail, e, result)
 		}
+	case *syntax.ScopeExpr:
+		f.tail(x.Body, e, result)
 	case *syntax.If:
 		if x.Else == nil {
 			f.walk(x, e)
@@ -377,6 +379,8 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 		if x.Tail != nil {
 			f.walk(x.Tail, e)
 		}
+	case *syntax.ScopeExpr:
+		f.walk(x.Body, e)
 	case *syntax.Return:
 		if x.Value != nil {
 			f.tail(x.Value, e, f.checkResult)
@@ -853,6 +857,10 @@ func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int)
 			if cs.take(f.prove(x.Tail, ob, f.stmts(x.Stmts, e), depth+1)) {
 				return true, nil
 			}
+		}
+	case *syntax.ScopeExpr:
+		if cs.take(f.prove(x.Body, ob, e, depth+1)) {
+			return true, nil
 		}
 	case *syntax.If:
 		if x.Else != nil {

@@ -75,6 +75,11 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 		if len(td.TypeParams) > 0 {
 			c.errorf(td.Pos, "a type alias cannot have type parameters (yet); declare a record or sealed type")
 		}
+	case syntax.ResourceType:
+		if len(td.TypeParams) > 0 {
+			c.errorf(td.Pos, "a resource type cannot have type parameters")
+		}
+		e.typ = &Resource{Name: td.Name, Decl: td, Prelude: prelude}
 	}
 	if e.typ != nil {
 		c.info.TypeOrder = append(c.info.TypeOrder, e.typ)

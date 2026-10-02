@@ -163,6 +163,10 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 	case p.at(LBrace):
 		td.Kind = RecordType
 		td.Fields = p.fieldDecls()
+	case p.at(TIdent) && p.tok().Text == "resource" && (p.peekKind() == Semi || p.peekKind() == EOF):
+		// `resource` is a keyword only here.
+		td.Kind = ResourceType
+		p.next()
 	default:
 		td.Kind = AliasType
 		td.Alias = p.typeExpr()
@@ -360,7 +364,7 @@ func (p *parser) block() *Block {
 	for {
 		p.skipSemis()
 		if p.at(RBrace) {
-			p.next()
+			b.End = p.next().Pos
 			return b
 		}
 		if p.at(EOF) {
@@ -392,7 +396,7 @@ func (p *parser) block() *Block {
 			stmt = &ExprStmt{X: p.expr()}
 		}
 		if p.at(RBrace) {
-			p.next()
+			b.End = p.next().Pos
 			if es, ok := stmt.(*ExprStmt); ok {
 				b.Tail = es.X
 			} else {
@@ -413,7 +417,7 @@ func (p *parser) block() *Block {
 				b.Stmts = b.Stmts[:len(b.Stmts)-1]
 				b.Tail = es.X
 			}
-			p.next()
+			b.End = p.next().Pos
 			return b
 		}
 		p.i = save
@@ -629,6 +633,12 @@ func (p *parser) primary() Expr {
 	case TIdent:
 		if p.peekKind() == Arrow && !p.noLambda {
 			return p.lambda()
+		}
+		// `scope` is a keyword only where a scope block starts.
+		if t.Text == "scope" && p.peekKind() == TIdent {
+			p.next()
+			name := p.next()
+			return &ScopeExpr{Pos: t.Pos, Name: name.Text, Body: p.block()}
 		}
 		p.next()
 		return &Ident{Pos: t.Pos, Name: t.Text}

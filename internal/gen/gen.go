@@ -213,6 +213,10 @@ type gen struct {
 	usesAssert  bool
 	usesTests   bool
 	usesRules   bool
+	usesScopes  bool
+	// openScopes lists the Go variables of the scope blocks around the
+	// code being generated, which are closed before returning.
+	openScopes []*ast.Ident
 	// testMode generates checks of trusted facts (see Tests), and
 	// extraFuncs holds functions to emit besides the reachable ones.
 	testMode   bool
@@ -409,6 +413,12 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		res := g.newTmp()
 		return []ast.Stmt{varDecl(res, g.goType(t)), &ast.BlockStmt{List: g.blockInto(e, sink{res: res, resType: t})}}, res
+	case *syntax.ScopeExpr:
+		if t == check.Never || t == check.Unit {
+			return g.effect(e), nil
+		}
+		res := g.newTmp()
+		return append([]ast.Stmt{varDecl(res, g.goType(t))}, g.scopeInto(e, sink{res: res, resType: t})...), res
 	case *syntax.Return:
 		return g.returnStmt(e), nil
 	case *syntax.Selector:
@@ -577,8 +587,9 @@ func (g *gen) lambda(e *syntax.Lambda) ast.Expr {
 	for i, p := range e.Params {
 		names[i] = name(p.Name)
 	}
-	saved := g.fnResult
-	g.fnResult = ft.Result
+	saved, savedScopes := g.fnResult, g.openScopes
+	g.fnResult, g.openScopes = ft.Result, nil
+	defer func() { g.openScopes = savedScopes }()
 	var body []ast.Stmt
 	if ft.Result == check.Unit {
 		body = g.effect(e.Body)
@@ -650,6 +661,8 @@ func (g *gen) effect(e syntax.Expr) []ast.Stmt {
 		return g.matchStmt(e, sink{})
 	case *syntax.Block:
 		return []ast.Stmt{&ast.BlockStmt{List: g.blockInto(e, sink{})}}
+	case *syntax.ScopeExpr:
+		return g.scopeInto(e, sink{})
 	case *syntax.Return:
 		return g.returnStmt(e)
 	}
@@ -680,6 +693,8 @@ func (g *gen) into(e syntax.Expr, k sink) []ast.Stmt {
 	switch e := e.(type) {
 	case *syntax.Block:
 		return g.blockInto(e, k)
+	case *syntax.ScopeExpr:
+		return g.scopeInto(e, k)
 	case *syntax.If:
 		return g.ifChain(e, k)
 	case *syntax.Match:
@@ -754,6 +769,8 @@ func (g *gen) tailReturn(e syntax.Expr) []ast.Stmt {
 			return g.tailReturn(e.Tail)
 		}
 		return []ast.Stmt{&ast.BlockStmt{List: g.blockInto(e, ret)}}
+	case *syntax.ScopeExpr:
+		return g.scopeInto(e, ret)
 	case *syntax.Return:
 		return g.returnStmt(e)
 	}
@@ -761,7 +778,46 @@ func (g *gen) tailReturn(e syntax.Expr) []ast.Stmt {
 	if x == nil {
 		return stmts
 	}
-	return append(stmts, &ast.ReturnStmt{Results: []ast.Expr{g.convert(x, g.info.Types[e], g.fnResult)}})
+	return append(stmts, g.returning(g.convert(x, g.info.Types[e], g.fnResult))...)
+}
+
+// scopeInto lowers `scope s { ... }`, its value into k. The scope is
+// closed when the block ends, before any return from inside it, and
+// (by a deferred close) when it panics.
+func (g *gen) scopeInto(e *syntax.ScopeExpr, k sink) []ast.Stmt {
+	g.usesScopes = true
+	s := name(e.Name)
+	closeCall := &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("close")}}
+	stmts := []ast.Stmt{
+		define(s, &ast.UnaryExpr{Op: token.AND, X: &ast.CompositeLit{Type: ast.NewIdent("_Scope")}}),
+		&ast.DeferStmt{Call: closeCall},
+	}
+	g.openScopes = append(g.openScopes, s)
+	stmts = append(stmts, g.blockInto(e.Body, k)...)
+	g.openScopes = g.openScopes[:len(g.openScopes)-1]
+	if !k.ret && g.info.Types[e.Body] != check.Never {
+		stmts = append(stmts, &ast.ExprStmt{X: closeCall})
+	}
+	return []ast.Stmt{&ast.BlockStmt{List: stmts}}
+}
+
+// returning returns the given results (none or one) from the function,
+// first closing the scopes around the return.
+func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
+	if len(g.openScopes) == 0 {
+		return []ast.Stmt{&ast.ReturnStmt{Results: results}}
+	}
+	var stmts []ast.Stmt
+	if len(results) > 0 {
+		// The result is computed while the scopes are open.
+		r := g.newTmp()
+		stmts = append(stmts, typedVar(r, g.goType(g.fnResult), results[0]))
+		results = []ast.Expr{r}
+	}
+	for i := len(g.openScopes) - 1; i >= 0; i-- {
+		stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: g.openScopes[i], Sel: ast.NewIdent("close")}}})
+	}
+	return append(stmts, &ast.ReturnStmt{Results: results})
 }
 
 // diverges reports whether a statement list ends by never finishing.
@@ -800,13 +856,13 @@ func (g *gen) ifChain(e *syntax.If, k sink) []ast.Stmt {
 
 func (g *gen) returnStmt(e *syntax.Return) []ast.Stmt {
 	if e.Value == nil {
-		return []ast.Stmt{&ast.ReturnStmt{}}
+		return g.returning()
 	}
 	stmts, x := g.value(e.Value)
 	if x == nil {
 		return stmts
 	}
-	return append(stmts, &ast.ReturnStmt{Results: []ast.Expr{g.convert(x, g.info.Types[e.Value], g.fnResult)}})
+	return append(stmts, g.returning(g.convert(x, g.info.Types[e.Value], g.fnResult))...)
 }
 
 // convert adjusts a Go expression of bork type from for use where type

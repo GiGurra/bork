@@ -1,0 +1,11 @@
+close failing
+close inner
+close outer
+FAIL  finalizers run when a scope panics
+      boom
+close last
+close first
+FAIL  a failing finalizer still lets the others run
+      finalizer failed
+0 passed, 2 failed
+exit code 1

@@ -41,6 +41,9 @@ var (
 	// Never is the type of expressions that never finish normally, such
 	// as `return`. It can be used wherever any type is expected.
 	Never Type = &Basic{name: "Never"}
+	// Scope is the type of a scope (`scope s { ... }`): resources are
+	// opened in a scope, and closed when it closes.
+	Scope Type = &Basic{name: "Scope"}
 	// Invalid marks an expression that already failed to type-check, to
 	// avoid cascades of follow-up errors.
 	Invalid Type = &Basic{name: "invalid"}
@@ -65,6 +68,7 @@ var basicTypes = map[string]Type{
 	"Bool":   Bool,
 	"String": String,
 	"Unit":   Unit,
+	"Scope":  Scope,
 
 	"Int8": Int8, "Int16": Int16, "Int32": Int32, "Int64": Int,
 	"Uint8": Uint8, "Uint16": Uint16, "Uint32": Uint32, "Uint64": Uint64,
@@ -110,6 +114,17 @@ func alwaysFits(from, to Type) bool {
 	}
 	return false // signed to unsigned: negative values never fit
 }
+
+// Resource is a resource type (`type File = resource`): a handle to
+// something outside the program that a scope closes. Its values are
+// made by `unsafe go` functions, which register the finalizer.
+type Resource struct {
+	Name    string
+	Decl    *syntax.TypeDecl
+	Prelude bool
+}
+
+func (r *Resource) String() string { return r.Name }
 
 // Field is a named, typed field of a record or variant.
 type Field struct {
@@ -570,12 +585,15 @@ func comparable(t Type) bool {
 }
 
 func comparableIn(t Type, seen map[Type]bool) bool {
+	if t == Scope {
+		return false
+	}
 	if seen[t] {
 		return true
 	}
 	seen[t] = true
 	switch t := t.(type) {
-	case *List, *FuncType, *TypeParam:
+	case *List, *FuncType, *TypeParam, *Resource:
 		return false
 	case *Record:
 		for _, f := range t.Fields {
