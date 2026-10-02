@@ -28,7 +28,17 @@ fn Csv(rows: List[List[String]]): String unsafe go {
   import "strings"
   var text strings.Builder
   writer := csv.NewWriter(&text)
-  writer.WriteAll(rows)
+  for _, row := range rows {
+    // Go's writer emits a sole empty field as a blank line, which its
+    // reader skips. Quote that field so an empty record survives.
+    if len(row) == 1 && row[0] == "" {
+      writer.Flush()
+      text.WriteString("\"\"\n")
+    } else {
+      writer.Write(row)
+    }
+  }
+  writer.Flush()
   return text.String()
 }
 

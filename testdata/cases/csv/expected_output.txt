@@ -13,4 +13,6 @@ CsvErrors { errors: [CsvError { row: 1, column: "", message: "expected a derived
 CsvErrors { errors: [CsvError { row: 2, column: "tags[1]", message: "expected a whole number, found a boolean" }] }
 [["code", "count", "active", "note"], ["007", "2", "true", "null"], ["008", "3", "false", "\"\""]]
 [Item { code: "007", count: 2, active: true, note: Option.None }, Item { code: "008", count: 3, active: false, note: Option.Some { value: "" } }]
+[[""]]
+[Single { value: "" }, Single { value: "x" }, Single { value: "" }, Single { value: "y" }, Single { value: "" }]
 
