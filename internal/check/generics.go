@@ -434,6 +434,15 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 		// (`xs: List[Int] = empty()`), also for the lambdas' results.
 		in.unify(fn.Result, want)
 	}
+	// A lambda's body can decide what `[]` or `{:}` leaves open:
+	// fold(xs, [], (acc, x) => append(acc, x)).
+	if in != nil && c.hasEmptyLiteralArg(e.Args) {
+		for i, a := range e.Args {
+			if l, ok := a.(*syntax.Lambda); ok && i < len(fn.Params) && lambdaParamsOpen(l, in.subst(fn.Params[i]), in) {
+				c.inferFromBody(l, fn.Params[i], in)
+			}
+		}
+	}
 	for i, a := range e.Args {
 		if c.needsContext(a) {
 			check(i, a)
@@ -545,6 +554,17 @@ func (c *checker) needsContext(x syntax.Expr) bool {
 		return len(x.Elems) == 0
 	case *syntax.MapLit:
 		return len(x.Keys) == 0
+	case *syntax.Call:
+		// A generic call that is given `[]` or `{:}` may need the
+		// context too: maps.Sorted({:}).
+		id, ok := x.Fun.(*syntax.Ident)
+		if !ok || c.lookup(id.Name) != nil {
+			return false
+		}
+		if fn, ok := c.funcNamed(id.Name); !ok || len(fn.TypeParams) == 0 || len(x.TypeArgs) > 0 {
+			return false
+		}
+		return c.hasEmptyLiteralArg(x.Args)
 	case *syntax.Selector:
 		if owner, ok := c.isTypeRef(x.X); ok {
 			s, ok := c.typeNamed(owner).(*Sealed)
@@ -691,6 +711,65 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 		return Invalid
 	}
 	return ft
+}
+
+// hasEmptyLiteralArg reports whether an argument takes its type from
+// the context and is not a lambda (`[]`, `{:}`, `maps.Sorted({:})`).
+func (c *checker) hasEmptyLiteralArg(args []syntax.Expr) bool {
+	for _, a := range args {
+		if _, isLambda := a.(*syntax.Lambda); !isLambda && c.needsContext(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// lambdaParamsOpen reports whether some parameter of lambda l, written
+// without a type, would get its type from a type parameter that in has
+// not decided yet.
+func lambdaParamsOpen(l *syntax.Lambda, want Type, in *inference) bool {
+	ft, ok := want.(*FuncType)
+	if !ok || len(ft.Params) != len(l.Params) {
+		return false
+	}
+	for i, p := range l.Params {
+		if p.Type == nil && in.open(ft.Params[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// inferFromBody decides type parameters from what a lambda's body
+// gives, when only an argument that takes its type from the context
+// would otherwise decide them: in fold(words, {:}, (m, w) =>
+// maps.Put(m, w, 1)), the body gives a Map[String, Int], which is the
+// accumulator's type. The body is checked quietly, with the parameters
+// of undecided types as holes (a type that nothing is known of); if
+// its result is then a type without holes, the lambda's result type
+// is unified with it. The real checks come after.
+func (c *checker) inferFromBody(l *syntax.Lambda, p Type, in *inference) {
+	pt, ok := in.subst(p).(*FuncType)
+	orig, ok2 := p.(*FuncType)
+	if !ok || !ok2 || len(pt.Params) != len(l.Params) {
+		return
+	}
+	hole := &TypeParam{Name: "?"}
+	spec := &FuncType{}
+	for _, q := range pt.Params {
+		if in.open(q) {
+			q = hole
+		}
+		spec.Params = append(spec.Params, q)
+	}
+	before := c.diags.Len()
+	t := c.lambda(l, spec, nil)
+	c.diags.Truncate(before)
+	ft, ok := t.(*FuncType)
+	if !ok || ft.Result == nil || !isValue(ft.Result) || mentionsParam(ft.Result, hole) {
+		return
+	}
+	in.unify(orig.Result, ft.Result)
 }
 
 // listLit checks a list literal. Its element type comes from the

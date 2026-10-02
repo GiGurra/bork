@@ -40,6 +40,9 @@ func (l *List) Add(pos Pos, format string, args ...any) {
 
 func (l *List) Len() int { return len(l.items) }
 
+// Truncate drops the diagnostics added after the first n.
+func (l *List) Truncate(n int) { l.items = l.items[:n] }
+
 // Sorted returns the diagnostics ordered by file, line, and column.
 func (l *List) Sorted() []Diagnostic {
 	out := append([]Diagnostic(nil), l.items...)

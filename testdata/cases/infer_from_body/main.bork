@@ -1,0 +1,13 @@
+import "bork/maps"
+
+// What `[]` or `{:}` holds is decided by what the lambda's body gives.
+fn main() {
+  words = split("b a b c", " ")
+  println(fold(words, [], (acc, w) => append(acc, toUpper(w))))
+  println(fold(words, {:}, (m, w) => maps.Put(m, w, maps.GetOr(m, w, 0) + 1)))
+  println(fold(words, maps.Sorted({:}), (m, w) => maps.Put(m, w, byteLength(w))))
+  println(fold([1, 2, 3], Option.None, (best, x) => Option.Some { value: x }))
+  // Nested: the inner call waits for the outer one to know.
+  sizes: Map[String, Int] = maps.Sorted(maps.Unordered({:}))
+  println(sizes)
+}
