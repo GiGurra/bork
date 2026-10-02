@@ -31,9 +31,11 @@ type ParseError = { input: String, message: String }
 
 // Concurrency is structured: a task runs on its own goroutine, and the
 // scope that started it waits for it before it closes (and before its
-// finalizers run), so a task can use the scope's resources. A task that
-// panics panics await, or, if no one awaited it, the scope's routine
-// when the scope closes.
+// finalizers run), so a task can use the scope's resources. When the
+// scope ends, it cancels itself first: how a task stops (at once, after
+// cleaning up, or after finishing its work) is up to the task. A task
+// that panics panics await, or, if no one awaited it, the scope's
+// routine when the scope closes.
 
 // Task is a running computation of a T, started with spawn.
 type Task[T] = { wait: () => T }
@@ -61,7 +63,8 @@ type Cancelled = { reason: String }
 
 // cancel cancels the scope s: its tasks see it at their next
 // cancellation point (delay, checkpoint, channels), and so do scopes
-// nested in it. The scope still waits for them before it closes.
+// nested in it. The scope still waits for them before it closes. (A
+// scope is also cancelled when it ends.)
 fn cancel(s: Scope) unsafe go {
   s.cancel(_errCancelled)
 }

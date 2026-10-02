@@ -382,7 +382,10 @@ func _scopeWith(ctx context.Context) *_Scope {
 	return s
 }
 
-var _errCancelled = errors.New("cancelled")
+var (
+	_errCancelled  = errors.New("cancelled")
+	_errScopeEnded = errors.New("the scope ended")
+)
 
 // _cancelReason says why a scope was cancelled, or "" if it was not.
 func (s *_Scope) _cancelReason() string {
@@ -494,11 +497,14 @@ func (t *_task) Await() any {
 	return t.result
 }
 
-// close waits for the scope's tasks, then runs the finalizers. A task
-// that panicked without being awaited panics the scope's routine. A
-// scope is closed when its block ends, and again (doing nothing, unless
-// a finalizer panicked) by abort.
+// close ends the scope, however its block ended: it cancels the scope,
+// so its tasks learn that it is ending (how they stop, quickly or with
+// cleanup of their own, is up to them), waits for them, and then runs
+// the finalizers. A task that panicked without being awaited panics the
+// scope's routine. A scope is closed when its block ends, and again
+// (doing nothing, unless a finalizer panicked) by abort.
 func (s *_Scope) close() {
+	s.cancel(_errScopeEnded)
 	s.running.Wait()
 	for {
 		s.mu.Lock()
@@ -511,7 +517,6 @@ func (s *_Scope) close() {
 		s.mu.Unlock()
 		f()
 	}
-	s.cancel(_errCancelled) // releases the context
 	s.mu.Lock()
 	tasks := s.tasks
 	s.tasks = nil
@@ -523,16 +528,9 @@ func (s *_Scope) close() {
 	}
 }
 
-// abort is deferred when a scope opens: after a panic in its block, it
-// cancels the scope's tasks and closes it. After a normal close, it does
-// nothing.
+// abort is deferred when a scope opens, so that a panic in its block
+// closes it too. After a normal close, it does nothing.
 func (s *_Scope) abort() {
-	s.mu.Lock()
-	open := len(s.finalizers) > 0 || len(s.tasks) > 0
-	s.mu.Unlock()
-	if open {
-		s.cancel(errors.New("the scope's block failed"))
-	}
 	s.close()
 }
 

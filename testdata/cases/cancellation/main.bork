@@ -19,12 +19,23 @@ fn main() {
     await(t) >= 1
   }
   println(r)
-  // A deadline.
+  // When a scope ends, it cancels itself and waits for its tasks: how
+  // each one stops is its own business. This worker stops at once...
   scope s {
-    cancelAfter(s, 15)
     launch(s, () => {
       ticker(s, "b", 0)
     })
+    // ...and this one, which does not check for cancellation, finishes
+    // its work first.
+    launch(s, () => {
+      sleep(10)
+      println("d finished its work")
+    })
+  }
+  // A deadline.
+  scope s {
+    cancelAfter(s, 15)
+    println(delay(s, 1000))
   }
   // Nested scopes are cancelled with the scope around them.
   scope outer {
