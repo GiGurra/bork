@@ -51,3 +51,36 @@ test "invalid duration and instant text is rejected" {
     _ => assert(false)
   }
 }
+type Pair[A, B] = { first: A, second: B } derive (Decode)
+test "generic fields use instantiated decoder parsing kinds" {
+  values = {"APP_FIRST": "hello", "APP_SECOND": "42"}
+  result: Pair[String, Int] | env.ConfigError = env.LoadWith("APP", name => values.get(name))
+  match (result) {
+    pair: Pair[String, Int] => {
+      assertEqual(pair.first, "hello")
+      assertEqual(pair.second, 42)
+    }
+    _ => assert(false)
+  }
+}
+pred present(value: Option[String]) { value.isSome() }
+type RequiredOptions = {
+  first: Option[String] where present,
+  second: Option[String] where present,
+  port: Int,
+} derive (Decode)
+test "absent options still check every field fact" {
+  result: RequiredOptions | env.ConfigError = env.LoadWith("APP", name => Option.None)
+  match (result) {
+    errors: env.ConfigError => assertEqual(map(errors.errors, issue => issue.path), ["APP_FIRST", "APP_SECOND", "APP_PORT"])
+    _ => assert(false)
+  }
+}
+test "generic Option fields may be absent" {
+  values = {"APP_SECOND": "42"}
+  result: Pair[Option[String], Int] | env.ConfigError = env.LoadWith("APP", name => values.get(name))
+  match (result) {
+    pair: Pair[Option[String], Int] => assert(pair.first.isNone())
+    _ => assert(false)
+  }
+}

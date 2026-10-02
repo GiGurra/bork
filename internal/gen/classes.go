@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -37,7 +38,10 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 	if class.Prelude && class.Name == "Decode" {
 		g.usesDecodeSchema = true
 		callback, _ := parser.ParseExpr("func() []_borkDecodeField")
-		st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("fields")}, Type: callback})
+		st.Fields.List = append(st.Fields.List,
+			&ast.Field{Names: []*ast.Ident{ast.NewIdent("fields")}, Type: callback},
+			&ast.Field{Names: []*ast.Ident{ast.NewIdent("kind")}, Type: ast.NewIdent("string")},
+			&ast.Field{Names: []*ast.Ident{ast.NewIdent("optional")}, Type: ast.NewIdent("bool")})
 	}
 	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
 		Name:       typeName(class.Name, class.Pkg),
@@ -103,6 +107,12 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 			fn = &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}
 		}
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(ci.Class.Methods[i].Decl.Name), Value: fn})
+	}
+	if ci.Class.Prelude && ci.Class.Name == "Decode" {
+		kind, _ := parser.ParseExpr(g.decodeKind(ci.Type))
+		lit.Elts = append(lit.Elts,
+			&ast.KeyValueExpr{Key: ast.NewIdent("kind"), Value: kind},
+			&ast.KeyValueExpr{Key: ast.NewIdent("optional"), Value: ast.NewIdent(fmt.Sprintf("%t", check.IsOption(ci.Type)))})
 	}
 	if ci.Class.Prelude && ci.Class.Name == "Decode" && len(ci.Methods) > 0 && ci.Methods[0].Derived != nil {
 		if record, ok := ci.Type.(*check.Record); ok {
