@@ -26,3 +26,32 @@ fn main() {
     x
     }, x => x)
 }
+
+// An open result: runThen's callers are not charged for f, so it may
+// not call f itself.
+fn runThen(f: () => Unit): () => Unit {
+  f()
+  () => {}
+}
+
+type Box[T] = { value: T }
+
+fn box[T](x: T): Box[T] { Box { value: x } }
+
+// The open f cannot escape as a pure function inside a generic type.
+fn stash(f: () => Unit): Box[() => Unit] { box(f) }
+
+fn moreChecks() {
+  loud = () => println("loud")
+  pureBox: Box[() => Unit] = box(loud)
+  // Lambdas are charged what the calls in their bodies use: methods,
+  // function values, and what a call's open result carries.
+  viaMethod: () => Unit = () => [1].forEach(x => println(x))
+  viaValue: () => Unit = () => loud()
+  viaCompose: () => Int = () => compose((x: Int) => x, x => {
+    println(x)
+    x
+  })(1)
+  // Branches join their effects, so the result is not pure.
+  either: () => Unit = if (true) { loud } else { () => {} }
+}

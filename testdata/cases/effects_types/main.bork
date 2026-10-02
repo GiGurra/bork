@@ -10,7 +10,29 @@ fn runAll(jobs: List[Job]) uses io {
   forEach(jobs, j => j.run())
 }
 
+type Box[T] = { value: T }
+
+fn box[T](x: T): Box[T] { Box { value: x } }
+
 fn main() {
+  // Generic types keep the effects of the functions they hold.
+  boxed: Box[() uses io => Unit] = box(() => println("boxed"))
+  boxed.value()
+
+  // Branches and unions join the effects of the functions in them.
+  either = if (true) { () => println("either") } else { () => {} }
+  either()
+  choice: (() uses io => Unit) | Int = () => {}
+  match (choice) {
+    f: () uses io => Unit => f()
+    n: Int => println(n)
+  }
+
+  // Results are covariant: a pure function fits where one that uses
+  // io is expected.
+  maker: () => () uses io => Unit = () => () => {}
+  maker()()
+
   // A pure lambda fits a function type that allows io.
   quiet: () uses io => Unit = () => {}
   loud: () uses io => Unit = () => println("loud")

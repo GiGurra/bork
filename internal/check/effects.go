@@ -38,13 +38,16 @@ var effectNames = []struct {
 }
 
 // String writes the effects as a uses declaration lists them:
-// "io + net", or "nothing". It leaves out EffOpen.
+// "io + net", or "nothing". EffOpen is written "open".
 func (e Effects) String() string {
 	var names []string
 	for _, n := range effectNames {
 		if e&n.eff != 0 {
 			names = append(names, n.name)
 		}
+	}
+	if e&EffOpen != 0 {
+		names = append(names, "open")
 	}
 	if len(names) == 0 {
 		return "nothing"
@@ -196,6 +199,8 @@ func effectsNote(args []any) string {
 		return " (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)"
 	case extra != 0 && want&EffOpen != 0:
 		return fmt.Sprintf(" (it uses %s, but an open result can only use what the open parameters use; to allow more, write the parameters' and the result's effects)", extra)
+	case extra != 0 && want == 0:
+		return fmt.Sprintf(" (it uses %s, where a function that uses nothing is expected)", extra)
 	case extra != 0:
 		return fmt.Sprintf(" (it uses %s, which is not allowed there)", extra)
 	}
