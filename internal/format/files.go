@@ -2,6 +2,7 @@ package format
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,6 +20,7 @@ func Files(paths []string, check bool) ([]string, error) {
 	}
 	seen := map[string]bool{}
 	var files []string
+	fromDirectory := map[string]bool{}
 	for _, path := range paths {
 		info, err := os.Lstat(path)
 		if err != nil {
@@ -40,6 +42,7 @@ func Files(paths []string, check bool) ([]string, error) {
 			}
 			if entry.Type().IsRegular() && strings.HasSuffix(p, ".bork") {
 				files = append(files, p)
+				fromDirectory[p] = true
 			}
 			return nil
 		})
@@ -48,14 +51,15 @@ func Files(paths []string, check bool) ([]string, error) {
 		}
 	}
 	slices.Sort(files)
-	// Prepare all edits first, so an invalid source does not leave a partially
-	// formatted tree. Symlinks are not followed during directory traversal.
+	// Invalid files found in directories are reported together while the other
+	// files are formatted. Explicit-file errors abort before any writes.
 	type edit struct {
 		path string
 		src  []byte
 	}
 	var edits []edit
 	var changed []string
+	var failures []error
 	for _, path := range files {
 		abs, err := filepath.Abs(path)
 		if err != nil {
@@ -71,6 +75,10 @@ func Files(paths []string, check bool) ([]string, error) {
 		}
 		formatted, err := Source(path, src)
 		if err != nil {
+			if fromDirectory[path] {
+				failures = append(failures, err)
+				continue
+			}
 			return nil, err
 		}
 		if !bytes.Equal(src, formatted) {
@@ -85,5 +93,5 @@ func Files(paths []string, check bool) ([]string, error) {
 			}
 		}
 	}
-	return changed, nil
+	return changed, errors.Join(failures...)
 }

@@ -103,11 +103,11 @@ func main() {
 				Short: "format bork source files in place",
 				RunFunc: func(p *fmtParams, _ *cobra.Command, _ []string) {
 					changed, err := borkformat.Files(p.Paths, p.Check)
-					if err != nil {
-						fail(err)
-					}
 					for _, path := range changed {
 						fmt.Println(path)
+					}
+					if err != nil {
+						fail(err)
 					}
 					if p.Check && len(changed) > 0 {
 						os.Exit(1)

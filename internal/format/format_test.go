@@ -107,6 +107,21 @@ func TestCorpusClean(t *testing.T) {
 				}
 				got, err := Source(path, src)
 				if err != nil {
+					d := &diag.List{}
+					syntax.Lex(path, src, d)
+					if d.Len() != 0 {
+						if _, err := Files([]string{path}, false); err == nil {
+							t.Fatal("invalid fixture was accepted")
+						}
+						if got != nil {
+							t.Fatal("invalid source produced formatted output")
+						}
+						unchanged, readErr := os.ReadFile(path)
+						if readErr != nil || !bytes.Equal(src, unchanged) {
+							t.Fatal("invalid source was modified")
+						}
+						return
+					}
 					t.Fatal(err)
 				}
 				stable(t, src, got)
@@ -158,12 +173,23 @@ func TestFiles(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("@"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Files([]string{dir}, false); err == nil {
+	if _, err := Files([]string{path, bad}, false); err == nil {
 		t.Fatal("expected error")
 	}
 	unchanged, err = os.ReadFile(path)
 	if err != nil || !bytes.Equal(unchanged, src) {
 		t.Fatal("invalid file allowed partial edits")
+	}
+	if _, err := Files([]string{dir}, false); err == nil {
+		t.Fatal("directory should report invalid source")
+	}
+	formatted, err := os.ReadFile(path)
+	if err != nil || bytes.Equal(formatted, src) {
+		t.Fatal("directory did not format valid source")
+	}
+	unchanged, err = os.ReadFile(bad)
+	if err != nil || string(unchanged) != "@" {
+		t.Fatal("directory changed invalid source")
 	}
 }
 

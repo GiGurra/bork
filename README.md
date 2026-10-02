@@ -94,6 +94,8 @@ existing line breaks and comment text. Strings, interpolations, and raw `unsafe
 go` bodies are preserved verbatim. Directory traversal skips hidden directories,
 `vendor`, and symbolic links. `--check` prints paths needing formatting without
 writing files; it exits 0 when all files are already formatted, and 1 otherwise.
+Lexically invalid files are reported and left untouched; directory formatting
+continues with the remaining files and exits 1 after reporting errors.
 
 A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`.
 

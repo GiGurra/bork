@@ -120,3 +120,66 @@ func TestDiagnosticJSON(t *testing.T) {
 		}
 	})
 }
+
+func TestFormatCLI(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "bork")
+	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+	dir := t.TempDir()
+	good := filepath.Join(dir, "main.bork")
+	src := []byte("fn main(){println(1)}")
+	if err := os.WriteFile(good, src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.bork", "z.bork"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("@"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, check := range []bool{true, false} {
+		args := []string{"fmt"}
+		if check {
+			args = append(args, "--check")
+		}
+		cmd := exec.Command(exe, args...)
+		cmd.Dir = dir
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err == nil || cmd.ProcessState.ExitCode() != 1 {
+			t.Fatalf("expected exit 1: %v", err)
+		}
+		if !strings.Contains(stdout.String(), "main.bork") {
+			t.Fatalf("missing changed file: %s", &stdout)
+		}
+		for _, name := range []string{"a.bork", "z.bork"} {
+			if !strings.Contains(stderr.String(), name) {
+				t.Fatalf("missing error for %s: %s", name, &stderr)
+			}
+			got, err := os.ReadFile(filepath.Join(dir, name))
+			if err != nil || string(got) != "@" {
+				t.Fatal("invalid file changed")
+			}
+		}
+		got, err := os.ReadFile(good)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if check && !bytes.Equal(got, src) {
+			t.Fatal("check wrote source")
+		}
+		if !check && bytes.Equal(got, src) {
+			t.Fatal("invalid files prevented valid file formatting")
+		}
+	}
+	for _, name := range []string{"a.bork", "z.bork"} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command(exe, "fmt", "--check")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil || len(out) != 0 {
+		t.Fatalf("clean directory: %v\n%s", err, out)
+	}
+}
