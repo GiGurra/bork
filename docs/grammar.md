@@ -155,3 +155,18 @@ EOL        = newline | ";" .
 - **A program** is a package with `fn main()`, which takes no parameters and returns no value.
 
 `bork/time` exposes `Instant`, `Duration`, and `Clock` records, plus checked arithmetic, parsing/formatting, and scope-aware `Sleep`. `bork/env.Load[T: Decode](prefix)` and `LoadWith` decode environment configuration from derived record fields; `LoadJson` decodes one JSON variable. These packages introduce no new syntax. See [examples/time_env](../examples/time_env/main.bork) and the [Go schema helpers](std-go.md).
+
+- **Binary data:** `Bytes` is a built-in immutable byte sequence, distinct from
+  `List[Byte]`. There is no special literal: `bytes([toByte(0), toByte(255)])`
+  copies a byte list, and `utf8Bytes("hello")` gives a string's UTF-8 bytes.
+  `utf8String(data)` returns `String | ParseError`, rejecting invalid UTF-8.
+  Methods: `length`, `isEmpty`, `get(index)` (`Option[Byte]`), `toList`,
+  `slice(from, to)` (exclusive end, `Bytes | OutOfRange`), and `concat(other)`.
+  Equality compares contents; empty sequences are equal. Bytes prints as
+  `Bytes(00ff)`, lower-case hex, including in records, lists, and maps.
+- **`bork/encoding`:** `Hex` / `ParseHex`, `Base64` / `ParseBase64`, and
+  `Base64URL` / `ParseBase64URL` convert Bytes and String. Parsers return
+  `Bytes | ParseError`; hex accepts either case and requires complete pairs.
+  Both base64 forms use padding and reject nonzero trailing padding bits;
+  parsers accept CR/LF as Go's base64 decoder does. No partial bytes are
+  returned after an error. See [examples/bytes_encoding](../examples/bytes_encoding/main.bork).

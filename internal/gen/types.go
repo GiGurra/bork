@@ -47,6 +47,10 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		g.usedTypes[t] = true
 		return typeName(t.Name, t.Pkg)
 	}
+	if t == check.Bytes {
+		g.usesBytes = true
+		return ast.NewIdent("_Bytes")
+	}
 	if t == check.Scope {
 		g.usesScopes = true
 		return &ast.StarExpr{X: ast.NewIdent("_Scope")}
@@ -972,6 +976,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesScopes {
 		src = append(src, scopeRuntime, scopeHelpers)
 	}
+	if g.usesBytes {
+		src = append(src, bytesRuntime)
+	}
 	if g.usesUnit {
 		src = append(src, unitRuntime)
 	}
@@ -1037,6 +1044,9 @@ func needsDeepEqual(t check.Type, seen map[check.Type]bool) bool {
 		return false
 	}
 	seen[t] = true
+	if t == check.Bytes {
+		return true
+	}
 	fields := func(fs []*check.Field) bool {
 		for _, f := range fs {
 			if needsDeepEqual(f.Type, seen) {

@@ -1,0 +1,49 @@
+Bytes(68c3a900)
+4
+Option.Some { value: 104 }
+Option.None
+Option.None
+[104, 195, 169, 0]
+Bytes(68)
+OutOfRange { value: "-1:0", target: "Bytes slice" }
+Bytes(68c3a90021)
+true
+true
+true
+true
+true
+bytes
+list
+Option.Some { value: "found" }
+Bytes(0102)
+68c3a900
+Bytes(00ff)
+ParseError { input: "0", message: "encoding/hex: odd length hex string" }
+ParseError { input: "gg", message: "encoding/hex: invalid byte: U+0067 'g'" }
+aMOpAA==
+Bytes(68c3a900)
++/8=
+-_8=
+Bytes(fbff)
+ParseError { input: "!!!!", message: "illegal base64 data at input byte 0" }
+ParseError { input: "Zh==", message: "illegal base64 data at input byte 2" }
+ParseError { input: "+/8=", message: "illegal base64 data at input byte 0" }
+ParseError { input: "Bytes(fbff)", message: "invalid UTF-8" }
+true
+Bytes()
+Bytes()
+Bytes()
+Bytes()
+ParseError { input: "0011gg", message: "encoding/hex: invalid byte: U+0067 'g'" }
+ParseError { input: "YQ==!!!!", message: "illegal base64 data at input byte 4" }
+Bytes(61)
+Bytes(61)
+2
+Option.Some { value: "bytes" }
+Option.Some { value: "list" }
+false
+Bytes(fbfffbff)
+Bytes(fbff)
+Bytes()
+OutOfRange { value: "1:0", target: "Bytes slice" }
+OutOfRange { value: "0:3", target: "Bytes slice" }
