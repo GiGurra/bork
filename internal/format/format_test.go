@@ -180,6 +180,15 @@ func TestFiles(t *testing.T) {
 	if err != nil || !bytes.Equal(unchanged, src) {
 		t.Fatal("invalid file allowed partial edits")
 	}
+	for _, explicit := range []string{bad, dir + "/nested/../z-invalid.bork"} {
+		if _, err := Files([]string{dir, explicit}, false); err == nil {
+			t.Fatal("explicit invalid file accepted with directory")
+		}
+		unchanged, err = os.ReadFile(path)
+		if err != nil || !bytes.Equal(unchanged, src) {
+			t.Fatal("directory overrode explicit file protection")
+		}
+	}
 	if _, err := Files([]string{dir}, false); err == nil {
 		t.Fatal("directory should report invalid source")
 	}

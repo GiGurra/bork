@@ -20,7 +20,7 @@ func Files(paths []string, check bool) ([]string, error) {
 	}
 	seen := map[string]bool{}
 	var files []string
-	fromDirectory := map[string]bool{}
+	explicitFiles := map[string]bool{}
 	for _, path := range paths {
 		info, err := os.Lstat(path)
 		if err != nil {
@@ -31,6 +31,11 @@ func Files(paths []string, check bool) ([]string, error) {
 				return nil, fmt.Errorf("%s: expected a regular .bork file or directory", path)
 			}
 			files = append(files, path)
+			abs, err := filepath.Abs(path)
+			if err != nil {
+				return nil, err
+			}
+			explicitFiles[abs] = true
 			continue
 		}
 		err = filepath.WalkDir(path, func(p string, entry fs.DirEntry, err error) error {
@@ -42,7 +47,6 @@ func Files(paths []string, check bool) ([]string, error) {
 			}
 			if entry.Type().IsRegular() && strings.HasSuffix(p, ".bork") {
 				files = append(files, p)
-				fromDirectory[p] = true
 			}
 			return nil
 		})
@@ -75,7 +79,7 @@ func Files(paths []string, check bool) ([]string, error) {
 		}
 		formatted, err := Source(path, src)
 		if err != nil {
-			if fromDirectory[path] {
+			if !explicitFiles[abs] {
 				failures = append(failures, err)
 				continue
 			}
