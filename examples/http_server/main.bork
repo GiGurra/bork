@@ -58,7 +58,7 @@ fn create(store: Atom[Store], body: String): http.Response {
         nextId: st.nextId + 1,
       })
       id = s.nextId - 1
-      log.Info("created", {"id": id, "title": req.title})
+      log.Info("created", { "id": id, "title": req.title })
       match (s.todos.get(id)) {
         Option.Some { value: todo } => http.JsonReply(201, encodeJson(todo))
         Option.None => notFound(id)
@@ -89,7 +89,7 @@ fn remove(store: Atom[Store], id: Int): http.Response {
   // todo decides the answer, even if another request removed it too.
   old = swap(store, st => st.copy(todos = st.todos.remove(id)))
   if (old.todos.has(id)) {
-    log.Info("removed", {"id": id})
+    log.Info("removed", { "id": id })
     http.Text(204, "")
   } else {
     notFound(id)
@@ -128,7 +128,7 @@ fn route(store: Atom[Store], req: http.Request): http.Response {
 fn handler(store: Atom[Store]): (http.Request, Scope) => http.Response {
   (req, rs) => {
     resp = route(store, req)
-    log.Info("request", {"method": req.method, "path": req.path, "status": resp.status})
+    log.Info("request", { "method": req.method, "path": req.path, "status": resp.status })
     resp
   }
 }
@@ -136,7 +136,7 @@ fn handler(store: Atom[Store]): (http.Request, Scope) => http.Response {
 fn serve(addr: String): Unit | IoError {
   scope s {
     server = http.Listen(addr, s, handler(atom(emptyStore())))?
-    log.Info("listening", {"address": http.Address(server)})
+    log.Info("listening", { "address": http.Address(server) })
     http.Wait(server)
   }
 }

@@ -1,0 +1,2 @@
+type T = { x: Int }
+fn f() { T { x: 1 }.copy(x = 2)? }

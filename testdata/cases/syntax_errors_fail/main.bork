@@ -1,15 +1,15 @@
 fn main() {
   x = (1 + 2
-  println(x)
-}
-
-fn other(a Int) {
-  println(a)
-}
-
-fn restNotLast(xs: List[Int]): Int {
-  match (xs) {
-    [x, ...r, y] => x
-    _ => 0
+    println(x)
   }
-}
+
+  fn other(a Int) {
+    println(a)
+  }
+
+  fn restNotLast(xs: List[Int]): Int {
+    match (xs) {
+      [x, ...r, y] => x
+      _ => 0
+    }
+  }

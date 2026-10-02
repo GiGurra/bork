@@ -11,6 +11,7 @@ import (
 	"github.com/GiGurra/boa/pkg/boa"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/driver"
+	borkformat "github.com/GiGurra/bork/internal/format"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +22,11 @@ type pathParams struct {
 type diagnosticParams struct {
 	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	JSON bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
+}
+
+type fmtParams struct {
+	Paths []string `positional:"true" optional:"true" descr:".bork files or directories (default: .); directories are visited recursively"`
+	Check bool     `optional:"true" descr:"report files needing formatting without writing them"`
 }
 
 type buildParams struct {
@@ -92,6 +98,22 @@ func main() {
 		Use:   "bork",
 		Short: "the bork compiler: a pragmatic backend language of guarantees",
 		SubCmds: boa.SubCmds(
+			boa.CmdT[fmtParams]{
+				Use:   "fmt",
+				Short: "format bork source files in place",
+				RunFunc: func(p *fmtParams, _ *cobra.Command, _ []string) {
+					changed, err := borkformat.Files(p.Paths, p.Check)
+					for _, path := range changed {
+						fmt.Println(path)
+					}
+					if err != nil {
+						fail(err)
+					}
+					if p.Check && len(changed) > 0 {
+						os.Exit(1)
+					}
+				},
+			},
 			boa.CmdT[buildParams]{
 				Use:   "build",
 				Short: "compile a bork program into an executable",

@@ -1,0 +1,4 @@
+fn f(): String unsafe go {
+return `  hi
+ there` // preserve
+}

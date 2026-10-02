@@ -54,5 +54,5 @@ fn typeArgs() {
   println([1, 2].map[String](x => toString(x)))
   println([1, 2].map[Int, Float](x => toFloat(x) / 2.0))
   println(["a", "b"].fold[List[String]]([], (acc, x) => [x].concat(acc)))
-  println({"b": 2, "a": 1}.mapValues[Float](v => toFloat(v)))
+  println({ "b": 2, "a": 1 }.mapValues[Float](v => toFloat(v)))
 }

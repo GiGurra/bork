@@ -11,7 +11,7 @@ fn main() {
   println(maps.Get(counts, "the"))
   println(maps.Size(counts))
   // Equal to an ordered map with the same entries.
-  println(counts == {"the": 3, "cat": 1, "and": 2, "dog": 1, "bird": 1})
+  println(counts == { "the": 3, "cat": 1, "and": 2, "dog": 1, "bird": 1 })
   // Everything keeps it unordered; InOrder takes the order it has.
   fewer = maps.Remove(counts, "the") |> maps.Filter((w, n) => n == 1)
   println(fewer)

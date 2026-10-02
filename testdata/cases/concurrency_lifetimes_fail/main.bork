@@ -19,5 +19,4 @@ fn inner(path: String): Int {
   }
 }
 
-
 fn main() {}

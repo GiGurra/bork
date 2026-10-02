@@ -10,4 +10,3 @@ fn main() {
   // map's B values come from the lambda, which is not checked.
   println(map[Int, Pos]([1], x => x))
 }
-
