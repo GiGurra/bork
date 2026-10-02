@@ -251,6 +251,7 @@ type gen struct {
 	usesIs      bool
 	usesAssert  bool
 	usesTests   bool
+	usesSnaps   bool
 	usesRules   bool
 	usesScopes  bool
 	usesDerive  bool
@@ -839,6 +840,14 @@ func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 			expected = &ast.CallExpr{Fun: g.goType(t), Args: []ast.Expr{expected}}
 		}
 		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, at(e.Fun.Position())}}
+	case check.BuiltinAssertSnapshot:
+		if !g.testMode {
+			msg := e.Fun.Position().String() + ": assertSnapshot works only in tests (bork test)"
+			return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{strLit(msg)}}
+		}
+		g.usesSnaps = true
+		text := g.stringOf(args[0], g.info.Types[e.Args[0]])
+		return &ast.CallExpr{Fun: ast.NewIdent("_assertSnapshot"), Args: []ast.Expr{text, at(e.Fun.Position())}}
 	}
 	inst := g.info.Instances[e]
 	if inst.Func.Class != nil {

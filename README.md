@@ -81,6 +81,7 @@ bork build examples/hello    # compile to an executable
 bork check examples/hello    # type-check only
 bork emit examples/hello     # show the generated Go
 bork test examples/payments  # run the tests, checking trusted facts and rules
+bork test --update .         # run the tests, writing the snapshots assertSnapshot finds missing or changed
 ```
 
 A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`.

@@ -305,26 +305,48 @@ const testRuntime = `package main
 import (
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 )
 
 type _test struct {
 	name string
+	snap string // the base name of the test's snapshot files
 	run  func() // nil for a test that cannot run; name says why
+}
+
+// The test running now, for assertSnapshot.
+var _tests struct {
+	sync.Mutex
+	current   *_test
+	snapshots int      // assertSnapshot calls so far in this test
+	written   []string // snapshot files written in this test
 }
 
 // _runTests runs the tests, each until it fails (panics), and reports.
 func _runTests(tests []_test) {
 	failed, skipped := 0, 0
-	for _, t := range tests {
+	for i, t := range tests {
 		if t.run == nil {
 			skipped++
 			fmt.Printf("skip  %s\n", t.name)
-		} else if msg := _runTest(t.run); msg != "" {
+			continue
+		}
+		_tests.Lock()
+		_tests.current, _tests.snapshots, _tests.written = &tests[i], 0, nil
+		_tests.Unlock()
+		if msg := _runTest(t.run); msg != "" {
 			failed++
-			fmt.Printf("FAIL  %s\n      %s\n", t.name, msg)
+			fmt.Printf("FAIL  %s\n      %s\n", t.name, _indent(msg))
 		} else {
 			fmt.Printf("ok    %s\n", t.name)
 		}
+		_tests.Lock()
+		for _, path := range _tests.written {
+			fmt.Printf("      wrote %s\n", path)
+		}
+		_tests.current = nil
+		_tests.Unlock()
 	}
 	if skipped > 0 {
 		fmt.Printf("%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
@@ -336,6 +358,17 @@ func _runTests(tests []_test) {
 	}
 }
 
+// _indent indents a failure message's lines after the first.
+func _indent(msg string) string {
+	lines := strings.Split(msg, "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i] != "" {
+			lines[i] = "      " + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func _runTest(run func()) (msg string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -344,6 +377,132 @@ func _runTest(run func()) (msg string) {
 	}()
 	run()
 	return ""
+}
+`
+
+// snapshotRuntime is assertSnapshot. The driver passes the snapshot
+// directory in $BORK_SNAPSHOTS, and sets $BORK_UPDATE_SNAPSHOTS for
+// bork test --update.
+const snapshotRuntime = `package main
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// _assertSnapshot compares text with the running test's next snapshot
+// file: <test>.snap for its first assertSnapshot, then <test>.2.snap,
+// and so on. A file holds the text and a newline. When updating, it
+// writes the file instead if it is missing or different.
+func _assertSnapshot(text, at string) {
+	_tests.Lock()
+	t := _tests.current
+	if t == nil {
+		_tests.Unlock()
+		panic(at + ": assertSnapshot works only while a test runs")
+	}
+	_tests.snapshots++
+	file := t.snap + ".snap"
+	if _tests.snapshots > 1 {
+		file = fmt.Sprintf("%s.%d.snap", t.snap, _tests.snapshots)
+	}
+	_tests.Unlock()
+	path := filepath.Join(os.Getenv("BORK_SNAPSHOTS"), file)
+	old, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		panic(at + ": " + err.Error())
+	}
+	found := err == nil
+	if found && string(old) == text+"\n" {
+		return
+	}
+	if os.Getenv("BORK_UPDATE_SNAPSHOTS") != "" {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			panic(at + ": " + err.Error())
+		}
+		if err := os.WriteFile(path, []byte(text+"\n"), 0o644); err != nil {
+			panic(at + ": " + err.Error())
+		}
+		_tests.Lock()
+		_tests.written = append(_tests.written, path)
+		_tests.Unlock()
+		return
+	}
+	if !found {
+		panic(at + ": no snapshot " + path + " yet (bork test --update writes it); the value is:\n" + text)
+	}
+	panic(at + ": snapshot " + path + " does not match (- snapshot, + actual; bork test --update rewrites it):\n" +
+		_snapshotDiff(strings.TrimSuffix(string(old), "\n"), text))
+}
+
+// _snapshotDiff shows the lines that differ between old and new, with
+// two lines of context around them.
+func _snapshotDiff(old, new string) string {
+	a, b := strings.Split(old, "\n"), strings.Split(new, "\n")
+	// lcs[i][j] is the length of the longest common subsequence of
+	// a[i:] and b[j:].
+	lcs := make([][]int, len(a)+1)
+	for i := range lcs {
+		lcs[i] = make([]int, len(b)+1)
+	}
+	for i := len(a) - 1; i >= 0; i-- {
+		for j := len(b) - 1; j >= 0; j-- {
+			if a[i] == b[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else {
+				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
+			}
+		}
+	}
+	var lines []string
+	var changed []bool
+	add := func(prefix, line string, change bool) {
+		if line == "" {
+			prefix = strings.TrimSpace(prefix)
+		}
+		lines = append(lines, prefix+line)
+		changed = append(changed, change)
+	}
+	i, j := 0, 0
+	for i < len(a) || j < len(b) {
+		switch {
+		case i < len(a) && j < len(b) && a[i] == b[j]:
+			add("  ", a[i], false)
+			i, j = i+1, j+1
+		case i < len(a) && (j == len(b) || lcs[i+1][j] >= lcs[i][j+1]):
+			add("- ", a[i], true)
+			i++
+		default:
+			add("+ ", b[j], true)
+			j++
+		}
+	}
+	const context = 2
+	var out []string
+	skipped := false
+	for k, line := range lines {
+		near := false
+		for d := max(0, k-context); d <= min(len(lines)-1, k+context); d++ {
+			near = near || changed[d]
+		}
+		if !near {
+			skipped = true
+			continue
+		}
+		if skipped {
+			out = append(out, "  ...")
+		}
+		skipped = false
+		out = append(out, line)
+	}
+	if skipped {
+		out = append(out, "  ...")
+	}
+	return strings.Join(out, "\n")
 }
 `
 
@@ -757,6 +916,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	}
 	if g.usesTests {
 		src = append(src, testRuntime)
+	}
+	if g.usesSnaps {
+		src = append(src, snapshotRuntime)
 	}
 	if g.usesRules {
 		src = append(src, rulesRuntime)

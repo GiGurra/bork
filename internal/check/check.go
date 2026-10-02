@@ -115,16 +115,18 @@ const (
 	BuiltinToString
 	BuiltinConvert // toInt8(x), toFloat(x), ...
 	BuiltinPanic
-	BuiltinAssert      // assert(cond)
-	BuiltinAssertEqual // assertEqual(actual, expected)
+	BuiltinAssert         // assert(cond)
+	BuiltinAssertEqual    // assertEqual(actual, expected)
+	BuiltinAssertSnapshot // assertSnapshot(x)
 )
 
 var builtins = map[string]Builtin{
-	"println":     BuiltinPrintln,
-	"toString":    BuiltinToString,
-	"panic":       BuiltinPanic,
-	"assert":      BuiltinAssert,
-	"assertEqual": BuiltinAssertEqual,
+	"println":        BuiltinPrintln,
+	"toString":       BuiltinToString,
+	"panic":          BuiltinPanic,
+	"assert":         BuiltinAssert,
+	"assertEqual":    BuiltinAssertEqual,
+	"assertSnapshot": BuiltinAssertSnapshot,
 }
 
 // conversions maps each conversion function to its target type.
@@ -1101,6 +1103,12 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 			c.errorf(e.Args[0].Position(), "toString needs a value, found %s", t)
 		}
 		return String
+	case BuiltinAssertSnapshot:
+		t := c.expr(e.Args[0])
+		if t != Invalid && !isValue(t) {
+			c.errorf(e.Args[0].Position(), "assertSnapshot needs a value, found %s", t)
+		}
+		return Unit
 	case BuiltinConvert:
 		return c.conversion(e, fname)
 	case BuiltinPrintln:

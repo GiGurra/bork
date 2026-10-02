@@ -5,6 +5,8 @@ test "misuse" {
   assertEqual([1], [1])
   assertEqual(1, "one")
   assertEqual(1)
+  assertSnapshot(1, 2)
+  assertSnapshot(println("x"))
 }
 
 test "misuse" {

@@ -1,0 +1,1 @@
+Invoice { customer: "Ada", lines: [Line { item: "tea", cents: 250 }, Line { item: "scones", cents: 400 }] }
