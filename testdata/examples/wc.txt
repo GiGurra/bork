@@ -1,0 +1,5 @@
+     3      9      45 sample.txt
+wc: missing.txt: no such file or directory
+     4     15      75 poem.txt
+     7     24     120 total
+exit code 1

@@ -36,6 +36,23 @@ transfer(0)              // error: transfer requires amount to be positive, but 
 
 Predicates are ordinary bork functions; on constants, the compiler runs them at build time. See [examples/payments](examples/payments/main.bork).
 
+So do scopes:
+
+```
+fn countFile(path: String): Counts | IoError {
+  scope s {
+    countText(readAll(openFile(path, s)?)?)   // the file is closed when s ends, even by ? or a panic
+  }
+}
+
+fn broken(path: String): String | IoError {
+  f = scope s { openFile(path, s)? }
+  readAll(f)             // error: f may be released: it belongs to scope s, which ended on line 2
+}
+```
+
+See [examples/wc](examples/wc/main.bork), a small `wc`.
+
 ## Goals
 
 - **Pragmatic high correctness for backend systems.** That is the whole point.

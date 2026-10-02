@@ -1,0 +1,4 @@
+Roses are red,
+violets are blue,
+scopes close files
+so you do not have to.

@@ -38,7 +38,9 @@ jobs:
       - name: Run tests with -race
         run: go test -race ./... -count=1
 
-      - name: Build and run the examples
+      # The tests run the examples (with their args.txt) and check their
+      # output; this checks the CLI itself on each of them.
+      - name: Check the examples with the CLI
         run: |
           go install ./cmd/bork
-          for d in examples/*/; do bork run "$d"; done
+          for d in examples/*/; do bork check "$d"; done

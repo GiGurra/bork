@@ -301,7 +301,12 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	}
 	fn := &Func{Decl: fd, Prelude: prelude}
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
-	fn.Result = c.resolveType(fd.Result)
+	if r := fd.Result; r != nil && r.Name == "Never" && len(r.Args) == 0 && r.Func == nil && len(r.Union) == 0 {
+		// A function that never returns, such as exit.
+		fn.Result = Never
+	} else {
+		fn.Result = c.resolveType(fd.Result)
+	}
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
@@ -808,6 +813,12 @@ func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 	if cond != Bool && cond != Invalid && cond != Never {
 		c.errorf(e.Cond.Position(), "if-condition must be Bool, found %s", cond)
 	}
+	if e.Else != nil && want == nil && c.branchNeedsContext(e.Then) && !c.branchNeedsContext(e.Else) {
+		// The then-branch's type comes from the else-branch: `[]`.
+		elseT := c.exprWant(e.Else, nil)
+		thenT := c.block(e.Then, elseT)
+		return c.unify(e.Pos, "if-branches have", []Type{thenT, elseT}, nil)
+	}
 	thenT := c.block(e.Then, want)
 	if e.Else == nil {
 		// Without else, the if is only run for its effect.
@@ -816,8 +827,24 @@ func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 		}
 		return Unit
 	}
+	if want == nil && c.branchNeedsContext(e.Else) {
+		want = thenT
+	}
 	elseT := c.exprWant(e.Else, want)
 	return c.unify(e.Pos, "if-branches have", []Type{thenT, elseT}, want)
+}
+
+// branchNeedsContext reports whether a branch's value (a block's tail)
+// gets its type from the context, as `[]` does.
+func (c *checker) branchNeedsContext(x syntax.Expr) bool {
+	if b, ok := x.(*syntax.Block); ok {
+		if b.Tail == nil {
+			return false
+		}
+		return c.branchNeedsContext(b.Tail)
+	}
+	_, isLambda := x.(*syntax.Lambda)
+	return !isLambda && c.needsContext(x)
 }
 
 // unify computes the type of a value that comes from one of several

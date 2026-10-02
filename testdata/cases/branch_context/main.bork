@@ -1,0 +1,33 @@
+// A branch whose type comes from the context (`[]`, `Option.None`) gets
+// it from the other branches.
+fn evens(xs: List[Int]): List[Int] {
+  flatMap(xs, x => if (x % 2 == 0) { [x] } else { [] })
+}
+
+fn firstWords(lines: List[String]): List[String] {
+  flatMap(lines, line => match (head(fields(line))) {
+    Option.None => []
+    Option.Some { value: w } => [w]
+  })
+}
+
+fn halve(x: Int): Option[Int] {
+  half = if (x % 2 == 0) { Option.Some { value: x / 2 } } else { Option.None }
+  half
+}
+
+// A function that never returns can end any branch.
+fn fail(message: String): Never {
+  panic(s"failed: $message")
+}
+
+fn positive(x: Int): Int {
+  if (x > 0) { x } else { fail("not positive") }
+}
+
+fn main() {
+  println(evens([1, 2, 3, 4]))
+  println(firstWords(["hello world", "", "  bork  lang"]))
+  println(halve(4), halve(3))
+  println(positive(5))
+}

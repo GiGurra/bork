@@ -107,6 +107,28 @@ fn write(f: File, text: String): Int | IoError unsafe go {
   return int64(n)
 }
 
+// The program's environment.
+
+// args is the program's command-line arguments (without its name).
+fn args(): List[String] unsafe go {
+  import "os"
+  return os.Args[1:]
+}
+
+// exit ends the program with the given status code, without closing
+// scopes.
+fn exit(code: Int): Never unsafe go {
+  import "os"
+  os.Exit(int(code))
+}
+
+// eprintln prints text and a newline to standard error.
+fn eprintln(text: String) unsafe go {
+  import "fmt"
+  import "os"
+  fmt.Fprintln(os.Stderr, text)
+}
+
 // Reading numbers and Bools from Strings.
 
 fn parseInt(text: String): Int | ParseError unsafe go {
@@ -138,6 +160,26 @@ fn parseBool(text: String): Bool | ParseError unsafe go {
 }
 
 // Strings. Lengths and indexes count bytes (UTF-8), as in Go.
+
+// fields splits s around runs of whitespace: fields(" a  b ") is ["a", "b"].
+fn fields(s: String): List[String] unsafe go {
+  import "strings"
+  return strings.Fields(s)
+}
+
+// lines splits s into lines, without their line endings. A final line
+// ending does not start another line.
+fn lines(s: String): List[String] unsafe go {
+  import "strings"
+  if s == "" {
+    return []string{}
+  }
+  out := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+  for i, line := range out {
+    out[i] = strings.TrimSuffix(line, "\r")
+  }
+  return out
+}
 
 fn byteLength(s: String): Int unsafe go {
   return int64(len(s))

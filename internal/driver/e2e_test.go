@@ -102,7 +102,10 @@ func compare(t *testing.T, expectedPath, got string) {
 }
 
 // TestExamples runs every program under examples/ and compares its
-// output with testdata/examples/<name>.txt.
+// output with testdata/examples/<name>.txt. A program runs in its own
+// directory, with the arguments in its args.txt (one per line) if it
+// has one. Its output includes standard error, and how it exited if it
+// failed.
 func TestExamples(t *testing.T) {
 	root := filepath.Join("..", "..", "examples")
 	entries, err := os.ReadDir(root)
@@ -120,8 +123,17 @@ func TestExamples(t *testing.T) {
 			if err := Build(filepath.Join(root, name), exe); err != nil {
 				t.Fatalf("build failed:\n%v", err)
 			}
-			out, err := exec.Command(exe).Output()
-			if err != nil {
+			var args []string
+			if text, err := os.ReadFile(filepath.Join(root, name, "args.txt")); err == nil {
+				args = strings.Fields(string(text))
+			}
+			cmd := exec.Command(exe, args...)
+			cmd.Dir = filepath.Join(root, name)
+			out, err := cmd.CombinedOutput()
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				out = fmt.Appendf(out, "exit code %d\n", exitErr.ExitCode())
+			} else if err != nil {
 				t.Fatalf("program failed: %v\n%s", err, out)
 			}
 			compare(t, filepath.Join("..", "..", "testdata", "examples", name+".txt"), string(out))
