@@ -6,6 +6,8 @@ fn Check(s: Scope): Bool unsafe go {
   m = _borkMapPut(m, "c", int64(4))
   value, found := _borkMapGet(m, "a")
   _, missing := _borkMapGet(m, "missing")
+  order := ""
+  _borkMapEach(m, func(k string, v int64) bool { order += k; return true })
   count := 0
   _borkMapEach(m, func(k string, v int64) bool { count++; return false })
   child := _borkScopeWith(_borkScopeContext(s))
@@ -13,7 +15,16 @@ fn Check(s: Scope): Bool unsafe go {
   done := false
   child.Defer(func() { done = true })
   _borkScopeClose(child)
-  return found && value == 3 && !missing && _borkMapLen(old) == 2 && _borkMapLen(m) == 3 && count == 1 && done && _borkScopeContext(child).Err() != nil && _borkScopeContext(s).Err() == nil && context.Cause(_borkScopeContext(child)) != nil
+  aborted := false
+  recovered := false
+  func() {
+    defer func() { recovered = recover() == "test panic" }()
+    scope := _borkScopeWith(_borkScopeContext(s))
+    defer _borkScopeAbort(scope)
+    scope.Defer(func() { aborted = true })
+    panic("test panic")
+  }()
+  return order == "abc" && aborted && recovered && found && value == 3 && !missing && _borkMapLen(old) == 2 && _borkMapLen(m) == 3 && count == 1 && done && _borkScopeContext(child).Err() != nil && _borkScopeContext(s).Err() == nil && context.Cause(_borkScopeContext(child)) != nil
 }
 
 fn Some(): Option[Int] unsafe go { return _borkSome(int64(42)) }
