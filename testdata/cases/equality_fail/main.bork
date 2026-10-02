@@ -1,0 +1,12 @@
+type F = { f: (Int) => Int }
+type W = { x: Int } derive (Eq)
+type V = { x: Int } derive (Show)
+
+instance eqW: Eq[W] { fn equals(a: W, b: W): Bool { true } }
+
+fn same[T](a: T, b: T): Bool { a == b }
+
+fn main() {
+  println(includes([F { f: x => x }], F { f: x => x }))
+  println([(x: Int) => x] == [])
+}

@@ -62,7 +62,13 @@ type Dict struct {
 	Args     []*Dict
 	// Or a bound of a type parameter in scope:
 	Param *TypeParam
+	// Or built in: Eq, for every type whose values can be compared.
+	Builtin bool
 }
+
+// IsEq reports whether class is the prelude's Eq, which every type
+// whose values can be compared has, built in.
+func IsEq(class *Class) bool { return class.Prelude && class.Name == "Eq" }
 
 // HasBound reports whether the type parameter is bounded by class.
 func (t *TypeParam) HasBound(class *Class) bool {
@@ -194,6 +200,10 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 		}
 	}
 	cl := c.lookupClass(id.Class)
+	if cl != nil && IsEq(cl) {
+		c.errorf(id.ClassPos, "Eq is built in: every type whose values can be compared has it, with structural ==")
+		return
+	}
 	if cl == nil {
 		if why := c.notFound(id.Class); why != "" {
 			c.errorf(id.ClassPos, "%s", why)
@@ -444,6 +454,13 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		c.errorf(pos, "%s needs an instance of %s for %s; require one: [%s: %s]", c.useText(), class.Name, tp.Name, tp.Name, class.Name)
 		return nil
 	}
+	if IsEq(class) {
+		if !comparable(t) {
+			c.errorf(pos, "values of type %s cannot be compared, so it has no Eq (functions, scopes, and resources have no ==)", t)
+			return nil
+		}
+		return &Dict{Class: class, Type: t, Builtin: true}
+	}
 	var matches []*Dict
 	var partial []*ClassInstance // the head fits, but a bound does not
 	for _, ci := range c.pkg.inScope {
@@ -630,8 +647,14 @@ func (c *checker) declareDerived(files []*syntax.File) {
 			for _, name := range td.Derive {
 				cl := c.lookupClass(name)
 				switch {
+				case cl == nil && name == "Show":
+					c.errorf(td.DerivePos, "Show is not needed: toString shows every value")
+					continue
 				case cl == nil:
 					c.errorf(td.DerivePos, "unknown class %s", name)
+					continue
+				case IsEq(cl):
+					c.errorf(td.DerivePos, "Eq is built in: every type whose values can be compared has it, with no derive needed")
 					continue
 				case !derivable(cl):
 					c.errorf(td.DerivePos, "%s cannot be derived; only Decode and Encode can (yet)", name)

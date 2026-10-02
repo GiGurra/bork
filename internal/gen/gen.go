@@ -236,6 +236,7 @@ type gen struct {
 	usesRules   bool
 	usesScopes  bool
 	usesDerive  bool
+	usesEqual   bool
 	// openScopes lists the Go variables of the scope blocks around the
 	// code being generated, which are closed before returning.
 	openScopes []*ast.Ident
@@ -622,8 +623,23 @@ func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
 		return stmts, nil
 	}
 	if e.Op == syntax.Eq || e.Op == syntax.NotEq {
+		// Both sides as the wider type, when one is a union holding the
+		// other's.
 		t := g.info.Types[e.X]
-		xs[0], xs[1] = g.convert(xs[0], t, t), g.convert(xs[1], g.info.Types[e.Y], t)
+		if ty := g.info.Types[e.Y]; !check.Identical(t, ty) && check.Assignable(t, ty) {
+			t = ty
+		}
+		xs[0], xs[1] = g.convert(xs[0], g.info.Types[e.X], t), g.convert(xs[1], g.info.Types[e.Y], t)
+		if needsDeepEqual(t, map[check.Type]bool{}) {
+			// Go's == does not compare slices, nor what type parameters
+			// stand for.
+			g.usesEqual = true
+			var eq ast.Expr = &ast.CallExpr{Fun: ast.NewIdent("_equal"), Args: xs}
+			if e.Op == syntax.NotEq {
+				eq = &ast.UnaryExpr{Op: token.NOT, X: eq}
+			}
+			return stmts, eq
+		}
 	}
 	return stmts, &ast.BinaryExpr{X: paren(xs[0]), Op: binaryOps[e.Op], Y: paren(xs[1])}
 }

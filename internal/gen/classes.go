@@ -115,6 +115,13 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 	if d.Param != nil {
 		return dictParam(d.Param, d.Class)
 	}
+	if d.Builtin {
+		// Eq: Eq[T]{equals: _equalOf[T]}.
+		fun, _ := g.dictMethod(d, "equals")
+		return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{
+			&ast.KeyValueExpr{Key: ast.NewIdent("equals"), Value: fun},
+		}}
+	}
 	var fun ast.Expr = ast.NewIdent(instName(d.Inst))
 	if len(d.TypeArgs) > 0 {
 		idx := &ast.IndexListExpr{X: fun}
@@ -142,6 +149,10 @@ func (g *gen) methodFunc(inst *check.Instance) (fun ast.Expr, dicts []ast.Expr) 
 func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []ast.Expr) {
 	if d.Param != nil {
 		return &ast.SelectorExpr{X: dictParam(d.Param, d.Class), Sel: name(method)}, nil
+	}
+	if d.Builtin {
+		g.usesEqual = true
+		return &ast.IndexExpr{X: ast.NewIdent("_equalOf"), Index: g.goType(d.Type)}, nil
 	}
 	var impl *check.Func
 	for _, m := range d.Inst.Methods {

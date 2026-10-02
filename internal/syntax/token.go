@@ -47,6 +47,7 @@ const (
 	Comma
 	Colon
 	Dot
+	Ellipsis   // ... in a list pattern
 	Underscore // the wildcard pattern _
 
 	// Operators
@@ -76,7 +77,7 @@ var kindNames = map[Kind]string{
 	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TRune: "rune literal", TGoCode: "Go code", TString: "string literal", TInterp: "interpolated string",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
 	KwType: "'type'", KwSealed: "'sealed'", KwMatch: "'match'", KwUnsafe: "'unsafe'", KwPred: "'pred'", KwWhere: "'where'", KwAnd: "'and'", KwTrust: "'trust'", KwRule: "'rule'", KwOr: "'or'",
-	LBrack: "'['", RBrack: "']'", Dot: "'.'", Underscore: "'_'", Pipe: "'|'", PipeGt: "'|>'", Arrow: "'=>'", Quest: "'?'",
+	LBrack: "'['", RBrack: "']'", Dot: "'.'", Ellipsis: "'...'", Underscore: "'_'", Pipe: "'|'", PipeGt: "'|>'", Arrow: "'=>'", Quest: "'?'",
 	LParen: "'('", RParen: "')'", LBrace: "'{'", RBrace: "'}'", Comma: "','", Colon: "':'",
 	Assign: "'='", Plus: "'+'", Minus: "'-'", Star: "'*'", Slash: "'/'", Pct: "'%'", Not: "'!'",
 	AndAnd: "'&&'", OrOr: "'||'", Eq: "'=='", NotEq: "'!='", Lt: "'<'", LtEq: "'<='", Gt: "'>'", GtEq: "'>='",

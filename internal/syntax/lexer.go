@@ -354,6 +354,12 @@ func (lx *lexer) operator(pos diag.Pos) {
 	case ']':
 		lx.emit(RBrack, "", pos)
 	case '.':
+		if lx.peek(0) == '.' && lx.peek(1) == '.' {
+			lx.advance()
+			lx.advance()
+			lx.emit(Ellipsis, "", pos)
+			return
+		}
 		lx.emit(Dot, "", pos)
 	case '?':
 		lx.emit(Quest, "", pos)

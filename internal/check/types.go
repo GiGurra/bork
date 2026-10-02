@@ -554,6 +554,9 @@ func containsMember(u *Union, t Type) bool {
 // Identical is identical for other packages.
 func Identical(a, b Type) bool { return identical(a, b) }
 
+// Assignable reports whether a value of type src can be used as a dst.
+func Assignable(src, dst Type) bool { return assignable(src, dst) }
+
 // assignable reports whether a value of type src can be used where dst
 // is expected: the same type, Never, a member of a union, or a union
 // whose members all fit.
@@ -598,7 +601,16 @@ func comparableIn(t Type, seen map[Type]bool) bool {
 	}
 	seen[t] = true
 	switch t := t.(type) {
-	case *List, *FuncType, *TypeParam, *Resource:
+	case *List:
+		return comparableIn(t.Elem, seen)
+	case *TypeParam:
+		for _, b := range t.Bounds {
+			if IsEq(b) {
+				return true
+			}
+		}
+		return false
+	case *FuncType, *Resource:
 		return false
 	case *Record:
 		for _, f := range t.Fields {

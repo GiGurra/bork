@@ -280,8 +280,8 @@ func _assert(ok bool, at string) {
 	}
 }
 
-func _assertEqual[T comparable](actual, expected T, at string) {
-	if actual != expected {
+func _assertEqual[T any](actual, expected T, at string) {
+	if !_equal(actual, expected) {
 		panic(at + ": expected " + _show(expected) + ", got " + _show(actual))
 	}
 }
@@ -470,6 +470,7 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
 	if g.usesAssert {
 		g.usesShow = true
+		g.usesEqual = true
 		src = append(src, assertRuntime)
 	}
 	if g.usesTests {
@@ -480,6 +481,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	}
 	if g.usesScopes {
 		src = append(src, scopeRuntime)
+	}
+	if g.usesEqual {
+		src = append(src, equalRuntime)
 	}
 	if g.usesDerive {
 		src = append(src, deriveRuntime)
@@ -523,3 +527,94 @@ func sortedKeys(m map[string]bool) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+// needsDeepEqual reports whether values of type t need _equal rather
+// than Go's ==: they may hold lists, or are of a type parameter.
+func needsDeepEqual(t check.Type, seen map[check.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	fields := func(fs []*check.Field) bool {
+		for _, f := range fs {
+			if needsDeepEqual(f.Type, seen) {
+				return true
+			}
+		}
+		return false
+	}
+	switch t := t.(type) {
+	case *check.List, *check.TypeParam:
+		return true
+	case *check.Record:
+		return fields(t.Fields)
+	case *check.Sealed:
+		for _, v := range t.Variants {
+			if fields(v.Fields) {
+				return true
+			}
+		}
+	case *check.Union:
+		for _, m := range t.Members {
+			if needsDeepEqual(m, seen) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// equalRuntime is structural equality for values Go's == cannot compare:
+// lists count as equal when their elements are (a nil list is empty).
+const equalRuntime = `package main
+
+import "reflect"
+
+func _equal(a, b any) bool { return _equalValues(reflect.ValueOf(a), reflect.ValueOf(b)) }
+
+func _equalOf[T any](a, b T) bool { return _equal(a, b) }
+
+func _equalValues(x, y reflect.Value) bool {
+	if !x.IsValid() || !y.IsValid() {
+		return x.IsValid() == y.IsValid()
+	}
+	if x.Type() != y.Type() {
+		return false
+	}
+	switch x.Kind() {
+	case reflect.Interface:
+		if x.IsNil() || y.IsNil() {
+			return x.IsNil() == y.IsNil()
+		}
+		return _equalValues(x.Elem(), y.Elem())
+	case reflect.Slice:
+		if x.Len() != y.Len() {
+			return false
+		}
+		for i := 0; i < x.Len(); i++ {
+			if !_equalValues(x.Index(i), y.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Struct:
+		for i := 0; i < x.NumField(); i++ {
+			if !_equalValues(x.Field(i), y.Field(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Bool:
+		return x.Bool() == y.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return x.Int() == y.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return x.Uint() == y.Uint()
+	case reflect.Float32, reflect.Float64:
+		return x.Float() == y.Float()
+	case reflect.String:
+		return x.String() == y.String()
+	}
+	return false
+}
+`

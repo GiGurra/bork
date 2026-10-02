@@ -1,0 +1,3 @@
+ok    lists compare by their elements
+1 passed, 0 failed
+exit code 0

@@ -23,6 +23,9 @@ const (
 	// PatType matches the members Members of a union, and then the
 	// narrowed value against Sub.
 	PatType
+	// PatList matches a list with as many elements as Elems (or, with
+	// Rest, at least as many), and its elements against them.
+	PatList
 )
 
 // Pat is a checked match pattern. Code generation lowers matches from
@@ -48,6 +51,11 @@ type Pat struct {
 	// pattern for the narrowed value (nil: anything).
 	Members []Type
 	Sub     *Pat
+	// Elems and Rest are the parts of a PatList; Rest (a wildcard,
+	// possibly binding the remaining elements) is nil for a list of
+	// exactly len(Elems) elements.
+	Elems []*Pat
+	Rest  *Pat
 }
 
 // PatField is one field of a destructuring pattern.
@@ -197,6 +205,45 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 
 	case *syntax.VariantPat:
 		return c.namePattern(p, st)
+
+	case *syntax.ListPat:
+		lt, ok := st.(*List)
+		if !ok {
+			if st != Invalid {
+				c.errorf(p.Pos, "cannot match a list pattern against a value of type %s", st)
+			}
+			// Bind its names anyway, to avoid follow-up errors.
+			saved := c.diags
+			c.diags = &diag.List{}
+			for _, e := range p.Elems {
+				c.pattern(e, Invalid)
+			}
+			c.diags = saved
+			if p.Rest != "" {
+				c.bind(p.Rest, p.RestPos, Invalid, p)
+			}
+			return nil
+		}
+		pat := &Pat{Kind: PatList, Type: st}
+		ok = true
+		for _, e := range p.Elems {
+			ep := c.pattern(e, lt.Elem)
+			ok = ok && ep != nil
+			pat.Elems = append(pat.Elems, ep)
+		}
+		if p.HasRest {
+			pat.Rest = &Pat{Kind: PatWild, Type: st}
+			if p.Rest != "" {
+				c.bindPat(pat.Rest, p.Rest, p.RestPos, p)
+			}
+			if len(p.Elems) == 0 {
+				return pat.Rest // [...rest] is any list
+			}
+		}
+		if !ok {
+			return nil
+		}
+		return pat
 	}
 	return nil
 }

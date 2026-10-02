@@ -759,6 +759,23 @@ class Encode[T] {
   fn encode(x: T): Json
 }
 
+// Eq is built in: every type whose values can be compared (all but
+// functions, scopes, and resources) has it, with structural ==. A bound
+// [T: Eq] lets generic code compare values of T.
+class Eq[T] {
+  fn equals(a: T, b: T): Bool
+}
+
+// includes reports whether x is in xs.
+fn includes[T: Eq](xs: List[T], x: T): Bool {
+  any(xs, y => y == x)
+}
+
+// distinct keeps the first of each value in xs.
+fn distinct[T: Eq](xs: List[T]): List[T] {
+  fold(xs, [], (seen: List[T], x: T) => if (includes(seen, x)) { seen } else { append(seen, x) })
+}
+
 // decodeJson parses text and decodes it.
 fn decodeJson[T: Decode](text: String): T | JsonError | DecodeError {
   json = parseJson(text)?

@@ -1,0 +1,8 @@
+empty
+one: 7
+zero then 2 more
+two: 1, 2
+starts with 1
+10
+5
+no args

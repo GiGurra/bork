@@ -814,6 +814,25 @@ func (p *parser) pattern() Pattern {
 		return &WildcardPat{Pos: t.Pos}
 	case TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:
 		return &LitPat{Pos: t.Pos, Value: p.unary()}
+	case LBrack:
+		p.next()
+		lp := &ListPat{Pos: t.Pos}
+		p.list(RBrack, "a pattern", func() {
+			if lp.HasRest {
+				p.errorf(p.tok().Pos, "the rest of the list (...) must come last")
+				panic(bailout{})
+			}
+			if p.at(Ellipsis) {
+				lp.RestPos = p.next().Pos
+				lp.HasRest = true
+				if p.at(TIdent) {
+					lp.Rest = p.next().Text
+				}
+				return
+			}
+			lp.Elems = append(lp.Elems, p.pattern())
+		})
+		return lp
 	case TIdent:
 		if p.peekKind() == Colon {
 			p.next()
