@@ -913,7 +913,11 @@ func (p *parser) primary() Expr {
 				p.next()
 				saved := p.noRecordLit
 				p.noRecordLit = true
-				se.Policy = p.expr()
+				se.Policies = append(se.Policies, p.expr())
+				for p.at(Comma) {
+					p.next()
+					se.Policies = append(se.Policies, p.expr())
+				}
 				p.noRecordLit = saved
 			}
 			se.Body = p.block()

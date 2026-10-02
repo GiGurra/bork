@@ -265,8 +265,8 @@ func (f *factChecker) tail(x syntax.Expr, e env, result func(syntax.Expr, env)) 
 			f.tail(x.Tail, e, result)
 		}
 	case *syntax.ScopeExpr:
-		if x.Policy != nil {
-			f.walk(x.Policy, e)
+		for _, p := range x.Policies {
+			f.walk(p, e)
 		}
 		f.tail(x.Body, e, result)
 	case *syntax.If:
@@ -387,8 +387,8 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 			f.walk(x.Tail, e)
 		}
 	case *syntax.ScopeExpr:
-		if x.Policy != nil {
-			f.walk(x.Policy, e)
+		for _, p := range x.Policies {
+			f.walk(p, e)
 		}
 		f.walk(x.Body, e)
 	case *syntax.Return:

@@ -1,0 +1,45 @@
+fn main() {
+  // The default policy waits for every finalizer.
+  scope s {
+    onClose(s, () => {
+      sleep(30)
+      println("slow finalizer done")
+    })
+  }
+  println("after the blocking scope")
+  // A timeout: a finalizer that takes longer is left behind.
+  scope s with cleanupTimeout(10) {
+    onClose(s, () => println("quick finalizer done"))
+    onClose(s, () => {
+      sleep(200)
+      println("never seen: the program ends first")
+    })
+  }
+  println("after the scope with a timeout")
+  // A policy is a value, and a scope can have several.
+  policy = ScopePolicy.CleanupTimeout { ms: 50 }
+  scope s with policy, taskTimeout(1000) {
+    onClose(s, () => println("finalizer within the limit"))
+  }
+  // A task timeout: a task that ignores cancellation is orphaned, and
+  // the scope's finalizers still run.
+  scope s with taskTimeout(10) {
+    onClose(s, () => println("the scope's finalizer still runs"))
+    launch(s, () => {
+      stubborn(200)
+      println("never seen: the program ends first")
+    })
+  }
+  println("after the scope with a task timeout")
+  // Failures logged instead of raised.
+  scope s with logFailures() {
+    onClose(s, () => panic("logged, not raised"))
+  }
+  println("after the scope that logs its failures")
+}
+
+// stubborn sleeps without heeding cancellation.
+fn stubborn(ms: Int) unsafe go {
+  import "time"
+  time.Sleep(time.Duration(ms) * time.Millisecond)
+}
