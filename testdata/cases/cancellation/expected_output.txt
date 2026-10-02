@@ -1,6 +1,8 @@
 a stopped: cancelled
 true
-b stopped: deadline exceeded
+b stopped: the scope ended
+d finished its work
+Cancelled { reason: "deadline exceeded" }
 false
 true
 Cancelled { reason: "cancelled" }
