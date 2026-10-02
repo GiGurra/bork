@@ -79,10 +79,18 @@ func (c *checker) variantRef(pos diag.Pos, owner, name string, ctx Type) *Varian
 		return nil
 	}
 	if len(sealed.TypeParams) > 0 {
-		inst, _ := instanceIn(ctx, sealed).(*Sealed)
-		if inst == nil {
-			generic := owner + "[" + paramNames(sealed.TypeParams) + "]"
+		generic := owner + "[" + paramNames(sealed.TypeParams) + "]"
+		report := func() {
 			c.errorf(pos, "cannot tell which %s type %s.%s is here; use it where %s %s is expected", owner, owner, name, article(owner), generic)
+		}
+		inst, _ := instanceIn(ctx, sealed).(*Sealed)
+		switch {
+		case c.unbound(ctx):
+			// Which one is decided later in the call it is given to.
+			inst = c.newOrigin(sealed, report).(*Sealed)
+			c.solve(ctx, inst)
+		case inst == nil:
+			report()
 			return nil
 		}
 		sealed = inst
@@ -194,7 +202,9 @@ func (c *checker) genericLit(e *syntax.RecordLit, base Type, variant, label stri
 	in := typeInference(typeParamsOf(base))
 	if inst := instanceIn(want, base); inst != nil {
 		for i, a := range TypeArgs(inst) {
-			in.bound[in.params[i]] = a
+			if !c.open(a) {
+				in.bound[in.params[i]] = a
+			}
 		}
 	}
 	types := make([]Type, len(e.Fields))

@@ -169,12 +169,17 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 		}
 		return c.callFuncValue(e, c.record(sel, r.Field(sel.Name).Type)), true
 	}
-	fn, why := c.methodNamed(xt, sel.Name)
-	if tp, ok := xt.(*TypeParam); ok && tp.Hole {
-		// The receiver's type is not known yet: the one method of
-		// this name and arity there is tells what it is.
-		fn = c.onlyMethod(sel.Name, len(e.Args))
+	if c.unbound(xt) {
+		// The receiver's type is not known (`[]` that nothing decides):
+		// that is reported where it comes from.
+		for _, a := range e.Args {
+			if _, isLambda := a.(*syntax.Lambda); !isLambda {
+				c.expr(a)
+			}
+		}
+		return Invalid, true
 	}
+	fn, why := c.methodNamed(xt, sel.Name)
 	if fn == nil {
 		c.errorf(sel.Pos, "%s", why)
 		for _, a := range e.Args {
@@ -235,36 +240,6 @@ func freeNames(fn *Func, free []int) string {
 		names[k] = fn.TypeParams[i].Name
 	}
 	return strings.Join(names, ", ")
-}
-
-// onlyMethod is the one method code here sees with the given name that
-// takes nargs arguments after the receiver (or nil if there are none,
-// or several).
-func (c *checker) onlyMethod(name string, nargs int) *Func {
-	var found *Func
-	pkgs := []*Package{c.preludePkg}
-	if !c.inPrelude {
-		pkgs = append(pkgs, c.pkg)
-		for _, p := range c.pkg.imports {
-			pkgs = append(pkgs, p)
-		}
-	}
-	for _, p := range pkgs {
-		for _, byName := range p.methods {
-			fn := byName[name]
-			if fn == nil || (p != c.pkg && p != c.preludePkg && !exported(name)) {
-				continue
-			}
-			if n := len(fn.Params) - 1; nargs > n || nargs < requiredParams(fn)-1 {
-				continue
-			}
-			if found != nil && found != fn {
-				return nil
-			}
-			found = fn
-		}
-	}
-	return found
 }
 
 // isVariantPath reports whether x names a sealed type's variant or a

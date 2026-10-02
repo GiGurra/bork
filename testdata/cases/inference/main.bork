@@ -1,0 +1,18 @@
+// Type arguments are solved by unification: what `[]`, `{:}`, or
+// `Option.None` holds is decided by what comes after, also inside
+// lambdas' bodies.
+fn main() {
+  words = ["a", "b", "a"]
+  // The branches decide each other's types.
+  println(words.fold([], (acc, w) => if (w == "a") { acc } else { acc.append(w) }))
+  println(words.fold([], (acc, w) => if (w == "b") { [] } else { acc.append(w) }))
+  // A call in the body, given a value of the body's own unknown type.
+  println(words.fold({:}, (m, w) => m.put(w, m.getOr(w, []).append(1))))
+  // An operator decides its unknown operand from the other one.
+  println(words.fold(Option.None, (best, w) => match (best) {
+    Option.Some { value } => Option.Some { value: value + w }
+    Option.None => Option.Some { value: w }
+  }))
+  println(words.fold(Option.None, (b, w) => if (w == "b") { Option.Some { value: w } } else { b }))
+  println(words.fold([], (acc, w) => [w].concat(acc)).length())
+}
