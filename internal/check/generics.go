@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -379,6 +380,9 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			return Invalid
 		}
 		for i, ta := range e.TypeArgs {
+			if ta == nil {
+				continue // a method's, decided by its receiver
+			}
 			t := c.resolveType(ta)
 			if t == Invalid {
 				return Invalid
@@ -458,7 +462,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 				case t == Invalid:
 					reported = true
 				case i < len(fn.Params) && !in.fits(in.subst(fn.Params[i]), t):
-					c.errorf(e.Args[i].Position(), "argument %d to %s must be %s, found %s", i+1, id.Name, in.subst(fn.Params[i]), t)
+					c.errorf(e.Args[i].Position(), "%s to %s must be %s, found %s", argLabel(fn, i), id.Name, in.subst(fn.Params[i]), t)
 					reported = true
 				}
 			}
@@ -534,7 +538,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 	c.info.Instances[e] = inst
 	for i, a := range e.Args {
 		if i < len(inst.Params) && types[i] != Invalid && !assignable(types[i], inst.Params[i]) {
-			c.errorf(a.Position(), "argument %d to %s must be %s, found %s", i+1, id.Name, inst.Params[i], types[i])
+			c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), id.Name, inst.Params[i], types[i])
 		}
 	}
 	return inst.Result
@@ -722,6 +726,18 @@ func (c *checker) hasEmptyLiteralArg(args []syntax.Expr) bool {
 		}
 	}
 	return false
+}
+
+// argLabel names a call's i-th argument (from 0) in messages; a
+// method's receiver is not counted.
+func argLabel(fn *Func, i int) string {
+	if fn.Decl != nil && fn.Decl.IsMethod {
+		if i == 0 {
+			return "the receiver"
+		}
+		return fmt.Sprintf("argument %d", i)
+	}
+	return fmt.Sprintf("argument %d", i+1)
 }
 
 // lambdaParamsOpen reports whether some parameter of lambda l, written

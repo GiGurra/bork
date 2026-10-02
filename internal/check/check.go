@@ -78,7 +78,7 @@ type Func struct {
 	// ParamConstraints holds each parameter's where clause, and
 	// ResultConstraints what the result promises (per union member).
 	// defaultsChecked is set once the parameters' defaults are checked.
-	defaultsChecked bool
+	defaultsChecked   bool
 	ParamConstraints  [][]*Constraint
 	ResultConstraints []MemberConstraints
 }

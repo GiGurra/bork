@@ -722,8 +722,11 @@ func (p *parser) unary() Expr {
 func (p *parser) postfix(x Expr) Expr {
 	for {
 		var typeArgs []*TypeExpr
-		if _, isID := x.(*Ident); isID && p.at(LBrack) {
-			// Explicit type arguments of a call: empty[Int]().
+		_, isID := x.(*Ident)
+		_, isSel := x.(*Selector)
+		if (isID || isSel) && p.at(LBrack) {
+			// Explicit type arguments of a call: empty[Int](), or of a
+			// method call: xs.map[String](f).
 			p.next()
 			for {
 				typeArgs = append(typeArgs, p.typeExpr())
