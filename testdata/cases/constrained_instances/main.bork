@@ -1,0 +1,32 @@
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+
+type Port = Int where between(1, 65535)
+
+// Ports decode from numbers or strings, with a message of their own.
+instance decodePort: Decode[Port] {
+  fn decode(json: Json): Port | DecodeError {
+    n = match (json) {
+      Json.Number { text } => parseInt(text)
+      Json.String { value } => parseInt(value)
+      _ => ParseError { input: "", message: "" }
+    }
+    match (n) {
+      p: Int => if (between(p, 1, 65535)) { p } else { DecodeError { path: "", message: s"$p is not a port (1 to 65535)" } }
+      e: ParseError => DecodeError { path: "", message: "expected a port number" }
+    }
+  }
+}
+
+type Config = { host: String, port: Port, retries: Int } derive (Decode)
+
+fn show(text: String) {
+  r: Config | JsonError | DecodeError = decodeJson(text)
+  println(r)
+}
+
+fn main() {
+  show("{\"host\": \"a\", \"port\": \"8080\", \"retries\": 3}")
+  show("{\"host\": \"a\", \"port\": 70000, \"retries\": 3}")
+  show("{\"host\": \"a\", \"port\": true, \"retries\": 3}")
+  show("{\"host\": \"a\", \"port\": 80, \"retries\": \"3\"}")
+}

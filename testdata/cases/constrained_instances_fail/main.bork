@@ -1,0 +1,26 @@
+pred positive(x: Int) { x > 0 }
+pred small(x: Int) { x < 100 }
+
+// Must promise positive for its Int result.
+instance decodePositive: Decode[Int where positive] {
+  fn decode(json: Json): Int | DecodeError { 1 }
+}
+
+// The promise is checked against the body.
+instance decodeSmall: Decode[Int where small] {
+  fn decode(json: Json): Int where small | DecodeError { 500 }
+}
+
+instance encodeOptions: Encode[Option[Int where positive]] {
+  fn encode(x: Option[Int]): Json { Json.Null }
+}
+
+instance encodeBad: Encode[String] {
+  fn encode(x: String where positive): Json { Json.Null }
+}
+
+// Both constrained instances fit a field that is positive and small,
+// and neither is more specific.
+type Both = { n: Int where positive and small } derive (Decode)
+
+fn main() {}

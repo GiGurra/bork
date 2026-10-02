@@ -47,6 +47,10 @@ type ClassInstance struct {
 	Type       Type
 	// Methods holds the implementations, in the class's method order.
 	Methods []*Func
+	// Constraints are those of a constrained instance's type
+	// (`Decode[Int where positive]`). Such an instance is used only for
+	// values known to satisfy them.
+	Constraints []*Constraint
 }
 
 // Dict is the instance a use of a class method or of a function with
@@ -147,6 +151,111 @@ func (c *checker) noWhere(md *syntax.FuncDecl) {
 	}
 }
 
+// noParamWhere rejects where clauses on an instance method's
+// parameters: calls through the class could not prove them. (Results
+// may promise facts; a constrained instance's must.)
+func (c *checker) noParamWhere(md *syntax.FuncDecl) {
+	for _, p := range md.Params {
+		if hasWhere(p.Type) {
+			c.errorf(p.Type.Pos, "where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)")
+			return
+		}
+	}
+}
+
+// instanceConstraints resolves the constraints of constrained instances'
+// types. Their methods assume them of parameters of the type, and must
+// promise them of results of it.
+func (c *checker) instanceConstraints() {
+	for _, ci := range c.info.ClassInstances {
+		if ci.Decl == nil || ci.Decl.Type == nil {
+			continue
+		}
+		c.pkg, c.inPrelude = ci.Pkg, ci.Prelude
+		cons := c.constraintsOf(ci.Decl.Type, ci.Type, nil)
+		if len(cons) == 0 {
+			continue
+		}
+		for _, con := range cons {
+			if con.Path != "" {
+				c.errorf(ci.Decl.Type.Pos, "an instance's type can only be constrained as a whole, as in Decode[Int where positive]")
+				cons = nil
+				break
+			}
+		}
+		ci.Constraints = cons
+		param := ci.Class.Param
+		for i, m := range ci.Methods {
+			cm := ci.Class.Methods[i]
+			for j, p := range cm.Params {
+				if p == Type(param) && j < len(m.ParamConstraints) {
+					m.ParamConstraints[j] = append(m.ParamConstraints[j], cons...)
+				}
+			}
+			if !mentionsMember(cm.Result, param) {
+				continue
+			}
+			var promised []*Constraint
+			for _, mc := range m.ResultConstraints {
+				if identical(mc.Type, ci.Type) {
+					promised = mc.Constraints
+				}
+			}
+			if missing := missingConstraints(promised, cons); len(missing) > 0 {
+				pos := m.Decl.Pos
+				if m.Decl.Result != nil {
+					pos = m.Decl.Result.Pos
+				}
+				c.errorf(pos, "method %s of instance %s must promise %s for its %s result, since the instance is for %s where %s: write %s where %s in its result type",
+					m.Decl.Name, ci.Name, constraintsText(missing, c.pkg), ci.Type, ci.Type, constraintsText(cons, c.pkg), ci.Type, constraintsText(cons, c.pkg))
+			}
+		}
+	}
+	c.inPrelude = false
+}
+
+// mentionsMember reports whether t is tp, or a union with tp as a
+// member.
+func mentionsMember(t Type, tp *TypeParam) bool {
+	if t == Type(tp) {
+		return true
+	}
+	if u, ok := t.(*Union); ok {
+		for _, m := range u.Members {
+			if m == Type(tp) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// missingConstraints lists the constraints of need that have does not
+// include.
+func missingConstraints(have, need []*Constraint) []*Constraint {
+	var out []*Constraint
+	for _, n := range need {
+		found := false
+		for _, h := range have {
+			if h.Path == n.Path && h.Text(nil) == n.Text(nil) {
+				found = true
+			}
+		}
+		if !found {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func constraintsText(cons []*Constraint, from *Package) string {
+	parts := make([]string, len(cons))
+	for i, con := range cons {
+		parts[i] = con.Text(from)
+	}
+	return strings.Join(parts, " and ")
+}
+
 // lookupClass finds a class by (possibly qualified) name.
 func (c *checker) lookupClass(name string) *Class {
 	if pkg, n, ok := c.qualified(name); ok {
@@ -240,7 +349,7 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 			c.errorf(md.Pos, "an instance's method cannot have type parameters; give the instance its type parameters")
 			continue
 		}
-		c.noWhere(md)
+		c.noParamWhere(md)
 		fn := &Func{Decl: md, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: ci.TypeParams}
 		fn.Result = c.resolveType(md.Result)
 		for _, p := range md.Params {
@@ -467,6 +576,9 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		if ci.Class != class {
 			continue
 		}
+		if len(ci.Constraints) > 0 && (depth > 0 || len(missingConstraints(c.have, ci.Constraints)) > 0) {
+			continue // the value is not known to satisfy them
+		}
 		args, ok := matchHead(ci, t)
 		if !ok {
 			continue
@@ -488,6 +600,7 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 			partial = append(partial, ci)
 		}
 	}
+	matches = mostSpecific(matches)
 	switch {
 	case len(matches) == 1:
 		return matches[0]
@@ -523,6 +636,25 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 	}
 	c.errorf(pos, "%s", msg)
 	return nil
+}
+
+// mostSpecific drops the instances that another one is more specific
+// than: one for `Int where positive` over one for Int.
+func mostSpecific(ds []*Dict) []*Dict {
+	var out []*Dict
+	for _, d := range ds {
+		beaten := false
+		for _, other := range ds {
+			if other != d && len(other.Inst.Constraints) > len(d.Inst.Constraints) &&
+				len(missingConstraints(other.Inst.Constraints, d.Inst.Constraints)) == 0 {
+				beaten = true
+			}
+		}
+		if !beaten {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // dictQuiet is dict without error messages; it returns nil if there is
@@ -724,9 +856,25 @@ func (c *checker) resolveDerived() {
 		for i, fields := range groups {
 			var row []*Dict
 			for _, f := range fields {
-				d := c.dictQuiet(ci.Class, f.Type, 0)
+				// The field's where clause selects constrained instances.
+				c.have = nil
+				for _, con := range f.Constraints {
+					if con.Path == "" {
+						c.have = append(c.have, con)
+					}
+				}
+				saved := c.diags
+				c.diags = &diag.List{}
+				d := c.dict(ci.Class, f.Type, ci.Decl.Pos, 0)
+				why := c.diags.Sorted()
+				c.diags = saved
+				c.have = nil
 				if d == nil {
-					c.errorf(ci.Decl.Pos, "cannot derive %s for %s: field %s has type %s, which has no %s instance in scope (%s)", ci.Class.Name, owners[i], f.Name, f.Type, ci.Class.Name, c.instanceHint(ci.Class, f.Type))
+					if len(why) > 0 && strings.HasPrefix(why[0].Msg, "more than one") {
+						c.errorf(ci.Decl.Pos, "cannot derive %s for %s: field %s: %s", ci.Class.Name, owners[i], f.Name, why[0].Msg)
+					} else {
+						c.errorf(ci.Decl.Pos, "cannot derive %s for %s: field %s has type %s, which has no %s instance in scope (%s)", ci.Class.Name, owners[i], f.Name, f.Type, ci.Class.Name, c.instanceHint(ci.Class, f.Type))
+					}
 				}
 				row = append(row, d)
 			}

@@ -1,0 +1,5 @@
+main.bork:6:26: method decode of instance decodePositive must promise positive for its Int result, since the instance is for Int where positive: write Int where positive in its result type
+main.bork:14:32: an instance's type can only be constrained as a whole, as in Decode[Int where positive]
+main.bork:19:16: where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)
+main.bork:19:29: positive applies to Int, not String
+main.bork:24:49: cannot derive Decode for Both: field n: more than one instance of Decode for Int is in scope: decodePositive and decodeSmall; a package's own instances are always in scope, so keep only one of them here, and move the others to packages that code can choose from with use

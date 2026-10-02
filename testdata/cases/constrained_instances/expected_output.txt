@@ -1,0 +1,4 @@
+Config { host: "a", port: 8080, retries: 3 }
+DecodeError { path: ".port", message: "70000 is not a port (1 to 65535)" }
+DecodeError { path: ".port", message: "expected a port number" }
+DecodeError { path: ".retries", message: "expected a whole number, found a string" }
