@@ -1,0 +1,33 @@
+ok    facts hold for every generated value
+ok    a field's facts hold
+FAIL  totals are at least the count
+      main.bork:40:3: assertion failed
+      for items = [Item { name: "", qty: 1 }, Item { name: "", qty: 9223372036854775807 }] (shrunk from items = [Item { name: "a", qty: 8682927260418058509 }, Item { name: "A", qty: 100 }, Item { name: "\n", qty: 651339209512335667 }, Item { name: "ab", qty: 23 }, Item { name: "A", qty: 100 }])
+      case 15, seed 1013438550924415624 (bork test --seed 1013438550924415624)
+ok    or facts
+FAIL  a failure is shrunk
+      main.bork:48:3: assertion failed
+      for xs = [1, 1, 1] (shrunk from xs = [9223372036854775807, 6, 8])
+      case 8, seed 5735312229030324107 (bork test --seed 5735312229030324107)
+FAIL  a failing tree is shrunk
+      main.bork:52:3: assertion failed
+      for t = Tree.Node { left: Tree.Node { left: Tree.Leaf, value: 0, right: Tree.Leaf }, value: 0, right: Tree.Node { left: Tree.Leaf, value: 0, right: Tree.Leaf } } (shrunk from t = Tree.Node { left: Tree.Node { left: Tree.Leaf, value: 1, right: Tree.Leaf }, value: -1, right: Tree.Node { left: Tree.Node { left: Tree.Node { left: Tree.Node { left: Tree.Leaf, value: 2, right: Tree.Leaf }, value: 1, right: Tree.Leaf }, value: 2285229136017468808, right: Tree.Node { left: Tree.Leaf, value: 1, right: Tree.Node { left: Tree.Leaf, value: 6785531168479100968, right: Tree.Leaf } } }, value: -2, right: Tree.Leaf } })
+      case 3, seed 4658514779561692150 (bork test --seed 4658514779561692150)
+FAIL  panics fail
+      runtime error: integer divide by zero
+      for a = 0, b = 0 (shrunk from a = -2, b = 0)
+      case 4, seed 3159370801954603029 (bork test --seed 3159370801954603029)
+FAIL  trusted facts are checked
+      main.bork:22:3: trusted fact does not hold: positive(raw) (raw = 0)
+      for raw = 0 (shrunk from raw = -2)
+      case 1, seed 5861176357243335318 (bork test --seed 5861176357243335318)
+ok    constants in facts guide generation
+FAIL  values that are hard to find are reported
+      could not generate the parameters: no value for n that is rare in 100 tries (101 of 101 cases were rejected)
+skip  no values for functions (no values are generated for (Int) => Int)
+FAIL  generated values cannot be snapshotted
+      main.bork:76:3: assertSnapshot works only in tests, not in rules or property tests
+      for n = 0 (shrunk from n = 6821980675586216454)
+      case 1, seed 3171774204762949582 (bork test --seed 3171774204762949582)
+4 passed, 7 failed, 1 skipped
+exit code 1

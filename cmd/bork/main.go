@@ -36,9 +36,12 @@ type buildParams struct {
 }
 
 type testParams struct {
-	JSON   bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
-	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
-	Update bool   `short:"u" optional:"true" descr:"write the snapshots assertSnapshot finds missing or different, instead of failing"`
+	JSON           bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
+	Path           string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	Update         bool   `short:"u" optional:"true" descr:"write the snapshots assertSnapshot finds missing or different, instead of failing"`
+	AutoProperties bool   `optional:"true" descr:"also property-test the functions whose promises are trusted (unsafe go, or trust), on generated arguments"`
+	Seed           int64  `optional:"true" descr:"the seed of every property test (default: one from the test's name)"`
+	Cases          int    `optional:"true" descr:"how many cases each property test runs (default 100)"`
 }
 
 type runParams struct {
@@ -151,7 +154,7 @@ func main() {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
 				RunFunc: func(p *testParams, _ *cobra.Command, _ []string) {
-					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update})
+					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases})
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stderr)
 					}

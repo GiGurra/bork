@@ -412,7 +412,7 @@ func _assertSnapshot(text, at string) {
 	}
 	if t.snap == "" {
 		_tests.Unlock()
-		panic(at + ": assertSnapshot works only in tests, not in rules")
+		panic(at + ": assertSnapshot works only in tests, not in rules or property tests")
 	}
 	_tests.snapshots++
 	file := t.snap + ".snap"
@@ -969,6 +969,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	}
 	if g.usesSnaps {
 		src = append(src, snapshotRuntime)
+	}
+	if g.usesProps {
+		src = append(src, propertyRuntime)
 	}
 	if g.usesRules {
 		src = append(src, rulesRuntime)

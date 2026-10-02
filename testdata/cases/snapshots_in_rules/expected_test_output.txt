@@ -1,4 +1,4 @@
 FAIL  rule snapshotsInRules
-      main.bork:3:3: assertSnapshot works only in tests, not in rules
+      main.bork:3:3: assertSnapshot works only in tests, not in rules or property tests
 0 passed, 1 failed
 exit code 1

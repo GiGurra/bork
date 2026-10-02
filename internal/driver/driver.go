@@ -213,6 +213,15 @@ type TestOptions struct {
 	// Update writes the snapshots that assertSnapshot finds missing or
 	// different, instead of failing.
 	Update bool
+	// AutoProperties property-tests the functions whose promises are
+	// trusted (unsafe go, or trust in their body), calling them on
+	// generated arguments. It is opt-in until effects tell which
+	// functions are pure: random arguments could make others do IO.
+	AutoProperties bool
+	// Seed, if not 0, is the seed of every property test, instead of
+	// one from its name. Cases, if not 0, is how many cases each runs.
+	Seed  int64
+	Cases int
 }
 
 // SnapshotDir is where the tests of the package at path keep their
@@ -232,12 +241,12 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if len(info.Tests) == 0 && len(info.Rules) == 0 {
+	if len(info.Tests) == 0 && len(info.Rules) == 0 && !opts.AutoProperties {
 		diags := &diag.List{}
 		diags.AddCode(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package.no-tests", "package has no tests or rules (add `test \"name\" { ... }`)")
 		return 1, &DiagError{Diags: diags}
 	}
-	goSrc, err := gen.Tests(files, info)
+	goSrc, err := gen.Tests(files, info, opts.AutoProperties)
 	if err != nil {
 		return 1, err
 	}
@@ -256,7 +265,14 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	if opts.Update {
 		update = "1"
 	}
-	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update)
+	seed, cases := "", ""
+	if opts.Seed != 0 {
+		seed = strconv.FormatInt(opts.Seed, 10)
+	}
+	if opts.Cases != 0 {
+		cases = strconv.Itoa(opts.Cases)
+	}
+	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update, "BORK_SEED="+seed, "BORK_CASES="+cases)
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
@@ -268,12 +284,12 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 }
 
 // EmitTests is Emit for the test program (see Test).
-func EmitTests(path string) ([]byte, error) {
+func EmitTests(path string, opts TestOptions) ([]byte, error) {
 	files, info, err := Check(path)
 	if err != nil {
 		return nil, err
 	}
-	return gen.Tests(files, info)
+	return gen.Tests(files, info, opts.AutoProperties)
 }
 
 // DefaultOutput is the executable name `bork build` uses when none is

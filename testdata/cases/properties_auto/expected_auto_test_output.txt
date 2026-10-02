@@ -1,0 +1,13 @@
+ok    an ordinary test
+FAIL  property validate
+      main.bork:10:1: validate promised a result that is positive, but returned 0
+      for raw = 0
+      case 2, seed 8451615691363898007 (bork test --seed 8451615691363898007)
+ok    property half
+FAIL  property account
+      main.bork:23:1: account returned an Account whose id is not positive: -1
+      for id = -1 (shrunk from id = -2)
+      case 1, seed 2788651997115321891 (bork test --seed 2788651997115321891)
+ok    property clamp
+3 passed, 2 failed
+exit code 1

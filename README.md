@@ -84,6 +84,7 @@ bork test examples/payments  # run the tests, checking trusted facts and rules
 bork test --update .         # run the tests, writing the snapshots assertSnapshot finds missing or changed
 bork fmt examples           # format .bork files recursively in place
 bork fmt --check examples    # exit 1 if formatting would change a file
+bork test --auto-properties examples/payments  # also call trusted functions on generated arguments
 ```
 
 For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
