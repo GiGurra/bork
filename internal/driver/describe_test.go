@@ -158,6 +158,7 @@ fn (u: User) number(): Int { u.n }
 fn example(u: User) {
   println(s"value ${add(1)} and ${u.number()}")
   println((add)(1))
+  println((u.number)())
 }
 `
 	for _, tc := range []struct{ fragment, typ string }{
@@ -166,6 +167,8 @@ fn example(u: User) {
 		{"number()}", "() => Int"},
 		{"()}", "Int"},
 		{"add)(1)", "(Int) => Int"},
+		{"number)()", "() => Int"},
+		{"())", "Int"},
 	} {
 		result := describeAt(t, source, tc.fragment, "")
 		if result.typ != tc.typ || !result.defined {

@@ -384,6 +384,9 @@ func (s *sourceIndex) callee(call *check.Call) {
 				}
 			}
 		}
+		for j < len(s.tokens) && s.tokens[j].Kind == syntax.RParen {
+			j++
+		}
 		if j < len(s.tokens) && s.tokens[j].Kind == syntax.LParen && s.contains(s.tokens[j].Pos, 1) {
 			pos := call.Func.Decl.Pos
 			s.choose(call, call.Type(), &pos)
