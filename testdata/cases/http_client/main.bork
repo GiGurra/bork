@@ -82,7 +82,10 @@ fn main() {
     }
     observed = atom(false)
     scope request {
-      launch(request, () => { update(observed, previous => cancelledResult(http.Get(base + "/close", request, 2000))) })
+      launch(request, () => {
+        result = cancelledResult(http.Get(base + "/close", request, 2000))
+        update(observed, previous => result)
+      })
       started(remote)
     }
     println(current(observed))
