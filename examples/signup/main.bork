@@ -56,7 +56,7 @@ fn handleAll(lines: List[String], id: Int): List[String] {
   }
 }
 
-fn readFile(path: String): String | fs.Error {
+fn readFile(path: String) uses io: String | fs.Error {
   scope s {
     fs.ReadAllText(fs.Open(path, s)?)
   }

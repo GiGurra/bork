@@ -1,6 +1,6 @@
 import "bork/fs"
 
-fn demo(s: Scope): Unit | fs.Error {
+fn demo(s: Scope) uses io: Unit | fs.Error {
   directory = fs.TempDir(s)?
   root = fs.DirectoryPath(directory)
   path = fs.Join([root, "hello.txt"])

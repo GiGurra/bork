@@ -41,13 +41,13 @@ So do scopes:
 ```
 import "bork/fs"
 
-fn countFile(path: String): Counts | fs.Error {
+fn countFile(path: String) uses io: Counts | fs.Error {
   scope s {
     countText(fs.ReadAllText(fs.Open(path, s)?)?)   // the file is closed when s ends, even by ? or a panic
   }
 }
 
-fn broken(path: String): String | fs.Error {
+fn broken(path: String) uses io: String | fs.Error {
   f = scope s { fs.Open(path, s)? }
   fs.ReadAllText(f)             // error: f may be released: it belongs to scope s, which ended on line 2
 }

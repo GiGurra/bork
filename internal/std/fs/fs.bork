@@ -31,16 +31,16 @@ fn unitResult(raw: Unit | fileFailure, makeError: (fileFailure) => Error): Unit 
 }
 
 // Read gives a whole file as immutable binary data.
-fn Read(path: String): Bytes | Error { result(read(path)) }
-fn read(path: String): Bytes | fileFailure unsafe go {
+fn Read(path: String) uses io: Bytes | Error { result(read(path)) }
+fn read(path: String) uses io: Bytes | fileFailure unsafe go {
   import "os"
   data, err := os.ReadFile(path)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
   return _borkBytesFrom(data)
 }
 
-fn Write(path: String, data: Bytes): Unit | Error { resultUnit(write(path, data)) }
-fn write(path: String, data: Bytes): Unit | fileFailure unsafe go {
+fn Write(path: String, data: Bytes) uses io: Unit | Error { resultUnit(write(path, data)) }
+fn write(path: String, data: Bytes) uses io: Unit | fileFailure unsafe go {
   import "os"
   file, err := os.OpenFile(path, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0666)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
@@ -52,8 +52,8 @@ fn write(path: String, data: Bytes): Unit | fileFailure unsafe go {
   return _Unit{}
 }
 
-fn Append(path: String, data: Bytes): Unit | Error { resultUnit(appendFile(path, data)) }
-fn appendFile(path: String, data: Bytes): Unit | fileFailure unsafe go {
+fn Append(path: String, data: Bytes) uses io: Unit | Error { resultUnit(appendFile(path, data)) }
+fn appendFile(path: String, data: Bytes) uses io: Unit | fileFailure unsafe go {
   import "os"
   file, err := os.OpenFile(path, os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0666)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
@@ -65,16 +65,16 @@ fn appendFile(path: String, data: Bytes): Unit | fileFailure unsafe go {
   return _Unit{}
 }
 
-fn Open(path: String, s: Scope): File | Error { result(open(path, s)) }
-fn open(path: String, s: Scope): File | fileFailure unsafe go {
+fn Open(path: String, s: Scope) uses io: File | Error { result(open(path, s)) }
+fn open(path: String, s: Scope) uses io: File | fileFailure unsafe go {
   import "os"
   file, err := os.Open(path)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
   return File{handle: file, owner: s.Own(func() { file.Close() })}
 }
 
-fn Create(path: String, s: Scope): File | Error { result(create(path, s)) }
-fn create(path: String, s: Scope): File | fileFailure unsafe go {
+fn Create(path: String, s: Scope) uses io: File | Error { result(create(path, s)) }
+fn create(path: String, s: Scope) uses io: File | fileFailure unsafe go {
   import "os"
   file, err := os.Create(path)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
@@ -82,8 +82,8 @@ fn create(path: String, s: Scope): File | fileFailure unsafe go {
 }
 
 // ReadAll consumes the rest of an open file.
-fn ReadAll(file: File): Bytes | Error { result(readAll(file)) }
-fn readAll(file: File): Bytes | fileFailure unsafe go {
+fn ReadAll(file: File) uses io: Bytes | Error { result(readAll(file)) }
+fn readAll(file: File) uses io: Bytes | fileFailure unsafe go {
   import "os"
   import "io"
   handle := file.handle.(*os.File)
@@ -94,14 +94,14 @@ fn readAll(file: File): Bytes | fileFailure unsafe go {
 
 // ReadAllText preserves the prelude's former readAll behavior: raw Go text.
 // For validated UTF-8 use ReadAll followed by utf8String.
-fn ReadAllText(file: File): String | Error {
+fn ReadAllText(file: File) uses io: String | Error {
   data = ReadAll(file)?
   rawText(data)
 }
 fn rawText(data: Bytes): String unsafe go { return string(data) }
 
-fn WriteTo(file: File, data: Bytes): Int | Error { result(writeTo(file, data)) }
-fn writeTo(file: File, data: Bytes): Int | fileFailure unsafe go {
+fn WriteTo(file: File, data: Bytes) uses io: Int | Error { result(writeTo(file, data)) }
+fn writeTo(file: File, data: Bytes) uses io: Int | fileFailure unsafe go {
   import "os"
   handle := file.handle.(*os.File)
   written, err := handle.Write(_borkBytesData(data))
@@ -109,7 +109,7 @@ fn writeTo(file: File, data: Bytes): Int | fileFailure unsafe go {
   return int64(written)
 }
 
-fn WriteText(file: File, text: String): Int | Error { WriteTo(file, utf8Bytes(text)) }
+fn WriteText(file: File, text: String) uses io: Int | Error { WriteTo(file, utf8Bytes(text)) }
 
 fn Path(file: File): String unsafe go {
   import "os"
@@ -117,32 +117,32 @@ fn Path(file: File): String unsafe go {
 }
 fn DirectoryPath(directory: Directory): String unsafe go { return directory.handle.(string) }
 
-fn MkdirAll(path: String): Unit | Error { resultUnit(mkdirAll(path)) }
-fn mkdirAll(path: String): Unit | fileFailure unsafe go {
+fn MkdirAll(path: String) uses io: Unit | Error { resultUnit(mkdirAll(path)) }
+fn mkdirAll(path: String) uses io: Unit | fileFailure unsafe go {
   import "os"
   err := os.MkdirAll(path, 0777)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
   return _Unit{}
 }
 
-fn Remove(path: String): Unit | Error { resultUnit(remove(path)) }
-fn remove(path: String): Unit | fileFailure unsafe go {
+fn Remove(path: String) uses io: Unit | Error { resultUnit(remove(path)) }
+fn remove(path: String) uses io: Unit | fileFailure unsafe go {
   import "os"
   err := os.Remove(path)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
   return _Unit{}
 }
 
-fn RemoveAll(path: String): Unit | Error { resultUnit(removeAll(path)) }
-fn removeAll(path: String): Unit | fileFailure unsafe go {
+fn RemoveAll(path: String) uses io: Unit | Error { resultUnit(removeAll(path)) }
+fn removeAll(path: String) uses io: Unit | fileFailure unsafe go {
   import "os"
   err := os.RemoveAll(path)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
   return _Unit{}
 }
 
-fn Rename(from: String, to: String): Unit | Error { resultUnit(rename(from, to)) }
-fn rename(from: String, to: String): Unit | fileFailure unsafe go {
+fn Rename(from: String, to: String) uses io: Unit | Error { resultUnit(rename(from, to)) }
+fn rename(from: String, to: String) uses io: Unit | fileFailure unsafe go {
   import "os"
   err := os.Rename(from, to)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: from, message: message, kind: kind} }
@@ -150,8 +150,8 @@ fn rename(from: String, to: String): Unit | fileFailure unsafe go {
 }
 
 // ReadDir returns entries sorted by name; it does not follow symlinks.
-fn ReadDir(path: String): List[DirEntry] | Error { result(readDir(path)) }
-fn readDir(path: String): List[DirEntry] | fileFailure unsafe go {
+fn ReadDir(path: String) uses io: List[DirEntry] | Error { result(readDir(path)) }
+fn readDir(path: String) uses io: List[DirEntry] | fileFailure unsafe go {
   import "os"
   import "path/filepath"
   entries, err := os.ReadDir(path)
@@ -166,8 +166,8 @@ fn readDir(path: String): List[DirEntry] | fileFailure unsafe go {
 }
 
 // Walk includes the root, visits in lexical order, and never follows symlinks.
-fn Walk(path: String): List[DirEntry] | Error { result(walk(path)) }
-fn walk(path: String): List[DirEntry] | fileFailure unsafe go {
+fn Walk(path: String) uses io: List[DirEntry] | Error { result(walk(path)) }
+fn walk(path: String) uses io: List[DirEntry] | fileFailure unsafe go {
   import "os"
   import "path/filepath"
   import "io/fs"
@@ -185,12 +185,12 @@ fn walk(path: String): List[DirEntry] | fileFailure unsafe go {
 }
 
 type rawInfo = { size: Int, modifiedNanos: Int, kind: String }
-fn Stat(path: String): Info | Error {
+fn Stat(path: String) uses io: Info | Error {
   info = result(stat(path))?
   Info { size: info.size, modified: time.Instant { unixNanos: info.modifiedNanos }, kind: info.kind }
 }
 
-fn stat(path: String): rawInfo | fileFailure unsafe go {
+fn stat(path: String) uses io: rawInfo | fileFailure unsafe go {
   import "os"
   info, err := os.Lstat(path)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
@@ -200,8 +200,8 @@ fn stat(path: String): rawInfo | fileFailure unsafe go {
 }
 
 // Temporary resources are closed and removed when their scope closes.
-fn TempFile(s: Scope, directory: String = "", pattern: String = "bork-*"): File | Error { result(tempFile(s, directory, pattern)) }
-fn tempFile(s: Scope, directory: String = "", pattern: String = "bork-*"): File | fileFailure unsafe go {
+fn TempFile(s: Scope, directory: String = "", pattern: String = "bork-*") uses io: File | Error { result(tempFile(s, directory, pattern)) }
+fn tempFile(s: Scope, directory: String = "", pattern: String = "bork-*") uses io: File | fileFailure unsafe go {
   import "os"
   temporary, err := os.CreateTemp(directory, pattern)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: directory, message: message, kind: kind} }
@@ -209,8 +209,8 @@ fn tempFile(s: Scope, directory: String = "", pattern: String = "bork-*"): File 
 }
 
 // Temporary resources are closed and removed when their scope closes.
-fn TempDir(s: Scope, directory: String = "", pattern: String = "bork-*"): Directory | Error { result(tempDir(s, directory, pattern)) }
-fn tempDir(s: Scope, directory: String = "", pattern: String = "bork-*"): Directory | fileFailure unsafe go {
+fn TempDir(s: Scope, directory: String = "", pattern: String = "bork-*") uses io: Directory | Error { result(tempDir(s, directory, pattern)) }
+fn tempDir(s: Scope, directory: String = "", pattern: String = "bork-*") uses io: Directory | fileFailure unsafe go {
   import "os"
   temporary, err := os.MkdirTemp(directory, pattern)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: directory, message: message, kind: kind} }
@@ -218,8 +218,8 @@ fn tempDir(s: Scope, directory: String = "", pattern: String = "bork-*"): Direct
 }
 
 // ForEachLine streams unbounded-length lines, strips LF/CRLF, and keeps a final unterminated line.
-fn ForEachLine(file: File, visit: (String) => Unit): Unit | Error { resultUnit(forEachLine(file, visit)) }
-fn forEachLine(file: File, visit: (String) => Unit): Unit | fileFailure unsafe go {
+fn ForEachLine(file: File, visit: (String) => Unit) uses io: Unit | Error { resultUnit(forEachLine(file, visit)) }
+fn forEachLine(file: File, visit: (String) => Unit) uses io: Unit | fileFailure unsafe go {
   import "os"
   import "bufio"
   import "io"
@@ -256,8 +256,8 @@ fn Ext(path: String): String unsafe go {
   return filepath.Ext(path)
 }
 
-fn Abs(path: String): String | Error { result(abs(path)) }
-fn abs(path: String): String | fileFailure unsafe go {
+fn Abs(path: String) uses io: String | Error { result(abs(path)) }
+fn abs(path: String) uses io: String | fileFailure unsafe go {
   import "path/filepath"
   absolute, err := filepath.Abs(path)
   if err != nil { kind, message := _borkIoFailure(err); return fileFailure{path: path, message: message, kind: kind} }
@@ -275,8 +275,8 @@ fn ErrorInfo(error: Error): IoError {
 }
 
 // CreateNew creates a file exclusively; an existing path returns Exists.
-fn CreateNew(path: String, s: Scope): File | Error { result(createNew(path, s)) }
-fn createNew(path: String, s: Scope): File | fileFailure unsafe go {
+fn CreateNew(path: String, s: Scope) uses io: File | Error { result(createNew(path, s)) }
+fn createNew(path: String, s: Scope) uses io: File | fileFailure unsafe go {
   import "os"
   file, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE | os.O_EXCL, 0666)
   if err != nil {

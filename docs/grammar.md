@@ -198,4 +198,5 @@ HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeo
   `NotFound | PermissionDenied | Exists | IoError`, all carrying path/message;
   `ErrorInfo(error)` extracts those common fields into IoError. The old
   prelude `File`, `openFile`, `createFile`, `readAll`, and `write` have moved
-  to this package. See [the filesystem example](../examples/fs/main.bork).
+  to this package. I/O functions declare `uses io`; ForEachLine accepts an
+  open callback and also charges its effects. See [the filesystem example](../examples/fs/main.bork).

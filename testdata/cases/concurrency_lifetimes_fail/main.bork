@@ -11,7 +11,7 @@ fn late(): Int {
   await(t)
 }
 
-fn inner(path: String): Int {
+fn inner(path: String) uses io: Int {
   scope outer {
     scope s {
       f = fs.Open(path, s)
