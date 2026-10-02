@@ -5,7 +5,7 @@ fn leak(): Channel[Int] {
   }
 }
 
-fn late() {
+fn late() uses io + state {
   ch = scope s {
     c: Channel[Int] = channel(s, 1)
     c

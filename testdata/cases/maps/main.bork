@@ -33,7 +33,7 @@ fn main() {
   useMaps()
 }
 
-fn useMaps() {
+fn useMaps() uses io {
   ages = { "ada": 36, "bob": 41 }
   println(maps.Get(ages, "ada"))
   println(maps.Get(ages, "cy"))

@@ -17,7 +17,7 @@ fn payOut(amount: Int): Int {
 }
 
 // The fact holds only inside the if.
-fn afterIf(amount: Int): Int {
+fn afterIf(amount: Int) uses io: Int {
   if (positive(amount)) {
     println("positive")
   }

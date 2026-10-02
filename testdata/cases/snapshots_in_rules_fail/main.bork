@@ -1,4 +1,4 @@
-// A rule's property test generates its values, so it cannot snapshot them.
+// A predicate cannot snapshot: assertSnapshot writes files (under --update), so it uses io, and predicates are pure.
 pred snapshotted(x: Int) {
   assertSnapshot(x)
   x > 0

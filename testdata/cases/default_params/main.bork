@@ -1,4 +1,4 @@
-fn greet(name: String, greeting: String = "Hello", times: Int = 1) {
+fn greet(name: String, greeting: String = "Hello", times: Int = 1) uses io {
   forEach(range(0, times), i => println(s"$greeting, $name!"))
 }
 
@@ -33,7 +33,7 @@ fn send(msg: String, level: Level = Level.Low, retry: Retry = Retry { times: 3, 
   s"$msg $level $retry"
 }
 
-fn more() {
+fn more() uses io {
   println(send("a"))
   println(send("b", Level.High))
   println(send("c", Level.High, Retry { times: 1, backoff: Option.Some { value: 50 } }))

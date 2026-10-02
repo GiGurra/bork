@@ -1,0 +1,49 @@
+import "bork/http"
+
+type User = { name: String, age: Int }
+
+fn describe(u: User): String {
+  println(u.name)
+  u.name
+}
+
+fn fetch(url: String) uses net: String {
+  match (http.Get(url)) {
+    r: http.Response => r.body
+    e: IoError => e.message
+  }
+}
+
+fn both(url: String) uses net {
+  println(fetch(url))
+}
+
+fn process(xs: List[String]): List[String] {
+  map(xs, x => {
+    println(x)
+    x
+  })
+}
+
+fn save(text: String) uses io + net { println(text) }
+
+pred loud(x: Int) {
+  println(x)
+  x > 0
+}
+
+fn run(f: () uses io => Unit) uses io { f() }
+
+type Job = { run: () uses io => Unit }
+
+fn callsField(job: Job) { job.run() }
+
+fn again() { main() }
+
+fn main() uses io {
+  _ = describe(User { name: "Ada", age: 36 })
+  both("http://localhost:1")
+  _ = process(["a"])
+  save("x")
+  run(() => println("y"))
+}

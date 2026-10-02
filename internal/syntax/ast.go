@@ -97,6 +97,8 @@ type FuncDecl struct {
 	// `fn map[A, B](...)`.
 	TypeParams []*TypeParam
 	Params     []*Param
+	// ParamsEnd is the position of the ')' that ends the parameters.
+	ParamsEnd diag.Pos
 	// Uses lists the effects the function may have, `uses io + net`,
 	// or is nil when it declares none.
 	Uses   *Uses

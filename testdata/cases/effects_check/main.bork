@@ -1,0 +1,45 @@
+// A function's body may do only what its signature declares. A
+// function that declares nothing is pure; main and tests may use every
+// effect.
+import "bork/log"
+
+type User = { name: String, age: Int }
+
+// Pure: no uses.
+fn describe(u: User): String { s"${u.name} (${u.age})" }
+
+// Logging is not tracked, so a pure function may log.
+fn checked(u: User): Bool {
+  log.Debug("checking", { "user": u.name })
+  u.age >= 18
+}
+
+fn show(u: User) uses io { println(describe(u)) }
+
+// map's f is open: process is charged what its lambda does.
+fn showAll(users: List[User]) uses io {
+  _ = map(users, u => {
+    show(u)
+    u
+  })
+}
+
+// An exported function may declare more than it uses, to keep its API
+// stable.
+fn Report(users: List[User]) uses io + net { showAll(users) }
+
+fn counter() uses state: Int {
+  a = atom(0)
+  update(a, n => n + 1)
+}
+
+fn main() {
+  users = [User { name: "Ada", age: 36 }, User { name: "Bob", age: 12 }]
+  println(checked(users.get(0).getOr(User { name: "", age: 0 })))
+  Report(users)
+  println(counter())
+}
+
+test "tests may use every effect" {
+  show(User { name: "Cy", age: 20 })
+}

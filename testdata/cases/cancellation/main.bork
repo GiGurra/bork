@@ -1,6 +1,6 @@
 // A worker that ticks until its scope is cancelled, and says why it
 // stopped.
-fn ticker(s: Scope, name: String, n: Int): Int {
+fn ticker(s: Scope, name: String, n: Int) uses io + clock + state: Int {
   match (delay(s, 5)) {
     c: Cancelled => {
       println(s"$name stopped: ${c.reason}")

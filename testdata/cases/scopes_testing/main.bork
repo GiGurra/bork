@@ -1,8 +1,8 @@
-fn tracked(name: String, s: Scope) {
+fn tracked(name: String, s: Scope) uses io {
   onClose(s, () => println(s"close $name"))
 }
 
-fn failing(n: Int): Int {
+fn failing(n: Int) uses io: Int {
   scope s {
     tracked("failing", s)
     if (n > 0) { panic("boom") }

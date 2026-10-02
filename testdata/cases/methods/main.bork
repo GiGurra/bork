@@ -36,7 +36,7 @@ fn (xs: List[Int]) total(): Int { xs.fold(0, (a, b) => a + b) }
 // A record's function field is called as before, not a method.
 fn (c: Counter) next(): Int { 0 }
 
-fn more() {
+fn more() uses io {
   println(Point { x: 1, y: 2 }.plus(Point { x: 3, y: 4 }))
   println([Shape.Circle { r: 1 }, Shape.Square { side: 2 }].map(s => s.area()).total())
   c = Counter { step: 2, next: n => n + 2 }
@@ -50,7 +50,7 @@ fn more() {
 }
 
 // Type arguments: those the receiver does not decide, or all of them.
-fn typeArgs() {
+fn typeArgs() uses io {
   println([1, 2].map[String](x => toString(x)))
   println([1, 2].map[Int, Float](x => toFloat(x) / 2.0))
   println(["a", "b"].fold[List[String]]([], (acc, x) => [x].concat(acc)))

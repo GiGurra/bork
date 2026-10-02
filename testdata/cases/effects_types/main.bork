@@ -64,7 +64,7 @@ fn main() {
 
 fn pick[T](a: T, b: T): T { b }
 
-fn more() {
+fn more() uses io {
   // Inference joins the effects of functions given for one type
   // parameter, in either order.
   quiet = () => {}

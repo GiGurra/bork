@@ -73,6 +73,10 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	check.CheckEffects(files, info, diags)
+	if diags.Len() > 0 {
+		return nil, nil, &DiagError{Diags: diags}
+	}
 	check.Lifetimes(files, info, diags)
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}

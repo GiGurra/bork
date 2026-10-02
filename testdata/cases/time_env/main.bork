@@ -10,7 +10,7 @@ type Config = {
 } derive (Decode)
 
 fn lookup(values: Map[String, String], name: String): Option[String] { values.get(name) }
-fn config(values: Map[String, String]) {
+fn config(values: Map[String, String]) uses io {
   result: Config | env.ConfigError = env.LoadWith("APP", name => lookup(values, name))
   match (result) {
     c: Config => println(c)

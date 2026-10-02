@@ -322,7 +322,7 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 		p.next()
 		p.skipNewlines()
 	}
-	p.expect(RParen, "to end the parameter list")
+	fn.ParamsEnd = p.expect(RParen, "to end the parameter list").Pos
 	fn.Uses = p.uses()
 	if isPred {
 		// A predicate always returns Bool.

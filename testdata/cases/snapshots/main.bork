@@ -32,7 +32,7 @@ test "a snapshot not yet taken" {
   assertSnapshot(42)
 }
 
-fn snapshotSquares(xs: List[Int]) {
+fn snapshotSquares(xs: List[Int]) uses io {
   forEach(xs, (x) => assertSnapshot(x * x))
 }
 

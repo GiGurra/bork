@@ -5,7 +5,7 @@ import "bork/time"
 
 pred validPort(n: Int) { n > 0 && n <= 65535 }
 type Config = { host: String, port: Int where validPort } derive (Decode)
-fn report(result: Config | env.ConfigError, clock: time.Clock) {
+fn report(result: Config | env.ConfigError, clock: time.Clock) uses io + clock {
   match (result) {
     config: Config => println(s"${time.Format(time.Read(clock), time.RFC3339())}: ${config.host}:${config.port}")
     error: env.ConfigError => forEach(error.errors, issue => eprintln(s"${issue.path}: ${issue.message}"))

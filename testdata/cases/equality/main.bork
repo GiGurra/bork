@@ -1,6 +1,6 @@
 type NotFound = { key: String }
 fn find(k: String): Int | NotFound { if (k == "a") { 1 } else { NotFound { key: k } } }
-fn unions() {
+fn unions() uses io {
   println(find("a") == 1)
   println(1 == find("a"))
   println(find("b") == NotFound { key: "b" })
