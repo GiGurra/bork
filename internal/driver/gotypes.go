@@ -4,22 +4,21 @@ import (
 	"errors"
 	"go/types"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/syntax"
 	"golang.org/x/tools/go/packages"
 )
-
-// goMod is the module file of generated programs.
-const goMod = "module borkprogram\n\ngo 1.22\n"
 
 // goPackages loads the Go packages that bindings name, with go/packages,
 // in a module like the one the build uses, so the checker sees the Go
 // code that the build compiles. Types come from export data, through
 // Go's build cache.
-type goPackages struct{}
+type goPackages struct {
+	files []*syntax.File
+}
 
-func (goPackages) Load(paths []string) (map[string]*types.Package, map[string]error) {
+func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string]error) {
 	pkgs := map[string]*types.Package{}
 	errs := map[string]error{}
 	fail := func(err error) (map[string]*types.Package, map[string]error) {
@@ -33,13 +32,13 @@ func (goPackages) Load(paths []string) (map[string]*types.Package, map[string]er
 		return fail(err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0o644); err != nil {
+	if _, err := writeGoModule(dir, gp.files); err != nil {
 		return fail(err)
 	}
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedTypes,
 		Dir:  dir,
-		Env:  append(os.Environ(), "GOWORK=off", "GOFLAGS="),
+		Env:  append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=readonly"),
 	}
 	loaded, err := packages.Load(cfg, paths...)
 	if err != nil {

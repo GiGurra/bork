@@ -14,11 +14,16 @@ fn NotOption(key: String): String unsafe go "os.LookupEnv"
 fn Typed[T](s: String): String unsafe go "strings.ToUpper"
 pred short(s: String) { byteLength(s) < 10 }
 fn Promise(s: String): String where short unsafe go "strings.ToUpper"
-fn Lossy(s: String, n: Int): String unsafe go "strings.Repeat32"
+fn Lossy(s: String, n: Uint64): String unsafe go "strings.Repeat"
 fn TooWide(x: Int): Int unsafe go "math/bits.Len32"
 fn FloatNarrow(x: Float): Uint32 unsafe go "math.Float32bits"
 fn Other(s: String): Int | OutOfRange unsafe go "strconv.Atoi"
 fn NoResult(): Int unsafe go "os.Clearenv"
 fn NotAName(): Int unsafe go "Atoi"
+fn Internal(s: String, b: Uint8): Int unsafe go "internal/bytealg.IndexByteString"
+fn Vendored(s: String): String | GoError unsafe go "vendor/golang.org/x/net/idna.ToASCII"
+fn TakeLower(x: Int): Int unsafe go "example.com/bindtest.TakeLower"
+fn PtrKeys(): Map[Int, String] | GoValueError unsafe go "example.com/bindtest.PtrKeys"
+fn FloatKeys(): Map[Float, String] unsafe go "example.com/bindtest.FloatKeys"
 
 fn main() {}

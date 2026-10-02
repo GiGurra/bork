@@ -89,6 +89,10 @@ func (c *checker) checkBindings(files []*syntax.File, goTypes GoTypes) {
 				c.bindErr(fd.GoBind.Pos, "%q is not a Go function name; write its import path and name, such as \"os.Getenv\"", fd.GoBind.Name)
 				continue
 			}
+			if path == "internal" || strings.HasPrefix(path, "internal/") || strings.Contains(path, "/internal/") || strings.HasSuffix(path, "/internal") || strings.HasPrefix(path, "vendor/") {
+				c.bindErr(fd.GoBind.Pos, "Go package %s is internal, so it cannot be bound", path)
+				continue
+			}
 			all = append(all, pending{f, fn, path, name})
 			paths[path] = true
 		}
@@ -109,6 +113,11 @@ func (c *checker) checkBindings(files []*syntax.File, goTypes GoTypes) {
 	for _, b := range all {
 		c.inFile(b.file)
 		if err := errs[b.path]; err != nil {
+			if strings.Contains(b.path[strings.LastIndex(b.path, "/")+1:], ".") {
+				// "os.FileMode.String": a method.
+				c.bindErr(b.fn.Decl.GoBind.Pos, "Go package %q cannot be loaded; to bind a method, write it as (T).M, which is not supported yet", b.path)
+				continue
+			}
 			c.bindErr(b.fn.Decl.GoBind.Pos, "Go package %q cannot be loaded: %v", b.path, err)
 			continue
 		}
@@ -294,13 +303,13 @@ func isGoError(t types.Type) bool {
 // isGoNillable reports whether a Go result can be nil where bork expects
 // a value.
 func isGoNillable(t types.Type) bool {
-	_, ok := t.(*types.Pointer)
+	_, ok := t.Underlying().(*types.Pointer)
 	return ok
 }
 
 // goElemOfNil is what a nil-able result converts as, once a nil without
 // an error is reported as a GoError: the value it points to.
-func goElemOfNil(t types.Type) types.Type { return t.(*types.Pointer).Elem() }
+func goElemOfNil(t types.Type) types.Type { return t.Underlying().(*types.Pointer).Elem() }
 
 // goQualifier names other packages by their names, as Go code does.
 func goQualifier(p *types.Package) string { return p.Name() }
@@ -341,6 +350,9 @@ func goNumber(b *types.Basic) Type {
 // fromGo says how a Go value of type g converts to bork type t.
 func (c *checker) fromGo(g types.Type, t Type) convResult {
 	no := convResult{}
+	if !goTypeVisible(g) {
+		return no
+	}
 	switch u := g.Underlying().(type) {
 	case *types.Basic:
 		if n := goNumber(u); n != nil {
@@ -367,11 +379,14 @@ func (c *checker) fromGo(g types.Type, t Type) convResult {
 			return c.fromGo(u.Elem(), l.Elem)
 		}
 	case *types.Array:
+		if t == Bytes {
+			return convResult{ok: isGoByte(u.Elem())}
+		}
 		if l, ok := t.(*List); ok {
 			return c.fromGo(u.Elem(), l.Elem)
 		}
 	case *types.Map:
-		if m, ok := t.(*Map); ok && isKeyType(m.Key) {
+		if m, ok := t.(*Map); ok && isKeyType(m.Key) && isGoKeyType(u.Key()) {
 			k, v := c.fromGo(u.Key(), m.Key), c.fromGo(u.Elem(), m.Value)
 			return convResult{ok: k.ok && v.ok, fallible: k.fallible || v.fallible}
 		}
@@ -388,6 +403,9 @@ func (c *checker) fromGo(g types.Type, t Type) convResult {
 // toGo reports whether a bork value of type t converts to Go type g.
 // Converting to Go never fails.
 func (c *checker) toGo(t Type, g types.Type) bool {
+	if !goTypeVisible(g) {
+		return false
+	}
 	switch u := g.Underlying().(type) {
 	case *types.Basic:
 		if n := goNumber(u); n != nil {
@@ -411,7 +429,7 @@ func (c *checker) toGo(t Type, g types.Type) bool {
 			return c.toGo(l.Elem, u.Elem())
 		}
 	case *types.Map:
-		if m, ok := t.(*Map); ok && isKeyType(m.Key) {
+		if m, ok := t.(*Map); ok && isKeyType(m.Key) && isGoKeyType(u.Key()) {
 			return c.toGo(m.Key, u.Key()) && c.toGo(m.Value, u.Elem())
 		}
 	case *types.Pointer:
@@ -423,11 +441,25 @@ func (c *checker) toGo(t Type, g types.Type) bool {
 	return false
 }
 
-func isGoByte(t types.Type) bool {
-	b, ok := t.Underlying().(*types.Basic)
-	return ok && b.Kind() == types.Uint8
-}
+// isGoByte reports whether t is byte itself (not a named byte type,
+// whose slices do not convert to []byte).
+func isGoByte(t types.Type) bool { return types.Identical(t, types.Typ[types.Byte]) }
 
 // isKeyType reports whether a map key converts one to one at the
-// boundary: numbers, String, and Bool.
-func isKeyType(t Type) bool { return IsNumeric(t) || t == String || t == Bool }
+// boundary: integers, String, and Bool. (Not floats: NaN keys are
+// never equal, so a Go map can hold several.)
+func isKeyType(t Type) bool { return IsInteger(t) || t == String || t == Bool }
+
+// isGoKeyType is isKeyType for the Go side: an integer, string, or bool
+// type, so that two different Go keys never become one bork key.
+func isGoKeyType(t types.Type) bool {
+	b, ok := t.Underlying().(*types.Basic)
+	return ok && b.Info()&(types.IsInteger|types.IsString|types.IsBoolean) != 0 && b.Kind() != types.Uintptr
+}
+
+// goTypeVisible reports whether generated code can name a Go type: it
+// is not a named type that its package does not export.
+func goTypeVisible(t types.Type) bool {
+	n, ok := t.(*types.Named)
+	return !ok || n.Obj().Pkg() == nil || n.Obj().Exported()
+}

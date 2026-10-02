@@ -28,18 +28,18 @@ import (
 func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	fn := g.info.FuncOf[fd]
 	b := g.info.GoBindings[fn]
-	for _, p := range fd.Params {
-		if goReserved[p.Name] {
-			return "", fmt.Errorf("%s: parameter %s of %s is a reserved name in Go; rename it", p.Pos, p.Name, fd.Name)
-		}
-	}
 	g.usesBind = true
+	// The wrapper names its parameters itself, so any bork name works.
+	sig := g.signature(fd)
+	sig.Name.Name = goName
 	w := &bindWriter{g: g, b: b}
 	var args []string
 	params := b.Sig.Params()
-	for i, p := range fd.Params {
+	for i := range fd.Params {
+		pname := "_a" + strconv.Itoa(i)
+		sig.Type.Params.List[i].Names[0].Name = pname
 		gt := params.At(i).Type()
-		arg := w.toGo(p.Name, fn.Params[i], gt)
+		arg := w.toGo(pname, fn.Params[i], gt)
 		if b.Sig.Variadic() && i == params.Len()-1 {
 			arg += "..."
 		}
@@ -60,7 +60,7 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		w.line("_r, _err := " + call)
 		w.line("if _err != nil { return _bindGoError(_err) }")
 		rt := b.Sig.Results().At(0).Type()
-		if p, ok := rt.(*types.Pointer); ok && !check.IsOption(b.Value) {
+		if p, ok := rt.Underlying().(*types.Pointer); ok && !check.IsOption(b.Value) {
 			// A nil result without an error is the Go function's bug.
 			w.line(`if _r == nil { return _bindGoError(nil) }`)
 			w.line("return " + w.fromGo("*_r", p.Elem(), b.Value, `"result"`))
@@ -74,8 +74,6 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		w.line("if !_ok { return _borkNone[" + g.typeText(elem) + "]() }")
 		w.line("return _borkSome(" + w.fromGo("_r", b.Sig.Results().At(0).Type(), elem, `"result"`) + ")")
 	}
-	sig := g.signature(fd)
-	sig.Name.Name = goName
 	// The Go compiler reports errors in the wrapper (which would be
 	// compiler bugs) at the binding.
 	pos := fd.GoBind.Pos
@@ -189,6 +187,9 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 	case *types.Slice, *types.Array:
 		if t == check.Bytes {
 			w.g.usesBytes = true
+			if _, ok := u.(*types.Array); ok {
+				return "_borkBytesFrom((" + x + ")[:])"
+			}
 			return "_borkBytesFrom([]byte(" + x + "))"
 		}
 		elem := t.(*check.List).Elem

@@ -69,7 +69,7 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 		// Report syntax and import errors before attempting to type-check.
 		return nil, nil, &DiagError{Diags: diags}
 	}
-	info := check.Program(files, root, diags, goPackages{})
+	info := check.Program(files, root, diags, goPackages{files: files})
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
@@ -169,21 +169,9 @@ func buildGo(files []*syntax.File, goSrc []byte, out string) error {
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), goSrc, 0o644); err != nil {
 		return err
 	}
-	var importPaths []string
-	for _, file := range files {
-		importPaths = append(importPaths, file.Package)
-	}
-	goMod, goSum, err := std.GoModuleFiles(importPaths)
+	pinned, err := writeGoModule(dir, files)
 	if err != nil {
-		return fmt.Errorf("standard package Go dependencies: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), goMod, 0o644); err != nil {
 		return err
-	}
-	if len(goSum) != 0 {
-		if err := os.WriteFile(filepath.Join(dir, "go.sum"), goSum, 0o644); err != nil {
-			return err
-		}
 	}
 	cmd := exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
 	cmd.Dir = dir
@@ -195,7 +183,7 @@ func buildGo(files []*syntax.File, goSrc []byte, out string) error {
 			if diags := unsafeGoErrors(sourcePaths(files), dir, string(output)); diags != nil {
 				return &DiagError{Diags: diags}
 			}
-			if len(goSum) != 0 {
+			if pinned {
 				return fmt.Errorf("building generated program with pinned Go dependencies failed (offline builds need the modules in Go's cache):\n%s", strings.TrimSpace(string(output)))
 			}
 			return fmt.Errorf("go build failed on the generated code (this is a bork compiler bug):\n%s", strings.TrimSpace(string(output)))
@@ -204,6 +192,36 @@ func buildGo(files []*syntax.File, goSrc []byte, out string) error {
 	}
 	return nil
 }
+
+// writeGoModule writes the go.mod (and go.sum) of a generated program
+// into dir: the Go modules the standard packages among files depend on.
+// It reports whether there are any.
+func writeGoModule(dir string, files []*syntax.File) (bool, error) {
+	var importPaths []string
+	for _, file := range files {
+		importPaths = append(importPaths, file.Package)
+	}
+	goMod, goSum, err := std.GoModuleFiles(importPaths)
+	if err != nil {
+		return false, fmt.Errorf("standard package Go dependencies: %w", err)
+	}
+	if goModuleHook != nil {
+		goMod = goModuleHook(goMod)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), goMod, 0o644); err != nil {
+		return false, err
+	}
+	if len(goSum) != 0 {
+		if err := os.WriteFile(filepath.Join(dir, "go.sum"), goSum, 0o644); err != nil {
+			return false, err
+		}
+	}
+	return len(goSum) != 0, nil
+}
+
+// goModuleHook lets tests change the go.mod of generated programs, to
+// add a local Go module for bindings to call.
+var goModuleHook func(goMod []byte) []byte
 
 // Run builds the package at path into a temporary executable and runs
 // it with the given arguments. It returns the program's exit code.

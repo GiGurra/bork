@@ -28,10 +28,10 @@ fn DecodeHex(s: String): Bytes | GoError unsafe go "encoding/hex.DecodeString"
 fn EncodeHex(data: Bytes): String unsafe go "encoding/hex.EncodeToString"
 fn Sha256(data: Bytes): List[Byte] unsafe go "crypto/sha256.Sum256"
 
-// Pointers: Option or a checked value from Go, a fresh copy to Go.
+// Pointers: Option or a checked value from Go. The value is copied when
+// the binding returns, so a later flag.Parse would not show here.
 fn FlagString(name: String, value: String, usage: String): String | GoValueError unsafe go "flag.String"
 fn FlagInt(name: String, value: Int, usage: String): Option[Int] unsafe go "flag.Int"
-fn StringVar(p: String, name: String, value: String, usage: String) unsafe go "flag.StringVar"
 
 // A method can bind a Go function too: the receiver is its first
 // parameter.
@@ -67,6 +67,5 @@ fn main() {
   println(DecodeHex("xyz"))
   println(FlagString("name", "ada", "a name"))
   println(FlagInt("count", 3, "a count"))
-  StringVar("unused", "other", "x", "a name")
   println("a b/c".escaped())
 }
