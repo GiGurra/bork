@@ -160,6 +160,9 @@ fn main() {
 
 Shell completion (via [boa](https://github.com/GiGurra/boa)): `bork completion bash|zsh|fish|powershell`.
 
+For VS Code syntax highlighting, including interpolated strings and embedded Go,
+see the [local bork editor extension](editors/vscode/README.md).
+
 ## Status
 
 Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today.
