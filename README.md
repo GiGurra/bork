@@ -171,6 +171,8 @@ Standard packages may use pinned Go modules. Generated builds use Go's module ca
 
 HTTP clients take a scope (`http.Get(url, s, timeoutMs = 0)`); cancellation and optional timeouts cover the response body too. Request/response headers are `Map[String, List[String]]`, preserving repeated header values.
 
+`bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](examples/sql/main.bork).
+
 ## Status
 
 Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today.

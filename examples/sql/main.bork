@@ -1,0 +1,66 @@
+// bork run examples/sql: scope-owned SQLite and rollback unless committed.
+import "bork/sql"
+
+pred nonEmpty(value: String) { value.byteLength() > 0 }
+type User = { id: Int, name: String where nonEmpty, note: Option[String] } derive (Decode)
+type Count = { count: Int } derive (Decode)
+fn demo(): Unit | sql.Error | DecodeError {
+  scope app {
+    db = sql.OpenSqlite(":memory:", app)?
+    created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)", [])?
+    scope transaction {
+      tx = sql.Begin(db, transaction)?
+      inserted = sql.Exec(tx, "INSERT INTO users(name, note) VALUES (?, ?)", ["Ada", sql.Null {}])?
+      println(s"inserted ${inserted.rowsAffected}")
+      sql.Commit(tx)?
+    }
+    scope transaction {
+      tx = sql.Begin(db, transaction)?
+      discarded = sql.Exec(tx, "INSERT INTO users(name) VALUES (?)", ["discarded"])?
+    }
+    users = sql.Query[User](db, "SELECT id, name, note FROM users ORDER BY id", [])?
+    println(users)
+    count = sql.Query[Count](db, "SELECT count(*) AS count FROM users", [])?
+    println(count)
+  }
+}
+fn main() {
+  match (demo()) {
+    error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
+    error: DecodeError => eprintln(s"${error.path}: ${error.message}")
+    _ => {}
+  }
+}
+test "commit persists and scope end rolls back" {
+  scope app {
+    opened = sql.OpenSqlite(":memory:", app)
+    match (opened) {
+      db: sql.Connection => {
+        created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)", [])
+        scope transaction {
+          begun = sql.Begin(db, transaction)
+          match (begun) {
+            tx: sql.Transaction => {
+              inserted = sql.Exec(tx, "INSERT INTO users(name) VALUES ('kept')", [])
+              committed = sql.Commit(tx)
+            }
+            _ => assert(false)
+          }
+        }
+        scope transaction {
+          begun = sql.Begin(db, transaction)
+          match (begun) {
+            tx: sql.Transaction => { inserted = sql.Exec(tx, "INSERT INTO users(name) VALUES ('discarded')", []) }
+            _ => assert(false)
+          }
+        }
+        result: List[Count] | sql.Error | DecodeError = sql.Query(db, "SELECT count(*) AS count FROM users", [])
+        match (result) {
+          rows: List[Count] => assertEqual(rows, [Count { count: 1 }])
+          _ => assert(false)
+        }
+      }
+      _ => assert(false)
+    }
+  }
+}

@@ -1,0 +1,100 @@
+import "bork/sql"
+
+pred named(value: String) { value.byteLength() > 0 }
+type Row = {
+  id: Int,
+  name: String where named,
+  note: Option[String],
+  active: Bool,
+  score: Float,
+  data: List[Int],
+} derive (Decode)
+type Count = { count: Int } derive (Decode)
+fn count(db: sql.Connection): Int | sql.Error | DecodeError {
+  rows = sql.Query[Count](db, "SELECT count(*) AS count FROM users", [])?
+  rows.get(0).getOr(Count { count: -1 }).count
+}
+fn showError(result: Json | sql.Error) {
+  match (result) {
+    error: sql.Error => println(error.operation)
+    value: Json => println(renderJson(value))
+  }
+}
+fn rollbackPanic(db: sql.Connection): Unit | sql.Error {
+  scope transaction {
+    tx = sql.Begin(db, transaction)?
+    inserted = sql.Exec(tx, "INSERT INTO users(id, name) VALUES (10, 'panic')", [])?
+    panic("rollback test")
+  }
+}
+fn protect(work: () => Unit): Bool unsafe go {
+  recovered := false
+  func() {
+    defer func() { recovered = recover() == "rollback test" }()
+    work()
+  }()
+  return recovered
+}
+fn demo(): Unit | sql.Error | DecodeError {
+  scope app {
+    db = sql.OpenSqlite(":memory:", app)?
+    created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)", [])?
+    inserted = sql.Exec(db, "INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)", [1, "Ada", sql.Null {}, true, 1.25, utf8Bytes("ab")])?
+    println(inserted.rowsAffected, inserted.lastInsertId)
+    rows = sql.Query[Row](db, "SELECT id, name, note, active, score, data FROM users ORDER BY id", [])?
+    println(rows)
+    empty = sql.Query[Row](db, "SELECT id, name, note, active, score, data FROM users WHERE id = ?", [99])?
+    println(empty)
+    showError(sql.QueryJson(db, "SELECT 9223372036854775807 AS exact", []))
+    showError(sql.QueryJson(db, "SELECT 1 AS duplicate, 2 AS duplicate", []))
+    showError(sql.QueryJson(db, "SELECT missing FROM users", []))
+    scope transaction {
+      tx = sql.Begin(db, transaction)?
+      discarded = sql.Exec(tx, "INSERT INTO users(id, name) VALUES (?, ?)", [2, "discarded"])?
+    }
+    println(count(db))
+    scope transaction {
+      tx = sql.Begin(db, transaction)?
+      kept = sql.Exec(tx, "INSERT INTO users(id, name) VALUES (?, ?)", [3, "quote' OR 1=1 --"])?
+      sql.Commit(tx)?
+    }
+    println(count(db))
+    matched = sql.Query[Count](db, "SELECT count(*) AS count FROM users WHERE name = ?", ["quote' OR 1=1 --"])?
+    println(matched)
+    scope transaction {
+      tx = sql.Begin(db, transaction)?
+      discarded = sql.Exec(tx, "INSERT INTO users(id, name) VALUES (?, ?)", [4, "rollback"])?
+      sql.Rollback(tx)?
+      sql.Rollback(tx)?
+    }
+    println(count(db))
+    println(protect(() => { match (rollbackPanic(db)) { error: sql.Error => println(error); _ => {} } }))
+    println(count(db))
+    invalid = sql.Exec(db, "UPDATE users SET name = '' WHERE id = 1", [])?
+    result: List[Row] | sql.Error | DecodeError = sql.Query(db, "SELECT id, name, note, active, score, data FROM users WHERE id = 1", [])
+    match (result) {
+      error: DecodeError => println(s"${error.path}: ${error.message}")
+      _ => println("unexpected")
+    }
+    scope transaction {
+      tx = sql.Begin(db, transaction)?
+      cancel(transaction)
+      match (sql.Commit(tx)) { error: sql.Error => println(error.operation); _ => println("unexpected") }
+    }
+    scope stopped {
+      cancel(stopped)
+      match (sql.OpenSqlite(":memory:", stopped)) { error: sql.Error => println(error.operation); _ => println("unexpected") }
+      match (sql.Begin(db, stopped)) { error: sql.Error => println(error.operation); _ => println("unexpected") }
+    }
+    cancel(app)
+    showError(sql.QueryJson(db, "SELECT 1", []))
+    match (sql.Exec(db, "DELETE FROM users", [])) { error: sql.Error => println(error.operation); _ => println("unexpected") }
+  }
+}
+fn main() {
+  match (demo()) {
+    error: sql.Error => println(error)
+    error: DecodeError => println(error)
+    _ => {}
+  }
+}
