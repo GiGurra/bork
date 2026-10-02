@@ -400,6 +400,10 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 	}
 	types := make([]Type, len(e.Args))
 	check := func(i int, a syntax.Expr) {
+		if c.sharedDefaults[a] {
+			types[i] = c.info.Types[a]
+			return
+		}
 		if i >= len(fn.Params) {
 			types[i] = c.expr(a)
 			return

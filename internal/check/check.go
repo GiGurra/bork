@@ -74,6 +74,8 @@ type Func struct {
 	Calls []*Func
 	// ParamConstraints holds each parameter's where clause, and
 	// ResultConstraints what the result promises (per union member).
+	// defaultsChecked is set once the parameters' defaults are checked.
+	defaultsChecked bool
 	ParamConstraints  [][]*Constraint
 	ResultConstraints []MemberConstraints
 }
@@ -437,6 +439,9 @@ type checker struct {
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
 	lambdaDepth int
+	// sharedDefaults are the parameter defaults that calls share (see
+	// defaults.go): checked once, where they were declared.
+	sharedDefaults map[syntax.Expr]bool
 }
 
 type local struct {
@@ -567,7 +572,7 @@ func (c *checker) checkFunc(fn *Func) {
 		}
 		c.scopes[0][p.Name] = &local{typ: fn.Params[i], decl: p}
 	}
-	c.checkDefaults(fn)
+	c.ensureDefaults(fn)
 	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Unit) {
 		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
 	}

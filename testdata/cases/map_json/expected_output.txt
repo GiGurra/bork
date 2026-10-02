@@ -1,0 +1,5 @@
+{"currency":"SEK","items":{"apple":5,"pear":7}}
+Prices { currency: "EUR", items: {"b": 2, "a": 1} }
+DecodeError { path: ".items.b", message: "expected a whole number, found a string" }
+{"x": [1, 2], "y": []}
+{"nested":{"deep":true}}

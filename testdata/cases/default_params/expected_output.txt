@@ -8,3 +8,6 @@ b {"x": 1}
 ["a"]
 -3.0
 Yo, dee!
+a Level.Low Retry { times: 3, backoff: Option.None }
+b Level.High Retry { times: 3, backoff: Option.None }
+c Level.High Retry { times: 1, backoff: Option.Some { value: 50 } }

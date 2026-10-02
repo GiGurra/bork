@@ -1,5 +1,7 @@
 main.bork:1:18: parameter y needs a default value too: parameters after one with a default must have one
 main.bork:2:15: the default of x must be Int, found String
-main.bork:3:23: a parameter's default must be a literal (a number, string, rune, Bool, or a list or map of them)
+main.bork:3:23: a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)
 main.bork:7:4: d takes 1 to 2 argument(s), but 0 were given
 main.bork:8:4: d takes 1 to 2 argument(s), but 3 were given
+main.bork:11:24: the default of x can only be a literal, since its type depends on a type parameter
+main.bork:12:15: a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)

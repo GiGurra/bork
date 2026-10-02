@@ -7,3 +7,6 @@ fn main() {
   d()
   d(1, 2, 3)
 }
+
+fn e[T](x: Option[T] = Option.None) {}
+fn f(x: Int = toInt(1.5)) {}
