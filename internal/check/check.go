@@ -568,7 +568,7 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
 	fn.Effects = c.effectsOf(fd.Uses)
 	if fd.IsPred && fd.Uses != nil {
-		c.errorf(fd.Uses.Pos, "pred %s cannot declare effects: predicates must be pure, or their facts could go stale", fd.Name)
+		c.diags.AddCode(fd.Uses.Pos, "effect.pred", "pred %s cannot declare effects: predicates must be pure, or their facts could go stale", fd.Name)
 	}
 	if r := fd.Result; r != nil && r.Name == "Never" && len(r.Args) == 0 && r.Func == nil && len(r.Union) == 0 {
 		// A function that never returns, such as exit.
@@ -579,6 +579,7 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
+	c.openSignature(fn)
 	c.typeParams = nil
 	c.pkg.Funcs[fd.Name] = fn
 	c.info.FuncOf[fd] = fn

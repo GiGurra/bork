@@ -129,6 +129,7 @@ func (c *checker) declareClassMethods() {
 			for _, p := range md.Params {
 				fn.Params = append(fn.Params, c.resolveType(p.Type))
 			}
+			c.openSignature(fn)
 			cl.Methods = append(cl.Methods, fn)
 			c.pkg.Funcs[md.Name] = fn
 			c.info.FuncOf[md] = fn
@@ -357,12 +358,15 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 		for _, p := range md.Params {
 			fn.Params = append(fn.Params, c.resolveType(p.Type))
 		}
+		c.openSignature(fn)
 		want := &FuncType{Result: subst(m.Result, bound), Effects: m.Effects}
 		for _, p := range m.Params {
 			want.Params = append(want.Params, subst(p, bound))
 		}
 		if !identical(fn.funcType(), want) {
 			c.errorf(md.Pos, "method %s of instance %s must be %s, to match class %s for %s, but is %s", md.Name, id.Name, want, cl.Name, ci.Type, fn.funcType())
+		} else if extra := fn.Effects &^ m.Effects; extra != 0 {
+			c.diags.AddCode(md.Uses.Pos, "effect.instance", "method %s of instance %s uses %s, but class %s allows %s", md.Name, id.Name, extra, cl.Name, allowedText(m.Effects))
 		}
 		ci.Methods = append(ci.Methods, fn)
 		c.info.FuncOf[md] = fn
@@ -928,7 +932,7 @@ func (c *checker) deriveInstance(td *syntax.TypeDecl, t Type, cl *Class, prelude
 	bound := map[*TypeParam]Type{cl.Param: head}
 	for _, m := range cl.Methods {
 		fd := &syntax.FuncDecl{Pos: td.DerivePos, Name: m.Decl.Name, Params: m.Decl.Params}
-		fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: tps, Result: subst(m.Result, bound), Derived: &Derived{}}
+		fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: tps, Result: subst(m.Result, bound), Effects: m.Effects, Derived: &Derived{}}
 		for _, p := range m.Params {
 			fn.Params = append(fn.Params, subst(p, bound))
 		}

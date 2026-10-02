@@ -564,16 +564,28 @@ func (p *parser) pred() *PredRef {
 // uses parses `uses io + net` or `uses nothing`, if present: the
 // effects of a function or a function type.
 func (p *parser) uses() *Uses {
-	if !p.at(TIdent) || p.tok().Text != "uses" || p.peekKind() != TIdent {
+	if !p.at(TIdent) || p.tok().Text != "uses" {
 		return nil
 	}
 	u := &Uses{Pos: p.next().Pos}
+	if !p.at(TIdent) {
+		p.errorf(p.tok().Pos, "expected an effect name or nothing after uses, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
 	if p.tok().Text == "nothing" {
 		p.next()
+		if p.at(Plus) {
+			p.errorf(p.tok().Pos, "uses nothing cannot be combined with effects")
+			panic(bailout{})
+		}
 		return u
 	}
 	for {
 		name := p.expect(TIdent, "(effect name)")
+		if name.Text == "nothing" {
+			p.errorf(name.Pos, "uses nothing cannot be combined with effects")
+			panic(bailout{})
+		}
 		u.Effects = append(u.Effects, Effect{Pos: name.Pos, Name: name.Text})
 		if !p.at(Plus) {
 			return u

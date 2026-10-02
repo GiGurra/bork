@@ -222,19 +222,7 @@ func TypeText(t Type, from *Package) string {
 	case *Map:
 		return "Map[" + TypeText(t.Key, from) + ", " + TypeText(t.Value, from) + "]"
 	case *FuncType:
-		params := make([]string, len(t.Params))
-		for i, p := range t.Params {
-			params[i] = TypeText(p, from)
-		}
-		result := TypeText(t.Result, from)
-		if _, ok := t.Result.(*Union); ok {
-			result = "(" + result + ")"
-		}
-		uses := ""
-		if t.Effects != 0 {
-			uses = " uses " + t.Effects.String()
-		}
-		return "(" + strings.Join(params, ", ") + ")" + uses + " => " + result
+		return funcText(t, from, false)
 	case *Union:
 		parts := make([]string, len(t.Members))
 		for i, m := range t.Members {
@@ -246,6 +234,32 @@ func TypeText(t Type, from *Package) string {
 		return strings.Join(parts, " | ")
 	}
 	return t.String()
+}
+
+// funcText writes a function type. pureMark writes `uses nothing` for
+// a pure one, as a parameter's function type without uses would read as
+// open.
+func funcText(t *FuncType, from *Package, pureMark bool) string {
+	params := make([]string, len(t.Params))
+	for i, p := range t.Params {
+		if pf, ok := p.(*FuncType); ok {
+			params[i] = funcText(pf, from, true)
+		} else {
+			params[i] = TypeText(p, from)
+		}
+	}
+	result := TypeText(t.Result, from)
+	if _, ok := t.Result.(*Union); ok {
+		result = "(" + result + ")"
+	}
+	uses := ""
+	switch {
+	case t.Effects&^EffOpen != 0:
+		uses = " uses " + t.Effects.String()
+	case t.Effects == 0 && pureMark:
+		uses = " uses nothing"
+	}
+	return "(" + strings.Join(params, ", ") + ")" + uses + " => " + result
 }
 
 func argsText(args []Type, from *Package) string {
