@@ -20,6 +20,7 @@ func TestMapRuntime(t *testing.T) {
 		"map.go":      mapRuntime,
 		"show.go":     showRuntime,
 		"equal.go":    equalRuntime,
+		"hash.go":     hashRuntime,
 		"map_test.go": mapRuntimeTest,
 	}
 	for name, src := range files {
@@ -37,6 +38,7 @@ func TestMapRuntime(t *testing.T) {
 const mapRuntimeTest = `package main
 
 import (
+	"math"
 	"math/rand"
 	"slices"
 	"testing"
@@ -223,6 +225,41 @@ func TestMapPrinting(t *testing.T) {
 type printKey struct { id int64 }
 
 func (printKey) String() string { return "same" }
+
+func TestStructuralKeys(t *testing.T) {
+	real := _mapHash
+	defer func() { _mapHash = real }()
+	for _, hash := range []func(any) uint64{real, func(any) uint64 { return 42 }} {
+		_mapHash = hash
+		m := _mapOf([][]int64{nil, {1, 2}, {2, 1}}, []int64{0, 12, 21})
+		if v, ok := m.get([]int64{}); !ok || v != 0 { t.Fatal("nil and empty list keys differ") }
+		changed := m.put([]int64{}, 3).remove([]int64{1, 2})
+		if changed.len() != 2 || m.len() != 3 { t.Fatal("structural key update/remove changed size or old map") }
+		if v, ok := changed.get([]int64{2, 1}); !ok || v != 21 { t.Fatal("collision lost another list key") }
+		// These unequal keys have identical text; text is not identity.
+		ties := _mapOf([][]printKey{{{1}}, {{2}}}, []int64{10, 20})
+		if ties.len() != 2 { t.Fatal("identical text conflated unequal list keys") }
+		if v, ok := ties.get([]printKey{{2}}); !ok || v != 20 { t.Fatal("list key lookup is wrong") }
+		a := _mapOf([]int64{1, 2}, []string{"one", "two"})
+		b := _mapUnordered(_mapOf([]int64{2, 1}, []string{"two", "one"}))
+		nested := _mapOf([]_Map[int64, string]{a}, []int64{12})
+		if v, ok := nested.get(b); !ok || v != 12 { t.Fatal("map keys depend on entry order or map kind") }
+	}
+	zero := _mapOf([]float64{0}, []int64{1})
+	if v, ok := zero.get(math.Copysign(0, -1)); !ok || v != 1 { t.Fatal("signed zero keys differ") }
+	for _, xs := range [][]int8{nil, {}, {-1, 2, 3}} {
+		if _hash(xs) != _hashList(xs, _hashOf[int8]) { t.Fatal("typed and fallback int8 hashes differ") }
+	}
+	for _, xs := range [][]float64{nil, {}, {0, -2.5, 3}} {
+		if _hash(xs) != _hashList(xs, _hashOf[float64]) { t.Fatal("typed and fallback float hashes differ") }
+	}
+	for _, xs := range [][]string{nil, {}, {"a", "b"}} {
+		if _hash(xs) != _hashList(xs, _hashOf[string]) { t.Fatal("typed and fallback string hashes differ") }
+	}
+	for _, xs := range [][]int64{nil, {}, {1, 2, 3}} {
+		if _hash(xs) != _hashList(xs, _hashOf[int64]) { t.Fatal("typed and fallback list hashes differ") }
+	}
+}
 
 func TestRandom(t *testing.T) {
 	hashes := map[string]func(any) uint64{
