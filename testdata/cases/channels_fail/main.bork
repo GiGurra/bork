@@ -1,0 +1,16 @@
+// A channel belongs to its scope: it cannot leave it.
+fn leak(): Channel[Int] {
+  scope s {
+    channel(s, 1)
+  }
+}
+
+fn late() {
+  ch = scope s {
+    c: Channel[Int] = channel(s, 1)
+    c
+  }
+  println(receive(ch))
+}
+
+fn main() {}

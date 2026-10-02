@@ -1,0 +1,46 @@
+// A pipeline: a producer sends numbers, a worker squares them, and the
+// main routine collects the results.
+fn produce(ch: Channel[Int], n: Int, last: Int): Unit | Cancelled | Closed {
+  if (n <= last) {
+    send(ch, n)?
+    produce(ch, n + 1, last)
+  } else {
+    closeChannel(ch)
+  }
+}
+
+fn square(input: Channel[Int], output: Channel[Int]): Unit | Cancelled | Closed {
+  match (receive(input)) {
+    n: Int => {
+      send(output, n * n)?
+      square(input, output)
+    }
+    _ => closeChannel(output)
+  }
+}
+
+fn main() {
+  results = scope s {
+    numbers: Channel[Int] = channel(s, 0)
+    squares: Channel[Int] = channel(s, 2)
+    launch(s, () => produce(numbers, 1, 5))
+    launch(s, () => square(numbers, squares))
+    received(squares)
+  }
+  println(results)
+  // Receiving from a closed, drained channel; sending to it.
+  scope s {
+    ch: Channel[String] = channel(s, 1)
+    println(send(ch, "a"))
+    closeChannel(ch)
+    println(send(ch, "b"))
+    println(receive(ch))
+    println(receive(ch))
+  }
+  // A receive that waits is stopped by cancellation.
+  scope s {
+    ch: Channel[Int] = channel(s, 0)
+    cancelAfter(s, 10)
+    println(receive(ch))
+  }
+}
