@@ -929,13 +929,14 @@ const mapRuntime = `package main
 
 import (
 	"hash/maphash"
+	"math/bits"
 	"reflect"
 	"strings"
 )
 
 // _Map is a bork map. The zero value is the empty map. Its core keeps
 // the entries: in the order their keys were added (_mapCore, the
-// default), or sorted by key (_sortedCore).
+// default), sorted by key (_sortedCore), or in no order (_hashCore).
 type _Map[K, V any] struct{ core _mapImpl }
 
 type _mapImpl interface {
@@ -1054,10 +1055,11 @@ func (m _Map[K, V]) String() string {
 type _mapEntry struct {
 	key, val, hkey any
 	hash           uint64
+	pos            int // in an insertion-ordered map, the position in its vector
 }
 
 type _mapCore struct {
-	trie  *_hnode // hkey -> position in the vector
+	trie  *_hnode // the keys, each with its position in the vector (its value may be stale)
 	vec   *_vnode
 	shift uint // of the vector's root: 0 for a single leaf
 	total int  // positions used in the vector, holes included
@@ -1121,7 +1123,7 @@ func (c *_mapCore) mapVals(f func(v any) any) _mapImpl {
 	for i := 0; i < c.total; i++ {
 		var ne *_mapEntry
 		if e := c.at(i); e != nil {
-			ne = &_mapEntry{key: e.key, hkey: e.hkey, hash: e.hash, val: f(e.val)}
+			ne = &_mapEntry{key: e.key, hkey: e.hkey, hash: e.hash, val: f(e.val), pos: e.pos}
 		}
 		out.appendSlot(ne)
 	}
@@ -1133,11 +1135,11 @@ func (c *_mapCore) find(k any) *_mapEntry {
 		return nil
 	}
 	hk := _mapKey(k)
-	pos, ok := c.trie.find(hk, _mapHash(hk), 0)
-	if !ok {
+	r := c.trie.get(hk, _mapHash(hk))
+	if r == nil {
 		return nil
 	}
-	return c.at(pos)
+	return c.at(r.pos)
 }
 
 // put gives a map with k set to v. With inPlace (only while building
@@ -1152,14 +1154,14 @@ func (c *_mapCore) put(k, v any, inPlace bool) *_mapCore {
 		} else {
 			*out = *c
 		}
-		if pos, ok := c.trie.find(hk, h, 0); ok {
-			old := c.at(pos)
-			out.setSlot(pos, &_mapEntry{key: old.key, hkey: hk, hash: h, val: v})
+		if r := c.trie.get(hk, h); r != nil {
+			out.setSlot(r.pos, &_mapEntry{key: r.key, hkey: hk, hash: h, val: v, pos: r.pos})
 			return out
 		}
 	}
-	out.trie = out.trie.insert(hk, h, out.total, 0)
-	out.appendSlot(&_mapEntry{key: k, hkey: hk, hash: h, val: v})
+	e := &_mapEntry{key: k, hkey: hk, hash: h, val: v, pos: out.total}
+	out.trie, _ = out.trie.set(e, 0)
+	out.appendSlot(e)
 	out.n++
 	return out
 }
@@ -1170,13 +1172,13 @@ func (c *_mapCore) remove(k any) *_mapCore {
 	}
 	hk := _mapKey(k)
 	h := _mapHash(hk)
-	pos, ok := c.trie.find(hk, h, 0)
-	if !ok {
+	r := c.trie.get(hk, h)
+	if r == nil {
 		return c
 	}
 	out := *c
-	out.trie = c.trie.remove(hk, h, 0)
-	out.setSlot(pos, nil)
+	out.trie, _ = c.trie.remove(hk, h, 0)
+	out.setSlot(r.pos, nil)
 	out.n--
 	if out.n == 0 {
 		return nil
@@ -1191,8 +1193,9 @@ func (c *_mapCore) remove(k any) *_mapCore {
 func (c *_mapCore) compact() *_mapCore {
 	b := &_mapCore{}
 	c.each(func(e *_mapEntry) bool {
-		b.trie = b.trie.insert(e.hkey, e.hash, b.total, 0)
-		b.appendSlot(e)
+		ne := &_mapEntry{key: e.key, hkey: e.hkey, hash: e.hash, val: e.val, pos: b.total}
+		b.trie, _ = b.trie.set(ne, 0)
+		b.appendSlot(ne)
 		b.n++
 		return true
 	})
@@ -1270,113 +1273,248 @@ func (n *_vnode) each(shift uint, f func(e *_mapEntry) bool) bool {
 	return true
 }
 
-// The trie: 32-way nodes indexed by 5 bits of the hash at a time, with
-// a bitmap of the children present. Keys whose hashes are equal are
-// kept together in a leaf's list.
+// The trie (a CHAMP: compressed hash-array mapped prefix tree, as
+// Scala's HashMap): nodes indexed by 5 bits of the hash at a time.
+// datamap marks the slots that hold an entry, nodemap those that hold
+// a node deeper down; entries and subs hold them, in slot order. Keys
+// whose whole hashes are equal share a collision node (coll).
 
 type _hnode struct {
-	bitmap uint32
-	kids   []_hkid
+	datamap, nodemap uint32
+	entries          []*_mapEntry
+	subs             []*_hnode
+	coll             []*_mapEntry
 }
 
-type _hkid struct {
-	sub  *_hnode
-	leaf []_hleaf // keys with the same hash
-}
-
-type _hleaf struct {
-	hkey any
-	hash uint64
-	pos  int
-}
-
-func (n *_hnode) find(hk any, h uint64, shift uint) (int, bool) {
-	for n != nil {
-		bit := uint32(1) << ((h >> shift) & 31)
-		if n.bitmap&bit == 0 {
-			return 0, false
-		}
-		k := n.kids[_popcount(n.bitmap&(bit-1))]
-		if k.sub == nil {
-			for _, l := range k.leaf {
-				if l.hash == h && l.hkey == hk {
-					return l.pos, true
+func (n *_hnode) get(hk any, h uint64) *_mapEntry {
+	for shift := uint(0); n != nil; shift += 5 {
+		if n.coll != nil {
+			for _, e := range n.coll {
+				if e.hkey == hk {
+					return e
 				}
 			}
-			return 0, false
-		}
-		n, shift = k.sub, shift+5
-	}
-	return 0, false
-}
-
-// insert adds a key that n does not have.
-func (n *_hnode) insert(hk any, h uint64, pos int, shift uint) *_hnode {
-	out := &_hnode{}
-	if n != nil {
-		out.bitmap, out.kids = n.bitmap, append([]_hkid(nil), n.kids...)
-	}
-	bit := uint32(1) << ((h >> shift) & 31)
-	i := _popcount(out.bitmap & (bit - 1))
-	leaf := _hleaf{hkey: hk, hash: h, pos: pos}
-	if out.bitmap&bit == 0 {
-		out.bitmap |= bit
-		out.kids = append(out.kids, _hkid{})
-		copy(out.kids[i+1:], out.kids[i:])
-		out.kids[i] = _hkid{leaf: []_hleaf{leaf}}
-		return out
-	}
-	k := out.kids[i]
-	switch {
-	case k.sub != nil:
-		out.kids[i] = _hkid{sub: k.sub.insert(hk, h, pos, shift+5)}
-	case k.leaf[0].hash == h || shift >= 60:
-		out.kids[i] = _hkid{leaf: append(append([]_hleaf(nil), k.leaf...), leaf)}
-	default:
-		var sub *_hnode
-		for _, l := range k.leaf {
-			sub = sub.insert(l.hkey, l.hash, l.pos, shift+5)
-		}
-		out.kids[i] = _hkid{sub: sub.insert(hk, h, pos, shift+5)}
-	}
-	return out
-}
-
-// remove drops a key that n has; nil if n is left empty.
-func (n *_hnode) remove(hk any, h uint64, shift uint) *_hnode {
-	bit := uint32(1) << ((h >> shift) & 31)
-	i := _popcount(n.bitmap & (bit - 1))
-	k := n.kids[i]
-	var nk _hkid
-	if k.sub != nil {
-		nk.sub = k.sub.remove(hk, h, shift+5)
-	} else {
-		for _, l := range k.leaf {
-			if l.hash != h || l.hkey != hk {
-				nk.leaf = append(nk.leaf, l)
-			}
-		}
-	}
-	out := &_hnode{bitmap: n.bitmap, kids: append([]_hkid(nil), n.kids...)}
-	if nk.sub == nil && len(nk.leaf) == 0 {
-		out.bitmap &^= bit
-		out.kids = append(out.kids[:i], out.kids[i+1:]...)
-		if out.bitmap == 0 {
 			return nil
 		}
-		return out
+		bit := uint32(1) << ((h >> shift) & 31)
+		if n.datamap&bit != 0 {
+			e := n.entries[_popcount(n.datamap&(bit-1))]
+			if e.hash == h && e.hkey == hk {
+				return e
+			}
+			return nil
+		}
+		if n.nodemap&bit == 0 {
+			return nil
+		}
+		n = n.subs[_popcount(n.nodemap&(bit-1))]
 	}
-	out.kids[i] = nk
+	return nil
+}
+
+func (n *_hnode) clone() *_hnode {
+	return &_hnode{datamap: n.datamap, nodemap: n.nodemap, entries: n.entries, subs: n.subs}
+}
+
+func _insertAt[T any](xs []T, i int, x T) []T {
+	out := make([]T, len(xs)+1)
+	copy(out, xs[:i])
+	out[i] = x
+	copy(out[i+1:], xs[i:])
 	return out
 }
 
-func _popcount(x uint32) int {
-	n := 0
-	for ; x != 0; x &= x - 1 {
-		n++
-	}
-	return n
+func _removeAt[T any](xs []T, i int) []T {
+	out := make([]T, len(xs)-1)
+	copy(out, xs[:i])
+	copy(out[i:], xs[i+1:])
+	return out
 }
+
+func _replaceAt[T any](xs []T, i int, x T) []T {
+	out := make([]T, len(xs))
+	copy(out, xs)
+	out[i] = x
+	return out
+}
+
+// set gives n with e for its key, added or replacing the entry there,
+// and whether it was added.
+func (n *_hnode) set(e *_mapEntry, shift uint) (*_hnode, bool) {
+	if n == nil {
+		bit := uint32(1) << ((e.hash >> shift) & 31)
+		return &_hnode{datamap: bit, entries: []*_mapEntry{e}}, true
+	}
+	if n.coll != nil {
+		for i, x := range n.coll {
+			if x.hkey == e.hkey {
+				return &_hnode{coll: _replaceAt(n.coll, i, e)}, false
+			}
+		}
+		return &_hnode{coll: append(append([]*_mapEntry(nil), n.coll...), e)}, true
+	}
+	bit := uint32(1) << ((e.hash >> shift) & 31)
+	switch {
+	case n.datamap&bit != 0:
+		i := _popcount(n.datamap & (bit - 1))
+		old := n.entries[i]
+		out := n.clone()
+		if old.hash == e.hash && old.hkey == e.hkey {
+			out.entries = _replaceAt(n.entries, i, e)
+			return out, false
+		}
+		// Both go into a node deeper down.
+		out.datamap &^= bit
+		out.nodemap |= bit
+		out.entries = _removeAt(n.entries, i)
+		out.subs = _insertAt(n.subs, _popcount(out.nodemap&(bit-1)), _hpair(old, e, shift+5))
+		return out, true
+	case n.nodemap&bit != 0:
+		j := _popcount(n.nodemap & (bit - 1))
+		sub, added := n.subs[j].set(e, shift+5)
+		out := n.clone()
+		out.subs = _replaceAt(n.subs, j, sub)
+		return out, added
+	}
+	out := n.clone()
+	out.datamap |= bit
+	out.entries = _insertAt(n.entries, _popcount(out.datamap&(bit-1)), e)
+	return out, true
+}
+
+// _hpair is a node holding two entries with different keys.
+func _hpair(a, b *_mapEntry, shift uint) *_hnode {
+	if a.hash == b.hash {
+		return &_hnode{coll: []*_mapEntry{a, b}}
+	}
+	ba, bb := (a.hash>>shift)&31, (b.hash>>shift)&31
+	if ba == bb {
+		return &_hnode{nodemap: 1 << ba, subs: []*_hnode{_hpair(a, b, shift+5)}}
+	}
+	if ba > bb {
+		a, b = b, a
+	}
+	return &_hnode{datamap: 1<<ba | 1<<bb, entries: []*_mapEntry{a, b}}
+}
+
+// single is the one entry of a node that holds nothing else, or nil.
+func (n *_hnode) single() *_mapEntry {
+	switch {
+	case n.coll != nil && len(n.coll) == 1:
+		return n.coll[0]
+	case n.coll == nil && len(n.entries) == 1 && len(n.subs) == 0:
+		return n.entries[0]
+	}
+	return nil
+}
+
+// remove gives n without a key (nil if nothing is left), and whether
+// it had the key.
+func (n *_hnode) remove(hk any, h uint64, shift uint) (*_hnode, bool) {
+	if n == nil {
+		return nil, false
+	}
+	if n.coll != nil {
+		for i, x := range n.coll {
+			if x.hkey == hk {
+				if len(n.coll) == 1 {
+					return nil, true
+				}
+				return &_hnode{coll: _removeAt(n.coll, i)}, true
+			}
+		}
+		return n, false
+	}
+	bit := uint32(1) << ((h >> shift) & 31)
+	switch {
+	case n.datamap&bit != 0:
+		i := _popcount(n.datamap & (bit - 1))
+		if e := n.entries[i]; e.hash != h || e.hkey != hk {
+			return n, false
+		}
+		if len(n.entries) == 1 && len(n.subs) == 0 {
+			return nil, true
+		}
+		out := n.clone()
+		out.datamap &^= bit
+		out.entries = _removeAt(n.entries, i)
+		return out, true
+	case n.nodemap&bit != 0:
+		j := _popcount(n.nodemap & (bit - 1))
+		sub, removed := n.subs[j].remove(hk, h, shift+5)
+		if !removed {
+			return n, false
+		}
+		out := n.clone()
+		switch {
+		case sub == nil:
+			out.nodemap &^= bit
+			out.subs = _removeAt(n.subs, j)
+			if len(out.entries) == 0 && len(out.subs) == 0 {
+				return nil, true
+			}
+		case sub.single() != nil:
+			// A node left with one entry moves it up here.
+			out.nodemap &^= bit
+			out.subs = _removeAt(n.subs, j)
+			out.datamap |= bit
+			out.entries = _insertAt(n.entries, _popcount(out.datamap&(bit-1)), sub.single())
+		default:
+			out.subs = _replaceAt(n.subs, j, sub)
+		}
+		return out, true
+	}
+	return n, false
+}
+
+// each calls f with the entries, until it returns false.
+func (n *_hnode) each(f func(e *_mapEntry) bool) bool {
+	if n == nil {
+		return true
+	}
+	for _, e := range n.coll {
+		if !f(e) {
+			return false
+		}
+	}
+	for _, e := range n.entries {
+		if !f(e) {
+			return false
+		}
+	}
+	for _, sub := range n.subs {
+		if !sub.each(f) {
+			return false
+		}
+	}
+	return true
+}
+
+// mapEntries gives n with f applied to every entry, keeping its shape.
+func (n *_hnode) mapEntries(f func(e *_mapEntry) *_mapEntry) *_hnode {
+	if n == nil {
+		return nil
+	}
+	out := &_hnode{datamap: n.datamap, nodemap: n.nodemap}
+	for _, e := range n.coll {
+		out.coll = append(out.coll, f(e))
+	}
+	if len(n.entries) > 0 {
+		out.entries = make([]*_mapEntry, len(n.entries))
+		for i, e := range n.entries {
+			out.entries[i] = f(e)
+		}
+	}
+	if len(n.subs) > 0 {
+		out.subs = make([]*_hnode, len(n.subs))
+		for i, sub := range n.subs {
+			out.subs[i] = sub.mapEntries(f)
+		}
+	}
+	return out
+}
+
+func _popcount(x uint32) int { return bits.OnesCount32(x) }
 
 // The sorted map: a persistent AVL tree ordered by less. Two keys are
 // the same key when neither is less than the other.
@@ -1509,6 +1647,68 @@ func (c *_sortedCore) delete(n *_tnode, k any) *_tnode {
 	return _tbalance(m.e, n.left, c.delete(n.right, m.e.key))
 }
 
+// The unordered map: the trie alone, holding the entries. It lists
+// them in the order of their hashes, which differs from run to run.
+
+type _hashCore struct {
+	trie *_hnode
+	n    int
+}
+
+func (c *_hashCore) find(k any) *_mapEntry {
+	hk := _mapKey(k)
+	return c.trie.get(hk, _mapHash(hk))
+}
+
+func (c *_hashCore) with(k, v any) _mapImpl {
+	hk := _mapKey(k)
+	h := _mapHash(hk)
+	key := k
+	if old := c.trie.get(hk, h); old != nil {
+		key = old.key
+	}
+	trie, added := c.trie.set(&_mapEntry{key: key, hkey: hk, hash: h, val: v}, 0)
+	out := &_hashCore{trie: trie, n: c.n}
+	if added {
+		out.n++
+	}
+	return out
+}
+
+func (c *_hashCore) without(k any) _mapImpl {
+	hk := _mapKey(k)
+	trie, removed := c.trie.remove(hk, _mapHash(hk), 0)
+	if !removed {
+		return c
+	}
+	return &_hashCore{trie: trie, n: c.n - 1}
+}
+
+func (c *_hashCore) size() int { return c.n }
+
+func (c *_hashCore) empty() _mapImpl { return &_hashCore{} }
+
+func (c *_hashCore) each(f func(e *_mapEntry) bool) { c.trie.each(f) }
+
+func (c *_hashCore) mapVals(f func(v any) any) _mapImpl {
+	return &_hashCore{trie: c.trie.mapEntries(func(e *_mapEntry) *_mapEntry {
+		return &_mapEntry{key: e.key, hkey: e.hkey, hash: e.hash, val: f(e.val)}
+	}), n: c.n}
+}
+
+// _mapUnordered is m as an unordered map.
+func _mapUnordered[K, V any](m _Map[K, V]) _Map[K, V] {
+	if _, ok := m.impl().(*_hashCore); ok {
+		return m
+	}
+	var out _mapImpl = &_hashCore{}
+	m.impl().each(func(e *_mapEntry) bool {
+		out = out.with(e.key, e.val)
+		return true
+	})
+	return _Map[K, V]{out}
+}
+
 // _implOf is the core of a _Map value reached by reflection.
 func _implOf(x reflect.Value) _mapImpl {
 	f := x.Field(0)
@@ -1521,6 +1721,8 @@ func _implOf(x reflect.Value) _mapImpl {
 		return (*_mapCore)(e.UnsafePointer())
 	case reflect.TypeFor[*_sortedCore]():
 		return (*_sortedCore)(e.UnsafePointer())
+	case reflect.TypeFor[*_hashCore]():
+		return (*_hashCore)(e.UnsafePointer())
 	}
 	panic("bork: unknown map kind " + e.Type().String())
 }

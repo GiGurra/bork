@@ -121,6 +121,54 @@ func TestSorted(t *testing.T) {
 	}
 }
 
+func TestUnordered(t *testing.T) {
+	hashes := map[string]func(any) uint64{
+		"real":      _mapHash,
+		"constant":  func(any) uint64 { return 42 },
+		"few bits":  func(k any) uint64 { return uint64(k.(int64) % 7) },
+		"high bits": func(k any) uint64 { return uint64(k.(int64)%5) << 61 },
+	}
+	real := _mapHash
+	for name, h := range hashes {
+		t.Run(name, func(t *testing.T) {
+			_mapHash = h
+			defer func() { _mapHash = real }()
+			r := rand.New(rand.NewSource(3))
+			var empty _Map[int64, string]
+			m := _mapUnordered(empty)
+			want := model{vals: map[int64]string{}}
+			var old []_Map[int64, string]
+			var olds []model
+			for step := 0; step < 3000; step++ {
+				k := int64(r.Intn(300))
+				if r.Intn(3) == 0 {
+					m, want = m.remove(k), want.remove(k)
+				} else {
+					v := string(rune('a' + r.Intn(26)))
+					m, want = m.put(k, v), want.put(k, v)
+				}
+				// Compare in sorted order: the map's own order is the hashes'.
+				got := _mapSortedBy(m, func(a, b int64) bool { return a < b })
+				check(t, step, got, model{keys: slices.Sorted(slices.Values(want.keys)), vals: want.vals})
+				if step%250 == 0 {
+					old, olds = append(old, m), append(olds, want)
+				}
+			}
+			for i := range old {
+				got := _mapSortedBy(old[i], func(a, b int64) bool { return a < b })
+				check(t, -i, got, model{keys: slices.Sorted(slices.Values(olds[i].keys)), vals: olds[i].vals})
+			}
+			if !_equal(m, _mapInOrder(m)) {
+				t.Fatal("unordered and insertion-ordered maps with the same entries differ")
+			}
+			doubled := _mapValues(m, func(s string) string { return s + s })
+			if v, ok := doubled.get(want.keys[0]); !ok || v != want.vals[want.keys[0]]+want.vals[want.keys[0]] {
+				t.Fatal("mapValues is wrong")
+			}
+		})
+	}
+}
+
 func TestRandom(t *testing.T) {
 	hashes := map[string]func(any) uint64{
 		"real":      _mapHash,

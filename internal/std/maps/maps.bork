@@ -18,7 +18,8 @@
 //
 // A map literal keeps its keys in the order they were added, and so do
 // the maps made from it. Sorted (or SortedBy) gives a map that keeps
-// them sorted instead; InOrder goes back. Either way it is a Map, which
+// them sorted instead, and Unordered a hash map that keeps no order;
+// InOrder goes back. Either way it is a Map, which
 // every function here takes, and what it gives keeps the order of the
 // map it started from.
 
@@ -40,6 +41,15 @@ fn SortedBy[K: Eq, V](m: Map[K, V], less: (K, K) => Bool): Map[K, V] unsafe go {
 // starting from its current order.
 fn InOrder[K: Eq, V](m: Map[K, V]): Map[K, V] unsafe go {
   return _mapInOrder(m)
+}
+
+// Unordered is m as a hash map that keeps no order: it lists its
+// entries in an order that depends on their hashes, and differs from
+// run to run. It takes less memory than the default map, and is
+// quicker to change. Use it for large maps whose order does not matter
+// (lookups, caches, counting); sort what you show from it.
+fn Unordered[K: Eq, V](m: Map[K, V]): Map[K, V] unsafe go {
+  return _mapUnordered(m)
 }
 
 // Get is the value of key, if m has it.
