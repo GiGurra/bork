@@ -1,0 +1,2 @@
+main.bork:3:3: function leak cannot return this value: it belongs to scope s, which ends on line 5
+main.bork:13:19: ch may be released: it belongs to scope s, which ended on line 12

@@ -97,6 +97,96 @@ fn delay(s: Scope, ms: Int): Unit | Cancelled unsafe go {
   return _Unit{}
 }
 
+// Closed is what sending to or receiving from a closed channel gives
+// (once its buffered values are received).
+type Closed = {}
+
+// Channel passes values of type T between tasks. It belongs to the
+// scope it was made in, and closes when that scope closes; its
+// operations stop with Cancelled when that scope is cancelled.
+type Channel[T] = {
+  sendFn: (T) => Unit | Cancelled | Closed,
+  receiveFn: () => T | Cancelled | Closed,
+  closeFn: () => Unit,
+}
+
+// channel makes a channel in scope s that holds up to capacity values
+// that are not received yet (0: a sender waits for a receiver).
+fn channel[T](s: Scope, capacity: Int): Channel[T] unsafe go {
+  import "sync"
+  c := make(chan T, capacity)
+  closed := make(chan struct{})
+  var once sync.Once
+  closeFn := func() { once.Do(func() { close(closed) }) }
+  s.Defer(closeFn)
+  // The Go channel is never closed, so a late send cannot panic.
+  return Channel[T]{
+    sendFn: func(x T) any {
+      select {
+      case <-closed:
+        return Closed{}
+      case <-s.ctx.Done():
+        return Cancelled{reason: s._cancelReason()}
+      default:
+      }
+      select {
+      case c <- x:
+        return _Unit{}
+      case <-closed:
+        return Closed{}
+      case <-s.ctx.Done():
+        return Cancelled{reason: s._cancelReason()}
+      }
+    },
+    receiveFn: func() any {
+      select {
+      case x := <-c:
+        return x
+      case <-closed:
+        select {
+        case x := <-c:
+          return x
+        default:
+          return Closed{}
+        }
+      case <-s.ctx.Done():
+        return Cancelled{reason: s._cancelReason()}
+      }
+    },
+    closeFn: closeFn,
+  }
+}
+
+// send passes x to the channel, waiting while it is full.
+fn send[T](ch: Channel[T], x: T): Unit | Cancelled | Closed unsafe go {
+  return ch.sendFn(x)
+}
+
+// receive takes the next value from the channel, waiting until there
+// is one.
+fn receive[T](ch: Channel[T]): T | Cancelled | Closed unsafe go {
+  return ch.receiveFn()
+}
+
+// closeChannel closes the channel: sends give Closed, and receives
+// give the values still buffered, then Closed.
+fn closeChannel[T](ch: Channel[T]) unsafe go {
+  ch.closeFn()
+}
+
+// received receives values until the channel closes (or its scope is
+// cancelled), and gives them in order.
+fn received[T](ch: Channel[T]): List[T] unsafe go {
+  out := []T{}
+  for {
+    v, ok := ch.receiveFn().(T)
+    if !ok {
+      return out
+    }
+    out = append(out, v)
+  }
+}
+
 // sleep pauses the routine for ms milliseconds.
 fn sleep(ms: Int) unsafe go {
   import "time"
