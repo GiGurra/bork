@@ -1,0 +1,30 @@
+import "bork/encoding"
+
+pred positive(n: Int) { n > 0 }
+type Item = { code: String, count: Int where positive, active: Bool, note: Option[String] } derive (Decode, Encode)
+type Group = { name: String, tags: List[Int] } derive (Decode, Encode)
+
+fn main() {
+  println(encoding.CsvRows("a,b\n\"line\nnext\",\"quote\"\"here\"\n"))
+  println(encoding.CsvRows("a,b\nshort\n"))
+  println(encoding.CsvRows("\"bad"))
+  println(encoding.CsvRows(encoding.Csv([["a,b", "x\"y", "line\nnext", ""]])))
+  println(encoding.DecodeCsv[Item]("code,count,active\n007,2,true\n"))
+  println(encoding.DecodeCsv[Item]("active,code,count,note\nfalse,007,3,null\ntrue,008,4,\"\"\"\"\"\"\n"))
+  println(encoding.DecodeCsv[Item]("code,count,active\n007,0,no\n008,-1,123\n"))
+  println(encoding.DecodeCsv[Item]("code,count,active\n007,2,true,extra\n008\n"))
+  println(encoding.DecodeCsv[Item]("code,code,extra\n"))
+  println(encoding.DecodeCsv[Item](""))
+  println(encoding.DecodeCsv[Int]("a\n1\n"))
+  println(encoding.DecodeCsv[Group]("name,tags\na,\"[1,2]\"\n"))
+  println(encoding.DecodeCsv[Group]("name,tags\na,\"[1,false]\"\n"))
+  items = [Item { code: "007", count: 2, active: true, note: Option.None }, Item { code: "008", count: 3, active: false, note: Option.Some { value: "" } }]
+  match (encoding.EncodeCsv(items)) {
+    text: String => {
+      println(encoding.CsvRows(text))
+      println(encoding.DecodeCsv[Item](text))
+    }
+    error: encoding.CsvError => println(error)
+  }
+  println(encoding.EncodeCsv[Item]([]))
+}

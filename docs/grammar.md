@@ -200,3 +200,21 @@ HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeo
   prelude `File`, `openFile`, `createFile`, `readAll`, and `write` have moved
   to this package. I/O functions declare `uses io`; ForEachLine accepts an
   open callback and also charges its effects. See [the filesystem example](../examples/fs/main.bork).
+
+- **CSV:** `encoding.CsvRows(text)` parses comma-separated text into
+  `List[List[String]] | encoding.CsvError`; `encoding.Csv(rows)` writes rows
+  with LF endings and CSV quoting. Raw parsing permits ragged rows and
+  quoted newlines, skips blank lines, and normalizes CRLF as Go's CSV parser
+  does. `encoding.DecodeCsv[T: Decode](text)` reads a header row and a derived
+  record schema, returning `List[T] | encoding.CsvError | encoding.CsvErrors`.
+  Required String fields are literal (so `007` stays `007`); all other cells
+  use JSON syntax. Optional strings therefore use JSON quotes, and `null`
+  represents None, preserving Some(""). Missing optional columns become None.
+  Headers match field names exactly; duplicate, unknown, and missing required
+  columns are errors. Field types and facts are checked, collecting every
+  row/field error without returning partial records. `EncodeCsv[T: Encode + Decode]`
+  writes headers in schema order; both classes are required to obtain the
+  schema and preserve optional-cell semantics. Record schemas need at least
+  one field. Empty typed input writes empty text. Errors use one-based rows
+  including the header and field-name columns (nested paths appended); CSV
+  syntax errors use physical line and byte position. See [the CSV example](../examples/csv/main.bork).

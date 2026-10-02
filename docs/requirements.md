@@ -989,7 +989,6 @@ returns a union error. Immutable access uses `length`, `isEmpty`, `get`,
 `bork/encoding` supplies hex and padded standard/URL-safe base64 encoders and
 parsers. Invalid encodings return `ParseError` without partial data. The
 base64 parsers enforce zero trailing padding bits and accept CR/LF.
-CSV support follows separately using record field schemas and `Decode`.
 
 ### Filesystem package
 
@@ -1012,3 +1011,20 @@ umask. Write truncates; Append appends; CreateNew reports Exists for an
 existing path. Operational errors are typed union values NotFound,
 PermissionDenied, Exists or IoError with the path and underlying message.
 There are no new language constructs.
+
+
+### CSV encoding
+
+CSV has raw row parsing/writing and typed record parsing/writing through
+`Decode`/`Encode`. Typed CSV uses the derived Decode field schema: String
+fields are verbatim, numbers, booleans and compound fields use JSON, and
+optional cells use JSON (including quoted optional strings and null). Missing
+optional columns become None. Header names match fields exactly; unknown,
+duplicate and missing required headers are errors. Ragged typed rows are
+errors. Facts and field types are checked before constructing records, with
+all field errors collected in `CsvErrors` by row and column. Malformed CSV
+returns `CsvError`; partial records are never returned. Encoding requires both
+Encode and Decode for the schema and optional semantics. Zero-field records
+are unsupported; empty input encodes to empty text. Raw CSV follows Go CSV
+quoting, blank-line skipping, CRLF normalization and LF output, permitting
+ragged rows. No new syntax is introduced.

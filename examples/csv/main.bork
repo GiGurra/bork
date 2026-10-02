@@ -1,0 +1,21 @@
+import "bork/encoding"
+
+pred positive(n: Int) { n > 0 }
+type Stock = { code: String, quantity: Int where positive, note: Option[String] } derive (Decode, Encode)
+
+fn main() {
+  // Field types decide parsing. The code remains "007".
+  match (encoding.DecodeCsv[Stock]("code,quantity\n007,3\n")) {
+    rows: List[Stock] => {
+      println(rows)
+      match (encoding.EncodeCsv(rows)) {
+        text: String => println(encoding.CsvRows(text))
+        error: encoding.CsvError => println(error)
+      }
+    }
+    error: encoding.CsvError => println(error)
+    errors: encoding.CsvErrors => println(errors)
+  }
+  // Both rows fail their quantity fact; both failures are returned.
+  println(encoding.DecodeCsv[Stock]("code,quantity\n007,0\n008,-2\n"))
+}
