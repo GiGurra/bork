@@ -116,3 +116,13 @@ test('every example and case source tokenizes without exhausting the time limit'
   walk(path.join(root, 'examples'));
   walk(path.join(root, 'testdata/cases'));
 });
+
+
+test('unfinished single-line literals recover before the next declaration', () => {
+  for (const literal of ['"unfinished', "'x", 's"unfinished $name', 's"${1']) {
+    const ls = tokenize(`fn f(): String { ${literal}\n}\nfn next(): Int { 1 }`);
+    has(ls, 2, 'fn', 'storage.type.function.bork');
+    has(ls, 2, 'next', 'entity.name.function.bork');
+    assert.ok(!scopes(ls, 2, 'next').some(scope => scope.startsWith('string.')));
+  }
+});

@@ -80,7 +80,7 @@
     "strings": {
       "name": "string.quoted.double.bork",
       "begin": "\"",
-      "end": "\"",
+      "end": "\"|$",
       "patterns": [
         {
           "include": "#escapes"
@@ -90,7 +90,7 @@
     "runes": {
       "name": "string.quoted.single.bork",
       "begin": "'",
-      "end": "'",
+      "end": "'|$",
       "patterns": [
         {
           "include": "#escapes"
@@ -100,7 +100,7 @@
     "interpolated-string": {
       "name": "string.interpolated.bork",
       "begin": "\\bs\"",
-      "end": "\"",
+      "end": "\"|$",
       "patterns": [
         {
           "include": "#escapes"
@@ -118,7 +118,7 @@
               "name": "punctuation.section.interpolation.begin.bork"
             }
           },
-          "end": "\\}",
+          "end": "\\}|$",
           "endCaptures": {
             "0": {
               "name": "punctuation.section.interpolation.end.bork"
