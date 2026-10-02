@@ -1,0 +1,14 @@
+ADA, CY
+["bob", "ada", "cy"]
+{"core": ["ada", "cy"], "web": ["bob"]}
+2
+{"and": 1, "cat": 1, "hat": 1, "the": 2}
+["the"]
+[3, 2, 1]
+hihi
+Point { x: 4, y: 6 }
+7
+7
+5
+[30, 20]
+5

@@ -8,6 +8,7 @@ fn describe(a: money.Amount): String {
 }
 
 fn main() {
+  println(money.FormatIn(money.Cents(150).Doubled()))
   println(money.FormatIn(money.Fee()))
   println(money.FormatIn(money.Cents(5), money.Currency.Sek))
   items = [

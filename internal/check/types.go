@@ -466,6 +466,9 @@ type TypeParam struct {
 	Decl *syntax.TypeParam
 	// Bounds lists the classes the type must have instances of.
 	Bounds []*Class
+	// Hole is set for a type not known yet, while a lambda's body is
+	// checked to infer what it gives (see inferFromBody).
+	Hole bool
 }
 
 func (t *TypeParam) String() string { return t.Name }

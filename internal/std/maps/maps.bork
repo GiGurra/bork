@@ -16,6 +16,9 @@
 // with ==; two maps are equal when they have the same entries, in any
 // order.
 //
+// Every function here is also a method of Map, which needs no import:
+// m.get(k), m.put(k, v), m.filter(f).keys(), and so on.
+//
 // A map literal keeps its keys in the order they were added, and so do
 // the maps made from it. Sorted (or SortedBy) gives a map that keeps
 // them sorted instead, and Unordered a hash map that keeps no order;
@@ -27,135 +30,65 @@
 // and stay so as keys are put in. It is a persistent balanced tree, so
 // Get, Put, and Remove take time proportional to the log (base 2) of
 // the size.
-fn Sorted[K: Ord + Eq, V](m: Map[K, V]): Map[K, V] {
-  SortedBy(m, (a, b) => compare(a, b) < 0)
-}
+fn Sorted[K: Ord + Eq, V](m: Map[K, V]): Map[K, V] { m.sorted() }
 
 // SortedBy is m kept sorted by less, which must be a strict order that
 // agrees with == (neither a < b nor b < a exactly when a == b).
-fn SortedBy[K: Eq, V](m: Map[K, V], less: (K, K) => Bool): Map[K, V] unsafe go {
-  return _mapSortedBy(m, less)
-}
+fn SortedBy[K: Eq, V](m: Map[K, V], less: (K, K) => Bool): Map[K, V] { m.sortedBy(less) }
 
 // InOrder is m kept in the order its keys are added (the default),
 // starting from its current order.
-fn InOrder[K: Eq, V](m: Map[K, V]): Map[K, V] unsafe go {
-  return _mapInOrder(m)
-}
+fn InOrder[K: Eq, V](m: Map[K, V]): Map[K, V] { m.inOrder() }
 
 // Unordered is m as a hash map that keeps no order: it lists its
 // entries in an order that depends on their hashes, and differs from
 // run to run. It takes less memory than the default map, and is
 // quicker to change. Use it for large maps whose order does not matter
 // (lookups, caches, counting); sort what you show from it.
-fn Unordered[K: Eq, V](m: Map[K, V]): Map[K, V] unsafe go {
-  return _mapUnordered(m)
-}
+fn Unordered[K: Eq, V](m: Map[K, V]): Map[K, V] { m.unordered() }
 
 // Get is the value of key, if m has it.
-fn Get[K: Eq, V](m: Map[K, V], key: K): Option[V] unsafe go {
-  if v, ok := m.get(key); ok {
-    return Option_Some[V]{value: v}
-  }
-  return Option_None[V]{}
-}
+fn Get[K: Eq, V](m: Map[K, V], key: K): Option[V] { m.get(key) }
 
 // GetOr is the value of key, or otherwise if m does not have it.
-fn GetOr[K: Eq, V](m: Map[K, V], key: K, otherwise: V): V unsafe go {
-  if v, ok := m.get(key); ok {
-    return v
-  }
-  return otherwise
-}
+fn GetOr[K: Eq, V](m: Map[K, V], key: K, otherwise: V): V { m.getOr(key, otherwise) }
 
 // Has reports whether m has key.
-fn Has[K: Eq, V](m: Map[K, V], key: K): Bool unsafe go {
-  _, ok := m.get(key)
-  return ok
-}
+fn Has[K: Eq, V](m: Map[K, V], key: K): Bool { m.has(key) }
 
 // Put is m with key set to value: added at the end, or changed where
 // it is.
-fn Put[K: Eq, V](m: Map[K, V], key: K, value: V): Map[K, V] unsafe go {
-  return m.put(key, value)
-}
+fn Put[K: Eq, V](m: Map[K, V], key: K, value: V): Map[K, V] { m.put(key, value) }
 
 // Remove is m without key.
-fn Remove[K: Eq, V](m: Map[K, V], key: K): Map[K, V] unsafe go {
-  return m.remove(key)
-}
+fn Remove[K: Eq, V](m: Map[K, V], key: K): Map[K, V] { m.remove(key) }
 
 // Size is the number of entries.
-fn Size[K: Eq, V](m: Map[K, V]): Int unsafe go {
-  return int64(m.len())
-}
+fn Size[K: Eq, V](m: Map[K, V]): Int { m.size() }
 
 // IsEmpty reports whether m has no entries.
-fn IsEmpty[K: Eq, V](m: Map[K, V]): Bool unsafe go {
-  return m.len() == 0
-}
+fn IsEmpty[K: Eq, V](m: Map[K, V]): Bool { m.isEmpty() }
 
 // Keys are m's keys, in order.
-fn Keys[K: Eq, V](m: Map[K, V]): List[K] unsafe go {
-  return m.keys()
-}
+fn Keys[K: Eq, V](m: Map[K, V]): List[K] { m.keys() }
 
 // Values are m's values, in the order of their keys.
-fn Values[K: Eq, V](m: Map[K, V]): List[V] unsafe go {
-  return m.vals()
-}
+fn Values[K: Eq, V](m: Map[K, V]): List[V] { m.values() }
 
 // Entries are m's keys with their values, in order.
-fn Entries[K: Eq, V](m: Map[K, V]): List[Entry[K, V]] unsafe go {
-  out := make([]Entry[K, V], 0, m.len())
-  m.each(func(k K, v V) bool {
-    out = append(out, Entry[K, V]{key: k, value: v})
-    return true
-  })
-  return out
-}
+fn Entries[K: Eq, V](m: Map[K, V]): List[Entry[K, V]] { m.entries() }
 
 // FromEntries builds a map; a key given twice keeps the later value.
-fn FromEntries[K: Eq, V](entries: List[Entry[K, V]]): Map[K, V] unsafe go {
-  keys := make([]K, len(entries))
-  vals := make([]V, len(entries))
-  for i, e := range entries {
-    keys[i], vals[i] = e.key, e.value
-  }
-  return _mapOf(keys, vals)
-}
+fn FromEntries[K: Eq, V](entries: List[Entry[K, V]]): Map[K, V] { entries.toMap() }
 
 // Merge is a with b's entries put in: b's value wins for a key in both.
-fn Merge[K: Eq, V](a: Map[K, V], b: Map[K, V]): Map[K, V] unsafe go {
-  out := a
-  b.each(func(k K, v V) bool {
-    out = out.put(k, v)
-    return true
-  })
-  return out
-}
+fn Merge[K: Eq, V](a: Map[K, V], b: Map[K, V]): Map[K, V] { a.merge(b) }
 
 // MapValues is m with f applied to every value.
-fn MapValues[K: Eq, V, W](m: Map[K, V], f: (V) => W): Map[K, W] unsafe go {
-  return _mapValues(m, f)
-}
+fn MapValues[K: Eq, V, W](m: Map[K, V], f: (V) => W): Map[K, W] { m.mapValues(f) }
 
 // Filter keeps the entries for which test holds.
-fn Filter[K: Eq, V](m: Map[K, V], test: (K, V) => Bool): Map[K, V] unsafe go {
-  out := m
-  m.each(func(k K, v V) bool {
-    if !test(k, v) {
-      out = out.remove(k)
-    }
-    return true
-  })
-  return out
-}
+fn Filter[K: Eq, V](m: Map[K, V], test: (K, V) => Bool): Map[K, V] { m.filter(test) }
 
 // ForEach calls f with every key and value, in order.
-fn ForEach[K: Eq, V](m: Map[K, V], f: (K, V) => Unit) unsafe go {
-  m.each(func(k K, v V) bool {
-    f(k, v)
-    return true
-  })
-}
+fn ForEach[K: Eq, V](m: Map[K, V], f: (K, V) => Unit) { m.forEach(f) }

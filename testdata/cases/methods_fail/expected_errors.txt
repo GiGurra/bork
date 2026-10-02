@@ -1,0 +1,5 @@
+main.bork:4:1: method norm of Point is already declared at main.bork:3:1
+main.bork:5:8: methods can be declared on List, Map, the basic types, and declared types, not on T
+main.bork:7:30: T has no methods
+main.bork:10:13: Int has no method norm
+main.bork:11:32: Point has no method size

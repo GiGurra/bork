@@ -47,3 +47,7 @@ fn AtLeastOneCent(x: Int): Int where Positive { if (Positive(x)) { x } else { 1 
 fn FormatIn(a: Amount, c: Currency = Currency.Eur): String { Format(a, c) }
 
 fn Fee(base: Amount = Amount { cents: 100 }): Amount { base }
+
+// Exported methods are seen wherever the type is.
+fn (a: Amount) Doubled(): Amount { Add(a, a) }
+fn (a: Amount) secret(): Int { a.cents }

@@ -1,0 +1,12 @@
+type Point = { x: Int, y: Int }
+
+fn (p: Point) norm(): Int { p.x + p.y }
+fn (p: Point) norm(): Int { 0 }
+fn (x: T) bad[T](): Int { 0 }
+
+fn generic[T](x: T): Int { x.norm() }
+
+fn main() {
+  println(5.norm())
+  println(Point { x: 1, y: 2 }.size())
+}
