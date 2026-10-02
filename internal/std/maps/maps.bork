@@ -44,7 +44,9 @@ fn InOrder[K: Eq, V](m: Map[K, V]): Map[K, V] { m.inOrder() }
 // entries in an order that depends on their hashes, and differs from
 // run to run. It takes less memory than the default map, and is
 // quicker to change. Use it for large maps whose order does not matter
-// (lookups, caches, counting); sort what you show from it.
+// (lookups, caches, counting). Printing sorts numeric and string keys
+// by value, and other keys by their text, grouping mixed kinds.
+// Printing does not change traversal.
 fn Unordered[K: Eq, V](m: Map[K, V]): Map[K, V] { m.unordered() }
 
 // Get is the value of key, if m has it.

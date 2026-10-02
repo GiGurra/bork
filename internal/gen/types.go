@@ -928,9 +928,11 @@ var _equalMapHook func(x, y reflect.Value) bool
 const mapRuntime = `package main
 
 import (
+	"cmp"
 	"hash/maphash"
 	"math/bits"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -1042,12 +1044,49 @@ func (m _Map[K, V]) String() string {
 	if m.len() == 0 {
 		return "{:}"
 	}
-	var parts []string
+	type shownEntry struct {
+		key any
+		keyText, text string
+	}
+	entries := make([]shownEntry, 0, m.len())
 	m.impl().each(func(e *_mapEntry) bool {
-		parts = append(parts, _show(e.key)+": "+_show(e.val))
+		keyText := _show(e.key)
+		entries = append(entries, shownEntry{e.key, keyText, keyText+": "+_show(e.val)})
 		return true
 	})
+	if _, ok := m.impl().(*_hashCore); ok {
+		slices.SortFunc(entries, func(a, b shownEntry) int {
+			if c := _mapPrintCompare(a.key, b.key, a.keyText, b.keyText); c != 0 {
+				return c
+			}
+			return strings.Compare(a.text, b.text)
+		})
+	}
+	parts := make([]string, len(entries))
+	for i, e := range entries {
+		parts[i] = e.text
+	}
 	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+// _mapPrintCompare orders numbers and strings by value, and other keys
+// by their text. Mixed kinds are grouped so the order stays transitive.
+func _mapPrintCompare(a, b any, aText, bText string) int {
+	x, y := reflect.ValueOf(a), reflect.ValueOf(b)
+	if x.Kind() != y.Kind() {
+		return cmp.Compare(x.Kind(), y.Kind())
+	}
+	switch x.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return cmp.Compare(x.Int(), y.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return cmp.Compare(x.Uint(), y.Uint())
+	case reflect.Float32, reflect.Float64:
+		return cmp.Compare(x.Float(), y.Float())
+	case reflect.String:
+		return strings.Compare(x.String(), y.String())
+	}
+	return strings.Compare(aText, bText)
 }
 
 // _mapEntry is a key with its value. hkey is the key as Go hashes and

@@ -169,6 +169,61 @@ func TestUnordered(t *testing.T) {
 	}
 }
 
+func TestMapPrinting(t *testing.T) {
+	real := _mapHash
+	defer func() { _mapHash = real }()
+	for _, hash := range []func(any) uint64{real, func(any) uint64 { return 0 }, func(k any) uint64 { return ^real(k) }} {
+		_mapHash = hash
+		ints := _mapOf([]int64{10, 2, -1}, []string{"ten", "two", "minus"})
+		unordered := _mapUnordered(ints)
+		before := unordered.keys()
+		if got := unordered.String(); got != "{-1: \"minus\", 2: \"two\", 10: \"ten\"}" {
+			t.Fatalf("numeric order: %s", got)
+		}
+		if !slices.Equal(before, unordered.keys()) {
+			t.Fatal("printing changed traversal order")
+		}
+		if got := ints.String(); got != "{10: \"ten\", 2: \"two\", -1: \"minus\"}" {
+			t.Fatalf("insertion order: %s", got)
+		}
+		desc := _mapSortedBy(ints, func(a, b int64) bool { return a > b })
+		if got := desc.String(); got != "{10: \"ten\", 2: \"two\", -1: \"minus\"}" {
+			t.Fatalf("custom sort order: %s", got)
+		}
+		unsigned := _mapUnordered(_mapOf([]uint64{10, 2, 0}, []int64{10, 2, 0}))
+		if got := unsigned.String(); got != "{0: 0, 2: 2, 10: 10}" {
+			t.Fatalf("unsigned order: %s", got)
+		}
+		floats := _mapUnordered(_mapOf([]float64{10, -2.5, 0.25}, []int64{10, -2, 0}))
+		if got := floats.String(); got != "{-2.5: -2, 0.25: 0, 10.0: 10}" {
+			t.Fatalf("float order: %s", got)
+		}
+		lists := _mapUnordered(_mapOf([][]int64{{2}, {10}}, []int64{2, 10}))
+		if got := lists.String(); got != "{[10]: 10, [2]: 2}" {
+			t.Fatalf("text fallback: %s", got)
+		}
+		mixed := _mapUnordered(_mapOf([]any{int64(10), "a", int64(2)}, []int64{10, 1, 2}))
+		if got := mixed.String(); got != "{2: 2, 10: 10, \"a\": 1}" {
+			t.Fatalf("mixed keys: %s", got)
+		}
+		ties := _mapUnordered(_mapOf([]printKey{{2}, {1}}, []int64{20, 10}))
+		if got := ties.String(); got != "{same: 10, same: 20}" {
+			t.Fatalf("text ties: %s", got)
+		}
+		nested := _mapUnordered(_mapOf([]string{"z", "a"}, []_Map[int64, string]{unordered, unordered}))
+		if got := nested.String(); got != "{\"a\": {-1: \"minus\", 2: \"two\", 10: \"ten\"}, \"z\": {-1: \"minus\", 2: \"two\", 10: \"ten\"}}" {
+			t.Fatalf("nested maps: %s", got)
+		}
+		if got := _mapUnordered(_Map[int64, string]{}).String(); got != "{:}" {
+			t.Fatalf("empty map: %s", got)
+		}
+	}
+}
+
+type printKey struct { id int64 }
+
+func (printKey) String() string { return "same" }
+
 func TestRandom(t *testing.T) {
 	hashes := map[string]func(any) uint64{
 		"real":      _mapHash,
