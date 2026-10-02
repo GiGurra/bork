@@ -428,7 +428,7 @@ Remaining work:
 
 > **Proposal, under review** (bork-ot9ki9). Nothing here is implemented yet. If it is accepted, it replaces "no need to thread effects through types" under *Effects and concurrency* and "no purity tracking in v0.1" under *Facts, purity, and the outside world*.
 
-Today any function can print, read files, call the network, or update shared state, and its signature does not say so. For code written by agents, the signature is what a reviewer checks, so it should state what the function can do to the world outside its arguments and result. A function that declares nothing does nothing outside them, and the compiler checks this.
+Today any function can print, read files, call the network, or update shared state, and its signature does not say so. For code written by agents, the signature is what a reviewer checks, so it should state what the function can do to the world outside its arguments and result. Below `main`, a function that declares nothing does nothing outside them, and the compiler checks this. The exceptions are deliberate and few: logging, the runtime's own diagnostics, and `unsafe go` code (trusted, and allowed only where `bork.mod` says so).
 
 ### The two designs
 
@@ -454,7 +454,7 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 
 | Effect  | Allows | Prelude and standard library |
 |---------|--------|------------------------------|
-| `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `openFile`, `createFile`, `readAll`, `write`, `args`, `exit` |
+| `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `openFile`, `createFile`, `readAll`, `write`, `args`, `exit`, `log.Configure` |
 | `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send` |
 | `clock` | time and waiting | `sleep`, `delay`, `cancelAfter` (and the future clock and timers) |
 | `random` | random numbers | none yet (the future random number functions) |
@@ -465,7 +465,7 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 - **The compiler's built-ins** are classified in the checker: `println` is `io`, and `toString`, `panic`, the conversions, `assert`, and `assertEqual` are pure.
 - **Making things is pure.** `atom(x)`, `channel(s, n)`, `spawn`, `launch`, `await`, `attach`, `onClose`, `scope` blocks and their policies, `http.Address`, `http.Text`, JSON, strings, lists, and maps use nothing on their own. (`spawn` and `onClose` take on the effects of the work they are given; see higher-order functions below.)
 - **`panic` is pure.** It signals a bug, not an effect. The same goes for what the runtime does on its own when a scope ends: logging an orphaned task, or a failure under `logFailures()`, and the timing of `taskTimeout` and `cleanupTimeout`. These are runtime diagnostics, not actions of the code.
-- **Logging is not tracked.** `bork/log` (`log.Info`, `log.Configure`, ...) can be used in any function, pure ones and predicates included, with no `uses`. A log line added deep in a call chain should not ripple a declaration up through every caller, and logs do not change what a program computes. When compile-time evaluation runs a predicate that logs, the log output is discarded.
+- **Logging is not tracked.** Writing logs with `bork/log` (`log.Info`, `log.Debug`, `log.Log`, ...) is allowed in any function, pure ones and predicates included, with no `uses`. It is also the way to trace a pure function while debugging. `log.Configure` is `io`, though: it decides for the whole program where logs go (stdout, say), so it belongs in `main`, and pure code cannot turn logging into printing. A log line added deep in a call chain should not ripple a declaration up through every caller, and logs do not change what a program computes. When compile-time evaluation runs a predicate that logs, the log output is discarded.
 - **Randomness is its own effect**, `random`, beside `clock`: both make a function nondeterministic without touching anything outside the process. The standard library has no random numbers yet; the effect is reserved for them, and the `unsafe go` check below uses it.
 
 ### Syntax
@@ -483,7 +483,8 @@ fn handler(store: Atom[Store]): (Request, Scope) uses state => Response { ... }
 
 - **`uses` comes after the parameters**, before the result, in declarations and in function types alike, the way Swift writes `throws`. Effects are joined with `+`, as type parameter bounds are (`T: Show + Eq`); a comma would clash with the comma between parameters.
 - **So it is never unclear what `uses` belongs to.** `handler` above is pure: it builds a function that touches state. Unions in results need no parentheses either (`(String) uses net => Response | IoError`).
-- **`uses nothing`** marks a function-typed parameter that must be pure (see below). Elsewhere, leaving `uses` out already means pure.
+- **`uses nothing`** marks a function-typed parameter that must be pure (see below), or a `main` that must be (see below). Elsewhere, leaving `uses` out already means pure, and `uses nothing` is allowed but redundant.
+- **Grammar changes:** `FuncDecl` and `MethodSig` get an optional `Uses` after the parameter list, and `FuncType` one before its `=>`: `Uses = "uses" ( "nothing" | Ident { "+" Ident } )`. On a declaration, it comes before the result and before `where` (`fn f(x: Int) uses io: Int where positive unsafe go { ... }`).
 - `uses` and `nothing` are keywords only in these positions, and the effect names are only names there, so a package or value may still be called `state` or `random`.
 - **An unexported function may not declare effects its body never uses.** This matches unused imports, and keeps `uses net` meaning "may call the network". Exported functions may declare more than they use, to keep their API stable when the body changes. So may class methods, `unsafe go` functions (their bodies are not checked), and function types.
 
@@ -499,18 +500,19 @@ forEach(names, n => println(n))                              // this call uses i
 ```
 
 - **Inside the body, an open parameter can be called freely.** Its effects belong to the caller.
-- **Inside the body, an open parameter's effects are unknown**: one effect variable, standing for whatever the caller passes. The implementation models it that way.
-- **An open parameter can only flow to another open position:** an open parameter of a call, or the open result of its own signature. It cannot be stored in, or passed as, a function type with a fixed set of effects, pure or not, since its effects would be lost (a `run: () uses io => Unit` field could then hold a function that uses `net`). To store a function, close the parameter: `fn job(name: String, f: () uses io => Unit): Job`.
-- **An open parameter can be returned.** A function type without `uses` in the *result* of the same signature is open too, and it carries the effects of the open arguments: `fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C` gives a function that uses what `f` and `g` use. A function with open parameters is charged their effects whether or not it calls them. That is conservative and simple.
-- **Which positions are open:** a parameter (receivers included) or result whose type is a function type written without `uses`, also through a type alias (`handler: Handler`, with `type Handler = (Request, Scope) => Response`). Nothing else: not `List[() => Unit]`, not a union such as `((A) => B) | None`, and not the parameters inside a function type. So a middleware type such as `((Request) => Response) => (Request) => Response` takes pure handlers only, and one that wraps effectful handlers names their effects.
+- **Inside the body, an open parameter's effects are unknown**: one effect variable, `open`, standing for whatever the caller passes. The implementation models it that way. A lambda that calls an open parameter has `open` among its effects, like the parameter itself.
+- **What has `open` among its effects can only flow to another open position:** an open parameter of a call, or the open result of its own signature. `open` fits in no fixed set of effects, so such a value cannot be stored in, or passed as, a function type with fixed effects, pure or not (a `run: () uses io => Unit` field could then hold a function that uses `net`). Nor can it become a type argument or an element: `[f]`, `Option.Some { value: f }`, `identity(f)`, `() => f()` in a record field. To store a function, close the parameter: `fn job(name: String, f: () uses io => Unit): Job`.
+- **An open parameter can be returned.** A function type without `uses` in the *result* of the same signature is open too: `fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C` gives a function that uses what `f` and `g` use. A value returned in an open result may use `open` and nothing else, so `fn wrap(f: () => Unit): () => Unit { () => { println("x"); f() } }` is an error: there is no way to write "io plus what f uses". (Write `wrap(f: () uses io => Unit): () uses io => Unit` instead.)
+- **A call is charged the effects of the open arguments its function may call:** those passed to open parameters that the body calls, or hands on to a call. An open parameter that only flows into the open result is not charged at the call, but carried in the result's type: `compose(a, b)` is pure, and the function it gives uses what `a` and `b` use, as a hand-written `handler` closure does.
+- **Which positions are open:** a parameter (receivers included) or result whose type is a function type written without `uses`, also through a type alias (`handler: Handler`, with `type Handler = (Request, Scope) => Response`). Nothing else: not `List[() => Unit]`, not a union such as `((A) => B) | None`, and not the parameters or results inside a function type (`(A) => (B) => C` has an open result `(B) => C` only at the top). So a middleware type such as `((Request) => Response) => (Request) => Response` takes pure handlers only, and one that wraps effectful handlers names their effects.
 - **A function with open parameters used as a value** (`g = map`) has its open positions closed as pure: `g` is `(List[A], (A) => B) => List[B]`, all pure. Calling `map` directly keeps it open.
 - **Generic code needs nothing extra:** if `T` is `() uses io => Int`, the effect is part of `T`, so `identity`, `head`, and `Option[T]` carry it. Since effects are erased in the Go output, a type pattern on a function type (`f: () => Unit`) may only match a union member known statically to have the same effects, as facts are treated.
 - **`uses nothing` makes a parameter strictly pure.** `fn update[T](a: Atom[T], f: (T) uses nothing => T) uses state: T` is how the prelude says "f may run more than once, so it must not do anything".
-- **A fact named after a function argument needs a pure argument.** `filter(xs, keep)` gives `List[T where keep]`, and that fact, "keep holds", only means something if `keep` gives the same answer every time. So an effectful `keep` still filters, but the result is a plain `List[T]`. The facts its body proves with predicates are kept either way (predicates are pure): `filter(xs, x => { println(x); positive(x) })` uses `io` and still gives positive elements.
+- **A fact named after a function argument needs a pure argument.** `filter(xs, keep)` gives `List[T where keep]`, and that fact, "keep holds", only means something if `keep` gives the same answer every time. So an effectful `keep` still filters, but the result is a plain `List[T]`. The facts its body proves with predicates are kept either way (predicates are pure): `filter(xs, x => { println(x); positive(x) })` uses `io` and still gives positive elements. Inside a function whose parameter is open, a fact named after that parameter holds on the same condition: the prelude's method `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] { filter(xs, keep) }` still checks, and at each call the fact is kept only if that argument is pure.
 
 The prelude's list, `Option`, and map functions stay as they are, and their function parameters are open. Only `update` and `swap` (strictly pure `f`) and the effectful functions in the table change.
 
-**Records of functions made in Go carry their effects.** The prelude's `Atom` and `Channel` are records whose fields are functions made by `unsafe go` (`currentFn`, `sendFn`, ...), visible to any code that has the record. Their types must say what they do, `currentFn: () uses state => T`, or a program could call `store.currentFn()` with no `uses state`. The general rule: an `unsafe go` function that returns or builds function values types them with their effects, as part of the signature bork trusts.
+**Records of functions made in Go carry their effects.** The prelude's `Atom` and `Channel` are records whose fields are functions made by `unsafe go` (`currentFn`, `sendFn`, ...), visible to any code that has the record. Their types must say what they do, `currentFn: () uses state => T`, or a program could call `store.currentFn()` with no `uses state`. The general rule: an `unsafe go` function that returns or builds function values types them with their effects, as part of the signature bork trusts. (`Task`'s `wait: () => T` stays pure: the work's effects were charged at `spawn`.)
 
 ### Lambdas, methods, and classes
 
@@ -518,14 +520,21 @@ The prelude's list, `Option`, and map functions stay as they are, and their func
 - **Named functions as values** have the effects they declare: `forEach(lines, println)` uses `io`.
 - **Function types are ordered by their effects.** A function that uses less fits where more is allowed: a pure `(Int) => Int` can be passed as `(Int) uses io => Int`, but not the other way round.
 - **Methods** declare `uses` as functions do. `fn (c: Client) fetch(url: String) uses net: Response | IoError`.
-- **Class methods** may declare `uses`, and an instance's method may use at most what the class declares. The prelude's classes (`Eq`, `Ord`, `Decode`, `Encode`, `Monoid`, ...) are pure, so their instances, including derived ones, must be pure.
+- **Class methods** may declare `uses`, and an instance's method may use at most what the class declares. The prelude's classes (`Eq`, `Ord`, `Decode`, `Encode`) are pure, so their instances, including derived ones, must be pure.
 
 ### `unsafe go`
 
 - **An `unsafe go` function declares its effects, and bork trusts them,** as it trusts the rest of the signature. `fn now() uses clock: Int unsafe go { ... }`.
 - **`unsafe` is not an effect.** If it were, every caller of the prelude's `length` and `map`, which are `unsafe go`, would be "unsafe", and the word would mean nothing. The trust boundary is the declaration.
-- **Which packages may contain `unsafe go` is declared in `bork.mod`:** `unsafe "example.com/shop/ffi"`. The prelude and the standard library always may. Every other package that has an `unsafe go` body is an error ("package example.com/shop/money has unsafe go, but bork.mod does not allow it"). So new Go code shows up in review as a change to `bork.mod`, and code in other packages cannot do what its signature does not allow, without exceptions. A program without a `bork.mod` cannot use `unsafe go`.
-- **A check for honest declarations:** an `unsafe go` body that calls a Go function with an obvious effect must declare that effect. The check looks at the functions called, not at the imports, since `time.Duration` alone is pure: `os` (except its error types) → `io`; `net` and `net/...` → `net`; `time.Now`, `Since`, `Until`, `Sleep`, `After`, `AfterFunc`, `Tick`, `NewTimer`, `NewTicker` → `clock`. `math/rand`, `math/rand/v2`, and `crypto/rand` → `random`. It is an error, not a warning. It is not a proof (Go code can reach the world in other ways), but it catches an `unsafe go` helper that quietly does I/O while its signature says it is pure.
+- **Which packages may contain `unsafe go` is declared in `bork.mod`:** `unsafe "example.com/shop/ffi"`. The prelude and the standard library always may. Every other package that has an `unsafe go` body is an error ("package example.com/shop/money has unsafe go, but bork.mod does not allow it"). So new Go code shows up in review as a change to `bork.mod`, and code in other packages cannot do what its signature does not allow, without exceptions. The module's root package is named by the module path (`unsafe "example.com/shop"`). A program without a `bork.mod` cannot use `unsafe go`; `bork run` on a single directory still works, it just has to be all bork.
+- **A check for honest declarations:** an `unsafe go` body that uses a Go name with an obvious effect must declare that effect. The check looks at the names used (functions and variables), not at the imports, since `time.Duration` alone is pure:
+  - `io`: `os` (except its error types and values), `os/exec`, `os/signal`, `syscall`, `io/ioutil`, and `fmt.Print*`, `fmt.Fprint*`, `fmt.Scan*`, `fmt.Fscan*`;
+  - `net`: `net` and `net/...`;
+  - `clock`: `time.Now`, `Since`, `Until`, `Sleep`, `After`, `AfterFunc`, `Tick`, `NewTimer`, `NewTicker`;
+  - `random`: `math/rand`, `math/rand/v2`, `crypto/rand`;
+  - `state`: `go` statements, channel operations, `sync`, `sync/atomic`.
+
+  A name counts against the function's own declared effects, or, inside a function value it returns or builds, against that value's declared type (`Atom`'s `currentFn: () uses state => T`). It is an error, not a warning, and applies to user packages; the prelude and the standard library are written by hand to the same rules, and reviewed instead (their runtime plumbing, such as `bork/log` choosing `os.Stdout`, would trip it). It is not a proof (Go code can reach the world in other ways), but it catches an `unsafe go` helper that quietly does I/O while its signature says it is pure.
 
 ### Tasks and scopes
 
@@ -535,7 +544,8 @@ The prelude's list, `Option`, and map functions stay as they are, and their func
 
 ### `main` and tests
 
-- **`main` and test bodies may use every effect**, with nothing declared. They are the program's roots: everything a program does starts there, so a declaration on them would say little, and tests print, read fixtures, and start servers. The functions they call are still checked against their own declarations, which is where the guarantee matters: below `main`, a function that declares nothing does nothing. `main` may still declare `uses`, which is then checked like any other function's (useful for a program that should be provably free of, say, network access).
+- **`main` and test bodies may use every effect**, with nothing declared (`main` is the one function where no `uses` does not mean pure). They are the program's roots: everything a program does starts there, so a declaration on them would say little, and tests print, read fixtures, and start servers. The functions they call are still checked against their own declarations, which is where the guarantee matters: below `main`, a function that declares nothing does nothing. `main` may still declare `uses`, which is then checked like any other function's (useful for a program that should be provably free of, say, network access), and `fn main() uses nothing` declares a pure program.
+- **`main` cannot be called or used as a value**, so no other function can reach "every effect" through it.
 
 ### Predicates, rules, and compile-time evaluation
 
@@ -555,8 +565,14 @@ Each error names the effect, the call that needs it, and the fix, written out:
 main.bork:14:3: describe uses io (it calls println), but its signature allows no effects
   hint: declare it: fn describe(u: User) uses io: String
 
-main.bork:30:5: serve uses state (it calls http.Listen, with a handler that calls update), but its signature allows only net
+main.bork:30:5: serve uses state (it calls http.Listen, with a handler that uses state), but its signature allows only net
   hint: declare it: fn serve(addr: String) uses net + state: Unit | IoError
+
+main.bork:62:3: handler returns a function that uses state (it calls update), but its result type allows no effects
+  hint: declare it: fn handler(store: Atom[Store]): (http.Request, Scope) uses state => http.Response
+
+main.bork:20:11: field run takes a function that uses nothing, but this lambda uses io (it calls println)
+  hint: declare the field's effects: run: () uses io => Unit
 
 main.bork:41:7: process uses io (it calls map, with a lambda that calls println), but its signature allows no effects
   hint: declare it: fn process(xs: List[String]) uses io: List[String]
@@ -583,13 +599,13 @@ money/money.bork:12:1: package example.com/shop/money has unsafe go, but bork.mo
 (`now` in the predicate example stands for a clock function the standard library does not have yet.)
 
 - **The reason chain is one step deep.** It names the direct call (and, for an open parameter, the lambda's call). The callee's own signature says why that callee needs the effect.
-- **The hint is the full corrected signature line**, so an agent can apply it as written. A future `bork fix` could apply these mechanically.
+- **When the fix is a signature change, the hint is the full corrected line**, so an agent can apply it as written. A future `bork fix` could apply these mechanically.
 
 ### Migration
 
 - **The prelude and the standard library** get `uses` on the functions in the table above, and `uses nothing` on the function parameters of `update` and `swap`. Their list, `Option`, map, string, and JSON functions do not change.
-- **Examples:** `main` needs nothing. Helpers that print, read files, wait, touch atoms, or call the network get what they use: `step` in `accounts` (`io`), `readFile` in `signup` and `countFile` and `report` in `wc` (`io`), and the server helpers of `signup_api` and `http_server`. In `http_server`: `list`, `show`, `finish`, `create`, `remove`, `route`, and the test helper `request` get `uses state`; `handler` stays pure and returns `(http.Request, Scope) uses state => http.Response`; `call` gets `uses io + net`; `serve` gets `uses net + state` (it passes the handler to `http.Listen`), and `demo` `uses io + net + state`. `hello`, `calculator`, `orders`, `payments`, and `users` do not change at all: their helpers are pure, which shows that the pure core of a program is the default.
-- **Test cases:** only the helpers that print, read files, wait, touch atoms, or serve need `uses`; cases that do all of that in `main` and `test` blocks do not change. Expected outputs of passing cases do not change. Error positions in failing cases shift where a declaration's line gains `uses ...`. The effect check runs after type checking, like the lifetime check, and only when type checking found no errors, so cases that fail with type errors keep their messages. The nine cases with `unsafe go` get a `bork.mod` that allows it. The change is made by applying the compiler's own hints, and each golden diff is still checked by hand.
+- **Examples:** `main` needs nothing. Helpers that print, read files, wait, touch atoms, or call the network get what they use: `step` in `accounts` (`io`), `readFile` in `signup` and `countFile` and `report` in `wc` (`io`), and the server helpers. In `signup_api`: `slow`, `route`, and the test helper `get` get `uses clock + state` (`cancelAfter`, `delay`); `show` gets `uses io`; `post` gets `uses io + net`; `serve` and `demo` get `uses io + net + clock + state`. In `http_server`: `list`, `show`, `finish`, `create`, `remove`, `route`, and the test helper `request` get `uses state`; `handler` stays pure and returns `(http.Request, Scope) uses state => http.Response`; `call` gets `uses io + net`; `serve` gets `uses net + state` (it passes the handler to `http.Listen`), and `demo` `uses io + net + state`. `hello`, `calculator`, `orders`, `payments`, and `users` do not change at all: their helpers are pure, which shows that the pure core of a program is the default.
+- **Test cases:** only the helpers that print, read files, wait, touch atoms, or serve need `uses`; cases that do all of that in `main` and `test` blocks do not change. Expected outputs of passing cases do not change. Error positions in failing cases shift where a declaration's line gains `uses ...`. The effect check runs after type checking, like the lifetime check, and only when type checking found no errors, so cases that fail with type errors keep their messages. The nine cases with `unsafe go` get a `bork.mod` that allows it (seven of them have none yet). Their `unsafe go` helpers get what they do: `connect` in `attach` uses `io` (`fmt.Println`), `stubborn` in `scope_policies` uses `clock` (`time.Sleep`). The change is made by applying the compiler's own hints, and each golden diff is still checked by hand.
 - **The check lands in one step** (the check, the prelude, and all migrations in one PR, after the syntax and types PRs), because a half-annotated prelude would make every program fail.
 
 ### Implementation plan
@@ -608,7 +624,6 @@ money/money.bork:12:1: package example.com/shop/money has unsafe go, but bork.mo
 - **Should `io` be split** into `console`, `files`, and `process`? This proposal starts coarse. Splitting later only adds effects, so it is cheap to do once real code shows the need.
 - **Effect aliases** (`effects Backend = io + net + state`) for long lists on handlers? Not needed while there are five effects.
 - **Test doubles:** with effects in place of capabilities, a test cannot hand a function a fake clock. Today the workaround is a function parameter (`now: () uses clock => Int`). Effect handlers, which let a test say how an effect is answered, would be the principled answer later.
-- **A debug print in pure code** (`debug(x)`, allowed anywhere, and easy to grep for)? Left out for now: it is the first thing an agent would reach for to get around a missing `uses io`.
 
 ## 4. Errors and results (in progress, to be tried out)
 
