@@ -122,6 +122,10 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	if main != nil {
 		g.imports["fmt"] = true
 	}
+	// Instances are used through their dictionaries, so all are emitted.
+	for _, ci := range info.ClassInstances {
+		roots = append(roots, ci.Methods...)
+	}
 	emit := g.reachable(roots)
 	if main != nil {
 		emit[info.Funcs["main"]] = false
@@ -151,12 +155,18 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			funcs = append(funcs, g.funcDecl(fd))
 		}
 	}
+	for _, ci := range info.ClassInstances {
+		funcs = append(funcs, g.instanceDecl(ci))
+	}
 	funcs = append(funcs, g.extraFuncs...)
 	if main != nil {
 		funcs = append(funcs, main)
 	}
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)
+	for i := len(info.Classes) - 1; i >= 0; i-- {
+		decls = append([]ast.Decl{g.classDecl(info.Classes[i])}, decls...)
+	}
 	runtime, runtimeFset, err := g.runtimeDecls()
 	if err != nil {
 		return nil, err
@@ -349,6 +359,9 @@ func (g *gen) funcName(fn *check.Func) *ast.Ident {
 	if fn.Prelude && g.info.Funcs[fn.Decl.Name] != fn {
 		return ast.NewIdent("_prelude_" + fn.Decl.Name)
 	}
+	if fn.Of != nil {
+		return ast.NewIdent(instName(fn.Of) + "_" + fn.Decl.Name)
+	}
 	if fn.Pkg != nil && fn.Pkg.GoPrefix != "" {
 		return ast.NewIdent(fn.Pkg.GoPrefix + fn.Decl.Name)
 	}
@@ -363,7 +376,8 @@ func (g *gen) newTmp() *ast.Ident {
 // signature generates a function declaration without a body.
 func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 	fn := g.info.FuncOf[fd]
-	ftype := &ast.FuncType{Params: &ast.FieldList{}}
+	// The instances its type parameters' bounds need come first.
+	ftype := &ast.FuncType{Params: &ast.FieldList{List: g.dictParams(fn.TypeParams)}}
 	for i, p := range fd.Params {
 		ftype.Params.List = append(ftype.Params.List, &ast.Field{
 			Names: []*ast.Ident{name(p.Name)},
@@ -417,6 +431,9 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 		return nil, ast.NewIdent(strconv.FormatBool(e.Value))
 	case *syntax.Ident:
 		if inst := g.info.FuncRefs[e]; inst != nil {
+			if inst.Func.Class != nil || len(inst.Dicts) > 0 {
+				return nil, g.funcRef(inst)
+			}
 			return nil, g.instance(inst)
 		}
 		return nil, name(e.Name)
@@ -696,7 +713,16 @@ func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 		}
 		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, at(e.Fun.Position())}}
 	}
-	return &ast.CallExpr{Fun: g.instance(g.info.Instances[e]), Args: args}
+	inst := g.info.Instances[e]
+	if inst.Func.Class != nil {
+		fun, dicts := g.methodFunc(inst)
+		return &ast.CallExpr{Fun: fun, Args: append(dicts, args...)}
+	}
+	var dicts []ast.Expr
+	for _, d := range inst.Dicts {
+		dicts = append(dicts, g.dict(d))
+	}
+	return &ast.CallExpr{Fun: g.instance(inst), Args: append(dicts, args...)}
 }
 
 // effect lowers an expression evaluated only for its effect.

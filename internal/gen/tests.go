@@ -140,6 +140,11 @@ func exprText(x syntax.Expr) string {
 func (g *gen) checkedWrapper(fn *check.Func) ast.Decl {
 	decl := g.signature(fn.Decl)
 	var args []ast.Expr
+	for _, tp := range fn.TypeParams {
+		for _, b := range tp.Bounds {
+			args = append(args, dictParam(tp, b))
+		}
+	}
 	for _, p := range fn.Decl.Params {
 		args = append(args, name(p.Name))
 	}

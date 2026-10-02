@@ -1,0 +1,14 @@
+import "example.com/tc/text"
+import "example.com/tc/money"
+import "example.com/tc/other"
+
+use text.*
+
+fn notInScope(a: money.Amount): String {
+  text.show(a)
+}
+
+fn main() {
+  // money's instances are not in scope without use.
+  println(text.Shout(money.Amount { cents: 7 }), other.Both(money.Amount { cents: 1 }))
+}

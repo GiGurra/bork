@@ -106,6 +106,8 @@ proven's `testdata/cases/` (108 cases) are a good source of golden tests: each o
 
 ### M3: type classes
 
+**Status: under way.** Done: classes, named instances (also generic, with bounds), bounded type parameters, `use` of other packages' instances, ambiguity and missing-instance errors, and explicit type arguments. Remaining: instances on constrained types, `derive` (`Eq`, `Show`, `Decode`), and JSON decoding.
+
 Type classes, instances (including on constrained types), explicit instance-scope imports, ambiguity errors, and `derive` (`Eq`, `Show`, `Decode`).
 
 *Done when* a request record with constrained fields decodes from JSON into already-proven values.

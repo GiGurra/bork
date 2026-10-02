@@ -1,0 +1,13 @@
+class Show[T] {
+  fn show(x: T): String
+}
+
+instance ShowInt: Show[Int] {
+  fn show(x: Int): String { toString(x) }
+}
+
+instance ShowList[T: Show]: Show[List[T]] {
+  fn show(xs: List[T]): String { "[" + join(map(xs, show), ", ") + "]" }
+}
+
+fn Shout[T: Show](x: T): String { toUpper(show(x)) + "!" }

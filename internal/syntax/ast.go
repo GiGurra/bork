@@ -9,7 +9,11 @@ type File struct {
 	// driver), and Imports what the file imports.
 	Package string
 	Imports []*Import
+	Uses    []*Use
 	Rules   []*RuleDecl
+	// Classes and Instances; the instances' methods are also in Funcs.
+	Classes   []*ClassDecl
+	Instances []*InstanceDecl
 	// Prelude is set for the compiler's built-in prelude.bork.
 	Prelude  bool
 	Types    []*TypeDecl
@@ -88,6 +92,37 @@ type FuncDecl struct {
 	Result     *TypeExpr
 	Body       *Block
 	GoBody     *GoCode
+	// Instance is set for a method of an instance declaration.
+	Instance *InstanceDecl
+}
+
+// ClassDecl is a type class: `class Show[T] { fn show(x: T): String }`.
+// Its methods are signatures, without bodies.
+type ClassDecl struct {
+	Pos        diag.Pos
+	Name       string
+	TypeParams []*TypeParam
+	Methods    []*FuncDecl
+}
+
+// InstanceDecl is a named instance of a class for a type:
+// `instance showInt: Show[Int] { fn show(x: Int): String { ... } }`, or
+// generic: `instance showList[T: Show]: Show[List[T]] { ... }`.
+type InstanceDecl struct {
+	Pos        diag.Pos
+	Name       string
+	TypeParams []*TypeParam
+	Class      string // possibly qualified: fmt.Show
+	ClassPos   diag.Pos
+	Type       *TypeExpr
+	Methods    []*FuncDecl
+}
+
+// Use brings instances of another package into scope: `use money.showAmount`,
+// or every exported one: `use money.*`.
+type Use struct {
+	Pos  diag.Pos
+	Name string // "money.showAmount" or "money.*"
 }
 
 // GoCode is the body of `unsafe go { ... }`: Go statements, preceded
@@ -104,6 +139,9 @@ type GoCode struct {
 type TypeParam struct {
 	Pos  diag.Pos
 	Name string
+	// Bounds lists the classes the type must have instances of:
+	// `T: Show + Eq`.
+	Bounds []string
 }
 
 // Param is a function's or a lambda's parameter. A lambda's parameter
@@ -256,6 +294,8 @@ type Call struct {
 	Pos  diag.Pos // position of '('
 	Fun  Expr
 	Args []Expr
+	// TypeArgs are explicit type arguments: `empty[Int]()`.
+	TypeArgs []*TypeExpr
 }
 
 // If is `if (cond) { ... } else { ... }`. Else is nil, a *Block, or an

@@ -1,0 +1,40 @@
+class Show[T] {
+  fn show(x: T): String
+}
+
+type Point = { x: Int, y: Int }
+
+instance showInt: Show[Int] {
+  fn show(x: Int): String { toString(x) }
+}
+
+instance showInt2: Show[Int] {
+  fn show(x: Int): String { "int" }
+}
+
+instance showList[T: Show]: Show[List[T]] {
+  fn show(xs: List[T]): String { join(map(xs, show), ",") }
+}
+
+instance badPoint: Show[Point] {
+  fn show(p: Point, extra: Int): String { "p" }
+  fn other(): Int { 1 }
+}
+
+instance missing: Show[String] {}
+
+fn unbounded[T](x: T): String { show(x) }
+
+fn main() {
+  println(show(1))
+  println(show(true))
+  println(show([true]))
+}
+
+class Positive[T] {
+  fn check(x: T where positive): Bool
+}
+
+pred positive(x: Int) { x > 0 }
+
+fn typeArgsOnValue(f: (Int) => Int): Int { f[Int](1) }

@@ -1,0 +1,11 @@
+import "example.com/tc/text"
+import "example.com/tc/money"
+
+use text.*
+use money.ShowAmount
+
+fn main() {
+  println(text.show([money.Amount { cents: 5 }]))
+  println(text.Shout(money.Amount { cents: 7 }))
+  println(text.show(3))
+}

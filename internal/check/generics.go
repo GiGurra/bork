@@ -14,6 +14,10 @@ type Instance struct {
 	TypeArgs []Type
 	Params   []Type
 	Result   Type
+	// Dicts holds the class instances the use needs: for a class method,
+	// the class's; for a function with bounded type parameters, one per
+	// bound, in order.
+	Dicts []*Dict
 }
 
 // funcType is the type of fn as a value.
@@ -24,9 +28,15 @@ func (fn *Func) funcType() *FuncType {
 // declareTypeParams makes a generic function's type parameters
 // visible while its signature, constraints, and body are resolved.
 func (c *checker) declareTypeParams(fd *syntax.FuncDecl, prelude bool) []*TypeParam {
+	return c.declareTypeParamList(fd.TypeParams, prelude)
+}
+
+// declareTypeParamList declares type parameters (of a function or an
+// instance), with their bounds, and makes them visible.
+func (c *checker) declareTypeParamList(decls []*syntax.TypeParam, prelude bool) []*TypeParam {
 	var out []*TypeParam
 	c.typeParams = map[string]*TypeParam{}
-	for _, d := range fd.TypeParams {
+	for _, d := range decls {
 		switch {
 		case c.typeParams[d.Name] != nil:
 			c.errorf(d.Pos, "type parameter %s is declared twice", d.Name)
@@ -35,7 +45,7 @@ func (c *checker) declareTypeParams(fd *syntax.FuncDecl, prelude bool) []*TypePa
 			c.errorf(d.Pos, "type parameter %s has the name of a type", d.Name)
 			continue
 		}
-		tp := &TypeParam{Name: d.Name, Decl: d}
+		tp := &TypeParam{Name: d.Name, Decl: d, Bounds: c.bounds(d)}
 		c.typeParams[d.Name] = tp
 		out = append(out, tp)
 	}
@@ -59,6 +69,9 @@ type inference struct {
 	fn     *Func // nil when solving a generic type's parameters
 	params []*TypeParam
 	bound  map[*TypeParam]Type
+	// foreign, if set, tells type parameters that must not be bound to:
+	// unknowns of another inference.
+	foreign func(*TypeParam) bool
 }
 
 func newInference(fn *Func) *inference {
@@ -95,6 +108,9 @@ func (in *inference) unify(p, a Type) {
 	}
 	switch p := p.(type) {
 	case *TypeParam:
+		if ta, ok := a.(*TypeParam); ok && in.foreign != nil && in.foreign(ta) {
+			return
+		}
 		if in.owns(p) && in.bound[p] == nil {
 			in.bound[p] = a
 		}
@@ -309,6 +325,19 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 	if len(fn.TypeParams) > 0 {
 		in = newInference(fn)
 	}
+	if len(e.TypeArgs) > 0 {
+		if len(e.TypeArgs) != len(fn.TypeParams) {
+			c.errorf(e.Pos, "%s takes %d type argument(s), but %d were given", id.Name, len(fn.TypeParams), len(e.TypeArgs))
+			return Invalid
+		}
+		for i, ta := range e.TypeArgs {
+			t := c.resolveType(ta)
+			if t == Invalid {
+				return Invalid
+			}
+			in.bound[fn.TypeParams[i]] = t
+		}
+	}
 	types := make([]Type, len(e.Args))
 	check := func(i int, a syntax.Expr) {
 		if i >= len(fn.Params) {
@@ -322,7 +351,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 		if l, ok := a.(*syntax.Lambda); ok {
 			types[i] = c.record(l, c.lambda(l, pw, in))
 		} else {
-			if in.open(pw) {
+			if in.open(pw) && !c.genericFuncRef(a) {
 				pw = nil
 			}
 			types[i] = c.exprWant(a, pw)
@@ -367,6 +396,9 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 		}
 		inst = in.instance()
 	}
+	if !c.resolveDicts(inst, e.Pos) {
+		return Invalid
+	}
 	c.info.Instances[e] = inst
 	for i, a := range e.Args {
 		if i < len(inst.Params) && types[i] != Invalid && !assignable(types[i], inst.Params[i]) {
@@ -380,6 +412,9 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 // type: a lambda (for its parameters), an empty list, or a variant
 // without fields of a generic type (Option.None).
 func (c *checker) needsContext(x syntax.Expr) bool {
+	if c.genericFuncRef(x) {
+		return true
+	}
 	switch x := x.(type) {
 	case *syntax.Lambda:
 		return true
@@ -392,6 +427,17 @@ func (c *checker) needsContext(x syntax.Expr) bool {
 		}
 	}
 	return false
+}
+
+// genericFuncRef reports whether x names a generic function (used as a
+// value), whose type arguments come from the context.
+func (c *checker) genericFuncRef(x syntax.Expr) bool {
+	id, ok := x.(*syntax.Ident)
+	if !ok || c.lookup(id.Name) != nil {
+		return false
+	}
+	fn, ok := c.funcNamed(id.Name)
+	return ok && len(fn.TypeParams) > 0
 }
 
 // callValue checks a call of a function value: `f(x)`, `make(1)(2)`.
@@ -432,6 +478,9 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 	inst := &Instance{Func: fn, Params: fn.Params, Result: fn.Result}
 	if len(fn.TypeParams) > 0 {
 		in := newInference(fn)
+		// The expected type may still mention type parameters of a call
+		// being inferred (map's B in map(xs, show)); those say nothing.
+		in.foreign = func(tp *TypeParam) bool { return !c.inScopeParam(tp) }
 		if want != nil {
 			in.unify(fn.funcType(), want)
 		}
@@ -440,6 +489,9 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 			return Invalid
 		}
 		inst = in.instance()
+	}
+	if !c.resolveDicts(inst, e.Pos) {
+		return Invalid
 	}
 	c.info.FuncRefs[e] = inst
 	return &FuncType{Params: inst.Params, Result: inst.Result}
