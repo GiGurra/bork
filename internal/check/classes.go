@@ -528,9 +528,23 @@ func (c *checker) useItem(u *syntax.Use) []*ClassInstance {
 // value) needs: the class's instance for a method, and one for each
 // bound of a generic function's type parameters.
 func (c *checker) resolveDicts(inst *Instance, pos diag.Pos) bool {
+	return c.resolveDictsWith(inst, pos, nil)
+}
+
+// resolveDictsWith is resolveDicts, where have holds (per type
+// parameter) what is known of its values, for constrained instances.
+func (c *checker) resolveDictsWith(inst *Instance, pos diag.Pos, have [][]*Constraint) bool {
 	fn := inst.Func
 	ok := true
+	haveFor := func(i int) []*Constraint {
+		if i < len(have) {
+			return have[i]
+		}
+		return nil
+	}
+	defer func() { c.have = nil }()
 	if fn.Class != nil {
+		c.have = haveFor(0)
 		d := c.dict(fn.Class, inst.TypeArgs[0], pos, 0)
 		ok = d != nil
 		inst.Dicts = []*Dict{d}
@@ -538,12 +552,106 @@ func (c *checker) resolveDicts(inst *Instance, pos diag.Pos) bool {
 	}
 	for i, tp := range fn.TypeParams {
 		for _, b := range tp.Bounds {
+			c.have = haveFor(i)
 			d := c.dict(b, inst.TypeArgs[i], pos, 0)
 			ok = ok && d != nil
 			inst.Dicts = append(inst.Dicts, d)
 		}
 	}
 	return ok
+}
+
+// promisesArgFacts checks that a call with constrained type arguments
+// (decodeJson[Port]) can promise their constraints for results of
+// those types. By parametricity, a generic function gets values of a
+// type parameter only from its arguments (which must satisfy the
+// constraints) and from the instances of the parameter's bounds, which
+// must then be constrained instances that promise them.
+func (c *checker) promisesArgFacts(inst *Instance, argFacts [][]*Constraint, name string, pos diag.Pos) bool {
+	fn := inst.Func
+	// Values of the type that come in any other way than as arguments
+	// of exactly the type (from a function argument, say) are not
+	// checked.
+	for i, tp := range fn.TypeParams {
+		if len(argFacts[i]) == 0 {
+			continue
+		}
+		for j, p := range fn.Params {
+			if p != Type(tp) && mentionsParam(p, tp) {
+				c.errorf(pos, "%s cannot take a constrained type argument for %s: its parameter %s could give it values that are not checked (only parameters of type %s itself are)", name, tp.Name, fn.Decl.Params[j].Name, tp.Name)
+				return false
+			}
+		}
+	}
+	k := 0
+	for i, tp := range fn.TypeParams {
+		bounds := tp.Bounds
+		if fn.Class != nil {
+			bounds = []*Class{fn.Class}
+		}
+		for _, b := range bounds {
+			d := inst.Dicts[k]
+			k++
+			if len(argFacts[i]) == 0 || d == nil || !producesParam(b) {
+				continue
+			}
+			if d.Inst == nil || len(missingConstraints(d.Inst.Constraints, argFacts[i])) > 0 {
+				which := "the " + b.Name + " instance in use"
+				if d.Inst != nil {
+					which = qualify(d.Inst.Name, d.Inst.Pkg, c.pkg)
+				}
+				c.errorf(pos, "%s cannot promise that its %s values are %s: they may come from %s, which does not promise it (declare an instance for %s where %s)",
+					name, inst.TypeArgs[i], constraintsText(argFacts[i], c.pkg), which, inst.TypeArgs[i], constraintsText(argFacts[i], c.pkg))
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// producesParam reports whether a method of class can give values of
+// the class's type (decode can; encode and equals cannot).
+func producesParam(class *Class) bool {
+	for _, m := range class.Methods {
+		if mentionsMember(m.Result, class.Param) {
+			return true
+		}
+	}
+	return false
+}
+
+// declaredFacts lists the constraints declared for the value of x: a
+// parameter's or a binding's where clause, or a record field's.
+func (c *checker) declaredFacts(x syntax.Expr) []*Constraint {
+	var cons []*Constraint
+	switch x := x.(type) {
+	case *syntax.Ident:
+		switch d := c.info.Defs[x].(type) {
+		case *syntax.Binding:
+			cons = c.info.BindingConstraints[d]
+		case *syntax.Param:
+			if c.fn != nil {
+				for i, p := range c.fn.Decl.Params {
+					if p == d && i < len(c.fn.ParamConstraints) {
+						cons = c.fn.ParamConstraints[i]
+					}
+				}
+			}
+		}
+	case *syntax.Selector:
+		if rec, ok := c.info.Types[x.X].(*Record); ok {
+			if fd := rec.Field(x.Name); fd != nil {
+				cons = fd.Constraints
+			}
+		}
+	}
+	var out []*Constraint
+	for _, con := range cons {
+		if con.Path == "" {
+			out = append(out, con)
+		}
+	}
+	return out
 }
 
 // dict finds the instance of class for type t, reporting an error at

@@ -18,6 +18,10 @@ type Instance struct {
 	// the class's; for a function with bounded type parameters, one per
 	// bound, in order.
 	Dicts []*Dict
+	// ArgFacts holds, per type parameter, the constraints of an explicit
+	// type argument (decodeJson[Port]): arguments of that type must
+	// satisfy them, and results of it do (see callFunc).
+	ArgFacts [][]*Constraint
 }
 
 // funcType is the type of fn as a value.
@@ -350,6 +354,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 	if len(fn.TypeParams) > 0 {
 		in = newInference(fn)
 	}
+	var argFacts [][]*Constraint
 	if len(e.TypeArgs) > 0 {
 		if len(e.TypeArgs) != len(fn.TypeParams) {
 			c.errorf(e.Pos, "%s takes %d type argument(s), but %d were given", id.Name, len(fn.TypeParams), len(e.TypeArgs))
@@ -361,6 +366,18 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 				return Invalid
 			}
 			in.bound[fn.TypeParams[i]] = t
+			var cons []*Constraint
+			for _, con := range c.constraintsOf(ta, t, c.paramScope()) {
+				if con.Path == "" {
+					cons = append(cons, con)
+				}
+			}
+			if len(cons) > 0 {
+				if argFacts == nil {
+					argFacts = make([][]*Constraint, len(fn.TypeParams))
+				}
+				argFacts[i] = cons
+			}
 		}
 	}
 	types := make([]Type, len(e.Args))
@@ -437,9 +454,52 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			return Invalid
 		}
 	}
-	if !c.resolveDicts(inst, e.Pos) {
+	// What is known of the values a type parameter stands for selects
+	// constrained instances: an explicit type argument's constraints, or
+	// those declared for the argument a class method is called on.
+	have := argFacts
+	if have == nil {
+		// Only what every argument of the type is known to be counts:
+		// the instance may be used on any of them.
+		for j, tp := range fn.TypeParams {
+			var common []*Constraint
+			first := true
+			for i, p := range fn.Params {
+				if i >= len(e.Args) || !mentionsParam(p, tp) {
+					continue
+				}
+				if p != Type(tp) {
+					common = nil // List[T] and the like: not tracked
+					break
+				}
+				cons := c.declaredFacts(e.Args[i])
+				if first {
+					common, first = cons, false
+					continue
+				}
+				var kept []*Constraint
+				for _, con := range common {
+					if len(missingConstraints(cons, []*Constraint{con})) == 0 {
+						kept = append(kept, con)
+					}
+				}
+				common = kept
+			}
+			if len(common) > 0 {
+				if have == nil {
+					have = make([][]*Constraint, len(fn.TypeParams))
+				}
+				have[j] = common
+			}
+		}
+	}
+	if !c.resolveDictsWith(inst, e.Pos, have) {
 		return Invalid
 	}
+	if argFacts != nil && !c.promisesArgFacts(inst, argFacts, id.Name, e.Pos) {
+		return Invalid
+	}
+	inst.ArgFacts = argFacts
 	c.info.Instances[e] = inst
 	for i, a := range e.Args {
 		if i < len(inst.Params) && types[i] != Invalid && !assignable(types[i], inst.Params[i]) {
@@ -666,4 +726,40 @@ func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
 		return Invalid
 	}
 	return &List{Elem: t}
+}
+
+// mentionsParam reports whether t mentions the type parameter tp.
+func mentionsParam(t Type, tp *TypeParam) bool {
+	switch t := t.(type) {
+	case *TypeParam:
+		return t == tp
+	case *List:
+		return mentionsParam(t.Elem, tp)
+	case *FuncType:
+		for _, p := range t.Params {
+			if mentionsParam(p, tp) {
+				return true
+			}
+		}
+		return mentionsParam(t.Result, tp)
+	case *Union:
+		for _, m := range t.Members {
+			if mentionsParam(m, tp) {
+				return true
+			}
+		}
+	case *Record:
+		for _, a := range t.Args {
+			if mentionsParam(a, tp) {
+				return true
+			}
+		}
+	case *Sealed:
+		for _, a := range t.Args {
+			if mentionsParam(a, tp) {
+				return true
+			}
+		}
+	}
+	return false
 }

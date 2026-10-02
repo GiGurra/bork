@@ -1,0 +1,19 @@
+pred positive(x: Int) { x > 0 }
+
+type Pos = Int where positive
+
+fn pick[T](a: T, b: T): T { a }
+
+fn need(p: Pos): Int { p }
+
+fn obliged(n: Int): Int {
+  // Arguments of the type must satisfy its constraints...
+  pick[Pos](1, n)
+}
+
+fn proven(n: Int): Int {
+  // ...and then the result is proven.
+  if (positive(n)) { need(pick[Pos](n, 5)) } else { 0 }
+}
+
+fn main() {}
