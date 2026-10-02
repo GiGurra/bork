@@ -122,6 +122,7 @@ type Resource struct {
 	Name    string
 	Decl    *syntax.TypeDecl
 	Prelude bool
+	Pkg     *Package
 }
 
 func (r *Resource) String() string { return r.Name }
@@ -143,7 +144,8 @@ type Record struct {
 	Name    string
 	Fields  []*Field
 	Decl    *syntax.TypeDecl
-	Prelude bool // declared in prelude.bork
+	Prelude bool     // declared in prelude.bork
+	Pkg     *Package // the declaring package
 
 	TypeParams []*TypeParam
 	Base       *Record
@@ -162,7 +164,7 @@ func (r *Record) Instance(args []Type) *Record {
 	if t, ok := r.insts.byKey[key]; ok {
 		return t.(*Record)
 	}
-	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Base: r, Args: args}
+	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Pkg: r.Pkg, Base: r, Args: args}
 	r.insts.byKey[key] = inst
 	r.insts.whenResolved(func() {
 		inst.Fields = substFields(r.Fields, bindParams(r.TypeParams, args))
@@ -350,7 +352,8 @@ type Sealed struct {
 	Name     string
 	Variants []*Variant
 	Decl     *syntax.TypeDecl
-	Prelude  bool // declared in prelude.bork
+	Prelude  bool     // declared in prelude.bork
+	Pkg      *Package // the declaring package
 
 	TypeParams []*TypeParam
 	Base       *Sealed
@@ -369,7 +372,7 @@ func (s *Sealed) Instance(args []Type) *Sealed {
 	if t, ok := s.insts.byKey[key]; ok {
 		return t.(*Sealed)
 	}
-	inst := &Sealed{Name: s.Name, Decl: s.Decl, Prelude: s.Prelude, Base: s, Args: args}
+	inst := &Sealed{Name: s.Name, Decl: s.Decl, Prelude: s.Prelude, Pkg: s.Pkg, Base: s, Args: args}
 	s.insts.byKey[key] = inst
 	s.insts.whenResolved(func() {
 		bound := bindParams(s.TypeParams, args)

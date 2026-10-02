@@ -1,0 +1,4 @@
+main.bork:4:15: money.Cents requires n to be money.Positive, but that is not proven for n (check it first with if (money.Positive(n)) { ... }, or require it: n: Int where money.Positive)
+main.bork:8:23: money.Cents requires n to be money.Positive, but money.Positive(0) is false
+main.bork:9:33: money.Amount requires cents to be money.Positive, but money.Positive(-1) is false
+main.bork:10:23: money.Cents requires n to be money.Positive, but that is not proven for this value (money.Clamp does not promise it in its signature, and only what it promises is known outside its package; give the result a name and check it first)

@@ -1,0 +1,1 @@
+main.bork:1:1: cannot import example.com/x/money: imports need a module (add a bork.mod file to the module's root directory, with a line `module example.com/name`)

@@ -1,0 +1,5 @@
+ok    formats amounts
+FAIL  records built by imported unsafe go keep their invariants
+      money/money.bork:46:1: Broken returned an Amount whose cents is not Positive: -3
+1 passed, 1 failed
+exit code 1

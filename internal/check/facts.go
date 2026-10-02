@@ -46,11 +46,14 @@ type Query struct {
 	Via string
 }
 
-func (q Query) String() string {
+func (q Query) String() string { return q.Text(nil) }
+
+// Text renders the query as code in package from would write it.
+func (q Query) Text(from *Package) string {
 	join := func(parts []Query, sep string) string {
 		out := make([]string, len(parts))
 		for i, p := range parts {
-			out[i] = p.String()
+			out[i] = p.Text(from)
 			if p.Pred == nil && len(parts) > 1 {
 				out[i] = "(" + out[i] + ")"
 			}
@@ -70,7 +73,7 @@ func (q Query) String() string {
 	for _, a := range q.Args {
 		args = append(args, CArg{Const: a}.String())
 	}
-	return q.Pred.Decl.Name + "(" + strings.Join(args, ", ") + ")"
+	return q.Pred.QualifiedName(from) + "(" + strings.Join(args, ", ") + ")"
 }
 
 // Evaluator runs predicates on constants at compile time, returning one
@@ -241,6 +244,7 @@ type pendingQuery struct {
 	query Query
 	pos   diag.Pos
 	ob    obligation
+	from  *Package // the package whose code needs it
 }
 
 func (f *factChecker) function(fn *Func) {
@@ -454,7 +458,7 @@ func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
 			break
 		}
 		for _, con := range cons {
-			req := fmt.Sprintf("%s requires %s to be %s", fn.Decl.Name, pathPhrase(con.Path, fn.Decl.Params[i].Name), con)
+			req := fmt.Sprintf("%s requires %s to be %s", fn.QualifiedName(f.from()), pathPhrase(con.Path, fn.Decl.Params[i].Name), con.Text(f.from()))
 			f.oblige(call.Args[i], con, f.callArgs(call, fn), e, req)
 		}
 	}
@@ -465,14 +469,14 @@ func (f *factChecker) recordObligations(lit *syntax.RecordLit, e env) {
 	var label string
 	switch t := f.info.RecordTargets[lit].(type) {
 	case *Record:
-		fields, label = t.Fields, t.Name
+		fields, label = t.Fields, qualify(t.Name, t.Pkg, f.from())
 	case *Variant:
-		fields, label = t.Fields, t.Parent.Name+"."+t.Name
+		fields, label = t.Fields, qualify(t.Parent.Name, t.Parent.Pkg, f.from())+"."+t.Name
 	}
 	for _, fi := range lit.Fields {
 		if fd := findField(fields, fi.Name); fd != nil {
 			for _, con := range fd.Constraints {
-				f.oblige(fi.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con))
+				f.oblige(fi.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
 			}
 		}
 	}
@@ -499,7 +503,7 @@ func (f *factChecker) copyObligations(cp *syntax.Copy, e env) {
 		}
 		path := strings.Join(u.Path, ".")
 		for _, con := range fd.Constraints {
-			f.oblige(u.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", rec.Name, pathPhrase(con.Path, path), con))
+			f.oblige(u.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", qualify(rec.Name, rec.Pkg, f.from()), pathPhrase(con.Path, path), con.Text(f.from())))
 		}
 	}
 }
@@ -561,14 +565,14 @@ func (f *factChecker) settle(x syntax.Expr, ob obligation, ok bool, pending []Qu
 		return
 	}
 	for _, q := range pending {
-		f.pending = append(f.pending, pendingQuery{query: q, pos: x.Position(), ob: ob})
+		f.pending = append(f.pending, pendingQuery{query: q, pos: x.Position(), ob: ob, from: f.from()})
 	}
 }
 
 // obligationOf is the obligation to prove con, with the constraint's
 // parameter arguments given by subst.
 func (f *factChecker) obligationOf(con *Constraint, subst func(string) argVal, requirement string) obligation {
-	ob := obligation{requirement: requirement, con: con.String(), path: con.Path}
+	ob := obligation{requirement: requirement, con: con.Text(f.from()), path: con.Path}
 	if con.Or != nil {
 		for _, alt := range con.Or {
 			a := f.obligationOf(alt, subst, requirement)
@@ -1431,6 +1435,11 @@ func (f *factChecker) derive(call *syntax.Call, fn *Func, member Type, ob obliga
 	if fn.Decl.Body == nil || f.active[activeKey] || depth > maxDepth {
 		return false, nil
 	}
+	// Another package's function promises only what its signature says,
+	// so that changing its body cannot break its importers.
+	if !fn.Prelude && f.fn != nil && fn.Pkg != f.fn.Pkg {
+		return false, nil
+	}
 	f.active[activeKey] = true
 	defer delete(f.active, activeKey)
 	// The obligation, in terms of the callee's parameters.
@@ -1802,9 +1811,9 @@ func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
 		return ""
 	}
 	if ob.path == ".[]" {
-		keep := "x => " + checkText("x", ob)
+		keep := "x => " + checkText("x", ob, f.from())
 		if ob.pred != nil && len(ob.args) == 0 {
-			keep = ob.pred.Decl.Name
+			keep = ob.pred.QualifiedName(f.from())
 		}
 		if name == "this value" {
 			name = "..."
@@ -1813,12 +1822,17 @@ func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
 	}
 	if sel, ok := f.fieldSelector(x, ob.path); ok && name != "this value" {
 		// A field of a record can be checked directly.
-		return fmt.Sprintf(" (check it first with if (%s) { ... })", checkText(name+sel, obligation{pred: ob.pred, args: ob.args, or: ob.or}))
+		return fmt.Sprintf(" (check it first with if (%s) { ... })", checkText(name+sel, obligation{pred: ob.pred, args: ob.args, or: ob.or}, f.from()))
+	}
+	if call, ok := x.(*syntax.Call); ok && ob.path == "" {
+		if fn := f.info.CallFuncs[call]; fn != nil && !fn.Prelude && f.fn != nil && fn.Pkg != f.fn.Pkg {
+			return fmt.Sprintf(" (%s does not promise it in its signature, and only what it promises is known outside its package; give the result a name and check it first)", fn.QualifiedName(f.from()))
+		}
 	}
 	if ob.path != "" || name == "this value" {
 		return " (give it a name and check it first)"
 	}
-	check := fmt.Sprintf("if (%s) { ... }", checkText(name, ob))
+	check := fmt.Sprintf("if (%s) { ... }", checkText(name, ob, f.from()))
 	if id, ok := x.(*syntax.Ident); ok {
 		if p, isParam := f.info.Defs[id].(*syntax.Param); isParam {
 			for i, pp := range f.fn.Decl.Params {
@@ -1848,12 +1862,13 @@ func (f *factChecker) fieldSelector(x syntax.Expr, path string) (string, bool) {
 	return path, true
 }
 
-// checkText is the condition that checks ob for the value called name.
-func checkText(name string, ob obligation) string {
+// checkText is the condition that checks ob for the value called name,
+// as code in package from would write it.
+func checkText(name string, ob obligation, from *Package) string {
 	if ob.or != nil {
 		alts := make([]string, len(ob.or))
 		for i, alt := range ob.or {
-			alts[i] = checkText(name, alt)
+			alts[i] = checkText(name, alt, from)
 		}
 		return strings.Join(alts, " || ")
 	}
@@ -1861,7 +1876,15 @@ func checkText(name string, ob obligation) string {
 	for _, a := range ob.args {
 		args = append(args, a.text)
 	}
-	return fmt.Sprintf("%s(%s)", ob.pred.Decl.Name, strings.Join(args, ", "))
+	return fmt.Sprintf("%s(%s)", ob.pred.QualifiedName(from), strings.Join(args, ", "))
+}
+
+// from is the package of the code being checked.
+func (f *factChecker) from() *Package {
+	if f.fn == nil {
+		return nil
+	}
+	return f.fn.Pkg
 }
 
 // --- Compile-time evaluation ---
@@ -1890,14 +1913,14 @@ func (f *factChecker) evaluate(eval Evaluator) {
 	for _, p := range f.pending {
 		if !results[index[p.query.String()]] {
 			if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil {
-				f.diags.Add(p.pos, "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: p.query.Args[0]}, p.query)
+				f.diags.Add(p.pos, "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: p.query.Args[0]}, p.query.Text(p.from))
 				continue
 			}
 			if p.query.Via != "" {
-				f.diags.Add(p.pos, "%s, but for a value %s can return, %s is false", p.ob.requirement, p.query.Via, p.query)
+				f.diags.Add(p.pos, "%s, but for a value %s can return, %s is false", p.ob.requirement, p.query.Via, p.query.Text(p.from))
 				continue
 			}
-			f.diags.Add(p.pos, "%s, but %s is false", p.ob.requirement, p.query)
+			f.diags.Add(p.pos, "%s, but %s is false", p.ob.requirement, p.query.Text(p.from))
 		}
 	}
 }

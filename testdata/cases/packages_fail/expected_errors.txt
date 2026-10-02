@@ -1,0 +1,6 @@
+main.bork:2:1: example.com/bad/money is imported but not used
+main.bork:5:11: pad is not exported by package example.com/bad/money (only names starting with an upper-case letter are)
+main.bork:6:6: secret is not exported by package example.com/bad/money (only names starting with an upper-case letter are)
+main.bork:6:21: secret is not exported by package example.com/bad/money (only names starting with an upper-case letter are)
+main.bork:7:11: package example.com/bad/money has no Nope
+main.bork:8:3: money is already the name of an imported package (bork does not allow shadowing)

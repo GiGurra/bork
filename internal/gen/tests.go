@@ -33,6 +33,9 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 		}})
 	}
 	for i, r := range info.Rules {
+		if r.Pkg != nil && !r.Pkg.Root {
+			continue // an imported package's rules are tested with it
+		}
 		goName := ast.NewIdent("_rule" + strconv.Itoa(i+1))
 		decl, untried := g.ruleTest(r, goName)
 		if decl == nil {
@@ -173,8 +176,177 @@ func (g *gen) checkedWrapper(fn *check.Func) ast.Decl {
 			Body: &ast.BlockStmt{List: checks},
 		})
 	}
+	// Records it builds must keep their fields' where clauses.
+	body = append(body, g.invariantChecks(fn, r, fn.Result, map[check.Type]bool{})...)
 	decl.Body = &ast.BlockStmt{List: append(body, &ast.ReturnStmt{Results: []ast.Expr{r}})}
 	return decl
+}
+
+// invariantPreds lists the predicates that invariantChecks may call for
+// values of type t.
+func invariantPreds(t check.Type, seen map[check.Type]bool) []*check.Func {
+	if seen[t] {
+		return nil
+	}
+	seen[t] = true
+	var out []*check.Func
+	fields := func(fs []*check.Field) {
+		for _, f := range fs {
+			for _, con := range f.Constraints {
+				out = append(out, constraintPreds(con)...)
+			}
+			out = append(out, invariantPreds(f.Type, seen)...)
+		}
+	}
+	switch t := t.(type) {
+	case *check.Record:
+		fields(t.Fields)
+	case *check.Sealed:
+		for _, v := range t.Variants {
+			fields(v.Fields)
+		}
+	case *check.Union:
+		for _, m := range t.Members {
+			out = append(out, invariantPreds(m, seen)...)
+		}
+	case *check.List:
+		out = append(out, invariantPreds(t.Elem, seen)...)
+	}
+	return out
+}
+
+func constraintPreds(con *check.Constraint) []*check.Func {
+	var out []*check.Func
+	for _, alt := range con.Or {
+		out = append(out, constraintPreds(alt)...)
+	}
+	if con.Pred != nil {
+		out = append(out, con.Pred)
+	}
+	return out
+}
+
+// hasInvariants reports whether values of type t can hold records whose
+// fields have where clauses.
+func (g *gen) hasInvariants(t check.Type, seen map[check.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *check.Record:
+		for _, f := range t.Fields {
+			if len(f.Constraints) > 0 || g.hasInvariants(f.Type, seen) {
+				return true
+			}
+		}
+	case *check.Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if len(f.Constraints) > 0 || g.hasInvariants(f.Type, seen) {
+					return true
+				}
+			}
+		}
+	case *check.Union:
+		for _, m := range t.Members {
+			if g.hasInvariants(m, seen) {
+				return true
+			}
+		}
+	case *check.List:
+		return g.hasInvariants(t.Elem, seen)
+	}
+	return false
+}
+
+// invariantChecks checks that the records in x (of type t), which fn
+// returned, keep their fields' where clauses. Types already being
+// checked are not entered again, so recursive types are checked only to
+// a fixed depth.
+func (g *gen) invariantChecks(fn *check.Func, x ast.Expr, t check.Type, seen map[check.Type]bool) []ast.Stmt {
+	if seen[t] || !g.hasInvariants(t, map[check.Type]bool{}) {
+		return nil
+	}
+	seen[t] = true
+	defer delete(seen, t)
+	fields := func(owner string, x ast.Expr, fs []*check.Field) []ast.Stmt {
+		var out []ast.Stmt
+		for _, f := range fs {
+			v := &ast.SelectorExpr{X: x, Sel: name(f.Name)}
+			for _, con := range f.Constraints {
+				what := fmt.Sprintf("%s whose %s is not %s", owner, f.Name, con)
+				out = append(out, g.atPath(v, f.Type, splitPath(con.Path), func(y ast.Expr, yt check.Type) []ast.Stmt {
+					return g.invariantCheck(fn, con, y, yt, what)
+				})...)
+			}
+			out = append(out, g.invariantChecks(fn, v, f.Type, seen)...)
+		}
+		return out
+	}
+	switch t := t.(type) {
+	case *check.Record:
+		return fields(t.Name, x, t.Fields)
+	case *check.Sealed:
+		var out []ast.Stmt
+		for _, v := range t.Variants {
+			if !g.hasInvariants(&check.Record{Fields: v.Fields}, map[check.Type]bool{}) {
+				continue
+			}
+			val, ok := g.newTmp(), g.newTmp()
+			body := fields(t.Name+"."+v.Name, val, v.Fields)
+			out = append(out, &ast.IfStmt{
+				Init: &ast.AssignStmt{Lhs: []ast.Expr{val, ok}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: x, Type: g.variantType(v)}}},
+				Cond: ok,
+				Body: &ast.BlockStmt{List: body},
+			})
+		}
+		return out
+	case *check.Union:
+		var out []ast.Stmt
+		for _, m := range t.Members {
+			if !g.hasInvariants(m, map[check.Type]bool{}) {
+				continue
+			}
+			val, ok := g.newTmp(), g.newTmp()
+			out = append(out, &ast.IfStmt{
+				Init: &ast.AssignStmt{Lhs: []ast.Expr{val, ok}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: x, Type: g.goType(m)}}},
+				Cond: ok,
+				Body: &ast.BlockStmt{List: g.invariantChecks(fn, val, m, seen)},
+			})
+		}
+		return out
+	case *check.List:
+		el := g.newTmp()
+		return []ast.Stmt{&ast.RangeStmt{
+			Key: ast.NewIdent("_"), Value: el, Tok: token.DEFINE, X: x,
+			Body: &ast.BlockStmt{List: g.invariantChecks(fn, el, t.Elem, seen)},
+		}}
+	}
+	return nil
+}
+
+// invariantCheck panics if con does not hold for x, a field value of a
+// record fn returned.
+func (g *gen) invariantCheck(fn *check.Func, con *check.Constraint, x ast.Expr, t check.Type, what string) []ast.Stmt {
+	cond := g.constraintCond(con, x, t)
+	if cond == nil {
+		return nil
+	}
+	g.usesShow = true
+	msg := fmt.Sprintf("%s: %s returned %s %s: ", fn.Decl.Pos, fn.Decl.Name, article(what), what)
+	text := &ast.BinaryExpr{X: strLit(msg), Op: token.ADD, Y: &ast.CallExpr{Fun: ast.NewIdent("_show"), Args: []ast.Expr{x}}}
+	return []ast.Stmt{&ast.IfStmt{
+		Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)},
+		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{text}}}}},
+	}}
+}
+
+func article(w string) string {
+	if w != "" && strings.ContainsRune("AEIOUaeiou", rune(w[0])) {
+		return "an"
+	}
+	return "a"
 }
 
 func splitPath(path string) []string {

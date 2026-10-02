@@ -458,7 +458,10 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 ### Packages and modules
 
 - **Go style.** A directory is a package, a module file at the root names the module, imports use module paths, and there are no circular package dependencies.
-- **Visibility follows Go:** names starting with an upper-case letter are exported.
+- **Visibility follows Go:** names starting with an upper-case letter are exported. This applies to top-level declarations (functions, predicates, types); the fields and variants of an exported type are visible wherever the type is.
+- **How it works (implemented).** `bork.mod` at the module's root holds `module example.com/shop`. A file starts with its imports, `import "example.com/shop/money"` or `import cash "example.com/shop/money"`, and refers to the package's names as `money.Cents`, `money.Amount`, `money.Currency.Eur`. Unused imports are errors, import cycles are rejected, and an import name cannot be shadowed. For now the compiler checks the whole program at once (with each package's names kept apart), rather than each package against summaries of its imports.
+- **Another package's functions promise only what their signatures say.** Facts derived from a function's body are used within its package, but not by importers, so a package's body can change without breaking them. (This settles the "exported return types" question below.)
+- **Inference rules apply everywhere** their predicates are used, and `bork test` property-tests the rules of the package being tested.
 
 ### Open questions
 

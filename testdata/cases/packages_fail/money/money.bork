@@ -1,0 +1,12 @@
+pred Positive(x: Int) { x > 0 }
+
+type Amount = { cents: Int where Positive }
+
+type secret = { code: String }
+
+fn Cents(n: Int where Positive): Amount { Amount { cents: n } }
+
+fn pad(n: Int): String { toString(n) }
+
+// Its body proves the result positive, but its signature does not say so.
+fn Clamp(x: Int): Int { if (Positive(x)) { x } else { 1 } }

@@ -13,9 +13,11 @@ import (
 	"go/constant"
 	"go/format"
 	"go/printer"
+	goscanner "go/scanner"
 	"go/token"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -23,10 +25,14 @@ import (
 
 // Package generates a Go `package main` source file.
 func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
+	// Every function of the program's packages is emitted (unsafe go
+	// code may call them); the prelude's only if used.
 	var roots []*check.Func
-	for _, fn := range info.Funcs {
-		if !fn.Prelude {
-			roots = append(roots, fn)
+	for _, f := range files {
+		for _, fd := range f.Funcs {
+			if fn := info.FuncOf[fd]; fn != nil && !fn.Prelude {
+				roots = append(roots, fn)
+			}
 		}
 	}
 	return generate(newGen(info), files, roots, nil)
@@ -130,7 +136,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			if fd.GoBody != nil {
 				fn := info.FuncOf[fd]
 				goName := g.funcName(fn).Name
-				if g.testMode && len(fn.ResultConstraints) > 0 {
+				if g.testMode && (len(fn.ResultConstraints) > 0 || g.hasInvariants(fn.Result, map[check.Type]bool{})) {
 					// Check what the Go code promises.
 					funcs = append(funcs, g.checkedWrapper(fn))
 					goName = "_unchecked_" + goName
@@ -236,6 +242,12 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 		for _, callee := range fn.Calls {
 			visit(callee)
 		}
+		if g.testMode && fn.Decl.GoBody != nil {
+			// Test mode checks the records it returns (see checkedWrapper).
+			for _, pred := range invariantPreds(fn.Result, map[check.Type]bool{}) {
+				visit(pred)
+			}
+		}
 	}
 	for _, fn := range roots {
 		visit(fn)
@@ -265,8 +277,41 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	if abs, err := filepath.Abs(file); err == nil {
 		file = abs
 	}
-	fmt.Fprintf(&buf, " {/*line %s:%d:%d*/%s}\n", file, pos.Line, pos.Col+1, fd.GoBody.Body)
+	fmt.Fprintf(&buf, " {%s/*line %s:%d:%d*/%s}\n", g.packageAliases(fd), file, pos.Line, pos.Col+1, fd.GoBody.Body)
 	return buf.String(), nil
+}
+
+// packageAliases lets the Go code of a function in an imported package
+// use the package's own types and functions by their bork names, which
+// are prefixed in Go: `type Amount = _money_Amount;`.
+func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
+	fn := g.info.FuncOf[fd]
+	pkg := fn.Pkg
+	if pkg == nil || pkg.GoPrefix == "" {
+		return ""
+	}
+	var out strings.Builder
+	seen := map[string]bool{}
+	var sc goscanner.Scanner
+	src := []byte(fd.GoBody.Body)
+	sc.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)
+	for {
+		_, tok, lit := sc.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok != token.IDENT || seen[lit] {
+			continue
+		}
+		seen[lit] = true
+		if t := pkg.TypeNamed(lit); t != nil && len(check.TypeArgs(t)) == 0 {
+			g.goType(t)
+			fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
+		} else if f := pkg.Funcs[lit]; f != nil && f != fn && len(f.TypeParams) == 0 {
+			fmt.Fprintf(&out, "%s := %s%s; _ = %s; ", lit, pkg.GoPrefix, lit, lit)
+		}
+	}
+	return out.String()
 }
 
 // goReserved holds names a bork identifier may not use verbatim in Go:
@@ -303,6 +348,9 @@ func name(s string) *ast.Ident {
 func (g *gen) funcName(fn *check.Func) *ast.Ident {
 	if fn.Prelude && g.info.Funcs[fn.Decl.Name] != fn {
 		return ast.NewIdent("_prelude_" + fn.Decl.Name)
+	}
+	if fn.Pkg != nil && fn.Pkg.GoPrefix != "" {
+		return ast.NewIdent(fn.Pkg.GoPrefix + fn.Decl.Name)
 	}
 	return name(fn.Decl.Name)
 }

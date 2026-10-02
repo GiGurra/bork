@@ -3,6 +3,8 @@ package check
 import (
 	"strings"
 
+	"github.com/GiGurra/bork/internal/diag"
+
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -13,6 +15,7 @@ type typeEntry struct {
 	resolving bool // guards against alias cycles
 	resolved  bool
 	prelude   bool
+	pkg       *Package // the declaring package
 	// The where clause of a constrained alias (type Port = Int where ...).
 	constraints     []*Constraint
 	constraintsDone bool
@@ -31,8 +34,24 @@ func (c *checker) isTypeName(name string) bool {
 	if reservedTypeNames[name] {
 		return true
 	}
-	_, ok := c.decls[name]
-	return ok
+	return c.lookupType(name) != nil
+}
+
+// lookupType finds a declared type by name, as the code being checked
+// sees it: its package's types, then the prelude's. A qualified name
+// ("money.Amount") is looked up in an imported package, which must
+// export it.
+func (c *checker) lookupType(name string) *typeEntry {
+	if pkg, n, ok := c.qualified(name); ok {
+		if !Exported(n) {
+			return nil
+		}
+		return pkg.types[n]
+	}
+	if e := c.pkg.types[name]; e != nil {
+		return e
+	}
+	return c.preludePkg.types[name]
 }
 
 func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
@@ -40,18 +59,23 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 		c.errorf(td.Pos, "%s is a built-in type and cannot be redefined", td.Name)
 		return
 	}
-	if prev, ok := c.decls[td.Name]; ok && prev.prelude {
-		c.errorf(td.Pos, "%s is a built-in type and cannot be redefined", td.Name)
+	if prev, ok := c.preludePkg.types[td.Name]; ok && !prelude {
+		c.errorf(td.Pos, "%s is a built-in type and cannot be redefined", prev.decl.Name)
 		return
-	} else if ok {
+	}
+	if prev, ok := c.pkg.types[td.Name]; ok {
 		c.errorf(td.Pos, "type %s is already declared at %s", td.Name, prev.decl.Pos)
+		return
+	}
+	if _, ok := c.pkg.imports[td.Name]; ok {
+		c.errorf(td.Pos, "%s is already the name of an imported package", td.Name)
 		return
 	}
 	if _, ok := builtins[td.Name]; ok {
 		c.errorf(td.Pos, "%s is a built-in function", td.Name)
 		return
 	}
-	e := &typeEntry{decl: td, prelude: prelude}
+	e := &typeEntry{decl: td, prelude: prelude, pkg: c.pkg}
 	var params []*TypeParam
 	seen := map[string]bool{}
 	for _, d := range td.TypeParams {
@@ -68,9 +92,9 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 	}
 	switch td.Kind {
 	case syntax.RecordType:
-		e.typ = &Record{Name: td.Name, Decl: td, Prelude: prelude, TypeParams: params, insts: newInstanceSet()}
+		e.typ = &Record{Name: td.Name, Decl: td, Prelude: prelude, Pkg: c.pkg, TypeParams: params, insts: newInstanceSet()}
 	case syntax.SealedType:
-		e.typ = &Sealed{Name: td.Name, Decl: td, Prelude: prelude, TypeParams: params, insts: newInstanceSet()}
+		e.typ = &Sealed{Name: td.Name, Decl: td, Prelude: prelude, Pkg: c.pkg, TypeParams: params, insts: newInstanceSet()}
 	case syntax.AliasType:
 		if len(td.TypeParams) > 0 {
 			c.errorf(td.Pos, "a type alias cannot have type parameters (yet); declare a record or sealed type")
@@ -79,12 +103,12 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 		if len(td.TypeParams) > 0 {
 			c.errorf(td.Pos, "a resource type cannot have type parameters")
 		}
-		e.typ = &Resource{Name: td.Name, Decl: td, Prelude: prelude}
+		e.typ = &Resource{Name: td.Name, Decl: td, Prelude: prelude, Pkg: c.pkg}
 	}
 	if e.typ != nil {
 		c.info.TypeOrder = append(c.info.TypeOrder, e.typ)
 	}
-	c.decls[td.Name] = e
+	c.pkg.types[td.Name] = e
 }
 
 func (c *checker) resolveDecl(e *typeEntry) Type {
@@ -98,6 +122,10 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 	}
 	e.resolving = true
 	td := e.decl
+	// Names in the declaration are those of its own package.
+	savedPkg, savedPrelude := c.pkg, c.inPrelude
+	c.pkg, c.inPrelude = e.pkg, e.prelude
+	defer func() { c.pkg, c.inPrelude = savedPkg, savedPrelude }()
 	// A generic type's parameters are visible in its fields.
 	savedParams := c.typeParams
 	if ps := typeParamsOf(e.typ); len(ps) > 0 {
@@ -233,7 +261,7 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 		}
 		return &List{Elem: elem}
 	}
-	if e, ok := c.decls[t.Name]; ok && e.decl.Kind != syntax.AliasType {
+	if e := c.lookupType(t.Name); e != nil && e.decl.Kind != syntax.AliasType {
 		params := typeParamsOf(e.typ)
 		if len(params) == 0 {
 			if len(t.Args) > 0 {
@@ -266,14 +294,23 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 	if typ, ok := basicTypes[t.Name]; ok {
 		return typ
 	}
-	if e, ok := c.decls[t.Name]; ok {
+	if e := c.lookupType(t.Name); e != nil {
 		if e.decl.Kind == syntax.AliasType {
 			return c.resolveDecl(e)
 		}
 		return e.typ
 	}
-	c.errorf(t.Pos, "unknown type %s", t.Name)
+	c.unknownType(t.Pos, t.Name)
 	return Invalid
+}
+
+// unknownType reports a type name that does not resolve.
+func (c *checker) unknownType(pos diag.Pos, name string) {
+	if why := c.notFound(name); why != "" {
+		c.errorf(pos, "%s", why)
+		return
+	}
+	c.errorf(pos, "unknown type %s", name)
 }
 
 func paramNames(ps []*TypeParam) string {

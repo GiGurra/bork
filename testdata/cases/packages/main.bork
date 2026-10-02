@@ -1,0 +1,28 @@
+// A program of several packages: a directory is a package, bork.mod
+// names the module, and imports use module paths.
+import "example.com/shop/money"
+import shop "example.com/shop/store/catalog"
+
+fn describe(a: money.Amount): String {
+  money.Format(a, money.Currency.Sek)
+}
+
+fn main() {
+  items = [
+    shop.Item { name: "tea", price: money.Cents(250) },
+    shop.Item { name: "cake", price: money.Amount { cents: 425 } },
+  ]
+  match (shop.Total(items)) {
+    Option.Some { value: total } => {
+      println(money.Format(total, money.Currency.Eur))
+      println(money.Format(total, money.Currency.Other { code: "NOK" }))
+    }
+    Option.None => println("nothing")
+  }
+  match (money.Parse("12")) {
+    a: money.Amount => println(describe(a))
+    e: String => println(e)
+  }
+  println(money.Parse("x"))
+  println(money.Cents(money.AtLeastOneCent(-5)))
+}

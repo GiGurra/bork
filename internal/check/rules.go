@@ -11,6 +11,7 @@ import (
 // (and the Conditions on constants are true), the Conclusions hold too.
 type Rule struct {
 	Decl        *syntax.RuleDecl
+	Pkg         *Package
 	VarTypes    []Type // the types of Decl.Params
 	Premises    []*RuleAtom
 	Conditions  []syntax.Expr
@@ -32,12 +33,13 @@ type RuleArg struct {
 func (c *checker) checkRules(files []*syntax.File) {
 	names := map[string]bool{}
 	for _, f := range files {
+		c.inFile(f)
 		for _, rd := range f.Rules {
-			if names[rd.Name] {
+			if names[f.Package+"."+rd.Name] {
 				c.errorf(rd.Pos, "rule %s is declared twice", rd.Name)
 				continue
 			}
-			names[rd.Name] = true
+			names[f.Package+"."+rd.Name] = true
 			if r := c.checkRule(rd); r != nil {
 				c.info.Rules = append(c.info.Rules, r)
 			}
@@ -59,7 +61,7 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 		vars[p.Name] = true
 		c.scopes[0][p.Name] = &local{typ: t, decl: p, used: true}
 	}
-	r := &Rule{Decl: rd, VarTypes: types}
+	r := &Rule{Decl: rd, Pkg: c.pkg, VarTypes: types}
 	ok := true
 	bound := map[string]bool{}
 	atom := func(x syntax.Expr, what string) *RuleAtom {

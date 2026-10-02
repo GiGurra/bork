@@ -1,0 +1,12 @@
+import "example.com/bad/money"
+
+fn pay(n: Int): money.Amount {
+  money.Cents(n)
+}
+
+fn main() {
+  println(money.Cents(0))
+  println(money.Amount { cents: -1 })
+  println(money.Cents(money.Clamp(-5)))
+  println(pay(1))
+}
