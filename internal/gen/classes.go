@@ -21,10 +21,8 @@ import (
 // A call whose instance is known calls the method directly; only code
 // that is generic over the instance goes through the struct.
 
-// className keeps the optional prelude Show distinct from a package's
-// own class named Show, which predates the prelude renderer.
 func className(class *check.Class) *ast.Ident {
-	if class.Prelude && class.Name == "Show" {
+	if check.IsShow(class) {
 		return ast.NewIdent("_Show")
 	}
 	return typeName(class.Name, class.Pkg)
@@ -151,9 +149,13 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 	}
 	if d.Builtin {
 		// Eq: Eq[T]{equals: _equalOf[T]}.
-		fun, _ := g.dictMethod(d, "equals")
+		method := "equals"
+		if check.IsShow(d.Class) {
+			method = "show"
+		}
+		fun, _ := g.dictMethod(d, method)
 		return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{
-			&ast.KeyValueExpr{Key: ast.NewIdent("equals"), Value: fun},
+			&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun},
 		}}
 	}
 	var fun ast.Expr = ast.NewIdent(instName(d.Inst))
@@ -185,6 +187,10 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 		return &ast.SelectorExpr{X: dictParam(d.Param, d.Class), Sel: name(method)}, nil
 	}
 	if d.Builtin {
+		if check.IsShow(d.Class) {
+			g.usesShow = true
+			return &ast.IndexExpr{X: ast.NewIdent("_strOf"), Index: g.goType(d.Type)}, nil
+		}
 		g.usesEqual = true
 		return &ast.IndexExpr{X: ast.NewIdent("_equalOf"), Index: g.goType(d.Type)}, nil
 	}

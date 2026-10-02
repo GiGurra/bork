@@ -1,79 +1,66 @@
 package check
 
-import "github.com/GiGurra/bork/internal/syntax"
+// IsShow identifies the coherent prelude renderer; user-defined classes
+// named Show retain the ordinary instance rules.
+func IsShow(class *Class) bool { return class.Prelude && class.Name == "Show" }
 
-// ShowDicts are the optional custom renderers visible where e is printed.
-func (i *Info) ShowDicts(e syntax.Expr) []*Dict { return i.showDicts[e] }
+func showBase(t Type) (Type, *Package, []*TypeParam, []Type) {
+	switch t := t.(type) {
+	case *Record:
+		if t.Base != nil {
+			return t.Base, t.Pkg, t.Base.TypeParams, t.Args
+		}
+		return t, t.Pkg, t.TypeParams, nil
+	case *Sealed:
+		if t.Base != nil {
+			return t.Base, t.Pkg, t.Base.TypeParams, t.Args
+		}
+		return t, t.Pkg, t.TypeParams, nil
+	}
+	return nil, nil, nil, nil
+}
 
-func (c *checker) recordShow(e syntax.Expr, t Type) {
-	var show *Class
-	for _, cl := range c.info.Classes {
-		if cl.Prelude && cl.Name == "Show" {
-			show = cl
+func (c *checker) validShow(ci *ClassInstance) bool {
+	base, pkg, params, args := showBase(ci.Type)
+	if base == nil {
+		c.errorf(ci.Decl.Type.Pos, "Show instances require a declared record or sealed type; wrap basic types, lists and maps in a declared type")
+		return false
+	}
+	if pkg != c.pkg || ci.Prelude {
+		c.errorf(ci.Decl.Type.Pos, "a Show instance must be declared in the type's own package, so its text is the same everywhere")
+		return false
+	}
+	universal := len(ci.TypeParams) == len(params) && len(args) == len(params)
+	used := map[*TypeParam]bool{}
+	for _, arg := range args {
+		tp, ok := arg.(*TypeParam)
+		if !ok || used[tp] {
+			universal = false
 			break
 		}
+		used[tp] = true
 	}
-	if show == nil || t == Invalid {
-		return
-	}
-	var dicts []*Dict
-	seen := map[Type]bool{}
-	unknown := false
-	var visit func(Type)
-	visit = func(t Type) {
-		if seen[t] {
-			return
+	for _, tp := range ci.TypeParams {
+		if !used[tp] {
+			universal = false
 		}
-		seen[t] = true
-		if d := c.findDict(show, t, e.Position(), 0, true); d != nil {
-			dicts = append(dicts, d)
-			return
-		}
-		savedHave := c.have
-		c.have = nil
-		defer func() { c.have = savedHave }()
-		fields := func(fs []*Field) {
-			for _, f := range fs {
-				visit(f.Type)
-			}
-		}
-		switch t := t.(type) {
-		case *TypeParam:
-			unknown = true
-		case *List:
-			visit(t.Elem)
-		case *Map:
-			visit(t.Key)
-			visit(t.Value)
-		case *Record:
-			fields(t.Fields)
-		case *Sealed:
-			for _, v := range t.Variants {
-				fields(v.Fields)
-			}
-		case *Union:
-			for _, m := range t.Members {
-				visit(m)
+		for _, bound := range tp.Bounds {
+			if !IsShow(bound) {
+				c.errorf(tp.Decl.Pos, "a generic Show instance may only have Show bounds: its renderer must work for every instantiation")
+				return false
 			}
 		}
 	}
-	saved := c.have
-	c.have = c.declaredFacts(e)
-	visit(t)
-	c.have = saved
-	// An unbounded generic value can still have a concrete instance visible
-	// in its defining package. Generic instance heads need a known type.
-	if unknown {
-		for _, ci := range c.pkg.inScope {
-			if ci.Class == show && len(ci.TypeParams) == 0 && len(ci.Constraints) == 0 {
-				visit(ci.Type)
-			}
+	if !universal {
+		c.errorf(ci.Decl.Type.Pos, "Show instances for generic types must cover every instantiation, as in Show[Box[T]]; specialized renderers would make generic printing inconsistent")
+		return false
+	}
+	for _, other := range c.info.ClassInstances {
+		otherBase, _, _, _ := showBase(other.Type)
+		if IsShow(other.Class) && otherBase == base {
+			c.errorf(ci.Decl.Pos, "type %s already has a Show instance (%s); Show has one renderer per type so printing is consistent everywhere", base, other.Name)
+			return false
 		}
 	}
-	if len(dicts) > 0 {
-		if c.info.showDicts == nil {
-			c.info.showDicts = map[syntax.Expr][]*Dict{}
-		}
-		c.info.showDicts[e] = dicts
-	}
+	return true
 }

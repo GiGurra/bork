@@ -203,7 +203,8 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 	case *check.Record:
 		recv := g.instantiated(typeName(t.Name, t.Pkg), t)
 		decls = append(decls, g.structDecl(typeName(t.Name, t.Pkg), t.TypeParams, t.Fields))
-		decls = append(decls, g.stringMethod(recv, t.Name, t.Fields, true, false), g.stringMethod(recv, t.Name, t.Fields, true, true))
+		decls = append(decls, g.showStringMethod(recv, t, t.Name, t.Fields, true))
+		decls = append(decls, g.showMethods(recv, t)...)
 		decls = append(decls, g.valueMethods(recv, t.Fields)...)
 	case *check.Sealed:
 		// The interface's marker method mentions the type parameters, so
@@ -231,7 +232,8 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 				Type: markerType,
 				Body: &ast.BlockStmt{},
 			})
-			decls = append(decls, g.stringMethod(recv, t.Name+"."+v.Name, v.Fields, false, false), g.stringMethod(recv, t.Name+"."+v.Name, v.Fields, false, true))
+			decls = append(decls, g.showStringMethod(recv, t, t.Name+"."+v.Name, v.Fields, false))
+			decls = append(decls, g.showMethods(recv, t)...)
 			decls = append(decls, g.valueMethods(recv, v.Fields)...)
 		}
 	}
@@ -249,10 +251,7 @@ func (g *gen) structDecl(n *ast.Ident, params []*check.TypeParam, fields []*chec
 // stringMethod generates `func (v T) String() string` rendering the
 // value as `Label { field: value, ... }`. String fields are quoted.
 // A variant without fields renders as just its label.
-func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, isRecord, custom bool) ast.Decl {
-	if custom {
-		g.usesShow = true
-	}
+func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, isRecord bool) ast.Decl {
 	strLit := func(s string) ast.Expr { return &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(s)} }
 	var result ast.Expr
 	switch {
@@ -267,11 +266,7 @@ func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, i
 			if i == 0 {
 				prefix = label + " { " + f.Name + ": "
 			}
-			field := &ast.SelectorExpr{X: ast.NewIdent("v"), Sel: name(f.Name)}
-			show := g.showValue(field, f.Type)
-			if custom {
-				show = g.showWithValue(field, f.Type, ast.NewIdent("custom"))
-			}
+			show := g.showValue(&ast.SelectorExpr{X: ast.NewIdent("v"), Sel: name(f.Name)}, f.Type)
 			part := &ast.BinaryExpr{X: strLit(prefix), Op: token.ADD, Y: show}
 			if result == nil {
 				result = part
@@ -285,16 +280,10 @@ func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, i
 	if len(fields) == 0 {
 		recvName = ast.NewIdent("_")
 	}
-	methodName := "String"
-	params := &ast.FieldList{}
-	if custom {
-		methodName = "_borkShow"
-		params.List = []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("custom")}, Type: ast.NewIdent("_showCustom")}}
-	}
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{recvName}, Type: recv}}},
-		Name: ast.NewIdent(methodName),
-		Type: &ast.FuncType{Params: params, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}}}},
+		Name: ast.NewIdent("String"),
+		Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}}}},
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{result}}}},
 	}
 }
@@ -924,49 +913,34 @@ import (
 
 // _show renders a field value for String methods: strings are quoted,
 // everything else is printed as by _str.
-type _showCustom func(any) (string, bool)
-
-func _show(x any) string { return _showWith(x, nil) }
-
-func _showWith(x any, custom _showCustom) string {
-	if custom != nil {
-		if text, ok := custom(x); ok { return text }
+func _show(x any) string {
+	if v, ok := x.(interface{ _borkShow() string }); ok { return v._borkShow() }
+	if s, ok := x.(string); ok {
+		return strconv.Quote(s)
 	}
-	if s, ok := x.(string); ok { return strconv.Quote(s) }
-	return _strDefault(x, custom)
+	return _str(x)
 }
 
 // _str renders a value as println and toString show it. Floats always
 // look like floats (3.0, not 3), and use an exponent only when very
 // large or small.
-func _str(x any) string { return _strWith(x, nil) }
+func _strOf[T any](x T) string { return _str(x) }
 
-func _strWith(x any, custom _showCustom) string {
-	if custom != nil {
-		if text, ok := custom(x); ok { return text }
-	}
-	return _strDefault(x, custom)
-}
-
-func _strDefault(x any, custom _showCustom) string {
+func _str(x any) string {
+	if v, ok := x.(interface{ _borkShow() string }); ok { return v._borkShow() }
 	switch x := x.(type) {
 	case float64:
 		return _fmtFloat(x, 64)
 	case float32:
 		return _fmtFloat(float64(x), 32)
-	case fmt.Stringer:
-		if custom != nil {
-			if v, ok := x.(interface{ _borkShow(_showCustom) string }); ok { return v._borkShow(custom) }
-		}
-		return x.String()
-	case string:
-		return x
+	case fmt.Stringer, string:
+		return fmt.Sprint(x)
 	}
 	switch v := reflect.ValueOf(x); v.Kind() {
 	case reflect.Slice:
 		parts := make([]string, v.Len())
 		for i := range parts {
-			parts[i] = _showWith(v.Index(i).Interface(), custom)
+			parts[i] = _show(v.Index(i).Interface())
 		}
 		return "[" + strings.Join(parts, ", ") + "]"
 	case reflect.Func:
@@ -1377,9 +1351,7 @@ func (m _Map[K, V]) _borkHash() uint64 {
 	return _hashMix(uint64(m.len()), h)
 }
 
-func (m _Map[K, V]) String() string { return m._borkShow(nil) }
-
-func (m _Map[K, V]) _borkShow(custom _showCustom) string {
+func (m _Map[K, V]) String() string {
 	if m.len() == 0 {
 		return "{:}"
 	}
@@ -1389,8 +1361,8 @@ func (m _Map[K, V]) _borkShow(custom _showCustom) string {
 	}
 	entries := make([]shownEntry, 0, m.len())
 	m.impl().each(func(e *_mapEntry) bool {
-		keyText := _showWith(e.key, custom)
-		entries = append(entries, shownEntry{e.key, keyText, keyText+": "+_showWith(e.val, custom)})
+		keyText := _show(e.key)
+		entries = append(entries, shownEntry{e.key, keyText, keyText+": "+_show(e.val)})
 		return true
 	})
 	if _, ok := m.impl().(*_hashCore); ok {

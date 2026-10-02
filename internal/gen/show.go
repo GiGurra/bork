@@ -2,35 +2,71 @@ package gen
 
 import (
 	"go/ast"
-	"go/token"
 
 	"github.com/GiGurra/bork/internal/check"
 )
 
-// customText renders with the instances selected in the caller's package.
-// The callback is local, so nested printing has no global renderer state.
-func (g *gen) customText(x ast.Expr, t check.Type, dicts []*check.Dict) ast.Expr {
-	g.usesShow = true
-	value, custom := ast.NewIdent("value"), ast.NewIdent("custom")
-	sw := &ast.TypeSwitchStmt{Assign: &ast.AssignStmt{Lhs: []ast.Expr{value}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: ast.NewIdent("x")}}}, Body: &ast.BlockStmt{}}
-	for _, d := range dicts {
-		fun, args := g.dictMethod(d, "show")
-		args = append(args, value)
-		sw.Body.List = append(sw.Body.List, &ast.CaseClause{List: []ast.Expr{g.goType(d.Type)}, Body: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{&ast.CallExpr{Fun: fun, Args: args}, ast.NewIdent("true")}}}})
+func (g *gen) showInstance(t check.Type) *check.ClassInstance {
+	for _, ci := range g.info.ClassInstances {
+		if check.IsShow(ci.Class) && baseOf(ci.Type) == baseOf(t) {
+			return ci
+		}
 	}
-	callback := &ast.FuncLit{
-		Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("x")}, Type: ast.NewIdent("any")}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}, {Type: ast.NewIdent("bool")}}}},
-		Body: &ast.BlockStmt{List: []ast.Stmt{sw, &ast.ReturnStmt{Results: []ast.Expr{strLit(""), ast.NewIdent("false")}}}},
-	}
-	body := &ast.BlockStmt{List: []ast.Stmt{define(custom, callback), &ast.ReturnStmt{Results: []ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_strWith"), Args: []ast.Expr{ast.NewIdent("x"), custom}}}}}}
-	return &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("x")}, Type: g.goType(t)}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}}}}, Body: body}, Args: []ast.Expr{g.typed(x, t)}}
+	return nil
 }
 
-func (g *gen) showWithValue(x ast.Expr, t check.Type, custom ast.Expr) ast.Expr {
-	if list, ok := t.(*check.List); ok {
-		value := ast.NewIdent("x")
-		show := &ast.FuncLit{Type: g.funcType(&check.FuncType{Params: []check.Type{list.Elem}, Result: check.String}, []*ast.Ident{value}), Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.showWithValue(value, list.Elem, custom)}}}}}
-		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_showList"), Index: g.goType(list.Elem)}, Args: []ast.Expr{x, show}}
+// showMethods attach the universal instance to every representation of
+// the declared type, including each variant of a sealed type.
+func (g *gen) showMethods(recv ast.Expr, t check.Type) []ast.Decl {
+	ci := g.showInstance(t)
+	if ci == nil {
+		return nil
 	}
-	return &ast.CallExpr{Fun: ast.NewIdent("_showWith"), Args: []ast.Expr{x, custom}}
+	g.usesShow = true
+	var params []*check.TypeParam
+	var args []check.Type
+	switch t := t.(type) {
+	case *check.Record:
+		params = t.TypeParams
+		args = ci.Type.(*check.Record).Args
+	case *check.Sealed:
+		params = t.TypeParams
+		args = ci.Type.(*check.Sealed).Args
+	}
+	bound := map[*check.TypeParam]check.Type{}
+	for i, arg := range args {
+		bound[arg.(*check.TypeParam)] = params[i]
+	}
+	var fun ast.Expr = g.funcName(ci.Methods[0])
+	var callArgs []ast.Expr
+	if len(ci.TypeParams) > 0 {
+		idx := &ast.IndexListExpr{X: fun}
+		for _, tp := range ci.TypeParams {
+			actual := bound[tp]
+			idx.Indices = append(idx.Indices, g.goType(actual))
+			for _, class := range tp.Bounds {
+				callArgs = append(callArgs, g.dict(&check.Dict{Class: class, Type: actual, Builtin: true}))
+			}
+		}
+		fun = idx
+	}
+	callArgs = append(callArgs, ast.NewIdent("v"))
+	return []ast.Decl{&ast.FuncDecl{
+		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("v")}, Type: recv}}},
+		Name: ast.NewIdent("_borkShow"),
+		Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}}}},
+		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{&ast.CallExpr{Fun: fun, Args: callArgs}}}}},
+	}}
+}
+
+func (g *gen) showStringMethod(recv ast.Expr, t check.Type, label string, fields []*check.Field, record bool) ast.Decl {
+	if g.showInstance(t) == nil {
+		return g.stringMethod(recv, label, fields, record)
+	}
+	return &ast.FuncDecl{
+		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("v")}, Type: recv}}},
+		Name: ast.NewIdent("String"),
+		Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}}}},
+		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{&ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("v"), Sel: ast.NewIdent("_borkShow")}}}}}},
+	}
 }

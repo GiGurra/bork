@@ -1065,8 +1065,9 @@ class Eq[T] {
   fn equals(a: T, b: T): Bool
 }
 
-// Show optionally customizes toString, println, interpolation and nested
-// printing. Values without an instance keep their default bork text.
+// Show customizes text consistently, including generic and nested values.
+// One universal instance may be declared in a record or sealed type's own
+// package. Every value has a default renderer, so Show bounds always hold.
 class Show[T] {
   fn show(x: T): String
 }
