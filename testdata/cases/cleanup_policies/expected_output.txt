@@ -1,0 +1,6 @@
+slow finalizer done
+after the blocking scope
+quick finalizer done
+after the scope with a timeout
+finalizer within the limit
+explicitly blocking

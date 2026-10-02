@@ -303,6 +303,9 @@ func (l *lifeChecker) exprLife(x syntax.Expr) lifetime {
 		}
 		return l.expr(x.Tail)
 	case *syntax.ScopeExpr:
+		if x.Policy != nil {
+			l.use(x.Policy, l.expr(x.Policy))
+		}
 		l.enclosing[x] = append([]*syntax.ScopeExpr(nil), l.open...)
 		l.frame[x] = l.cur
 		l.env[x] = lifetime{x}

@@ -1,0 +1,46 @@
+fn main() {
+  // The default policy waits for every finalizer.
+  scope s {
+    onClose(s, () => {
+      sleep(30)
+      println("slow finalizer done")
+    })
+  }
+  println("after the blocking scope")
+  // A timeout: a finalizer that takes longer is left behind.
+  scope s with cleanupTimeout(10) {
+    onClose(s, () => println("quick finalizer done"))
+    onClose(s, () => {
+      sleep(200)
+      println("never seen: the program ends first")
+    })
+  }
+  println("after the scope with a timeout")
+  // A policy is a value.
+  policy = Cleanup.Timeout { ms: 50 }
+  scope s with policy {
+    onClose(s, () => println("finalizer within the limit"))
+  }
+  scope s with Cleanup.Block {
+    println("explicitly blocking")
+  }
+}
+
+// Finalizers that fail do not stop the others; their failures are
+// raised together once the scope has closed.
+test "every finalizer runs, and failures are raised together" {
+  scope s {
+    onClose(s, () => println("finalizer 1 ran"))
+    onClose(s, () => panic("finalizer 2 failed"))
+    onClose(s, () => println("finalizer 3 ran"))
+    onClose(s, () => panic("finalizer 4 failed"))
+    onClose(s, () => println("finalizer 5 ran"))
+  }
+}
+
+test "a task's failure is raised with the finalizers'" {
+  scope s {
+    onClose(s, () => panic("the finalizer failed"))
+    launch(s, () => panic("the task failed"))
+  }
+}

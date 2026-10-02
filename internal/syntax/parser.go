@@ -99,6 +99,9 @@ type parser struct {
 	noLambda bool
 	// imports holds the names of the file's imported packages.
 	imports map[string]bool
+	// noRecordLit is set while parsing a scope's policy, where a '{'
+	// after a name starts the scope's block.
+	noRecordLit bool
 }
 
 // importDecl parses `import "path"` or `import name "path"`.
@@ -720,6 +723,8 @@ func (p *parser) postfix(x Expr) Expr {
 		switch {
 		case p.at(LParen):
 			call := &Call{Pos: p.next().Pos, Fun: x, TypeArgs: typeArgs}
+			saved := p.noRecordLit
+			p.noRecordLit = false // within the parentheses, '{' is a literal again
 			p.skipNewlines()
 			for !p.at(RParen) {
 				call.Args = append(call.Args, p.expr())
@@ -731,6 +736,7 @@ func (p *parser) postfix(x Expr) Expr {
 				p.skipNewlines()
 			}
 			p.expect(RParen, "to end the argument list")
+			p.noRecordLit = saved
 			x = call
 		case p.at(Dot):
 			p.next()
@@ -742,7 +748,7 @@ func (p *parser) postfix(x Expr) Expr {
 			}
 		case p.at(Quest):
 			x = &Try{Pos: p.next().Pos, X: x}
-		case p.at(LBrace) && isTypePath(x):
+		case p.at(LBrace) && isTypePath(x) && !p.noRecordLit:
 			x = p.recordLit(x)
 		default:
 			return x
@@ -900,7 +906,18 @@ func (p *parser) primary() Expr {
 		if t.Text == "scope" && p.peekKind() == TIdent {
 			p.next()
 			name := p.next()
-			return &ScopeExpr{Pos: t.Pos, Name: name.Text, Body: p.block()}
+			se := &ScopeExpr{Pos: t.Pos, Name: name.Text}
+			if p.at(TIdent) && p.tok().Text == "with" {
+				// The policy is followed by the block, so a bare name
+				// before '{' is not a record literal.
+				p.next()
+				saved := p.noRecordLit
+				p.noRecordLit = true
+				se.Policy = p.expr()
+				p.noRecordLit = saved
+			}
+			se.Body = p.block()
+			return se
 		}
 		p.next()
 		return &Ident{Pos: t.Pos, Name: p.qualify(t)}

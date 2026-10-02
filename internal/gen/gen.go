@@ -939,11 +939,22 @@ func (g *gen) scopeInto(e *syntax.ScopeExpr, k sink) []ast.Stmt {
 	if n := len(g.openScopes); n > 0 {
 		parent = g.openScopes[n-1]
 	}
-	stmts := []ast.Stmt{
-		define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent}}),
-		// A panic cancels the scope's tasks, and then closes it.
-		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("abort")}}},
+	// The cleanup policy is computed before the scope opens.
+	var stmts, policy []ast.Stmt
+	if e.Policy != nil {
+		pstmts, px := g.value(e.Policy)
+		stmts = append(stmts, pstmts...)
+		if px != nil {
+			fn := g.info.Funcs["setCleanup"]
+			policy = []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: g.funcName(fn), Args: []ast.Expr{s, px}}}}
+		}
 	}
+	stmts = append(stmts,
+		define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Name)}}}),
+		// A panic in the block closes the scope too.
+		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("abort")}}},
+	)
+	stmts = append(stmts, policy...)
 	g.openScopes = append(g.openScopes, s)
 	stmts = append(stmts, g.blockInto(e.Body, k)...)
 	g.openScopes = g.openScopes[:len(g.openScopes)-1]
