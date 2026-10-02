@@ -476,7 +476,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr) lifetime {
 	// Go code given a scope may keep its other arguments until the scope
 	// closes (as a finalizer, say). So may a function value, which could
 	// be such Go code.
-	if fn == nil && direct || fn != nil && fn.Decl.GoBody == nil {
+	if fn == nil && direct || fn != nil && !fn.Decl.IsGo() {
 		return life
 	}
 	for i, a := range xargs {

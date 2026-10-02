@@ -105,6 +105,9 @@ type FuncDecl struct {
 	Result *TypeExpr
 	Body   *Block
 	GoBody *GoCode
+	// GoBind is set instead of a body for a binding to a Go function:
+	// `fn Getenv(key: String): String unsafe go "os.Getenv"`.
+	GoBind *GoBind
 	// Instance is set for a method of an instance declaration.
 	Instance *InstanceDecl
 	// IsMethod is set for a method, `fn (xs: List[T]) first[T](): T`:
@@ -159,6 +162,17 @@ type GoCode struct {
 	// blanked out, so its lines still match the source.
 	Body string
 }
+
+// GoBind names the Go function a binding calls, with its import path:
+// "os.Getenv", "crypto/sha256.Sum256".
+type GoBind struct {
+	Pos  diag.Pos // position of the string
+	Name string
+}
+
+// IsGo reports whether the function is implemented in Go, by an
+// `unsafe go` body or a binding: bork trusts its signature.
+func (fd *FuncDecl) IsGo() bool { return fd.GoBody != nil || fd.GoBind != nil }
 
 // TypeParam is a declared type parameter.
 type TypeParam struct {

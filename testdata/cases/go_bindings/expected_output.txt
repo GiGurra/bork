@@ -1,0 +1,25 @@
+a+b%26c
+42
+GoError { message: "strconv.Atoi: parsing \"x\": invalid syntax", goType: "*strconv.NumError" }
+a,b,c
+Option.None
+GoError { message: "chdir /nonexistent-dir: no such file or directory", goType: "*fs.PathError" }
+1.5
+ababab
+8
+5
+GoValueError { path: "result", message: "200 does not fit Int8" }
+1.0
+2
+GoValueError { path: "result", message: "-1 does not fit Uint64" }
+a/c
+
+{"a": ["1", "3"], "b": ["2"]}
+GoError { message: "invalid URL escape \"%zz\"", goType: "url.EscapeError" }
+text/plain; charset=utf-8
+cafe
+32
+GoError { message: "encoding/hex: invalid byte: U+0078 'x'", goType: "hex.InvalidByteError" }
+ada
+Option.Some { value: 3 }
+a%20b%2Fc

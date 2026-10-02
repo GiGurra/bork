@@ -34,6 +34,16 @@ type OutOfRange = { value: String, target: String }
 // ParseError is returned when a String cannot be read as a value.
 type ParseError = { input: String, message: String }
 
+// GoError is a Go function's error, returned by a binding
+// (`fn f(...): T | GoError unsafe go "pkg.F"`): its Error() text, and
+// its Go type (such as *fs.PathError).
+type GoError = { message: String, goType: String }
+
+// GoValueError is returned by a binding when a value from Go does not
+// fit its bork type, such as a number out of range or a nil pointer:
+// path says where in the value (result, result[2]).
+type GoValueError = { path: String, message: String }
+
 // Scopes and resources. A resource is opened in a scope, and closed
 // when the scope closes: finalizers run in reverse order of
 // registration, when the scope's block ends or panics.

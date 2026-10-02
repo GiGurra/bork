@@ -69,7 +69,7 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 		// Report syntax and import errors before attempting to type-check.
 		return nil, nil, &DiagError{Diags: diags}
 	}
-	info := check.Program(files, root, diags)
+	info := check.Program(files, root, diags, goPackages{})
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}

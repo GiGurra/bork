@@ -831,7 +831,7 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 ### Implementation plan
 
 1. **This proposal**, as its own PR.
-2. **Bindings of functions over basic types:** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, result facts, and the generated wrappers. Standard-library Go packages only.
+2. **Bindings of functions over basic types (implemented):** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `Bytes`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library Go packages only. Facts on a binding's result are an error for now; checking them moves to step 4, with the mirror records' facts.
 3. **Opaque Go types**: identity, boxing, nil checks, method bindings, assignability, `Scope` as `context.Context`, and resources of Go types.
 4. **Mirror records**, conversions both ways with fact checks, and the `_borkToGo`/`_borkFromGo` helpers in [std-go.md](std-go.md).
 5. **Record field defaults and field doc comments** (useful without Go: literals and `Decode`).

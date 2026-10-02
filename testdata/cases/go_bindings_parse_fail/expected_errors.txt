@@ -1,0 +1,1 @@
+main.bork:1:23: expected string literal after 'unsafe go' (write `unsafe go { ... }`, or `unsafe go "pkg.Func"` to bind a Go function), found integer literal

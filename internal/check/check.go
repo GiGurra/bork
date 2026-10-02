@@ -195,6 +195,9 @@ type Info struct {
 	Tests []*Func
 	// Rules holds the inference rules of every package.
 	Rules []*Rule
+	// GoBindings holds every checked binding to a Go function
+	// (`unsafe go "os.Getenv"`).
+	GoBindings map[*Func]*GoBinding
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -273,10 +276,14 @@ type patSource struct {
 // Program type-checks a program: the root package (whose import path is
 // root), and the packages it imports. files holds the files of all of
 // them, and the prelude's.
-func Program(files []*syntax.File, root string, diags *diag.List) *Info {
+//
+// goTypes loads the Go packages that bindings name; it may be nil for a
+// program without bindings.
+func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes) *Info {
 	c := &checker{
 		diags: diags,
 		info: &Info{
+			GoBindings:       map[*Func]*GoBinding{},
 			Funcs:            map[string]*Func{},
 			FuncOf:           map[*syntax.FuncDecl]*Func{},
 			Named:            map[string]Type{},
@@ -347,6 +354,7 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 	c.instanceConstraints()
 	c.resolveDerived()
 	c.checkRules(files)
+	c.checkBindings(files, goTypes)
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -645,7 +653,7 @@ func (c *checker) checkFunc(fn *Func) {
 	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Unit) {
 		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
 	}
-	if fn.Decl.GoBody != nil {
+	if fn.Decl.IsGo() {
 		// The Go code is checked by the Go compiler.
 		c.fn = nil
 		return
