@@ -1143,7 +1143,7 @@ func matchingBrace(s string, from int) int {
 // subExpr parses the expression inside ${...}, starting at pos.
 func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags)
-	sub := &parser{toks: toks, diags: p.diags}
+	sub := &parser{toks: toks, diags: p.diags, imports: p.imports}
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(bailout); !ok {

@@ -209,7 +209,8 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 			switch {
 			case mt == Invalid:
 				return Invalid
-			case !isValue(mt):
+			case !isValue(mt) && mt != Unit:
+				// Unit can: `Unit | IoError` is a result that may fail.
 				c.errorf(m.Pos, "%s cannot be part of a union", mt)
 				return Invalid
 			}

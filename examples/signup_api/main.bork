@@ -1,0 +1,130 @@
+// signup_api is a JSON-over-HTTP endpoint with constrained request
+// fields:
+//
+//   bork run examples/signup_api -- serve localhost:8080
+//   curl -d '{"name": "ann", "plan": "Free"}' localhost:8080/signup
+//
+// `-- demo` starts it on a free port, sends it a few requests, and
+// prints the answers.
+//
+// The request type derives its decoder, which checks the where clauses:
+// a request that decodes is proven, and register relies on its facts.
+
+import "bork/http"
+
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred maxBytes(s: String, n: Int) { byteLength(s) <= n }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+
+type UserName = String where nonEmpty and maxBytes(20)
+
+type Plan = sealed {
+  Free,
+  Paid { seats: Int where between(1, 500) },
+} derive (Decode, Encode)
+
+type SignUp = {
+  name: UserName,
+  age: Option[Int where between(13, 150)],
+  plan: Plan,
+} derive (Decode, Encode)
+
+type Account = { name: UserName, seats: Int } derive (Encode)
+
+type Problem = { path: String, message: String } derive (Encode)
+
+fn seatsOf(plan: Plan): Int {
+  match (plan) {
+    Plan.Free => 1
+    Plan.Paid { seats: n } => n
+  }
+}
+
+// register needs a valid name; a decoded SignUp has one.
+fn register(req: SignUp): Account {
+  Account { name: req.name, seats: seatsOf(req.plan) }
+}
+
+fn signup(body: String): http.Response {
+  r: SignUp | JsonError | DecodeError = decodeJson(body)
+  match (r) {
+    req: SignUp => http.JsonReply(201, encodeJson(register(req)))
+    e: JsonError => http.JsonReply(400, encodeJson(Problem { path: "", message: e.message }))
+    e: DecodeError => http.JsonReply(422, encodeJson(Problem { path: e.path, message: e.message }))
+  }
+}
+
+fn route(req: http.Request): http.Response {
+  match (http.Segments(req.path)) {
+    ["health"] => http.Text(200, "ok")
+    ["signup"] => if (req.method == "POST") { signup(req.body) } else { http.Text(405, "use POST") }
+    _ => http.Text(404, "not found")
+  }
+}
+
+fn serve(addr: String): Unit | IoError {
+  scope s {
+    server = http.Listen(addr, s, route)?
+    eprintln(s"listening on ${http.Address(server)}")
+    http.Wait(server)
+  }
+}
+
+fn show(label: String, r: http.Response | IoError) {
+  match (r) {
+    resp: http.Response => println(s"$label -> ${toString(resp.status)} ${resp.body}")
+    e: IoError => println(s"$label -> error: ${e.message}")
+  }
+}
+
+fn post(base: String, body: String) {
+  show(s"POST /signup $body", http.Post(base + "/signup", "application/json", body))
+}
+
+// demo starts the server on a free port and sends it requests; the
+// server stops when the scope closes.
+fn demo(): Unit | IoError {
+  scope s {
+    server = http.Listen("127.0.0.1:0", s, route)?
+    base = "http://" + http.Address(server)
+    show("GET /health", http.Get(base + "/health"))
+    post(base, "{\"name\": \"ann\", \"plan\": \"Free\"}")
+    post(base, "{\"name\": \"bob\", \"age\": 40, \"plan\": {\"type\": \"Paid\", \"seats\": 12}}")
+    post(base, "{\"name\": \"\", \"plan\": \"Free\"}")
+    post(base, "{\"name\": \"cy\", \"plan\": {\"type\": \"Paid\", \"seats\": 0}}")
+    post(base, "{\"name\": \"dee\"")
+    show("GET /signup", http.Get(base + "/signup"))
+    show("GET /nope", http.Get(base + "/nope"))
+  }
+}
+
+fn main() {
+  result = match (args()) {
+    ["serve", addr] => serve(addr)
+    ["demo"] => demo()
+    _ => {
+      eprintln("usage: signup_api serve ADDR | demo")
+      exit(2)
+    }
+  }
+  match (result) {
+    e: IoError => {
+      eprintln(s"signup_api: ${e.path}: ${e.message}")
+      exit(1)
+    }
+    _ => {}
+  }
+}
+
+test "routes requests" {
+  get = (path: String) => route(http.Request { method: "GET", path: path, query: "", headers: [], body: "" })
+  assertEqual(get("/health").body, "ok")
+  assertEqual(get("/missing").status, 404)
+  assertEqual(get("/signup").status, 405)
+}
+
+test "rejects broken where clauses with 422" {
+  r = signup("{\"name\": \"\", \"plan\": \"Free\"}")
+  assertEqual(r.status, 422)
+  assertEqual(r.body, "{\"path\":\".name\",\"message\":\"must be nonEmpty\"}")
+}

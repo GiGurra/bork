@@ -1,0 +1,28 @@
+type Failed = { why: String }
+
+fn step(ok: Bool): Unit | Failed {
+  if (ok) { println("step ok") } else { Failed { why: "nope" } }
+}
+
+fn both(a: Bool, b: Bool): Unit | Failed {
+  step(a)?
+  step(b)?
+}
+
+fn scoped(): Unit | Failed {
+  scope s {
+    step(true)?
+    println("in scope")
+  }
+}
+
+fn main() {
+  println(both(true, true))
+  println(both(true, false))
+  r = both(false, true)
+  match (r) {
+    f: Failed => println(s"failed: ${f.why}")
+    _ => println("fine")
+  }
+  println(scoped())
+}

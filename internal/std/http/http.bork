@@ -1,0 +1,162 @@
+// Package http serves and sends HTTP requests:
+//
+//   import "bork/http"
+//
+// A server runs while its scope is open: closing the scope stops it, and
+// waits for it to finish. Each request runs its handler on its own
+// goroutine; bork values are immutable, so handlers share nothing that
+// can change.
+
+// ValidStatus holds for the status codes HTTP defines (100 to 599).
+pred ValidStatus(code: Int) { code >= 100 && code <= 599 }
+
+type Status = Int where ValidStatus
+
+type Header = { name: String, value: String }
+
+type Request = {
+  method: String,
+  path: String,
+  query: String,
+  headers: List[Header],
+  body: String,
+}
+
+type Response = { status: Status, headers: List[Header], body: String }
+
+// Server is a running server, stopped when its scope closes.
+type Server = resource
+
+// Text is a plain text response.
+fn Text(status: Status, body: String): Response {
+  Response { status: status, headers: [Header { name: "Content-Type", value: "text/plain; charset=utf-8" }], body: body }
+}
+
+// JsonReply is a response with a JSON body (already rendered, as encodeJson
+// gives it).
+fn JsonReply(status: Status, body: String): Response {
+  Response { status: status, headers: [Header { name: "Content-Type", value: "application/json" }], body: body }
+}
+
+// Segments are the non-empty parts of a path: "/users/42/" gives
+// ["users", "42"], to match on.
+fn Segments(path: String): List[String] {
+  filter(split(path, "/"), part => part != "")
+}
+
+// HeaderOf is the value of the first header with the given name,
+// compared without regard to case.
+fn HeaderOf(headers: List[Header], name: String): Option[String] {
+  match (find(headers, h => toLower(h.name) == toLower(name))) {
+    Option.Some { value } => Option.Some { value: value.value }
+    Option.None => Option.None
+  }
+}
+
+// Listen starts a server on addr (host:port; port 0 picks a free one)
+// that answers every request with handler. It runs until s closes.
+fn Listen(addr: String, s: Scope, handler: (Request) => Response): Server | IoError unsafe go {
+  import "io"
+  import "net"
+  import "net/http"
+  import "sort"
+  ln, err := net.Listen("tcp", addr)
+  if err != nil {
+    return IoError{path: addr, message: err.Error()}
+  }
+  srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    body, _ := io.ReadAll(r.Body)
+    headers := []Header{}
+    names := make([]string, 0, len(r.Header))
+    for name := range r.Header {
+      names = append(names, name)
+    }
+    sort.Strings(names)
+    for _, name := range names {
+      for _, v := range r.Header[name] {
+        headers = append(headers, Header{name: name, value: v})
+      }
+    }
+    resp := handler(Request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, headers: headers, body: string(body)})
+    for _, h := range resp.headers {
+      w.Header().Add(h.name, h.value)
+    }
+    w.WriteHeader(int(resp.status))
+    io.WriteString(w, resp.body)
+  })}
+  state := struct {
+    addr string
+    done chan struct{}
+  }{ln.Addr().String(), make(chan struct{})}
+  go func() {
+    srv.Serve(ln)
+    close(state.done)
+  }()
+  s.Defer(func() {
+    srv.Close()
+    <-state.done
+  })
+  return Server{handle: state}
+}
+
+// Address is the address the server listens on, as host:port.
+fn Address(server: Server): String unsafe go {
+  return server.handle.(struct {
+    addr string
+    done chan struct{}
+  }).addr
+}
+
+// Wait blocks until the server stops.
+fn Wait(server: Server) unsafe go {
+  <-server.handle.(struct {
+    addr string
+    done chan struct{}
+  }).done
+}
+
+// Get sends a GET request.
+fn Get(url: String): Response | IoError {
+  Send("GET", url, [], "")
+}
+
+// Post sends a POST request with a body of the given content type.
+fn Post(url: String, contentType: String, body: String): Response | IoError {
+  Send("POST", url, [Header { name: "Content-Type", value: contentType }], body)
+}
+
+// Send sends a request, and reads the whole response.
+fn Send(method: String, url: String, headers: List[Header], body: String): Response | IoError unsafe go {
+  import "io"
+  import "net/http"
+  import "sort"
+  import "strings"
+  req, err := http.NewRequest(method, url, strings.NewReader(body))
+  if err != nil {
+    return IoError{path: url, message: err.Error()}
+  }
+  for _, h := range headers {
+    req.Header.Add(h.name, h.value)
+  }
+  resp, err := http.DefaultClient.Do(req)
+  if err != nil {
+    return IoError{path: url, message: err.Error()}
+  }
+  defer resp.Body.Close()
+  data, err := io.ReadAll(resp.Body)
+  if err != nil {
+    return IoError{path: url, message: err.Error()}
+  }
+  out := []Header{}
+  names := make([]string, 0, len(resp.Header))
+  for name := range resp.Header {
+    names = append(names, name)
+  }
+  sort.Strings(names)
+  for _, name := range names {
+    for _, v := range resp.Header[name] {
+      out = append(out, Header{name: name, value: v})
+    }
+  }
+  return Response{status: int64(resp.StatusCode), headers: out, body: string(data)}
+}

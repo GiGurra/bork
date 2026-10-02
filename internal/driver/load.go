@@ -8,6 +8,7 @@ import (
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/prelude"
+	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -113,15 +114,23 @@ func load(path string) ([]*syntax.File, string, *diag.List, error) {
 }
 
 func (l *loader) loadPackage(importPath string, paths []string) error {
-	l.state[importPath] = 1
-	l.stack = append(l.stack, importPath)
-	var files []*syntax.File
+	var srcs [][]byte
 	for _, p := range paths {
 		src, err := os.ReadFile(p)
 		if err != nil {
 			return err
 		}
-		f := syntax.Parse(p, src, l.diags)
+		srcs = append(srcs, src)
+	}
+	return l.loadSources(importPath, paths, srcs)
+}
+
+func (l *loader) loadSources(importPath string, paths []string, srcs [][]byte) error {
+	l.state[importPath] = 1
+	l.stack = append(l.stack, importPath)
+	var files []*syntax.File
+	for i, p := range paths {
+		f := syntax.Parse(p, srcs[i], l.diags)
 		f.Package = importPath
 		files = append(files, f)
 	}
@@ -149,6 +158,14 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 		}
 		l.diags.Add(imp.Pos, "import cycle: %s imports %s (packages cannot import each other in a circle)", imp.Path, cycle)
 		return nil
+	}
+	if strings.HasPrefix(imp.Path, std.Prefix) {
+		paths, srcs, ok := std.Sources(imp.Path)
+		if !ok {
+			l.diags.Add(imp.Pos, "cannot import %s: there is no such standard package", imp.Path)
+			return nil
+		}
+		return l.loadSources(imp.Path, paths, srcs)
 	}
 	if l.mod.path == "" {
 		l.diags.Add(imp.Pos, "cannot import %s: imports need a module (add a %s file to the module's root directory, with a line `module example.com/name`)", imp.Path, ModFile)

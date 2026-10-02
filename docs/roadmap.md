@@ -62,7 +62,7 @@ The M1 baseline has two parts, and both must hold:
 1. **Every example in [requirements.md](requirements.md)** that involves facts: the core-idea example, the constrained-input examples (`transfer`, `connect` with `Port`, the `CreateUser` request, `clamp`, the refining `filter`), and "callers prove or declare" (`payOut`, `payOutChecked`, `payOutDeclared`). Each becomes a golden test, along with the failing variants it implies.
 2. **Everything proven can do**, described below.
 
-The target example programs (a JSON-over-HTTP endpoint with constrained request fields, a database handler using scopes, a small CLI) must also work by the end of the milestones that cover their features.
+The target example programs (a JSON-over-HTTP endpoint with constrained request fields, a database handler using scopes, a small CLI) must also work by the end of the milestones that cover their features. Done: the JSON-over-HTTP endpoint ([signup_api](../examples/signup_api/main.bork), with `bork/http`) and the CLI ([wc](../examples/wc/main.bork), [signup](../examples/signup/main.bork)).
 
 #### Everything proven can do
 
