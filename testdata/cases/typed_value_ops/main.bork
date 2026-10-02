@@ -1,0 +1,32 @@
+import "bork/maps"
+
+type Key = { parts: List[Int], label: String }
+type Box[T] = { value: T }
+type Choice = sealed { First { values: List[String] }, Last }
+
+fn wrap[T](value: T): Box[T] { Box { value: value } }
+
+// The Go boundary retains plain slices, including generic results.
+fn goList[T](value: T): List[T] unsafe go { return []T{value} }
+
+fn main() {
+  key = Key { parts: [1, 2], label: "a" }
+  same = Key { parts: [1, 2], label: "a" }
+  other = Key { parts: [2, 1], label: "a" }
+  println(key == same, key == other)
+  println({key: "first", other: "second"}.get(same))
+  println(wrap([1, 2]) == wrap([1, 2]))
+  println({wrap([1, 2]): "generic key"}.get(wrap([1, 2])))
+  choice = Choice.First { values: ["x", "y"] }
+  println({choice: "variant key", Choice.Last: "empty variant"}.get(Choice.First { values: ["x", "y"] }))
+  println(wrap(goList(Choice.First { values: ["x", "y"] })))
+  println(Choice.First { values: ["x", "y"] } == Choice.First { values: ["x", "y"] })
+  a = {"x": 1, "y": 2}
+  b = maps.Unordered({"y": 2, "x": 1})
+  println({a: "same entries"}.get(b))
+  println({wrap([a]): "nested key"}.get(wrap([b])))
+  println([key, other])
+  println([[1, 2], [3]])
+  functions: List[(Int) => Int] = [x => x + 1, x => x + 2]
+  println(functions)
+}

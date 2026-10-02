@@ -256,6 +256,7 @@ type gen struct {
 	usesScopes  bool
 	usesDerive  bool
 	usesEqual   bool
+	usesHash    bool
 	usesUnit    bool
 	usesMap     bool
 	// openScopes lists the Go variables of the scope blocks around the
@@ -702,7 +703,7 @@ func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
 			// Go's == does not compare slices, nor what type parameters
 			// stand for.
 			g.usesEqual = true
-			var eq ast.Expr = &ast.CallExpr{Fun: ast.NewIdent("_equal"), Args: xs}
+			eq := g.equalValue(xs[0], xs[1], t)
 			if e.Op == syntax.NotEq {
 				eq = &ast.UnaryExpr{Op: token.NOT, X: eq}
 			}
@@ -1232,6 +1233,9 @@ func (g *gen) conversion(e *syntax.Call, arg ast.Expr) ast.Expr {
 // go through the runtime's _str, so they print in bork's format.
 func (g *gen) str(x ast.Expr, t check.Type) ast.Expr {
 	x = g.typed(x, t)
+	if _, ok := t.(*check.List); ok {
+		return g.showValue(x, t)
+	}
 	if needsStr(t) {
 		g.usesShow = true
 		return &ast.CallExpr{Fun: ast.NewIdent("_str"), Args: []ast.Expr{x}}

@@ -14,7 +14,8 @@
 // 32), and share everything but the changed path with the map they
 // start from, so keeping old versions is cheap. Keys are any type
 // with ==; two maps are equal when they have the same entries, in any
-// order.
+// order. Key identity is structural, including list and map keys;
+// rendered text is never used to decide whether two keys are equal.
 //
 // Every function here is also a method of Map, which needs no import:
 // m.get(k), m.put(k, v), m.filter(f).keys(), and so on.

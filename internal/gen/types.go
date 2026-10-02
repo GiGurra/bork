@@ -200,6 +200,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 		recv := g.instantiated(typeName(t.Name, t.Pkg), t)
 		decls = append(decls, g.structDecl(typeName(t.Name, t.Pkg), t.TypeParams, t.Fields))
 		decls = append(decls, g.stringMethod(recv, t.Name, t.Fields, true))
+		decls = append(decls, g.valueMethods(recv, t.Fields)...)
 	case *check.Sealed:
 		// The interface's marker method mentions the type parameters, so
 		// that Option[int64] and Option[string] are different types.
@@ -227,6 +228,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 				Body: &ast.BlockStmt{},
 			})
 			decls = append(decls, g.stringMethod(recv, t.Name+"."+v.Name, v.Fields, false))
+			decls = append(decls, g.valueMethods(recv, v.Fields)...)
 		}
 	}
 	return decls
@@ -258,9 +260,7 @@ func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, i
 			if i == 0 {
 				prefix = label + " { " + f.Name + ": "
 			}
-			show := &ast.CallExpr{Fun: ast.NewIdent("_show"), Args: []ast.Expr{
-				&ast.SelectorExpr{X: ast.NewIdent("v"), Sel: name(f.Name)},
-			}}
+			show := g.showValue(&ast.SelectorExpr{X: ast.NewIdent("v"), Sel: name(f.Name)}, f.Type)
 			part := &ast.BinaryExpr{X: strLit(prefix), Op: token.ADD, Y: show}
 			if result == nil {
 				result = part
@@ -929,6 +929,12 @@ func _str(x any) string {
 	return fmt.Sprint(x)
 }
 
+func _showList[T any](xs []T, show func(T) string) string {
+	parts := make([]string, len(xs))
+	for i, x := range xs { parts[i] = show(x) }
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
 func _fmtFloat(f float64, bits int) string {
 	if a := math.Abs(f); math.IsInf(f, 0) || math.IsNaN(f) || (a != 0 && (a < 1e-6 || a >= 1e21)) {
 		return strconv.FormatFloat(f, 'g', -1, bits)
@@ -967,9 +973,13 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 		src = append(src, unitRuntime)
 	}
 	if g.usesMap {
+		g.usesHash = true
 		g.usesShow = true
 		g.usesEqual = true
 		src = append(src, mapRuntime, mapHelpers)
+	}
+	if g.usesHash {
+		src = append(src, hashRuntime)
 	}
 	if g.usesEqual {
 		src = append(src, equalRuntime)
@@ -1062,7 +1072,48 @@ import (
 	"strings"
 )
 
-func _equal(a, b any) bool { return _equalValues(reflect.ValueOf(a), reflect.ValueOf(b)) }
+func _equal(a, b any) bool {
+	if x, ok := a.(interface{ _borkEqual(any) bool }); ok {
+		return x._borkEqual(b)
+	}
+	switch x := a.(type) {
+	case nil:
+		return b == nil
+	case bool:
+		y, ok := b.(bool); return ok && x == y
+	case string:
+		y, ok := b.(string); return ok && x == y
+	case int64:
+		y, ok := b.(int64); return ok && x == y
+	case int32:
+		y, ok := b.(int32); return ok && x == y
+	case int16:
+		y, ok := b.(int16); return ok && x == y
+	case int8:
+		y, ok := b.(int8); return ok && x == y
+	case uint64:
+		y, ok := b.(uint64); return ok && x == y
+	case uint32:
+		y, ok := b.(uint32); return ok && x == y
+	case uint16:
+		y, ok := b.(uint16); return ok && x == y
+	case uint8:
+		y, ok := b.(uint8); return ok && x == y
+	case float64:
+		y, ok := b.(float64); return ok && x == y
+	case float32:
+		y, ok := b.(float32); return ok && x == y
+	}
+	return _equalValues(reflect.ValueOf(a), reflect.ValueOf(b))
+}
+
+func _equalList[T any](a, b []T, equal func(T, T) bool) bool {
+	if len(a) != len(b) { return false }
+	for i := range a {
+		if !equal(a[i], b[i]) { return false }
+	}
+	return true
+}
 
 func _equalOf[T any](a, b T) bool { return _equal(a, b) }
 
@@ -1072,6 +1123,11 @@ func _equalValues(x, y reflect.Value) bool {
 	}
 	if x.Type() != y.Type() {
 		return false
+	}
+	if x.CanInterface() {
+		if v, ok := x.Interface().(interface{ _borkEqual(any) bool }); ok && y.CanInterface() {
+			return v._borkEqual(y.Interface())
+		}
 	}
 	switch x.Kind() {
 	case reflect.Interface:
@@ -1128,7 +1184,6 @@ const mapRuntime = `package main
 
 import (
 	"cmp"
-	"hash/maphash"
 	"math/bits"
 	"reflect"
 	"slices"
@@ -1239,6 +1294,31 @@ func _mapValues[K, V, W any](m _Map[K, V], f func(V) W) _Map[K, W] {
 	})}
 }
 
+func (m _Map[K, V]) _borkEqual(other any) bool {
+	o, ok := other.(_Map[K, V])
+	return ok && m._equals(o)
+}
+
+func (m _Map[K, V]) _equals(o _Map[K, V]) bool {
+	if m.len() != o.len() { return false }
+	equal := true
+	m.impl().each(func(e *_mapEntry) bool {
+		v := o.impl().find(e.key)
+		equal = v != nil && _equal(e.val, v.val)
+		return equal
+	})
+	return equal
+}
+
+func (m _Map[K, V]) _borkHash() uint64 {
+	var h uint64
+	m.impl().each(func(e *_mapEntry) bool {
+		h += _hashMix(_hash(e.key), _hash(e.val))
+		return true
+	})
+	return _hashMix(uint64(m.len()), h)
+}
+
 func (m _Map[K, V]) String() string {
 	if m.len() == 0 {
 		return "{:}"
@@ -1304,41 +1384,11 @@ type _mapCore struct {
 	n     int  // entries
 }
 
-var _mapSeed = maphash.MakeSeed()
+// _mapHash is a variable so tests can force collisions.
+var _mapHash = _hash
 
-// _mapHash hashes a key's Go form (a variable, so tests can force
-// collisions).
-var _mapHash = func(hk any) uint64 { return maphash.Comparable(_mapSeed, hk) }
-
-// _mapKey is the Go form of a bork key: the key itself if Go can hash
-// it, or else (for a key holding a list or map) its text.
-func _mapKey(k any) any {
-	switch k.(type) {
-	case string, bool, int64, int32, int16, int8, uint64, uint32, uint16, uint8, float64, float32:
-		return k
-	}
-	if _hashable(reflect.ValueOf(k)) {
-		return k
-	}
-	return "\x00" + _show(k)
-}
-
-func _hashable(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.Interface:
-		return v.IsNil() || _hashable(v.Elem())
-	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
-			if !_hashable(v.Field(i)) {
-				return false
-			}
-		}
-		return true
-	case reflect.Slice, reflect.Map, reflect.Func, reflect.Pointer:
-		return false
-	}
-	return true
-}
+// _mapKey keeps the structural key; trie comparisons use _equal.
+func _mapKey(k any) any { return k }
 
 func (c *_mapCore) with(k, v any) _mapImpl { return c.put(k, v, false) }
 
@@ -1528,7 +1578,7 @@ func (n *_hnode) get(hk any, h uint64) *_mapEntry {
 	for shift := uint(0); n != nil; shift += 5 {
 		if n.coll != nil {
 			for _, e := range n.coll {
-				if e.hkey == hk {
+				if _equal(e.hkey, hk) {
 					return e
 				}
 			}
@@ -1537,7 +1587,7 @@ func (n *_hnode) get(hk any, h uint64) *_mapEntry {
 		bit := uint32(1) << ((h >> shift) & 31)
 		if n.datamap&bit != 0 {
 			e := n.entries[_popcount(n.datamap&(bit-1))]
-			if e.hash == h && e.hkey == hk {
+			if e.hash == h && _equal(e.hkey, hk) {
 				return e
 			}
 			return nil
@@ -1585,7 +1635,7 @@ func (n *_hnode) set(e *_mapEntry, shift uint) (*_hnode, bool) {
 	}
 	if n.coll != nil {
 		for i, x := range n.coll {
-			if x.hkey == e.hkey {
+			if _equal(x.hkey, e.hkey) {
 				return &_hnode{coll: _replaceAt(n.coll, i, e)}, false
 			}
 		}
@@ -1597,7 +1647,7 @@ func (n *_hnode) set(e *_mapEntry, shift uint) (*_hnode, bool) {
 		i := _popcount(n.datamap & (bit - 1))
 		old := n.entries[i]
 		out := n.clone()
-		if old.hash == e.hash && old.hkey == e.hkey {
+		if old.hash == e.hash && _equal(old.hkey, e.hkey) {
 			out.entries = _replaceAt(n.entries, i, e)
 			return out, false
 		}
@@ -1654,7 +1704,7 @@ func (n *_hnode) remove(hk any, h uint64, shift uint) (*_hnode, bool) {
 	}
 	if n.coll != nil {
 		for i, x := range n.coll {
-			if x.hkey == hk {
+			if _equal(x.hkey, hk) {
 				if len(n.coll) == 1 {
 					return nil, true
 				}
@@ -1667,7 +1717,7 @@ func (n *_hnode) remove(hk any, h uint64, shift uint) (*_hnode, bool) {
 	switch {
 	case n.datamap&bit != 0:
 		i := _popcount(n.datamap & (bit - 1))
-		if e := n.entries[i]; e.hash != h || e.hkey != hk {
+		if e := n.entries[i]; e.hash != h || !_equal(e.hkey, hk) {
 			return n, false
 		}
 		if len(n.entries) == 1 && len(n.subs) == 0 {

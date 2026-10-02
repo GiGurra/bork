@@ -1,0 +1,12 @@
+true false
+Option.Some { value: "first" }
+true
+Option.Some { value: "generic key" }
+Option.Some { value: "variant key" }
+Box { value: [Choice.First { values: ["x", "y"] }] }
+true
+Option.Some { value: "same entries" }
+Option.Some { value: "nested key" }
+[Key { parts: [1, 2], label: "a" }, Key { parts: [2, 1], label: "a" }]
+[[1, 2], [3]]
+[<function>, <function>]
