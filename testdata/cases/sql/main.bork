@@ -10,17 +10,17 @@ type Row = {
   data: List[Int],
 } derive (Decode)
 type Count = { count: Int } derive (Decode)
-fn count(db: sql.Connection): Int | sql.Error | DecodeError {
+fn count(db: sql.Connection) uses io + net: Int | sql.Error | DecodeError {
   rows = sql.Query[Count](db, "SELECT count(*) AS count FROM users", [])?
   rows.get(0).getOr(Count { count: -1 }).count
 }
-fn showError(result: Json | sql.Error) {
+fn showError(result: Json | sql.Error) uses io {
   match (result) {
     error: sql.Error => println(error.operation)
     value: Json => println(renderJson(value))
   }
 }
-fn rollbackPanic(db: sql.Connection): Unit | sql.Error {
+fn rollbackPanic(db: sql.Connection) uses io + net: Unit | sql.Error {
   scope transaction {
     tx = sql.Begin(db, transaction)?
     inserted = sql.Exec(tx, "INSERT INTO users(id, name) VALUES (10, 'panic')", [])?
@@ -35,7 +35,7 @@ fn protect(work: () => Unit): Bool unsafe go {
   }()
   return recovered
 }
-fn demo(): Unit | sql.Error | DecodeError {
+fn demo() uses io + net: Unit | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)", [])?
@@ -91,7 +91,45 @@ fn demo(): Unit | sql.Error | DecodeError {
     match (sql.Exec(db, "DELETE FROM users", [])) { error: sql.Error => println(error.operation); _ => println("unexpected") }
   }
 }
+fn attachments() uses io + net: Unit | sql.Error | DecodeError {
+  scope outer {
+    db = scope original {
+      opened = sql.OpenSqlite(":memory:", original)?
+      attach(opened, outer)
+    }
+    created = sql.Exec(db, "CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT)", [])?
+    scope owner {
+      tx = scope original {
+        started = sql.Begin(db, original)?
+        attach(started, owner)
+      }
+      inserted = sql.Exec(tx, "INSERT INTO users VALUES(1, 'attached')", [])?
+      showError(sql.QueryJson(tx, "SELECT count(*) AS count FROM users", []))
+    }
+    println(count(db))
+    scope owner {
+      tx = scope original {
+        started = sql.Begin(db, original)?
+        attach(started, owner)
+      }
+      inserted = sql.Exec(tx, "INSERT INTO users VALUES(2, 'committed')", [])?
+      sql.Commit(tx)?
+    }
+    println(count(db))
+    scope owner {
+      tx = scope original {
+        started = sql.Begin(db, original)?
+        attach(started, owner)
+      }
+      cancel(owner)
+      match (sql.Exec(tx, "INSERT INTO users VALUES(3, 'cancelled')", [])) { error: sql.Error => println(error.operation); _ => println("unexpected") }
+    }
+    cancel(outer)
+    showError(sql.QueryJson(db, "SELECT 1", []))
+  }
+}
 fn main() {
+  match (attachments()) { error: sql.Error => println(error); error: DecodeError => println(error); _ => {} }
   match (demo()) {
     error: sql.Error => println(error)
     error: DecodeError => println(error)

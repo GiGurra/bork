@@ -109,3 +109,18 @@ with Go's missing-module error and an explanation that offline builds require
 cached modules. No checksum database access is needed when shipped hashes cover
 the build. The pinned SQLite and Postgres manifests are tested both online and
 from an offline warm cache. See the [Go module reference](https://go.dev/ref/mod).
+
+Resource handles may implement `_borkRebind(*_Scope)`. The generated resource
+forwards this optional method to its handle, and `attach(resource, s)` calls it
+after retaining ownership in `s`. Cancellation should then follow the destination
+scope, even after the opening scope ends. The latest attachment selects the
+cancellation source; final cleanup still waits for every retained owner.
+
+`_borkNewResourceHandle(value any, s)` returns a `*_borkResourceHandle` with
+`Value`, `Context() context.Context`, and `Close()`. `Value` must be initialized
+before publishing the resource and never mutated afterwards. Its stable context
+carries cancellation from the current owner, supports rebinding, and carries no
+scope context values or deadline metadata. Call `Close` in the resource's final
+cleanup. Cancellation is terminal: attaching an already cancelled resource does
+not revive it. This allows Go APIs such as `database/sql.BeginTx` to retain the
+same context while attachment changes its cancellation source.

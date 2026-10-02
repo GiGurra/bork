@@ -265,7 +265,8 @@ fn sleep(ms: Int) uses clock unsafe go {
 // attach keeps a resource open until scope s closes too: it closes when
 // the last of the scopes it is attached to closes. It gives the
 // resource, as a value of s, to hand to tasks of s (which may outlive
-// the scope the resource was opened in).
+// the scope the resource was opened in). Handles with a cancellation rebind
+// hook follow s for cancellation after attachment.
 fn attach[R](r: R, s: Scope): R unsafe go {
   o, _ := any(r).(interface{ _ownerOf() *_Owner })
   if o == nil || o._ownerOf() == nil {
@@ -274,6 +275,7 @@ fn attach[R](r: R, s: Scope): R unsafe go {
   if !o._ownerOf().attach(s) {
     panic("bork: attach: the resource is already closed")
   }
+  if h, ok := any(r).(interface { _borkRebind(*_Scope) }); ok { h._borkRebind(s) }
   return r
 }
 

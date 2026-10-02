@@ -4,7 +4,7 @@ import "bork/sql"
 pred nonEmpty(value: String) { value.byteLength() > 0 }
 type User = { id: Int, name: String where nonEmpty, note: Option[String] } derive (Decode)
 type Count = { count: Int } derive (Decode)
-fn demo(): Unit | sql.Error | DecodeError {
+fn demo() uses io + net: Unit | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)", [])?

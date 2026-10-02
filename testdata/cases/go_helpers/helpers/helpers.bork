@@ -1,6 +1,7 @@
 // This package deliberately uses every stable helper in an imported Go body.
 fn Check(s: Scope): Bool unsafe go {
   import "context"
+  import "runtime"
   m := _borkMapOf([]string{"a", "b", "a"}, []int64{1, 2, 3})
   old := m
   m = _borkMapPut(m, "c", int64(4))
@@ -15,6 +16,21 @@ fn Check(s: Scope): Bool unsafe go {
   done := false
   child.Defer(func() { done = true })
   _borkScopeClose(child)
+  original := _borkScopeWith(_borkScopeContext(s))
+  handle := _borkNewResourceHandle("value", original)
+  handle._borkRebind(s)
+  _borkScopeClose(original)
+  resourceOK := handle.Value == "value" && handle.Context().Err() == nil
+  handle.Close()
+  resourceOK = resourceOK && handle.Context().Err() != nil
+  previousProcs := runtime.GOMAXPROCS(1)
+  cancelled := _borkScopeWith(_borkScopeContext(s))
+  terminal := _borkNewResourceHandle(nil, cancelled)
+  _borkScopeClose(cancelled)
+  terminal._borkRebind(s)
+  resourceOK = resourceOK && terminal.Context().Err() != nil
+  terminal.Close()
+  runtime.GOMAXPROCS(previousProcs)
   aborted := false
   recovered := false
   func() {
@@ -24,7 +40,7 @@ fn Check(s: Scope): Bool unsafe go {
     scope.Defer(func() { aborted = true })
     panic("test panic")
   }()
-  return order == "abc" && aborted && recovered && found && value == 3 && !missing && _borkMapLen(old) == 2 && _borkMapLen(m) == 3 && count == 1 && done && _borkScopeContext(child).Err() != nil && _borkScopeContext(s).Err() == nil && context.Cause(_borkScopeContext(child)) != nil
+  return resourceOK && order == "abc" && aborted && recovered && found && value == 3 && !missing && _borkMapLen(old) == 2 && _borkMapLen(m) == 3 && count == 1 && done && _borkScopeContext(child).Err() != nil && _borkScopeContext(s).Err() == nil && context.Cause(_borkScopeContext(child)) != nil
 }
 
 fn Some(): Option[Int] unsafe go { return _borkSome(int64(42)) }

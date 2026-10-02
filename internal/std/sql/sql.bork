@@ -11,9 +11,8 @@ type outcome = sealed { Rows { values: List[Json] }, Changed { result: Result } 
 // Open connects using "sqlite" or "pgx" (Postgres), and pings with s's context.
 // SQLite pools use one connection, preserving :memory: databases and serializing
 // access. The pool closes when its scope's last resource owner closes.
-fn Open(driver: String, dataSource: String, s: Scope): Connection | Error unsafe go {
+fn Open(driver: String, dataSource: String, s: Scope) uses io + net: Connection | Error unsafe go {
   import "database/sql"
-  import "context"
   import "modernc.org/sqlite"
   import "github.com/jackc/pgx/v5/stdlib"
   _ = sqlite.Driver{}
@@ -25,43 +24,44 @@ fn Open(driver: String, dataSource: String, s: Scope): Connection | Error unsafe
     db.Close()
     return Error{operation: "open", message: err.Error()}
   }
-  state := struct { db any; ctx context.Context }{db, _borkScopeContext(s)}
-  return Connection{handle: state, owner: s.Own(func() { if err := db.Close(); err != nil { panic(err) } })}
+  state := _borkNewResourceHandle(db, s)
+  return Connection{handle: state, owner: s.Own(func() { state.Close(); if err := db.Close(); err != nil { panic(err) } })}
 }
-fn OpenSqlite(dataSource: String, s: Scope): Connection | Error { Open("sqlite", dataSource, s) }
-fn OpenPostgres(dataSource: String, s: Scope): Connection | Error { Open("pgx", dataSource, s) }
+fn OpenSqlite(dataSource: String, s: Scope) uses io + net: Connection | Error { Open("sqlite", dataSource, s) }
+fn OpenPostgres(dataSource: String, s: Scope) uses io + net: Connection | Error { Open("pgx", dataSource, s) }
 
 // Begin opens a transaction in s. Unless Commit succeeds, closing s rolls it
-// back. Every operation uses the transaction's scope context.
-fn Begin(connection: Connection, s: Scope): Transaction | Error unsafe go {
+// back. Attachment rebinds cancellation to the destination scope.
+fn Begin(connection: Connection, s: Scope) uses io + net: Transaction | Error unsafe go {
   import "database/sql"
-  import "context"
   import "errors"
-  tx, err := connection.handle.(struct { db any; ctx context.Context }).db.(*sql.DB).BeginTx(_borkScopeContext(s), nil)
-  if err != nil { return Error{operation: "begin", message: err.Error()} }
-  state := struct { db any; ctx context.Context }{tx, _borkScopeContext(s)}
+  state := _borkNewResourceHandle(nil, s)
+  tx, err := connection.handle.(*_borkResourceHandle).Value.(*sql.DB).BeginTx(state.Context(), nil)
+  if err != nil { state.Close(); return Error{operation: "begin", message: err.Error()} }
+  state.Value = tx
   return Transaction{handle: state, owner: s.Own(func() {
+    state.Close()
     if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { panic(err) }
   })}
 }
-fn Commit(transaction: Transaction): Unit | Error unsafe go {
+fn Commit(transaction: Transaction) uses io + net: Unit | Error unsafe go {
   import "database/sql"
-  import "context"
-  if err := transaction.handle.(struct { db any; ctx context.Context }).db.(*sql.Tx).Commit(); err != nil { return Error{operation: "commit", message: err.Error()} }
+  _ = transaction.handle.(*_borkResourceHandle).Context()
+  if err := transaction.handle.(*_borkResourceHandle).Value.(*sql.Tx).Commit(); err != nil { return Error{operation: "commit", message: err.Error()} }
   return _Unit{}
 }
 // Rollback is harmless after a transaction has already committed or rolled back.
-fn Rollback(transaction: Transaction): Unit | Error unsafe go {
+fn Rollback(transaction: Transaction) uses io + net: Unit | Error unsafe go {
   import "database/sql"
-  import "context"
   import "errors"
-  if err := transaction.handle.(struct { db any; ctx context.Context }).db.(*sql.Tx).Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { return Error{operation: "rollback", message: err.Error()} }
+  _ = transaction.handle.(*_borkResourceHandle).Context()
+  if err := transaction.handle.(*_borkResourceHandle).Value.(*sql.Tx).Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { return Error{operation: "rollback", message: err.Error()} }
   return _Unit{}
 }
 
 // Exec binds params to the driver's placeholders (? for SQLite, $1 for
 // Postgres), uses the owner's cancellation context, and returns the changed row count and optional generated ID.
-fn Exec(connection: Connection | Transaction, query: String, params: List[Value]): Result | Error {
+fn Exec(connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: Result | Error {
   match (run(connection, query, params, false)) {
     outcome.Changed { result } => result
     outcome.Rows { values } => panic("sql: unexpected query result")
@@ -71,7 +71,7 @@ fn Exec(connection: Connection | Transaction, query: String, params: List[Value]
 
 // Query materializes rows as records decoded from column-name JSON objects.
 // SQL NULL maps to Option.None; facts are checked before any rows are returned.
-fn Query[T: Decode](connection: Connection | Transaction, query: String, params: List[Value]): List[T] | Error | DecodeError {
+fn Query[T: Decode](connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: List[T] | Error | DecodeError {
   json = QueryJson(connection, query, params)?
   decode[List[T]](json)
 }
@@ -79,7 +79,9 @@ fn Query[T: Decode](connection: Connection | Transaction, query: String, params:
 // QueryJson returns the first result set as a JSON array of column-name objects.
 // Integers retain exact digits, NULL is null, timestamps are RFC3339 strings,
 // and binary columns are arrays of byte integers. Alias columns to record fields.
-fn QueryJson(connection: Connection | Transaction, query: String, params: List[Value]): Json | Error {
+// Postgres NUMERIC values remain strings; JSON/JSONB driver bytes remain arrays.
+// Cast columns or decode QueryJson explicitly when another mapping is needed.
+fn QueryJson(connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: Json | Error {
   match (run(connection, query, params, true)) {
     outcome.Rows { values } => Json.Array { items: values }
     outcome.Changed { result } => panic("sql: unexpected exec result")
@@ -87,9 +89,9 @@ fn QueryJson(connection: Connection | Transaction, query: String, params: List[V
   }
 }
 
-fn run(connection: Connection | Transaction, query: String, params: List[Value], read: Bool): outcome | Error unsafe go {
-  import "context"
+fn run(connection: Connection | Transaction, query: String, params: List[Value], read: Bool) uses io + net: outcome | Error unsafe go {
   import "database/sql"
+  import "context"
   import "fmt"
   import "math"
   import "strconv"
@@ -103,11 +105,11 @@ fn run(connection: Connection | Transaction, query: String, params: List[Value],
   var ctx context.Context
   switch connection := connection.(type) {
   case Connection:
-    state := connection.handle.(struct { db any; ctx context.Context })
-    db, ctx = state.db.(executor), state.ctx
+    state := connection.handle.(*_borkResourceHandle)
+    db, ctx = state.Value.(executor), state.Context()
   case Transaction:
-    state := connection.handle.(struct { db any; ctx context.Context })
-    db, ctx = state.db.(executor), state.ctx
+    state := connection.handle.(*_borkResourceHandle)
+    db, ctx = state.Value.(executor), state.Context()
   default: panic("sql: invalid connection")
   }
   args := make([]any, len(params))

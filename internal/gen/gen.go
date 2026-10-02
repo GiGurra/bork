@@ -146,7 +146,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				if strings.Contains(fd.GoBody.Body, "_borkMap") {
 					g.usesMap = true
 				}
-				if strings.Contains(fd.GoBody.Body, "_borkScope") {
+				if strings.Contains(fd.GoBody.Body, "_borkScope") || strings.Contains(fd.GoBody.Body, "_borkNewResourceHandle") || strings.Contains(fd.GoBody.Body, "_borkResourceHandle") {
 					g.usesScopes = true
 				}
 				if strings.Contains(fd.GoBody.Body, "_borkSome") || strings.Contains(fd.GoBody.Body, "_borkNone") || strings.Contains(fd.GoBody.Body, "_borkOptionGet") {
