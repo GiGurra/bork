@@ -715,26 +715,27 @@ func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
 // call lowers a call: the statements to run first, and the call (nil
 // if an argument never produces a value).
 func (g *gen) call(e *syntax.Call) ([]ast.Stmt, ast.Expr) {
-	exprs := e.Args
+	args := g.info.Args(e)
+	exprs := args
 	if g.info.CallFuncs[e] == nil && g.info.CallBuiltins[e] == check.BuiltinNone {
 		// A function value is evaluated before the arguments.
-		exprs = append([]syntax.Expr{e.Fun}, e.Args...)
+		exprs = append([]syntax.Expr{e.Fun}, args...)
 	}
 	stmts, xs := g.values(exprs)
 	if xs == nil {
 		return stmts, nil
 	}
-	if len(exprs) > len(e.Args) {
+	if len(exprs) > len(args) {
 		ft := g.info.Types[e.Fun].(*check.FuncType)
-		args := xs[1:]
-		for i := range args {
-			args[i] = g.convert(args[i], g.info.Types[e.Args[i]], ft.Params[i])
+		xargs := xs[1:]
+		for i := range xargs {
+			xargs[i] = g.convert(xargs[i], g.info.Types[args[i]], ft.Params[i])
 		}
-		return stmts, &ast.CallExpr{Fun: xs[0], Args: args}
+		return stmts, &ast.CallExpr{Fun: xs[0], Args: xargs}
 	}
 	if inst := g.info.Instances[e]; inst != nil {
 		for i := range xs {
-			xs[i] = g.convert(xs[i], g.info.Types[e.Args[i]], inst.Params[i])
+			xs[i] = g.convert(xs[i], g.info.Types[args[i]], inst.Params[i])
 		}
 	}
 	return stmts, g.callExpr(e, xs)

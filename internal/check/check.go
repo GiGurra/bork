@@ -186,6 +186,11 @@ type Info struct {
 	// Calls records which function each call targets.
 	CallFuncs    map[*syntax.Call]*Func
 	CallBuiltins map[*syntax.Call]Builtin
+	// CallArgs holds the arguments of every call of a declared function
+	// as the function takes them: a method call's receiver first, then
+	// the arguments written, then the defaults of those left out. The
+	// call's syntax is left as written.
+	CallArgs map[*syntax.Call][]syntax.Expr
 	// RecordTargets records what each record literal builds: a *Record
 	// or a *Variant.
 	RecordTargets map[*syntax.RecordLit]any
@@ -232,6 +237,15 @@ type Info struct {
 	PatSources map[any]*PatSource
 }
 
+// Args is a call's arguments: for a call of a declared function, as the
+// function takes them (see CallArgs); otherwise as written.
+func (info *Info) Args(call *syntax.Call) []syntax.Expr {
+	if args, ok := info.CallArgs[call]; ok {
+		return args
+	}
+	return call.Args
+}
+
 // PatSource is where a value bound by a match pattern came from.
 //
 // A name bound inside the pattern (`Option.Some { value: v }`) has the
@@ -256,6 +270,7 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 			Types:            map[syntax.Expr]Type{},
 			CallFuncs:        map[*syntax.Call]*Func{},
 			CallBuiltins:     map[*syntax.Call]Builtin{},
+			CallArgs:         map[*syntax.Call][]syntax.Expr{},
 			RecordTargets:    map[*syntax.RecordLit]any{},
 			SelectorVariants: map[*syntax.Selector]*Variant{},
 			ArmPats:          map[*syntax.Arm]*Pat{},
@@ -447,13 +462,6 @@ type checker struct {
 	// sharedDefaults are the parameter defaults that calls share (see
 	// defaults.go): checked once, where they were declared.
 	sharedDefaults map[syntax.Expr]bool
-	// prechecked holds the types of expressions already checked, which
-	// the next check of them takes instead of checking them again (a
-	// method call's receiver; see methods.go).
-	prechecked map[syntax.Expr]Type
-	// methodCalls holds the method calls rewritten as calls of the
-	// method, with what they were, to check them again from scratch.
-	methodCalls map[*syntax.Call]methodCall
 }
 
 type local struct {
@@ -811,10 +819,6 @@ func (c *checker) expr(e syntax.Expr) Type { return c.exprWant(e, nil) }
 // and values like `Option.None` whose type comes from the context. It
 // does not report mismatches; the caller does.
 func (c *checker) exprWant(e syntax.Expr, want Type) Type {
-	if t, ok := c.prechecked[e]; ok {
-		delete(c.prechecked, e)
-		return t
-	}
 	if v := constValue(e); v != nil {
 		return c.constant(e, v, want)
 	}
@@ -1056,7 +1060,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		}
 		return Invalid
 	}
-	return c.callFunc(e, id, fn, want)
+	return c.callFunc(e, id.Name, fn, e.Args, nil, e.TypeArgs, want)
 }
 
 func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {

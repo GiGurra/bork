@@ -1,0 +1,1 @@
+main.bork:7:22: only a declared generic function can be given type arguments

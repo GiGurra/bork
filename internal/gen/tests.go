@@ -135,16 +135,17 @@ func (g *gen) trustCheck(s *syntax.TrustStmt) []ast.Stmt {
 // argsShown renders the first argument of a trusted call for the
 // message: " (x = 0)".
 func (g *gen) argsShown(call *syntax.Call) ast.Expr {
-	if len(call.Args) == 0 {
+	args := g.info.Args(call)
+	if len(args) == 0 {
 		return &ast.BasicLit{Kind: token.STRING, Value: `""`}
 	}
-	_, x := g.value(call.Args[0])
+	_, x := g.value(args[0])
 	if x == nil {
 		return &ast.BasicLit{Kind: token.STRING, Value: `""`}
 	}
-	show := &ast.CallExpr{Fun: ast.NewIdent("_show"), Args: []ast.Expr{g.typed(x, g.info.Types[call.Args[0]])}}
+	show := &ast.CallExpr{Fun: ast.NewIdent("_show"), Args: []ast.Expr{g.typed(x, g.info.Types[args[0]])}}
 	return &ast.BinaryExpr{
-		X:  &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(" (" + exprText(call.Args[0]) + " = ")},
+		X:  &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(" (" + exprText(args[0]) + " = ")},
 		Op: token.ADD,
 		Y:  &ast.BinaryExpr{X: show, Op: token.ADD, Y: &ast.BasicLit{Kind: token.STRING, Value: `")"`}},
 	}

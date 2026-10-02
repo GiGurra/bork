@@ -1,0 +1,8 @@
+// A record field holding a function is a function value, which takes
+// no type arguments.
+type Counter = { step: Int, next: (Int) => Int }
+
+fn main() {
+  c = Counter { step: 2, next: n => n + 2 }
+  println(c.next[Int](5))
+}

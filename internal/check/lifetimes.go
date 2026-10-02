@@ -467,8 +467,9 @@ func (l *lifeChecker) call(x *syntax.Call) lifetime {
 	if !direct {
 		life = l.use(x.Fun, l.expr(x.Fun))
 	}
-	args := make([]lifetime, len(x.Args))
-	for i, a := range x.Args {
+	xargs := l.info.Args(x)
+	args := make([]lifetime, len(xargs))
+	for i, a := range xargs {
 		args[i] = l.use(a, l.expr(a))
 		life = life.union(args[i])
 	}
@@ -482,11 +483,11 @@ func (l *lifeChecker) call(x *syntax.Call) lifetime {
 	if fn == nil && direct || fn != nil && fn.Decl.GoBody == nil {
 		return life
 	}
-	for i, a := range x.Args {
+	for i, a := range xargs {
 		if l.info.Types[a] != Scope {
 			continue
 		}
-		for j, b := range x.Args {
+		for j, b := range xargs {
 			if j == i {
 				continue
 			}
