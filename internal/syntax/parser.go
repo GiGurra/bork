@@ -595,8 +595,12 @@ func (p *parser) block() *Block {
 		}
 		var stmt Stmt
 		switch {
-		case p.at(TIdent) && p.peekKind() == Assign:
+		case (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == Assign:
+			// `_ = f()` evaluates f() and drops its value.
 			name := p.next()
+			if name.Kind == Underscore {
+				name.Text = "_"
+			}
 			p.next() // '='
 			stmt = &Binding{Pos: name.Pos, Name: name.Text, Value: p.expr()}
 		case p.at(KwTrust):

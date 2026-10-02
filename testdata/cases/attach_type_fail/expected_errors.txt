@@ -1,0 +1,1 @@
+main.bork:3:15: attach takes a resource (a value of a resource type, such as File), found Int

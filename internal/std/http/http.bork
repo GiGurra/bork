@@ -99,11 +99,10 @@ fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response): Server
     srv.Serve(ln)
     close(state.done)
   }()
-  s.Defer(func() {
+  return Server{handle: state, owner: s.Own(func() {
     srv.Close()
     <-state.done
-  })
-  return Server{handle: state}
+  })}
 }
 
 // Address is the address the server listens on, as host:port.

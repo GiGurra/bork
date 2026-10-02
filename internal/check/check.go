@@ -752,7 +752,9 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		if s.Type != nil && t != Invalid {
 			c.info.BindingConstraints[s] = c.constraintsOf(s.Type, t, c.paramScope())
 		}
-		c.bind(s.Name, s.Pos, t, s)
+		if s.Name != "_" {
+			c.bind(s.Name, s.Pos, t, s)
+		}
 		return Unit
 	case *syntax.TrustStmt:
 		c.expr(s.Call)

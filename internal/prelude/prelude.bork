@@ -12,7 +12,8 @@
 //   (A, B) => C            func(A, B) C (no result for Unit)
 //   a type parameter T     a Go type parameter T (any)
 //   Scope                  *_Scope; s.Defer(f) runs f when the scope closes
-//   a resource type        a struct { handle any }
+//   a resource type        a struct { handle any; owner *_Owner }, made as
+//                          R{handle: h, owner: s.Own(func() { close h })}
 
 // Option is a value that may be missing.
 type Option[T] = sealed { Some { value: T }, None }
@@ -193,6 +194,21 @@ fn sleep(ms: Int) unsafe go {
   time.Sleep(time.Duration(ms) * time.Millisecond)
 }
 
+// attach keeps a resource open until scope s closes too: it closes when
+// the last of the scopes it is attached to closes. It gives the
+// resource, as a value of s, to hand to tasks of s (which may outlive
+// the scope the resource was opened in).
+fn attach[R](r: R, s: Scope): R unsafe go {
+  o, _ := any(r).(interface{ _ownerOf() *_Owner })
+  if o == nil || o._ownerOf() == nil {
+    panic("bork: attach: the resource was not opened with an owner (s.Own)")
+  }
+  if !o._ownerOf().attach(s) {
+    panic("bork: attach: the resource is already closed")
+  }
+  return r
+}
+
 // onClose runs f when the scope s closes.
 fn onClose(s: Scope, f: () => Unit) unsafe go {
   s.Defer(f)
@@ -216,8 +232,7 @@ fn openFile(path: String, s: Scope): File | IoError unsafe go {
     }
     return IoError{path: path, message: msg}
   }
-  s.Defer(func() { f.Close() })
-  return File{handle: f}
+  return File{handle: f, owner: s.Own(func() { f.Close() })}
 }
 
 // createFile creates (or empties) the file at path, for writing.
@@ -233,8 +248,7 @@ fn createFile(path: String, s: Scope): File | IoError unsafe go {
     }
     return IoError{path: path, message: msg}
   }
-  s.Defer(func() { f.Close() })
-  return File{handle: f}
+  return File{handle: f, owner: s.Own(func() { f.Close() })}
 }
 
 // readAll reads the rest of the file.

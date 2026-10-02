@@ -867,6 +867,10 @@ func (g *gen) stmts(list []syntax.Stmt) []ast.Stmt {
 				return out
 			}
 			bt, vt := g.info.Bindings[s], g.info.Types[s.Value]
+			if s.Name == "_" {
+				out = append(out, assign(ast.NewIdent("_"), x))
+				continue
+			}
 			if s.Type != nil || (check.IsNumeric(vt) && isConst(x)) {
 				// A declared type is kept, and an untyped Go constant would
 				// get Go's default type (int, float64).
