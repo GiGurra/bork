@@ -1,4 +1,5 @@
-# GitHub has no bork highlighting yet: borrow Rust's, the closest in
-# syntax (fn, match, =>, where, unsafe), and keep .bork files out of
-# the repository's language statistics.
-*.bork linguist-language=Rust linguist-detectable=false
+# GitHub has no bork highlighting yet: borrow Scala's, whose syntax is
+# closest to bork's ([T] generics, `: Type` results, A | B unions,
+# match, =>, s"..." interpolation), and keep .bork files out of the
+# repository's language statistics.
+*.bork linguist-language=Scala linguist-detectable=false
