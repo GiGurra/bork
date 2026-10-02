@@ -280,8 +280,9 @@ func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner st
 		} else {
 			t = c.exprWant(fi.Value, f.Type)
 		}
-		if !assignable(t, f.Type) {
-			c.errorf(fi.Value.Position(), "field %s of %s must be %s, found %s", fi.Name, owner, f.Type, t)
+		ft := f.Type
+		if t, ft = c.settle(t, ft); !assignable(t, ft) {
+			c.errorf(fi.Value.Position(), "field %s of %s must be %s, found %s", fi.Name, owner, ft, t)
 		}
 	}
 	var missing []string
@@ -321,8 +322,10 @@ func (c *checker) copyExpr(e *syntax.Copy) Type {
 			want = target.Type
 		}
 		t := c.exprWant(u.Value, want)
-		if target != nil && !assignable(t, target.Type) {
-			c.errorf(u.Value.Position(), "%s must be %s, found %s", strings.Join(u.Path, "."), target.Type, t)
+		if target != nil {
+			if t, tt := c.settle(t, target.Type); !assignable(t, tt) {
+				c.errorf(u.Value.Position(), "%s must be %s, found %s", strings.Join(u.Path, "."), tt, t)
+			}
 		}
 		path := strings.Join(u.Path, ".")
 		for _, prev := range paths {

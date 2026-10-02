@@ -29,6 +29,9 @@ type session struct {
 	origins []*origin
 	params  []*openParam
 	finish  []func()
+	// explained holds the unknowns that stayed unknown and are
+	// reported: those of an origin or a lambda parameter, or a call's.
+	explained map[*TypeParam]bool
 }
 
 // callState is what a session knows of one of its calls.
@@ -315,6 +318,17 @@ func (c *checker) couldFit(p, a Type) bool {
 	return false
 }
 
+// settle solves the unknowns of a value's type t and of the type want
+// it is expected to have (in a session; see infer.go), and gives both
+// with what is solved, for an assignability check.
+func (c *checker) settle(t, want Type) (Type, Type) {
+	if c.session == nil || t == Invalid || want == Invalid {
+		return t, want
+	}
+	c.solve(want, t)
+	return c.zonk(t), c.zonk(want)
+}
+
 // closeSession reports what the session could not decide, and completes
 // its calls, innermost first.
 func (c *checker) closeSession() {
@@ -324,17 +338,37 @@ func (c *checker) closeSession() {
 		if c.open(o.t) {
 			o.report()
 			o.call.blame()
+			c.explain(s, o.t)
 		}
 	}
 	for _, p := range s.params {
 		if c.open(p.t) {
 			c.cannotTellParam(p.lambda, p.param)
 			p.call.blame()
+			c.explain(s, p.t)
 		}
 	}
 	for _, f := range s.finish {
 		f()
 	}
+}
+
+// explain records that the unknowns left in t are reported.
+func (c *checker) explain(s *session, t Type) {
+	if s.explained == nil {
+		s.explained = map[*TypeParam]bool{}
+	}
+	mentionsWhere(c.zonk(t), func(tp *TypeParam) bool {
+		if tp.unknown {
+			s.explained[tp] = true
+		}
+		return false
+	})
+}
+
+// unexplained reports whether t has unknowns that are not reported.
+func (c *checker) unexplained(s *session, t Type) bool {
+	return mentionsWhere(c.zonk(t), func(tp *TypeParam) bool { return tp.unknown && !s.explained[tp] })
 }
 
 // cannotTellParam reports that a lambda parameter, written without a

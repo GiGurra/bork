@@ -15,4 +15,33 @@ fn main() {
   }))
   println(words.fold(Option.None, (b, w) => if (w == "b") { Option.Some { value: w } } else { b }))
   println(words.fold([], (acc, w) => [w].concat(acc)).length())
+  laterChecks()
+}
+
+type Bag = { items: List[Int] }
+type Tree[T] = sealed { Leaf, Node { v: T, l: Tree[T] } }
+type Box[T] = { v: T, rest: List[T] }
+
+// Checks against a known type decide unknowns too: bindings, fields,
+// arguments of function values, and comparisons.
+fn laterChecks() {
+  xs = [1, 2, 3]
+  println(xs.fold([], (acc, x) => {
+    y: List[Int] = acc
+    y.append(x)
+  }))
+  println(xs.fold([], (acc, x) => {
+    b = Bag { items: acc }
+    acc.append(x)
+  }))
+  g = (ys: List[Int]) => ys.length()
+  println(xs.fold([], (acc, x) => {
+    n = g(acc)
+    acc.append(x)
+  }))
+  println(xs.fold(Tree.Leaf, (t, x) => Tree.Node { v: x, l: t }))
+  println(xs.fold([], (acc, x) => Box { v: x, rest: acc }.rest.append(x)))
+  ws = ["a", "b", "b"]
+  println(ws.fold([], (acc, w) => if (acc.last() == Option.Some { value: w }) { acc } else { acc.append(w) }))
+  println(ws.fold([], (acc, w) => if (acc == ["a"]) { acc } else { acc.append(w) }))
 }

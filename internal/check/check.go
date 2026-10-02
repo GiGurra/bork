@@ -857,7 +857,7 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		if declared != nil {
 			// A declared type holds even when the value has errors, so
 			// that they do not spread to its uses.
-			if t != Invalid && declared != Invalid && !assignable(t, declared) {
+			if t, declared := c.settle(t, declared); t != Invalid && declared != Invalid && !assignable(t, declared) {
 				c.errorf(s.Value.Position(), "%s must be %s, found %s", s.Name, declared, t)
 			}
 			t = declared
@@ -1037,9 +1037,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 	if x == Invalid || y == Invalid {
 		return Invalid
 	}
-	if c.unbound(x) || c.unbound(y) {
-		// An operand whose type is not known yet (in a lambda given to a
-		// call being inferred) has the other's type, or Bool.
+	if c.session != nil && (c.open(x) || c.open(y)) {
+		// An operand whose type is not fully known yet (in a lambda
+		// given to a call being inferred) has the other's type, or Bool.
 		switch e.Op {
 		case syntax.AndAnd, syntax.OrOr:
 			c.solve(x, Bool)
@@ -1101,6 +1101,16 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 		if !isValue(x) {
 			c.errorf(e.Pos, "cannot compare values of type %s", x)
 			return Invalid
+		}
+		if c.session != nil && c.open(x) {
+			// Whether it has == is told once the session decides it.
+			pos, t := e.Pos, x
+			c.session.finish = append(c.session.finish, func() {
+				if t := c.zonk(t); !c.open(t) && !comparable(t) {
+					c.errorf(pos, "cannot compare values of type %s with %s (functions, scopes, and resources have no ==)", t, op)
+				}
+			})
+			return Bool
 		}
 		if tp, ok := x.(*TypeParam); ok && !comparable(x) {
 			c.errorf(e.Pos, "cannot compare values of type parameter %s with %s; require it: [%s: Eq]", tp.Name, op, tp.Name)
@@ -1269,8 +1279,15 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 	if c.session != nil {
 		// Branches whose types are not fully known yet decide each
 		// other's (see infer.go).
-		for _, t := range ts[1:] {
-			c.solve(ts[0], t)
+		var first Type
+		for _, t := range ts {
+			switch {
+			case t == Never || t == Invalid:
+			case first == nil:
+				first = t
+			default:
+				c.solve(first, t)
+			}
 		}
 		want = c.zonk(want)
 	}

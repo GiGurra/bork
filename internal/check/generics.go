@@ -2,7 +2,6 @@ package check
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -494,14 +493,17 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			}
 		}
 	}
+	s := c.session
 	finish := func() {
 		reported := errs > 0 || cs.blamed
 		for i := range types {
 			types[i] = c.zonk(types[i])
 		}
+		// A type argument still unknown is reported here, unless what
+		// it came from is (an empty literal, or a call in the arguments).
 		var missing []string
 		for i, u := range unknowns {
-			if r, ok := c.resolve(u).(*TypeParam); ok && r.unknown && slices.Contains(unknowns, r) {
+			if c.unexplained(s, u) {
 				missing = append(missing, fn.TypeParams[i].Name)
 			}
 		}
@@ -520,6 +522,9 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			if !reported {
 				c.errorf(e.Pos, "cannot tell what %s is in this call to %s; give the arguments (or the result) a known type", strings.Join(missing, " and "), name)
 			}
+			for _, u := range unknowns {
+				c.explain(s, u)
+			}
 			fail()
 			return
 		}
@@ -534,8 +539,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			}
 			for _, ta := range inst.TypeArgs {
 				if c.open(ta) {
-					// What stayed unknown came from elsewhere, and is
-					// reported there.
+					// What stayed unknown is reported where it came from.
 					fail()
 					return
 				}
@@ -664,8 +668,8 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 			continue
 		}
 		at := c.exprWant(a, ft.Params[i])
-		if !assignable(at, ft.Params[i]) {
-			c.errorf(a.Position(), "argument %d must be %s, found %s", i+1, ft.Params[i], at)
+		if at, pt := c.settle(at, ft.Params[i]); !assignable(at, pt) {
+			c.errorf(a.Position(), "argument %d must be %s, found %s", i+1, pt, at)
 		}
 	}
 	return ft.Result
@@ -770,7 +774,7 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 		ft.Result = Invalid
 	case wf != nil && wf.Result == Unit:
 		ft.Result = Unit // the body's value, if any, is dropped
-	case rw != nil && assignable(bt, rw):
+	case rw != nil && assignable(c.settle(bt, rw)):
 		ft.Result = rw
 	case bt == Never:
 		ft.Result = Unit
@@ -917,7 +921,7 @@ func (c *checker) elems(pos diag.Pos, elems []syntax.Expr, ew Type, what, agree 
 	if ew != nil {
 		ok := true
 		for i, t := range ts {
-			if t != Invalid && !assignable(t, ew) {
+			if t, ew := c.settle(t, ew); t != Invalid && !assignable(t, ew) {
 				c.errorf(elems[i].Position(), "%s must be %s, found %s", what, ew, t)
 				ok = false
 			}

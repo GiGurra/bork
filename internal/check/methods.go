@@ -170,8 +170,9 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 		return c.callFuncValue(e, c.record(sel, r.Field(sel.Name).Type)), true
 	}
 	if c.unbound(xt) {
-		// The receiver's type is not known (`[]` that nothing decides):
-		// that is reported where it comes from.
+		// Methods are found by the receiver's type, which must be known
+		// by now (left to right).
+		c.errorf(sel.Pos, "cannot tell the type of the value %s is called on yet; give it a type where it comes from", sel.Name)
 		for _, a := range e.Args {
 			if _, isLambda := a.(*syntax.Lambda); !isLambda {
 				c.expr(a)
