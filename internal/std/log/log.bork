@@ -38,7 +38,7 @@ fn Defaults(): Config {
 
 // Configure sets how records are written from now on, by the whole
 // program: log.Configure(log.Defaults().copy(level = log.Level.Debug)).
-fn Configure(config: Config) {
+fn Configure(config: Config) uses io {
   json = match (config.format) {
     Format.Json => true
     Format.Text => false
@@ -50,7 +50,7 @@ fn Configure(config: Config) {
   configure(slogLevel(config.level), json, stdout, config.timestamps)
 }
 
-fn configure(level: Int, json: Bool, stdout: Bool, timestamps: Bool) unsafe go {
+fn configure(level: Int, json: Bool, stdout: Bool, timestamps: Bool) uses io unsafe go {
   import "log/slog"
   import "os"
   opts := &slog.HandlerOptions{Level: slog.Level(level)}

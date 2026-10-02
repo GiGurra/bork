@@ -562,11 +562,11 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 	}
 	c.info.instances[e] = inst
 	for i, a := range args {
-		if i < len(inst.Params) && types[i] != Invalid && !assignable(types[i], inst.Params[i]) {
+		if i < len(inst.Params) && types[i] != Invalid && !fitsParam(types[i], inst.Params[i]) {
 			c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, inst.Params[i], types[i])
 		}
 	}
-	return inst.Result
+	return c.chargeCall(fn, inst.Result, types)
 }
 
 // needsContext reports whether x can only be typed with an expected
@@ -634,6 +634,7 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 	if len(e.Args) != len(ft.Params) {
 		c.errorf(e.Pos, "this function takes %d argument(s), but %d were given", len(ft.Params), len(e.Args))
 	}
+	c.used |= ft.Effects
 	for i, a := range e.Args {
 		if i >= len(ft.Params) {
 			c.expr(a)
@@ -672,7 +673,7 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 		return Invalid
 	}
 	c.info.funcRefs[e] = inst
-	return &FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects}
+	return closeOpen(&FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects})
 }
 
 // lambda checks a lambda. want is the expected function type, if any;
@@ -727,7 +728,11 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 		rw = wf.Result
 	}
 	c.lambdaDepth++
+	outer := c.used
+	c.used = 0
 	bt := c.exprWant(e.Body, rw)
+	ft.Effects = c.used
+	c.used = outer
 	c.lambdaDepth--
 	switch {
 	case bt == Invalid:

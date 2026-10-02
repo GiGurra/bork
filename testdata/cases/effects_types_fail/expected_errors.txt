@@ -1,0 +1,7 @@
+main.bork:3:41: field run of Job must be () => Unit, found () => Unit (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)
+main.bork:5:49: field run of Job must be () => Unit, found () => Unit (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)
+main.bork:8:3: function wrap returns () => Unit, but its body produces () uses io => Unit (it uses io, but an open result can only use what the open parameters use; to allow more, write the parameters' and the result's effects)
+main.bork:17:22: pure must be () => Unit, found () uses io => Unit (it uses io, which is not allowed there)
+main.bork:19:23: argument 2 to update must be (Int) => Int, found (Int) uses io => Int (it uses io, which is not allowed there)
+main.bork:23:29: list element must be () => Unit, found () uses io => Unit (it uses io, which is not allowed there)
+main.bork:24:23: inc must be (Int) => Int, found (Int) uses io => Int (it uses io, which is not allowed there)

@@ -1,0 +1,28 @@
+type Job = { run: () => Unit }
+
+fn job(f: () => Unit): Job { Job { run: f } }
+
+fn jobByLambda(f: () => Unit): Job { Job { run: () => f() } }
+
+fn wrap(f: () => Unit): () => Unit {
+  () => {
+    println("wrapped")
+    f()
+  }
+}
+
+fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C { x => g(f(x)) }
+
+fn main() {
+  pure: () => Unit = () => println("x")
+  counter = atom(0)
+  _ = update(counter, n => {
+    println(n)
+    n + 1
+  })
+  jobs: List[() => Unit] = [() => println("a")]
+  inc: (Int) => Int = compose(x => {
+    println(x)
+    x
+    }, x => x)
+}

@@ -54,6 +54,6 @@ fn main() {
   println(add2(40), adder(1)(1))
   toText = compose(adder(10), x => s"<$x>")
   println(toText(5), applyAll([adder(1), x => x * 100, identity], 3))
-  printer: (String) => Unit = s => println(s"> $s")
+  printer: (String) uses io => Unit = s => println(s"> $s")
   printer("hello")
 }

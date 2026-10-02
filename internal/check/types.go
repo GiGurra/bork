@@ -569,15 +569,7 @@ func identical(a, b Type) bool {
 		return ok && identical(a.Key, b.Key) && identical(a.Value, b.Value)
 	case *FuncType:
 		b, ok := b.(*FuncType)
-		if !ok || len(a.Params) != len(b.Params) || !identical(a.Result, b.Result) {
-			return false
-		}
-		for i := range a.Params {
-			if !identical(a.Params[i], b.Params[i]) {
-				return false
-			}
-		}
-		return true
+		return ok && a.Effects == b.Effects && sameSignature(a, b)
 	case *Record, *Sealed:
 		base := genericBase(a)
 		if base == nil || base != genericBase(b) {
@@ -614,6 +606,20 @@ func containsMember(u *Union, t Type) bool {
 	return false
 }
 
+// sameSignature reports whether two function types take and give the
+// same types, whatever their effects.
+func sameSignature(a, b *FuncType) bool {
+	if len(a.Params) != len(b.Params) || !identical(a.Result, b.Result) {
+		return false
+	}
+	for i := range a.Params {
+		if !identical(a.Params[i], b.Params[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // Identical is identical for other packages.
 func Identical(a, b Type) bool { return identical(a, b) }
 
@@ -621,11 +627,18 @@ func Identical(a, b Type) bool { return identical(a, b) }
 func Assignable(src, dst Type) bool { return assignable(src, dst) }
 
 // assignable reports whether a value of type src can be used where dst
-// is expected: the same type, Never, a member of a union, or a union
-// whose members all fit.
+// is expected: the same type, Never, a member of a union, a union
+// whose members all fit, or a function that uses no more than dst
+// allows.
 func assignable(src, dst Type) bool {
 	if src == Never || src == Invalid || dst == Invalid || identical(src, dst) {
 		return true
+	}
+	if sf, ok := src.(*FuncType); ok {
+		df, ok := dst.(*FuncType)
+		if ok {
+			return sf.Effects&^df.Effects == 0 && sameSignature(sf, df)
+		}
 	}
 	du, ok := dst.(*Union)
 	if !ok {

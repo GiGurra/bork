@@ -58,7 +58,7 @@ fn HeaderOf(headers: List[Header], name: String): Option[String] {
 // Each request gets a scope of its own, closed when the handler
 // returns, and cancelled if the client goes away or s closes: the
 // handler can open resources in it and spawn tasks in it.
-fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response): Server | IoError unsafe go {
+fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response) uses net: Server | IoError unsafe go {
   import "context"
   import "io"
   import "net"
@@ -114,7 +114,7 @@ fn Address(server: Server): String unsafe go {
 }
 
 // Wait blocks until the server stops.
-fn Wait(server: Server) unsafe go {
+fn Wait(server: Server) uses net unsafe go {
   <-server.handle.(struct {
     addr string
     done chan struct{}
@@ -122,17 +122,17 @@ fn Wait(server: Server) unsafe go {
 }
 
 // Get sends a GET request.
-fn Get(url: String): Response | IoError {
+fn Get(url: String) uses net: Response | IoError {
   Send("GET", url, [], "")
 }
 
 // Post sends a POST request with a body of the given content type.
-fn Post(url: String, contentType: String, body: String): Response | IoError {
+fn Post(url: String, contentType: String, body: String) uses net: Response | IoError {
   Send("POST", url, [Header { name: "Content-Type", value: contentType }], body)
 }
 
 // Send sends a request, and reads the whole response.
-fn Send(method: String, url: String, headers: List[Header], body: String): Response | IoError unsafe go {
+fn Send(method: String, url: String, headers: List[Header], body: String) uses net: Response | IoError unsafe go {
   import "io"
   import "net/http"
   import "sort"
