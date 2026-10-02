@@ -18,6 +18,7 @@ import (
 //   - Option[T] becomes the runtime's generic Option[T]
 //   - a union becomes `any`; matching on it uses a type switch
 //   - List[T] becomes a slice []T, never modified once built
+//   - Map[K, V] becomes the runtime's _Map[K, V], never modified once built
 //   - a function type becomes a Go func type
 //   - a type parameter becomes a Go type parameter
 func (g *gen) goType(t check.Type) ast.Expr {
@@ -26,6 +27,9 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		return name(t.Name)
 	case *check.List:
 		return &ast.ArrayType{Elt: g.goType(t.Elem)}
+	case *check.Map:
+		g.usesMap = true
+		return &ast.IndexListExpr{X: ast.NewIdent("_Map"), Indices: []ast.Expr{g.goType(t.Key), g.goType(t.Value)}}
 	case *check.FuncType:
 		return g.funcType(t, nil)
 	case *check.Record:
@@ -763,6 +767,10 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesUnit {
 		src = append(src, unitRuntime)
 	}
+	if g.usesMap {
+		g.usesShow = true
+		src = append(src, mapRuntime)
+	}
 	if g.usesEqual {
 		src = append(src, equalRuntime)
 	}
@@ -825,7 +833,7 @@ func needsDeepEqual(t check.Type, seen map[check.Type]bool) bool {
 		return false
 	}
 	switch t := t.(type) {
-	case *check.List, *check.TypeParam:
+	case *check.List, *check.Map, *check.TypeParam:
 		return true
 	case *check.Record:
 		return fields(t.Fields)
@@ -849,7 +857,10 @@ func needsDeepEqual(t check.Type, seen map[check.Type]bool) bool {
 // lists count as equal when their elements are (a nil list is empty).
 const equalRuntime = `package main
 
-import "reflect"
+import (
+	"reflect"
+	"strings"
+)
 
 func _equal(a, b any) bool { return _equalValues(reflect.ValueOf(a), reflect.ValueOf(b)) }
 
@@ -879,6 +890,9 @@ func _equalValues(x, y reflect.Value) bool {
 		}
 		return true
 	case reflect.Struct:
+		if strings.HasPrefix(x.Type().Name(), "_Map[") {
+			return _equalMaps(x, y)
+		}
 		for i := 0; i < x.NumField(); i++ {
 			if !_equalValues(x.Field(i), y.Field(i)) {
 				return false
@@ -897,6 +911,143 @@ func _equalValues(x, y reflect.Value) bool {
 		return x.String() == y.String()
 	}
 	return false
+}
+
+// _equalMaps compares two maps (_Map values): the same keys, with
+// equal values, in any order.
+func _equalMaps(x, y reflect.Value) bool {
+	xk, xv, yk, yv := x.Field(0), x.Field(1), y.Field(0), y.Field(1)
+	if xk.Len() != yk.Len() {
+		return false
+	}
+outer:
+	for i := 0; i < xk.Len(); i++ {
+		for j := 0; j < yk.Len(); j++ {
+			if _equalValues(xk.Index(i), yk.Index(j)) {
+				if !_equalValues(xv.Index(i), yv.Index(j)) {
+					return false
+				}
+				continue outer
+			}
+		}
+		return false
+	}
+	return true
+}
+`
+
+// mapRuntime is the representation of Map[K, V]: keys and values in
+// the order the keys were first added, and an index from each key to
+// its position. A map is never modified once built: put and remove
+// copy it.
+const mapRuntime = `package main
+
+import (
+	"maps"
+	"reflect"
+	"slices"
+	"strings"
+)
+
+type _Map[K, V any] struct {
+	keys []K
+	vals []V
+	idx  map[any]int
+}
+
+// _mapOf builds a map literal. A key given twice keeps the later value
+// (at the earlier position).
+func _mapOf[K, V any](keys []K, vals []V) _Map[K, V] {
+	m := _Map[K, V]{idx: make(map[any]int, len(keys))}
+	for i, k := range keys {
+		m.set(k, vals[i])
+	}
+	return m
+}
+
+// set changes m in place: only while building it.
+func (m *_Map[K, V]) set(k K, v V) {
+	hk := _mapKey(k)
+	if i, ok := m.idx[hk]; ok {
+		m.vals[i] = v
+		return
+	}
+	if m.idx == nil {
+		m.idx = map[any]int{}
+	}
+	m.idx[hk] = len(m.keys)
+	m.keys = append(m.keys, k)
+	m.vals = append(m.vals, v)
+}
+
+func (m _Map[K, V]) get(k K) (V, bool) {
+	i, ok := m.idx[_mapKey(k)]
+	if !ok {
+		var zero V
+		return zero, false
+	}
+	return m.vals[i], true
+}
+
+func (m _Map[K, V]) put(k K, v V) _Map[K, V] {
+	c := _Map[K, V]{keys: slices.Clone(m.keys), vals: slices.Clone(m.vals), idx: maps.Clone(m.idx)}
+	c.set(k, v)
+	return c
+}
+
+func (m _Map[K, V]) remove(k K) _Map[K, V] {
+	i, ok := m.idx[_mapKey(k)]
+	if !ok {
+		return m
+	}
+	c := _Map[K, V]{idx: make(map[any]int, len(m.keys)-1)}
+	for j := range m.keys {
+		if j != i {
+			c.set(m.keys[j], m.vals[j])
+		}
+	}
+	return c
+}
+
+func (m _Map[K, V]) String() string {
+	if len(m.keys) == 0 {
+		return "{:}"
+	}
+	parts := make([]string, len(m.keys))
+	for i, k := range m.keys {
+		parts[i] = _show(k) + ": " + _show(m.vals[i])
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+// _mapKey is the Go map key for a bork key: the key itself if Go can
+// hash it, or else (for a key holding a Map) its text.
+func _mapKey(k any) any {
+	switch k.(type) {
+	case string, bool, int64, int32, int16, int8, uint64, uint32, uint16, uint8, float64, float32:
+		return k
+	}
+	if _hashable(reflect.ValueOf(k)) {
+		return k
+	}
+	return "\x00" + _show(k)
+}
+
+func _hashable(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Interface:
+		return v.IsNil() || _hashable(v.Elem())
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if !_hashable(v.Field(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Slice, reflect.Map, reflect.Func:
+		return false
+	}
+	return true
 }
 `
 

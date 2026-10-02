@@ -9,6 +9,8 @@
 //   Option[T]              Option[T]: Option_Some[T]{value: v} or Option_None[T]{}
 //   a union                any, holding one of the member types
 //   List[T]                []T, never modified once built
+//   Map[K, V]              _Map[K, V]; m.get(k), m.put(k, v), m.remove(k),
+//                          _mapOf(keys, values), and m.keys, m.vals in order
 //   (A, B) => C            func(A, B) C (no result for Unit)
 //   a type parameter T     a Go type parameter T (any)
 //   Scope                  *_Scope; s.Defer(f) runs f when the scope closes
@@ -17,6 +19,10 @@
 
 // Option is a value that may be missing.
 type Option[T] = sealed { Some { value: T }, None }
+
+// Entry is a key of a Map with its value (bork/maps lists a map's
+// entries).
+type Entry[K, V] = { key: K, value: V }
 
 // OutOfRange is returned by a conversion whose value does not fit the
 // target type, such as toInt8(1000).

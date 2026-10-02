@@ -1,0 +1,121 @@
+// Package maps works with maps, Map[K, V]:
+//
+//   import "bork/maps"
+//
+//   ages = {"ada": 36, "bob": 41}
+//   maps.Get(ages, "ada")          // Option.Some { value: 36 }
+//   older = maps.Put(ages, "cy", 29)
+//
+// A map is written {key: value, ...}, or {:} when empty. Like every
+// bork value it never changes: Put and Remove give a new map. A map
+// keeps its keys in the order they were first added, which is the
+// order Keys, Values, Entries, and printing use. Keys are any type
+// with ==; two maps are equal when they have the same entries, in any
+// order.
+
+// Get is the value of key, if m has it.
+fn Get[K: Eq, V](m: Map[K, V], key: K): Option[V] unsafe go {
+  if v, ok := m.get(key); ok {
+    return Option_Some[V]{value: v}
+  }
+  return Option_None[V]{}
+}
+
+// GetOr is the value of key, or otherwise if m does not have it.
+fn GetOr[K: Eq, V](m: Map[K, V], key: K, otherwise: V): V unsafe go {
+  if v, ok := m.get(key); ok {
+    return v
+  }
+  return otherwise
+}
+
+// Has reports whether m has key.
+fn Has[K: Eq, V](m: Map[K, V], key: K): Bool unsafe go {
+  _, ok := m.get(key)
+  return ok
+}
+
+// Put is m with key set to value: added at the end, or changed in place.
+fn Put[K: Eq, V](m: Map[K, V], key: K, value: V): Map[K, V] unsafe go {
+  return m.put(key, value)
+}
+
+// Remove is m without key.
+fn Remove[K: Eq, V](m: Map[K, V], key: K): Map[K, V] unsafe go {
+  return m.remove(key)
+}
+
+// Size is the number of entries.
+fn Size[K: Eq, V](m: Map[K, V]): Int unsafe go {
+  return int64(len(m.keys))
+}
+
+// IsEmpty reports whether m has no entries.
+fn IsEmpty[K: Eq, V](m: Map[K, V]): Bool unsafe go {
+  return len(m.keys) == 0
+}
+
+// Keys are m's keys, in order.
+fn Keys[K: Eq, V](m: Map[K, V]): List[K] unsafe go {
+  return m.keys
+}
+
+// Values are m's values, in the order of their keys.
+fn Values[K: Eq, V](m: Map[K, V]): List[V] unsafe go {
+  return m.vals
+}
+
+// Entries are m's keys with their values, in order.
+fn Entries[K: Eq, V](m: Map[K, V]): List[Entry[K, V]] unsafe go {
+  out := make([]Entry[K, V], len(m.keys))
+  for i, k := range m.keys {
+    out[i] = Entry[K, V]{key: k, value: m.vals[i]}
+  }
+  return out
+}
+
+// FromEntries builds a map; a key given twice keeps the later value.
+fn FromEntries[K: Eq, V](entries: List[Entry[K, V]]): Map[K, V] unsafe go {
+  keys := make([]K, len(entries))
+  vals := make([]V, len(entries))
+  for i, e := range entries {
+    keys[i], vals[i] = e.key, e.value
+  }
+  return _mapOf(keys, vals)
+}
+
+// Merge is a with b's entries put in: b's value wins for a key in both.
+fn Merge[K: Eq, V](a: Map[K, V], b: Map[K, V]): Map[K, V] unsafe go {
+  keys := append(append([]K{}, a.keys...), b.keys...)
+  vals := append(append([]V{}, a.vals...), b.vals...)
+  return _mapOf(keys, vals)
+}
+
+// MapValues is m with f applied to every value.
+fn MapValues[K: Eq, V, W](m: Map[K, V], f: (V) => W): Map[K, W] unsafe go {
+  vals := make([]W, len(m.vals))
+  for i, v := range m.vals {
+    vals[i] = f(v)
+  }
+  return _mapOf(m.keys, vals)
+}
+
+// Filter keeps the entries for which test holds.
+fn Filter[K: Eq, V](m: Map[K, V], test: (K, V) => Bool): Map[K, V] unsafe go {
+  var keys []K
+  var vals []V
+  for i, k := range m.keys {
+    if test(k, m.vals[i]) {
+      keys = append(keys, k)
+      vals = append(vals, m.vals[i])
+    }
+  }
+  return _mapOf(keys, vals)
+}
+
+// ForEach calls f with every key and value, in order.
+fn ForEach[K: Eq, V](m: Map[K, V], f: (K, V) => Unit) unsafe go {
+  for i, k := range m.keys {
+    f(k, m.vals[i])
+  }
+}

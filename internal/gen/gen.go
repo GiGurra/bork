@@ -238,6 +238,7 @@ type gen struct {
 	usesDerive  bool
 	usesEqual   bool
 	usesUnit    bool
+	usesMap     bool
 	// openScopes lists the Go variables of the scope blocks around the
 	// code being generated, which are closed before returning.
 	openScopes []*ast.Ident
@@ -339,11 +340,29 @@ func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 		if t := pkg.TypeNamed(lit); t != nil && len(check.TypeArgs(t)) == 0 {
 			g.goType(t)
 			fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
+		} else if t, v, ok := strings.Cut(lit, "_"); ok && isVariantOf(pkg.TypeNamed(t), v) {
+			g.goType(pkg.TypeNamed(t))
+			fmt.Fprintf(&out, "type %s = %s%s; ", lit, pkg.GoPrefix, lit)
 		} else if f := pkg.Funcs[lit]; f != nil && f != fn && len(f.TypeParams) == 0 {
 			fmt.Fprintf(&out, "%s := %s%s; _ = %s; ", lit, pkg.GoPrefix, lit, lit)
 		}
 	}
 	return out.String()
+}
+
+// isVariantOf reports whether t is a non-generic sealed type with a
+// variant named v.
+func isVariantOf(t check.Type, v string) bool {
+	st, ok := t.(*check.Sealed)
+	if !ok || len(check.TypeArgs(st)) > 0 {
+		return false
+	}
+	for _, x := range st.Variants {
+		if x.Name == v {
+			return true
+		}
+	}
+	return false
 }
 
 // goReserved holds names a bork identifier may not use verbatim in Go:
@@ -463,6 +482,8 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 		return nil, g.lambda(e)
 	case *syntax.ListLit:
 		return g.listLit(e)
+	case *syntax.MapLit:
+		return g.mapLit(e)
 	case *syntax.Unary:
 		stmts, x := g.value(e.X)
 		if x == nil {
@@ -718,6 +739,30 @@ func (g *gen) listLit(e *syntax.ListLit) ([]ast.Stmt, ast.Expr) {
 		xs[i] = g.convert(xs[i], g.info.Types[e.Elems[i]], lt.Elem)
 	}
 	return stmts, &ast.CompositeLit{Type: g.goType(lt), Elts: xs}
+}
+
+// mapLit builds a map literal: _mapOf([]K{keys...}, []V{values...}).
+func (g *gen) mapLit(e *syntax.MapLit) ([]ast.Stmt, ast.Expr) {
+	mt := g.info.Types[e].(*check.Map)
+	all := append(append([]syntax.Expr{}, e.Keys...), e.Values...)
+	stmts, xs := g.values(all)
+	if xs == nil {
+		return stmts, nil
+	}
+	n := len(e.Keys)
+	for i := range xs {
+		want := mt.Key
+		if i >= n {
+			want = mt.Value
+		}
+		xs[i] = g.convert(xs[i], g.info.Types[all[i]], want)
+	}
+	g.goType(mt)
+	of := &ast.IndexListExpr{X: ast.NewIdent("_mapOf"), Indices: []ast.Expr{g.goType(mt.Key), g.goType(mt.Value)}}
+	return stmts, &ast.CallExpr{Fun: of, Args: []ast.Expr{
+		&ast.CompositeLit{Type: &ast.ArrayType{Elt: g.goType(mt.Key)}, Elts: xs[:n]},
+		&ast.CompositeLit{Type: &ast.ArrayType{Elt: g.goType(mt.Value)}, Elts: xs[n:]},
+	}}
 }
 
 func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
@@ -1143,7 +1188,7 @@ func (g *gen) str(x ast.Expr, t check.Type) ast.Expr {
 // than Go prints them.
 func needsStr(t check.Type) bool {
 	switch t.(type) {
-	case *check.Union, *check.List, *check.FuncType, *check.TypeParam:
+	case *check.Union, *check.List, *check.Map, *check.FuncType, *check.TypeParam:
 		return true
 	}
 	return check.IsFloat(t)

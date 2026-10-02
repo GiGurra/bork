@@ -251,6 +251,8 @@ func (l *lifeChecker) carriesLife(t Type) bool {
 		v = t == Scope
 	case *List:
 		v = l.carriesLife(t.Elem)
+	case *Map:
+		v = l.carriesLife(t.Key) || l.carriesLife(t.Value)
 	case *Union:
 		for _, m := range t.Members {
 			v = v || l.carriesLife(m)
@@ -372,6 +374,12 @@ func (l *lifeChecker) exprLife(x syntax.Expr) lifetime {
 		var life lifetime
 		for _, e := range x.Elems {
 			life = life.union(l.expr(e))
+		}
+		return life
+	case *syntax.MapLit:
+		var life lifetime
+		for i := range x.Keys {
+			life = life.union(l.expr(x.Keys[i])).union(l.expr(x.Values[i]))
 		}
 		return life
 	case *syntax.Unary:

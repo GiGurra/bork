@@ -3,6 +3,7 @@ package check
 import (
 	"strings"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -122,6 +123,11 @@ func (in *inference) unify(p, a Type) {
 		if a, ok := a.(*List); ok {
 			in.unify(p.Elem, a.Elem)
 		}
+	case *Map:
+		if a, ok := a.(*Map); ok {
+			in.unify(p.Key, a.Key)
+			in.unify(p.Value, a.Value)
+		}
 	case *Record, *Sealed:
 		if base := genericBase(p); base != nil && base == genericBase(a) {
 			pa, aa := TypeArgs(p), TypeArgs(a)
@@ -203,6 +209,8 @@ func subst(t Type, bound map[*TypeParam]Type) Type {
 		}
 	case *List:
 		return &List{Elem: subst(t.Elem, bound)}
+	case *Map:
+		return &Map{Key: subst(t.Key, bound), Value: subst(t.Value, bound)}
 	case *FuncType:
 		ft := &FuncType{Result: subst(t.Result, bound)}
 		for _, p := range t.Params {
@@ -238,6 +246,8 @@ func (in *inference) open(t Type) bool {
 		return in.owns(t) && in.bound[t] == nil
 	case *List:
 		return in.open(t.Elem)
+	case *Map:
+		return in.open(t.Key) || in.open(t.Value)
 	case *FuncType:
 		for _, p := range t.Params {
 			if in.open(p) {
@@ -273,6 +283,9 @@ func (in *inference) fits(p, a Type) bool {
 	case *List:
 		a, ok := a.(*List)
 		return ok && in.fits(p.Elem, a.Elem)
+	case *Map:
+		a, ok := a.(*Map)
+		return ok && in.fits(p.Key, a.Key) && in.fits(p.Value, a.Value)
 	case *FuncType:
 		a, ok := a.(*FuncType)
 		if !ok || len(a.Params) != len(p.Params) {
@@ -347,8 +360,13 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 	}
+	c.addDefaults(e, fn)
 	if len(e.Args) != len(fn.Params) {
-		c.errorf(e.Pos, "%s takes %d argument(s), but %d were given", id.Name, len(fn.Params), len(e.Args))
+		if req := requiredParams(fn); req < len(fn.Params) {
+			c.errorf(e.Pos, "%s takes %d to %d argument(s), but %d were given", id.Name, req, len(fn.Params), len(e.Args))
+		} else {
+			c.errorf(e.Pos, "%s takes %d argument(s), but %d were given", id.Name, len(fn.Params), len(e.Args))
+		}
 	}
 	var in *inference
 	if len(fn.TypeParams) > 0 {
@@ -521,6 +539,8 @@ func (c *checker) needsContext(x syntax.Expr) bool {
 		return true
 	case *syntax.ListLit:
 		return len(x.Elems) == 0
+	case *syntax.MapLit:
+		return len(x.Keys) == 0
 	case *syntax.Selector:
 		if owner, ok := c.isTypeRef(x.X); ok {
 			s, ok := c.typeNamed(owner).(*Sealed)
@@ -683,11 +703,58 @@ func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
 		}
 		return &List{Elem: ew}
 	}
-	ts := make([]Type, len(e.Elems))
+	t := c.elems(e.Pos, e.Elems, ew, "list element", "list elements have")
+	switch {
+	case t == Invalid:
+		return Invalid
+	case !isValue(t):
+		c.errorf(e.Pos, "a list cannot hold %s", t)
+		return Invalid
+	}
+	return &List{Elem: t}
+}
+
+// mapLit checks a map literal. Its key and value types come from the
+// context, or else from the entries, which must then agree.
+func (c *checker) mapLit(e *syntax.MapLit, want Type) Type {
+	var kw, vw Type
+	if wm, ok := want.(*Map); ok {
+		kw, vw = wm.Key, wm.Value
+	}
+	if len(e.Keys) == 0 {
+		if kw == nil {
+			c.errorf(e.Pos, "cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}")
+			return Invalid
+		}
+		return &Map{Key: kw, Value: vw}
+	}
+	k := c.elems(e.Pos, e.Keys, kw, "map key", "map keys have")
+	v := c.elems(e.Pos, e.Values, vw, "map value", "map values have")
+	if k == Invalid || v == Invalid {
+		return Invalid
+	}
+	for _, t := range []Type{k, v} {
+		if !isValue(t) {
+			c.errorf(e.Pos, "a map cannot hold %s", t)
+			return Invalid
+		}
+	}
+	if !comparable(k) {
+		c.errorf(e.Keys[0].Position(), "a Map's keys must be comparable with ==, and %s is not", k)
+		return Invalid
+	}
+	return &Map{Key: k, Value: v}
+}
+
+// elems checks the elements of a list literal (or the keys or values
+// of a map literal), and gives their type: ew if the context gives
+// one, or else the type they agree on.
+func (c *checker) elems(pos diag.Pos, elems []syntax.Expr, ew Type, what, agree string) Type {
+	ts := make([]Type, len(elems))
 	// Elements whose type comes from the context (`Option.None`) are
 	// checked last, against the others' type if there is no context.
 	var later []int
-	for i, x := range e.Elems {
+	for i, x := range elems {
 		if ew == nil && c.branchNeedsContext(x) {
 			later = append(later, i)
 			continue
@@ -702,30 +769,22 @@ func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
 				break
 			}
 		}
-		ts[i] = c.exprWant(e.Elems[i], w)
+		ts[i] = c.exprWant(elems[i], w)
 	}
 	if ew != nil {
 		ok := true
 		for i, t := range ts {
 			if t != Invalid && !assignable(t, ew) {
-				c.errorf(e.Elems[i].Position(), "list element must be %s, found %s", ew, t)
+				c.errorf(elems[i].Position(), "%s must be %s, found %s", what, ew, t)
 				ok = false
 			}
 		}
 		if !ok {
 			return Invalid
 		}
-		return &List{Elem: ew}
+		return ew
 	}
-	t := c.unify(e.Pos, "list elements have", ts, nil)
-	switch {
-	case t == Invalid:
-		return Invalid
-	case !isValue(t):
-		c.errorf(e.Pos, "a list cannot hold %s", t)
-		return Invalid
-	}
-	return &List{Elem: t}
+	return c.unify(pos, agree, ts, nil)
 }
 
 // mentionsParam reports whether t mentions the type parameter tp.
@@ -735,6 +794,8 @@ func mentionsParam(t Type, tp *TypeParam) bool {
 		return t == tp
 	case *List:
 		return mentionsParam(t.Elem, tp)
+	case *Map:
+		return mentionsParam(t.Key, tp) || mentionsParam(t.Value, tp)
 	case *FuncType:
 		for _, p := range t.Params {
 			if mentionsParam(p, tp) {

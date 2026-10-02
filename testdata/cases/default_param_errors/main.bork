@@ -1,0 +1,9 @@
+fn a(x: Int = 1, y: Int) {}
+fn b(x: Int = "one") {}
+fn c(x: Int, y: Int = x) {}
+fn d(x: Int, y: Int = 2) {}
+
+fn main() {
+  d()
+  d(1, 2, 3)
+}

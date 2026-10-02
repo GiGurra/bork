@@ -567,6 +567,7 @@ func (c *checker) checkFunc(fn *Func) {
 		}
 		c.scopes[0][p.Name] = &local{typ: fn.Params[i], decl: p}
 	}
+	c.checkDefaults(fn)
 	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Unit) {
 		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
 	}
@@ -825,6 +826,8 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.record(e, c.lambda(e, want, nil))
 	case *syntax.ListLit:
 		return c.record(e, c.listLit(e, want))
+	case *syntax.MapLit:
+		return c.record(e, c.mapLit(e, want))
 	case *syntax.If:
 		return c.record(e, c.ifExpr(e, want))
 	case *syntax.Block:

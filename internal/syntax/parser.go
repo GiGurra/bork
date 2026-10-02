@@ -296,7 +296,12 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 	for !p.at(RParen) {
 		pname := p.expect(TIdent, "(parameter name)")
 		p.expect(Colon, "after parameter name")
-		fn.Params = append(fn.Params, &Param{Pos: pname.Pos, Name: pname.Text, Type: p.typeExpr()})
+		param := &Param{Pos: pname.Pos, Name: pname.Text, Type: p.typeExpr()}
+		if p.at(Assign) {
+			p.next()
+			param.Default = p.expr()
+		}
+		fn.Params = append(fn.Params, param)
 		p.skipNewlines()
 		if !p.at(Comma) {
 			break
@@ -944,6 +949,9 @@ func (p *parser) primary() Expr {
 		p.expect(RParen, "to close the parenthesis")
 		return x
 	case LBrace:
+		if p.mapAhead() {
+			return p.mapLit()
+		}
 		return p.block()
 	case KwIf:
 		return p.ifExpr()
@@ -979,6 +987,79 @@ func (p *parser) lambdaAhead() bool {
 		}
 	}
 	return false
+}
+
+// mapAhead reports whether the `{` at the current token starts a map
+// literal rather than a block: `{:}`, or a first line of the form
+// `key: value` followed by `,`, `}`, or a newline. (A block's only
+// statement with a `:`, the binding `x: Int = 1`, has an `=`.)
+func (p *parser) mapAhead() bool {
+	i := p.i + 1
+	for i < len(p.toks) && p.toks[i].Kind == Semi && p.toks[i].Text == "\n" {
+		i++
+	}
+	if i+1 < len(p.toks) && p.toks[i].Kind == Colon && p.toks[i+1].Kind == RBrace {
+		return true
+	}
+	depth, colon := 0, false
+	for ; i < len(p.toks); i++ {
+		switch t := p.toks[i]; t.Kind {
+		case LParen, LBrack, LBrace:
+			depth++
+		case RParen, RBrack:
+			depth--
+		case RBrace:
+			if depth == 0 {
+				return colon
+			}
+			depth--
+		case Colon:
+			if depth == 0 {
+				if colon {
+					return false
+				}
+				colon = true
+			}
+		case Comma:
+			if depth == 0 {
+				return colon
+			}
+		case Semi:
+			if depth == 0 {
+				return colon
+			}
+		case Assign:
+			if depth == 0 {
+				return false
+			}
+		case EOF:
+			return false
+		}
+	}
+	return false
+}
+
+// mapLit parses `{key: value, ...}`, or `{:}` for the empty map.
+func (p *parser) mapLit() Expr {
+	lit := &MapLit{Pos: p.next().Pos}
+	saved := p.noRecordLit
+	p.noRecordLit = false
+	defer func() { p.noRecordLit = saved }()
+	p.skipNewlines()
+	if p.at(Colon) {
+		p.next()
+		p.skipNewlines()
+		p.expect(RBrace, "to close the empty map {:}")
+		return lit
+	}
+	p.list(RBrace, "a map entry", func() {
+		p.skipNewlines()
+		lit.Keys = append(lit.Keys, p.expr())
+		p.expect(Colon, "between a map entry's key and value")
+		p.skipNewlines()
+		lit.Values = append(lit.Values, p.expr())
+	})
+	return lit
 }
 
 // lambda parses `x => body` or `(params) => body`.

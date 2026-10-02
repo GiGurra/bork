@@ -1,0 +1,26 @@
+fn greet(name: String, greeting: String = "Hello", times: Int = 1) {
+  forEach(range(0, times), i => println(s"$greeting, $name!"))
+}
+
+fn tags(name: String, extra: Map[String, Int] = {:}): String {
+  s"$name $extra"
+}
+
+fn firstOr[T](xs: List[T], fallback: List[T] = []): List[T] {
+  if (isEmpty(xs)) { fallback } else { take(xs, 1) }
+}
+
+fn scale(x: Float, by: Float = -1.5): Float { x * by }
+
+fn main() {
+  greet("ada")
+  greet("bob", "Hi")
+  greet("cy", "Hey", 2)
+  println(tags("a"))
+  println(tags("b", {"x": 1}))
+  // The default takes its type from each call.
+  println(firstOr([1, 2]))
+  println(firstOr(["a"]))
+  println(scale(2.0))
+  "dee" |> greet("Yo")
+}
