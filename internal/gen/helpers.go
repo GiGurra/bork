@@ -34,4 +34,26 @@ func _borkMapEach[K, V any](m _Map[K, V], visit func(K, V) bool) { m.each(visit)
 
 const optionHelpers = `func _borkSome[T any](value T) Option[T] { return Option_Some[T]{value: value} }
 func _borkNone[T any]() Option[T] { return Option_None[T]{} }
+func _borkOptionGet[T any](option Option[T]) (T, bool) {
+  if some, ok := option.(Option_Some[T]); ok { return some.value, true }
+  var zero T
+  return zero, false
+}
+`
+
+// Derived record schemas expose declared field types and their proven decoders.
+const decodeSchemaHelpers = `package main
+
+type _borkDecodeField struct {
+ Name string
+ Type string
+ Constraints []string
+ Kind string
+ Optional bool
+ Decode func(Json) any
+}
+func _borkDecodeFields[T any](dict Decode[T]) ([]_borkDecodeField, bool) {
+ if dict.fields == nil { return nil, false }
+ return dict.fields(), true
+}
 `

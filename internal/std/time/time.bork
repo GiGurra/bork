@@ -1,0 +1,83 @@
+// Package time provides immutable instants, durations, and injectable clocks.
+// Instants use signed Unix nanoseconds (1677-09-21 through 2262-04-11).
+type Instant = { unixNanos: Int }
+type Duration = { nanos: Int }
+type Clock = { now: () => Instant }
+
+// Now reads the system clock. Use Read with an injected Clock in testable code.
+fn Now(): Instant unsafe go {
+  import "time"
+  return Instant{unixNanos: time.Now().UnixNano()}
+}
+fn SystemClock(): Clock { Clock { now: () => Now() } }
+fn FixedClock(instant: Instant): Clock { Clock { now: () => instant } }
+fn Read(clock: Clock): Instant { clock.now() }
+fn Nanoseconds(n: Int): Duration { Duration { nanos: n } }
+
+// Milliseconds reports OutOfRange instead of wrapping a duration.
+fn Milliseconds(n: Int): Duration | OutOfRange unsafe go {
+  import "strconv"
+  if n > 9223372036854 || n < -9223372036854 {
+    return OutOfRange{value: strconv.FormatInt(n, 10), target: "Duration"}
+  }
+  return Duration{nanos: n * 1000000}
+}
+
+fn ParseDuration(text: String): Duration | ParseError unsafe go {
+  import "time"
+  d, err := time.ParseDuration(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  return Duration{nanos: int64(d)}
+}
+fn FormatDuration(duration: Duration): String unsafe go {
+  import "time"
+  return time.Duration(duration.nanos).String()
+}
+
+// RFC3339 is a layout with an optional nanosecond fraction and a UTC offset.
+fn RFC3339(): String unsafe go {
+  import "time"
+  return time.RFC3339Nano
+}
+fn Format(instant: Instant, layout: String): String unsafe go {
+  import "time"
+  return time.Unix(0, instant.unixNanos).UTC().Format(layout)
+}
+fn Parse(text: String, layout: String): Instant | ParseError unsafe go {
+  import "time"
+  t, err := time.Parse(layout, text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  n := t.UnixNano()
+  if !time.Unix(0, n).Equal(t) {
+    return ParseError{input: text, message: "instant is outside the Unix nanosecond range"}
+  }
+  return Instant{unixNanos: n}
+}
+fn Add(instant: Instant, duration: Duration): Instant | OutOfRange unsafe go {
+  a, b := instant.unixNanos, duration.nanos
+  if (b > 0 && a > 9223372036854775807-b) || (b < 0 && a < -9223372036854775808-b) {
+    return OutOfRange{value: "instant + duration", target: "Instant"}
+  }
+  return Instant{unixNanos: a + b}
+}
+fn Between(start: Instant, end: Instant): Duration | OutOfRange unsafe go {
+  a, b := end.unixNanos, start.unixNanos
+  if (b < 0 && a > 9223372036854775807+b) || (b > 0 && a < -9223372036854775808+b) {
+    return OutOfRange{value: "end - start", target: "Duration"}
+  }
+  return Duration{nanos: a - b}
+}
+
+// Sleep stops when the scope is cancelled. Nonpositive durations finish at once.
+fn Sleep(s: Scope, duration: Duration): Unit | Cancelled unsafe go {
+  import "time"
+  import "context"
+  ctx := _borkScopeContext(s)
+  if ctx.Err() != nil { return Cancelled{reason: context.Cause(ctx).Error()} }
+  timer := time.NewTimer(time.Duration(duration.nanos))
+  defer timer.Stop()
+  select {
+  case <-ctx.Done(): return Cancelled{reason: context.Cause(ctx).Error()}
+  case <-timer.C: return _Unit{}
+  }
+}

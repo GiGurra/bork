@@ -52,3 +52,23 @@ Resources still use their generated record's `handle` and `owner` fields and
 prelude's documented Go representation. The helper API isolates maps, options,
 and scope context/lifecycle operations. `testdata/cases/go_helpers` compiles an
 imported package using every helper and checks persistence and scope cleanup.
+
+Derived `Decode` dictionaries also expose a general record schema. In an
+`unsafe go` function with `T: Decode`, `_d_T_Decode` is the dictionary parameter;
+`_borkDecodeFields(_d_T_Decode)` returns `(fields, supported)`. `supported` is
+false for custom, primitive, and sealed-type instances. Fields follow declaration
+order and have these stable members:
+
+- `Name`: the bork field name.
+- `Type`: the underlying bork type's display name (aliases are resolved).
+- `Constraints`: the field's declared fact requirements, as text.
+- `Kind`: `string`, `number`, `bool`, or `json`; Option uses its element's kind.
+- `Optional`: whether the field is an Option and may be absent.
+- `Decode`: a `func(Json) any` that returns the field's decoded value or a
+  `DecodeError`, checking its facts just as the derived record decoder does.
+
+Schemas are fresh immutable snapshots; callers must not change their slices.
+They describe fields independently, and do not construct partial records in
+bork. Call the regular `Decode` method to construct a complete proven record.
+`bork/env` consumes this schema; it is also available to other std integrations.
+`_borkOptionGet(option)` returns `(value, present)` without variant-name coupling.
