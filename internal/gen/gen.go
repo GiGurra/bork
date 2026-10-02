@@ -322,7 +322,7 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 			Type:  g.goType(fn.Params[i]),
 		})
 	}
-	if fn.Result != check.Unit {
+	if fn.Result != check.Unit && fn.Result != check.Never {
 		ftype.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(fn.Result)}}}
 	}
 	if len(fn.TypeParams) > 0 {
@@ -394,7 +394,12 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 			return stmts, nil
 		}
 		if t == check.Never {
-			return append(stmts, &ast.ExprStmt{X: call}), nil
+			stmts = append(stmts, &ast.ExprStmt{X: call})
+			if g.info.CallBuiltins[e] != check.BuiltinPanic {
+				// Go does not know that the function never returns.
+				stmts = append(stmts, unreachable()...)
+			}
+			return stmts, nil
 		}
 		return stmts, call
 	case *syntax.If, *syntax.Match:
@@ -650,6 +655,10 @@ func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
 func (g *gen) effect(e syntax.Expr) []ast.Stmt {
 	switch e := e.(type) {
 	case *syntax.Call:
+		if g.info.Types[e] == check.Never {
+			stmts, _ := g.value(e)
+			return stmts
+		}
 		stmts, call := g.call(e)
 		if call == nil {
 			return stmts

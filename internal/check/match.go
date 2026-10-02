@@ -107,10 +107,22 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 		}
 		return Invalid
 	}
-	var pats []*Pat
-	var armTypes []Type
+	pats := make([]*Pat, len(m.Arms))
+	armTypes := make([]Type, len(m.Arms))
 	ok := true
-	for _, arm := range m.Arms {
+	// Arms whose type comes from the context (`[]`, `Option.None`) are
+	// checked last, against the type of the others if there is no
+	// context.
+	var order, later []int
+	for i, arm := range m.Arms {
+		if want == nil && c.branchNeedsContext(arm.Body) {
+			later = append(later, i)
+		} else {
+			order = append(order, i)
+		}
+	}
+	for _, i := range append(order, later...) {
+		arm := m.Arms[i]
 		c.pushScope()
 		p := c.pattern(arm.Pattern, st)
 		if p == nil {
@@ -119,8 +131,12 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 			c.info.ArmPats[arm] = p
 			c.patSources(p, m.X, "", nil, true)
 		}
-		pats = append(pats, p)
-		armTypes = append(armTypes, c.exprWant(arm.Body, want))
+		pats[i] = p
+		armWant := want
+		if armWant == nil && len(later) > 0 && len(order) > 0 {
+			armWant = armTypes[order[0]]
+		}
+		armTypes[i] = c.exprWant(arm.Body, armWant)
 		c.popScope()
 	}
 	// Broken patterns are left out; and without them, missing cases

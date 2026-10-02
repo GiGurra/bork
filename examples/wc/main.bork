@@ -1,0 +1,71 @@
+// wc counts the lines, words, and bytes in files, like Unix wc:
+//
+//   bork run examples/wc -- notes.txt todo.txt
+//
+// Each file is open only while it is counted: its scope closes it,
+// whether counting succeeds or not.
+
+type Counts = { lines: Int, words: Int, bytes: Int }
+
+// FileCount is what counting one file gave.
+type FileCount = { path: String, result: Counts | IoError }
+
+fn countText(text: String): Counts {
+  Counts { lines: length(lines(text)), words: length(fields(text)), bytes: byteLength(text) }
+}
+
+fn countFile(path: String): Counts | IoError {
+  scope s {
+    countText(readAll(openFile(path, s)?)?)
+  }
+}
+
+fn add(a: Counts, b: Counts): Counts {
+  Counts { lines: a.lines + b.lines, words: a.words + b.words, bytes: a.bytes + b.bytes }
+}
+
+fn padLeft(text: String, width: Int): String {
+  if (byteLength(text) >= width) { text } else { padLeft(" " + text, width) }
+}
+
+fn row(c: Counts, name: String): String {
+  s"${padLeft(toString(c.lines), 6)} ${padLeft(toString(c.words), 6)} ${padLeft(toString(c.bytes), 7)} $name"
+}
+
+fn report(counts: List[FileCount]): Bool {
+  forEach(counts, fc => match (fc.result) {
+    c: Counts => println(row(c, fc.path))
+    e: IoError => eprintln(s"wc: ${e.path}: ${e.message}")
+  })
+  found = flatMap(counts, fc => match (fc.result) {
+    c: Counts => [c]
+    e: IoError => []
+  })
+  if (length(found) > 1) {
+    println(row(fold(found, Counts { lines: 0, words: 0, bytes: 0 }, add), "total"))
+  }
+  length(found) == length(counts)
+}
+
+fn main() {
+  paths = args()
+  if (isEmpty(paths)) {
+    eprintln("usage: wc FILE...")
+    exit(2)
+  }
+  counts = map(paths, path => FileCount { path: path, result: countFile(path) })
+  if (!report(counts)) {
+    exit(1)
+  }
+}
+
+test "counts lines, words, and bytes" {
+  assertEqual(countText("one two\nthree\n"), Counts { lines: 2, words: 3, bytes: 14 })
+  assertEqual(countText(""), Counts { lines: 0, words: 0, bytes: 0 })
+  assertEqual(countText("no newline"), Counts { lines: 1, words: 2, bytes: 10 })
+}
+
+test "pads numbers on the left" {
+  assertEqual(padLeft("42", 5), "   42")
+  assertEqual(padLeft("123456", 3), "123456")
+}
