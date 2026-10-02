@@ -55,3 +55,17 @@ fn moreChecks() {
   // Branches join their effects, so the result is not pure.
   either: () => Unit = if (true) { loud } else { () => {} }
 }
+
+fn id[T](x: T): T { x }
+
+// An open parameter cannot become a type argument, so it cannot lose
+// its effects through a generic call.
+fn launder(f: () => Unit): Job { Job { run: id(f) } }
+
+fn one(): Int { 1 }
+
+fn variance() {
+  // Results are covariant only in their effects: Go's function types
+  // are invariant.
+  widened: () => Int | String = one
+}

@@ -32,6 +32,7 @@ fn main() {
   // io is expected.
   maker: () => () uses io => Unit = () => () => {}
   maker()()
+  more()
 
   // A pure lambda fits a function type that allows io.
   quiet: () uses io => Unit = () => {}
@@ -60,3 +61,21 @@ fn main() {
   apply: (List[Int], (Int) uses nothing => Int) => List[Int] = map
   println(apply([1, 2], double))
 }
+
+fn pick[T](a: T, b: T): T { b }
+
+fn more() {
+  // Inference joins the effects of functions given for one type
+  // parameter, in either order.
+  quiet = () => {}
+  loud = () => println("loud")
+  f = pick(quiet, loud)
+  f()
+  // A union of functions fits a union that allows more.
+  a: (() => Unit) | Int = quiet
+  b: (() uses io => Unit) | Int = a
+  // An open parameter takes a function whose result uses less.
+  run(() => () => {})
+}
+
+fn run(make: () => () uses io => Unit) uses io { make()() }

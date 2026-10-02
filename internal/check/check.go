@@ -559,7 +559,7 @@ func (c *checker) notFound(name string) string {
 // errorf reports an error. Types in args are shown as code in the
 // current package would write them (money.Cents).
 func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
-	if strings.Contains(format, ", found %s") || strings.Contains(format, "but its body produces %s") {
+	if strings.Contains(format, "must be %s") && strings.Contains(format, ", found %s") || strings.Contains(format, "but its body produces %s") {
 		format += effectsNote(args)
 	}
 	for i, a := range args {

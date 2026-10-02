@@ -119,6 +119,12 @@ func (in *inference) unify(p, a Type) {
 		}
 		if in.owns(p) && in.bound[p] == nil {
 			in.bound[p] = a
+		} else if bf, ok := in.bound[p].(*FuncType); ok && in.owns(p) {
+			// Functions that differ only in their effects: T is one
+			// that may use what either uses.
+			if af, ok := a.(*FuncType); ok && sameSignature(bf, af) {
+				in.bound[p] = &FuncType{Params: bf.Params, Result: bf.Result, Effects: bf.Effects | af.Effects}
+			}
 		}
 	case *List:
 		if a, ok := a.(*List); ok {
@@ -496,6 +502,10 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 		inst = in.instance()
 	}
 	for i, ta := range inst.TypeArgs {
+		if mentionsOpen(ta) && c.diags.Len() == errorsBefore {
+			c.diags.AddCode(e.Pos, "effect.open-type-argument", "%s of %s cannot be %s: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result", fn.TypeParams[i].Name, name, innerText(ta, c.pkg))
+			return Invalid
+		}
 		if ta == Unit && c.diags.Len() == errorsBefore {
 			hint := ""
 			if fn.Prelude && fn.Decl.Name == "spawn" {

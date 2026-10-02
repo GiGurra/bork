@@ -643,7 +643,7 @@ func sameSignature(a, b *FuncType) bool {
 // dst: it takes the same parameters, gives a result that fits, and uses
 // no more than dst allows.
 func fitsFunc(src, dst *FuncType) bool {
-	if src.Effects&^dst.Effects != 0 || len(src.Params) != len(dst.Params) || !assignable(src.Result, dst.Result) {
+	if src.Effects&^dst.Effects != 0 || len(src.Params) != len(dst.Params) || !fitsResult(src.Result, dst.Result) {
 		return false
 	}
 	for i := range src.Params {
@@ -652,6 +652,18 @@ func fitsFunc(src, dst *FuncType) bool {
 		}
 	}
 	return true
+}
+
+// fitsResult reports whether a function's result of type src fits one
+// of type dst: the same type, or a function that uses less. (Go's
+// function types are invariant, so nothing else may differ.)
+func fitsResult(src, dst Type) bool {
+	if identical(src, dst) {
+		return true
+	}
+	sf, ok1 := src.(*FuncType)
+	df, ok2 := dst.(*FuncType)
+	return ok1 && ok2 && fitsFunc(sf, df)
 }
 
 // Identical is identical for other packages.
@@ -686,7 +698,7 @@ func assignable(src, dst Type) bool {
 	}
 	if su, ok := src.(*Union); ok {
 		for _, m := range su.Members {
-			if !containsMember(du, m) {
+			if !assignable(m, du) {
 				return false
 			}
 		}

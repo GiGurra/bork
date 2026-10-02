@@ -126,6 +126,8 @@ func (c *checker) unannotatedFunc(te *syntax.TypeExpr, depth int) bool {
 // declares, and what the arguments to its open parameters do, unless
 // its result is open: then those are what the function it gives does.
 func (c *checker) chargeCall(fn *Func, result Type, args []Type) Type {
+	// Only a result declared open carries effects: a type parameter
+	// bound to an open function type (id(f)) does not.
 	c.used |= fn.Effects
 	var open Effects
 	for i, t := range args {
@@ -135,11 +137,44 @@ func (c *checker) chargeCall(fn *Func, result Type, args []Type) Type {
 			}
 		}
 	}
-	if rf, ok := result.(*FuncType); ok && isOpen(rf) {
+	if rf, ok := result.(*FuncType); ok && isOpen(fn.Result) {
 		return &FuncType{Params: rf.Params, Result: rf.Result, Effects: rf.Effects&^EffOpen | open}
 	}
 	c.used |= open
 	return result
+}
+
+// mentionsOpen reports whether t is or holds a function type that uses
+// what an open parameter uses.
+func mentionsOpen(t Type) bool {
+	switch t := t.(type) {
+	case *FuncType:
+		if t.Effects&EffOpen != 0 || mentionsOpen(t.Result) {
+			return true
+		}
+		for _, p := range t.Params {
+			if mentionsOpen(p) {
+				return true
+			}
+		}
+	case *List:
+		return mentionsOpen(t.Elem)
+	case *Map:
+		return mentionsOpen(t.Key) || mentionsOpen(t.Value)
+	case *Union:
+		for _, m := range t.Members {
+			if mentionsOpen(m) {
+				return true
+			}
+		}
+	case *Record, *Sealed:
+		for _, a := range TypeArgs(t) {
+			if mentionsOpen(a) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // isOpen reports whether t is the type of an open parameter or result.
@@ -154,7 +189,7 @@ func isOpen(t Type) bool {
 func fitsParam(t, p Type) bool {
 	if isOpen(p) {
 		if tf, ok := t.(*FuncType); ok {
-			return sameSignature(tf, p.(*FuncType))
+			return fitsFunc(&FuncType{Params: tf.Params, Result: tf.Result}, p.(*FuncType))
 		}
 	}
 	return assignable(t, p)
