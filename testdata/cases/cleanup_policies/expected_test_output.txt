@@ -1,0 +1,9 @@
+finalizer 5 ran
+finalizer 3 ran
+finalizer 1 ran
+FAIL  every finalizer runs, and failures are raised together
+      finalizer 4 failed; and then: finalizer 2 failed
+FAIL  a task's failure is raised with the finalizers'
+      the task failed; and then: the finalizer failed
+0 passed, 2 failed
+exit code 1

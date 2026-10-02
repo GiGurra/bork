@@ -348,6 +348,8 @@ const scopeRuntime = `package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -364,20 +366,26 @@ type _Scope struct {
 	tasks      []*_task
 	ctx        context.Context
 	cancel     context.CancelCauseFunc
+	// timeout is how long close waits for each finalizer; 0 waits for as
+	// long as it takes (the default policy, Cleanup.Block).
+	timeout time.Duration
+	name    string
 }
 
-// _newScope opens a scope inside parent (nil for none).
-func _newScope(parent *_Scope) *_Scope {
+// _newScope opens the scope name inside parent (nil for none).
+func _newScope(parent *_Scope, name string) *_Scope {
 	ctx := context.Background()
 	if parent != nil {
 		ctx = parent.ctx
 	}
-	return _scopeWith(ctx)
+	s := _scopeWith(ctx)
+	s.name = name
+	return s
 }
 
 // _scopeWith opens a scope that is cancelled with ctx.
 func _scopeWith(ctx context.Context) *_Scope {
-	s := &_Scope{}
+	s := &_Scope{name: "(a scope)"}
 	s.ctx, s.cancel = context.WithCancelCause(ctx)
 	return s
 }
@@ -503,9 +511,14 @@ func (t *_task) Await() any {
 // the finalizers. A task that panicked without being awaited panics the
 // scope's routine. A scope is closed when its block ends, and again
 // (doing nothing, unless a finalizer panicked) by abort.
+//
+// Every finalizer runs, even when others fail. Failures (finalizers that
+// panicked, and tasks that panicked without being awaited) are raised as
+// one panic once the scope is closed.
 func (s *_Scope) close() {
 	s.cancel(_errScopeEnded)
 	s.running.Wait()
+	var failures []any
 	for {
 		s.mu.Lock()
 		if len(s.finalizers) == 0 {
@@ -515,16 +528,55 @@ func (s *_Scope) close() {
 		f := s.finalizers[len(s.finalizers)-1]
 		s.finalizers = s.finalizers[:len(s.finalizers)-1]
 		s.mu.Unlock()
-		f()
+		if r := s.finalize(f); r != nil {
+			failures = append(failures, r)
+		}
 	}
 	s.mu.Lock()
 	tasks := s.tasks
 	s.tasks = nil
 	s.mu.Unlock()
+	var taskFailures []any
 	for _, t := range tasks {
 		if t.failure != nil && !t.reported.Swap(true) {
-			panic(t.failure)
+			taskFailures = append(taskFailures, t.failure)
 		}
+	}
+	failures = append(taskFailures, failures...)
+	switch len(failures) {
+	case 0:
+	case 1:
+		panic(failures[0])
+	default:
+		msg := fmt.Sprint(failures[0])
+		for _, f := range failures[1:] {
+			msg += "; and then: " + fmt.Sprint(f)
+		}
+		panic(msg)
+	}
+}
+
+// finalize runs one finalizer under the scope's policy, and gives what
+// it panicked with, if it did.
+func (s *_Scope) finalize(f func()) (failure any) {
+	run := func() (failure any) {
+		defer func() { failure = recover() }()
+		f()
+		return nil
+	}
+	if s.timeout <= 0 {
+		return run()
+	}
+	done := make(chan any, 1)
+	go func() { done <- run() }()
+	t := time.NewTimer(s.timeout)
+	defer t.Stop()
+	select {
+	case r := <-done:
+		return r
+	case <-t.C:
+		fmt.Fprintf(os.Stderr, "bork: a finalizer of scope %s did not finish within %v; the scope closes without waiting for it\n", s.name, s.timeout)
+		return nil
 	}
 }
 
