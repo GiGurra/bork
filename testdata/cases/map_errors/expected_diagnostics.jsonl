@@ -1,6 +1,6 @@
 {"schema_version":1,"file":"main.bork","line":1,"column":22,"end_line":1,"end_column":22,"message":"a Map's keys must be comparable with ==, and K is not (for a type parameter, bound it: [K: Eq])","code":"type.error"}
 {"schema_version":1,"file":"main.bork","line":4,"column":7,"end_line":4,"end_column":7,"message":"cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}","code":"type.empty-map","fixes":[{"message":"annotate the binding (replace the type placeholders)","requires_input":true,"edits":[{"start":{"file":"main.bork","line":4,"column":4},"end":{"file":"main.bork","line":4,"column":4},"replacement":": Map[Key, Value]"}]}]}
 {"schema_version":1,"file":"main.bork","line":5,"column":7,"end_line":5,"end_column":7,"message":"map values have different types: Int and String","code":"type.error"}
-{"schema_version":1,"file":"main.bork","line":6,"column":31,"end_line":6,"end_column":31,"message":"map value must be Int, found String","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":6,"column":32,"end_line":6,"end_column":32,"message":"map value must be Int, found String","code":"type.error"}
 {"schema_version":1,"file":"main.bork","line":7,"column":6,"end_line":7,"end_column":6,"message":"Map needs exactly two type arguments, as in Map[String, Int]","code":"type.error"}
 {"schema_version":1,"file":"main.bork","line":7,"column":20,"end_line":7,"end_column":20,"message":"cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}","code":"type.empty-map"}
