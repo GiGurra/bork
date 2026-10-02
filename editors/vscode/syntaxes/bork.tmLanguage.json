@@ -1,0 +1,308 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "bork",
+  "scopeName": "source.bork",
+  "fileTypes": [
+    "bork"
+  ],
+  "patterns": [
+    {
+      "include": "#expression"
+    }
+  ],
+  "repository": {
+    "expression": {
+      "patterns": [
+        {
+          "include": "#unsafe-go"
+        },
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#interpolated-string"
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#runes"
+        },
+        {
+          "include": "#declarations"
+        },
+        {
+          "include": "#keywords"
+        },
+        {
+          "include": "#numbers"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#braces"
+        },
+        {
+          "include": "#parentheses"
+        },
+        {
+          "include": "#brackets"
+        },
+        {
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+          "name": "entity.name.type.bork"
+        },
+        {
+          "match": "\\b[a-z][A-Za-z0-9_]*(?=\\s*(?:\\[[^]\\n]*\\])?\\s*\\()",
+          "name": "entity.name.function.bork"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.bork",
+          "begin": "//",
+          "end": "$"
+        },
+        {
+          "name": "comment.block.bork",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "escapes": {
+      "match": "\\\\(?:[abfnrtv\\\\\\'\"$]|[0-7]{3}|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8})",
+      "name": "constant.character.escape.bork"
+    },
+    "strings": {
+      "name": "string.quoted.double.bork",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#escapes"
+        }
+      ]
+    },
+    "runes": {
+      "name": "string.quoted.single.bork",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "include": "#escapes"
+        }
+      ]
+    },
+    "interpolated-string": {
+      "name": "string.interpolated.bork",
+      "begin": "\\bs\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#escapes"
+        },
+        {
+          "match": "\\$\\$",
+          "name": "constant.character.escape.bork"
+        },
+        {
+          "name": "meta.interpolation.bork",
+          "contentName": "meta.embedded.expression.bork",
+          "begin": "\\$\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.begin.bork"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.interpolation.end.bork"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#expression"
+            }
+          ]
+        },
+        {
+          "match": "\\$[A-Za-z][A-Za-z0-9_]*",
+          "name": "variable.other.interpolated.bork"
+        }
+      ]
+    },
+    "unsafe-go": {
+      "name": "meta.unsafe.bork",
+      "contentName": "meta.embedded.block.go",
+      "begin": "\\b(unsafe)[ \\t]+(go)[ \\t]*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.unsafe.bork"
+        },
+        "2": {
+          "name": "keyword.control.go.bork"
+        },
+        "3": {
+          "name": "punctuation.section.block.begin.bork"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.block.end.bork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#go-braces"
+        },
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "go-braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#go-braces"
+        },
+        {
+          "include": "source.go"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(fn|pred|rule)\\s+([A-Za-z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.bork"
+            },
+            "2": {
+              "name": "entity.name.function.bork"
+            }
+          }
+        },
+        {
+          "match": "\\b(type|class|instance|instances)\\s+([A-Za-z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "storage.type.bork"
+            },
+            "2": {
+              "name": "entity.name.type.bork"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(fn|pred|type|class|instance|instances|rule)\\b",
+          "name": "storage.type.bork"
+        },
+        {
+          "match": "\\b(if|else|match|return|sealed|scope|with|uses|trust|derive|unsafe|go|resource|import|use|test|where|and|or)\\b",
+          "name": "keyword.control.bork"
+        },
+        {
+          "match": "\\b(true|false)\\b",
+          "name": "constant.language.boolean.bork"
+        },
+        {
+          "match": "\\b_\\b",
+          "name": "variable.language.wildcard.bork"
+        }
+      ]
+    },
+    "numbers": {
+      "match": "\\b(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9][0-9_]*)?)\\b",
+      "name": "constant.numeric.bork"
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "\\|>",
+          "name": "keyword.operator.pipeline.bork"
+        },
+        {
+          "match": "\\.\\.\\.|=>|==|!=|<=|>=|&&|\\|\\||[=+*/%!?<>|\\-]",
+          "name": "keyword.operator.bork"
+        },
+        {
+          "match": "[:,;.]",
+          "name": "punctuation.separator.bork"
+        }
+      ]
+    },
+    "braces": {
+      "name": "meta.braces.bork",
+      "begin": "\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.begin.bork"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.bork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#expression"
+        }
+      ]
+    },
+    "parentheses": {
+      "name": "meta.parentheses.bork",
+      "begin": "\\(",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.parentheses.begin.bork"
+        }
+      },
+      "end": "\\)",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.parentheses.end.bork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#expression"
+        }
+      ]
+    },
+    "brackets": {
+      "name": "meta.brackets.bork",
+      "begin": "\\[",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.brackets.begin.bork"
+        }
+      },
+      "end": "\\]",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.brackets.end.bork"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#expression"
+        }
+      ]
+    }
+  }
+}

@@ -14,6 +14,18 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  grammar:
+    name: TextMate grammar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - run: npm ci --prefix editors/vscode
+      - run: npm test --prefix editors/vscode
   test:
     name: Test
     runs-on: ubuntu-latest

@@ -1,0 +1,50 @@
+{
+  "name": "bork",
+  "displayName": "bork",
+  "description": "Syntax highlighting for the bork language, including embedded Go.",
+  "version": "0.0.1",
+  "publisher": "gigurra",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GiGurra/bork"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "bork",
+        "aliases": [
+          "bork",
+          "Bork"
+        ],
+        "extensions": [
+          ".bork"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bork",
+        "scopeName": "source.bork",
+        "path": "./syntaxes/bork.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.go": "go"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  }
+}
