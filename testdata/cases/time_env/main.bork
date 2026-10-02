@@ -55,10 +55,10 @@ fn main() {
     error: ParseError => println(error.message)
     _ => println("unexpected")
   }
-  config({"APP_HOST": "true", "APP_HTTP_PORT": "8080", "APP_ENABLED": "false"})
-  config({"APP_HOST": "", "APP_HTTP_PORT": "0", "APP_ENABLED": "wrong"})
+  config({ "APP_HOST": "true", "APP_HTTP_PORT": "8080", "APP_ENABLED": "false" })
+  config({ "APP_HOST": "", "APP_HTTP_PORT": "0", "APP_ENABLED": "wrong" })
   config({:})
-  config({"APP_HOST": "localhost", "APP_HTTP_PORT": "8080", "APP_ENABLED": "true", "APP_LABEL": ""})
+  config({ "APP_HOST": "localhost", "APP_HTTP_PORT": "8080", "APP_ENABLED": "true", "APP_LABEL": "" })
   scope s {
     seed(s)
     println(env.Get("BORK_ENV_TEST"), env.Require("BORK_ENV_TEST"))

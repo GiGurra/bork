@@ -15,12 +15,12 @@ fn main() {
   if (args().includes("live")) {
     report(env.Load[Config]("APP"), time.SystemClock())
   } else {
-    values = {"APP_HOST": "localhost", "APP_PORT": "8080"}
+    values = { "APP_HOST": "localhost", "APP_PORT": "8080" }
     report(env.LoadWith[Config]("APP", name => values.get(name)), time.FixedClock(time.Instant { unixNanos: 0 }))
   }
 }
 test "config collects missing and invalid fields" {
-  values = {"APP_PORT": "0"}
+  values = { "APP_PORT": "0" }
   result: Config | env.ConfigError = env.LoadWith("APP", name => values.get(name))
   match (result) {
     errors: env.ConfigError => assertEqual(length(errors.errors), 2)
@@ -53,7 +53,7 @@ test "invalid duration and instant text is rejected" {
 }
 type Pair[A, B] = { first: A, second: B } derive (Decode)
 test "generic fields use instantiated decoder parsing kinds" {
-  values = {"APP_FIRST": "hello", "APP_SECOND": "42"}
+  values = { "APP_FIRST": "hello", "APP_SECOND": "42" }
   result: Pair[String, Int] | env.ConfigError = env.LoadWith("APP", name => values.get(name))
   match (result) {
     pair: Pair[String, Int] => {
@@ -77,7 +77,7 @@ test "absent options still check every field fact" {
   }
 }
 test "generic Option fields may be absent" {
-  values = {"APP_SECOND": "42"}
+  values = { "APP_SECOND": "42" }
   result: Pair[Option[String], Int] | env.ConfigError = env.LoadWith("APP", name => values.get(name))
   match (result) {
     pair: Pair[Option[String], Int] => assert(pair.first.isNone())
