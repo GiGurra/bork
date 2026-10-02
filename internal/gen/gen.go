@@ -930,11 +930,6 @@ func needsStr(t check.Type) bool {
 	return check.IsFloat(t)
 }
 
-func isUnion(t check.Type) bool {
-	_, ok := t.(*check.Union)
-	return ok
-}
-
 // stringOf renders x, of type t, as toString does.
 func (g *gen) stringOf(x ast.Expr, t check.Type) ast.Expr {
 	switch {
