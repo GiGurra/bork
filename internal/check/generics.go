@@ -32,7 +32,7 @@ type Instance struct {
 
 // funcType is the type of fn as a value.
 func (fn *Func) funcType() *FuncType {
-	return &FuncType{Params: fn.Params, Result: fn.Result}
+	return &FuncType{Params: fn.Params, Result: fn.Result, Effects: fn.Effects}
 }
 
 // declareTypeParams makes a generic function's type parameters
@@ -217,7 +217,7 @@ func subst(t Type, bound map[*TypeParam]Type) Type {
 	case *Map:
 		return &Map{Key: subst(t.Key, bound), Value: subst(t.Value, bound)}
 	case *FuncType:
-		ft := &FuncType{Result: subst(t.Result, bound)}
+		ft := &FuncType{Result: subst(t.Result, bound), Effects: t.Effects}
 		for _, p := range t.Params {
 			ft.Params = append(ft.Params, subst(p, bound))
 		}
@@ -662,7 +662,7 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 		return Invalid
 	}
 	c.info.FuncRefs[e] = inst
-	return &FuncType{Params: inst.Params, Result: inst.Result}
+	return &FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects}
 }
 
 // lambda checks a lambda. want is the expected function type, if any;

@@ -323,6 +323,7 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 		p.skipNewlines()
 	}
 	p.expect(RParen, "to end the parameter list")
+	fn.Uses = p.uses()
 	if isPred {
 		// A predicate always returns Bool.
 		fn.Result = &TypeExpr{Pos: name.Pos, Name: "Bool"}
@@ -560,6 +561,39 @@ func (p *parser) pred() *PredRef {
 	return ref
 }
 
+// uses parses `uses io + net` or `uses nothing`, if present: the
+// effects of a function or a function type.
+func (p *parser) uses() *Uses {
+	if !p.at(TIdent) || p.tok().Text != "uses" {
+		return nil
+	}
+	u := &Uses{Pos: p.next().Pos}
+	if !p.at(TIdent) {
+		p.errorf(p.tok().Pos, "expected an effect name or nothing after uses, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	if p.tok().Text == "nothing" {
+		p.next()
+		if p.at(Plus) {
+			p.errorf(p.tok().Pos, "uses nothing cannot be combined with effects")
+			panic(bailout{})
+		}
+		return u
+	}
+	for {
+		name := p.expect(TIdent, "(effect name)")
+		if name.Text == "nothing" {
+			p.errorf(name.Pos, "uses nothing cannot be combined with effects")
+			panic(bailout{})
+		}
+		u.Effects = append(u.Effects, Effect{Pos: name.Pos, Name: name.Text})
+		if !p.at(Plus) {
+			return u
+		}
+		p.next()
+	}
+}
+
 func (p *parser) typeAtom() *TypeExpr {
 	if p.at(LParen) {
 		// A function type `(A, B) => C`, or a parenthesized type.
@@ -576,9 +610,14 @@ func (p *parser) typeAtom() *TypeExpr {
 			p.skipNewlines()
 		}
 		p.expect(RParen, "to close the type")
+		uses := p.uses()
+		if uses != nil && !p.at(Arrow) {
+			p.errorf(p.tok().Pos, "expected => after a function type's effects")
+			panic(bailout{})
+		}
 		if p.at(Arrow) {
 			p.next()
-			return &TypeExpr{Pos: pos, Func: &FuncTypeExpr{Params: params, Result: p.typeExpr()}}
+			return &TypeExpr{Pos: pos, Func: &FuncTypeExpr{Params: params, Uses: uses, Result: p.typeExpr()}}
 		}
 		if len(params) != 1 {
 			p.errorf(pos, "expected => after a function type's parameters")

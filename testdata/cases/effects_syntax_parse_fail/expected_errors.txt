@@ -1,0 +1,1 @@
+main.bork:1:23: expected => after a function type's effects

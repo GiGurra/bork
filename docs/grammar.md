@@ -7,7 +7,7 @@
 - **Source files** are UTF-8, with the `.bork` extension. A directory of `.bork` files is one package. Diagnostic positions use one-based lines and byte columns (see [JSON diagnostics](diagnostics.md)).
 - **Comments:** `// to end of line` and `/* block */`. They are ignored by the parser, but kept by the lexer and formatter.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, and `derive` are keywords only where they start a declaration, a scope block (or its policy), a resource type, or a derive list, and can otherwise be used as names.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `derive`, `uses`, and `nothing` are keywords only where they start a declaration, a scope block (or its policy), a resource type, a derive list, or a list of effects, and can otherwise be used as names.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -27,7 +27,7 @@ UseItem    = Ident | Ident "." ( Ident | "*" ) .
 Instances  = "instances" Ident "{" [ UseItem { Sep UseItem } [ Sep ] ] "}" .
                                              (* instances Json { ItemDecode, ItemEncode, money.Defaults } *)
 ClassDecl  = "class" Ident "[" Ident "]" "{" { MethodSig EOL } "}" .  (* class Show[T] { fn show(x: T): String } *)
-MethodSig  = "fn" Ident "(" [ Params ] ")" [ ":" Type ] .
+MethodSig  = "fn" Ident "(" [ Params ] ")" [ Uses ] [ ":" Type ] .
 InstanceDecl = "instance" Ident [ TypeParams ] ":" Ident "[" Type "]" "{" { FuncDecl EOL } "}" .
                                              (* instance showList[T: Show]: Show[List[T]] { fn show(xs: List[T]): String { ... } } *)
 Import     = "import" [ Ident ] StringLit .  (* import "example.com/shop/money", or import cash "..." *)
@@ -47,7 +47,8 @@ Sealed     = "sealed" "{" [ Variant { Sep Variant } [ Sep ] ] "}" .
 Variant    = Ident [ Fields ] .
 Sep        = "," | newline .                 (* commas or one item per line *)
 
-FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ ":" Type ] ( Block | GoBody ) .
+FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ Uses ] [ ":" Type ] ( Block | GoBody ) .
+Uses       = "uses" ( "nothing" | Ident { "+" Ident } ) .  (* uses io + net: the effects io, net, clock, random, state *)
 Receiver   = "(" Ident ":" Type ")" .   (* a method: fn (xs: List[T]) second[T](): Option[T] { ... } *)
 TypeParams = "[" TypeParam { "," TypeParam } "]" .   (* fn map[A, B](...) *)
 TypeParam  = Ident [ ":" Ident { "+" Ident } ] .     (* T: Show + Eq: T needs instances of Show and Eq *)
@@ -61,7 +62,7 @@ Clause     = PredRef { "or" PredRef }          (* alone: p or q *)
            | "(" PredRef { "or" PredRef } ")" .  (* with and: (p or q) and r *)
 PredRef    = Ident [ "(" Expr { "," Expr } ")" ] .  (* positive, between(1, 65535), atLeast(lo) *)
 TypeAtom   = Ident [ "[" Type { "," Type } "]" ] | "(" Type ")" | FuncType .
-FuncType   = "(" [ Type { "," Type } ] ")" "=>" Type .  (* (Int, String) => Bool *)
+FuncType   = "(" [ Type { "," Type } ] ")" [ Uses ] "=>" Type .  (* (Int, String) => Bool, (String) uses io => Unit *)
 
 Block      = "{" { Stmt EOL } [ Expr ] "}" .
 Stmt       = Binding | Trust | Expr .
@@ -125,6 +126,7 @@ EOL        = newline | ";" .
 - **`panic(message)`** stops the program with a message. It is for bugs, not expected failures (those are union results). Its type is `Never`, so it can end any branch.
 - **`println(args...)`** prints its arguments separated by spaces, followed by a newline. **`toString(x)`** renders any value the way `println` prints it. Floats always print as floats: `3.0`, `0.25`, `1e+21`.
 - **The prelude** ([prelude.bork](../internal/prelude/prelude.bork)) is available everywhere: the records `OutOfRange` and `ParseError`; `parseInt`, `parseFloat`, `parseBool` (returning `T | ParseError`); and `byteLength`, `contains`, `startsWith`, `endsWith`, `indexOf` (an `Option[Int]`), `toUpper`, `toLower`, `trim`, `replaceAll`, `repeat`, which count bytes; and `runeCount`, `runeAt` (an `Option[Rune]`), `substring` (a `String | OutOfRange`), `runeToString`, `isDigit`, `isLetter`, `isSpace`, `isUpper`, `isLower`, which count runes. A `Rune` prints as its number; `runeToString` gives the character. For lists: `length`, `isEmpty`, the predicate `notEmpty`, `first` (for a list known to be `notEmpty`), `get`, `head`, `last` (each an `Option[T]` where it may be missing), `map`, `flatMap`, `filter`, `fold`, `find`, `any`, `all`, `count`, `forEach`, `take`, `drop`, `reverse`, `concat`, `append`, `prepend`, `sortWith`, `range`, and `join`/`split` for Strings. Prelude types and the compiler's own functions (`println`, `toString`, `panic`, `toInt8`, ...) cannot be redefined. Concurrency: `spawn(s, () => value)` gives a `Task[T]`, `await(task)` its result, and `launch(s, () => ...)` runs work without a result; scope `s` waits for its tasks before it closes. Scope policies (`ScopePolicy`): `taskTimeout(ms)`, `cleanupTimeout(ms)`, `logFailures()`. `sleep(ms)` pauses. Cancellation: `cancel(s)`, `cancelAfter(s, ms)`, `cancelled(s)`, and the cancellation points `delay(s, ms)` and `checkpoint(s)` (`Unit | Cancelled`). Resources: `attach(r, s)` keeps `r` open until `s` closes too. Channels: `channel[T](s, capacity)`, `send`, `receive`, `closeChannel`, `received`. Shared state: `atom(x)` makes an `Atom[T]`, `current(a)` reads it, and `update(a, f)` (giving the new value) or `swap(a, f)` (giving the old one) replaces its value atomically, retrying f if another task got there first.
+- **Effects** are declared after the parameters, before the result: `fn save(path: String, text: String) uses io: Unit | IoError`, and in function types, before the `=>`: `(String) uses io => Unit`. The effects are `io`, `net`, `clock`, `random`, and `state` (see [requirements.md](requirements.md#effects-in-signatures-proposal)). They are parsed and named in types, but not checked yet. A `pred` cannot declare effects.
 - **`unsafe go` bodies** are Go statements implementing the function. Parameters are visible under their own names, and values have the Go representations listed at the top of the prelude. Standard packages use the stable [Go helper API](std-go.md) for maps, options, and scope contexts. Imports go on the first lines (`import "strings"`). bork trusts the function's signature and does not check the body; the Go compiler does, and reports errors at the bork positions.
 - **Records** (`type User = { name: String, age: Int }`) are built with all their fields named: `User { name: "Ada", age: 36 }`. Fields are read with `u.name`. A record cannot contain itself directly.
 - **`copy`** makes a changed copy: `u.copy(age = 37, address.city = "Oslo")`. Paths reach into nested records; two updates may not overlap (`address` and `address.city`).

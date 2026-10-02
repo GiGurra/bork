@@ -66,6 +66,8 @@ type Func struct {
 	TypeParams []*TypeParam
 	Params     []Type
 	Result     Type
+	// Effects is what the function declares it may do (`uses io`).
+	Effects Effects
 	// Prelude is set for the built-in functions of prelude.bork.
 	Prelude bool
 	// Synthetic is set for a predicate that stands for a function
@@ -564,6 +566,10 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	}
 	fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude}
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
+	fn.Effects = c.effectsOf(fd.Uses)
+	if fd.IsPred && fd.Uses != nil {
+		c.diags.AddCode(fd.Uses.Pos, "effect.pred", "pred %s cannot declare effects: predicates must be pure, or their facts could go stale", fd.Name)
+	}
 	if r := fd.Result; r != nil && r.Name == "Never" && len(r.Args) == 0 && r.Func == nil && len(r.Union) == 0 {
 		// A function that never returns, such as exit.
 		fn.Result = Never
@@ -573,6 +579,7 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
+	c.openSignature(fn)
 	c.typeParams = nil
 	c.pkg.Funcs[fd.Name] = fn
 	c.info.FuncOf[fd] = fn

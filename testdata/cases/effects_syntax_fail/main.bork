@@ -1,0 +1,22 @@
+fn a() uses io + disk {}
+
+fn b() uses io + io {}
+
+pred c(x: Int) uses io { x > 0 }
+
+fn e(f: (Int) uses io => Int): Int { f(1) }
+
+fn k(f: (Int) uses nothing => Int, g: (Int) => Int) {}
+
+class Greeter[T] {
+  fn greet(x: T) uses io
+}
+
+instance greetInt: Greeter[Int] {
+  fn greet(x: Int) uses io + net { println(x) }
+}
+
+fn main() {
+  x: Int = e
+  y: Int = k
+}

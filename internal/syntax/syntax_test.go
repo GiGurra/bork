@@ -86,6 +86,72 @@ func TestParseFunction(t *testing.T) {
 	}
 }
 
+func TestParseUses(t *testing.T) {
+	src := `fn serve(addr: String, h: (Int) uses io + state => Int | Unit) uses net + state: Unit | IoError {
+}
+fn update(f: (Int) uses nothing => Int): Int unsafe go { return 0 }
+fn pure(): Int { 1 }`
+	diags := &diag.List{}
+	f := Parse("t.bork", []byte(src), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	names := func(u *Uses) []string {
+		var out []string
+		for _, e := range u.Effects {
+			out = append(out, e.Name)
+		}
+		return out
+	}
+	serve := f.Funcs[0]
+	if got := names(serve.Uses); len(got) != 2 || got[0] != "net" || got[1] != "state" {
+		t.Fatalf("serve uses %v", got)
+	}
+	if len(serve.Result.Union) != 2 {
+		t.Fatalf("serve's result should be a union, got %+v", serve.Result)
+	}
+	h := serve.Params[1].Type.Func
+	if got := names(h.Uses); len(got) != 2 || got[0] != "io" || len(h.Result.Union) != 2 {
+		t.Fatalf("h uses %v, result %+v", got, h.Result)
+	}
+	f2 := f.Funcs[1].Params[0].Type.Func
+	if f2.Uses == nil || len(f2.Uses.Effects) != 0 {
+		t.Fatalf("uses nothing parsed as %+v", f2.Uses)
+	}
+	if f.Funcs[1].Uses != nil || f.Funcs[2].Uses != nil {
+		t.Fatalf("functions without uses got some")
+	}
+}
+
+func TestUsesIsStillAName(t *testing.T) {
+	src := `type R = { uses: Int, nothing: Int }
+fn uses(nothing: Int): Int { io = nothing; io }
+fn f(g: (Int) => Int): Int { g(1) }`
+	diags := &diag.List{}
+	f := Parse("t.bork", []byte(src), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	if len(f.Funcs) != 2 || f.Funcs[0].Name != "uses" || f.Funcs[0].Uses != nil {
+		t.Fatalf("unexpected functions: %+v", f.Funcs)
+	}
+}
+
+func TestParseUsesErrors(t *testing.T) {
+	for src, want := range map[string]string{
+		"fn f() uses {}":              "expected an effect name or nothing after uses",
+		"fn f() uses nothing + io {}": "uses nothing cannot be combined with effects",
+		"fn f() uses io + nothing {}": "uses nothing cannot be combined with effects",
+		"fn f(g: (Int) uses io) {}":   "expected => after a function type's effects",
+	} {
+		diags := &diag.List{}
+		Parse("t.bork", []byte(src), diags)
+		if !strings.Contains(diags.Error(), want) {
+			t.Errorf("%s: got %q, want %q", src, diags.Error(), want)
+		}
+	}
+}
+
 func TestParseRecoversAtNextFunction(t *testing.T) {
 	src := "fn broken( {\n}\n\nfn ok() {\n}\n"
 	diags := &diag.List{}

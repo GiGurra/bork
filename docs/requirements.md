@@ -432,7 +432,7 @@ Remaining work:
 
 ## Effects in signatures (proposal)
 
-> **Proposal, under review** (bork-ot9ki9). Nothing here is implemented yet. If it is accepted, it replaces "no need to thread effects through types" under *Effects and concurrency* and "no purity tracking in v0.1" under *Facts, purity, and the outside world*.
+> **Proposal, accepted, being implemented** (bork-ot9ki9). So far the syntax is parsed (`uses` on functions and function types), and effect names are checked, but nothing is checked against them yet. Once done, it replaces "no need to thread effects through types" under *Effects and concurrency* and "no purity tracking in v0.1" under *Facts, purity, and the outside world*.
 
 Today any function can print, read files, call the network, or update shared state, and its signature does not say so. For code written by agents, the signature is what a reviewer checks, so it should state what the function can do to the world outside its arguments and result. Below `main`, a function that declares nothing does nothing outside them, and the compiler checks this. The exceptions are deliberate and few: logging, the runtime's own diagnostics, and `unsafe go` code (trusted, and allowed only where `bork.mod` says so).
 

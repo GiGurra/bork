@@ -94,9 +94,12 @@ type FuncDecl struct {
 	// `fn map[A, B](...)`.
 	TypeParams []*TypeParam
 	Params     []*Param
-	Result     *TypeExpr
-	Body       *Block
-	GoBody     *GoCode
+	// Uses lists the effects the function may have, `uses io + net`,
+	// or is nil when it declares none.
+	Uses   *Uses
+	Result *TypeExpr
+	Body   *Block
+	GoBody *GoCode
 	// Instance is set for a method of an instance declaration.
 	Instance *InstanceDecl
 	// IsMethod is set for a method, `fn (xs: List[T]) first[T](): T`:
@@ -187,10 +190,25 @@ type TypeExpr struct {
 	Where []*PredRef
 }
 
-// FuncTypeExpr is a function type: `(A, B) => C`.
+// FuncTypeExpr is a function type: `(A, B) => C`, or with effects,
+// `(A) uses io => C`.
 type FuncTypeExpr struct {
 	Params []*TypeExpr
+	Uses   *Uses
 	Result *TypeExpr
+}
+
+// Uses is a declaration of effects: `uses io + net`, or `uses nothing`
+// (Effects is then empty).
+type Uses struct {
+	Pos     diag.Pos
+	Effects []Effect
+}
+
+// Effect is one effect named in a `uses` declaration.
+type Effect struct {
+	Pos  diag.Pos
+	Name string
 }
 
 // PredRef is one predicate in a where clause: `positive`, or

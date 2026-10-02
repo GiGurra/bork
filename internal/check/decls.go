@@ -219,7 +219,7 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 		return newUnion(members)
 	}
 	if t.Func != nil {
-		ft := &FuncType{Result: c.resolveType(t.Func.Result)}
+		ft := &FuncType{Result: c.resolveType(t.Func.Result), Effects: c.effectsOf(t.Func.Uses)}
 		if ft.Result == Invalid {
 			return Invalid
 		}

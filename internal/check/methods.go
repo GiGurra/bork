@@ -45,10 +45,12 @@ func methodKey(t Type) (string, bool) {
 func (c *checker) declareMethod(fd *syntax.FuncDecl, prelude bool) {
 	fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude}
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
+	fn.Effects = c.effectsOf(fd.Uses)
 	fn.Result = c.resolveType(fd.Result)
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
+	c.openSignature(fn)
 	c.typeParams = nil
 	recv := fn.Params[0]
 	if recv == Invalid {

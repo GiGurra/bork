@@ -1,0 +1,32 @@
+// Effects are written in signatures (`uses io + net`) and in function
+// types (`(String) uses io => Unit`). They are not checked yet.
+
+type Job = { name: String, run: () uses io => Unit }
+
+class Greeter[T] {
+  fn greet(x: T) uses io
+}
+
+instance greetInt: Greeter[Int] {
+  fn greet(x: Int) uses io { println(s"hello $x") }
+}
+
+fn (j: Job) start() uses io { j.run() }
+
+fn say(text: String) uses io: Unit { println(text) }
+
+fn twice(f: (String) uses io => Unit, text: String) uses io {
+  f(text)
+  f(text)
+}
+
+fn keep(f: (Int) uses nothing => Int): Int { f(1) }
+
+fn now() uses clock: Int unsafe go { return 7 }
+
+fn main() uses io + clock {
+  twice(say, "hi")
+  Job { name: "job", run: () => say("running") }.start()
+  greet(2)
+  println(keep(x => x + 1), now())
+}
