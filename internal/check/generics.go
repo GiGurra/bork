@@ -24,10 +24,6 @@ type Instance struct {
 	// type argument (decodeJson[Port]): arguments of that type must
 	// satisfy them, and results of it do (see callFunc).
 	ArgFacts [][]*Constraint
-	// TypeArgExprs holds a call's explicit type arguments as written,
-	// one per type parameter (nil for those a method's receiver
-	// decides), or nil if there are none.
-	TypeArgExprs []*syntax.TypeExpr
 }
 
 // funcType is the type of fn as a value.
@@ -363,17 +359,28 @@ func (fn *Func) InstanceFor(subject Type) *Instance {
 // the other arguments have decided what they can.
 func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.Expr, recv Type, typeArgs []*syntax.TypeExpr, want Type) Type {
 	errorsBefore := c.diags.Len()
-	c.info.CallFuncs[e] = fn
+	c.info.callFuncs[e] = fn
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 	}
 	args = c.withDefaults(args, fn)
-	c.info.CallArgs[e] = args
+	c.info.callArgs[e] = args
+	// Errors about the call itself are reported at the method's name in
+	// a method call, x.m(a).
+	at := e.Pos
+	if sel, ok := e.Fun.(*syntax.Selector); ok && recv != nil {
+		at = sel.Pos
+	}
 	if len(args) != len(fn.Params) {
+		// A method's receiver is not counted.
+		what, skip := name, 0
+		if recv != nil {
+			what, skip = "method "+name, 1
+		}
 		if req := requiredParams(fn); req < len(fn.Params) {
-			c.errorf(e.Pos, "%s takes %d to %d argument(s), but %d were given", name, req, len(fn.Params), len(args))
+			c.errorf(at, "%s takes %d to %d argument(s), but %d were given", what, req-skip, len(fn.Params)-skip, len(args)-skip)
 		} else {
-			c.errorf(e.Pos, "%s takes %d argument(s), but %d were given", name, len(fn.Params), len(args))
+			c.errorf(at, "%s takes %d argument(s), but %d were given", what, len(fn.Params)-skip, len(args)-skip)
 		}
 	}
 	var in *inference
@@ -383,7 +390,7 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 	var argFacts [][]*Constraint
 	if len(typeArgs) > 0 {
 		if len(typeArgs) != len(fn.TypeParams) {
-			c.errorf(e.Pos, "%s takes %d type argument(s), but %d were given", name, len(fn.TypeParams), len(typeArgs))
+			c.errorf(at, "%s takes %d type argument(s), but %d were given", name, len(fn.TypeParams), len(typeArgs))
 			return Invalid
 		}
 		for i, ta := range typeArgs {
@@ -419,7 +426,7 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 			}
 			return
 		case c.sharedDefaults[a]:
-			types[i] = c.info.Types[a]
+			types[i] = c.info.types[a]
 			return
 		}
 		if i >= len(fn.Params) {
@@ -469,8 +476,9 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 	inst := &Instance{Func: fn, Params: fn.Params, Result: fn.Result}
 	if in != nil {
 		if missing := in.unsolved(); len(missing) > 0 {
-			// A wrong argument is the better explanation.
-			reported := false
+			// A wrong argument (or number of them) is the better
+			// explanation.
+			reported := c.diags.Len() > errorsBefore
 			for i, t := range types {
 				switch {
 				case t == Invalid:
@@ -549,8 +557,10 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 		return Invalid
 	}
 	inst.ArgFacts = argFacts
-	inst.TypeArgExprs = typeArgs
-	c.info.Instances[e] = inst
+	if len(typeArgs) > 0 {
+		c.info.callTypeArgs[e] = typeArgs
+	}
+	c.info.instances[e] = inst
 	for i, a := range args {
 		if i < len(inst.Params) && types[i] != Invalid && !assignable(types[i], inst.Params[i]) {
 			c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, inst.Params[i], types[i])
@@ -661,7 +671,7 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 	if !c.resolveDicts(inst, e.Pos) {
 		return Invalid
 	}
-	c.info.FuncRefs[e] = inst
+	c.info.funcRefs[e] = inst
 	return &FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects}
 }
 
@@ -709,7 +719,6 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 			t = Invalid
 		}
 		ft.Params = append(ft.Params, t)
-		c.info.LambdaParams[p] = true
 		c.bind(p.Name, p.Pos, t, p)
 		c.scopes[len(c.scopes)-1][p.Name].node = nil // unused parameters are fine
 	}

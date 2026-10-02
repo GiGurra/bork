@@ -10,12 +10,23 @@ import (
 // Rule is a checked inference rule: when facts matching Premises hold
 // (and the Conditions on constants are true), the Conclusions hold too.
 type Rule struct {
-	Decl        *syntax.RuleDecl
-	Pkg         *Package
-	VarTypes    []Type // the types of Decl.Params
-	Premises    []*RuleAtom
-	Conditions  []syntax.Expr
+	Decl     *syntax.RuleDecl
+	Pkg      *Package
+	VarTypes []Type // the types of Decl.Params
+	Premises []*RuleAtom
+	// Conditions are the premises that compute with the variables'
+	// values (see evalCondition), as typed expressions; conditions holds
+	// them as written.
+	Conditions  []Expr
+	conditions  []syntax.Expr
 	Conclusions []*RuleAtom
+	// Vars are the rule's variables. PremiseExprs and ConclusionExprs
+	// are its premises and conclusions as typed expressions, which test
+	// mode runs, and ConclusionTexts the conclusions as written.
+	Vars            []*Var
+	PremiseExprs    []Expr
+	ConclusionExprs []Expr
+	ConclusionTexts []string
 }
 
 // RuleAtom is a predicate applied to rule variables and constants.
@@ -66,14 +77,14 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 	bound := map[string]bool{}
 	atom := func(x syntax.Expr, what string) *RuleAtom {
 		call, isCall := x.(*syntax.Call)
-		fn := c.info.CallFuncs[call]
+		fn := c.info.callFuncs[call]
 		if !isCall || fn == nil || !fn.Decl.IsPred {
 			c.errorf(x.Position(), "a rule's %s must be predicate calls, as in positive(x)", what)
 			ok = false
 			return nil
 		}
 		a := &RuleAtom{Pred: fn}
-		for i, arg := range c.info.Args(call) {
+		for i, arg := range c.info.args(call) {
 			if id, isID := arg.(*syntax.Ident); isID && vars[id.Name] {
 				a.Args = append(a.Args, RuleArg{Var: id.Name})
 				bound[id.Name] = true
@@ -99,7 +110,7 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 			ok = false
 			continue
 		}
-		if call, isCall := p.(*syntax.Call); isCall && c.info.CallFuncs[call] != nil && c.info.CallFuncs[call].Decl.IsPred {
+		if call, isCall := p.(*syntax.Call); isCall && c.info.callFuncs[call] != nil && c.info.callFuncs[call].Decl.IsPred {
 			if a := atom(p, "premises"); a != nil {
 				r.Premises = append(r.Premises, a)
 			}
@@ -109,7 +120,7 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 			ok = false
 			continue
 		}
-		r.Conditions = append(r.Conditions, p)
+		r.conditions = append(r.conditions, p)
 	}
 	for _, x := range rd.Conclusions {
 		if t := c.expr(x); t == Invalid {
@@ -156,15 +167,14 @@ func (c *checker) conditionOnly(x syntax.Expr, vars map[string]bool) bool {
 
 // evalCondition computes a rule condition with the variables bound to
 // constants. It returns nil if that is not possible.
-func evalCondition(x syntax.Expr, info *Info, vars map[string]constant.Value) constant.Value {
-	if v := info.constantOf(x); v != nil {
-		return v
-	}
+func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 	switch x := x.(type) {
-	case *syntax.Ident:
-		return vars[x.Name]
-	case *syntax.Unary:
-		v := evalCondition(x.X, info, vars)
+	case *Const:
+		return x.Value
+	case *VarRef:
+		return vars[x.Var.Name]
+	case *Unary:
+		v := evalCondition(x.X, vars)
 		if v == nil {
 			return nil
 		}
@@ -172,8 +182,8 @@ func evalCondition(x syntax.Expr, info *Info, vars map[string]constant.Value) co
 			return constant.UnaryOp(token.NOT, v, 0)
 		}
 		return constant.UnaryOp(token.SUB, v, 0)
-	case *syntax.Binary:
-		a, b := evalCondition(x.X, info, vars), evalCondition(x.Y, info, vars)
+	case *Binary:
+		a, b := evalCondition(x.X, vars), evalCondition(x.Y, vars)
 		if a == nil || b == nil || a.Kind() == constant.Unknown || b.Kind() == constant.Unknown {
 			return nil
 		}

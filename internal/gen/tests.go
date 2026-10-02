@@ -108,7 +108,7 @@ func (g *gen) testFunc(fn *check.Func, goName *ast.Ident) ast.Decl {
 	return &ast.FuncDecl{
 		Name: goName,
 		Type: &ast.FuncType{Params: &ast.FieldList{}},
-		Body: &ast.BlockStmt{List: g.blockInto(fn.Decl.Body, sink{})},
+		Body: &ast.BlockStmt{List: g.blockInto(fn.Body, sink{})},
 	}
 }
 
@@ -118,14 +118,14 @@ func at(pos fmt.Stringer) ast.Expr {
 }
 
 // trustCheck checks a `trust p(x)` in test mode.
-func (g *gen) trustCheck(s *syntax.TrustStmt) []ast.Stmt {
+func (g *gen) trustCheck(s *check.Trust) []ast.Stmt {
 	stmts, cond := g.value(s.Call)
 	if cond == nil {
 		return stmts
 	}
 	msg := fmt.Sprintf("%s: trusted fact does not hold: ", s.Pos)
 	g.usesShow = true
-	text := &ast.BinaryExpr{X: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(msg + exprText(s.Call))}, Op: token.ADD, Y: g.argsShown(s.Call)}
+	text := &ast.BinaryExpr{X: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(msg + s.Text)}, Op: token.ADD, Y: g.argsShown(s)}
 	return append(stmts, &ast.IfStmt{
 		Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)},
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{text}}}}},
@@ -134,8 +134,14 @@ func (g *gen) trustCheck(s *syntax.TrustStmt) []ast.Stmt {
 
 // argsShown renders the first argument of a trusted call for the
 // message: " (x = 0)".
-func (g *gen) argsShown(call *syntax.Call) ast.Expr {
-	args := g.info.Args(call)
+func (g *gen) argsShown(s *check.Trust) ast.Expr {
+	var args []check.Expr
+	switch c := s.Call.(type) {
+	case *check.Call:
+		args = c.Args
+	case *check.CallValue:
+		args = c.Args
+	}
 	if len(args) == 0 {
 		return &ast.BasicLit{Kind: token.STRING, Value: `""`}
 	}
@@ -143,33 +149,12 @@ func (g *gen) argsShown(call *syntax.Call) ast.Expr {
 	if x == nil {
 		return &ast.BasicLit{Kind: token.STRING, Value: `""`}
 	}
-	show := &ast.CallExpr{Fun: ast.NewIdent("_show"), Args: []ast.Expr{g.typed(x, g.info.Types[args[0]])}}
+	show := &ast.CallExpr{Fun: ast.NewIdent("_show"), Args: []ast.Expr{g.typed(x, args[0].Type())}}
 	return &ast.BinaryExpr{
-		X:  &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(" (" + exprText(args[0]) + " = ")},
+		X:  &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(" (" + s.SubjectText + " = ")},
 		Op: token.ADD,
 		Y:  &ast.BinaryExpr{X: show, Op: token.ADD, Y: &ast.BasicLit{Kind: token.STRING, Value: `")"`}},
 	}
-}
-
-// exprText shows a simple expression as written, for messages.
-func exprText(x syntax.Expr) string {
-	switch x := x.(type) {
-	case *syntax.Ident:
-		return x.Name
-	case *syntax.Selector:
-		return exprText(x.X) + "." + x.Name
-	case *syntax.Call:
-		args := make([]string, len(x.Args))
-		for i, a := range x.Args {
-			args[i] = exprText(a)
-		}
-		return exprText(x.Fun) + "(" + strings.Join(args, ", ") + ")"
-	case *syntax.StringLit:
-		return strconv.Quote(x.Value)
-	case *syntax.IntLit:
-		return x.Text
-	}
-	return "..."
 }
 
 // checkedWrapper generates, in test mode, the function fn (implemented

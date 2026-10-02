@@ -87,7 +87,7 @@ func (g *gen) query(q check.Query, roots *[]*check.Func, setup *[]ast.Stmt) ast.
 	if q.Subject != nil {
 		stmts, x := g.value(q.Subject)
 		*setup = append(*setup, stmts...)
-		args = append(args, g.convert(x, g.info.Types[q.Subject], q.Params[0]))
+		args = append(args, g.convert(x, q.Subject.Type(), q.Params[0]))
 	}
 	for _, v := range q.Args {
 		args = append(args, g.constant(v, q.Params[len(args)]))
@@ -496,9 +496,9 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	g.fnResult = fn.Result
 	decl := g.signature(fd)
 	if fn.Result == check.Unit {
-		decl.Body = &ast.BlockStmt{List: g.blockInto(fd.Body, sink{})}
+		decl.Body = &ast.BlockStmt{List: g.blockInto(fn.Body, sink{})}
 	} else {
-		decl.Body = &ast.BlockStmt{List: g.blockInto(fd.Body, sink{ret: true})}
+		decl.Body = &ast.BlockStmt{List: g.blockInto(fn.Body, sink{ret: true})}
 	}
 	return decl
 }
@@ -506,33 +506,33 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 // value lowers an expression whose result is needed. It returns the
 // statements to run first and the Go expression holding the result.
 // The expression is nil when e never produces a value (type Never).
-func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
-	t := g.info.Types[e]
-	if v, ok := g.info.Consts[e]; ok {
-		return nil, constLit(v, t)
-	}
+func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
+	t := e.Type()
 	switch e := e.(type) {
-	case *syntax.StringLit:
-		return nil, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Value)}
-	case *syntax.Interp:
-		return g.interp(e)
-	case *syntax.BoolLit:
-		return nil, ast.NewIdent(strconv.FormatBool(e.Value))
-	case *syntax.Ident:
-		if inst := g.info.FuncRefs[e]; inst != nil {
-			if inst.Func.Class != nil || len(inst.Dicts) > 0 {
-				return nil, g.funcRef(inst)
-			}
-			return nil, g.instance(inst)
+	case *check.Const:
+		switch e.Value.Kind() {
+		case constant.String:
+			return nil, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(constant.StringVal(e.Value))}
+		case constant.Bool:
+			return nil, ast.NewIdent(strconv.FormatBool(constant.BoolVal(e.Value)))
 		}
-		return nil, name(e.Name)
-	case *syntax.Lambda:
+		return nil, constLit(e.Value, t)
+	case *check.Interp:
+		return g.interp(e)
+	case *check.FuncRef:
+		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 {
+			return nil, g.funcRef(inst)
+		}
+		return nil, g.instance(e.Inst)
+	case *check.VarRef:
+		return nil, name(e.Var.Name)
+	case *check.Lambda:
 		return nil, g.lambda(e)
-	case *syntax.ListLit:
+	case *check.ListLit:
 		return g.listLit(e)
-	case *syntax.MapLit:
+	case *check.MapLit:
 		return g.mapLit(e)
-	case *syntax.Unary:
+	case *check.Unary:
 		stmts, x := g.value(e.X)
 		if x == nil {
 			return stmts, nil
@@ -542,30 +542,30 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 			op = token.NOT
 		}
 		return stmts, &ast.UnaryExpr{Op: op, X: paren(x)}
-	case *syntax.Binary:
+	case *check.Binary:
 		return g.binary(e)
-	case *syntax.Call:
+	case *check.Call, *check.CallBuiltin, *check.CallValue:
 		stmts, call := g.call(e)
 		if call == nil {
 			return stmts, nil
 		}
 		if t == check.Never {
 			stmts = append(stmts, &ast.ExprStmt{X: call})
-			if g.info.CallBuiltins[e] != check.BuiltinPanic {
+			if b, ok := e.(*check.CallBuiltin); !ok || b.Builtin != check.BuiltinPanic {
 				// Go does not know that the function never returns.
 				stmts = append(stmts, unreachable()...)
 			}
 			return stmts, nil
 		}
 		return stmts, call
-	case *syntax.If, *syntax.Match:
+	case *check.If, *check.Match:
 		if t == check.Never || t == check.Unit {
 			return g.effect(e), nil
 		}
 		res := g.newTmp()
 		stmts := []ast.Stmt{varDecl(res, g.goType(t))}
 		return append(stmts, g.into(e, sink{res: res, resType: t})...), res
-	case *syntax.Block:
+	case *check.Block:
 		if len(e.Stmts) == 0 && e.Tail != nil {
 			return g.value(e.Tail)
 		}
@@ -574,21 +574,23 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		res := g.newTmp()
 		return []ast.Stmt{varDecl(res, g.goType(t)), &ast.BlockStmt{List: g.blockInto(e, sink{res: res, resType: t})}}, res
-	case *syntax.ScopeExpr:
+	case *check.ScopeBlock:
 		if t == check.Never || t == check.Unit {
 			return g.effect(e), nil
 		}
 		res := g.newTmp()
 		return append([]ast.Stmt{varDecl(res, g.goType(t))}, g.scopeInto(e, sink{res: res, resType: t})...), res
-	case *syntax.Return:
+	case *check.Return:
 		return g.returnStmt(e), nil
-	case *syntax.Selector:
+	case *check.Select:
 		return g.selector(e)
-	case *syntax.RecordLit:
+	case *check.VariantValue:
+		return nil, &ast.CompositeLit{Type: g.variantType(e.Variant)}
+	case *check.RecordLit:
 		return g.recordLit(e)
-	case *syntax.Copy:
+	case *check.Copy:
 		return g.copyExpr(e)
-	case *syntax.Try:
+	case *check.Try:
 		return g.try(e)
 	}
 	panic(fmt.Sprintf("unhandled expression %T", e))
@@ -599,7 +601,7 @@ func (g *gen) value(e syntax.Expr) ([]ast.Stmt, ast.Expr) {
 // run first, earlier results are saved in temporaries so evaluation
 // order is preserved. Returns nil expressions if any one never
 // produces a value.
-func (g *gen) values(es []syntax.Expr) ([]ast.Stmt, []ast.Expr) {
+func (g *gen) values(es []check.Expr) ([]ast.Stmt, []ast.Expr) {
 	var out []ast.Stmt
 	xs := []ast.Expr{}
 	for _, e := range es {
@@ -664,7 +666,7 @@ var binaryOps = map[syntax.Kind]token.Token{
 	syntax.AndAnd: token.LAND, syntax.OrOr: token.LOR,
 }
 
-func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
+func (g *gen) binary(e *check.Binary) ([]ast.Stmt, ast.Expr) {
 	if e.Op == syntax.AndAnd || e.Op == syntax.OrOr {
 		sx, x := g.value(e.X)
 		if x == nil {
@@ -688,18 +690,18 @@ func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
 		stmts := append(sx, define(res, x), &ast.IfStmt{Cond: cond, Body: &ast.BlockStmt{List: body}})
 		return stmts, res
 	}
-	stmts, xs := g.values([]syntax.Expr{e.X, e.Y})
+	stmts, xs := g.values([]check.Expr{e.X, e.Y})
 	if xs == nil {
 		return stmts, nil
 	}
 	if e.Op == syntax.Eq || e.Op == syntax.NotEq {
 		// Both sides as the wider type, when one is a union holding the
 		// other's.
-		t := g.info.Types[e.X]
-		if ty := g.info.Types[e.Y]; !check.Identical(t, ty) && check.Assignable(t, ty) {
+		t := e.X.Type()
+		if ty := e.Y.Type(); !check.Identical(t, ty) && check.Assignable(t, ty) {
 			t = ty
 		}
-		xs[0], xs[1] = g.convert(xs[0], g.info.Types[e.X], t), g.convert(xs[1], g.info.Types[e.Y], t)
+		xs[0], xs[1] = g.convert(xs[0], e.X.Type(), t), g.convert(xs[1], e.Y.Type(), t)
 		if needsDeepEqual(t, map[check.Type]bool{}) {
 			// Go's == does not compare slices, nor what type parameters
 			// stand for.
@@ -716,31 +718,46 @@ func (g *gen) binary(e *syntax.Binary) ([]ast.Stmt, ast.Expr) {
 
 // call lowers a call: the statements to run first, and the call (nil
 // if an argument never produces a value).
-func (g *gen) call(e *syntax.Call) ([]ast.Stmt, ast.Expr) {
-	args := g.info.Args(e)
-	exprs := args
-	if g.info.CallFuncs[e] == nil && g.info.CallBuiltins[e] == check.BuiltinNone {
+func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
+	switch e := e.(type) {
+	case *check.CallValue:
 		// A function value is evaluated before the arguments.
-		exprs = append([]syntax.Expr{e.Fun}, args...)
-	}
-	stmts, xs := g.values(exprs)
-	if xs == nil {
-		return stmts, nil
-	}
-	if len(exprs) > len(args) {
-		ft := g.info.Types[e.Fun].(*check.FuncType)
-		xargs := xs[1:]
-		for i := range xargs {
-			xargs[i] = g.convert(xargs[i], g.info.Types[args[i]], ft.Params[i])
+		stmts, xs := g.values(append([]check.Expr{e.Fun}, e.Args...))
+		if xs == nil {
+			return stmts, nil
 		}
-		return stmts, &ast.CallExpr{Fun: xs[0], Args: xargs}
-	}
-	if inst := g.info.Instances[e]; inst != nil {
+		ft := e.Fun.Type().(*check.FuncType)
+		args := xs[1:]
+		for i := range args {
+			args[i] = g.convert(args[i], e.Args[i].Type(), ft.Params[i])
+		}
+		return stmts, &ast.CallExpr{Fun: xs[0], Args: args}
+	case *check.CallBuiltin:
+		stmts, xs := g.values(e.Args)
+		if xs == nil {
+			return stmts, nil
+		}
+		return stmts, g.builtinCall(e, xs)
+	case *check.Call:
+		stmts, xs := g.values(e.Args)
+		if xs == nil {
+			return stmts, nil
+		}
+		inst := e.Inst
 		for i := range xs {
-			xs[i] = g.convert(xs[i], g.info.Types[args[i]], inst.Params[i])
+			xs[i] = g.convert(xs[i], e.Args[i].Type(), inst.Params[i])
 		}
+		if inst.Func.Class != nil {
+			fun, dicts := g.methodFunc(inst)
+			return stmts, &ast.CallExpr{Fun: fun, Args: append(dicts, xs...)}
+		}
+		var dicts []ast.Expr
+		for _, d := range inst.Dicts {
+			dicts = append(dicts, g.dict(d))
+		}
+		return stmts, &ast.CallExpr{Fun: g.instance(inst), Args: append(dicts, xs...)}
 	}
-	return stmts, g.callExpr(e, xs)
+	panic(fmt.Sprintf("unhandled call %T", e))
 }
 
 // instance is the Go expression for a function, instantiated with its
@@ -758,8 +775,8 @@ func (g *gen) instance(inst *check.Instance) ast.Expr {
 }
 
 // lambda lowers a lambda to a Go function literal.
-func (g *gen) lambda(e *syntax.Lambda) ast.Expr {
-	ft := g.info.Types[e].(*check.FuncType)
+func (g *gen) lambda(e *check.Lambda) ast.Expr {
+	ft := e.Type().(*check.FuncType)
 	names := make([]*ast.Ident, len(e.Params))
 	for i, p := range e.Params {
 		names[i] = name(p.Name)
@@ -778,22 +795,22 @@ func (g *gen) lambda(e *syntax.Lambda) ast.Expr {
 }
 
 // listLit lowers a list literal to a slice literal.
-func (g *gen) listLit(e *syntax.ListLit) ([]ast.Stmt, ast.Expr) {
-	lt := g.info.Types[e].(*check.List)
+func (g *gen) listLit(e *check.ListLit) ([]ast.Stmt, ast.Expr) {
+	lt := e.Type().(*check.List)
 	stmts, xs := g.values(e.Elems)
 	if xs == nil {
 		return stmts, nil
 	}
 	for i := range xs {
-		xs[i] = g.convert(xs[i], g.info.Types[e.Elems[i]], lt.Elem)
+		xs[i] = g.convert(xs[i], e.Elems[i].Type(), lt.Elem)
 	}
 	return stmts, &ast.CompositeLit{Type: g.goType(lt), Elts: xs}
 }
 
 // mapLit builds a map literal: _mapOf([]K{keys...}, []V{values...}).
-func (g *gen) mapLit(e *syntax.MapLit) ([]ast.Stmt, ast.Expr) {
-	mt := g.info.Types[e].(*check.Map)
-	all := append(append([]syntax.Expr{}, e.Keys...), e.Values...)
+func (g *gen) mapLit(e *check.MapLit) ([]ast.Stmt, ast.Expr) {
+	mt := e.Type().(*check.Map)
+	all := append(append([]check.Expr{}, e.Keys...), e.Values...)
 	stmts, xs := g.values(all)
 	if xs == nil {
 		return stmts, nil
@@ -804,7 +821,7 @@ func (g *gen) mapLit(e *syntax.MapLit) ([]ast.Stmt, ast.Expr) {
 		if i >= n {
 			want = mt.Value
 		}
-		xs[i] = g.convert(xs[i], g.info.Types[all[i]], want)
+		xs[i] = g.convert(xs[i], all[i].Type(), want)
 	}
 	g.goType(mt)
 	of := &ast.IndexListExpr{X: ast.NewIdent("_mapOf"), Indices: []ast.Expr{g.goType(mt.Key), g.goType(mt.Value)}}
@@ -814,61 +831,53 @@ func (g *gen) mapLit(e *syntax.MapLit) ([]ast.Stmt, ast.Expr) {
 	}}
 }
 
-func (g *gen) callExpr(e *syntax.Call, args []ast.Expr) ast.Expr {
+// builtinCall lowers a call of a builtin, given its arguments.
+func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 	fmtCall := func(fn string, args ...ast.Expr) ast.Expr {
 		g.imports["fmt"] = true
 		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent(fn)}, Args: args}
 	}
-	switch g.info.CallBuiltins[e] {
+	switch e.Builtin {
 	case check.BuiltinPrintln:
 		for i := range args {
-			args[i] = g.str(args[i], g.info.Types[e.Args[i]])
+			args[i] = g.str(args[i], e.Args[i].Type())
 		}
 		return fmtCall("Println", args...)
 	case check.BuiltinToString:
-		return g.stringOf(args[0], g.info.Types[e.Args[0]])
+		return g.stringOf(args[0], e.Args[0].Type())
 	case check.BuiltinConvert:
 		return g.conversion(e, args[0])
 	case check.BuiltinPanic:
 		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: args}
 	case check.BuiltinAssert:
 		g.usesAssert = true
-		return &ast.CallExpr{Fun: ast.NewIdent("_assert"), Args: []ast.Expr{args[0], at(e.Fun.Position())}}
+		return &ast.CallExpr{Fun: ast.NewIdent("_assert"), Args: []ast.Expr{args[0], at(e.Pos())}}
 	case check.BuiltinAssertEqual:
 		g.usesAssert = true
-		t := g.info.Types[e.Args[0]]
+		t := e.Args[0].Type()
 		actual := g.typed(args[0], t)
-		expected := g.convert(args[1], g.info.Types[e.Args[1]], t)
+		expected := g.convert(args[1], e.Args[1].Type(), t)
 		if check.IsNumeric(t) && isConst(expected) {
 			expected = &ast.CallExpr{Fun: g.goType(t), Args: []ast.Expr{expected}}
 		}
-		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, at(e.Fun.Position())}}
+		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, at(e.Pos())}}
 	case check.BuiltinAssertSnapshot:
 		if !g.testMode {
-			msg := e.Fun.Position().String() + ": assertSnapshot works only in tests (bork test)"
+			msg := e.Pos().String() + ": assertSnapshot works only in tests (bork test)"
 			return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{strLit(msg)}}
 		}
 		g.usesSnaps = true
-		text := g.stringOf(args[0], g.info.Types[e.Args[0]])
-		return &ast.CallExpr{Fun: ast.NewIdent("_assertSnapshot"), Args: []ast.Expr{text, at(e.Fun.Position())}}
+		text := g.stringOf(args[0], e.Args[0].Type())
+		return &ast.CallExpr{Fun: ast.NewIdent("_assertSnapshot"), Args: []ast.Expr{text, at(e.Pos())}}
 	}
-	inst := g.info.Instances[e]
-	if inst.Func.Class != nil {
-		fun, dicts := g.methodFunc(inst)
-		return &ast.CallExpr{Fun: fun, Args: append(dicts, args...)}
-	}
-	var dicts []ast.Expr
-	for _, d := range inst.Dicts {
-		dicts = append(dicts, g.dict(d))
-	}
-	return &ast.CallExpr{Fun: g.instance(inst), Args: append(dicts, args...)}
+	panic(fmt.Sprintf("unhandled builtin %s", e.Name))
 }
 
 // effect lowers an expression evaluated only for its effect.
-func (g *gen) effect(e syntax.Expr) []ast.Stmt {
+func (g *gen) effect(e check.Expr) []ast.Stmt {
 	switch e := e.(type) {
-	case *syntax.Call:
-		if g.info.Types[e] == check.Never {
+	case *check.Call, *check.CallBuiltin, *check.CallValue:
+		if e.Type() == check.Never {
 			stmts, _ := g.value(e)
 			return stmts
 		}
@@ -877,15 +886,15 @@ func (g *gen) effect(e syntax.Expr) []ast.Stmt {
 			return stmts
 		}
 		return append(stmts, &ast.ExprStmt{X: call})
-	case *syntax.If:
+	case *check.If:
 		return g.ifChain(e, sink{})
-	case *syntax.Match:
+	case *check.Match:
 		return g.matchStmt(e, sink{})
-	case *syntax.Block:
+	case *check.Block:
 		return []ast.Stmt{&ast.BlockStmt{List: g.blockInto(e, sink{})}}
-	case *syntax.ScopeExpr:
+	case *check.ScopeBlock:
 		return g.scopeInto(e, sink{})
-	case *syntax.Return:
+	case *check.Return:
 		return g.returnStmt(e)
 	}
 	stmts, x := g.value(e)
@@ -905,7 +914,7 @@ type sink struct {
 }
 
 // into lowers e into the context k.
-func (g *gen) into(e syntax.Expr, k sink) []ast.Stmt {
+func (g *gen) into(e check.Expr, k sink) []ast.Stmt {
 	switch {
 	case k.ret:
 		return g.tailReturn(e)
@@ -913,22 +922,22 @@ func (g *gen) into(e syntax.Expr, k sink) []ast.Stmt {
 		return g.effect(e)
 	}
 	switch e := e.(type) {
-	case *syntax.Block:
+	case *check.Block:
 		return g.blockInto(e, k)
-	case *syntax.ScopeExpr:
+	case *check.ScopeBlock:
 		return g.scopeInto(e, k)
-	case *syntax.If:
+	case *check.If:
 		return g.ifChain(e, k)
-	case *syntax.Match:
+	case *check.Match:
 		return g.matchStmt(e, k)
 	}
-	if g.info.Types[e] == check.Unit {
+	if e.Type() == check.Unit {
 		// Unit into a union holding it.
 		return append(g.effect(e), assign(k.res, g.unitValue()))
 	}
 	stmts, x := g.value(e)
 	if x != nil {
-		stmts = append(stmts, assign(k.res, g.convert(x, g.info.Types[e], k.resType)))
+		stmts = append(stmts, assign(k.res, g.convert(x, e.Type(), k.resType)))
 	}
 	return stmts
 }
@@ -939,7 +948,7 @@ func (g *gen) unitValue() ast.Expr {
 }
 
 // blockInto lowers a block: its statements, then its tail into k.
-func (g *gen) blockInto(b *syntax.Block, k sink) []ast.Stmt {
+func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 	out := g.stmts(b.Stmts)
 	if g.diverges(b.Stmts) {
 		return out
@@ -958,34 +967,34 @@ func (g *gen) blockInto(b *syntax.Block, k sink) []ast.Stmt {
 }
 
 // stmts lowers a block's statements (not its tail).
-func (g *gen) stmts(list []syntax.Stmt) []ast.Stmt {
+func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 	var out []ast.Stmt
 	for _, s := range list {
 		switch s := s.(type) {
-		case *syntax.Binding:
+		case *check.Let:
 			stmts, x := g.value(s.Value)
 			out = append(out, stmts...)
 			if x == nil {
 				return out
 			}
-			bt, vt := g.info.Bindings[s], g.info.Types[s.Value]
-			if s.Name == "_" {
+			bt, vt := s.Var.Type, s.Value.Type()
+			if s.Var.Name == "_" {
 				out = append(out, assign(ast.NewIdent("_"), x))
 				continue
 			}
-			if s.Type != nil || (check.IsNumeric(vt) && isConst(x)) {
+			if s.Declared || (check.IsNumeric(vt) && isConst(x)) {
 				// A declared type is kept, and an untyped Go constant would
 				// get Go's default type (int, float64).
-				out = append(out, typedVar(name(s.Name), g.goType(bt), g.convert(x, vt, bt)))
+				out = append(out, typedVar(name(s.Var.Name), g.goType(bt), g.convert(x, vt, bt)))
 			} else {
-				out = append(out, define(name(s.Name), g.convert(x, vt, vt)))
+				out = append(out, define(name(s.Var.Name), g.convert(x, vt, vt)))
 			}
-			if g.info.Unused[s] {
-				out = append(out, assign(ast.NewIdent("_"), name(s.Name)))
+			if s.Var.Unused {
+				out = append(out, assign(ast.NewIdent("_"), name(s.Var.Name)))
 			}
-		case *syntax.ExprStmt:
+		case *check.ExprStmt:
 			out = append(out, g.effect(s.X)...)
-		case *syntax.TrustStmt:
+		case *check.Trust:
 			if g.testMode {
 				out = append(out, g.trustCheck(s)...)
 			}
@@ -997,16 +1006,16 @@ func (g *gen) stmts(list []syntax.Stmt) []ast.Stmt {
 // tailReturn lowers an expression in return position. A tail `if`,
 // `match`, or block becomes Go control flow that returns from each
 // branch, which keeps the generated code close to hand-written Go.
-func (g *gen) tailReturn(e syntax.Expr) []ast.Stmt {
+func (g *gen) tailReturn(e check.Expr) []ast.Stmt {
 	ret := sink{ret: true}
 	switch e := e.(type) {
-	case *syntax.If:
+	case *check.If:
 		if e.Else != nil {
 			return g.ifChain(e, ret)
 		}
-	case *syntax.Match:
+	case *check.Match:
 		return g.matchStmt(e, ret)
-	case *syntax.Block:
+	case *check.Block:
 		if len(e.Stmts) == 0 {
 			if e.Tail == nil {
 				return nil
@@ -1014,27 +1023,27 @@ func (g *gen) tailReturn(e syntax.Expr) []ast.Stmt {
 			return g.tailReturn(e.Tail)
 		}
 		return []ast.Stmt{&ast.BlockStmt{List: g.blockInto(e, ret)}}
-	case *syntax.ScopeExpr:
+	case *check.ScopeBlock:
 		return g.scopeInto(e, ret)
-	case *syntax.Return:
+	case *check.Return:
 		return g.returnStmt(e)
 	}
-	if g.info.Types[e] == check.Unit && g.fnResult != check.Unit {
+	if e.Type() == check.Unit && g.fnResult != check.Unit {
 		return append(g.effect(e), g.returning(g.unitValue())...)
 	}
 	stmts, x := g.value(e)
 	if x == nil {
 		return stmts
 	}
-	return append(stmts, g.returning(g.convert(x, g.info.Types[e], g.fnResult))...)
+	return append(stmts, g.returning(g.convert(x, e.Type(), g.fnResult))...)
 }
 
 // scopeInto lowers `scope s { ... }`, its value into k. The scope is
 // closed when the block ends, before any return from inside it, and
 // (by a deferred close) when it panics.
-func (g *gen) scopeInto(e *syntax.ScopeExpr, k sink) []ast.Stmt {
+func (g *gen) scopeInto(e *check.ScopeBlock, k sink) []ast.Stmt {
 	g.usesScopes = true
-	s := name(e.Name)
+	s := name(e.Var.Name)
 	closeCall := &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("close")}}
 	// A scope inside another one in the function is cancelled with it.
 	var parent ast.Expr = ast.NewIdent("nil")
@@ -1052,7 +1061,7 @@ func (g *gen) scopeInto(e *syntax.ScopeExpr, k sink) []ast.Stmt {
 		}
 	}
 	stmts = append(stmts,
-		define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Name)}}}),
+		define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Var.Name)}}}),
 		// A panic in the block closes the scope too.
 		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("abort")}}},
 	)
@@ -1060,7 +1069,7 @@ func (g *gen) scopeInto(e *syntax.ScopeExpr, k sink) []ast.Stmt {
 	g.openScopes = append(g.openScopes, s)
 	stmts = append(stmts, g.blockInto(e.Body, k)...)
 	g.openScopes = g.openScopes[:len(g.openScopes)-1]
-	if !k.ret && g.info.Types[e.Body] != check.Never {
+	if !k.ret && e.Body.Type() != check.Never {
 		stmts = append(stmts, &ast.ExprStmt{X: closeCall})
 	}
 	return []ast.Stmt{&ast.BlockStmt{List: stmts}}
@@ -1086,12 +1095,12 @@ func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
 }
 
 // diverges reports whether a statement list ends by never finishing.
-func (g *gen) diverges(stmts []syntax.Stmt) bool {
+func (g *gen) diverges(stmts []check.Stmt) bool {
 	if len(stmts) == 0 {
 		return false
 	}
-	if es, ok := stmts[len(stmts)-1].(*syntax.ExprStmt); ok {
-		return g.info.Types[es.X] == check.Never
+	if es, ok := stmts[len(stmts)-1].(*check.ExprStmt); ok {
+		return es.X.Type() == check.Never
 	}
 	return false
 }
@@ -1099,16 +1108,16 @@ func (g *gen) diverges(stmts []syntax.Stmt) bool {
 // ifChain lowers an if/else-if/else chain, each branch into k. An
 // `else if` whose condition needs no setup statements becomes a Go
 // `else if`.
-func (g *gen) ifChain(e *syntax.If, k sink) []ast.Stmt {
+func (g *gen) ifChain(e *check.If, k sink) []ast.Stmt {
 	stmts, cond := g.value(e.Cond)
 	if cond == nil {
 		return stmts
 	}
 	s := &ast.IfStmt{Cond: cond, Body: &ast.BlockStmt{List: g.blockInto(e.Then, k)}}
 	switch els := e.Else.(type) {
-	case *syntax.Block:
+	case *check.Block:
 		s.Else = &ast.BlockStmt{List: g.blockInto(els, k)}
-	case *syntax.If:
+	case *check.If:
 		rest := g.ifChain(els, k)
 		if len(rest) == 1 {
 			s.Else = rest[0].(*ast.IfStmt)
@@ -1119,7 +1128,7 @@ func (g *gen) ifChain(e *syntax.If, k sink) []ast.Stmt {
 	return append(stmts, s)
 }
 
-func (g *gen) returnStmt(e *syntax.Return) []ast.Stmt {
+func (g *gen) returnStmt(e *check.Return) []ast.Stmt {
 	if e.Value == nil {
 		return g.returning()
 	}
@@ -1127,7 +1136,7 @@ func (g *gen) returnStmt(e *syntax.Return) []ast.Stmt {
 	if x == nil {
 		return stmts
 	}
-	return append(stmts, g.returning(g.convert(x, g.info.Types[e.Value], g.fnResult))...)
+	return append(stmts, g.returning(g.convert(x, e.Value.Type(), g.fnResult))...)
 }
 
 // convert adjusts a Go expression of bork type from for use where type
@@ -1206,11 +1215,11 @@ func (g *gen) typed(x ast.Expr, t check.Type) ast.Expr {
 
 // conversion lowers `toInt8(x)` and friends. A checked conversion calls
 // the runtime, which produces the value or an OutOfRange.
-func (g *gen) conversion(e *syntax.Call, arg ast.Expr) ast.Expr {
-	conv := g.info.Conversions[e]
+func (g *gen) conversion(e *check.CallBuiltin, arg ast.Expr) ast.Expr {
+	conv := e.Conv
 	if conv == nil {
 		// A constant, already checked to fit.
-		return &ast.CallExpr{Fun: g.goType(g.info.Types[e]), Args: []ast.Expr{arg}}
+		return &ast.CallExpr{Fun: g.goType(e.Type()), Args: []ast.Expr{arg}}
 	}
 	if !conv.Checked {
 		if check.Identical(conv.From, conv.To) {
@@ -1270,7 +1279,7 @@ func (g *gen) stringOf(x ast.Expr, t check.Type) ast.Expr {
 }
 
 // interp lowers s"..." to a string concatenation.
-func (g *gen) interp(e *syntax.Interp) ([]ast.Stmt, ast.Expr) {
+func (g *gen) interp(e *check.Interp) ([]ast.Stmt, ast.Expr) {
 	stmts, xs := g.values(e.Exprs)
 	if xs == nil {
 		return stmts, nil
@@ -1289,7 +1298,7 @@ func (g *gen) interp(e *syntax.Interp) ([]ast.Stmt, ast.Expr) {
 			add(lit(part))
 		}
 		if i < len(xs) {
-			add(g.stringOf(xs[i], g.info.Types[e.Exprs[i]]))
+			add(g.stringOf(xs[i], e.Exprs[i].Type()))
 		}
 	}
 	if out == nil {

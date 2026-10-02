@@ -632,9 +632,9 @@ func (c *checker) declaredFacts(x syntax.Expr) []*Constraint {
 	var cons []*Constraint
 	switch x := x.(type) {
 	case *syntax.Ident:
-		switch d := c.info.Defs[x].(type) {
+		switch d := c.info.defs[x].(type) {
 		case *syntax.Binding:
-			cons = c.info.BindingConstraints[d]
+			cons = c.info.bindingConstraints[d]
 		case *syntax.Param:
 			if c.fn != nil {
 				for i, p := range c.fn.Decl.Params {
@@ -645,7 +645,7 @@ func (c *checker) declaredFacts(x syntax.Expr) []*Constraint {
 			}
 		}
 	case *syntax.Selector:
-		if rec, ok := c.info.Types[x.X].(*Record); ok {
+		if rec, ok := c.info.types[x.X].(*Record); ok {
 			if fd := rec.Field(x.Name); fd != nil {
 				cons = fd.Constraints
 			}

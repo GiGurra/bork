@@ -110,7 +110,7 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 			c.errorf(e.Pos, "%s.%s has fields; build it with %s.%s { ... }", owner, e.Name, owner, e.Name)
 			return Invalid
 		}
-		c.info.SelectorVariants[e] = v
+		c.info.selectorVariants[e] = v
 		return v.Parent
 	}
 	xt := c.expr(e.X)
@@ -148,7 +148,7 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 			if len(typ.TypeParams) > 0 {
 				return c.genericLit(e, typ, "", t.Name, want)
 			}
-			c.info.RecordTargets[e] = typ
+			c.info.recordTargets[e] = typ
 			c.fieldInits(e, typ.Fields, typ.Name)
 			return typ
 		case *Sealed:
@@ -168,7 +168,7 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 			c.skipFieldInits(e)
 			return Invalid
 		}
-		c.info.RecordTargets[e] = v
+		c.info.recordTargets[e] = v
 		c.fieldInits(e, v.Fields, owner+"."+v.Name)
 		return v.Parent
 	}
@@ -234,11 +234,11 @@ func (c *checker) genericLit(e *syntax.RecordLit, base Type, variant, label stri
 	inst := instantiate(base, in.args())
 	if s, ok := inst.(*Sealed); ok {
 		v := s.Variant(variant)
-		c.info.RecordTargets[e] = v
+		c.info.recordTargets[e] = v
 		c.fieldInitsTyped(e, v.Fields, label, types)
 		return s
 	}
-	c.info.RecordTargets[e] = inst
+	c.info.recordTargets[e] = inst
 	c.fieldInitsTyped(e, inst.(*Record).Fields, label, types)
 	return inst
 }
@@ -372,7 +372,7 @@ func (c *checker) try(e *syntax.Try) Type {
 			c.errorf(e.Pos, "? would return %s from %s, but %s returns %s", strings.Join(misfits, " | "), c.fn.Decl.Name, c.fn.Decl.Name, result)
 			return Invalid
 		}
-		c.info.Tries[e] = info
+		c.info.tries[e] = info
 		return info.Kept
 	case *Sealed:
 		if IsOption(t) {
@@ -381,7 +381,7 @@ func (c *checker) try(e *syntax.Try) Type {
 				c.errorf(e.Pos, "? on %s would return Option.None from %s, but %s returns %s", t, c.fn.Decl.Name, c.fn.Decl.Name, result)
 				return Invalid
 			}
-			c.info.Tries[e] = &TryInfo{Kept: t.Args[0], Option: t, NoneOf: noneOf}
+			c.info.tries[e] = &TryInfo{Kept: t.Args[0], Option: t, NoneOf: noneOf}
 			return t.Args[0]
 		}
 	}

@@ -220,9 +220,9 @@ func (c *checker) methodTypeArgs(e *syntax.Call, sel *syntax.Selector, fn *Func)
 		copy(full, e.TypeArgs)
 	default:
 		if len(free) == 0 {
-			c.errorf(e.Pos, "method %s takes no type arguments: its receiver decides them", sel.Name)
+			c.errorf(sel.Pos, "method %s takes no type arguments: its receiver decides them", sel.Name)
 		} else {
-			c.errorf(e.Pos, "method %s takes %d type argument(s) (%s), but %d were given", sel.Name, len(free), freeNames(fn, free), len(e.TypeArgs))
+			c.errorf(sel.Pos, "method %s takes %d type argument(s) (%s), but %d were given", sel.Name, len(free), freeNames(fn, free), len(e.TypeArgs))
 		}
 		return nil, false
 	}
