@@ -255,10 +255,16 @@ func (s *sourceIndex) walk(x check.Expr) {
 			outer := s.tokens
 			at := part.Pos()
 			if at.File == s.pos.File && at.Line > 0 && at.Line <= len(s.lines) {
-				s.tokens, _ = syntax.Lex(at.File, []byte(s.lines[at.Line-1][at.Col-1:]), &diag.List{})
+				line := s.lines[at.Line-1]
+				start := at.Col - 1
+				// Grouping parentheses have no typed nodes of their own.
+				for start > 0 && strings.ContainsRune("( \t", rune(line[start-1])) {
+					start--
+				}
+				s.tokens, _ = syntax.Lex(at.File, []byte(line[start:]), &diag.List{})
 				for i := range s.tokens {
 					s.tokens[i].Pos.Line += at.Line - 1
-					s.tokens[i].Pos.Col += at.Col - 1
+					s.tokens[i].Pos.Col += start
 				}
 			}
 			s.walk(part)
@@ -384,6 +390,9 @@ func (s *sourceIndex) callee(call *check.Call) {
 			return
 		}
 	}
+	for i > 0 && s.tokens[i].Kind == syntax.RParen {
+		i--
+	}
 	if s.tokens[i].Kind == syntax.RBrack {
 		depth := 1
 		for i--; i >= 0; i-- {
@@ -419,7 +428,7 @@ func (s *sourceIndex) callee(call *check.Call) {
 		params = params[1:]
 	}
 	pos := call.Func.Decl.Pos
-	s.choose(call, &check.FuncType{Params: params, Result: call.Inst.Result}, &pos)
+	s.choose(call, &check.FuncType{Params: params, Result: call.Inst.Result, Effects: call.Func.Effects}, &pos)
 	s.selected.Value = false
 }
 

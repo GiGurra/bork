@@ -76,11 +76,13 @@ func TestDescribeMethodsAndDefinitions(t *testing.T) {
 	source := `type User = { age: Int }
 fn (u: User) ageText(): String { toString(u.age) }
 fn add(x: Int, y: Int = 2): Int { x + y }
+fn log(n: Int) uses io { println(n) }
 fn scenario(xs: List[Int], u: User) {
   println(add(1))
   println(xs.map(x => x + 1))
   println(u.ageText())
   println(u.age)
+  log(1)
 }
 `
 	for _, tc := range []struct{ fragment, typ string }{
@@ -89,6 +91,7 @@ fn scenario(xs: List[Int], u: User) {
 		{"map(x", "((Int) => Int) => List[Int]"},
 		{"ageText())", "() => String"},
 		{"age)", "Int"},
+		{"log(1)", "(Int) uses io => Unit"},
 	} {
 		t.Run(tc.fragment, func(t *testing.T) {
 			result := describeAt(t, source, tc.fragment, "")
@@ -102,7 +105,7 @@ fn scenario(xs: List[Int], u: User) {
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Describe(path+":6:11", "")
+	result, err := Describe(path+":7:11", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,6 +157,7 @@ fn add(x: Int): Int { x + 1 }
 fn (u: User) number(): Int { u.n }
 fn example(u: User) {
   println(s"value ${add(1)} and ${u.number()}")
+  println((add)(1))
 }
 `
 	for _, tc := range []struct{ fragment, typ string }{
@@ -161,11 +165,36 @@ fn example(u: User) {
 		{"(1)}", "Int"},
 		{"number()}", "() => Int"},
 		{"()}", "Int"},
+		{"add)(1)", "(Int) => Int"},
 	} {
 		result := describeAt(t, source, tc.fragment, "")
 		if result.typ != tc.typ || !result.defined {
 			t.Fatalf("interpolated %s: %+v", tc.fragment, result)
 		}
+	}
+}
+
+func TestDescribeFunctionFieldResult(t *testing.T) {
+	source := "type Holder = { f: (Int) => Int }\nfn example(h: Holder) { println(h.f(1)) }\n"
+	result := describeAt(t, source, "(1))", "")
+	if result.typ != "Int" {
+		t.Fatalf("unexpected field call result: %+v", result)
+	}
+}
+
+func TestDescribeFoldedInterpolation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	source := "fn example() { println(s\"value ${(1 + 2) * 3}\") }\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Describe(fmt.Sprintf("%s:1:%d", path, strings.Index(source, "1")+1), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Expression != "(1 + 2) * 3" {
+		t.Fatalf("unbalanced folded interpolation: %q", result.Expression)
 	}
 }
 
@@ -286,7 +315,7 @@ fn main() {
 func TestDescribeInvalidQueries(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
-	if err := os.WriteFile(path, []byte("fn example(n: Int) { println(n) }\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("fn example(n: Int) { println(n) }\npred positive(n: Int) { n > 0 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct{ position, where, message string }{
@@ -295,9 +324,11 @@ func TestDescribeInvalidQueries(t *testing.T) {
 		{path + ":1:0", "", "positive integers"},
 		{path + ":999:1", "", "outside the source"},
 		{path + ":1:3", "", "no expression or local name"},
-		{path + ":1:29", "missing", "unknown predicate"},
-		{path + ":1:29", "notEmpty", "applies to"},
-		{path + ":1:29", "(", "invalid where query"},
+		{path + ":1:30", "missing", "unknown predicate"},
+		{path + ":1:30", "notEmpty", "applies to"},
+		{path + ":1:30", "positive and missing", "unknown predicate"},
+		{path + ":1:30", "positive and notEmpty", "applies to"},
+		{path + ":1:30", "(", "invalid where query"},
 	} {
 		t.Run(tc.position+tc.where, func(t *testing.T) {
 			_, err := Describe(tc.position, tc.where)

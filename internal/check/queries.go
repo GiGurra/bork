@@ -55,7 +55,7 @@ func VisibleMethods(info *Info, from *Package, t Type) []MethodDescription {
 		if !assignable(t, in.subst(fn.Params[0])) {
 			continue
 		}
-		ft := &FuncType{Result: in.subst(fn.Result)}
+		ft := &FuncType{Result: in.subst(fn.Result), Effects: fn.Effects}
 		for _, p := range fn.Params[1:] {
 			ft.Params = append(ft.Params, in.subst(p))
 		}
@@ -166,12 +166,16 @@ func DescribeFacts(info *Info, fn *Func, x Expr, site diag.Pos, where string, ev
 	for i, p := range fn.Decl.Params {
 		scope[p.Name] = fn.Params[i]
 	}
-	proof := &Proof{Where: where, Proven: true}
+	var constraints []*Constraint
 	for _, ref := range parsed.Funcs[0].Params[0].Type.Where {
 		con := c.constraint(ref, x.Type(), scope)
 		if c.diags.Len() != 0 || con == nil {
 			return nil, nil, fmt.Errorf("invalid where query: %s", c.diags.Error())
 		}
+		constraints = append(constraints, con)
+	}
+	proof := &Proof{Where: where, Proven: true}
+	for _, con := range constraints {
 		ob := f.obligationOf(con, f.ownParams(), "")
 		ok, pending := f.prove(x, ob, at, 0)
 		if !ok {

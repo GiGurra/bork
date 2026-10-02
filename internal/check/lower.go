@@ -149,6 +149,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		if b := l.info.callBuiltins[x]; b != BuiltinNone {
 			return &CallBuiltin{expr: at, Builtin: b, Name: x.Fun.(*syntax.Ident).Name, Args: l.exprs(x.Args), Conv: l.info.conversions[x]}
 		}
+		at.token = x.Pos
 		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args)}
 	case *syntax.Lambda:
 		ft := at.typ.(*FuncType)
