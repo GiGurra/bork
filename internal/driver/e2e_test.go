@@ -61,7 +61,7 @@ func runOutputCase(t *testing.T, dir string) {
 // report, including the exit code.
 func runTestCase(t *testing.T, dir string) {
 	var out strings.Builder
-	code, err := Test(dir, &out)
+	code, err := Test(dir, &out, TestOptions{})
 	if err != nil {
 		t.Fatalf("test build failed:\n%v", err)
 	}
@@ -140,7 +140,7 @@ func TestExamples(t *testing.T) {
 			// An example's tests must pass.
 			if _, info, err := Check(filepath.Join(root, name)); err == nil && len(info.Tests) > 0 {
 				var report strings.Builder
-				code, err := Test(filepath.Join(root, name), &report)
+				code, err := Test(filepath.Join(root, name), &report, TestOptions{})
 				if err != nil || code != 0 {
 					t.Fatalf("tests failed (%v):\n%s", err, report.String())
 				}

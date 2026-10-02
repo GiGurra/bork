@@ -21,6 +21,11 @@ type buildParams struct {
 	Output string `short:"o" optional:"true" descr:"output executable (default: the file or directory name)"`
 }
 
+type testParams struct {
+	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	Update bool   `short:"u" optional:"true" descr:"write the snapshots assertSnapshot finds missing or different, instead of failing"`
+}
+
 type runParams struct {
 	Path string   `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	Args []string `positional:"true" optional:"true" descr:"arguments passed to the program (put them after --)"`
@@ -89,14 +94,14 @@ func main() {
 					os.Exit(code)
 				},
 			},
-			boa.CmdT[pathParams]{
+			boa.CmdT[testParams]{
 				Use:   "test",
 				Short: "run a bork program's tests, checking trusted facts as they run",
-				ValidArgsFunc: func(p *pathParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+				ValidArgsFunc: func(p *testParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
-				RunFunc: func(p *pathParams, _ *cobra.Command, _ []string) {
-					code, err := driver.Test(p.Path, os.Stdout)
+				RunFunc: func(p *testParams, _ *cobra.Command, _ []string) {
+					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update})
 					if err != nil {
 						fail(err)
 					}

@@ -1,0 +1,35 @@
+ok    renders an invoice
+ok    values show as toString shows them
+FAIL  a changed value
+      main.bork:28:3: snapshot snapshots/a_changed_value.snap does not match (- snapshot, + actual; bork test --update rewrites it):
+        Invoice for Ada
+          tea: 250
+      -   scones: 350
+      - total: 600
+      +   scones: 400
+      + total: 650
+FAIL  a snapshot not yet taken
+      main.bork:32:3: no snapshot snapshots/a_snapshot_not_yet_taken.snap yet (bork test --update writes it); the value is:
+      42
+ok    snapshots from a helper are numbered in order
+ok    Names: with punctuation!
+FAIL  only the lines near a change are shown
+      main.bork:48:3: snapshot snapshots/only_the_lines_near_a_change_are_shown.snap does not match (- snapshot, + actual; bork test --update rewrites it):
+        line 1
+        line 2
+      - line three
+      + line 3
+        line 4
+        line 5
+        ...
+        line 10
+        line 11
+      + line 12
+        line 13
+        line 14
+        ...
+        line 19
+        line 20
+      - line 21
+4 passed, 3 failed
+exit code 1

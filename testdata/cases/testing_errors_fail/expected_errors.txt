@@ -1,4 +1,6 @@
 main.bork:4:10: assert needs a Bool, found Int
 main.bork:6:18: cannot compare Int with String
 main.bork:7:14: assertEqual takes 2 arguments (actual, expected), but 1 were given
-main.bork:10:1: test "misuse" is already declared at main.bork:3:1
+main.bork:8:17: assertSnapshot takes 1 argument, but 2 were given
+main.bork:9:18: assertSnapshot needs a value, found Unit
+main.bork:12:1: test "misuse" is already declared at main.bork:3:1

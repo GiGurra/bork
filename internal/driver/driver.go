@@ -208,10 +208,26 @@ func Run(path string, args []string) (int, error) {
 	return 0, nil
 }
 
+// TestOptions are the options of bork test.
+type TestOptions struct {
+	// Update writes the snapshots that assertSnapshot finds missing or
+	// different, instead of failing.
+	Update bool
+}
+
+// SnapshotDir is where the tests of the package at path keep their
+// snapshots: a snapshots directory next to its sources.
+func SnapshotDir(path string) string {
+	if st, err := os.Stat(path); err == nil && !st.IsDir() {
+		path = filepath.Dir(path)
+	}
+	return filepath.Join(path, "snapshots")
+}
+
 // Test builds the package's tests in test mode and runs them, with the
 // report going to stdout. It returns the exit code: 0 if every test
 // passed.
-func Test(path string, stdout io.Writer) (int, error) {
+func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	files, info, err := Check(path)
 	if err != nil {
 		return 1, err
@@ -236,6 +252,11 @@ func Test(path string, stdout io.Writer) (int, error) {
 	}
 	cmd := exec.Command(exe)
 	cmd.Stdout, cmd.Stderr = stdout, os.Stderr
+	update := ""
+	if opts.Update {
+		update = "1"
+	}
+	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update)
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {

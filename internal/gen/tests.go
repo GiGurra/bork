@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -23,12 +24,14 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 	g.usesTests = true
 	var roots []*check.Func
 	list := &ast.CompositeLit{Type: &ast.ArrayType{Elt: ast.NewIdent("_test")}}
+	snaps := map[string]bool{}
 	for i, fn := range info.Tests {
 		roots = append(roots, fn.Calls...)
 		goName := ast.NewIdent("_test" + strconv.Itoa(i+1))
 		g.extraFuncs = append(g.extraFuncs, g.testFunc(fn, goName))
 		list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
 			&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(fn.Test.Name)},
+			strLit(snapshotName(fn.Test.Name, snaps)),
 			goName,
 		}})
 	}
@@ -41,6 +44,7 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 		if decl == nil {
 			list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
 				strLit(fmt.Sprintf("rule %s (no values are generated for %s)", r.Decl.Name, untried)),
+				strLit(""),
 				ast.NewIdent("nil"),
 			}})
 			continue
@@ -53,6 +57,7 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 		g.extraFuncs = append(g.extraFuncs, decl)
 		list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
 			strLit("rule " + r.Decl.Name),
+			strLit(""),
 			goName,
 		}})
 	}
@@ -62,6 +67,38 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_runTests"), Args: []ast.Expr{list}}}}},
 	}
 	return generate(g, files, roots, main)
+}
+
+// snapshotName is the base name of a test's snapshot files: its name
+// with every run of characters other than ASCII letters and digits
+// replaced by _, and a number added if another test already has it
+// (ignoring case).
+func snapshotName(test string, taken map[string]bool) string {
+	var b strings.Builder
+	gap := false
+	for _, r := range test {
+		if r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			if gap && b.Len() > 0 {
+				b.WriteByte('_')
+			}
+			b.WriteRune(r)
+			gap = false
+		} else {
+			gap = true
+		}
+	}
+	base := b.String()
+	if base == "" {
+		base = "test"
+	}
+	// Names that differ only in case are the same file on some
+	// file systems.
+	name := base
+	for n := 2; taken[strings.ToLower(name)]; n++ {
+		name = base + "_" + strconv.Itoa(n)
+	}
+	taken[strings.ToLower(name)] = true
+	return name
 }
 
 // testFunc generates a test's body as a function.
