@@ -45,7 +45,7 @@ func _hashList[T any](xs []T, hash func(T) uint64) uint64 {
 
 func _hashValue(v reflect.Value) uint64 {
  if !v.IsValid() { return 0 }
- if v.CanInterface() {
+ if v.Kind() == reflect.Struct && v.CanInterface() {
   if x, ok := v.Interface().(interface{ _borkHash() uint64 }); ok { return x._borkHash() }
  }
  switch v.Kind() {
@@ -59,20 +59,20 @@ func _hashValue(v reflect.Value) uint64 {
   var h uint64
   for i := 0; i < v.NumField(); i++ { h = _hashMix(h, _hashValue(v.Field(i))) }
   return h
- case reflect.Bool: return _hash(v.Bool())
- case reflect.String: return _hash(v.String())
- case reflect.Int: return _hash(v.Int())
- case reflect.Int64: return _hash(v.Int())
- case reflect.Int32: return _hash(int32(v.Int()))
- case reflect.Int16: return _hash(int16(v.Int()))
- case reflect.Int8: return _hash(int8(v.Int()))
- case reflect.Uint: return _hash(v.Uint())
- case reflect.Uint64: return _hash(v.Uint())
- case reflect.Uint32: return _hash(uint32(v.Uint()))
- case reflect.Uint16: return _hash(uint16(v.Uint()))
- case reflect.Uint8: return _hash(uint8(v.Uint()))
- case reflect.Float64: return _hash(v.Float())
- case reflect.Float32: return _hash(float32(v.Float()))
+ case reflect.Bool: return maphash.Comparable(_mapSeed, v.Bool())
+ case reflect.String: return maphash.Comparable(_mapSeed, v.String())
+ case reflect.Int: return maphash.Comparable(_mapSeed, v.Int())
+ case reflect.Int64: return maphash.Comparable(_mapSeed, v.Int())
+ case reflect.Int32: return maphash.Comparable(_mapSeed, int32(v.Int()))
+ case reflect.Int16: return maphash.Comparable(_mapSeed, int16(v.Int()))
+ case reflect.Int8: return maphash.Comparable(_mapSeed, int8(v.Int()))
+ case reflect.Uint: return maphash.Comparable(_mapSeed, v.Uint())
+ case reflect.Uint64: return maphash.Comparable(_mapSeed, v.Uint())
+ case reflect.Uint32: return maphash.Comparable(_mapSeed, uint32(v.Uint()))
+ case reflect.Uint16: return maphash.Comparable(_mapSeed, uint16(v.Uint()))
+ case reflect.Uint8: return maphash.Comparable(_mapSeed, uint8(v.Uint()))
+ case reflect.Float64: return maphash.Comparable(_mapSeed, v.Float())
+ case reflect.Float32: return maphash.Comparable(_mapSeed, float32(v.Float()))
  }
  panic("bork: cannot hash this value")
 }

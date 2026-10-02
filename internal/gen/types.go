@@ -1124,7 +1124,7 @@ func _equalValues(x, y reflect.Value) bool {
 	if x.Type() != y.Type() {
 		return false
 	}
-	if x.CanInterface() {
+	if x.Kind() == reflect.Struct && x.CanInterface() {
 		if v, ok := x.Interface().(interface{ _borkEqual(any) bool }); ok && y.CanInterface() {
 			return v._borkEqual(y.Interface())
 		}
