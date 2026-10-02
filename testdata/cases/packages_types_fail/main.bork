@@ -1,0 +1,7 @@
+import "example.com/tc/money"
+fn main() {
+  c: String = money.Make(1)
+  xs: List[Int] = [money.Make(2)]
+  f: (Int) => String = money.Make
+  println(money.Currency.Eur == 1)
+}

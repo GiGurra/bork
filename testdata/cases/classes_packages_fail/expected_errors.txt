@@ -1,3 +1,3 @@
 main.bork:8:12: no instance of Show for Amount is in scope (use money.ShowAmount, or use money.ShowAmountShort)
 main.bork:13:21: no instance of Show for Amount is in scope (use money.ShowAmount, or use money.ShowAmountShort)
-other/other.bork:6:45: more than one instance of Show for Amount is in scope: money.ShowAmount and money.ShowAmountShort; use only one of them
+other/other.bork:6:45: more than one instance of Show for money.Amount is in scope: money.ShowAmount and money.ShowAmountShort; use only one of them

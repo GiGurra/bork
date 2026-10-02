@@ -125,7 +125,7 @@ type Resource struct {
 	Pkg     *Package
 }
 
-func (r *Resource) String() string { return r.Name }
+func (r *Resource) String() string { return TypeText(r, nil) }
 
 // Field is a named, typed field of a record or variant.
 type Field struct {
@@ -153,7 +153,7 @@ type Record struct {
 	insts      *instanceSet
 }
 
-func (r *Record) String() string { return r.Name + argsString(r.Args) }
+func (r *Record) String() string { return TypeText(r, nil) }
 
 // Instance is the generic record r with the given type arguments.
 func (r *Record) Instance(args []Type) *Record {
@@ -200,13 +200,55 @@ func (s *instanceSet) markResolved() {
 	}
 }
 
-func argsString(args []Type) string {
+// TypeText renders t as code in package from would write it: the
+// types of other packages qualified (money.Cents). With from nil, no
+// names are qualified.
+func TypeText(t Type, from *Package) string {
+	named := func(name string, pkg *Package, args []Type) string {
+		if from != nil {
+			name = qualify(name, pkg, from)
+		}
+		return name + argsText(args, from)
+	}
+	switch t := t.(type) {
+	case *Record:
+		return named(t.Name, t.Pkg, t.Args)
+	case *Sealed:
+		return named(t.Name, t.Pkg, t.Args)
+	case *Resource:
+		return named(t.Name, t.Pkg, nil)
+	case *List:
+		return "List[" + TypeText(t.Elem, from) + "]"
+	case *FuncType:
+		params := make([]string, len(t.Params))
+		for i, p := range t.Params {
+			params[i] = TypeText(p, from)
+		}
+		result := TypeText(t.Result, from)
+		if _, ok := t.Result.(*Union); ok {
+			result = "(" + result + ")"
+		}
+		return "(" + strings.Join(params, ", ") + ") => " + result
+	case *Union:
+		parts := make([]string, len(t.Members))
+		for i, m := range t.Members {
+			parts[i] = TypeText(m, from)
+			if _, ok := m.(*FuncType); ok {
+				parts[i] = "(" + parts[i] + ")"
+			}
+		}
+		return strings.Join(parts, " | ")
+	}
+	return t.String()
+}
+
+func argsText(args []Type, from *Package) string {
 	if len(args) == 0 {
 		return ""
 	}
 	parts := make([]string, len(args))
 	for i, a := range args {
-		parts[i] = a.String()
+		parts[i] = TypeText(a, from)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
 }
@@ -361,7 +403,7 @@ type Sealed struct {
 	insts      *instanceSet
 }
 
-func (s *Sealed) String() string { return s.Name + argsString(s.Args) }
+func (s *Sealed) String() string { return TypeText(s, nil) }
 
 // Instance is the generic sealed type s with the given type arguments.
 func (s *Sealed) Instance(args []Type) *Sealed {
@@ -430,24 +472,14 @@ type FuncType struct {
 	Result Type
 }
 
-func (f *FuncType) String() string {
-	params := make([]string, len(f.Params))
-	for i, p := range f.Params {
-		params[i] = p.String()
-	}
-	result := f.Result.String()
-	if _, ok := f.Result.(*Union); ok {
-		result = "(" + result + ")"
-	}
-	return "(" + strings.Join(params, ", ") + ") => " + result
-}
+func (f *FuncType) String() string { return TypeText(f, nil) }
 
 // List is the built-in immutable list type List[T].
 type List struct {
 	Elem Type
 }
 
-func (l *List) String() string { return "List[" + l.Elem.String() + "]" }
+func (l *List) String() string { return TypeText(l, nil) }
 
 // Union is `A | B | ...`. Members are kept in written order, because
 // `?` keeps the leftmost member. Members are never unions themselves
@@ -456,16 +488,7 @@ type Union struct {
 	Members []Type
 }
 
-func (u *Union) String() string {
-	parts := make([]string, len(u.Members))
-	for i, m := range u.Members {
-		parts[i] = m.String()
-		if _, ok := m.(*FuncType); ok {
-			parts[i] = "(" + parts[i] + ")"
-		}
-	}
-	return strings.Join(parts, " | ")
-}
+func (u *Union) String() string { return TypeText(u, nil) }
 
 // newUnion flattens and de-duplicates members. A single remaining
 // member is returned as itself.
