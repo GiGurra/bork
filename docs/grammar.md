@@ -171,3 +171,5 @@ EOL        = newline | ";" .
   Both base64 forms use padding and reject nonzero trailing padding bits;
   parsers accept CR/LF as Go's base64 decoder does. No partial bytes are
   returned after an error. See [examples/bytes_encoding](../examples/bytes_encoding/main.bork).
+
+Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. This is internal compiler data, with no new bork syntax; user-package Go dependency declarations remain future work. See [std Go dependencies](std-go.md).

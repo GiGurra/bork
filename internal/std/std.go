@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-//go:embed */*.bork
+//go:embed */*.bork */go-deps.mod */go-deps.sum
 var files embed.FS
 
 // Prefix starts the import paths of standard packages.

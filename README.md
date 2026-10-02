@@ -164,6 +164,8 @@ Shell completion (via [boa](https://github.com/GiGurra/boa)): `bork completion b
 For VS Code syntax highlighting, including interpolated strings and embedded Go,
 see the [local bork editor extension](editors/vscode/README.md).
 
+Standard packages may use pinned Go modules. Generated builds use Go's module cache; populate it while online before building with `GOPROXY=off`. See the [dependency and offline build contract](docs/std-go.md).
+
 ## Status
 
 Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today.

@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/GiGurra/boa v1.0.31
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/mod v0.27.0
 )
 
 require (
