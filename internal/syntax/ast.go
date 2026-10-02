@@ -411,6 +411,16 @@ type TypePat struct {
 // `Option.None`), a type (`NotFound`), a record destructure
 // (`User { name }`), or, for a single name that is not a type, a
 // binding of the whole value (`n`).
+// ListPat matches a list: `[]`, `[a, b]`, or `[first, ...rest]` (Rest
+// binds the remaining elements; `[first, ...]` ignores them).
+type ListPat struct {
+	Pos     diag.Pos
+	Elems   []Pattern
+	HasRest bool
+	Rest    string // "" when ignored
+	RestPos diag.Pos
+}
+
 type VariantPat struct {
 	Pos    diag.Pos
 	Path   []string
@@ -436,11 +446,13 @@ type LitPat struct {
 func (*WildcardPat) patternNode() {}
 func (*TypePat) patternNode()     {}
 func (*VariantPat) patternNode()  {}
+func (*ListPat) patternNode()     {}
 func (*LitPat) patternNode()      {}
 
 func (p *WildcardPat) Position() diag.Pos { return p.Pos }
 func (p *TypePat) Position() diag.Pos     { return p.Pos }
 func (p *VariantPat) Position() diag.Pos  { return p.Pos }
+func (p *ListPat) Position() diag.Pos     { return p.Pos }
 func (p *LitPat) Position() diag.Pos      { return p.Pos }
 
 // Lambda is a function value: `x => x + 1`, `(a, b) => a + b`, or

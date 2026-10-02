@@ -1,0 +1,4 @@
+main.bork:2:3: match is not exhaustive: missing [_, _, ...]
+main.bork:9:3: match is not exhaustive: missing [false]
+main.bork:18:5: unreachable match arm: every value it matches is handled by an earlier arm
+main.bork:24:5: cannot match a list pattern against a value of type Int

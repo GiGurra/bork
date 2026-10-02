@@ -1,0 +1,29 @@
+fn a(xs: List[Int]): Int {
+  match (xs) {
+    [] => 0
+    [x] => x
+  }
+}
+
+fn b(xs: List[Bool]): Int {
+  match (xs) {
+    [true, ...] => 1
+    [] => 0
+  }
+}
+
+fn c(xs: List[Int]): Int {
+  match (xs) {
+    [...rest] => 0
+    [x] => x
+  }
+}
+
+fn d(x: Int): Int {
+  match (x) {
+    [y] => y
+    _ => 0
+  }
+}
+
+fn main() {}

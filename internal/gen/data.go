@@ -346,8 +346,23 @@ func (g *gen) tests(p *check.Pat, x ast.Expr) []ast.Expr {
 			conds = append(conds, g.tests(p.Sub, g.narrow(p, x))...)
 		}
 		return conds
+	case check.PatList:
+		op := token.EQL
+		if p.Rest != nil {
+			op = token.GEQ
+		}
+		n := &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(len(p.Elems))}
+		conds := []ast.Expr{&ast.BinaryExpr{X: &ast.CallExpr{Fun: ast.NewIdent("len"), Args: []ast.Expr{x}}, Op: op, Y: n}}
+		for i, e := range p.Elems {
+			conds = append(conds, g.tests(e, listIndex(x, i))...)
+		}
+		return conds
 	}
 	return nil
+}
+
+func listIndex(x ast.Expr, i int) ast.Expr {
+	return &ast.IndexExpr{X: x, Index: &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(i)}}
 }
 
 func (g *gen) fieldTests(fields []*check.PatField, x ast.Expr) []ast.Expr {
@@ -399,6 +414,14 @@ func (g *gen) binds(p *check.Pat, x ast.Expr, narrowed bool) []ast.Stmt {
 	case check.PatRecord:
 		for _, f := range p.Fields {
 			out = append(out, g.binds(f.Pat, &ast.SelectorExpr{X: x, Sel: name(f.Name)}, false)...)
+		}
+	case check.PatList:
+		for i, e := range p.Elems {
+			out = append(out, g.binds(e, listIndex(x, i), false)...)
+		}
+		if p.Rest != nil {
+			rest := &ast.SliceExpr{X: x, Low: &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(len(p.Elems))}}
+			out = append(out, g.binds(p.Rest, rest, false)...)
 		}
 	case check.PatType:
 		if p.Sub != nil && len(p.Members) == 1 {

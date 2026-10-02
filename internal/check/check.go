@@ -942,7 +942,12 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 		c.errorf(e.Pos, "operator %s needs two numbers of the same type or two Strings, found %s and %s", op, x, y)
 		return Invalid
 	case syntax.Eq, syntax.NotEq:
-		if !identical(x, y) {
+		// A union compares with a value of one of its members.
+		switch {
+		case identical(x, y), assignable(y, x):
+		case assignable(x, y):
+			x = y
+		default:
 			c.errorf(e.Pos, "cannot compare %s with %s: the types are incompatible", x, y)
 			return Invalid
 		}
@@ -950,8 +955,12 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 			c.errorf(e.Pos, "cannot compare values of type %s", x)
 			return Invalid
 		}
+		if tp, ok := x.(*TypeParam); ok && !comparable(x) {
+			c.errorf(e.Pos, "cannot compare values of type parameter %s with %s; require it: [%s: Eq]", tp.Name, op, tp.Name)
+			return Invalid
+		}
 		if !comparable(x) {
-			c.errorf(e.Pos, "cannot compare values of type %s with %s (lists, functions, and values of type parameters have no ==)", x, op)
+			c.errorf(e.Pos, "cannot compare values of type %s with %s (functions, scopes, and resources have no ==)", x, op)
 			return Invalid
 		}
 		return Bool

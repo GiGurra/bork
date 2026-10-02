@@ -48,9 +48,9 @@ fn handle(id: Int, line: String): String {
 
 // handleAll handles lines, numbering them from id.
 fn handleAll(lines: List[String], id: Int): List[String] {
-  match (head(lines)) {
-    Option.Some { value: line } => prepend(handle(id, line), handleAll(drop(lines, 1), id + 1))
-    Option.None => []
+  match (lines) {
+    [line, ...rest] => prepend(handle(id, line), handleAll(rest, id + 1))
+    [] => []
   }
 }
 
@@ -61,9 +61,9 @@ fn readFile(path: String): String | IoError {
 }
 
 fn main() {
-  path = match (head(args())) {
-    Option.Some { value } => value
-    Option.None => {
+  path = match (args()) {
+    [p] => p
+    _ => {
       eprintln("usage: signup FILE")
       exit(2)
     }

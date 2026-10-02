@@ -1,0 +1,38 @@
+fn describe(xs: List[Int]): String {
+  match (xs) {
+    [] => "empty"
+    [x] => s"one: $x"
+    [0, ...rest] => s"zero then ${toString(length(rest))} more"
+    [a, b] => s"two: $a, $b"
+    [a, ...] => s"starts with $a"
+  }
+}
+
+fn sum(xs: List[Int]): Int {
+  match (xs) {
+    [] => 0
+    [first, ...rest] => first + sum(rest)
+  }
+}
+
+fn firstSome(xs: List[Option[Int]]): Int {
+  match (xs) {
+    [Option.Some { value }, ...] => value
+    [Option.None, ...rest] => firstSome(rest)
+    [] => -1
+  }
+}
+
+fn main() {
+  println(describe([]))
+  println(describe([7]))
+  println(describe([0, 1, 2]))
+  println(describe([1, 2]))
+  println(describe([1, 2, 3]))
+  println(sum([1, 2, 3, 4]))
+  println(firstSome([Option.None, Option.Some { value: 5 }]))
+  match (args()) {
+    [] => println("no args")
+    [...all] => println(all)
+  }
+}

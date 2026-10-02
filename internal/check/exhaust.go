@@ -25,6 +25,7 @@ type ctor struct {
 	member  Type // a union member
 	record  *Record
 	lit     constant.Value
+	list    *List // the empty list, or (with args) a first element and the rest
 }
 
 // ctorsOf lists the constructors of t, if it has finitely many.
@@ -44,6 +45,8 @@ func ctorsOf(t Type) ([]*ctor, bool) {
 		return cs, true
 	case *Record:
 		return []*ctor{recordCtor(t)}, true
+	case *List:
+		return []*ctor{emptyCtor(t), consCtor(t)}, true
 	}
 	if t == Bool {
 		return []*ctor{litCtor(constant.MakeBool(true)), litCtor(constant.MakeBool(false))}, true
@@ -71,6 +74,14 @@ func recordCtor(r *Record) *ctor {
 	return c
 }
 
+// Lists are built from two constructors: the empty list, and a first
+// element followed by a list of the rest.
+func emptyCtor(l *List) *ctor { return &ctor{key: "list empty", label: "[]", list: l} }
+
+func consCtor(l *List) *ctor {
+	return &ctor{key: "list cons", label: "[_, ...]", list: l, args: []Type{l.Elem, l}}
+}
+
 func litCtor(v constant.Value) *ctor {
 	return &ctor{key: "lit " + v.ExactString(), label: v.ExactString(), lit: v}
 }
@@ -92,6 +103,11 @@ func heads(p *Pat) []*ctor {
 			cs = append(cs, memberCtor(m))
 		}
 		return cs
+	case PatList:
+		if len(p.Elems) == 0 {
+			return []*ctor{emptyCtor(p.Type.(*List))}
+		}
+		return []*ctor{consCtor(p.Type.(*List))}
 	}
 	return nil
 }
@@ -107,6 +123,17 @@ func parts(p *Pat, c *ctor) []*Pat {
 		fields = c.record.Fields
 	case c.member != nil:
 		out[0] = p.Sub
+		return out
+	case c.list != nil:
+		if len(c.args) > 0 {
+			// The first element, and a pattern for the rest.
+			out[0] = p.Elems[0]
+			if len(p.Elems) > 1 || p.Rest == nil {
+				out[1] = &Pat{Kind: PatList, Type: p.Type, Elems: p.Elems[1:], Rest: p.Rest}
+			} else {
+				out[1] = p.Rest
+			}
+		}
 		return out
 	}
 	for i, f := range fields {
@@ -285,6 +312,19 @@ func (w *witness) describe(top bool) string {
 		return w.args[0].describe(true)
 	case c.lit != nil:
 		return c.label
+	case c.list != nil:
+		var items []string
+		for w := w; ; w = w.args[1] {
+			if w.ctor == nil {
+				items = append(items, "...")
+				break
+			}
+			if len(w.ctor.args) == 0 {
+				break
+			}
+			items = append(items, w.args[0].describe(false))
+		}
+		return "[" + strings.Join(items, ", ") + "]"
 	}
 	var fields []*Field
 	if c.variant != nil {

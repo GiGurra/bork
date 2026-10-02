@@ -106,7 +106,7 @@ proven's `testdata/cases/` (108 cases) are a good source of golden tests: each o
 
 ### M3: type classes
 
-**Status: under way.** Done: classes, named instances (also generic, with bounds), bounded type parameters, `use` of other packages' instances and of named sets of them (`instances Json { ... }`), ambiguity and missing-instance errors, explicit type arguments, JSON in the prelude (`Json`, `Decode`, `Encode`), and `derive (Decode, Encode)`, whose decoders check the fields' where clauses (the `signup` example decodes requests into proven values). Remaining: instances on constrained types, and deriving `Eq` and `Show`.
+**Status: under way.** Done: classes, named instances (also generic, with bounds), bounded type parameters, `use` of other packages' instances and of named sets of them (`instances Json { ... }`), ambiguity and missing-instance errors, explicit type arguments, JSON in the prelude (`Json`, `Decode`, `Encode`), and `derive (Decode, Encode)`, whose decoders check the fields' where clauses (the `signup` example decodes requests into proven values). `Eq` is built in (structural `==`, also on lists, and `[T: Eq]` bounds), so it and `Show` need no `derive`. Remaining: instances on constrained types.
 
 Type classes, instances (including on constrained types), explicit instance-scope imports, ambiguity errors, and `derive` (`Eq`, `Show`, `Decode`).
 
