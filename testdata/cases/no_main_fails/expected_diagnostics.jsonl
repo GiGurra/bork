@@ -1,0 +1,1 @@
+{"schema_version":1,"file":"main.bork","line":1,"column":1,"end_line":1,"end_column":1,"message":"package has no main function (add `fn main() { ... }`)","code":"package.no-main"}

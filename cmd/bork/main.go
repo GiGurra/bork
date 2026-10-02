@@ -4,10 +4,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime/debug"
 
 	"github.com/GiGurra/boa/pkg/boa"
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/driver"
 	"github.com/spf13/cobra"
 )
@@ -16,12 +18,19 @@ type pathParams struct {
 	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 }
 
+type diagnosticParams struct {
+	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	JSON bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
+}
+
 type buildParams struct {
+	JSON   bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
 	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	Output string `short:"o" optional:"true" descr:"output executable (default: the file or directory name)"`
 }
 
 type testParams struct {
+	JSON   bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
 	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	Update bool   `short:"u" optional:"true" descr:"write the snapshots assertSnapshot finds missing or different, instead of failing"`
 }
@@ -52,6 +61,25 @@ func fail(err error) {
 	os.Exit(1)
 }
 
+// failDiagnostics keeps diagnostic JSON separate from test program output.
+func failDiagnostics(err error, asJSON bool, output io.Writer) {
+	if !asJSON {
+		fail(err)
+	}
+	var de *driver.DiagError
+	var diags *diag.List
+	if errors.As(err, &de) {
+		diags = de.Diags
+	} else {
+		diags = &diag.List{}
+		diags.AddCode(diag.Pos{}, "tool.error", "%s", err)
+	}
+	if writeErr := diags.WriteJSON(output); writeErr != nil {
+		fmt.Fprintln(os.Stderr, "bork:", writeErr)
+	}
+	os.Exit(1)
+}
+
 func version() string {
 	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 		return bi.Main.Version
@@ -76,7 +104,7 @@ func main() {
 						out = driver.DefaultOutput(p.Path)
 					}
 					if err := driver.Build(p.Path, out); err != nil {
-						fail(err)
+						failDiagnostics(err, p.JSON, os.Stderr)
 					}
 				},
 			},
@@ -103,20 +131,20 @@ func main() {
 				RunFunc: func(p *testParams, _ *cobra.Command, _ []string) {
 					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update})
 					if err != nil {
-						fail(err)
+						failDiagnostics(err, p.JSON, os.Stderr)
 					}
 					os.Exit(code)
 				},
 			},
-			boa.CmdT[pathParams]{
+			boa.CmdT[diagnosticParams]{
 				Use:   "check",
 				Short: "type-check a bork program without building it",
-				ValidArgsFunc: func(p *pathParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+				ValidArgsFunc: func(p *diagnosticParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
-				RunFunc: func(p *pathParams, _ *cobra.Command, _ []string) {
+				RunFunc: func(p *diagnosticParams, _ *cobra.Command, _ []string) {
 					if _, _, err := driver.Check(p.Path); err != nil {
-						fail(err)
+						failDiagnostics(err, p.JSON, os.Stdout)
 					}
 				},
 			},

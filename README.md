@@ -84,6 +84,8 @@ bork test examples/payments  # run the tests, checking trusted facts and rules
 bork test --update .         # run the tests, writing the snapshots assertSnapshot finds missing or changed
 ```
 
+For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
+
 A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`.
 
 ```

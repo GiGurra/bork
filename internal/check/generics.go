@@ -690,7 +690,17 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 			t = wf.Params[i]
 		default:
 			if !quiet {
-				c.errorf(p.Pos, "cannot tell the type of parameter %s; write it: (%s: Type) => ...", p.Name, p.Name)
+				c.diags.AddCode(p.Pos, "type.lambda-parameter", "cannot tell the type of parameter %s; write it: (%s: Type) => ...", p.Name, p.Name)
+				end := p.Pos
+				end.Col += len(p.Name)
+				edit := diag.TextEdit{Start: end, End: end, Replacement: ": Type"}
+				if e.Pos == p.Pos {
+					edit = diag.TextEdit{Start: p.Pos, End: end, Replacement: "(" + p.Name + ": Type)"}
+				}
+				c.diags.Suggest(p.Pos, "type.lambda-parameter", end, diag.Fix{
+					Message:       "annotate the parameter (replace Type with its intended type)",
+					RequiresInput: true, Edits: []diag.TextEdit{edit},
+				})
 			}
 			t = Invalid
 		}
@@ -816,7 +826,7 @@ func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
 	}
 	if len(e.Elems) == 0 {
 		if ew == nil {
-			c.errorf(e.Pos, "cannot tell the type of an empty list; give it one, as in xs: List[Int] = []")
+			c.diags.AddCode(e.Pos, "type.empty-list", "cannot tell the type of an empty list; give it one, as in xs: List[Int] = []")
 			return Invalid
 		}
 		return &List{Elem: ew}
@@ -841,7 +851,7 @@ func (c *checker) mapLit(e *syntax.MapLit, want Type) Type {
 	}
 	if len(e.Keys) == 0 {
 		if kw == nil {
-			c.errorf(e.Pos, "cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}")
+			c.diags.AddCode(e.Pos, "type.empty-map", "cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}")
 			return Invalid
 		}
 		return &Map{Key: kw, Value: vw}

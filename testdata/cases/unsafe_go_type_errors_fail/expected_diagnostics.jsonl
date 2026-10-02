@@ -1,0 +1,1 @@
+{"schema_version":1,"file":"main.bork","line":3,"column":9,"end_line":3,"end_column":9,"message":"in unsafe go block: invalid operation: x * y (mismatched types int64 and string)","code":"go.error"}

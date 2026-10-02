@@ -532,7 +532,7 @@ func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
 			args[i] = TypeText(t, c.pkg)
 		}
 	}
-	c.diags.Add(pos, format, args...)
+	c.diags.AddCode(pos, "type.error", format, args...)
 }
 
 func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
@@ -772,6 +772,28 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			declared = c.resolveType(s.Type)
 		}
 		t := c.exprWant(s.Value, declared)
+		if s.Type == nil {
+			var code, annotation string
+			switch e := s.Value.(type) {
+			case *syntax.ListLit:
+				if len(e.Elems) == 0 {
+					code, annotation = "type.empty-list", ": List[Element]"
+				}
+			case *syntax.MapLit:
+				if len(e.Keys) == 0 {
+					code, annotation = "type.empty-map", ": Map[Key, Value]"
+				}
+			}
+			if code != "" {
+				at := s.Pos
+				at.Col += len(s.Name)
+				c.diags.Suggest(s.Value.Position(), code, s.Value.Position(), diag.Fix{
+					Message:       "annotate the binding (replace the type placeholders)",
+					RequiresInput: true,
+					Edits:         []diag.TextEdit{{Start: at, End: at, Replacement: annotation}},
+				})
+			}
+		}
 		switch t {
 		case Unit:
 			c.errorf(s.Value.Position(), "cannot bind %s: the expression produces no value (Unit)", s.Name)

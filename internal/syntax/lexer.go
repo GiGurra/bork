@@ -144,7 +144,7 @@ func (lx *lexer) blockComment(pos diag.Pos) {
 	hasNewline := false
 	for {
 		if lx.off >= len(lx.src) {
-			lx.diags.Add(pos, "comment is not terminated")
+			lx.diags.AddCode(pos, "syntax.error", "comment is not terminated")
 			break
 		}
 		if lx.peek(0) == '*' && lx.peek(1) == '/' {
@@ -185,7 +185,7 @@ func (lx *lexer) ident(pos diag.Pos) {
 		return
 	}
 	if text[0] == '_' {
-		lx.diags.Add(pos, "identifiers cannot start with '_' (reserved for the compiler)")
+		lx.diags.AddCode(pos, "syntax.error", "identifiers cannot start with '_' (reserved for the compiler)")
 	}
 	lx.emit(TIdent, text, pos)
 }
@@ -225,7 +225,7 @@ func (lx *lexer) number(pos diag.Pos) {
 		}
 	}
 	if lx.off < len(lx.src) && isLetter(lx.peek(0)) {
-		lx.diags.Add(lx.pos(), "unexpected character %q in number", lx.peek(0))
+		lx.diags.AddCode(lx.pos(), "syntax.error", "unexpected character %q in number", lx.peek(0))
 		for lx.off < len(lx.src) && (isLetter(lx.peek(0)) || isDigit(lx.peek(0))) {
 			lx.advance()
 		}
@@ -276,7 +276,7 @@ func (lx *lexer) goCode() {
 	}
 	for depth > 0 {
 		if lx.off >= len(lx.src) {
-			lx.diags.Add(pos, "unsafe go block is not closed (missing '}')")
+			lx.diags.AddCode(pos, "syntax.error", "unsafe go block is not closed (missing '}')")
 			return
 		}
 		c := lx.advance()
@@ -312,7 +312,7 @@ func (lx *lexer) string(pos diag.Pos) {
 	lx.advance() // opening quote
 	for {
 		if lx.off >= len(lx.src) || lx.peek(0) == '\n' {
-			lx.diags.Add(pos, "string literal is not terminated")
+			lx.diags.AddCode(pos, "syntax.error", "string literal is not terminated")
 			lx.emit(TString, `""`, pos)
 			return
 		}
@@ -396,7 +396,12 @@ func (lx *lexer) operator(pos diag.Pos) {
 			lx.emit(AndAnd, "", pos)
 			return
 		}
-		lx.diags.Add(pos, "unexpected character '&' (did you mean '&&'?)")
+		lx.diags.AddCode(pos, "syntax.single-ampersand", "unexpected character '&' (did you mean '&&'?)")
+		end := lx.pos()
+		lx.diags.Suggest(pos, "syntax.single-ampersand", end, diag.Fix{
+			Message: "replace & with &&",
+			Edits:   []diag.TextEdit{{Start: pos, End: end, Replacement: "&&"}},
+		})
 	case '|':
 		if lx.off < len(lx.src) && lx.peek(0) == '|' {
 			lx.advance()
@@ -410,7 +415,7 @@ func (lx *lexer) operator(pos diag.Pos) {
 		}
 		lx.emit(Pipe, "", pos)
 	default:
-		lx.diags.Add(pos, "unexpected character %q", c)
+		lx.diags.AddCode(pos, "syntax.error", "unexpected character %q", c)
 	}
 }
 
@@ -427,7 +432,7 @@ func (lx *lexer) runeLit(pos diag.Pos) {
 	lx.advance() // opening quote
 	for {
 		if lx.off >= len(lx.src) || lx.peek(0) == '\n' {
-			lx.diags.Add(pos, "rune literal is not terminated")
+			lx.diags.AddCode(pos, "syntax.error", "rune literal is not terminated")
 			lx.emit(TRune, "'?'", pos)
 			return
 		}
@@ -452,7 +457,7 @@ func (lx *lexer) interp(pos diag.Pos) {
 	depth := 0
 	for {
 		if lx.off >= len(lx.src) || lx.peek(0) == '\n' {
-			lx.diags.Add(pos, "string literal is not terminated")
+			lx.diags.AddCode(pos, "syntax.error", "string literal is not terminated")
 			lx.emit(TInterp, `""`, pos)
 			return
 		}

@@ -93,7 +93,7 @@ type lifeChecker struct {
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
-	l.diags.Add(pos, format, args...)
+	l.diags.AddCode(pos, "lifetime.error", format, args...)
 }
 
 func (l *lifeChecker) function(fd *syntax.FuncDecl, params []*syntax.Param, body *syntax.Block) {

@@ -315,7 +315,7 @@ func (f *factChecker) stmts(list []syntax.Stmt, e env) env {
 			f.walk(s.Call, e)
 			facts := f.conditionFacts(s.Call, true)
 			if len(facts) == 0 && f.collect == nil {
-				f.diags.Add(f.info.Args(s.Call)[0].Position(), "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
+				f.diags.AddCode(f.info.Args(s.Call)[0].Position(), "facts.error", "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
 			}
 			e = e.with(facts...)
 		}
@@ -351,7 +351,7 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 		if inst := f.info.FuncRefs[x]; inst != nil && f.collect == nil {
 			for i, cons := range inst.Func.ParamConstraints {
 				if len(cons) > 0 {
-					f.diags.Add(x.Pos, "%s requires %s to be %s, so it cannot be used as a value; use a lambda that checks it: x => if (...) { %s(x) } else { ... }", x.Name, inst.Func.Decl.Params[i].Name, cons[0], x.Name)
+					f.diags.AddCode(x.Pos, "facts.error", "%s requires %s to be %s, so it cannot be used as a value; use a lambda that checks it: x => if (...) { %s(x) } else { ... }", x.Name, inst.Func.Decl.Params[i].Name, cons[0], x.Name)
 					break
 				}
 			}
@@ -617,7 +617,7 @@ func (f *factChecker) oblige(x syntax.Expr, con *Constraint, subst func(string) 
 
 func (f *factChecker) settle(x syntax.Expr, ob obligation, ok bool, pending []Query) {
 	if !ok {
-		f.diags.Add(x.Position(), "%s, but that is not proven for %s%s", ob.requirement, f.describe(x), f.hint(x, ob))
+		f.diags.AddCode(x.Position(), "facts.error", "%s, but that is not proven for %s%s", ob.requirement, f.describe(x), f.hint(x, ob))
 		return
 	}
 	for _, q := range pending {
@@ -1976,20 +1976,20 @@ func (f *factChecker) evaluate(eval Evaluator) {
 	}
 	results, err := eval(queries)
 	if err != nil {
-		f.diags.Add(f.pending[0].pos, "cannot run predicates at compile time: %v", err)
+		f.diags.AddCode(f.pending[0].pos, "facts.error", "cannot run predicates at compile time: %v", err)
 		return
 	}
 	for _, p := range f.pending {
 		if !results[index[p.query.String()]] {
 			if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil {
-				f.diags.Add(p.pos, "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: p.query.Args[0]}, p.query.Text(p.from))
+				f.diags.AddCode(p.pos, "facts.error", "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: p.query.Args[0]}, p.query.Text(p.from))
 				continue
 			}
 			if p.query.Via != "" {
-				f.diags.Add(p.pos, "%s, but for a value %s can return, %s is false", p.ob.requirement, p.query.Via, p.query.Text(p.from))
+				f.diags.AddCode(p.pos, "facts.error", "%s, but for a value %s can return, %s is false", p.ob.requirement, p.query.Via, p.query.Text(p.from))
 				continue
 			}
-			f.diags.Add(p.pos, "%s, but %s is false", p.ob.requirement, p.query.Text(p.from))
+			f.diags.AddCode(p.pos, "facts.error", "%s, but %s is false", p.ob.requirement, p.query.Text(p.from))
 		}
 	}
 }
