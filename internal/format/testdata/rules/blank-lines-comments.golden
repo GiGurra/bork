@@ -1,0 +1,7 @@
+// header
+
+fn main() {
+  x = -1 // negative
+
+  println(!false, x - -2)
+}

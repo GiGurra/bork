@@ -1,0 +1,5 @@
+fn f() {
+  forEach(xs, x => {
+    println(x)
+  })
+}

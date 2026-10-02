@@ -82,9 +82,18 @@ bork check examples/hello    # type-check only
 bork emit examples/hello     # show the generated Go
 bork test examples/payments  # run the tests, checking trusted facts and rules
 bork test --update .         # run the tests, writing the snapshots assertSnapshot finds missing or changed
+bork fmt examples           # format .bork files recursively in place
+bork fmt --check examples    # exit 1 if formatting would change a file
 ```
 
 For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
+
+`bork fmt [paths...]` defaults to the current directory and prints changed paths.
+It uses two spaces for indentation, normalizes spacing and blank-line runs, and keeps
+existing line breaks and comment text. Strings, interpolations, and raw `unsafe
+go` bodies are preserved verbatim. Directory traversal skips hidden directories,
+`vendor`, and symbolic links. `--check` prints paths needing formatting without
+writing files; it exits 0 when all files are already formatted, and 1 otherwise.
 
 A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`.
 

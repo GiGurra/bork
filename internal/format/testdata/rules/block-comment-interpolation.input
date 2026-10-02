@@ -1,0 +1,5 @@
+fn f(){
+  /* line one
+    line two */
+  s"${f("x")}"
+}

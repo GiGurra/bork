@@ -5,6 +5,11 @@
 
 ## Scope of v0.1
 
+The toolchain includes `bork fmt [paths...]`: one canonical whitespace format,
+with two spaces for indentation and normalized spacing and blank-line grouping.
+Existing line breaks, comment text, and raw Go bodies are retained. `--check`
+reports files that would change and exits non-zero without writing them.
+
 v0.1 is deliberately feature-sparse. It exists to prove the core idea (below): **when everything is immutable, every proven fact stays true**, so correctness checks are cheap, local, and permanent. Anything that doesn't serve that idea waits.
 
 The main advantages over Go are **immutability, facts, and scopes**. Everything else is there to support those three, or to stay out of their way.
