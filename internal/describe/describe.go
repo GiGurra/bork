@@ -138,7 +138,7 @@ func (s *sourceIndex) token(pos diag.Pos) (syntax.Token, int) {
 func (s *sourceIndex) choose(x check.Expr, t check.Type, def *diag.Pos) {
 	s.selected = &Selection{Expr: x, Func: s.fn, Package: s.fn.Pkg, Type: t, Definition: def, Site: x.Pos(), Value: true}
 	if c, ok := x.(*check.Const); ok && c.SourceSpan != nil {
-		span := c.SourceSpan
+		span := s.balancedSpan(*c.SourceSpan)
 		parts := append([]string(nil), s.lines[span.Start.Line-1:span.End.Line]...)
 		parts[len(parts)-1] = parts[len(parts)-1][:span.End.Col-1]
 		parts[0] = parts[0][span.Start.Col-1:]
@@ -250,7 +250,19 @@ func (s *sourceIndex) walk(x check.Expr) {
 		s.walk(x.X)
 	case *check.Interp:
 		for _, part := range x.Exprs {
+			// Interpolation expressions are nested inside one lexer token.
+			// Re-index their source so call names and parentheses work too.
+			outer := s.tokens
+			at := part.Pos()
+			if at.File == s.pos.File && at.Line > 0 && at.Line <= len(s.lines) {
+				s.tokens, _ = syntax.Lex(at.File, []byte(s.lines[at.Line-1][at.Col-1:]), &diag.List{})
+				for i := range s.tokens {
+					s.tokens[i].Pos.Line += at.Line - 1
+					s.tokens[i].Pos.Col += at.Col - 1
+				}
+			}
 			s.walk(part)
+			s.tokens = outer
 		}
 	case *check.Lambda:
 		for _, param := range x.Params {
@@ -278,6 +290,45 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.walk(x.Values[i])
 		}
 	}
+}
+
+// The parser drops grouping parentheses. Recover those needed to keep the
+// folded source spelling balanced, without swallowing a call's parentheses.
+func (s *sourceIndex) balancedSpan(span check.SourceSpan) check.SourceSpan {
+	_, first := s.token(span.Start)
+	if first < 0 {
+		return span
+	}
+	last, depth, missing := first, 0, 0
+	for i := first; i < len(s.tokens); i++ {
+		t := s.tokens[i]
+		if t.Pos.Line > span.End.Line || t.Pos.Line == span.End.Line && t.Pos.Col >= span.End.Col {
+			break
+		}
+		last = i
+		switch t.Kind {
+		case syntax.LParen:
+			depth++
+		case syntax.RParen:
+			depth--
+			if -depth > missing {
+				missing = -depth
+			}
+		}
+	}
+	for missing > 0 && first > 0 && s.tokens[first-1].Kind == syntax.LParen {
+		first--
+		span.Start = s.tokens[first].Pos
+		depth++
+		missing--
+	}
+	for depth > 0 && last+1 < len(s.tokens) && s.tokens[last+1].Kind == syntax.RParen {
+		last++
+		span.End = s.tokens[last].Pos
+		span.End.Col++
+		depth--
+	}
+	return span
 }
 
 func (s *sourceIndex) foldedContains(x check.Expr) bool {

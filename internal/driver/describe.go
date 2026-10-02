@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/describe"
+	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/std"
 )
 
 // Describe compiles the selected file's package, then answers compiler queries
@@ -44,6 +47,25 @@ func Describe(position, where string) (*describe.Result, error) {
 		return nil, err
 	}
 	methods := check.VisibleMethods(info, selected.Package, selected.Type)
+	// Embedded packages use virtual paths; disk imports use loader paths
+	// relative to the working directory and need an absolute output path.
+	diskFiles := map[string]bool{}
+	for _, file := range files {
+		if !file.Prelude && !strings.HasPrefix(file.Package, std.Prefix) {
+			diskFiles[file.Path] = true
+		}
+	}
+	absoluteDefinition := func(pos *diag.Pos) {
+		if pos != nil && diskFiles[pos.File] {
+			if absolute, err := filepath.Abs(pos.File); err == nil {
+				pos.File = absolute
+			}
+		}
+	}
+	absoluteDefinition(selected.Definition)
+	for i := range methods {
+		absoluteDefinition(methods[i].Definition)
+	}
 	if facts == nil {
 		facts = []check.KnownFact{}
 	}

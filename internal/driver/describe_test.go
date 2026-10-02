@@ -133,6 +133,40 @@ func TestDescribeFoldedExpressions(t *testing.T) {
 			t.Fatalf("expected the complete folded expression, got %+v", result)
 		}
 	}
+	for _, expression := range []string{"(1 + 2) * (3 + 4)", "1 * (2 + 3)", "(1 + 2) * 3"} {
+		if err := os.WriteFile(path, []byte("fn example() { println("+expression+") }\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		column := len("fn example() { println(") + strings.Index(expression, "1") + 1
+		result, err := Describe(fmt.Sprintf("%s:1:%d", path, column), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Expression != expression {
+			t.Fatalf("expected balanced %q, got %q", expression, result.Expression)
+		}
+	}
+}
+
+func TestDescribeInterpolationCallees(t *testing.T) {
+	source := `type User = { n: Int }
+fn add(x: Int): Int { x + 1 }
+fn (u: User) number(): Int { u.n }
+fn example(u: User) {
+  println(s"value ${add(1)} and ${u.number()}")
+}
+`
+	for _, tc := range []struct{ fragment, typ string }{
+		{"add(1)", "(Int) => Int"},
+		{"(1)}", "Int"},
+		{"number()}", "() => Int"},
+		{"()}", "Int"},
+	} {
+		result := describeAt(t, source, tc.fragment, "")
+		if result.typ != tc.typ || !result.defined {
+			t.Fatalf("interpolated %s: %+v", tc.fragment, result)
+		}
+	}
 }
 
 func TestDescribeRulesAndConstraintArguments(t *testing.T) {
@@ -196,6 +230,7 @@ func TestDescribeMethodVisibility(t *testing.T) {
 fn New(): User { User { n: 1 } }
 fn (u: User) Describe(): String { "money" }
 fn (u: User) Format(): String { "money" }
+fn (u: User) Unique(): String { "unique" }
 fn (u: User) hidden(): String { "private" }
 `,
 		"other/main.bork": `import "example.com/query/money"
@@ -226,8 +261,25 @@ fn main() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Methods) != 2 || result.Methods[0].Name != "Describe" || result.Methods[0].Definition.File != path || result.Methods[1].Name != "Format" || result.Methods[1].Ambiguity == "" || result.Methods[1].Definition != nil {
+	if len(result.Methods) != 3 || result.Methods[0].Name != "Describe" || result.Methods[0].Definition.File != path || result.Methods[1].Name != "Format" || result.Methods[1].Ambiguity == "" || result.Methods[1].Definition != nil {
 		t.Fatalf("method precedence, visibility, or ambiguity mismatch: %+v", result.Methods)
+	}
+	if result.Methods[2].Name != "Unique" || result.Methods[2].Definition.File != filepath.Join(dir, "money/main.bork") {
+		t.Fatalf("imported method must have an absolute definition: %+v", result.Methods[2])
+	}
+	result, err = Describe(path+":5:10", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Definition == nil || result.Definition.File != filepath.Join(dir, "money/main.bork") {
+		t.Fatalf("imported definition must have an absolute path: %+v", result.Definition)
+	}
+	result, err = Describe(path+":6:17", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Definition == nil || result.Definition.File != filepath.Join(dir, "other/main.bork") {
+		t.Fatalf("imported function must have an absolute path: %+v", result.Definition)
 	}
 }
 
