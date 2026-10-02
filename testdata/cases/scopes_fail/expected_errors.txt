@@ -1,0 +1,11 @@
+main.bork:8:11: f may be released: it belongs to scope s, which ended on line 7
+main.bork:13:10: g may be released: it belongs to scope s, which ended on line 12
+main.bork:21:10: files may be released: it belongs to scope s, which ended on line 20
+main.bork:26:10: h may be released: it belongs to scope s, which ended on line 25
+main.bork:33:11: the value of this scope block belongs to scope s, which has ended; use it inside the block
+main.bork:38:3: function escapes cannot return this value: it belongs to scope s, which ends on line 38
+main.bork:44:12: function escapesByReturn cannot return this value: it belongs to scope s, which ends on line 45
+main.bork:49:3: function inRecord cannot return this value: it belongs to scope s, which ends on line 52
+main.bork:56:3: function inLambda cannot return this value: it belongs to scope s, which ends on line 59
+main.bork:67:22: the lambda may not live as long as scope outer (it depends on scope inner), but onClose may keep it until outer closes
+main.bork:73:14: the lambda may not live as long as scope s (it depends on parameter f), but onClose may keep it until s closes

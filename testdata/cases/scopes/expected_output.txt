@@ -1,0 +1,32 @@
+open a
+open b
+open c
+inner done
+close c
+close b
+open d
+close d
+close a
+42
+open early
+close early
+returned early
+open early
+close early
+finished
+IoError { path: "/nonexistent/in.txt", message: "no such file or directory" }
+IoError { path: "/nonexistent/a", message: "no such file or directory" }
+open greeter
+close greeter
+hello, bork
+open item 1
+close item 1
+open item 2
+close item 2
+[10, 20]
+open level 2
+open level 1
+leaving 1
+close level 1
+leaving 2
+close level 2

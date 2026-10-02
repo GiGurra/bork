@@ -1,0 +1,89 @@
+type Conn = { file: File, name: String }
+
+fn id[T](x: T): T { x }
+
+// Used after its scope ended.
+fn released(path: String): String | IoError {
+  f = scope s { openFile(path, s)? }
+  readAll(f)
+}
+
+fn viaGeneric(p: String): String | IoError {
+  g = scope s { id(openFile(p, s)) }
+  match (g) {
+    f: File => readAll(f)
+    e: IoError => e
+  }
+}
+
+fn viaList(p: String): Int {
+  files = scope s { [openFile(p, s), openFile(p, s)] }
+  length(files)
+}
+
+fn scopeInLambda(p: String): Int {
+  h = scope s { () => openFile(p, s) }
+  match (h()) {
+    f: File => 1
+    e: IoError => 0
+  }
+}
+
+fn direct(path: String): String | IoError {
+  readAll(scope s { openFile(path, s)? })
+}
+
+// Returned from the scope it belongs to.
+fn escapes(path: String): File | IoError {
+  scope s { openFile(path, s) }
+}
+
+fn escapesByReturn(path: String): File | IoError {
+  scope s {
+    f = openFile(path, s)?
+    return f
+  }
+}
+
+fn inRecord(path: String): Conn | IoError {
+  scope s {
+    f = openFile(path, s)?
+    Conn { file: f, name: path }
+  }
+}
+
+fn inLambda(path: String): (() => String | IoError) | IoError {
+  scope s {
+    f = openFile(path, s)?
+    () => readAll(f)
+  }
+}
+
+// Kept by a scope that lives longer.
+fn keptLonger(path: String) {
+  scope outer {
+    scope inner {
+      f = openFile(path, inner)
+      onClose(outer, () => println(toString(f)))
+    }
+  }
+}
+
+fn keptByParam(f: File, s: Scope) {
+  onClose(s, () => println(toString(f)))
+}
+
+// These are fine.
+fn fine(path: String, s: Scope): File | IoError {
+  openFile(path, s)
+}
+
+fn fine2(path: String): String | IoError {
+  scope s {
+    f = fine(path, s)?
+    onClose(s, () => println(toString(f)))
+    readAll(f)
+  }
+}
+
+fn main() {}

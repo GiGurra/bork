@@ -1,0 +1,31 @@
+fn tracked(name: String, s: Scope) {
+  onClose(s, () => println(s"close $name"))
+}
+
+fn failing(n: Int): Int {
+  scope s {
+    tracked("failing", s)
+    if (n > 0) { panic("boom") }
+    n
+  }
+}
+
+test "finalizers run when a scope panics" {
+  scope outer {
+    tracked("outer", outer)
+    scope inner {
+      tracked("inner", inner)
+      assertEqual(failing(1), 0)
+    }
+  }
+}
+
+test "a failing finalizer still lets the others run" {
+  scope s {
+    tracked("first", s)
+    onClose(s, () => panic("finalizer failed"))
+    tracked("last", s)
+  }
+}
+
+fn main() {}

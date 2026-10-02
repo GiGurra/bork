@@ -102,14 +102,14 @@ func (g *gen) try(e *syntax.Try) ([]ast.Stmt, ast.Expr) {
 	clause := func(types []ast.Expr, body ...ast.Stmt) {
 		sw.Body.List = append(sw.Body.List, &ast.CaseClause{List: types, Body: body})
 	}
-	ret := func(x ast.Expr) ast.Stmt { return &ast.ReturnStmt{Results: []ast.Expr{x}} }
+	ret := func(x ast.Expr) []ast.Stmt { return g.returning(x) }
 	if info.Option != nil {
 		clause([]ast.Expr{g.variantType(info.Option.Variants[0])}, assign(kept, &ast.SelectorExpr{X: v, Sel: ast.NewIdent("value")}))
-		clause(nil, ret(&ast.CompositeLit{Type: g.variantType(info.NoneOf.Variants[1])}))
+		clause(nil, ret(&ast.CompositeLit{Type: g.variantType(info.NoneOf.Variants[1])})...)
 	} else {
 		clause([]ast.Expr{g.goType(info.Kept)}, assign(kept, v))
 		for _, m := range info.Rest {
-			clause([]ast.Expr{g.goType(m)}, ret(v))
+			clause([]ast.Expr{g.goType(m)}, ret(v)...)
 		}
 		clause(nil, unreachable()...)
 	}

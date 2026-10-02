@@ -458,6 +458,18 @@ func (c *checker) block(b *syntax.Block, want Type) Type {
 	return c.record(b, t)
 }
 
+// scopeExpr checks `scope s { ... }`: its body is a block that sees s,
+// of type Scope. Whether resources outlive their scopes is checked
+// later (see lifetimes.go).
+func (c *checker) scopeExpr(e *syntax.ScopeExpr, want Type) Type {
+	c.pushScope()
+	defer c.popScope()
+	if !c.nameTaken(e.Name, e.Pos) {
+		c.scopes[len(c.scopes)-1][e.Name] = &local{typ: Scope, decl: e, used: true}
+	}
+	return c.block(e.Body, want)
+}
+
 func stmtPos(s syntax.Stmt) diag.Pos {
 	switch s := s.(type) {
 	case *syntax.Binding:
@@ -562,6 +574,8 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.record(e, c.ifExpr(e, want))
 	case *syntax.Block:
 		return c.block(e, want)
+	case *syntax.ScopeExpr:
+		return c.record(e, c.scopeExpr(e, want))
 	case *syntax.Return:
 		c.returnExpr(e)
 		return c.record(e, Never)

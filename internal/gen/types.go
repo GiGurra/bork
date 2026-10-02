@@ -39,6 +39,13 @@ func (g *gen) goType(t check.Type) ast.Expr {
 			g.goType(m) // the members' declarations are needed
 		}
 		return ast.NewIdent("any")
+	case *check.Resource:
+		g.usedTypes[t] = true
+		return typeName(t.Name)
+	}
+	if t == check.Scope {
+		g.usesScopes = true
+		return &ast.StarExpr{X: ast.NewIdent("_Scope")}
 	}
 	if n, ok := basicGoNames[t]; ok {
 		return ast.NewIdent(n)
@@ -133,6 +140,8 @@ func (g *gen) typeDecls() []ast.Decl {
 			return !t.Prelude || g.usedTypes[t]
 		case *check.Sealed:
 			return !t.Prelude || g.usedTypes[t]
+		case *check.Resource:
+			return !t.Prelude || g.usedTypes[t]
 		}
 		return false
 	}
@@ -160,6 +169,14 @@ func (g *gen) typeDecls() []ast.Decl {
 func (g *gen) typeDecl(t check.Type) []ast.Decl {
 	var decls []ast.Decl
 	switch t := t.(type) {
+	case *check.Resource:
+		// A handle that unsafe go code fills in: File{handle: f}.
+		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\n", typeName(t.Name).Name, t.Name)
+		f, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
+		if err != nil {
+			panic(err)
+		}
+		decls = append(decls, f.Decls...)
 	case *check.Record:
 		recv := g.instantiated(typeName(t.Name), t)
 		decls = append(decls, g.structDecl(typeName(t.Name), t.TypeParams, t.Fields))
@@ -311,6 +328,32 @@ func _runTest(run func()) (msg string) {
 }
 `
 
+const scopeRuntime = `package main
+
+// _Scope is a bork scope: finalizers that run, last registered first,
+// when the scope closes.
+type _Scope struct {
+	finalizers []func()
+}
+
+// Defer registers f to run when the scope closes. Resources opened in
+// unsafe go code register their finalizers with it.
+func (s *_Scope) Defer(f func()) { s.finalizers = append(s.finalizers, f) }
+
+// close runs the finalizers. A scope is closed when its block ends, and
+// again (doing nothing, unless a finalizer panicked) by a deferred call
+// that makes panics close it too.
+func (s *_Scope) close() {
+	for len(s.finalizers) > 0 {
+		f := s.finalizers[len(s.finalizers)-1]
+		s.finalizers = s.finalizers[:len(s.finalizers)-1]
+		f()
+	}
+}
+
+func (s *_Scope) String() string { return "<scope>" }
+`
+
 const isRuntime = `package main
 
 // _is reports whether x holds a value of type T.
@@ -428,6 +471,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	}
 	if g.usesRules {
 		src = append(src, rulesRuntime)
+	}
+	if g.usesScopes {
+		src = append(src, scopeRuntime)
 	}
 	if g.usesIs {
 		src = append(src, isRuntime)

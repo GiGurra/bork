@@ -1,0 +1,75 @@
+// Scopes: resources are opened in a scope, and closed (finalizers run,
+// last first) when the scope's block ends, also by return or `?`.
+
+fn tracked(name: String, s: Scope) {
+  println(s"open $name")
+  onClose(s, () => println(s"close $name"))
+}
+
+fn early(flag: Bool): String {
+  scope s {
+    tracked("early", s)
+    if (flag) {
+      return "returned early"
+    }
+    "finished"
+  }
+}
+
+fn copyText(from: String, to: String): Int | IoError {
+  scope s {
+    text = readAll(openFile(from, s)?)?
+    write(createFile(to, s)?, text)
+  }
+}
+
+// A function given a scope can open resources in it for its caller.
+fn openBoth(a: String, b: String, s: Scope): Int | IoError {
+  first = openFile(a, s)?
+  second = openFile(b, s)?
+  length([first, second])
+}
+
+fn countdown(n: Int) {
+  if (n > 0) {
+    scope s {
+      tracked(s"level $n", s)
+      countdown(n - 1)
+      println(s"leaving $n")
+    }
+  }
+}
+
+fn main() {
+  n = scope outer {
+    tracked("a", outer)
+    scope inner {
+      tracked("b", inner)
+      tracked("c", inner)
+      println("inner done")
+    }
+    tracked("d", outer)
+    42
+  }
+  println(n)
+  println(early(true))
+  println(early(false))
+  println(copyText("/nonexistent/in.txt", "/nonexistent/out.txt"))
+  println(scope s { openBoth("/nonexistent/a", "/nonexistent/b", s) })
+
+  // A lambda that does not use the scope's resources can leave it.
+  greet = scope s {
+    tracked("greeter", s)
+    name = "bork"
+    () => s"hello, $name"
+  }
+  println(greet())
+
+  // Scopes inside lambdas.
+  sizes = map([1, 2], i => scope s {
+    tracked(s"item $i", s)
+    i * 10
+  })
+  println(sizes)
+  countdown(2)
+}

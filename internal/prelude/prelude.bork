@@ -11,6 +11,8 @@
 //   List[T]                []T, never modified once built
 //   (A, B) => C            func(A, B) C (no result for Unit)
 //   a type parameter T     a Go type parameter T (any)
+//   Scope                  *_Scope; s.Defer(f) runs f when the scope closes
+//   a resource type        a struct { handle any }
 
 // Option is a value that may be missing.
 type Option[T] = sealed { Some { value: T }, None }
@@ -21,6 +23,89 @@ type OutOfRange = { value: String, target: String }
 
 // ParseError is returned when a String cannot be read as a value.
 type ParseError = { input: String, message: String }
+
+// Scopes and resources. A resource is opened in a scope, and closed
+// when the scope closes: finalizers run in reverse order of
+// registration, when the scope's block ends or panics.
+
+// onClose runs f when the scope s closes.
+fn onClose(s: Scope, f: () => Unit) unsafe go {
+  s.Defer(f)
+}
+
+// IoError is returned when reading or writing outside the program fails.
+type IoError = { path: String, message: String }
+
+// File is an open file, closed when its scope closes.
+type File = resource
+
+fn openFile(path: String, s: Scope): File | IoError unsafe go {
+  import "errors"
+  import "os"
+  f, err := os.Open(path)
+  if err != nil {
+    msg := err.Error()
+    var pe *os.PathError
+    if errors.As(err, &pe) {
+      msg = pe.Err.Error()
+    }
+    return IoError{path: path, message: msg}
+  }
+  s.Defer(func() { f.Close() })
+  return File{handle: f}
+}
+
+// createFile creates (or empties) the file at path, for writing.
+fn createFile(path: String, s: Scope): File | IoError unsafe go {
+  import "errors"
+  import "os"
+  f, err := os.Create(path)
+  if err != nil {
+    msg := err.Error()
+    var pe *os.PathError
+    if errors.As(err, &pe) {
+      msg = pe.Err.Error()
+    }
+    return IoError{path: path, message: msg}
+  }
+  s.Defer(func() { f.Close() })
+  return File{handle: f}
+}
+
+// readAll reads the rest of the file.
+fn readAll(f: File): String | IoError unsafe go {
+  import "errors"
+  import "io"
+  import "os"
+  file := f.handle.(*os.File)
+  data, err := io.ReadAll(file)
+  if err != nil {
+    msg := err.Error()
+    var pe *os.PathError
+    if errors.As(err, &pe) {
+      msg = pe.Err.Error()
+    }
+    return IoError{path: file.Name(), message: msg}
+  }
+  return string(data)
+}
+
+// write writes text to the file, and returns the number of bytes written.
+fn write(f: File, text: String): Int | IoError unsafe go {
+  import "errors"
+  import "os"
+  file := f.handle.(*os.File)
+  n, err := file.WriteString(text)
+  if err != nil {
+    msg := err.Error()
+    var pe *os.PathError
+    if errors.As(err, &pe) {
+      msg = pe.Err.Error()
+    }
+    return IoError{path: file.Name(), message: msg}
+  }
+  return int64(n)
+}
 
 // Reading numbers and Bools from Strings.
 
