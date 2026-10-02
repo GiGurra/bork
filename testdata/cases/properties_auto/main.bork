@@ -1,0 +1,64 @@
+// bork test --auto-properties also tests the functions whose promises
+// are trusted, on generated arguments.
+
+pred positive(x: Int) { x > 0 }
+pred small(x: Int) { x < 1000 && x > -1000 }
+
+type Account = { id: Int where positive }
+
+// Wrong for 0.
+fn validate(raw: Int where small): Int where positive unsafe go {
+  if raw >= 0 {
+    return raw + 0
+  }
+  return 1
+}
+
+// Kept: its argument is positive.
+fn half(n: Int where positive): Int where small unsafe go {
+  return n % 1000 / 2 + 0
+}
+
+// Breaks a record's field fact for negative ids.
+fn account(id: Int where small): Account unsafe go {
+  if id < 0 {
+    return Account{id: id}
+  }
+  return Account{id: id + 1}
+}
+
+// A trusted fact that holds.
+fn clamp(x: Int): Int {
+  if (x > 0) {
+    x
+  } else {
+    trust positive(1)
+    1
+  }
+}
+
+// Proven by the compiler: not tested.
+fn same(x: Int where positive): Int where positive { x }
+
+// No values are generated for functions: not tested.
+fn applied(f: (Int) => Int): Int where positive unsafe go {
+  return 1
+}
+
+fn main() {}
+
+test "an ordinary test" {
+  assertEqual(clamp(-3), 1)
+}
+
+pred rare(x: Int) { x % 7919 == 1234 && x > 5000 }
+
+// Methods are named by their type.
+fn (a: Account) withdraw(amount: Int where positive): Account unsafe go {
+  return Account{id: a.id - amount}
+}
+
+// Skipped: arguments are hard to find.
+fn lucky(n: Int where rare): Int where positive unsafe go {
+  return n
+}

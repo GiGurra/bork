@@ -18,7 +18,11 @@ import (
 // checked at runtime, so a wrong one fails the test that reaches it.
 // Inference rules, also taken on trust, get property tests that look
 // for counterexamples (see ruleTest).
-func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
+//
+// A test with parameters is a property test (see propertyTest), and
+// with autoProperties, so is every function whose promises are trusted
+// (see autoPropertyCandidate).
+func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte, error) {
 	g := newGen(info)
 	g.testMode = true
 	g.usesTests = true
@@ -28,6 +32,22 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 	for i, fn := range info.Tests {
 		roots = append(roots, fn.Calls...)
 		goName := ast.NewIdent("_test" + strconv.Itoa(i+1))
+		if len(fn.Params) > 0 {
+			// Its generated values cannot be snapshotted.
+			body := func() []ast.Stmt { return g.blockInto(fn.Body, sink{}) }
+			decl, untried := g.propertyTest(fn.Test.Name, false, fn.Decl.Params, fn.Params, fn.ParamConstraints, body, goName)
+			if decl == nil {
+				list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
+					strLit(fmt.Sprintf("%s (no values are generated for %s)", fn.Test.Name, untried)),
+					strLit(""),
+					ast.NewIdent("nil"),
+				}})
+				continue
+			}
+			g.extraFuncs = append(g.extraFuncs, decl)
+			list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{strLit(fn.Test.Name), strLit(""), goName}})
+			continue
+		}
 		g.extraFuncs = append(g.extraFuncs, g.testFunc(fn, goName))
 		list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
 			&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(fn.Test.Name)},
@@ -61,6 +81,23 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 			goName,
 		}})
 	}
+	if autoProperties {
+		n := 0
+		for _, f := range files {
+			for _, fd := range f.Funcs {
+				fn := info.FuncOf[fd]
+				if fn == nil || !g.autoPropertyCandidate(fn) {
+					continue
+				}
+				n++
+				goName := ast.NewIdent("_auto" + strconv.Itoa(n))
+				roots = append(roots, fn)
+				g.extraFuncs = append(g.extraFuncs, g.autoProperty(fn, goName))
+				list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{strLit(autoPropertyName(fn)), strLit(""), goName}})
+			}
+		}
+	}
+	roots = append(roots, g.propRoots...)
 	main := &ast.FuncDecl{
 		Name: ast.NewIdent("main"),
 		Type: &ast.FuncType{Params: &ast.FieldList{}},

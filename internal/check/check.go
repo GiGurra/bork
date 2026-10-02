@@ -390,7 +390,18 @@ func (c *checker) checkTest(td *syntax.TestDecl, names map[string]diag.Pos) {
 		c.errorf(td.Pos, "test %q is already declared at %s", td.Name, prev)
 	}
 	names[td.Name] = td.Pos
-	fn := &Func{Decl: &syntax.FuncDecl{Pos: td.Pos, Name: "test", Body: td.Body}, Pkg: c.pkg, Result: Unit, Test: td}
+	fn := &Func{Decl: &syntax.FuncDecl{Pos: td.Pos, Name: "test", Params: td.Params, Body: td.Body}, Pkg: c.pkg, Result: Unit, Test: td}
+	// A property test's parameters are generated, with their facts.
+	scope := map[string]Type{}
+	for _, p := range td.Params {
+		t := c.resolveType(p.Type)
+		fn.Params = append(fn.Params, t)
+		scope[p.Name] = t
+	}
+	fn.ParamConstraints = make([][]*Constraint, len(td.Params))
+	for i, p := range td.Params {
+		fn.ParamConstraints[i] = c.constraintsOf(p.Type, fn.Params[i], scope)
+	}
 	c.info.Tests = append(c.info.Tests, fn)
 	c.checkFunc(fn)
 }

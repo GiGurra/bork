@@ -36,11 +36,14 @@ type Import struct {
 }
 
 // TestDecl is a test: `test "adds numbers" { assert(add(1, 2) == 3) }`.
-// Tests run with `bork test`, and are left out of programs.
+// Tests run with `bork test`, and are left out of programs. A test with
+// parameters is a property test, run on generated values of them:
+// `test "doubles" (n: Int where small) { assert(double(n) > n) }`.
 type TestDecl struct {
-	Pos  diag.Pos
-	Name string
-	Body *Block
+	Pos    diag.Pos
+	Name   string
+	Params []*Param
+	Body   *Block
 }
 
 // TypeKind says what a type declaration declares.

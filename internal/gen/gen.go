@@ -255,6 +255,7 @@ type gen struct {
 	usesAssert       bool
 	usesTests        bool
 	usesSnaps        bool
+	usesProps        bool
 	usesRules        bool
 	usesScopes       bool
 	usesDerive       bool
@@ -271,6 +272,10 @@ type gen struct {
 	// extraFuncs holds functions to emit besides the reachable ones.
 	testMode   bool
 	extraFuncs []ast.Decl
+	// genFuncs are the functions generating values for property tests,
+	// and propRoots the predicates their facts call.
+	genFuncs  []genFunc
+	propRoots []*check.Func
 }
 
 // reachable lists the functions to emit: the roots, and the functions

@@ -35,10 +35,15 @@ type buildParams struct {
 	Output string `short:"o" optional:"true" descr:"output executable (default: the file or directory name)"`
 }
 
+// testParams pins its short flags (no automatic ones, so they don't
+// shift as flags are added); --auto-properties has none on purpose.
 type testParams struct {
-	JSON   bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
-	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
-	Update bool   `short:"u" optional:"true" descr:"write the snapshots assertSnapshot finds missing or different, instead of failing"`
+	JSON           bool   `short:"j" optional:"true" descr:"report diagnostics as JSON Lines"`
+	Path           string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	Update         bool   `short:"u" optional:"true" descr:"write the snapshots assertSnapshot finds missing or different, instead of failing"`
+	AutoProperties bool   `optional:"true" descr:"also property-test the functions whose promises are trusted (unsafe go, or trust), on generated arguments"`
+	Seed           int64  `short:"s" optional:"true" descr:"the seed of every property test (default: one from the test's name)"`
+	Cases          int    `short:"c" optional:"true" descr:"how many cases each property test runs (default 100)"`
 }
 
 type runParams struct {
@@ -145,13 +150,17 @@ func main() {
 				},
 			},
 			boa.CmdT[testParams]{
-				Use:   "test",
-				Short: "run a bork program's tests, checking trusted facts as they run",
+				Use:         "test",
+				Short:       "run a bork program's tests, checking trusted facts as they run",
+				ParamEnrich: boa.ParamEnricherCombine(boa.ParamEnricherName, boa.ParamEnricherBool),
 				ValidArgsFunc: func(p *testParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
 				RunFunc: func(p *testParams, _ *cobra.Command, _ []string) {
-					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update})
+					if p.Cases < 0 {
+						fail(errors.New("--cases must be positive"))
+					}
+					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases})
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stderr)
 					}

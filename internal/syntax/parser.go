@@ -1336,7 +1336,16 @@ func (p *parser) testDecl() (td *TestDecl) {
 	if err != nil {
 		p.errorf(name.Pos, "invalid string literal %s", name.Text)
 	}
-	td = &TestDecl{Pos: pos, Name: v, Body: p.block()}
+	td = &TestDecl{Pos: pos, Name: v}
+	if p.at(LParen) {
+		p.next()
+		p.list(RParen, "a parameter", func() {
+			pname := p.expect(TIdent, "(parameter name)")
+			p.expect(Colon, "after parameter name")
+			td.Params = append(td.Params, &Param{Pos: pname.Pos, Name: pname.Text, Type: p.typeExpr()})
+		})
+	}
+	td.Body = p.block()
 	if !p.at(Semi) && !p.at(EOF) {
 		p.errorf(p.tok().Pos, "expected end of line after test, found %s", p.tok().Kind)
 		panic(bailout{})
