@@ -1,0 +1,11 @@
+{"ada": 1, "bob": 2, "cy": 3}
+{"abe": 0, "ada": 1, "bob": 2, "cy": 3, "zed": 9}
+{"ada": 1, "cy": 3}
+{"ada": 10, "bob": 20, "cy": 30}
+{"bob": 2, "cy": 3}
+{"aaa": 7, "ada": 1, "bob": 2, "cy": 3}
+true
+{"ada": 1, "bob": 2, "cy": 3, "abe": 0}
+{9: "nine", 10: "ten", 100: "hundred"}
+[Version { major: 0, minor: 9 }, Version { major: 1, minor: 2 }, Version { major: 1, minor: 10 }]
+Option.Some { value: "a" }

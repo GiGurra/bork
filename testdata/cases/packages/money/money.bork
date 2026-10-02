@@ -42,3 +42,8 @@ fn Parse(text: String): Amount | String unsafe go {
 
 // A declared promise is known to importers.
 fn AtLeastOneCent(x: Int): Int where Positive { if (Positive(x)) { x } else { 1 } }
+
+// Defaults are values of this package, wherever the call is.
+fn FormatIn(a: Amount, c: Currency = Currency.Eur): String { Format(a, c) }
+
+fn Fee(base: Amount = Amount { cents: 100 }): Amount { base }

@@ -101,16 +101,22 @@ fn Log(logger: Logger, level: Level, msg: String, attrs: Attrs = {:}) {
 }
 
 fn merge(a: Attrs, b: Attrs): Attrs unsafe go {
-  return _mapOf(append(append([]string{}, a.keys...), b.keys...), append(append([]any{}, a.vals...), b.vals...))
+  out := a
+  b.each(func(k string, v any) bool {
+    out = out.put(k, v)
+    return true
+  })
+  return out
 }
 
 fn write(level: Int, msg: String, attrs: Attrs) unsafe go {
   import "context"
   import "log/slog"
-  all := make([]slog.Attr, len(attrs.keys))
-  for i, k := range attrs.keys {
-    all[i] = slog.Any(k, attrs.vals[i])
-  }
+  all := make([]slog.Attr, 0, attrs.len())
+  attrs.each(func(k string, v any) bool {
+    all = append(all, slog.Any(k, v))
+    return true
+  })
   slog.LogAttrs(context.Background(), slog.Level(level), msg, all...)
 }
 

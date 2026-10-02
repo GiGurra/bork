@@ -23,4 +23,18 @@ fn main() {
   println(firstOr(["a"]))
   println(scale(2.0))
   "dee" |> greet("Yo")
+  more()
+}
+
+type Level = sealed { Low, High }
+type Retry = { times: Int, backoff: Option[Int] }
+
+fn send(msg: String, level: Level = Level.Low, retry: Retry = Retry { times: 3, backoff: Option.None }): String {
+  s"$msg $level $retry"
+}
+
+fn more() {
+  println(send("a"))
+  println(send("b", Level.High))
+  println(send("c", Level.High, Retry { times: 1, backoff: Option.Some { value: 50 } }))
 }

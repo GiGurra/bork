@@ -9,8 +9,9 @@
 //   Option[T]              Option[T]: Option_Some[T]{value: v} or Option_None[T]{}
 //   a union                any, holding one of the member types
 //   List[T]                []T, never modified once built
-//   Map[K, V]              _Map[K, V]; m.get(k), m.put(k, v), m.remove(k),
-//                          _mapOf(keys, values), and m.keys, m.vals in order
+//   Map[K, V]              _Map[K, V], persistent: m.get(k), m.put(k, v),
+//                          m.remove(k), m.len(), m.each(f), m.keys(),
+//                          m.vals(), _mapOf(keys, values)
 //   (A, B) => C            func(A, B) C (no result for Unit)
 //   a type parameter T     a Go type parameter T (any)
 //   Scope                  *_Scope; s.Defer(f) runs f when the scope closes
@@ -1006,6 +1007,58 @@ class Eq[T] {
   fn equals(a: T, b: T): Bool
 }
 
+// Ord orders the values of a type: compare(a, b) is negative when a
+// comes before b, positive when it comes after, and 0 when they are
+// equal (it must agree with ==). Numbers and Strings have instances
+// (Strings compare by bytes); declare one for other types.
+class Ord[T] {
+  fn compare(a: T, b: T): Int
+}
+
+instance ordInt: Ord[Int] {
+  fn compare(a: Int, b: Int): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordInt8: Ord[Int8] {
+  fn compare(a: Int8, b: Int8): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordInt16: Ord[Int16] {
+  fn compare(a: Int16, b: Int16): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordInt32: Ord[Int32] {
+  fn compare(a: Int32, b: Int32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint8: Ord[Uint8] {
+  fn compare(a: Uint8, b: Uint8): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint16: Ord[Uint16] {
+  fn compare(a: Uint16, b: Uint16): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint32: Ord[Uint32] {
+  fn compare(a: Uint32, b: Uint32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint64: Ord[Uint64] {
+  fn compare(a: Uint64, b: Uint64): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordFloat: Ord[Float] {
+  fn compare(a: Float, b: Float): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordFloat32: Ord[Float32] {
+  fn compare(a: Float32, b: Float32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordString: Ord[String] {
+  fn compare(a: String, b: String): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
 // includes reports whether x is in xs.
 fn includes[T: Eq](xs: List[T], x: T): Bool {
   any(xs, y => y == x)
@@ -1111,6 +1164,30 @@ fn decodeItems[T: Decode](items: List[Json], index: Int, done: List[T]): List[T]
   }
 }
 
+// A Map with String keys is a JSON object; its fields keep their order.
+instance decodeMap[V: Decode]: Decode[Map[String, V]] {
+  fn decode(json: Json): Map[String, V] | DecodeError {
+    match (json) {
+      Json.Object { fields } => decodeFields(fields, {:})
+      other => decodeMismatch("an object", other)
+    }
+  }
+}
+
+fn decodeFields[V: Decode](fields: List[JsonField], done: Map[String, V]): Map[String, V] | DecodeError {
+  match (head(fields)) {
+    Option.None => done
+    Option.Some { value: field } => match (decode[V](field.value)) {
+      e: DecodeError => atPath(e, s".${field.name}")
+      x: V => decodeFields(drop(fields, 1), jsonFieldPut(done, field.name, x))
+    }
+  }
+}
+
+fn jsonFieldPut[V](m: Map[String, V], name: String, value: V): Map[String, V] unsafe go {
+  return m.put(name, value)
+}
+
 instance decodeJson: Decode[Json] {
   fn decode(json: Json): Json | DecodeError { json }
 }
@@ -1142,6 +1219,21 @@ instance encodeOption[T: Encode]: Encode[Option[T]] {
 
 instance encodeList[T: Encode]: Encode[List[T]] {
   fn encode(xs: List[T]): Json { Json.Array { items: map(xs, encode) } }
+}
+
+instance encodeMap[V: Encode]: Encode[Map[String, V]] {
+  fn encode(m: Map[String, V]): Json {
+    Json.Object { fields: map(jsonFieldsOf(m), e => JsonField { name: e.key, value: encode(e.value) }) }
+  }
+}
+
+fn jsonFieldsOf[V](m: Map[String, V]): List[Entry[String, V]] unsafe go {
+  out := make([]Entry[string, V], 0, m.len())
+  m.each(func(k string, v V) bool {
+    out = append(out, Entry[string, V]{key: k, value: v})
+    return true
+  })
+  return out
 }
 
 instance encodeJson: Encode[Json] {
