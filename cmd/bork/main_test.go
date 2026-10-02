@@ -99,4 +99,24 @@ func TestDiagnosticJSON(t *testing.T) {
 			}
 		})
 	}
+	t.Run("snapshot golden", func(t *testing.T) {
+		fixture := filepath.Join("..", "..", "testdata", "cases", "snapshot_json_ok")
+		cmd := exec.Command(exe, "test", "--json", fixture)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("snapshot test: %v\n%s\n%s", err, &stdout, &stderr)
+		}
+		wantDiagnostics, err := os.ReadFile(filepath.Join(fixture, "expected_diagnostics.jsonl"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantReport, err := os.ReadFile(filepath.Join(fixture, "expected_test_output.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stderr.String() != string(wantDiagnostics) || stdout.String()+"exit code 0\n" != string(wantReport) {
+			t.Fatalf("snapshot JSON golden mismatch:\nstdout: %s\nstderr: %s", &stdout, &stderr)
+		}
+	})
 }
