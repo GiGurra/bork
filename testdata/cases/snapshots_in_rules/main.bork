@@ -1,0 +1,9 @@
+// A rule's property test generates its values, so it cannot snapshot them.
+pred snapshotted(x: Int) {
+  assertSnapshot(x)
+  x > 0
+}
+
+rule snapshotsInRules(x: Int) { snapshotted(x) => snapshotted(x) }
+
+fn main() {}

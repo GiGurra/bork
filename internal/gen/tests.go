@@ -71,7 +71,8 @@ func Tests(files []*syntax.File, info *check.Info) ([]byte, error) {
 
 // snapshotName is the base name of a test's snapshot files: its name
 // with every run of characters other than ASCII letters and digits
-// replaced by _, and a number added if another test already has it.
+// replaced by _, and a number added if another test already has it
+// (ignoring case).
 func snapshotName(test string, taken map[string]bool) string {
 	var b strings.Builder
 	gap := false
@@ -90,11 +91,13 @@ func snapshotName(test string, taken map[string]bool) string {
 	if base == "" {
 		base = "test"
 	}
+	// Names that differ only in case are the same file on some
+	// file systems.
 	name := base
-	for n := 2; taken[name]; n++ {
+	for n := 2; taken[strings.ToLower(name)]; n++ {
 		name = base + "_" + strconv.Itoa(n)
 	}
-	taken[name] = true
+	taken[strings.ToLower(name)] = true
 	return name
 }
 

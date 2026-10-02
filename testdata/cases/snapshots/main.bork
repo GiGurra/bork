@@ -45,5 +45,5 @@ test "Names: with punctuation!" {
 }
 
 test "only the lines near a change are shown" {
-  assertSnapshot(join([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => s"line $n"), "\n"))
+  assertSnapshot(join([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => s"line $n"), "\n"))
 }

@@ -396,14 +396,19 @@ import (
 
 // _assertSnapshot compares text with the running test's next snapshot
 // file: <test>.snap for its first assertSnapshot, then <test>.2.snap,
-// and so on. A file holds the text and a newline. When updating, it
-// writes the file instead if it is missing or different.
+// and so on. A file holds the text and a newline (\r\n line endings
+// read as \n). When updating, it writes the file instead if it is
+// missing or different.
 func _assertSnapshot(text, at string) {
 	_tests.Lock()
 	t := _tests.current
 	if t == nil {
 		_tests.Unlock()
 		panic(at + ": assertSnapshot works only while a test runs")
+	}
+	if t.snap == "" {
+		_tests.Unlock()
+		panic(at + ": assertSnapshot works only in tests, not in rules")
 	}
 	_tests.snapshots++
 	file := t.snap + ".snap"
@@ -417,6 +422,7 @@ func _assertSnapshot(text, at string) {
 		panic(at + ": " + err.Error())
 	}
 	found := err == nil
+	old = []byte(strings.ReplaceAll(string(old), "\r\n", "\n"))
 	if found && string(old) == text+"\n" {
 		return
 	}
@@ -443,15 +449,30 @@ func _assertSnapshot(text, at string) {
 // two lines of context around them.
 func _snapshotDiff(old, new string) string {
 	a, b := strings.Split(old, "\n"), strings.Split(new, "\n")
-	// lcs[i][j] is the length of the longest common subsequence of
-	// a[i:] and b[j:].
-	lcs := make([][]int, len(a)+1)
-	for i := range lcs {
-		lcs[i] = make([]int, len(b)+1)
+	// The lines both start and end with are kept as they are, and only
+	// the middle is diffed.
+	pre := 0
+	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {
+		pre++
 	}
-	for i := len(a) - 1; i >= 0; i-- {
-		for j := len(b) - 1; j >= 0; j-- {
-			if a[i] == b[j] {
+	suf := 0
+	for suf < len(a)-pre && suf < len(b)-pre && a[len(a)-1-suf] == b[len(b)-1-suf] {
+		suf++
+	}
+	ma, mb := a[pre:len(a)-suf], b[pre:len(b)-suf]
+	// lcs[i][j] is the length of the longest common subsequence of
+	// ma[i:] and mb[j:]. A middle too large to compare line by line is
+	// shown as removed and added.
+	if len(ma)*len(mb) > 10000000 {
+		ma, mb = nil, nil
+	}
+	lcs := make([][]int, len(ma)+1)
+	for i := range lcs {
+		lcs[i] = make([]int, len(mb)+1)
+	}
+	for i := len(ma) - 1; i >= 0; i-- {
+		for j := len(mb) - 1; j >= 0; j-- {
+			if ma[i] == mb[j] {
 				lcs[i][j] = lcs[i+1][j+1] + 1
 			} else {
 				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
@@ -467,40 +488,56 @@ func _snapshotDiff(old, new string) string {
 		lines = append(lines, prefix+line)
 		changed = append(changed, change)
 	}
+	for _, line := range a[:pre] {
+		add("  ", line, false)
+	}
+	if ma == nil && mb == nil {
+		for _, line := range a[pre : len(a)-suf] {
+			add("- ", line, true)
+		}
+		for _, line := range b[pre : len(b)-suf] {
+			add("+ ", line, true)
+		}
+	}
 	i, j := 0, 0
-	for i < len(a) || j < len(b) {
+	for i < len(ma) || j < len(mb) {
 		switch {
-		case i < len(a) && j < len(b) && a[i] == b[j]:
-			add("  ", a[i], false)
+		case i < len(ma) && j < len(mb) && ma[i] == mb[j]:
+			add("  ", ma[i], false)
 			i, j = i+1, j+1
-		case i < len(a) && (j == len(b) || lcs[i+1][j] >= lcs[i][j+1]):
-			add("- ", a[i], true)
+		case i < len(ma) && (j == len(mb) || lcs[i+1][j] >= lcs[i][j+1]):
+			add("- ", ma[i], true)
 			i++
 		default:
-			add("+ ", b[j], true)
+			add("+ ", mb[j], true)
 			j++
 		}
 	}
-	const context = 2
-	var out []string
-	skipped := false
-	for k, line := range lines {
-		near := false
-		for d := max(0, k-context); d <= min(len(lines)-1, k+context); d++ {
-			near = near || changed[d]
-		}
-		if !near {
-			skipped = true
-			continue
-		}
-		if skipped {
-			out = append(out, "  ...")
-		}
-		skipped = false
-		out = append(out, line)
+	for _, line := range a[len(a)-suf:] {
+		add("  ", line, false)
 	}
-	if skipped {
-		out = append(out, "  ...")
+	// Runs of two or more lines far from a change are left out.
+	const context = 2
+	shown := make([]bool, len(lines))
+	for k := range lines {
+		for d := max(0, k-context); d <= min(len(lines)-1, k+context); d++ {
+			shown[k] = shown[k] || changed[d]
+		}
+	}
+	var out []string
+	for k := 0; k < len(lines); {
+		end := k
+		for end < len(lines) && !shown[end] {
+			end++
+		}
+		switch {
+		case end-k >= 2:
+			out = append(out, "  ...")
+			k = end
+		default:
+			out = append(out, lines[k])
+			k++
+		}
 	}
 	return strings.Join(out, "\n")
 }
