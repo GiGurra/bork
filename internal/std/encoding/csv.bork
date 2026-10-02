@@ -43,8 +43,8 @@ fn Csv(rows: List[List[String]]): String unsafe go {
 }
 
 // DecodeCsv reads header-named fields using a derived record's Decode schema.
-// Required Strings are literal; other fields use JSON syntax. Optional cells
-// use JSON too (quoted strings or null); missing optional columns become None.
+// Strings are literal; other fields use JSON syntax. Empty optional cells
+// and missing optional columns become None; nonempty cells become Some.
 // Every bad field is collected, with no partial records returned.
 fn DecodeCsv[T: Decode](text: String): List[T] | CsvError | CsvErrors {
   rows = CsvRows(text)?
@@ -52,7 +52,7 @@ fn DecodeCsv[T: Decode](text: String): List[T] | CsvError | CsvErrors {
 }
 
 fn csvValue(raw: String, kind: String, optional: Bool): Json | JsonError {
-  if (kind == "string" && !optional) { Json.String { value: raw } } else { parseJson(raw) }
+  if (optional && raw == "") { Json.Null } else if (kind == "string") { Json.String { value: raw } } else { parseJson(raw) }
 }
 
 fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bool) => (Json | JsonError), decodeRow: (Json) => (T | DecodeError)): List[T] | CsvErrors unsafe go {
@@ -120,8 +120,8 @@ fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bo
   return values
 }
 
-// EncodeCsv writes records in their encoded field order. Optional values are
-// JSON cells, so None and Some("") stay distinct. Empty input gives empty text.
+// EncodeCsv writes records in schema field order. None and Some("") both
+// write empty cells, which decode as None. Empty input gives empty text.
 fn EncodeCsv[T: Encode + Decode](values: List[T]): String | CsvError {
   rows = encodeCsvRows[T](values, value => encode[T](value), renderJson)?
   Csv(rows)
@@ -150,7 +150,9 @@ fn encodeCsvRows[T: Decode](values: List[T], encodeRow: (T) => Json, render: (Js
     for _, field := range schema {
       json, found := fields[field.Name]
       if !found { return CsvError{row: int64(index + 2), column: field.Name, message: "encoded field is missing"} }
-      if field.Kind == "string" && !field.Optional {
+      if _, absent := json.(Json_Null); field.Optional && absent {
+        row = append(row, "")
+      } else if field.Kind == "string" {
         text, valid := json.(Json_String)
         if !valid { return CsvError{row: int64(index + 2), column: field.Name, message: "expected an encoded string"} }
         row = append(row, text.value)

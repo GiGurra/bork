@@ -4,6 +4,10 @@ pred positive(n: Int) { n > 0 }
 type Item = { code: String, count: Int where positive, active: Bool, note: Option[String] } derive (Decode, Encode)
 type Group = { name: String, tags: List[Int] } derive (Decode, Encode)
 
+type OptionalSingle = { value: Option[String] } derive (Decode, Encode)
+
+type Optional = { name: Option[String], count: Option[Int] } derive (Decode, Encode)
+
 type Single = { value: String } derive (Decode, Encode)
 
 fn main() {
@@ -12,7 +16,7 @@ fn main() {
   println(encoding.CsvRows("\"bad"))
   println(encoding.CsvRows(encoding.Csv([["a,b", "x\"y", "line\nnext", ""]])))
   println(encoding.DecodeCsv[Item]("code,count,active\n007,2,true\n"))
-  println(encoding.DecodeCsv[Item]("active,code,count,note\nfalse,007,3,null\ntrue,008,4,\"\"\"\"\"\"\n"))
+  println(encoding.DecodeCsv[Item]("active,code,count,note\nfalse,007,3,hello\ntrue,008,4,\n"))
   println(encoding.DecodeCsv[Item]("code,count,active\n007,0,no\n008,-1,123\n"))
   println(encoding.DecodeCsv[Item]("code,count,active\n007,2,true,extra\n008\n"))
   println(encoding.DecodeCsv[Item]("code,code,extra\n"))
@@ -31,6 +35,11 @@ fn main() {
   println(encoding.CsvRows(encoding.Csv([[""]])))
   match (encoding.EncodeCsv([Single { value: "" }, Single { value: "x" }, Single { value: "" }, Single { value: "y" }, Single { value: "" }])) {
     text: String => println(encoding.DecodeCsv[Single](text))
+    error: encoding.CsvError => println(error)
+  }
+  println(encoding.DecodeCsv[Optional]("name,count\n007,42\n,\nnull,0\n"))
+  match (encoding.EncodeCsv([OptionalSingle { value: Option.None }, OptionalSingle { value: Option.Some { value: "hello" } }, OptionalSingle { value: Option.Some { value: "" } }])) {
+    text: String => println(encoding.DecodeCsv[OptionalSingle](text))
     error: encoding.CsvError => println(error)
   }
   println(encoding.EncodeCsv[Item]([]))

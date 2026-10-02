@@ -1017,9 +1017,11 @@ There are no new language constructs.
 
 CSV has raw row parsing/writing and typed record parsing/writing through
 `Decode`/`Encode`. Typed CSV uses the derived Decode field schema: String
-fields are verbatim, numbers, booleans and compound fields use JSON, and
-optional cells use JSON (including quoted optional strings and null). Missing
-optional columns become None. Header names match fields exactly; unknown,
+fields are verbatim; numbers, booleans and compound fields use JSON. Empty
+optional cells and missing optional columns become None. Nonempty optional
+cells become Some, parsed exactly like the required field (no JSON quotes
+for String). Encoding Some("") writes empty like None; Some("") cannot
+round-trip and decodes as None. Header names match fields exactly; unknown,
 duplicate and missing required headers are errors. Ragged typed rows are
 errors. Facts and field types are checked before constructing records, with
 all field errors collected in `CsvErrors` by row and column. Malformed CSV

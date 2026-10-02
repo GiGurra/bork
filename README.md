@@ -188,7 +188,7 @@ input returns `ParseError`. See [the encoding example](examples/bytes_encoding/m
 
 Import `bork/encoding` for CSV. `encoding.DecodeCsv[T]` reads header-based records
 using each field's declared type and facts, collecting errors by row and column.
-`EncodeCsv` preserves optional values; [the CSV example](examples/csv/main.bork) shows both.
+`EncodeCsv` writes empty optional cells as None (Some("") cannot round-trip); [the CSV example](examples/csv/main.bork) shows both.
 
 ## License
 

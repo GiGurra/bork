@@ -3,7 +3,7 @@
 CsvError { row: 1, column: "5", message: "extraneous or missing \" in quoted-field" }
 [["a,b", "x\"y", "line\nnext", ""]]
 [Item { code: "007", count: 2, active: true, note: Option.None }]
-[Item { code: "007", count: 3, active: false, note: Option.None }, Item { code: "008", count: 4, active: true, note: Option.Some { value: "" } }]
+[Item { code: "007", count: 3, active: false, note: Option.Some { value: "hello" } }, Item { code: "008", count: 4, active: true, note: Option.None }]
 CsvErrors { errors: [CsvError { row: 2, column: "count", message: "must be positive" }, CsvError { row: 2, column: "active", message: "invalid JSON at line 1, column 1: expected a value" }, CsvError { row: 3, column: "count", message: "must be positive" }, CsvError { row: 3, column: "active", message: "expected a boolean, found a number" }] }
 CsvErrors { errors: [CsvError { row: 2, column: "", message: "expected 3 columns, found 4" }, CsvError { row: 3, column: "", message: "expected 3 columns, found 1" }] }
 CsvErrors { errors: [CsvError { row: 1, column: "code", message: "duplicate column" }, CsvError { row: 1, column: "extra", message: "unknown column" }, CsvError { row: 1, column: "count", message: "required column is missing" }, CsvError { row: 1, column: "active", message: "required column is missing" }] }
@@ -11,8 +11,10 @@ CsvErrors { errors: [CsvError { row: 1, column: "code", message: "duplicate colu
 CsvErrors { errors: [CsvError { row: 1, column: "", message: "expected a derived record decoder" }] }
 [Group { name: "a", tags: [1, 2] }]
 CsvErrors { errors: [CsvError { row: 2, column: "tags[1]", message: "expected a whole number, found a boolean" }] }
-[["code", "count", "active", "note"], ["007", "2", "true", "null"], ["008", "3", "false", "\"\""]]
-[Item { code: "007", count: 2, active: true, note: Option.None }, Item { code: "008", count: 3, active: false, note: Option.Some { value: "" } }]
+[["code", "count", "active", "note"], ["007", "2", "true", ""], ["008", "3", "false", ""]]
+[Item { code: "007", count: 2, active: true, note: Option.None }, Item { code: "008", count: 3, active: false, note: Option.None }]
 [[""]]
 [Single { value: "" }, Single { value: "x" }, Single { value: "" }, Single { value: "y" }, Single { value: "" }]
+[Optional { name: Option.Some { value: "007" }, count: Option.Some { value: 42 } }, Optional { name: Option.None, count: Option.None }, Optional { name: Option.Some { value: "null" }, count: Option.Some { value: 0 } }]
+[OptionalSingle { value: Option.None }, OptionalSingle { value: Option.Some { value: "hello" } }, OptionalSingle { value: Option.None }]
 

@@ -207,9 +207,12 @@ HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeo
   quoted newlines, skips blank lines, and normalizes CRLF as Go's CSV parser
   does. `encoding.DecodeCsv[T: Decode](text)` reads a header row and a derived
   record schema, returning `List[T] | encoding.CsvError | encoding.CsvErrors`.
-  Required String fields are literal (so `007` stays `007`); all other cells
-  use JSON syntax. Optional strings therefore use JSON quotes, and `null`
-  represents None, preserving Some(""). Missing optional columns become None.
+  String fields are literal (so `007` stays `007`); other fields use JSON
+  syntax. Empty optional cells and missing optional columns become None;
+  nonempty optional cells become Some, parsed like the required field. Thus
+  an optional String cell `hello` needs no JSON quotes. Encoding None and
+  Some("") both writes empty cells, which decode as None: Some("") cannot
+  round-trip. This limitation matches ordinary spreadsheet/tool CSV.
   Headers match field names exactly; duplicate, unknown, and missing required
   columns are errors. Field types and facts are checked, collecting every
   row/field error without returning partial records. `EncodeCsv[T: Encode + Decode]`
