@@ -1,2 +1,2 @@
-main.bork:4:45: http.Get requires timeoutMs to be http.validTimeout, but http.validTimeout(-1) is false
-main.bork:5:45: http.Get requires timeoutMs to be http.validTimeout, but http.validTimeout(9223372036855) is false
+main.bork:4:45: http.Get requires timeoutMs to be http.ValidTimeout, but http.ValidTimeout(-1) is false
+main.bork:5:45: http.Get requires timeoutMs to be http.ValidTimeout, but http.ValidTimeout(9223372036855) is false

@@ -18,7 +18,9 @@ fn openServer(s: Scope): TestServer unsafe go {
     w.Header().Add("X-Many", "one")
     w.Header().Add("X-Many", "two")
     w.WriteHeader(418)
-    io.WriteString(w, strings.Join(r.Header.Values("X-Many"), ",") + ":" + string(data))
+    body := strings.Join(r.Header.Values("X-Many"), ",") + ":" + string(data)
+    if r.URL.Path == "/post" { body += ":" + r.Header.Get("Content-Type") }
+    io.WriteString(w, body)
   }))
   state := struct { url string; started chan struct{} }{srv.URL, started}
   return TestServer{handle: state, owner: s.Own(func() { srv.Close() })}
@@ -46,13 +48,18 @@ fn timedOut(response: http.Response | IoError): Bool {
   }
 }
 fn echo(request: http.Request, s: Scope): http.Response {
-  http.Text(200, http.HeaderOf(request.headers, "x-many").getOr("missing"))
+  http.Response {
+    status: 200,
+    headers: { "X-Reply": ["one", "two"] },
+    body: http.HeaderOf(request.headers, "x-many").getOr("missing"),
+  }
 }
+fn dynamicTimeout(): Int unsafe go { return 20 }
 fn main() {
   scope app {
     remote = openServer(app)
     base = url(remote)
-    match (http.Send("POST", base, {"x-many": ["a", "b"]}, "payload", app, 2000)) {
+    match (http.Send("POST", base, { "x-many": ["a", "b"] }, "payload", app, 2000)) {
       response: http.Response => {
         println(response.status, response.body)
         println(response.headers.get("X-Many"))
@@ -60,7 +67,12 @@ fn main() {
       }
       _ => println("unexpected")
     }
-    println(timedOut(http.Get(base + "/wait", app, 20)))
+    match (http.Post(base + "/post", "application/json", "posted", app)) {
+      response: http.Response => println(response.body)
+      _ => println("unexpected")
+    }
+    timeout = dynamicTimeout()
+    if (http.ValidTimeout(timeout)) { println(timedOut(http.Get(base + "/wait", app, timeout))) } else { println("unexpected") }
     println(timedOut(http.Get(base + "/body", app, 20)))
     scope request {
       task = spawn(request, () => http.Get(base + "/cancel", request, 2000))
@@ -80,8 +92,8 @@ fn main() {
     }
     local = http.Listen("127.0.0.1:0", app, echo)
     match (local) {
-      running: http.Server => match (http.Send("GET", "http://" + http.Address(running), {"X-Many": ["first", "second"]}, "", app)) {
-        response: http.Response => println(response.body)
+      running: http.Server => match (http.Send("GET", "http://" + http.Address(running), { "X-Many": ["first", "second"] }, "", app)) {
+        response: http.Response => { println(response.body); println(response.headers.get("X-Reply")) }
         _ => println("unexpected")
       }
       _ => println("unexpected")

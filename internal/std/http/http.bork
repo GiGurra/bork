@@ -16,8 +16,8 @@ type Status = Int where ValidStatus
 type Headers = Map[String, List[String]]
 
 // TimeoutMs is a nonnegative timeout that fits Go's nanosecond duration.
-pred validTimeout(ms: Int) { ms >= 0 && ms <= 9223372036854 }
-type TimeoutMs = Int where validTimeout
+pred ValidTimeout(ms: Int) { ms >= 0 && ms <= 9223372036854 }
+type TimeoutMs = Int where ValidTimeout
 
 type Request = {
   method: String,
@@ -34,13 +34,13 @@ type Server = resource
 
 // Text is a plain text response.
 fn Text(status: Status, body: String): Response {
-  Response { status: status, headers: {"Content-Type": ["text/plain; charset=utf-8"]}, body: body }
+  Response { status: status, headers: { "Content-Type": ["text/plain; charset=utf-8"] }, body: body }
 }
 
 // JsonReply is a response with a JSON body (already rendered, as encodeJson
 // gives it).
 fn JsonReply(status: Status, body: String): Response {
-  Response { status: status, headers: {"Content-Type": ["application/json"]}, body: body }
+  Response { status: status, headers: { "Content-Type": ["application/json"] }, body: body }
 }
 
 // Segments are the non-empty parts of a path: "/users/42/" gives
@@ -136,7 +136,7 @@ fn Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoE
 
 // Post sends a POST request with the given content type.
 fn Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoError {
-  Send("POST", url, {"Content-Type": [contentType]}, body, s, timeoutMs)
+  Send("POST", url, { "Content-Type": [contentType] }, body, s, timeoutMs)
 }
 
 // Send sends a request and reads its entire response. Transport, cancellation,
