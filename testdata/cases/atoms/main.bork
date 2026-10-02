@@ -1,0 +1,13 @@
+fn main() {
+  // Tasks update an atom concurrently; no update is lost.
+  counter = atom(0)
+  scope s {
+    forEach(range(0, 100), i => launch(s, () => { _ = update(counter, n => n + 1) }))
+  }
+  println(current(counter))
+  // update gives the new value, swap the one it replaced.
+  names = atom(["ada"])
+  println(update(names, xs => append(xs, "bob")))
+  println(swap(names, xs => drop(xs, 1)))
+  println(current(names))
+}

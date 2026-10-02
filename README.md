@@ -71,7 +71,7 @@ See [examples/wc](examples/wc/main.bork), a small `wc`.
 
 ## Getting started
 
-The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); packages; and type classes with JSON decoding (M3, under way: `derive (Decode)` decodes requests into proven values); and standard packages `bork/http`, `bork/maps`, and `bork/log` (see [examples/signup_api](examples/signup_api/main.bork)). It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); packages; and type classes with JSON decoding (M3, under way: `derive (Decode)` decodes requests into proven values); and standard packages `bork/http`, `bork/maps`, and `bork/log` (see [examples/http_server](examples/http_server/main.bork), a REST API, and [examples/signup_api](examples/signup_api/main.bork), JSON requests with constrained fields). It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -104,7 +104,7 @@ fn main() {
 }
 ```
 
-More examples: [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
+More examples: [http_server](examples/http_server/main.bork) (a REST API with JSON, an atom of persistent maps for state, and logging), [signup_api](examples/signup_api/main.bork) (an endpoint whose requests decode into proven values), [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
 
 ```
 type Address = { city: String }

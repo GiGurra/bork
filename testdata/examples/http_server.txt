@@ -1,0 +1,21 @@
+level=INFO msg=created id=1 title="buy milk"
+level=INFO msg=request method=POST path=/todos status=201
+POST /todos {"title": "buy milk"} -> 201 {"id":1,"title":"buy milk","done":false}
+level=INFO msg=created id=2 title="write docs"
+level=INFO msg=request method=POST path=/todos status=201
+POST /todos {"title": "write docs"} -> 201 {"id":2,"title":"write docs","done":false}
+level=INFO msg=request method=POST path=/todos status=422
+POST /todos {"title": ""} -> 422 {"path":".title","message":"must be nonEmpty"}
+level=INFO msg=request method=POST path=/todos/1/done status=200
+POST /todos/1/done -> 200 {"id":1,"title":"buy milk","done":true}
+level=INFO msg=request method=GET path=/todos status=200
+GET /todos -> 200 [{"id":1,"title":"buy milk","done":true},{"id":2,"title":"write docs","done":false}]
+level=INFO msg=removed id=2
+level=INFO msg=request method=DELETE path=/todos/2 status=204
+DELETE /todos/2 -> 204 
+level=INFO msg=request method=GET path=/todos/2 status=404
+GET /todos/2 -> 404 {"path":"","message":"no todo 2"}
+level=INFO msg=request method=GET path=/todos/x status=400
+GET /todos/x -> 400 not an id: x
+level=INFO msg=request method=GET path=/todos status=200
+GET /todos -> 200 [{"id":1,"title":"buy milk","done":true}]

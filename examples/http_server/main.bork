@@ -1,0 +1,204 @@
+// http_server is a small REST API for a todo list, kept in memory:
+//
+//   bork run examples/http_server -- serve localhost:8080
+//   curl -d '{"title": "buy milk"}' localhost:8080/todos
+//   curl localhost:8080/todos
+//   curl -X POST localhost:8080/todos/1/done
+//   curl -X DELETE localhost:8080/todos/1
+//
+// `-- demo` starts it on a free port, sends it a few requests, and
+// prints the answers.
+//
+// It shows the pieces a server is made of in bork:
+//   - routing by matching the path's segments as a list;
+//   - JSON requests decoded into proven values, and responses encoded;
+//   - state between requests: an atom holding a persistent map, which
+//     handlers update atomically (they share nothing else that changes);
+//   - structured logging;
+//   - scopes: the server runs until its scope closes.
+
+import "bork/http"
+import "bork/log"
+import "bork/maps"
+
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred maxBytes(s: String, n: Int) { byteLength(s) <= n }
+
+type Title = String where nonEmpty and maxBytes(100)
+
+type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
+
+type NewTodo = { title: Title } derive (Decode)
+
+type Problem = { path: String, message: String } derive (Encode)
+
+// Store is the server's state: the todos by id (sorted, so they list in
+// id order), and the next id to give out.
+type Store = { todos: Map[Int, Todo], nextId: Int }
+
+fn emptyStore(): Store {
+  Store { todos: maps.Sorted({:}), nextId: 1 }
+}
+
+fn notFound(id: Int): http.Response {
+  http.JsonReply(404, encodeJson(Problem { path: "", message: s"no todo $id" }))
+}
+
+fn list(store: Atom[Store]): http.Response {
+  http.JsonReply(200, encodeJson(maps.Values(current(store).todos)))
+}
+
+fn create(store: Atom[Store], body: String): http.Response {
+  r: NewTodo | JsonError | DecodeError = decodeJson(body)
+  match (r) {
+    req: NewTodo => {
+      // The id is the one this update gave out: s is the state it made.
+      s = update(store, st => Store {
+        todos: maps.Put(st.todos, st.nextId, Todo { id: st.nextId, title: req.title, done: false }),
+        nextId: st.nextId + 1,
+      })
+      id = s.nextId - 1
+      log.Info("created", {"id": id, "title": req.title})
+      match (maps.Get(s.todos, id)) {
+        Option.Some { value: todo } => http.JsonReply(201, encodeJson(todo))
+        Option.None => notFound(id)
+      }
+    }
+    e: JsonError => http.JsonReply(400, encodeJson(Problem { path: "", message: e.message }))
+    e: DecodeError => http.JsonReply(422, encodeJson(Problem { path: e.path, message: e.message }))
+  }
+}
+
+fn show(store: Atom[Store], id: Int): http.Response {
+  match (maps.Get(current(store).todos, id)) {
+    Option.Some { value: todo } => http.JsonReply(200, encodeJson(todo))
+    Option.None => notFound(id)
+  }
+}
+
+fn finish(store: Atom[Store], id: Int): http.Response {
+  _ = update(store, st => match (maps.Get(st.todos, id)) {
+    Option.Some { value: todo } => st.copy(todos = maps.Put(st.todos, id, todo.copy(done = true)))
+    Option.None => st
+  })
+  show(store, id)
+}
+
+fn remove(store: Atom[Store], id: Int): http.Response {
+  // swap gives the state the removal was made to: whether it had the
+  // todo decides the answer, even if another request removed it too.
+  old = swap(store, st => st.copy(todos = maps.Remove(st.todos, id)))
+  if (maps.Has(old.todos, id)) {
+    log.Info("removed", {"id": id})
+    http.Text(204, "")
+  } else {
+    notFound(id)
+  }
+}
+
+// withId runs handle with the id in the path, if it is a number.
+fn withId(segment: String, handle: (Int) => http.Response): http.Response {
+  match (parseInt(segment)) {
+    id: Int => handle(id)
+    e: ParseError => http.Text(400, s"not an id: ${e.input}")
+  }
+}
+
+// route answers a request. Handlers get the store from here: it is the
+// one value they share.
+fn route(store: Atom[Store], req: http.Request): http.Response {
+  match (http.Segments(req.path)) {
+    ["health"] => http.Text(200, "ok")
+    ["todos"] => match (req.method) {
+      "GET" => list(store)
+      "POST" => create(store, req.body)
+      _ => http.Text(405, "use GET or POST")
+    }
+    ["todos", id] => match (req.method) {
+      "GET" => withId(id, n => show(store, n))
+      "DELETE" => withId(id, n => remove(store, n))
+      _ => http.Text(405, "use GET or DELETE")
+    }
+    ["todos", id, "done"] => if (req.method == "POST") { withId(id, n => finish(store, n)) } else { http.Text(405, "use POST") }
+    _ => http.Text(404, "not found")
+  }
+}
+
+// handler logs each request with its answer's status.
+fn handler(store: Atom[Store]): (http.Request, Scope) => http.Response {
+  (req, rs) => {
+    resp = route(store, req)
+    log.Info("request", {"method": req.method, "path": req.path, "status": resp.status})
+    resp
+  }
+}
+
+fn serve(addr: String): Unit | IoError {
+  scope s {
+    server = http.Listen(addr, s, handler(atom(emptyStore())))?
+    log.Info("listening", {"address": http.Address(server)})
+    http.Wait(server)
+  }
+}
+
+fn call(base: String, method: String, path: String, body: String = "") {
+  label = if (body == "") { s"$method $path" } else { s"$method $path $body" }
+  match (http.Send(method, base + path, [], body)) {
+    resp: http.Response => println(s"$label -> ${resp.status} ${resp.body}")
+    e: IoError => println(s"$label -> error: ${e.message}")
+  }
+}
+
+// demo starts the server on a free port and sends it requests; the
+// server stops when the scope closes. Logs go to stdout, as plain text.
+fn demo(): Unit | IoError {
+  log.Configure(log.Defaults().copy(output = log.Output.Stdout, timestamps = false))
+  scope s {
+    server = http.Listen("127.0.0.1:0", s, handler(atom(emptyStore())))?
+    base = "http://" + http.Address(server)
+    call(base, "POST", "/todos", "{\"title\": \"buy milk\"}")
+    call(base, "POST", "/todos", "{\"title\": \"write docs\"}")
+    call(base, "POST", "/todos", "{\"title\": \"\"}")
+    call(base, "POST", "/todos/1/done")
+    call(base, "GET", "/todos")
+    call(base, "DELETE", "/todos/2")
+    call(base, "GET", "/todos/2")
+    call(base, "GET", "/todos/x")
+    call(base, "GET", "/todos")
+  }
+}
+
+fn main() {
+  result = match (args()) {
+    ["serve", addr] => serve(addr)
+    ["demo"] => demo()
+    _ => {
+      eprintln("usage: http_server serve ADDR | demo")
+      exit(2)
+    }
+  }
+  match (result) {
+    e: IoError => {
+      eprintln(s"http_server: ${e.path}: ${e.message}")
+      exit(1)
+    }
+    _ => {}
+  }
+}
+
+fn request(store: Atom[Store], method: String, path: String, body: String): http.Response {
+  route(store, http.Request { method: method, path: path, query: "", headers: [], body: body })
+}
+
+test "creates, finishes, and removes todos" {
+  store = atom(emptyStore())
+  assertEqual(request(store, "POST", "/todos", "{\"title\": \"a\"}").status, 201)
+  assertEqual(request(store, "POST", "/todos/1/done", "").body, "{\"id\":1,\"title\":\"a\",\"done\":true}")
+  assertEqual(request(store, "DELETE", "/todos/1", "").status, 204)
+  assertEqual(request(store, "GET", "/todos", "").body, "[]")
+}
+
+test "rejects an empty title with 422" {
+  r = request(atom(emptyStore()), "POST", "/todos", "{\"title\": \"\"}")
+  assertEqual(r.status, 422)
+}
