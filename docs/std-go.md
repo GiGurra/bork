@@ -80,3 +80,32 @@ bork. Call the regular `Decode` method to construct a complete proven record.
 Go APIs; both copy so later Go mutation cannot change an existing bork value.
 Functions whose signatures or Go bodies use Bytes helpers include the runtime
 automatically. Bytes has no writable fields or elements in bork.
+
+A standard package that imports third-party Go libraries declares their pinned
+module requirements in `internal/std/<package>/go-deps.mod` and corresponding
+checksums in `go-deps.sum`. These use Go's native `go.mod`/`go.sum` syntax; the
+names avoid creating a nested Go module inside the compiler's embedded sources.
+Declare the complete `go mod tidy` requirement graph, including indirect
+requirements. Generate both files from a temporary Go module importing exactly
+the libraries the package uses, then copy its go.mod/go.sum under these names.
+Only `module`, `go`, and canonical pinned `require` declarations are supported;
+Other directives are rejected.
+
+The driver combines declarations for loaded standard packages, including
+transitive bork imports, and ships only their checksums into the generated
+module. Imports without declarations add no modules. Shared module requirements
+select the highest declared version, following Go's minimal version selection;
+conflicting hashes are errors. Maintainers must refresh and test declarations
+together when a shared dependency changes. The Go directive uses the highest
+required version, starting at 1.22. Builds use `-mod=readonly`, so missing or
+incomplete declarations fail instead of resolving new dependency versions.
+
+Dependencies use Go's module cache; source is not vendored in the compiler.
+A first build can download the pinned modules using the user's `GOPROXY` and
+verify them against shipped checksums. For offline use, build a program importing
+the required packages while online, or prepopulate/copy the Go module cache.
+Then `GOPROXY=off bork build <program>` works from that cache. A cold cache fails
+with Go's missing-module error and an explanation that offline builds require
+cached modules. No checksum database access is needed when shipped hashes cover
+the build. The pinned SQLite and Postgres manifests are tested both online and
+from an offline warm cache. See the [Go module reference](https://go.dev/ref/mod).
