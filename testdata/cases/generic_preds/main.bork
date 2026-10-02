@@ -1,16 +1,16 @@
 type User = { name: String, age: Int }
 
 // Generic predicates apply to every type they fit.
-pred shortList[T](xs: List[T]) { length(xs) <= 3 }
+pred shortList[T](xs: List[T]) { xs.length() <= 3 }
 pred adult(u: User) { u.age >= 18 }
 
-fn firstOfFew[T](xs: List[T] where shortList and notEmpty): T { first(xs) }
+fn firstOfFew[T](xs: List[T] where shortList and notEmpty): T { xs.first() }
 
 fn greet(u: User where adult): String { s"hello ${u.name}" }
 
 // The prelude's notEmpty and first: no Option needed once it is known.
 fn biggest(xs: List[Int] where notEmpty): Int {
-  fold(xs, first(xs), (best, x) => if (x > best) { x } else { best })
+  xs.fold(xs.first(), (best, x) => if (x > best) { x } else { best })
 }
 
 fn describe(xs: List[Int]): String {
@@ -19,13 +19,13 @@ fn describe(xs: List[Int]): String {
 
 // A package's own isEmpty does not change what the prelude's notEmpty
 // means.
-fn isEmpty(s: String): Bool { byteLength(s) == 0 }
+fn isEmpty(s: String): Bool { s.byteLength() == 0 }
 
 fn main() {
   // Literals are checked at compile time, also lists and records.
   println(firstOfFew([1, 2]), firstOfFew(["a"]), biggest([3, 9, 4]))
   println(greet(User { name: "ann", age: 30 }))
-  println(describe([]), describe([5, 1]), isEmpty(""))
+  println(describe([]), describe([5, 1]), "".isEmpty())
   // Lists built by prepend, append, and split are known not to be empty.
-  println(first(prepend(0, [])), first(split("a,b", ",")))
+  println(prepend(0, []).first(), "a,b".split(",").first())
 }

@@ -13,7 +13,7 @@ instance showInt2: Show[Int] {
 }
 
 instance showList[T: Show]: Show[List[T]] {
-  fn show(xs: List[T]): String { join(map(xs, show), ",") }
+  fn show(xs: List[T]): String { xs.map(show).join(",") }
 }
 
 instance badPoint: Show[Point] {

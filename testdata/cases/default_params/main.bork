@@ -1,5 +1,5 @@
 fn greet(name: String, greeting: String = "Hello", times: Int = 1) {
-  forEach(range(0, times), i => println(s"$greeting, $name!"))
+  range(0, times).forEach(i => println(s"$greeting, $name!"))
 }
 
 fn tags(name: String, extra: Map[String, Int] = {:}): String {
@@ -7,7 +7,7 @@ fn tags(name: String, extra: Map[String, Int] = {:}): String {
 }
 
 fn firstOr[T](xs: List[T], fallback: List[T] = []): List[T] {
-  if (isEmpty(xs)) { fallback } else { take(xs, 1) }
+  if (xs.isEmpty()) { fallback } else { xs.take(1) }
 }
 
 fn scale(x: Float, by: Float = -1.5): Float { x * by }

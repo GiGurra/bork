@@ -6,15 +6,15 @@ pred positive(x: Int) { x > 0 }
 pred nonNegative(x: Int) { x >= 0 }
 pred atLeast(x: Int, min: Int) { x >= min }
 pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-pred short(s: String) { byteLength(s) < 5 }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
+pred short(s: String) { s.byteLength() < 5 }
 pred small8(x: Int8) { x > 0 && x < 120 }
 pred doubles8(x: Int8) { x * 2 > x }
 pred fraction(f: Float) { f > 0.0 && f < 1.0 }
 pred belowOne(f: Float) { f < 1.0 }
 pred on(b: Bool) { b }
-pred notEmpty[T](xs: List[T]) { length(xs) > 0 }
-pred short2[T](xs: List[T]) { length(xs) < 2 }
+pred notEmpty[T](xs: List[T]) { xs.length() > 0 }
+pred short2[T](xs: List[T]) { xs.length() < 2 }
 
 // These hold.
 rule positiveIsNonNegative(x: Int) { positive(x) => nonNegative(x) }

@@ -7,7 +7,7 @@ type Job = { name: String, run: () uses io => Unit }
 fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C { x => g(f(x)) }
 
 fn runAll(jobs: List[Job]) uses io {
-  forEach(jobs, j => j.run())
+  jobs.forEach(j => j.run())
 }
 
 type Box[T] = { value: T }
@@ -40,7 +40,7 @@ fn main() {
   runAll([Job { name: "quiet", run: quiet }, Job { name: "loud", run: loud }])
 
   // map's f is open: it takes a function that prints.
-  _ = map([1, 2], x => {
+  _ = [1, 2].map(x => {
     println(x)
     x
   })

@@ -19,10 +19,9 @@
 
 import "bork/http"
 import "bork/log"
-import "bork/maps"
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-pred maxBytes(s: String, n: Int) { byteLength(s) <= n }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
+pred maxBytes(s: String, n: Int) { s.byteLength() <= n }
 
 type Title = String where nonEmpty and maxBytes(100)
 
@@ -37,7 +36,7 @@ type Problem = { path: String, message: String } derive (Encode)
 type Store = { todos: Map[Int, Todo], nextId: Int }
 
 fn emptyStore(): Store {
-  Store { todos: maps.Sorted({:}), nextId: 1 }
+  Store { todos: {:}.sorted(), nextId: 1 }
 }
 
 fn notFound(id: Int): http.Response {

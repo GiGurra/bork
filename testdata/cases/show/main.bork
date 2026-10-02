@@ -1,4 +1,3 @@
-import "bork/maps"
 
 type Amount = { cents: Int }
 type Invoice = { amount: Amount, tags: List[String] }
@@ -52,6 +51,6 @@ fn main() {
   println(empty, show(empty), show(3.0))
   same: Amount | String = amount
   println(show(same), toString(same), [same])
-  println(maps.Unordered({ amount: "large", Amount { cents: 20 }: "small" }))
+  println({ amount: "large", Amount { cents: 20 }: "small" }.unordered())
   println([1, 2], "plain", 3.0)
 }

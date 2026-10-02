@@ -12,7 +12,7 @@ type Counts = { lines: Int, words: Int, bytes: Int }
 type FileCount = { path: String, result: Counts | IoError }
 
 fn countText(text: String): Counts {
-  Counts { lines: length(lines(text)), words: length(fields(text)), bytes: byteLength(text) }
+  Counts { lines: text.lines().length(), words: text.fields().length(), bytes: text.byteLength() }
 }
 
 fn countFile(path: String): Counts | IoError {
@@ -26,7 +26,7 @@ fn add(a: Counts, b: Counts): Counts {
 }
 
 fn padLeft(text: String, width: Int): String {
-  if (byteLength(text) >= width) { text } else { padLeft(" " + text, width) }
+  if (text.byteLength() >= width) { text } else { padLeft(" " + text, width) }
 }
 
 fn row(c: Counts, name: String): String {
@@ -34,29 +34,29 @@ fn row(c: Counts, name: String): String {
 }
 
 fn report(counts: List[FileCount]): Bool {
-  forEach(counts, fc => match (fc.result) {
+  counts.forEach(fc => match (fc.result) {
     c: Counts => println(row(c, fc.path))
     e: IoError => eprintln(s"wc: ${e.path}: ${e.message}")
   })
-  found = flatMap(counts, fc => match (fc.result) {
+  found = counts.flatMap(fc => match (fc.result) {
     c: Counts => [c]
     e: IoError => []
   })
-  if (length(found) > 1) {
-    println(row(fold(found, Counts { lines: 0, words: 0, bytes: 0 }, add), "total"))
+  if (found.length() > 1) {
+    println(row(found.fold(Counts { lines: 0, words: 0, bytes: 0 }, add), "total"))
   }
-  length(found) == length(counts)
+  found.length() == counts.length()
 }
 
 fn main() {
   paths = args()
-  if (isEmpty(paths)) {
+  if (paths.isEmpty()) {
     eprintln("usage: wc FILE...")
     exit(2)
   }
   counts = scope s {
-    tasks = map(paths, path => spawn(s, () => FileCount { path: path, result: countFile(path) }))
-    map(tasks, t => await(t))
+    tasks = paths.map(path => spawn(s, () => FileCount { path: path, result: countFile(path) }))
+    tasks.map(t => await(t))
   }
   if (!report(counts)) {
     exit(1)

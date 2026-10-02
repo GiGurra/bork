@@ -10,6 +10,6 @@ fn find(id: Int): Option[Int] {
 
 fn main() {
   count = 3
-  last = trim(" x ")
-  println(count, last, find(2), toUpper("still here"))
+  last = " x ".trim()
+  println(count, last, 2.find(), "still here".toUpper())
 }

@@ -17,7 +17,7 @@ type InvalidDiscount = { reason: String }
 type Priced = { order: Order, subtotal: Int, discountCents: Int, total: Int }
 
 fn parseQuantity(input: String): Int | InvalidQuantity {
-  match (parseInt(trim(input))) {
+  match (parseInt(input.trim())) {
     n: Int => if (n <= 0) {
       InvalidQuantity { input: input, reason: "must be at least 1" }
     } else if (n > 1000) {

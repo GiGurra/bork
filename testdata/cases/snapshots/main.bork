@@ -33,7 +33,7 @@ test "a snapshot not yet taken" {
 }
 
 fn snapshotSquares(xs: List[Int]) {
-  forEach(xs, (x) => assertSnapshot(x * x))
+  xs.forEach((x) => assertSnapshot(x * x))
 }
 
 test "snapshots from a helper are numbered in order" {
@@ -45,5 +45,5 @@ test "Names: with punctuation!" {
 }
 
 test "only the lines near a change are shown" {
-  assertSnapshot(join([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => s"line $n"), "\n"))
+  assertSnapshot([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => s"line $n").join("\n"))
 }

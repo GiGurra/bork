@@ -27,7 +27,7 @@ fn copyText(from: String, to: String): Int | IoError {
 fn openBoth(a: String, b: String, s: Scope): Int | IoError {
   first = openFile(a, s)?
   second = openFile(b, s)?
-  length([first, second])
+  [first, second].length()
 }
 
 fn countdown(n: Int) {
@@ -66,7 +66,7 @@ fn main() {
   println(greet())
 
   // Scopes inside lambdas.
-  sizes = map([1, 2], i => scope s {
+  sizes = [1, 2].map(i => scope s {
     tracked(s"item $i", s)
     i * 10
   })

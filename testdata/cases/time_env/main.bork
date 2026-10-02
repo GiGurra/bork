@@ -14,7 +14,7 @@ fn config(values: Map[String, String]) {
   result: Config | env.ConfigError = env.LoadWith("APP", name => lookup(values, name))
   match (result) {
     c: Config => println(c)
-    errors: env.ConfigError => forEach(errors.errors, error => println(s"${error.path}: ${error.message}"))
+    errors: env.ConfigError => errors.errors.forEach(error => println(s"${error.path}: ${error.message}"))
   }
 }
 fn seed(s: Scope) unsafe go {

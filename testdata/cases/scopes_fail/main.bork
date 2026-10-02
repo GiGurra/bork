@@ -18,7 +18,7 @@ fn viaGeneric(p: String): String | IoError {
 
 fn viaList(p: String): Int {
   files = scope s { [openFile(p, s), openFile(p, s)] }
-  length(files)
+  files.length()
 }
 
 fn scopeInLambda(p: String): Int {

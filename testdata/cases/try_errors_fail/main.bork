@@ -6,7 +6,7 @@ fn find(id: Int): Int | NotFound | DbError {
 }
 
 fn onlyNotFound(id: Int): Int | NotFound {
-  find(id)? + 1
+  id.find()? + 1
 }
 
 fn notUnion(x: Int): Int {
@@ -18,6 +18,6 @@ fn optionInPlainFn(o: Option[Int]): Int {
 }
 
 fn main() {
-  x = find(1)?
+  x = 1.find()?
   println(x, onlyNotFound(1), notUnion(1), optionInPlainFn(Option.None))
 }

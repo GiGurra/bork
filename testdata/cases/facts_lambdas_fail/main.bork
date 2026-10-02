@@ -3,20 +3,20 @@ pred positive(x: Int) { x > 0 }
 fn transfer(amount: Int where positive): Int { amount * 100 }
 
 fn unchecked(amounts: List[Int]): List[Int] {
-  map(amounts, a => transfer(a))
+  amounts.map(a => transfer(a))
 }
 
 // Calls through a function value could not be checked.
 fn asValue(amounts: List[Int]): List[Int] {
-  map(amounts, transfer)
+  amounts.map(transfer)
 }
 
 // Filtering by something else proves nothing about positive.
 pred small(x: Int) { x < 10 }
 
 fn otherCheck(xs: List[Int]): List[Int] {
-  checked = filter(xs, x => small(x))
-  map(checked, y => transfer(y))
+  checked = xs.filter(x => small(x))
+  checked.map(y => transfer(y))
 }
 
 fn main() {

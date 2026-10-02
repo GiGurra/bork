@@ -1,11 +1,11 @@
 // A branch whose type comes from the context (`[]`, `Option.None`) gets
 // it from the other branches.
 fn evens(xs: List[Int]): List[Int] {
-  flatMap(xs, x => if (x % 2 == 0) { [x] } else { [] })
+  xs.flatMap(x => if (x % 2 == 0) { [x] } else { [] })
 }
 
 fn firstWords(lines: List[String]): List[String] {
-  flatMap(lines, line => match (head(fields(line))) {
+  lines.flatMap(line => match (line.fields().head()) {
     Option.None => []
     Option.Some { value: w } => [w]
   })

@@ -12,8 +12,8 @@
 
 import "bork/http"
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-pred maxBytes(s: String, n: Int) { byteLength(s) <= n }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
+pred maxBytes(s: String, n: Int) { s.byteLength() <= n }
 pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
 
 type UserName = String where nonEmpty and maxBytes(20)
@@ -137,9 +137,9 @@ fn get(path: String): http.Response {
 }
 
 test "routes requests" {
-  assertEqual(get("/health").body, "ok")
-  assertEqual(get("/missing").status, 404)
-  assertEqual(get("/signup").status, 405)
+  assertEqual("/health".get().body, "ok")
+  assertEqual("/missing".get().status, 404)
+  assertEqual("/signup".get().status, 405)
 }
 
 test "rejects broken where clauses with 422" {

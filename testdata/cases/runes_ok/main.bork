@@ -1,6 +1,6 @@
 // Counts the digits in s, from rune index i on.
 fn countDigits(s: String, i: Int): Int {
-  match (runeAt(s, i)) {
+  match (s.runeAt(i)) {
     Option.Some { value: r } => if (isDigit(r)) { 1 + countDigits(s, i + 1) } else { countDigits(s, i + 1) }
     Option.None => 0
   }
@@ -16,9 +16,9 @@ fn describe(r: Rune): String {
 
 fn main() {
   s = "Grüße 2024"
-  println(byteLength(s), runeCount(s), countDigits(s, 0))
-  println(runeAt(s, 2), runeAt(s, 99))
-  println(substring(s, 0, 5), substring(s, 3, 2))
+  println(s.byteLength(), s.runeCount(), countDigits(s, 0))
+  println(s.runeAt(2), s.runeAt(99))
+  println(s.substring(0, 5), s.substring(3, 2))
   r = 'ü'
   next: Rune = r + 1
   println(r, next, runeToString(next), toString('A'))

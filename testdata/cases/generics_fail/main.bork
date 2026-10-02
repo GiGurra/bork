@@ -8,15 +8,15 @@ fn main() {
   println([])
   f = x => x
   // Wrong argument types.
-  println(map([1, 2], "nope"), filter([1], x => x + 1))
-  println(map([1], (a, b) => a))
+  println([1, 2].map("nope"), [1].filter(x => x + 1))
+  println([1].map((a, b) => a))
   // Lists of different element types.
   mixed = [1, "a"]
   // Lists compare by their elements.
   println([1] == [1])
   // return and ? stay in their function.
-  g = map([1], x => { return 1 })
-  h = map(["1"], s => parseInt(s)?)
+  g = [1].map(x => { return 1 })
+  h = ["1"].map(s => parseInt(s)?)
   // Calling things that are not functions.
   n = 1
   println(n(2))

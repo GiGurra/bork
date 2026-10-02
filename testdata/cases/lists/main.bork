@@ -4,24 +4,24 @@ fn double(x: Int): Int { x * 2 }
 
 fn adults(users: List[User]): List[String] {
   users
-    |> filter(u => u.age >= 18)
-    |> map(u => u.name)
+    |> (u => u.age >= 18).filter()
+    |> (u => u.name).map()
 }
 
 fn main() {
   xs = [1, 2, 3, 4]
-  println(xs, length(xs), isEmpty(xs))
-  println(map(xs, x => x * 10), map(xs, double))
-  println(filter(xs, x => x % 2 == 0))
-  println(fold(xs, 0, (sum, x) => sum + x))
-  println(get(xs, 1), get(xs, 9), head(xs), last(xs))
-  println(find(xs, x => x > 2), any(xs, x => x > 3), all(xs, x => x > 0), count(xs, x => x > 1))
-  println(take(xs, 2), drop(xs, 2), reverse(xs), concat(xs, [5]), append(xs, 5), prepend(0, xs))
-  println(range(0, 5), join(["a", "b"], "-"), split("a,b,c", ","))
-  println(sortWith([3, 1, 2], (a, b) => a < b))
+  println(xs, xs.length(), xs.isEmpty())
+  println(xs.map(x => x * 10), xs.map(double))
+  println(xs.filter(x => x % 2 == 0))
+  println(xs.fold(0, (sum, x) => sum + x))
+  println(xs.get(1), xs.get(9), xs.head(), xs.last())
+  println(xs.find(x => x > 2), xs.any(x => x > 3), xs.all(x => x > 0), xs.count(x => x > 1))
+  println(xs.take(2), xs.drop(2), xs.reverse(), xs.concat([5]), xs.append(5), prepend(0, xs))
+  println(range(0, 5), ["a", "b"].join("-"), "a,b,c".split(","))
+  println([3, 1, 2].sortWith((a, b) => a < b))
   words: List[String] = []
-  println(words, flatMap([1, 2], x => [x, x]))
-  forEach(["x", "y"], w => println(s"item $w"))
+  println(words, [1, 2].flatMap(x => [x, x]))
+  ["x", "y"].forEach(w => println(s"item $w"))
   users = [User { name: "ann", age: 30 }, User { name: "bob", age: 12 }]
   println(users)
   piped()
@@ -31,7 +31,7 @@ fn piped() {
   users = [User { name: "ann", age: 30 }, User { name: "bob", age: 12 }, User { name: "cy", age: 44 }]
   println(adults(users))
   total = users
-    |> map(u => u.age)
-    |> fold(0, (sum, age) => sum + age)
+    |> (u => u.age).map()
+    |> 0.fold((sum, age) => sum + age)
   println(total)
 }

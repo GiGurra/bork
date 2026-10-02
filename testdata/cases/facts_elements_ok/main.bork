@@ -1,7 +1,7 @@
 pred positive(x: Int) { x > 0 }
 pred nonNegative(x: Int) { x >= 0 }
 pred small(x: Int) { x < 10 }
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
 
 rule positiveIsNonNegative(x: Int) { positive(x) => nonNegative(x) }
 
@@ -9,7 +9,7 @@ fn transfer(amount: Int where positive): Int { amount * 100 }
 
 // Facts inside type arguments: every element, or the value in an Option.
 fn total(amounts: List[Int where positive]): Int {
-  amounts |> map(a => transfer(a)) |> fold(0, (sum, x) => sum + x)
+  amounts |> (a => transfer(a)).map() |> 0.fold((sum, x) => sum + x)
 }
 
 fn noteText(note: Option[String where nonEmpty]): String {
@@ -19,13 +19,13 @@ fn noteText(note: Option[String where nonEmpty]): String {
   }
 }
 
-fn sizes(xs: List[Int where nonNegative]): Int { length(xs) }
+fn sizes(xs: List[Int where nonNegative]): Int { xs.length() }
 
-fn smallPositives(xs: List[Int where positive and small]): Int { length(xs) }
+fn smallPositives(xs: List[Int where positive and small]): Int { xs.length() }
 
 // A refining function of our own: what p says holds for the result.
 fn keepIf[T](xs: List[T], p: (T) => Bool): List[T where p] {
-  filter(xs, p)
+  xs.filter(p)
 }
 
 fn onlyPositive(xs: List[Int]): List[Int where positive] {
@@ -36,7 +36,7 @@ type Batch = { amounts: List[Int where positive] }
 
 fn firstTransfer(amounts: List[Int where positive]): Int {
   // head can only return elements of amounts.
-  match (head(amounts)) {
+  match (amounts.head()) {
     Option.Some { value: a } => transfer(a)
     Option.None => 0
   }
@@ -44,20 +44,20 @@ fn firstTransfer(amounts: List[Int where positive]): Int {
 
 fn main() {
   raw = [3, -1, 7, 0, 12]
-  positives = filter(raw, positive)
+  positives = raw.filter(positive)
   println(total([1, 2, 3]), total(positives), total(onlyPositive(raw)))
   // Lambdas give the facts their bodies check.
-  println(smallPositives(filter(raw, x => positive(x) && small(x))))
+  println(smallPositives(raw.filter(x => positive(x) && small(x))))
   // Rules apply to elements too.
   println(sizes(positives))
   // Option values: literals, None, and refining find.
-  println(noteText(Option.Some { value: "hi" }), noteText(Option.None), noteText(find(["", "b"], nonEmpty)))
+  println(noteText(Option.Some { value: "hi" }), noteText(Option.None), noteText(["", "b"].find(nonEmpty)))
   // Facts flow through generic functions: the results can only hold
   // values from their arguments.
-  println(total(reverse(positives)), total(take(positives, 1)), total(concat(positives, [5])), total(append(positives, 9)))
+  println(total(positives.reverse()), total(positives.take(1)), total(positives.concat([5])), total(positives.append(9)))
   println(firstTransfer(positives), firstTransfer([]))
   checked: List[Int where positive] = [4, 5]
   batch = Batch { amounts: positives }
   println(total(checked), total(batch.amounts))
-  forEach(positives, p => println(transfer(p)))
+  positives.forEach(p => println(transfer(p)))
 }

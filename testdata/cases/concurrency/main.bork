@@ -15,8 +15,8 @@ fn main() {
   }
   println(total)
   squares = scope s {
-    tasks = map(range(1, 6), n => spawn(s, () => slow(n, 10 - n)))
-    map(tasks, t => await(t))
+    tasks = range(1, 6).map(n => spawn(s, () => slow(n, 10 - n)))
+    tasks.map(t => await(t))
   }
   println(squares)
 }

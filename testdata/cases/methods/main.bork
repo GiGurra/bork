@@ -45,7 +45,7 @@ fn more() {
   xs = [5, 6].append(7)
   println(xs.first())
   // Methods and |> mix.
-  println([1, 2, 3] |> map(x => x * 10) |> filter(x => x > 10) |> reverse)
+  println([1, 2, 3] |> (x => x * 10).map() |> (x => x > 10).filter() |> reverse)
   println(Option.Some { value: 4 }.map(x => x + 1).getOr(0))
 }
 
