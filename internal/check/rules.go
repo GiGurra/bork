@@ -73,7 +73,7 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 			return nil
 		}
 		a := &RuleAtom{Pred: fn}
-		for i, arg := range call.Args {
+		for i, arg := range c.info.Args(call) {
 			if id, isID := arg.(*syntax.Ident); isID && vars[id.Name] {
 				a.Args = append(a.Args, RuleArg{Var: id.Name})
 				bound[id.Name] = true

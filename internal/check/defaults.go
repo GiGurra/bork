@@ -12,7 +12,8 @@ import "github.com/GiGurra/bork/internal/syntax"
 // if written there: a copy of a literal (which then takes its type
 // from the call, so `xs: List[T] = []` works for every T), or else the
 // default itself, checked once where it was declared, so its names
-// mean what they mean there.
+// mean what they mean there. The call's syntax is left as written; its
+// arguments with the defaults are in Info.CallArgs.
 
 // ensureDefaults checks fn's defaults, once: closed values, of the
 // parameter's type, and only on the last parameters.
@@ -64,25 +65,29 @@ func (c *checker) ensureDefaults(fn *Func) {
 	}
 }
 
-// addDefaults adds the defaults of the parameters a call leaves out.
-func (c *checker) addDefaults(e *syntax.Call, fn *Func) {
-	if fn.Decl == nil || len(e.Args) >= len(fn.Decl.Params) {
-		return
+// withDefaults is a call's arguments followed by the defaults of the
+// parameters it leaves out (or the arguments alone, if one of those has
+// no usable default).
+func (c *checker) withDefaults(args []syntax.Expr, fn *Func) []syntax.Expr {
+	if fn.Decl == nil || len(args) >= len(fn.Decl.Params) {
+		return args
 	}
 	c.ensureDefaults(fn)
-	missing := fn.Decl.Params[len(e.Args):]
+	missing := fn.Decl.Params[len(args):]
 	for _, p := range missing {
 		if p.Default == nil || !isLiteral(p.Default) && !c.sharedDefaults[p.Default] {
-			return
+			return args
 		}
 	}
+	out := append([]syntax.Expr(nil), args...)
 	for _, p := range missing {
 		if isLiteral(p.Default) {
-			e.Args = append(e.Args, copyLiteral(p.Default))
+			out = append(out, copyLiteral(p.Default))
 		} else {
-			e.Args = append(e.Args, p.Default)
+			out = append(out, p.Default)
 		}
 	}
+	return out
 }
 
 // isClosed reports whether x is a closed value: a literal, or a list,

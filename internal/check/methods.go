@@ -22,12 +22,6 @@ import (
 // prelude's (which has those of List, Map, and String). A record's
 // field holding a function is called as before: r.f() calls the field.
 
-type methodCall struct {
-	fun      syntax.Expr
-	args     []syntax.Expr
-	typeArgs []*syntax.TypeExpr
-}
-
 // methodKey names the types methods can be declared on: List, Map,
 // the basic types, and declared types (whatever their type arguments).
 func methodKey(t Type) (string, bool) {
@@ -146,14 +140,9 @@ func (c *checker) methodNamed(t Type, name string) (*Func, string) {
 }
 
 // methodCallOf checks e if it is a method call, x.m(args), and reports
-// whether it was.
+// whether it was. The call is left as written: the checker records its
+// arguments as m takes them, x first (see Info.CallArgs).
 func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
-	if orig, ok := c.methodCalls[e]; ok {
-		// Checked before (a lambda's body can be checked twice): start
-		// again from what was written.
-		e.Fun, e.Args, e.TypeArgs = orig.fun, orig.args, orig.typeArgs
-		delete(c.methodCalls, e)
-	}
 	sel, ok := e.Fun.(*syntax.Selector)
 	if !ok {
 		return nil, false
@@ -164,17 +153,16 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	if c.isVariantPath(sel.X) {
 		return nil, false
 	}
-	delete(c.prechecked, sel.X)
 	xt := c.expr(sel.X)
-	if c.prechecked == nil {
-		c.prechecked = map[syntax.Expr]Type{}
-	}
-	c.prechecked[sel.X] = xt
 	if xt == Invalid {
-		return nil, false
+		for _, a := range e.Args {
+			c.expr(a)
+		}
+		return Invalid, true
 	}
 	if r, ok := xt.(*Record); ok && r.Field(sel.Name) != nil {
-		return nil, false // a field holding a function
+		// A field holding a function.
+		return c.callFuncValue(e, c.record(sel, r.Field(sel.Name).Type)), true
 	}
 	fn, why := c.methodNamed(xt, sel.Name)
 	if tp, ok := xt.(*TypeParam); ok && tp.Hole {
@@ -183,17 +171,13 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 		fn = c.onlyMethod(sel.Name, len(e.Args))
 	}
 	if fn == nil {
-		delete(c.prechecked, sel.X)
 		c.errorf(sel.Pos, "%s", why)
 		for _, a := range e.Args {
 			c.expr(a)
 		}
 		return Invalid, true
 	}
-	if c.methodCalls == nil {
-		c.methodCalls = map[*syntax.Call]methodCall{}
-	}
-	c.methodCalls[e] = methodCall{fun: e.Fun, args: e.Args, typeArgs: e.TypeArgs}
+	typeArgs := e.TypeArgs
 	if len(e.TypeArgs) > 0 {
 		full, ok := c.methodTypeArgs(e, sel, fn)
 		if !ok {
@@ -204,12 +188,10 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 			}
 			return Invalid, true
 		}
-		e.TypeArgs = full
+		typeArgs = full
 	}
-	id := &syntax.Ident{Pos: sel.Pos, Name: sel.Name}
-	e.Fun = id
-	e.Args = append([]syntax.Expr{sel.X}, e.Args...)
-	return c.callFunc(e, id, fn, want), true
+	args := append([]syntax.Expr{sel.X}, e.Args...)
+	return c.callFunc(e, sel.Name, fn, args, xt, typeArgs, want), true
 }
 
 // methodTypeArgs places the type arguments written in a method call

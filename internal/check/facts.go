@@ -315,7 +315,7 @@ func (f *factChecker) stmts(list []syntax.Stmt, e env) env {
 			f.walk(s.Call, e)
 			facts := f.conditionFacts(s.Call, true)
 			if len(facts) == 0 && f.collect == nil {
-				f.diags.Add(s.Call.Args[0].Position(), "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
+				f.diags.Add(f.info.Args(s.Call)[0].Position(), "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
 			}
 			e = e.with(facts...)
 		}
@@ -331,7 +331,7 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 			f.walk(x.Fun, e)
 		}
 		if fn := f.info.CallFuncs[x]; fn != nil {
-			for i, a := range x.Args {
+			for i, a := range f.info.Args(x) {
 				if l, ok := a.(*syntax.Lambda); ok {
 					for k, p := range l.Params {
 						f.lambdaArgs[p] = lambdaArg{call: x, fn: fn, arg: i, param: k}
@@ -339,7 +339,7 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 				}
 			}
 		}
-		for _, a := range x.Args {
+		for _, a := range f.info.Args(x) {
 			f.walk(a, e)
 		}
 		if fn := f.info.CallFuncs[x]; fn != nil {
@@ -464,13 +464,14 @@ func pathPhrase(path, name string) string {
 }
 
 func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
+	args := f.info.Args(call)
 	for i, cons := range fn.ParamConstraints {
-		if i >= len(call.Args) {
+		if i >= len(args) {
 			break
 		}
 		for _, con := range cons {
 			req := fmt.Sprintf("%s requires %s to be %s", fn.QualifiedName(f.from()), pathPhrase(con.Path, fn.Decl.Params[i].Name), con.Text(f.from()))
-			f.oblige(call.Args[i], con, f.callArgs(call, fn), e, req)
+			f.oblige(args[i], con, f.callArgs(call, fn), e, req)
 		}
 	}
 	// With a constrained type argument (f[Port](x)), arguments of that
@@ -481,16 +482,16 @@ func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
 	}
 	for i, p := range fn.Params {
 		for j, tp := range fn.TypeParams {
-			if p != Type(tp) || i >= len(call.Args) {
+			if p != Type(tp) || i >= len(args) {
 				continue
 			}
 			for _, con := range inst.ArgFacts[j] {
 				arg := TypeText(inst.TypeArgs[j], f.from())
-				if j < len(call.TypeArgs) && call.TypeArgs[j] != nil && call.TypeArgs[j].Name != "" && len(call.TypeArgs[j].Args) == 0 && len(call.TypeArgs[j].Where) == 0 {
-					arg = call.TypeArgs[j].Name // as written: Port, not Int
+				if ta := inst.TypeArgExprs; j < len(ta) && ta[j] != nil && ta[j].Name != "" && len(ta[j].Args) == 0 && len(ta[j].Where) == 0 {
+					arg = ta[j].Name // as written: Port, not Int
 				}
 				req := fmt.Sprintf("%s[%s] requires %s to be %s", fn.QualifiedName(f.from()), arg, fn.Decl.Params[i].Name, con.Text(f.from()))
-				f.oblige(call.Args[i], con, noParams, e, req)
+				f.oblige(args[i], con, noParams, e, req)
 			}
 		}
 	}
@@ -766,8 +767,8 @@ func (f *factChecker) argOf(x syntax.Expr) argVal {
 func (f *factChecker) callArgs(call *syntax.Call, fn *Func) func(string) argVal {
 	return func(param string) argVal {
 		for i, p := range fn.Decl.Params {
-			if p.Name == param && i < len(call.Args) {
-				return f.argOf(call.Args[i])
+			if args := f.info.Args(call); p.Name == param && i < len(args) {
+				return f.argOf(args[i])
 			}
 		}
 		return argVal{text: param}
@@ -1033,7 +1034,7 @@ func (f *factChecker) parametric(call *syntax.Call, fn *Func, ob obligation, e e
 			for _, s := range sources {
 				inner := ob
 				inner.path = s.path + rest
-				ok, p := f.prove(call.Args[s.arg], inner, e, depth+1)
+				ok, p := f.prove(f.info.Args(call)[s.arg], inner, e, depth+1)
 				if !ok {
 					proven = false
 					break
@@ -1071,7 +1072,7 @@ func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int)
 		for _, p := range paths {
 			inner := ob
 			inner.path = p + ob.path
-			ok, more := f.prove(la.call.Args[i], inner, e, depth+1)
+			ok, more := f.prove(f.info.Args(la.call)[i], inner, e, depth+1)
 			if !ok {
 				return false, nil
 			}
@@ -1535,8 +1536,8 @@ func (f *factChecker) derive(call *syntax.Call, fn *Func, member Type, ob obliga
 			if id, isID := path.x.(*syntax.Ident); isID {
 				if param, isParam := f.info.Defs[id].(*syntax.Param); isParam {
 					for j, pp := range fn.Decl.Params {
-						if pp == param && j < len(call.Args) {
-							ok, p = f.prove(call.Args[j], ob, e, depth+1)
+						if args := f.info.Args(call); pp == param && j < len(args) {
+							ok, p = f.prove(args[j], ob, e, depth+1)
 						}
 					}
 				}
@@ -1577,7 +1578,7 @@ func (f *factChecker) calleeObligation(call *syntax.Call, fn *Func, ob obligatio
 			continue
 		}
 		found := false
-		for j, arg := range call.Args {
+		for j, arg := range f.info.Args(call) {
 			if a.key != "" && f.key(arg) == a.key {
 				inner.args[i] = argVal{key: "p:" + fn.Decl.Params[j].Name, text: fn.Decl.Params[j].Name, expr: f.paramIdent(fn.Decl.Params[j])}
 				found = true
@@ -1767,15 +1768,16 @@ func (f *factChecker) conditionFacts(cond syntax.Expr, positive bool) []fact {
 		}
 	case *syntax.Call:
 		fn := f.info.CallFuncs[c]
-		if !positive || fn == nil || !fn.Decl.IsPred || len(c.Args) == 0 {
+		args := f.info.Args(c)
+		if !positive || fn == nil || !fn.Decl.IsPred || len(args) == 0 {
 			return nil
 		}
-		subject := f.key(c.Args[0])
+		subject := f.key(args[0])
 		if subject == "" {
 			return nil
 		}
 		ft := fact{pred: fn, subject: subject}
-		for _, a := range c.Args[1:] {
+		for _, a := range args[1:] {
 			ft.args = append(ft.args, f.argOf(a))
 		}
 		return []fact{ft}

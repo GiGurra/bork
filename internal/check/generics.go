@@ -24,6 +24,10 @@ type Instance struct {
 	// type argument (decodeJson[Port]): arguments of that type must
 	// satisfy them, and results of it do (see callFunc).
 	ArgFacts [][]*Constraint
+	// TypeArgExprs holds a call's explicit type arguments as written,
+	// one per type parameter (nil for those a method's receiver
+	// decides), or nil if there are none.
+	TypeArgExprs []*syntax.TypeExpr
 }
 
 // funcType is the type of fn as a value.
@@ -351,22 +355,25 @@ func (fn *Func) InstanceFor(subject Type) *Instance {
 	return in.instance()
 }
 
-// callFunc checks a call of a declared function. Arguments are checked
-// left to right, except that those that need a type from the context
-// (lambdas, `[]`, `Option.None`) come last, once the other arguments
-// have decided what they can.
-func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type) Type {
+// callFunc checks a call of a declared function, named name, with the
+// given arguments and type arguments: for a method call, the receiver
+// comes first, already checked as being of type recv (nil otherwise).
+// Arguments are checked left to right, except that those that need a
+// type from the context (lambdas, `[]`, `Option.None`) come last, once
+// the other arguments have decided what they can.
+func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.Expr, recv Type, typeArgs []*syntax.TypeExpr, want Type) Type {
 	errorsBefore := c.diags.Len()
 	c.info.CallFuncs[e] = fn
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 	}
-	c.addDefaults(e, fn)
-	if len(e.Args) != len(fn.Params) {
+	args = c.withDefaults(args, fn)
+	c.info.CallArgs[e] = args
+	if len(args) != len(fn.Params) {
 		if req := requiredParams(fn); req < len(fn.Params) {
-			c.errorf(e.Pos, "%s takes %d to %d argument(s), but %d were given", id.Name, req, len(fn.Params), len(e.Args))
+			c.errorf(e.Pos, "%s takes %d to %d argument(s), but %d were given", name, req, len(fn.Params), len(args))
 		} else {
-			c.errorf(e.Pos, "%s takes %d argument(s), but %d were given", id.Name, len(fn.Params), len(e.Args))
+			c.errorf(e.Pos, "%s takes %d argument(s), but %d were given", name, len(fn.Params), len(args))
 		}
 	}
 	var in *inference
@@ -374,12 +381,12 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 		in = newInference(fn)
 	}
 	var argFacts [][]*Constraint
-	if len(e.TypeArgs) > 0 {
-		if len(e.TypeArgs) != len(fn.TypeParams) {
-			c.errorf(e.Pos, "%s takes %d type argument(s), but %d were given", id.Name, len(fn.TypeParams), len(e.TypeArgs))
+	if len(typeArgs) > 0 {
+		if len(typeArgs) != len(fn.TypeParams) {
+			c.errorf(e.Pos, "%s takes %d type argument(s), but %d were given", name, len(fn.TypeParams), len(typeArgs))
 			return Invalid
 		}
-		for i, ta := range e.TypeArgs {
+		for i, ta := range typeArgs {
 			if ta == nil {
 				continue // a method's, decided by its receiver
 			}
@@ -402,9 +409,16 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			}
 		}
 	}
-	types := make([]Type, len(e.Args))
+	types := make([]Type, len(args))
 	check := func(i int, a syntax.Expr) {
-		if c.sharedDefaults[a] {
+		switch {
+		case i == 0 && recv != nil:
+			types[i] = recv
+			if in != nil {
+				in.unify(fn.Params[i], recv)
+			}
+			return
+		case c.sharedDefaults[a]:
 			types[i] = c.info.Types[a]
 			return
 		}
@@ -428,7 +442,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			in.unify(fn.Params[i], types[i])
 		}
 	}
-	for i, a := range e.Args {
+	for i, a := range args {
 		if !c.needsContext(a) {
 			check(i, a)
 		}
@@ -440,14 +454,14 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 	}
 	// A lambda's body can decide what `[]` or `{:}` leaves open:
 	// fold(xs, [], (acc, x) => append(acc, x)).
-	if in != nil && c.hasEmptyLiteralArg(e.Args) {
-		for i, a := range e.Args {
+	if in != nil && c.hasEmptyLiteralArg(args) {
+		for i, a := range args {
 			if l, ok := a.(*syntax.Lambda); ok && i < len(fn.Params) && lambdaParamsOpen(l, in.subst(fn.Params[i]), in) {
 				c.inferFromBody(l, fn.Params[i], in)
 			}
 		}
 	}
-	for i, a := range e.Args {
+	for i, a := range args {
 		if c.needsContext(a) {
 			check(i, a)
 		}
@@ -462,12 +476,12 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 				case t == Invalid:
 					reported = true
 				case i < len(fn.Params) && !in.fits(in.subst(fn.Params[i]), t):
-					c.errorf(e.Args[i].Position(), "%s to %s must be %s, found %s", argLabel(fn, i), id.Name, in.subst(fn.Params[i]), t)
+					c.errorf(args[i].Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, in.subst(fn.Params[i]), t)
 					reported = true
 				}
 			}
 			if !reported {
-				c.errorf(e.Pos, "cannot tell what %s is in this call to %s; give the arguments (or the result) a known type", strings.Join(missing, " and "), id.Name)
+				c.errorf(e.Pos, "cannot tell what %s is in this call to %s; give the arguments (or the result) a known type", strings.Join(missing, " and "), name)
 			}
 			return Invalid
 		}
@@ -479,7 +493,7 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			if fn.Prelude && fn.Decl.Name == "spawn" {
 				hint = " (to run work that gives no value, use launch)"
 			}
-			c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, id.Name, ta, hint)
+			c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, name, ta, hint)
 			return Invalid
 		}
 	}
@@ -500,14 +514,14 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			var common []*Constraint
 			first := true
 			for i, p := range fn.Params {
-				if i >= len(e.Args) || !mentionsParam(p, tp) {
+				if i >= len(args) || !mentionsParam(p, tp) {
 					continue
 				}
 				if p != Type(tp) {
 					common = nil // List[T] and the like: not tracked
 					break
 				}
-				cons := c.declaredFacts(e.Args[i])
+				cons := c.declaredFacts(args[i])
 				if first {
 					common, first = cons, false
 					continue
@@ -531,14 +545,15 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 	if !c.resolveDictsWith(inst, e.Pos, have) {
 		return Invalid
 	}
-	if argFacts != nil && !c.promisesArgFacts(inst, argFacts, id.Name, e.Pos) {
+	if argFacts != nil && !c.promisesArgFacts(inst, argFacts, name, e.Pos) {
 		return Invalid
 	}
 	inst.ArgFacts = argFacts
+	inst.TypeArgExprs = typeArgs
 	c.info.Instances[e] = inst
-	for i, a := range e.Args {
+	for i, a := range args {
 		if i < len(inst.Params) && types[i] != Invalid && !assignable(types[i], inst.Params[i]) {
-			c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), id.Name, inst.Params[i], types[i])
+			c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, inst.Params[i], types[i])
 		}
 	}
 	return inst.Result
@@ -591,7 +606,11 @@ func (c *checker) genericFuncRef(x syntax.Expr) bool {
 
 // callValue checks a call of a function value: `f(x)`, `make(1)(2)`.
 func (c *checker) callValue(e *syntax.Call) Type {
-	t := c.expr(e.Fun)
+	return c.callFuncValue(e, c.expr(e.Fun))
+}
+
+// callFuncValue checks a call of a function value, e.Fun, of type t.
+func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 	ft, ok := t.(*FuncType)
 	if !ok {
 		if t != Invalid {
