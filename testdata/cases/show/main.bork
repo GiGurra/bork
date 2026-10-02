@@ -29,6 +29,8 @@ fn main() {
   println(Box { value: amount })
   println(Maybe.Some { amount: amount }, Maybe.None)
   println(bounded(amount), unbounded(amount), wrapped(amount))
+  println(show(amount), show([amount]), show(1))
+  println(Box { value: 1 }, unbounded(Box { value: amount }))
   println(maps.Unordered({ amount: "large", Amount { cents: 20 }: "small" }))
   println([1, 2], "plain", 3.0)
 }

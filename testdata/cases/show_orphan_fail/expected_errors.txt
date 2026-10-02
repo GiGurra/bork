@@ -1,0 +1,2 @@
+main.bork:3:1: package example.com/orphan/pretty has no instance or set of instances ShowAmount
+pretty/pretty.bork:3:27: a Show instance must be declared in the type's own package, so its text is the same everywhere

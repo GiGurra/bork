@@ -1,8 +1,5 @@
 import "example.com/show/money"
-import "example.com/show/pretty"
 import "example.com/show/plain"
-
-use pretty.ShowAmount
 
 fn main() {
   a = money.Amount { cents: 425 }

@@ -1,5 +1,0 @@
-import "example.com/show/money"
-
-instance ShowAmount: Show[money.Amount] {
-  fn show(a: money.Amount): String { s"${a.cents} cents" }
-}

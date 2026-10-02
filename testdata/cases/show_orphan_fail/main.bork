@@ -1,0 +1,5 @@
+import "example.com/orphan/pretty"
+
+use pretty.ShowAmount
+
+fn main() {}

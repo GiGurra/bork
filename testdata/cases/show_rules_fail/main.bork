@@ -1,0 +1,27 @@
+type Box[T] = { value: T }
+type Amount = { cents: Int }
+pred positive(a: Amount) { a.cents > 0 }
+
+instance basic: Show[Int] {
+  fn show(x: Int): String { "int" }
+}
+instance list: Show[List[Int]] {
+  fn show(x: List[Int]): String { "list" }
+}
+instance map: Show[Map[Int, Int]] {
+  fn show(x: Map[Int, Int]): String { "map" }
+}
+instance option: Show[Option[Int]] {
+  fn show(x: Option[Int]): String { "option" }
+}
+instance specialized: Show[Box[Int]] {
+  fn show(x: Box[Int]): String { "specialized" }
+}
+instance bounded[T: Eq]: Show[Box[T]] {
+  fn show(x: Box[T]): String { "bounded" }
+}
+instance refined: Show[Amount where positive] {
+  fn show(x: Amount): String { "refined" }
+}
+
+fn main() {}
