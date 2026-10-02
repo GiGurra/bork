@@ -1,52 +1,60 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in TypeScript syntax: `function`, `const`, type predicates
+// (`s is Title`) for preds, branded types, discriminated unions for
+// sealed types, `this` parameters for methods, arrow functions,
+// template literals, the Hack-style pipe proposal (`|> f(%)`), `using`
+// declarations for scopes, the TC39 pattern matching proposal
+// (`match (x) { when ... }`), and a tagged template for unsafe Go.
+import * as http from "bork/http";
+import * as log from "bork/log";
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-
-type Title = String where nonEmpty
-
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
-
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+function nonEmpty(s: string): s is Title {
+  return byteLength(s) > 0;
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+type Title = string & { readonly __where: "nonEmpty" };
+
+type Todo = { id: number; title: Title; done: boolean } & Derive<Encode>;
+
+type Discount =
+  | { kind: "None" }
+  | { kind: "Percent"; percent: number }
+  | { kind: "FixedOff"; cents: number };
+
+function discountFor(coupon: string | undefined): Discount | InvalidDiscount {
+  return match (coupon) {
+    when (undefined): { kind: "None" };
+    when ("TENOFF"): { kind: "Percent", percent: 10 };
+    when (code): { reason: `unknown coupon ${code.toUpperCase()}` };
+  };
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
-
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+function second<T>(this: List<T>): Option<T> {
+  return this.get(1);
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+function summary(users: List<User>, minAge = 18): string {
+  const adults = users.filter(u => u.age >= minAge);
+  const names = adults.map(u => u.name).sorted();
+  const counts = names.reduce((m, n) => m.put(n, m.getOr(n, 0) + 1), new Map<string, number>());
+  const total = [1, 2, 3] |> map(%, x => x * 10) |> fold(%, 0, (a, b) => a + b);
+  log.info("summary", { adults: adults.length, total });
+  return names.isEmpty() ? "nobody" : `${total}: ${names.join(", ")}`;
 }
 
-fn now(): Int unsafe go {
+function serve(addr: string): void | IoError {
+  using s = scope({ taskTimeout: 100, cleanupTimeout: 500 });
+  const store = atom(new Map<string, Todo>());
+  const server = http.listen(addr, s, (req, rs) => http.text(200, "ok"));
+  if (server instanceof IoError) return server;
+  s.launch(() => { s.delay(1000); });
+  server.wait();
+}
+
+const now = unsafe.go<() => number>`
   import "time"
   return time.Now().UnixMilli()
-}
+`;
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
-}
+test("summary counts adults", () => {
+  assertEqual(summary([]), "nobody");
+});

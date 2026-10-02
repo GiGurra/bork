@@ -1,52 +1,55 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Kotlin syntax: `fun`, `val`, `data class`, `sealed
+// interface`, `when`, nullable types for Option, extension functions,
+// trailing `{ it }` lambdas, `to` pairs, `$` templates, and the
+// `?:` operator. Kotlin has no union types, so `|` stays bork's.
+import bork.http
+import bork.log
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred fun nonEmpty(s: String) = s.byteLength > 0
 
-type Title = String where nonEmpty
+typealias Title = String where nonEmpty
 
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
+@Derive(Encode::class)
+data class Todo(val id: Int, val title: Title, val done: Boolean)
 
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+sealed interface Discount {
+    data object None : Discount
+    data class Percent(val percent: Int) : Discount
+    data class FixedOff(val cents: Int) : Discount
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+fun discountFor(coupon: String?): Discount | InvalidDiscount = when (coupon) {
+    null -> Discount.None
+    "TENOFF" -> Discount.Percent(percent = 10)
+    else -> InvalidDiscount(reason = "unknown coupon ${coupon.uppercase()}")
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
+fun <T> List<T>.second(): T? = getOrNull(1)
 
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+fun summary(users: List<User>, minAge: Int = 18): String {
+    val adults = users.filter { it.age >= minAge }
+    val names = adults.map { it.name }.sorted()
+    val counts = names.fold(mapOf<String, Int>()) { m, n -> m + (n to (m[n] ?: 0) + 1) }
+    val total = listOf(1, 2, 3).map { it * 10 }.fold(0) { a, b -> a + b }
+    log.info("summary", mapOf("adults" to adults.size, "total" to total))
+    return if (names.isEmpty()) "nobody" else "$total: ${names.joinToString(", ")}"
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+fun serve(addr: String): Unit | IoError = scope(taskTimeout(100), cleanupTimeout(500)) { s ->
+    val store = atom(mapOf<String, Todo>())
+    val server = http.listen(addr, s) { req, rs -> http.text(200, "ok") }.bind()
+    s.launch { delay(1000) }
+    server.await()
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
-}
+unsafe fun now(): Int = go(
+    """
+    import "time"
+    return time.Now().UnixMilli()
+    """
+)
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+@Test
+fun `summary counts adults`() {
+    assertEquals("nobody", summary(emptyList()))
 }

@@ -1,52 +1,70 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Gleam syntax: `let` bindings, `->` results, `List(a)`
+// generics, custom types with constructors, `case` with patterns,
+// `Result` instead of unions, no methods (module functions and `|>`
+// instead), `fn(x) { }` lambdas, `<>` for strings, `#(a, b)` tuples,
+// `use` for scopes and early returns, `@external` for unsafe Go, and
+// gleeunit-style tests.
+import bork/http
+import bork/log
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-
-type Title = String where nonEmpty
-
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
-
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+@pred
+pub fn non_empty(s: String) -> Bool {
+  string.byte_size(s) > 0
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
+@where(non_empty)
+pub type Title =
+  String
+
+@derive(Encode)
+pub type Todo {
+  Todo(id: Int, title: Title, done: Bool)
+}
+
+pub type Discount {
+  NoDiscount
+  Percent(percent: Int)
+  FixedOff(cents: Int)
+}
+
+pub fn discount_for(coupon: Option(String)) -> Result(Discount, InvalidDiscount) {
+  case coupon {
+    None -> Ok(NoDiscount)
+    Some("TENOFF") -> Ok(Percent(percent: 10))
+    Some(code) -> Error(InvalidDiscount(reason: "unknown coupon " <> string.uppercase(code)))
   }
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
-
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+pub fn second(xs: List(a)) -> Option(a) {
+  list.at(xs, 1)
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
+pub fn summary(users: List(User), min_age min_age: Int) -> String {
+  let adults = users |> list.filter(fn(u) { u.age >= min_age })
+  let names = adults |> list.map(fn(u) { u.name }) |> list.sort(string.compare)
+  let counts =
+    names
+    |> list.fold(dict.new(), fn(m, n) { dict.insert(m, n, dict.get_or(m, n, 0) + 1) })
+  let total = [1, 2, 3] |> list.map(fn(x) { x * 10 }) |> list.fold(0, fn(a, b) { a + b })
+  log.info("summary", dict.from_list([#("adults", list.length(adults)), #("total", total)]))
+  case names {
+    [] -> "nobody"
+    _ -> int.to_string(total) <> ": " <> string.join(names, ", ")
   }
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
+pub fn serve(addr: String) -> Result(Nil, IoError) {
+  use s <- scope.open([task_timeout(100), cleanup_timeout(500)])
+  let store = atom.new(dict.new())
+  use server <- result.try(http.listen(addr, s, fn(req, rs) { http.text(200, "ok") }))
+  task.launch(s, fn() { scope.delay(s, 1000) })
+  Ok(http.wait(server))
 }
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+@external(go, "time", "Now().UnixMilli")
+pub fn now() -> Int
+
+pub fn summary_counts_adults_test() {
+  summary([], min_age: 18)
+  |> should.equal("nobody")
 }

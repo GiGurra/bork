@@ -1,52 +1,64 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Rust syntax: snake_case, `let` bindings, `->` results,
+// `<T>` generics, attributes (`#[pred]`, `#[derive]`, `#[test]`),
+// `enum`s, `impl` blocks for methods, `|x|` closures, `::` paths, and
+// macros (`format!`, `map!`, `scope!`, `go!`). Rust has no unions or
+// default parameters, so those stay bork's.
+use bork::http;
+use bork::log;
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+#[pred]
+fn non_empty(s: &String) -> bool { s.byte_len() > 0 }
 
-type Title = String where nonEmpty
+#[refine(non_empty)]
+type Title = String;
 
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
+#[derive(Encode)]
+struct Todo { id: i64, title: Title, done: bool }
 
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+enum Discount {
+    None,
+    Percent { percent: i64 },
+    FixedOff { cents: i64 },
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+fn discount_for(coupon: Option<String>) -> Discount | InvalidDiscount {
+    match coupon {
+        None => Discount::None,
+        Some("TENOFF") => Discount::Percent { percent: 10 },
+        Some(code) => InvalidDiscount { reason: format!("unknown coupon {}", code.to_upper()) },
+    }
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
-
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+impl<T> List<T> {
+    fn second(&self) -> Option<T> { self.get(1) }
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+fn summary(users: List<User>, min_age: i64 = 18) -> String {
+    let adults = users.filter(|u| u.age >= min_age);
+    let names = adults.map(|u| u.name).sorted();
+    let counts = names.fold(map! {}, |m, n| m.put(n, m.get_or(n, 0) + 1));
+    let total = list![1, 2, 3].map(|x| x * 10).fold(0, |a, b| a + b);
+    log::info!("summary", map! { "adults" => adults.len(), "total" => total });
+    if names.is_empty() { "nobody".into() } else { format!("{total}: {}", names.join(", ")) }
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
+fn serve(addr: String) -> Result<(), IoError> {
+    scope!(s, task_timeout = 100, cleanup_timeout = 500, {
+        let store = Atom::new(map! {});
+        let server = http::listen(&addr, s, |req, rs| http::text(200, "ok"))?;
+        s.launch(|| { let _ = s.delay(1000); });
+        server.wait();
+    })
 }
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+unsafe fn now() -> i64 {
+    go! {
+        import "time"
+        return time.Now().UnixMilli()
+    }
+}
+
+#[test]
+fn summary_counts_adults() {
+    assert_eq!(summary(list![]), "nobody");
 }

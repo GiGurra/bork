@@ -1,52 +1,86 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in V syntax: V is already close (`fn`, `[T]` generics,
+// receivers, `match`, `{'k': v}` map literals, `${}` interpolation,
+// `unsafe`). V adds `:=` bindings, sum types (`type X = A | B`),
+// attributes (`@[...]`), `it` in lambdas, `or {}` for options, `!`
+// for errors, `@[params]` structs for defaults, and `test_` functions.
+import bork.http
+import bork.log
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-
-type Title = String where nonEmpty
-
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
-
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+@[pred]
+fn non_empty(s string) bool {
+	return s.len > 0
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+@[where: 'non_empty']
+type Title = string
+
+@[derive: 'Encode']
+struct Todo {
+	id    int
+	title Title
+	done  bool
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
+struct NoDiscount {}
 
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+struct Percent {
+	percent int
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+struct FixedOff {
+	cents int
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
+type Discount = FixedOff | NoDiscount | Percent
+
+fn discount_for(coupon ?string) Discount | InvalidDiscount {
+	code := coupon or { return NoDiscount{} }
+	return match code {
+		'TENOFF' { Percent{ percent: 10 } }
+		else { InvalidDiscount{ reason: 'unknown coupon ${code.to_upper()}' } }
+	}
 }
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+fn (xs []T) second[T]() ?T {
+	return xs.get(1)
+}
+
+@[params]
+struct SummaryOptions {
+	min_age int = 18
+}
+
+fn summary(users []User, opts SummaryOptions) string {
+	adults := users.filter(it.age >= opts.min_age)
+	names := adults.map(it.name).sorted()
+	counts := names.fold(map[string]int{}, fn (m map[string]int, n string) map[string]int {
+		return m.put(n, m.get_or(n, 0) + 1)
+	})
+	total := [1, 2, 3].map(it * 10).fold(0, fn (a int, b int) int { return a + b })
+	log.info('summary', {'adults': adults.len, 'total': total})
+	return if names.len == 0 { 'nobody' } else { '${total}: ${names.join(', ')}' }
+}
+
+fn serve(addr string) ! {
+	s := scope(task_timeout: 100, cleanup_timeout: 500)
+	defer { s.close() }
+	store := atom(map[string]Todo{})
+	server := http.listen(addr, s, fn (req http.Request, rs Scope) http.Response {
+		return http.text(200, 'ok')
+	})!
+	s.launch(fn [s] () { s.delay(1000) })
+	server.wait()
+}
+
+fn now() i64 {
+	return unsafe {
+		go('
+			import "time"
+			return time.Now().UnixMilli()
+		')
+	}
+}
+
+fn test_summary_counts_adults() {
+	assert summary([], SummaryOptions{}) == 'nobody'
 }

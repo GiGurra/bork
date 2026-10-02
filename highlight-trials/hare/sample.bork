@@ -1,52 +1,73 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Hare syntax: `use` imports, `let`/`const` bindings, `fn
+// name(x: t) t = { ... };` with the result type after the
+// parameters, tagged unions `(a | b)` (native in Hare, as in bork),
+// `match (x) { case ... => }`, `void` for absence, struct literals
+// with `=`, `@test` functions, and `defer`. Hare has no generics,
+// lambdas, methods, or defaults: those become concrete types, named
+// functions, and plain functions.
+use bork::http;
+use bork::log;
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+@pred fn nonempty(s: str) bool = len(s) > 0;
 
-type Title = String where nonEmpty
+@where(nonempty) type title = str;
 
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
+@derive(encode) type todo = struct {
+	id: int,
+	title: title,
+	done: bool,
+};
 
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
-}
+type nodiscount = void;
+type percent = struct { percent: int };
+type fixedoff = struct { cents: int };
+type discount = (nodiscount | percent | fixedoff);
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
-}
+fn discount_for(coupon: (str | void)) (discount | invalid_discount) = {
+	match (coupon) {
+	case void =>
+		return nodiscount;
+	case let code: str =>
+		if (code == "TENOFF") {
+			return percent { percent = 10 };
+		};
+		return invalid_discount {
+			reason = fmt::asprintf("unknown coupon {}", strings::toupper(code)),
+		};
+	};
+};
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
+fn second(xs: []user) (user | void) = {
+	if (len(xs) < 2) return;
+	return xs[1];
+};
 
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
-}
+fn is_adult(u: user, min_age: int) bool = u.age >= min_age;
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
-}
+fn summary(users: []user, min_age: int) str = {
+	const adults = filter(users, &is_adult, min_age);
+	const names = sorted(names_of(adults));
+	const counts = fold(names, map::empty(), &count_name);
+	const total = fold([1, 2, 3], 0, &add_tenfold);
+	log::info("summary", map::of(("adults", len(adults)), ("total", total)));
+	if (len(names) == 0) return "nobody";
+	return fmt::asprintf("{}: {}", total, strings::join(", ", names...));
+};
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
-}
+fn serve(addr: str) (void | io_error) = {
+	const s = scope::open(scope::task_timeout(100), scope::cleanup_timeout(500));
+	defer scope::close(s);
+	const store = atom::new(map::empty());
+	const server = http::listen(addr, s, &handle)?;
+	scope::launch(s, &wait_a_second);
+	http::wait(server);
+};
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
-}
+@unsafe("go") fn now() int = `
+	import "time"
+	return time.Now().UnixMilli()
+`;
+
+@test fn summary_counts_adults() void = {
+	assert(summary([], 18) == "nobody");
+};

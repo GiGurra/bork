@@ -1,52 +1,76 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Zig syntax: `const` bindings and `@import`, types as
+// comptime values (`Where(String, nonEmpty)`), tagged unions
+// (`union(enum)`), `?T` optionals with `orelse`, struct literals
+// `.{ .field = x }`, an options struct for defaults, `defer` for
+// scopes, `try` for errors, `\\` multiline strings for unsafe Go, and
+// Zig's own `test "name" { }`. Zig has no lambdas, so they become
+// functions in anonymous structs.
+const http = @import("bork/http");
+const log = @import("bork/log");
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-
-type Title = String where nonEmpty
-
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
-
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+pred fn nonEmpty(s: String) bool {
+    return s.byteLength() > 0;
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+const Title = Where(String, nonEmpty);
+
+const Todo = struct {
+    id: Int,
+    title: Title,
+    done: bool,
+
+    pub usingnamespace Derive(.{Encode});
+};
+
+const Discount = union(enum) {
+    none,
+    percent: struct { percent: Int },
+    fixed_off: struct { cents: Int },
+};
+
+fn discountFor(coupon: ?String) Union(.{ Discount, InvalidDiscount }) {
+    const code = coupon orelse return .{ .none = {} };
+    if (eql(code, "TENOFF")) return .{ .percent = .{ .percent = 10 } };
+    return InvalidDiscount{ .reason = fmt("unknown coupon {s}", .{code.toUpper()}) };
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
-
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+pub fn second(comptime T: type, xs: List(T)) ?T {
+    return xs.get(1);
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+fn summary(users: List(User), opts: struct { min_age: Int = 18 }) String {
+    const adults = users.filter(struct {
+        fn keep(u: User) bool {
+            return u.age >= opts.min_age;
+        }
+    }.keep);
+    const names = adults.map(struct {
+        fn name(u: User) String {
+            return u.name;
+        }
+    }.name).sorted();
+    const total = List(Int).of(.{ 1, 2, 3 }).map(times10).fold(0, add);
+    log.info("summary", .{ .adults = adults.len(), .total = total });
+    if (names.isEmpty()) return "nobody";
+    return fmt("{d}: {s}", .{ total, names.join(", ") });
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
+fn serve(addr: String) !void {
+    var s = scope(.{ .task_timeout = 100, .cleanup_timeout = 500 });
+    defer s.close();
+    const store = atom(Map(String, Todo).empty);
+    const server = try http.listen(addr, &s, handler);
+    s.launch(waitASecond);
+    server.wait();
+}
+
+fn now() Int {
+    return unsafe_go(
+        \\import "time"
+        \\return time.Now().UnixMilli()
+    );
 }
 
 test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+    try expectEqual("nobody", summary(.{}, .{}));
 }

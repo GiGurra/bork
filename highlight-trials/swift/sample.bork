@@ -1,52 +1,64 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Swift syntax: `func`, `let`, `->` results, `enum` with
+// associated values, `switch` with `case let`, optionals (`String?`),
+// extensions, trailing closures with `$0`, `\(...)` interpolation,
+// typed `throws` for errors, and Swift Testing's `@Test`/`#expect`.
+// Swift has no union types, so `|` stays bork's.
+import bork.http
+import bork.log
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+@pred func nonEmpty(_ s: String) -> Bool { s.byteLength > 0 }
 
-type Title = String where nonEmpty
+typealias Title = String where nonEmpty
 
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
-
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+struct Todo: Encodable {
+    let id: Int
+    let title: Title
+    let done: Bool
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+enum Discount {
+    case none
+    case percent(percent: Int)
+    case fixedOff(cents: Int)
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
-
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+func discountFor(_ coupon: String?) -> Discount | InvalidDiscount {
+    switch coupon {
+    case nil: .none
+    case "TENOFF": .percent(percent: 10)
+    case let code?: InvalidDiscount(reason: "unknown coupon \(code.uppercased())")
+    }
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+extension List {
+    func second() -> Element? { get(1) }
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
+func summary(_ users: [User], minAge: Int = 18) -> String {
+    let adults = users.filter { $0.age >= minAge }
+    let names = adults.map(\.name).sorted()
+    let counts = names.reduce([String: Int]()) { m, n in m.put(n, m.getOr(n, 0) + 1) }
+    let total = [1, 2, 3].map { $0 * 10 }.reduce(0, +)
+    log.info("summary", ["adults": adults.count, "total": total])
+    return names.isEmpty ? "nobody" : "\(total): \(names.joined(separator: ", "))"
 }
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+func serve(_ addr: String) throws(IoError) {
+    try scope(.taskTimeout(100), .cleanupTimeout(500)) { s in
+        let store = Atom([String: Todo]())
+        let server = try http.listen(addr, s) { req, rs in http.text(200, "ok") }
+        s.launch { _ = s.delay(1000) }
+        server.wait()
+    }
+}
+
+@unsafe func now() -> Int {
+    #go("""
+    import "time"
+    return time.Now().UnixMilli()
+    """)
+}
+
+@Test("summary counts adults") func summaryCountsAdults() {
+    #expect(summary([]) == "nobody")
 }

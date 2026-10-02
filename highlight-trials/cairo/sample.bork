@@ -1,52 +1,87 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Cairo syntax (Rust-like, for StarkNet): `use` paths,
+// `let` bindings, `->` results, `<T>` generics, `#[derive]`, enum
+// variants as `Name: Type`, `match` with `=>`, `trait`/`impl ... of`
+// for methods, `|x|` closures, `format!` and `array!` macros, and
+// `#[test]` functions. Cairo has no unions or defaults, so unions
+// become `Result` and defaults stay bork's.
+use bork::http;
+use bork::log;
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-
-type Title = String where nonEmpty
-
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
-
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+#[pred]
+fn non_empty(s: @ByteArray) -> bool {
+    s.len() > 0
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+#[where(non_empty)]
+type Title = ByteArray;
+
+#[derive(Drop, Encode)]
+struct Todo {
+    id: u64,
+    title: Title,
+    done: bool,
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
-
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+#[derive(Drop)]
+enum Discount {
+    None,
+    Percent: u32,
+    FixedOff: u32,
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+fn discount_for(coupon: Option<ByteArray>) -> Result<Discount, InvalidDiscount> {
+    match coupon {
+        Option::None => Result::Ok(Discount::None),
+        Option::Some(code) => if code == "TENOFF" {
+            Result::Ok(Discount::Percent(10))
+        } else {
+            Result::Err(InvalidDiscount { reason: format!("unknown coupon {}", code.to_upper()) })
+        },
+    }
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
+trait ListExt<T> {
+    fn second(self: @Array<T>) -> Option<T>;
 }
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+impl ListExtImpl<T, +Drop<T>> of ListExt<T> {
+    fn second(self: @Array<T>) -> Option<T> {
+        self.get(1)
+    }
+}
+
+fn summary(users: Array<User>, min_age: u32 = 18) -> ByteArray {
+    let adults = users.filter(|u| u.age >= min_age);
+    let names = adults.map(|u| u.name).sorted();
+    let counts = names.fold(map!{}, |m, n| m.put(n, m.get_or(n, 0) + 1));
+    let total = array![1, 2, 3].map(|x| x * 10).fold(0, |a, b| a + b);
+    log::info!("summary", map!{ "adults" => adults.len(), "total" => total });
+    if names.is_empty() {
+        "nobody"
+    } else {
+        format!("{}: {}", total, names.join(", "))
+    }
+}
+
+fn serve(addr: ByteArray) -> Result<(), IoError> {
+    let s = scope::open(scope::task_timeout(100), scope::cleanup_timeout(500));
+    let store = atom::new(map!{});
+    let server = http::listen(addr, @s, |req, rs| http::text(200, "ok"))?;
+    s.launch(|| { let _ = s.delay(1000); });
+    server.wait();
+    s.close();
+    Result::Ok(())
+}
+
+#[unsafe_go]
+fn now() -> u64 {
+    go!("
+        import \"time\"
+        return time.Now().UnixMilli()
+    ")
+}
+
+#[test]
+fn summary_counts_adults() {
+    assert_eq!(summary(array![]), "nobody");
 }

@@ -1,52 +1,50 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Scala 3 syntax: indentation instead of braces, `def`, `val`
+// bindings, `enum` for sealed types, `derives`, extension methods, `_`
+// lambdas, Iron-style refined types (`:|`), and context functions
+// (`s ?=>`) for scopes. Unsafe Go becomes a `go"..."` interpolator.
+import bork.http
+import bork.log
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred def nonEmpty(s: String): Boolean = s.byteLength > 0
 
-type Title = String where nonEmpty
+type Title = String :| nonEmpty
 
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
+case class Todo(id: Int, title: Title, done: Boolean) derives Encode
 
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
-}
+enum Discount:
+  case None
+  case Percent(percent: Int)
+  case FixedOff(cents: Int)
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
+def discountFor(coupon: Option[String]): Discount | InvalidDiscount =
+  coupon match
+    case None           => Discount.None
+    case Some("TENOFF") => Discount.Percent(percent = 10)
+    case Some(code)     => InvalidDiscount(reason = s"unknown coupon ${code.toUpper}")
+
+extension [T](xs: List[T]) def second: Option[T] = xs.get(1)
+
+def summary(users: List[User], minAge: Int = 18): String =
+  val adults = users.filter(_.age >= minAge)
+  val names = adults.map(_.name).sorted
+  val counts = names.foldLeft(Map.empty[String, Int])((m, n) => m.put(n, m.getOr(n, 0) + 1))
+  val total = List(1, 2, 3).map(_ * 10).foldLeft(0)(_ + _)
+  log.info("summary", Map("adults" -> adults.length, "total" -> total))
+  if names.isEmpty then "nobody" else s"$total: ${names.join(", ")}"
+
+def serve(addr: String): Unit | IoError =
+  scope(taskTimeout(100), cleanupTimeout(500)) { s ?=>
+    val store = atom(Map.empty[String, Todo])
+    val server = http.listen(addr, (req, rs) => http.text(200, "ok")).?
+    launch { delay(1000) }
+    server.await()
   }
-}
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
-
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
-}
-
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
-}
-
-fn now(): Int unsafe go {
+def now(): Int = unsafe.go"""
   import "time"
   return time.Now().UnixMilli()
-}
+"""
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+test("summary counts adults") {
+  assertEqual(summary(Nil), "nobody")
 }

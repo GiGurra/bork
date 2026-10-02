@@ -1,52 +1,78 @@
-// A sample of bork syntax, to compare borrowed GitHub highlighting.
-import "bork/http"
-import "bork/log"
+// bork in Go syntax: `func`, `:=` bindings, receivers, exported
+// capitals, struct tags, union interfaces for sealed types, a type
+// switch instead of match, `func` literals instead of lambdas, slog's
+// key-value logging, `defer` for scopes, and Go's testing style. The
+// unsafe Go body is just Go. Go has no unions in results or default
+// parameters, so those stay bork's.
+package main
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+import (
+	"bork/http"
+	"bork/log"
+)
 
-type Title = String where nonEmpty
+//bork:pred
+func nonEmpty(s string) bool { return len(s) > 0 }
 
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
+type Title string //bork:where nonEmpty
 
-type Discount = sealed {
-  None,
-  Percent { percent: Int },
-  FixedOff { cents: Int },
+type Todo struct {
+	ID    int   `json:"id"`
+	Title Title `json:"title"`
+	Done  bool  `json:"done"`
 }
 
-fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
-  match (coupon) {
-    Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
-  }
+type NoDiscount struct{}
+type Percent struct{ Percent int }
+type FixedOff struct{ Cents int }
+type Discount interface{ NoDiscount | Percent | FixedOff }
+
+func discountFor(coupon Option[string]) Discount | InvalidDiscount {
+	switch c := coupon.(type) {
+	case None:
+		return NoDiscount{}
+	case Some[string]:
+		if c.Value == "TENOFF" {
+			return Percent{Percent: 10}
+		}
+		return InvalidDiscount{Reason: fmt.Sprintf("unknown coupon %s", strings.ToUpper(c.Value))}
+	}
 }
 
-fn (xs: List[T]) second[T](): Option[T] { xs.get(1) }
+func (xs List[T]) Second() Option[T] { return xs.Get(1) }
 
-fn summary(users: List[User], minAge: Int = 18): String {
-  adults = users.filter(u => u.age >= minAge)
-  names = adults.map(u => u.name).sorted()
-  counts = names.fold({:}, (m, n) => m.put(n, m.getOr(n, 0) + 1))
-  total = [1, 2, 3] |> map(x => x * 10) |> fold(0, (a, b) => a + b)
-  log.Info("summary", {"adults": adults.length(), "total": total})
-  if (names.isEmpty()) { "nobody" } else { s"$total: ${names.join(", ")}" }
+func summary(users List[User], minAge int = 18) string {
+	adults := users.Filter(func(u User) bool { return u.Age >= minAge })
+	names := adults.Map(func(u User) string { return u.Name }).Sorted()
+	counts := names.Fold(Map[string, int]{}, func(m Map[string, int], n string) Map[string, int] {
+		return m.Put(n, m.GetOr(n, 0)+1)
+	})
+	total := List[int]{1, 2, 3}.Map(func(x int) int { return x * 10 }).Fold(0, func(a, b int) int { return a + b })
+	log.Info("summary", "adults", len(adults), "total", total)
+	if len(names) == 0 {
+		return "nobody"
+	}
+	return fmt.Sprintf("%d: %s", total, strings.Join(names, ", "))
 }
 
-fn serve(addr: String): Unit | IoError {
-  scope s with taskTimeout(100), cleanupTimeout(500) {
-    store = atom({:})
-    server = http.Listen(addr, s, (req, rs) => http.Text(200, "ok"))?
-    launch(s, () => { _ = delay(s, 1000) })
-    http.Wait(server)
-  }
+func serve(addr string) error {
+	s := scope.New(scope.TaskTimeout(100), scope.CleanupTimeout(500))
+	defer s.Close()
+	store := atom(Map[string, Todo]{})
+	server, err := http.Listen(addr, s, func(req http.Request, rs Scope) http.Response { return http.Text(200, "ok") })
+	if err != nil {
+		return err
+	}
+	s.Go(func() { s.Delay(1000) })
+	server.Wait()
+	return nil
 }
 
-fn now(): Int unsafe go {
-  import "time"
-  return time.Now().UnixMilli()
+//bork:unsafe
+func now() int {
+	return time.Now().UnixMilli()
 }
 
-test "summary counts adults" {
-  assertEqual(summary([]), "nobody")
+func TestSummaryCountsAdults(t *testing.T) {
+	assertEqual(t, summary(nil), "nobody")
 }
