@@ -3,3 +3,17 @@
 # match, =>, s"..." interpolation), and keep .bork files out of the
 # repository's language statistics.
 *.bork linguist-language=Scala linguist-detectable=false
+
+# Each folder borrows another language's GitHub highlighting for the same bork file.
+highlight-trials/scala/*.bork linguist-language=Scala linguist-detectable=false
+highlight-trials/rust/*.bork linguist-language=Rust linguist-detectable=false
+highlight-trials/v/*.bork linguist-language=V linguist-detectable=false
+highlight-trials/cairo/*.bork linguist-language=Cairo linguist-detectable=false
+highlight-trials/hare/*.bork linguist-language=Hare linguist-detectable=false
+highlight-trials/gleam/*.bork linguist-language=Gleam linguist-detectable=false
+highlight-trials/zig/*.bork linguist-language=Zig linguist-detectable=false
+highlight-trials/mojo/*.bork linguist-language=Mojo linguist-detectable=false
+highlight-trials/kotlin/*.bork linguist-language=Kotlin linguist-detectable=false
+highlight-trials/typescript/*.bork linguist-language=TypeScript linguist-detectable=false
+highlight-trials/swift/*.bork linguist-language=Swift linguist-detectable=false
+highlight-trials/go/*.bork linguist-language=Go linguist-detectable=false
