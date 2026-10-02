@@ -25,7 +25,7 @@ fn firstWord(s: String): Option[String] unsafe go {
   return Option_Some[string]{value: fields[0]}
 }
 
-fn shout(s: String) unsafe go {
+fn shout(s: String) uses io unsafe go {
   import "fmt"
   fmt.Println(s + "!")
 }

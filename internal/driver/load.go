@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -12,15 +13,19 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// ModFile is the file at a module's root that names the module:
+// ModFile is the file at a module's root that names the module, and
+// the packages allowed to contain unsafe go:
 //
 //	module example.com/shop
+//	unsafe "example.com/shop/ffi"
 const ModFile = "bork.mod"
 
 // module is the module a package belongs to.
 type module struct {
 	root string // the directory holding bork.mod
 	path string // the module path; "" without a bork.mod
+	// unsafe holds the packages allowed to contain unsafe go.
+	unsafe map[string]bool
 }
 
 // findModule finds the module of the package in dir: the nearest
@@ -34,11 +39,12 @@ func findModule(dir string) (module, error) {
 	for d := abs; ; d = filepath.Dir(d) {
 		data, err := os.ReadFile(filepath.Join(d, ModFile))
 		if err == nil {
-			path, err := parseModFile(string(data))
+			mod, err := parseModFile(string(data))
 			if err != nil {
 				return module{}, fmt.Errorf("%s: %w", filepath.Join(d, ModFile), err)
 			}
-			return module{root: d, path: path}, nil
+			mod.root = d
+			return mod, nil
 		}
 		if filepath.Dir(d) == d {
 			return module{root: abs}, nil
@@ -46,19 +52,36 @@ func findModule(dir string) (module, error) {
 	}
 }
 
-func parseModFile(text string) (string, error) {
+func parseModFile(text string) (module, error) {
+	var mod module
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "//") {
 			continue
 		}
 		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[0] == "module" {
-			return fields[1], nil
+		switch {
+		case mod.path == "" && len(fields) == 2 && fields[0] == "module":
+			mod.path = fields[1]
+		case mod.path == "":
+			return module{}, fmt.Errorf("expected `module <path>`, found %q", line)
+		case len(fields) == 2 && fields[0] == "unsafe":
+			path, err := strconv.Unquote(fields[1])
+			if err != nil {
+				return module{}, fmt.Errorf("expected `unsafe \"<package path>\"`, found %q", line)
+			}
+			if mod.unsafe == nil {
+				mod.unsafe = map[string]bool{}
+			}
+			mod.unsafe[path] = true
+		default:
+			return module{}, fmt.Errorf("expected `unsafe \"<package path>\"`, found %q", line)
 		}
-		return "", fmt.Errorf("expected `module <path>`, found %q", line)
 	}
-	return "", fmt.Errorf("expected `module <path>`")
+	if mod.path == "" {
+		return module{}, fmt.Errorf("expected `module <path>`")
+	}
+	return mod, nil
 }
 
 // importPath is the import path of the package in dir.
@@ -135,6 +158,9 @@ func (l *loader) loadSources(importPath string, paths []string, srcs [][]byte) e
 		files = append(files, f)
 	}
 	l.files = append(l.files, files...)
+	if !strings.HasPrefix(importPath, std.Prefix) {
+		l.checkUnsafe(importPath, files)
+	}
 	for _, f := range files {
 		for _, imp := range f.Imports {
 			if err := l.loadImport(imp); err != nil {
@@ -194,6 +220,27 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 		return nil
 	}
 	return l.loadPackage(imp.Path, paths)
+}
+
+// checkUnsafe reports unsafe go in a package that bork.mod does not
+// allow to have it.
+func (l *loader) checkUnsafe(importPath string, files []*syntax.File) {
+	if l.mod.unsafe[importPath] {
+		return
+	}
+	for _, f := range files {
+		for _, fd := range f.Funcs {
+			if fd.GoBody == nil {
+				continue
+			}
+			if l.mod.path == "" {
+				l.diags.AddCode(fd.Pos, "unsafe.not-allowed", "%s is implemented in unsafe go, which needs a %s that allows it: a file at the module's root with the lines `module <path>` and `unsafe \"<path>\"`", fd.Name, ModFile)
+			} else {
+				l.diags.AddCode(fd.Pos, "unsafe.not-allowed", "package %s has unsafe go (%s), but %s does not allow it; if it is meant to, add the line: unsafe %q", importPath, fd.Name, ModFile, importPath)
+			}
+			return
+		}
+	}
 }
 
 func validName(s string) bool {

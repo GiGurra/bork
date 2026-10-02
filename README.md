@@ -122,7 +122,7 @@ continues with the remaining files and exits 1 after reporting errors.
 
 `bork describe file.bork:line:column` reports the type, definition, visible methods, and known facts at a position. Add `--where 'between(1, 10)'` to ask the compiler whether a requirement is proven there, or `--json` for a structured answer. See [compiler code queries](docs/describe.md).
 
-A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`.
+A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`. A package that implements functions in Go (`unsafe go`) must be listed in `bork.mod` too, as `unsafe "example.com/shop/money"`, so new Go code shows up in review.
 
 ```
 ```

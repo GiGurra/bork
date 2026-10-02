@@ -1,0 +1,1 @@
+main.bork:2:1: package example.com/shop has unsafe go (shout), but bork.mod does not allow it; if it is meant to, add the line: unsafe "example.com/shop"

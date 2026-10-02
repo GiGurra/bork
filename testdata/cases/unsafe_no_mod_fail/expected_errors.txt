@@ -1,0 +1,1 @@
+main.bork:2:1: shout is implemented in unsafe go, which needs a bork.mod that allows it: a file at the module's root with the lines `module <path>` and `unsafe "<path>"`

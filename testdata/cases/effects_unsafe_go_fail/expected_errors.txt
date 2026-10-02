@@ -1,0 +1,6 @@
+main.bork:5:10: env's unsafe go body uses io (it uses os.Getenv, which works with the process, files, or the environment), but its signature allows no effects; declare it: uses io
+main.bork:10:13: dial's unsafe go body uses net (it uses net.Dial, which uses the network), but its signature allows no effects; declare it: uses net
+main.bork:16:10: now's unsafe go body uses clock (it uses time.Now, which reads the clock or waits), but its signature allows no effects; declare it: uses clock
+main.bork:21:16: dice's unsafe go body uses random (it uses rand.IntN, which makes random numbers), but its signature allows no effects; declare it: uses random
+main.bork:25:3: background's unsafe go body uses state (it starts a goroutine), but its signature allows no effects; declare it: uses state
+main.bork:30:3: shout's unsafe go body uses io (it uses fmt.Println, which prints or scans), but its signature allows no effects; declare it: uses io

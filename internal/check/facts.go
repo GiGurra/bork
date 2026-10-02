@@ -694,7 +694,14 @@ func (f *factChecker) predsOf(arg argVal) []known {
 		return nil
 	case *VarRef:
 		if k := x.Var.Kind; k == VarParam || k == VarLambdaParam {
-			// A function parameter (the checker made sure of that).
+			// A function parameter (the checker made sure of that). A
+			// fact named after it only means something if it gives the
+			// same answer every time: an open one is pure at the calls
+			// where facts are kept (see the Lambda case), and one that
+			// declares effects is not.
+			if ft, ok := x.Var.Type.(*FuncType); ok && ft.Effects&^EffOpen != 0 {
+				return nil
+			}
 			return []known{{pred: f.paramPred(x.Var)}}
 		}
 	case *Lambda:

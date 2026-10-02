@@ -1,0 +1,8 @@
+// Without a bork.mod, a program cannot have unsafe go.
+fn shout(s: String): String unsafe go {
+  return s + "!"
+}
+
+fn main() {
+  println(shout("hi"))
+}

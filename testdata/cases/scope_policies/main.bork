@@ -39,7 +39,7 @@ fn main() {
 }
 
 // stubborn sleeps without heeding cancellation.
-fn stubborn(ms: Int) unsafe go {
+fn stubborn(ms: Int) uses clock unsafe go {
   import "time"
   time.Sleep(time.Duration(ms) * time.Millisecond)
 }

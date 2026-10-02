@@ -1,0 +1,12 @@
+// A fact named after a function argument needs a pure one: keep that
+// prints may answer differently next time, so "keep holds" can go stale.
+
+fn keepPure(xs: List[Int], keep: (Int) => Bool): List[Int where keep] { filter(xs, keep) }
+
+fn keepImpure(xs: List[Int], keep: (Int) uses io => Bool) uses io: List[Int where keep] {
+  filter(xs, keep)
+}
+
+fn main() {
+  println(keepPure([1, -1], x => x > 0))
+}

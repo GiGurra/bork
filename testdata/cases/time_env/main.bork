@@ -17,7 +17,7 @@ fn config(values: Map[String, String]) uses io {
     errors: env.ConfigError => errors.errors.forEach(error => println(s"${error.path}: ${error.message}"))
   }
 }
-fn seed(s: Scope) unsafe go {
+fn seed(s: Scope) uses io unsafe go {
   import "os"
   old, found := os.LookupEnv("BORK_ENV_TEST")
   os.Setenv("BORK_ENV_TEST", "")
