@@ -126,3 +126,10 @@ test('unfinished single-line literals recover before the next declaration', () =
     assert.ok(!scopes(ls, 2, 'next').some(scope => scope.startsWith('string.')));
   }
 });
+
+test('effect signatures and function types', () => {
+  const ls = tokenize('fn send(x: Int) uses io + net: Int { x }\nfn pure() uses nothing {}\ntype Callback = (Int) uses io => Int');
+  for (const row of [0, 1, 2]) has(ls, row, 'uses', 'keyword.control.bork');
+  has(ls, 0, '+', 'keyword.operator.bork');
+  has(ls, 2, '=>', 'keyword.operator.bork');
+});
