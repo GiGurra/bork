@@ -110,7 +110,13 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 func (l *lowerer) expr(x syntax.Expr) Expr {
 	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
 	if v := l.info.constantOf(x); v != nil {
-		return &Const{expr: at, Value: v}
+		var span *SourceSpan
+		switch x.(type) {
+		case *syntax.Unary, *syntax.Binary:
+			start, end := constantSpan(x)
+			span = &SourceSpan{Start: start, End: end}
+		}
+		return &Const{expr: at, Value: v, SourceSpan: span}
 	}
 	switch x := x.(type) {
 	case *syntax.Interp:
@@ -256,6 +262,24 @@ func sourceTokenPos(x syntax.Expr) diag.Pos {
 		return x.Pos
 	}
 	return x.Position()
+}
+
+func constantSpan(x syntax.Expr) (diag.Pos, diag.Pos) {
+	start, end := x.Position(), x.Position()
+	switch x := x.(type) {
+	case *syntax.IntLit:
+		end.Col += len(x.Text)
+	case *syntax.FloatLit:
+		end.Col += len(x.Text)
+	case *syntax.RuneLit:
+		end.Col += len(x.Text)
+	case *syntax.Unary:
+		_, end = constantSpan(x.X)
+	case *syntax.Binary:
+		start, _ = constantSpan(x.X)
+		_, end = constantSpan(x.Y)
+	}
+	return start, end
 }
 
 // patVars makes variables of the names pat binds, from the value

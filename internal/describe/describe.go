@@ -16,6 +16,7 @@ type Result struct {
 	SchemaVersion int                       `json:"schema_version"`
 	Position      diag.Pos                  `json:"position"`
 	Type          string                    `json:"type"`
+	Expression    string                    `json:"expression,omitempty"`
 	Definition    *diag.Pos                 `json:"definition,omitempty"`
 	Methods       []check.MethodDescription `json:"methods"`
 	Facts         []check.KnownFact         `json:"facts"`
@@ -28,6 +29,7 @@ type Selection struct {
 	Func       *check.Func
 	Package    *check.Package
 	Type       check.Type
+	Expression string
 	Definition *diag.Pos
 	Site       diag.Pos
 	Value      bool
@@ -135,6 +137,13 @@ func (s *sourceIndex) token(pos diag.Pos) (syntax.Token, int) {
 
 func (s *sourceIndex) choose(x check.Expr, t check.Type, def *diag.Pos) {
 	s.selected = &Selection{Expr: x, Func: s.fn, Package: s.fn.Pkg, Type: t, Definition: def, Site: x.Pos(), Value: true}
+	if c, ok := x.(*check.Const); ok && c.SourceSpan != nil {
+		span := c.SourceSpan
+		parts := append([]string(nil), s.lines[span.Start.Line-1:span.End.Line]...)
+		parts[len(parts)-1] = parts[len(parts)-1][:span.End.Col-1]
+		parts[0] = parts[0][span.Start.Col-1:]
+		s.selected.Expression = strings.Join(parts, "\n")
+	}
 }
 
 func (s *sourceIndex) selectVar(v *check.Var, site diag.Pos) {
@@ -173,7 +182,7 @@ func (s *sourceIndex) walk(x check.Expr) {
 			}
 		}
 	}
-	if s.contains(x.TokenPos(), width) {
+	if s.contains(x.TokenPos(), width) || s.foldedContains(x) {
 		s.choose(x, x.Type(), definition(x))
 	}
 	switch x := x.(type) {
@@ -183,6 +192,9 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.walk(a)
 		}
 	case *check.CallBuiltin:
+		if s.contains(x.Pos(), len(x.Name)) {
+			s.choose(x, x.Type(), nil)
+		}
 		for _, a := range x.Args {
 			s.walk(a)
 		}
@@ -248,6 +260,10 @@ func (s *sourceIndex) walk(x check.Expr) {
 		}
 		s.walk(x.Body)
 	case *check.ScopeBlock:
+		_, i := s.token(x.TokenPos())
+		if i >= 0 && i+1 < len(s.tokens) && s.tokens[i+1].Text == x.Var.Name && s.contains(s.tokens[i+1].Pos, len(x.Var.Name)) {
+			s.selectVar(x.Var, x.Body.Pos())
+		}
 		for _, policy := range x.Policies {
 			s.walk(policy)
 		}
@@ -262,6 +278,25 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.walk(x.Values[i])
 		}
 	}
+}
+
+func (s *sourceIndex) foldedContains(x check.Expr) bool {
+	c, ok := x.(*check.Const)
+	if !ok || c.SourceSpan == nil {
+		return false
+	}
+	span := c.SourceSpan
+	start, end := span.Start, span.End
+	inside := start.File == s.pos.File && (s.pos.Line > start.Line || s.pos.Line == start.Line && s.pos.Col >= start.Col) && (s.pos.Line < end.Line || s.pos.Line == end.Line && s.pos.Col < end.Col)
+	if !inside {
+		return false
+	}
+	for _, token := range s.tokens {
+		if s.contains(token.Pos, tokenWidth(token)) {
+			return true
+		}
+	}
+	return false
 }
 
 // A declared call contains no FuncRef node. Its written callee is the

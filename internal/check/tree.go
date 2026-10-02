@@ -53,6 +53,14 @@ func (*expr) exprNode()    {}
 type Const struct {
 	expr
 	Value constant.Value
+	// SourceSpan covers folded arithmetic whose operand nodes are no longer
+	// in the typed tree. Source queries select the complete folded value.
+	SourceSpan *SourceSpan
+}
+
+type SourceSpan struct {
+	Start diag.Pos `json:"start"`
+	End   diag.Pos `json:"end"`
 }
 
 // Interp is an interpolated string: s"Hello $name". Parts holds the

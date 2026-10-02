@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/GiGurra/boa/pkg/boa"
 	"github.com/GiGurra/bork/internal/describe"
@@ -60,6 +61,9 @@ type describeParams struct {
 }
 
 func printDescription(result *describe.Result) {
+	if result.Expression != "" {
+		fmt.Println("expression:", result.Expression)
+	}
 	fmt.Println("type:", result.Type)
 	if result.Definition != nil {
 		fmt.Println("defined at:", result.Definition)
@@ -68,7 +72,11 @@ func printDescription(result *describe.Result) {
 		if method.Ambiguity != "" {
 			fmt.Println("method:", method.Ambiguity)
 		} else {
-			fmt.Printf("method: %s: %s (%s)\n", method.Name, method.Type, method.Definition)
+			fmt.Printf("method: %s: %s (%s)", method.Name, method.Type, method.Definition)
+			if len(method.Requires) > 0 {
+				fmt.Printf(" requires %s", strings.Join(method.Requires, "; "))
+			}
+			fmt.Println()
 		}
 	}
 	for _, fact := range result.Facts {

@@ -117,6 +117,47 @@ fn scenario(xs: List[Int], u: User) {
 	}
 }
 
+func TestDescribeFoldedExpressions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	source := "pred positive(x: Int8) { x > 0 }\nfn example() {\n  n: Int8 = 128 - 1\n  println(n)\n}\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []int{13, 17, 19} {
+		result, err := Describe(fmt.Sprintf("%s:3:%d", path, column), "positive")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Type != "Int8" || result.Expression != "128 - 1" || !result.Proof.Proven {
+			t.Fatalf("expected the complete folded expression, got %+v", result)
+		}
+	}
+}
+
+func TestDescribeRulesAndConstraintArguments(t *testing.T) {
+	source := `pred positive(x: Int) { x > 0 }
+pred nonNegative(x: Int) { x >= 0 }
+pred atLeast(x: Int, minimum: Int) { x >= minimum }
+rule weaken(x: Int) { positive(x) => nonNegative(x) }
+fn example(n: Int where positive, m: Int where atLeast(n)) {
+  println(n) // by rule
+  println(m) // relational
+  println(3) // constants
+}
+`
+	for _, tc := range []struct{ fragment, where string }{
+		{"n) // by rule", "nonNegative"},
+		{"m) // relational", "atLeast(n)"},
+		{"3) // constants", "atLeast(2)"},
+	} {
+		result := describeAt(t, source, tc.fragment, tc.where)
+		if !result.proven || result.typ != "Int" {
+			t.Fatalf("unexpected rule/argument proof: %+v", result)
+		}
+	}
+}
+
 func TestDescribeGolden(t *testing.T) {
 	dir := filepath.Join("..", "..", "testdata", "cases", "describe_queries")
 	data, err := os.ReadFile(filepath.Join(dir, "queries.json"))

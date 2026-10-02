@@ -50,5 +50,5 @@ func Describe(position, where string) (*describe.Result, error) {
 	if methods == nil {
 		methods = []check.MethodDescription{}
 	}
-	return &describe.Result{SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof}, nil
+	return &describe.Result{SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof}, nil
 }
