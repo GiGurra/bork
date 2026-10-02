@@ -1,0 +1,17 @@
+import "example.com/tc/api"
+
+// Derived instances are used like any other package's instances.
+use api.ItemDecode
+use api.StatusDecode
+use api.StatusEncode
+
+fn main() {
+  r: api.Item | JsonError | DecodeError = decodeJson("{\"name\": \"pen\", \"qty\": 0}")
+  println(r)
+  s: api.Status | JsonError | DecodeError = decodeJson("{\"type\": \"Closed\", \"reason\": \"done\"}")
+  match (s) {
+    st: api.Status => println(encodeJson(st))
+    e: JsonError => println(e)
+    e: DecodeError => println(e)
+  }
+}

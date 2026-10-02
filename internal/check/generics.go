@@ -143,6 +143,30 @@ func (in *inference) unify(p, a Type) {
 				fixed = append(fixed, in.subst(m))
 			}
 		}
+		if len(open) == 0 {
+			// `List[T] | DecodeError` given `List[Int] | DecodeError`: the
+			// one member with open parameters takes what remains.
+			var pOpen []Type
+			for _, m := range p.Members {
+				if in.open(m) {
+					pOpen = append(pOpen, m)
+				}
+			}
+			members := []Type{a}
+			if u, ok := a.(*Union); ok {
+				members = u.Members
+			}
+			var rest []Type
+			for _, m := range members {
+				if !containsMember(&Union{Members: fixed}, m) {
+					rest = append(rest, m)
+				}
+			}
+			if len(pOpen) == 1 && len(rest) == 1 {
+				in.unify(pOpen[0], rest[0])
+			}
+			return
+		}
 		if len(open) != 1 {
 			return
 		}
@@ -583,8 +607,25 @@ func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
 		return &List{Elem: ew}
 	}
 	ts := make([]Type, len(e.Elems))
+	// Elements whose type comes from the context (`Option.None`) are
+	// checked last, against the others' type if there is no context.
+	var later []int
 	for i, x := range e.Elems {
+		if ew == nil && c.branchNeedsContext(x) {
+			later = append(later, i)
+			continue
+		}
 		ts[i] = c.exprWant(x, ew)
+	}
+	for _, i := range later {
+		w := ew
+		for j, t := range ts {
+			if t != nil && t != Invalid && (len(later) == 0 || j != i) {
+				w = t
+				break
+			}
+		}
+		ts[i] = c.exprWant(e.Elems[i], w)
 	}
 	if ew != nil {
 		ok := true

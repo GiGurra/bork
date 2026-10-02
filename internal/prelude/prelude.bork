@@ -486,3 +486,291 @@ fn split(s: String, separator: String): List[String] where notEmpty unsafe go {
   import "strings"
   return strings.Split(s, separator)
 }
+
+// JSON.
+
+// Json is a JSON value. A number keeps its text, so that whole numbers
+// of any size decode exactly.
+type Json = sealed {
+  Null
+  Bool { value: Bool }
+  Number { text: String }
+  String { value: String }
+  Array { items: List[Json] }
+  Object { fields: List[JsonField] }
+}
+
+type JsonField = { name: String, value: Json }
+
+// JsonError is returned for text that is not valid JSON.
+type JsonError = { message: String }
+
+// parseJson reads a JSON value; object fields keep their order.
+fn parseJson(text: String): Json | JsonError unsafe go {
+  import "encoding/json"
+  import "strings"
+  dec := json.NewDecoder(strings.NewReader(text))
+  dec.UseNumber()
+  var parse func() (Json, error)
+  parse = func() (Json, error) {
+    tok, err := dec.Token()
+    if err != nil {
+      return nil, err
+    }
+    switch t := tok.(type) {
+    case nil:
+      return Json_Null{}, nil
+    case bool:
+      return Json_Bool{value: t}, nil
+    case json.Number:
+      return Json_Number{text: string(t)}, nil
+    case string:
+      return Json_String{value: t}, nil
+    case json.Delim:
+      if t == '[' {
+        items := []Json{}
+        for dec.More() {
+          item, err := parse()
+          if err != nil {
+            return nil, err
+          }
+          items = append(items, item)
+        }
+        _, err := dec.Token()
+        return Json_Array{items: items}, err
+      }
+      fields := []JsonField{}
+      for dec.More() {
+        key, err := dec.Token()
+        if err != nil {
+          return nil, err
+        }
+        value, err := parse()
+        if err != nil {
+          return nil, err
+        }
+        fields = append(fields, JsonField{name: key.(string), value: value})
+      }
+      _, err := dec.Token()
+      return Json_Object{fields: fields}, err
+    }
+    return nil, nil
+  }
+  j, err := parse()
+  if err == nil && dec.More() {
+    return JsonError{message: "unexpected text after the JSON value"}
+  }
+  if err != nil {
+    return JsonError{message: err.Error()}
+  }
+  return j
+}
+
+// renderJson writes a JSON value as compact text.
+fn renderJson(j: Json): String unsafe go {
+  import "encoding/json"
+  import "strings"
+  var b strings.Builder
+  var render func(j Json)
+  render = func(j Json) {
+    switch j := j.(type) {
+    case Json_Null:
+      b.WriteString("null")
+    case Json_Bool:
+      if j.value {
+        b.WriteString("true")
+      } else {
+        b.WriteString("false")
+      }
+    case Json_Number:
+      b.WriteString(j.text)
+    case Json_String:
+      s, _ := json.Marshal(j.value)
+      b.Write(s)
+    case Json_Array:
+      b.WriteString("[")
+      for i, item := range j.items {
+        if i > 0 {
+          b.WriteString(",")
+        }
+        render(item)
+      }
+      b.WriteString("]")
+    case Json_Object:
+      b.WriteString("{")
+      for i, f := range j.fields {
+        if i > 0 {
+          b.WriteString(",")
+        }
+        s, _ := json.Marshal(f.name)
+        b.Write(s)
+        b.WriteString(":")
+        render(f.value)
+      }
+      b.WriteString("}")
+    }
+  }
+  render(j)
+  return b.String()
+}
+
+// jsonKind names the kind of a JSON value, for messages.
+fn jsonKind(j: Json): String {
+  match (j) {
+    Json.Null => "null"
+    Json.Bool { value } => "a boolean"
+    Json.Number { text } => "a number"
+    Json.String { value } => "a string"
+    Json.Array { items } => "an array"
+    Json.Object { fields } => "an object"
+  }
+}
+
+// DecodeError says where in a JSON value decoding failed (a path like
+// ".items[2].name", "" for the whole value), and why.
+type DecodeError = { path: String, message: String }
+
+// Decode reads values of a type from JSON. `derive (Decode)` on a record
+// or sealed type gives it an instance that also checks every field's
+// where clause, so decoded values arrive already proven.
+class Decode[T] {
+  fn decode(json: Json): T | DecodeError
+}
+
+// Encode writes values of a type as JSON; `derive (Encode)` gives
+// records and sealed types an instance.
+class Encode[T] {
+  fn encode(x: T): Json
+}
+
+// decodeJson parses text and decodes it.
+fn decodeJson[T: Decode](text: String): T | JsonError | DecodeError {
+  json = parseJson(text)?
+  decode[T](json)
+}
+
+// encodeJson encodes a value and renders it as compact JSON text.
+fn encodeJson[T: Encode](x: T): String {
+  renderJson(encode(x))
+}
+
+fn decodeMismatch(expected: String, json: Json): DecodeError {
+  DecodeError { path: "", message: s"expected $expected, found ${jsonKind(json)}" }
+}
+
+// atPath puts an error found inside a value under the given step of
+// its path (".name", "[2]").
+fn atPath(e: DecodeError, step: String): DecodeError {
+  DecodeError { path: step + e.path, message: e.message }
+}
+
+instance decodeInt: Decode[Int] {
+  fn decode(json: Json): Int | DecodeError {
+    match (json) {
+      Json.Number { text } => match (parseInt(text)) {
+        n: Int => n
+        e: ParseError => DecodeError { path: "", message: s"expected a whole number, found $text" }
+      }
+      other => decodeMismatch("a whole number", other)
+    }
+  }
+}
+
+instance decodeFloat: Decode[Float] {
+  fn decode(json: Json): Float | DecodeError {
+    match (json) {
+      Json.Number { text } => match (parseFloat(text)) {
+        f: Float => f
+        e: ParseError => DecodeError { path: "", message: s"expected a number, found $text" }
+      }
+      other => decodeMismatch("a number", other)
+    }
+  }
+}
+
+instance decodeString: Decode[String] {
+  fn decode(json: Json): String | DecodeError {
+    match (json) {
+      Json.String { value } => value
+      other => decodeMismatch("a string", other)
+    }
+  }
+}
+
+instance decodeBool: Decode[Bool] {
+  fn decode(json: Json): Bool | DecodeError {
+    match (json) {
+      Json.Bool { value } => value
+      other => decodeMismatch("a boolean", other)
+    }
+  }
+}
+
+// An Option is null (or a missing field) for None.
+instance decodeOption[T: Decode]: Decode[Option[T]] {
+  fn decode(json: Json): Option[T] | DecodeError {
+    match (json) {
+      Json.Null => Option.None
+      other => {
+        value = decode[T](other)?
+        Option.Some { value: value }
+      }
+    }
+  }
+}
+
+instance decodeList[T: Decode]: Decode[List[T]] {
+  fn decode(json: Json): List[T] | DecodeError {
+    match (json) {
+      Json.Array { items } => decodeItems(items, 0, [])
+      other => decodeMismatch("an array", other)
+    }
+  }
+}
+
+fn decodeItems[T: Decode](items: List[Json], index: Int, done: List[T]): List[T] | DecodeError {
+  match (head(items)) {
+    Option.None => reverse(done)
+    Option.Some { value: item } => match (decode[T](item)) {
+      e: DecodeError => atPath(e, s"[$index]")
+      x: T => decodeItems(drop(items, 1), index + 1, prepend(x, done))
+    }
+  }
+}
+
+instance decodeJson: Decode[Json] {
+  fn decode(json: Json): Json | DecodeError { json }
+}
+
+instance encodeInt: Encode[Int] {
+  fn encode(x: Int): Json { Json.Number { text: toString(x) } }
+}
+
+instance encodeFloat: Encode[Float] {
+  fn encode(x: Float): Json { Json.Number { text: toString(x) } }
+}
+
+instance encodeString: Encode[String] {
+  fn encode(x: String): Json { Json.String { value: x } }
+}
+
+instance encodeBool: Encode[Bool] {
+  fn encode(x: Bool): Json { Json.Bool { value: x } }
+}
+
+instance encodeOption[T: Encode]: Encode[Option[T]] {
+  fn encode(x: Option[T]): Json {
+    match (x) {
+      Option.None => Json.Null
+      Option.Some { value } => encode(value)
+    }
+  }
+}
+
+instance encodeList[T: Encode]: Encode[List[T]] {
+  fn encode(xs: List[T]): Json { Json.Array { items: map(xs, encode) } }
+}
+
+instance encodeJson: Encode[Json] {
+  fn encode(x: Json): Json { x }
+}

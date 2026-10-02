@@ -55,6 +55,8 @@ type Func struct {
 	// the implementation of a method in an instance.
 	Class *Class
 	Of    *ClassInstance
+	// Derived is set for an instance method the compiler writes.
+	Derived *Derived
 	// TypeParams lists a generic function's type parameters.
 	TypeParams []*TypeParam
 	Params     []Type
@@ -294,7 +296,9 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 		}
 	}
 	c.declareInstances(files)
+	c.declareDerived(files)
 	c.resolveUses(files)
+	c.resolveDerived()
 	for name, fn := range c.preludePkg.Funcs {
 		c.info.Funcs[name] = fn
 	}
@@ -722,8 +726,10 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			c.errorf(s.Value.Position(), "cannot bind %s: the expression never produces a value", s.Name)
 			return Never
 		}
-		if declared != nil && t != Invalid {
-			if declared != Invalid && !assignable(t, declared) {
+		if declared != nil {
+			// A declared type holds even when the value has errors, so
+			// that they do not spread to its uses.
+			if t != Invalid && declared != Invalid && !assignable(t, declared) {
 				c.errorf(s.Value.Position(), "%s must be %s, found %s", s.Name, declared, t)
 			}
 			t = declared

@@ -71,7 +71,7 @@ See [examples/wc](examples/wc/main.bork), a small `wc`.
 
 ## Getting started
 
-The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); and packages. Type classes (M3) come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); packages; and type classes with JSON decoding (M3, under way: `derive (Decode)` decodes requests into proven values). It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest

@@ -173,7 +173,20 @@ fn sum[T: Monoid](xs: List[T]): T { fold(xs, empty[T](), combine) }
 - **Methods are called like functions** (`show(x)`, `money.show(x)`); the types decide the instance. Methods of an exported class are visible with it. A method can also be passed as a value (`map(xs, show)`). Explicit type arguments decide what the arguments cannot: `empty[Int]()`.
 - **Missing and ambiguous instances are errors,** with hints: which `use` would bring one into scope, or which bound a generic function lacks.
 - **Lowered to dictionary passing.** A call whose instance is known calls the instance's method directly; only generic code passes instances around.
-- **Not yet:** classes with several type parameters, superclasses, default methods, `where` clauses on methods, and choosing an instance at a call site.
+- **`derive (Decode, Encode)`** on a record or sealed type asks the compiler to write the instances, named after the type (`CreateUserDecode`). They follow the same rules as written instances: in scope in their own package, used elsewhere with `use api.CreateUserDecode`. Each field needs an instance in scope. Only the prelude's `Decode` and `Encode` (JSON) can be derived so far.
+- **JSON:** the prelude has a `Json` sealed type, `parseJson`/`renderJson`, the classes `Decode` and `Encode` with instances for the basic types, `Option`, `List`, and `Json`, and `decodeJson[T]`/`encodeJson[T]`. Records are objects; a sealed value is an object whose `"type"` names the variant (a variant without fields may be just its name, `"Free"`); a missing `Option` field is `None`. A `DecodeError` says where (`.items[1].qty`) and what went wrong.
+- **A derived decoder checks the where clauses** of the fields it decodes, so a decoded value is proven, and needs no further checks:
+
+```
+type SignUp = {
+  name: String where nonEmpty and maxBytes(20),
+  age: Option[Int where between(13, 150)],
+} derive (Decode, Encode)
+
+r: SignUp | JsonError | DecodeError = decodeJson(line)   // DecodeError { path: ".name", message: "must be nonEmpty" }
+```
+
+- **Not yet:** classes with several type parameters, superclasses, default methods, `where` clauses on methods, choosing an instance at a call site, instances on constrained types, and deriving other classes (`Eq`, `Show`).
 
 ### Open questions
 

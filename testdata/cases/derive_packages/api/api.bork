@@ -1,0 +1,4 @@
+pred positive(x: Int) { x > 0 }
+
+type Item = { name: String, qty: Int where positive } derive (Decode, Encode)
+type Status = sealed { Open, Closed { reason: String } } derive (Decode, Encode)

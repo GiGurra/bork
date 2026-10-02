@@ -1,0 +1,87 @@
+// signup validates sign-up requests, one JSON object per line:
+//
+//   bork run examples/signup -- requests.jsonl
+//
+// The request type derives its decoder. The decoder checks every where
+// clause, so a decoded request is proven: register can rely on its
+// facts without checking them again.
+
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred maxBytes(s: String, n: Int) { byteLength(s) <= n }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+
+type UserName = String where nonEmpty and maxBytes(20)
+
+type Plan = sealed {
+  Free,
+  Paid { seats: Int where between(1, 500) },
+} derive (Decode, Encode)
+
+type SignUp = {
+  name: UserName,
+  age: Option[Int where between(13, 150)],
+  plan: Plan,
+} derive (Decode, Encode)
+
+type Account = { id: Int, name: UserName, seats: Int } derive (Encode)
+
+fn seatsOf(plan: Plan): Int {
+  match (plan) {
+    Plan.Free => 1
+    Plan.Paid { seats: n } => n
+  }
+}
+
+// register needs a valid name; a decoded SignUp has one.
+fn register(id: Int, req: SignUp): Account {
+  Account { id: id, name: req.name, seats: seatsOf(req.plan) }
+}
+
+fn handle(id: Int, line: String): String {
+  r: SignUp | JsonError | DecodeError = decodeJson(line)
+  match (r) {
+    req: SignUp => s"ok    ${encodeJson(register(id, req))}"
+    e: JsonError => s"bad   line ${toString(id)}: not JSON: ${e.message}"
+    e: DecodeError => s"bad   line ${toString(id)}: ${e.path}: ${e.message}"
+  }
+}
+
+// handleAll handles lines, numbering them from id.
+fn handleAll(lines: List[String], id: Int): List[String] {
+  match (head(lines)) {
+    Option.Some { value: line } => prepend(handle(id, line), handleAll(drop(lines, 1), id + 1))
+    Option.None => []
+  }
+}
+
+fn readFile(path: String): String | IoError {
+  scope s {
+    readAll(openFile(path, s)?)
+  }
+}
+
+fn main() {
+  path = match (head(args())) {
+    Option.Some { value } => value
+    Option.None => {
+      eprintln("usage: signup FILE")
+      exit(2)
+    }
+  }
+  match (readFile(path)) {
+    text: String => forEach(handleAll(lines(text), 1), line => println(line))
+    e: IoError => {
+      eprintln(s"signup: ${e.path}: ${e.message}")
+      exit(1)
+    }
+  }
+}
+
+test "decodes and registers a request" {
+  assertEqual(handle(1, "{\"name\": \"ann\", \"plan\": \"Free\"}"), "ok    {\"id\":1,\"name\":\"ann\",\"seats\":1}")
+}
+
+test "rejects broken where clauses" {
+  assertEqual(handle(2, "{\"name\": \"\", \"plan\": \"Free\"}"), "bad   line 2: .name: must be nonEmpty")
+  assertEqual(handle(3, "{\"name\": \"bo\", \"plan\": {\"type\": \"Paid\", \"seats\": 0}}"), "bad   line 3: .plan.seats: must be between(1, 500)")
+}

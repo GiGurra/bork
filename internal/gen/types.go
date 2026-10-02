@@ -481,6 +481,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesScopes {
 		src = append(src, scopeRuntime)
 	}
+	if g.usesDerive {
+		src = append(src, deriveRuntime)
+	}
 	if g.usesIs {
 		src = append(src, isRuntime)
 	}

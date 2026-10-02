@@ -1,0 +1,10 @@
+Json.Object { fields: [JsonField { name: "a", value: Json.Array { items: [Json.Number { text: "1" }, Json.Number { text: "2.5" }, Json.Bool { value: true }, Json.Null, Json.String { value: "x" }] } }, JsonField { name: "b", value: Json.Object { fields: [] } }] }
+{"a":[1,2.5,true,null,"x"],"b":{}}
+JsonError { message: "invalid character 'b' looking for beginning of value" }
+[1, 2, 3]
+DecodeError { path: "[1]", message: "expected a whole number, found a string" }
+[Option.Some { value: "a" }, Option.None]
+[1,null]
+{"s":"a\"b\né","n":-1.5e3,"z":0}
+DecodeError { path: "", message: "expected a boolean, found a number" }
+DecodeError { path: "", message: "expected a whole number, found 1.5" }

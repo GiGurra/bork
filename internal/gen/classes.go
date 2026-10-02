@@ -134,8 +134,12 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 // instance's method itself when the instance is known, or the field of
 // the dictionary.
 func (g *gen) methodFunc(inst *check.Instance) (fun ast.Expr, dicts []ast.Expr) {
-	d := inst.Dicts[0]
-	method := inst.Func.Decl.Name
+	return g.dictMethod(inst.Dicts[0], inst.Func.Decl.Name)
+}
+
+// dictMethod is the Go function for a method of the instance d, and the
+// instances to pass it first.
+func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []ast.Expr) {
 	if d.Param != nil {
 		return &ast.SelectorExpr{X: dictParam(d.Param, d.Class), Sel: name(method)}, nil
 	}

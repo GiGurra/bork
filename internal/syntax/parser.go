@@ -244,6 +244,13 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 		td.Kind = AliasType
 		td.Alias = p.typeExpr()
 	}
+	if p.at(TIdent) && p.tok().Text == "derive" && p.peekKind() == LParen {
+		td.DerivePos = p.next().Pos
+		p.next()
+		p.list(RParen, "a class to derive", func() {
+			td.Derive = append(td.Derive, p.qualify(p.expect(TIdent, "(class name)")))
+		})
+	}
 	if !p.at(Semi) && !p.at(EOF) {
 		p.errorf(p.tok().Pos, "expected end of line after type declaration, found %s", p.tok().Kind)
 		panic(bailout{})

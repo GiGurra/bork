@@ -1,0 +1,14 @@
+hello ann: {"name":"ann","age":30,"tags":["a"]}
+hello bob: {"name":"bob","age":null,"tags":[]}
+error at .name: must be nonEmpty
+error at .age: must be between(0, 150)
+error at .tags[0]: expected a string, found a number
+error at .name: is missing
+error at : expected an object, found an array
+{"type":"Circle","radius":2.0}
+{"type":"Empty"}
+error at .type: unknown variant "Hex" of Shape
+error at .type: expected the variant's name, as a string
+{"id":1,"items":[{"first":"pen","second":2}],"shape":{"type":"Empty"}}
+error at .items[1].second: is missing
+error at .shape.side: expected a number, found a string
