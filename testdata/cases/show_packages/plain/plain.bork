@@ -1,0 +1,4 @@
+import "example.com/show/money"
+
+fn Text(a: money.Amount): String { toString(a) }
+fn Nested(a: money.Amount): String { toString(money.Invoice { amount: a }) }

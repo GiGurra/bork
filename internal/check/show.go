@@ -29,6 +29,9 @@ func (c *checker) recordShow(e syntax.Expr, t Type) {
 			dicts = append(dicts, d)
 			return
 		}
+		savedHave := c.have
+		c.have = nil
+		defer func() { c.have = savedHave }()
 		fields := func(fs []*Field) {
 			for _, f := range fs {
 				visit(f.Type)
@@ -54,7 +57,10 @@ func (c *checker) recordShow(e syntax.Expr, t Type) {
 			}
 		}
 	}
+	saved := c.have
+	c.have = c.declaredFacts(e)
 	visit(t)
+	c.have = saved
 	// An unbounded generic value can still have a concrete instance visible
 	// in its defining package. Generic instance heads need a known type.
 	if unknown {

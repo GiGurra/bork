@@ -1172,6 +1172,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 		if t != Invalid && !isValue(t) {
 			c.errorf(e.Args[0].Position(), "assertSnapshot needs a value, found %s", t)
 		}
+		c.recordShow(e.Args[0], t)
 		return Unit
 	case BuiltinConvert:
 		return c.conversion(e, fname)

@@ -1,0 +1,15 @@
+import "example.com/show/money"
+import "example.com/show/pretty"
+import "example.com/show/plain"
+
+use pretty.ShowAmount
+
+fn main() {
+  a = money.Amount { cents: 425 }
+  println(a)
+  println(money.Invoice { amount: a })
+  println(plain.Text(a))
+  println(plain.Nested(a))
+  println(a == money.Amount { cents: 425 })
+  println({ a: "first", money.Amount { cents: 20 }: "second" }.size())
+}

@@ -1,0 +1,1 @@
+main.bork:10:21: more than one instance of Show for Amount is in scope: first and second; a package's own instances are always in scope, so keep only one of them here, and move the others to packages that code can choose from with use

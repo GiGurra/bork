@@ -1,0 +1,2 @@
+type Amount = { cents: Int }
+type Invoice = { amount: Amount }

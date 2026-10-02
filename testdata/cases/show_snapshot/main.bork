@@ -1,0 +1,12 @@
+type Amount = { cents: Int }
+
+instance amountShow: Show[Amount] {
+  fn show(a: Amount): String { s"${a.cents} cents" }
+}
+
+fn main() {}
+
+test "custom rendering" {
+  assertSnapshot(Amount { cents: 425 })
+  assertSnapshot([Amount { cents: 425 }])
+}

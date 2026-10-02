@@ -155,7 +155,7 @@ In priority order. When two values conflict, the higher one wins.
 - **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
-Implemented:
+Implemented: the prelude class `Show[T] { fn show(x: T): String }` optionally customizes `toString`, `println`, interpolation, snapshots, and nested printing. A value without an instance keeps its default bork text. Instance selection follows the printing package's `use` declarations, including when a value comes from another package; a `[T: Show]` bound carries the renderer into generic code. Custom rendering never changes equality or map-key hashing. `Show` cannot be derived; default rendering needs no derive.
 
 ```
 class Monoid[T] {
