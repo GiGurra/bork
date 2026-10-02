@@ -462,6 +462,50 @@ func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
 			f.oblige(call.Args[i], con, f.callArgs(call, fn), e, req)
 		}
 	}
+	// With a constrained type argument (f[Port](x)), arguments of that
+	// type must satisfy its constraints.
+	inst := f.info.Instances[call]
+	if inst == nil || inst.ArgFacts == nil {
+		return
+	}
+	for i, p := range fn.Params {
+		for j, tp := range fn.TypeParams {
+			if p != Type(tp) || i >= len(call.Args) {
+				continue
+			}
+			for _, con := range inst.ArgFacts[j] {
+				arg := TypeText(inst.TypeArgs[j], f.from())
+				if j < len(call.TypeArgs) && call.TypeArgs[j].Name != "" && len(call.TypeArgs[j].Args) == 0 && len(call.TypeArgs[j].Where) == 0 {
+					arg = call.TypeArgs[j].Name // as written: Port, not Int
+				}
+				req := fmt.Sprintf("%s[%s] requires %s to be %s", fn.QualifiedName(f.from()), arg, fn.Decl.Params[i].Name, con.Text(f.from()))
+				f.oblige(call.Args[i], con, noParams, e, req)
+			}
+		}
+	}
+}
+
+// argFactsFor lists what a call with constrained type arguments
+// promises of its result's member m (or its whole result): the
+// constraints of the type argument that member stands for.
+func (f *factChecker) argFactsFor(call *syntax.Call, fn *Func, m Type) []*Constraint {
+	inst := f.info.Instances[call]
+	if inst == nil || inst.ArgFacts == nil {
+		return nil
+	}
+	members := []Type{fn.Result}
+	if u, ok := fn.Result.(*Union); ok {
+		members = u.Members
+	}
+	var out []*Constraint
+	for j, tp := range fn.TypeParams {
+		for _, mt := range members {
+			if mt == Type(tp) && (m == nil || identical(inst.TypeArgs[j], m)) {
+				out = append(out, inst.ArgFacts[j]...)
+			}
+		}
+	}
+	return out
 }
 
 func (f *factChecker) recordObligations(lit *syntax.RecordLit, e env) {
@@ -1384,6 +1428,9 @@ func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
 					add(mc.Constraints, f.callArgs(x, fn))
 				}
 			}
+			if _, isUnion := fn.Result.(*Union); !isUnion {
+				add(f.argFactsFor(x, fn, nil), noParams)
+			}
 		}
 	case *syntax.Try:
 		if info := f.info.Tries[x]; info != nil && info.Option == nil {
@@ -1415,6 +1462,9 @@ func (f *factChecker) declaredMember(x syntax.Expr, m Type) []known {
 						out = append(out, f.knownOf(con, f.callArgs(x, fn))...)
 					}
 				}
+			}
+			for _, con := range f.argFactsFor(x, fn, m) {
+				out = append(out, f.knownOf(con, noParams)...)
 			}
 		}
 	case *syntax.Ident:

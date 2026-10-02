@@ -1,0 +1,13 @@
+pred positive(x: Int) { x > 0 }
+
+type Pos = Int where positive
+
+fn pick[T](a: T, b: T): T { a }
+
+fn main() {
+  // decodeInt does not promise positive.
+  println(decodeJson[Pos]("1"))
+  // map's B values come from the lambda, which is not checked.
+  println(map[Int, Pos]([1], x => x))
+}
+

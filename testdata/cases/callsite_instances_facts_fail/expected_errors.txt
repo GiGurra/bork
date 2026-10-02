@@ -1,0 +1,1 @@
+main.bork:11:16: pick[Pos] requires b to be positive, but that is not proven for n (check it first with if (positive(n)) { ... }, or require it: n: Int where positive)
