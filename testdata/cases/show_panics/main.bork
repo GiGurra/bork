@@ -1,0 +1,45 @@
+type Amount = { cents: Int }
+type Invoice = { amount: Amount }
+type Choice = sealed { One { amount: Amount }, Empty }
+type Bad = sealed { One }
+
+instance amountShow: Show[Amount] {
+  fn show(a: Amount): String { panic("renderer failed") }
+}
+
+instance badShow: Show[Bad] {
+  fn show(b: Bad): String { panic("renderer failed") }
+}
+
+fn generic[T](x: T): String { toString(x) }
+
+fn fails(f: () => String): Bool unsafe go {
+  failed := false
+  func() {
+    defer func() { failed = recover() != nil }()
+    _ = f()
+  }()
+  return failed
+}
+
+fn failsPrint(f: () => Unit): Bool unsafe go {
+  failed := false
+  func() {
+    defer func() { failed = recover() != nil }()
+    f()
+  }()
+  return failed
+}
+
+fn main() {
+  a = Amount { cents: 425 }
+  println(fails(() => toString(a)))
+  println(fails(() => s"amount: ${a}"))
+  println(failsPrint(() => println(a)))
+  println(fails(() => show(a)), fails(() => generic(a)))
+  println(fails(() => toString(Invoice { amount: a })))
+  println(fails(() => toString(Choice.One { amount: a })))
+  println(fails(() => toString([a])))
+  println(fails(() => toString({ "due": a })))
+  println(fails(() => toString(Bad.One)))
+}

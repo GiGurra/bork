@@ -9,5 +9,9 @@ Maybe.Some { amount: 425 cents } Maybe.None
 425 cents 425 cents box(425 cents)
 425 cents [425 cents] 1
 box(1) box(425 cents)
+pair(425 cents, ok)
+parcel(425 cents) parcel(425 cents)
+empty parcel empty parcel 3.0
+425 cents 425 cents [425 cents]
 {20 cents: "small", 425 cents: "large"}
 [1, 2] plain 3.0

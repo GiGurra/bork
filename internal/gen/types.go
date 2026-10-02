@@ -933,8 +933,10 @@ func _str(x any) string {
 		return _fmtFloat(x, 64)
 	case float32:
 		return _fmtFloat(float64(x), 32)
-	case fmt.Stringer, string:
-		return fmt.Sprint(x)
+	case fmt.Stringer:
+		return x.String()
+	case string:
+		return x
 	}
 	switch v := reflect.ValueOf(x); v.Kind() {
 	case reflect.Slice:

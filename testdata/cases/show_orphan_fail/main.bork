@@ -1,5 +1,3 @@
 import "example.com/orphan/pretty"
 
-use pretty.ShowAmount
-
-fn main() {}
+fn main() { println(pretty.Name()) }

@@ -1266,7 +1266,7 @@ func (g *gen) str(x ast.Expr, t check.Type) ast.Expr {
 // than Go prints them.
 func needsStr(t check.Type) bool {
 	switch t.(type) {
-	case *check.Union, *check.List, *check.Map, *check.FuncType, *check.TypeParam:
+	case *check.Union, *check.List, *check.Map, *check.FuncType, *check.TypeParam, *check.Record, *check.Sealed:
 		return true
 	}
 	return check.IsFloat(t)

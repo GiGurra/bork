@@ -148,7 +148,7 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
-		// Eq: Eq[T]{equals: _equalOf[T]}.
+		// Built-in equality and rendering dispatch through universal helpers.
 		method := "equals"
 		if check.IsShow(d.Class) {
 			method = "show"

@@ -3,3 +3,5 @@ import "example.com/orphan/money"
 instance ShowAmount: Show[money.Amount] {
   fn show(a: money.Amount): String { "amount" }
 }
+
+fn Name(): String { "pretty" }

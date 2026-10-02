@@ -66,7 +66,7 @@ type Dict struct {
 	Args     []*Dict
 	// Or a bound of a type parameter in scope:
 	Param *TypeParam
-	// Or built in: Eq, for every type whose values can be compared.
+	// Or built in: Eq for comparable types, or Show for every value.
 	Builtin bool
 }
 

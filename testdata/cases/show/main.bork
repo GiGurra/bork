@@ -3,6 +3,8 @@ import "bork/maps"
 type Amount = { cents: Int }
 type Invoice = { amount: Amount, tags: List[String] }
 type Box[T] = { value: T }
+type Pair[A, B] = { first: A, second: B }
+type Parcel[T] = sealed { Value { value: T }, Empty }
 type Maybe = sealed { Some { amount: Amount }, None }
 
 instance amountShow: Show[Amount] {
@@ -11,6 +13,19 @@ instance amountShow: Show[Amount] {
 
 instance boxShow[T: Show]: Show[Box[T]] {
   fn show(b: Box[T]): String { "box(" + show(b.value) + ")" }
+}
+
+instance pairShow[X: Show, Y: Show]: Show[Pair[Y, X]] {
+  fn show(p: Pair[Y, X]): String { "pair(" + show(p.first) + ", " + show(p.second) + ")" }
+}
+
+instance parcelShow[T]: Show[Parcel[T]] {
+  fn show(p: Parcel[T]): String {
+    match (p) {
+      Parcel.Value { value: v } => "parcel(" + show(v) + ")"
+      Parcel.Empty => "empty parcel"
+    }
+  }
 }
 
 fn wrapped[T: Show](x: T): String { toString(Box { value: x }) }
@@ -31,6 +46,12 @@ fn main() {
   println(bounded(amount), unbounded(amount), wrapped(amount))
   println(show(amount), show([amount]), show(1))
   println(Box { value: 1 }, unbounded(Box { value: amount }))
+  println(Pair { first: amount, second: "ok" })
+  println(Parcel.Value { value: amount }, unbounded(Parcel.Value { value: amount }))
+  empty: Parcel[Amount] = Parcel.Empty
+  println(empty, show(empty), show(3.0))
+  same: Amount | String = amount
+  println(show(same), toString(same), [same])
   println(maps.Unordered({ amount: "large", Amount { cents: 20 }: "small" }))
   println([1, 2], "plain", 3.0)
 }
