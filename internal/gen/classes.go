@@ -2,6 +2,7 @@ package gen
 
 import (
 	"go/ast"
+	"go/parser"
 	"go/token"
 
 	"github.com/GiGurra/bork/internal/check"
@@ -32,6 +33,11 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 			Names: []*ast.Ident{name(m.Decl.Name)},
 			Type:  g.funcType(&check.FuncType{Params: m.Params, Result: m.Result}, nil),
 		})
+	}
+	if class.Prelude && class.Name == "Decode" {
+		g.usesDecodeSchema = true
+		callback, _ := parser.ParseExpr("func() []_borkDecodeField")
+		st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("fields")}, Type: callback})
 	}
 	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
 		Name:       typeName(class.Name, class.Pkg),
@@ -97,6 +103,15 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 			fn = &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}
 		}
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(ci.Class.Methods[i].Decl.Name), Value: fn})
+	}
+	if ci.Class.Prelude && ci.Class.Name == "Decode" && len(ci.Methods) > 0 && ci.Methods[0].Derived != nil {
+		if record, ok := ci.Type.(*check.Record); ok {
+			callback, err := parser.ParseExpr(g.decodeSchema(ci, record))
+			if err != nil {
+				panic(err)
+			}
+			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: ast.NewIdent("fields"), Value: callback})
+		}
 	}
 	return &ast.FuncDecl{
 		Name: ast.NewIdent(instName(ci)),

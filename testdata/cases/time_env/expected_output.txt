@@ -1,0 +1,21 @@
+httpPort:Int:port
+unsupported
+2024-01-02T03:04:05.123Z
+Duration { nanos: 2000000000 }
+1.5s
+Duration { nanos: 7380000000000 }
+OutOfRange { value: "9223372036855", target: "Duration" }
+OutOfRange { value: "instant + duration", target: "Instant" }
+OutOfRange { value: "end - start", target: "Duration" }
+instant is outside the Unix nanosecond range
+Config { host: "true", httpPort: 8080, enabled: false, label: Option.None }
+APP_HTTP_PORT: must be port
+APP_ENABLED: invalid JSON at line 1, column 1: expected a value
+APP_HOST: is missing
+APP_HTTP_PORT: is missing
+APP_ENABLED: is missing
+Config { host: "localhost", httpPort: 8080, enabled: true, label: Option.Some { value: "" } }
+Option.Some { value: "" } 
+Option.Some { value: "" }
+Config { host: "json-host", httpPort: 80, enabled: true, label: Option.None }
+Cancelled { reason: "cancelled" }

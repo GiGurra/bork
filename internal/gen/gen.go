@@ -146,7 +146,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				if strings.Contains(fd.GoBody.Body, "_borkScope") {
 					g.usesScopes = true
 				}
-				if strings.Contains(fd.GoBody.Body, "_borkSome") || strings.Contains(fd.GoBody.Body, "_borkNone") {
+				if strings.Contains(fd.GoBody.Body, "_borkSome") || strings.Contains(fd.GoBody.Body, "_borkNone") || strings.Contains(fd.GoBody.Body, "_borkOptionGet") {
 					usesOptionHelpers = true
 				}
 				goName := g.funcName(fn).Name
@@ -246,19 +246,20 @@ type gen struct {
 	// usedTypes holds the declared types the generated code refers to.
 	usedTypes map[check.Type]bool
 	// Runtime support the program needs.
-	usesShow    bool
-	usesConvert bool
-	usesIs      bool
-	usesAssert  bool
-	usesTests   bool
-	usesSnaps   bool
-	usesRules   bool
-	usesScopes  bool
-	usesDerive  bool
-	usesEqual   bool
-	usesHash    bool
-	usesUnit    bool
-	usesMap     bool
+	usesShow         bool
+	usesConvert      bool
+	usesIs           bool
+	usesAssert       bool
+	usesTests        bool
+	usesSnaps        bool
+	usesRules        bool
+	usesScopes       bool
+	usesDerive       bool
+	usesEqual        bool
+	usesHash         bool
+	usesUnit         bool
+	usesMap          bool
+	usesDecodeSchema bool
 	// openScopes lists the Go variables of the scope blocks around the
 	// code being generated, which are closed before returning.
 	openScopes []*ast.Ident

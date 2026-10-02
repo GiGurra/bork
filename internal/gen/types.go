@@ -952,6 +952,9 @@ func _fmtFloat(f float64, bits int) string {
 // comments print correctly.
 func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
+	if g.usesDecodeSchema {
+		src = append(src, decodeSchemaHelpers)
+	}
 	if g.usesAssert {
 		g.usesShow = true
 		g.usesEqual = true

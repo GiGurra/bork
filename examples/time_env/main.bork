@@ -1,0 +1,53 @@
+// APP_HOST=localhost APP_PORT=8080 bork run examples/time_env -- live
+// The default demo injects both the environment and clock.
+import "bork/env"
+import "bork/time"
+
+pred validPort(n: Int) { n > 0 && n <= 65535 }
+type Config = { host: String, port: Int where validPort } derive (Decode)
+fn report(result: Config | env.ConfigError, clock: time.Clock) {
+  match (result) {
+    config: Config => println(s"${time.Format(time.Read(clock), time.RFC3339())}: ${config.host}:${config.port}")
+    error: env.ConfigError => forEach(error.errors, issue => eprintln(s"${issue.path}: ${issue.message}"))
+  }
+}
+fn main() {
+  if (args().includes("live")) {
+    report(env.Load[Config]("APP"), time.SystemClock())
+  } else {
+    values = {"APP_HOST": "localhost", "APP_PORT": "8080"}
+    report(env.LoadWith[Config]("APP", name => values.get(name)), time.FixedClock(time.Instant { unixNanos: 0 }))
+  }
+}
+test "config collects missing and invalid fields" {
+  values = {"APP_PORT": "0"}
+  result: Config | env.ConfigError = env.LoadWith("APP", name => values.get(name))
+  match (result) {
+    errors: env.ConfigError => assertEqual(length(errors.errors), 2)
+    _ => assert(false)
+  }
+}
+test "fake clock remains fixed" {
+  clock = time.FixedClock(time.Instant { unixNanos: 42 })
+  assertEqual(time.Read(clock), time.Read(clock))
+}
+test "negative arithmetic overflow is checked" {
+  match (time.Add(time.Instant { unixNanos: -9223372036854775808 }, time.Nanoseconds(-1))) {
+    error: OutOfRange => {}
+    _ => assert(false)
+  }
+  match (time.Between(time.Instant { unixNanos: 1 }, time.Instant { unixNanos: -9223372036854775808 })) {
+    error: OutOfRange => {}
+    _ => assert(false)
+  }
+}
+test "invalid duration and instant text is rejected" {
+  match (time.ParseDuration("nope")) {
+    error: ParseError => {}
+    _ => assert(false)
+  }
+  match (time.Parse("nope", time.RFC3339())) {
+    error: ParseError => {}
+    _ => assert(false)
+  }
+}

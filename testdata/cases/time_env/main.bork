@@ -1,0 +1,71 @@
+import "bork/time"
+import "bork/env"
+
+pred port(n: Int) { n > 0 && n <= 65535 }
+type Config = {
+  host: String,
+  httpPort: Int where port,
+  enabled: Bool,
+  label: Option[String],
+} derive (Decode)
+
+fn lookup(values: Map[String, String], name: String): Option[String] { values.get(name) }
+fn config(values: Map[String, String]) {
+  result: Config | env.ConfigError = env.LoadWith("APP", name => lookup(values, name))
+  match (result) {
+    c: Config => println(c)
+    errors: env.ConfigError => forEach(errors.errors, error => println(s"${error.path}: ${error.message}"))
+  }
+}
+fn seed(s: Scope) unsafe go {
+  import "os"
+  old, found := os.LookupEnv("BORK_ENV_TEST")
+  os.Setenv("BORK_ENV_TEST", "")
+  jsonOld, jsonFound := os.LookupEnv("BORK_ENV_JSON_TEST")
+  os.Setenv("BORK_ENV_JSON_TEST", `{"host":"json-host","httpPort":80,"enabled":true}`)
+  s.Defer(func() { if jsonFound { os.Setenv("BORK_ENV_JSON_TEST", jsonOld) } else { os.Unsetenv("BORK_ENV_JSON_TEST") } })
+  s.Defer(func() { if found { os.Setenv("BORK_ENV_TEST", old) } else { os.Unsetenv("BORK_ENV_TEST") } })
+}
+fn schema[T: Decode](): String unsafe go {
+  fields, supported := _borkDecodeFields(_d_T_Decode)
+  if !supported { return "unsupported" }
+  return fields[1].Name + ":" + fields[1].Type + ":" + fields[1].Constraints[0]
+}
+fn main() {
+  println(schema[Config]())
+  println(schema[Int]())
+  parsed = time.Parse("2024-01-02T03:04:05.123Z", time.RFC3339())
+  match (parsed) {
+    instant: time.Instant => {
+      println(time.Format(time.Read(time.FixedClock(instant)), time.RFC3339()))
+      next = time.Add(instant, time.Nanoseconds(2000000000))
+      match (next) {
+        end: time.Instant => println(time.Between(instant, end))
+        error: OutOfRange => println(error)
+      }
+    }
+    error: ParseError => println(error)
+  }
+  println(time.FormatDuration(time.Nanoseconds(1500000000)))
+  println(time.ParseDuration("2h3m"))
+  println(time.Milliseconds(9223372036855))
+  println(time.Add(time.Instant { unixNanos: 9223372036854775807 }, time.Nanoseconds(1)))
+  println(time.Between(time.Instant { unixNanos: -1 }, time.Instant { unixNanos: 9223372036854775807 }))
+  match (time.Parse("2500-01-01T00:00:00Z", time.RFC3339())) {
+    error: ParseError => println(error.message)
+    _ => println("unexpected")
+  }
+  config({"APP_HOST": "true", "APP_HTTP_PORT": "8080", "APP_ENABLED": "false"})
+  config({"APP_HOST": "", "APP_HTTP_PORT": "0", "APP_ENABLED": "wrong"})
+  config({:})
+  config({"APP_HOST": "localhost", "APP_HTTP_PORT": "8080", "APP_ENABLED": "true", "APP_LABEL": ""})
+  scope s {
+    seed(s)
+    println(env.Get("BORK_ENV_TEST"), env.Require("BORK_ENV_TEST"))
+    println(env.All().get("BORK_ENV_TEST"))
+    result: Config | env.Missing | JsonError | DecodeError = env.LoadJson("BORK_ENV_JSON_TEST")
+    println(result)
+    cancel(s)
+    println(time.Sleep(s, time.Nanoseconds(1000000)))
+  }
+}
