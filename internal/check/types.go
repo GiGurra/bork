@@ -219,6 +219,8 @@ func TypeText(t Type, from *Package) string {
 		return named(t.Name, t.Pkg, nil)
 	case *List:
 		return "List[" + TypeText(t.Elem, from) + "]"
+	case *Map:
+		return "Map[" + TypeText(t.Key, from) + ", " + TypeText(t.Value, from) + "]"
 	case *FuncType:
 		params := make([]string, len(t.Params))
 		for i, p := range t.Params {
@@ -270,6 +272,8 @@ func typeKey(t Type) string {
 		return fmt.Sprintf("%s#%p", t.Name, t)
 	case *List:
 		return "List[" + typeKey(t.Elem) + "]"
+	case *Map:
+		return "Map[" + typeKey(t.Key) + "," + typeKey(t.Value) + "]"
 	case *FuncType:
 		return "(" + argsKey(t.Params) + ")=>" + typeKey(t.Result)
 	case *Union:
@@ -481,6 +485,14 @@ type List struct {
 
 func (l *List) String() string { return TypeText(l, nil) }
 
+// Map is the built-in immutable map type Map[K, V]. It keeps its keys
+// in the order they were first added.
+type Map struct {
+	Key, Value Type
+}
+
+func (m *Map) String() string { return TypeText(m, nil) }
+
 // Union is `A | B | ...`. Members are kept in written order, because
 // `?` keeps the leftmost member. Members are never unions themselves
 // (nested unions are flattened) and never repeat.
@@ -527,6 +539,9 @@ func identical(a, b Type) bool {
 	case *List:
 		b, ok := b.(*List)
 		return ok && identical(a.Elem, b.Elem)
+	case *Map:
+		b, ok := b.(*Map)
+		return ok && identical(a.Key, b.Key) && identical(a.Value, b.Value)
 	case *FuncType:
 		b, ok := b.(*FuncType)
 		if !ok || len(a.Params) != len(b.Params) || !identical(a.Result, b.Result) {
@@ -626,6 +641,8 @@ func comparableIn(t Type, seen map[Type]bool) bool {
 	switch t := t.(type) {
 	case *List:
 		return comparableIn(t.Elem, seen)
+	case *Map:
+		return comparableIn(t.Key, seen) && comparableIn(t.Value, seen)
 	case *TypeParam:
 		for _, b := range t.Bounds {
 			if IsEq(b) {

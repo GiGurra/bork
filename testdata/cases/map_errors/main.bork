@@ -1,0 +1,8 @@
+fn noEq[K, V](m: Map[K, V]): Int { 0 }
+
+fn main() {
+  a = {:}
+  d = {"a": 1, "b": "two"}
+  e: Map[String, Int] = {"a": "one"}
+  f: Map[String] = {:}
+}

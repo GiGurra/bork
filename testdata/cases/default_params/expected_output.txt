@@ -1,0 +1,10 @@
+Hello, ada!
+Hi, bob!
+Hey, cy!
+Hey, cy!
+a {:}
+b {"x": 1}
+[1]
+["a"]
+-3.0
+Yo, dee!

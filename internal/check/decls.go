@@ -22,7 +22,7 @@ type typeEntry struct {
 }
 
 // reservedTypeNames cannot be declared by user code.
-var reservedTypeNames = map[string]bool{"Never": true, "List": true}
+var reservedTypeNames = map[string]bool{"Never": true, "List": true, "Map": true}
 
 func init() {
 	for name := range basicTypes {
@@ -261,6 +261,27 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 			return Invalid
 		}
 		return &List{Elem: elem}
+	}
+	if t.Name == "Map" {
+		if len(t.Args) != 2 {
+			c.errorf(t.Pos, "Map needs exactly two type arguments, as in Map[String, Int]")
+			return Invalid
+		}
+		key, value := c.resolveType(t.Args[0]), c.resolveType(t.Args[1])
+		if key == Invalid || value == Invalid {
+			return Invalid
+		}
+		for i, a := range []Type{key, value} {
+			if !isValue(a) {
+				c.errorf(t.Args[i].Pos, "Map[%s, %s] is not allowed", key, value)
+				return Invalid
+			}
+		}
+		if !comparable(key) {
+			c.errorf(t.Args[0].Pos, "a Map's keys must be comparable with ==, and %s is not (for a type parameter, bound it: [K: Eq])", key)
+			return Invalid
+		}
+		return &Map{Key: key, Value: value}
 	}
 	if e := c.lookupType(t.Name); e != nil && e.decl.Kind != syntax.AliasType {
 		params := typeParamsOf(e.typ)

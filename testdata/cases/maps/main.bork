@@ -1,0 +1,54 @@
+import "bork/maps"
+
+type Point = { x: Int, y: Int }
+
+fn main() {
+  ages = {"ada": 36, "bob": 41}
+  println(ages)
+  empty: Map[String, Int] = {:}
+  println(empty)
+  // A key given twice keeps the later value.
+  println({"a": 1, "b": 2, "a": 3})
+  // Entries over several lines; values from the context.
+  attrs: Map[String, String | Int | Bool] = {
+    "user": "ada",
+    "age": 36,
+    "admin": false,
+  }
+  println(attrs)
+  // Keys of any comparable type.
+  names = {Point { x: 1, y: 2 }: "a", Point { x: 0, y: 0 }: "origin"}
+  println(names)
+  byList = {[1, 2]: "a", [3]: "b"}
+  println(maps.Get(byList, [1, 2]))
+  // Equality ignores order.
+  println({"a": 1, "b": 2} == {"b": 2, "a": 1})
+  println({"a": 1} == {"a": 2})
+  // A block is still a block.
+  x = {
+    y = 1
+    y + 1
+  }
+  println(x)
+  useMaps()
+}
+
+fn useMaps() {
+  ages = {"ada": 36, "bob": 41}
+  println(maps.Get(ages, "ada"))
+  println(maps.Get(ages, "cy"))
+  println(maps.GetOr(ages, "cy", 0))
+  older = ages |> maps.Put("cy", 29) |> maps.Put("ada", 37)
+  println(older)
+  println(maps.Remove(older, "bob"))
+  println(ages)
+  println(s"${maps.Size(older)} ${maps.Has(older, "cy")} ${maps.IsEmpty(ages)}")
+  println(maps.Keys(older))
+  println(maps.Values(older))
+  println(maps.Entries(ages))
+  println(maps.FromEntries([Entry { key: 1, value: "one" }, Entry { key: 2, value: "two" }]))
+  println(maps.Merge(ages, {"bob": 0, "dee": 50}))
+  println(maps.MapValues(ages, a => a * 2))
+  println(maps.Filter(older, (name, age) => age > 30))
+  maps.ForEach(ages, (name, age) => println(s"$name is $age"))
+}

@@ -1,0 +1,6 @@
+main.bork:1:22: a Map's keys must be comparable with ==, and K is not (for a type parameter, bound it: [K: Eq])
+main.bork:4:7: cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}
+main.bork:5:7: map values have different types: Int and String
+main.bork:6:31: map value must be Int, found String
+main.bork:7:6: Map needs exactly two type arguments, as in Map[String, Int]
+main.bork:7:20: cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}

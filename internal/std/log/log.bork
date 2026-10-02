@@ -1,0 +1,125 @@
+// Package log writes structured logs, through Go's log/slog:
+//
+//   import "bork/log"
+//
+//   log.Info("signed up", {"user": name, "age": 37})
+//   log.Warn("slow")
+//
+// A record is a message, a level, and attributes (a map from keys to a
+// String, Int, Float, or Bool). Logs go to stderr as text by default;
+// Configure changes the level, format, and destination. The runtime's
+// own messages (such as a scope's failures with logFailures()) are
+// written the same way.
+
+// Level is how important a record is. Records below the configured
+// level are dropped.
+type Level = sealed { Debug, Info, Warn, Error }
+
+// Attrs are a record's attributes: keys with a String, Int, Float, or
+// Bool value, written in order.
+type Attrs = Map[String, String | Int | Float | Bool]
+
+// Format is how records are written: as text (key=value), or as one
+// JSON object per line.
+type Format = sealed { Text, Json }
+
+// Output is where records are written.
+type Output = sealed { Stderr, Stdout }
+
+// Config says how records are written. timestamps adds the time to
+// each record.
+type Config = { level: Level, format: Format, output: Output, timestamps: Bool }
+
+// Defaults is the configuration logs start with: Info and above, as
+// text with timestamps, on stderr.
+fn Defaults(): Config {
+  Config { level: Level.Info, format: Format.Text, output: Output.Stderr, timestamps: true }
+}
+
+// Configure sets how records are written from now on, by the whole
+// program: log.Configure(log.Defaults().copy(level = log.Level.Debug)).
+fn Configure(config: Config) {
+  json = match (config.format) {
+    Format.Json => true
+    Format.Text => false
+  }
+  stdout = match (config.output) {
+    Output.Stdout => true
+    Output.Stderr => false
+  }
+  configure(slogLevel(config.level), json, stdout, config.timestamps)
+}
+
+fn configure(level: Int, json: Bool, stdout: Bool, timestamps: Bool) unsafe go {
+  import "log/slog"
+  import "os"
+  opts := &slog.HandlerOptions{Level: slog.Level(level)}
+  if !timestamps {
+    opts.ReplaceAttr = func(groups []string, a slog.Attr) slog.Attr {
+      if a.Key == slog.TimeKey && len(groups) == 0 {
+        return slog.Attr{}
+      }
+      return a
+    }
+  }
+  w := os.Stderr
+  if stdout {
+    w = os.Stdout
+  }
+  var h slog.Handler = slog.NewTextHandler(w, opts)
+  if json {
+    h = slog.NewJSONHandler(w, opts)
+  }
+  slog.SetDefault(slog.New(h))
+}
+
+// Logger adds its attributes to every record it writes: one per
+// request, say, with the request's id.
+type Logger = { attrs: Attrs }
+
+// With is a logger that adds attrs to its records.
+fn With(attrs: Attrs): Logger {
+  Logger { attrs: attrs }
+}
+
+// Extend is a logger with attrs added to those of logger.
+fn Extend(logger: Logger, attrs: Attrs): Logger {
+  Logger { attrs: merge(logger.attrs, attrs) }
+}
+
+// Debug, Info, Warn, and Error write a record at their level:
+// log.Info("signed up", {"user": name}), or log.Info("started").
+fn Debug(msg: String, attrs: Attrs = {:}) { write(-4, msg, attrs) }
+fn Info(msg: String, attrs: Attrs = {:}) { write(0, msg, attrs) }
+fn Warn(msg: String, attrs: Attrs = {:}) { write(4, msg, attrs) }
+fn Error(msg: String, attrs: Attrs = {:}) { write(8, msg, attrs) }
+
+// Log writes a record with logger's attributes and attrs:
+// logger |> log.Log(log.Level.Info, "done").
+fn Log(logger: Logger, level: Level, msg: String, attrs: Attrs = {:}) {
+  write(slogLevel(level), msg, merge(logger.attrs, attrs))
+}
+
+fn merge(a: Attrs, b: Attrs): Attrs unsafe go {
+  return _mapOf(append(append([]string{}, a.keys...), b.keys...), append(append([]any{}, a.vals...), b.vals...))
+}
+
+fn write(level: Int, msg: String, attrs: Attrs) unsafe go {
+  import "context"
+  import "log/slog"
+  all := make([]slog.Attr, len(attrs.keys))
+  for i, k := range attrs.keys {
+    all[i] = slog.Any(k, attrs.vals[i])
+  }
+  slog.LogAttrs(context.Background(), slog.Level(level), msg, all...)
+}
+
+// slogLevel is the number slog gives a level.
+fn slogLevel(level: Level): Int {
+  match (level) {
+    Level.Debug => -4
+    Level.Info => 0
+    Level.Warn => 4
+    Level.Error => 8
+  }
+}

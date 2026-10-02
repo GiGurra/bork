@@ -363,6 +363,11 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 		for _, el := range x.Elems {
 			f.walk(el, e)
 		}
+	case *syntax.MapLit:
+		for i := range x.Keys {
+			f.walk(x.Keys[i], e)
+			f.walk(x.Values[i], e)
+		}
 	case *syntax.Unary:
 		f.walk(x.X, e)
 	case *syntax.Binary:
@@ -1089,6 +1094,10 @@ func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
 		}
 	case *List:
 		return typeParamPaths(t.Elem, tp, path+".[]")
+	case *Map:
+		if mentions(t, tp) {
+			return nil, false // not followed into maps yet
+		}
 	case *Sealed:
 		if IsOption(t) {
 			return typeParamPaths(t.Args[0], tp, path+".value")
@@ -1124,6 +1133,8 @@ func mentions(t Type, tp *TypeParam) bool {
 		return t == tp
 	case *List:
 		return mentions(t.Elem, tp)
+	case *Map:
+		return mentions(t.Key, tp) || mentions(t.Value, tp)
 	case *Record, *Sealed:
 		for _, a := range TypeArgs(t) {
 			if mentions(a, tp) {

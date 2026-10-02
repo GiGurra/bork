@@ -1,0 +1,7 @@
+level=INFO msg=started
+level=INFO msg="signed up" user=ada age=37
+level=WARN msg=slow ms=1.5 retry=true
+level=ERROR msg=failed request=r-1 status=500
+level=INFO msg=done request=r-1 user=bob
+{"level":"DEBUG","msg":"now shown","user":"ada"}
+{"level":"ERROR","msg":"bork: a failure while the scope closed","scope":"s","failure":"cleanup failed"}

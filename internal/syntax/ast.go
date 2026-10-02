@@ -164,6 +164,9 @@ type Param struct {
 	Pos  diag.Pos
 	Name string
 	Type *TypeExpr
+	// Default is the value of a function parameter that a call may
+	// leave out (`attrs: Map[String, Int] = {:}`), or nil.
+	Default Expr
 }
 
 // TypeExpr is a written type: a name with optional type arguments
@@ -480,6 +483,16 @@ type ListLit struct {
 	Elems []Expr
 }
 
+// MapLit is a map literal: `{"a": 1, "b": 2}`, or `{:}` for the empty
+// map.
+type MapLit struct {
+	Pos    diag.Pos
+	Keys   []Expr
+	Values []Expr
+}
+
+func (*MapLit) exprNode()               {}
+func (e *MapLit) Position() diag.Pos    { return e.Pos }
 func (*ScopeExpr) exprNode()            {}
 func (e *ScopeExpr) Position() diag.Pos { return e.Pos }
 func (*Lambda) exprNode()               {}

@@ -53,7 +53,7 @@ TypeParam  = Ident [ ":" Ident { "+" Ident } ] .     (* T: Show + Eq: T needs in
 GoBody     = "unsafe" "go" "{" { GoImport } GoStatements "}" .
 GoImport   = "import" StringLit newline .     (* import "strings" *)
 Params     = Param { "," Param } [ "," ] .
-Param      = Ident ":" Type .
+Param      = Ident ":" Type [ "=" Expr ] .   (* a default: a literal; only on the last parameters *)
 Type       = Constrained { "|" Constrained } .  (* a union: Int | NotFound *)
 Constrained = TypeAtom [ "where" Clause { "and" Clause } ] .
 Clause     = PredRef { "or" PredRef }          (* alone: p or q *)
@@ -86,11 +86,13 @@ Update     = Ident { "." Ident } "=" Expr .  (* u.copy(address.city = "Oslo") *)
 Args       = Expr { "," Expr } [ "," ] .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | "true" | "false" | Ident
-           | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | ScopeExpr .
+           | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr .
 ScopeExpr  = "scope" Ident [ "with" Expr { "," Expr } ] Block .  (* scope s { f = openFile(path, s)? ... }; scope s with taskTimeout(100), cleanupTimeout(500) { ... } *)
 Lambda     = ( Ident | "(" [ LParam { "," LParam } ] ")" ) "=>" Expr .  (* x => x + 1 *)
 LParam     = Ident [ ":" Type ] .
 ListLit    = "[" [ Expr { Sep Expr } [ Sep ] ] "]" .
+MapLit     = "{" ":" "}" | "{" Entry { Sep Entry } [ Sep ] "}" .  (* {"a": 1, "b": 2}; {:} is the empty map *)
+Entry      = Expr ":" Expr .
 If         = "if" "(" Expr ")" Block [ "else" ( If | Block ) ] .
 Return     = "return" [ Expr ] .
 Match      = "match" "(" Expr ")" "{" [ Arm { Sep Arm } [ Sep ] ] "}" .
@@ -130,6 +132,8 @@ EOL        = newline | ";" .
 - **`List[T]`** is built in and immutable: `[1, 2, 3]`, or `[]` where the type is known (`xs: List[Int] = []`). Lists print as `[1, 2, 3]`.
 - **Functions are values.** `(Int) => String` is a function type; a lambda is `x => x + 1`, `(a, b) => a + b`, or `(x: Int) => ...` where nothing says the parameter's type. Named functions can be passed (`map(xs, double)`) unless they have `where` requirements. Lambdas see the values around them; `return` and `?` are not allowed in them.
 - **Generic functions** take type parameters: `fn first[T](xs: List[T]): Option[T]`. Calls infer them from the arguments (lambdas, `[]` and `Option.None` last, so `fold(xs, 0, (sum, x) => sum + x)` works) or from the expected result. Inside, a type parameter can be passed around, stored, printed, and matched with a type pattern (`v: T`), but not compared with `==`. Lists, functions, and records holding them have no `==` either.
+- **Maps:** `Map[K, V]` is built in, written `{key: value, ...}` (`{:}` when empty); keys are expressions (`{"user": name}`), of any type with `==`. A `{` where an expression starts is a map when its first line is `key: value` followed by `,`, `}`, or a newline, and otherwise a block (`{}` is an empty block). Maps never change, keep their keys in the order first added, and compare equal when they have the same entries. `bork/maps` has `Get`, `GetOr`, `Has`, `Put`, `Remove`, `Size`, `IsEmpty`, `Keys`, `Values`, `Entries` (a list of the prelude's `Entry[K, V]`), `FromEntries`, `Merge`, `MapValues`, `Filter`, and `ForEach`.
+- **Default parameter values:** `fn greet(name: String, greeting: String = "Hello")` can be called as `greet("ada")`. Defaults are literals (numbers, strings, runes, Bools, and list and map literals of them) and only on the last parameters; a call that leaves them out gets them as arguments.
 - **`|>`** passes a value as the first argument: `users |> filter(u => u.age >= 18) |> map(u => u.name)`. With free functions instead of methods, it keeps chains readable left to right.
 - **Tests:** `test "name" { ... }` declares a test, run by `bork test` and left out of programs. `assert(cond)` and `assertEqual(actual, expected)` fail a test with the position (and both values); so does a `panic`. Tests run in test mode: facts the compiler takes on trust are checked as they run, so a `trust positive(x)` that does not hold, or an `unsafe go` function that breaks its promise, fails the test with the value. (`test` is not a keyword.)
 - **Generic types:** records and sealed types can take type parameters: `type Pair[A, B] = { first: A, second: B }`, `type Tree[T] = sealed { Leaf, Node { left: Tree[T], value: T, right: Tree[T] } }`. Literals take their type arguments from the expected type or from their fields (`Pair { first: 1, second: "one" }` is a `Pair[Int, String]`); a variant without fields (`Tree.Leaf`) needs an expected type. A `where` in a type argument applies to the fields declared with that parameter: in `Pair[String, Int where positive]`, to `second`. Type aliases cannot have parameters yet.
