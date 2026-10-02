@@ -6,15 +6,15 @@ fn count(words: List[String]): Map[String, Int] {
 
 fn main() {
   counts = count(split("the cat and the dog and the bird", " "))
-  // Its own order differs from run to run: show it sorted.
-  println(maps.Sorted(counts))
+  // Printing is sorted even though traversal keeps hash order.
+  println(counts)
   println(maps.Get(counts, "the"))
   println(maps.Size(counts))
   // Equal to an ordered map with the same entries.
   println(counts == {"the": 3, "cat": 1, "and": 2, "dog": 1, "bird": 1})
   // Everything keeps it unordered; InOrder takes the order it has.
   fewer = maps.Remove(counts, "the") |> maps.Filter((w, n) => n == 1)
-  println(maps.Sorted(fewer))
+  println(fewer)
   println(maps.Size(maps.InOrder(fewer)))
-  println(maps.Sorted(maps.MapValues(counts, n => n * 100)))
+  println(maps.MapValues(counts, n => n * 100))
 }
