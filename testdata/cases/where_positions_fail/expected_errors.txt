@@ -14,3 +14,5 @@ main.bork:31:13: where clauses inside function types are not supported yet
 main.bork:34:24: where clauses on a rule's variables are not supported yet, so the fact would not be checked
 main.bork:37:21: where clauses on a lambda's parameters are not supported yet, so the fact would not be checked
 main.bork:38:11: PosInt is a constrained type (where positive), and constrained types on a lambda's parameters are not supported yet, so the fact would not be checked
+main.bork:45:44: where clauses on a Map's values are not supported yet, so the fact would not be checked
+main.bork:45:68: where clauses on a member of a union are not supported yet, so the fact would not be checked

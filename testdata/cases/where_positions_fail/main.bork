@@ -40,3 +40,8 @@ fn lambdas(): Int {
 }
 
 fn main() {}
+
+// Property test parameters, as function parameters.
+test "generated" (m: Map[String, Int where positive], u: Int where positive | String) {
+  assert(true)
+}
