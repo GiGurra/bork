@@ -319,6 +319,9 @@ type _test struct {
 	run  func() // nil for a test that cannot run; name says why
 }
 
+// _skip is the panic of a test that finds it cannot run.
+type _skip struct{ why string }
+
 // The test running now, for assertSnapshot.
 var _tests struct {
 	sync.Mutex
@@ -339,7 +342,10 @@ func _runTests(tests []_test) {
 		_tests.Lock()
 		_tests.current, _tests.snapshots, _tests.written = &tests[i], 0, nil
 		_tests.Unlock()
-		if msg := _runTest(t.run); msg != "" {
+		if msg, skip := _runTest(t.run); skip {
+			skipped++
+			fmt.Printf("skip  %s (%s)\n", t.name, msg)
+		} else if msg != "" {
 			failed++
 			fmt.Printf("FAIL  %s\n      %s\n", t.name, _indent(msg))
 		} else {
@@ -373,14 +379,18 @@ func _indent(msg string) string {
 	return strings.Join(lines, "\n")
 }
 
-func _runTest(run func()) (msg string) {
+func _runTest(run func()) (msg string, skip bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			msg = fmt.Sprint(r)
+			if s, ok := r.(_skip); ok {
+				msg, skip = s.why, true
+			} else {
+				msg = fmt.Sprint(r)
+			}
 		}
 	}()
 	run()
-	return ""
+	return "", false
 }
 `
 

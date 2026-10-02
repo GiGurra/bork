@@ -154,6 +154,9 @@ func main() {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
 				RunFunc: func(p *testParams, _ *cobra.Command, _ []string) {
+					if p.Cases < 0 {
+						fail(errors.New("--cases must be positive"))
+					}
 					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases})
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stderr)

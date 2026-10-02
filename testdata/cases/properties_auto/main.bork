@@ -50,3 +50,15 @@ fn main() {}
 test "an ordinary test" {
   assertEqual(clamp(-3), 1)
 }
+
+pred rare(x: Int) { x % 7919 == 1234 && x > 5000 }
+
+// Methods are named by their type.
+fn (a: Account) withdraw(amount: Int where positive): Account unsafe go {
+  return Account{id: a.id - amount}
+}
+
+// Skipped: arguments are hard to find.
+fn lucky(n: Int where rare): Int where positive unsafe go {
+  return n
+}

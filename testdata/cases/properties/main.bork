@@ -75,3 +75,17 @@ test "no values for functions" (f: (Int) => Int) {
 test "generated values cannot be snapshotted" (n: Int) {
   assertSnapshot(n)
 }
+
+pred below(x: Int, n: Int) { x < n }
+
+test "facts may name later parameters" (xs: List[Int where atLeast(n)], o: Option[Int where atLeast(n)], n: Int where small) {
+  assert(filter(xs, (x) => x < n).isEmpty())
+}
+
+test "parameters are made after those their facts name" (a: Int where atLeast(b), b: Int where positive) {
+  assert(a >= b)
+}
+
+test "facts that name each other" (a: Int where below(b), b: Int where atLeast(a)) {
+  assert(a < b)
+}

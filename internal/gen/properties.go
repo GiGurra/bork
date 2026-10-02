@@ -40,7 +40,7 @@ var (
 // function named goName. params are the generated parameters (with their where
 // clauses in cons), and body runs on them. It returns nil and the type
 // if a parameter has a type no values are generated for.
-func (g *gen) propertyTest(title string, params []*syntax.Param, types []check.Type, cons [][]*check.Constraint, body func() []ast.Stmt, goName *ast.Ident) (ast.Decl, check.Type) {
+func (g *gen) propertyTest(title string, auto bool, params []*syntax.Param, types []check.Type, cons [][]*check.Constraint, body func() []ast.Stmt, goName *ast.Ident) (ast.Decl, check.Type) {
 	for _, t := range types {
 		if bad := ungeneratable(t, map[check.Type]bool{}); bad != nil {
 			return nil, bad
@@ -54,22 +54,29 @@ func (g *gen) propertyTest(title string, params []*syntax.Param, types []check.T
 	var stmts []ast.Stmt
 	defined := map[string]bool{}
 	var deferred []ast.Stmt
-	var shown ast.Expr
-	for i, p := range params {
+	for _, i := range genOrder(params, cons) {
+		p := params[i]
 		var now []*check.Constraint
 		for _, con := range cons[i] {
-			if refersToUndefined(con, defined) {
-				// It names a later parameter: checked once all are made.
-				cond := g.propCond(con, name(p.Name), types[i])
-				if cond != nil {
-					deferred = append(deferred, rejectUnless(cond, fmt.Sprintf("%s: %s where %s", p.Name, check.TypeText(types[i], nil), con)))
-				}
+			if !refersToUndefined(con, defined) {
+				now = append(now, con)
 				continue
 			}
-			now = append(now, con)
+			// Parameters whose facts name each other: checked once all
+			// are made.
+			what := fmt.Sprintf("%s: %s where %s", p.Name, check.TypeText(types[i], nil), con)
+			deferred = append(deferred, g.atPath(name(p.Name), types[i], splitPath(con.Path), func(x ast.Expr, t check.Type) []ast.Stmt {
+				if cond := g.propCond(con, x, t); cond != nil {
+					return []ast.Stmt{rejectUnless(cond, what)}
+				}
+				return nil
+			})...)
 		}
 		stmts = append(stmts, define(name(p.Name), g.genValue(types[i], now, &ast.BasicLit{Kind: token.INT, Value: "0"}, p.Name)))
 		defined[p.Name] = true
+	}
+	var shown ast.Expr
+	for i, p := range params {
 		label := p.Name + " = "
 		if i > 0 {
 			label = ", " + label
@@ -99,7 +106,7 @@ func (g *gen) propertyTest(title string, params []*syntax.Param, types []check.T
 		Body: &ast.BlockStmt{List: stmts},
 	}
 	run := &ast.CallExpr{Fun: ast.NewIdent("_property"), Args: []ast.Expr{
-		strLit(title), &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(cases)}, prop,
+		strLit(title), &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(cases)}, ast.NewIdent(strconv.FormatBool(auto)), prop,
 	}}
 	return &ast.FuncDecl{
 		Name: goName,
@@ -142,8 +149,50 @@ func (g *gen) autoProperty(fn *check.Func, goName *ast.Ident) ast.Decl {
 		}
 		return []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{ast.NewIdent("_")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call}}}
 	}
-	decl, _ := g.propertyTest("property "+fn.Decl.Name, fn.Decl.Params, fn.Params, fn.ParamConstraints, body, goName)
+	decl, _ := g.propertyTest(autoPropertyName(fn), true, fn.Decl.Params, fn.Params, fn.ParamConstraints, body, goName)
 	return decl
+}
+
+// genOrder is the order to generate parameters in: each after the
+// ones its facts name (`hi: Int where atLeast(lo)` after lo), and
+// otherwise as declared. Parameters whose facts name each other are
+// taken in declared order.
+func genOrder(params []*syntax.Param, cons [][]*check.Constraint) []int {
+	var order []int
+	done := make([]bool, len(params))
+	defined := map[string]bool{}
+	for len(order) < len(params) {
+		next := -1
+		for i := range params {
+			if done[i] {
+				continue
+			}
+			if next < 0 {
+				next = i
+			}
+			ready := true
+			for _, con := range cons[i] {
+				ready = ready && !refersToUndefined(con, defined)
+			}
+			if ready {
+				next = i
+				break
+			}
+		}
+		done[next] = true
+		order = append(order, next)
+		defined[params[next].Name] = true
+	}
+	return order
+}
+
+// autoPropertyName is the name of fn's automatic property test:
+// "property validate", or "property Account.close" for a method.
+func autoPropertyName(fn *check.Func) string {
+	if fn.Decl.IsMethod {
+		return "property " + check.TypeText(fn.Params[0], nil) + "." + fn.Decl.Name
+	}
+	return "property " + fn.Decl.Name
 }
 
 // refersToUndefined reports whether con names a parameter not yet
@@ -788,19 +837,23 @@ func (c *_choices) uint(hi uint64, pool []uint64) uint64 {
 	return c.draw(hi + 1)
 }
 
+var _floatSpecials = []float64{math.Copysign(0, -1), math.Inf(1), math.Inf(-1), math.NaN()}
+
 func (c *_choices) float(pool []float64) float64 {
-	switch c.draw(4) {
+	switch c.draw(5) {
 	case 0:
 		return float64(c.small())
 	case 1:
 		return pool[c.draw(uint64(len(pool)))]
 	case 2:
 		return float64(c.small()) / 100
+	case 4:
+		return _floatSpecials[c.draw(uint64(len(_floatSpecials)))]
 	}
 	return (float64(c.draw(1<<53))/(1<<53)*2 - 1) * 1e12
 }
 
-var _alphabet = []string{"a", "b", "c", "x", "y", "z", " ", "A", "Z", "0", "9", "-", "_", ".", "é", "日", "\n", "\t", "\"", "\\"}
+var _alphabet = []string{"a", "b", "c", "x", "y", "z", " ", "A", "Z", "0", "9", "-", "_", ".", "é", "日", "\n", "\t", "\"", "\\", "😀"}
 
 func (c *_choices) string(pool []string) string {
 	if c.draw(3) == 2 {
@@ -817,8 +870,10 @@ func (c *_choices) string(pool []string) string {
 // values (cases of them, or by default 100 or $BORK_CASES), from a seed
 // that is the test's name hashed, or $BORK_SEED. A failing case is
 // shrunk, and reported with the seed that reproduces it. What the cases
-// print is not shown.
-func _property(name string, cases int, prop func(*_choices)) {
+// print is not shown. An automatic property whose parameters cannot be
+// generated is skipped rather than failed.
+func _property(name string, cases int, auto bool, prop func(*_choices)) {
+	fixed := cases != 0
 	if n, err := strconv.Atoi(os.Getenv("BORK_CASES")); err == nil && n > 0 && cases == 0 {
 		cases = n
 	}
@@ -849,6 +904,9 @@ func _property(name string, cases int, prop func(*_choices)) {
 			passed++
 		case 2:
 			rejected++
+			if rejected > cases && auto {
+				panic(_skip{fmt.Sprintf("could not generate the parameters: %s", msg)})
+			}
 			if rejected > cases {
 				panic(fmt.Sprintf("could not generate the parameters: %s (%d of %d cases were rejected)", msg, rejected, i+1))
 			}
@@ -866,7 +924,12 @@ func _property(name string, cases int, prop func(*_choices)) {
 					report += " (shrunk from " + c.args + ")"
 				}
 			}
-			panic(report + fmt.Sprintf("\ncase %d, seed %d (bork test --seed %d)", i+1, seed, seed))
+			repro := fmt.Sprintf("--seed %d", seed)
+			if !fixed && cases != 100 {
+				// The values' sizes depend on the number of cases.
+				repro += fmt.Sprintf(" --cases %d", cases)
+			}
+			panic(report + fmt.Sprintf("\ncase %d, seed %d (bork test %s)", i+1, seed, repro))
 		}
 	}
 }

@@ -35,7 +35,7 @@ func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte,
 		if len(fn.Params) > 0 {
 			// Its generated values cannot be snapshotted.
 			body := func() []ast.Stmt { return g.blockInto(fn.Body, sink{}) }
-			decl, untried := g.propertyTest(fn.Test.Name, fn.Decl.Params, fn.Params, fn.ParamConstraints, body, goName)
+			decl, untried := g.propertyTest(fn.Test.Name, false, fn.Decl.Params, fn.Params, fn.ParamConstraints, body, goName)
 			if decl == nil {
 				list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{
 					strLit(fmt.Sprintf("%s (no values are generated for %s)", fn.Test.Name, untried)),
@@ -93,7 +93,7 @@ func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte,
 				goName := ast.NewIdent("_auto" + strconv.Itoa(n))
 				roots = append(roots, fn)
 				g.extraFuncs = append(g.extraFuncs, g.autoProperty(fn, goName))
-				list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{strLit("property " + fd.Name), strLit(""), goName}})
+				list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{strLit(autoPropertyName(fn)), strLit(""), goName}})
 			}
 		}
 	}

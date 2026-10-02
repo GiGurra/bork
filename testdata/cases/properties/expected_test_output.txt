@@ -2,8 +2,8 @@ ok    facts hold for every generated value
 ok    a field's facts hold
 FAIL  totals are at least the count
       main.bork:40:3: assertion failed
-      for items = [Item { name: "", qty: 1 }, Item { name: "", qty: 9223372036854775807 }] (shrunk from items = [Item { name: "a", qty: 8682927260418058509 }, Item { name: "A", qty: 100 }, Item { name: "\n", qty: 651339209512335667 }, Item { name: "ab", qty: 23 }, Item { name: "A", qty: 100 }])
-      case 15, seed 1013438550924415624 (bork test --seed 1013438550924415624)
+      for items = [Item { name: "", qty: 1 }, Item { name: "", qty: 9223372036854775807 }] (shrunk from items = [Item { name: "", qty: 8393356546200483043 }, Item { name: "ab", qty: 5660070944320674883 }, Item { name: "b", qty: 5 }, Item { name: "b", qty: 1928198915503839644 }])
+      case 14, seed 1013438550924415624 (bork test --seed 1013438550924415624)
 ok    or facts
 FAIL  a failure is shrunk
       main.bork:48:3: assertion failed
@@ -29,5 +29,8 @@ FAIL  generated values cannot be snapshotted
       main.bork:76:3: assertSnapshot works only in tests, not in rules or property tests
       for n = 0 (shrunk from n = 6821980675586216454)
       case 1, seed 3171774204762949582 (bork test --seed 3171774204762949582)
-4 passed, 7 failed, 1 skipped
+ok    facts may name later parameters
+ok    parameters are made after those their facts name
+ok    facts that name each other
+7 passed, 7 failed, 1 skipped
 exit code 1

@@ -55,6 +55,15 @@ func TestPropertySeed(t *testing.T) {
 		t.Errorf("--seed %d does not reproduce\n%s\ngot:\n%s", seed, failure, again.String())
 	}
 
+	// With --cases, the command to reproduce a failure includes it.
+	var more strings.Builder
+	if _, err := Test(dir, &more, TestOptions{Cases: 300}); err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`\(bork test --seed -?\d+ --cases 300\)`).MatchString(more.String()) {
+		t.Errorf("--cases is not in the command:\n%s", more.String())
+	}
+
 	// With 1 case of size 1, the list has at most one element.
 	var one strings.Builder
 	if _, err := Test(dir, &one, TestOptions{Cases: 1}); err != nil {
