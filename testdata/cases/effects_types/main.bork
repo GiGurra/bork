@@ -1,0 +1,81 @@
+// Function types carry effects: a lambda's are inferred from its body,
+// a function that uses less fits where more is allowed, and an open
+// parameter (a function type written without uses) takes any function.
+
+type Job = { name: String, run: () uses io => Unit }
+
+fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C { x => g(f(x)) }
+
+fn runAll(jobs: List[Job]) uses io {
+  forEach(jobs, j => j.run())
+}
+
+type Box[T] = { value: T }
+
+fn box[T](x: T): Box[T] { Box { value: x } }
+
+fn main() {
+  // Generic types keep the effects of the functions they hold.
+  boxed: Box[() uses io => Unit] = box(() => println("boxed"))
+  boxed.value()
+
+  // Branches and unions join the effects of the functions in them.
+  either = if (true) { () => println("either") } else { () => {} }
+  either()
+  choice: (() uses io => Unit) | Int = () => {}
+  match (choice) {
+    f: () uses io => Unit => f()
+    n: Int => println(n)
+  }
+
+  // Results are covariant: a pure function fits where one that uses
+  // io is expected.
+  maker: () => () uses io => Unit = () => () => {}
+  maker()()
+  more()
+
+  // A pure lambda fits a function type that allows io.
+  quiet: () uses io => Unit = () => {}
+  loud: () uses io => Unit = () => println("loud")
+  runAll([Job { name: "quiet", run: quiet }, Job { name: "loud", run: loud }])
+
+  // map's f is open: it takes a function that prints.
+  _ = map([1, 2], x => {
+    println(x)
+    x
+  })
+
+  // An open result carries the effects of the open arguments.
+  double: (Int) => Int = compose(x => x + 1, x => x * 2)
+  shout: (Int) uses io => Int = compose(double, x => {
+    println(s"shout $x")
+    x
+  })
+  println(double(1), shout(2))
+
+  // update's f must be pure.
+  counter = atom(0)
+  println(update(counter, n => n + 1))
+
+  // A function with open parameters used as a value has pure ones.
+  apply: (List[Int], (Int) uses nothing => Int) => List[Int] = map
+  println(apply([1, 2], double))
+}
+
+fn pick[T](a: T, b: T): T { b }
+
+fn more() {
+  // Inference joins the effects of functions given for one type
+  // parameter, in either order.
+  quiet = () => {}
+  loud = () => println("loud")
+  f = pick(quiet, loud)
+  f()
+  // A union of functions fits a union that allows more.
+  a: (() => Unit) | Int = quiet
+  b: (() uses io => Unit) | Int = a
+  // An open parameter takes a function whose result uses less.
+  run(() => () => {})
+}
+
+fn run(make: () => () uses io => Unit) uses io { make()() }

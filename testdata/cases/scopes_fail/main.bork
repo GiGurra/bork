@@ -52,7 +52,7 @@ fn inRecord(path: String): Conn | IoError {
   }
 }
 
-fn inLambda(path: String): (() => String | IoError) | IoError {
+fn inLambda(path: String): (() uses io => String | IoError) | IoError {
   scope s {
     f = openFile(path, s)?
     () => readAll(f)

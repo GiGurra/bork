@@ -1,0 +1,71 @@
+type Job = { run: () => Unit }
+
+fn job(f: () => Unit): Job { Job { run: f } }
+
+fn jobByLambda(f: () => Unit): Job { Job { run: () => f() } }
+
+fn wrap(f: () => Unit): () => Unit {
+  () => {
+    println("wrapped")
+    f()
+  }
+}
+
+fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C { x => g(f(x)) }
+
+fn main() {
+  pure: () => Unit = () => println("x")
+  counter = atom(0)
+  _ = update(counter, n => {
+    println(n)
+    n + 1
+  })
+  jobs: List[() => Unit] = [() => println("a")]
+  inc: (Int) => Int = compose(x => {
+    println(x)
+    x
+    }, x => x)
+}
+
+// An open result: runThen's callers are not charged for f, so it may
+// not call f itself.
+fn runThen(f: () => Unit): () => Unit {
+  f()
+  () => {}
+}
+
+type Box[T] = { value: T }
+
+fn box[T](x: T): Box[T] { Box { value: x } }
+
+// The open f cannot escape as a pure function inside a generic type.
+fn stash(f: () => Unit): Box[() => Unit] { box(f) }
+
+fn moreChecks() {
+  loud = () => println("loud")
+  pureBox: Box[() => Unit] = box(loud)
+  // Lambdas are charged what the calls in their bodies use: methods,
+  // function values, and what a call's open result carries.
+  viaMethod: () => Unit = () => [1].forEach(x => println(x))
+  viaValue: () => Unit = () => loud()
+  viaCompose: () => Int = () => compose((x: Int) => x, x => {
+    println(x)
+    x
+  })(1)
+  // Branches join their effects, so the result is not pure.
+  either: () => Unit = if (true) { loud } else { () => {} }
+}
+
+fn id[T](x: T): T { x }
+
+// An open parameter cannot become a type argument, so it cannot lose
+// its effects through a generic call.
+fn launder(f: () => Unit): Job { Job { run: id(f) } }
+
+fn one(): Int { 1 }
+
+fn variance() {
+  // Results are covariant only in their effects: Go's function types
+  // are invariant.
+  widened: () => Int | String = one
+}

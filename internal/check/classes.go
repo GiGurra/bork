@@ -370,7 +370,7 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 		for _, p := range m.Params {
 			want.Params = append(want.Params, subst(p, bound))
 		}
-		if !identical(fn.funcType(), want) {
+		if !sameSignature(fn.funcType(), want) {
 			c.errorf(md.Pos, "method %s of instance %s must be %s, to match class %s for %s, but is %s", md.Name, id.Name, want, cl.Name, ci.Type, fn.funcType())
 		} else if extra := fn.Effects &^ m.Effects; extra != 0 {
 			c.diags.AddCode(md.Uses.Pos, "effect.instance", "method %s of instance %s uses %s, but class %s allows %s", md.Name, id.Name, extra, cl.Name, allowedText(m.Effects))

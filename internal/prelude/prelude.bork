@@ -74,18 +74,18 @@ type Cancelled = { reason: String }
 // cancellation point (delay, checkpoint, channels), and so do scopes
 // nested in it. The scope still waits for them before it closes. (A
 // scope is also cancelled when it ends.)
-fn cancel(s: Scope) unsafe go {
+fn cancel(s: Scope) uses state unsafe go {
   s.cancel(_errCancelled)
 }
 
 // cancelled reports whether s has been cancelled.
-fn cancelled(s: Scope): Bool unsafe go {
+fn cancelled(s: Scope) uses state: Bool unsafe go {
   return s.ctx.Err() != nil
 }
 
 // cancelAfter cancels s once ms milliseconds have passed, unless it has
 // closed by then: a deadline.
-fn cancelAfter(s: Scope, ms: Int) unsafe go {
+fn cancelAfter(s: Scope, ms: Int) uses clock + state unsafe go {
   import "errors"
   import "time"
   t := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() { s.cancel(errors.New("deadline exceeded")) })
@@ -94,7 +94,7 @@ fn cancelAfter(s: Scope, ms: Int) unsafe go {
 
 // checkpoint gives Cancelled if s has been cancelled: a cancellation
 // point for work that does not otherwise wait, as in checkpoint(s)?.
-fn checkpoint(s: Scope): Unit | Cancelled unsafe go {
+fn checkpoint(s: Scope) uses state: Unit | Cancelled unsafe go {
   if r := s._cancelReason(); r != "" {
     return Cancelled{reason: r}
   }
@@ -102,7 +102,7 @@ fn checkpoint(s: Scope): Unit | Cancelled unsafe go {
 }
 
 // delay pauses for ms milliseconds, or until s is cancelled.
-fn delay(s: Scope, ms: Int): Unit | Cancelled unsafe go {
+fn delay(s: Scope, ms: Int) uses clock + state: Unit | Cancelled unsafe go {
   import "time"
   if !s._sleep(time.Duration(ms) * time.Millisecond) {
     return Cancelled{reason: s._cancelReason()}
@@ -125,9 +125,9 @@ type Closed = {}
 // update may call f more than once (when another task updated the atom
 // in between), so f should do nothing but compute the new value.
 type Atom[T] = {
-  currentFn: () => T,
-  updateFn: ((T) => T) => T,
-  swapFn: ((T) => T) => T,
+  currentFn: () uses state => T,
+  updateFn: ((T) uses nothing => T) uses state => T,
+  swapFn: ((T) uses nothing => T) uses state => T,
 }
 
 // atom makes an atom holding initial.
@@ -153,20 +153,20 @@ fn atom[T](initial: T): Atom[T] unsafe go {
 }
 
 // current is the value a holds now.
-fn current[T](a: Atom[T]): T {
+fn current[T](a: Atom[T]) uses state: T {
   a.currentFn()
 }
 
 // update replaces a's value x with f(x), atomically, and gives the new
 // value.
-fn update[T](a: Atom[T], f: (T) => T): T {
+fn update[T](a: Atom[T], f: (T) uses nothing => T) uses state: T {
   a.updateFn(f)
 }
 
 // swap is update, but gives the value it replaced: what the change was
 // made to, so the caller can tell what it did (`old = swap(store, s =>
 // remove(s, id))`, then whether old had id).
-fn swap[T](a: Atom[T], f: (T) => T): T {
+fn swap[T](a: Atom[T], f: (T) uses nothing => T) uses state: T {
   a.swapFn(f)
 }
 
@@ -174,9 +174,9 @@ fn swap[T](a: Atom[T], f: (T) => T): T {
 // scope it was made in, and closes when that scope closes; its
 // operations stop with Cancelled when that scope is cancelled.
 type Channel[T] = {
-  sendFn: (T) => Unit | Cancelled | Closed,
-  receiveFn: () => T | Cancelled | Closed,
-  closeFn: () => Unit,
+  sendFn: (T) uses state => Unit | Cancelled | Closed,
+  receiveFn: () uses state => T | Cancelled | Closed,
+  closeFn: () uses state => Unit,
 }
 
 // channel makes a channel in scope s that holds up to capacity values
@@ -227,25 +227,25 @@ fn channel[T](s: Scope, capacity: Int): Channel[T] unsafe go {
 }
 
 // send passes x to the channel, waiting while it is full.
-fn send[T](ch: Channel[T], x: T): Unit | Cancelled | Closed unsafe go {
+fn send[T](ch: Channel[T], x: T) uses state: Unit | Cancelled | Closed unsafe go {
   return ch.sendFn(x)
 }
 
 // receive takes the next value from the channel, waiting until there
 // is one.
-fn receive[T](ch: Channel[T]): T | Cancelled | Closed unsafe go {
+fn receive[T](ch: Channel[T]) uses state: T | Cancelled | Closed unsafe go {
   return ch.receiveFn()
 }
 
 // closeChannel closes the channel: sends give Closed, and receives
 // give the values still buffered, then Closed.
-fn closeChannel[T](ch: Channel[T]) unsafe go {
+fn closeChannel[T](ch: Channel[T]) uses state unsafe go {
   ch.closeFn()
 }
 
 // received receives values until the channel closes (or its scope is
 // cancelled), and gives them in order.
-fn received[T](ch: Channel[T]): List[T] unsafe go {
+fn received[T](ch: Channel[T]) uses state: List[T] unsafe go {
   out := []T{}
   for {
     v, ok := ch.receiveFn().(T)
@@ -257,7 +257,7 @@ fn received[T](ch: Channel[T]): List[T] unsafe go {
 }
 
 // sleep pauses the routine for ms milliseconds.
-fn sleep(ms: Int) unsafe go {
+fn sleep(ms: Int) uses clock unsafe go {
   import "time"
   time.Sleep(time.Duration(ms) * time.Millisecond)
 }
@@ -340,7 +340,7 @@ type IoError = { path: String, message: String }
 // File is an open file, closed when its scope closes.
 type File = resource
 
-fn openFile(path: String, s: Scope): File | IoError unsafe go {
+fn openFile(path: String, s: Scope) uses io: File | IoError unsafe go {
   import "errors"
   import "os"
   f, err := os.Open(path)
@@ -356,7 +356,7 @@ fn openFile(path: String, s: Scope): File | IoError unsafe go {
 }
 
 // createFile creates (or empties) the file at path, for writing.
-fn createFile(path: String, s: Scope): File | IoError unsafe go {
+fn createFile(path: String, s: Scope) uses io: File | IoError unsafe go {
   import "errors"
   import "os"
   f, err := os.Create(path)
@@ -372,7 +372,7 @@ fn createFile(path: String, s: Scope): File | IoError unsafe go {
 }
 
 // readAll reads the rest of the file.
-fn readAll(f: File): String | IoError unsafe go {
+fn readAll(f: File) uses io: String | IoError unsafe go {
   import "errors"
   import "io"
   import "os"
@@ -390,7 +390,7 @@ fn readAll(f: File): String | IoError unsafe go {
 }
 
 // write writes text to the file, and returns the number of bytes written.
-fn write(f: File, text: String): Int | IoError unsafe go {
+fn write(f: File, text: String) uses io: Int | IoError unsafe go {
   import "errors"
   import "os"
   file := f.handle.(*os.File)
@@ -409,20 +409,20 @@ fn write(f: File, text: String): Int | IoError unsafe go {
 // The program's environment.
 
 // args is the program's command-line arguments (without its name).
-fn args(): List[String] unsafe go {
+fn args() uses io: List[String] unsafe go {
   import "os"
   return os.Args[1:]
 }
 
 // exit ends the program with the given status code, without closing
 // scopes.
-fn exit(code: Int): Never unsafe go {
+fn exit(code: Int) uses io: Never unsafe go {
   import "os"
   os.Exit(int(code))
 }
 
 // eprintln prints text and a newline to standard error.
-fn eprintln(text: String) unsafe go {
+fn eprintln(text: String) uses io unsafe go {
   import "fmt"
   import "os"
   fmt.Fprintln(os.Stderr, text)

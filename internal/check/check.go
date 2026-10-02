@@ -488,6 +488,9 @@ type checker struct {
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
 	lambdaDepth int
+	// used collects the effects of the function or lambda being
+	// checked: of the calls in its body (see effects.go).
+	used Effects
 	// sharedDefaults are the parameter defaults that calls share (see
 	// defaults.go): checked once, where they were declared.
 	sharedDefaults map[syntax.Expr]bool
@@ -556,6 +559,9 @@ func (c *checker) notFound(name string) string {
 // errorf reports an error. Types in args are shown as code in the
 // current package would write them (money.Cents).
 func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
+	if strings.Contains(format, "must be %s") && strings.Contains(format, ", found %s") || strings.Contains(format, "but its body produces %s") {
+		format += effectsNote(args)
+	}
 	for i, a := range args {
 		if t, ok := a.(Type); ok && t != nil {
 			args[i] = TypeText(t, c.pkg)
@@ -643,7 +649,11 @@ func (c *checker) checkFunc(fn *Func) {
 	if fn.Result != Unit {
 		want = fn.Result
 	}
+	c.used = 0
 	bodyType := c.block(fn.Decl.Body, want)
+	if isOpen(fn.Result) && c.used&EffOpen != 0 {
+		c.diags.AddCode(fn.Decl.Pos, "effect.open-result", "%s returns an open function, so it cannot call its open parameters itself (its callers are not charged for them); give them effects, or only return them", fn.Decl.Name)
+	}
 	if fn.Result == Unit && isValue(bodyType) {
 		if fn.Test != nil {
 			c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (a test returns no value)", bodyType)
@@ -1146,6 +1156,9 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 		}
 		return Invalid
 	}
+	if b == BuiltinPrintln || b == BuiltinAssertSnapshot {
+		c.used |= EffIO
+	}
 	switch b {
 	case BuiltinPanic:
 		if t := c.exprWant(e.Args[0], String); t != String && t != Invalid {
@@ -1261,6 +1274,21 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 		}
 		if fits {
 			return wide
+		}
+	}
+	// Functions that differ only in their effects join: the value may
+	// use what any of them uses.
+	if joined, ok := vals[0].(*FuncType); ok {
+		for _, t := range vals[1:] {
+			if tf, ok := t.(*FuncType); ok && sameSignature(joined, tf) {
+				joined = &FuncType{Params: joined.Params, Result: joined.Result, Effects: joined.Effects | tf.Effects}
+			} else {
+				joined = nil
+				break
+			}
+		}
+		if joined != nil {
+			return joined
 		}
 	}
 	for _, t := range vals[1:] {

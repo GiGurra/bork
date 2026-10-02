@@ -119,6 +119,12 @@ func (in *inference) unify(p, a Type) {
 		}
 		if in.owns(p) && in.bound[p] == nil {
 			in.bound[p] = a
+		} else if bf, ok := in.bound[p].(*FuncType); ok && in.owns(p) {
+			// Functions that differ only in their effects: T is one
+			// that may use what either uses.
+			if af, ok := a.(*FuncType); ok && sameSignature(bf, af) {
+				in.bound[p] = &FuncType{Params: bf.Params, Result: bf.Result, Effects: bf.Effects | af.Effects}
+			}
 		}
 	case *List:
 		if a, ok := a.(*List); ok {
@@ -496,6 +502,10 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 		inst = in.instance()
 	}
 	for i, ta := range inst.TypeArgs {
+		if mentionsOpen(ta) && c.diags.Len() == errorsBefore {
+			c.diags.AddCode(e.Pos, "effect.open-type-argument", "%s of %s cannot be %s: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result", fn.TypeParams[i].Name, name, innerText(ta, c.pkg))
+			return Invalid
+		}
 		if ta == Unit && c.diags.Len() == errorsBefore {
 			hint := ""
 			if fn.Prelude && fn.Decl.Name == "spawn" {
@@ -562,11 +572,11 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 	}
 	c.info.instances[e] = inst
 	for i, a := range args {
-		if i < len(inst.Params) && types[i] != Invalid && !assignable(types[i], inst.Params[i]) {
+		if i < len(inst.Params) && types[i] != Invalid && !fitsParam(types[i], inst.Params[i]) {
 			c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, inst.Params[i], types[i])
 		}
 	}
-	return inst.Result
+	return c.chargeCall(fn, inst.Result, types)
 }
 
 // needsContext reports whether x can only be typed with an expected
@@ -634,6 +644,7 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 	if len(e.Args) != len(ft.Params) {
 		c.errorf(e.Pos, "this function takes %d argument(s), but %d were given", len(ft.Params), len(e.Args))
 	}
+	c.used |= ft.Effects
 	for i, a := range e.Args {
 		if i >= len(ft.Params) {
 			c.expr(a)
@@ -672,7 +683,7 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 		return Invalid
 	}
 	c.info.funcRefs[e] = inst
-	return &FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects}
+	return closeOpen(&FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects})
 }
 
 // lambda checks a lambda. want is the expected function type, if any;
@@ -727,7 +738,11 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 		rw = wf.Result
 	}
 	c.lambdaDepth++
+	outer := c.used
+	c.used = 0
 	bt := c.exprWant(e.Body, rw)
+	ft.Effects = c.used
+	c.used = outer
 	c.lambdaDepth--
 	switch {
 	case bt == Invalid:

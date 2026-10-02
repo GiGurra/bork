@@ -220,15 +220,15 @@ func TypeText(t Type, from *Package) string {
 	case *Resource:
 		return named(t.Name, t.Pkg, nil)
 	case *List:
-		return "List[" + TypeText(t.Elem, from) + "]"
+		return "List[" + innerText(t.Elem, from) + "]"
 	case *Map:
-		return "Map[" + TypeText(t.Key, from) + ", " + TypeText(t.Value, from) + "]"
+		return "Map[" + innerText(t.Key, from) + ", " + innerText(t.Value, from) + "]"
 	case *FuncType:
-		return funcText(t, from, false)
+		return funcText(t, from, false, false)
 	case *Union:
 		parts := make([]string, len(t.Members))
 		for i, m := range t.Members {
-			parts[i] = TypeText(m, from)
+			parts[i] = innerText(m, from)
 			if _, ok := m.(*FuncType); ok {
 				parts[i] = "(" + parts[i] + ")"
 			}
@@ -238,14 +238,25 @@ func TypeText(t Type, from *Package) string {
 	return t.String()
 }
 
+// innerText writes a type inside another (a type argument, an element,
+// a union's member), where an open function type cannot be written:
+// it is shown as using "open".
+func innerText(t Type, from *Package) string {
+	if ft, ok := t.(*FuncType); ok {
+		return funcText(ft, from, false, true)
+	}
+	return TypeText(t, from)
+}
+
 // funcText writes a function type. pureMark writes `uses nothing` for
 // a pure one, as a parameter's function type without uses would read as
-// open.
-func funcText(t *FuncType, from *Package, pureMark bool) string {
+// open. showOpen writes the effects of an open one ("uses open"), which
+// otherwise reads as written, without uses.
+func funcText(t *FuncType, from *Package, pureMark, showOpen bool) string {
 	params := make([]string, len(t.Params))
 	for i, p := range t.Params {
 		if pf, ok := p.(*FuncType); ok {
-			params[i] = funcText(pf, from, true)
+			params[i] = funcText(pf, from, true, false)
 		} else {
 			params[i] = TypeText(p, from)
 		}
@@ -256,7 +267,7 @@ func funcText(t *FuncType, from *Package, pureMark bool) string {
 	}
 	uses := ""
 	switch {
-	case t.Effects&^EffOpen != 0:
+	case t.Effects&^EffOpen != 0 || showOpen && t.Effects != 0:
 		uses = " uses " + t.Effects.String()
 	case t.Effects == 0 && pureMark:
 		uses = " uses nothing"
@@ -270,7 +281,7 @@ func argsText(args []Type, from *Package) string {
 	}
 	parts := make([]string, len(args))
 	for i, a := range args {
-		parts[i] = TypeText(a, from)
+		parts[i] = innerText(a, from)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
 }
@@ -295,7 +306,7 @@ func typeKey(t Type) string {
 	case *Map:
 		return "Map[" + typeKey(t.Key) + "," + typeKey(t.Value) + "]"
 	case *FuncType:
-		return "(" + argsKey(t.Params) + ")=>" + typeKey(t.Result)
+		return fmt.Sprintf("(%s)%d=>%s", argsKey(t.Params), t.Effects, typeKey(t.Result))
 	case *Union:
 		return "(" + strings.Join(strings.Split(argsKey(t.Members), ","), "|") + ")"
 	case *Record, *Sealed:
@@ -532,9 +543,17 @@ func (u *Union) String() string { return TypeText(u, nil) }
 func newUnion(members []Type) Type {
 	var flat []Type
 	add := func(t Type) {
-		for _, m := range flat {
+		for i, m := range flat {
 			if identical(m, t) {
 				return
+			}
+			// Function types that differ only in their effects are one
+			// member, which may use either's.
+			if mf, ok := m.(*FuncType); ok {
+				if tf, ok := t.(*FuncType); ok && sameSignature(mf, tf) {
+					flat[i] = &FuncType{Params: mf.Params, Result: mf.Result, Effects: mf.Effects | tf.Effects}
+					return
+				}
 			}
 		}
 		flat = append(flat, t)
@@ -569,15 +588,7 @@ func identical(a, b Type) bool {
 		return ok && identical(a.Key, b.Key) && identical(a.Value, b.Value)
 	case *FuncType:
 		b, ok := b.(*FuncType)
-		if !ok || len(a.Params) != len(b.Params) || !identical(a.Result, b.Result) {
-			return false
-		}
-		for i := range a.Params {
-			if !identical(a.Params[i], b.Params[i]) {
-				return false
-			}
-		}
-		return true
+		return ok && a.Effects == b.Effects && sameSignature(a, b)
 	case *Record, *Sealed:
 		base := genericBase(a)
 		if base == nil || base != genericBase(b) {
@@ -614,6 +625,47 @@ func containsMember(u *Union, t Type) bool {
 	return false
 }
 
+// sameSignature reports whether two function types take and give the
+// same types, whatever their effects.
+func sameSignature(a, b *FuncType) bool {
+	if len(a.Params) != len(b.Params) || !identical(a.Result, b.Result) {
+		return false
+	}
+	for i := range a.Params {
+		if !identical(a.Params[i], b.Params[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// fitsFunc reports whether a function of type src can be used as a
+// dst: it takes the same parameters, gives a result that fits, and uses
+// no more than dst allows.
+func fitsFunc(src, dst *FuncType) bool {
+	if src.Effects&^dst.Effects != 0 || len(src.Params) != len(dst.Params) || !fitsResult(src.Result, dst.Result) {
+		return false
+	}
+	for i := range src.Params {
+		if !identical(src.Params[i], dst.Params[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// fitsResult reports whether a function's result of type src fits one
+// of type dst: the same type, or a function that uses less. (Go's
+// function types are invariant, so nothing else may differ.)
+func fitsResult(src, dst Type) bool {
+	if identical(src, dst) {
+		return true
+	}
+	sf, ok1 := src.(*FuncType)
+	df, ok2 := dst.(*FuncType)
+	return ok1 && ok2 && fitsFunc(sf, df)
+}
+
 // Identical is identical for other packages.
 func Identical(a, b Type) bool { return identical(a, b) }
 
@@ -621,11 +673,24 @@ func Identical(a, b Type) bool { return identical(a, b) }
 func Assignable(src, dst Type) bool { return assignable(src, dst) }
 
 // assignable reports whether a value of type src can be used where dst
-// is expected: the same type, Never, a member of a union, or a union
-// whose members all fit.
+// is expected: the same type, Never, a member of a union, a union
+// whose members all fit, or a function that uses no more than dst
+// allows.
 func assignable(src, dst Type) bool {
 	if src == Never || src == Invalid || dst == Invalid || identical(src, dst) {
 		return true
+	}
+	if sf, ok := src.(*FuncType); ok {
+		switch dst := dst.(type) {
+		case *FuncType:
+			return fitsFunc(sf, dst)
+		case *Union:
+			for _, m := range dst.Members {
+				if mf, ok := m.(*FuncType); ok && fitsFunc(sf, mf) {
+					return true
+				}
+			}
+		}
 	}
 	du, ok := dst.(*Union)
 	if !ok {
@@ -633,7 +698,7 @@ func assignable(src, dst Type) bool {
 	}
 	if su, ok := src.(*Union); ok {
 		for _, m := range su.Members {
-			if !containsMember(du, m) {
+			if !assignable(m, du) {
 				return false
 			}
 		}

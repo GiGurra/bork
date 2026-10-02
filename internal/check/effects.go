@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/syntax"
@@ -37,13 +38,16 @@ var effectNames = []struct {
 }
 
 // String writes the effects as a uses declaration lists them:
-// "io + net", or "nothing". It leaves out EffOpen.
+// "io + net", or "nothing". EffOpen is written "open".
 func (e Effects) String() string {
 	var names []string
 	for _, n := range effectNames {
 		if e&n.eff != 0 {
 			names = append(names, n.name)
 		}
+	}
+	if e&EffOpen != 0 {
+		names = append(names, "open")
 	}
 	if len(names) == 0 {
 		return "nothing"
@@ -115,6 +119,127 @@ func (c *checker) unannotatedFunc(te *syntax.TypeExpr, depth int) bool {
 	}
 	e := c.lookupType(te.Name)
 	return e != nil && e.decl.Kind == syntax.AliasType && c.unannotatedFunc(e.decl.Alias, depth+1)
+}
+
+// chargeCall adds what a call of fn does to the effects of the code
+// being checked, and gives the call's result. The call does what fn
+// declares, and what the arguments to its open parameters do, unless
+// its result is open: then those are what the function it gives does.
+func (c *checker) chargeCall(fn *Func, result Type, args []Type) Type {
+	// Only a result declared open carries effects: a type parameter
+	// bound to an open function type (id(f)) does not.
+	c.used |= fn.Effects
+	var open Effects
+	for i, t := range args {
+		if i < len(fn.Params) && isOpen(fn.Params[i]) {
+			if at, ok := t.(*FuncType); ok {
+				open |= at.Effects
+			}
+		}
+	}
+	if rf, ok := result.(*FuncType); ok && isOpen(fn.Result) {
+		return &FuncType{Params: rf.Params, Result: rf.Result, Effects: rf.Effects&^EffOpen | open}
+	}
+	c.used |= open
+	return result
+}
+
+// mentionsOpen reports whether t is or holds a function type that uses
+// what an open parameter uses.
+func mentionsOpen(t Type) bool {
+	switch t := t.(type) {
+	case *FuncType:
+		if t.Effects&EffOpen != 0 || mentionsOpen(t.Result) {
+			return true
+		}
+		for _, p := range t.Params {
+			if mentionsOpen(p) {
+				return true
+			}
+		}
+	case *List:
+		return mentionsOpen(t.Elem)
+	case *Map:
+		return mentionsOpen(t.Key) || mentionsOpen(t.Value)
+	case *Union:
+		for _, m := range t.Members {
+			if mentionsOpen(m) {
+				return true
+			}
+		}
+	case *Record, *Sealed:
+		for _, a := range TypeArgs(t) {
+			if mentionsOpen(a) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isOpen reports whether t is the type of an open parameter or result.
+func isOpen(t Type) bool {
+	ft, ok := t.(*FuncType)
+	return ok && ft.Effects&EffOpen != 0
+}
+
+// fitsParam reports whether an argument of type t can be passed for a
+// parameter of type p. An open parameter takes a function with any
+// effects.
+func fitsParam(t, p Type) bool {
+	if isOpen(p) {
+		if tf, ok := t.(*FuncType); ok {
+			return fitsFunc(&FuncType{Params: tf.Params, Result: tf.Result}, p.(*FuncType))
+		}
+	}
+	return assignable(t, p)
+}
+
+// closeOpen gives the type of a function with open positions used as a
+// value: they become pure.
+func closeOpen(ft *FuncType) *FuncType {
+	out := &FuncType{Params: make([]Type, len(ft.Params)), Result: ft.Result, Effects: ft.Effects}
+	for i, p := range ft.Params {
+		out.Params[i] = closeOne(p)
+	}
+	out.Result = closeOne(ft.Result)
+	return out
+}
+
+func closeOne(t Type) Type {
+	if !isOpen(t) {
+		return t
+	}
+	ft := t.(*FuncType)
+	return &FuncType{Params: ft.Params, Result: ft.Result, Effects: ft.Effects &^ EffOpen}
+}
+
+// effectsNote explains a message about an expected and a found
+// function type (the first two function types among args, in that
+// order) when they differ only in their effects, which the types alone
+// do not show well.
+func effectsNote(args []any) string {
+	var fts []*FuncType
+	for _, a := range args {
+		if ft, ok := a.(*FuncType); ok {
+			fts = append(fts, ft)
+		}
+	}
+	if len(fts) < 2 || !sameSignature(fts[0], fts[1]) {
+		return ""
+	}
+	want, found := fts[0].Effects, fts[1].Effects
+	switch extra := found &^ want; {
+	case extra&EffOpen != 0:
+		return " (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)"
+	case extra != 0 && want&EffOpen != 0:
+		return fmt.Sprintf(" (it uses %s, but an open result can only use what the open parameters use; to allow more, write the parameters' and the result's effects)", extra)
+	case extra != 0 && want == 0:
+		return fmt.Sprintf(" (it uses %s, where a function that uses nothing is expected)", extra)
+	case extra != 0:
+		return fmt.Sprintf(" (it uses %s, which is not allowed there)", extra)
+	}
+	return ""
 }
 
 func effectNamed(name string) Effects {
