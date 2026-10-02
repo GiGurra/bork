@@ -1,0 +1,3 @@
+import "bork/nope"
+
+fn main() {}

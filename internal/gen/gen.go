@@ -237,6 +237,7 @@ type gen struct {
 	usesScopes  bool
 	usesDerive  bool
 	usesEqual   bool
+	usesUnit    bool
 	// openScopes lists the Go variables of the scope blocks around the
 	// code being generated, which are closed before returning.
 	openScopes []*ast.Ident
@@ -819,6 +820,10 @@ func (g *gen) into(e syntax.Expr, k sink) []ast.Stmt {
 	case *syntax.Match:
 		return g.matchStmt(e, k)
 	}
+	if g.info.Types[e] == check.Unit {
+		// Unit into a union holding it.
+		return append(g.effect(e), assign(k.res, g.unitValue()))
+	}
 	stmts, x := g.value(e)
 	if x != nil {
 		stmts = append(stmts, assign(k.res, g.convert(x, g.info.Types[e], k.resType)))
@@ -826,10 +831,25 @@ func (g *gen) into(e syntax.Expr, k sink) []ast.Stmt {
 	return stmts
 }
 
+// unitValue is the Go value of Unit in a union.
+func (g *gen) unitValue() ast.Expr {
+	return &ast.CompositeLit{Type: g.goType(check.Unit)}
+}
+
 // blockInto lowers a block: its statements, then its tail into k.
 func (g *gen) blockInto(b *syntax.Block, k sink) []ast.Stmt {
 	out := g.stmts(b.Stmts)
-	if b.Tail == nil || g.diverges(b.Stmts) {
+	if g.diverges(b.Stmts) {
+		return out
+	}
+	if b.Tail == nil {
+		// A block without a value, where a union holding Unit is wanted.
+		switch {
+		case k.ret && g.fnResult != check.Unit && g.fnResult != check.Never:
+			out = append(out, g.returning(g.unitValue())...)
+		case k.res != nil:
+			out = append(out, assign(k.res, g.unitValue()))
+		}
 		return out
 	}
 	return append(out, g.into(b.Tail, k)...)
@@ -892,6 +912,9 @@ func (g *gen) tailReturn(e syntax.Expr) []ast.Stmt {
 		return g.scopeInto(e, ret)
 	case *syntax.Return:
 		return g.returnStmt(e)
+	}
+	if g.info.Types[e] == check.Unit && g.fnResult != check.Unit {
+		return append(g.effect(e), g.returning(g.unitValue())...)
 	}
 	stmts, x := g.value(e)
 	if x == nil {

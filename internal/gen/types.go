@@ -47,6 +47,12 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		g.usesScopes = true
 		return &ast.StarExpr{X: ast.NewIdent("_Scope")}
 	}
+	if t == check.Unit {
+		// Only as a union member: the value of `Unit | IoError` that
+		// says nothing went wrong.
+		g.usesUnit = true
+		return ast.NewIdent("_Unit")
+	}
 	if n, ok := basicGoNames[t]; ok {
 		return ast.NewIdent(n)
 	}
@@ -482,6 +488,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesScopes {
 		src = append(src, scopeRuntime)
 	}
+	if g.usesUnit {
+		src = append(src, unitRuntime)
+	}
 	if g.usesEqual {
 		src = append(src, equalRuntime)
 	}
@@ -617,4 +626,12 @@ func _equalValues(x, y reflect.Value) bool {
 	}
 	return false
 }
+`
+
+// unitRuntime is the Go value of Unit, in a union.
+const unitRuntime = `package main
+
+type _Unit struct{}
+
+func (_Unit) String() string { return "Unit" }
 `
