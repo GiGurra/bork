@@ -508,60 +508,176 @@ type JsonError = { message: String }
 // parseJson reads a JSON value; object fields keep their order.
 fn parseJson(text: String): Json | JsonError unsafe go {
   import "encoding/json"
+  import "fmt"
   import "strings"
-  dec := json.NewDecoder(strings.NewReader(text))
-  dec.UseNumber()
-  var parse func() (Json, error)
-  parse = func() (Json, error) {
-    tok, err := dec.Token()
-    if err != nil {
-      return nil, err
+  // A small parser of its own, so that messages are the same in every Go
+  // version: "invalid JSON at line 1, column 2: expected a value".
+  pos := 0
+  fail := func(what string) JsonError {
+    line := 1 + strings.Count(text[:pos], "\n")
+    col := pos - strings.LastIndex(text[:pos], "\n")
+    if pos >= len(text) {
+      return JsonError{message: "unexpected end of JSON: expected " + what}
     }
-    switch t := tok.(type) {
-    case nil:
-      return Json_Null{}, nil
-    case bool:
-      return Json_Bool{value: t}, nil
-    case json.Number:
-      return Json_Number{text: string(t)}, nil
-    case string:
-      return Json_String{value: t}, nil
-    case json.Delim:
-      if t == '[' {
-        items := []Json{}
-        for dec.More() {
-          item, err := parse()
-          if err != nil {
-            return nil, err
-          }
-          items = append(items, item)
-        }
-        _, err := dec.Token()
-        return Json_Array{items: items}, err
+    return JsonError{message: fmt.Sprintf("invalid JSON at line %d, column %d: expected %s", line, col, what)}
+  }
+  space := func() {
+    for pos < len(text) && strings.IndexByte(" \t\r\n", text[pos]) >= 0 {
+      pos++
+    }
+  }
+  digits := func() int {
+    start := pos
+    for pos < len(text) && text[pos] >= '0' && text[pos] <= '9' {
+      pos++
+    }
+    return pos - start
+  }
+  str := func() (string, *JsonError) {
+    start := pos
+    pos++
+    for pos < len(text) && text[pos] != '"' {
+      if text[pos] == '\\' {
+        pos++
       }
+      pos++
+    }
+    if pos >= len(text) {
+      e := fail("the end of a string")
+      return "", &e
+    }
+    pos++
+    var s string
+    if json.Unmarshal([]byte(text[start:pos]), &s) != nil {
+      pos = start
+      e := fail("a valid string")
+      return "", &e
+    }
+    return s, nil
+  }
+  var value func() (Json, *JsonError)
+  value = func() (Json, *JsonError) {
+    space()
+    if pos >= len(text) {
+      e := fail("a value")
+      return nil, &e
+    }
+    for word, j := range map[string]Json{"null": Json_Null{}, "true": Json_Bool{value: true}, "false": Json_Bool{value: false}} {
+      if strings.HasPrefix(text[pos:], word) {
+        pos += len(word)
+        return j, nil
+      }
+    }
+    switch c := text[pos]; {
+    case c == '"':
+      s, e := str()
+      return Json_String{value: s}, e
+    case c == '-' || c >= '0' && c <= '9':
+      start := pos
+      if c == '-' {
+        pos++
+      }
+      if n := digits(); n == 0 || n > 1 && text[pos-n] == '0' {
+        pos = start
+        e := fail("a number")
+        return nil, &e
+      }
+      if pos < len(text) && text[pos] == '.' {
+        pos++
+        if digits() == 0 {
+          e := fail("a digit")
+          return nil, &e
+        }
+      }
+      if pos < len(text) && (text[pos] == 'e' || text[pos] == 'E') {
+        pos++
+        if pos < len(text) && (text[pos] == '+' || text[pos] == '-') {
+          pos++
+        }
+        if digits() == 0 {
+          e := fail("a digit")
+          return nil, &e
+        }
+      }
+      return Json_Number{text: text[start:pos]}, nil
+    case c == '[':
+      pos++
+      items := []Json{}
+      space()
+      if pos < len(text) && text[pos] == ']' {
+        pos++
+        return Json_Array{items: items}, nil
+      }
+      for {
+        item, e := value()
+        if e != nil {
+          return nil, e
+        }
+        items = append(items, item)
+        space()
+        if pos < len(text) && text[pos] == ',' {
+          pos++
+          continue
+        }
+        if pos < len(text) && text[pos] == ']' {
+          pos++
+          return Json_Array{items: items}, nil
+        }
+        e2 := fail("',' or ']'")
+        return nil, &e2
+      }
+    case c == '{':
+      pos++
       fields := []JsonField{}
-      for dec.More() {
-        key, err := dec.Token()
-        if err != nil {
-          return nil, err
-        }
-        value, err := parse()
-        if err != nil {
-          return nil, err
-        }
-        fields = append(fields, JsonField{name: key.(string), value: value})
+      space()
+      if pos < len(text) && text[pos] == '}' {
+        pos++
+        return Json_Object{fields: fields}, nil
       }
-      _, err := dec.Token()
-      return Json_Object{fields: fields}, err
+      for {
+        space()
+        if pos >= len(text) || text[pos] != '"' {
+          e := fail("a field name")
+          return nil, &e
+        }
+        name, e := str()
+        if e != nil {
+          return nil, e
+        }
+        space()
+        if pos >= len(text) || text[pos] != ':' {
+          e := fail("':'")
+          return nil, &e
+        }
+        pos++
+        v, e := value()
+        if e != nil {
+          return nil, e
+        }
+        fields = append(fields, JsonField{name: name, value: v})
+        space()
+        if pos < len(text) && text[pos] == ',' {
+          pos++
+          continue
+        }
+        if pos < len(text) && text[pos] == '}' {
+          pos++
+          return Json_Object{fields: fields}, nil
+        }
+        e2 := fail("',' or '}'")
+        return nil, &e2
+      }
     }
-    return nil, nil
+    e := fail("a value")
+    return nil, &e
   }
-  j, err := parse()
-  if err == nil && dec.More() {
-    return JsonError{message: "unexpected text after the JSON value"}
+  j, e := value()
+  if e != nil {
+    return *e
   }
-  if err != nil {
-    return JsonError{message: err.Error()}
+  space()
+  if pos < len(text) {
+    return fail("the end of the text")
   }
   return j
 }

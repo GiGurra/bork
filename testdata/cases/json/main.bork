@@ -21,6 +21,10 @@ fn escapes() {
     v: Json => println(renderJson(v))
     e: JsonError => println(e)
   }
+  println(parseJson("[1,"))
+  println(parseJson("1 2"))
+  println(parseJson("{\"a\": 01}"))
+  println(parseJson("[1,\n  tru]"))
   b: Bool | JsonError | DecodeError = decodeJson("1")
   println(b)
   i: Int | JsonError | DecodeError = decodeJson("1.5")

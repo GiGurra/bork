@@ -5,4 +5,4 @@ bad   line 4: .name: must be maxBytes(20)
 bad   line 5: .age: must be between(13, 150)
 bad   line 6: .plan.type: unknown variant "Gold" of Plan
 bad   line 7: .plan.seats: is missing
-bad   line 8: not JSON: unexpected end of JSON input
+bad   line 8: not JSON: unexpected end of JSON: expected ',' or '}'
