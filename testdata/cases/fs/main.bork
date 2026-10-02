@@ -3,6 +3,11 @@ import "bork/fs"
 fn exercise(s: Scope): Unit | fs.Error {
   directory = fs.TempDir(s)?
   root = fs.DirectoryPath(directory)
+  early = failAfterCreating(root)
+  println(match (early) { done: Unit => false, error: fs.Error => true })
+  println((fs.ReadDir(root)?).length())
+  println(recovered(() => panicAfterCreating(root)))
+  println((fs.ReadDir(root)?).length())
   path = fs.Join([root, "data.bin"])
   fs.Write(path, bytes([toByte(0), toByte(255)]))?
   fs.Append(path, utf8Bytes("!"))?
@@ -28,6 +33,14 @@ fn exercise(s: Scope): Unit | fs.Error {
   temporary = fs.TempFile(s, root)?
   temporaryWritten = fs.WriteTo(temporary, utf8Bytes("temp"))?
   println((fs.Stat(fs.Path(temporary))?).size)
+  endingsPath = fs.Join([root, "endings.txt"])
+  fs.Write(endingsPath, utf8Bytes("\n\r\nlast\r"))?
+  endings = fs.Open(endingsPath, s)?
+  fs.ForEachLine(endings, line => println(byteLength(line)))?
+  linkPath = fs.Join([root, "link"])
+  symlink(fs.Join([root, "nested"]), linkPath)?
+  println((fs.Stat(linkPath)?).kind)
+  println(length(filter(fs.Walk(root)?, entry => entry.kind == "directory")))
   println(fs.Base(path))
   println(fs.Ext(path))
   println(fs.Dir(path) == root)
@@ -82,4 +95,29 @@ fn errorKinds(): List[String] unsafe go {
     kinds = append(kinds, kind)
   }
   return kinds
+}
+
+fn failAfterCreating(parent: String): Unit | fs.Error {
+  scope s {
+    directory = fs.TempDir(s, parent)?
+    ignored = fs.Read(fs.Join([fs.DirectoryPath(directory), "missing"]))?
+  }
+}
+fn panicAfterCreating(parent: String): Unit | fs.Error {
+  scope s {
+    directory = fs.TempDir(s, parent)?
+    panic("cleanup probe")
+  }
+}
+fn recovered(work: () => (Unit | fs.Error)): Bool unsafe go {
+  return func() (panicked bool) {
+    defer func() { if recover() != nil { panicked = true } }()
+    work()
+    return false
+  }()
+}
+fn symlink(target: String, path: String): Unit | IoError unsafe go {
+  import "os"
+  if err := os.Symlink(target, path); err != nil { return IoError{path: path, message: err.Error()} }
+  return _Unit{}
 }

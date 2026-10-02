@@ -229,7 +229,9 @@ fn forEachLine(file: File, visit: (String) => Unit): Unit | fileFailure unsafe g
   for {
     line, err := reader.ReadString('\n')
     if len(line) != 0 {
-      line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+      if strings.HasSuffix(line, "\n") {
+        line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+      }
       visit(line)
     }
     if err == io.EOF { return _Unit{} }
