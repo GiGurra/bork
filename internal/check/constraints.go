@@ -167,7 +167,11 @@ func (c *checker) memberConstraints(t *syntax.TypeExpr, typ Type, scope map[stri
 // resolved type is typ, including those of a constrained alias it names.
 // Predicate arguments may name the parameters in scope.
 func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]Type) []*Constraint {
-	if t == nil || typ == Invalid {
+	if t == nil {
+		return nil
+	}
+	if typ == Invalid {
+		c.whereReported(t) // the type is already an error
 		return nil
 	}
 	c.appliedWhere[t] = true
@@ -204,7 +208,10 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 			if len(cons) == 0 {
 				continue
 			}
-			if f := fieldHoldingInside(base, tp); f != nil {
+			if f := fieldHoldingInside(base, tp); f != nil && isPreludeType(base) {
+				c.errorf(t.Args[i].Pos, "facts on the type argument of %s are not supported yet, so they would not be checked", t.Name)
+				continue
+			} else if f != nil {
 				c.errorf(t.Args[i].Pos, "facts on the type argument %s of %s are not supported yet, so they would not be checked: its field %s holds %s inside %s",
 					tp.Name, t.Name, f.Name, tp.Name, f.Type)
 				continue
@@ -215,6 +222,16 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 		}
 	}
 	return out
+}
+
+func isPreludeType(t Type) bool {
+	switch t := t.(type) {
+	case *Record:
+		return t.Prelude
+	case *Sealed:
+		return t.Prelude
+	}
+	return false
 }
 
 // fieldHoldingInside returns a field of the generic type base (in any

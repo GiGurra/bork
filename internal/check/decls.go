@@ -1,6 +1,7 @@
 package check
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -234,7 +235,7 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 			}
 			ft.Params = append(ft.Params, pt)
 		}
-		if hasWhere(t.Func.Result) || hasWhereIn(t.Func.Params) {
+		if c.hasFacts(t.Func.Result) || slices.ContainsFunc(t.Func.Params, c.hasFacts) {
 			c.whereReported(t)
 			c.errorf(t.Pos, "where clauses inside function types are not supported yet")
 			return Invalid
@@ -342,23 +343,6 @@ func paramNames(ps []*TypeParam) string {
 		names[i] = p.Name
 	}
 	return strings.Join(names, ", ")
-}
-
-func hasWhere(t *syntax.TypeExpr) bool {
-	if t == nil {
-		return false
-	}
-	return len(t.Where) > 0 || hasWhereIn(t.Union) || hasWhereIn(t.Args) ||
-		(t.Func != nil && (hasWhere(t.Func.Result) || hasWhereIn(t.Func.Params)))
-}
-
-func hasWhereIn(ts []*syntax.TypeExpr) bool {
-	for _, t := range ts {
-		if hasWhere(t) {
-			return true
-		}
-	}
-	return false
 }
 
 // checkRecordCycles reports records that contain themselves directly

@@ -2,6 +2,7 @@ package check
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -43,15 +44,23 @@ func (c *checker) unappliedIn(t *syntax.TypeExpr, where string) {
 				t.Name, constraintsText(c.constrainedAlias(t), c.pkg), at)
 		}
 	}
+	// Inside a type whose facts are dropped, the parts' facts are
+	// dropped for the same reason.
+	in := func(own string) string {
+		if !c.appliedWhere[t] && where != "" {
+			return where
+		}
+		return own
+	}
 	for _, m := range t.Union {
-		c.unappliedIn(m, "on a member of a union")
+		c.unappliedIn(m, in("on a member of a union"))
 	}
 	if t.Func != nil {
 		for _, p := range t.Func.Params {
-			c.unappliedIn(p, "on a function type's parameters")
+			c.unappliedIn(p, in("on a function type's parameters"))
 		}
 		if t.Func.Result != nil {
-			c.unappliedIn(t.Func.Result, "on a function type's result")
+			c.unappliedIn(t.Func.Result, in("on a function type's result"))
 		}
 	}
 	for i, a := range t.Args {
@@ -61,9 +70,37 @@ func (c *checker) unappliedIn(t *syntax.TypeExpr, where string) {
 		case t.Name == "Map":
 			c.unappliedIn(a, "on a Map's values")
 		default:
-			c.unappliedIn(a, "on this type argument of "+t.Name)
+			c.unappliedIn(a, in("on this type argument of "+t.Name))
 		}
 	}
+}
+
+// hasFacts reports whether the written type t has facts anywhere: a
+// where clause, or a constrained alias. (It looks at what is written,
+// so it works before predicates are resolved.)
+func (c *checker) hasFacts(t *syntax.TypeExpr) bool {
+	visiting := map[*syntax.TypeDecl]bool{}
+	var has func(t *syntax.TypeExpr) bool
+	has = func(t *syntax.TypeExpr) bool {
+		if t == nil {
+			return false
+		}
+		if len(t.Where) > 0 || slices.ContainsFunc(t.Union, has) || slices.ContainsFunc(t.Args, has) {
+			return true
+		}
+		if t.Func != nil && (has(t.Func.Result) || slices.ContainsFunc(t.Func.Params, has)) {
+			return true
+		}
+		if t.Union == nil && t.Func == nil && len(t.Args) == 0 {
+			// An alias, unless it is part of a cycle (an error already).
+			if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType && !visiting[e.decl] {
+				visiting[e.decl] = true
+				return has(e.decl.Alias)
+			}
+		}
+		return false
+	}
+	return has(t)
 }
 
 // constrainedAlias returns the facts of the constrained alias that t
@@ -120,6 +157,11 @@ func forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where string)) {
 				params, at = n.Params, "on a rule's variables"
 			case *syntax.Lambda:
 				params, at = n.Params, "on a lambda's parameters"
+			case *syntax.TypePat:
+				if n.Type != nil {
+					seen[reflect.ValueOf(n.Type).Pointer()] = true
+					f(n.Type, "in a type pattern")
+				}
 			}
 			for _, p := range params {
 				if p.Type != nil {

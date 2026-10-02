@@ -15,16 +15,19 @@ type Fields = { f: Int where positive | String }
 fn member(u: Int where positive | String): Int { 0 }
 fn listOfMembers(xs: List[Int where positive | String]): Int { 0 }
 fn aliasMember(u: PosInt | String): Int { 0 }
+fn nestedMember(u: List[PosInt] | String): Int { 0 }
 
 // Map keys and values, also inside other types and in results.
 fn values(m: Map[String, Int where positive]): Int { 0 }
 fn keys(m: Map[String where nonEmpty, Int]): Int { 0 }
 fn aliasValues(m: Map[String, PosInt]): Int { 0 }
 fn optionalMap(o: Option[Map[String, Int where positive]]): Int { 0 }
+fn boxedValues(m: Map[String, Box[PosInt]]): Int { 0 }
 fn mapResult(): Map[String, Int where positive] { {:} }
 
 // Type arguments that fields hold inside other types.
 fn box(b: Box[Int where positive]): Int { 0 }
+fn atomic(a: Atom[PosInt]): Int { 0 }
 fn only(o: Only[PosInt]): Int { 0 }
 
 // Function types.
@@ -39,7 +42,42 @@ fn lambdas(): Int {
   0
 }
 
-fn main() {}
+// Class and instance methods, also through an alias.
+class Scored[T] {
+  fn score(x: T, bonus: PosInt): Int
+}
+class Named[T] {
+  fn name(x: T): String
+}
+instance namedInt: Named[Int] {
+  fn name(x: Int): String { "int" }
+}
+class Weighed[T] {
+  fn weigh(x: T, n: Int): Int
+}
+instance weighedString: Weighed[String] {
+  fn weigh(x: String, n: PosInt): Int { n }
+}
+
+fn id[T](x: T): T { x }
+fn listOf[T](n: Int): List[T] { [] }
+fn pick(): PosInt | String { 1 }
+
+fn main() {
+  // Call type arguments: facts on their parts, or kept only inside the
+  // result.
+  println(id[List[Int where positive]]([1]))
+  println(id[Option[PosInt]](Option.Some { value: 1 }))
+  println(listOf[PosInt](1))
+  a = atom[PosInt](1)
+  // Type patterns.
+  match (pick()) {
+    p: PosInt => println(p)
+    s: String => println(s)
+  }
+  // Inside a type whose facts are dropped, the reason is the outer one.
+  f = (xs: List[PosInt]) => 0
+}
 
 // Property test parameters, as function parameters.
 test "generated" (m: Map[String, Int where positive], u: Int where positive | String) {

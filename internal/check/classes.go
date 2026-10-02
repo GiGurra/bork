@@ -143,30 +143,47 @@ func (c *checker) declareClassMethods() {
 // the class could not see them (not supported yet).
 func (c *checker) noWhere(md *syntax.FuncDecl) {
 	for _, p := range md.Params {
-		c.whereReported(p.Type)
-	}
-	c.whereReported(md.Result)
-	for _, p := range md.Params {
-		if hasWhere(p.Type) {
+		if c.hasFacts(p.Type) {
 			c.errorf(p.Type.Pos, "where clauses on the methods of classes and instances are not supported yet")
+			c.signatureReported(md)
 			return
 		}
 	}
-	if hasWhere(md.Result) {
+	if c.hasFacts(md.Result) {
 		c.errorf(md.Result.Pos, "where clauses on the methods of classes and instances are not supported yet")
+		c.signatureReported(md)
 	}
+}
+
+// signatureReported marks the facts in md's signature as reported.
+func (c *checker) signatureReported(md *syntax.FuncDecl) {
+	for _, p := range md.Params {
+		c.whereReported(p.Type)
+	}
+	c.whereReported(md.Result)
 }
 
 // noParamWhere rejects where clauses on an instance method's
 // parameters: calls through the class could not prove them. (Results
 // may promise facts; a constrained instance's must.)
-func (c *checker) noParamWhere(md *syntax.FuncDecl) {
+func (c *checker) noParamWhere(md *syntax.FuncDecl, instType *syntax.TypeExpr) {
 	for _, p := range md.Params {
-		if hasWhere(p.Type) {
+		if c.hasFacts(p.Type) && !sameWrittenType(p.Type, instType) {
 			c.errorf(p.Type.Pos, "where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)")
+			for _, p := range md.Params {
+				c.whereReported(p.Type)
+			}
 			return
 		}
 	}
+}
+
+// sameWrittenType reports whether a and b are the same plain type name
+// (the type of a constrained instance, whose constraints its methods
+// assume).
+func sameWrittenType(a, b *syntax.TypeExpr) bool {
+	return a != nil && b != nil && a.Name == b.Name && a.Union == nil && b.Union == nil && a.Func == nil && b.Func == nil &&
+		len(a.Args) == 0 && len(b.Args) == 0 && len(a.Where) == 0 && len(b.Where) == 0
 }
 
 // instanceConstraints resolves the constraints of constrained instances'
@@ -362,7 +379,7 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 			c.errorf(md.Pos, "an instance's method cannot have type parameters; give the instance its type parameters")
 			continue
 		}
-		c.noParamWhere(md)
+		c.noParamWhere(md, id.Type)
 		fn := &Func{Decl: md, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: ci.TypeParams}
 		fn.Effects = c.effectsOf(md.Uses)
 		fn.Result = c.resolveType(md.Result)
@@ -596,6 +613,18 @@ func (c *checker) promisesArgFacts(inst *Instance, argFacts [][]*Constraint, nam
 		for j, p := range fn.Params {
 			if p != Type(tp) && mentionsParam(p, tp) {
 				c.errorf(pos, "%s cannot take a constrained type argument for %s: its parameter %s could give it values that are not checked (only parameters of type %s itself are)", name, tp.Name, fn.Decl.Params[j].Name, tp.Name)
+				return false
+			}
+		}
+		// The result keeps the facts only where it is the type itself
+		// (or a member of a result union).
+		members := []Type{fn.Result}
+		if u, ok := fn.Result.(*Union); ok {
+			members = u.Members
+		}
+		for _, m := range members {
+			if m != Type(tp) && mentionsParam(m, tp) {
+				c.errorf(pos, "%s cannot take a constrained type argument for %s: its result holds %s inside %s, where the facts would not be kept (only a result of type %s itself keeps them)", name, tp.Name, tp.Name, m, tp.Name)
 				return false
 			}
 		}
