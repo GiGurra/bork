@@ -486,7 +486,7 @@ func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
 			}
 			for _, con := range inst.ArgFacts[j] {
 				arg := TypeText(inst.TypeArgs[j], f.from())
-				if j < len(call.TypeArgs) && call.TypeArgs[j].Name != "" && len(call.TypeArgs[j].Args) == 0 && len(call.TypeArgs[j].Where) == 0 {
+				if j < len(call.TypeArgs) && call.TypeArgs[j] != nil && call.TypeArgs[j].Name != "" && len(call.TypeArgs[j].Args) == 0 && len(call.TypeArgs[j].Where) == 0 {
 					arg = call.TypeArgs[j].Name // as written: Port, not Int
 				}
 				req := fmt.Sprintf("%s[%s] requires %s to be %s", fn.QualifiedName(f.from()), arg, fn.Decl.Params[i].Name, con.Text(f.from()))

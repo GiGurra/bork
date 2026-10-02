@@ -23,8 +23,9 @@ import (
 // field holding a function is called as before: r.f() calls the field.
 
 type methodCall struct {
-	fun  syntax.Expr
-	args []syntax.Expr
+	fun      syntax.Expr
+	args     []syntax.Expr
+	typeArgs []*syntax.TypeExpr
 }
 
 // methodKey names the types methods can be declared on: List, Map,
@@ -150,7 +151,7 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	if orig, ok := c.methodCalls[e]; ok {
 		// Checked before (a lambda's body can be checked twice): start
 		// again from what was written.
-		e.Fun, e.Args = orig.fun, orig.args
+		e.Fun, e.Args, e.TypeArgs = orig.fun, orig.args, orig.typeArgs
 		delete(c.methodCalls, e)
 	}
 	sel, ok := e.Fun.(*syntax.Selector)
@@ -192,11 +193,61 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	if c.methodCalls == nil {
 		c.methodCalls = map[*syntax.Call]methodCall{}
 	}
-	c.methodCalls[e] = methodCall{fun: e.Fun, args: e.Args}
+	c.methodCalls[e] = methodCall{fun: e.Fun, args: e.Args, typeArgs: e.TypeArgs}
+	if len(e.TypeArgs) > 0 {
+		full, ok := c.methodTypeArgs(e, sel, fn)
+		if !ok {
+			for _, a := range e.Args {
+				if _, isLambda := a.(*syntax.Lambda); !isLambda {
+					c.expr(a)
+				}
+			}
+			return Invalid, true
+		}
+		e.TypeArgs = full
+	}
 	id := &syntax.Ident{Pos: sel.Pos, Name: sel.Name}
 	e.Fun = id
 	e.Args = append([]syntax.Expr{sel.X}, e.Args...)
 	return c.callFunc(e, id, fn, want), true
+}
+
+// methodTypeArgs places the type arguments written in a method call
+// among the method's type parameters: those its receiver does not
+// decide (xs.map[String](f) gives map[A, B] its B), or else all of
+// them. The receiver's places are left nil.
+func (c *checker) methodTypeArgs(e *syntax.Call, sel *syntax.Selector, fn *Func) ([]*syntax.TypeExpr, bool) {
+	var free []int
+	for i, tp := range fn.TypeParams {
+		if !mentionsParam(fn.Params[0], tp) {
+			free = append(free, i)
+		}
+	}
+	full := make([]*syntax.TypeExpr, len(fn.TypeParams))
+	switch len(e.TypeArgs) {
+	case len(free):
+		for k, i := range free {
+			full[i] = e.TypeArgs[k]
+		}
+	case len(fn.TypeParams):
+		copy(full, e.TypeArgs)
+	default:
+		if len(free) == 0 {
+			c.errorf(e.Pos, "method %s takes no type arguments: its receiver decides them", sel.Name)
+		} else {
+			c.errorf(e.Pos, "method %s takes %d type argument(s) (%s), but %d were given", sel.Name, len(free), freeNames(fn, free), len(e.TypeArgs))
+		}
+		return nil, false
+	}
+	return full, true
+}
+
+func freeNames(fn *Func, free []int) string {
+	names := make([]string, len(free))
+	for k, i := range free {
+		names[k] = fn.TypeParams[i].Name
+	}
+	return strings.Join(names, ", ")
 }
 
 // onlyMethod is the one method code here sees with the given name that

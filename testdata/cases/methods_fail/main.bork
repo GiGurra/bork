@@ -10,3 +10,9 @@ fn main() {
   println(5.norm())
   println(Point { x: 1, y: 2 }.size())
 }
+
+fn typeArgs() {
+  println(["x"].map[Int, String, Bool](x => x))
+  println(["x"].reverse[Int, Int]())
+  println(["x"].map[Int](x => x))
+}
