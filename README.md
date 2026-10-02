@@ -71,7 +71,7 @@ See [examples/wc](examples/wc/main.bork), a small `wc`.
 
 ## Getting started
 
-The compiler is at an early stage. Milestone M0 is done, and M1 (facts) is under way: functions, sized integers and floats with checked conversions, `Bool`/`String` with a small prelude of string and parsing functions, bindings, `if`/`match`/blocks as expressions, records with nested `copy`, sealed types, unions, `Option`, `?`, and `unsafe go` function bodies for calling Go. Facts and scopes come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); and packages. Type classes (M3) come next. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -81,6 +81,11 @@ bork build examples/hello    # compile to an executable
 bork check examples/hello    # type-check only
 bork emit examples/hello     # show the generated Go
 bork test examples/payments  # run the tests, checking trusted facts and rules
+```
+
+A directory is a package. To use several, put a `bork.mod` naming the module (`module example.com/shop`) at its root, and import packages by path: `import "example.com/shop/money"`, then `money.Cents(250)`.
+
+```
 ```
 
 ```

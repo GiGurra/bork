@@ -1,0 +1,48 @@
+// Package money: amounts of money in cents.
+
+pred positive(x: Int) { x > 0 }
+
+// Exported names start with an upper-case letter, as in Go.
+pred Positive(x: Int) { positive(x) }
+
+type Amount = { cents: Int where Positive }
+
+type Currency = sealed { Eur, Sek, Other { code: String } }
+
+fn Cents(n: Int where Positive): Amount { Amount { cents: n } }
+
+fn Add(a: Amount, b: Amount): Amount {
+  sum = a.cents + b.cents
+  if (Positive(sum)) { Amount { cents: sum } } else { panic("overflow") }
+}
+
+fn Format(a: Amount, c: Currency): String {
+  s"${toString(a.cents / 100)}.${pad(a.cents % 100)} ${currencyCode(c)}"
+}
+
+fn pad(n: Int): String { if (n < 10) { s"0$n" } else { toString(n) } }
+
+fn currencyCode(c: Currency): String {
+  match (c) {
+    Currency.Eur => "EUR"
+    Currency.Sek => "SEK"
+    Currency.Other { code } => code
+  }
+}
+
+// unsafe go code uses the package's own names.
+fn Parse(text: String): Amount | String unsafe go {
+  import "strconv"
+  n, err := strconv.ParseInt(text, 10, 64)
+  if err != nil || n <= 0 {
+    return "not a positive number: " + text
+  }
+  return Amount{cents: n}
+}
+
+// A declared promise is known to importers.
+fn AtLeastOneCent(x: Int): Int where Positive { if (Positive(x)) { x } else { 1 } }
+
+fn Broken(): Amount unsafe go {
+  return Amount{cents: -3}
+}

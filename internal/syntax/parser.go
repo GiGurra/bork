@@ -15,14 +15,28 @@ import (
 // returned file holds whatever could be parsed.
 func Parse(path string, src []byte, diags *diag.List) *File {
 	toks, comments := Lex(path, src, diags)
-	p := &parser{toks: toks, diags: diags}
+	p := &parser{toks: toks, diags: diags, imports: map[string]bool{}}
 	f := &File{Path: path, Comments: comments}
+	// Imports come first.
+	for {
+		p.skipSemis()
+		if !p.at(TIdent) || p.tok().Text != "import" || (p.peekKind() != TString && p.peekKind() != TIdent) {
+			break
+		}
+		if imp := p.importDecl(); imp != nil {
+			f.Imports = append(f.Imports, imp)
+			p.imports[imp.Name] = true
+		}
+	}
 	for {
 		p.skipSemis()
 		if p.at(EOF) {
 			break
 		}
 		switch {
+		case p.at(TIdent) && p.tok().Text == "import" && (p.peekKind() == TString || p.peekKind() == TIdent):
+			p.errorf(p.tok().Pos, "imports must come before the declarations")
+			p.syncTopLevel()
 		case p.at(KwFn) || p.at(KwPred):
 			if fn := p.funcDecl(); fn != nil {
 				f.Funcs = append(f.Funcs, fn)
@@ -57,6 +71,43 @@ type parser struct {
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
+	// imports holds the names of the file's imported packages.
+	imports map[string]bool
+}
+
+// importDecl parses `import "path"` or `import name "path"`.
+func (p *parser) importDecl() (imp *Import) {
+	defer p.recoverDecl(func() { imp = nil })
+	pos := p.next().Pos
+	imp = &Import{Pos: pos}
+	if p.at(TIdent) {
+		imp.Name = p.next().Text
+	}
+	t := p.expect(TString, "(the package's import path)")
+	path, err := strconv.Unquote(t.Text)
+	if err != nil || path == "" || strings.HasPrefix(path, "/") || strings.HasSuffix(path, "/") || strings.Contains(path, "\\") {
+		p.errorf(t.Pos, "invalid import path %s", t.Text)
+		panic(bailout{})
+	}
+	imp.Path = path
+	if imp.Name == "" {
+		imp.Name = path[strings.LastIndex(path, "/")+1:]
+	}
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after the import, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return imp
+}
+
+// qualify reads `pkg.name`, where pkg (the token just read) names an
+// imported package, as the one name "pkg.name".
+func (p *parser) qualify(t Token) string {
+	if p.imports[t.Text] && p.at(Dot) && p.peekKind() == TIdent {
+		p.next()
+		return t.Text + "." + p.next().Text
+	}
+	return t.Text
 }
 
 func (p *parser) tok() Token     { return p.toks[p.i] }
@@ -299,7 +350,7 @@ func (p *parser) predOr() *PredRef {
 // `between(1, 65535)`.
 func (p *parser) pred() *PredRef {
 	name := p.expect(TIdent, "(predicate name)")
-	ref := &PredRef{Pos: name.Pos, Name: name.Text}
+	ref := &PredRef{Pos: name.Pos, Name: p.qualify(name)}
 	if p.at(LParen) {
 		p.next()
 		p.skipNewlines()
@@ -344,7 +395,7 @@ func (p *parser) typeAtom() *TypeExpr {
 		return params[0]
 	}
 	t := p.expect(TIdent, "(type name)")
-	te := &TypeExpr{Pos: t.Pos, Name: t.Text}
+	te := &TypeExpr{Pos: t.Pos, Name: p.qualify(t)}
 	if p.at(LBrack) {
 		p.next()
 		for {
@@ -581,7 +632,7 @@ func (p *parser) pattern() Pattern {
 			p.next()
 			return &TypePat{Pos: t.Pos, Name: t.Text, Type: p.typeExpr()}
 		}
-		vp := &VariantPat{Pos: t.Pos, Path: []string{p.next().Text}}
+		vp := &VariantPat{Pos: t.Pos, Path: []string{p.qualify(p.next())}}
 		for p.at(Dot) {
 			p.next()
 			vp.Path = append(vp.Path, p.expect(TIdent, "(variant name)").Text)
@@ -641,7 +692,7 @@ func (p *parser) primary() Expr {
 			return &ScopeExpr{Pos: t.Pos, Name: name.Text, Body: p.block()}
 		}
 		p.next()
-		return &Ident{Pos: t.Pos, Name: t.Text}
+		return &Ident{Pos: t.Pos, Name: p.qualify(t)}
 	case LBrack:
 		p.next()
 		lit := &ListLit{Pos: t.Pos}

@@ -4,14 +4,30 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
-	Path  string
-	Rules []*RuleDecl
+	Path string
+	// Package is the import path of the file's package (set by the
+	// driver), and Imports what the file imports.
+	Package string
+	Imports []*Import
+	Rules   []*RuleDecl
 	// Prelude is set for the compiler's built-in prelude.bork.
 	Prelude  bool
 	Types    []*TypeDecl
 	Funcs    []*FuncDecl
 	Tests    []*TestDecl
 	Comments []Comment
+}
+
+// Import is `import "example.com/shop/money"` or, with a name to use
+// instead of the path's last element, `import cash "example.com/shop/money"`.
+//
+// The parser reads a use of an imported name, `money.add` or
+// `money.Amount`, as one qualified name: an Ident (or type, predicate,
+// or pattern name) "money.add".
+type Import struct {
+	Pos  diag.Pos
+	Name string // what the file calls the package
+	Path string
 }
 
 // TestDecl is a test: `test "adds numbers" { assert(add(1, 2) == 3) }`.

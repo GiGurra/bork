@@ -243,7 +243,7 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 		t := c.typeNamed(name)
 		if t == nil {
 			if p.Braces {
-				c.errorf(p.Pos, "unknown type %s", name)
+				c.unknownType(p.Pos, name)
 				return nil
 			}
 			// A name that is not a type binds the whole value.

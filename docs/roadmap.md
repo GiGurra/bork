@@ -49,7 +49,7 @@ Functions, records, unions and sealed types, `match` with exhaustiveness, `Optio
 - **Checking:** verified result promises; compile-time evaluation of any predicate on constants and literals, using the program's own code; diagnostics with fixes; test mode (`bork test`), where trusted facts (`trust`, and promises of `unsafe go` functions) are checked as the tests run, and every inference rule gets a property test that looks for counterexamples (on Int, the sized numbers, Float, String, and Bool variables).
 - **Groundwork it needed:** generic functions and types, function types and lambdas, `List[T]`, `|>`, `Option` as a prelude type, and `test` declarations with `assert` and `assertEqual`.
 
-Remaining: the `CreateUser` example, which needs decoding (M3), and obligations across packages, which need packages.
+Packages are in too: obligations across packages work (importers see what signatures declare, and compile-time checks run the imported predicates). Remaining: the `CreateUser` example, which needs decoding (M3).
 
 `pred`, `where` on parameters and returns, constrained type aliases, guards and `match` as fact sources, the backward resolver, "callers prove or declare", inference rules, `trust`, and compile-time checks of literals.
 

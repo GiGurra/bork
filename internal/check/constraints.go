@@ -52,11 +52,14 @@ func (a CArg) String() string {
 
 // String renders the constraint as written: `positive`, `between(1, 5)`,
 // `positive or zero`.
-func (c *Constraint) String() string {
+func (c *Constraint) String() string { return c.Text(nil) }
+
+// Text renders the constraint as code in package from would write it.
+func (c *Constraint) Text(from *Package) string {
 	if c.Or != nil {
 		alts := make([]string, len(c.Or))
 		for i, a := range c.Or {
-			alts[i] = a.String()
+			alts[i] = a.Text(from)
 		}
 		return strings.Join(alts, " or ")
 	}
@@ -64,13 +67,13 @@ func (c *Constraint) String() string {
 		return c.PredParam
 	}
 	if len(c.Args) == 0 {
-		return c.Pred.Decl.Name
+		return c.Pred.QualifiedName(from)
 	}
 	args := make([]string, len(c.Args))
 	for i, a := range c.Args {
 		args[i] = a.String()
 	}
-	return c.Pred.Decl.Name + "(" + strings.Join(args, ", ") + ")"
+	return c.Pred.QualifiedName(from) + "(" + strings.Join(args, ", ") + ")"
 }
 
 // MemberConstraints are the constraints on the values of one member of a
@@ -86,16 +89,20 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 	for _, t := range c.info.TypeOrder {
 		switch t := t.(type) {
 		case *Record:
+			c.pkg, c.inPrelude = t.Pkg, t.Prelude
 			c.fieldConstraints(t.Fields, t.Decl.Fields)
 		case *Sealed:
+			c.pkg, c.inPrelude = t.Pkg, t.Prelude
 			for _, v := range t.Variants {
 				c.fieldConstraints(v.Fields, t.Decl.Variants[v.Index].Fields)
 			}
 		}
 	}
+	c.inPrelude = false
 	for _, f := range files {
+		c.inFile(f)
 		for _, td := range f.Types {
-			if e := c.decls[td.Name]; e != nil && e.decl == td && td.Kind == syntax.AliasType {
+			if e := c.pkg.types[td.Name]; e != nil && e.decl == td && td.Kind == syntax.AliasType {
 				c.aliasConstraints(e)
 			}
 		}
@@ -106,6 +113,7 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			if fn == nil {
 				continue
 			}
+			c.pkg = fn.Pkg
 			c.inPrelude = fn.Prelude
 			scope := map[string]Type{}
 			for i, p := range fd.Params {
@@ -164,7 +172,7 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 	}
 	var out []*Constraint
 	if t.Union == nil && len(t.Args) == 0 {
-		if e, ok := c.decls[t.Name]; ok && e.decl.Kind == syntax.AliasType {
+		if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {
 			out = append(out, c.aliasConstraints(e)...)
 		}
 	}
@@ -224,7 +232,10 @@ func fieldPathsOf(base Type, tp *TypeParam) []string {
 func (c *checker) aliasConstraints(e *typeEntry) []*Constraint {
 	if !e.constraintsDone {
 		e.constraintsDone = true
+		savedPkg, savedPrelude := c.pkg, c.inPrelude
+		c.pkg, c.inPrelude = e.pkg, e.prelude
 		e.constraints = c.constraintsOf(e.decl.Alias, e.typ, nil)
+		c.pkg, c.inPrelude = savedPkg, savedPrelude
 	}
 	return e.constraints
 }

@@ -30,10 +30,10 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		return g.funcType(t, nil)
 	case *check.Record:
 		g.usedTypes[baseOf(t)] = true
-		return g.instantiated(typeName(t.Name), t)
+		return g.instantiated(typeName(t.Name, t.Pkg), t)
 	case *check.Sealed:
 		g.usedTypes[baseOf(t)] = true
-		return g.instantiated(typeName(t.Name), t)
+		return g.instantiated(typeName(t.Name, t.Pkg), t)
 	case *check.Union:
 		for _, m := range t.Members {
 			g.goType(m) // the members' declarations are needed
@@ -41,7 +41,7 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		return ast.NewIdent("any")
 	case *check.Resource:
 		g.usedTypes[t] = true
-		return typeName(t.Name)
+		return typeName(t.Name, t.Pkg)
 	}
 	if t == check.Scope {
 		g.usesScopes = true
@@ -119,16 +119,22 @@ func typeParamList(params []*check.TypeParam) *ast.FieldList {
 	return &ast.FieldList{List: []*ast.Field{f}}
 }
 
-// typeName maps a declared bork type name to its Go name.
-func typeName(s string) *ast.Ident { return name(s) }
+// typeName maps a declared bork type name to its Go name. Types of
+// imported packages get the package's prefix.
+func typeName(s string, pkg *check.Package) *ast.Ident {
+	if pkg != nil && pkg.GoPrefix != "" {
+		return ast.NewIdent(pkg.GoPrefix + s)
+	}
+	return name(s)
+}
 
 // variantType is the Go struct type of a sealed type's variant.
 func (g *gen) variantType(v *check.Variant) ast.Expr {
 	g.usedTypes[baseOf(v.Parent)] = true
-	return g.instantiated(ast.NewIdent(typeName(v.Parent.Name).Name+"_"+v.Name), v.Parent)
+	return g.instantiated(ast.NewIdent(typeName(v.Parent.Name, v.Parent.Pkg).Name+"_"+v.Name), v.Parent)
 }
 
-func markerMethod(sealedName string) string { return "is" + typeName(sealedName).Name }
+func markerMethod(t *check.Sealed) string { return "is" + typeName(t.Name, t.Pkg).Name }
 
 // typeDecls generates Go declarations for the package's records and
 // sealed types, including String methods so values print in bork
@@ -171,26 +177,26 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 	switch t := t.(type) {
 	case *check.Resource:
 		// A handle that unsafe go code fills in: File{handle: f}.
-		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\n", typeName(t.Name).Name, t.Name)
+		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\n", typeName(t.Name, t.Pkg).Name, t.Name)
 		f, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
 		if err != nil {
 			panic(err)
 		}
 		decls = append(decls, f.Decls...)
 	case *check.Record:
-		recv := g.instantiated(typeName(t.Name), t)
-		decls = append(decls, g.structDecl(typeName(t.Name), t.TypeParams, t.Fields))
+		recv := g.instantiated(typeName(t.Name, t.Pkg), t)
+		decls = append(decls, g.structDecl(typeName(t.Name, t.Pkg), t.TypeParams, t.Fields))
 		decls = append(decls, g.stringMethod(recv, t.Name, t.Fields, true))
 	case *check.Sealed:
 		// The interface's marker method mentions the type parameters, so
 		// that Option[int64] and Option[string] are different types.
-		marker := markerMethod(t.Name)
+		marker := markerMethod(t)
 		markerType := &ast.FuncType{Params: &ast.FieldList{}}
 		for _, p := range t.TypeParams {
 			markerType.Params.List = append(markerType.Params.List, &ast.Field{Type: name(p.Name)})
 		}
 		decls = append(decls, &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
-			Name:       typeName(t.Name),
+			Name:       typeName(t.Name, t.Pkg),
 			TypeParams: typeParamList(t.TypeParams),
 			Type: &ast.InterfaceType{Methods: &ast.FieldList{List: []*ast.Field{{
 				Names: []*ast.Ident{ast.NewIdent(marker)},
@@ -198,7 +204,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 			}}}},
 		}}})
 		for _, v := range t.Variants {
-			vname := ast.NewIdent(typeName(t.Name).Name + "_" + v.Name)
+			vname := ast.NewIdent(typeName(t.Name, t.Pkg).Name + "_" + v.Name)
 			recv := g.instantiated(vname, t)
 			decls = append(decls, g.structDecl(vname, t.TypeParams, v.Fields))
 			decls = append(decls, &ast.FuncDecl{

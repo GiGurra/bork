@@ -1,0 +1,10 @@
+import "example.com/bad/money"
+import cash "example.com/bad/money"
+
+fn main() {
+  println(money.pad(1))
+  s: money.secret = money.secret { code: "x" }
+  println(money.Nope(1))
+  money = 1
+  println(money)
+}

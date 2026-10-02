@@ -1,0 +1,3 @@
+import "example.com/cyc/a"
+
+fn B(): Int { a.A() }

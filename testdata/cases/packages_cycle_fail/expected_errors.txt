@@ -1,0 +1,1 @@
+b/b.bork:1:1: import cycle: example.com/cyc/a imports example.com/cyc/b imports example.com/cyc/a (packages cannot import each other in a circle)

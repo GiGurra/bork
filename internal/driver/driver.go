@@ -17,7 +17,6 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/gen"
-	"github.com/GiGurra/bork/internal/prelude"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -58,26 +57,18 @@ func Sources(path string) ([]string, error) {
 	return files, nil
 }
 
-// Check parses and type-checks the package at path.
+// Check parses and type-checks the package at path, and the packages
+// it imports. The files start with the prelude, then the package's own.
 func Check(path string) ([]*syntax.File, *check.Info, error) {
-	paths, err := Sources(path)
+	files, root, diags, err := load(path)
 	if err != nil {
 		return nil, nil, err
 	}
-	diags := &diag.List{}
-	files := []*syntax.File{prelude.Parse(diags)}
-	for _, p := range paths {
-		src, err := os.ReadFile(p)
-		if err != nil {
-			return nil, nil, err
-		}
-		files = append(files, syntax.Parse(p, src, diags))
-	}
 	if diags.Len() > 0 {
-		// Report syntax errors before attempting to type-check.
+		// Report syntax and import errors before attempting to type-check.
 		return nil, nil, &DiagError{Diags: diags}
 	}
-	info := check.Package(files, diags)
+	info := check.Program(files, root, diags)
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
@@ -106,7 +97,7 @@ func evaluator(path string, files []*syntax.File, info *check.Info) check.Evalua
 		}
 		defer func() { _ = os.RemoveAll(dir) }()
 		exe := filepath.Join(dir, "eval")
-		if err := buildGo(path, goSrc, exe); err != nil {
+		if err := buildGo(files, goSrc, exe); err != nil {
 			return nil, err
 		}
 		var stderr strings.Builder
@@ -131,30 +122,36 @@ func evaluator(path string, files []*syntax.File, info *check.Info) check.Evalua
 // Emit compiles the package at path to Go source. A program must have
 // a main function.
 func Emit(path string) ([]byte, error) {
+	_, goSrc, err := emit(path)
+	return goSrc, err
+}
+
+func emit(path string) ([]*syntax.File, []byte, error) {
 	files, info, err := Check(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, ok := info.Funcs["main"]; !ok {
 		diags := &diag.List{}
 		diags.Add(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package has no main function (add `fn main() { ... }`)")
-		return nil, &DiagError{Diags: diags}
+		return nil, nil, &DiagError{Diags: diags}
 	}
-	return gen.Package(files, info)
+	goSrc, err := gen.Package(files, info)
+	return files, goSrc, err
 }
 
 // Build compiles the package at path into an executable at out.
 func Build(path, out string) error {
-	goSrc, err := Emit(path)
+	files, goSrc, err := emit(path)
 	if err != nil {
 		return err
 	}
-	return buildGo(path, goSrc, out)
+	return buildGo(files, goSrc, out)
 }
 
-// buildGo builds generated Go source (for the package at path) into an
+// buildGo builds generated Go source (for the given bork files) into an
 // executable at out.
-func buildGo(path string, goSrc []byte, out string) error {
+func buildGo(files []*syntax.File, goSrc []byte, out string) error {
 	absOut, err := filepath.Abs(out)
 	if err != nil {
 		return err
@@ -177,7 +174,7 @@ func buildGo(path string, goSrc []byte, out string) error {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			if diags := unsafeGoErrors(path, dir, string(output)); diags != nil {
+			if diags := unsafeGoErrors(sourcePaths(files), dir, string(output)); diags != nil {
 				return &DiagError{Diags: diags}
 			}
 			return fmt.Errorf("go build failed on the generated code (this is a bork compiler bug):\n%s", strings.TrimSpace(string(output)))
@@ -234,7 +231,7 @@ func Test(path string, stdout io.Writer) (int, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "tests")
-	if err := buildGo(path, goSrc, exe); err != nil {
+	if err := buildGo(files, goSrc, exe); err != nil {
 		return 1, err
 	}
 	cmd := exec.Command(exe)
@@ -277,9 +274,7 @@ var goErrorLine = regexp.MustCompile(`^(.+\.bork):(\d+):(\d+): (.*)$`)
 // unsafeGoErrors turns Go compiler errors located in .bork files (in
 // `unsafe go` code, which the generated Go maps back to its source)
 // into bork diagnostics. It returns nil if there are none.
-func unsafeGoErrors(path, buildDir, output string) *diag.List {
-	paths, _ := Sources(path)
-	paths = append(paths, prelude.Path)
+func unsafeGoErrors(paths []string, buildDir, output string) *diag.List {
 	original := map[string]string{}
 	for _, p := range paths {
 		if abs, err := filepath.Abs(p); err == nil {

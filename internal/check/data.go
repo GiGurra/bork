@@ -53,7 +53,7 @@ func (c *checker) typeNamed(name string) Type {
 	if t, ok := basicTypes[name]; ok {
 		return t
 	}
-	if e, ok := c.decls[name]; ok {
+	if e := c.lookupType(name); e != nil {
 		return c.resolveDecl(e)
 	}
 	return nil
@@ -66,7 +66,7 @@ func (c *checker) typeNamed(name string) Type {
 func (c *checker) variantRef(pos diag.Pos, owner, name string, ctx Type) *Variant {
 	t := c.typeNamed(owner)
 	if t == nil {
-		c.errorf(pos, "unknown type %s", owner)
+		c.unknownType(pos, owner)
 		return nil
 	}
 	sealed, ok := t.(*Sealed)
@@ -139,7 +139,7 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 	case *syntax.Ident:
 		typ := c.typeNamed(t.Name)
 		if typ == nil {
-			c.errorf(t.Pos, "unknown type %s", t.Name)
+			c.unknownType(t.Pos, t.Name)
 			c.skipFieldInits(e)
 			return Invalid
 		}

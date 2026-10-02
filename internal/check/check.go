@@ -1,16 +1,51 @@
 package check
 
 import (
+	"fmt"
 	"go/constant"
+	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
+// Package is a bork package: a directory of .bork files.
+type Package struct {
+	Path string // the import path; "" for the prelude
+	Name string // the last element of the path
+	// Root is set for the package being built or tested; the others are
+	// the packages it imports, directly or not.
+	Root bool
+	// GoPrefix starts the Go names of the package's functions and types
+	// ("" for the root package and the prelude).
+	GoPrefix string
+	// Funcs holds the package's own functions by name.
+	Funcs   map[string]*Func
+	types   map[string]*typeEntry
+	imports map[string]*Package // by the name files use for them
+	used    map[string]bool     // the imports that are used
+}
+
+// TypeNamed is the record, sealed, or resource type the package
+// declares with the given name, or nil.
+func (p *Package) TypeNamed(name string) Type {
+	if e := p.types[name]; e != nil && e.decl.Kind != syntax.AliasType {
+		return e.typ
+	}
+	return nil
+}
+
+// Exported reports whether a name is visible to other packages: it
+// starts with an upper-case letter, as in Go.
+func Exported(name string) bool {
+	return name != "" && name[0] >= 'A' && name[0] <= 'Z'
+}
+
 // Func is a declared function's signature.
 type Func struct {
 	Decl *syntax.FuncDecl
+	Pkg  *Package
 	// TypeParams lists a generic function's type parameters.
 	TypeParams []*TypeParam
 	Params     []Type
@@ -28,6 +63,29 @@ type Func struct {
 	// ResultConstraints what the result promises (per union member).
 	ParamConstraints  [][]*Constraint
 	ResultConstraints []MemberConstraints
+}
+
+// QualifiedName is the function's name as code in package from refers
+// to it: "money.add" for a function of a package from imports.
+func (fn *Func) QualifiedName(from *Package) string {
+	if fn.Prelude {
+		return fn.Decl.Name
+	}
+	return qualify(fn.Decl.Name, fn.Pkg, from)
+}
+
+// qualify is name, declared in package pkg, as code in package from
+// refers to it.
+func qualify(name string, pkg, from *Package) string {
+	if from == nil || pkg == nil || pkg == from || pkg.Path == "" {
+		return name
+	}
+	for alias, p := range from.imports {
+		if p == pkg {
+			return alias + "." + name
+		}
+	}
+	return pkg.Name + "." + name
 }
 
 // Builtin identifies a function provided by the compiler.
@@ -83,11 +141,14 @@ type TryInfo struct {
 	NoneOf *Sealed
 }
 
-// Info is what the checker learned about a package. Later passes (code
-// generation) read it instead of re-deriving types.
+// Info is what the checker learned about a program: the root package,
+// and the packages it imports. Later passes (code generation) read it
+// instead of re-deriving types.
 type Info struct {
-	// Funcs holds the functions visible to the package by name: its own,
-	// and the prelude's that it does not replace.
+	// Packages lists the program's packages, imported ones first.
+	Packages []*Package
+	// Funcs holds the functions visible to the root package by name: its
+	// own, and the prelude's that it does not replace.
 	Funcs map[string]*Func
 	// FuncOf holds every declared function, including prelude functions
 	// the package replaced (the prelude still uses its own).
@@ -130,10 +191,10 @@ type Info struct {
 	Defs map[*syntax.Ident]any
 	// BindingConstraints holds the where clauses of typed bindings.
 	BindingConstraints map[*syntax.Binding][]*Constraint
-	// Tests holds the package's tests, each checked as a function
+	// Tests holds the root package's tests, each checked as a function
 	// without parameters.
 	Tests []*Func
-	// Rules holds the package's inference rules.
+	// Rules holds the inference rules of every package.
 	Rules []*Rule
 	// Instances describes every call of a declared function, and
 	// FuncRefs every function used as a value, with type arguments for
@@ -159,12 +220,12 @@ type PatSource struct {
 	Field   *Field
 }
 
-// Package type-checks the given files as one package.
-func Package(files []*syntax.File, diags *diag.List) *Info {
+// Program type-checks a program: the root package (whose import path is
+// root), and the packages it imports. files holds the files of all of
+// them, and the prelude's.
+func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 	c := &checker{
-		diags:   diags,
-		prelude: map[string]*Func{},
-		decls:   map[string]*typeEntry{},
+		diags: diags,
 		info: &Info{
 			Funcs:            map[string]*Func{},
 			FuncOf:           map[*syntax.FuncDecl]*Func{},
@@ -189,16 +250,19 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 			LambdaParams:       map[*syntax.Param]bool{},
 		},
 	}
+	c.declarePackages(files, root)
 	// Pass 1: declare types, then resolve their bodies, so types can
 	// refer to each other regardless of declaration order.
 	for _, f := range files {
+		c.inFile(f)
 		for _, td := range f.Types {
 			c.declareType(td, f.Prelude)
 		}
 	}
 	for _, f := range files {
+		c.inFile(f)
 		for _, td := range f.Types {
-			if e := c.decls[td.Name]; e != nil && e.decl == td {
+			if e := c.pkg.types[td.Name]; e != nil && e.decl == td {
 				c.resolveDecl(e)
 			}
 		}
@@ -208,9 +272,16 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 	// Pass 2: collect function signatures, so functions can call each
 	// other regardless of declaration order.
 	for _, f := range files {
+		c.inFile(f)
 		for _, fd := range f.Funcs {
 			c.declareFunc(fd, f.Prelude)
 		}
+	}
+	for name, fn := range c.preludePkg.Funcs {
+		c.info.Funcs[name] = fn
+	}
+	for name, fn := range c.rootPkg.Funcs {
+		c.info.Funcs[name] = fn
 	}
 	// Where clauses refer to predicates, so they are resolved once all
 	// functions are declared.
@@ -226,30 +297,111 @@ func Package(files []*syntax.File, diags *diag.List) *Info {
 	}
 	names := map[string]diag.Pos{}
 	for _, f := range files {
+		if f.Prelude || f.Package != root {
+			continue
+		}
+		c.inFile(f)
 		for _, td := range f.Tests {
-			if prev, ok := names[td.Name]; ok {
-				c.errorf(td.Pos, "test %q is already declared at %s", td.Name, prev)
+			c.checkTest(td, names)
+		}
+	}
+	for _, f := range files {
+		if f.Prelude {
+			continue
+		}
+		pkg := c.pkgs[f.Package]
+		for _, imp := range f.Imports {
+			if pkg.imports[imp.Name] != nil && !pkg.used[imp.Name] {
+				c.errorf(imp.Pos, "%s is imported but not used", imp.Path)
 			}
-			names[td.Name] = td.Pos
-			fn := &Func{Decl: &syntax.FuncDecl{Pos: td.Pos, Name: "test", Body: td.Body}, Result: Unit, Test: td}
-			c.info.Tests = append(c.info.Tests, fn)
-			c.checkFunc(fn)
 		}
 	}
 	return c.info
 }
 
+// checkTest checks a test's body as a function without parameters.
+func (c *checker) checkTest(td *syntax.TestDecl, names map[string]diag.Pos) {
+	if prev, ok := names[td.Name]; ok {
+		c.errorf(td.Pos, "test %q is already declared at %s", td.Name, prev)
+	}
+	names[td.Name] = td.Pos
+	fn := &Func{Decl: &syntax.FuncDecl{Pos: td.Pos, Name: "test", Body: td.Body}, Pkg: c.pkg, Result: Unit, Test: td}
+	c.info.Tests = append(c.info.Tests, fn)
+	c.checkFunc(fn)
+}
+
+// declarePackages sets up the packages the files belong to, and their
+// imports.
+func (c *checker) declarePackages(files []*syntax.File, root string) {
+	c.pkgs = map[string]*Package{}
+	c.preludePkg = &Package{Funcs: map[string]*Func{}, types: map[string]*typeEntry{}}
+	byName := map[string]int{}
+	for _, f := range files {
+		if f.Prelude || c.pkgs[f.Package] != nil {
+			continue
+		}
+		name := f.Package[strings.LastIndex(f.Package, "/")+1:]
+		pkg := &Package{Path: f.Package, Name: name, Root: f.Package == root,
+			Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}}
+		if !pkg.Root {
+			byName[name]++
+			pkg.GoPrefix = "_" + name + "_"
+			if n := byName[name]; n > 1 {
+				pkg.GoPrefix = "_" + name + strconv.Itoa(n) + "_"
+			}
+		}
+		c.pkgs[f.Package] = pkg
+		c.info.Packages = append(c.info.Packages, pkg)
+	}
+	c.rootPkg = c.pkgs[root]
+	if c.rootPkg == nil {
+		c.rootPkg = &Package{Path: root, Root: true, Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}}
+	}
+	for _, f := range files {
+		if f.Prelude {
+			continue
+		}
+		pkg := c.pkgs[f.Package]
+		for _, imp := range f.Imports {
+			target := c.pkgs[imp.Path]
+			switch {
+			case target == nil:
+				c.errorf(imp.Pos, "package %s is not loaded (compiler bug)", imp.Path)
+			case target == pkg:
+				c.errorf(imp.Pos, "a package cannot import itself")
+			case pkg.imports[imp.Name] != nil && pkg.imports[imp.Name] != target:
+				c.errorf(imp.Pos, "%s already names the imported package %s; import this one with another name: import other %q", imp.Name, pkg.imports[imp.Name].Path, imp.Path)
+			default:
+				pkg.imports[imp.Name] = target
+			}
+		}
+	}
+}
+
+// inFile makes declarations of the file's package the ones in view.
+func (c *checker) inFile(f *syntax.File) {
+	if f.Prelude {
+		c.pkg = c.preludePkg
+	} else {
+		c.pkg = c.pkgs[f.Package]
+	}
+}
+
 type checker struct {
 	diags *diag.List
 	info  *Info
-	decls map[string]*typeEntry
+	// The program's packages by import path; the prelude; the root
+	// package; and the package whose code is being checked.
+	pkgs       map[string]*Package
+	preludePkg *Package
+	rootPkg    *Package
+	pkg        *Package
 
 	// Per-function state.
 	fn     *Func
 	scopes []map[string]*local
-	// prelude holds the prelude's functions by name; inPrelude is set
-	// while prelude code is checked, which sees only those.
-	prelude   map[string]*Func
+	// inPrelude is set while prelude code is checked, which sees only
+	// the prelude.
 	inPrelude bool
 	// typeParams holds the type parameters in scope.
 	typeParams map[string]*TypeParam
@@ -266,14 +418,52 @@ type local struct {
 }
 
 // funcNamed looks up a function by name, as the code being checked
-// sees it: prelude code sees only the prelude.
+// sees it: its package's functions, then the prelude's (prelude code
+// sees only the prelude). A qualified name ("money.add") is looked up in
+// an imported package, which must export it.
 func (c *checker) funcNamed(name string) (*Func, bool) {
 	if c.inPrelude {
-		fn, ok := c.prelude[name]
+		fn, ok := c.preludePkg.Funcs[name]
 		return fn, ok
 	}
-	fn, ok := c.info.Funcs[name]
+	if pkg, n, ok := c.qualified(name); ok {
+		fn, ok := pkg.Funcs[n]
+		return fn, ok && Exported(n)
+	}
+	if fn, ok := c.pkg.Funcs[name]; ok {
+		return fn, true
+	}
+	fn, ok := c.preludePkg.Funcs[name]
 	return fn, ok
+}
+
+// qualified splits a qualified name "money.add" into the imported
+// package and the name in it.
+func (c *checker) qualified(name string) (*Package, string, bool) {
+	i := strings.IndexByte(name, '.')
+	if i < 0 {
+		return nil, "", false
+	}
+	pkg := c.pkg.imports[name[:i]]
+	if pkg != nil {
+		c.pkg.used[name[:i]] = true
+	}
+	return pkg, name[i+1:], pkg != nil
+}
+
+// notFound explains why a qualified name was not found: it is not
+// exported, or does not exist. It returns "" for other names.
+func (c *checker) notFound(name string) string {
+	pkg, n, ok := c.qualified(name)
+	if !ok {
+		return ""
+	}
+	_, isFunc := pkg.Funcs[n]
+	_, isType := pkg.types[n]
+	if (isFunc || isType) && !Exported(n) {
+		return fmt.Sprintf("%s is not exported by package %s (only names starting with an upper-case letter are)", n, pkg.Path)
+	}
+	return fmt.Sprintf("package %s has no %s", pkg.Path, n)
 }
 
 func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
@@ -287,8 +477,12 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	}
 	// A function of the package replaces a prelude function of the
 	// same name, so new prelude functions never break programs.
-	if prev, ok := c.info.Funcs[fd.Name]; ok && !prev.Prelude {
+	if prev, ok := c.pkg.Funcs[fd.Name]; ok {
 		c.errorf(fd.Pos, "function %s is already declared at %s", fd.Name, prev.Decl.Pos)
+		return
+	}
+	if _, ok := c.pkg.imports[fd.Name]; ok {
+		c.errorf(fd.Pos, "%s is already the name of an imported package", fd.Name)
 		return
 	}
 	if c.isTypeName(fd.Name) {
@@ -299,7 +493,7 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		c.errorf(fd.Pos, "pred %s needs a parameter: the value it is about", fd.Name)
 		return
 	}
-	fn := &Func{Decl: fd, Prelude: prelude}
+	fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude}
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
 	if r := fd.Result; r != nil && r.Name == "Never" && len(r.Args) == 0 && r.Func == nil && len(r.Union) == 0 {
 		// A function that never returns, such as exit.
@@ -311,15 +505,13 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
 	c.typeParams = nil
-	c.info.Funcs[fd.Name] = fn
+	c.pkg.Funcs[fd.Name] = fn
 	c.info.FuncOf[fd] = fn
-	if prelude {
-		c.prelude[fd.Name] = fn
-	}
 }
 
 func (c *checker) checkFunc(fn *Func) {
 	c.fn = fn
+	c.pkg = fn.Pkg
 	c.inPrelude = fn.Prelude
 	defer func() { c.inPrelude = false }()
 	c.useTypeParams(fn)
@@ -380,8 +572,12 @@ func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 	}
 	// Prelude functions may be shadowed: their names (count, find,
 	// last, ...) are too useful to take away from locals.
-	if fn, ok := c.info.Funcs[name]; ok && !fn.Prelude {
+	if _, ok := c.pkg.Funcs[name]; ok && c.pkg != c.preludePkg {
 		c.errorf(pos, "%s is already the name of a function (bork does not allow shadowing)", name)
+		return true
+	}
+	if _, ok := c.pkg.imports[name]; ok {
+		c.errorf(pos, "%s is already the name of an imported package (bork does not allow shadowing)", name)
 		return true
 	}
 	if _, ok := builtins[name]; ok {
@@ -615,6 +811,14 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 		c.errorf(e.Pos, "%s is a type, not a value", e.Name)
 		return Invalid
 	}
+	if why := c.notFound(e.Name); why != "" {
+		c.errorf(e.Pos, "%s", why)
+		return Invalid
+	}
+	if _, ok := c.pkg.imports[e.Name]; ok {
+		c.errorf(e.Pos, "%s is a package; use one of its names, as in %s.Name", e.Name, e.Name)
+		return Invalid
+	}
 	c.errorf(e.Pos, "undefined: %s", e.Name)
 	return Invalid
 }
@@ -739,6 +943,8 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		switch {
 		case c.isTypeName(id.Name):
 			c.errorf(id.Pos, "%s is a type; build a record with %s { field: value, ... }", id.Name, id.Name)
+		case c.notFound(id.Name) != "":
+			c.errorf(id.Pos, "%s", c.notFound(id.Name))
 		default:
 			c.errorf(id.Pos, "undefined function: %s", id.Name)
 		}
