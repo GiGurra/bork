@@ -1,0 +1,21 @@
+Bytes(00ff21)
+true
+Bytes(00ff21)
+3
+file
+["data.bin", "nested"]
+["directory", "file", "directory"]
+a
+b
+last
+4
+data.bin
+.bin
+true
+true
+100000
+true
+["notFound", "permissionDenied", "exists", "io"]
+true
+true
+ok

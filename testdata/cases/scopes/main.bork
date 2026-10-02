@@ -1,3 +1,5 @@
+import "bork/fs"
+
 // Scopes: resources are opened in a scope, and closed (finalizers run,
 // last first) when the scope's block ends, also by return or `?`.
 
@@ -16,17 +18,17 @@ fn early(flag: Bool): String {
   }
 }
 
-fn copyText(from: String, to: String): Int | IoError {
+fn copyText(from: String, to: String): Int | fs.Error {
   scope s {
-    text = readAll(openFile(from, s)?)?
-    write(createFile(to, s)?, text)
+    text = fs.ReadAllText(fs.Open(from, s)?)?
+    fs.WriteText(fs.Create(to, s)?, text)
   }
 }
 
 // A function given a scope can open resources in it for its caller.
-fn openBoth(a: String, b: String, s: Scope): Int | IoError {
-  first = openFile(a, s)?
-  second = openFile(b, s)?
+fn openBoth(a: String, b: String, s: Scope): Int | fs.Error {
+  first = fs.Open(a, s)?
+  second = fs.Open(b, s)?
   length([first, second])
 }
 

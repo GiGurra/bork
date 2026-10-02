@@ -1,61 +1,63 @@
-type Conn = { file: File, name: String }
+import "bork/fs"
+
+type Conn = { file: fs.File, name: String }
 
 fn id[T](x: T): T { x }
 
 // Used after its scope ended.
-fn released(path: String): String | IoError {
-  f = scope s { openFile(path, s)? }
-  readAll(f)
+fn released(path: String): String | fs.Error {
+  f = scope s { fs.Open(path, s)? }
+  fs.ReadAllText(f)
 }
 
-fn viaGeneric(p: String): String | IoError {
-  g = scope s { id(openFile(p, s)) }
+fn viaGeneric(p: String): String | fs.Error {
+  g = scope s { id(fs.Open(p, s)) }
   match (g) {
-    f: File => readAll(f)
-    e: IoError => e
+    f: fs.File => fs.ReadAllText(f)
+    e: fs.Error => e
   }
 }
 
 fn viaList(p: String): Int {
-  files = scope s { [openFile(p, s), openFile(p, s)] }
+  files = scope s { [fs.Open(p, s), fs.Open(p, s)] }
   length(files)
 }
 
 fn scopeInLambda(p: String): Int {
-  h = scope s { () => openFile(p, s) }
+  h = scope s { () => fs.Open(p, s) }
   match (h()) {
-    f: File => 1
-    e: IoError => 0
+    f: fs.File => 1
+    e: fs.Error => 0
   }
 }
 
-fn direct(path: String): String | IoError {
-  readAll(scope s { openFile(path, s)? })
+fn direct(path: String): String | fs.Error {
+  fs.ReadAllText(scope s { fs.Open(path, s)? })
 }
 
 // Returned from the scope it belongs to.
-fn escapes(path: String): File | IoError {
-  scope s { openFile(path, s) }
+fn escapes(path: String): fs.File | fs.Error {
+  scope s { fs.Open(path, s) }
 }
 
-fn escapesByReturn(path: String): File | IoError {
+fn escapesByReturn(path: String): fs.File | fs.Error {
   scope s {
-    f = openFile(path, s)?
+    f = fs.Open(path, s)?
     return f
   }
 }
 
-fn inRecord(path: String): Conn | IoError {
+fn inRecord(path: String): Conn | fs.Error {
   scope s {
-    f = openFile(path, s)?
+    f = fs.Open(path, s)?
     Conn { file: f, name: path }
   }
 }
 
-fn inLambda(path: String): (() uses io => String | IoError) | IoError {
+fn inLambda(path: String): (() uses io => String | fs.Error) | fs.Error {
   scope s {
-    f = openFile(path, s)?
-    () => readAll(f)
+    f = fs.Open(path, s)?
+    () => fs.ReadAllText(f)
   }
 }
 
@@ -63,26 +65,26 @@ fn inLambda(path: String): (() uses io => String | IoError) | IoError {
 fn keptLonger(path: String) {
   scope outer {
     scope inner {
-      f = openFile(path, inner)
+      f = fs.Open(path, inner)
       onClose(outer, () => println(toString(f)))
     }
   }
 }
 
-fn keptByParam(f: File, s: Scope) {
+fn keptByParam(f: fs.File, s: Scope) {
   onClose(s, () => println(toString(f)))
 }
 
 // These are fine.
-fn fine(path: String, s: Scope): File | IoError {
-  openFile(path, s)
+fn fine(path: String, s: Scope): fs.File | fs.Error {
+  fs.Open(path, s)
 }
 
-fn fine2(path: String): String | IoError {
+fn fine2(path: String): String | fs.Error {
   scope s {
     f = fine(path, s)?
     onClose(s, () => println(toString(f)))
-    readAll(f)
+    fs.ReadAllText(f)
   }
 }
 

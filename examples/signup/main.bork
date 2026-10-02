@@ -1,3 +1,5 @@
+import "bork/fs"
+
 // signup validates sign-up requests, one JSON object per line:
 //
 //   bork run examples/signup -- requests.jsonl
@@ -54,9 +56,9 @@ fn handleAll(lines: List[String], id: Int): List[String] {
   }
 }
 
-fn readFile(path: String): String | IoError {
+fn readFile(path: String): String | fs.Error {
   scope s {
-    readAll(openFile(path, s)?)
+    fs.ReadAllText(fs.Open(path, s)?)
   }
 }
 
@@ -70,8 +72,9 @@ fn main() {
   }
   match (readFile(path)) {
     text: String => forEach(handleAll(lines(text), 1), line => println(line))
-    e: IoError => {
-      eprintln(s"signup: ${e.path}: ${e.message}")
+    e: fs.Error => {
+      detail = fs.ErrorInfo(e)
+      eprintln(s"signup: ${detail.path}: ${detail.message}")
       exit(1)
     }
   }

@@ -14,8 +14,8 @@ returned early
 open early
 close early
 finished
-IoError { path: "/nonexistent/in.txt", message: "no such file or directory" }
-IoError { path: "/nonexistent/a", message: "no such file or directory" }
+NotFound { path: "/nonexistent/in.txt", message: "no such file or directory" }
+NotFound { path: "/nonexistent/a", message: "no such file or directory" }
 open greeter
 close greeter
 hello, bork

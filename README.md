@@ -39,15 +39,17 @@ Predicates are ordinary bork functions; on constants, the compiler runs them at 
 So do scopes:
 
 ```
-fn countFile(path: String): Counts | IoError {
+import "bork/fs"
+
+fn countFile(path: String): Counts | fs.Error {
   scope s {
-    countText(readAll(openFile(path, s)?)?)   // the file is closed when s ends, even by ? or a panic
+    countText(fs.ReadAllText(fs.Open(path, s)?)?)   // the file is closed when s ends, even by ? or a panic
   }
 }
 
-fn broken(path: String): String | IoError {
-  f = scope s { openFile(path, s)? }
-  readAll(f)             // error: f may be released: it belongs to scope s, which ended on line 2
+fn broken(path: String): String | fs.Error {
+  f = scope s { fs.Open(path, s)? }
+  fs.ReadAllText(f)             // error: f may be released: it belongs to scope s, which ended on line 2
 }
 ```
 

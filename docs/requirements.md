@@ -344,7 +344,7 @@ Outside resources (files, sockets, database connections, transactions, locks) ar
 - **Reference counting falls out of the design.** Within one call stack, scopes nest, so the last scope is simply the outermost one. Across goroutines, a resource attached to several scopes stays open until all of them have closed, which is shared ownership without a separate `shared_ptr`-style type.
 - **Scopes are passed explicitly in v0.1.** Acquiring functions take the scope as an ordinary argument. Implicit scope passing may be added later.
 - **How the compiler checks it (implemented).** Every value has a lifetime: the set of scopes that must all be open for it to be usable. A resource returned by a function that was given a scope belongs to that scope; so does anything that holds it (a record, a list, a union, a lambda that uses it). Parameters belong to the caller's scopes, which outlive every scope the function opens. Three checks follow: a value whose scope has ended may not be used ("possibly released"); a function or lambda may not return a value of a scope it opened; and an `unsafe go` function given a scope may keep its other arguments until the scope closes (as `onClose` does), so they must live at least as long. Immutability, and having nowhere global to put values, make these the only escape routes.
-- **Resource types are declared, and made in Go.** `type File = resource` declares an opaque handle. `unsafe go` functions create its values (`File{handle: f}`) and register finalizers with the scope (`s.Defer(...)`). The prelude has `onClose(s, f)` and a minimal file API (`openFile`, `createFile`, `readAll`, `write`).
+- **Resource types are declared, and made in Go.** `type File = resource` declares an opaque handle. `unsafe go` functions create its values (`File{handle: f}`) and register finalizers with the scope (`s.Defer(...)`). The prelude has `onClose(s, f)`; file resources and operations are in `bork/fs`.
 
 ```
 fn main() = scope app {
@@ -354,7 +354,7 @@ fn main() = scope app {
 
 fn handle(req: Request, pool: DbPool) = scope request {
   conn = pool.connect(request)?            // closed when the request scope ends
-  file = openFile(path, request)?
+  file = fs.Open(path, request)?
   ...
 }                                          // finalizers run LIFO
 
@@ -461,7 +461,7 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 
 | Effect  | Allows | Prelude and standard library |
 |---------|--------|------------------------------|
-| `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `openFile`, `createFile`, `readAll`, `write`, `args`, `exit`, `log.Configure`, `env.Get`, `env.Require`, `env.All`, `env.Load`, `env.LoadJson` |
+| `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `fs.Open`, `fs.Create`, `fs.ReadAll`, `fs.WriteTo`, `args`, `exit`, `log.Configure`, `env.Get`, `env.Require`, `env.All`, `env.Load`, `env.LoadJson` |
 | `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send` |
 | `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep` |
 | `random` | random numbers | none yet (the future random number functions) |
@@ -990,3 +990,25 @@ returns a union error. Immutable access uses `length`, `isEmpty`, `get`,
 parsers. Invalid encodings return `ParseError` without partial data. The
 base64 parsers enforce zero trailing padding bits and accept CR/LF.
 CSV support follows separately using record field schemas and `Decode`.
+
+### Filesystem package
+
+`bork/fs` owns `File`, moved from the prelude, and provides whole-file binary
+Read/Write/Append, scoped Open/Create/CreateNew, ReadAll/WriteTo on handles,
+text compatibility helpers ReadAllText/WriteText, and streaming ForEachLine.
+File data is Bytes; caller-visible slices never mutate. Text compatibility
+helpers preserve the former prelude behavior; validated UTF-8 decoding is
+explicit. Streaming has no Scanner line-size limit. File resource lifetimes
+remain enforced, including imported resources returned through generic wrappers.
+
+Directories have lexical listing/walking, MkdirAll, Remove/RemoveAll, Rename,
+and Stat with size, time.Instant modification time and kind. Walk and Stat do
+not follow symbolic links. Host filepath helpers join and split paths and
+resolve absolute paths. TempFile/TempDir resources close and remove themselves
+at scope end, including early-return and panic cleanup; TempDir removes its
+contents. Cleanup is best effort, as existing scope file finalizers were.
+Files create with mode 0666 and directories with 0777, modified by the host
+umask. Write truncates; Append appends; CreateNew reports Exists for an
+existing path. Operational errors are typed union values NotFound,
+PermissionDenied, Exists or IoError with the path and underlying message.
+There are no new language constructs.

@@ -89,7 +89,7 @@ Args       = Expr { "," Expr } [ "," ] .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | "true" | "false" | Ident
            | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr .
-ScopeExpr  = "scope" Ident [ "with" Expr { "," Expr } ] Block .  (* scope s { f = openFile(path, s)? ... }; scope s with taskTimeout(100), cleanupTimeout(500) { ... } *)
+ScopeExpr  = "scope" Ident [ "with" Expr { "," Expr } ] Block .  (* scope s { f = fs.Open(path, s)? ... }; scope s with taskTimeout(100), cleanupTimeout(500) { ... } *)
 Lambda     = ( Ident | "(" [ LParam { "," LParam } ] ")" ) "=>" Expr .  (* x => x + 1 *)
 LParam     = Ident [ ":" Type ] .
 ListLit    = "[" [ Expr { Sep Expr } [ Sep ] ] "]" .
@@ -177,3 +177,25 @@ Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module
 HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeout: `http.Get(url, s, timeoutMs = 0)`, `http.Post(url, contentType, body, s, timeoutMs = 0)`, or `http.Send(method, url, headers, body, s, timeoutMs = 0)`. Zero uses only scope cancellation; the maximum is 9223372036854 milliseconds. Use `http.ValidTimeout(value)` as a guard for a dynamic timeout. `http.Headers` is `Map[String, List[String]]`; use `{:}` for no headers. `http.HeaderOf` finds the first value without regard to case. Cancellation, timeout, and transport failures are `IoError`; HTTP error status codes remain responses.
 
 `bork/sql` adds scope-owned `Connection` and `Transaction` resources. Open with `OpenSqlite(dataSource, s)` or `OpenPostgres(dataSource, s)`, start a transaction with `Begin(connection, s)`, and `Commit(tx)` before that scope closes; otherwise it rolls back. `Exec(connectionOrTx, query, params)` and `Query[T: Decode](connectionOrTx, query, params)` bind `String | Int | Float | Bool | Bytes | sql.Null` values, using the owner's cancellation context; attachment switches that context's cancellation source to the destination scope. Column aliases map to record fields; SQL NULL decodes as Option.None, binary columns as JSON byte-integer arrays, and timestamps as RFC3339 strings. Queries return the first result set; duplicate column names are errors. See [examples/sql](../examples/sql/main.bork).
+
+- **`bork/fs`:** files and directories use `Bytes` and scoped resources.
+  `Read(path)`, `Write(path, bytes)` (create/truncate), and `Append(path, bytes)`
+  work with whole files. `Open(path, scope)`, `Create(path, scope)` (truncate),
+  and `CreateNew(path, scope)` (exclusive) give scoped `fs.File` resources.
+  `ReadAll(file)` consumes remaining bytes; `WriteTo(file, bytes)` returns
+  the byte count. `ReadAllText` and `WriteText` replace the former prelude's
+  text operations; ReadAllText preserves raw text, while validated decoding
+  is `utf8String(ReadAll(file)?)`. `ForEachLine(file, visit)` streams lines
+  without a scanner size limit, removing LF/CRLF and keeping a final line.
+  Directory operations: `ReadDir` (lexical entry order), `Walk` (includes
+  root, lexical traversal, no symlink following), `MkdirAll`, `Remove`,
+  `RemoveAll`, `Rename`, and `Stat` (size, modified `time.Instant`, and kind;
+  observes symlinks themselves). Kinds are "file", "directory", "symlink",
+  or "other". `Join(List[String])`, `Base`, `Dir`, `Ext`, and `Abs` follow
+  the host's filepath rules. `TempFile(scope, directory = "", pattern = "bork-*")`
+  and `TempDir` create resources removed at scope end; `Path(file)` and
+  `DirectoryPath(directory)` give their paths. `fs.Error` is
+  `NotFound | PermissionDenied | Exists | IoError`, all carrying path/message;
+  `ErrorInfo(error)` extracts those common fields into IoError. The old
+  prelude `File`, `openFile`, `createFile`, `readAll`, and `write` have moved
+  to this package. See [the filesystem example](../examples/fs/main.bork).

@@ -1,0 +1,85 @@
+import "bork/fs"
+
+fn exercise(s: Scope): Unit | fs.Error {
+  directory = fs.TempDir(s)?
+  root = fs.DirectoryPath(directory)
+  path = fs.Join([root, "data.bin"])
+  fs.Write(path, bytes([toByte(0), toByte(255)]))?
+  fs.Append(path, utf8Bytes("!"))?
+  println(fs.Read(path)?)
+  println(match (fs.CreateNew(path, s)) {
+    file: fs.File => false
+    error: fs.Exists => true
+    error: fs.NotFound => false
+    error: fs.PermissionDenied => false
+    error: IoError => false
+  })
+  file = fs.Open(path, s)?
+  println(fs.ReadAll(file)?)
+  println((fs.Stat(path)?).size)
+  println((fs.Stat(path)?).kind)
+  fs.MkdirAll(fs.Join([root, "nested"]))?
+  println(map(fs.ReadDir(root)?, entry => entry.name))
+  println(map(fs.Walk(root)?, entry => entry.kind))
+  lines = fs.Create(fs.Join([root, "lines.txt"]), s)?
+  written = fs.WriteText(lines, "a\r\nb\nlast")?
+  reader = fs.Open(fs.Path(lines), s)?
+  fs.ForEachLine(reader, line => println(line))?
+  temporary = fs.TempFile(s, root)?
+  temporaryWritten = fs.WriteTo(temporary, utf8Bytes("temp"))?
+  println((fs.Stat(fs.Path(temporary))?).size)
+  println(fs.Base(path))
+  println(fs.Ext(path))
+  println(fs.Dir(path) == root)
+  println(startsWith(fs.Abs(path)?, root))
+  longFile = fs.Create(fs.Join([root, "long.txt"]), s)?
+  longWritten = fs.WriteText(longFile, repeat("x", 100000))?
+  longReader = fs.Open(fs.Path(longFile), s)?
+  fs.ForEachLine(longReader, line => println(byteLength(line)))?
+  fs.Rename(path, fs.Join([root, "renamed.bin"]))?
+  fs.Remove(fs.Join([root, "renamed.bin"]))?
+  println(match (fs.Read(path)) {
+    data: Bytes => false
+    error: fs.NotFound => true
+    error: fs.PermissionDenied => false
+    error: fs.Exists => false
+    error: IoError => false
+  })
+}
+
+fn main() {
+  result = scope s { exercise(s) }
+  println(errorKinds())
+  paths = scope cleanup { temporaryPaths(cleanup) }
+  match (paths) {
+    names: List[String] => forEach(names, name => println(match (fs.Stat(name)) {
+      info: fs.Info => false
+      error: fs.NotFound => true
+      error: fs.PermissionDenied => false
+      error: fs.Exists => false
+      error: IoError => false
+    }))
+    error: fs.Error => println(error)
+  }
+  match (result) {
+    done: Unit => println("ok")
+    error: fs.Error => println(error)
+  }
+}
+
+fn temporaryPaths(s: Scope): List[String] | fs.Error {
+  directory = fs.TempDir(s)?
+  root = fs.DirectoryPath(directory)
+  file = fs.TempFile(s, root)?
+  [root, fs.Path(file)]
+}
+fn errorKinds(): List[String] unsafe go {
+  import "errors"
+  import "os"
+  kinds := []string{}
+  for _, err := range []error{os.ErrNotExist, os.ErrPermission, os.ErrExist, errors.New("other")} {
+    kind, _ := _borkIoFailure(&os.PathError{Op: "read", Path: "test", Err: err})
+    kinds = append(kinds, kind)
+  }
+  return kinds
+}
