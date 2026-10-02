@@ -235,6 +235,7 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 			ft.Params = append(ft.Params, pt)
 		}
 		if hasWhere(t.Func.Result) || hasWhereIn(t.Func.Params) {
+			c.whereReported(t)
 			c.errorf(t.Pos, "where clauses inside function types are not supported yet")
 			return Invalid
 		}

@@ -1,0 +1,42 @@
+// Every position where a where clause (or a constrained alias) can be
+// written but is not checked yet is an error, never silently dropped.
+// where_positions_checked_fail has the positions that are checked.
+
+pred positive(x: Int) { x > 0 }
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+
+type PosInt = Int where positive
+type Box[T] = { item: T, items: List[T] }
+type Only[T] = { items: List[T] }
+
+// Union members, in an alias, a field, a parameter, and a list.
+type Either = Int where positive | String
+type Fields = { f: Int where positive | String }
+fn member(u: Int where positive | String): Int { 0 }
+fn listOfMembers(xs: List[Int where positive | String]): Int { 0 }
+fn aliasMember(u: PosInt | String): Int { 0 }
+
+// Map keys and values, also inside other types and in results.
+fn values(m: Map[String, Int where positive]): Int { 0 }
+fn keys(m: Map[String where nonEmpty, Int]): Int { 0 }
+fn aliasValues(m: Map[String, PosInt]): Int { 0 }
+fn optionalMap(o: Option[Map[String, Int where positive]]): Int { 0 }
+fn mapResult(): Map[String, Int where positive] { {:} }
+
+// Type arguments that fields hold inside other types.
+fn box(b: Box[Int where positive]): Int { 0 }
+fn only(o: Only[PosInt]): Int { 0 }
+
+// Function types.
+fn apply(f: (Int where positive) => Int): Int { 0 }
+
+// Rule variables and lambda parameters.
+rule same(x: Int where positive) { positive(x) => positive(x) }
+
+fn lambdas(): Int {
+  f = (x: Int where positive) => x
+  g = (x: PosInt) => x
+  0
+}
+
+fn main() {}

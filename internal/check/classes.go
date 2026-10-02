@@ -143,6 +143,10 @@ func (c *checker) declareClassMethods() {
 // the class could not see them (not supported yet).
 func (c *checker) noWhere(md *syntax.FuncDecl) {
 	for _, p := range md.Params {
+		c.whereReported(p.Type)
+	}
+	c.whereReported(md.Result)
+	for _, p := range md.Params {
 		if hasWhere(p.Type) {
 			c.errorf(p.Type.Pos, "where clauses on the methods of classes and instances are not supported yet")
 			return
