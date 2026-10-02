@@ -180,3 +180,5 @@ input returns `ParseError`. See [the encoding example](examples/bytes_encoding/m
 ## License
 
 [MIT](LICENSE)
+
+HTTP clients take a scope (`http.Get(url, s, timeoutMs = 0)`); cancellation and optional timeouts cover the response body too. Request/response headers are `Map[String, List[String]]`, preserving repeated header values.

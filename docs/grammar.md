@@ -173,3 +173,5 @@ EOL        = newline | ";" .
   returned after an error. See [examples/bytes_encoding](../examples/bytes_encoding/main.bork).
 
 Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. This is internal compiler data, with no new bork syntax; user-package Go dependency declarations remain future work. See [std Go dependencies](std-go.md).
+
+HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeout: `http.Get(url, s, timeoutMs = 0)`, `http.Post(url, contentType, body, s, timeoutMs = 0)`, or `http.Send(method, url, headers, body, s, timeoutMs = 0)`. Zero uses only scope cancellation. `http.Headers` is `Map[String, List[String]]`; use `{:}` for no headers. `http.HeaderOf` finds the first value without regard to case. Cancellation, timeout, and transport failures are `IoError`; HTTP error status codes remain responses.

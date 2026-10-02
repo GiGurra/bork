@@ -90,8 +90,8 @@ fn show(label: String, r: http.Response | IoError) {
   }
 }
 
-fn post(base: String, body: String) {
-  show(s"POST /signup $body", http.Post(base + "/signup", "application/json", body))
+fn post(s: Scope, base: String, body: String) {
+  show(s"POST /signup $body", http.Post(base + "/signup", "application/json", body, s))
 }
 
 // demo starts the server on a free port and sends it requests; the
@@ -100,15 +100,15 @@ fn demo(): Unit | IoError {
   scope s {
     server = http.Listen("127.0.0.1:0", s, route)?
     base = "http://" + http.Address(server)
-    show("GET /health", http.Get(base + "/health"))
-    post(base, "{\"name\": \"ann\", \"plan\": \"Free\"}")
-    post(base, "{\"name\": \"bob\", \"age\": 40, \"plan\": {\"type\": \"Paid\", \"seats\": 12}}")
-    post(base, "{\"name\": \"\", \"plan\": \"Free\"}")
-    post(base, "{\"name\": \"cy\", \"plan\": {\"type\": \"Paid\", \"seats\": 0}}")
-    post(base, "{\"name\": \"dee\"")
-    show("GET /signup", http.Get(base + "/signup"))
-    show("GET /nope", http.Get(base + "/nope"))
-    show("GET /slow", http.Get(base + "/slow"))
+    show("GET /health", http.Get(base + "/health", s))
+    post(s, base, "{\"name\": \"ann\", \"plan\": \"Free\"}")
+    post(s, base, "{\"name\": \"bob\", \"age\": 40, \"plan\": {\"type\": \"Paid\", \"seats\": 12}}")
+    post(s, base, "{\"name\": \"\", \"plan\": \"Free\"}")
+    post(s, base, "{\"name\": \"cy\", \"plan\": {\"type\": \"Paid\", \"seats\": 0}}")
+    post(s, base, "{\"name\": \"dee\"")
+    show("GET /signup", http.Get(base + "/signup", s))
+    show("GET /nope", http.Get(base + "/nope", s))
+    show("GET /slow", http.Get(base + "/slow", s))
   }
 }
 
@@ -132,7 +132,7 @@ fn main() {
 
 fn get(path: String): http.Response {
   scope rs {
-    route(http.Request { method: "GET", path: path, query: "", headers: [], body: "" }, rs)
+    route(http.Request { method: "GET", path: path, query: "", headers: {:}, body: "" }, rs)
   }
 }
 
