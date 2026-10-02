@@ -4,4 +4,4 @@ fn equalInts(a: List[Int], b: List[Int]): Bool { a == b }
 fn equalKeys(a: Key, b: Key): Bool { a == b }
 fn showInts(a: List[Int]): String { toString(a) }
 
-fn main() { println({1: 1}) }
+fn main() { println({ 1: 1 }) }
