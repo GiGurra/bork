@@ -4,7 +4,7 @@
 
 ## Lexical structure
 
-- **Source files** are UTF-8, with the `.bork` extension. A directory of `.bork` files is one package.
+- **Source files** are UTF-8, with the `.bork` extension. A directory of `.bork` files is one package. Diagnostic positions use one-based lines and byte columns (see [JSON diagnostics](diagnostics.md)).
 - **Comments:** `// to end of line` and `/* block */`. They are ignored by the parser, but kept by the lexer for future tooling.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
 - **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, and `derive` are keywords only where they start a declaration, a scope block (or its policy), a resource type, or a derive list, and can otherwise be used as names.

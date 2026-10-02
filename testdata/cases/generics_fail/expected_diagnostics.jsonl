@@ -1,0 +1,13 @@
+{"schema_version":1,"file":"main.bork","line":2,"column":34,"end_line":2,"end_column":34,"message":"cannot compare values of type parameter T with ==; require it: [T: Eq]","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":3,"column":11,"end_line":3,"end_column":11,"message":"type parameter T is declared twice","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":7,"column":12,"end_line":7,"end_column":12,"message":"cannot tell what T is in this call to empty; give the arguments (or the result) a known type","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":8,"column":11,"end_line":8,"end_column":11,"message":"cannot tell the type of an empty list; give it one, as in xs: List[Int] = []","code":"type.empty-list"}
+{"schema_version":1,"file":"main.bork","line":9,"column":7,"end_line":9,"end_column":8,"message":"cannot tell the type of parameter x; write it: (x: Type) =\u003e ...","code":"type.lambda-parameter","fixes":[{"message":"annotate the parameter (replace Type with its intended type)","requires_input":true,"edits":[{"start":{"file":"main.bork","line":9,"column":7},"end":{"file":"main.bork","line":9,"column":8},"replacement":"(x: Type)"}]}]}
+{"schema_version":1,"file":"main.bork","line":11,"column":23,"end_line":11,"end_column":23,"message":"argument 2 to map must be (Int) =\u003e B, found String","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":11,"column":44,"end_line":11,"end_column":44,"message":"argument 2 to filter must be (Int) =\u003e Bool, found (Int) =\u003e Int","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":12,"column":20,"end_line":12,"end_column":20,"message":"expected a function taking 1 argument(s), but this lambda takes 2","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":14,"column":11,"end_line":14,"end_column":11,"message":"list elements have different types: Int and String","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":18,"column":23,"end_line":18,"end_column":23,"message":"return cannot be used in a lambda; a lambda's value is its body's value","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":19,"column":34,"end_line":19,"end_column":34,"message":"? cannot be used in a lambda (it would return from the enclosing function); use match","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":22,"column":11,"end_line":22,"end_column":11,"message":"cannot call a value of type Int","code":"type.error"}
+{"schema_version":1,"file":"main.bork","line":24,"column":7,"end_line":24,"end_column":7,"message":"cannot tell what T is for empty here; use it where a function type is expected, or call it in a lambda","code":"type.error"}

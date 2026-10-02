@@ -149,7 +149,7 @@ func (p *parser) skipSemis() {
 	}
 }
 func (p *parser) errorf(pos diag.Pos, format string, args ...any) {
-	p.diags.Add(pos, format, args...)
+	p.diags.AddCode(pos, "syntax.error", format, args...)
 }
 
 // skipNewlines skips newline-terminators, which are meaningless inside

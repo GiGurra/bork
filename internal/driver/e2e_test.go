@@ -82,6 +82,18 @@ func runErrorCase(t *testing.T, dir string) {
 	// Report paths relative to the case directory.
 	got := strings.ReplaceAll(de.Error(), dir+string(filepath.Separator), "") + "\n"
 	compare(t, filepath.Join(dir, "expected_errors.txt"), got)
+	if jsonPath := filepath.Join(dir, "expected_diagnostics.jsonl"); fileExists(jsonPath) {
+		var out strings.Builder
+		if err := de.Diags.WriteJSON(&out); err != nil {
+			t.Fatal(err)
+		}
+		compare(t, jsonPath, strings.ReplaceAll(out.String(), dir+string(filepath.Separator), ""))
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func compare(t *testing.T, expectedPath, got string) {

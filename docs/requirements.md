@@ -85,7 +85,7 @@ In priority order. When two values conflict, the higher one wins.
 3. **Explicit escape hatches, never silent bypasses.** Whenever a guarantee is weakened, it is visible in the code, greppable, and reviewable.
 4. **Readable at 3am during an incident.** Explicit over clever. One obvious way to do common things. **Clarity over conciseness:** agents will write much of the code, so saving keystrokes matters little, while being easy to read and review matters a lot.
 5. **Boring, fast tooling.** One `bork` binary, fast builds, and a formatter with no options.
-6. **Friendly, specific diagnostics.** Errors say what could not be proven, where, and how to fix it.
+6. **Friendly, specific diagnostics.** Errors say what could not be proven, where, and how to fix it. `check`, `build`, and `test` accept `--json` for versioned JSON Lines with stable diagnostic codes and optional suggested text edits; see [the format](diagnostics.md). Text output remains the default.
 
 ## Decided
 

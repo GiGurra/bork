@@ -156,24 +156,24 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 		for i := len(l.stack) - 1; i >= 0 && l.stack[i] != imp.Path; i-- {
 			cycle = l.stack[i] + " imports " + cycle
 		}
-		l.diags.Add(imp.Pos, "import cycle: %s imports %s (packages cannot import each other in a circle)", imp.Path, cycle)
+		l.diags.AddCode(imp.Pos, "import.error", "import cycle: %s imports %s (packages cannot import each other in a circle)", imp.Path, cycle)
 		return nil
 	}
 	if strings.HasPrefix(imp.Path, std.Prefix) {
 		paths, srcs, ok := std.Sources(imp.Path)
 		if !ok {
-			l.diags.Add(imp.Pos, "cannot import %s: there is no such standard package", imp.Path)
+			l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: there is no such standard package", imp.Path)
 			return nil
 		}
 		return l.loadSources(imp.Path, paths, srcs)
 	}
 	if l.mod.path == "" {
-		l.diags.Add(imp.Pos, "cannot import %s: imports need a module (add a %s file to the module's root directory, with a line `module example.com/name`)", imp.Path, ModFile)
+		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: imports need a module (add a %s file to the module's root directory, with a line `module example.com/name`)", imp.Path, ModFile)
 		return nil
 	}
 	rel, ok := strings.CutPrefix(imp.Path, l.mod.path+"/")
 	if !ok {
-		l.diags.Add(imp.Pos, "cannot import %s: only packages of module %s can be imported", imp.Path, l.mod.path)
+		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: only packages of module %s can be imported", imp.Path, l.mod.path)
 		return nil
 	}
 	dir := filepath.Join(l.mod.root, filepath.FromSlash(rel))
@@ -185,12 +185,12 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 	}
 	paths, err := Sources(dir)
 	if err != nil {
-		l.diags.Add(imp.Pos, "cannot import %s: %v", imp.Path, err)
+		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: %v", imp.Path, err)
 		return nil
 	}
 	name := imp.Path[strings.LastIndex(imp.Path, "/")+1:]
 	if !validName(name) {
-		l.diags.Add(imp.Pos, "cannot import %s: a package's directory name must be a valid name, like money or http_util", imp.Path)
+		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: a package's directory name must be a valid name, like money or http_util", imp.Path)
 		return nil
 	}
 	return l.loadPackage(imp.Path, paths)
