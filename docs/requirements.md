@@ -150,16 +150,30 @@ In priority order. When two values conflict, the higher one wins.
 - **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
-Sketch (syntax not final):
+Implemented:
 
 ```
-typeclass Monoid[T] {
-  fn empty: T
+class Monoid[T] {
+  fn empty(): T
   fn combine(a: T, b: T): T
 }
 
-fn sum[T: Monoid](xs: List[T]): T = xs.fold(Monoid[T].empty, Monoid[T].combine)
+instance sumInt: Monoid[Int] {
+  fn empty(): Int { 0 }
+  fn combine(a: Int, b: Int): Int { a + b }
+}
+
+instance showList[T: Show]: Show[List[T]] { ... }   // generic, with a bound
+
+fn sum[T: Monoid](xs: List[T]): T { fold(xs, empty[T](), combine) }
 ```
+
+- **Instances are named,** so several can exist per class and type, and `use` can pick them: `use money.ShowAmount`, or every exported one: `use money.*`.
+- **What is in scope:** a package's own instances, the prelude's, and those it uses. Instances of other packages are never picked up without `use`. (A package's own instances being in scope is a pragmatic exception to "no automatic instances"; to offer alternatives, put them in packages and choose with `use`.)
+- **Methods are called like functions** (`show(x)`, `money.show(x)`); the types decide the instance. Methods of an exported class are visible with it. A method can also be passed as a value (`map(xs, show)`). Explicit type arguments decide what the arguments cannot: `empty[Int]()`.
+- **Missing and ambiguous instances are errors,** with hints: which `use` would bring one into scope, or which bound a generic function lacks.
+- **Lowered to dictionary passing.** A call whose instance is known calls the instance's method directly; only generic code passes instances around.
+- **Not yet:** classes with several type parameters, superclasses, default methods, `where` clauses on methods, and choosing an instance at a call site.
 
 ### Open questions
 

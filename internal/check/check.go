@@ -25,6 +25,11 @@ type Package struct {
 	types   map[string]*typeEntry
 	imports map[string]*Package // by the name files use for them
 	used    map[string]bool     // the imports that are used
+	classes map[string]*Class
+	// instances holds the package's own class instances, and inScope
+	// those its code can use: its own, the prelude's, and those it uses.
+	instances []*ClassInstance
+	inScope   []*ClassInstance
 }
 
 // TypeNamed is the record, sealed, or resource type the package
@@ -46,6 +51,10 @@ func Exported(name string) bool {
 type Func struct {
 	Decl *syntax.FuncDecl
 	Pkg  *Package
+	// Class is set for a class's method (which has no body), and Of for
+	// the implementation of a method in an instance.
+	Class *Class
+	Of    *ClassInstance
 	// TypeParams lists a generic function's type parameters.
 	TypeParams []*TypeParam
 	Params     []Type
@@ -145,8 +154,11 @@ type TryInfo struct {
 // and the packages it imports. Later passes (code generation) read it
 // instead of re-deriving types.
 type Info struct {
-	// Packages lists the program's packages, imported ones first.
+	// Packages lists the program's packages.
 	Packages []*Package
+	// Classes and ClassInstances list every class and instance.
+	Classes        []*Class
+	ClassInstances []*ClassInstance
 	// Funcs holds the functions visible to the root package by name: its
 	// own, and the prelude's that it does not replace.
 	Funcs map[string]*Func
@@ -269,14 +281,20 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 	}
 	c.checkRecordCycles()
 	c.info.OutOfRange = c.info.Named["OutOfRange"]
+	c.declareClasses(files)
+	c.declareClassMethods()
 	// Pass 2: collect function signatures, so functions can call each
 	// other regardless of declaration order.
 	for _, f := range files {
 		c.inFile(f)
 		for _, fd := range f.Funcs {
-			c.declareFunc(fd, f.Prelude)
+			if fd.Instance == nil {
+				c.declareFunc(fd, f.Prelude)
+			}
 		}
 	}
+	c.declareInstances(files)
+	c.resolveUses(files)
 	for name, fn := range c.preludePkg.Funcs {
 		c.info.Funcs[name] = fn
 	}
@@ -334,7 +352,7 @@ func (c *checker) checkTest(td *syntax.TestDecl, names map[string]diag.Pos) {
 // imports.
 func (c *checker) declarePackages(files []*syntax.File, root string) {
 	c.pkgs = map[string]*Package{}
-	c.preludePkg = &Package{Funcs: map[string]*Func{}, types: map[string]*typeEntry{}}
+	c.preludePkg = &Package{Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}, classes: map[string]*Class{}}
 	byName := map[string]int{}
 	for _, f := range files {
 		if f.Prelude || c.pkgs[f.Package] != nil {
@@ -342,7 +360,7 @@ func (c *checker) declarePackages(files []*syntax.File, root string) {
 		}
 		name := f.Package[strings.LastIndex(f.Package, "/")+1:]
 		pkg := &Package{Path: f.Package, Name: name, Root: f.Package == root,
-			Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}}
+			Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}, classes: map[string]*Class{}}
 		if !pkg.Root {
 			byName[name]++
 			pkg.GoPrefix = "_" + name + "_"
@@ -355,7 +373,7 @@ func (c *checker) declarePackages(files []*syntax.File, root string) {
 	}
 	c.rootPkg = c.pkgs[root]
 	if c.rootPkg == nil {
-		c.rootPkg = &Package{Path: root, Root: true, Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}}
+		c.rootPkg = &Package{Path: root, Root: true, Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}, classes: map[string]*Class{}}
 	}
 	for _, f := range files {
 		if f.Prelude {
@@ -428,7 +446,8 @@ func (c *checker) funcNamed(name string) (*Func, bool) {
 	}
 	if pkg, n, ok := c.qualified(name); ok {
 		fn, ok := pkg.Funcs[n]
-		return fn, ok && Exported(n)
+		// The methods of an exported class are visible with it.
+		return fn, ok && (Exported(n) || fn.Class != nil && Exported(fn.Class.Name))
 	}
 	if fn, ok := c.pkg.Funcs[name]; ok {
 		return fn, true
@@ -458,8 +477,11 @@ func (c *checker) notFound(name string) string {
 	if !ok {
 		return ""
 	}
-	_, isFunc := pkg.Funcs[n]
+	fn, isFunc := pkg.Funcs[n]
 	_, isType := pkg.types[n]
+	if isFunc && fn.Class != nil && !Exported(fn.Class.Name) {
+		return fmt.Sprintf("%s is a method of class %s, which package %s does not export", n, fn.Class.Name, pkg.Path)
+	}
 	if (isFunc || isType) && !Exported(n) {
 		return fmt.Sprintf("%s is not exported by package %s (only names starting with an upper-case letter are)", n, pkg.Path)
 	}
@@ -931,6 +953,15 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
 	id, ok := e.Fun.(*syntax.Ident)
+	if len(e.TypeArgs) > 0 {
+		builtin := false
+		if ok {
+			_, builtin = builtins[id.Name]
+		}
+		if !ok || c.lookup(id.Name) != nil || builtin {
+			c.errorf(e.Pos, "only a declared generic function can be given type arguments")
+		}
+	}
 	if !ok || c.lookup(id.Name) != nil {
 		return c.callValue(e)
 	}

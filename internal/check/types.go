@@ -418,6 +418,8 @@ func findField(fields []*Field, name string) *Field {
 type TypeParam struct {
 	Name string
 	Decl *syntax.TypeParam
+	// Bounds lists the classes the type must have instances of.
+	Bounds []*Class
 }
 
 func (t *TypeParam) String() string { return t.Name }

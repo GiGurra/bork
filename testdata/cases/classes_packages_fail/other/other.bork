@@ -1,0 +1,6 @@
+import "example.com/tc/text"
+import "example.com/tc/money"
+
+use money.*
+
+fn Both(a: money.Amount): String { text.show(a) }

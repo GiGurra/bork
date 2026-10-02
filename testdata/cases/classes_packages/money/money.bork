@@ -1,0 +1,11 @@
+import "example.com/tc/text"
+
+type Amount = { cents: Int }
+
+instance ShowAmount: text.Show[Amount] {
+  fn show(a: Amount): String { s"${toString(a.cents)} cents" }
+}
+
+instance ShowAmountShort: text.Show[Amount] {
+  fn show(a: Amount): String { s"${toString(a.cents)}c" }
+}

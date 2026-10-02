@@ -28,12 +28,34 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 			p.imports[imp.Name] = true
 		}
 	}
+	// Then the instances used.
+	for {
+		p.skipSemis()
+		if !p.at(TIdent) || p.tok().Text != "use" || p.peekKind() != TIdent {
+			break
+		}
+		if u := p.useDecl(); u != nil {
+			f.Uses = append(f.Uses, u)
+		}
+	}
 	for {
 		p.skipSemis()
 		if p.at(EOF) {
 			break
 		}
 		switch {
+		case p.at(TIdent) && p.tok().Text == "class" && p.peekKind() == TIdent:
+			if cd := p.classDecl(); cd != nil {
+				f.Classes = append(f.Classes, cd)
+			}
+		case p.at(TIdent) && p.tok().Text == "instance" && p.peekKind() == TIdent:
+			if id := p.instanceDecl(); id != nil {
+				f.Instances = append(f.Instances, id)
+				f.Funcs = append(f.Funcs, id.Methods...)
+			}
+		case p.at(TIdent) && p.tok().Text == "use" && p.peekKind() == TIdent:
+			p.errorf(p.tok().Pos, "use must come after the imports, before the declarations")
+			p.syncTopLevel()
 		case p.at(TIdent) && p.tok().Text == "import" && (p.peekKind() == TString || p.peekKind() == TIdent):
 			p.errorf(p.tok().Pos, "imports must come before the declarations")
 			p.syncTopLevel()
@@ -54,7 +76,7 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 				f.Tests = append(f.Tests, td)
 			}
 		default:
-			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', or 'test'), found %s", p.tok().Kind)
+			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', 'class', 'instance', or 'test'), found %s", p.tok().Kind)
 			p.syncTopLevel()
 		}
 	}
@@ -243,17 +265,17 @@ func (p *parser) fieldDecls() []*FieldDecl {
 
 func (p *parser) funcDecl() (fn *FuncDecl) {
 	defer p.recoverDecl(func() { fn = nil })
+	return p.funcDeclIn(true)
+}
+
+// funcDeclIn parses a function declaration; without withBody (a class
+// method), just its signature.
+func (p *parser) funcDeclIn(withBody bool) *FuncDecl {
 	isPred := p.at(KwPred)
 	pos := p.next().Pos
 	name := p.expect(TIdent, "(function name)")
-	fn = &FuncDecl{Pos: pos, Name: name.Text, IsPred: isPred}
-	if p.at(LBrack) {
-		p.next()
-		p.list(RBrack, "a type parameter", func() {
-			t := p.expect(TIdent, "(type parameter name)")
-			fn.TypeParams = append(fn.TypeParams, &TypeParam{Pos: t.Pos, Name: t.Text})
-		})
-	}
+	fn := &FuncDecl{Pos: pos, Name: name.Text, IsPred: isPred}
+	fn.TypeParams = p.typeParams()
 	p.expect(LParen, "to start the parameter list")
 	p.skipNewlines()
 	for !p.at(RParen) {
@@ -279,18 +301,125 @@ func (p *parser) funcDecl() (fn *FuncDecl) {
 		p.next()
 		fn.Result = p.typeExpr()
 	}
-	if p.at(KwUnsafe) {
+	switch {
+	case !withBody:
+	case p.at(KwUnsafe):
 		p.next()
 		t := p.expect(TGoCode, "after 'unsafe' (write `unsafe go { ... }`)")
 		fn.GoBody = p.goCode(t)
-	} else {
+	default:
 		fn.Body = p.block()
 	}
-	if !p.at(Semi) && !p.at(EOF) {
+	if !p.at(Semi) && !p.at(EOF) && (withBody || !p.at(RBrace)) {
 		p.errorf(p.tok().Pos, "expected end of line after function body, found %s", p.tok().Kind)
 		panic(bailout{})
 	}
 	return fn
+}
+
+// typeParams parses `[A, B: Show + Eq]`, if present.
+func (p *parser) typeParams() []*TypeParam {
+	if !p.at(LBrack) {
+		return nil
+	}
+	var out []*TypeParam
+	p.next()
+	p.list(RBrack, "a type parameter", func() {
+		t := p.expect(TIdent, "(type parameter name)")
+		tp := &TypeParam{Pos: t.Pos, Name: t.Text}
+		if p.at(Colon) {
+			p.next()
+			for {
+				tp.Bounds = append(tp.Bounds, p.qualify(p.expect(TIdent, "(class name)")))
+				if !p.at(Plus) {
+					break
+				}
+				p.next()
+			}
+		}
+		out = append(out, tp)
+	})
+	return out
+}
+
+// classDecl parses `class Show[T] { fn show(x: T): String ... }`.
+func (p *parser) classDecl() (cd *ClassDecl) {
+	defer p.recoverDecl(func() { cd = nil })
+	pos := p.next().Pos
+	name := p.expect(TIdent, "(class name)")
+	cd = &ClassDecl{Pos: pos, Name: name.Text, TypeParams: p.typeParams()}
+	p.expect(LBrace, "to start the class's methods")
+	for {
+		p.skipSemis()
+		if p.at(RBrace) {
+			p.next()
+			break
+		}
+		if !p.at(KwFn) {
+			p.errorf(p.tok().Pos, "expected a method (fn name(...): Type) or '}', found %s", p.tok().Kind)
+			panic(bailout{})
+		}
+		cd.Methods = append(cd.Methods, p.funcDeclIn(false))
+	}
+	return cd
+}
+
+// instanceDecl parses `instance name[T: Bound]: Class[Type] { fn ... }`.
+func (p *parser) instanceDecl() (id *InstanceDecl) {
+	defer p.recoverDecl(func() { id = nil })
+	pos := p.next().Pos
+	name := p.expect(TIdent, "(instance name)")
+	id = &InstanceDecl{Pos: pos, Name: name.Text, TypeParams: p.typeParams()}
+	p.expect(Colon, "after the instance's name (write `instance name: Class[Type] { ... }`)")
+	head := p.typeAtom()
+	if head.Func != nil || len(head.Args) != 1 || len(head.Where) > 0 {
+		p.errorf(head.Pos, "expected the class and the type it is an instance for, as in Show[Int]")
+		panic(bailout{})
+	}
+	id.Class, id.ClassPos, id.Type = head.Name, head.Pos, head.Args[0]
+	p.expect(LBrace, "to start the instance's methods")
+	for {
+		p.skipSemis()
+		if p.at(RBrace) {
+			p.next()
+			break
+		}
+		if !p.at(KwFn) {
+			p.errorf(p.tok().Pos, "expected a method (fn name(...) { ... }) or '}', found %s", p.tok().Kind)
+			panic(bailout{})
+		}
+		m := p.funcDeclIn(true)
+		m.Instance = id
+		id.Methods = append(id.Methods, m)
+	}
+	return id
+}
+
+// useDecl parses `use name`, `use pkg.name`, or `use pkg.*`.
+func (p *parser) useDecl() (u *Use) {
+	defer p.recoverDecl(func() { u = nil })
+	pos := p.next().Pos
+	t := p.expect(TIdent, "(instance name)")
+	u = &Use{Pos: pos, Name: t.Text}
+	if p.at(Dot) {
+		p.next()
+		if p.at(Star) {
+			// A line ending after '*' does not end a statement in general
+			// (a * b can span lines), but it ends this one.
+			star := p.next()
+			u.Name += ".*"
+			if p.tok().Pos.Line > star.Pos.Line {
+				return u
+			}
+		} else {
+			u.Name += "." + p.expect(TIdent, "(instance name)").Text
+		}
+	}
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after use, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return u
 }
 
 // typeExpr parses a type: `Name`, `Name[Args]`, or a union `A | B`.
@@ -525,9 +654,26 @@ func (p *parser) unary() Expr {
 
 func (p *parser) postfix(x Expr) Expr {
 	for {
+		var typeArgs []*TypeExpr
+		if _, isID := x.(*Ident); isID && p.at(LBrack) {
+			// Explicit type arguments of a call: empty[Int]().
+			p.next()
+			for {
+				typeArgs = append(typeArgs, p.typeExpr())
+				if !p.at(Comma) {
+					break
+				}
+				p.next()
+			}
+			p.expect(RBrack, "to end the type arguments")
+			if !p.at(LParen) {
+				p.errorf(p.tok().Pos, "expected '(' to call the function after its type arguments")
+				panic(bailout{})
+			}
+		}
 		switch {
 		case p.at(LParen):
-			call := &Call{Pos: p.next().Pos, Fun: x}
+			call := &Call{Pos: p.next().Pos, Fun: x, TypeArgs: typeArgs}
 			p.skipNewlines()
 			for !p.at(RParen) {
 				call.Args = append(call.Args, p.expr())
