@@ -230,7 +230,11 @@ func TypeText(t Type, from *Package) string {
 		if _, ok := t.Result.(*Union); ok {
 			result = "(" + result + ")"
 		}
-		return "(" + strings.Join(params, ", ") + ") => " + result
+		uses := ""
+		if t.Effects != 0 {
+			uses = " uses " + t.Effects.String()
+		}
+		return "(" + strings.Join(params, ", ") + ")" + uses + " => " + result
 	case *Union:
 		parts := make([]string, len(t.Members))
 		for i, m := range t.Members {
@@ -477,6 +481,8 @@ func (t *TypeParam) String() string { return t.Name }
 type FuncType struct {
 	Params []Type
 	Result Type
+	// Effects is what calling the function may do: `(A) uses io => C`.
+	Effects Effects
 }
 
 func (f *FuncType) String() string { return TypeText(f, nil) }

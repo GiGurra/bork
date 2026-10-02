@@ -1,0 +1,3 @@
+fn d(f: (Int) uses net) { }
+
+fn main() { }

@@ -124,6 +124,7 @@ func (c *checker) declareClassMethods() {
 			}
 			c.noWhere(md)
 			fn := &Func{Decl: md, Pkg: c.pkg, Prelude: cl.Prelude, Class: cl, TypeParams: []*TypeParam{cl.Param}}
+			fn.Effects = c.effectsOf(md.Uses)
 			fn.Result = c.resolveType(md.Result)
 			for _, p := range md.Params {
 				fn.Params = append(fn.Params, c.resolveType(p.Type))
@@ -351,11 +352,12 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 		}
 		c.noParamWhere(md)
 		fn := &Func{Decl: md, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: ci.TypeParams}
+		fn.Effects = c.effectsOf(md.Uses)
 		fn.Result = c.resolveType(md.Result)
 		for _, p := range md.Params {
 			fn.Params = append(fn.Params, c.resolveType(p.Type))
 		}
-		want := &FuncType{Result: subst(m.Result, bound)}
+		want := &FuncType{Result: subst(m.Result, bound), Effects: m.Effects}
 		for _, p := range m.Params {
 			want.Params = append(want.Params, subst(p, bound))
 		}

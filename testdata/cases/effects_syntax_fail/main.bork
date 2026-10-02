@@ -1,0 +1,11 @@
+fn a() uses io + disk { }
+
+fn b() uses io + io { }
+
+pred c(x: Int) uses io { x > 0 }
+
+fn e(f: (Int) uses io => Int): Int { f(1) }
+
+fn main() {
+  x: Int = e
+}
