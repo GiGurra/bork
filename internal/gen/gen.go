@@ -132,6 +132,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	}
 	var funcs []ast.Decl
 	var goFuncs []string
+	usesOptionHelpers := false
 	for _, f := range files {
 		for _, fd := range f.Funcs {
 			if fn := info.FuncOf[fd]; fn == nil || !emit[fn] {
@@ -139,6 +140,15 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			}
 			if fd.GoBody != nil {
 				fn := info.FuncOf[fd]
+				if strings.Contains(fd.GoBody.Body, "_borkMap") {
+					g.usesMap = true
+				}
+				if strings.Contains(fd.GoBody.Body, "_borkScope") {
+					g.usesScopes = true
+				}
+				if strings.Contains(fd.GoBody.Body, "_borkSome") || strings.Contains(fd.GoBody.Body, "_borkNone") {
+					usesOptionHelpers = true
+				}
 				goName := g.funcName(fn).Name
 				if g.testMode && (len(fn.ResultConstraints) > 0 || g.hasInvariants(fn.Result, map[check.Type]bool{})) {
 					// Check what the Go code promises.
@@ -166,6 +176,14 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	funcs = append(funcs, g.extraFuncs...)
 	if main != nil {
 		funcs = append(funcs, main)
+	}
+	if usesOptionHelpers {
+		for _, t := range info.TypeOrder {
+			if st, ok := t.(*check.Sealed); ok && st.Prelude && st.Name == "Option" {
+				g.usedTypes[st] = true
+			}
+		}
+		goFuncs = append(goFuncs, optionHelpers)
 	}
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)

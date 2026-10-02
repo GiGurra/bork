@@ -1,0 +1,37 @@
+package gen
+
+// The _bork helpers are the stable Go API for unsafe go bodies in standard
+// packages. Their names, type parameters, arguments, results, and semantics
+// are stable; the runtime representations they wrap are compiler internals.
+// Maps are persistent; iteration follows the map's order and stops when the
+// callback returns false. Scope contexts carry cancellation; closing a scope
+// waits for tasks and runs finalizers, while deferred abort also handles panic.
+// Option constructors return the prelude's Option, regardless of package names.
+const scopeHelpers = `package main
+import "context"
+
+// Stable scope helpers for unsafe go bodies.
+func _borkScopeContext(s *_Scope) context.Context { return s.ctx }
+func _borkScopeWith(ctx context.Context) *_Scope { return _scopeWith(ctx) }
+func _borkScopeClose(s *_Scope) { s.close() }
+func _borkScopeAbort(s *_Scope) { s.abort() }
+
+`
+
+const mapHelpers = `package main
+
+// Stable helpers for unsafe go bodies. Keep generated representation details here.
+func _borkMapOf[K, V any](keys []K, values []V) _Map[K, V] {
+	if len(keys) != len(values) { panic("_borkMapOf: different key and value counts") }
+	return _mapOf(keys, values)
+}
+func _borkMapGet[K, V any](m _Map[K, V], key K) (V, bool) { return m.get(key) }
+func _borkMapPut[K, V any](m _Map[K, V], key K, value V) _Map[K, V] { return m.put(key, value) }
+func _borkMapLen[K, V any](m _Map[K, V]) int { return m.len() }
+func _borkMapEach[K, V any](m _Map[K, V], visit func(K, V) bool) { m.each(visit) }
+
+`
+
+const optionHelpers = `func _borkSome[T any](value T) Option[T] { return Option_Some[T]{value: value} }
+func _borkNone[T any]() Option[T] { return Option_None[T]{} }
+`

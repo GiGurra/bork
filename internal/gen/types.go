@@ -762,7 +762,7 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 		src = append(src, rulesRuntime)
 	}
 	if g.usesScopes {
-		src = append(src, scopeRuntime)
+		src = append(src, scopeRuntime, scopeHelpers)
 	}
 	if g.usesUnit {
 		src = append(src, unitRuntime)
@@ -770,7 +770,7 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesMap {
 		g.usesShow = true
 		g.usesEqual = true
-		src = append(src, mapRuntime)
+		src = append(src, mapRuntime, mapHelpers)
 	}
 	if g.usesEqual {
 		src = append(src, equalRuntime)
