@@ -300,7 +300,6 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 	c.declareInstances(files)
 	c.declareDerived(files)
 	c.resolveUses(files)
-	c.resolveDerived()
 	for name, fn := range c.preludePkg.Funcs {
 		c.info.Funcs[name] = fn
 	}
@@ -310,6 +309,8 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 	// Where clauses refer to predicates, so they are resolved once all
 	// functions are declared.
 	c.resolveConstraints(files)
+	c.instanceConstraints()
+	c.resolveDerived()
 	c.checkRules(files)
 	// Pass 3: check bodies.
 	for _, f := range files {
@@ -412,6 +413,10 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
+	// have holds the facts known of the value an instance is looked up
+	// for (a field's where clause), which constrained instances need.
+	have []*Constraint
+
 	diags *diag.List
 	info  *Info
 	// The program's packages by import path; the prelude; the root
@@ -1127,6 +1132,19 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 		}
 		if fits {
 			return want
+		}
+	}
+	// The type of one branch, if it holds the values of all the others
+	// (a union, and some of its members).
+	for _, wide := range vals {
+		fits := true
+		for _, t := range vals {
+			if !assignable(t, wide) {
+				fits = false
+			}
+		}
+		if fits {
+			return wide
 		}
 	}
 	for _, t := range vals[1:] {

@@ -185,6 +185,7 @@ use api.Json
 - **Lowered to dictionary passing.** A call whose instance is known calls the instance's method directly; only generic code passes instances around.
 - **`derive (Decode, Encode)`** on a record or sealed type asks the compiler to write the instances, named after the type (`CreateUserDecode`). They follow the same rules as written instances: in scope in their own package, used elsewhere with `use api.CreateUserDecode`. Each field needs an instance in scope. Only the prelude's `Decode` and `Encode` (JSON) can be derived so far.
 - **JSON:** the prelude has a `Json` sealed type, `parseJson`/`renderJson`, the classes `Decode` and `Encode` with instances for the basic types, `Option`, `List`, and `Json`, and `decodeJson[T]`/`encodeJson[T]`. Records are objects; a sealed value is an object whose `"type"` names the variant (a variant without fields may be just its name, `"Free"`); a missing `Option` field is `None`. A `DecodeError` says where (`.items[1].qty`) and what went wrong.
+- **Instances on constrained types:** `instance decodePort: Decode[Port]`, with `type Port = Int where between(1, 65535)`, is used for values known to be ports: so far, the fields of derived instances whose where clauses include the instance's. The most specific instance wins (`Int where positive` over `Int`). Its methods assume the constraints of parameters of the type, and must promise them of results (`fn decode(json: Json): Port | DecodeError`), which the facts checker verifies.
 - **A derived decoder checks the where clauses** of the fields it decodes, so a decoded value is proven, and needs no further checks:
 
 ```
@@ -196,7 +197,7 @@ type SignUp = {
 r: SignUp | JsonError | DecodeError = decodeJson(line)   // DecodeError { path: ".name", message: "must be nonEmpty" }
 ```
 
-- **Not yet:** classes with several type parameters, superclasses, default methods, `where` clauses on methods, choosing an instance at a call site, instances on constrained types, and deriving other classes (`Eq`, `Show`).
+- **Not yet:** classes with several type parameters, superclasses, default methods, `where` clauses on methods, and choosing an instance at a call site.
 
 ### Open questions
 

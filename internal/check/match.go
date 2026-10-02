@@ -110,6 +110,11 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 		}
 		for _, arm := range m.Arms {
 			c.pushScope()
+			// Bind the patterns' names anyway, to avoid follow-up errors.
+			saved := c.diags
+			c.diags = &diag.List{}
+			c.pattern(arm.Pattern, Invalid)
+			c.diags = saved
 			c.expr(arm.Body)
 			c.popScope()
 		}
