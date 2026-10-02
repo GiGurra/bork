@@ -1046,16 +1046,17 @@ func (m _Map[K, V]) String() string {
 	}
 	type shownEntry struct {
 		key any
-		text string
+		keyText, text string
 	}
 	entries := make([]shownEntry, 0, m.len())
 	m.impl().each(func(e *_mapEntry) bool {
-		entries = append(entries, shownEntry{e.key, _show(e.key)+": "+_show(e.val)})
+		keyText := _show(e.key)
+		entries = append(entries, shownEntry{e.key, keyText, keyText+": "+_show(e.val)})
 		return true
 	})
 	if _, ok := m.impl().(*_hashCore); ok {
 		slices.SortFunc(entries, func(a, b shownEntry) int {
-			if c := _mapPrintCompare(a.key, b.key); c != 0 {
+			if c := _mapPrintCompare(a.key, b.key, a.keyText, b.keyText); c != 0 {
 				return c
 			}
 			return strings.Compare(a.text, b.text)
@@ -1070,7 +1071,7 @@ func (m _Map[K, V]) String() string {
 
 // _mapPrintCompare orders numbers and strings by value, and other keys
 // by their text. Mixed kinds are grouped so the order stays transitive.
-func _mapPrintCompare(a, b any) int {
+func _mapPrintCompare(a, b any, aText, bText string) int {
 	x, y := reflect.ValueOf(a), reflect.ValueOf(b)
 	if x.Kind() != y.Kind() {
 		return cmp.Compare(x.Kind(), y.Kind())
@@ -1085,7 +1086,7 @@ func _mapPrintCompare(a, b any) int {
 	case reflect.String:
 		return strings.Compare(x.String(), y.String())
 	}
-	return strings.Compare(_show(a), _show(b))
+	return strings.Compare(aText, bText)
 }
 
 // _mapEntry is a key with its value. hkey is the key as Go hashes and

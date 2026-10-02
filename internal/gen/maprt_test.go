@@ -190,6 +190,14 @@ func TestMapPrinting(t *testing.T) {
 		if got := desc.String(); got != "{10: \"ten\", 2: \"two\", -1: \"minus\"}" {
 			t.Fatalf("custom sort order: %s", got)
 		}
+		unsigned := _mapUnordered(_mapOf([]uint64{10, 2, 0}, []int64{10, 2, 0}))
+		if got := unsigned.String(); got != "{0: 0, 2: 2, 10: 10}" {
+			t.Fatalf("unsigned order: %s", got)
+		}
+		floats := _mapUnordered(_mapOf([]float64{10, -2.5, 0.25}, []int64{10, -2, 0}))
+		if got := floats.String(); got != "{-2.5: -2, 0.25: 0, 10.0: 10}" {
+			t.Fatalf("float order: %s", got)
+		}
 		lists := _mapUnordered(_mapOf([][]int64{{2}, {10}}, []int64{2, 10}))
 		if got := lists.String(); got != "{[10]: 10, [2]: 2}" {
 			t.Fatalf("text fallback: %s", got)
