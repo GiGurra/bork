@@ -642,26 +642,43 @@ Today Go types never cross into bork. An `unsafe go` body sees bork values in th
 type Request = go "*net/http.Request"
 
 // A record that mirrors a Go struct, converted at the boundary.
-type Repo = go "github.com/google/go-github/v66/github.Repository" {
-  name: String
-  stargazersCount: Int where nonNegative
-  topics: List[String]
-  homepage: Option[String]
+type Url = go "net/url.URL" {
+  scheme: String
+  host: String
+  path: String
+  rawQuery: String
 }
 
 // Go functions and methods, bound by name. No body to write.
 fn QueryEscape(s: String): String unsafe go "net/url.QueryEscape"
+fn ParseUrl(s: String): Url | GoError unsafe go "net/url.Parse"
 fn Getenv(key: String) uses io: String unsafe go "os.Getenv"
-fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"
 fn UserAgent(r: Request): String unsafe go "(*net/http.Request).UserAgent"
 ```
 
 ### Decided in this proposal
 
-- **Three declarations, no new keywords.** `type X = go "<Go type>"` names an opaque Go type. `type X = go "<Go type>" { fields }` is a record that mirrors a Go struct. `fn ... unsafe go "<Go function>"` binds a Go function or method; it is an `unsafe go` function whose body is a name instead of code. `go` and `extern` stay out of the keyword list (`go` is only special after `=` in a type declaration and after `unsafe`).
+- **Three declarations, no new keywords.** `type X = go "<Go type>"` names an opaque Go type. `type X = go "<Go type>" { fields }` is a record that mirrors a Go struct. `fn ... unsafe go "<Go function>"` binds a Go function or method; it is an `unsafe go` function whose body is a name instead of code.
 - **Bindings are `unsafe go`.** The ticket sketched `extern fn`. A binding runs Go code that bork does not check, exactly as an `unsafe go` body does, so it is the same boundary with the same word: greppable, allowed only in packages that `bork.mod` lets use `unsafe go`, and declaring its effects with `uses`, which bork trusts. The honest-effects check of the effects proposal applies to the bound name itself: binding `os.Getenv` without `uses io` is an error.
 - **Go types are named by declarations, not inline.** There is no `go.Type["net/http", "Request"]` in signatures. A declaration gives the type a bork name and a place for a doc comment, and signatures stay bork.
 - **Everything is checked against the real Go package**, at `bork check` time, not first by the Go compiler on generated code. Errors are reported at the bork declaration, and show the Go signature.
+- **Bindings are checked more than bodies are.** A binding's wrapper is generated, so everything it converts from Go is checked, facts included: a binding can only break its promise through its declared effects.
+- **bork targets 64-bit platforms.** Go's `int` and `uint` are 64 bits wide there, so they are `Int` and `Uint64`. (This is true of every target bork builds for today; this proposal makes it a rule.)
+
+### Syntax
+
+```ebnf
+TypeDecl   = "type" Ident [ TypeParams ] "=" ( Fields | Sealed | "resource" [ GoName ] | GoName [ Fields ] | Type ) [ Derive ] .
+GoName     = "go" StringLit .               (* go "*net/http.Request" *)
+Field      = [ Doc ] Ident ":" Type [ "=" Expr ] [ GoTags ] .
+GoTags     = "go" "{" [ GoTag { Sep GoTag } [ Sep ] ] "}" .   (* go { json: "port,omitempty", short: "p" } *)
+GoTag      = Ident ":" StringLit .
+GoBody     = "unsafe" "go" ( "{" { GoImport } GoStatements "}" | StringLit ) .
+```
+
+- `go` stays an identifier everywhere else. After `=` in a type declaration, `go` followed by a string literal is a `GoName` (a type named `go` cannot take a string, so there is no ambiguity). The lexer's raw-Go mode after `unsafe go` starts only at a `{`; `unsafe go "os.Getenv"` is ordinary tokens.
+- A field's default is an expression, which ends at the end of the field (newline or `,`) or at `go {`, since an expression never continues with an identifier.
+- `Doc` is the `//` comment lines directly above a field. The parser keeps them, like the other doc comments it will keep for tooling.
 
 ### Naming Go things
 
@@ -669,30 +686,36 @@ The string after `go` is a Go type or function written with its full import path
 
 - types: `"net/http.Request"`, `"*net/http.Request"`, `"io.Reader"`, `"example.com/x/v2.User"` (the package is everything up to the last `.` after the last `/`);
 - functions: `"os.Getenv"`, `"crypto/sha256.Sum256"`;
-- methods, as Go method expressions: `"(*net/http.Request).UserAgent"`, `"(time.Time).Unix"`. The receiver is the method's first parameter in the bork signature (a bork method can bind it too: `fn (r: Request) userAgent(): String unsafe go "(*net/http.Request).UserAgent"`).
+- methods, as Go method expressions: `"(*net/http.Request).UserAgent"`, `"(time.Time).Unix"`. The receiver is the method's first parameter in the bork signature (a bork method can bind it too: `fn (r: Request) userAgent(): String unsafe go "(*net/http.Request).UserAgent"`). A method with a pointer receiver cannot be bound on an opaque type that is not a pointer: it would change a copy.
 
-Only exported, non-generic package-level functions, methods, and named types can be bound. A field path such as `Header.Get` is not a function and is rejected: write an `unsafe go` body. Generic Go functions and types are an open question.
+Only exported, non-generic package-level functions, methods, and named types can be bound. A field path such as `(*net/http.Request).Header.Get` is not a function and is rejected: write an `unsafe go` body. Bindings take no type parameters, since the Go function has none. Generic Go functions and types are an open question.
 
 A Go package outside Go's standard library must be a declared Go module dependency: of a standard package (bork-8zh4yy), or, later, of the user's module in `bork.mod`.
 
 ### Opaque Go types
 
-`type Request = go "*net/http.Request"` makes `Request` a bork type whose values are Go values of that type, held as they are.
+`type Request = go "*net/http.Request"` makes `Request` a bork type whose values are Go values of that type.
 
-- **Shared, not copied.** Passing a `Request` around passes the Go value (for a pointer, the pointer).
-- **Bork can only hold and pass them.** No fields, no `==`, no `Decode`/`Encode`, no type patterns beyond the type itself. `toString` shows `<go *net/http.Request>`. Everything else goes through bindings or `unsafe go` bodies, where the value is its Go type (`*http.Request`), not `any`.
-- **Not immutable, so no facts.** A Go value can change behind bork's back, which breaks the core idea's "a fact stays true". So a predicate cannot take an opaque type as a parameter (or a record, list, or option holding one), and no `where` clause can name one. Functions that read or change a mutable Go value should declare `uses state`; bork cannot check that, and trusts the declaration as it trusts every `unsafe go` signature.
-- **Interfaces work as in Go.** `type Reader = go "io.Reader"` is opaque too. A binding whose parameter is opaque type `A` checks that `A`'s Go type is *assignable* to the Go parameter's type (`go/types.AssignableTo`), so a `File` (`*os.File`) can be passed to a binding of `io.Copy(dst io.Writer, src io.Reader)` declared with `File` parameters. There is no subtyping between opaque types in bork itself; a value is converted with a binding (or later, an explicit conversion), not implicitly.
-- **Resources stay resources.** A Go value that must be closed is a `resource` type, as today, so scopes close it. (Typing a resource's handle with a Go type, `type File = resource go "*os.File"`, is a small later step.)
+- **Which Go types:** a named Go type (`time.Time`), a pointer to one (`*net/http.Request`), or a named interface (`io.Reader`). Not a basic type (`go "string"` is just `String`), and not an unnamed composite type (`go "[]int"`).
+- **The Go type is the identity.** Two declarations of the same Go type, in the same package or in two packages, are the same bork type, as if one were an alias of the other. So two libraries that both bind `*net/http.Request` can pass values to each other.
+- **Shared, not copied.** Passing a `Request` around passes the Go value (for a pointer, the pointer). In `unsafe go` bodies the value is its Go type (`*http.Request`), not `any`.
+- **Never nil.** A binding's result of an opaque pointer or interface type is checked: `nil` there is a `GoValueError`, unless the bork result is `Option[Request]`, where `nil` is `None` (`Option` of an opaque pointer or interface type maps to that same Go type, not to a pointer to it). So "no null" still holds outside `unsafe go` bodies.
+- **Exact in unions.** A union is Go's `any`, matched with a type switch. An opaque value in a union is boxed in a struct the compiler generates per Go type, so a type pattern on it matches exactly that type: an interface such as `fmt.Stringer` does not match a bork record that happens to have a `String` method, and an `*os.File` in `Reader | Writer` is whichever the code put in.
+- **Bork can only hold and pass them.** No fields, no `==`, no `Decode`/`Encode`. `toString` shows `<go *net/http.Request>`. Everything else goes through bindings or `unsafe go` bodies.
+- **Not immutable, so no facts.** A Go value can change behind bork's back, which breaks the core idea's "a fact stays true". A predicate cannot take an opaque type as a parameter, no `where` clause can apply to one, and a record, list, map, option, or union holding one loses `==`, `Decode`, `Encode`, and facts about it, as values holding functions do today. Bindings that change a Go value, or read one that can change, should declare `uses state`; bork trusts the declaration, as it trusts every `unsafe go` signature.
+- **Not race-free.** Bork values can be shared between tasks because they never change. Opaque values can change, and whether that is safe is up to the Go type (`*http.Client` is safe for concurrent use, `*bytes.Buffer` is not). This is the honest cost of holding Go objects, and the reason they are declared one by one.
+- **What must be closed is a resource.** An opaque type whose Go type has a `Close() error` method (`io.Closer`) is an error unless it is declared as a resource: `type File = resource go "*os.File"`. A resource of a Go type is a resource as today (opened in a scope, closed when the scope closes, `attach`, lifetimes), with a handle of that Go type instead of `any`. So `*sql.Rows` cannot be used after its scope closed, as for every other resource.
+- **Interfaces work as in Go.** A binding whose parameter is opaque type `A` checks that `A`'s Go type is *assignable* to the Go parameter's type (`go/types.AssignableTo`), so a `File` (`*os.File`) can be passed to a binding of `io.Copy(dst io.Writer, src io.Reader)` declared with `File` parameters. There is no subtyping between opaque types in bork itself; a value is converted with a binding, not implicitly.
 
 ### Records that mirror Go structs
 
-`type Repo = go "github.com/.../github.Repository" { name: String, ... }` is an ordinary bork record (immutable, facts, `==`, `copy`, `derive`), whose fields are checked against the Go struct, and which is converted to and from it at the boundary.
+`type Url = go "net/url.URL" { scheme: String, ... }` is an ordinary bork record (immutable, facts, `==`, `copy`, `derive`), whose fields are checked against the Go struct, and which is converted to and from it at the boundary.
 
 - **Fields are matched by name.** A bork field `name` matches the exported Go field `Name` (first letter upper-cased); if there is none, the one exported field whose name is equal ignoring case (`id` matches `ID`, `httpPort` matches `HTTPPort`). Several matches, or none, is an error. Unexported Go fields cannot be matched. Fields of embedded structs are matched through their promoted names.
 - **The record may leave Go fields out.** Converting to Go leaves them at Go's zero value, as a Go struct literal does; converting from Go drops them. The record lists what bork needs, not the whole Go type. (Open question: should a mirror that is converted *to* Go be required to cover every field? Zero values are idiomatic Go, but silent.)
-- **Each field's type follows the basic mapping below**, recursively. A nested Go struct needs its own mirror record (`owner: User` where `User = go ".../github.User" { ... }`), and the mirror's Go type must be the field's Go type, or its pointer.
-- **The Go side is not the bork representation.** The record keeps its own generated struct (with its `String` method, its field names, `int64` for `Int`), and the compiler generates the two conversion functions. In `unsafe go` code, `_borkToGo(v)` and `_borkFromGo[T](g)` call them (added to the [helper API](std-go.md)).
+- **Each field's type follows the basic mapping below**, recursively. A nested Go struct needs its own mirror record (`owner: User` where `User = go ".../x.User" { ... }`), and the mirror's Go type must be the field's Go type, or its pointer.
+- **The Go struct's own tags are its own.** A mirror record cannot add `go { ... }` tags; they are for generated structs (below).
+- **The Go side is not the bork representation.** The record keeps its own generated struct (with its `String` method, its field names, `int64` for `Int`), and the compiler generates the two conversion functions. In `unsafe go` code, `_borkToGo(v)` gives the Go struct, and `_borkFromGo[T](g)` gives `(T, []GoValueError)`, with every error found (added to the [helper API](std-go.md)).
 - **Generic Go structs** cannot be mirrored yet.
 
 ### The basic mapping
@@ -701,24 +724,27 @@ Bindings and mirror records convert values by their types, at the boundary. A pa
 
 | bork | Go | to Go | from Go |
 |------|----|-------|---------|
-| `Int`, `Int8` ... `Uint64`, `Float32`, `Float`, `Bool` | the same-sized Go type; also `int`, `uint`, `uintptr` as 64-bit | copy; lossless widening allowed | copy; widening allowed, narrowing checked |
-| `Rune`, `Byte` | `rune`, `byte` | copy | copy |
-| a number type | a named Go type with that underlying type (`time.Duration`, `os.FileMode`) | copy | copy, checked as above |
-| `String` | `string` (or a named string type) | shared (Go strings are immutable) | shared |
-| `List[T]` | `[]T'`, `...T'` (variadic) | copied into a new slice | copied, each element converted |
+| `Int8` ... `Int` | `int8` ... `int64`, `int` | copy; to a wider signed type too | copy; from a narrower type, or from an unsigned one that fits, too; narrowing checked |
+| `Uint8` ... `Uint64` | `uint8` ... `uint64`, `uint` | copy; to a wider unsigned or signed type too | copy; from a narrower unsigned type too; narrowing checked |
+| `Float32`, `Float` | `float32`, `float64` | copy; `Float32` to `float64` too | copy; exact types only (no float narrowing, no integer to float) |
+| `Bool` | `bool` | copy | copy |
+| any of the above | a named Go type with that underlying type (`time.Duration`, `os.FileMode`) | as above | as above |
+| `String` | `string`, or a named string type | shared (Go strings are immutable) | shared |
+| `List[T]` | `[]T'`, `...T'` (variadic) | a new slice, never `nil` (`[]` stays an empty slice) | copied, each element converted; `nil` is `[]` |
 | `List[T]` | `[N]T'` (arrays) | not allowed | copied |
-| `Map[K, V]` | `map[K']V'` | copied into a new map | copied into an unordered map (`maps.Unordered`), since a Go map has no order |
-| `Option[T]` | `*T'` | `None` is `nil`; `Some` is a pointer to a fresh copy | `nil` is `None`, otherwise a copy of what it points to |
-| `T` (not an `Option`) | `*T'` | a pointer to a fresh copy | a copy; `nil` is a conversion error |
+| `Map[K, V]` | `map[K']V'` | a new map, never `nil` | copied into an unordered map (`maps.Unordered`), since a Go map has no order; `nil` is `{:}` |
+| `Option[T]` | `*T'`, or for an opaque pointer or interface type, that type | `None` is `nil`; `Some` is a pointer to a fresh copy | `nil` is `None`, otherwise a copy of what it points to |
+| `T` (not an `Option`) | `*T'` | a pointer to a fresh copy | a copy; `nil` is a `GoValueError` |
 | a mirror record | its Go struct, or a pointer to it | field by field, as above | field by field; the record's facts are checked |
-| an opaque type | a Go type it is assignable to (parameters), or the same type (results) | shared | shared |
+| an opaque type | a Go type it is assignable to (parameters), or the same type (results) | shared | shared; `nil` is a `GoValueError` |
 | `Unit` | no result | | |
 
+`uintptr`, `complex64`/`complex128`, channels, `unsafe.Pointer`, Go functions, and `any` do not convert. A `Map`'s key type must map to a comparable Go type.
+
 - **Nothing bork gives Go can be changed under bork.** Lists, maps, structs, and pointers are copied into fresh Go values, so a Go function that writes to its argument writes to its own copy. Strings are shared because neither side can change them. Only opaque values are shared, and those are Go's, never bork's.
-- **Nothing Go gives bork can be changed under bork either.** Lists, maps, and records are copied out of Go values, so a Go library that keeps and later changes a slice it returned does not change a bork `List`. The cost is a copy per boundary crossing, linear in the size of the value; for large byte payloads, `Bytes` (bork-uwhbyt) can get a cheaper path later.
-- **Converting to Go never fails.** A parameter's bork type must convert losslessly: an `Int8` can be passed as a Go `int32`, an `Int` cannot be passed as one (declare the parameter `Int32`, and the caller converts with `toInt32`). `int` and `uint` are 64-bit: bork targets 64-bit platforms only.
-- **Converting from Go can fail**, when a number does not fit (`int64` to an `Int32` result), a pointer is `nil` where bork has no `Option`, or a mirror record's facts (`stargazersCount: Int where nonNegative`) do not hold. Then the bound function returns the prelude record `GoValueError { path: String, message: String }` (`path` is where in the value it failed: `result.owner.stargazersCount`). Whether a conversion can fail is known from the types, so a binding whose result can fail must have `GoValueError` in its result type, and the error says so, with the corrected signature as the hint. A binding whose result cannot fail does not mention it. This is the same rule as `toInt8(x)` returning `Int8 | OutOfRange`: a check bork cannot prove is a value the caller handles.
-- **A cyclic Go value** (through pointers) cannot become a bork value, which is a tree; converting one panics with the path, rather than looping.
+- **Nothing Go gives bork can be changed under bork either.** Lists, maps, and records are copied out of Go values, so a Go library that keeps and later changes a slice it returned does not change a bork `List`. The cost is a copy per boundary crossing, linear in the size of the value (a Go value that shares one part from several places is copied once per place, since bork values are trees). `[]byte` is a `List[Byte]`, copied element by element; `Bytes` (bork-uwhbyt) gets a direct `[]byte` mapping once it exists.
+- **Converting to Go never fails.** A parameter's bork type must convert losslessly: an `Int8` can be passed as a Go `int32`, an `Int` cannot be passed as one (declare the parameter `Int32`, and the caller converts with `toInt32`).
+- **Converting from Go can fail**, when a number does not fit (`int64` to an `Int32` result), a pointer or interface is `nil` where bork has no `Option`, a fact does not hold (a mirror record's `where` clauses, and the binding's own result facts, `: Int where positive`), or a Go value is cyclic (a mirror record that can contain itself, through `Option` or `List`, can meet a cyclic Go value, which a tree cannot hold). Then the bound function returns the prelude record `GoValueError { path: String, message: String }` (`path` is where in the value it failed: `result.items[2].count`). Whether a conversion can fail is known from the types, so a binding whose result can fail must have `GoValueError` in its result type, and the error says so, with the corrected signature as the hint. A binding whose result cannot fail does not mention it. This is the same rule as `toInt8(x)` returning `Int8 | OutOfRange`: a check bork cannot prove is a value the caller handles.
 
 ### Bindings: parameters and results
 
@@ -732,21 +758,24 @@ A binding is checked parameter by parameter, and its result against the Go funct
 | `T, error` | `T' | GoError` |
 | `T, bool` | `Option[T']` (the `comma ok` form: `false` is `None`) |
 
-- **`GoError { message: String, goType: String }`** is a prelude record: a non-nil Go `error`, with its `Error()` text and its dynamic Go type (`*fs.PathError`). It is a value, not a panic, because Go functions return errors for expected failures. To turn particular errors into particular bork records (`fs.ErrNotExist` into `NotFound`), write an `unsafe go` body; a mapping clause on bindings is an open question.
+- **`GoError { message: String, goType: String }`** is a prelude record: a non-nil Go `error`, with its `Error()` text and its dynamic Go type (`*fs.PathError`). It is a value, not a panic, because Go functions return errors for expected failures. A non-nil interface holding a nil pointer is non-nil, as in Go; if its `Error()` panics, the message says so instead. To turn particular errors into particular bork records (`fs.ErrNotExist` into `NotFound`), write an `unsafe go` body; a mapping clause on bindings is an open question.
+- **With `T, error`, a non-nil error wins**, and `T` is dropped: a function whose `T` matters even on error (`io.Reader.Read`'s byte count) needs an `unsafe go` body. A `*T, error` result with a nil pointer and a nil error is a `GoError` too ("nil result without an error"), since that is a broken Go function rather than bad data, and `ParseUrl` above stays `Url | GoError`.
 - **The members after the leftmost are the binding's failures, in any order**: `T' | GoError | GoValueError`. A Go function with an `error` result must have `GoError` in the bork result (bork does not drop errors silently); one without must not.
-- **Other result shapes** (two values that are not `T, error` or `T, bool`, three results) cannot be bound: write an `unsafe go` body that builds a record.
+- **Other result shapes** (three results, or two that are not `T, error` or `T, bool`) cannot be bound: write an `unsafe go` body that builds a record. (A common Go shape is `T, *Response, error` in API clients; an open question below.)
 - **Function-typed parameters and results** (Go callbacks) cannot be bound yet. They need a bork function wrapped as a Go `func` with conversions on every call, and an answer to which effects such a callback may have. That is the next step after this proposal.
-- **Default parameter values, type parameters, and `where` clauses** work on bindings as on any function: the defaults and facts are bork's, checked before the call; a promised fact on the result (`: Int where positive`) is trusted, as with `unsafe go`.
+- **Default parameter values and `where` clauses on parameters** work on bindings as on any function: they are bork's, checked before the call. Facts promised on the result are checked by the wrapper, as above.
+- **Compile-time evaluation** treats a binding as it treats an `unsafe go` function.
 
 ### Struct tags, field docs, and defaults
 
 Go libraries that work by reflection (`encoding/json`, sql scanners, boa for `bork/cli`) need Go structs with exported fields, tags, and sometimes descriptions and defaults. Bork records cannot give them that today: their generated structs have unexported, lower-case fields, and their field names are what `unsafe go` code relies on (the prelude's table), so they stay as they are. Instead:
 
-- **`derive (GoStruct)` generates a Go mirror for a bork record**: a Go struct with an exported field per bork field (`httpPort` becomes `HttpPort`), mapped as in the table above (`Option[T]` becomes `*T`), and the conversions both ways, the one from Go checking the record's facts. `GoStruct` is a prelude class, so generic std code takes `[T: GoStruct]` and gets a dictionary with: `New() any` (a pointer to a fresh mirror with the record's defaults filled in), `FromGo(any) T | GoValueError` (every field error at once), `ToGo(T) any`, and the record's field schema (as `bork/env`'s `_borkDecodeFields` has it, plus the docs, defaults, and tags below). A mirror record (`type X = go "..." { ... }`) has a `GoStruct` instance automatically, using the real Go type.
-- **Fields can carry Go struct tags**, written as a `go { ... }` clause after the field's type, with bork string values and no Go quoting: `port: Int go { json: "port,omitempty", short: "p" }` becomes `` Port int64 `json:"port,omitempty" short:"p"` `` in the generated mirror, in the written order. Tags only exist on `GoStruct` mirrors; on a record without one, they are an error.
-- **Fields can have doc comments** (`//` lines directly above the field), kept by the parser like doc comments on declarations, and given in the schema (and to `bork describe`).
-- **Record fields can have defaults**, with the same rules as parameter defaults (closed values): `type Options = { port: Int = 8080, verbose: Bool = false }`. A record literal may leave defaulted fields out, derived `Decode` uses the default for a missing field, and `New()` fills them in.
-- **The compiler writes no library's tag names itself.** It does not know that boa reads `descr` and `default`. `bork/cli` reads docs and defaults from the schema and gives them to boa, so the language does not depend on one library's conventions. User-written tags go into the struct as written.
+- **`derive (GoStruct)` gives a record a Go struct**, with an exported field per bork field (`httpPort` becomes `HttpPort`), mapped as in the table above (`Option[T]` becomes `*T`), and the conversions both ways, the one from Go checking the record's facts and collecting every error. For a mirror record, the struct is the mirrored Go type; for any other record, the compiler generates it. Fields whose types do not convert (unions, sealed types, functions, opaque types) make the derive an error. Note that `encoding/json` on the generated struct uses `HttpPort` as the key unless a tag says otherwise, unlike the derived `Encode`.
+- **`GoStruct` is a prelude class with no bork methods**: it exists for `[T: GoStruct]` bounds in standard packages, whose `unsafe go` code gets its dictionary, as `bork/env` gets `Decode`'s. Like every derived instance, it is written with `derive` and brought into other packages with `use`. The dictionary, in the [helper API](std-go.md): `New()` (a pointer to a fresh Go struct, with the record's defaults filled in), `FromGo(p)` (`(T, []GoValueError)`), `ToGo(v)`, and the record's field schema (as `bork/env`'s `_borkDecodeFields` has it, plus each field's Go name, doc, default, and tags).
+- **Fields of a generated struct can carry Go struct tags**, written as a `go { ... }` clause after the field's type and default, with bork string values and no Go quoting: `port: Int go { json: "port,omitempty", short: "p" }` becomes `` Port int64 `json:"port,omitempty" short:"p"` ``, in the written order. On a record without `derive (GoStruct)`, or on a mirror record, they are an error.
+- **Fields can have doc comments** (`//` lines directly above the field), given in the schema.
+- **Record fields can have defaults**, with the same rules as parameter defaults (closed values): `type Options = { port: Int = 8080, verbose: Bool = false }`. A record literal may leave defaulted fields out, derived `Decode` uses the default for a missing field, and `New()` fills them in. This is a language change of its own (record literals currently name every field), useful without Go, and sequenced as its own step below.
+- **The compiler writes no library's tag names itself.** It does not know that boa reads `descr` and `default`. `bork/cli` reads docs and defaults from the schema and gives them to boa, either through boa's API or by building a struct type with those tags at run time (`reflect.StructOf`), so the language does not depend on one library's conventions. User-written tags go into the struct as written.
 
 ```
 type Options = {
@@ -762,51 +791,58 @@ type Options = {
 ### Checking against Go: how
 
 - **The compiler loads the Go packages a program binds**, with `golang.org/x/tools/go/packages` (types from export data, through Go's build cache), in a temporary module with the same `go.mod` and `go.sum` the build will use. So the check sees exactly the Go code the build compiles, and third-party packages resolve as they will in the build (bork-8zh4yy).
-- **The checker does not run Go itself.** It asks an interface for the Go type of a name (`check.GoTypes`), which the driver implements with `go/packages`; tests can give it a fake. A program with no Go bindings never starts the Go tool for checking, and checking works without Go installed, as now.
-- **Checking is part of type checking**, after declarations are collected and before bodies, since a binding's signature is its declaration. Errors come out with the rest, with stable diagnostic codes (`go.no-such-func`, `go.mismatch`, `go.result-shape`, ...).
+- **The checker does not run Go itself.** It asks an interface for the Go type of a name (`check.GoTypes`), which the driver implements with `go/packages`; tests can give it a fake.
+- **The standard library's bindings are checked when the compiler is built**, by a test, and the compiler carries their signatures. So a program whose own packages have no bindings never starts the Go tool for checking, and `bork check` still works without Go installed. Building always needs Go, as now.
+- **Checking is part of type checking**, after declarations are collected and before bodies, since a binding's signature is its declaration. Errors come out with the rest, with stable diagnostic codes in a `bind.` category (`bind.no-such-func`, `bind.mismatch`, `bind.result-shape`, ...), apart from `go.error`, which is for Go code in `unsafe go` bodies.
 - **The generated code is a wrapper per binding**: the Go function the compiler writes for it converts the arguments, calls the bound function, and converts the results, exactly as a hand-written `unsafe go` body would. Nothing new reaches the runtime besides the conversion helpers.
 
 ### Diagnostics
 
 ```
-net.bork:4:1: Atoi is bound to strconv.Atoi, which returns (int, error), but its result type has no GoError
-  hint: fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"
+url.bork:4:1: ParseUrl is bound to net/url.Parse, which returns (*url.URL, error), but its result type has no GoError
+  hint: fn ParseUrl(s: String): Url | GoError unsafe go "net/url.Parse"
 
-net.bork:7:1: Escape is bound to net/url.QueryEscape(s string) string, but parameter s is Int
+url.bork:7:1: QueryEscape is bound to net/url.QueryEscape(s string) string, but parameter s is Int
   hint: a Go string needs a bork String
 
-repo.bork:3:3: Repo mirrors github.Repository, which has no exported field Stars (or stars, ignoring case)
-  hint: the Go field may be named differently: StargazersCount would be stargazersCount
+url.bork:3:3: Url mirrors url.URL, which has no exported field Hostname (or hostname, ignoring case)
+  hint: url.URL has a method Hostname; a mirror record has only the struct's fields
 
-repo.bork:12:1: Fetch returns a Repo, whose facts (stargazersCount: Int where nonNegative) are checked when converting from Go, so the result may be a GoValueError
-  hint: fn Fetch(name: String) uses net: Repo | GoError | GoValueError unsafe go "example.com/gh.Fetch"
+stock.bork:12:1: Fetch returns an Item, whose facts (count: Int where nonNegative) are checked when converting from Go, so the result may be a GoValueError
+  hint: fn Fetch(id: String) uses net: Item | GoError | GoValueError unsafe go "example.com/stock.Fetch"
 
 env.bork:2:1: Getenv calls os.Getenv, which reads the environment, but declares no effects
   hint: fn Getenv(key: String) uses io: String unsafe go "os.Getenv"
 
+db.bork:3:1: Rows is *database/sql.Rows, which has a Close method, so it must be a resource
+  hint: type Rows = resource go "*database/sql.Rows"
+
 pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can change, so a fact about it could go stale
 ```
+
 
 ### Implementation plan
 
 1. **This proposal**, as its own PR.
-2. **Bindings of functions over basic types:** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library Go packages only.
-3. **Opaque Go types**, method bindings, assignability.
+2. **Bindings of functions over basic types:** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, result facts, and the generated wrappers. Standard-library Go packages only.
+3. **Opaque Go types**: identity, nil checks, boxing in unions, method bindings, assignability, and resources of Go types.
 4. **Mirror records**, conversions both ways with fact checks, and the `_borkToGo`/`_borkFromGo` helpers in [std-go.md](std-go.md).
-5. **Record field defaults and field doc comments** (useful without Go: literals and `Decode`), then `go { ... }` tags and `derive (GoStruct)` with its schema. This is what `bork/cli` (bork-pkk136) builds on.
-6. **Third-party Go packages**, with Go module dependencies (bork-8zh4yy).
-7. **Docs:** fold this section into the decided parts, and update `grammar.md`, the prelude's table, and the README.
+5. **Record field defaults and field doc comments** (useful without Go: literals and `Decode`).
+6. **`derive (GoStruct)`**, `go { ... }` tags, and the schema. This is what `bork/cli` (bork-pkk136) builds on; until it lands, `bork/cli` uses a hand-written Go struct.
+7. **Third-party Go packages**, with Go module dependencies (bork-8zh4yy), and the standard library's bindings checked by a test.
+8. **Docs:** fold this section into the decided parts, and update `grammar.md`, the prelude's table, and the README.
 
 Effects land separately (bork-ot9ki9). Until they do, a binding has no `uses`, and the `bork.mod` gate does not exist yet; both apply to bindings from the moment they apply to `unsafe go` bodies.
 
 ### Open questions
 
 - **Error mapping on bindings:** `unsafe go "os.Open" errors { fs.ErrNotExist => NotFound }`, through `errors.Is`/`errors.As`, instead of an `unsafe go` body?
+- **More result shapes:** `T, X, error` (API clients that return a response beside the value), dropping `X` or giving it as an opaque value?
 - **Callbacks:** bork functions passed to Go as `func` values (with conversions per call, and effects declared on the parameter's function type). Needed for `sort.Slice`-style and handler APIs.
 - **Generic Go functions and types** (`slices.Index`, `atomic.Pointer[T]`): instantiate them from bork type arguments?
 - **Go constants and variables** (`math.MaxInt32`, `os.Args`): bind them as zero-parameter functions?
 - **Full mirrors:** require a mirror converted to Go to list every exported field?
-- **Opaque values and effects:** should every binding that takes an opaque *pointer* type need `uses state`, rather than trusting the declaration?
+- **Opaque values and effects:** should every binding that takes an opaque *pointer* type need `uses state`, rather than trusting the declaration? And should opaque values that are not safe for concurrent use be kept out of `spawn`?
 - **User packages with Go module dependencies**, declared in `bork.mod` and gated like `unsafe` (part of bork-8zh4yy, later).
 
 ## 4. Errors and results (in progress, to be tried out)
