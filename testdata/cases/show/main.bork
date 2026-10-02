@@ -1,0 +1,28 @@
+import "bork/maps"
+
+type Amount = { cents: Int }
+type Invoice = { amount: Amount, tags: List[String] }
+type Box[T] = { value: T }
+type Maybe = sealed { Some { amount: Amount }, None }
+
+instance amountShow: Show[Amount] {
+  fn show(a: Amount): String { s"${a.cents} cents" }
+}
+
+fn bounded[T: Show](x: T): String { toString(x) }
+fn unbounded[T](x: T): String { toString(x) }
+
+fn main() {
+  amount = Amount { cents: 425 }
+  println(amount)
+  println(toString(amount))
+  println(s"pay ${amount}")
+  println([amount, Amount { cents: 20 }])
+  println({"due": amount})
+  println(Invoice { amount: amount, tags: ["a", "b"] })
+  println(Box { value: amount })
+  println(Maybe.Some { amount: amount }, Maybe.None)
+  println(bounded(amount), unbounded(amount))
+  println(maps.Unordered({amount: "large", Amount { cents: 20 }: "small"}))
+  println([1, 2], "plain", 3.0)
+}

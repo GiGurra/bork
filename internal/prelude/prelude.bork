@@ -1065,6 +1065,12 @@ class Eq[T] {
   fn equals(a: T, b: T): Bool
 }
 
+// Show optionally customizes toString, println, interpolation and nested
+// printing. Values without an instance keep their default bork text.
+class Show[T] {
+  fn show(x: T): String
+}
+
 // Ord orders the values of a type: compare(a, b) is negative when a
 // comes before b, positive when it comes after, and 0 when they are
 // equal (it must agree with ==). Numbers and Strings have instances

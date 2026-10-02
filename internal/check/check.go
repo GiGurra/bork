@@ -172,6 +172,7 @@ type TryInfo struct {
 // generation) read it, and the typed tree of each function body
 // (Func.Body), instead of re-deriving types.
 type Info struct {
+	showDicts map[syntax.Expr][]*Dict
 	// Packages lists the program's packages.
 	Packages []*Package
 	// Classes and ClassInstances list every class and instance.
@@ -892,9 +893,11 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.record(e, String)
 	case *syntax.Interp:
 		for _, x := range e.Exprs {
-			if t := c.expr(x); t != Invalid && !isValue(t) {
+			t := c.expr(x)
+			if t != Invalid && !isValue(t) {
 				c.errorf(x.Position(), "cannot put a value of type %s in a string", t)
 			}
+			c.recordShow(x, t)
 		}
 		return c.record(e, String)
 	case *syntax.BoolLit:
@@ -1162,6 +1165,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 		if t != Invalid && !isValue(t) {
 			c.errorf(e.Args[0].Position(), "toString needs a value, found %s", t)
 		}
+		c.recordShow(e.Args[0], t)
 		return String
 	case BuiltinAssertSnapshot:
 		t := c.expr(e.Args[0])
@@ -1177,6 +1181,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 			if t != Invalid && !isValue(t) {
 				c.errorf(a.Position(), "println cannot print a value of type %s", t)
 			}
+			c.recordShow(a, t)
 		}
 		return Unit
 	}

@@ -1,5 +1,5 @@
 main.bork:2:21: Eq is built in: every type whose values can be compared has it, with no derive needed
-main.bork:3:21: Show is not needed: toString shows every value
+main.bork:3:21: Show cannot be derived; only Decode and Encode can (yet)
 main.bork:5:15: Eq is built in: every type whose values can be compared has it, with structural ==
 main.bork:7:34: cannot compare values of type parameter T with ==; require it: [T: Eq]
 main.bork:10:19: values of type F cannot be compared, so it has no Eq (functions, scopes, and resources have no ==)

@@ -1,0 +1,11 @@
+425 cents
+425 cents
+pay 425 cents
+[425 cents, 20 cents]
+{"due": 425 cents}
+Invoice { amount: 425 cents, tags: ["a", "b"] }
+Box { value: 425 cents }
+Maybe.Some { amount: 425 cents } Maybe.None
+425 cents 425 cents
+{20 cents: "small", 425 cents: "large"}
+[1, 2] plain 3.0

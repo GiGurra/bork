@@ -21,9 +21,18 @@ import (
 // A call whose instance is known calls the method directly; only code
 // that is generic over the instance goes through the struct.
 
+// className keeps the optional prelude Show distinct from a package's
+// own class named Show, which predates the prelude renderer.
+func className(class *check.Class) *ast.Ident {
+	if class.Prelude && class.Name == "Show" {
+		return ast.NewIdent("_Show")
+	}
+	return typeName(class.Name, class.Pkg)
+}
+
 // classType is the Go type of class's dictionary for type t.
 func (g *gen) classType(class *check.Class, t check.Type) ast.Expr {
-	return &ast.IndexExpr{X: typeName(class.Name, class.Pkg), Index: g.goType(t)}
+	return &ast.IndexExpr{X: className(class), Index: g.goType(t)}
 }
 
 // classDecl declares a class's dictionary struct.
@@ -44,7 +53,7 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("optional")}, Type: ast.NewIdent("bool")})
 	}
 	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
-		Name:       typeName(class.Name, class.Pkg),
+		Name:       className(class),
 		TypeParams: typeParamList([]*check.TypeParam{class.Param}),
 		Type:       st,
 	}}}

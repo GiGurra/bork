@@ -663,6 +663,12 @@ func (c *checker) declaredFacts(x syntax.Expr) []*Constraint {
 // dict finds the instance of class for type t, reporting an error at
 // pos if there is none, or more than one.
 func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
+	return c.findDict(class, t, pos, depth, false)
+}
+
+// findDict permits an absent instance for optional rendering, while
+// retaining diagnostics for ambiguous instances.
+func (c *checker) findDict(class *Class, t Type, pos diag.Pos, depth int, optional bool) *Dict {
 	if t == Invalid || t == nil {
 		return nil
 	}
@@ -673,6 +679,9 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 	if tp, ok := t.(*TypeParam); ok && c.inScopeParam(tp) {
 		if tp.HasBound(class) {
 			return &Dict{Class: class, Type: t, Param: tp}
+		}
+		if optional {
+			return nil
 		}
 		c.errorf(pos, "%s needs an instance of %s for %s; require one: [%s: %s]", c.useText(), class.Name, tp.Name, tp.Name, class.Name)
 		return nil
@@ -734,6 +743,9 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		c.errorf(pos, "more than one instance of %s for %s is in scope: %s; %s", class.Name, t, strings.Join(names, " and "), advice)
 		return nil
 	case len(partial) == 1:
+		if optional {
+			return nil
+		}
 		// Report why the one candidate does not fit.
 		ci := partial[0]
 		args, _ := matchHead(ci, t)
@@ -742,6 +754,9 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 				c.dict(b, args[i], pos, depth+1)
 			}
 		}
+		return nil
+	}
+	if optional {
 		return nil
 	}
 	msg := fmt.Sprintf("no instance of %s for %s is in scope", class.Name, t)
