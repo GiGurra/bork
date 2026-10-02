@@ -19,6 +19,8 @@ fn isolated(): Bytes unsafe go {
   return data
 }
 
+fn nilBytes(): Bytes unsafe go { return nil }
+
 fn main() {
   data = utf8Bytes("hé\x00")
   println(data)
@@ -30,7 +32,10 @@ fn main() {
   println(data.slice(0, 1))
   println(data.slice(-1, 0))
   println(data.concat(utf8Bytes("!")))
-  println(utf8String(data))
+  println(match (utf8String(data)) {
+    text: String => text == "hé\x00"
+    error: ParseError => false
+  })
   println(bytes([]).isEmpty())
   println(bytes([]) == utf8Bytes(""))
   println(data == utf8Bytes("hé\x00"))
@@ -53,4 +58,29 @@ fn main() {
   println(encoding.ParseBase64("Zh=="))
   println(encoding.ParseBase64URL("+/8="))
   println(utf8String(binary))
+  println(nilBytes() == bytes([]))
+  println(nilRoundTrip())
+  println(encoding.ParseHex(""))
+  println(encoding.ParseBase64(""))
+  println(encoding.ParseBase64URL(""))
+  println(encoding.ParseHex("0011gg"))
+  println(encoding.ParseBase64("YQ==!!!!"))
+  println(encoding.ParseBase64("YQ==\r\n"))
+  println(encoding.ParseBase64URL("YQ==\r\n"))
+  mixed: Map[Bytes | List[Byte], String] = { binary: "bytes", binary.toList(): "list" }
+  println(mixed.size())
+  println(mixed.get(binary))
+  println(mixed.get(binary.toList()))
+  println(mixedEqual(binary, binary.toList()))
+  println(binary.concat(binary))
+  println(binary)
+  println(binary.slice(2, 2))
+  println(binary.slice(1, 0))
+  println(binary.slice(0, 3))
 }
+
+fn nilRoundTrip(): Bytes unsafe go {
+  return _borkBytesFrom(_borkBytesData(_borkBytesFrom(nil)))
+}
+
+fn mixedEqual(a: Bytes | List[Byte], b: Bytes | List[Byte]): Bool { a == b }

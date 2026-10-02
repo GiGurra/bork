@@ -1530,5 +1530,5 @@ fn (data: Bytes) slice(from: Int, to: Int): Bytes | OutOfRange unsafe go {
   return _borkBytesFrom(data[from:to])
 }
 fn (data: Bytes) concat(other: Bytes): Bytes unsafe go {
-  return _borkBytesFrom(append(_borkBytesData(data), other...))
+  return append(_borkBytesFrom(data), other...)
 }
