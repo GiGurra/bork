@@ -10,6 +10,7 @@ type File struct {
 	Package string
 	Imports []*Import
 	Uses    []*Use
+	Bundles []*Bundle
 	Rules   []*RuleDecl
 	// Classes and Instances; the instances' methods are also in Funcs.
 	Classes   []*ClassDecl
@@ -120,6 +121,15 @@ type InstanceDecl struct {
 	ClassPos   diag.Pos
 	Type       *TypeExpr
 	Methods    []*FuncDecl
+}
+
+// Bundle names a set of instances, which `use` brings into scope at
+// once: `instances Json { ItemDecode, ItemEncode, money.* }`. A
+// package suggests instances to its importers with one.
+type Bundle struct {
+	Pos   diag.Pos
+	Name  string
+	Items []*Use // instances, bundles, and pkg.* of imported packages
 }
 
 // Use brings instances of another package into scope: `use money.showAmount`,

@@ -1,0 +1,15 @@
+type Cents = { amount: Int } derive (Decode, Encode)
+
+// Two ways to show an amount; Defaults suggests one of them.
+instance showDollars: Show[Cents] {
+  fn show(c: Cents): String { s"$$${toString(c.amount / 100)}.${toString(c.amount % 100)}" }
+}
+
+instance ShowRaw: Show[Cents] {
+  fn show(c: Cents): String { s"${toString(c.amount)} cents" }
+}
+
+// An exported set may hold unexported instances: they come with it.
+instances Defaults { showDollars, CentsDecode, CentsEncode }
+
+class Show[T] { fn show(x: T): String }

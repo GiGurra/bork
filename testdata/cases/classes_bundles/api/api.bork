@@ -1,0 +1,12 @@
+import "example.com/tc/money"
+
+use money.Defaults
+
+type Item = { name: String, price: money.Cents } derive (Decode, Encode)
+
+// A package can suggest other packages' instances too, and sets can
+// include sets.
+instances Json {
+  ItemDecode, ItemEncode
+  money.Defaults
+}

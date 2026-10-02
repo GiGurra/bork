@@ -1,0 +1,19 @@
+import "example.com/tc/money"
+
+use money.internal
+use money.Missing
+
+type Point = { x: Int }
+
+instance showPoint: money.Show[Point] { fn show(p: Point): String { "point" } }
+
+instances A { B }
+instances B { A, showPoint }
+instances A { showPoint }
+instances showPoint { A }
+instances C { nothing, other.Thing }
+
+fn main() {
+  // money.Suggested would bring an instance into scope.
+  println(money.show(money.Cents { amount: 1 }))
+}

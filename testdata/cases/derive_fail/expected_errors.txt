@@ -1,5 +1,5 @@
-main.bork:1:52: cannot derive Decode for Handler: field run has type (Int) => Int, which has no Decode instance in scope
-main.bork:2:35: cannot derive Encode for Wrapper: field inner has type Handler, which has no Encode instance in scope
+main.bork:1:52: cannot derive Decode for Handler: field run has type (Int) => Int, which has no Decode instance in scope (declare one: instance name: Decode[(Int) => Int] { ... })
+main.bork:2:35: cannot derive Encode for Wrapper: field inner has type Handler, which has no Encode instance in scope (add `derive (Encode)` to type Handler, or declare one: instance name: Encode[Handler] { ... })
 main.bork:3:23: Show cannot be derived; only Decode and Encode can (yet)
 main.bork:4:27: unknown class Nope
 main.bork:12:50: no instance of Decode for Plain is in scope (add `derive (Decode)` to type Plain, or declare one: instance name: Decode[Plain] { ... })
