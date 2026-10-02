@@ -16,6 +16,8 @@ func TestSuggestedEdits(t *testing.T) {
 		name, source string
 	}{
 		{"operator", "fn main() { println(true & false) }\n"},
+		{"byte columns", "fn main() {\n\tprintln(\"å\"); xs = []; f = x => x\n}\n"},
+		{"interpolation", "fn main() { println(s\"å ${true & false}\") }\n"},
 		{"annotations", "fn main() {\n xs = []\n m = {:}\n f = x => x\n g = (y) => y\n h = (a, b) => a\n}\n"},
 		{"multiline", "fn main() {\n xs = [\n ]\n m = {\n :}\n f = (\n x,\n y\n ) => x\n}\n"},
 	}

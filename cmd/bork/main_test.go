@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,4 +75,28 @@ func TestDiagnosticJSON(t *testing.T) {
 			t.Fatalf("success should emit nothing: %v\n%s", err, out)
 		}
 	})
+	t.Run("successful build", func(t *testing.T) {
+		out, err := exec.Command(exe, "build", "--json", "-o", filepath.Join(dir, "program"), path).CombinedOutput()
+		if err != nil || len(out) != 0 {
+			t.Fatalf("build should emit no diagnostics: %v\n%s", err, out)
+		}
+	})
+	for _, passing := range []bool{true, false} {
+		t.Run(fmt.Sprintf("runtime test %t", passing), func(t *testing.T) {
+			source := fmt.Sprintf("test \"example\" { assert(%t) }\n", passing)
+			if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(exe, "test", "--json", path)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			err := cmd.Run()
+			if passing && err != nil || !passing && cmd.ProcessState.ExitCode() != 1 {
+				t.Fatalf("unexpected test exit: %v", err)
+			}
+			if stderr.Len() != 0 || !strings.Contains(stdout.String(), "example") || !strings.Contains(stdout.String(), "passed,") {
+				t.Fatalf("test report must remain on stdout: %s / %s", &stdout, &stderr)
+			}
+		})
+	}
 }
