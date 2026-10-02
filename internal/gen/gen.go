@@ -156,6 +156,11 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 		}
 	}
 	for _, ci := range info.ClassInstances {
+		for _, m := range ci.Methods {
+			if m.Derived != nil {
+				goFuncs = append(goFuncs, g.derivedFunc(m))
+			}
+		}
 		funcs = append(funcs, g.instanceDecl(ci))
 	}
 	funcs = append(funcs, g.extraFuncs...)
@@ -230,6 +235,7 @@ type gen struct {
 	usesTests   bool
 	usesRules   bool
 	usesScopes  bool
+	usesDerive  bool
 	// openScopes lists the Go variables of the scope blocks around the
 	// code being generated, which are closed before returning.
 	openScopes []*ast.Ident
@@ -252,8 +258,22 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 		for _, callee := range fn.Calls {
 			visit(callee)
 		}
+		if fn.Derived != nil && fn.Of.Class.Name == "Decode" {
+			// A derived decoder checks the fields' where clauses.
+			for _, pred := range invariantPreds(fn.Of.Type, map[check.Type]bool{}) {
+				visit(pred)
+			}
+		}
 		if g.testMode && fn.Decl.GoBody != nil {
-			// Test mode checks the records it returns (see checkedWrapper).
+			// Test mode checks what it promises, and the records it
+			// returns (see checkedWrapper).
+			for _, mc := range fn.ResultConstraints {
+				for _, con := range mc.Constraints {
+					for _, pred := range constraintPreds(con) {
+						visit(pred)
+					}
+				}
+			}
 			for _, pred := range invariantPreds(fn.Result, map[check.Type]bool{}) {
 				visit(pred)
 			}
@@ -356,11 +376,11 @@ func name(s string) *ast.Ident {
 // funcName is the Go name of a function. A prelude function the package
 // replaced (but the prelude still uses) gets a name of its own.
 func (g *gen) funcName(fn *check.Func) *ast.Ident {
-	if fn.Prelude && g.info.Funcs[fn.Decl.Name] != fn {
-		return ast.NewIdent("_prelude_" + fn.Decl.Name)
-	}
 	if fn.Of != nil {
 		return ast.NewIdent(instName(fn.Of) + "_" + fn.Decl.Name)
+	}
+	if fn.Prelude && g.info.Funcs[fn.Decl.Name] != fn {
+		return ast.NewIdent("_prelude_" + fn.Decl.Name)
 	}
 	if fn.Pkg != nil && fn.Pkg.GoPrefix != "" {
 		return ast.NewIdent(fn.Pkg.GoPrefix + fn.Decl.Name)

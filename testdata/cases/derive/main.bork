@@ -1,0 +1,70 @@
+pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
+
+type CreateUser = {
+  name: String where nonEmpty,
+  age: Option[Int where between(0, 150)],
+  tags: List[String],
+} derive (Decode, Encode)
+
+type Shape = sealed {
+  Circle { radius: Float },
+  Square { side: Float },
+  Empty,
+} derive (Decode, Encode)
+
+// A decoded record is proven: its where clauses were checked.
+fn greet(name: String where nonEmpty): String { s"hello $name" }
+
+fn user(s: String) {
+  r: CreateUser | JsonError | DecodeError = decodeJson(s)
+  match (r) {
+    u: CreateUser => println(s"${greet(u.name)}: ${encodeJson(u)}")
+    e: JsonError => println(e)
+    e: DecodeError => println(s"error at ${e.path}: ${e.message}")
+  }
+}
+
+fn shape(s: String) {
+  r: Shape | JsonError | DecodeError = decodeJson(s)
+  match (r) {
+    sh: Shape => println(encodeJson(sh))
+    e: JsonError => println(e)
+    e: DecodeError => println(s"error at ${e.path}: ${e.message}")
+  }
+}
+
+fn main() {
+  user("{\"name\": \"ann\", \"age\": 30, \"tags\": [\"a\"]}")
+  user("{\"name\": \"bob\", \"tags\": []}")
+  user("{\"name\": \"\", \"tags\": []}")
+  user("{\"name\": \"cy\", \"age\": 200, \"tags\": []}")
+  user("{\"name\": \"cy\", \"tags\": [1]}")
+  user("{\"tags\": []}")
+  user("[1]")
+  shape("{\"type\": \"Circle\", \"radius\": 2}")
+  shape("\"Empty\"")
+  shape("{\"type\": \"Hex\"}")
+  shape("{\"radius\": 2}")
+  orders()
+}
+
+// Generic types derive generic instances; fields of derived types use
+// their derived instances.
+type Pair[A, B] = { first: A, second: B } derive (Decode, Encode)
+type Order = { id: Int, items: List[Pair[String, Int]], shape: Shape } derive (Decode, Encode)
+
+fn order(s: String) {
+  r: Order | JsonError | DecodeError = decodeJson(s)
+  match (r) {
+    o: Order => println(encodeJson(o))
+    e: JsonError => println(e)
+    e: DecodeError => println(s"error at ${e.path}: ${e.message}")
+  }
+}
+
+fn orders() {
+  order("{\"id\": 1, \"items\": [{\"first\": \"pen\", \"second\": 2}], \"shape\": \"Empty\"}")
+  order("{\"id\": 1, \"items\": [{\"first\": \"pen\", \"second\": 2}, {\"first\": \"ink\"}], \"shape\": \"Empty\"}")
+  order("{\"id\": 1, \"items\": [], \"shape\": {\"type\": \"Square\", \"side\": \"big\"}}")
+}

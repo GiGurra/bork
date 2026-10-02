@@ -1,0 +1,8 @@
+{"name": "ann", "age": 34, "plan": "Free"}
+{"name": "bob", "plan": {"type": "Paid", "seats": 12}}
+{"name": "", "plan": "Free"}
+{"name": "a name that is far too long", "plan": "Free"}
+{"name": "cy", "age": 9, "plan": "Free"}
+{"name": "dee", "plan": {"type": "Gold"}}
+{"name": "eve", "plan": {"type": "Paid"}}
+{"name": "fay"

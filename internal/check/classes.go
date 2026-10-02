@@ -250,7 +250,8 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 }
 
 // resolveUses decides which instances are in scope in each package: its
-// own, the prelude's, and the ones it uses.
+// own, the prelude's, and the ones it uses. (Derived instances too need
+// `use` in other packages: no instance is in scope on its own.)
 func (c *checker) resolveUses(files []*syntax.File) {
 	for _, pkg := range c.pkgs {
 		pkg.inScope = append(append([]*ClassInstance(nil), pkg.instances...), c.preludePkg.instances...)
@@ -450,10 +451,23 @@ func (c *checker) instanceHint(class *Class, t Type) string {
 			}
 		}
 	}
-	if len(found) == 0 {
-		return fmt.Sprintf("declare one: instance name: %s[%s] { ... }", class.Name, t)
+	if len(found) > 0 {
+		return strings.Join(found, ", or ")
 	}
-	return strings.Join(found, ", or ")
+	if derivable(class) {
+		var name string
+		var pkg *Package
+		switch b := t.(type) {
+		case *Record:
+			name, pkg = b.Name, b.Pkg
+		case *Sealed:
+			name, pkg = b.Name, b.Pkg
+		}
+		if name != "" && pkg == c.pkg {
+			return fmt.Sprintf("add `derive (%s)` to type %s, or declare one: instance name: %s[%s] { ... }", class.Name, name, class.Name, t)
+		}
+	}
+	return fmt.Sprintf("declare one: instance name: %s[%s] { ... }", class.Name, t)
 }
 
 // inScopeParam reports whether tp is a type parameter of the code being
@@ -470,4 +484,124 @@ func (c *checker) useText() string {
 		return c.fn.Decl.Name
 	}
 	return "this"
+}
+
+// Derived describes an instance method the compiler writes (`derive`):
+// FieldDicts holds the class's instance for each field of the type (for
+// a sealed type, each variant's fields, variant by variant).
+type Derived struct {
+	FieldDicts [][]*Dict
+}
+
+// derivable reports whether instances of class can be derived.
+func derivable(class *Class) bool {
+	return class.Prelude && (class.Name == "Decode" || class.Name == "Encode")
+}
+
+// declareDerived declares the instances that `derive (...)` asks for.
+func (c *checker) declareDerived(files []*syntax.File) {
+	for _, f := range files {
+		c.inFile(f)
+		for _, td := range f.Types {
+			if len(td.Derive) == 0 {
+				continue
+			}
+			e := c.pkg.types[td.Name]
+			if e == nil || e.decl != td {
+				continue
+			}
+			switch e.typ.(type) {
+			case *Record, *Sealed:
+			default:
+				c.errorf(td.DerivePos, "only records and sealed types can derive instances")
+				continue
+			}
+			for _, name := range td.Derive {
+				cl := c.lookupClass(name)
+				switch {
+				case cl == nil:
+					c.errorf(td.DerivePos, "unknown class %s", name)
+					continue
+				case !derivable(cl):
+					c.errorf(td.DerivePos, "%s cannot be derived; only Decode and Encode can (yet)", name)
+					continue
+				}
+				c.deriveInstance(td, e.typ, cl, f.Prelude)
+			}
+		}
+	}
+}
+
+func (c *checker) deriveInstance(td *syntax.TypeDecl, t Type, cl *Class, prelude bool) {
+	// A generic type's instance is generic too: Pair[A, B] can be decoded
+	// if A and B can.
+	var tps []*TypeParam
+	var args []Type
+	for _, p := range typeParamsOf(t) {
+		tp := &TypeParam{Name: p.Name, Decl: p.Decl, Bounds: []*Class{cl}}
+		tps = append(tps, tp)
+		args = append(args, tp)
+	}
+	head := t
+	if len(tps) > 0 {
+		head = instantiate(t, args)
+	}
+	name := td.Name + cl.Name
+	decl := &syntax.InstanceDecl{Pos: td.DerivePos, Name: name}
+	ci := &ClassInstance{Name: name, Decl: decl, Pkg: c.pkg, Prelude: prelude, Class: cl, TypeParams: tps, Type: head}
+	bound := map[*TypeParam]Type{cl.Param: head}
+	for _, m := range cl.Methods {
+		fd := &syntax.FuncDecl{Pos: td.DerivePos, Name: m.Decl.Name, Params: m.Decl.Params}
+		fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: tps, Result: subst(m.Result, bound), Derived: &Derived{}}
+		for _, p := range m.Params {
+			fn.Params = append(fn.Params, subst(p, bound))
+		}
+		ci.Methods = append(ci.Methods, fn)
+		c.info.FuncOf[fd] = fn
+	}
+	c.pkg.instances = append(c.pkg.instances, ci)
+	c.info.ClassInstances = append(c.info.ClassInstances, ci)
+}
+
+// resolveDerived finds the instances the fields of derived instances'
+// types need, now that it is known which instances are in scope.
+func (c *checker) resolveDerived() {
+	for _, ci := range c.info.ClassInstances {
+		if len(ci.Methods) == 0 || ci.Methods[0].Derived == nil {
+			continue
+		}
+		c.pkg, c.inPrelude = ci.Pkg, ci.Prelude
+		c.typeParams = map[string]*TypeParam{}
+		for _, tp := range ci.TypeParams {
+			c.typeParams[tp.Name] = tp
+		}
+		var groups [][]*Field
+		var owners []string
+		switch t := ci.Type.(type) {
+		case *Record:
+			groups, owners = [][]*Field{t.Fields}, []string{t.Name}
+		case *Sealed:
+			for _, v := range t.Variants {
+				groups = append(groups, v.Fields)
+				owners = append(owners, t.Name+"."+v.Name)
+			}
+		}
+		var dicts [][]*Dict
+		for i, fields := range groups {
+			var row []*Dict
+			for _, f := range fields {
+				d := c.dictQuiet(ci.Class, f.Type, 0)
+				if d == nil {
+					c.errorf(ci.Decl.Pos, "cannot derive %s for %s: field %s has type %s, which has no %s instance in scope", ci.Class.Name, owners[i], f.Name, f.Type, ci.Class.Name)
+				}
+				row = append(row, d)
+			}
+			dicts = append(dicts, row)
+		}
+		for _, m := range ci.Methods {
+			m.Derived.FieldDicts = dicts
+		}
+	}
+	c.typeParams = nil
+	c.inPrelude = false
 }

@@ -62,6 +62,10 @@ type TypeDecl struct {
 	Fields     []*FieldDecl   // RecordType
 	Variants   []*VariantDecl // SealedType
 	Alias      *TypeExpr      // AliasType
+	// Derive lists the classes to derive instances of:
+	// `type User = { ... } derive (Decode, Encode)`.
+	Derive    []string
+	DerivePos diag.Pos
 }
 
 type FieldDecl struct {
