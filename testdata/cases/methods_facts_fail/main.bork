@@ -1,0 +1,4 @@
+fn main() {
+  xs = "1 2".split(" ").filter(s => s != "1")
+  println(xs.first())
+}

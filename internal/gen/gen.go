@@ -397,6 +397,16 @@ func name(s string) *ast.Ident {
 // funcName is the Go name of a function. A prelude function the package
 // replaced (but the prelude still uses) gets a name of its own.
 func (g *gen) funcName(fn *check.Func) *ast.Ident {
+	if fn.Decl != nil && fn.Decl.IsMethod {
+		// _m_List_first, or _pm_List_first for the prelude's.
+		prefix := "_m_"
+		if fn.Prelude {
+			prefix = "_pm_"
+		} else if fn.Pkg != nil {
+			prefix = fn.Pkg.GoPrefix + "_m_"
+		}
+		return ast.NewIdent(prefix + g.methodTag(fn.Params[0]) + "_" + fn.Decl.Name)
+	}
 	if fn.Of != nil {
 		return ast.NewIdent(instName(fn.Of) + "_" + fn.Decl.Name)
 	}
@@ -407,6 +417,23 @@ func (g *gen) funcName(fn *check.Func) *ast.Ident {
 		return ast.NewIdent(fn.Pkg.GoPrefix + fn.Decl.Name)
 	}
 	return name(fn.Decl.Name)
+}
+
+// methodTag names a receiver type in a method's Go name.
+func (g *gen) methodTag(t check.Type) string {
+	switch t := t.(type) {
+	case *check.List:
+		return "List"
+	case *check.Map:
+		return "Map"
+	case *check.Record:
+		return typeName(t.Name, t.Pkg).Name
+	case *check.Sealed:
+		return typeName(t.Name, t.Pkg).Name
+	case *check.Resource:
+		return typeName(t.Name, t.Pkg).Name
+	}
+	return t.String()
 }
 
 func (g *gen) newTmp() *ast.Ident {

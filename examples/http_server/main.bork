@@ -45,7 +45,7 @@ fn notFound(id: Int): http.Response {
 }
 
 fn list(store: Atom[Store]): http.Response {
-  http.JsonReply(200, encodeJson(maps.Values(current(store).todos)))
+  http.JsonReply(200, encodeJson(current(store).todos.values()))
 }
 
 fn create(store: Atom[Store], body: String): http.Response {
@@ -54,12 +54,12 @@ fn create(store: Atom[Store], body: String): http.Response {
     req: NewTodo => {
       // The id is the one this update gave out: s is the state it made.
       s = update(store, st => Store {
-        todos: maps.Put(st.todos, st.nextId, Todo { id: st.nextId, title: req.title, done: false }),
+        todos: st.todos.put(st.nextId, Todo { id: st.nextId, title: req.title, done: false }),
         nextId: st.nextId + 1,
       })
       id = s.nextId - 1
       log.Info("created", {"id": id, "title": req.title})
-      match (maps.Get(s.todos, id)) {
+      match (s.todos.get(id)) {
         Option.Some { value: todo } => http.JsonReply(201, encodeJson(todo))
         Option.None => notFound(id)
       }
@@ -70,15 +70,15 @@ fn create(store: Atom[Store], body: String): http.Response {
 }
 
 fn show(store: Atom[Store], id: Int): http.Response {
-  match (maps.Get(current(store).todos, id)) {
+  match (current(store).todos.get(id)) {
     Option.Some { value: todo } => http.JsonReply(200, encodeJson(todo))
     Option.None => notFound(id)
   }
 }
 
 fn finish(store: Atom[Store], id: Int): http.Response {
-  _ = update(store, st => match (maps.Get(st.todos, id)) {
-    Option.Some { value: todo } => st.copy(todos = maps.Put(st.todos, id, todo.copy(done = true)))
+  _ = update(store, st => match (st.todos.get(id)) {
+    Option.Some { value: todo } => st.copy(todos = st.todos.put(id, todo.copy(done = true)))
     Option.None => st
   })
   show(store, id)
@@ -87,8 +87,8 @@ fn finish(store: Atom[Store], id: Int): http.Response {
 fn remove(store: Atom[Store], id: Int): http.Response {
   // swap gives the state the removal was made to: whether it had the
   // todo decides the answer, even if another request removed it too.
-  old = swap(store, st => st.copy(todos = maps.Remove(st.todos, id)))
-  if (maps.Has(old.todos, id)) {
+  old = swap(store, st => st.copy(todos = st.todos.remove(id)))
+  if (old.todos.has(id)) {
     log.Info("removed", {"id": id})
     http.Text(204, "")
   } else {

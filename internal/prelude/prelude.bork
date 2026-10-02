@@ -1295,3 +1295,202 @@ fn jsonFieldsOf[V](m: Map[String, V]): List[Entry[String, V]] unsafe go {
 instance encodeJson: Encode[Json] {
   fn encode(x: Json): Json { x }
 }
+
+// Methods, for chaining: xs.filter(f).map(g), m.get(k), s.trim().
+// Each List and String method is the function of the same name, with
+// the receiver as its first argument.
+
+fn (xs: List[T]) length[T](): Int { length(xs) }
+fn (xs: List[T]) isEmpty[T](): Bool { isEmpty(xs) }
+fn (xs: List[T] where notEmpty) first[T](): T { first(xs) }
+fn (xs: List[T]) get[T](index: Int): Option[T] { get(xs, index) }
+fn (xs: List[T]) head[T](): Option[T] { head(xs) }
+fn (xs: List[T]) last[T](): Option[T] { last(xs) }
+fn (xs: List[A]) map[A, B](f: (A) => B): List[B] { map(xs, f) }
+fn (xs: List[A]) flatMap[A, B](f: (A) => List[B]): List[B] { flatMap(xs, f) }
+fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] { filter(xs, keep) }
+fn (xs: List[T]) fold[T, A](initial: A, f: (A, T) => A): A { fold(xs, initial, f) }
+fn (xs: List[T]) find[T](matches: (T) => Bool): Option[T where matches] { find(xs, matches) }
+fn (xs: List[T]) any[T](test: (T) => Bool): Bool { any(xs, test) }
+fn (xs: List[T]) all[T](test: (T) => Bool): Bool { all(xs, test) }
+fn (xs: List[T]) count[T](test: (T) => Bool): Int { count(xs, test) }
+fn (xs: List[T]) forEach[T](f: (T) => Unit) { forEach(xs, f) }
+fn (xs: List[T]) take[T](n: Int): List[T] { take(xs, n) }
+fn (xs: List[T]) drop[T](n: Int): List[T] { drop(xs, n) }
+fn (xs: List[T]) reverse[T](): List[T] { reverse(xs) }
+fn (xs: List[T]) concat[T](ys: List[T]): List[T] { concat(xs, ys) }
+fn (xs: List[T]) append[T](x: T): List[T] where notEmpty { append(xs, x) }
+fn (xs: List[T]) sortWith[T](less: (T, T) => Bool): List[T] { sortWith(xs, less) }
+fn (xs: List[T]) includes[T: Eq](x: T): Bool { includes(xs, x) }
+fn (xs: List[T]) distinct[T: Eq](): List[T] { distinct(xs) }
+fn (parts: List[String]) join(separator: String): String { join(parts, separator) }
+
+// sorted is xs in the order of Ord, keeping equal elements in their
+// order.
+fn (xs: List[T]) sorted[T: Ord](): List[T] { sortWith(xs, (a, b) => compare(a, b) < 0) }
+
+// sortBy is xs in the order of what key gives for each element.
+fn (xs: List[T]) sortBy[T, K: Ord](key: (T) => K): List[T] { sortWith(xs, (a, b) => compare(key(a), key(b)) < 0) }
+
+// groupBy puts the elements in lists by what key gives for them, in
+// the order the keys first appear.
+fn (xs: List[T]) groupBy[T, K: Eq](key: (T) => K): Map[K, List[T]] {
+  fold(xs, {:}, (groups, x) => groups.put(key(x), append(groups.getOr(key(x), []), x)))
+}
+
+// toMap makes a map of entries; a key given twice keeps the later value.
+fn (entries: List[Entry[K, V]]) toMap[K: Eq, V](): Map[K, V] unsafe go {
+  keys := make([]K, len(entries))
+  vals := make([]V, len(entries))
+  for i, e := range entries {
+    keys[i], vals[i] = e.key, e.value
+  }
+  return _mapOf(keys, vals)
+}
+
+fn (s: String) byteLength(): Int { byteLength(s) }
+fn (s: String) runeCount(): Int { runeCount(s) }
+fn (s: String) contains(part: String): Bool { contains(s, part) }
+fn (s: String) startsWith(prefix: String): Bool { startsWith(s, prefix) }
+fn (s: String) endsWith(suffix: String): Bool { endsWith(s, suffix) }
+fn (s: String) indexOf(part: String): Option[Int] { indexOf(s, part) }
+fn (s: String) toUpper(): String { toUpper(s) }
+fn (s: String) toLower(): String { toLower(s) }
+fn (s: String) trim(): String { trim(s) }
+fn (s: String) replaceAll(old: String, replacement: String): String { replaceAll(s, old, replacement) }
+fn (s: String) repeat(count: Int): String { repeat(s, count) }
+fn (s: String) runeAt(index: Int): Option[Rune] { runeAt(s, index) }
+fn (s: String) substring(from: Int, to: Int): String | OutOfRange { substring(s, from, to) }
+fn (s: String) split(separator: String): List[String] where notEmpty { split(s, separator) }
+fn (s: String) fields(): List[String] { fields(s) }
+fn (s: String) lines(): List[String] { lines(s) }
+
+fn (o: Option[T]) map[T, U](f: (T) => U): Option[U] {
+  match (o) {
+    Option.Some { value } => Option.Some { value: f(value) }
+    Option.None => Option.None
+  }
+}
+
+fn (o: Option[T]) flatMap[T, U](f: (T) => Option[U]): Option[U] {
+  match (o) {
+    Option.Some { value } => f(value)
+    Option.None => Option.None
+  }
+}
+
+fn (o: Option[T]) getOr[T](otherwise: T): T {
+  match (o) {
+    Option.Some { value } => value
+    Option.None => otherwise
+  }
+}
+
+fn (o: Option[T]) isSome[T](): Bool {
+  match (o) {
+    Option.Some { value } => true
+    Option.None => false
+  }
+}
+
+fn (o: Option[T]) isNone[T](): Bool { !o.isSome() }
+
+// Map methods. A map never changes: put and remove give a new one,
+// sharing all but the changed path with it (see bork/maps).
+
+fn (m: Map[K, V]) get[K: Eq, V](key: K): Option[V] unsafe go {
+  if v, ok := m.get(key); ok {
+    return Option_Some[V]{value: v}
+  }
+  return Option_None[V]{}
+}
+
+fn (m: Map[K, V]) getOr[K: Eq, V](key: K, otherwise: V): V unsafe go {
+  if v, ok := m.get(key); ok {
+    return v
+  }
+  return otherwise
+}
+
+fn (m: Map[K, V]) has[K: Eq, V](key: K): Bool unsafe go {
+  _, ok := m.get(key)
+  return ok
+}
+
+fn (m: Map[K, V]) put[K: Eq, V](key: K, value: V): Map[K, V] unsafe go {
+  return m.put(key, value)
+}
+
+fn (m: Map[K, V]) remove[K: Eq, V](key: K): Map[K, V] unsafe go {
+  return m.remove(key)
+}
+
+fn (m: Map[K, V]) size[K: Eq, V](): Int unsafe go {
+  return int64(m.len())
+}
+
+fn (m: Map[K, V]) isEmpty[K: Eq, V](): Bool unsafe go {
+  return m.len() == 0
+}
+
+fn (m: Map[K, V]) keys[K: Eq, V](): List[K] unsafe go {
+  return m.keys()
+}
+
+fn (m: Map[K, V]) values[K: Eq, V](): List[V] unsafe go {
+  return m.vals()
+}
+
+fn (m: Map[K, V]) entries[K: Eq, V](): List[Entry[K, V]] unsafe go {
+  out := make([]Entry[K, V], 0, m.len())
+  m.each(func(k K, v V) bool {
+    out = append(out, Entry[K, V]{key: k, value: v})
+    return true
+  })
+  return out
+}
+
+fn (a: Map[K, V]) merge[K: Eq, V](b: Map[K, V]): Map[K, V] unsafe go {
+  out := a
+  b.each(func(k K, v V) bool {
+    out = out.put(k, v)
+    return true
+  })
+  return out
+}
+
+fn (m: Map[K, V]) mapValues[K: Eq, V, W](f: (V) => W): Map[K, W] unsafe go {
+  return _mapValues(m, f)
+}
+
+fn (m: Map[K, V]) filter[K: Eq, V](test: (K, V) => Bool): Map[K, V] unsafe go {
+  out := m
+  m.each(func(k K, v V) bool {
+    if !test(k, v) {
+      out = out.remove(k)
+    }
+    return true
+  })
+  return out
+}
+
+fn (m: Map[K, V]) forEach[K: Eq, V](f: (K, V) => Unit) unsafe go {
+  m.each(func(k K, v V) bool {
+    f(k, v)
+    return true
+  })
+}
+
+fn (m: Map[K, V]) sorted[K: Ord + Eq, V](): Map[K, V] { m.sortedBy((a, b) => compare(a, b) < 0) }
+
+fn (m: Map[K, V]) sortedBy[K: Eq, V](less: (K, K) => Bool): Map[K, V] unsafe go {
+  return _mapSortedBy(m, less)
+}
+
+fn (m: Map[K, V]) inOrder[K: Eq, V](): Map[K, V] unsafe go {
+  return _mapInOrder(m)
+}
+
+fn (m: Map[K, V]) unordered[K: Eq, V](): Map[K, V] unsafe go {
+  return _mapUnordered(m)
+}

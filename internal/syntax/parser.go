@@ -288,9 +288,22 @@ func (p *parser) funcDecl() (fn *FuncDecl) {
 func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 	isPred := p.at(KwPred)
 	pos := p.next().Pos
+	// A method: `fn (xs: List[T]) first[T](): T`.
+	var receiver *Param
+	if p.at(LParen) && !isPred && withBody && !inBraces {
+		p.next()
+		rname := p.expect(TIdent, "(the receiver's name)")
+		p.expect(Colon, "after the receiver's name")
+		receiver = &Param{Pos: rname.Pos, Name: rname.Text, Type: p.typeExpr()}
+		p.expect(RParen, "to end the receiver")
+	}
 	name := p.expect(TIdent, "(function name)")
 	fn := &FuncDecl{Pos: pos, Name: name.Text, IsPred: isPred}
 	fn.TypeParams = p.typeParams()
+	if receiver != nil {
+		fn.IsMethod = true
+		fn.Params = append(fn.Params, receiver)
+	}
 	p.expect(LParen, "to start the parameter list")
 	p.skipNewlines()
 	for !p.at(RParen) {

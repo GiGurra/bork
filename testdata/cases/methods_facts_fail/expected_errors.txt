@@ -1,0 +1,1 @@
+main.bork:3:11: first requires xs to be notEmpty, but that is not proven for xs (check it first with if (notEmpty(xs)) { ... })

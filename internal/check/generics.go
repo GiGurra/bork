@@ -754,7 +754,7 @@ func (c *checker) inferFromBody(l *syntax.Lambda, p Type, in *inference) {
 	if !ok || !ok2 || len(pt.Params) != len(l.Params) {
 		return
 	}
-	hole := &TypeParam{Name: "?"}
+	hole := &TypeParam{Name: "?", Hole: true}
 	spec := &FuncType{}
 	for _, q := range pt.Params {
 		if in.open(q) {

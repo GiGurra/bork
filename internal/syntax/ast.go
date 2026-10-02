@@ -99,6 +99,9 @@ type FuncDecl struct {
 	GoBody     *GoCode
 	// Instance is set for a method of an instance declaration.
 	Instance *InstanceDecl
+	// IsMethod is set for a method, `fn (xs: List[T]) first[T](): T`:
+	// its receiver is its first parameter.
+	IsMethod bool
 }
 
 // ClassDecl is a type class: `class Show[T] { fn show(x: T): String }`.

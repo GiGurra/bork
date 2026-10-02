@@ -1,0 +1,49 @@
+type User = { name: String, age: Int, team: String }
+
+fn main() {
+  users = [
+    User { name: "ada", age: 36, team: "core" },
+    User { name: "bob", age: 17, team: "web" },
+    User { name: "cy", age: 41, team: "core" },
+  ]
+  println(users.filter(u => u.age >= 18).map(u => u.name.toUpper()).join(", "))
+  println(users.sortBy(u => u.age).map(u => u.name))
+  byTeam = users.groupBy(u => u.team).mapValues(us => us.map(u => u.name))
+  println(byTeam)
+  println(byTeam.get("core").map(names => names.length()).getOr(0))
+  counts = "the cat and the hat".split(" ").fold({:}, (m, w) => m.put(w, m.getOr(w, 0) + 1))
+  println(counts.sorted())
+  println(counts.filter((w, n) => n > 1).keys())
+  println([3, 1, 2].sorted().reverse())
+  println("  hi  ".trim().repeat(2))
+  more()
+}
+
+// Methods of your own types, and of built-in ones.
+type Point = { x: Int, y: Int }
+type Shape = sealed { Circle { r: Int }, Square { side: Int } }
+type Counter = { step: Int, next: (Int) => Int }
+
+fn (p: Point) plus(q: Point): Point { Point { x: p.x + q.x, y: p.y + q.y } }
+fn (s: Shape) area(): Int {
+  match (s) {
+    Shape.Circle { r } => 3 * r * r
+    Shape.Square { side } => side * side
+  }
+}
+fn (xs: List[Int]) total(): Int { xs.fold(0, (a, b) => a + b) }
+// A record's function field is called as before, not a method.
+fn (c: Counter) next(): Int { 0 }
+
+fn more() {
+  println(Point { x: 1, y: 2 }.plus(Point { x: 3, y: 4 }))
+  println([Shape.Circle { r: 1 }, Shape.Square { side: 2 }].map(s => s.area()).total())
+  c = Counter { step: 2, next: n => n + 2 }
+  println(c.next(5))
+  // Facts carry through: a list known not to be empty has a first.
+  xs = [5, 6].append(7)
+  println(xs.first())
+  // Methods and |> mix.
+  println([1, 2, 3] |> map(x => x * 10) |> filter(x => x > 10) |> reverse)
+  println(Option.Some { value: 4 }.map(x => x + 1).getOr(0))
+}

@@ -21,7 +21,10 @@ type Package struct {
 	// ("" for the root package and the prelude).
 	GoPrefix string
 	// Funcs holds the package's own functions by name.
-	Funcs   map[string]*Func
+	Funcs map[string]*Func
+	// methods holds the package's methods, by receiver type (see
+	// methodKey) and name.
+	methods map[string]map[string]*Func
 	types   map[string]*typeEntry
 	imports map[string]*Package // by the name files use for them
 	used    map[string]bool     // the imports that are used
@@ -442,6 +445,13 @@ type checker struct {
 	// sharedDefaults are the parameter defaults that calls share (see
 	// defaults.go): checked once, where they were declared.
 	sharedDefaults map[syntax.Expr]bool
+	// prechecked holds the types of expressions already checked, which
+	// the next check of them takes instead of checking them again (a
+	// method call's receiver; see methods.go).
+	prechecked map[syntax.Expr]Type
+	// methodCalls holds the method calls rewritten as calls of the
+	// method, with what they were, to check them again from scratch.
+	methodCalls map[*syntax.Call]methodCall
 }
 
 type local struct {
@@ -516,6 +526,10 @@ func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
 }
 
 func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
+	if fd.IsMethod {
+		c.declareMethod(fd, prelude)
+		return
+	}
 	if _, ok := builtins[fd.Name]; ok {
 		c.errorf(fd.Pos, "%s is a built-in function and cannot be redefined", fd.Name)
 		return
@@ -795,6 +809,10 @@ func (c *checker) expr(e syntax.Expr) Type { return c.exprWant(e, nil) }
 // and values like `Option.None` whose type comes from the context. It
 // does not report mismatches; the caller does.
 func (c *checker) exprWant(e syntax.Expr, want Type) Type {
+	if t, ok := c.prechecked[e]; ok {
+		delete(c.prechecked, e)
+		return t
+	}
 	if v := constValue(e); v != nil {
 		return c.constant(e, v, want)
 	}
@@ -1001,6 +1019,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 }
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
+	if t, ok := c.methodCallOf(e, want); ok {
+		return t
+	}
 	id, ok := e.Fun.(*syntax.Ident)
 	if len(e.TypeArgs) > 0 {
 		builtin := false
