@@ -1,0 +1,43 @@
+// A worker that ticks until its scope is cancelled, and says why it
+// stopped.
+fn ticker(s: Scope, name: String, n: Int): Int {
+  match (delay(s, 5)) {
+    c: Cancelled => {
+      println(s"$name stopped: ${c.reason}")
+      n
+    }
+    _ => ticker(s, name, n + 1)
+  }
+}
+
+fn main() {
+  // An explicit cancel; the scope still waits for its tasks.
+  r = scope s {
+    t = spawn(s, () => ticker(s, "a", 0))
+    sleep(20)
+    cancel(s)
+    await(t) >= 1
+  }
+  println(r)
+  // A deadline.
+  scope s {
+    cancelAfter(s, 15)
+    launch(s, () => {
+      ticker(s, "b", 0)
+    })
+  }
+  // Nested scopes are cancelled with the scope around them.
+  scope outer {
+    scope inner {
+      println(cancelled(inner))
+      cancel(outer)
+      println(cancelled(inner))
+      println(checkpoint(inner))
+    }
+  }
+  // Work that is done before the deadline is not cancelled.
+  scope s {
+    cancelAfter(s, 1000)
+    println(delay(s, 1))
+  }
+}

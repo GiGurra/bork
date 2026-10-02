@@ -343,17 +343,63 @@ func _runTest(run func()) (msg string) {
 const scopeRuntime = `package main
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // _Scope is a bork scope: tasks it waits for, and finalizers that run,
-// last registered first, when it closes.
+// last registered first, when it closes. Its context is cancelled by
+// cancel, by a deadline, by a task that panics, by a panic in its
+// block, and with the scope it is nested in.
 type _Scope struct {
 	mu         sync.Mutex
 	finalizers []func()
 	running    sync.WaitGroup
 	tasks      []*_task
+	ctx        context.Context
+	cancel     context.CancelCauseFunc
+}
+
+// _newScope opens a scope inside parent (nil for none).
+func _newScope(parent *_Scope) *_Scope {
+	ctx := context.Background()
+	if parent != nil {
+		ctx = parent.ctx
+	}
+	return _scopeWith(ctx)
+}
+
+// _scopeWith opens a scope that is cancelled with ctx.
+func _scopeWith(ctx context.Context) *_Scope {
+	s := &_Scope{}
+	s.ctx, s.cancel = context.WithCancelCause(ctx)
+	return s
+}
+
+var _errCancelled = errors.New("cancelled")
+
+// _cancelReason says why a scope was cancelled, or "" if it was not.
+func (s *_Scope) _cancelReason() string {
+	if s.ctx.Err() == nil {
+		return ""
+	}
+	return context.Cause(s.ctx).Error()
+}
+
+// _sleep waits d, or until the scope is cancelled; it reports whether
+// it slept the whole time.
+func (s *_Scope) _sleep(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-s.ctx.Done():
+		return false
+	}
 }
 
 // _task is a goroutine a scope started (spawn, launch).
@@ -372,7 +418,8 @@ func (s *_Scope) Defer(f func()) {
 	s.mu.Unlock()
 }
 
-// Go runs work on a goroutine the scope waits for before it closes.
+// Go runs work on a goroutine the scope waits for before it closes. A
+// task that panics cancels the scope, so its siblings stop too.
 func (s *_Scope) Go(work func() any) *_task {
 	t := &_task{done: make(chan struct{})}
 	s.mu.Lock()
@@ -385,6 +432,7 @@ func (s *_Scope) Go(work func() any) *_task {
 		defer func() {
 			if r := recover(); r != nil {
 				t.failure = r
+				s.cancel(errors.New("a task failed"))
 			}
 		}()
 		t.result = work()
@@ -406,8 +454,7 @@ func (t *_task) Await() any {
 // close waits for the scope's tasks, then runs the finalizers. A task
 // that panicked without being awaited panics the scope's routine. A
 // scope is closed when its block ends, and again (doing nothing, unless
-// a finalizer panicked) by a deferred call that makes panics close it
-// too.
+// a finalizer panicked) by abort.
 func (s *_Scope) close() {
 	s.running.Wait()
 	for {
@@ -421,6 +468,7 @@ func (s *_Scope) close() {
 		s.mu.Unlock()
 		f()
 	}
+	s.cancel(_errCancelled) // releases the context
 	s.mu.Lock()
 	tasks := s.tasks
 	s.tasks = nil
@@ -430,6 +478,19 @@ func (s *_Scope) close() {
 			panic(t.failure)
 		}
 	}
+}
+
+// abort is deferred when a scope opens: after a panic in its block, it
+// cancels the scope's tasks and closes it. After a normal close, it does
+// nothing.
+func (s *_Scope) abort() {
+	s.mu.Lock()
+	open := len(s.finalizers) > 0 || len(s.tasks) > 0
+	s.mu.Unlock()
+	if open {
+		s.cancel(errors.New("the scope's block failed"))
+	}
+	s.close()
 }
 
 func (s *_Scope) String() string { return "<scope>" }

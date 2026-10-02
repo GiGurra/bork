@@ -54,9 +54,22 @@ fn signup(body: String): http.Response {
   }
 }
 
-fn route(req: http.Request): http.Response {
+// slow does work that takes longer than the request's deadline allows;
+// the request scope is cancelled, and delay gives Cancelled.
+fn slow(rs: Scope): http.Response {
+  cancelAfter(rs, 20)
+  match (delay(rs, 2000)) {
+    c: Cancelled => http.Text(503, s"gave up: ${c.reason}")
+    _ => http.Text(200, "done")
+  }
+}
+
+// route answers a request; rs is the request's scope, cancelled if the
+// client goes away.
+fn route(req: http.Request, rs: Scope): http.Response {
   match (http.Segments(req.path)) {
     ["health"] => http.Text(200, "ok")
+    ["slow"] => slow(rs)
     ["signup"] => if (req.method == "POST") { signup(req.body) } else { http.Text(405, "use POST") }
     _ => http.Text(404, "not found")
   }
@@ -95,6 +108,7 @@ fn demo(): Unit | IoError {
     post(base, "{\"name\": \"dee\"")
     show("GET /signup", http.Get(base + "/signup"))
     show("GET /nope", http.Get(base + "/nope"))
+    show("GET /slow", http.Get(base + "/slow"))
   }
 }
 
@@ -116,8 +130,13 @@ fn main() {
   }
 }
 
+fn get(path: String): http.Response {
+  scope rs {
+    route(http.Request { method: "GET", path: path, query: "", headers: [], body: "" }, rs)
+  }
+}
+
 test "routes requests" {
-  get = (path: String) => route(http.Request { method: "GET", path: path, query: "", headers: [], body: "" })
   assertEqual(get("/health").body, "ok")
   assertEqual(get("/missing").status, 404)
   assertEqual(get("/signup").status, 405)

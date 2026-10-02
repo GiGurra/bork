@@ -6,3 +6,4 @@ POST /signup {"name": "cy", "plan": {"type": "Paid", "seats": 0}} -> 422 {"path"
 POST /signup {"name": "dee" -> 400 {"path":"","message":"unexpected end of JSON: expected ',' or '}'"}
 GET /signup -> 405 use POST
 GET /nope -> 404 not found
+GET /slow -> 503 gave up: deadline exceeded
