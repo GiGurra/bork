@@ -1,0 +1,2 @@
+main.bork:13:3: f may be released: it belongs to scope s, which ended on line 12
+main.bork:24:3: f may be released: it belongs to scope s, which ended on line 23

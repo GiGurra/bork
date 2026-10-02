@@ -7,13 +7,9 @@ import (
 	"strconv"
 
 	"github.com/GiGurra/bork/internal/check"
-	"github.com/GiGurra/bork/internal/syntax"
 )
 
-func (g *gen) selector(e *syntax.Selector) ([]ast.Stmt, ast.Expr) {
-	if v := g.info.SelectorVariants[e]; v != nil {
-		return nil, &ast.CompositeLit{Type: g.variantType(v)}
-	}
+func (g *gen) selector(e *check.Select) ([]ast.Stmt, ast.Expr) {
 	stmts, x := g.value(e.X)
 	if x == nil {
 		return stmts, nil
@@ -21,17 +17,15 @@ func (g *gen) selector(e *syntax.Selector) ([]ast.Stmt, ast.Expr) {
 	return stmts, &ast.SelectorExpr{X: paren(x), Sel: name(e.Name)}
 }
 
-func (g *gen) recordLit(e *syntax.RecordLit) ([]ast.Stmt, ast.Expr) {
+func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 	var typ ast.Expr
-	var fields []*check.Field
-	switch target := g.info.RecordTargets[e].(type) {
-	case *check.Record:
-		typ, fields = g.goType(target), target.Fields
-	case *check.Variant:
-		typ, fields = g.variantType(target), target.Fields
+	if e.Record != nil {
+		typ = g.goType(e.Record)
+	} else {
+		typ = g.variantType(e.Variant)
 	}
 	// Field values are evaluated in the order they are written.
-	vals := make([]syntax.Expr, len(e.Fields))
+	vals := make([]check.Expr, len(e.Fields))
 	for i, fi := range e.Fields {
 		vals[i] = fi.Value
 	}
@@ -42,12 +36,10 @@ func (g *gen) recordLit(e *syntax.RecordLit) ([]ast.Stmt, ast.Expr) {
 	lit := &ast.CompositeLit{Type: typ}
 	for i, fi := range e.Fields {
 		var ft check.Type
-		for _, f := range fields {
-			if f.Name == fi.Name {
-				ft = f.Type
-			}
+		if fi.Field != nil {
+			ft = fi.Field.Type
 		}
-		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(fi.Name), Value: g.convert(xs[i], g.info.Types[fi.Value], ft)})
+		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(fi.Name), Value: g.convert(xs[i], fi.Value.Type(), ft)})
 	}
 	return stmts, lit
 }
@@ -55,8 +47,8 @@ func (g *gen) recordLit(e *syntax.RecordLit) ([]ast.Stmt, ast.Expr) {
 // copyExpr lowers `x.copy(a = 1, b.c = 2)`. Records are Go struct
 // values, so copying the struct and assigning the changed (possibly
 // nested) fields never affects x.
-func (g *gen) copyExpr(e *syntax.Copy) ([]ast.Stmt, ast.Expr) {
-	exprs := []syntax.Expr{e.X}
+func (g *gen) copyExpr(e *check.Copy) ([]ast.Stmt, ast.Expr) {
+	exprs := []check.Expr{e.X}
 	for _, u := range e.Updates {
 		exprs = append(exprs, u.Value)
 	}
@@ -66,7 +58,7 @@ func (g *gen) copyExpr(e *syntax.Copy) ([]ast.Stmt, ast.Expr) {
 	}
 	res := g.newTmp()
 	stmts = append(stmts, define(res, xs[0]))
-	rec := g.info.Types[e.X].(*check.Record)
+	rec := e.X.Type().(*check.Record)
 	for i, u := range e.Updates {
 		var lhs ast.Expr = res
 		cur := rec
@@ -79,20 +71,20 @@ func (g *gen) copyExpr(e *syntax.Copy) ([]ast.Stmt, ast.Expr) {
 				cur = next
 			}
 		}
-		stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.convert(xs[i+1], g.info.Types[u.Value], ft)}})
+		stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.convert(xs[i+1], u.Value.Type(), ft)}})
 	}
 	return stmts, res
 }
 
 // try lowers `x?` to a type switch that keeps one case and returns the
 // others from the function.
-func (g *gen) try(e *syntax.Try) ([]ast.Stmt, ast.Expr) {
-	info := g.info.Tries[e]
+func (g *gen) try(e *check.Try) ([]ast.Stmt, ast.Expr) {
+	info := &e.TryInfo
 	stmts, x := g.value(e.X)
 	if x == nil {
 		return stmts, nil
 	}
-	x = g.convert(x, g.info.Types[e.X], g.info.Types[e.X])
+	x = g.convert(x, e.X.Type(), e.X.Type())
 	kept, v := g.newTmp(), g.newTmp()
 	stmts = append(stmts, varDecl(kept, g.goType(info.Kept)))
 	sw := &ast.TypeSwitchStmt{
@@ -129,8 +121,8 @@ func unreachable() []ast.Stmt {
 // only test the top-level type or variant, it becomes a Go type switch;
 // literals on a basic type become an expression switch; and nested
 // patterns become an if-else chain of tests.
-func (g *gen) matchStmt(m *syntax.Match, k sink) []ast.Stmt {
-	st := g.info.Types[m.X]
+func (g *gen) matchStmt(m *check.Match, k sink) []ast.Stmt {
+	st := m.X.Type()
 	stmts, x := g.value(m.X)
 	if x == nil {
 		return stmts
@@ -140,7 +132,7 @@ func (g *gen) matchStmt(m *syntax.Match, k sink) []ast.Stmt {
 	pats := make([]*check.Pat, len(m.Arms))
 	flat, lits := true, true
 	for i, arm := range m.Arms {
-		p := g.info.ArmPats[arm]
+		p := arm.Pat
 		pats[i] = p
 		if !flatPattern(p) {
 			flat = false
@@ -223,7 +215,7 @@ func and(conds []ast.Expr) ast.Expr {
 	return x
 }
 
-func (g *gen) typeSwitch(m *syntax.Match, pats []*check.Pat, x ast.Expr, v *ast.Ident, k sink) ast.Stmt {
+func (g *gen) typeSwitch(m *check.Match, pats []*check.Pat, x ast.Expr, v *ast.Ident, k sink) ast.Stmt {
 	sw := &ast.TypeSwitchStmt{Assign: &ast.ExprStmt{X: &ast.TypeAssertExpr{X: x}}, Body: &ast.BlockStmt{}}
 	for _, p := range pats {
 		if binds(p) {
@@ -280,7 +272,7 @@ func binds(p *check.Pat) bool {
 	return false
 }
 
-func (g *gen) literalSwitch(m *syntax.Match, pats []*check.Pat, x ast.Expr, v *ast.Ident, k sink) ast.Stmt {
+func (g *gen) literalSwitch(m *check.Match, pats []*check.Pat, x ast.Expr, v *ast.Ident, k sink) ast.Stmt {
 	sw := &ast.SwitchStmt{Init: define(v, x), Tag: v, Body: &ast.BlockStmt{}}
 	hasDefault := false
 	for i, arm := range m.Arms {
@@ -398,7 +390,7 @@ func (g *gen) binds(p *check.Pat, x ast.Expr, narrowed bool) []ast.Stmt {
 			val = g.narrow(p, x)
 		}
 		out = append(out, define(name(p.Bind), val))
-		if g.info.Unused[p.BindNode] {
+		if p.Var.Unused {
 			out = append(out, assign(ast.NewIdent("_"), name(p.Bind)))
 		}
 	}

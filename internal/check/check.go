@@ -77,6 +77,10 @@ type Func struct {
 	Test *syntax.TestDecl
 	// Calls lists the functions this function's body calls.
 	Calls []*Func
+	// ParamVars are the variables of the parameters, and Body the typed
+	// tree of the body (nil for a function implemented in Go).
+	ParamVars []*Var
+	Body      *Block
 	// ParamConstraints holds each parameter's where clause, and
 	// ResultConstraints what the result promises (per union member).
 	// defaultsChecked is set once the parameters' defaults are checked.
@@ -164,8 +168,9 @@ type TryInfo struct {
 }
 
 // Info is what the checker learned about a program: the root package,
-// and the packages it imports. Later passes (code generation) read it
-// instead of re-deriving types.
+// and the packages it imports. Later passes (lifetimes, facts, and code
+// generation) read it, and the typed tree of each function body
+// (Func.Body), instead of re-deriving types.
 type Info struct {
 	// Packages lists the program's packages.
 	Packages []*Package
@@ -183,76 +188,82 @@ type Info struct {
 	Named map[string]Type
 	// TypeOrder lists declared records and sealed types in source order.
 	TypeOrder []Type
-	// Types records the type of every expression.
-	Types map[syntax.Expr]Type
-	// Calls records which function each call targets.
-	CallFuncs    map[*syntax.Call]*Func
-	CallBuiltins map[*syntax.Call]Builtin
-	// CallArgs holds the arguments of every call of a declared function
-	// as the function takes them: a method call's receiver first, then
-	// the arguments written, then the defaults of those left out. The
-	// call's syntax is left as written.
-	CallArgs map[*syntax.Call][]syntax.Expr
-	// RecordTargets records what each record literal builds: a *Record
-	// or a *Variant.
-	RecordTargets map[*syntax.RecordLit]any
-	// SelectorVariants records selectors that name a field-less variant
-	// (`Shape.Empty`); other selectors are field accesses.
-	SelectorVariants map[*syntax.Selector]*Variant
-	// ArmPats holds the checked pattern of every match arm.
-	ArmPats map[*syntax.Arm]*Pat
-	// Tries describes every `?`.
-	Tries map[*syntax.Try]*TryInfo
-	// Unused holds bindings whose value is never read: *syntax.Binding,
-	// or the pattern node that bound the name.
-	Unused map[any]bool
-	// Consts holds the value of every constant expression (number
-	// literals and arithmetic on them), already converted to the type
-	// recorded in Types.
-	Consts map[syntax.Expr]constant.Value
-	// Bindings records the type of every binding.
-	Bindings map[*syntax.Binding]Type
-	// Conversions describes numeric conversions of non-constant values.
-	Conversions map[*syntax.Call]*Conversion
 	// OutOfRange is the prelude's OutOfRange record.
 	OutOfRange Type
-	// Defs records what each identifier refers to: a *syntax.Param, a
-	// *syntax.Binding, or the pattern node that bound it.
-	Defs map[*syntax.Ident]any
-	// BindingConstraints holds the where clauses of typed bindings.
-	BindingConstraints map[*syntax.Binding][]*Constraint
 	// Tests holds the root package's tests, each checked as a function
 	// without parameters.
 	Tests []*Func
 	// Rules holds the inference rules of every package.
 	Rules []*Rule
-	// Instances describes every call of a declared function, and
-	// FuncRefs every function used as a value, with type arguments for
+
+	// What the checker records about the syntax as it checks it, which
+	// the typed tree is built from (see lower.go).
+
+	// types records the type of every expression.
+	types map[syntax.Expr]Type
+	// callFuncs and callBuiltins record which function each call
+	// targets.
+	callFuncs    map[*syntax.Call]*Func
+	callBuiltins map[*syntax.Call]Builtin
+	// callArgs holds the arguments of every call of a declared function
+	// as the function takes them: a method call's receiver first, then
+	// the arguments written, then the defaults of those left out. The
+	// call's syntax is left as written.
+	callArgs map[*syntax.Call][]syntax.Expr
+	// callTypeArgs holds a call's explicit type arguments as written, one
+	// per type parameter (nil for those a method's receiver decides).
+	callTypeArgs map[*syntax.Call][]*syntax.TypeExpr
+	// instances describes every call of a declared function, and
+	// funcRefs every function used as a value, with type arguments for
 	// generic functions.
-	Instances map[*syntax.Call]*Instance
-	FuncRefs  map[*syntax.Ident]*Instance
-	// LambdaParams holds the parameters of lambdas.
-	LambdaParams map[*syntax.Param]bool
-	// PatSources records, for a name bound by the top-level pattern of a
-	// match arm, the matched expression and the union member the pattern
-	// narrowed it to (nil if it did not narrow).
-	PatSources map[any]*PatSource
+	instances map[*syntax.Call]*Instance
+	funcRefs  map[*syntax.Ident]*Instance
+	// recordTargets records what each record literal builds: a *Record
+	// or a *Variant.
+	recordTargets map[*syntax.RecordLit]any
+	// selectorVariants records selectors that name a field-less variant
+	// (`Shape.Empty`); other selectors are field accesses.
+	selectorVariants map[*syntax.Selector]*Variant
+	// armPats holds the checked pattern of every match arm.
+	armPats map[*syntax.Arm]*Pat
+	// tries describes every `?`.
+	tries map[*syntax.Try]*TryInfo
+	// unused holds bindings whose value is never read: *syntax.Binding,
+	// or the pattern node that bound the name.
+	unused map[any]bool
+	// consts holds the value of every constant expression (number
+	// literals and arithmetic on them), already converted to the type
+	// recorded in types.
+	consts map[syntax.Expr]constant.Value
+	// bindings records the type of every binding, and
+	// bindingConstraints the where clauses of typed ones.
+	bindings           map[*syntax.Binding]Type
+	bindingConstraints map[*syntax.Binding][]*Constraint
+	// conversions describes numeric conversions of non-constant values.
+	conversions map[*syntax.Call]*Conversion
+	// defs records what each identifier refers to: a *syntax.Param, a
+	// *syntax.Binding, a *syntax.ScopeExpr, or the pattern node that
+	// bound it.
+	defs map[*syntax.Ident]any
+	// patSources records, for a name bound by a match arm's pattern,
+	// where its value comes from (see patSource).
+	patSources map[any]*patSource
 }
 
-// Args is a call's arguments: for a call of a declared function, as the
-// function takes them (see CallArgs); otherwise as written.
-func (info *Info) Args(call *syntax.Call) []syntax.Expr {
-	if args, ok := info.CallArgs[call]; ok {
+// args is a call's arguments: for a call of a declared function, as the
+// function takes them (see callArgs); otherwise as written.
+func (info *Info) args(call *syntax.Call) []syntax.Expr {
+	if args, ok := info.callArgs[call]; ok {
 		return args
 	}
 	return call.Args
 }
 
-// PatSource is where a value bound by a match pattern came from.
+// patSource is where a value bound by a match pattern came from.
 //
 // A name bound inside the pattern (`Option.Some { value: v }`) has the
 // field path to it from the subject (".value"), and the Field.
-type PatSource struct {
+type patSource struct {
 	Subject syntax.Expr
 	Member  Type
 	Path    string
@@ -269,25 +280,25 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 			Funcs:            map[string]*Func{},
 			FuncOf:           map[*syntax.FuncDecl]*Func{},
 			Named:            map[string]Type{},
-			Types:            map[syntax.Expr]Type{},
-			CallFuncs:        map[*syntax.Call]*Func{},
-			CallBuiltins:     map[*syntax.Call]Builtin{},
-			CallArgs:         map[*syntax.Call][]syntax.Expr{},
-			RecordTargets:    map[*syntax.RecordLit]any{},
-			SelectorVariants: map[*syntax.Selector]*Variant{},
-			ArmPats:          map[*syntax.Arm]*Pat{},
-			Tries:            map[*syntax.Try]*TryInfo{},
-			Unused:           map[any]bool{},
-			Consts:           map[syntax.Expr]constant.Value{},
-			Bindings:         map[*syntax.Binding]Type{},
-			Conversions:      map[*syntax.Call]*Conversion{},
-			Defs:             map[*syntax.Ident]any{},
+			types:            map[syntax.Expr]Type{},
+			callFuncs:        map[*syntax.Call]*Func{},
+			callBuiltins:     map[*syntax.Call]Builtin{},
+			callArgs:         map[*syntax.Call][]syntax.Expr{},
+			callTypeArgs:     map[*syntax.Call][]*syntax.TypeExpr{},
+			recordTargets:    map[*syntax.RecordLit]any{},
+			selectorVariants: map[*syntax.Selector]*Variant{},
+			armPats:          map[*syntax.Arm]*Pat{},
+			tries:            map[*syntax.Try]*TryInfo{},
+			unused:           map[any]bool{},
+			consts:           map[syntax.Expr]constant.Value{},
+			bindings:         map[*syntax.Binding]Type{},
+			conversions:      map[*syntax.Call]*Conversion{},
+			defs:             map[*syntax.Ident]any{},
 
-			BindingConstraints: map[*syntax.Binding][]*Constraint{},
-			PatSources:         map[any]*PatSource{},
-			Instances:          map[*syntax.Call]*Instance{},
-			FuncRefs:           map[*syntax.Ident]*Instance{},
-			LambdaParams:       map[*syntax.Param]bool{},
+			bindingConstraints: map[*syntax.Binding][]*Constraint{},
+			patSources:         map[any]*patSource{},
+			instances:          map[*syntax.Call]*Instance{},
+			funcRefs:           map[*syntax.Ident]*Instance{},
 		},
 	}
 	c.declarePackages(files, root)
@@ -364,6 +375,11 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 				c.errorf(imp.Pos, "%s is imported but not used", imp.Path)
 			}
 		}
+	}
+	// The later passes read the typed tree, which is built once the
+	// program checks.
+	if c.diags.Len() == 0 {
+		c.lower(files)
 	}
 	return c.info
 }
@@ -469,7 +485,7 @@ type checker struct {
 type local struct {
 	typ  Type
 	node any // the binding's syntax node; nil for parameters
-	decl any // what an identifier refers to (see Info.Defs)
+	decl any // what an identifier refers to (see Info.defs)
 	used bool
 }
 
@@ -692,14 +708,14 @@ func (c *checker) pushScope() { c.scopes = append(c.scopes, map[string]*local{})
 func (c *checker) popScope() {
 	for _, l := range c.scopes[len(c.scopes)-1] {
 		if l.node != nil && !l.used {
-			c.info.Unused[l.node] = true
+			c.info.unused[l.node] = true
 		}
 	}
 	c.scopes = c.scopes[:len(c.scopes)-1]
 }
 
 func (c *checker) record(e syntax.Expr, t Type) Type {
-	c.info.Types[e] = t
+	c.info.types[e] = t
 	return t
 }
 
@@ -817,9 +833,9 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			}
 			t = declared
 		}
-		c.info.Bindings[s] = t
+		c.info.bindings[s] = t
 		if s.Type != nil && t != Invalid {
-			c.info.BindingConstraints[s] = c.constraintsOf(s.Type, t, c.paramScope())
+			c.info.bindingConstraints[s] = c.constraintsOf(s.Type, t, c.paramScope())
 		}
 		if s.Name != "_" {
 			c.bind(s.Name, s.Pos, t, s)
@@ -827,7 +843,7 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		return Unit
 	case *syntax.TrustStmt:
 		c.expr(s.Call)
-		if fn := c.info.CallFuncs[s.Call]; fn != nil && !fn.Decl.IsPred {
+		if fn := c.info.callFuncs[s.Call]; fn != nil && !fn.Decl.IsPred {
 			c.errorf(s.Call.Position(), "trust needs a predicate call, but %s is a function", fn.Decl.Name)
 		}
 		return Unit
@@ -912,7 +928,7 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if l := c.lookup(e.Name); l != nil {
 		l.used = true
-		c.info.Defs[e] = l.decl
+		c.info.defs[e] = l.decl
 		return l.typ
 	}
 	if fn, ok := c.funcNamed(e.Name); ok {
@@ -990,7 +1006,7 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 	op := opSymbol(e.Op)
 	sameNumbers := IsNumeric(x) && identical(x, y)
 	if e.Op == syntax.Slash || e.Op == syntax.Pct {
-		if v := c.info.Consts[e.Y]; v != nil && constant.Sign(v) == 0 {
+		if v := c.info.consts[e.Y]; v != nil && constant.Sign(v) == 0 {
 			c.errorf(e.Y.Position(), "division by zero")
 			return Invalid
 		}
@@ -1071,7 +1087,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		return c.callValue(e)
 	}
 	if b, ok := builtins[id.Name]; ok && c.lookup(id.Name) == nil {
-		c.info.CallBuiltins[e] = b
+		c.info.callBuiltins[e] = b
 		return c.builtinCall(e, id.Name, b)
 	}
 	fn, ok := c.funcNamed(id.Name)
@@ -1293,10 +1309,10 @@ func (c *checker) conversion(e *syntax.Call, fname string) Type {
 		return Invalid
 	}
 	if alwaysFits(from, to) {
-		c.info.Conversions[e] = &Conversion{From: from, To: to}
+		c.info.conversions[e] = &Conversion{From: from, To: to}
 		return to
 	}
-	c.info.Conversions[e] = &Conversion{From: from, To: to, Checked: true}
+	c.info.conversions[e] = &Conversion{From: from, To: to, Checked: true}
 	return newUnion([]Type{to, c.info.OutOfRange})
 }
 

@@ -41,7 +41,7 @@ func (g *gen) ruleTest(r *check.Rule, goName *ast.Ident) (ast.Decl, check.Type) 
 		}
 	}
 	g.usesShow = true
-	for _, x := range r.Decl.Premises {
+	for _, x := range r.PremiseExprs {
 		stmts, cond := g.value(x)
 		body = append(body, stmts...)
 		body = append(body, &ast.IfStmt{
@@ -49,13 +49,13 @@ func (g *gen) ruleTest(r *check.Rule, goName *ast.Ident) (ast.Decl, check.Type) 
 			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{}}},
 		})
 	}
-	for _, x := range r.Decl.Conclusions {
+	for i, x := range r.ConclusionExprs {
 		stmts, cond := g.value(x)
 		body = append(body, stmts...)
 		msg := &ast.BinaryExpr{
 			X:  &ast.BinaryExpr{X: strLit(r.Decl.Pos.String() + ": rule " + r.Decl.Name + " does not hold for "), Op: token.ADD, Y: shown},
 			Op: token.ADD,
-			Y:  strLit(": the premises hold, but " + exprText(x) + " is false"),
+			Y:  strLit(": the premises hold, but " + r.ConclusionTexts[i] + " is false"),
 		}
 		body = append(body, &ast.IfStmt{
 			Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)},

@@ -143,7 +143,7 @@ func (c *checker) methodNamed(t Type, name string) (*Func, string) {
 
 // methodCallOf checks e if it is a method call, x.m(args), and reports
 // whether it was. The call is left as written: the checker records its
-// arguments as m takes them, x first (see Info.CallArgs).
+// arguments as m takes them, x first (see Info.callArgs).
 func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	sel, ok := e.Fun.(*syntax.Selector)
 	if !ok {
@@ -220,9 +220,9 @@ func (c *checker) methodTypeArgs(e *syntax.Call, sel *syntax.Selector, fn *Func)
 		copy(full, e.TypeArgs)
 	default:
 		if len(free) == 0 {
-			c.errorf(e.Pos, "method %s takes no type arguments: its receiver decides them", sel.Name)
+			c.errorf(sel.Pos, "method %s takes no type arguments: its receiver decides them", sel.Name)
 		} else {
-			c.errorf(e.Pos, "method %s takes %d type argument(s) (%s), but %d were given", sel.Name, len(free), freeNames(fn, free), len(e.TypeArgs))
+			c.errorf(sel.Pos, "method %s takes %d type argument(s) (%s), but %d were given", sel.Name, len(free), freeNames(fn, free), len(e.TypeArgs))
 		}
 		return nil, false
 	}

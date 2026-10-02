@@ -13,7 +13,7 @@ import "github.com/GiGurra/bork/internal/syntax"
 // from the call, so `xs: List[T] = []` works for every T), or else the
 // default itself, checked once where it was declared, so its names
 // mean what they mean there. The call's syntax is left as written; its
-// arguments with the defaults are in Info.CallArgs.
+// arguments with the defaults are in Info.callArgs, and the typed tree.
 
 // ensureDefaults checks fn's defaults, once: closed values, of the
 // parameter's type, and only on the last parameters.

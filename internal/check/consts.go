@@ -95,7 +95,7 @@ func (c *checker) constant(e syntax.Expr, v constant.Value, want Type) Type {
 	if !ok {
 		return c.record(e, Invalid)
 	}
-	c.info.Consts[e] = v
+	c.info.consts[e] = v
 	return c.record(e, t)
 }
 

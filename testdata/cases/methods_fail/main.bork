@@ -16,3 +16,8 @@ fn typeArgs() {
   println(["x"].reverse[Int, Int]())
   println(["x"].map[Int](x => x))
 }
+
+fn arity() {
+  println(["x"].take())
+  println([1].map())
+}

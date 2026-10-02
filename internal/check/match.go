@@ -35,11 +35,14 @@ type Pat struct {
 	// Type is the type of the value matched at this position.
 	Type Type
 	// Bind, if not empty, names the value matched here; BindType is its
-	// type (narrowed, for PatType), and BindNode the syntax node that
+	// type (narrowed, for PatType), and bindNode the syntax node that
 	// introduced it.
 	Bind     string
 	BindType Type
-	BindNode any
+	bindNode any
+	// Var is the variable of the bound name in the typed tree, set
+	// when the tree is built (see lower.go).
+	Var *Var
 	// Lit is the value of a PatLit (a number, string, or bool constant).
 	Lit constant.Value
 	// Variant is the variant of a PatVariant.
@@ -75,11 +78,11 @@ func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Fi
 		return
 	}
 	if p.Bind != "" {
-		src := &PatSource{Subject: subject, Path: path, Field: field}
+		src := &patSource{Subject: subject, Path: path, Field: field}
 		if top && p.Kind == PatType {
 			src.Member = p.Narrowed()
 		}
-		c.info.PatSources[p.BindNode] = src
+		c.info.patSources[p.bindNode] = src
 	}
 	var fields []*Field
 	switch {
@@ -141,7 +144,7 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 		if p == nil {
 			ok = false
 		} else {
-			c.info.ArmPats[arm] = p
+			c.info.armPats[arm] = p
 			c.patSources(p, m.X, "", nil, true)
 		}
 		pats[i] = p
@@ -279,7 +282,7 @@ func (c *checker) typePattern(t, st Type, pos diag.Pos) *Pat {
 
 // bindPat makes pat bind name to the value it matches.
 func (c *checker) bindPat(pat *Pat, name string, pos diag.Pos, node any) {
-	pat.Bind, pat.BindNode, pat.BindType = name, node, pat.Type
+	pat.Bind, pat.bindNode, pat.BindType = name, node, pat.Type
 	if pat.Kind == PatType {
 		pat.BindType = pat.Narrowed()
 	}
@@ -390,7 +393,7 @@ func (c *checker) fieldPatterns(pat *Pat, fps []*syntax.FieldPat, fields []*Fiel
 
 // literalValue is the value of a literal pattern.
 func (c *checker) literalValue(e syntax.Expr) constant.Value {
-	if v, ok := c.info.Consts[e]; ok {
+	if v, ok := c.info.consts[e]; ok {
 		return v
 	}
 	switch e := e.(type) {

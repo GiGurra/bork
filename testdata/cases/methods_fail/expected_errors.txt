@@ -3,6 +3,8 @@ main.bork:5:8: methods can be declared on List, Map, the basic types, and declar
 main.bork:7:30: T has no methods
 main.bork:10:13: Int has no method norm
 main.bork:11:32: Point has no method size
-main.bork:15:39: method map takes 1 type argument(s) (B), but 3 were given
-main.bork:16:34: method reverse takes no type arguments: its receiver decides them
+main.bork:15:17: method map takes 1 type argument(s) (B), but 3 were given
+main.bork:16:17: method reverse takes no type arguments: its receiver decides them
 main.bork:17:26: argument 1 to map must be (String) => Int, found (String) => String
+main.bork:21:17: method take takes 1 argument(s), but 0 were given
+main.bork:22:15: method map takes 1 argument(s), but 0 were given

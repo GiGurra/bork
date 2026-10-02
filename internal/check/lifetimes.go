@@ -29,25 +29,25 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 	l := &lifeChecker{
 		info:    info,
 		diags:   diags,
-		env:     map[any]lifetime{},
+		env:     map[*Var]lifetime{},
 		frame:   map[any]any{},
 		parent:  map[any]any{},
 		carries: map[Type]bool{},
 	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			if fd.Body != nil && info.FuncOf[fd] != nil {
-				l.function(fd, fd.Params, fd.Body)
+			if fn := info.FuncOf[fd]; fn != nil && fn.Body != nil {
+				l.function(fn)
 			}
 		}
 	}
 	for _, fn := range info.Tests {
-		l.function(fn.Decl, nil, fn.Decl.Body)
+		l.function(fn)
 	}
 }
 
 // A lifetime is a set of scopes: a value is usable while all of them
-// are open. Each scope is a *syntax.ScopeExpr, or a *syntax.Param (the
+// are open. Each scope is a *ScopeBlock, or a *Var of a parameter (the
 // scope of a function's or lambda's caller). The empty lifetime is
 // forever.
 type lifetime []any
@@ -74,14 +74,14 @@ func (a lifetime) has(x any) bool {
 type lifeChecker struct {
 	info  *Info
 	diags *diag.List
-	// env holds the lifetime of each binding, parameter, and pattern
-	// variable; and of each scope (a scope lives as long as itself).
-	env map[any]lifetime
+	// env holds the lifetime of each variable (a scope's lives as long
+	// as its scope block).
+	env map[*Var]lifetime
 	// open lists the scope blocks around the current point.
-	open []*syntax.ScopeExpr
+	open []*ScopeBlock
 	// enclosing holds, for each scope block, the scopes open when it
 	// opened; they outlive it.
-	enclosing map[*syntax.ScopeExpr][]*syntax.ScopeExpr
+	enclosing map[*ScopeBlock][]*ScopeBlock
 	// frame is the function or lambda each scope and parameter belongs
 	// to, and parent each lambda's enclosing frame.
 	frame, parent map[any]any
@@ -96,23 +96,23 @@ func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
 	l.diags.AddCode(pos, "lifetime.error", format, args...)
 }
 
-func (l *lifeChecker) function(fd *syntax.FuncDecl, params []*syntax.Param, body *syntax.Block) {
-	l.cur = fd
+func (l *lifeChecker) function(fn *Func) {
+	l.cur = fn
 	l.open = nil
-	l.enclosing = map[*syntax.ScopeExpr][]*syntax.ScopeExpr{}
-	for _, p := range params {
-		l.frame[p] = fd
+	l.enclosing = map[*ScopeBlock][]*ScopeBlock{}
+	for _, p := range fn.ParamVars {
+		l.frame[p] = fn
 		l.env[p] = lifetime{p}
 	}
-	l.result(body, l.expr(body), l.what())
+	l.result(fn.Body, l.expr(fn.Body), l.what())
 }
 
 // result checks that a function's or lambda's result does not belong to
 // a scope opened inside it.
-func (l *lifeChecker) result(x syntax.Expr, life lifetime, what string) {
+func (l *lifeChecker) result(x Expr, life lifetime, what string) {
 	for _, s := range life {
-		if s, ok := s.(*syntax.ScopeExpr); ok && l.within(s, l.cur) {
-			l.errorf(valuePos(x), "%s cannot return this value: it belongs to scope %s, which ends on line %d", what, s.Name, s.Body.End.Line)
+		if s, ok := s.(*ScopeBlock); ok && l.within(s, l.cur) {
+			l.errorf(valuePos(x), "%s cannot return this value: it belongs to scope %s, which ends on line %d", what, s.Var.Name, s.Body.End.Line)
 			return
 		}
 	}
@@ -131,12 +131,12 @@ func (l *lifeChecker) within(x, f any) bool {
 
 // use checks that a value about to be used has not been released, and
 // returns its lifetime (nil if it was, to avoid follow-up errors).
-func (l *lifeChecker) use(x syntax.Expr, life lifetime) lifetime {
+func (l *lifeChecker) use(x Expr, life lifetime) lifetime {
 	if s := l.closed(life); s != nil {
-		if _, ok := x.(*syntax.ScopeExpr); ok {
-			l.errorf(x.Position(), "the value of this scope block belongs to scope %s, which has ended; use it inside the block", s.Name)
+		if _, ok := x.(*ScopeBlock); ok {
+			l.errorf(x.Pos(), "the value of this scope block belongs to scope %s, which has ended; use it inside the block", s.Var.Name)
 		} else {
-			l.errorf(x.Position(), "%s may be released: it belongs to scope %s, which ended on line %d", describe(x), s.Name, s.Body.End.Line)
+			l.errorf(x.Pos(), "%s may be released: it belongs to scope %s, which ended on line %d", describe(x), s.Var.Name, s.Body.End.Line)
 		}
 		return nil
 	}
@@ -144,16 +144,16 @@ func (l *lifeChecker) use(x syntax.Expr, life lifetime) lifetime {
 }
 
 // closed is a scope of life that has ended, or nil.
-func (l *lifeChecker) closed(life lifetime) *syntax.ScopeExpr {
+func (l *lifeChecker) closed(life lifetime) *ScopeBlock {
 	for _, s := range life {
-		if s, ok := s.(*syntax.ScopeExpr); ok && !l.isOpen(s) {
+		if s, ok := s.(*ScopeBlock); ok && !l.isOpen(s) {
 			return s
 		}
 	}
 	return nil
 }
 
-func (l *lifeChecker) isOpen(s *syntax.ScopeExpr) bool {
+func (l *lifeChecker) isOpen(s *ScopeBlock) bool {
 	for _, o := range l.open {
 		if o == s {
 			return true
@@ -162,24 +162,26 @@ func (l *lifeChecker) isOpen(s *syntax.ScopeExpr) bool {
 	return false
 }
 
-func describe(x syntax.Expr) string {
+func describe(x Expr) string {
 	switch x := x.(type) {
-	case *syntax.Ident:
+	case *VarRef:
+		return x.Var.Name
+	case *FuncRef:
 		return x.Name
-	case *syntax.Lambda:
+	case *Lambda:
 		return "the lambda"
-	case *syntax.ScopeExpr:
-		return "the value of scope " + x.Name
+	case *ScopeBlock:
+		return "the value of scope " + x.Var.Name
 	}
 	return "this value"
 }
 
 // valuePos is where the value of x comes from: the tail of a block.
-func valuePos(x syntax.Expr) diag.Pos {
-	if b, ok := x.(*syntax.Block); ok && b.Tail != nil {
+func valuePos(x Expr) diag.Pos {
+	if b, ok := x.(*Block); ok && b.Tail != nil {
 		return valuePos(b.Tail)
 	}
-	return x.Position()
+	return x.Pos()
 }
 
 // shorter returns a scope of lifetime a that may end before lifetime b
@@ -204,9 +206,9 @@ func (l *lifeChecker) shorter(a, b lifetime) any {
 // scopeText names a scope of a lifetime, for messages.
 func (l *lifeChecker) scopeText(x any) string {
 	switch x := x.(type) {
-	case *syntax.ScopeExpr:
-		return "scope " + x.Name
-	case *syntax.Param:
+	case *ScopeBlock:
+		return "scope " + x.Var.Name
+	case *Var:
 		return "parameter " + x.Name
 	}
 	return "?"
@@ -217,12 +219,12 @@ func (l *lifeChecker) scopeOutlives(x, y any) bool {
 		return true
 	}
 	switch x := x.(type) {
-	case *syntax.Param:
+	case *Var:
 		// A caller's scope outlives the scopes its callee opens.
-		s, ok := y.(*syntax.ScopeExpr)
+		s, ok := y.(*ScopeBlock)
 		return ok && l.within(s, l.frame[x])
-	case *syntax.ScopeExpr:
-		s, ok := y.(*syntax.ScopeExpr)
+	case *ScopeBlock:
+		s, ok := y.(*ScopeBlock)
 		if !ok {
 			return false
 		}
@@ -273,30 +275,26 @@ func (l *lifeChecker) carriesLife(t Type) bool {
 }
 
 // expr checks an expression and returns its lifetime.
-func (l *lifeChecker) expr(x syntax.Expr) lifetime {
+func (l *lifeChecker) expr(x Expr) lifetime {
 	life := l.exprLife(x)
-	if t := l.info.Types[x]; t == nil || !l.carriesLife(t) {
+	if t := x.Type(); t == nil || !l.carriesLife(t) {
 		return nil
 	}
 	return life
 }
 
-func (l *lifeChecker) exprLife(x syntax.Expr) lifetime {
+func (l *lifeChecker) exprLife(x Expr) lifetime {
 	switch x := x.(type) {
-	case *syntax.Ident:
-		decl := l.info.Defs[x]
-		if decl == nil {
-			return nil // a function
-		}
-		if t := l.info.Types[x]; t == nil || !l.carriesLife(t) {
+	case *VarRef:
+		if !l.carriesLife(x.Type()) {
 			return nil
 		}
-		life := l.env[decl]
+		life := l.env[x.Var]
 		for _, c := range l.captures {
 			*c = c.union(life)
 		}
 		return l.use(x, life)
-	case *syntax.Block:
+	case *Block:
 		for _, s := range x.Stmts {
 			l.stmt(s)
 		}
@@ -304,91 +302,91 @@ func (l *lifeChecker) exprLife(x syntax.Expr) lifetime {
 			return nil
 		}
 		return l.expr(x.Tail)
-	case *syntax.ScopeExpr:
+	case *ScopeBlock:
 		for _, p := range x.Policies {
 			l.use(p, l.expr(p))
 		}
-		l.enclosing[x] = append([]*syntax.ScopeExpr(nil), l.open...)
+		l.enclosing[x] = append([]*ScopeBlock(nil), l.open...)
 		l.frame[x] = l.cur
-		l.env[x] = lifetime{x}
+		l.env[x.Var] = lifetime{x}
 		l.open = append(l.open, x)
 		life := l.expr(x.Body)
 		l.open = l.open[:len(l.open)-1]
 		// The value may belong to x, which has now ended: it is possibly
 		// released, which is reported where it is used.
 		return life
-	case *syntax.If:
+	case *If:
 		l.use(x.Cond, l.expr(x.Cond))
 		life := l.expr(x.Then)
 		if x.Else != nil {
 			life = life.union(l.expr(x.Else))
 		}
 		return life
-	case *syntax.Match:
+	case *Match:
 		subject := l.use(x.X, l.expr(x.X))
 		var life lifetime
 		for _, arm := range x.Arms {
-			l.bindPattern(arm.Pattern, subject)
+			l.bindPattern(arm.Pat, subject)
 			life = life.union(l.expr(arm.Body))
 		}
 		return life
-	case *syntax.Return:
+	case *Return:
 		if x.Value != nil {
 			l.result(x.Value, l.use(x.Value, l.expr(x.Value)), l.what())
 		}
 		return nil
-	case *syntax.Try:
+	case *Try:
 		life := l.expr(x.X)
-		if info := l.info.Tries[x]; info != nil {
-			for _, m := range info.Rest {
-				if l.carriesLife(m) {
-					// Other members are returned from the function.
-					l.result(x.X, l.use(x.X, life), l.what())
-					break
-				}
+		for _, m := range x.Rest {
+			if l.carriesLife(m) {
+				// Other members are returned from the function.
+				l.result(x.X, l.use(x.X, life), l.what())
+				break
 			}
 		}
 		return life
-	case *syntax.Lambda:
+	case *Lambda:
 		return l.lambda(x)
-	case *syntax.Call:
-		return l.call(x)
-	case *syntax.Selector:
-		if l.info.SelectorVariants[x] != nil {
-			return nil
-		}
+	case *Call:
+		return l.call(x.Func, true, x.Args)
+	case *CallBuiltin:
+		return l.call(nil, true, x.Args)
+	case *CallValue:
+		life := l.use(x.Fun, l.expr(x.Fun))
+		return life.union(l.call(nil, false, x.Args))
+	case *Select:
 		return l.use(x.X, l.expr(x.X))
-	case *syntax.RecordLit:
+	case *RecordLit:
 		var life lifetime
 		for _, f := range x.Fields {
 			life = life.union(l.expr(f.Value))
 		}
 		return life
-	case *syntax.Copy:
+	case *Copy:
 		life := l.expr(x.X)
 		for _, u := range x.Updates {
 			life = life.union(l.expr(u.Value))
 		}
 		return life
-	case *syntax.ListLit:
+	case *ListLit:
 		var life lifetime
 		for _, e := range x.Elems {
 			life = life.union(l.expr(e))
 		}
 		return life
-	case *syntax.MapLit:
+	case *MapLit:
 		var life lifetime
 		for i := range x.Keys {
 			life = life.union(l.expr(x.Keys[i])).union(l.expr(x.Values[i]))
 		}
 		return life
-	case *syntax.Unary:
+	case *Unary:
 		return l.expr(x.X)
-	case *syntax.Binary:
+	case *Binary:
 		l.use(x.X, l.expr(x.X))
 		l.use(x.Y, l.expr(x.Y))
 		return nil
-	case *syntax.Interp:
+	case *Interp:
 		for _, e := range x.Exprs {
 			l.use(e, l.expr(e))
 		}
@@ -398,46 +396,47 @@ func (l *lifeChecker) exprLife(x syntax.Expr) lifetime {
 
 // what names the current frame, for messages.
 func (l *lifeChecker) what() string {
-	switch f := l.cur.(type) {
-	case *syntax.FuncDecl:
-		if f.Name == "test" {
+	if fn, ok := l.cur.(*Func); ok {
+		if fn.Test != nil {
 			return "the test"
 		}
-		return "function " + f.Name
+		return "function " + fn.Decl.Name
 	}
 	return "the lambda"
 }
 
-func (l *lifeChecker) stmt(s syntax.Stmt) {
+func (l *lifeChecker) stmt(s Stmt) {
 	switch s := s.(type) {
-	case *syntax.Binding:
+	case *Let:
 		// A possibly released value can be bound; using it is the error.
-		l.env[s] = l.expr(s.Value)
-	case *syntax.ExprStmt:
+		l.env[s.Var] = l.expr(s.Value)
+	case *ExprStmt:
 		l.use(s.X, l.expr(s.X))
-	case *syntax.TrustStmt:
+	case *Trust:
 		l.use(s.Call, l.expr(s.Call))
 	}
 }
 
 // bindPattern gives the names a pattern binds the lifetime of the value
 // it matches.
-func (l *lifeChecker) bindPattern(p syntax.Pattern, life lifetime) {
-	switch p := p.(type) {
-	case *syntax.TypePat:
-		l.env[p] = life
-	case *syntax.VariantPat:
-		l.env[p] = life
-		for _, f := range p.Fields {
-			l.env[f] = life
-			if f.Pattern != nil {
-				l.bindPattern(f.Pattern, life)
-			}
-		}
+func (l *lifeChecker) bindPattern(p *Pat, life lifetime) {
+	if p == nil {
+		return
 	}
+	if p.Var != nil {
+		l.env[p.Var] = life
+	}
+	for _, f := range p.Fields {
+		l.bindPattern(f.Pat, life)
+	}
+	for _, e := range p.Elems {
+		l.bindPattern(e, life)
+	}
+	l.bindPattern(p.Rest, life)
+	l.bindPattern(p.Sub, life)
 }
 
-func (l *lifeChecker) lambda(x *syntax.Lambda) lifetime {
+func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	saved, savedOpen := l.cur, l.open
 	l.parent[x] = l.cur
 	l.cur = x
@@ -460,14 +459,11 @@ func (l *lifeChecker) lambda(x *syntax.Lambda) lifetime {
 	return life
 }
 
-func (l *lifeChecker) call(x *syntax.Call) lifetime {
+// call checks the arguments of a call, and returns the lifetime of its
+// result. The callee is fn, a builtin (direct, with fn nil), or a
+// function value (neither).
+func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr) lifetime {
 	var life lifetime
-	fn := l.info.CallFuncs[x]
-	direct := fn != nil || l.info.CallBuiltins[x] != BuiltinNone
-	if !direct {
-		life = l.use(x.Fun, l.expr(x.Fun))
-	}
-	xargs := l.info.Args(x)
 	args := make([]lifetime, len(xargs))
 	for i, a := range xargs {
 		args[i] = l.use(a, l.expr(a))
@@ -484,7 +480,7 @@ func (l *lifeChecker) call(x *syntax.Call) lifetime {
 		return life
 	}
 	for i, a := range xargs {
-		if l.info.Types[a] != Scope {
+		if a.Type() != Scope {
 			continue
 		}
 		for j, b := range xargs {
@@ -500,16 +496,16 @@ func (l *lifeChecker) call(x *syntax.Call) lifetime {
 				if fn != nil && fn.Prelude && (callee == "launch" || callee == "spawn") {
 					hint = fmt.Sprintf("; to give a task of %s a resource of a shorter scope, attach it first: r2 = attach(r, %s)", scopeName(a), scopeName(a))
 				}
-				l.errorf(b.Position(), "%s may not live as long as scope %s (it depends on %s), but %s may keep it until %s closes%s", describe(b), scopeName(a), l.scopeText(short), callee, scopeName(a), hint)
+				l.errorf(b.Pos(), "%s may not live as long as scope %s (it depends on %s), but %s may keep it until %s closes%s", describe(b), scopeName(a), l.scopeText(short), callee, scopeName(a), hint)
 			}
 		}
 	}
 	return life
 }
 
-func scopeName(x syntax.Expr) string {
-	if id, ok := x.(*syntax.Ident); ok {
-		return id.Name
+func scopeName(x Expr) string {
+	if v, ok := x.(*VarRef); ok {
+		return v.Var.Name
 	}
 	return "(a scope)"
 }

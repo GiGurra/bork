@@ -33,7 +33,7 @@ type Query struct {
 	// Subject, when set, is the constrained value as an expression of
 	// constants (a list or record literal), shown as SubjectText; Args
 	// then holds only the other arguments.
-	Subject     syntax.Expr
+	Subject     Expr
 	SubjectText string
 	// TypeArgs are a generic predicate's type arguments, and Params its
 	// parameter types with them filled in.
@@ -82,13 +82,13 @@ type Evaluator func(queries []Query) ([]bool, error)
 
 // Facts checks the where clauses of a type-checked package.
 func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
-	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*syntax.Param]*syntax.Ident{}, predParams: map[*syntax.Param]*Func{}, lambdaArgs: map[*syntax.Param]lambdaArg{}}
+	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
 	for _, file := range files {
 		if file.Prelude {
 			continue
 		}
 		for _, fd := range file.Funcs {
-			if fn := info.FuncOf[fd]; fn != nil && fd.Body != nil {
+			if fn := info.FuncOf[fd]; fn != nil && fn.Body != nil {
 				f.function(fn)
 			}
 		}
@@ -111,19 +111,18 @@ type factChecker struct {
 	// active guards against cycles: goals being proven by a rule, and
 	// functions whose results are being derived.
 	active map[string]bool
-	params map[*syntax.Param]*syntax.Ident
+	params map[*Var]*VarRef
 	// predParams holds the predicates standing for function parameters.
-	predParams map[*syntax.Param]*Func
+	predParams map[*Var]*Func
 	// lambdaArgs records, for the parameters of lambdas passed to
 	// declared functions, which call and parameter they belong to.
-	lambdaArgs map[*syntax.Param]lambdaArg
+	lambdaArgs map[*Var]lambdaArg
 }
 
 // lambdaArg places a lambda's parameter: the lambda is argument arg of
-// call (to fn), and the parameter is its param'th.
+// call, and the parameter is its param'th.
 type lambdaArg struct {
-	call       *syntax.Call
-	fn         *Func
+	call       *Call
 	arg, param int
 }
 
@@ -174,7 +173,7 @@ type argVal struct {
 	key   string
 	value constant.Value
 	text  string
-	expr  syntax.Expr
+	expr  Expr
 }
 
 func sameArgs(a, b []argVal) bool {
@@ -249,7 +248,7 @@ type pendingQuery struct {
 
 func (f *factChecker) function(fn *Func) {
 	f.fn = fn
-	f.tail(fn.Decl.Body, env{}, f.checkResult)
+	f.tail(fn.Body, env{}, f.checkResult)
 	f.fn = nil
 }
 
@@ -257,19 +256,19 @@ func (f *factChecker) function(fn *Func) {
 
 // tail walks an expression whose value is used by result, passing each
 // branch's value (with the facts known in that branch) to result.
-func (f *factChecker) tail(x syntax.Expr, e env, result func(syntax.Expr, env)) {
+func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 	switch x := x.(type) {
-	case *syntax.Block:
+	case *Block:
 		e = f.stmts(x.Stmts, e)
 		if x.Tail != nil {
 			f.tail(x.Tail, e, result)
 		}
-	case *syntax.ScopeExpr:
+	case *ScopeBlock:
 		for _, p := range x.Policies {
 			f.walk(p, e)
 		}
 		f.tail(x.Body, e, result)
-	case *syntax.If:
+	case *If:
 		if x.Else == nil {
 			f.walk(x, e)
 			return
@@ -277,14 +276,14 @@ func (f *factChecker) tail(x syntax.Expr, e env, result func(syntax.Expr, env)) 
 		f.walk(x.Cond, e)
 		f.tail(x.Then, e.with(f.conditionFacts(x.Cond, true)...), result)
 		f.tail(x.Else, e.with(f.conditionFacts(x.Cond, false)...), result)
-	case *syntax.Match:
+	case *Match:
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
 			f.tail(arm.Body, e, result)
 		}
 	default:
 		f.walk(x, e)
-		if f.info.Types[x] != Never {
+		if x.Type() != Never {
 			result(x, e)
 		}
 	}
@@ -292,30 +291,30 @@ func (f *factChecker) tail(x syntax.Expr, e env, result func(syntax.Expr, env)) 
 
 // stmts walks a block's statements and returns the facts known after
 // them.
-func (f *factChecker) stmts(list []syntax.Stmt, e env) env {
+func (f *factChecker) stmts(list []Stmt, e env) env {
 	for _, s := range list {
 		switch s := s.(type) {
-		case *syntax.Binding:
+		case *Let:
 			f.walk(s.Value, e)
-			for _, con := range f.info.BindingConstraints[s] {
-				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Name), con))
+			for _, con := range s.Constraints {
+				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Var.Name), con))
 			}
-		case *syntax.ExprStmt:
+		case *ExprStmt:
 			f.walk(s.X, e)
 			// A guard: `if (!p(x)) { return ... }` leaves p(x) known.
-			if ifx, ok := s.X.(*syntax.If); ok {
-				if f.info.Types[ifx.Then] == Never {
+			if ifx, ok := s.X.(*If); ok {
+				if ifx.Then.Type() == Never {
 					e = e.with(f.conditionFacts(ifx.Cond, false)...)
 				}
-				if ifx.Else != nil && f.info.Types[ifx.Else] == Never {
+				if ifx.Else != nil && ifx.Else.Type() == Never {
 					e = e.with(f.conditionFacts(ifx.Cond, true)...)
 				}
 			}
-		case *syntax.TrustStmt:
+		case *Trust:
 			f.walk(s.Call, e)
 			facts := f.conditionFacts(s.Call, true)
 			if len(facts) == 0 && f.collect == nil {
-				f.diags.AddCode(f.info.Args(s.Call)[0].Position(), "facts.error", "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
+				f.diags.AddCode(trustSubjectPos(s), "facts.error", "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
 			}
 			e = e.with(facts...)
 		}
@@ -323,54 +322,71 @@ func (f *factChecker) stmts(list []syntax.Stmt, e env) env {
 	return e
 }
 
-// walk visits an expression, checking the obligations inside it.
-func (f *factChecker) walk(x syntax.Expr, e env) {
-	switch x := x.(type) {
-	case *syntax.Call:
-		if _, named := f.info.CallFuncs[x]; !named && f.info.CallBuiltins[x] == BuiltinNone {
-			f.walk(x.Fun, e)
+// trustSubjectPos is where the value a trust statement is about starts.
+func trustSubjectPos(s *Trust) diag.Pos {
+	switch c := s.Call.(type) {
+	case *Call:
+		if len(c.Args) > 0 {
+			return c.Args[0].Pos()
 		}
-		if fn := f.info.CallFuncs[x]; fn != nil {
-			for i, a := range f.info.Args(x) {
-				if l, ok := a.(*syntax.Lambda); ok {
-					for k, p := range l.Params {
-						f.lambdaArgs[p] = lambdaArg{call: x, fn: fn, arg: i, param: k}
-					}
+	case *CallValue:
+		if len(c.Args) > 0 {
+			return c.Args[0].Pos()
+		}
+	}
+	return s.Call.Pos()
+}
+
+// walk visits an expression, checking the obligations inside it.
+func (f *factChecker) walk(x Expr, e env) {
+	switch x := x.(type) {
+	case *Call:
+		for i, a := range x.Args {
+			if l, ok := a.(*Lambda); ok {
+				for k, p := range l.Params {
+					f.lambdaArgs[p] = lambdaArg{call: x, arg: i, param: k}
 				}
 			}
 		}
-		for _, a := range f.info.Args(x) {
+		for _, a := range x.Args {
 			f.walk(a, e)
 		}
-		if fn := f.info.CallFuncs[x]; fn != nil {
-			f.callObligations(x, fn, e)
+		f.callObligations(x, e)
+	case *CallBuiltin:
+		for _, a := range x.Args {
+			f.walk(a, e)
 		}
-	case *syntax.Ident:
+	case *CallValue:
+		f.walk(x.Fun, e)
+		for _, a := range x.Args {
+			f.walk(a, e)
+		}
+	case *FuncRef:
 		// A function with requirements cannot be a value: calls through
 		// the value could not be checked.
-		if inst := f.info.FuncRefs[x]; inst != nil && f.collect == nil {
-			for i, cons := range inst.Func.ParamConstraints {
+		if f.collect == nil {
+			for i, cons := range x.Inst.Func.ParamConstraints {
 				if len(cons) > 0 {
-					f.diags.AddCode(x.Pos, "facts.error", "%s requires %s to be %s, so it cannot be used as a value; use a lambda that checks it: x => if (...) { %s(x) } else { ... }", x.Name, inst.Func.Decl.Params[i].Name, cons[0], x.Name)
+					f.diags.AddCode(x.Pos(), "facts.error", "%s requires %s to be %s, so it cannot be used as a value; use a lambda that checks it: x => if (...) { %s(x) } else { ... }", x.Name, x.Inst.Func.Decl.Params[i].Name, cons[0], x.Name)
 					break
 				}
 			}
 		}
-	case *syntax.Lambda:
+	case *Lambda:
 		// Facts known here still hold inside: values never change.
 		f.walk(x.Body, e)
-	case *syntax.ListLit:
+	case *ListLit:
 		for _, el := range x.Elems {
 			f.walk(el, e)
 		}
-	case *syntax.MapLit:
+	case *MapLit:
 		for i := range x.Keys {
 			f.walk(x.Keys[i], e)
 			f.walk(x.Values[i], e)
 		}
-	case *syntax.Unary:
+	case *Unary:
 		f.walk(x.X, e)
-	case *syntax.Binary:
+	case *Binary:
 		f.walk(x.X, e)
 		switch x.Op {
 		case syntax.AndAnd:
@@ -380,47 +396,47 @@ func (f *factChecker) walk(x syntax.Expr, e env) {
 		default:
 			f.walk(x.Y, e)
 		}
-	case *syntax.If:
+	case *If:
 		f.walk(x.Cond, e)
 		f.walk(x.Then, e.with(f.conditionFacts(x.Cond, true)...))
 		if x.Else != nil {
 			f.walk(x.Else, e.with(f.conditionFacts(x.Cond, false)...))
 		}
-	case *syntax.Block:
+	case *Block:
 		e = f.stmts(x.Stmts, e)
 		if x.Tail != nil {
 			f.walk(x.Tail, e)
 		}
-	case *syntax.ScopeExpr:
+	case *ScopeBlock:
 		for _, p := range x.Policies {
 			f.walk(p, e)
 		}
 		f.walk(x.Body, e)
-	case *syntax.Return:
+	case *Return:
 		if x.Value != nil {
 			f.tail(x.Value, e, f.checkResult)
 		}
-	case *syntax.Selector:
+	case *Select:
 		f.walk(x.X, e)
-	case *syntax.RecordLit:
+	case *RecordLit:
 		for _, fi := range x.Fields {
 			f.walk(fi.Value, e)
 		}
 		f.recordObligations(x, e)
-	case *syntax.Copy:
+	case *Copy:
 		f.walk(x.X, e)
 		for _, u := range x.Updates {
 			f.walk(u.Value, e)
 		}
 		f.copyObligations(x, e)
-	case *syntax.Match:
+	case *Match:
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
 			f.walk(arm.Body, e)
 		}
-	case *syntax.Try:
+	case *Try:
 		f.walk(x.X, e)
-	case *syntax.Interp:
+	case *Interp:
 		for _, ix := range x.Exprs {
 			f.walk(ix, e)
 		}
@@ -436,7 +452,7 @@ func (f *factChecker) resultPaths(fn *Func) []branch {
 	var paths []branch
 	saveFn, saveCollect := f.fn, f.collect
 	f.fn, f.collect = fn, &paths
-	f.tail(fn.Decl.Body, env{}, f.checkResult)
+	f.tail(fn.Body, env{}, f.checkResult)
 	f.fn, f.collect = saveFn, saveCollect
 	f.paths[fn] = paths
 	return paths
@@ -463,20 +479,20 @@ func pathPhrase(path, name string) string {
 	return name
 }
 
-func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
-	args := f.info.Args(call)
+func (f *factChecker) callObligations(call *Call, e env) {
+	fn, args := call.Func, call.Args
 	for i, cons := range fn.ParamConstraints {
 		if i >= len(args) {
 			break
 		}
 		for _, con := range cons {
 			req := fmt.Sprintf("%s requires %s to be %s", fn.QualifiedName(f.from()), pathPhrase(con.Path, fn.Decl.Params[i].Name), con.Text(f.from()))
-			f.oblige(args[i], con, f.callArgs(call, fn), e, req)
+			f.oblige(args[i], con, f.callArgs(call), e, req)
 		}
 	}
 	// With a constrained type argument (f[Port](x)), arguments of that
 	// type must satisfy its constraints.
-	inst := f.info.Instances[call]
+	inst := call.Inst
 	if inst == nil || inst.ArgFacts == nil {
 		return
 	}
@@ -487,8 +503,8 @@ func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
 			}
 			for _, con := range inst.ArgFacts[j] {
 				arg := TypeText(inst.TypeArgs[j], f.from())
-				if ta := inst.TypeArgExprs; j < len(ta) && ta[j] != nil && ta[j].Name != "" && len(ta[j].Args) == 0 && len(ta[j].Where) == 0 {
-					arg = ta[j].Name // as written: Port, not Int
+				if j < len(call.TypeArgNames) && call.TypeArgNames[j] != "" {
+					arg = call.TypeArgNames[j] // as written: Port, not Int
 				}
 				req := fmt.Sprintf("%s[%s] requires %s to be %s", fn.QualifiedName(f.from()), arg, fn.Decl.Params[i].Name, con.Text(f.from()))
 				f.oblige(args[i], con, noParams, e, req)
@@ -500,8 +516,8 @@ func (f *factChecker) callObligations(call *syntax.Call, fn *Func, e env) {
 // argFactsFor lists what a call with constrained type arguments
 // promises of its result's member m (or its whole result): the
 // constraints of the type argument that member stands for.
-func (f *factChecker) argFactsFor(call *syntax.Call, fn *Func, m Type) []*Constraint {
-	inst := f.info.Instances[call]
+func (f *factChecker) argFactsFor(call *Call, m Type) []*Constraint {
+	fn, inst := call.Func, call.Inst
 	if inst == nil || inst.ArgFacts == nil {
 		return nil
 	}
@@ -520,17 +536,15 @@ func (f *factChecker) argFactsFor(call *syntax.Call, fn *Func, m Type) []*Constr
 	return out
 }
 
-func (f *factChecker) recordObligations(lit *syntax.RecordLit, e env) {
-	var fields []*Field
-	var label string
-	switch t := f.info.RecordTargets[lit].(type) {
-	case *Record:
-		fields, label = t.Fields, qualify(t.Name, t.Pkg, f.from())
-	case *Variant:
-		fields, label = t.Fields, qualify(t.Parent.Name, t.Parent.Pkg, f.from())+"."+t.Name
+func (f *factChecker) recordObligations(lit *RecordLit, e env) {
+	label := ""
+	if t := lit.Record; t != nil {
+		label = qualify(t.Name, t.Pkg, f.from())
+	} else if t := lit.Variant; t != nil {
+		label = qualify(t.Parent.Name, t.Parent.Pkg, f.from()) + "." + t.Name
 	}
 	for _, fi := range lit.Fields {
-		if fd := findField(fields, fi.Name); fd != nil {
+		if fd := fi.Field; fd != nil {
 			for _, con := range fd.Constraints {
 				f.oblige(fi.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
 			}
@@ -538,22 +552,10 @@ func (f *factChecker) recordObligations(lit *syntax.RecordLit, e env) {
 	}
 }
 
-func (f *factChecker) copyObligations(cp *syntax.Copy, e env) {
-	rec, _ := f.info.Types[cp.X].(*Record)
+func (f *factChecker) copyObligations(cp *Copy, e env) {
+	rec, _ := cp.X.Type().(*Record)
 	for _, u := range cp.Updates {
-		cur := rec
-		var fd *Field
-		for _, name := range u.Path {
-			if cur == nil {
-				fd = nil
-				break
-			}
-			fd = cur.Field(name)
-			if fd == nil {
-				break
-			}
-			cur, _ = fd.Type.(*Record)
-		}
+		fd := u.Field
 		if fd == nil {
 			continue
 		}
@@ -566,12 +568,12 @@ func (f *factChecker) copyObligations(cp *syntax.Copy, e env) {
 
 // checkResult checks a value the current function returns against the
 // facts its signature promises.
-func (f *factChecker) checkResult(x syntax.Expr, e env) {
+func (f *factChecker) checkResult(x Expr, e env) {
 	if f.collect != nil {
 		*f.collect = append(*f.collect, branch{x: x, e: e})
 		return
 	}
-	t := f.info.Types[x]
+	t := x.Type()
 	for _, mc := range f.fn.ResultConstraints {
 		var member Type
 		switch {
@@ -606,7 +608,7 @@ func isMemberOf(m, t Type) bool {
 
 // oblige requires con of the value x, with the constraint's parameter
 // arguments given by subst.
-func (f *factChecker) oblige(x syntax.Expr, con *Constraint, subst func(string) argVal, e env, requirement string) {
+func (f *factChecker) oblige(x Expr, con *Constraint, subst func(string) argVal, e env, requirement string) {
 	if f.collect != nil {
 		return
 	}
@@ -615,13 +617,13 @@ func (f *factChecker) oblige(x syntax.Expr, con *Constraint, subst func(string) 
 	f.settle(x, ob, ok, pending)
 }
 
-func (f *factChecker) settle(x syntax.Expr, ob obligation, ok bool, pending []Query) {
+func (f *factChecker) settle(x Expr, ob obligation, ok bool, pending []Query) {
 	if !ok {
-		f.diags.AddCode(x.Position(), "facts.error", "%s, but that is not proven for %s%s", ob.requirement, f.describe(x), f.hint(x, ob))
+		f.diags.AddCode(x.Pos(), "facts.error", "%s, but that is not proven for %s%s", ob.requirement, f.describe(x), f.hint(x, ob))
 		return
 	}
 	for _, q := range pending {
-		f.pending = append(f.pending, pendingQuery{query: q, pos: x.Position(), ob: ob, from: f.from()})
+		f.pending = append(f.pending, pendingQuery{query: q, pos: x.Pos(), ob: ob, from: f.from()})
 	}
 }
 
@@ -677,18 +679,17 @@ func (f *factChecker) knownOf(con *Constraint, subst func(string) argVal) []know
 // establishes about its parameter (`x => positive(x) && small(x)`).
 func (f *factChecker) predsOf(arg argVal) []known {
 	switch x := arg.expr.(type) {
-	case *syntax.Ident:
-		if inst := f.info.FuncRefs[x]; inst != nil {
-			if inst.Func.Decl.IsPred && len(inst.Func.Params) == 1 {
-				return []known{{pred: inst.Func}}
-			}
-			return nil
+	case *FuncRef:
+		if x.Inst.Func.Decl.IsPred && len(x.Inst.Func.Params) == 1 {
+			return []known{{pred: x.Inst.Func}}
 		}
-		if p, ok := f.info.Defs[x].(*syntax.Param); ok {
+		return nil
+	case *VarRef:
+		if k := x.Var.Kind; k == VarParam || k == VarLambdaParam {
 			// A function parameter (the checker made sure of that).
-			return []known{{pred: f.paramPred(p)}}
+			return []known{{pred: f.paramPred(x.Var)}}
 		}
-	case *syntax.Lambda:
+	case *Lambda:
 		if len(x.Params) != 1 {
 			return nil
 		}
@@ -707,7 +708,7 @@ func (f *factChecker) predsOf(arg argVal) []known {
 // paramPred stands for a function parameter used as a predicate, as a
 // predicate of its own: facts about it can be known and required, but
 // it cannot be run.
-func (f *factChecker) paramPred(p *syntax.Param) *Func {
+func (f *factChecker) paramPred(p *Var) *Func {
 	if fn, ok := f.predParams[p]; ok {
 		return fn
 	}
@@ -736,39 +737,38 @@ func constArg(v constant.Value) argVal {
 func (f *factChecker) ownParams() func(string) argVal {
 	fn := f.fn
 	return func(param string) argVal {
-		for _, p := range fn.Decl.Params {
+		for _, p := range fn.ParamVars {
 			if p.Name == param {
-				return f.argOf(f.paramIdent(p))
+				return f.argOf(f.paramRef(p))
 			}
 		}
 		return argVal{text: param}
 	}
 }
 
-// paramIdent is an identifier referring to parameter p, for proving
-// facts about a parameter that no expression mentions.
-func (f *factChecker) paramIdent(p *syntax.Param) *syntax.Ident {
-	if id, ok := f.params[p]; ok {
-		return id
+// paramRef is a use of parameter p, for proving facts about a parameter
+// that no expression mentions.
+func (f *factChecker) paramRef(p *Var) *VarRef {
+	if ref, ok := f.params[p]; ok {
+		return ref
 	}
-	id := &syntax.Ident{Pos: p.Pos, Name: p.Name}
-	f.info.Defs[id] = p
-	f.params[p] = id
-	return id
+	ref := &VarRef{expr: expr{p.Pos, p.Type}, Var: p}
+	f.params[p] = ref
+	return ref
 }
 
 func noParams(param string) argVal { return argVal{text: param} }
 
-func (f *factChecker) argOf(x syntax.Expr) argVal {
-	return argVal{key: f.key(x), value: f.info.constantOf(x), text: f.describe(x), expr: x}
+func (f *factChecker) argOf(x Expr) argVal {
+	return argVal{key: f.key(x), value: constOf(x), text: f.describe(x), expr: x}
 }
 
 // callArgs substitutes a callee's parameters by the call's arguments.
-func (f *factChecker) callArgs(call *syntax.Call, fn *Func) func(string) argVal {
+func (f *factChecker) callArgs(call *Call) func(string) argVal {
 	return func(param string) argVal {
-		for i, p := range fn.Decl.Params {
-			if args := f.info.Args(call); p.Name == param && i < len(args) {
-				return f.argOf(args[i])
+		for i, p := range call.Func.Decl.Params {
+			if p.Name == param && i < len(call.Args) {
+				return f.argOf(call.Args[i])
 			}
 		}
 		return argVal{text: param}
@@ -780,14 +780,14 @@ func (f *factChecker) callArgs(call *syntax.Call, fn *Func) func(string) argVal 
 const maxDepth = 48
 
 type branch struct {
-	x syntax.Expr
+	x Expr
 	e env
 }
 
 // prove tries to prove ob for the value x. It returns false if that is
 // not possible; otherwise the proof may still depend on predicates of
 // constants, returned as queries to evaluate at compile time.
-func (f *factChecker) prove(x syntax.Expr, ob obligation, e env, depth int) (bool, []Query) {
+func (f *factChecker) prove(x Expr, ob obligation, e env, depth int) (bool, []Query) {
 	if depth > maxDepth || (ob.pred == nil && ob.or == nil) {
 		return false, nil
 	}
@@ -825,24 +825,23 @@ func (f *factChecker) prove(x syntax.Expr, ob obligation, e env, depth int) (boo
 
 // proveCases proves ob for x from how x is computed: what it is bound
 // to, its branches, the callee's body, or by rules or case splits.
-func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int) (bool, []Query) {
+func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool, []Query) {
 	var cs candidates
 	switch x := x.(type) {
-	case *syntax.Ident:
-		switch d := f.info.Defs[x].(type) {
-		case *syntax.Binding:
-			if cs.take(f.prove(d.Value, ob, e, depth+1)) {
+	case *VarRef:
+		switch d := x.Var; d.Kind {
+		case VarLet:
+			if cs.take(f.prove(d.Let.Value, ob, e, depth+1)) {
 				return true, nil
 			}
-		case *syntax.Param:
+		case VarLambdaParam:
 			if la, ok := f.lambdaArgs[d]; ok {
 				if cs.take(f.lambdaParam(la, ob, e, depth)) {
 					return true, nil
 				}
 			}
-		case nil:
-		default:
-			if src := f.info.PatSources[d]; src != nil {
+		case VarPattern:
+			if src := d.Source; src != nil {
 				var ok bool
 				var pending []Query
 				if src.Member == nil {
@@ -858,16 +857,14 @@ func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int)
 				}
 			}
 		}
-	case *syntax.Call:
-		if fn := f.info.CallFuncs[x]; fn != nil {
-			if cs.take(f.derive(x, fn, nil, ob, e, depth)) {
-				return true, nil
-			}
-			if cs.take(f.parametric(x, fn, ob, e, depth)) {
-				return true, nil
-			}
+	case *Call:
+		if cs.take(f.derive(x, nil, ob, e, depth)) {
+			return true, nil
 		}
-	case *syntax.ListLit:
+		if cs.take(f.parametric(x, ob, e, depth)) {
+			return true, nil
+		}
+	case *ListLit:
 		// Every element, one by one.
 		if rest, ok := cutStep(ob.path, ".[]"); ok {
 			inner := ob
@@ -880,7 +877,7 @@ func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int)
 				return true, nil
 			}
 		}
-	case *syntax.RecordLit:
+	case *RecordLit:
 		// A field of a record or variant built here.
 		for _, fi := range x.Fields {
 			if rest, ok := cutStep(ob.path, "."+fi.Name); ok {
@@ -891,38 +888,38 @@ func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int)
 				}
 			}
 		}
-		if v, ok := f.info.RecordTargets[x].(*Variant); ok && ob.path != "" && v.Field(firstStep(ob.path)) == nil {
+		if v := x.Variant; v != nil && ob.path != "" && v.Field(firstStep(ob.path)) == nil {
 			return true, nil // a variant without that part: nothing to prove
 		}
-	case *syntax.Selector:
-		if f.info.SelectorVariants[x] != nil {
-			if ob.path != "" {
-				return true, nil // Option.None has no value to constrain
-			}
-		} else if _, isRec := f.info.Types[x.X].(*Record); isRec {
+	case *VariantValue:
+		if ob.path != "" {
+			return true, nil // Option.None has no value to constrain
+		}
+	case *Select:
+		if _, isRec := x.X.Type().(*Record); isRec {
 			inner := ob
 			inner.path = "." + x.Name + ob.path
 			if cs.take(f.prove(x.X, inner, e, depth+1)) {
 				return true, nil
 			}
 		}
-	case *syntax.Try:
-		if info := f.info.Tries[x]; info != nil && info.Option == nil {
-			if cs.take(f.proveMember(x.X, info.Kept, ob, e, depth+1)) {
+	case *Try:
+		if x.Option == nil {
+			if cs.take(f.proveMember(x.X, x.Kept, ob, e, depth+1)) {
 				return true, nil
 			}
 		}
-	case *syntax.Block:
+	case *Block:
 		if x.Tail != nil {
 			if cs.take(f.prove(x.Tail, ob, f.stmts(x.Stmts, e), depth+1)) {
 				return true, nil
 			}
 		}
-	case *syntax.ScopeExpr:
+	case *ScopeBlock:
 		if cs.take(f.prove(x.Body, ob, e, depth+1)) {
 			return true, nil
 		}
-	case *syntax.If:
+	case *If:
 		if x.Else != nil {
 			if cs.take(f.all(ob, depth,
 				branch{x.Then, e.with(f.conditionFacts(x.Cond, true)...)},
@@ -930,7 +927,7 @@ func (f *factChecker) proveCases(x syntax.Expr, ob obligation, e env, depth int)
 				return true, nil
 			}
 		}
-	case *syntax.Match:
+	case *Match:
 		var bs []branch
 		for _, arm := range x.Arms {
 			bs = append(bs, branch{arm.Body, e})
@@ -1000,7 +997,8 @@ func firstStep(path string) string {
 // parameters, so those in its result come from its arguments, and what
 // holds for all of those holds for them: the head of a list of positive
 // numbers is positive.
-func (f *factChecker) parametric(call *syntax.Call, fn *Func, ob obligation, e env, depth int) (bool, []Query) {
+func (f *factChecker) parametric(call *Call, ob obligation, e env, depth int) (bool, []Query) {
+	fn := call.Func
 	type source struct {
 		arg  int
 		path string
@@ -1034,7 +1032,7 @@ func (f *factChecker) parametric(call *syntax.Call, fn *Func, ob obligation, e e
 			for _, s := range sources {
 				inner := ob
 				inner.path = s.path + rest
-				ok, p := f.prove(f.info.Args(call)[s.arg], inner, e, depth+1)
+				ok, p := f.prove(call.Args[s.arg], inner, e, depth+1)
 				if !ok {
 					proven = false
 					break
@@ -1054,7 +1052,8 @@ func (f *factChecker) parametric(call *syntax.Call, fn *Func, ob obligation, e e
 // function can only pass it values it was given, so it is proven for
 // those (`map(positives, p => transfer(p))`).
 func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int) (bool, []Query) {
-	ft, ok := la.fn.Params[la.arg].(*FuncType)
+	fn := la.call.Func
+	ft, ok := fn.Params[la.arg].(*FuncType)
 	if !ok || la.param >= len(ft.Params) {
 		return false, nil
 	}
@@ -1064,7 +1063,7 @@ func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int)
 	}
 	var pending []Query
 	found := false
-	for i, pt := range la.fn.Params {
+	for i, pt := range fn.Params {
 		paths, ok := typeParamPaths(pt, tp, "")
 		if !ok {
 			return false, nil
@@ -1072,7 +1071,7 @@ func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int)
 		for _, p := range paths {
 			inner := ob
 			inner.path = p + ob.path
-			ok, more := f.prove(f.info.Args(la.call)[i], inner, e, depth+1)
+			ok, more := f.prove(la.call.Args[i], inner, e, depth+1)
 			if !ok {
 				return false, nil
 			}
@@ -1192,7 +1191,7 @@ func allOf(qs []Query) Query {
 // split proves ob for x by cases: if one of several facts is known to
 // hold (from `a || b`, or `where p or q`), proving ob assuming each of
 // them in turn proves it.
-func (f *factChecker) split(x syntax.Expr, ob obligation, e env, depth int) (bool, []Query) {
+func (f *factChecker) split(x Expr, ob obligation, e env, depth int) (bool, []Query) {
 	var cases []fact
 	for _, ft := range e.facts {
 		if ft.or != nil {
@@ -1244,12 +1243,12 @@ func (f *factChecker) factOf(subject string, k known) fact {
 
 // literalQuery is ob on x, if x and ob's arguments are made of constants
 // only, so the predicate can be run at compile time.
-func (f *factChecker) literalQuery(ob obligation, x syntax.Expr) (Query, bool) {
+func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 	if ob.pred == nil || ob.pred.Synthetic || !f.closed(x) {
 		return Query{}, false
 	}
 	q := Query{Pred: ob.pred, Params: ob.pred.Params}
-	if v := f.info.constantOf(x); v != nil {
+	if v := constOf(x); v != nil {
 		q.Args = []constant.Value{v}
 	} else {
 		q.Subject, q.SubjectText = x, f.literalText(x)
@@ -1262,7 +1261,7 @@ func (f *factChecker) literalQuery(ob obligation, x syntax.Expr) (Query, bool) {
 	}
 	if len(ob.pred.TypeParams) > 0 {
 		in := newInference(ob.pred)
-		in.unify(ob.pred.Params[0], f.info.Types[x])
+		in.unify(ob.pred.Params[0], x.Type())
 		if len(in.unsolved()) > 0 {
 			return Query{}, false
 		}
@@ -1274,49 +1273,48 @@ func (f *factChecker) literalQuery(ob obligation, x syntax.Expr) (Query, bool) {
 
 // closed reports whether x is made of constants only: a constant, or a
 // list, record, or variant literal of them.
-func (f *factChecker) closed(x syntax.Expr) bool {
-	if f.info.constantOf(x) != nil {
+func (f *factChecker) closed(x Expr) bool {
+	if constOf(x) != nil {
 		return true
 	}
 	switch x := x.(type) {
-	case *syntax.ListLit:
+	case *ListLit:
 		for _, el := range x.Elems {
 			if !f.closed(el) {
 				return false
 			}
 		}
 		return true
-	case *syntax.RecordLit:
+	case *RecordLit:
 		for _, fi := range x.Fields {
 			if !f.closed(fi.Value) {
 				return false
 			}
 		}
 		return true
-	case *syntax.Selector:
-		return f.info.SelectorVariants[x] != nil
+	case *VariantValue:
+		return true
 	}
 	return false
 }
 
 // literalText shows a closed expression as written.
-func (f *factChecker) literalText(x syntax.Expr) string {
-	if v := f.info.constantOf(x); v != nil {
+func (f *factChecker) literalText(x Expr) string {
+	if v := constOf(x); v != nil {
 		return CArg{Const: v}.String()
 	}
 	switch x := x.(type) {
-	case *syntax.ListLit:
+	case *ListLit:
 		parts := make([]string, len(x.Elems))
 		for i, el := range x.Elems {
 			parts[i] = f.literalText(el)
 		}
 		return "[" + strings.Join(parts, ", ") + "]"
-	case *syntax.RecordLit:
-		var name string
-		switch t := f.info.RecordTargets[x].(type) {
-		case *Record:
+	case *RecordLit:
+		name := ""
+		if t := x.Record; t != nil {
 			name = t.Name
-		case *Variant:
+		} else if t := x.Variant; t != nil {
 			name = t.Parent.Name + "." + t.Name
 		}
 		parts := make([]string, len(x.Fields))
@@ -1324,10 +1322,8 @@ func (f *factChecker) literalText(x syntax.Expr) string {
 			parts[i] = fi.Name + ": " + f.literalText(fi.Value)
 		}
 		return name + " { " + strings.Join(parts, ", ") + " }"
-	case *syntax.Selector:
-		if v := f.info.SelectorVariants[x]; v != nil {
-			return v.Parent.Name + "." + v.Name
-		}
+	case *VariantValue:
+		return x.Variant.Parent.Name + "." + x.Variant.Name
 	}
 	return "?"
 }
@@ -1351,7 +1347,7 @@ func constQuery(ob obligation, v constant.Value) (Query, bool) {
 func (f *factChecker) all(ob obligation, depth int, bs ...branch) (bool, []Query) {
 	var pending []Query
 	for _, b := range bs {
-		if f.info.Types[b.x] == Never {
+		if b.x.Type() == Never {
 			continue
 		}
 		ok, p := f.prove(b.x, ob, b.e, depth+1)
@@ -1365,7 +1361,7 @@ func (f *factChecker) all(ob obligation, depth int, bs ...branch) (bool, []Query
 
 // proveMember proves ob for the values of member type m that x (of a
 // union type) can produce.
-func (f *factChecker) proveMember(x syntax.Expr, m Type, ob obligation, e env, depth int) (bool, []Query) {
+func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth int) (bool, []Query) {
 	if depth > maxDepth {
 		return false, nil
 	}
@@ -1380,13 +1376,11 @@ func (f *factChecker) proveMember(x syntax.Expr, m Type, ob obligation, e env, d
 		}
 	}
 	switch x := x.(type) {
-	case *syntax.Call:
-		if fn := f.info.CallFuncs[x]; fn != nil {
-			return f.derive(x, fn, m, ob, e, depth)
-		}
-	case *syntax.Ident:
-		if d, ok := f.info.Defs[x].(*syntax.Binding); ok {
-			return f.proveMember(d.Value, m, ob, e, depth+1)
+	case *Call:
+		return f.derive(x, m, ob, e, depth)
+	case *VarRef:
+		if x.Var.Kind == VarLet {
+			return f.proveMember(x.Var.Let.Value, m, ob, e, depth+1)
 		}
 	}
 	return false, nil
@@ -1395,7 +1389,7 @@ func (f *factChecker) proveMember(x syntax.Expr, m Type, ob obligation, e env, d
 // declared lists what is known about the value x without looking into
 // how it was computed: facts from guards and trust, and the facts that
 // declarations and promises give it.
-func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
+func (f *factChecker) declared(x Expr, e env, depth int) []known {
 	var out []known
 	if k := f.key(x); k != "" {
 		for _, ft := range e.facts {
@@ -1413,22 +1407,19 @@ func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
 		}
 	}
 	switch x := x.(type) {
-	case *syntax.Ident:
-		switch d := f.info.Defs[x].(type) {
-		case *syntax.Param:
-			for i, p := range f.fn.Decl.Params {
-				if p == d {
-					add(f.fn.ParamConstraints[i], f.ownParams())
-				}
+	case *VarRef:
+		switch d := x.Var; d.Kind {
+		case VarParam:
+			if f.ownsParam(d) {
+				add(f.fn.ParamConstraints[d.Index], f.ownParams())
 			}
-		case *syntax.Binding:
-			add(f.info.BindingConstraints[d], f.ownParams())
+		case VarLet:
+			add(d.Let.Constraints, f.ownParams())
 			if depth < maxDepth {
-				out = append(out, f.declared(d.Value, e, depth+1)...)
+				out = append(out, f.declared(d.Let.Value, e, depth+1)...)
 			}
-		case nil:
-		default:
-			if src := f.info.PatSources[d]; src != nil && depth < maxDepth {
+		case VarPattern:
+			if src := d.Source; src != nil && depth < maxDepth {
 				if src.Field != nil {
 					add(src.Field.Constraints, noParams)
 				}
@@ -1439,23 +1430,22 @@ func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
 				}
 			}
 		}
-	case *syntax.Call:
-		if fn := f.info.CallFuncs[x]; fn != nil {
-			for _, mc := range fn.ResultConstraints {
-				if identical(mc.Type, fn.Result) {
-					add(mc.Constraints, f.callArgs(x, fn))
-				}
-			}
-			if _, isUnion := fn.Result.(*Union); !isUnion {
-				add(f.argFactsFor(x, fn, nil), noParams)
+	case *Call:
+		fn := x.Func
+		for _, mc := range fn.ResultConstraints {
+			if identical(mc.Type, fn.Result) {
+				add(mc.Constraints, f.callArgs(x))
 			}
 		}
-	case *syntax.Try:
-		if info := f.info.Tries[x]; info != nil && info.Option == nil {
-			out = append(out, f.declaredMember(x.X, info.Kept)...)
+		if _, isUnion := fn.Result.(*Union); !isUnion {
+			add(f.argFactsFor(x, nil), noParams)
 		}
-	case *syntax.Selector:
-		if rec, ok := f.info.Types[x.X].(*Record); ok {
+	case *Try:
+		if x.Option == nil {
+			out = append(out, f.declaredMember(x.X, x.Kept)...)
+		}
+	case *Select:
+		if rec, ok := x.X.Type().(*Record); ok {
 			if fd := rec.Field(x.Name); fd != nil {
 				add(fd.Constraints, noParams)
 			}
@@ -1469,25 +1459,23 @@ func (f *factChecker) declared(x syntax.Expr, e env, depth int) []known {
 
 // declaredMember lists what a function promises about the member m of
 // the union x produces.
-func (f *factChecker) declaredMember(x syntax.Expr, m Type) []known {
+func (f *factChecker) declaredMember(x Expr, m Type) []known {
 	var out []known
 	switch x := x.(type) {
-	case *syntax.Call:
-		if fn := f.info.CallFuncs[x]; fn != nil {
-			for _, mc := range fn.ResultConstraints {
-				if identical(mc.Type, m) {
-					for _, con := range mc.Constraints {
-						out = append(out, f.knownOf(con, f.callArgs(x, fn))...)
-					}
+	case *Call:
+		for _, mc := range x.Func.ResultConstraints {
+			if identical(mc.Type, m) {
+				for _, con := range mc.Constraints {
+					out = append(out, f.knownOf(con, f.callArgs(x))...)
 				}
 			}
-			for _, con := range f.argFactsFor(x, fn, m) {
-				out = append(out, f.knownOf(con, noParams)...)
-			}
 		}
-	case *syntax.Ident:
-		if d, ok := f.info.Defs[x].(*syntax.Binding); ok {
-			out = append(out, f.declaredMember(d.Value, m)...)
+		for _, con := range f.argFactsFor(x, m) {
+			out = append(out, f.knownOf(con, noParams)...)
+		}
+	case *VarRef:
+		if x.Var.Kind == VarLet {
+			out = append(out, f.declaredMember(x.Var.Let.Value, m)...)
 		}
 	}
 	return out
@@ -1498,9 +1486,10 @@ func (f *factChecker) declaredMember(x syntax.Expr, m Type) []known {
 // returns must satisfy ob. This is how helpers pass on facts without
 // declaring them. A value the callee returns that is one of its
 // parameters is proven at the call site, for the argument.
-func (f *factChecker) derive(call *syntax.Call, fn *Func, member Type, ob obligation, e env, depth int) (bool, []Query) {
+func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, depth int) (bool, []Query) {
+	fn := call.Func
 	activeKey := fmt.Sprintf("derive %p", fn)
-	if fn.Decl.Body == nil || f.active[activeKey] || depth > maxDepth {
+	if fn.Body == nil || f.active[activeKey] || depth > maxDepth {
 		return false, nil
 	}
 	// Another package's function promises only what its signature says,
@@ -1511,13 +1500,13 @@ func (f *factChecker) derive(call *syntax.Call, fn *Func, member Type, ob obliga
 	f.active[activeKey] = true
 	defer delete(f.active, activeKey)
 	// The obligation, in terms of the callee's parameters.
-	inner, ok := f.calleeObligation(call, fn, ob)
+	inner, ok := f.calleeObligation(call, ob)
 	if !ok {
 		return false, nil
 	}
 	var pending []Query
 	for _, path := range f.resultPaths(fn) {
-		t := f.info.Types[path.x]
+		t := path.x.Type()
 		if member != nil && !identical(t, member) && !isMemberOf(member, t) {
 			continue
 		}
@@ -1533,14 +1522,8 @@ func (f *factChecker) derive(call *syntax.Call, fn *Func, member Type, ob obliga
 		f.fn = saveFn
 		if !ok {
 			// Returning a parameter: prove it for the argument.
-			if id, isID := path.x.(*syntax.Ident); isID {
-				if param, isParam := f.info.Defs[id].(*syntax.Param); isParam {
-					for j, pp := range fn.Decl.Params {
-						if args := f.info.Args(call); pp == param && j < len(args) {
-							ok, p = f.prove(args[j], ob, e, depth+1)
-						}
-					}
-				}
+			if ref, isRef := path.x.(*VarRef); isRef && isParamOf(ref.Var, fn) && ref.Var.Index < len(call.Args) {
+				ok, p = f.prove(call.Args[ref.Var.Index], ob, e, depth+1)
 			}
 		}
 		if !ok {
@@ -1556,16 +1539,26 @@ func (f *factChecker) derive(call *syntax.Call, fn *Func, member Type, ob obliga
 	return true, pending
 }
 
+// isParamOf reports whether v is a parameter of fn.
+func isParamOf(v *Var, fn *Func) bool {
+	return v.Kind == VarParam && v.Index < len(fn.ParamVars) && fn.ParamVars[v.Index] == v
+}
+
+// ownsParam reports whether v is a parameter of the current function.
+func (f *factChecker) ownsParam(v *Var) bool {
+	return f.fn != nil && isParamOf(v, f.fn)
+}
+
 // calleeObligation translates ob's arguments from a call's arguments to
 // the callee's parameters. It fails if an argument is neither a
 // constant nor one of the call's arguments.
-func (f *factChecker) calleeObligation(call *syntax.Call, fn *Func, ob obligation) (obligation, bool) {
+func (f *factChecker) calleeObligation(call *Call, ob obligation) (obligation, bool) {
 	inner := ob
 	if ob.or != nil {
 		inner.or = make([]obligation, len(ob.or))
 		for i, alt := range ob.or {
 			var ok bool
-			if inner.or[i], ok = f.calleeObligation(call, fn, alt); !ok {
+			if inner.or[i], ok = f.calleeObligation(call, alt); !ok {
 				return inner, false
 			}
 		}
@@ -1578,9 +1571,10 @@ func (f *factChecker) calleeObligation(call *syntax.Call, fn *Func, ob obligatio
 			continue
 		}
 		found := false
-		for j, arg := range f.info.Args(call) {
+		for j, arg := range call.Args {
 			if a.key != "" && f.key(arg) == a.key {
-				inner.args[i] = argVal{key: "p:" + fn.Decl.Params[j].Name, text: fn.Decl.Params[j].Name, expr: f.paramIdent(fn.Decl.Params[j])}
+				p := call.Func.ParamVars[j]
+				inner.args[i] = argVal{key: "p:" + p.Name, text: p.Name, expr: f.paramRef(p)}
 				found = true
 				break
 			}
@@ -1652,7 +1646,7 @@ func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, path str
 			vars[name] = v.value
 		}
 		for _, cond := range r.Conditions {
-			v := evalCondition(cond, f.info, vars)
+			v := evalCondition(cond, vars)
 			if v == nil || v.Kind() != constant.Bool || !constant.BoolVal(v) {
 				return false, nil
 			}
@@ -1748,13 +1742,13 @@ func alternatives(fs []fact) [][]fact {
 
 // conditionFacts lists the facts a condition establishes when it is
 // true (or, with positive false, when it is false).
-func (f *factChecker) conditionFacts(cond syntax.Expr, positive bool) []fact {
+func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 	switch c := cond.(type) {
-	case *syntax.Unary:
+	case *Unary:
 		if c.Op == syntax.Not {
 			return f.conditionFacts(c.X, !positive)
 		}
-	case *syntax.Binary:
+	case *Binary:
 		switch {
 		case c.Op == syntax.AndAnd && positive, c.Op == syntax.OrOr && !positive:
 			return append(f.conditionFacts(c.X, positive), f.conditionFacts(c.Y, positive)...)
@@ -1766,10 +1760,9 @@ func (f *factChecker) conditionFacts(cond syntax.Expr, positive bool) []fact {
 			}
 			return []fact{{or: append(alternatives(l), alternatives(r)...)}}
 		}
-	case *syntax.Call:
-		fn := f.info.CallFuncs[c]
-		args := f.info.Args(c)
-		if !positive || fn == nil || !fn.Decl.IsPred || len(args) == 0 {
+	case *Call:
+		fn, args := c.Func, c.Args
+		if !positive || !fn.Decl.IsPred || len(args) == 0 {
 			return nil
 		}
 		subject := f.key(args[0])
@@ -1791,37 +1784,31 @@ func (f *factChecker) conditionFacts(cond syntax.Expr, positive bool) []fact {
 // a parameter, a binding, a field path from one of those, or a constant.
 // Bindings to another value share its key. Values that cannot be
 // identified (calls, arithmetic) have no key.
-func (f *factChecker) key(x syntax.Expr) string {
-	if v := f.info.constantOf(x); v != nil {
+func (f *factChecker) key(x Expr) string {
+	if v := constOf(x); v != nil {
 		return constKey(v)
 	}
 	switch x := x.(type) {
-	case *syntax.Ident:
-		switch d := f.info.Defs[x].(type) {
-		case *syntax.Param:
-			if f.info.LambdaParams[d] {
-				return fmt.Sprintf("l:%p", d)
-			}
+	case *VarRef:
+		switch d := x.Var; d.Kind {
+		case VarParam:
 			return "p:" + d.Name
-		case *syntax.Binding:
-			if k := f.aliasKey(d.Value); k != "" {
+		case VarLambdaParam:
+			return fmt.Sprintf("l:%p", d)
+		case VarLet:
+			if k := f.aliasKey(d.Let.Value); k != "" {
 				return k
 			}
 			return fmt.Sprintf("b:%p", d)
-		case nil:
-			return ""
 		default:
-			if src := f.info.PatSources[d]; src != nil && src.Member == nil {
+			if src := d.Source; src != nil && src.Member == nil {
 				if k := f.aliasKey(src.Subject); k != "" {
 					return k + src.Path
 				}
 			}
 			return fmt.Sprintf("n:%p", d)
 		}
-	case *syntax.Selector:
-		if f.info.SelectorVariants[x] != nil {
-			return ""
-		}
+	case *Select:
 		if k := f.key(x.X); k != "" {
 			return k + "." + x.Name
 		}
@@ -1830,9 +1817,9 @@ func (f *factChecker) key(x syntax.Expr) string {
 }
 
 // aliasKey is the key of x if binding x just gives a value another name.
-func (f *factChecker) aliasKey(x syntax.Expr) string {
+func (f *factChecker) aliasKey(x Expr) string {
 	switch x.(type) {
-	case *syntax.Ident, *syntax.Selector:
+	case *VarRef, *Select:
 		return f.key(x)
 	}
 	return ""
@@ -1840,16 +1827,10 @@ func (f *factChecker) aliasKey(x syntax.Expr) string {
 
 func constKey(v constant.Value) string { return "c:" + v.ExactString() }
 
-// constantOf is the value of a constant expression, or nil.
-func (info *Info) constantOf(x syntax.Expr) constant.Value {
-	if v, ok := info.Consts[x]; ok {
-		return v
-	}
-	switch x := x.(type) {
-	case *syntax.StringLit:
-		return constant.MakeString(x.Value)
-	case *syntax.BoolLit:
-		return constant.MakeBool(x.Value)
+// constOf is the value of x if it is a constant, or nil.
+func constOf(x Expr) constant.Value {
+	if c, ok := x.(*Const); ok {
+		return c.Value
 	}
 	return nil
 }
@@ -1858,14 +1839,18 @@ func (info *Info) constantOf(x syntax.Expr) constant.Value {
 
 // describe shows a value in a message: its name, field path, or
 // constant, or "this value".
-func (f *factChecker) describe(x syntax.Expr) string {
-	if v := f.info.constantOf(x); v != nil {
+func (f *factChecker) describe(x Expr) string {
+	if v := constOf(x); v != nil {
 		return CArg{Const: v}.String()
 	}
 	switch x := x.(type) {
-	case *syntax.Ident:
+	case *VarRef:
+		return x.Var.Name
+	case *FuncRef:
 		return x.Name
-	case *syntax.Selector:
+	case *VariantValue:
+		return x.Text
+	case *Select:
 		if inner := f.describe(x.X); inner != "this value" {
 			return inner + "." + x.Name
 		}
@@ -1874,7 +1859,7 @@ func (f *factChecker) describe(x syntax.Expr) string {
 }
 
 // hint suggests how to establish a missing fact.
-func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
+func (f *factChecker) hint(x Expr, ob obligation) string {
 	name := f.describe(x)
 	if ob.pred == nil && ob.or == nil {
 		return ""
@@ -1893,8 +1878,8 @@ func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
 		// A field of a record can be checked directly.
 		return fmt.Sprintf(" (check it first with if (%s) { ... })", checkText(name+sel, obligation{pred: ob.pred, args: ob.args, or: ob.or}, f.from()))
 	}
-	if call, ok := x.(*syntax.Call); ok && ob.path == "" {
-		if fn := f.info.CallFuncs[call]; fn != nil && !fn.Prelude && f.fn != nil && fn.Pkg != f.fn.Pkg {
+	if call, ok := x.(*Call); ok && ob.path == "" {
+		if fn := call.Func; !fn.Prelude && f.fn != nil && fn.Pkg != f.fn.Pkg {
 			return fmt.Sprintf(" (%s does not promise it in its signature, and only what it promises is known outside its package; give the result a name and check it first)", fn.QualifiedName(f.from()))
 		}
 	}
@@ -1902,25 +1887,20 @@ func (f *factChecker) hint(x syntax.Expr, ob obligation) string {
 		return " (give it a name and check it first)"
 	}
 	check := fmt.Sprintf("if (%s) { ... }", checkText(name, ob, f.from()))
-	if id, ok := x.(*syntax.Ident); ok {
-		if p, isParam := f.info.Defs[id].(*syntax.Param); isParam {
-			for i, pp := range f.fn.Decl.Params {
-				if pp == p {
-					return fmt.Sprintf(" (check it first with %s, or require it: %s: %s where %s)", check, p.Name, f.fn.Params[i], ob.con)
-				}
-			}
-		}
+	if ref, ok := x.(*VarRef); ok && f.ownsParam(ref.Var) {
+		p := ref.Var
+		return fmt.Sprintf(" (check it first with %s, or require it: %s: %s where %s)", check, p.Name, f.fn.Params[p.Index], ob.con)
 	}
 	return fmt.Sprintf(" (check it first with %s)", check)
 }
 
 // fieldSelector is path as field selectors (".address.zip"), if every
 // step of it is a field of a record.
-func (f *factChecker) fieldSelector(x syntax.Expr, path string) (string, bool) {
+func (f *factChecker) fieldSelector(x Expr, path string) (string, bool) {
 	if path == "" {
 		return "", false
 	}
-	t := f.info.Types[x]
+	t := x.Type()
 	for _, step := range strings.Split(path[1:], ".") {
 		rec, ok := t.(*Record)
 		if !ok || rec.Field(step) == nil {
