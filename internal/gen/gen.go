@@ -941,12 +941,12 @@ func (g *gen) scopeInto(e *syntax.ScopeExpr, k sink) []ast.Stmt {
 	}
 	// The cleanup policy is computed before the scope opens.
 	var stmts, policy []ast.Stmt
-	if e.Policy != nil {
-		pstmts, px := g.value(e.Policy)
+	for _, p := range e.Policies {
+		pstmts, px := g.value(p)
 		stmts = append(stmts, pstmts...)
 		if px != nil {
-			fn := g.info.Funcs["setCleanup"]
-			policy = []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: g.funcName(fn), Args: []ast.Expr{s, px}}}}
+			fn := g.info.Funcs["setScopePolicy"]
+			policy = append(policy, &ast.ExprStmt{X: &ast.CallExpr{Fun: g.funcName(fn), Args: []ast.Expr{s, px}}})
 		}
 	}
 	stmts = append(stmts,

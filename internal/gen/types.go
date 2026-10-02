@@ -349,7 +349,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -366,9 +366,17 @@ type _Scope struct {
 	tasks      []*_task
 	ctx        context.Context
 	cancel     context.CancelCauseFunc
-	// timeout is how long close waits for each finalizer; 0 waits for as
-	// long as it takes (the default policy, Cleanup.Block).
-	timeout time.Duration
+	// taskTimeout is how long close waits for the scope's tasks once it
+	// has cancelled them, and finalizerTimeout how long it waits for
+	// each finalizer; 0 waits for as long as it takes (the default).
+	// Tasks and finalizers that take longer are orphaned: left running,
+	// while the scope goes on closing.
+	taskTimeout      time.Duration
+	finalizerTimeout time.Duration
+	// logFailures logs the failures at the scope's end instead of
+	// raising them.
+	logFailures bool
+	closed      bool
 	name    string
 }
 
@@ -487,6 +495,12 @@ func (s *_Scope) Go(work func() any) *_task {
 			if r := recover(); r != nil {
 				t.failure = r
 				s.cancel(errors.New("a task failed"))
+				s.mu.Lock()
+				orphan := s.closed && s.tasks == nil
+				s.mu.Unlock()
+				if orphan && !t.reported.Swap(true) {
+					slog.Error("bork: an orphaned task failed", "scope", s.name, "failure", fmt.Sprint(r))
+				}
 			}
 		}()
 		t.result = work()
@@ -509,15 +523,22 @@ func (t *_task) Await() any {
 // so its tasks learn that it is ending (how they stop, quickly or with
 // cleanup of their own, is up to them), waits for them, and then runs
 // the finalizers. A task that panicked without being awaited panics the
-// scope's routine. A scope is closed when its block ends, and again
-// (doing nothing, unless a finalizer panicked) by abort.
+// scope's routine. A scope is closed once: when its block ends, or by
+// abort when the block panics.
 //
 // Every finalizer runs, even when others fail. Failures (finalizers that
 // panicked, and tasks that panicked without being awaited) are raised as
 // one panic once the scope is closed.
 func (s *_Scope) close() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
+	s.mu.Unlock()
 	s.cancel(_errScopeEnded)
-	s.running.Wait()
+	s.waitForTasks()
 	var failures []any
 	for {
 		s.mu.Lock()
@@ -543,6 +564,12 @@ func (s *_Scope) close() {
 		}
 	}
 	failures = append(taskFailures, failures...)
+	if s.logFailures {
+		for _, f := range failures {
+			slog.Error("bork: a failure while the scope closed", "scope", s.name, "failure", fmt.Sprint(f))
+		}
+		return
+	}
 	switch len(failures) {
 	case 0:
 	case 1:
@@ -564,24 +591,46 @@ func (s *_Scope) finalize(f func()) (failure any) {
 		f()
 		return nil
 	}
-	if s.timeout <= 0 {
+	if s.finalizerTimeout <= 0 {
 		return run()
 	}
 	done := make(chan any, 1)
 	go func() { done <- run() }()
-	t := time.NewTimer(s.timeout)
+	t := time.NewTimer(s.finalizerTimeout)
 	defer t.Stop()
 	select {
 	case r := <-done:
 		return r
 	case <-t.C:
-		fmt.Fprintf(os.Stderr, "bork: a finalizer of scope %s did not finish within %v; the scope closes without waiting for it\n", s.name, s.timeout)
+		slog.Warn("bork: a finalizer did not finish in time; it is orphaned, and the scope goes on closing", "scope", s.name, "timeout", s.finalizerTimeout)
 		return nil
 	}
 }
 
+// waitForTasks waits for the scope's tasks, or, with a task timeout,
+// until it passes: tasks still running then are orphaned (they keep
+// running, and may find the scope's resources closed).
+func (s *_Scope) waitForTasks() {
+	if s.taskTimeout <= 0 {
+		s.running.Wait()
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		s.running.Wait()
+		close(done)
+	}()
+	t := time.NewTimer(s.taskTimeout)
+	defer t.Stop()
+	select {
+	case <-done:
+	case <-t.C:
+		slog.Warn("bork: tasks did not stop in time after the scope ended; they are orphaned, and the scope goes on closing", "scope", s.name, "timeout", s.taskTimeout)
+	}
+}
+
 // abort is deferred when a scope opens, so that a panic in its block
-// closes it too. After a normal close, it does nothing.
+// closes it too. After a close, it does nothing.
 func (s *_Scope) abort() {
 	s.close()
 }

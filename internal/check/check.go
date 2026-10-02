@@ -703,14 +703,14 @@ func (c *checker) block(b *syntax.Block, want Type) Type {
 // of type Scope. Whether resources outlive their scopes is checked
 // later (see lifetimes.go).
 func (c *checker) scopeExpr(e *syntax.ScopeExpr, want Type) Type {
-	if e.Policy != nil {
-		// The cleanup policy, computed before the scope opens.
-		cleanup := c.preludePkg.TypeNamed("Cleanup")
-		if t := c.exprWant(e.Policy, cleanup); t != Invalid && !assignable(t, cleanup) {
-			c.errorf(e.Policy.Position(), "a scope's policy must be a Cleanup (such as cleanupTimeout(500)), found %s", t)
+	// The policies, computed before the scope opens.
+	for _, p := range e.Policies {
+		policy := c.preludePkg.TypeNamed("ScopePolicy")
+		if t := c.exprWant(p, policy); t != Invalid && !assignable(t, policy) {
+			c.errorf(p.Position(), "a scope's policy must be a ScopePolicy (such as taskTimeout(100), cleanupTimeout(500), or logFailures()), found %s", t)
 		}
 		if c.fn != nil {
-			c.fn.Calls = append(c.fn.Calls, c.preludePkg.Funcs["setCleanup"])
+			c.fn.Calls = append(c.fn.Calls, c.preludePkg.Funcs["setScopePolicy"])
 		}
 	}
 	c.pushScope()

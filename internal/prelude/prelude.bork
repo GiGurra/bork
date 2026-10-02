@@ -212,33 +212,55 @@ fn attach[R](r: R, s: Scope): R unsafe go {
   return r
 }
 
-// Cleanup is how a scope runs its finalizers when it closes, chosen with
-// `scope s with policy { ... }`. Every finalizer runs, even when others
-// fail; failures are raised together once the scope is closed.
-//   - Block (the default): wait for each finalizer for as long as it
-//     takes.
-//   - Timeout: wait at most ms milliseconds for each finalizer; one that
-//     takes longer is left running, a line on stderr says so, and the
-//     scope goes on closing.
-type Cleanup = sealed {
-  Block,
-  Timeout { ms: Int },
+// ScopePolicy configures how a scope ends, chosen with
+// `scope s with taskTimeout(100), cleanupTimeout(500), logFailures() { ... }`.
+// When a scope ends, it cancels itself, waits for its tasks, and then
+// runs its finalizers. By default it waits for each for as long as it
+// takes, and raises failures (finalizers that panicked, and tasks that
+// panicked without being awaited) as one panic once it is closed;
+// every finalizer runs, even when others fail.
+//   - TaskTimeout: wait at most ms milliseconds for the tasks to stop
+//     (with whatever cleanup of their own they do). Tasks still running
+//     then are orphaned: they keep running, the scope's finalizers still
+//     run, and the tasks may find its resources closed.
+//   - CleanupTimeout: wait at most ms milliseconds for each finalizer;
+//     one that takes longer is orphaned, and the scope goes on closing.
+//   - LogFailures: log failures (at error level) instead of raising them.
+// Orphaning is logged at warning level.
+type ScopePolicy = sealed {
+  TaskTimeout { ms: Int },
+  CleanupTimeout { ms: Int },
+  LogFailures,
+}
+
+// taskTimeout is the policy that waits at most ms milliseconds for the
+// scope's tasks to stop when it ends.
+fn taskTimeout(ms: Int): ScopePolicy {
+  ScopePolicy.TaskTimeout { ms: ms }
 }
 
 // cleanupTimeout is the policy that waits at most ms milliseconds for
-// each finalizer: scope s with cleanupTimeout(500) { ... }.
-fn cleanupTimeout(ms: Int): Cleanup {
-  Cleanup.Timeout { ms: ms }
+// each finalizer.
+fn cleanupTimeout(ms: Int): ScopePolicy {
+  ScopePolicy.CleanupTimeout { ms: ms }
 }
 
-// setCleanup sets the cleanup policy of s (what `with` does).
-fn setCleanup(s: Scope, policy: Cleanup) unsafe go {
+// logFailures is the policy that logs failures at the scope's end
+// instead of raising them.
+fn logFailures(): ScopePolicy {
+  ScopePolicy.LogFailures
+}
+
+// setScopePolicy applies a policy to s (what `with` does).
+fn setScopePolicy(s: Scope, policy: ScopePolicy) unsafe go {
   import "time"
   switch p := policy.(type) {
-  case Cleanup_Timeout:
-    s.timeout = time.Duration(p.ms) * time.Millisecond
-  default:
-    s.timeout = 0
+  case ScopePolicy_TaskTimeout:
+    s.taskTimeout = time.Duration(p.ms) * time.Millisecond
+  case ScopePolicy_CleanupTimeout:
+    s.finalizerTimeout = time.Duration(p.ms) * time.Millisecond
+  case ScopePolicy_LogFailures:
+    s.logFailures = true
   }
 }
 

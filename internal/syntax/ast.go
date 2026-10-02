@@ -468,10 +468,10 @@ type Lambda struct {
 type ScopeExpr struct {
 	Pos  diag.Pos
 	Name string
-	// Policy is the cleanup policy of `scope s with cleanupTimeout(500)
-	// { ... }`, or nil for the default.
-	Policy Expr
-	Body   *Block
+	// Policies are those of `scope s with taskTimeout(100),
+	// cleanupTimeout(500) { ... }`; none for the defaults.
+	Policies []Expr
+	Body     *Block
 }
 
 // ListLit is a list literal: `[1, 2, 3]`.
