@@ -1,6 +1,6 @@
-fn a() uses io + disk { }
+fn a() uses io + disk {}
 
-fn b() uses io + io { }
+fn b() uses io + io {}
 
 pred c(x: Int) uses io { x > 0 }
 
