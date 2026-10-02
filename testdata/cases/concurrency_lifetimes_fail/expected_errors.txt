@@ -1,0 +1,3 @@
+main.bork:2:3: function leak cannot return this value: it belongs to scope s, which ends on line 4
+main.bork:9:9: t may be released: it belongs to scope s, which ended on line 8
+main.bork:16:24: the lambda may not live as long as scope outer (it depends on scope s), but spawn may keep it until outer closes

@@ -1,0 +1,31 @@
+fn slow(n: Int, ms: Int): Int {
+  sleep(ms)
+  n * n
+}
+
+fn main() {
+  total = scope s {
+    a = spawn(s, () => slow(3, 30))
+    b = spawn(s, () => slow(4, 10))
+    launch(s, () => {
+      sleep(5)
+      println("launched task ran")
+    })
+    await(a) + await(b)
+  }
+  println(total)
+  squares = scope s {
+    tasks = map(range(1, 6), n => spawn(s, () => slow(n, 10 - n)))
+    map(tasks, t => await(t))
+  }
+  println(squares)
+}
+
+test "tasks run concurrently, and await gives their results" {
+  r = scope s {
+    a = spawn(s, () => slow(2, 5))
+    b = spawn(s, () => slow(3, 5))
+    await(a) * await(b)
+  }
+  assertEqual(r, 36)
+}

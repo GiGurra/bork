@@ -338,6 +338,7 @@ func (fn *Func) InstanceFor(subject Type) *Instance {
 // (lambdas, `[]`, `Option.None`) come last, once the other arguments
 // have decided what they can.
 func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type) Type {
+	errorsBefore := c.diags.Len()
 	c.info.CallFuncs[e] = fn
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
@@ -419,6 +420,16 @@ func (c *checker) callFunc(e *syntax.Call, id *syntax.Ident, fn *Func, want Type
 			return Invalid
 		}
 		inst = in.instance()
+	}
+	for i, ta := range inst.TypeArgs {
+		if ta == Unit && c.diags.Len() == errorsBefore {
+			hint := ""
+			if fn.Prelude && fn.Decl.Name == "spawn" {
+				hint = " (to run work that gives no value, use launch)"
+			}
+			c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, id.Name, ta, hint)
+			return Invalid
+		}
 	}
 	if !c.resolveDicts(inst, e.Pos) {
 		return Invalid

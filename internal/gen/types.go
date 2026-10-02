@@ -342,24 +342,93 @@ func _runTest(run func()) (msg string) {
 
 const scopeRuntime = `package main
 
-// _Scope is a bork scope: finalizers that run, last registered first,
-// when the scope closes.
+import (
+	"sync"
+	"sync/atomic"
+)
+
+// _Scope is a bork scope: tasks it waits for, and finalizers that run,
+// last registered first, when it closes.
 type _Scope struct {
+	mu         sync.Mutex
 	finalizers []func()
+	running    sync.WaitGroup
+	tasks      []*_task
+}
+
+// _task is a goroutine a scope started (spawn, launch).
+type _task struct {
+	done     chan struct{}
+	result   any
+	failure  any
+	reported atomic.Bool
 }
 
 // Defer registers f to run when the scope closes. Resources opened in
 // unsafe go code register their finalizers with it.
-func (s *_Scope) Defer(f func()) { s.finalizers = append(s.finalizers, f) }
+func (s *_Scope) Defer(f func()) {
+	s.mu.Lock()
+	s.finalizers = append(s.finalizers, f)
+	s.mu.Unlock()
+}
 
-// close runs the finalizers. A scope is closed when its block ends, and
-// again (doing nothing, unless a finalizer panicked) by a deferred call
-// that makes panics close it too.
+// Go runs work on a goroutine the scope waits for before it closes.
+func (s *_Scope) Go(work func() any) *_task {
+	t := &_task{done: make(chan struct{})}
+	s.mu.Lock()
+	s.tasks = append(s.tasks, t)
+	s.mu.Unlock()
+	s.running.Add(1)
+	go func() {
+		defer s.running.Done()
+		defer close(t.done)
+		defer func() {
+			if r := recover(); r != nil {
+				t.failure = r
+			}
+		}()
+		t.result = work()
+	}()
+	return t
+}
+
+// Await waits for the task, and gives its result; a task that panicked
+// panics again here.
+func (t *_task) Await() any {
+	<-t.done
+	if t.failure != nil {
+		t.reported.Store(true)
+		panic(t.failure)
+	}
+	return t.result
+}
+
+// close waits for the scope's tasks, then runs the finalizers. A task
+// that panicked without being awaited panics the scope's routine. A
+// scope is closed when its block ends, and again (doing nothing, unless
+// a finalizer panicked) by a deferred call that makes panics close it
+// too.
 func (s *_Scope) close() {
-	for len(s.finalizers) > 0 {
+	s.running.Wait()
+	for {
+		s.mu.Lock()
+		if len(s.finalizers) == 0 {
+			s.mu.Unlock()
+			break
+		}
 		f := s.finalizers[len(s.finalizers)-1]
 		s.finalizers = s.finalizers[:len(s.finalizers)-1]
+		s.mu.Unlock()
 		f()
+	}
+	s.mu.Lock()
+	tasks := s.tasks
+	s.tasks = nil
+	s.mu.Unlock()
+	for _, t := range tasks {
+		if t.failure != nil && !t.reported.Swap(true) {
+			panic(t.failure)
+		}
 	}
 }
 
