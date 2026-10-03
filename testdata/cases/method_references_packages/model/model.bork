@@ -1,0 +1,3 @@
+type Point = { x: Int }
+fn (p: Point) Value(): Int { p.x }
+fn (p: Point) secret(): Int { p.x }

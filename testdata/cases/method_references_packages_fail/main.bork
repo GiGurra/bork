@@ -1,0 +1,2 @@
+import "example.com/refs/model"
+fn main() { println(model.Point.secret) }

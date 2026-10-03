@@ -1,0 +1,3 @@
+import "example.com/refs/model"
+fn (p: model.Point) Double(): Int { p.x * 2 }
+fn (text: String) Decorated(): String { "[" + text.trim() + "]" }

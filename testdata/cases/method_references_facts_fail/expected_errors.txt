@@ -1,0 +1,2 @@
+main.bork:6:29: Point.checked requires p to be positive, so it cannot be used as a value; use a lambda that checks it: x => if (...) { Point.checked(x) } else { ... }
+main.bork:8:31: List.first requires xs to be notEmpty, so it cannot be used as a value; use a lambda that checks it: x => if (...) { List.first(x) } else { ... }

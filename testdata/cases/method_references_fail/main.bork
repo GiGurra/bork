@@ -1,0 +1,18 @@
+type Point = { x: Int }
+pred positive(p: Point) { p.x > 0 }
+fn (p: Point where positive) checked(): Int { p.x }
+fn (p: Point) print() uses io { println(p.x) }
+
+type F = { f: (Int) => Int }
+
+fn main() {
+  f = List.length
+  println(f([1]))
+  println(String.missing)
+  wrong: (Int) => Int = String.byteLength
+  println(wrong(1))
+  printing: (Point) uses nothing => Unit = Point.print
+  printing(Point { x: 1 })
+  includes: (List[F], F) => Bool = List.includes
+  println(includes([], F { f: x => x }))
+}

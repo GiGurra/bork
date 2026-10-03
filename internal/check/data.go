@@ -109,6 +109,13 @@ func (c *checker) isTypeRef(x syntax.Expr) (string, bool) {
 }
 
 func (c *checker) selector(e *syntax.Selector, want Type) Type {
+	if fn, why, isMethod := c.methodReference(e); isMethod {
+		if fn == nil {
+			c.errorf(e.Pos, "%s", why)
+			return Invalid
+		}
+		return c.funcValue(e, writtenText(e), fn, want)
+	}
 	if owner, ok := c.isTypeRef(e.X); ok {
 		v := c.variantRef(e.Pos, owner, e.Name, want)
 		if v == nil {

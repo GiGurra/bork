@@ -220,7 +220,7 @@ type Info struct {
 	// funcRefs every function used as a value, with type arguments for
 	// generic functions.
 	instances map[*syntax.Call]*Instance
-	funcRefs  map[*syntax.Ident]*Instance
+	funcRefs  map[syntax.Expr]*Instance
 	// recordTargets records what each record literal builds: a *Record
 	// or a *Variant.
 	recordTargets map[*syntax.RecordLit]any
@@ -305,7 +305,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			bindingConstraints: map[*syntax.Binding][]*Constraint{},
 			patSources:         map[any]*patSource{},
 			instances:          map[*syntax.Call]*Instance{},
-			funcRefs:           map[*syntax.Ident]*Instance{},
+			funcRefs:           map[syntax.Expr]*Instance{},
 		},
 	}
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
@@ -980,7 +980,7 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 		return l.typ
 	}
 	if fn, ok := c.funcNamed(e.Name); ok {
-		return c.funcValue(e, fn, want)
+		return c.funcValue(e, e.Name, fn, want)
 	}
 	if _, ok := builtins[e.Name]; ok {
 		c.errorf(e.Pos, "built-in %s must be called", e.Name)

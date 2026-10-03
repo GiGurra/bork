@@ -1,0 +1,10 @@
+type Point = { x: Int }
+pred positive(p: Point) { p.x > 0 }
+fn (p: Point where positive) checked(): Int { p.x }
+
+fn main() {
+  checked: (Point) => Int = Point.checked
+  println(checked(Point { x: 1 }))
+  first: (List[Int]) => Int = List.first
+  println(first([1]))
+}
