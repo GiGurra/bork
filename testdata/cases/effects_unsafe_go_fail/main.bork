@@ -59,4 +59,27 @@ fn counter(): Counter unsafe go {
   return Counter{next: func() int64 { return n.Add(1) }}
 }
 
+// Imports are shared by every body of the generated file, so a package
+// counts without its own import.
+fn borrowedTime(): Int unsafe go {
+  return time.Now().UnixNano()
+}
+
+fn runtimeFmt() unsafe go {
+  fmt.Println("hi")
+}
+
+// Calling a bork function from Go needs its effects too.
+fn loud() uses io { println("loud") }
+
+fn callsLoud() unsafe go {
+  loud()
+}
+
+// A local name shadows a package, and Go's own names are not bork's.
+fn shadowed(): Int unsafe go {
+  time := []int64{1}
+  return int64(len(time)) + time[0]
+}
+
 fn main() {}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseModFile(t *testing.T) {
-	mod, err := parseModFile("// shop\nmodule example.com/shop\n\nunsafe \"example.com/shop/ffi\"\nunsafe \"example.com/shop\"\n")
+	mod, err := parseModFile("// shop\nmodule example.com/shop // the shop\n\nunsafe \"example.com/shop/ffi\" // bindings\nunsafe \"example.com/shop\"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,6 +18,7 @@ func TestParseModFile(t *testing.T) {
 		"unsafe \"a\"\nmodule m\n":             "expected `module <path>`, found",
 		"module m\nunsafe a\n":                 "expected `unsafe \"<package path>\"`",
 		"module m\nrequire example.com/x v1\n": "expected `unsafe \"<package path>\"`",
+		"module bork/app\n":                    "reserved for the standard library",
 	} {
 		if _, err := parseModFile(text); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: got %v, want %q", text, err, want)

@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	gotoken "go/token"
+	gotypes "go/types"
 	"path"
 	"regexp"
 	"strings"
@@ -104,8 +105,11 @@ type goUse struct {
 	text   string // "it calls time.Now, which reads the clock"
 }
 
-// goEffectUses finds the uses of effects in an unsafe go body.
-func goEffectUses(gc *syntax.GoCode) []goUse {
+// goEffectUses finds the uses of effects in an unsafe go body. The Go
+// imports of every body end up in one generated file, so a package
+// name counts even if another body imports it. funcs finds the bork
+// functions the body can call by their names.
+func goEffectUses(gc *syntax.GoCode, funcs func(name string) *Func) []goUse {
 	const prefix = "package p\n\nfunc _() {"
 	fset := gotoken.NewFileSet()
 	file, err := goparser.ParseFile(fset, "", prefix+gc.Body+"}\n", 0)
@@ -113,6 +117,11 @@ func goEffectUses(gc *syntax.GoCode) []goUse {
 		return nil // the parser reported it
 	}
 	pkgs := map[string]string{} // name -> import path
+	for imp := range goEffects {
+		if _, ok := pkgs[goPackageName(imp)]; !ok {
+			pkgs[goPackageName(imp)] = imp
+		}
+	}
 	for _, imp := range gc.Imports {
 		pkgs[goPackageName(imp)] = imp
 	}
@@ -125,12 +134,33 @@ func goEffectUses(gc *syntax.GoCode) []goUse {
 		}
 		return diag.Pos{File: gc.Pos.File, Line: gc.Pos.Line + line, Col: col + 1}
 	}
-	var uses []goUse
+	// Names that are not references: fields and struct literal keys.
+	notRefs := map[*ast.Ident]bool{}
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.SelectorExpr:
+			notRefs[n.Sel] = true
+		case *ast.KeyValueExpr:
+			if id, ok := n.Key.(*ast.Ident); ok {
+				notRefs[id] = true
+			}
+		}
+		return true
+	})
+	var uses []goUse
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.Ident:
+			// A bork function, unless the body declares the name.
+			if n.Obj != nil || notRefs[n] || gotypes.Universe.Lookup(n.Name) != nil {
+				return true
+			}
+			if fn := funcs(n.Name); fn != nil && fn.Effects&^EffOpen != 0 {
+				uses = append(uses, goUse{fn.Effects &^ EffOpen, at(n.Pos()), "it calls " + n.Name})
+			}
+		case *ast.SelectorExpr:
 			id, ok := n.X.(*ast.Ident)
-			if !ok {
+			if !ok || id.Obj != nil {
 				return true
 			}
 			imp, ok := pkgs[id.Name]
@@ -140,6 +170,7 @@ func goEffectUses(gc *syntax.GoCode) []goUse {
 			if e, ok := goEffectOf(imp); ok && e.has(n.Sel.Name) {
 				uses = append(uses, goUse{e.effect, at(n.Pos()), "it uses " + id.Name + "." + n.Sel.Name + ", which " + e.what})
 			}
+			return false // not a bork function
 		case *ast.GoStmt:
 			uses = append(uses, goUse{EffState, at(n.Pos()), "it starts a goroutine"})
 		case *ast.SendStmt:
@@ -160,16 +191,27 @@ func goEffectUses(gc *syntax.GoCode) []goUse {
 // body obviously does. The function values it gives may do it instead
 // (an Atom's currentFn: () uses state => T), so what their types allow
 // counts too.
-func checkUnsafeGo(fn *Func, diags *diag.List) {
+func checkUnsafeGo(fn *Func, info *Info, diags *diag.List) {
 	allowed := fn.Effects | effectsWithin(fn.Result, map[Type]bool{})
 	var missing Effects
 	var first *goUse
-	for _, u := range goEffectUses(fn.Decl.GoBody) {
-		if u.effect&allowed == 0 && missing&u.effect == 0 {
-			missing |= u.effect
+	funcs := func(name string) *Func {
+		// An imported package's body sees its own functions by their
+		// bork names (see gen.packageAliases); every body sees the
+		// root package's and the prelude's.
+		if fn.Pkg != nil && fn.Pkg.GoPrefix != "" {
+			if f := fn.Pkg.Funcs[name]; f != nil {
+				return f
+			}
+		}
+		return info.Funcs[name]
+	}
+	for _, u := range goEffectUses(fn.Decl.GoBody, funcs) {
+		if u.effect&^allowed != 0 && u.effect&^allowed&^missing != 0 {
 			if first == nil {
 				first = &u
 			}
+			missing |= u.effect &^ allowed
 		}
 	}
 	if missing == 0 {

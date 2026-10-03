@@ -4,3 +4,6 @@ main.bork:16:10: now's unsafe go body uses clock (it uses time.Now, which reads 
 main.bork:21:16: dice's unsafe go body uses random (it uses rand.IntN, which makes random numbers), but its signature allows no effects; declare it: uses random
 main.bork:25:3: background's unsafe go body uses state (it starts a goroutine), but its signature allows no effects; declare it: uses state
 main.bork:30:3: shout's unsafe go body uses io (it uses fmt.Println, which prints or scans), but its signature allows no effects; declare it: uses io
+main.bork:65:10: borrowedTime's unsafe go body uses clock (it uses time.Now, which reads the clock or waits), but its signature allows no effects; declare it: uses clock
+main.bork:69:3: runtimeFmt's unsafe go body uses io (it uses fmt.Println, which prints or scans), but its signature allows no effects; declare it: uses io
+main.bork:76:3: callsLoud's unsafe go body uses io (it calls loud), but its signature allows no effects; declare it: uses io

@@ -55,13 +55,19 @@ func findModule(dir string) (module, error) {
 func parseModFile(text string) (module, error) {
 	var mod module
 	for _, line := range strings.Split(text, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "//") {
+		if line == "" {
 			continue
 		}
 		fields := strings.Fields(line)
 		switch {
 		case mod.path == "" && len(fields) == 2 && fields[0] == "module":
+			if fields[1] == "bork" || strings.HasPrefix(fields[1], std.Prefix) {
+				return module{}, fmt.Errorf("module path %s is reserved for the standard library", fields[1])
+			}
 			mod.path = fields[1]
 		case mod.path == "":
 			return module{}, fmt.Errorf("expected `module <path>`, found %q", line)
