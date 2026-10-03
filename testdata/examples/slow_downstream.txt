@@ -1,0 +1,5 @@
+shed overloaded overloaded
+bounded downstream 2 active 2 queued
+finished 4 overloaded 2
+attempts 10 initial 6 retries 4
+peak handlers 2

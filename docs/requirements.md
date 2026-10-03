@@ -1191,7 +1191,7 @@ scope maint {
 ### Backpressure
 
 HTTP admission before body buffering, typed overload/deadline
-failures, and shared retry budgets are proposed in
+failures, and shared retry budgets are described in
 [the backpressure design](design/backpressure.md) (bork-l0kn5g). Ordinary
 spawn/launch keep their current signatures; the explicit bounded task pool below
 is implemented. HTTP retries are opt-in, limited by a shared
@@ -1212,7 +1212,7 @@ implicit pool. See [the package documentation](std/tasks.md). HTTP admission als
 FIFO order, rejecting with 429/503 and Retry-After. AdmissionState exposes load.
 Clients return Response, Overloaded (retaining the original 429/503 response),
 DeadlineExceeded, Cancelled, or IoError, with safe Retry-After parsing.
-See [HTTP documentation](std/http.md#bounded-admission); retry budgets remain planned in [the backpressure design](design/backpressure.md).
+Shared HTTP retry budgets charge clock + state for creation and operation effects plus clock + random + state for explicit retries. Initial attempts are free; retries atomically consume a shared, lazily refilled token, preserve Retry-After minimums, and stop when waits cannot fit the scope deadline. Budgets and injected clocks have checked scope lifetimes, and last-owner closure cancels waits and active attempt scopes. See [HTTP documentation](std/http.md#shared-retries) and [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes
 

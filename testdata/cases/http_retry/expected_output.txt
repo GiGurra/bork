@@ -1,0 +1,22 @@
+shared tokens 3 overloaded
+free next initial 4 overloaded
+concurrent true true
+terminal ["response", "io", "cancelled", "deadline"] 4
+attempt cap overloaded 5
+eventual success response 3
+capped jitter overloaded [1000000, 2000000, 4000000, 4000000]
+negative jitter and maximum backoff overloaded
+wait overflow overloaded
+server minimum response 2 true
+hint exceeds deadline overloaded 1
+already expired deadline 1
+already cancelled cancelled 0
+cancel wait cancelled 1
+budget close wait cancelled 1
+closed budget cancelled 1
+budget cancels operation cancelled
+panic cleanup true 1
+normal finalizers overloaded 4
+deadline during operation deadline
+attempt cleanup overloaded 3 3
+attached ownership overloaded 3

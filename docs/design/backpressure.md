@@ -1,7 +1,8 @@
 # Backpressure and retry budgets
 
 Design for bork-l0kn5g. Bounded task pools, HTTP admission, and typed client
-failures are implemented; retry budgets remain planned. This note makes
+failures, scope deadlines, retry budgets, and the runnable
+[slow-downstream example](../../examples/slow_downstream/main.bork) are implemented. This note makes
 bounded admission, HTTP shedding, and retry budgets explicit operations with
 checked failure unions. The later deadline/trace propagation work is
 bork-gqxe4s; request criticality and adaptive concurrency remain follow-ups.
@@ -160,7 +161,11 @@ Add a scope-owned retry budget resource in bork/http. Create it once per
 upstream/destination group, and share it across operations/tasks instead of
 creating a fresh allowance for every request. A budget has a proven positive
 capacity and refill interval in the positive TimeoutMs range, begins full, and accrues one retry token per
-interval up to capacity. Compute replenishment lazily from monotonic time;
+interval up to capacity. Compute replenishment lazily from monotonic system time by default;
+`clock: Option[time.Clock] = .None` permits an injected clock (including
+FixedClock or SystemClock with native `mock time.Now()` in tests). Backward
+injected time pauses refill until it catches up. Fractional intervals retain
+their phase;
 there is no background refill goroutine. Close disables the budget and waiting
 operations see cancellation. Its owner/attach semantics use the existing
 resource protocol; the retry operation checks both its caller scope and the
@@ -169,7 +174,7 @@ existing lifetime checks, including when shared with tasks. No token is spent on
 token only just before the next attempt; concurrent retries cannot overspend.
 Tokens are not refunded when an admitted attempt fails or is cancelled.
 
-Expose a helper with explicit operation and policy, approximately:
+The helper takes an explicit operation and policy:
 
 ```bork
 http.Retry(s, budget, operation, maxAttempts: 3,
@@ -191,6 +196,9 @@ is immutable, but that does not make a POST safe to replay. A retry callback can
 still perform effects; the helper cannot prove external idempotency.
 
 Use capped exponential backoff with full jitter, using overflow-safe arithmetic.
+Default draws use bork/rand.IntBetween. An optional jitter callback accepts the
+nanosecond ceiling and its result is clamped to 0..ceiling, never reported as an
+IoError. Clock injection controls refill; waits and scope deadlines use real time.
 Wait for serverMinimum + uniform jitter in [0, cappedBackoff], with serverMinimum
 zero when Retry-After is absent. Check the addition for overflow; an unrepresentable
 wait returns the last Overloaded. The wait is at least any valid Retry-After; maxDelayMs caps local backoff, not
@@ -202,10 +210,9 @@ is already exhausted, return DeadlineExceeded. If no deadline exists, attempts
 and the shared budget still bound retries; each operation retains its own
 explicit timeout where needed.
 
-The shared deadline bridge is implemented: cancelAfter exposes its deadline
-through the scope context. Record the
-scope's earliest explicit/parent deadline, use monotonic time to calculate its
-remaining budget, and never extend it through another cancelAfter call. Descendants
+The shared deadline bridge exposes cancelAfter through the scope context. It
+records the earliest explicit/parent deadline, uses monotonic time to calculate
+the remaining budget, and never extends it through another cancelAfter call. Descendants
 opened before a later parent deadline must also observe that tighter budget;
 query effective deadline through scope ancestry rather than a creation-time copy.
 Preserve deadlines on incoming Go contexts and keep deadline causes typed.

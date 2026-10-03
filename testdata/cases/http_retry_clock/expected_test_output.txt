@@ -1,0 +1,5 @@
+ok    an injected SystemClock uses native time mocks and preserves refill phase
+ok    FixedClock holds a budget steady
+ok    default jitter uses the standard random source and can be mocked
+3 passed, 0 failed
+exit code 0

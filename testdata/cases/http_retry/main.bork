@@ -1,0 +1,167 @@
+import "bork/http"
+import "bork/time"
+fn busy(hint: Int = 0): http.Result {
+  http.Overloaded { retryAfter: .Some { value: time.Duration { nanos: hint } }, response: http.Text(503, "busy") }
+}
+fn kind(result: http.Result): String {
+  match (result) {
+    value: http.Overloaded => "overloaded"
+    value: http.Response => "response"
+    value: http.DeadlineExceeded => "deadline"
+    value: Cancelled => "cancelled"
+    value: IoError => "io"
+  }
+}
+fn fixedBudget(s: Scope, capacity: http.RetryCount) uses clock + state: http.RetryBudget {
+  http.OpenRetryBudget(s, capacity: capacity, refillMs: 60000, clock: .Some { value: time.FixedClock(.{ unixNanos: 0 }) })
+}
+// Simulate the resource finalizer for closed-budget races independently of the
+// static borrow rule that correctly forbids closing an owner's borrowed scope.
+fn finalizer(budget: http.RetryBudget) uses state unsafe go { budget.owner.closeFn() }
+type Marker = resource
+fn marker(s: Scope, onClose: () => Unit) uses state: Marker unsafe go {
+  return Marker{handle:nil,owner:s.Own(onClose)}
+}
+fn panicCaught(work: () => http.Result): Bool unsafe go {
+  run := func()(caught bool) {
+    defer func(){caught=recover()!=nil}()
+    work()
+    return false
+  }
+  return run()
+}
+fn waitCancelled(s: Scope) uses state: http.Result unsafe go {
+  import "context"
+  ctx := _borkScopeContext(s)
+  <-ctx.Done()
+  return Cancelled{reason:context.Cause(ctx).Error()}
+}
+fn elapsed(start: time.Instant) uses clock: Int { time.Now().unixNanos - start.unixNanos }
+fn main() {
+  scope s {
+    budget = fixedBudget(s, 2)
+    calls = atom(0)
+    result = http.Retry(s, budget, operation: attempt => { _ = update(calls, n => n + 1); busy() }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0)
+    println("shared tokens", current(calls), kind(result))
+    result2 = http.Retry(s, budget, operation: attempt => { _ = update(calls, n => n + 1); busy() }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0)
+    println("free next initial", current(calls), kind(result2))
+  }
+  scope s {
+    budget = fixedBudget(s, 7)
+    calls = atom(0)
+    jobs = (range(0, 30)).map(i => spawn(s, () => http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, maxAttempts: 100, baseDelayMs: 0, maxDelayMs: 0)))
+    results = jobs.map(task => kind(await(task)))
+    println("concurrent", current(calls) == 37, results.all(value => value == "overloaded"))
+  }
+  scope s {
+    budget = fixedBudget(s, 10)
+    calls = atom(0)
+    responses: List[http.Result] = [http.Text(200, "ok"), IoError { path: "", message: "network" }, Cancelled { reason: "operation cancelled" }, http.DeadlineExceeded { message: "operation timeout" }]
+    println("terminal", responses.map(response => kind(http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); response }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0))), current(calls))
+    result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, maxAttempts: 1, baseDelayMs: 0, maxDelayMs: 0)
+    println("attempt cap", kind(result), current(calls))
+  }
+  scope s {
+    budget = fixedBudget(s, 10)
+    calls = atom(0)
+    result = http.Retry(s, budget, attempt => { n = update(calls, n => n + 1); if (n == 3) { http.Text(200, "ok") } else { busy() } }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0)
+    println("eventual success", kind(result), current(calls))
+  }
+  scope s {
+    budget = fixedBudget(s, 10)
+    ceilings = atom([0].take(0))
+    result = http.Retry(s, budget, attempt => busy(), maxAttempts: 5, baseDelayMs: 1, maxDelayMs: 4, jitter: .Some { value: ceiling => { _ = update(ceilings, xs => xs.append(ceiling)); 9223372036854775807 } })
+    println("capped jitter", kind(result), current(ceilings))
+    result2 = http.Retry(s, budget, attempt => busy(), maxAttempts: 4, baseDelayMs: 9223372036854, maxDelayMs: 9223372036854, jitter: .Some { value: ceiling => -1 })
+    println("negative jitter and maximum backoff", kind(result2))
+    result3 = http.Retry(s, budget, attempt => busy(9223372036854775807), maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 1, jitter: .Some { value: ceiling => ceiling })
+    println("wait overflow", kind(result3))
+  }
+  scope s {
+    budget = fixedBudget(s, 10)
+    start = time.Now()
+    calls = atom(0)
+    result = http.Retry(s, budget, attempt => { n = update(calls, n => n + 1); if (n == 1) { busy(20000000) } else { http.Text(200, "ok") } }, maxAttempts: 2, baseDelayMs: 0, maxDelayMs: 0)
+    println("server minimum", kind(result), current(calls), elapsed(start) >= 20000000)
+  }
+  scope app {
+    budget = fixedBudget(app, 10)
+    scope request {
+      cancelAfter(request, 60000)
+      calls = atom(0)
+      result = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy(120000000000) }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0)
+      println("hint exceeds deadline", kind(result), current(calls))
+      cancelAfter(request, 0)
+      result2 = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy() })
+      println("already expired", kind(result2), current(calls))
+    }
+    scope request {
+      cancel(request)
+      calls = atom(0)
+      result = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy() })
+      println("already cancelled", kind(result), current(calls))
+    }
+    scope request {
+      ready = channel[Bool](app, 1)
+      launch(request, () => { _ = receive(ready); cancel(request) })
+      calls = atom(0)
+      result = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = send(ready, true); ceiling } })
+      println("cancel wait", kind(result), current(calls))
+    }
+  }
+  scope s {
+    budget = fixedBudget(s, 10)
+    ready = channel[Bool](s, 1)
+    launch(s, () => { _ = receive(ready); finalizer(budget) })
+    calls = atom(0)
+    result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = send(ready, true); ceiling } })
+    println("budget close wait", kind(result), current(calls))
+    result2 = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() })
+    println("closed budget", kind(result2), current(calls))
+  }
+  scope s {
+    budget = fixedBudget(s, 10)
+    ready = channel[Bool](s, 1)
+    launch(s, () => { _ = receive(ready); finalizer(budget) })
+    result = http.Retry(s, budget, attempt => { _ = send(ready, true); waitCancelled(attempt) })
+    println("budget cancels operation", kind(result))
+  }
+  scope s {
+    budget = fixedBudget(s, 10)
+    cleaned = atom(0)
+    result = panicCaught(() => http.Retry(s, budget, attempt => {
+      _ = marker(attempt, () => { _ = update(cleaned, n => n + 1) })
+      panic("operation panic")
+    }))
+    println("panic cleanup", result, current(cleaned))
+    result2 = http.Retry(s, budget, attempt => {
+      _ = marker(attempt, () => { _ = update(cleaned, n => n + 1) })
+      busy()
+      }, maxAttempts: 3, baseDelayMs: 0, maxDelayMs: 0)
+    println("normal finalizers", kind(result2), current(cleaned))
+  }
+  scope app {
+    budget = fixedBudget(app, 10)
+    scope request {
+      cancelAfter(request, 10)
+      result = http.Retry(request, budget, attempt => waitCancelled(attempt))
+      println("deadline during operation", kind(result))
+    }
+  }
+  scope s {
+    budget = fixedBudget(s, 2)
+    calls = atom(0)
+    cleaned = atom(0)
+    result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); launch(attempt, () => { _ = update(cleaned, n => n + 1) }); busy() }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0)
+    println("attempt cleanup", kind(result), current(calls), current(cleaned))
+  }
+  scope app {
+    original = openScope(app)
+    budget = fixedBudget(original.scope, 2)
+    retained = attach(budget, app)
+    closeScope(original)
+    calls = atom(0)
+    result = http.Retry(app, retained, attempt => { _ = update(calls, n => n + 1); busy() }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0)
+    println("attached ownership", kind(result), current(calls))
+  }
+}

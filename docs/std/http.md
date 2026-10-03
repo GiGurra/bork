@@ -38,7 +38,7 @@ system clock when parsing dates; date hints are approximate under clock skew.
 See [HTTP date formats](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.7).
 Handle `Overloaded.response` when an application needs the original status or
 body. A typed overload result alone does not authorize replaying side effects.
-Shared retry budgets will be a separate opt-in API.
+See [Shared retries](#shared-retries) for the explicit shared-budget API.
 
 ## Bounded admission
 
@@ -84,3 +84,56 @@ listener; certificate or key file changes after loading cannot alter the value.
 HTTP clients take a scope (`http.Get(url, s, timeoutMs: 0)`); cancellation and optional timeouts cover the response body too. Request/response headers are `Map[String, List[String]]`, preserving repeated header values.
 
 HTTP servers accept method/path routes, middleware functions, typed body/query/path decoding, TLS, static files and forms. Server body limits are configurable (16 MiB by default). Scope cleanup drains active requests, bounded by `cleanupTimeout` or a per-server timeout. See [http_routes](../../examples/http_routes/main.bork).
+
+## Shared retries
+
+Create one `http.OpenRetryBudget(s, capacity: 4, refillMs: 1000)` per destination
+and share it across callers. The scope-owned resource starts full and lazily adds
+one token per interval, up to capacity, without a refill goroutine. Capacity and
+refill intervals must be positive; refill milliseconds must fit `TimeoutMs`.
+Attachment extends ownership; the budget closes when its last owner closes.
+The budget and any captured injected clock must outlive their explicit scope.
+
+```bork
+budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 1000)
+result = http.Retry(request, budget,
+  operation: attempt => http.Get(url, attempt),
+  maxAttempts: 3, baseDelayMs: 20, maxDelayMs: 1000)
+```
+
+`Retry` explicitly asserts that replay is safe. It retries only `Overloaded`;
+responses, transport errors, cancellation and deadline failures return directly.
+`maxAttempts` is positive and includes the initial attempt, which spends no
+budget token. Further attempts reserve shared tokens immediately before work;
+concurrent callers cannot overspend. Each attempt receives a fresh scope, whose
+tasks and resources finish cleanup before returning or beginning another attempt.
+Closing the budget cancels active attempt scopes and retry waits. An operation
+must cooperate with cancellation to finish promptly.
+
+Waits use the nonnegative server hint plus full jitter from zero through capped
+exponential local backoff. `maxDelayMs` must be at least `baseDelayMs`; it caps
+local backoff, and never shortens a server hint. Overflow, an insufficient
+remaining scope deadline, exhausted attempts or an empty budget return the last
+`Overloaded`. An already expired deadline gives `DeadlineExceeded`; cancellation
+gives `Cancelled`. Tokens spent on failed or cancelled retries are not refunded.
+Negative hints in a manually constructed `Overloaded` are treated as zero.
+The helper charges operation effects plus `clock + random + state`.
+
+For deterministic refill tests, pass `clock: .Some { value: time.FixedClock(...) }`
+or another `time.Clock` to `OpenRetryBudget`. The default `.None` reads monotonic
+system time. Backward injected readings pause refill until the clock catches up;
+fractional intervals retain their phase. Native `mock time.Now()` is another test
+option when the injected clock is `time.SystemClock()`; it does not replace the
+budget's default monotonic Go clock. The optional `Retry` argument
+`jitter: Option[(Int) uses random + state => Int]` receives a nanosecond ceiling.
+Its result is clamped to `0..ceiling`. Default jitter uses `bork/rand.IntBetween`,
+which can also be mocked in native tests. Timed waits and scope deadlines retain
+real system timing.
+
+[examples/slow_downstream](../../examples/slow_downstream/main.bork) runs a local
+service with two active requests and two queued requests. Six GET callers share
+four retry tokens. Gates hold accepted work while excess callers exhaust the
+budget, then let the accepted work finish. It reports four successes, two
+overloads, ten total attempts, and a peak of two handlers. The example uses a
+fixed refill clock and zero local delay to show exact bounds without a throughput
+benchmark.
