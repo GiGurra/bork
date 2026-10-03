@@ -825,7 +825,14 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			thunk := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(e.Type())}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote("unresolved comptime dependency")}}}}}}}
 			return nil, &ast.CallExpr{Fun: thunk}
 		}
-		return g.value(e.Value)
+		stmts, x := g.value(e.Value)
+		if x != nil {
+			x = g.convert(x, e.Value.Type(), e.Type())
+			if _, ok := e.Type().(*check.Union); ok {
+				x = &ast.CallExpr{Fun: g.goType(e.Type()), Args: []ast.Expr{x}}
+			}
+		}
+		return stmts, x
 	case *check.FloatBits:
 		g.imports["math"] = true
 		name := "Float64frombits"

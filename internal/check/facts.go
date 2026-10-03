@@ -1905,6 +1905,13 @@ func (f *factChecker) closed(x Expr) bool {
 		return true
 	case *Block:
 		return x.Type() == Ok && len(x.Stmts) == 0 && x.Tail == nil
+	case *MapLit:
+		for i, key := range x.Keys {
+			if !f.closed(key) || !f.closed(x.Values[i]) {
+				return false
+			}
+		}
+		return true
 	case *ListLit:
 		for _, el := range x.Elems {
 			if !f.closed(el) {
@@ -1938,6 +1945,12 @@ func (f *factChecker) literalText(x Expr) string {
 		if x.Type() == Ok && len(x.Stmts) == 0 && x.Tail == nil {
 			return "Ok"
 		}
+	case *MapLit:
+		parts := make([]string, len(x.Keys))
+		for i, key := range x.Keys {
+			parts[i] = f.literalText(key) + ": " + f.literalText(x.Values[i])
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
 	case *ListLit:
 		if x.Nil {
 			return "nil"
