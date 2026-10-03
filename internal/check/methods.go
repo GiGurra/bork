@@ -258,6 +258,10 @@ func (c *checker) isVariantPath(x syntax.Expr) bool {
 // pipeMethodError explains a pipeline targeting a method instead of a free
 // function. The parser keeps the original receiver range before desugaring.
 func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv, want Type) bool {
+	// A selector would call the field, which takes precedence over methods.
+	if r, ok := recv.(*Record); ok && r.Field(id.Name) != nil {
+		return false
+	}
 	fn, _ := c.methodNamed(recv, id.Name)
 	if fn == nil {
 		return false

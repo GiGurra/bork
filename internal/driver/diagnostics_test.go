@@ -108,3 +108,28 @@ func TestPipeMethodResultContext(t *testing.T) {
 		t.Fatalf("expected only the pipe diagnostic, got %+v", ds)
 	}
 }
+
+func TestPipeMethodFieldPrecedence(t *testing.T) {
+	for _, field := range []string{"length: Int", "length: () => Int"} {
+		t.Run(field, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "main.bork")
+			value := "1"
+			if strings.Contains(field, "=>") {
+				value = "() => 1"
+			}
+			source := "type R = { " + field + " }\nfn (r: R) length(x: Int): Int { x }\nfn main() { r = R { length: " + value + " }; println(r |> length(2)) }\n"
+			if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := Check(path)
+			var de *DiagError
+			if !errors.As(err, &de) {
+				t.Fatalf("expected diagnostics, got %v", err)
+			}
+			ds := de.Diags.Sorted()
+			if len(ds) != 1 || ds[0].Msg != "undefined function: length" || len(ds[0].Fixes) != 0 {
+				t.Fatalf("expected undefined function without a method fix, got %+v", ds)
+			}
+		})
+	}
+}
