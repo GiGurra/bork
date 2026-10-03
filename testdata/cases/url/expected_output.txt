@@ -1,0 +1,36 @@
+https
+[::1]:8443
+::1
+8443
+/a/b
+{"q": ["one", "two"], "space": ["hello world"]}
+f/g
+Option.Some { value: UserInfo { username: "user", password: Option.Some { value: "p@ss" } } }
+https://user:p%40ss@[::1]:8443/a%2Fb?q=one&q=two&space=hello+world#f%2Fg
+https://user:p%40ss@[::1]:8443/new%20path?q=one&q=two&space=hello+world#new%20fragment
+https://example.com/hello%20world?flag=&q=a%2Bb&q=%C3%A9#a%20b
+{"a": ["1", "3"], "b": ["2"], "flag": [""]}
+a=hello+world&z=2&z=1
+Url { scheme: "", host: "", path: "../a/b", query: {"x": ["1"]}, fragment: "two", user: Option.None, opaque: "", rawPath: "../a%2Fb", rawFragment: "", forceQuery: false, omitHost: false }
+Url { scheme: "mailto", host: "", path: "", query: {:}, fragment: "", user: Option.None, opaque: "user@example.com", rawPath: "", rawFragment: "", forceQuery: false, omitHost: false }
+mailto:user@example.com
+../a%2Fb?x=1#two
+Option.Some { value: UserInfo { username: "user", password: Option.Some { value: "" } } }
+https://user:@example.com/
+true
+https:/path
+Url { scheme: "https", host: "example.com", path: "", query: {:}, fragment: "", user: Option.None, opaque: "", rawPath: "", rawFragment: "", forceQuery: true, omitHost: false }
+https://example.com?
+a%2Fb%20+%C3%A9
+a%2Fb+%2B%C3%A9
+a/b+ 
+a/b  
+ParseError { input: "%xx", message: "invalid URL escape \"%xx\"" }
+ParseError { input: "%", message: "invalid URL escape \"%\"" }
+ParseError { input: "https://example.com/%xx", message: "parse \"https://example.com/%xx\": invalid URL escape \"%xx\"" }
+ParseError { input: "https://example.com/?valid=1&bad=%xx", message: "invalid URL escape \"%xx\"" }
+ParseError { input: "valid=1&bad=%xx", message: "invalid URL escape \"%xx\"" }
+ParseError { input: "a=1;b=2", message: "invalid semicolon separator in query" }
+{"a": ["1", "2"]}
+IoError { path: "/test", message: "invalid URL escape \"%xx\"" }
+Unit

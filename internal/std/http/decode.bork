@@ -1,19 +1,16 @@
+import urls "bork/url"
+
 // Body decodes JSON into a proven value, including derived field constraints.
 fn Body[T: Decode](request: Request): T | JsonError | DecodeError {
   decodeJson[T](request.body)
 }
 
 // Query parses URL query values and preserves repeated keys.
-fn Query(request: Request): Headers | IoError unsafe go {
-  import "net/url"
-  import "sort"
-  query, err := url.ParseQuery(request.query)
-  if err != nil { return IoError{path: request.path, message: err.Error()} }
-  keys, values := []string{}, [][]string{}
-  for key := range query { keys = append(keys, key) }
-  sort.Strings(keys)
-  for _, key := range keys { values = append(values, append([]string(nil), query[key]...)) }
-  return _borkMapOf(keys, values)
+fn Query(request: Request): Headers | IoError {
+  match (urls.ParseQuery(request.query)) {
+    values: urls.Query => values
+    error: ParseError => IoError { path: request.path, message: error.message }
+  }
 }
 
 // QueryAs and PathAs decode derived records. Strings are literal; other fields

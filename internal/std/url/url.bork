@@ -1,0 +1,106 @@
+// Package url parses and builds immutable URLs and repeated query parameters.
+type Query = Map[String, List[String]]
+type UserInfo = { username: String, password: Option[String] = Option.None }
+
+// Path and fragment are decoded. Raw hints preserve escaped separators on round-trip.
+// String ignores a raw hint when it no longer decodes to its corresponding field.
+type Url = {
+  scheme: String = "",
+  host: String = "",
+  path: String = "",
+  query: Query = {:},
+  fragment: String = "",
+  user: Option[UserInfo] = Option.None,
+  opaque: String = "",
+  rawPath: String = "",
+  rawFragment: String = "",
+  forceQuery: Bool = false,
+  omitHost: Bool = false,
+}
+
+// Parse accepts absolute URLs and relative references. Invalid queries fail wholly.
+fn Parse(text: String): Url | ParseError unsafe go {
+  import "net/url"
+  import "sort"
+  parsed, err := url.Parse(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  query, err := url.ParseQuery(parsed.RawQuery)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  keys, values := []string{}, [][]string{}
+  for key := range query { keys = append(keys, key) }
+  sort.Strings(keys)
+  for _, key := range keys { values = append(values, append([]string{}, query[key]...)) }
+  user := _borkNone[UserInfo]()
+  if parsed.User != nil {
+    password := _borkNone[string]()
+    if value, present := parsed.User.Password(); present { password = _borkSome(value) }
+    user = _borkSome(UserInfo{username: parsed.User.Username(), password: password})
+  }
+  return Url{scheme: parsed.Scheme, host: parsed.Host, path: parsed.Path, query: _borkMapOf(keys, values), fragment: parsed.Fragment, user: user, opaque: parsed.Opaque, rawPath: parsed.RawPath, rawFragment: parsed.RawFragment, forceQuery: parsed.ForceQuery, omitHost: parsed.OmitHost}
+}
+
+// Build formats fields with Go's URL escaping rules; query keys are sorted.
+// Constructed fields are not validated: use Parse to validate the formatted URL.
+fn Build(value: Url): String unsafe go {
+  import "net/url"
+  parsed := &url.URL{Scheme: value.scheme, Host: value.host, Path: value.path, RawQuery: EncodeQuery(value.query), Fragment: value.fragment, Opaque: value.opaque, RawPath: value.rawPath, RawFragment: value.rawFragment, ForceQuery: value.forceQuery, OmitHost: value.omitHost}
+  if user, present := _borkOptionGet(value.user); present {
+    parsed.User = url.User(user.username)
+    if password, present := _borkOptionGet(user.password); present { parsed.User = url.UserPassword(user.username, password) }
+  }
+  return parsed.String()
+}
+fn (value: Url) String(): String { Build(value) }
+fn (value: Url) Hostname(): String unsafe go {
+  import "net/url"
+  return (&url.URL{Host: value.host}).Hostname()
+}
+fn (value: Url) Port(): String unsafe go {
+  import "net/url"
+  return (&url.URL{Host: value.host}).Port()
+}
+
+// ParseQuery preserves repeated values and returns no partial map on invalid input.
+fn ParseQuery(text: String): Query | ParseError unsafe go {
+  import "net/url"
+  import "sort"
+  query, err := url.ParseQuery(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  keys, values := []string{}, [][]string{}
+  for key := range query { keys = append(keys, key) }
+  sort.Strings(keys)
+  for _, key := range keys { values = append(values, append([]string{}, query[key]...)) }
+  return _borkMapOf(keys, values)
+}
+fn EncodeQuery(query: Query): String unsafe go {
+  import "net/url"
+  values := url.Values{}
+  _borkMapEach(query, func(key string, entries []string) bool {
+    values[key] = append([]string{}, entries...)
+    return true
+  })
+  return values.Encode()
+}
+fn (query: Query) EncodeQuery(): String { EncodeQuery(query) }
+
+// PathEscape escapes one path segment, including slashes; QueryEscape uses + for spaces.
+fn (text: String) PathEscape(): String unsafe go {
+  import "net/url"
+  return url.PathEscape(text)
+}
+fn (text: String) PathUnescape(): String | ParseError unsafe go {
+  import "net/url"
+  value, err := url.PathUnescape(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  return value
+}
+fn (text: String) QueryEscape(): String unsafe go {
+  import "net/url"
+  return url.QueryEscape(text)
+}
+fn (text: String) QueryUnescape(): String | ParseError unsafe go {
+  import "net/url"
+  value, err := url.QueryUnescape(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  return value
+}
