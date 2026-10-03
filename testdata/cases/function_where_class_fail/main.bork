@@ -1,0 +1,3 @@
+class Choose[T] { fn choose(value: T, lo: Int, hi: Int) where lo <= hi: T }
+instance missing: Choose[String] { fn choose(value: String, lo: Int, hi: Int): String { value } }
+fn main() {}

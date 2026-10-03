@@ -1,0 +1,2 @@
+fn ordered(lo:Int,hi:Int)where(lo<=hi or atMost(lo,hi))and positive(lo)uses io:Int where positive {lo}
+class Choose[T]{fn choose(value:T,lo:Int,hi:Int)where lo<=hi:T}

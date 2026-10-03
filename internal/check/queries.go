@@ -24,6 +24,7 @@ type MethodDescription struct {
 // CallableDescription exposes declaration names, which are intentionally
 // absent from function types. Renaming a named parameter breaks named callers.
 type CallableDescription struct {
+	Requires             []string               `json:"requires,omitempty"`
 	NamedArguments       bool                   `json:"named_arguments"`
 	ParameterNamesAreAPI bool                   `json:"parameter_names_are_api"`
 	Parameters           []ParameterDescription `json:"parameters"`
@@ -41,6 +42,9 @@ type ParameterDescription struct {
 
 func DescribeCallable(fn *Func, params []Type, from *Package, bound bool) *CallableDescription {
 	out := &CallableDescription{NamedArguments: true, ParameterNamesAreAPI: true, Parameters: []ParameterDescription{}}
+	if fn.Requires != nil {
+		out.Requires = []string{requirementText(fn.Requires, from)}
+	}
 	skip := 0
 	if bound {
 		skip = 1
@@ -153,6 +157,9 @@ func VisibleMethods(info *Info, from *Package, t Type) []MethodDescription {
 			ft.Params = append(ft.Params, in.subst(p))
 		}
 		var requires []string
+		if fn.Requires != nil {
+			requires = append(requires, requirementText(fn.Requires, from))
+		}
 		for i, cons := range fn.ParamConstraints {
 			for _, con := range cons {
 				requires = append(requires, fn.Decl.Params[i].Name+": "+con.Text(from))

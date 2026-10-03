@@ -53,7 +53,6 @@ Variant    = Ident [ Fields ] [ Where ] .
 Sep        = "," | newline .                 (* commas or one item per line *)
 
 FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ Needs ] [ ":" Type ] ( Block | GoBody ) .
-(* FunctionWhere is the bork-3ly6p0 design; implementation follows separately. *)
 FunctionWhere = "where" RequirementGroup .
 RequirementGroup = Requirement [ ( "and" Requirement { "and" Requirement } )
                               | ( "or" Requirement { "or" Requirement } ) ] .

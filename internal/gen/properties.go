@@ -131,7 +131,7 @@ func (g *gen) autoPropertyCandidate(fn *check.Func) bool {
 			return false
 		}
 	}
-	if fn.Decl.GoBody != nil {
+	if fn.Decl.IsGo() {
 		return len(fn.ResultConstraints) > 0 || g.hasInvariants(fn.Result, map[check.Type]bool{})
 	}
 	return len(findNodes[*syntax.TrustStmt](fn.Decl.Body)) > 0
@@ -150,6 +150,16 @@ func (g *gen) autoProperty(fn *check.Func, goName *ast.Ident) ast.Decl {
 			return []ast.Stmt{&ast.ExprStmt{X: call}}
 		}
 		return []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{ast.NewIdent("_")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call}}}
+	}
+	originalBody := body
+	body = func() []ast.Stmt {
+		var stmts []ast.Stmt
+		if fn.Requires != nil {
+			pre, cond := g.value(fn.Requires)
+			stmts = append(stmts, pre...)
+			stmts = append(stmts, rejectUnless(cond, "function-level where requirements"))
+		}
+		return append(stmts, originalBody()...)
 	}
 	decl, _ := g.propertyTest(autoPropertyName(fn), true, fn.Decl.Params, fn.Params, fn.ParamConstraints, body, goName)
 	return decl

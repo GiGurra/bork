@@ -1,0 +1,3 @@
+ok    mock retains relational input assumptions
+1 passed, 0 failed
+exit code 0

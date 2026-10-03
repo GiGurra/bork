@@ -1,0 +1,4 @@
+class Choose[T] { fn choose(value: T, lo: Int, hi: Int) where lo <= hi: T }
+instance chosen: Choose[String] { fn choose(v: String, a: Int, b: Int) where a <= b: String { v } }
+fn relay[T: Choose](value: T, lo: Int, hi: Int) where lo <= hi: T { choose(value, lo, hi) }
+fn main() { println(choose("picked", 1, 2), relay("relay", 2, 3)) }

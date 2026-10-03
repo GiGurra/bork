@@ -655,3 +655,11 @@ fn main() {}
 		t.Errorf("override describes %s; want Int | Err", result.typ)
 	}
 }
+
+func TestDescribeFunctionRequirementProof(t *testing.T) {
+	source := "pred positive(n: Int) { n > 0 }\nfn value(n: Int) where positive(n): Int { n }\n"
+	result := describeAt(t, source, "n }", "positive")
+	if !result.proven || result.facts != 1 {
+		t.Fatalf("function requirement missing from body facts: %+v", result)
+	}
+}

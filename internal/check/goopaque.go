@@ -311,7 +311,7 @@ func (c *checker) checkOpaqueInstance(inst *Instance, pos diag.Pos, args []synta
 		if i < len(args) {
 			at = args[i].Position()
 		}
-		if i < len(fn.ParamConstraints) && len(fn.ParamConstraints[i]) > 0 && containsOpaque(pt, map[Type]bool{}) {
+		if (requirementMentionsParam(fn.Decl.Requires, fn.Decl.Params[i].Name) || i < len(fn.ParamConstraints) && len(fn.ParamConstraints[i]) > 0) && containsOpaque(pt, map[Type]bool{}) {
 			c.bindErr(at, "facts cannot apply to parameter %s of type %s, which holds a Go value that can change", fn.Decl.Params[i].Name, pt)
 			return false
 		}
@@ -401,6 +401,13 @@ func (c *checker) checkOpaqueGenericUses() {
 		}
 		if fn.Of != nil && fn.Of.Class.Prelude && (fn.Of.Class.Name == "Encode" || fn.Of.Class.Name == "Decode") {
 			markType(fn.Of.Type, fn.Of.Class.Name)
+		}
+		if fn.Decl.Requires != nil {
+			for i, pt := range fn.Params {
+				if requirementMentionsParam(fn.Decl.Requires, fn.Decl.Params[i].Name) {
+					markType(pt, "facts")
+				}
+			}
 		}
 		for i, cs := range fn.ParamConstraints {
 			if len(cs) > 0 {

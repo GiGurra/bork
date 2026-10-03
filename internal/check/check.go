@@ -93,6 +93,7 @@ type Func struct {
 	// tree of the body (nil for a function implemented in Go).
 	ParamVars []*Var
 	Body      *Block
+	Requires  Expr
 	// ParamIn holds, per parameter, the index of the parameter (a Scope
 	// or an OwnedScope) it is declared to belong to (`conn: Conn in
 	// prev`), or -1.
@@ -487,6 +488,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	c.ensureAllFieldDefaults()
 	c.checkBindings(files, c.goTypes)
 	c.resolveProviderBundles()
+	c.checkFunctionRequirements()
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -529,6 +531,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			c.checkEmbeds()
 			if c.diags.Len() == 0 {
 				c.lower(files)
+				c.checkRequirementContracts()
 			}
 		}
 	}

@@ -1,0 +1,4 @@
+pred same[T: Eq](a: T, b: T) { a == b }
+type Small = { n: Uint8 }
+fn equal(a: Uint8 | Int, b: Uint8 | Int) where same(a, b): Bool { a == b }
+fn main() { println(equal(1, 1), equal(Small { n: 1 }.n, 1)) }

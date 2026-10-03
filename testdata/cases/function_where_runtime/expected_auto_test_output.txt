@@ -1,0 +1,5 @@
+ok    mock retains relational input assumptions
+ok    property checked
+skip  property Compare (could not generate the parameters: the case does not meet function-level where requirements)
+2 passed, 0 failed, 1 skipped
+exit code 0

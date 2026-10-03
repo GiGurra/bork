@@ -1,0 +1,12 @@
+fn ordered(lo: Int, hi: Int) where lo <= hi: Int { lo }
+fn unknown(lo: Int, hi: Int): Int { ordered(lo, hi) }
+fn reversed(lo: Int, hi: Int) where lo <= hi: Int { ordered(hi, lo) }
+fn either(lo: Int, hi: Int) where lo < hi or lo > hi: Int { ordered(lo, hi) }
+fn main() { println(ordered(2, 1)); f = ordered; println(f(1, 2)) }
+
+pred sameLength[A, B](xs: List[A], ys: List[B]) { xs.length() == ys.length() }
+fn paired[A, B](xs: List[A], ys: List[B]) where sameLength(xs, ys): Int { xs.length() }
+fn missingListGuard(xs: List[Int], ys: List[String]): Int { paired(xs, ys) }
+fn wrongLengths(): Int { paired([1], ["a", "b"]) }
+fn floatOrdered(lo: Float, hi: Float) where lo <= hi: Float { lo }
+fn nanGuard(lo: Float, hi: Float): Float { if (!(lo > hi)) { floatOrdered(lo, hi) } else { 0.0 } }

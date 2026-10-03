@@ -32,14 +32,16 @@ type Rule struct {
 
 // RuleAtom is a predicate applied to rule variables and constants.
 type RuleAtom struct {
+	Inst *Instance
 	Pred *Func
 	Args []RuleArg // the subject first
 }
 
 // RuleArg is a rule variable, or a constant.
 type RuleArg struct {
-	Var   string
-	Const constant.Value
+	Var       string
+	Const     constant.Value
+	ConstType Type
 }
 
 func (c *checker) checkRules(files []*syntax.File) {
@@ -84,7 +86,7 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 			ok = false
 			return nil
 		}
-		a := &RuleAtom{Pred: fn}
+		a := &RuleAtom{Pred: fn, Inst: c.info.instances[call]}
 		for i, arg := range c.info.args(call) {
 			if id, isID := arg.(*syntax.Ident); isID && vars[id.Name] {
 				a.Args = append(a.Args, RuleArg{Var: id.Name})
@@ -92,7 +94,7 @@ func (c *checker) checkRule(rd *syntax.RuleDecl) *Rule {
 				continue
 			}
 			if v := c.info.constantOf(arg); v != nil && i > 0 {
-				a.Args = append(a.Args, RuleArg{Const: v})
+				a.Args = append(a.Args, RuleArg{Const: v, ConstType: c.info.types[arg]})
 				continue
 			}
 			if i == 0 {
@@ -195,6 +197,9 @@ func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 			return constant.MakeBool(constant.BoolVal(a) || constant.BoolVal(b))
 		}
 		if cmp, ok := compareOps[x.Op]; ok {
+			if !identical(x.X.Type(), x.Y.Type()) || (!IsNumeric(x.X.Type()) && x.X.Type() != String && x.X.Type() != Bool) {
+				return nil
+			}
 			return constant.MakeBool(constant.Compare(a, cmp, b))
 		}
 		if op, ok := constOps[x.Op]; ok {

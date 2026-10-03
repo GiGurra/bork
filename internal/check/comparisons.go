@@ -18,7 +18,7 @@ func (f *factChecker) comparison(x *Binary, positive bool) *comparison {
 	if _, ok := compareOps[x.Op]; !ok {
 		return nil
 	}
-	left, right := f.argOf(x.X), f.argOf(x.Y)
+	left, right := f.comparisonArg(x.X), f.comparisonArg(x.Y)
 	if left.key == "" || right.key == "" {
 		return nil
 	}
@@ -37,6 +37,16 @@ func (f *factChecker) comparison(x *Binary, positive bool) *comparison {
 		left, right = right, left
 	}
 	return &comparison{op: op, left: left, right: right, positive: positive}
+}
+
+// Comparison constants carry their runtime type: union equality distinguishes
+// Uint8(1) from Int(1), even though both have the same mathematical value.
+func (f *factChecker) comparisonArg(x Expr) argVal {
+	a := f.argOf(x)
+	if a.value != nil && a.expr != nil {
+		a.key = "typed:" + typeKey(a.expr.Type()) + ":" + a.key
+	}
+	return a
 }
 
 func oppositeComparison(op syntax.Kind) syntax.Kind {
@@ -171,6 +181,9 @@ func (f *factChecker) unfold(v argVal, ob obligation, e env, depth int) (bool, [
 		bound[ob.pred.ParamVars[i+1]] = a
 	}
 	body := substituteExpr(ob.pred.Body, bound)
+	if ob.inst != nil {
+		body = substituteRequirementTypes(body, bindParams(ob.pred.TypeParams, ob.inst.TypeArgs), ob.inst.Dicts)
+	}
 	if body == nil {
 		return false, nil
 	}
@@ -249,7 +262,11 @@ func (f *factChecker) proveCondition(x Expr, positive bool, e env, depth int) (b
 
 	case *Call:
 		if positive && x.Func.Decl.IsPred && len(x.Args) > 0 {
-			ob := obligation{pred: x.Func}
+			inst := x.Inst
+			if inst == nil {
+				inst = &Instance{Func: x.Func, Params: x.Func.Params, Result: x.Func.Result}
+			}
+			ob := obligation{pred: x.Func, inst: inst}
 			for _, a := range x.Args[1:] {
 				ob.args = append(ob.args, f.argOf(a))
 			}
@@ -292,6 +309,9 @@ func (f *factChecker) comparisonKnown(want *comparison, facts []fact, depth int)
 		}
 		f.active[goal] = true
 		body := substituteExpr(ft.pred.Body, bound)
+		if ft.inst != nil {
+			body = substituteRequirementTypes(body, bindParams(ft.pred.TypeParams, ft.inst.TypeArgs), ft.inst.Dicts)
+		}
 		proven := body != nil && f.comparisonKnown(want, f.conditionFacts(body, true), depth+1)
 		delete(f.active, goal)
 		if proven {

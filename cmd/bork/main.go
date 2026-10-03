@@ -109,6 +109,9 @@ func printDescription(result *describe.Result) {
 		if len(result.Callable.Needs) > 0 {
 			fmt.Println("needs:", strings.Join(result.Callable.Needs, " + "))
 		}
+		for _, req := range result.Callable.Requires {
+			fmt.Println("requires:", req)
+		}
 	}
 	for _, method := range result.Methods {
 		if method.Ambiguity != "" {

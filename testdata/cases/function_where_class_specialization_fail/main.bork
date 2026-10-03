@@ -1,0 +1,4 @@
+pred accepts[T](value: T) { true }
+class Accept[T] { fn accept(value: T) where accepts(value): T }
+instance changed: Accept[String] { fn accept(value: String) where accepts[String | Int](value): String { value } }
+fn main() {}

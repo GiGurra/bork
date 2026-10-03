@@ -403,6 +403,18 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 		p.skipNewlines()
 	}
 	fn.ParamsEnd = p.expect(RParen, "to end the parameter list").Pos
+	if p.at(KwWhere) {
+		p.next()
+		if isPred {
+			p.errorf(p.tok().Pos, "predicates do not support function-level where clauses")
+		}
+		func() {
+			saved := p.noRecordLit
+			defer func() { p.noRecordLit = saved }()
+			p.noRecordLit = true
+			fn.Requires = p.requirementGroup()
+		}()
+	}
 	fn.Uses = p.uses()
 	fn.Needs = p.needs()
 	if isPred {
@@ -720,6 +732,35 @@ func (p *parser) withExpr() Expr {
 	})
 	w.Body = p.block()
 	return w
+}
+
+// requirementGroup keeps and/or homogeneous at each parenthesis level.
+func (p *parser) requirementGroup() Expr {
+	atom := func() Expr {
+		if p.at(LParen) {
+			p.next()
+			x := p.requirementGroup()
+			p.expect(RParen, "to end the requirement group")
+			return x
+		}
+		return p.binary(precedence[Eq])
+	}
+	x := atom()
+	var join Kind
+	for p.at(KwAnd) || p.at(KwOr) {
+		op := p.next()
+		if join != 0 && join != op.Kind {
+			p.errorf(op.Pos, "mixing and with or needs parentheses")
+		}
+		join = op.Kind
+		p.skipNewlines()
+		kind := AndAnd
+		if op.Kind == KwOr {
+			kind = OrOr
+		}
+		x = &Binary{Pos: op.Pos, Op: kind, X: x, Y: atom()}
+	}
+	return x
 }
 
 // uses parses `uses io + net` or `uses nothing`, if present: the

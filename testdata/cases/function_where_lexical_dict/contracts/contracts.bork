@@ -1,0 +1,6 @@
+class Permit[T] { fn permit(n: Int): Bool }
+instance denied: Permit[Int] { fn permit(n: Int): Bool { false } }
+pred Gate[T: Permit](n: Int) { permit[T](n) }
+fn Need(n: Int) where Gate[Int](n): Bool { Gate[Int](n) }
+
+fn NeedGeneric[T: Permit](n: Int) where Gate[T](n): Bool { Gate[T](n) }

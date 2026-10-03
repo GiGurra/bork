@@ -1,0 +1,7 @@
+pred positive(n: Int) { n > 0 }
+fn broken(lo: Int, hi: Int) where lo < hi: Int where positive unsafe go {
+ if !(lo < hi) { panic("invalid generated or shrunk tuple") }
+ return 0
+}
+test "ordinary" { assertEqual(1, 1) }
+fn main() {}

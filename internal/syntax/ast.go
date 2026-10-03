@@ -131,6 +131,8 @@ type FuncDecl struct {
 	Params     []*Param
 	// ParamsEnd is the position of the ')' that ends the parameters.
 	ParamsEnd diag.Pos
+	// Requires relates function inputs; result constraints remain on Result.
+	Requires Expr
 	// Uses lists the effects the function may have, `uses io + net`,
 	// or is nil when it declares none.
 	Uses *Uses
@@ -361,7 +363,9 @@ type MockStmt struct {
 	// ParamsStart and ParamsEnd are the positions of the '(' and ')'
 	// around the parameters.
 	ParamsStart, ParamsEnd diag.Pos
-	Body                   *Block
+	// Requires relates function inputs; result constraints remain on Result.
+	Requires Expr
+	Body     *Block
 }
 
 // Stmt is a statement inside a block.

@@ -1,0 +1,1 @@
+main.bork:7:56: requiresUnion requires stringType(value), but that is not proven (check it first with if (stringType(value)) { ... }, or declare a function-level where clause)
