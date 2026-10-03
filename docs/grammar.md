@@ -306,3 +306,6 @@ in the result. List results and nested list parameters remain closed.
 `withTimeoutDo` accepts a Unit callback. Typed channel selection is
 `[channel.receiveCase(value => event(value))].select(s)`, returning
 `Option[Event] | Cancelled`. These add no keywords or syntax.
+
+Transparent async local bindings are proposed, not yet accepted:
+`async(scopeExpression) name [ : T ] = expr`. See [the async design](design/async.md).

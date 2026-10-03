@@ -3270,7 +3270,10 @@ value through `type Lazy[T] = { lazy value: T }`. Implement local bindings first
 fields second and pure package bindings third. The complete design, including
 effects, facts, scopes, copies, derivation and tooling, is in
 [lazy bindings and record fields](design/lazy.md). Transparent async bindings
-(bork-mais5u) will share access machinery under a separate design.
+(bork-mais5u) share access machinery under the proposed
+[transparent async design](design/async.md): `async(s) name = expr` starts a task
+now, keeps type T, and awaits on read. Unread tasks follow ordinary scope
+cancellation, joining and panic reporting. Implementation follows this design.
 
 ### Generators and lazy sequences (implemented)
 
