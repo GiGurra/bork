@@ -51,3 +51,23 @@ test "cancelling the callback scope returns cancellation, not partial results" {
     }
   }
 }
+
+fn waiting(child: Scope, x: Int, started: Channel[Int]) uses clock + state: Int | Cancelled {
+  match (send(started, x)) { sent: Unit => {}; c: Cancelled => return c; _ => panic("start channel closed") }
+  delay(child, 10000)?
+  x
+}
+
+test "external cancellation interrupts callbacks already running" {
+  scope s {
+    started = channel[Int](s, 2)
+    stopper = spawn(s, () => {
+      signal = receive(started)
+      match (signal) { n: Int => cancel(s); _ => panic("expected start signal") }
+      true
+    })
+    result = [1, 2].parMapIn(s, (child, x) => waiting(child, x, started), workers: 2)
+    match (result) { c: Cancelled => assertEqual(c.reason, "cancelled"); _ => panic("expected cancellation") }
+    assertEqual(await(stopper), true)
+  }
+}

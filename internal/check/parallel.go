@@ -28,12 +28,16 @@ func (c *checker) checkParallelInstance(inst *Instance, pos diag.Pos) bool {
 			c.errorf(pos, "%s success type %s overlaps its failure type in Go", fn.Decl.Name, success)
 			return false
 		}
+		if parallelSameRepresentation(&List{Elem: success}, m) {
+			c.errorf(pos, "%s result list type List[%s] overlaps its failure type in Go", fn.Decl.Name, success)
+			return false
+		}
 	}
 	return true
 }
 
-// Effects and unions are erased; sealed interfaces share their marker across
-// type arguments. Check that an assertion to the success type rejects E.
+// Effects and unions are erased, including inside generic arguments.
+// Check that an assertion to the success type rejects E.
 func parallelSameRepresentation(a, b Type) bool {
 	switch a := a.(type) {
 	case *Union:
@@ -57,8 +61,17 @@ func parallelSameRepresentation(a, b Type) bool {
 		}
 		return true
 	case *Sealed:
-		_, ok := b.(*Sealed)
-		return ok && genericBaseOrSelf(a) == genericBaseOrSelf(b)
+		b, ok := b.(*Sealed)
+		if !ok || genericBaseOrSelf(a) != genericBaseOrSelf(b) {
+			return false
+		}
+		aa, ba := TypeArgs(a), TypeArgs(b)
+		for i := range aa {
+			if !parallelSameRepresentation(aa[i], ba[i]) {
+				return false
+			}
+		}
+		return true
 	case *Record:
 		b, ok := b.(*Record)
 		if !ok || genericBaseOrSelf(a) != genericBaseOrSelf(b) {

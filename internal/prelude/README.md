@@ -31,6 +31,8 @@ finish before the call returns. Output order follows input; effect order does no
 the first observed failure. `parMapUntilIn[Int, MyError](s, f)` cancels its
 internal callback scope on failure, joins workers, and also returns `Cancelled`.
 That internal scope closes with `s`, preserving returned resource lifetimes.
+Its cancellation reaches child-owned operations; parent-owned channels and
+I/O handles continue following their owner's cancellation.
 Success must be concrete and non-union, distinguishable from concrete failure members in Go;
 use explicit success/failure type arguments where inference is ambiguous.
 For tiny inputs or cheap callbacks, sequential methods usually cost less.

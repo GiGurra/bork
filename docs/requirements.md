@@ -2225,7 +2225,8 @@ the caller. Cancellation never forcibly terminates a callback.
 `parMapUntil[B, E](f)` maps a pure callback returning `B | E` into
 `List[B] | E`. Supply the success and failure type arguments explicitly when
 inference cannot separate them. `B` must be a concrete, non-union type,
-distinguishable from every member of `E` in Go; `E` can itself be a union.
+distinguishable from every member of `E` in Go; the result `List[B]`
+must also be distinguishable from failures; `E` can itself be a union.
 Both types must be concrete, including any nested type arguments. This restriction
 keeps success distinguishable in Go's erased union representation. By
 convention `B` is the callback's leftmost result, as with `?`. The first
@@ -2237,7 +2238,11 @@ an internal child cancellation scope: the first observed failure cancels
 siblings without cancelling `s`. The call joins its workers, while the child
 scope's resources and any tasks a callback explicitly spawned remain owned
 until `s` closes. This allows successful callbacks to return resources whose
-checked lifetime is `s`. Callbacks should await their own spawned work if its
+checked lifetime is `s`. Only operations bound to the callback's child scope
+see early-stop cancellation. Parent-owned channels and I/O handles still
+follow their parent's cancellation, so a blocking operation on one may keep
+the call waiting. Use child-owned handles or child checkpoints for work that
+must stop on an element failure. Callbacks should await their own spawned work if its
 completion is part of the element operation. An observed callback failure
 wins over concurrent external cancellation; otherwise cancellation returns
 `Cancelled` and discards partial results.

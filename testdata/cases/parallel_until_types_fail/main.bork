@@ -20,3 +20,7 @@ fn erasedCall(): List[List[Left]] | List[Right] {
 fn genericError[E](f: (Int) uses nothing => Int | E): List[Int] | E {
   [1].parMapUntil[Int, E](f)
 }
+fn listFailure(x: Int): Int | List[Int] { [99] }
+fn listFailureCall(): List[Int] {
+  [1, 2].parMapUntil[Int, List[Int]](listFailure, workers: 1)
+}

@@ -3,3 +3,4 @@ main.bork:8:44: parMapUntil needs a concrete, non-union success type, found Int 
 main.bork:9:36: parMapUntil success type Int overlaps its failure type in Go
 main.bork:18:43: parMapUntil success type List[Int | String] overlaps its failure type in Go
 main.bork:21:26: parMapUntil needs concrete success and failure types
+main.bork:25:37: parMapUntil result list type List[Int] overlaps its failure type in Go
