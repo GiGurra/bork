@@ -2562,7 +2562,9 @@ compiler never searches for or calls a constructor implicitly. Foreign code
 can reuse an already-valid Config field without rebuilding it, or explicitly
 call the package's exported factory in an override. When source and target are
 identical and there are no overrides, return the existing value unchanged;
-this identity operation performs no private construction. With any overrides,
+this identity operation performs no private construction. It still proves any
+additional target-alias constraints: identical representation does not imply
+identical guarantees. With any overrides,
 a private record needs the owning package, just like `copy`. Readable source
 fields may be projected out of a private record into a public DTO. The result
 retains the scope dependencies of all source values and overrides it contains.
