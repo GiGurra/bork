@@ -85,7 +85,7 @@ var standardGoNames sync.Map // import path -> package name
 
 func (gp goPackages) Names(paths []string) map[string]string {
 	names := map[string]string{}
-	cache := builtInGoDriver()
+	cache := cacheStandardGoNames()
 	var missing []string
 	for _, path := range paths {
 		if name, ok := standardGoNames.Load(path); cache && ok {
@@ -125,9 +125,18 @@ func (gp goPackages) Names(paths []string) map[string]string {
 
 // External package drivers may omit module metadata for user packages. Their
 // results must not enter or reuse the standard-library-only cache.
-func builtInGoDriver() bool {
+func cacheStandardGoNames() bool {
 	// GOPATH packages also have no module metadata, even with Go's driver.
-	if os.Getenv("GO111MODULE") == "off" {
+	mode := os.Getenv("GO111MODULE")
+	if mode == "" {
+		// Include settings in Go's GOENV file, without caching mutable configuration.
+		out, err := exec.Command("go", "env", "GO111MODULE").Output()
+		if err != nil {
+			return false
+		}
+		mode = strings.TrimSpace(string(out))
+	}
+	if mode == "off" {
 		return false
 	}
 	switch os.Getenv("GOPACKAGESDRIVER") {

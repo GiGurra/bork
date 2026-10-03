@@ -50,21 +50,33 @@ func TestGoNamesExternalDriver(t *testing.T) {
 }
 
 func TestGoNamesGOPATH(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("GO111MODULE", "off")
-	t.Setenv("GOPACKAGESDRIVER", "off")
-	t.Setenv("GOPATH", root)
-	dir := filepath.Join(root, "src", "example.com", "gopathname")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"firstName", "secondName"} {
-		if err := os.WriteFile(filepath.Join(dir, "name.go"), []byte("package "+name+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		names := (goPackages{}).Names([]string{"example.com/gopathname"})
-		if got := names["example.com/gopathname"]; got != name {
-			t.Fatalf("GOPATH name = %q, want %q", got, name)
-		}
+	for _, saved := range []bool{false, true} {
+		t.Run(fmt.Sprintf("saved=%v", saved), func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("GO111MODULE", "off")
+			if saved {
+				settings := filepath.Join(root, "goenv")
+				if err := os.WriteFile(settings, []byte("GO111MODULE=off\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("GOENV", settings)
+				t.Setenv("GO111MODULE", "")
+			}
+			t.Setenv("GOPACKAGESDRIVER", "off")
+			t.Setenv("GOPATH", root)
+			dir := filepath.Join(root, "src", "example.com", "gopathname")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"firstName", "secondName"} {
+				if err := os.WriteFile(filepath.Join(dir, "name.go"), []byte("package "+name+"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				names := (goPackages{}).Names([]string{"example.com/gopathname"})
+				if got := names["example.com/gopathname"]; got != name {
+					t.Fatalf("GOPATH name = %q, want %q", got, name)
+				}
+			}
+		})
 	}
 }
