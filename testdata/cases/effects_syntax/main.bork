@@ -1,7 +1,7 @@
 // Effects are written in signatures (`uses io + net`) and in function
-// types (`(String) uses io => Unit`). They are not checked yet.
+// types (`(String) uses io => Ok`). They are not checked yet.
 
-type Job = { name: String, run: () uses io => Unit }
+type Job = { name: String, run: () uses io => Ok }
 
 class Greeter[T] {
   fn greet(x: T) uses io
@@ -13,9 +13,9 @@ instance greetInt: Greeter[Int] {
 
 fn (j: Job) start() uses io { j.run() }
 
-fn say(text: String) uses io: Unit { println(text) }
+fn say(text: String) uses io: Ok { println(text) }
 
-fn twice(f: (String) uses io => Unit, text: String) uses io {
+fn twice(f: (String) uses io => Ok, text: String) uses io {
   f(text)
   f(text)
 }

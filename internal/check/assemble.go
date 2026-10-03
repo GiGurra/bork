@@ -110,7 +110,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 	if target == Invalid {
 		return Invalid
 	}
-	if _, union := target.(*Union); union || target == Scope || assemblyOwner(target) || target == Unit || !isValue(target) || c.open(target) || hasTypeParam(target) {
+	if _, union := target.(*Union); union || target == Scope || assemblyOwner(target) || target == Ok || !isValue(target) || c.open(target) || hasTypeParam(target) {
 		c.diags.AddCode(call.Pos, "assemble.target", "%s requires a concrete non-union product type, found %s", mode, target)
 		return Invalid
 	}
@@ -151,7 +151,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		if p.expected != nil && !identical(p.product, p.expected) {
 			g.problem("bundle", x.Position(), "replacement for %s.%s must produce %s, found %s", p.bundle, p.entry, TypeText(p.expected, c.pkg), TypeText(p.product, c.pkg))
 		}
-		if p.product == Scope || assemblyOwner(p.product) || p.product == Unit || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasTypeParam(p.typ) || hasOpenEffects(p.typ) {
+		if p.product == Scope || assemblyOwner(p.product) || p.product == Ok || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasTypeParam(p.typ) || hasOpenEffects(p.typ) {
 			g.problem("provider", x.Position(), "provider #%d has unsupported signature %s", i+1, p.typ)
 			p.product = nil
 		}

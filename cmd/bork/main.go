@@ -348,6 +348,7 @@ func main() {
 					}
 					warnings := check.DebugWarnings(info)
 					warnings.Append(check.LazyWarnings(info))
+					warnings.Append(check.MigrationWarnings(info))
 					if p.JSON {
 						if err := warnings.WriteJSON(os.Stdout); err != nil {
 							fail(err)

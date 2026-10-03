@@ -41,13 +41,13 @@ test "closeScope raises the failures of the child" {
 
 type Stop = {}
 
-fn stop(): Unit | Stop {
+fn stop(): Ok | Stop {
   Stop {}
 }
 
 // leaves leaves its scope block early with ?, while an owned scope
 // bound in the block is still open: it closes before the block does.
-fn leaves() uses io + state: Unit | Stop {
+fn leaves() uses io + state: Ok | Stop {
   scope app {
     tracked("app", app)
     b = openScope(app)

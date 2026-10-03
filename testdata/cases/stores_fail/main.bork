@@ -135,11 +135,11 @@ fn callsFillIn() uses state {
 }
 
 // Functions that keep an argument cannot be used as values.
-fn apply2[A, B](f: (A, B) => Unit | Cancelled | Closed, a: A, b: B): Unit | Cancelled | Closed {
+fn apply2[A, B](f: (A, B) => Ok | Cancelled | Closed, a: A, b: B): Ok | Cancelled | Closed {
   f(a, b)
 }
 
-fn applyPut[A, B](f: (A, B) => Unit, a: A, b: B) {
+fn applyPut[A, B](f: (A, B) => Ok, a: A, b: B) {
   f(a, b)
 }
 

@@ -3,7 +3,7 @@ fn acquire(s: Scope, text: String) uses io: Int {
   onClose(s: s, f: () => println(s"close $text"))
   7
 }
-fn protect(work: () => Unit): Bool unsafe go {
+fn protect(work: () => Ok): Bool unsafe go {
  recovered := false
  func(){ defer func(){ recovered = recover() != nil }(); work() }()
  return recovered

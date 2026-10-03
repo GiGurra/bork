@@ -6,9 +6,9 @@ request scopes to bound their combined task activity. A slot remains occupied
 until its callback finishes or panics, even if that callback ignores cancellation.
 
 `tasks.TrySpawn(pool, s, work)` gives `Task[T] | tasks.TaskLimitReached | Cancelled`.
-`tasks.TryLaunch(pool, s, work)` gives `Unit | tasks.TaskLimitReached | Cancelled`.
+`tasks.TryLaunch(pool, s, work)` gives `Ok | tasks.TaskLimitReached | Cancelled`.
 Both charge `state` plus the callback's effects. `TrySpawn` needs a value result;
-use `TryLaunch` for a Unit callback. Saturation returns `TaskLimitReached { limit }`
+use `TryLaunch` for an Ok callback. Saturation returns `TaskLimitReached { limit }`
 at once. A cancelled or closing task scope, or a closed pool, gives `Cancelled`.
 Rejected callbacks never run. Admission racing cancellation may succeed, in
 which case the callback can observe that cancellation.

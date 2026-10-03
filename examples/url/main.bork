@@ -1,6 +1,6 @@
 import "bork/url"
 
-fn example() uses io: Unit | ParseError {
+fn example() uses io: Ok | ParseError {
   parsed = url.Parse("https://example.com/search?q=hello&q=world")?
   println(parsed.query)
   updated = parsed.copy(query: { "q": ["bork language"], "page": ["1"] })

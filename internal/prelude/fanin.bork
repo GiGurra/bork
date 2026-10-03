@@ -69,9 +69,9 @@ fn withTimeout[T](s: Scope, ms: Int, work: (Scope) => T) uses clock + state: T |
   return _borkFanInTimeout(s, ms, func(child *_Scope) any { return work(child) })
 }
 
-// withTimeoutDo runs a Unit callback with the same cooperative deadline.
-fn withTimeoutDo(s: Scope, ms: Int, work: (Scope) => Unit) uses clock + state: Unit | Cancelled unsafe go {
-  return _borkFanInTimeout(s, ms, func(child *_Scope) any { work(child); return _Unit{} })
+// withTimeoutDo runs an Ok callback with the same cooperative deadline.
+fn withTimeoutDo(s: Scope, ms: Int, work: (Scope) => Ok) uses clock + state: Ok | Cancelled unsafe go {
+  return _borkFanInTimeout(s, ms, func(child *_Scope) any { work(child); return _borkOk() })
 }
 
 // receiveCase keeps each arm typed, mapping its value or status to a common

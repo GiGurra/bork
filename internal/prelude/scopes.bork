@@ -127,6 +127,6 @@ fn scopeOf(owner: OwnedScope): Scope unsafe go {
 }
 
 // onClose runs f when the scope s closes.
-fn onClose(s: Scope, f: () => Unit) unsafe go {
+fn onClose(s: Scope, f: () => Ok) unsafe go {
   s.Defer(f)
 }

@@ -21,7 +21,7 @@ func TestLiteralHeadsRejected(t *testing.T) {
 		{"arity", "type Box[T] = { value: T }\nfn main() { println(Box[Int,String] { value: 1 }) }", "needs 1 type argument"},
 		{"plain type arguments", "type Box = { value: Int }\nfn main() { println(Box[Int] { value: 1 }) }", "does not take type arguments"},
 		{"alias arguments", "type Box[T] = { value: T }\ntype IntBox = Box[Int]\nfn main() { println(IntBox[Int] { value: 1 }) }", "does not take type arguments"},
-		{"kind", "type Box[T] = { value: T }\nfn main() { println(Box[Unit] { value: 1 }) }", "is not allowed"},
+		{"kind", "type Box[T] = { value: T }\nfn main() { println(Box[Ok] { value: 1 }) }", "is not allowed"},
 		{"result context", "fn main() { x: Option[Int] = Option[String].None; println(x) }", "found Option[String]"},
 		{"field context", "fn main() { println(Option[Int].Some { value: \"x\" }) }", "must be Int"},
 		{"missing braces", "fn main() { println(Option[Int].Some) }", "has fields"},

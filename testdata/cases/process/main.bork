@@ -48,7 +48,7 @@ fn signalChild(pid: Int, interrupt: Bool) uses io unsafe go {
   if interrupt { signal = syscall.SIGINT }
   if err := p.Signal(signal); err != nil { panic(err) }
 }
-fn signalTest(s: Scope, interrupt: Bool) uses io + state + clock: Unit | IoError | Cancelled {
+fn signalTest(s: Scope, interrupt: Bool) uses io + state + clock: Ok | IoError | Cancelled {
   path = marker(s)
   child = process.Start(s, executable(), ["signal-server", path])?
   waitReady(path)
@@ -62,7 +62,7 @@ fn server(path: String) uses io + state + clock {
     onClose(child, () => println("closed"))
     ready(path)
     println(match (delay(child, 60000)) {
-      done: Unit => false
+      done: Ok => false
       stopped: Cancelled => true
     })
   }
@@ -99,7 +99,7 @@ fn millis() uses clock: Int unsafe go {
   import "time"
   return time.Now().UnixMilli()
 }
-fn inheritedPipes(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
+fn inheritedPipes(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   path = marker(s)
   child = process.Start(s, "/bin/sh", ["-c", "sleep 3 & echo ready > \"$1\"; wait", "bork-test", path])?
   waitReady(path)
@@ -150,7 +150,7 @@ fn descendantGone(pid: Int) uses io + clock: Bool unsafe go {
   syscall.Kill(int(pid), syscall.SIGKILL)
   return false
 }
-fn groupCancellation(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
+fn groupCancellation(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   path = marker(s)
   child = process.Start(s, "/bin/sh", ["-c", "sleep 60 & echo $! > \"$1\"; wait", "bork-test", path])?
   waitReady(path)
@@ -170,7 +170,7 @@ fn parentEnv() uses io unsafe go {
   import "os"
   if err := os.Setenv("BORK_PROCESS_TEST", "parent"); err != nil { panic(err) }
 }
-fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
+fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   parentEnv()
   output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: utf8Bytes("input") })?
   println(output.code)
@@ -228,7 +228,7 @@ fn main() {
     _ => {
       result = scope s { exercise(s) }
       match (result) {
-        done: Unit => println("ok")
+        done: Ok => println("ok")
         error: IoError => println(error)
         cancelled: Cancelled => println(cancelled)
       }

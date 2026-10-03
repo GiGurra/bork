@@ -17,7 +17,7 @@ fn entropyFailures(v4: () uses random => uuid.Uuid | IoError, v7: () uses random
   second, ok7 := v7().(IoError)
   return []bool{ok4 && first.path == "uuid", ok7 && second.path == "uuid"}
 }
-fn exercise() uses io + random + clock + state: Unit | ParseError | IoError {
+fn exercise() uses io + random + clock + state: Ok | ParseError | IoError {
   id = fixed()?
   println(id)
   println(toString(id))

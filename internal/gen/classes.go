@@ -122,7 +122,7 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 			}
 			call := &ast.CallExpr{Fun: idx, Args: args}
 			var body []ast.Stmt
-			if m.Result == check.Unit {
+			if m.Result == check.Ok {
 				body = []ast.Stmt{&ast.ExprStmt{X: call}}
 			} else {
 				body = []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{call}}}
@@ -257,7 +257,7 @@ func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 	args = append(args, needs...)
 	call := &ast.CallExpr{Fun: fun, Args: args}
 	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.instanceResult(inst, call)}}}
-	if inst.Result == check.Unit || inst.Result == check.Never {
+	if inst.Result == check.Ok || inst.Result == check.Never {
 		body = []ast.Stmt{&ast.ExprStmt{X: call}}
 	}
 	return &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}

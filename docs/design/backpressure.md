@@ -18,7 +18,7 @@ tasks.TrySpawn(pool, request, () => work())
 ```
 
 TrySpawn returns Task[T] | TaskLimitReached | Cancelled; TryLaunch returns
-Unit | TaskLimitReached | Cancelled. Callback effects remain open and are
+Ok | TaskLimitReached | Cancelled. Callback effects remain open and are
 charged to callers together with state, even for a pure callback: capacity and
 cancellation are observable shared state. The explicit Scope owns the resulting task and governs its
 cancellation. Pool capacity is shared across every submitter and child scope

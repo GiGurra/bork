@@ -200,8 +200,8 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 		}
 		seen[fd.Name] = true
 		t := c.resolveType(fd.Type)
-		if t == Unit {
-			c.errorf(fd.Type.Pos, "field %s cannot have type Unit", fd.Name)
+		if t == Ok {
+			c.errorf(fd.Type.Pos, "field %s cannot have type Ok", fd.Name)
 			t = Invalid
 		}
 		fields = append(fields, &Field{Name: fd.Name, Type: t, Decl: fd, Pkg: c.pkg, Prelude: c.inPrelude, Doc: fd.Doc, GoTags: fd.GoTags, defaultGeneric: hasTypeParam(t)})
@@ -209,7 +209,7 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 	return fields
 }
 
-// resolveType turns a written type into a Type. A nil type means Unit
+// resolveType turns a written type into a Type. A nil type means Ok
 // (a function without a declared result).
 func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 	if known := c.info.assemblyTypes[t]; known != nil {
@@ -224,7 +224,7 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 }
 func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 	if t == nil {
-		return Unit
+		return Ok
 	}
 	if t.Union != nil {
 		members := make([]Type, 0, len(t.Union))
@@ -233,8 +233,8 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 			switch {
 			case mt == Invalid:
 				return Invalid
-			case !isValue(mt) && mt != Unit:
-				// Unit can: `Unit | IoError` is a result that may fail.
+			case !isValue(mt) && mt != Ok:
+				// Ok can: `Ok | IoError` is a result that may fail.
 				c.errorf(m.Pos, "%s cannot be part of a union", mt)
 				return Invalid
 			}

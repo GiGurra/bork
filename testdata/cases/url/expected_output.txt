@@ -36,4 +36,4 @@ ParseError { input: "valid=1&bad=%xx", message: "invalid URL escape \"%xx\"" }
 ParseError { input: "a=1;b=2", message: "invalid semicolon separator in query" }
 {"a": ["1", "2"]}
 IoError { path: "/test", message: "invalid URL escape \"%xx\"" }
-Unit
+Ok

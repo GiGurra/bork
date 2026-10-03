@@ -179,6 +179,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				if strings.Contains(fd.GoBody.Body, "_borkMap") {
 					g.usesMap = true
 				}
+				if strings.Contains(fd.GoBody.Body, "_borkOk") || strings.Contains(fd.GoBody.Body, "_Unit") {
+					g.usesOk = true
+				}
 				if strings.Contains(fd.GoBody.Body, "_borkScope") || strings.Contains(fd.GoBody.Body, "_borkNewResourceHandle") || strings.Contains(fd.GoBody.Body, "_borkResourceHandle") {
 					g.usesScopes = true
 				}
@@ -369,7 +372,7 @@ type gen struct {
 	usesDerive       bool
 	usesEqual        bool
 	usesHash         bool
-	usesUnit         bool
+	usesOk           bool
 	usesMap          bool
 	usesLazy         bool
 	evalMode         bool
@@ -712,7 +715,7 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 	if fn.TrackCaller {
 		ftype.Params.List = append(ftype.Params.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("_callerAt")}, Type: ast.NewIdent("string")})
 	}
-	if fn.Result != check.Unit && fn.Result != check.Never {
+	if fn.Result != check.Ok && fn.Result != check.Never {
 		ftype.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(fn.Result)}}}
 	}
 	if len(fn.TypeParams) > 0 {
@@ -759,7 +762,7 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	for i := range fn.Params {
 		drop(i)
 	}
-	k := sink{ret: fn.Result != check.Unit}
+	k := sink{ret: fn.Result != check.Ok}
 	decl.Body = &ast.BlockStmt{List: append(drops, g.guardLabels(func() []ast.Stmt { return g.blockInto(fn.Body, k) })...)}
 	return decl
 }
@@ -787,7 +790,7 @@ func borrowedName(v string) *ast.Ident {
 // value lowers an expression whose result is needed. It returns the
 // statements to run first and the Go expression holding the result.
 // The expression is nil when e never produces a value, including when
-// one of its subexpressions diverges. Unit has a concrete value.
+// one of its subexpressions diverges. Ok has a concrete value.
 func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	t := e.Type()
 	switch e := e.(type) {
@@ -867,16 +870,16 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			}
 			return stmts, nil
 		}
-		if t == check.Unit {
-			return append(stmts, &ast.ExprStmt{X: call}), g.unitValue()
+		if t == check.Ok {
+			return append(stmts, &ast.ExprStmt{X: call}), g.okValue()
 		}
 		return stmts, call
 	case *check.If, *check.Match:
 		if t == check.Never {
 			return g.effect(e), nil
 		}
-		if t == check.Unit {
-			return g.effect(e), g.unitValue()
+		if t == check.Ok {
+			return g.effect(e), g.okValue()
 		}
 		res := g.newTmp()
 		stmts := []ast.Stmt{varDecl(res, g.goType(t))}
@@ -888,8 +891,8 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if t == check.Never {
 			return g.effect(e), nil
 		}
-		if t == check.Unit {
-			return g.effect(e), g.unitValue()
+		if t == check.Ok {
+			return g.effect(e), g.okValue()
 		}
 		res := g.newTmp()
 		if t == check.OwnedScope {
@@ -901,8 +904,8 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if t == check.Never {
 			return g.effect(e), nil
 		}
-		if t == check.Unit {
-			return g.effect(e), g.unitValue()
+		if t == check.Ok {
+			return g.effect(e), g.okValue()
 		}
 		res := g.newTmp()
 		return append([]ast.Stmt{varDecl(res, g.goType(t))}, g.scopeInto(e, sink{res: res, resType: t})...), res
@@ -1209,7 +1212,7 @@ func (g *gen) lambda(e *check.Lambda) ast.Expr {
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = ft.Result, nil, nil, nil
 	defer func() { g.openScopes, g.blockOwners, g.openMocks = savedScopes, savedOwners, savedMocks }()
 	body := g.guardLabels(func() []ast.Stmt {
-		if ft.Result == check.Unit {
+		if ft.Result == check.Ok {
 			return g.effect(e.Body)
 		}
 		return g.tailReturn(e.Body)
@@ -1394,9 +1397,9 @@ func (g *gen) into(e check.Expr, k sink) []ast.Stmt {
 	case *check.Match:
 		return g.matchStmt(e, k)
 	}
-	if e.Type() == check.Unit {
-		// Unit into a union holding it.
-		return append(g.effect(e), assign(k.res, g.unitValue()))
+	if e.Type() == check.Ok {
+		// Ok into a union holding it.
+		return append(g.effect(e), assign(k.res, g.okValue()))
 	}
 	stmts, x := g.value(e)
 	if x != nil {
@@ -1405,9 +1408,9 @@ func (g *gen) into(e check.Expr, k sink) []ast.Stmt {
 	return stmts
 }
 
-// unitValue is the Go value of Unit in a union.
-func (g *gen) unitValue() ast.Expr {
-	return &ast.CompositeLit{Type: g.goType(check.Unit)}
+// okValue is the Go value of Ok in a union.
+func (g *gen) okValue() ast.Expr {
+	return &ast.CompositeLit{Type: g.goType(check.Ok)}
 }
 
 // blockInto lowers a block: its statements, then its tail into k.
@@ -1429,12 +1432,12 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 		out = append(out, g.ambientPush(b.Labels)...)
 	}
 	if b.Tail == nil {
-		// A block without a value, where a union holding Unit is wanted.
+		// A block without a value, where a union holding Ok is wanted.
 		switch {
-		case k.ret && g.fnResult != check.Unit && g.fnResult != check.Never:
-			return append(out, g.returning(g.unitValue())...)
+		case k.ret && g.fnResult != check.Ok && g.fnResult != check.Never:
+			return append(out, g.returning(g.okValue())...)
 		case k.res != nil:
-			out = append(out, assign(k.res, g.unitValue()))
+			out = append(out, assign(k.res, g.okValue()))
 		}
 		return append(out, g.endMocks(mocks)...)
 	}
@@ -1533,8 +1536,8 @@ func (g *gen) tailReturn(e check.Expr) []ast.Stmt {
 	case *check.Return:
 		return g.returnStmt(e)
 	}
-	if e.Type() == check.Unit && g.fnResult != check.Unit {
-		return append(g.effect(e), g.returning(g.unitValue())...)
+	if e.Type() == check.Ok && g.fnResult != check.Ok {
+		return append(g.effect(e), g.returning(g.okValue())...)
 	}
 	stmts, x := g.value(e)
 	if x == nil {
@@ -1688,6 +1691,9 @@ func (g *gen) ifChain(e *check.If, k sink) []ast.Stmt {
 func (g *gen) returnStmt(e *check.Return) []ast.Stmt {
 	if e.Value == nil {
 		return g.returning()
+	}
+	if g.fnResult == check.Ok && e.Value.Type() == check.Ok {
+		return append(g.effect(e.Value), g.returning()...)
 	}
 	stmts, x := g.value(e.Value)
 	if x == nil {

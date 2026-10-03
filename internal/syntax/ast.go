@@ -117,7 +117,7 @@ type VariantDecl struct {
 }
 
 // FuncDecl is `fn name(params): Result { body }`. Result is nil when
-// the function returns Unit. A function implemented in Go has GoBody
+// the function returns Ok. A function implemented in Go has GoBody
 // instead of Body.
 type FuncDecl struct {
 	// Constructor names the owning record in `fn New = Config.new`.
@@ -543,7 +543,7 @@ type If struct {
 }
 
 // Block is `{ stmts; tail }`. Tail is the block's value; nil means the
-// block's value is Unit (or Never, if it ends by returning).
+// block's value is Ok (or Never, if it ends by returning).
 type Block struct {
 	Pos   diag.Pos
 	Stmts []Stmt

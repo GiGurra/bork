@@ -1,7 +1,7 @@
 import "bork/fs"
 import "bork/sql"
 type Row = { n: Int } derive (Decode)
-fn demo() uses io + net: Unit | fs.Error | sql.Error {
+fn demo() uses io + net: Ok | fs.Error | sql.Error {
   scope app {
     directory = fs.TempDir(app, pattern: "seq-")?
     path = fs.Join([fs.DirectoryPath(directory), "lines.txt"])

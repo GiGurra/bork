@@ -1,7 +1,7 @@
 import "bork/math"
 use math.Codecs
 
-fn calculations() uses io: Unit | ParseError | math.MathError | OutOfRange {
+fn calculations() uses io: Ok | ParseError | math.MathError | OutOfRange {
   huge = math.ParseInteger("922337203685477580812345")?
   println(huge.Add(math.Integer(1)))
   println(huge)

@@ -44,28 +44,28 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 		name, env, base, config string
 		args, want, absent      []string
 	}{
-		{name: "serve-default", args: []string{"serve", "--host", "localhost"}, want: []string{`host: "localhost"`, "port: 8080", "serve closed\nUnit"}, absent: []string{"echo closed"}},
+		{name: "serve-default", args: []string{"serve", "--host", "localhost"}, want: []string{`host: "localhost"`, "port: 8080", "serve closed\nOk"}, absent: []string{"echo closed"}},
 		{name: "command-base-file", base: `{"host":"file","port":8081}`, args: []string{"serve"}, want: []string{`host: "file"`, "port: 8081", "serve closed"}},
 		{name: "command-selected-file", base: `{"host":"base"}`, config: `{"host":"selected","port":8082}`, args: []string{"serve", "--config", "config.json"}, want: []string{`host: "selected"`, "port: 8082", "serve closed"}},
 		{name: "serve-env", env: "9090", args: []string{"serve", "--host", "localhost"}, want: []string{"port: 9090", "serve closed"}},
 		{name: "serve-flags", env: "9090", args: []string{"serve", "--host", "localhost", "-p", "443"}, want: []string{"port: 443", "serve closed"}},
-		{name: "echo", args: []string{"echo", "one", "two"}, want: []string{`["one", "two"]`, "echo closed\nUnit"}, absent: []string{"serve closed"}},
-		{name: "validation", args: []string{"serve", "--port", "0"}, want: []string{".host", "is missing", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Unit"}},
-		{name: "bad-flag", args: []string{"serve", "--missing"}, want: []string{"unknown flag", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "unknown-command", args: []string{"missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "unknown-help", args: []string{"help", "missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "prefixed-unknown-help", args: []string{"--help=false", "help", "missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "prefixed-extra-help", args: []string{"-h=false", "help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "extra-help", args: []string{"help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "hidden-completion", args: []string{"__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "completion-after-unknown-value", args: []string{"--unknown", "value", "__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit", ":0"}},
-		{name: "completion-no-desc-after-unknown-value", args: []string{"-x", "value", "__completeNoDesc", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit", ":0"}},
-		{name: "hidden-completion-no-desc", args: []string{"__completeNoDesc", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "no-command", want: []string{"Example commands", "serve", "echo", "Unit"}, absent: []string{"closed", "Serve {"}},
-		{name: "root-help", args: []string{"--help"}, want: []string{"Example commands", "serve", "echo", "Unit"}, absent: []string{"closed", "Serve {"}},
-		{name: "leaf-help", args: []string{"serve", "--help"}, want: []string{"Serve a host", "app serve", "--host", "--port", "Host to serve.", "default 8080", "Unit"}, absent: []string{"closed", "Serve {"}},
-		{name: "help-command", args: []string{"help", "serve"}, want: []string{"Serve a host", "--host", "--port", "default 8080", "Unit"}, absent: []string{"closed", "Serve {"}},
-		{name: "echo-help", args: []string{"echo", "--help"}, want: []string{"Echo words", "Unit"}, absent: []string{"closed", "--port"}},
+		{name: "echo", args: []string{"echo", "one", "two"}, want: []string{`["one", "two"]`, "echo closed\nOk"}, absent: []string{"serve closed"}},
+		{name: "validation", args: []string{"serve", "--port", "0"}, want: []string{".host", "is missing", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Ok"}},
+		{name: "bad-flag", args: []string{"serve", "--missing"}, want: []string{"unknown flag", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "unknown-command", args: []string{"missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "unknown-help", args: []string{"help", "missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "prefixed-unknown-help", args: []string{"--help=false", "help", "missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "prefixed-extra-help", args: []string{"-h=false", "help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "extra-help", args: []string{"help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "hidden-completion", args: []string{"__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "completion-after-unknown-value", args: []string{"--unknown", "value", "__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok", ":0"}},
+		{name: "completion-no-desc-after-unknown-value", args: []string{"-x", "value", "__completeNoDesc", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok", ":0"}},
+		{name: "hidden-completion-no-desc", args: []string{"__completeNoDesc", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "no-command", want: []string{"Example commands", "serve", "echo", "Ok"}, absent: []string{"closed", "Serve {"}},
+		{name: "root-help", args: []string{"--help"}, want: []string{"Example commands", "serve", "echo", "Ok"}, absent: []string{"closed", "Serve {"}},
+		{name: "leaf-help", args: []string{"serve", "--help"}, want: []string{"Serve a host", "app serve", "--host", "--port", "Host to serve.", "default 8080", "Ok"}, absent: []string{"closed", "Serve {"}},
+		{name: "help-command", args: []string{"help", "serve"}, want: []string{"Serve a host", "--host", "--port", "default 8080", "Ok"}, absent: []string{"closed", "Serve {"}},
+		{name: "echo-help", args: []string{"echo", "--help"}, want: []string{"Echo words", "Ok"}, absent: []string{"closed", "--port"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -125,7 +125,7 @@ fn main() {
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	for _, want := range []string{"at least one subcommand", "duplicate subcommand name same", "commands[0].name", "commands[1].name", "subcommand name help is reserved", "Help {", "unknown CLI field", "handler\nUnit"} {
+	for _, want := range []string{"at least one subcommand", "duplicate subcommand name same", "commands[0].name", "commands[1].name", "subcommand name help is reserved", "Help {", "unknown CLI field", "handler\nOk"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
@@ -138,7 +138,7 @@ fn main() {
 func TestCLISubcommandEffects(t *testing.T) {
 	root := t.TempDir()
 	source := `import "bork/cli"
-fn partial(commands: List[cli.Command]) uses io: Unit | cli.Error | cli.Help { cli.Dispatch("app", "", [], commands) }
+fn partial(commands: List[cli.Command]) uses io: Ok | cli.Error | cli.Help { cli.Dispatch("app", "", [], commands) }
 fn main() {}
 `
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {

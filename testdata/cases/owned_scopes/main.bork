@@ -21,7 +21,7 @@ fn handOver(old: Conn, next: Conn) uses io {
 // roll keeps one connection open, and replaces it n times: each
 // successor opens before its predecessor closes, so at most two are
 // open at a time, and each old one is released at once.
-fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io + state: Unit | Failed {
+fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io + state: Ok | Failed {
   if (n == 0) {
     closeScope(prev)
     return Failed { reason: "rolled out" }
@@ -35,7 +35,7 @@ fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io
 
 // stepOrFail ends early with ? when fail is set: its owned scope is
 // closed on the way out.
-fn stepOrFail(app: Scope, fail: Bool) uses io + state: Unit | Failed {
+fn stepOrFail(app: Scope, fail: Bool) uses io + state: Ok | Failed {
   b = openScope(app)
   c = connect("step", b.scope)
   check(fail)?
@@ -43,7 +43,7 @@ fn stepOrFail(app: Scope, fail: Bool) uses io + state: Unit | Failed {
   closeScope(b)
 }
 
-fn check(fail: Bool): Unit | Failed {
+fn check(fail: Bool): Ok | Failed {
   if (fail) {
     return Failed { reason: "failed" }
   }
@@ -164,7 +164,7 @@ fn main() uses io + clock + state {
 // siblingTask leaves its scope block while a task of x owns a newer
 // child of app: x closes first, waiting for the task, so the task's
 // child is not closed under it.
-fn siblingTask() uses io + clock + state: Unit | Failed {
+fn siblingTask() uses io + clock + state: Ok | Failed {
   scope app {
     x = openScope(app)
     launch(x.scope, () => worker(app))
@@ -193,7 +193,7 @@ fn mayFail(fail: Bool): Int | Failed {
 
 // consumeLater gives b to a call whose next argument fails: b is
 // closed on the way out, not left for app.
-fn consumeLater(app: Scope) uses io + state: Unit | Failed {
+fn consumeLater(app: Scope) uses io + state: Ok | Failed {
   b = openScope(app)
   _ = connect("consumed later", b.scope)
   consume(b, mayFail(true)?)
@@ -201,7 +201,7 @@ fn consumeLater(app: Scope) uses io + state: Unit | Failed {
 
 // consumeBlock gives a call an owner made by a block, and then fails
 // in a later argument: the owner is closed on the way out.
-fn consumeBlock(app: Scope) uses io + state: Unit | Failed {
+fn consumeBlock(app: Scope) uses io + state: Ok | Failed {
   consume({
     b = openScope(app)
     _ = connect("from a block", b.scope)
@@ -209,7 +209,7 @@ fn consumeBlock(app: Scope) uses io + state: Unit | Failed {
     }, mayFail(true)?)
 }
 
-fn withTask(b: OwnedScope, f: () uses io => Unit in b) uses io: OwnedScope {
+fn withTask(b: OwnedScope, f: () uses io => Ok in b) uses io: OwnedScope {
   launch(b.scope, f)
   b
 }
@@ -224,7 +224,7 @@ fn nested(app: Scope) uses io + state {
   }
 }
 
-fn nestedStep() uses io + state: Unit | Failed {
+fn nestedStep() uses io + state: Ok | Failed {
   scope s {
     base = connect("base", s)
     child = openScope(s)

@@ -16,7 +16,7 @@
 //                          m.remove(k), m.len(), m.each(f), m.keys(),
 //                          m.vals(), _mapOf(keys, values)
 //   std Go helper API      see docs/std-go.md; use _bork helpers in std code
-//   (A, B) => C            func(A, B) C (no result for Unit)
+//   (A, B) => C            func(A, B) C (no result for Ok)
 //   a type parameter T     a Go type parameter T (any)
 //   Scope                  *_Scope; s.Defer(f) runs f when the scope closes
 //   OwnedScope             *_Scope, of a child scope its owner closes

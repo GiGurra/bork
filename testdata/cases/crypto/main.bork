@@ -14,7 +14,7 @@ fn entropyFailures(draw: () uses random => Bool, token: () uses random => Bool, 
   defer func() { rand.Reader = previous }()
   return draw() && token() && password()
 }
-fn exercise() uses io + random + state: Unit | crypto.Error | ParseError {
+fn exercise() uses io + random + state: Ok | crypto.Error | ParseError {
   println(crypto.SHA256Hex(utf8Bytes("abc")))
   println(crypto.SHA512Hex(utf8Bytes("abc")))
   key = encoding.ParseHex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b")?

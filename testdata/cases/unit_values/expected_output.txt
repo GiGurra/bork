@@ -1,3 +1,10 @@
+explicit effect
+explicit returned effect
+explicit
+explicit lambda
+explicit block
+explicit if
+explicit match
 block
 done
 call

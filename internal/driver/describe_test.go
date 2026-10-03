@@ -111,7 +111,7 @@ fn scenario(xs: List[Int], u: User) uses io {
 		{"map(x", "((Int) => Int) => List[Int]"},
 		{"ageText())", "() => String"},
 		{"age)", "Int"},
-		{"log(1)", "(Int) uses io => Unit"},
+		{"log(1)", "(Int) uses io => Ok"},
 	} {
 		t.Run(tc.fragment, func(t *testing.T) {
 			result := describeAt(t, source, tc.fragment, "")

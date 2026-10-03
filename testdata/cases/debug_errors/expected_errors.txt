@@ -1,6 +1,6 @@
 main.bork:1:17: dbg takes 1 argument, but 0 were given
 main.bork:2:19: dbg takes 1 argument, but 2 were given
-main.bork:3:20: dbg needs a value, found Unit
+main.bork:3:20: dbg needs a value, found Ok
 main.bork:4:24: todo needs a String message, found Int
 main.bork:5:24: todo takes 0 or 1 arguments, but 2 were given
-main.bork:6:22: dbg needs a value, found Unit
+main.bork:6:22: dbg needs a value, found Ok

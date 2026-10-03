@@ -40,7 +40,7 @@ fn Check(s: Scope): Bool unsafe go {
     scope.Defer(func() { aborted = true })
     panic("test panic")
   }()
-  return resourceOK && order == "abc" && aborted && recovered && found && value == 3 && !missing && _borkMapLen(old) == 2 && _borkMapLen(m) == 3 && count == 1 && done && _borkScopeContext(child).Err() != nil && _borkScopeContext(s).Err() == nil && context.Cause(_borkScopeContext(child)) != nil
+  return _borkOk().String() == "Ok" && resourceOK && order == "abc" && aborted && recovered && found && value == 3 && !missing && _borkMapLen(old) == 2 && _borkMapLen(m) == 3 && count == 1 && done && _borkScopeContext(child).Err() != nil && _borkScopeContext(s).Err() == nil && context.Cause(_borkScopeContext(child)) != nil
 }
 
 fn Some(): Option[Int] unsafe go { return _borkSome(int64(42)) }

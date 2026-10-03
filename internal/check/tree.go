@@ -253,7 +253,7 @@ type If struct {
 }
 
 // Block is `{ stmts; tail }`. Tail is nil when the block's value is
-// Unit (or it never finishes).
+// Ok (or it never finishes).
 type Block struct {
 	expr
 	Assembly   *Assembly

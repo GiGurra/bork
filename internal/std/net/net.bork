@@ -34,7 +34,7 @@ fn Dial(address: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + state + 
 
 // Listen starts a TCP server. Each handler receives a connection and its own
 // scope. Closing the server's scope cancels connections and waits for handlers.
-fn Listen(address: String, s: Scope, handler: (Connection, Scope) => Unit | IoError | Cancelled) uses net + state: Server | IoError | Cancelled unsafe go {
+fn Listen(address: String, s: Scope, handler: (Connection, Scope) => Ok | IoError | Cancelled) uses net + state: Server | IoError | Cancelled unsafe go {
   import "bufio"
   import "net"
   import "sync"
@@ -64,7 +64,7 @@ fn Listen(address: String, s: Scope, handler: (Connection, Scope) => Unit | IoEr
         task := child.Go(func() any { return handler(conn, child) })
         result := task.Await()
         switch result.(type) {
-        case _Unit, Cancelled:
+        case _Ok, Cancelled:
         default: slog.Error("bork: TCP handler returned an error", "error", result)
         }
         _borkScopeClose(child)

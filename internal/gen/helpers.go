@@ -9,6 +9,11 @@ package gen
 // Resource handles keep a stable cancellation context, rebind its source on
 // attachment, and close on final release. Cancellation remains terminal.
 // Option constructors return the prelude's Option, regardless of package names.
+const okHelpers = `package main
+
+func _borkOk() _Ok { return _Ok{} }
+`
+
 const scopeHelpers = `package main
 import "context"
 import "sync"

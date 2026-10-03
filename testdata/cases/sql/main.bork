@@ -20,14 +20,14 @@ fn showError(result: Json | sql.Error) uses io {
     value: Json => println(renderJson(value))
   }
 }
-fn rollbackPanic(db: sql.Connection) uses io + net: Unit | sql.Error {
+fn rollbackPanic(db: sql.Connection) uses io + net: Ok | sql.Error {
   scope transaction {
     tx = sql.Begin(db, transaction)?
     inserted = sql.Exec(tx, "INSERT INTO users(id, name) VALUES (10, 'panic')", [])?
     panic("rollback test")
   }
 }
-fn protect(work: () => Unit): Bool unsafe go {
+fn protect(work: () => Ok): Bool unsafe go {
   recovered := false
   func() {
     defer func() { recovered = recover() == "rollback test" }()
@@ -35,7 +35,7 @@ fn protect(work: () => Unit): Bool unsafe go {
   }()
   return recovered
 }
-fn demo() uses io + net + state: Unit | sql.Error | DecodeError {
+fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)", [])?
@@ -91,7 +91,7 @@ fn demo() uses io + net + state: Unit | sql.Error | DecodeError {
     match (sql.Exec(db, "DELETE FROM users", [])) { error: sql.Error => println(error.operation); _ => println("unexpected") }
   }
 }
-fn attachments() uses io + net + state: Unit | sql.Error | DecodeError {
+fn attachments() uses io + net + state: Ok | sql.Error | DecodeError {
   scope outer {
     db = scope original {
       opened = sql.OpenSqlite(":memory:", original)?

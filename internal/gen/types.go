@@ -66,11 +66,11 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		g.usesScopes = true
 		return &ast.StarExpr{X: ast.NewIdent("_Scope")}
 	}
-	if t == check.Unit {
-		// Only as a union member: the value of `Unit | IoError` that
+	if t == check.Ok {
+		// Only as a union member: the value of `Ok | IoError` that
 		// says nothing went wrong.
-		g.usesUnit = true
-		return ast.NewIdent("_Unit")
+		g.usesOk = true
+		return ast.NewIdent("_Ok")
 	}
 	if n, ok := basicGoNames[t]; ok {
 		return ast.NewIdent(n)
@@ -89,7 +89,7 @@ func (g *gen) funcType(t *check.FuncType, names []*ast.Ident) *ast.FuncType {
 		}
 		ft.Params.List = append(ft.Params.List, f)
 	}
-	if t.Result != check.Unit && t.Result != check.Never {
+	if t.Result != check.Ok && t.Result != check.Never {
 		ft.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(t.Result)}}}
 	}
 	return ft
@@ -1368,8 +1368,8 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 	if g.usesBindContexts {
 		src = append(src, bindContextRuntime)
 	}
-	if g.usesUnit {
-		src = append(src, unitRuntime)
+	if g.usesOk {
+		src = append(src, okRuntime, okHelpers)
 	}
 	if g.usesMap {
 		g.usesHash = true
@@ -2436,10 +2436,13 @@ func _equalMaps(x, y reflect.Value) bool {
 func init() { _equalMapHook = _equalMaps }
 `
 
-// unitRuntime is the Go value of Unit, in a union.
-const unitRuntime = `package main
+// okRuntime is the Go value of Ok, in a union.
+const okRuntime = `package main
 
-type _Unit struct{}
+type _Ok struct{}
 
-func (_Unit) String() string { return "Unit" }
+func (_Ok) String() string { return "Ok" }
+
+// Deprecated Go representation spelling, retained with the bork Unit alias.
+type _Unit = _Ok
 `

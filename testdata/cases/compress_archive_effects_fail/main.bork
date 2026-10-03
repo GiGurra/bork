@@ -4,7 +4,7 @@ import "bork/fs"
 import "bork/time"
 
 fn gzip(source: fs.File, target: fs.File): Int | IoError { compress.GzipTo(source, target) }
-fn zip(file: fs.File): Unit | IoError { archive.WriteZip(file, []) }
-fn zipClock(file: fs.File) uses io: Unit | IoError { archive.ForEachZip(file, entry => println(time.Now().unixNanos)) }
-fn tarClock(file: fs.File) uses io: Unit | IoError { archive.ForEachTar(file, entry => println(time.Now().unixNanos)) }
+fn zip(file: fs.File): Ok | IoError { archive.WriteZip(file, []) }
+fn zipClock(file: fs.File) uses io: Ok | IoError { archive.ForEachZip(file, entry => println(time.Now().unixNanos)) }
+fn tarClock(file: fs.File) uses io: Ok | IoError { archive.ForEachTar(file, entry => println(time.Now().unixNanos)) }
 fn main() {}

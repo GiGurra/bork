@@ -622,12 +622,12 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 				fail()
 				return
 			}
-			if ta == Unit && !reported {
+			if ta == Ok && !reported {
 				hint := ""
 				if fn.Prelude && fn.Decl.Name == "spawn" {
 					hint = " (to run work that gives no value, use launch)"
 				} else if fn.Prelude && fn.Decl.Name == "withTimeout" {
-					hint = " (for a Unit callback, use withTimeoutDo)"
+					hint = " (for an Ok callback, use withTimeoutDo)"
 				}
 				c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, name, ta, hint)
 				fail()
@@ -837,8 +837,8 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 			}
 			t = Invalid
 		}
-		if t == Unit {
-			c.errorf(p.Pos, "parameter %s cannot have type Unit", p.Name)
+		if t == Ok {
+			c.errorf(p.Pos, "parameter %s cannot have type Ok", p.Name)
 			t = Invalid
 		}
 		ft.Params = append(ft.Params, t)
@@ -846,7 +846,7 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 		c.scopes[len(c.scopes)-1][p.Name].node = nil // unused parameters are fine
 	}
 	var rw Type
-	if wf != nil && wf.Result != Unit {
+	if wf != nil && wf.Result != Ok {
 		rw = wf.Result
 	}
 	c.lambdaDepth++
@@ -859,12 +859,12 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 	switch {
 	case bt == Invalid:
 		ft.Result = Invalid
-	case wf != nil && wf.Result == Unit:
-		ft.Result = Unit // the body's value, if any, is dropped
+	case wf != nil && wf.Result == Ok:
+		ft.Result = Ok // the body's value, if any, is dropped
 	case rw != nil && assignable(c.settle(bt, rw)):
 		ft.Result = rw
 	case bt == Never:
-		ft.Result = Unit
+		ft.Result = Ok
 		if rw != nil {
 			ft.Result = rw
 		}

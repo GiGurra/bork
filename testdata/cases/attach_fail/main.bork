@@ -2,7 +2,7 @@ import "bork/fs"
 
 fn use(f: fs.File) {}
 
-fn noAttach(path: String) uses io: Unit | fs.Error {
+fn noAttach(path: String) uses io: Ok | fs.Error {
   scope app {
     scope job {
       f = fs.Create(path, job)?
@@ -11,7 +11,7 @@ fn noAttach(path: String) uses io: Unit | fs.Error {
   }
 }
 
-fn tooLate(path: String) uses io: Unit | fs.Error {
+fn tooLate(path: String) uses io: Ok | fs.Error {
   scope app {
     f = scope job { fs.Create(path, job)? }
     shared = attach(f, app)

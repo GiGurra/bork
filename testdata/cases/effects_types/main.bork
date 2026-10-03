@@ -2,7 +2,7 @@
 // a function that uses less fits where more is allowed, and an open
 // parameter (a function type written without uses) takes any function.
 
-type Job = { name: String, run: () uses io => Unit }
+type Job = { name: String, run: () uses io => Ok }
 
 fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C { x => g(f(x)) }
 
@@ -16,27 +16,27 @@ fn box[T](x: T): Box[T] { Box { value: x } }
 
 fn main() {
   // Generic types keep the effects of the functions they hold.
-  boxed: Box[() uses io => Unit] = box(() => println("boxed"))
+  boxed: Box[() uses io => Ok] = box(() => println("boxed"))
   boxed.value()
 
   // Branches and unions join the effects of the functions in them.
   either = if (true) { () => println("either") } else { () => {} }
   either()
-  choice: (() uses io => Unit) | Int = () => {}
+  choice: (() uses io => Ok) | Int = () => {}
   match (choice) {
-    f: () uses io => Unit => f()
+    f: () uses io => Ok => f()
     n: Int => println(n)
   }
 
   // Results are covariant: a pure function fits where one that uses
   // io is expected.
-  maker: () => () uses io => Unit = () => () => {}
+  maker: () => () uses io => Ok = () => () => {}
   maker()()
   more()
 
   // A pure lambda fits a function type that allows io.
-  quiet: () uses io => Unit = () => {}
-  loud: () uses io => Unit = () => println("loud")
+  quiet: () uses io => Ok = () => {}
+  loud: () uses io => Ok = () => println("loud")
   runAll([Job { name: "quiet", run: quiet }, Job { name: "loud", run: loud }])
 
   // map's f is open: it takes a function that prints.
@@ -74,10 +74,10 @@ fn more() uses io {
   f = pick(quiet, loud)
   f()
   // A union of functions fits a union that allows more.
-  a: (() => Unit) | Int = quiet
-  b: (() uses io => Unit) | Int = a
+  a: (() => Ok) | Int = quiet
+  b: (() uses io => Ok) | Int = a
   // An open parameter takes a function whose result uses less.
   run(() => () => {})
 }
 
-fn run(make: () => () uses io => Unit) uses io { make()() }
+fn run(make: () => () uses io => Ok) uses io { make()() }

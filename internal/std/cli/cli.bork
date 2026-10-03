@@ -196,7 +196,7 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], fla
 
 // Run reads process arguments and invokes the handler in a scope after validation.
 // Help is printed; errors remain values for the application to render and exit.
-fn Run[T: Decode](name: String, description: String, run: (T, Scope) => Unit, flags: List[Flag] = [], configFiles: List[String] = []) uses io: Unit | Error {
+fn Run[T: Decode](name: String, description: String, run: (T, Scope) => Ok, flags: List[Flag] = [], configFiles: List[String] = []) uses io: Ok | Error {
   match (Parse[T](name, description, args(), flags, configFiles)) {
     help: Help => { print(help.text) }
     error: Error => error

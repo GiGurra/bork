@@ -1,1 +1,1 @@
-main.bork:4:14: T of spawn cannot be Unit: a type argument must be a type of values (to run work that gives no value, use launch)
+main.bork:4:14: T of spawn cannot be Ok: a type argument must be a type of values (to run work that gives no value, use launch)

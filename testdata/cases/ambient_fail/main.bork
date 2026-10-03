@@ -3,9 +3,9 @@ import "example.com/ambfail/trace"
 ambient traceId: String
 ambient locale: String
 ambient session: Scope
-ambient callback: () => Unit
+ambient callback: () => Ok
 ambient count: Int where positive
-ambient nothingAtAll: Unit
+ambient nothingAtAll: Ok
 
 pred positive(x: Int) {
   x > 0
@@ -83,7 +83,7 @@ fn binds(): String {
 
 // Another package's ambient values are named with the package.
 fn viaPkg() needs trace.Id: String {
-  trace.Ok()
+  trace.ReadId()
 }
 
 fn unexported(): String {

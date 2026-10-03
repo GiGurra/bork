@@ -6,6 +6,6 @@ fn Leak() needs secret: String {
   secret
 }
 
-fn Ok() needs Id: String {
+fn ReadId() needs Id: String {
   Id
 }

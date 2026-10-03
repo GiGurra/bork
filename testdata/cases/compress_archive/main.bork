@@ -3,7 +3,7 @@ import "bork/archive"
 import "bork/fs"
 import "bork/time"
 
-fn codecs() uses io: Unit | IoError {
+fn codecs() uses io: Ok | IoError {
   data = bytes([toByte(0), toByte(255), toByte(65)])
   zipped = compress.Gzip(data)?
   println(compress.Gunzip(zipped)? == data)
@@ -55,7 +55,7 @@ fn codecs() uses io: Unit | IoError {
   })
 }
 
-fn files(s: Scope) uses io + clock: Unit | fs.Error {
+fn files(s: Scope) uses io + clock: Ok | fs.Error {
   source = fs.TempFile(s)?
   sourceWritten = fs.WriteTo(source, utf8Bytes("file stream"))?
   input = fs.Open(fs.Path(source), s)?
@@ -72,28 +72,28 @@ fn files(s: Scope) uses io + clock: Unit | fs.Error {
   archive.ForEachZip(zipFile, entry => println(entry.name))?
   archive.ForEachZip(zipFile, entry => println(time.Now().unixNanos > 0))?
   bad = [archive.Member { name: "bad\u0000name", data: bytes([]), directory: false }]
-  println(match (archive.WriteZip(zipFile, bad)) { value: Unit => false, error: IoError => true })
+  println(match (archive.WriteZip(zipFile, bad)) { value: Ok => false, error: IoError => true })
   malicious = fs.TempFile(s)?
   maliciousWritten = fs.WriteTo(malicious, rawZip("bad\u0000name", false))?
-  println(match (archive.ForEachZip(malicious, entry => println("unexpected"))) { value: Unit => false, error: IoError => true })
+  println(match (archive.ForEachZip(malicious, entry => println("unexpected"))) { value: Ok => false, error: IoError => true })
   cappedInput = fs.Open(fs.Path(zipped), s)?
   cappedOutput = fs.TempFile(s)?
   println(match (compress.GunzipTo(cappedInput, cappedOutput, 4)) { value: Int => false, error: IoError => true })
   println((fs.Read(fs.Path(cappedOutput))?).length())
-  println(match (archive.ForEachZip(zipFile, entry => println("unexpected"), 1)) { value: Unit => false, error: IoError => true })
+  println(match (archive.ForEachZip(zipFile, entry => println("unexpected"), 1)) { value: Ok => false, error: IoError => true })
   tarFile = fs.TempFile(s)?
   archive.WriteTar(tarFile, entries)?
   tarInput = fs.Open(fs.Path(tarFile), s)?
   archive.ForEachTar(tarInput, entry => println(utf8String(entry.data)))?
   clockTar = fs.Open(fs.Path(tarFile), s)?
   archive.ForEachTar(clockTar, entry => println(time.Now().unixNanos > 0))?
-  println(match (archive.WriteTar(tarFile, bad)) { value: Unit => false, error: IoError => true })
+  println(match (archive.WriteTar(tarFile, bad)) { value: Ok => false, error: IoError => true })
   cappedTar = fs.Open(fs.Path(tarFile), s)?
-  println(match (archive.ForEachTar(cappedTar, entry => println("unexpected"), 1)) { value: Unit => false, error: IoError => true })
+  println(match (archive.ForEachTar(cappedTar, entry => println("unexpected"), 1)) { value: Ok => false, error: IoError => true })
 }
 
 fn main() {
-  println(match (codecs()) { done: Unit => "codecs ok", error: IoError => error.message })
+  println(match (codecs()) { done: Ok => "codecs ok", error: IoError => error.message })
   result = scope s { files(s) }
-  println(match (result) { done: Unit => "files ok", error: fs.Error => fs.ErrorInfo(error).message })
+  println(match (result) { done: Ok => "files ok", error: fs.Error => fs.ErrorInfo(error).message })
 }

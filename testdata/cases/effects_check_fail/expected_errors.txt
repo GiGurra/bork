@@ -12,7 +12,7 @@ main.bork:55:23: print uses io (it calls println), but its signature allows no e
 main.bork:57:30: pureMain uses io (it calls println), but its signature allows no effects; declare it: uses io
 main.bork:59:21: both2 declares net, but never uses it
 main.bork:59:32: both2 uses io (it calls println), but its signature allows only net; declare it: uses io
-main.bork:61:40: main cannot be called or used as a value: it may use every effect
+main.bork:61:38: main cannot be called or used as a value: it may use every effect
 main.bork:65:3: main uses net (it calls both), but its signature allows only io; declare it: uses io + net
 main.bork:72:3: main cannot be called or used as a value: it may use every effect
 main.bork:76:3: assertSnapshot can only be used in tests (and the functions they call), not in a predicate

@@ -7,7 +7,7 @@ Failure { message: "two" }
 Option.Some { value: 7 }
 1
 Cancelled { reason: "deadline exceeded" }
-Unit
+Ok
 callback
 callback
 Option.Some { value: Event.Text { value: "hello" } }

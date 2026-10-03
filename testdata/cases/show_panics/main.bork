@@ -22,7 +22,7 @@ fn fails(f: () => String): Bool unsafe go {
   return failed
 }
 
-fn failsPrint(f: () => Unit): Bool unsafe go {
+fn failsPrint(f: () => Ok): Bool unsafe go {
   failed := false
   func() {
     defer func() { failed = recover() != nil }()

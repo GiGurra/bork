@@ -19,7 +19,7 @@ fn fixedBudget(s: Scope, capacity: http.RetryCount) uses clock + state: http.Ret
 // static borrow rule that correctly forbids closing an owner's borrowed scope.
 fn finalizer(budget: http.RetryBudget) uses state unsafe go { budget.owner.closeFn() }
 type Marker = resource
-fn marker(s: Scope, onClose: () => Unit) uses state: Marker unsafe go {
+fn marker(s: Scope, onClose: () => Ok) uses state: Marker unsafe go {
   return Marker{handle:nil,owner:s.Own(onClose)}
 }
 fn panicCaught(work: () => http.Result): Bool unsafe go {

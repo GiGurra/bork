@@ -3,36 +3,36 @@ type Error = { message: String }
 type Shape = sealed { Point { x: Int }, Empty }
 
 fn classify(f: Failure): Error { Error { message: f.message } }
-fn normalize(raw: Unit | Failure): Unit | Error {
+fn normalize(raw: Ok | Failure): Ok | Error {
   match (raw) {
     f: Failure => classify(f)
-    done: Unit => {}
+    done: Ok => {}
   }
 }
-fn empty(): Unit | Error {}
-fn success(): Unit | Failure {}
-fn branch(ok: Bool): Unit | Error {
+fn empty(): Ok | Error {}
+fn success(): Ok | Failure {}
+fn branch(ok: Bool): Ok | Error {
   if (ok) {} else { Error { message: "failed" } }
 }
-fn literal(ok: Bool): Unit | Error {
+fn literal(ok: Bool): Ok | Error {
   match (ok) { true => {}, false => Error { message: "failed" } }
 }
-fn nested(s: Shape): Unit | Error {
+fn nested(s: Shape): Ok | Error {
   match (s) {
     Shape.Point { x: 0 } => {}
     Shape.Point { x } => Error { message: toString(x) }
     Shape.Empty => {}
   }
 }
-fn scoped(ok: Bool) uses io: Unit | Error {
+fn scoped(ok: Bool) uses io: Ok | Error {
   scope s {
     onClose(s, () => println("closed"))
     match (ok) { true => {}, false => Error { message: "failed" } }
   }
 }
 fn plainUnit(ok: Bool) { match (ok) { true => {}, false => {} } }
-fn succeeded(r: Unit | Error): Bool {
-  match (r) { done: Unit => true, error: Error => false }
+fn succeeded(r: Ok | Error): Bool {
+  match (r) { done: Ok => true, error: Error => false }
 }
 
 fn main() {
@@ -48,7 +48,7 @@ fn main() {
   println(succeeded(nested(Shape.Empty)))
   println(succeeded(scoped(true)))
   println(succeeded(scoped(false)))
-  f: () => (Unit | Error) = () => {}
+  f: () => (Ok | Error) = () => {}
   println(succeeded(f()))
   plainUnit(true)
   plainUnit(false)

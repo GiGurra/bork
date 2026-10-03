@@ -113,7 +113,7 @@ func (c *checker) declareAmbient(ad *syntax.AmbientDecl) {
 		return
 	}
 	t := c.resolveType(ad.Type)
-	if t == Unit || t == Never {
+	if t == Ok || t == Never {
 		c.errorf(ad.Type.Pos, "ambient %s must hold values, not %s", ad.Name, t)
 		t = Invalid
 	} else if t != Invalid && (&lifeChecker{carries: map[Type]bool{}}).carriesLife(t) {

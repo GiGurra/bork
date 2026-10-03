@@ -4,7 +4,7 @@ pred ValidLimit(limit: Int) { limit > 0 }
 type Limit = Int where ValidLimit
 type TaskLimitReached = { limit: Int }
 type Pool = resource
-type permit = () uses state => Unit
+type permit = () uses state => Ok
 
 // Open creates a shared pool. A task keeps its slot until its callback ends,
 // including when cancellation is ignored. Closing the pool rejects new work.
@@ -44,7 +44,7 @@ fn TrySpawn[T](pool: Pool, s: Scope, work: () => T) uses state: Task[T] | TaskLi
 
 // TryLaunch admits a task without returning its result. Scope cleanup waits
 // for admitted work and reports panics just as ordinary launch does.
-fn TryLaunch(pool: Pool, s: Scope, work: () => Unit) uses state: Unit | TaskLimitReached | Cancelled unsafe go {
+fn TryLaunch(pool: Pool, s: Scope, work: () => Ok) uses state: Ok | TaskLimitReached | Cancelled unsafe go {
   if s.ctx.Err()!=nil { return Cancelled{reason:s._cancelReason()} }
   admission:=reserve(pool)
   release,ok:=admission.(func())
@@ -56,5 +56,5 @@ fn TryLaunch(pool: Pool, s: Scope, work: () => Unit) uses state: Unit | TaskLimi
     if reason=="" { reason="scope closed" }
     return Cancelled{reason:reason}
   }
-  return _Unit{}
+  return _borkOk()
 }

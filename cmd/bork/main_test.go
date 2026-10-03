@@ -96,6 +96,33 @@ func TestDiagnosticJSON(t *testing.T) {
 			t.Fatalf("unexpected text warnings: %s (%v)", out, err)
 		}
 	})
+	t.Run("Unit migration warning", func(t *testing.T) {
+		source := "fn complete(): Unit { Ok }\nfn main() { complete() }\n"
+		if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(exe, "check", "--json", path).CombinedOutput()
+		if err != nil {
+			t.Fatalf("migration warning should succeed: %v\n%s", err, out)
+		}
+		var d struct {
+			Code      string `json:"code"`
+			Severity  string `json:"severity"`
+			Column    int    `json:"column"`
+			EndColumn int    `json:"end_column"`
+			Fixes     []struct {
+				Edits []struct {
+					Replacement string `json:"replacement"`
+				} `json:"edits"`
+			} `json:"fixes"`
+		}
+		if err := json.Unmarshal(out, &d); err != nil {
+			t.Fatalf("invalid migration diagnostic: %v\n%s", err, out)
+		}
+		if d.Code != "migration.unit" || d.Severity != "warning" || d.Column != 16 || d.EndColumn != 20 || len(d.Fixes) != 1 || len(d.Fixes[0].Edits) != 1 || d.Fixes[0].Edits[0].Replacement != "Ok" {
+			t.Fatalf("unexpected migration diagnostic: %s", out)
+		}
+	})
 	t.Run("successful check", func(t *testing.T) {
 		if err := os.WriteFile(path, []byte("fn main() {}\n"), 0o644); err != nil {
 			t.Fatal(err)

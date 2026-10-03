@@ -49,7 +49,7 @@ fn indentJson(text: String, spaces: Indent): String | JsonError unsafe go {
 
 // Check each number token before rendering: an invalid token must not inject
 // additional array elements or turn a number into another JSON kind.
-fn validateNumbers(value: Json): Unit | JsonError unsafe go {
+fn validateNumbers(value: Json): Ok | JsonError unsafe go {
   var check func(Json) *JsonError
   check = func(value Json) *JsonError {
     switch value := value.(type) {
@@ -65,5 +65,5 @@ fn validateNumbers(value: Json): Unit | JsonError unsafe go {
     return nil
   }
   if failure := check(value); failure != nil { return *failure }
-  return _Unit{}
+  return _borkOk()
 }

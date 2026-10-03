@@ -47,7 +47,7 @@ func (g *gen) propertyTest(title string, auto bool, params []*syntax.Param, type
 		}
 	}
 	g.tmp = 0
-	g.fnResult = check.Unit
+	g.fnResult = check.Ok
 	g.usesProps = true
 	g.usesShow = true
 	c := ast.NewIdent(choicesVar)
@@ -149,7 +149,7 @@ func (g *gen) autoProperty(fn *check.Func, goName *ast.Ident) ast.Decl {
 			args = append(args, at(fn.Decl.Pos))
 		}
 		call := &ast.CallExpr{Fun: g.funcName(fn), Args: args}
-		if fn.Result == check.Unit || fn.Result == check.Never {
+		if fn.Result == check.Ok || fn.Result == check.Never {
 			return []ast.Stmt{&ast.ExprStmt{X: call}}
 		}
 		return []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{ast.NewIdent("_")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call}}}
@@ -253,7 +253,7 @@ func ungeneratable(t check.Type, seen map[check.Type]bool) check.Type {
 		return nil
 	case *check.Union:
 		for _, m := range t.Members {
-			if m == check.Unit {
+			if m == check.Ok {
 				continue
 			}
 			if bad := ungeneratable(m, seen); bad != nil {
@@ -520,9 +520,9 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 		var cases []ast.Stmt
 		for i, m := range t.Members {
 			var x ast.Expr
-			if m == check.Unit {
-				g.usesUnit = true
-				x = &ast.CompositeLit{Type: ast.NewIdent("_Unit")}
+			if m == check.Ok {
+				g.usesOk = true
+				x = &ast.CompositeLit{Type: ast.NewIdent("_Ok")}
 			} else {
 				x = g.genValue(m, nil, deeper, what)
 			}

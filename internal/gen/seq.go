@@ -33,7 +33,7 @@ func (g *gen) generateSeq(e *check.Generate) ast.Expr {
 	// A mock in the producer still passes calls on to the mocks around
 	// the generate.
 	g.outerMocks = append(append([]openMock(nil), g.outerMocks...), g.openMocks...)
-	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = check.Unit, nil, nil, nil
+	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = check.Ok, nil, nil, nil
 	g.yieldName, g.loops = g.newTmp(), nil
 	yield := g.yieldName
 	body := g.guardLabels(func() []ast.Stmt { return g.effect(e.Body) })
@@ -75,7 +75,7 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 	}
 	if exit.used {
 		stmts = append(stmts, define(exit.flag, ast.NewIdent("false")))
-		if g.fnResult != check.Unit {
+		if g.fnResult != check.Ok {
 			stmts = append(stmts, &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{exit.result}, Type: g.goType(g.fnResult)}}}})
 			if g.fnResult == check.OwnedScope {
 				stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("owner")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}})
@@ -106,7 +106,7 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 			stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("forget")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}})
 		}
 		var result []ast.Expr
-		if g.fnResult != check.Unit {
+		if g.fnResult != check.Ok {
 			var value ast.Expr = exit.result
 			if g.fnResult == check.OwnedScope {
 				value = &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}

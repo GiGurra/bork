@@ -1,10 +1,10 @@
 import "bork/fs"
 
-fn exercise(s: Scope) uses io: Unit | fs.Error {
+fn exercise(s: Scope) uses io: Ok | fs.Error {
   directory = fs.TempDir(s)?
   root = fs.DirectoryPath(directory)
   early = failAfterCreating(root)
-  println(match (early) { done: Unit => false, error: fs.Error => true })
+  println(match (early) { done: Ok => false, error: fs.Error => true })
   println((fs.ReadDir(root)?).length())
   println(recovered(() => panicAfterCreating(root)))
   println((fs.ReadDir(root)?).length())
@@ -75,7 +75,7 @@ fn main() {
     error: fs.Error => println(error)
   }
   match (result) {
-    done: Unit => println("ok")
+    done: Ok => println("ok")
     error: fs.Error => println(error)
   }
 }
@@ -97,27 +97,27 @@ fn errorKinds(): List[String] unsafe go {
   return kinds
 }
 
-fn failAfterCreating(parent: String) uses io: Unit | fs.Error {
+fn failAfterCreating(parent: String) uses io: Ok | fs.Error {
   scope s {
     directory = fs.TempDir(s, parent)?
     ignored = fs.Read(fs.Join([fs.DirectoryPath(directory), "missing"]))?
   }
 }
-fn panicAfterCreating(parent: String) uses io: Unit | fs.Error {
+fn panicAfterCreating(parent: String) uses io: Ok | fs.Error {
   scope s {
     directory = fs.TempDir(s, parent)?
     panic("cleanup probe")
   }
 }
-fn recovered(work: () => (Unit | fs.Error)): Bool unsafe go {
+fn recovered(work: () => (Ok | fs.Error)): Bool unsafe go {
   return func() (panicked bool) {
     defer func() { if recover() != nil { panicked = true } }()
     work()
     return false
   }()
 }
-fn symlink(target: String, path: String) uses io: Unit | IoError unsafe go {
+fn symlink(target: String, path: String) uses io: Ok | IoError unsafe go {
   import "os"
   if err := os.Symlink(target, path); err != nil { return IoError{path: path, message: err.Error()} }
-  return _Unit{}
+  return _borkOk()
 }

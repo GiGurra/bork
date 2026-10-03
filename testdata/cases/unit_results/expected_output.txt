@@ -1,9 +1,9 @@
 step ok
 step ok
-Unit
+Ok
 step ok
 Failed { why: "nope" }
 failed: nope
 step ok
 in scope
-Unit
+Ok

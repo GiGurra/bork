@@ -6,7 +6,7 @@ fn send(c: Conn, msg: String) uses io {
   println(s"send $msg")
 }
 
-fn later(f: () uses io => Unit) uses io {
+fn later(f: () uses io => Ok) uses io {
   f()
 }
 

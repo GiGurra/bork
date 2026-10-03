@@ -1,19 +1,21 @@
 type Error = { message: String }
-type Box = { value: Unit | Error }
+type Box = { value: Ok | Error }
 
 fn done() uses io { println("done") }
-fn consume(label: String, x: Unit | Error) uses io {
+fn explicitDone(): Ok { return Ok }
+fn explicitEffect() uses io: Ok { return println("explicit effect") }
+fn consume(label: String, x: Ok | Error) uses io {
   match (x) {
-    unit: Unit => println(label)
+    unit: Ok => println(label)
     error: Error => println(error.message)
   }
 }
 fn mark(label: String) uses io: String { println(label); label }
-fn returned(ok: Bool): Unit | Error {
-  if (ok) { return {} }
+fn returned(ok: Bool): Ok | Error {
+  if (ok) { return Ok }
   Error { message: "error" }
 }
-fn triple(first: String, x: Unit | Error, last: String) uses io {
+fn triple(first: String, x: Ok | Error, last: String) uses io {
   consume(first, x)
   println(last)
 }
@@ -38,6 +40,13 @@ fn policyReturn() uses io: String {
   "unreachable policy tail"
 }
 fn main() {
+  explicitDone()
+  consume("explicit returned effect", explicitEffect())
+  consume("explicit", Ok)
+  consume("explicit lambda", (() => Ok)())
+  consume("explicit block", { Ok })
+  consume("explicit if", if (true) { Ok } else { Error { message: "error" } })
+  consume("explicit match", match (true) { true => Ok, false => Error { message: "error" } })
   consume("block", {})
   consume("call", done())
   consume("builtin", println("builtin effect"))
@@ -52,13 +61,13 @@ fn main() {
   consume(mark("first"), { println("second") })
   consume("returned", returned(true))
   consume("returned", returned(false))
-  box = Box { value: {} }
+  box = Box { value: Ok }
   consume("field", box.value)
   changed = box.copy(value: done())
   consume("copy", changed.value)
-  xs: List[Unit | Error] = [{}, done()]
+  xs: List[Ok | Error] = [Ok, done()]
   xs.forEach(x => consume("list", x))
-  m: Map[String, Unit | Error] = { "a": {}, "b": done() }
+  m: Map[String, Ok | Error] = { "a": Ok, "b": done() }
   match (m.get("a")) {
     Option.Some { value } => consume("map", value)
     Option.None => println("missing")

@@ -24,7 +24,7 @@ TLS can be added later alongside HTTP.
 `bork/net` provides TCP `Dial(address, scope, timeoutMs = 0)` and
 `Listen(address, scope, handler)`. Listen returns a Server; `Address(server)`
 reports its selected address and `Wait(server)` waits for shutdown. Each handler
-receives a Connection and its own scope and returns `Unit | IoError | Cancelled`.
+receives a Connection and its own scope and returns `Ok | IoError | Cancelled`.
 Handler errors and panics are logged; other connections continue. Server cleanup
 cancels connections and waits for their handlers. `LocalAddress`/`RemoteAddress`
 inspect a Connection. `Read(conn, size = 4096, timeoutMs = 0)` reads up to size

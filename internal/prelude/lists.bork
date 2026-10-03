@@ -118,7 +118,7 @@ fn (xs: List[T]) count[T](test: (T) => Bool): Int unsafe go {
   }
   return n
 }
-fn (xs: List[T]) forEach[T](f: (T) => Unit) unsafe go {
+fn (xs: List[T]) forEach[T](f: (T) => Ok) unsafe go {
   for _, x := range xs {
     f(x)
   }

@@ -71,7 +71,7 @@ func TestCompilationFreezesGoManifests(t *testing.T) {
 		t.Fatalf("captured final build: %v", err)
 	}
 	output, err := exec.Command(exe).CombinedOutput()
-	if err != nil || !strings.HasPrefix(string(output), "Unit\nGoError") {
+	if err != nil || !strings.HasPrefix(string(output), "Ok\nGoError") {
 		t.Fatalf("built program: %s, %v", output, err)
 	}
 	if _, _, err := Check(root); err == nil {

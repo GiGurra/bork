@@ -18,7 +18,7 @@ fn sendAll(ch: Channel[Conn], xs: List[Conn] in ch) uses state {
 }
 
 // So may a lambda of a generic function of the program's own.
-fn each[T](xs: List[T], f: (T) uses state => Unit) uses state {
+fn each[T](xs: List[T], f: (T) uses state => Ok) uses state {
   match (xs) {
     [x, ...rest] => {
       f(x)
@@ -29,7 +29,7 @@ fn each[T](xs: List[T], f: (T) uses state => Unit) uses state {
 }
 
 // Entries of a map, and the values of an option, are its arguments' too.
-fn ifSome[T](o: Option[T], f: (T) uses state => Unit) uses state {
+fn ifSome[T](o: Option[T], f: (T) uses state => Ok) uses state {
   match (o) {
     Option.Some { value: v } => f(v)
     _ => {}
@@ -37,7 +37,7 @@ fn ifSome[T](o: Option[T], f: (T) uses state => Unit) uses state {
 }
 
 // What comes out of a channel lives as long as the channel.
-fn drain[T](from: Channel[T], f: (T) uses state => Unit) uses state {
+fn drain[T](from: Channel[T], f: (T) uses state => Ok) uses state {
   received(from).forEach(f)
 }
 

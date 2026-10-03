@@ -17,6 +17,6 @@ fn main() {
     }, flags: [.{ field: "port", short: "p" }, .{ field: "config", configFile: true }])
   match (result) {
     error: cli.Error => { println(error); exit(2) }
-    Unit => {}
+    Ok => {}
   }
 }

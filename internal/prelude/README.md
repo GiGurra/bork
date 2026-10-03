@@ -44,7 +44,7 @@ and `awaitAllUntil[Success, Failure](s)` (first observed failure). Existing
 tasks remain in their original scopes; `race(s, [child => work(child)])`
 starts its own child tasks, cancels losers, and joins all before returning.
 `withTimeout(s, milliseconds, child => work(child))` includes spawned tasks
-in its cooperative deadline; use `withTimeoutDo` for a Unit callback.
+in its cooperative deadline; use `withTimeoutDo` for an Ok callback.
 A successful timeout stops its timer, keeping returned resources usable until
 the parent closes. Race resources follow the cancelled race scope.
 

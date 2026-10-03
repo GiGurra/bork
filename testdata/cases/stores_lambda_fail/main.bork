@@ -16,7 +16,7 @@ fn shorterList() uses state {
 
 // A function of Conn may make one in a scope of its own: nothing is
 // known of what it passes.
-fn withConn(f: (Conn) uses state => Unit) uses state {
+fn withConn(f: (Conn) uses state => Ok) uses state {
   scope s {
     f(connect(s))
   }
@@ -30,7 +30,7 @@ fn concrete() uses state {
 }
 
 // Nor of a channel of T: it could be one of its own scope.
-fn withChannel[T](xs: List[T], f: (Channel[T]) uses state => Unit) uses state {
+fn withChannel[T](xs: List[T], f: (Channel[T]) uses state => Ok) uses state {
   scope s {
     f(channel[T](s, 1))
   }
@@ -56,7 +56,7 @@ fn folded() uses state {
 }
 
 // Arguments after the lambda are not known when it is checked.
-fn eachAfter[T](f: (T) uses state => Unit, xs: List[T]) uses state {
+fn eachAfter[T](f: (T) uses state => Ok, xs: List[T]) uses state {
   match (xs) {
     [x, ...rest] => {
       f(x)
@@ -78,7 +78,7 @@ class Make[T] {
   fn make(s: Scope): T
 }
 
-fn made[T: Make](xs: List[T], f: (T) uses state => Unit) uses state {
+fn made[T: Make](xs: List[T], f: (T) uses state => Ok) uses state {
   scope s {
     f(make(s))
   }
@@ -97,7 +97,7 @@ fn bounded() uses state {
 
 // An argument that is a function could make a value from what the
 // callee gives it: a scope of its own.
-fn viaMaker[T](mk: (Scope) => T, f: (T) uses state => Unit) uses state {
+fn viaMaker[T](mk: (Scope) => T, f: (T) uses state => Ok) uses state {
   scope s {
     f(mk(s))
   }
@@ -111,7 +111,7 @@ fn maker() uses state {
 }
 
 // Or a resource it made there.
-fn viaConv[T](conv: (Conn) => T, f: (T) uses state => Unit) uses state {
+fn viaConv[T](conv: (Conn) => T, f: (T) uses state => Ok) uses state {
   scope s {
     f(conv(connect(s)))
   }
