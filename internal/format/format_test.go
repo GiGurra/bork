@@ -78,7 +78,7 @@ func stable(t *testing.T, src, got []byte) {
 			cs[i].End = diag.Pos{}
 			// A line comment's CR in CRLF is a line ending, not its content.
 			if strings.HasPrefix(cs[i].Text, "//") {
-				cs[i].Text = strings.TrimSuffix(cs[i].Text, "\r")
+				cs[i].Text = strings.TrimRight(cs[i].Text, "\r")
 			}
 		}
 		return ts, cs

@@ -75,7 +75,7 @@ func Source(path string, src []byte) ([]byte, error) {
 		start := offset(c.Pos)
 		text := c.Text
 		if strings.HasPrefix(text, "//") {
-			text = strings.TrimSuffix(text, "\r")
+			text = strings.TrimRight(text, "\r")
 		}
 		items = append(items, item{text: text, start: start, end: start + len(c.Text), comment: true})
 	}
