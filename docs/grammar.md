@@ -234,3 +234,15 @@ pure callbacks. Their `In` counterparts take a scope and a `(Scope, T)`
 callback, charge its effects plus `state`, and return cancellation as a value.
 `parMapUntil[B, E]` and `parMapUntilIn[B, E]` stop on the first failure in a
 `B | E` callback result. See [parallel collection semantics](requirements.md#parallel-collections-implemented-bork-pd7rjm).
+
+Task fan-in uses ordinary prelude calls: `tasks.awaitAll()`,
+`tasks.awaitFirst(s)`, and `tasks.awaitAllUntil[Success, Failure](s)`.
+`race(s, [child => work(child)])` runs a list of callbacks in a child scope;
+a direct `List[(Scope) => T]` parameter opens its callback effects, while
+`List[(Scope) uses nothing => T]` requires pure callbacks. Generic inputs
+can forward open callback values when their type parameter does not occur
+in the result. List results and nested list parameters remain closed.
+`withTimeout(s, ms, child => work(child))` returns `T | Cancelled`;
+`withTimeoutDo` accepts a Unit callback. Typed channel selection is
+`[channel.receiveCase(value => event(value))].select(s)`, returning
+`Option[Event] | Cancelled`. These add no keywords or syntax.

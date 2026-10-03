@@ -1,0 +1,2 @@
+main.bork:3:13: a value of type OwnedScope | Cancelled cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
+main.bork:4:13: a value of type Option[OwnedScope] | Cancelled cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function

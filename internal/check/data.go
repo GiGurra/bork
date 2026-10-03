@@ -476,6 +476,10 @@ func (c *checker) recordConstruction(pos diag.Pos, rec *Record, operation string
 	if rec.Decl == nil || !rec.Decl.Private || rec.Pkg == c.pkg {
 		return true
 	}
-	c.diags.AddCode(pos, "construction.private_record", "cannot %s %s: package %s controls its construction; use an exported constructor or update method from that package", operation, rec.Name, rec.Pkg.Path)
+	pkg := rec.Pkg.Path
+	if rec.Prelude {
+		pkg = "prelude"
+	}
+	c.diags.AddCode(pos, "construction.private_record", "cannot %s %s: package %s controls its construction; use an exported constructor or update method from that package", operation, rec.Name, pkg)
 	return false
 }

@@ -1,0 +1,24 @@
+type Failed = { message: String }
+type Event = sealed { Number { value: Int }; Text { value: String }; End; Stopped }
+fn numberEvent(value: Int | Cancelled | Closed): Event {
+  match (value) { n: Int => Event.Number { value: n }; cancelled: Cancelled => Event.Stopped; closed: Closed => Event.End }
+}
+fn textEvent(value: String | Cancelled | Closed): Event {
+  match (value) { text: String => Event.Text { value: text }; cancelled: Cancelled => Event.Stopped; closed: Closed => Event.End }
+}
+fn main() {
+  scope s {
+    println([spawn(s, () => 1), spawn(s, () => 2)].awaitAll())
+    println([spawn(s, () => 7)].awaitFirst(s))
+    good: Task[Int | Failed] = spawn(s, () => 3)
+    println([good].awaitAllUntil[Int, Failed](s))
+    println(race(s, [child => 9]))
+    println(withTimeout(s, 0, child => 10))
+    numbers = channel[Int](s, 1)
+    texts = channel[String](s, 1)
+    assertEqual(send(numbers, 42), {})
+    println([numbers.receiveCase(numberEvent), texts.receiveCase(textEvent)].select(s))
+    assertEqual(send(texts, "hello"), {})
+    println([numbers.receiveCase(numberEvent), texts.receiveCase(textEvent)].select(s))
+  }
+}

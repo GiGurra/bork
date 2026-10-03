@@ -1,0 +1,98 @@
+// Task fan-in preserves result order. Existing tasks retain their owners.
+fn (tasks: List[Task[T]]) awaitAll[T](): List[T] unsafe go {
+  out := make([]T, len(tasks))
+  var failure any
+  for i, task := range tasks {
+    func() {
+      defer func() { if r := recover(); r != nil && failure == nil { failure = r } }()
+      out[i] = task.wait()
+    }()
+  }
+  if failure != nil { panic(failure) }
+  return out
+}
+
+// awaitFirst leaves loser tasks running in their original scope. Empty lists
+// give None. Among several ready tasks, the choice is unspecified.
+fn (tasks: List[Task[T]]) awaitFirst[T](s: Scope) uses state: Option[T] | Cancelled unsafe go {
+  if len(tasks) == 0 { return Option_None[T]{} }
+  native := make([]*_task, len(tasks))
+  for i, task := range tasks { native[i] = task.native.handle.(*_task) }
+  i := _borkFanInFirst(s.ctx, native)
+  if i < 0 { return Cancelled{reason: s._cancelReason()} }
+  return Option_Some[T]{value: tasks[i].wait()}
+}
+
+// Failure-aware fan-in watches completions, stops at the first observed E,
+// and leaves pending tasks in their owner scopes. Supply B and E explicitly.
+fn (tasks: List[Task[B | E]]) awaitAllUntil[B, E](s: Scope) uses state: List[B] | E | Cancelled unsafe go {
+  out := make([]B, len(tasks))
+  pending := make([]*_task, len(tasks))
+  positions := make([]int, len(tasks))
+  for i, task := range tasks { pending[i] = task.native.handle.(*_task); positions[i] = i }
+  for len(pending) > 0 {
+    selected := _borkFanInFirst(s.ctx, pending)
+    if selected < 0 { return Cancelled{reason: s._cancelReason()} }
+    i := positions[selected]
+    value := tasks[i].wait()
+    success, ok := value.(B)
+    if !ok { return value }
+    out[i] = success
+    pending = append(pending[:selected], pending[selected+1:]...)
+    positions = append(positions[:selected], positions[selected+1:]...)
+  }
+  if s.ctx.Err() != nil { return Cancelled{reason: s._cancelReason()} }
+  return out
+}
+
+// race starts work in its own cancellation scope. The first result cancels
+// the remaining work; all workers and their spawned tasks finish before return.
+fn race[T](s: Scope, works: List[(Scope) => T]) uses state: Option[T] | Cancelled unsafe go {
+  if len(works) == 0 { return Option_None[T]{} }
+  child := _scopeWith(s.ctx)
+  child.name = "race"
+  s.Defer(child.close)
+  defer _borkFanInAbort(child)
+  defer child.cancel(_errCancelled)
+  tasks := make([]*_task, len(works))
+  for i, work := range works { tasks[i] = child.Go(func() any { return work(child) }) }
+  selected := _borkFanInFirst(child.ctx, tasks)
+  child.cancel(_errCancelled)
+  _borkFanInJoin(child)
+  if selected < 0 { return Cancelled{reason: child._cancelReason()} }
+  return Option_Some[T]{value: tasks[selected].Await().(T)}
+}
+
+// withTimeout bounds a child operation cooperatively. The deadline includes
+// tasks the callback spawns. Returned resources stay owned until s closes.
+fn withTimeout[T](s: Scope, ms: Int, work: (Scope) => T) uses clock + state: T | Cancelled unsafe go {
+  return _borkFanInTimeout(s, ms, func(child *_Scope) any { return work(child) })
+}
+
+// withTimeoutDo runs a Unit callback with the same cooperative deadline.
+fn withTimeoutDo(s: Scope, ms: Int, work: (Scope) => Unit) uses clock + state: Unit | Cancelled unsafe go {
+  return _borkFanInTimeout(s, ms, func(child *_Scope) any { work(child); return _Unit{} })
+}
+
+// receiveCase keeps each arm typed, mapping its value or status to a common
+// result type R. It is private so its native handle and decoder stay paired.
+type ReceiveCase[R] = private {
+  native: ChannelHandle,
+  decode: (SelectPayload) uses nothing => R,
+}
+
+fn (ch: Channel[T]) receiveCase[T, R](mapResult: (T | Cancelled | Closed) uses nothing => R): ReceiveCase[R] unsafe go {
+  return ReceiveCase[R]{native: ch.native, decode: func(payload SelectPayload) R { return mapResult(payload.handle) }}
+}
+
+// select receives from exactly one arm; losing channels are untouched. Empty
+// lists give None; several ready arms are chosen in unspecified order.
+fn (arms: List[ReceiveCase[R]]) select[R](s: Scope) uses state: Option[R] | Cancelled unsafe go {
+  if len(arms) == 0 { return Option_None[R]{} }
+  native := make([]*_borkReceiveChoice, len(arms))
+  for i, arm := range arms { native[i] = arm.native.handle.(*_borkReceiveChoice) }
+  index, value := _borkFanInReceive(s.ctx, native)
+  if index < 0 { return value }
+  payload := SelectPayload{handle: value, owner: arms[index].native.owner}
+  return Option_Some[R]{value: arms[index].decode(payload)}
+}

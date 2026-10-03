@@ -1,0 +1,7 @@
+[1, 2]
+Option.Some { value: 7 }
+[3]
+Option.Some { value: 9 }
+Cancelled { reason: "deadline exceeded" }
+Option.Some { value: Event.Number { value: 42 } }
+Option.Some { value: Event.Text { value: "hello" } }

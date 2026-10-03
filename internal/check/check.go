@@ -1024,7 +1024,10 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 	if c.open(want) && !c.needsContext(e) {
 		// A type not fully known yet (see infer.go) guides only what
 		// takes its type from the context; the caller unifies the rest.
-		want = nil
+		list, openList := want.(*List)
+		if !openList || !mentionsOpen(list.Elem) {
+			want = nil
+		}
 	}
 	if v := constValue(e); v != nil {
 		return c.constant(e, v, want)

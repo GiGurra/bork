@@ -244,7 +244,7 @@ func (g *gen) funcRef(inst *check.Instance) ast.Expr {
 			dicts = append(dicts, g.dict(d))
 		}
 	}
-	if len(dicts) == 0 {
+	if len(dicts) == 0 && !collapsedUnion(inst) {
 		return fun
 	}
 	ft := &check.FuncType{Params: inst.Params, Result: inst.Result}
@@ -255,7 +255,7 @@ func (g *gen) funcRef(inst *check.Instance) ast.Expr {
 		args = append(args, names[j])
 	}
 	call := &ast.CallExpr{Fun: fun, Args: args}
-	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{call}}}
+	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.instanceResult(inst, call)}}}
 	if inst.Result == check.Unit {
 		body = []ast.Stmt{&ast.ExprStmt{X: call}}
 	}

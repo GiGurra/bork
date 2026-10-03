@@ -90,12 +90,35 @@ func (c *checker) effectsOf(u *syntax.Uses) Effects {
 func (c *checker) openSignature(fn *Func) {
 	for i, p := range fn.Decl.Params {
 		if i < len(fn.Params) && p.Type != nil {
-			fn.Params[i] = c.openAt(fn.Params[i], p.Type)
+			fn.Params[i] = c.openParamAt(fn.Params[i], p.Type)
 		}
 	}
 	if fn.Decl.Result != nil && !fn.Decl.IsPred {
 		fn.Result = c.openAt(fn.Result, fn.Decl.Result)
 	}
+}
+
+// Lists of work callbacks, as race accepts, carry their elements' effects.
+func (c *checker) openParamAt(t Type, te *syntax.TypeExpr) Type {
+	if list, ok := t.(*List); ok && te.Name == "List" && len(te.Args) == 1 {
+		return &List{Elem: c.openAt(list.Elem, te.Args[0])}
+	}
+	return c.openAt(t, te)
+}
+
+// openArgEffects extracts effects only from declared open positions.
+func openArgEffects(param, arg Type) Effects {
+	if isOpen(param) {
+		if f, ok := arg.(*FuncType); ok {
+			return f.Effects
+		}
+	}
+	if p, ok := param.(*List); ok {
+		if a, ok := arg.(*List); ok {
+			return openArgEffects(p.Elem, a.Elem)
+		}
+	}
+	return 0
 }
 
 // openAt gives t, written as te, with EffOpen as its effects if it is a
@@ -131,10 +154,8 @@ func (c *checker) chargeCall(fn *Func, result Type, args []Type) Type {
 	c.used |= fn.Effects
 	var open Effects
 	for i, t := range args {
-		if i < len(fn.Params) && isOpen(fn.Params[i]) {
-			if at, ok := t.(*FuncType); ok {
-				open |= at.Effects
-			}
+		if i < len(fn.Params) {
+			open |= openArgEffects(fn.Params[i], t)
 		}
 	}
 	if rf, ok := result.(*FuncType); ok && isOpen(fn.Result) {
@@ -187,6 +208,10 @@ func isOpen(t Type) bool {
 // parameter of type p. An open parameter takes a function with any
 // effects.
 func fitsParam(t, p Type) bool {
+	if pl, ok := p.(*List); ok && mentionsOpen(pl.Elem) {
+		tl, ok := t.(*List)
+		return ok && fitsParam(tl.Elem, pl.Elem)
+	}
 	if isOpen(p) {
 		if tf, ok := t.(*FuncType); ok {
 			return fitsFunc(&FuncType{Params: tf.Params, Result: tf.Result}, p.(*FuncType))
@@ -207,6 +232,9 @@ func closeOpen(ft *FuncType) *FuncType {
 }
 
 func closeOne(t Type) Type {
+	if list, ok := t.(*List); ok {
+		return &List{Elem: closeOne(list.Elem)}
+	}
 	if !isOpen(t) {
 		return t
 	}

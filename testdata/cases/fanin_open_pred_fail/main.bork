@@ -1,0 +1,5 @@
+fn apply(works: List[(Int) => Int]): Int {
+  match (works) { [first, ...rest] => first(1); [] => 0 }
+}
+pred bad(f: (Int) => Int) { apply([x => f(x)]) == 1 }
+fn main() {}

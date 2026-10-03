@@ -1213,11 +1213,12 @@ names.forEach(n => println(n))                              // this call uses io
 
 - **Inside the body, an open parameter can be called freely.** Its effects belong to the caller.
 - **Inside the body, an open parameter's effects are unknown**: one effect variable, `open`, standing for whatever the caller passes. The implementation models it that way. A lambda that calls an open parameter has `open` among its effects, like the parameter itself.
-- **What has `open` among its effects can only flow to another open position:** an open parameter of a call, or the open result of its own signature. `open` fits in no fixed set of effects, so such a value cannot be stored in, or passed as, a function type with fixed effects, pure or not (a `run: () uses io => Unit` field could then hold a function that uses `net`). Nor can it become a type argument or an element: `[f]`, `Option.Some { value: f }`, `identity(f)`, `() => f()` in a record field. To store a function, close the parameter: `fn job(name: String, f: () uses io => Unit): Job`.
+- **What has `open` among its effects can only flow to another open position:** an open parameter of a call, or the open result of its own signature. `open` fits in no fixed set of effects, so such a value cannot be stored in, or passed as, a function type with fixed effects, pure or not (a `run: () uses io => Unit` field could then hold a function that uses `net`). Nor can it escape through a generic result or an untyped element: `[f]`, `Option.Some { value: f }`, `identity(f)`, `() => f()` in a record field. To store a function, close the parameter: `fn job(name: String, f: () uses io => Unit): Job`.
 - **An open parameter can be returned.** A function type without `uses` in the *result* of the same signature is open too: `fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C` gives a function that uses what `f` and `g` use. A value returned in an open result may use `open` and nothing else, so `fn wrap(f: () => Unit): () => Unit { () => { println("x"); f() } }` is an error: there is no way to write "io plus what f uses". (Write `wrap(f: () uses io => Unit): () uses io => Unit` instead.)
 - **A call is charged the effects of its open arguments, unless the function's result is open.** Then they are carried in the result's type instead: `compose(a, b)` is pure, and the function it gives uses what `a` and `b` use, as a hand-written `handler` closure does. In exchange, a function with an open result may not call its open parameters itself, only return them in its result (or pass them to calls whose results it returns). This keeps the rule a matter of signatures, not of what a body does.
-- **Which positions are open:** a parameter (receivers included) or result whose type is a function type written without `uses`, also through a type alias (`handler: Handler`, with `type Handler = (Request, Scope) => Response`). Nothing else: not `List[() => Unit]`, not a union such as `((A) => B) | None`, and not the parameters or results inside a function type (`(A) => (B) => C` has an open result `(B) => C` only at the top). So a middleware type such as `((Request) => Response) => (Request) => Response` takes pure handlers only, and one that wraps effectful handlers names their effects.
+- **Which positions are open:** a parameter (receivers included) or result whose type is a function type written without `uses`, also through a type alias (`handler: Handler`, with `type Handler = (Request, Scope) => Response`). A direct `List[() => Unit]` parameter also opens its element callback and charges all its callbacks at the call; an explicit `uses nothing` keeps the elements pure. List results, nested lists, and list aliases stay closed. Nothing else: not a union such as `((A) => B) | None`, and not the parameters or results inside a function type (`(A) => (B) => C` has an open result `(B) => C` only at the top). So a middleware type such as `((Request) => Response) => (Request) => Response` takes pure handlers only, and one that wraps effectful handlers names their effects.
 - **A function with open parameters used as a value** (`g: (List[Int], (Int) uses nothing => Int) => List[Int] = transform`) has its open positions closed as pure: `g` is `(List[Int], (Int) uses nothing => Int) => List[Int]`, all pure. Calling `transform` directly keeps it open.
+- **Generic inputs may forward open callbacks when their type parameter does not occur in the result.** For example, `fs.map(f => f(x))` can consume an open callback list and return closed values. A generic result containing that parameter still rejects the open type argument, preventing it from escaping.
 - **Generic code needs nothing extra:** if `T` is `() uses io => Int`, the effect is part of `T`, so `identity`, `head`, and `Option[T]` carry it. Since effects are erased in the Go output, a type pattern on a function type (`f: () => Unit`) may only match a union member known statically to have the same effects, as facts are treated.
 - **`uses nothing` makes a parameter strictly pure.** `fn update[T](a: Atom[T], f: (T) uses nothing => T) uses state: T` is how the prelude says "f may run more than once, so it must not do anything".
 - **A fact named after a function argument needs a pure argument.** `xs.filter(keep)` gives `List[T where keep]`, and that fact, "keep holds", only means something if `keep` gives the same answer every time. So an effectful `keep` still filters, but the result is a plain `List[T]`. The facts its body proves with predicates are kept either way (predicates are pure): `xs.filter(x => { println(x); positive(x) })` uses `io` and still gives positive elements. Inside a function whose parameter is open, a fact named after that parameter holds on the same condition: the prelude's method `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep]` promises the conditional fact, and at each call the fact is kept only if that argument is pure.
@@ -3008,3 +3009,55 @@ Maps can use `entries().parMap(...)` or `values().parMap(...)`; no parallel
 map mutation API is introduced. See [the runnable example](../examples/parallel_lists/main.bork)
 for pure mapping and an eight-wait comparison with four scoped workers:
 `bork run examples/parallel_lists -- --benchmark`.
+
+## Task fan-in, typed selection, and timeouts (bork-58t786)
+
+Task lists provide `awaitAll()` (ordered results, joining every task even if
+one panics), `awaitFirst(s)` (first observed completion), and
+`awaitAllUntil[B, E](s)` (first observed failure or all ordered successes).
+Existing tasks retain their original owners; early return leaves pending
+tasks there, and their owners still join them. First-completion and
+failure-aware waiting use `state` and return cancellation as a value.
+`awaitFirst` returns `Option[T] | Cancelled`, with `None` for an empty list.
+The Until variant follows parallel mapping's concrete, distinguishable
+success/failure restrictions and returns `List[B] | E | Cancelled`.
+
+`race(s, [work...])` starts callbacks taking a scope in an internal child
+scope. It returns the first observed value as `Option[T] | Cancelled`,
+cancels the child, and joins all work before returning. Empty work lists give
+`None`. A callback that ignores cancellation can delay completion. Tasks
+explicitly spawned by callbacks are also joined, and worker panics propagate.
+The join is unconditional: `taskTimeout` limits scope closure, not these calls.
+Cancellation follows the callback scope: parent-owned channels and resources
+continue to follow the parent. Consume a response or other cancellation-aware
+resource inside the callback before returning the winning value.
+
+`withTimeout(s, ms, work)` passes a child scope to work and gives
+`T | Cancelled`. The deadline includes callback-spawned tasks, all of which
+are joined. Cancellation is cooperative; it does not terminate the callback.
+Nonpositive timeouts cancel before calling work. Oversized millisecond values
+are saturated to Go's maximum duration. A successful operation stops its
+deadline, so its returned resources remain usable; internal child resources
+stay owned until `s` closes. `withTimeoutDo` is the Unit-callback counterpart,
+returning `Unit | Cancelled`, as Unit is not a generic value argument.
+
+Typed selection uses `ch.receiveCase(f)` to map each channel's own
+`T | Cancelled | Closed` into a common event type `R`, and
+`arms.select(s)` gives `Option[R] | Cancelled`. Mapping callbacks are pure.
+Only the winning receive consumes a value; losing channels are untouched,
+including unbuffered channels. Empty arm lists give `None`. A closed channel
+first yields its buffered values, then `Closed`; a cancelled channel gives
+its cancellation to its own mapping arm, while cancellation of the selection
+scope returns `Cancelled` directly. Several ready arms or tasks have no
+specified tie order. The native selector supports up to 21,845 receive arms
+or 65,535 task completions in one wait; exceeding that bound panics.
+
+Effects of work callbacks inside a list are open in parameter declarations
+such as `List[(Scope) => T]`. Calls charge the effects of the actual elements,
+including when an open callback list is forwarded. Explicit `uses nothing`
+still requires purity; function values close open list positions as pure.
+This extends the existing direct-callback rule just to lists. Task, channel,
+and receive-case representations have package-controlled construction so
+native completion/selection handles cannot be paired with the wrong types.
+Generic result unions that specialize to one type retain that type at their
+Go call boundary, including references to the specialized function.

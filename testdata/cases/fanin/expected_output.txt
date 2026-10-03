@@ -1,0 +1,16 @@
+[1, 2]
+[]
+Option.None
+Option.Some { value: 7 }
+Failure { message: "two" }
+[3]
+Option.Some { value: 7 }
+1
+Cancelled { reason: "deadline exceeded" }
+Unit
+callback
+callback
+Option.Some { value: Event.Text { value: "hello" } }
+Option.Some { value: Event.Number { value: 42 } }
+Option.Some { value: Event.End }
+Option.None

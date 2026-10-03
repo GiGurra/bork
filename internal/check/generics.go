@@ -603,8 +603,10 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			fail()
 			return
 		}
+		// An abstract input can consume or forward an open value, but it
+		// must not escape through a generic result with untracked effects.
 		for i, ta := range inst.TypeArgs {
-			if mentionsOpen(ta) && !reported {
+			if mentionsOpen(ta) && mentionsParam(fn.Result, fn.TypeParams[i]) && !reported {
 				c.diags.AddCode(e.Pos, "effect.open-type-argument", "%s of %s cannot be %s: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result", fn.TypeParams[i].Name, name, innerText(ta, c.pkg))
 				fail()
 				return
@@ -613,6 +615,8 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 				hint := ""
 				if fn.Prelude && fn.Decl.Name == "spawn" {
 					hint = " (to run work that gives no value, use launch)"
+				} else if fn.Prelude && fn.Decl.Name == "withTimeout" {
+					hint = " (for a Unit callback, use withTimeoutDo)"
 				}
 				c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, name, ta, hint)
 				fail()
@@ -909,7 +913,8 @@ func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
 			report()
 			return Invalid
 		}
-		return &List{Elem: ew}
+		// An empty callback list contributes no effects.
+		return &List{Elem: closeOne(ew)}
 	}
 	t := c.elems(e.Pos, e.Elems, ew, "list element", "list elements have")
 	switch {
@@ -987,6 +992,21 @@ func (c *checker) elems(pos diag.Pos, elems []syntax.Expr, ew Type, what, agree 
 			}
 		}
 		ts[i] = c.exprWant(elems[i], w)
+	}
+	if isOpen(ew) {
+		var effects Effects
+		for i, t := range ts {
+			t, want := c.settle(t, ew)
+			if t == Invalid || !fitsParam(t, want) {
+				c.errorf(elems[i].Position(), "%s must be %s, found %s", what, want, t)
+				return Invalid
+			}
+			if f, ok := t.(*FuncType); ok {
+				effects |= f.Effects
+			}
+		}
+		f := c.zonk(ew).(*FuncType)
+		return &FuncType{Params: f.Params, Result: f.Result, Effects: effects}
 	}
 	if ew != nil {
 		ok := true

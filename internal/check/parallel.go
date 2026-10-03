@@ -6,10 +6,24 @@ import "github.com/GiGurra/bork/internal/diag"
 // A union erases to any in Go, so its type assertion would accept failures too.
 func (c *checker) checkParallelInstance(inst *Instance, pos diag.Pos) bool {
 	fn := inst.Func
-	if !fn.Prelude || !fn.Decl.IsMethod || (fn.Decl.Name != "parMapUntil" && fn.Decl.Name != "parMapUntilIn") || len(inst.TypeArgs) != 3 {
+	if !fn.Prelude || !fn.Decl.IsMethod {
 		return true
 	}
-	success, failure := inst.TypeArgs[1], inst.TypeArgs[2]
+	var success, failure Type
+	switch fn.Decl.Name {
+	case "parMapUntil", "parMapUntilIn":
+		if len(inst.TypeArgs) != 3 {
+			return true
+		}
+		success, failure = inst.TypeArgs[1], inst.TypeArgs[2]
+	case "awaitAllUntil":
+		if len(inst.TypeArgs) != 2 {
+			return true
+		}
+		success, failure = inst.TypeArgs[0], inst.TypeArgs[1]
+	default:
+		return true
+	}
 	switch success.(type) {
 	case *Union, *TypeParam:
 		c.errorf(pos, "%s needs a concrete, non-union success type, found %s", fn.Decl.Name, success)

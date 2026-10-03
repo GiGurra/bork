@@ -277,3 +277,10 @@ belong to the explicit scope. `assembleAll[T]` collects several providers and
 `assembleRecord[R]` assembles a record's fields. See the
 [SQLite and HTTP service example](examples/assemble/main.bork) and
 [assembly semantics](docs/requirements.md#compile-time-dependency-assembly).
+
+Task lists provide ordered `awaitAll()`, `awaitFirst(s)`, and failure-aware
+`awaitAllUntil[Success, Failure](s)`. `race(s, [child => work(child)])`
+cancels and joins losing work; `withTimeout(s, ms, child => work(child))`
+applies a cooperative deadline. Map heterogeneous channel receive arms with
+`receiveCase`, then call `arms.select(s)` to receive from exactly one. See the
+[task fan-in example](examples/task_fanin/main.bork).

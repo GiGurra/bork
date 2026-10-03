@@ -1113,6 +1113,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesParallel {
 		src = append(src, parallelRuntime)
 	}
+	if g.usesFanIn {
+		src = append(src, fanInRuntime)
+	}
 	if g.usesIoFailure {
 		src = append(src, ioFailureHelpers)
 	}

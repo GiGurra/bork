@@ -715,6 +715,15 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	if fn != nil && fn.Prelude && fn.Decl.Name == "attach" && len(args) == 2 {
 		return args[1]
 	}
+	// Fan-in and receive selection only inspect the wait scope during this
+	// call; they retain no tasks, arms or callbacks in it. The result still
+	// carries every input lifetime, including resources received from an arm.
+	if fn != nil && fn.Prelude && fn.Decl.IsMethod {
+		switch fn.Decl.Name {
+		case "awaitFirst", "awaitAllUntil", "select":
+			return life
+		}
+	}
 	// Go code given a scope may keep its other arguments until the scope
 	// closes (as a finalizer, say). So may a function value, which could
 	// be such Go code.
