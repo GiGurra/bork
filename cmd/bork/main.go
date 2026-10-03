@@ -23,9 +23,10 @@ type pathParams struct {
 	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 }
 
-type diagnosticParams struct {
-	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
-	JSON bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
+type checkParams struct {
+	Path  string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	JSON  bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
+	Watch bool   `optional:"true" descr:"keep checking when tracked inputs change (SIGHUP forces a check on Unix)"`
 }
 
 type fmtParams struct {
@@ -342,13 +343,19 @@ func main() {
 					os.Exit(code)
 				},
 			},
-			boa.CmdT[diagnosticParams]{
+			boa.CmdT[checkParams]{
 				Use:   "check",
 				Short: "type-check a bork program without building it",
-				ValidArgsFunc: func(p *diagnosticParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+				ValidArgsFunc: func(p *checkParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
-				RunFunc: func(p *diagnosticParams, _ *cobra.Command, _ []string) {
+				RunFunc: func(p *checkParams, cmd *cobra.Command, _ []string) {
+					if p.Watch {
+						if err := runCheckWatch(cmd.Context(), p.Path, p.JSON, os.Stdout); err != nil {
+							fail(err)
+						}
+						return
+					}
 					_, info, err := driver.Check(p.Path)
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stdout)

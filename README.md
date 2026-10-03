@@ -144,6 +144,7 @@ go install github.com/GiGurra/bork/cmd/bork@latest
 bork run examples/hello      # compile and run
 bork build examples/hello    # compile to an executable
 bork check examples/hello    # type-check only
+bork check --watch examples/hello # check again when tracked inputs change
 bork describe main.bork:3:9 --where notEmpty  # query a type and prove a fact
 bork emit examples/hello     # show the generated Go
 bork test examples/payments  # run the tests, checking trusted facts and rules
@@ -156,6 +157,8 @@ bork fmt --check examples    # exit 1 if formatting would change a file
 bork deps get github.com/google/uuid@v1.6.0  # pin a Go dependency beside bork.mod
 bork deps download          # download pinned dependencies and fill checksums
 ```
+
+Use `bork check --watch path` for ongoing diagnostics, or add `--json` for complete result objects. See [watch mode](docs/watch.md) for tracked inputs, manual retriggers, and the streaming format.
 
 For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
 

@@ -23,3 +23,5 @@ misuse outside assembly, and invalid named replacements. Each graph diagnostic's
 dependency tree and supplied provider list, with missing/ambiguous slots, shared
 nodes and cycle paths marked. Facts, effects and lifetime violations in resolved
 provider calls use their ordinary diagnostic codes.
+
+Watch mode publishes complete result objects rather than individual diagnostic lines; see [the watch stream](watch.md#json-stream).
