@@ -1,0 +1,1 @@
+time { value: 7 } <go time.Time>

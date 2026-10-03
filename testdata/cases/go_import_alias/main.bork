@@ -1,0 +1,4 @@
+type time = { value: Int = 7 } derive (GoStruct)
+type Instant = go "time.Time"
+fn Unix(seconds: Int, nanos: Int): Instant unsafe go "time.Unix"
+fn main() { println(time {}, Unix(0, 0)) }

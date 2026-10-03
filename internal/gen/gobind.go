@@ -103,14 +103,19 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 }
 
 // goImport imports a Go package for bindings, under a name that cannot
-// clash with generated names or other imports: _go_strconv.
+// clash with generated Go struct names or other imports: _gopkg_strconv.
 func (g *gen) goImport(path string) string {
-	alias := "_go_" + strings.Map(func(r rune) rune {
+	var encoded strings.Builder
+	encoded.WriteString("_gopkg_")
+	for _, r := range path {
 		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-			return r
+			encoded.WriteRune(r)
+		} else {
+			// Escape underscores too, so a literal escape cannot collide.
+			fmt.Fprintf(&encoded, "_%x_", r)
 		}
-		return '_'
-	}, path)
+	}
+	alias := encoded.String()
 	g.bindImports[path] = alias
 	return alias
 }
