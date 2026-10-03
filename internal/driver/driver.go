@@ -65,51 +65,68 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 	return checkObserved(path, nil)
 }
 
+type compiledProgram struct {
+	files  []*syntax.File
+	info   *check.Info
+	inputs *sourceSnapshot
+	module *goModuleInputs
+}
+
 func checkObserved(path string, observe func(string)) ([]*syntax.File, *check.Info, error) {
-	phase(observe, "parse")
-	files, root, diags, err := load(path)
+	program, err := checkProgramObserved(path, observe)
 	if err != nil {
 		return nil, nil, err
 	}
-	if diags.Len() > 0 {
-		// Report syntax and import errors before attempting to type-check.
-		return nil, nil, &DiagError{Diags: diags}
+	return program.files, program.info, nil
+}
+
+func checkProgramObserved(path string, observe func(string)) (*compiledProgram, error) {
+	loaded, module, err := loadCompilationInputs(path, observe)
+	if err != nil {
+		return nil, err
 	}
-	phase(observe, "module")
-	if _, _, err := programGoModule(files); err != nil {
-		return nil, nil, err
-	}
+	files, root, diags := loaded.Files, loaded.Root, loaded.Diags
 	phase(observe, "check")
-	info := check.ProgramObserved(files, root, diags, goPackages{files: files}, observe)
+	info := check.ProgramObserved(files, root, diags, goPackages{files: files, module: module}, observe)
 	if diags.Len() > 0 {
-		return nil, nil, &DiagError{Diags: diags}
+		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "embeds")
 	captureEmbeds(info, diags)
 	if diags.Len() > 0 {
-		return nil, nil, &DiagError{Diags: diags}
+		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "effects")
 	check.CheckEffects(files, info, diags)
 	if diags.Len() > 0 {
-		return nil, nil, &DiagError{Diags: diags}
+		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "lifetimes")
 	check.Lifetimes(files, info, diags)
 	if diags.Len() > 0 {
-		return nil, nil, &DiagError{Diags: diags}
+		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "facts")
-	check.Facts(files, info, diags, evaluator(path, files, info))
+	check.Facts(files, info, diags, evaluatorWithModule(files, info, module))
 	if diags.Len() > 0 {
-		return nil, nil, &DiagError{Diags: diags}
+		return nil, &DiagError{Diags: diags}
 	}
-	return files, info, nil
+	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module}, nil
 }
 
 // evaluator runs predicates on constants at compile time, by building
 // and running a small program made from the package's own code.
 func evaluator(path string, files []*syntax.File, info *check.Info) check.Evaluator {
+	// Legacy helper callers get their own one-shot module capture. Compilation
+	// requests pass their existing capture through evaluatorWithModule.
+	module, err := captureGoModule(files, diskSources{})
+	if err != nil {
+		return func([]check.Query) ([]bool, error) { return nil, err }
+	}
+	return evaluatorWithModule(files, info, module)
+}
+
+func evaluatorWithModule(files []*syntax.File, info *check.Info, module *goModuleInputs) check.Evaluator {
 	return func(queries []check.Query) ([]bool, error) {
 		goSrc, err := gen.EvalProgram(files, info, queries)
 		if err != nil {
@@ -121,7 +138,7 @@ func evaluator(path string, files []*syntax.File, info *check.Info) check.Evalua
 		}
 		defer func() { _ = os.RemoveAll(dir) }()
 		exe := filepath.Join(dir, "eval")
-		if err := buildGo(files, goSrc, exe, info.Embeds...); err != nil {
+		if err := buildGoWithModule(files, goSrc, exe, module, info.Embeds...); err != nil {
 			return nil, err
 		}
 		var stderr strings.Builder
@@ -155,32 +172,49 @@ func emit(path string) ([]*syntax.File, *check.Info, []byte, error) {
 }
 
 func emitObserved(path string, observe func(string)) ([]*syntax.File, *check.Info, []byte, error) {
-	files, info, err := checkObserved(path, observe)
+	program, source, err := emitProgramObserved(path, observe)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	return program.files, program.info, source, nil
+}
+
+func emitProgramObserved(path string, observe func(string)) (*compiledProgram, []byte, error) {
+	program, err := checkProgramObserved(path, observe)
+	if err != nil {
+		return nil, nil, err
+	}
+	files, info := program.files, program.info
 	if _, ok := info.Funcs["main"]; !ok {
 		diags := &diag.List{}
 		diags.AddCode(packagePos(files), "package.no-main", "package has no main function (add `fn main() { ... }`)")
-		return nil, nil, nil, &DiagError{Diags: diags}
+		return nil, nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "generate")
 	goSrc, err := gen.Package(files, info)
-	return files, info, goSrc, err
+	return program, goSrc, err
 }
 
 // Build compiles the package at path into an executable at out.
 func Build(path, out string) error {
-	files, info, goSrc, err := emit(path)
+	program, goSrc, err := emitProgramObserved(path, nil)
 	if err != nil {
 		return err
 	}
-	return buildGo(files, goSrc, out, info.Embeds...)
+	return buildGoWithModule(program.files, goSrc, out, program.module, program.info.Embeds...)
 }
 
 // buildGo builds generated Go source (for the given bork files) into an
 // executable at out.
 func buildGo(files []*syntax.File, goSrc []byte, out string, embeds ...*check.Embedded) error {
+	module, err := captureGoModule(files, diskSources{})
+	if err != nil {
+		return err
+	}
+	return buildGoWithModule(files, goSrc, out, module, embeds...)
+}
+
+func buildGoWithModule(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, embeds ...*check.Embedded) error {
 	absOut, err := filepath.Abs(out)
 	if err != nil {
 		return err
@@ -196,7 +230,7 @@ func buildGo(files []*syntax.File, goSrc []byte, out string, embeds ...*check.Em
 	if err := stageEmbeds(dir, embeds); err != nil {
 		return err
 	}
-	pinned, err := writeGoModule(dir, files)
+	pinned, err := module.write(dir)
 	if err != nil {
 		return err
 	}
@@ -224,22 +258,11 @@ func buildGo(files []*syntax.File, goSrc []byte, out string, embeds ...*check.Em
 // into dir: the Go modules imported standard packages and the user module need.
 // It reports whether there are any.
 func writeGoModule(dir string, files []*syntax.File) (bool, error) {
-	goMod, goSum, err := programGoModule(files)
+	module, err := captureGoModule(files, diskSources{})
 	if err != nil {
 		return false, err
 	}
-	if goModuleHook != nil {
-		goMod = goModuleHook(goMod)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), goMod, 0o644); err != nil {
-		return false, err
-	}
-	if len(goSum) != 0 {
-		if err := os.WriteFile(filepath.Join(dir, "go.sum"), goSum, 0o644); err != nil {
-			return false, err
-		}
-	}
-	return len(goSum) != 0, nil
+	return module.write(dir)
 }
 
 // goModuleHook lets tests change the go.mod of generated programs, to
@@ -305,10 +328,11 @@ func SnapshotDir(path string) string {
 // report going to stdout. It returns the exit code: 0 if every test
 // passed.
 func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
-	files, info, err := Check(path)
+	program, err := checkProgramObserved(path, nil)
 	if err != nil {
 		return 1, err
 	}
+	files, info := program.files, program.info
 	if len(info.Tests) == 0 && len(info.Rules) == 0 && !opts.AutoProperties {
 		diags := &diag.List{}
 		diags.AddCode(packagePos(files), "package.no-tests", "package has no tests or rules (add `test \"name\" { ... }`)")
@@ -328,7 +352,7 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "tests")
-	if err := buildGo(files, goSrc, exe, info.Embeds...); err != nil {
+	if err := buildGoWithModule(files, goSrc, exe, program.module, info.Embeds...); err != nil {
 		return 1, err
 	}
 	cmd := exec.Command(exe)

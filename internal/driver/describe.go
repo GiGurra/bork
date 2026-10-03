@@ -28,10 +28,11 @@ func Describe(position, where string) (*describe.Result, error) {
 		return nil, err
 	}
 	path := filepath.Dir(pos.File)
-	files, info, err := Check(path)
+	program, err := checkProgramObserved(path, nil)
 	if err != nil {
 		return nil, err
 	}
+	files, info := program.files, program.info
 	selected, err := describe.Lookup(files, info, pos, src)
 	if err != nil {
 		return nil, err
@@ -39,7 +40,7 @@ func Describe(position, where string) (*describe.Result, error) {
 	var facts []check.KnownFact
 	var proof *check.Proof
 	if selected.Value {
-		facts, proof, err = check.DescribeFacts(info, selected.Func, selected.Expr, selected.Site, where, evaluator(path, files, info))
+		facts, proof, err = check.DescribeFacts(info, selected.Func, selected.Expr, selected.Site, where, evaluatorWithModule(files, info, program.module))
 	} else if where != "" {
 		return nil, fmt.Errorf("where queries need a value expression; select the call's opening parenthesis for its result")
 	}
