@@ -701,6 +701,11 @@ type _Scope struct {
 	tasks      []*_task
 	ctx        context.Context
 	cancel     context.CancelCauseFunc
+	// Deadline ancestry is separate from owned-child close bookkeeping.
+	deadlineParent  *_Scope
+	deadlineContext context.Context
+	deadlineAt      time.Time
+	deadlineTimer   *time.Timer
 	// taskTimeout is how long close waits for the scope's tasks once it
 	// has cancelled them, and finalizerTimeout how long it waits for
 	// each finalizer; 0 waits for as long as it takes (the default).
@@ -730,15 +735,79 @@ func _newScope(parent *_Scope, name string) *_Scope {
 		ctx = parent.ctx
 	}
 	s := _scopeWith(ctx)
+	s.deadlineParent = parent
+	if parent != nil { s.deadlineContext = nil }
 	s.name = name
 	return s
 }
 
 // _scopeWith opens a scope that is cancelled with ctx.
 func _scopeWith(ctx context.Context) *_Scope {
-	s := &_Scope{name: "(a scope)"}
+	s := &_Scope{name: "(a scope)", deadlineContext: ctx}
 	s.ctx, s.cancel = context.WithCancelCause(ctx)
+	s.ctx = &_ScopeContext{Context: s.ctx, scope: s}
 	return s
+}
+
+// Scope contexts retain cancellation identity and values while exposing the
+// earliest live deadline. Descendants observe later ancestor deadlines too.
+type _ScopeContext struct {
+	context.Context
+	scope *_Scope
+}
+func (c *_ScopeContext) Deadline() (time.Time, bool) { return c.scope.deadline() }
+func (c *_ScopeContext) Err() error {
+	err := c.Context.Err()
+	if err != nil && errors.Is(context.Cause(c.Context), context.DeadlineExceeded) { return context.DeadlineExceeded }
+	return err
+}
+
+func (s *_Scope) deadline() (time.Time, bool) {
+	var deadline time.Time
+	found := false
+	add := func(value time.Time, ok bool) {
+		if ok && (!found || value.Before(deadline)) { deadline, found = value, true }
+	}
+	for current := s; current != nil; {
+		current.mu.Lock()
+		local, parent, external := current.deadlineAt, current.deadlineParent, current.deadlineContext
+		current.mu.Unlock()
+		add(local, !local.IsZero())
+		if external != nil { add(external.Deadline()) }
+		current = parent
+	}
+	return deadline, found
+}
+
+// cancelAfter never extends a deadline. Nonpositive delays cancel now; large
+// positive millisecond values saturate instead of overflowing Go durations.
+func (s *_Scope) cancelAfter(ms int64) {
+	var delay time.Duration
+	if ms > 0 {
+		if ms > (1<<63-1)/int64(time.Millisecond) { delay = time.Duration(1<<63-1) } else { delay = time.Duration(ms)*time.Millisecond }
+	}
+	deadline := time.Now().Add(delay)
+	s.mu.Lock()
+	if s.closed || s.ctx.Err() != nil || (!s.deadlineAt.IsZero() && !deadline.Before(s.deadlineAt)) {
+		s.mu.Unlock()
+		return
+	}
+	first := s.deadlineAt.IsZero()
+	s.deadlineAt = deadline
+	if s.deadlineTimer != nil { s.deadlineTimer.Stop() }
+	s.deadlineTimer = nil
+	remaining := time.Until(deadline)
+	if remaining > 0 { s.deadlineTimer = time.AfterFunc(remaining, func() { s.cancel(context.DeadlineExceeded) }) }
+	if first {
+		s.finalizers = append(s.finalizers, func() {
+			s.mu.Lock()
+			timer := s.deadlineTimer
+			s.mu.Unlock()
+			if timer != nil { timer.Stop() }
+		})
+	}
+	s.mu.Unlock()
+	if remaining <= 0 { s.cancel(context.DeadlineExceeded) }
 }
 
 var (

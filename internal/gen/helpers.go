@@ -4,7 +4,7 @@ package gen
 // packages. Their names, type parameters, arguments, results, and semantics
 // are stable; the runtime representations they wrap are compiler internals.
 // Maps are persistent; iteration follows the map's order and stops when the
-// callback returns false. Scope contexts carry cancellation; closing a scope
+// callback returns false. Scope contexts carry cancellation and effective deadlines; closing a scope
 // waits for tasks and runs finalizers, while deferred abort also handles panic.
 // Resource handles keep a stable cancellation context, rebind its source on
 // attachment, and close on final release. Cancellation remains terminal.
