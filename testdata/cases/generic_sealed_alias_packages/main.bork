@@ -1,0 +1,26 @@
+import "example.com/sealedalias/api"
+
+// Resolve the imported alias while resolving a field declared before it.
+type Holder = { box: LocalBox }
+type LocalBox = api.Box[Int]
+type AnotherBox = LocalBox
+
+fn (box: LocalBox) valueOrZero(): Int {
+  match (box) {
+    LocalBox.Empty => 0
+    LocalBox.Visible { value } => value
+  }
+}
+
+fn main() {
+  box = LocalBox.Visible { value: 7 }
+  holder = Holder { box: box }
+  another: AnotherBox = api.Box.Visible { value: 8 }
+  println(holder.box, holder.box.valueOrZero())
+  println(another, LocalBox.valueOrZero(another))
+  println(LocalBox.Empty, LocalBox.valueOrZero(LocalBox.Empty))
+  match (api.Box.Visible { value: 9 }) {
+    LocalBox.Empty => println(0)
+    LocalBox.Visible { value } => println(value)
+  }
+}
