@@ -1,0 +1,37 @@
+type Problem = { code: Int }
+pred Approved(x: Problem) { x.code > 0 }
+pred Allowed(x: Int | Problem) { match (x) { n: Int => n > 0; p: Problem => Approved(p) } }
+fn source(flag: Bool): Int | Problem where Approved { if (flag) { Problem { code: 1 } } else { 1 } }
+pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some { value } => true; Option.None => flag } }
+type Box = { lazy value: Int | Problem }
+fn fieldForward(flag: Bool): Int | Problem where Approved {
+  box = Box { value: { _ = source(flag)?; 1 } }
+  box.value?
+}
+fn fieldReturn(flag: Bool): Int | Problem where Approved {
+  box = Box { value: { if (flag) { return Problem { code: 1 } }; 1 } }
+  box.value?
+}
+type PromisedBox = { lazy value: (Int | Problem) where Allowed }
+fn fieldInline(flag: Bool): (Int | Problem) where Allowed {
+  box = PromisedBox { value: { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; operand? } }
+  box.value?
+}
+type OptionBox = { lazy value: Option[Int] }
+fn fieldOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
+  box = OptionBox { value: { n = x?; Option.Some { value: n } } }
+  box.value
+}
+pred AnyExit(x: Int | Ok) { match (x) { n: Int => true; unit: Ok => true } }
+fn emptyExit(): Int | Ok {}
+type ExitBox = { lazy value: Int | Ok }
+fn fieldEmpty(): (Int | Ok) where AnyExit {
+  box = ExitBox { value: { _ = emptyExit()?; 1 } }
+  box.value?
+}
+fn main() {
+  println(fieldEmpty())
+  println(fieldForward(true), fieldForward(false), fieldReturn(true), fieldReturn(false))
+  println(fieldOption(true, Option.None), fieldOption(false, Option.Some { value: 1 }))
+  println(fieldInline(true), fieldInline(false))
+}

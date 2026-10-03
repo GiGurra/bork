@@ -1,0 +1,4 @@
+main.bork:8:3: fieldFailure promises a result that is Approved, but for a value bad can return, Approved(Problem { code: 0 }) is false
+main.bork:12:3: fieldReturn promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:16:3: fieldTailPromise promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:23:3: fieldEmpty promises a result that is NumericExit, but for a value emptyExit can return, NumericExit(Ok) is false

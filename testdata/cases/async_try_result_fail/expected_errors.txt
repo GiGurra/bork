@@ -1,0 +1,4 @@
+main.bork:6:68: asyncFailure promises a result that is Approved, but for a value bad can return, Approved(Problem { code: 0 }) is false
+main.bork:9:94: asyncReturn promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:12:109: asyncTailPromise promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:17:65: asyncEmpty promises a result that is NumericExit, but for a value emptyExit can return, NumericExit(Ok) is false
