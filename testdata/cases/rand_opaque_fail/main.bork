@@ -1,0 +1,5 @@
+import "bork/rand"
+fn leak(g: rand.Generator): Bytes {
+  match (g) { rand.Generator.generator { state } => state }
+}
+fn main() { println(leak(rand.Seed(1))) }
