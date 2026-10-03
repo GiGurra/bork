@@ -254,7 +254,9 @@ fn jsonKind(j: Json): String {
 }
 
 // DecodeError says where in a JSON value decoding failed (a path like
-// ".items[2].name", "" for the whole value), and why.
+// ".items[2].name", "" for the whole value), and why. Transparent invariant
+// comparisons name the first failed condition and its primary field path;
+// other fields read by that condition appear in the message.
 type DecodeError = { path: String, message: String }
 
 // Decode reads values of a type from JSON. `derive (Decode)` on a record

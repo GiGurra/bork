@@ -1,7 +1,7 @@
 hello ann: {"name":"ann","age":30,"tags":["a"]}
 hello bob: {"name":"bob","age":null,"tags":[]}
 error at .name: must be nonEmpty
-error at .age: must be between(0, 150)
+error at .age: must satisfy value <= 150 (between(0, 150))
 error at .tags[0]: expected a string, found a number
 error at .name: is missing
 error at : expected an object, found an array

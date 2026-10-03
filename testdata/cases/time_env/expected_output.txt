@@ -9,7 +9,7 @@ OutOfRange { value: "instant + duration", target: "Instant" }
 OutOfRange { value: "end - start", target: "Duration" }
 instant is outside the Unix nanosecond range
 Config { host: "true", httpPort: 8080, enabled: false, label: Option.None }
-APP_HTTP_PORT: must be port
+APP_HTTP_PORT: must satisfy value > 0 (port)
 APP_ENABLED: invalid JSON at line 1, column 1: expected a value
 APP_HOST: is missing
 APP_HTTP_PORT: is missing

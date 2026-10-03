@@ -1,0 +1,55 @@
+import "bork/env"
+import "bork/cli"
+
+pred configured(c: Config) { c.low <= c.high && c.limit >= 1024 }
+type Config = { low: Int = 1, high: Int = 3, limit: Int = 1024 } where configured derive (Decode, GoStruct)
+type Envelope = { config: Config } derive (Decode)
+pred portRange(p: Int) { p > 0 && p < 65536 }
+type Port = { port: Int where portRange } derive (Decode)
+pred atLeast(n: Int, minimum: Int) { n >= minimum }
+type Sibling = { low: Int, high: Int where atLeast(low) } derive (Decode, GoStruct)
+pred boxValid[T](b: Box[T]) { b.low <= b.high && b.limit >= 1024 }
+type Box[T] = { value: T, low: Int, high: Int, limit: Int } where boxValid derive (Decode)
+fn hiddenBody(n: Int): Bool { n > 0 }
+pred hidden(c: Opaque) { hiddenBody(c.n) }
+type Opaque = { n: Int } where hidden derive (Decode)
+pred either(c: Either) { c.low < 0 || c.high > 0 }
+type Either = { low: Int, high: Int } where either derive (Decode)
+fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
+ import "encoding/json"
+ value := _d_T_GoStruct.New()
+ if err := json.Unmarshal([]byte(text), value); err != nil { return GoValueError{path:"json",message:err.Error()} }
+ out, errors := _d_T_GoStruct.FromGo(value)
+ if len(errors)>0 { return errors[0] }; return out
+}
+fn main() {
+  println(readGo[OptionalItems]("{\"Low\":5,\"Xs\":[6,2]}"))
+  println(decodeJson[Pair]("{\"first\":\"x\",\"second\":\"x\"}"))
+  println(decodeJson[OptionalItems]("{\"low\":5,\"xs\":[6,2]}"))
+  println(decodeJson[Items]("{\"low\":5,\"xs\":[6,2]}"))
+  println(readGo[Items]("{\"Low\":5,\"Xs\":[6,2]}"))
+  println(decodeJson[Config]("{\"limit\":512}"))
+  println(decodeJson[Config]("{\"low\":5,\"limit\":512}"))
+  println(decodeJson[Envelope]("{\"config\":{\"limit\":512}}"))
+  println(decodeJson[Port]("{\"port\":70000}"))
+  println(decodeJson[Sibling]("{\"low\":5,\"high\":2}"))
+  println(decodeJson[Box[String]]("{\"value\":\"x\",\"low\":1,\"high\":3,\"limit\":512}"))
+  println(decodeJson[Opaque]("{\"n\":0}"))
+  println(decodeJson[Either]("{\"low\":1,\"high\":-1}"))
+  println(readGo[Config]("{\"Low\":1,\"High\":3,\"Limit\":512}"))
+  println(readGo[Sibling]("{\"Low\":5,\"High\":2}"))
+  println(readGo[Phantom[String]]("{\"Low\":1,\"High\":3,\"Limit\":512}"))
+  lookup = (key: String) => if (key == "CFG_LIMIT") { Option.Some { value: "512" } } else { Option.None }
+  println(env.LoadWith[Config]("CFG", lookup))
+  println(cli.Parse[Config]("cfg", "", ["--limit", "512"]))
+}
+
+pred phantomValid[T](b: Phantom[T]) { b.low <= b.high && b.limit >= 1024 }
+type Phantom[T] = { low: Int, high: Int, limit: Int } where phantomValid derive (GoStruct)
+
+type Items = { low: Int, xs: List[Int where atLeast(low)] } derive (Decode, GoStruct)
+
+type OptionalItems = { low: Int, xs: List[Option[Int where atLeast(low)]] } derive (Decode, GoStruct)
+
+pred different[T: Eq](value: T, other: T) { value != other }
+type Pair = { first: String, second: String where different(first) } derive (Decode)

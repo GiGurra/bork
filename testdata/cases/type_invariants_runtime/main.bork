@@ -13,7 +13,7 @@ test "generated values satisfy whole invariants" (r: Range, s: State) {
   assert(stateValid(s))
 }
 test "decoding checks completed values and defaults" {
-  match (decodeJson[Range]("{\"lo\":20}")) { Range => assert(false), e: DecodeError => assertEqual(e.path, ""), JsonError => assert(false) }
+  match (decodeJson[Range]("{\"lo\":20}")) { Range => assert(false), e: DecodeError => assertEqual(e.path, ".lo"), JsonError => assert(false) }
   match (decodeJson[Range]("{\"lo\":2,\"hi\":3}")) { r: Range => assert(r.lo <= r.hi), _ => assert(false) }
   match (decodeJson[State]("{\"type\":\"Running\",\"lo\":9,\"hi\":2}")) { State => assert(false), DecodeError => assert(true), JsonError => assert(false) }
 }
@@ -25,7 +25,7 @@ fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
   if len(errors)>0 { return errors[0] }; return out
 }
 test "Go conversions check whole invariants" {
-  match (readGo[Range]("{\"Lo\":9,\"Hi\":2}")) { Range => assert(false), e: GoValueError => assertEqual(e.path, "result") }
+  match (readGo[Range]("{\"Lo\":9,\"Hi\":2}")) { Range => assert(false), e: GoValueError => assertEqual(e.path, "result.lo") }
   match (readGo[Range]("{\"Lo\":2,\"Hi\":3}")) { r: Range => assert(r.lo <= r.hi), _ => assert(false) }
 }
 pred boxValid[T](b: Box[T]) { b.n > 0 }

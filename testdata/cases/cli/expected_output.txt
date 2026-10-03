@@ -1,7 +1,7 @@
 Options { name: "Ada", httpPort: 8080, verbose: false, retries: Option.None, labels: [] }
 Options { name: "", httpPort: 443, verbose: true, retries: Option.Some { value: 0 }, labels: ["a", "b"] }
 Options { name: "Ada", httpPort: 80, verbose: false, retries: Option.None, labels: [] }
-Error { errors: [DecodeError { path: ".name", message: "is missing" }, DecodeError { path: ".httpPort", message: "must be port" }, DecodeError { path: ".retries", message: "invalid JSON at line 1, column 1: expected a value" }] }
+Error { errors: [DecodeError { path: ".name", message: "is missing" }, DecodeError { path: ".httpPort", message: "must satisfy value > 0 (port)" }, DecodeError { path: ".retries", message: "invalid JSON at line 1, column 1: expected a value" }] }
 Box { items: ["one,two", ""], optional: Option.Some { value: ["a", "b"] } }
 Box { items: [1, 2], optional: Option.None }
 Box { items: [[1, 2], []], optional: Option.None }
