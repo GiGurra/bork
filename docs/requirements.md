@@ -816,7 +816,287 @@ main.bork:17:26: field run of Job must be () uses io => Unit, found () => Unit (
 - **Should cancellation have its own effect?** It is `state` here, so a function that only waits with `delay(s, ms)` shows `state`, though it shares no data. Moving cancellation to `clock` (renamed `time`), or to its own effect, would keep `uses state` meaning "shares data with other tasks".
 - **Should `io` be split** into `console`, `files`, and `process`? The set starts coarse. Splitting later only adds effects, so it is cheap to do once real code shows the need.
 - **Effect aliases** (`effects Backend = io + net + state`) for long lists on handlers? Not needed while there are five effects.
-- **Test doubles:** with effects in place of capabilities, a test cannot hand a function a fake clock. Today the workaround is a function parameter (`now: () uses clock => Int`). Effect handlers, which let a test say how an effect is answered, would be the principled answer later.
+- **Test doubles:** with effects in place of capabilities, a test cannot hand a function a fake clock. [Mocking in tests](#mocking-in-tests-design-bork-53lit4) replaces the function that reads the clock instead. Effect handlers, which let a test say how an effect is answered, may still be worth it later.
+
+## Mocking in tests (design: bork-53lit4)
+
+A test can replace a declared function for part of its run, with no interfaces, no
+dependency injection, and no change to the code under test. This is
+[rewire](https://gigurra.github.io/rewire/) built into the compiler: bork owns
+code generation, so only test builds route calls through a dispatch point, and
+production builds are unchanged.
+
+```
+import "bork/http"
+import "bork/time"
+
+test "a slow upstream is reported" {
+  noon = time.Instant { nanos: 1_760_000_000_000_000_000 }
+  mock time.Now() { noon }
+  calls = mock http.Get(url, s, timeoutMs) { http.Text(503, "") }
+
+  assertEqual(checkUpstream("https://status.example.com"), Health.Down { since: noon })
+  assertEqual(calls.count(), 1)
+}
+```
+
+### Syntax
+
+```ebnf
+Stmt     = Binding | Trust | MockStmt | Expr .
+MockStmt = [ Ident "=" ] "mock" MockTarget [ TypeArgs ] "(" [ Ident { "," Ident } ] ")" Block .
+MockTarget = Ident | Ident "." Ident | Ident "." Ident "." Ident .
+             (* charge, payments.charge, User.greet, model.Point.Value *)
+```
+
+- **The target is named as in a call or a method reference:** `charge` (a
+  function of the test's package), `payments.charge` (an imported package's),
+  `User.greet` or `model.Point.Value` for a method, whose receiver is then the
+  first parameter, as in a [method reference](grammar.md).
+- **The parameters are names only.** Their types, facts and the result come from
+  the target's declaration, so a mock never restates a signature, and a change
+  to the target's types shows up as a type error in the mock's body instead of a
+  stale copy. There must be one name per parameter (`_` ignores one). Default
+  parameters are included: callers have already filled them in.
+- **The body is a block**, checked like a function body against the target's
+  result (see *Contracts* below).
+- **`mock` is a keyword only where a statement starts**, like `trust`, so
+  `mock` stays usable as a name elsewhere.
+- `bork fmt` formats it like a function declaration: `mock payments.charge(card, amount) {`.
+
+### Lifetime: a mock lasts until the end of its block
+
+A `mock` statement works like a binding: it is in force from that statement to
+the end of the block that contains it, and is undone when the block ends,
+whether it ends normally, returns, or panics. Nothing needs to be restored by
+hand. To change a mock mid-test, or to restore the real function, use a nested
+block:
+
+```
+test "retries after a failure" {
+  mock fetch(url) { FetchError { message: "down" } }
+  assertEqual(load(), Status.Unavailable)
+  {
+    mock fetch(url) { "ok" }        // replaces the outer mock in this block
+    assertEqual(load(), Status.Up)
+  }
+  assertEqual(load(), Status.Unavailable)   // the outer mock again
+}
+```
+
+- **One mock per target per block.** Mocking the same target twice in one block
+  is an error (as rebinding a name is); a nested block may mock it again, and
+  wins there.
+- **Only in tests.** `mock` is allowed in test bodies, including property tests
+  and blocks nested in them (`if`, `match`, `scope`), but not inside lambdas,
+  which can run later or elsewhere, and not in functions, which tests could
+  share only by giving up the block lifetime. A shared fake is an ordinary
+  function the mock's body calls: `mock time.Now() { fixedNoon() }`.
+
+### Propagation: mocks follow the work, not the code
+
+Each test has its own mocks. They belong to the goroutine that runs the test
+and are inherited by every goroutine started from it, at the moment it is
+started:
+
+- **Tasks** (`spawn`, `launch`), servers started with `http.Listen` and their
+  request handlers, and goroutines started by `unsafe go` code (a raw `go`
+  statement, or a Go library's) all see the mocks in force where they were
+  started, and keep seeing them while they run.
+- **A mock that ends ends for everyone.** When its block ends, a task that is
+  still running gets the meaning from outside the block (an outer mock or the
+  real function) on its next call. A call already running finishes.
+- **Data does not carry mocks.** A value sent on a channel, stored in an atom,
+  or captured by a function value does not take the sender's mocks along. Work
+  runs with the mocks of the goroutine it runs on: a worker task receiving jobs
+  from a channel uses the mocks in force where the worker was started.
+- **So tests do not see each other's mocks**, also when they run in parallel
+  (`bork test --parallel N`, below) and mock the same function differently. A
+  server one test starts answers with that test's mocks, whoever sends the
+  request.
+- **Outside any test, nothing is mocked.** A goroutine started before the tests
+  ran (by a Go package's `init`, or a pool a library created earlier) has no
+  test, so its calls run the real functions. So does any goroutine still
+  running after its test ended (an orphaned task, a leaked Go goroutine): the
+  test's mocks have all ended by then. This is the documented fallback; it can
+  never run another test's mock.
+- **Implementation.** The runtime keeps mocks as a chain of frames, one per
+  `mock` statement, each pointing to the frame that was in force when it was
+  made. The current frame is attached to the goroutine with Go's profiler
+  labels (`runtime/pprof`), which the Go runtime copies to every goroutine a
+  goroutine starts, including those bork does not start itself. A frame is
+  marked ended when its block ends, and lookups skip ended frames. `unsafe go`
+  code that sets its own profiler labels (`pprof.Do`) hides the test's mocks
+  from what runs under them; it then gets the real functions.
+
+### Contracts: a mock must keep the target's promises
+
+A mock replaces a function that callers were checked against, so its body is
+checked as if it were that function's body:
+
+- **Types and facts.** The parameters have the target's types including their
+  `where` facts (callers proved them), and the body must produce the target's
+  result type including its facts. `mock http.Get(url, s, timeoutMs) { http.Text(42, "") }`
+  fails to compile, since `42` is not a `ValidStatus`, and a mock of `fn validate(raw: Int): Int where positive | NotPositive`
+  that returns `0` is a compile error, so no mock can produce a value the
+  checker assumed impossible. `trust` works as in any test code, and is checked
+  at runtime there.
+- **Effects.** The body may use at most what the target declares, so a
+  function that is pure stays pure in tests (and facts named after it stay
+  true). One addition: a target that already declares an effect may also use
+  `state` in its mock, so a stateful fake (a clock that advances, an in-memory
+  store in an atom) can be written. Values captured from the test are
+  immutable and need nothing. An open parameter of the target can be called
+  in the mock, as in the target's own body.
+- **Lifetimes.** The body is checked like a lambda written at the `mock`
+  statement: it may capture what lives at least as long as the block.
+- **Compile-time facts do not move.** Predicates and rules cannot be mocked,
+  nor can a function that a predicate or rule calls, directly or not: the
+  compiler ran those at compile time to prove facts, and a test that changed
+  their answers would make those facts false. (Such functions are pure, and
+  rarely worth mocking.)
+
+### What can be mocked
+
+| Target | Mockable | Why |
+|--------|----------|-----|
+| A function of the test's package or an imported package, including the standard library | yes | |
+| A method (`User.greet`), the receiver being the first parameter | yes | |
+| An `unsafe go` function or a binding to a Go function (`time.Now`, `http.Get`) | yes | the dispatch point is the bork declaration, so the Go code is simply not called |
+| `pred` and `rule`, and functions they call | no | their answers prove facts at compile time |
+| The prelude's functions and methods (`spawn`, `atom`, list and string methods, ...) and the compiler's built-ins (`println`, `toString`, `assert`, ...) | no | they implement the language; mock the function that calls them |
+| Class methods and instances (`Show`, `Decode`, ...) | no | instances are resolved per type; mock the function that uses them |
+| Generic functions and methods | not yet | see below |
+| `main` and tests | no | `main` cannot be called; tests are roots |
+| A function value or a record field holding one | no | pass a different value instead |
+
+**Generic functions are left for later.** Bork generics compile to Go generics,
+so a call inside other generic code only knows the instantiation at runtime,
+in Go's terms, where facts are erased and every union is `any`. A mock of
+`decode[Int]` would then also answer `decode[Port]` (`Port = Int where positive`)
+and break its promise. Doing it soundly needs either one mock body for every
+instantiation (a generic mock) or runtime type descriptors; a follow-up
+ticket covers it.
+
+### Calling the real function
+
+Inside a mock's body, the target's own name means what it meant before the
+mock: an outer mock, or the real function. This is how a mock passes calls
+through, or wraps the real behaviour (a spy):
+
+```
+mock http.Get(url, s, timeoutMs) {
+  if (url.startsWith("https://weather.example.com/")) {
+    http.Text(200, "{\"celsius\": 21}")
+  } else {
+    http.Get(url, s, timeoutMs)    // the real http.Get (or an outer mock)
+  }
+}
+```
+
+Only a call written by name in the mock's body skips the mock; a call that
+reaches the target through other functions gets the mock again, as any call
+under it does.
+
+### Recording calls
+
+A `mock` statement can bind a handle, of the prelude's type `Mock`, that
+records the calls the mock answered, from every goroutine:
+
+- `m.count(): Int` is how many calls it answered so far.
+- `m.calls(): List[String]` lists them in the order they started, each as the
+  call's text with its arguments rendered as `toString` does:
+  `["charge(Card { last4: \"4242\" }, 100)"]`, so `assertEqual` and
+  `assertSnapshot` can check them.
+
+Both use `state` (the answer changes as calls happen). Calls passed through to
+the real function by name are recorded by the outer mock or not at all.
+Typed access to the arguments and expectations (call counts declared up
+front, argument matchers, waiting for asynchronous calls, as rewire's
+`expect` does) are a follow-up ticket.
+
+### Parallel tests
+
+`bork test --parallel N` runs up to N tests at a time, each on its own
+goroutine; the default stays one at a time. Results are reported in
+declaration order, and each test's snapshots are named as before. What tests
+print goes to the shared standard output as it happens, so it may interleave.
+Mocks need nothing for this: they already belong to each test's goroutines.
+
+### Production builds pay nothing
+
+`bork build` and `bork run` generate exactly what they did before. In the
+program `bork test` builds, each function that some test of the package mocks
+is generated as a small dispatcher that looks up the current goroutine's
+mocks (one pointer read when there are none) and otherwise calls the real
+body, renamed. Functions no test mocks are generated as before, so a test
+build pays only for what its tests mock. Because the dispatcher replaces the
+declaration, every way of reaching the function is covered: direct calls,
+calls from other packages, the function passed as a value, and calls by name
+from `unsafe go` code.
+
+### Diagnostics
+
+```
+main_test.bork:4:3: mock can only be used in a test body
+main_test.bork:4:3: mock can only be used in a test body, not in a lambda
+main_test.bork:4:8: payments.charge takes 2 parameters (card, amount), but the mock names 1; write: mock payments.charge(card, amount)
+main_test.bork:6:5: mock of validate must return Int where positive | NotPositive, found 0 (positive(0) is false)
+main_test.bork:7:5: mock of charge uses io (it calls println), but charge allows only net + state
+main_test.bork:4:8: positive is a predicate; predicates cannot be mocked, since the compiler uses their answers to prove facts
+main_test.bork:4:8: clamp cannot be mocked: predicate inRange calls it, and the compiler uses its answers to prove facts
+main_test.bork:4:8: println is built into the compiler and cannot be mocked; mock the function that calls it
+main_test.bork:4:8: map is a prelude method and cannot be mocked; mock the function that calls it
+main_test.bork:4:8: decode is generic; generic functions cannot be mocked yet
+main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it again in a nested block
+```
+
+- The wrong-arity error carries a JSON text edit that replaces the parameter
+  list with the target's parameter names.
+- Type and fact errors in a mock's body are ordinary errors, worded with "mock
+  of f" where they would name the function.
+
+### Tooling
+
+- **`bork describe`** on a mock's target describes the target function
+  (signature and definition); on a parameter name, its type and facts from the
+  target; inside the body, values as in any function.
+- **`bork fmt`** keeps `mock` statements in the canonical layout.
+
+### Decisions recorded
+
+- **A statement that lasts until its block ends,** rather than `mock ... { body }`
+  wrapping the code it applies to, or rewire's install-then-restore calls:
+  it reads like a binding, needs no restore, and a nested block gives the
+  mid-test restore. It is also what makes the frame chain simple.
+- **The signature is taken from the target,** not restated, so the contract
+  check is exact and refactoring the target cannot leave a mock that quietly no
+  longer matches.
+- **The target's own name inside its mock means the real function,** rather than a
+  `real(...)` keyword or rewire's `Real(t, f)`: there is nothing new to learn,
+  and it matches how a binding's own name is read on its right-hand side
+  elsewhere in languages with shadowing.
+- **Profiler labels as the carrier,** rather than a hidden context parameter
+  (every function would take one in test builds, including function values, and
+  `unsafe go` callbacks would lose it) or a goroutine-ID table (Go hides
+  goroutine IDs, and a goroutine bork did not start would have no entry). Labels
+  are inherited by every goroutine the Go runtime starts. Reading them uses
+  `runtime/pprof`'s internal `runtime_getProfLabel` (through `go:linkname`), in
+  test builds only; it is the hook profilers and tracing libraries use, and a
+  test of the runtime guards it on each Go upgrade.
+- **Mocks keep the target's effects,** plus `state` for targets that already
+  have effects. The test body may use everything, but the code under test was
+  checked against the target's declaration, and pure code should not gain
+  effects in tests.
+
+### Follow-ups
+
+- Generic functions and methods (one generic mock for every instantiation).
+- Typed call records and expectations (`Times`, `Never`, argument matchers,
+  waiting for asynchronous calls).
+- Hermetic tests: report, or require, that a test mocks every `net` function
+  it can reach, so it can run without a network.
+- Mocking class instances, if real code shows the need.
 
 ## Go interop
 
