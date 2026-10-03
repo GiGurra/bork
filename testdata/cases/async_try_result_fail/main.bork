@@ -16,4 +16,10 @@ fn emptyExit(): Int | Ok {}
 fn asyncEmpty(): (Int | Ok) where NumericExit {
   scope s { async(s) value: Int | Ok = { _ = emptyExit()?; 1 }; value? }
 }
+fn genericFailure[T](value: T, flag: Bool): Int | T | Problem where Approved {
+  scope s {
+    async(s) saved: Int | T | Problem = { operand: Int | T | Problem = if (flag) { value } else { 1 }; operand? }
+    saved?
+  }
+}
 fn main() {}

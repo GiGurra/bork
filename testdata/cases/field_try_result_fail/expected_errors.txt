@@ -2,3 +2,5 @@ main.bork:8:3: fieldFailure promises a result that is Approved, but for a value 
 main.bork:12:3: fieldReturn promises a result that is Approved, but Approved(Problem { code: 0 }) is false
 main.bork:16:3: fieldTailPromise promises a result that is Approved, but Approved(Problem { code: 0 }) is false
 main.bork:23:3: fieldEmpty promises a result that is NumericExit, but for a value emptyExit can return, NumericExit(Ok) is false
+main.bork:28:3: genericFailure promises a result that is Approved, but that is not proven for this value (give it a name and check it first)
+main.bork:28:3: genericFailure promises a result that is Approved, but that is not proven for this value (give it a name and check it first)

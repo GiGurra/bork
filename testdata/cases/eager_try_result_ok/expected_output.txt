@@ -1,3 +1,9 @@
+Problem { code: 1 } 1 Problem { code: 1 }
+Pair { a: 1, b: 0 }
+Box { value: Problem { code: 0 } }
+Box { value: Problem { code: 0 } } Box { value: Problem { code: 0 } }
+1 1 1 1
+Problem { code: 1 } 1
 1 1
 Ok Ok 1 Ok Ok Ok
 Problem { code: 1 } 1 Problem { code: 1 } 1

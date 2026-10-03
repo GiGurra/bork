@@ -22,4 +22,9 @@ fn fieldEmpty(): (Int | Ok) where NumericExit {
   box = ExitBox { value: { _ = emptyExit()?; 1 } }
   box.value?
 }
+type GenericBox[T] = { lazy value: Int | T | Problem }
+fn genericFailure[T](value: T, flag: Bool): Int | T | Problem where Approved {
+  box = GenericBox[T] { value: { operand: Int | T | Problem = if (flag) { value } else { 1 }; operand? } }
+  box.value?
+}
 fn main() {}

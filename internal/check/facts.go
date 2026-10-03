@@ -1031,7 +1031,7 @@ func (f *factChecker) checkResult(x Expr, e env) {
 		var member Type
 		switch {
 		case assignable(t, mc.Type):
-		case isMemberOf(mc.Type, t):
+		case typesOverlap(mc.Type, t):
 			member = mc.Type
 		default:
 			continue // a different member of the result's union
@@ -1055,11 +1055,6 @@ func (f *factChecker) checkResult(x Expr, e env) {
 			f.settle(x, ob, ok, pending)
 		}
 	}
-}
-
-func isMemberOf(m, t Type) bool {
-	u, ok := t.(*Union)
-	return ok && containsMember(u, m)
 }
 
 // oblige requires con of the value x, with the constraint's parameter
@@ -2014,6 +2009,71 @@ func (f *factChecker) allMembers(m Type, ob obligation, depth int, paths ...bran
 	return true, pending
 }
 
+// typesOverlap conservatively asks whether two types can share a union member,
+// including after their type parameters have been instantiated.
+func typesOverlap(a, b Type) bool {
+	if a == Never || b == Never {
+		return false
+	}
+	if _, ok := a.(*TypeParam); ok {
+		return true
+	}
+	if _, ok := b.(*TypeParam); ok {
+		return true
+	}
+	if u, ok := a.(*Union); ok {
+		for _, m := range u.Members {
+			if typesOverlap(m, b) {
+				return true
+			}
+		}
+		return false
+	}
+	if _, ok := b.(*Union); ok {
+		return typesOverlap(b, a)
+	}
+	if assignable(a, b) || assignable(b, a) {
+		return true
+	}
+	switch a := a.(type) {
+	case *Record, *Sealed:
+		if genericBaseOrSelf(a) != genericBaseOrSelf(b) {
+			return false
+		}
+		args, other := TypeArgs(a), TypeArgs(b)
+		if len(args) != len(other) {
+			return false
+		}
+		for i, arg := range args {
+			if !typesOverlap(arg, other[i]) {
+				return false
+			}
+		}
+		return true
+	case *List:
+		other, ok := b.(*List)
+		return ok && typesOverlap(a.Elem, other.Elem)
+	case *Seq:
+		other, ok := b.(*Seq)
+		return ok && typesOverlap(a.Elem, other.Elem)
+	case *Map:
+		other, ok := b.(*Map)
+		return ok && typesOverlap(a.Key, other.Key) && typesOverlap(a.Value, other.Value)
+	case *FuncType:
+		other, ok := b.(*FuncType)
+		if !ok || len(a.Params) != len(other.Params) || !typesOverlap(a.Result, other.Result) {
+			return false
+		}
+		for i, param := range a.Params {
+			if !typesOverlap(param, other.Params[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // proveMember proves ob for the values of member type m that x (of a
 // union type) can produce.
 func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth int) (bool, []Query) {
@@ -2029,10 +2089,13 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 		defer delete(f.expandedRecipes, x)
 		return f.allMembers(m, ob, depth, f.initializerPaths(x, x.Type(), e)...)
 	}
-	if x.Type() == Never || !identical(x.Type(), m) && !isMemberOf(m, x.Type()) {
-		return true, nil // this branch cannot return the member being checked
+	if x.Type() == Never {
+		return true, nil
 	}
-	if identical(x.Type(), m) {
+	if !typesOverlap(x.Type(), m) {
+		return true, nil // no instantiation can produce this member
+	}
+	if assignable(x.Type(), m) {
 		return f.prove(x, ob, e, depth+1)
 	}
 	if ob.or != nil {
@@ -2052,6 +2115,10 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 		}
 	}
 	switch x := x.(type) {
+	case *Try:
+		if x.Option == nil {
+			return f.proveMember(x.X, m, ob, e, depth+1)
+		}
 	case *Call:
 		return f.derive(x, m, ob, e, depth)
 	case *VarRef:
@@ -2291,7 +2358,12 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 	var pending []Query
 	for _, path := range f.resultPaths(fn) {
 		t := path.x.Type()
-		if member != nil && !identical(t, member) && !isMemberOf(member, t) {
+		param := returnedParam(path.x, fn)
+		parameter := param != nil && param.Index < len(call.Args)
+		if parameter {
+			t = call.Args[param.Index].Type()
+		}
+		if member != nil && !typesOverlap(t, member) {
 			continue
 		}
 		saveFn := f.fn
@@ -2306,8 +2378,13 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 		f.fn = saveFn
 		if !ok {
 			// Returning a parameter: prove it for the argument.
-			if ref, isRef := debugValue(path.x).(*VarRef); isRef && isParamOf(ref.Var, fn) && ref.Var.Index < len(call.Args) {
-				ok, p = f.prove(call.Args[ref.Var.Index], ob, e, depth+1)
+			if parameter {
+				value := call.Args[param.Index]
+				if member != nil {
+					ok, p = f.proveMember(value, member, ob, e, depth+1)
+				} else {
+					ok, p = f.prove(value, ob, e, depth+1)
+				}
 			}
 		}
 		if !ok {
@@ -2321,6 +2398,26 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 		}
 	}
 	return true, pending
+}
+
+// returnedParam follows eager aliases of a returned parameter. Deferred
+// initializers can return other values before their tail and must keep their
+// own result boundary.
+func returnedParam(x Expr, fn *Func) *Var {
+	for depth := 0; depth < maxDepth; depth++ {
+		ref, ok := debugValue(x).(*VarRef)
+		if !ok {
+			return nil
+		}
+		if isParamOf(ref.Var, fn) {
+			return ref.Var
+		}
+		if ref.Var.Kind != VarLet || ref.Var.Let.Initializer != nil {
+			return nil
+		}
+		x = ref.Var.Let.Value
+	}
+	return nil
 }
 
 // isParamOf reports whether v is a parameter of fn.

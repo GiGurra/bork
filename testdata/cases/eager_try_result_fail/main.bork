@@ -66,4 +66,20 @@ fn noElseFailure(flag: Bool): (Int | Ok) where NumericOk { _ = noElse(flag)?; 1 
 fn lazyEmptyFailure(): (Int | Ok) where NumericOk { lazy value: Int | Ok = { _ = empty()?; 1 }; value? }
 pred RejectOk(x: Int | Ok) { false }
 fn bareUnit(): Ok where RejectOk { return }
+fn genericFailure[T](value: T, flag: Bool): Int | T | Problem where Approved {
+  operand: Int | T | Problem = if (flag) { value } else { 1 }
+  operand?
+}
+fn genericSource[T](value: T, flag: Bool): Int | T | Problem { if (flag) { value } else { 1 } }
+fn genericDerivedFailure[T](value: T, flag: Bool): Int | T | Problem where Approved { _ = genericSource(value, flag)?; 1 }
+pred SubsetAllowed(x: Int | Problem) { match (x) { n: Int => true; p: Problem => Approved(p) } }
+fn needsSubset(x: (Int | Problem) where SubsetAllowed): Int { 1 }
+fn subsetFailure(flag: Bool): Int {
+  value: Int | Problem | String = if (flag) { Problem { code: 0 } } else { "text" }
+  match (value) { picked: Int | Problem => needsSubset(picked); text: String => 1 }
+}
+fn genericReturnFailure[T](value: T): Int | T | Problem where Approved { value }
 fn main() {}
+
+fn genericAliasSource[T](value: T, flag: Bool): Int | T | Problem { local = value; alias = local; if (flag) { alias } else { 1 } }
+fn genericAliasFailure(flag: Bool): Int | Problem where Approved { _ = genericAliasSource(Problem { code: 0 }, flag)?; 1 }
