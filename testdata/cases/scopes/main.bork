@@ -29,7 +29,7 @@ fn copyText(from: String, to: String) uses io: Int | fs.Error {
 fn openBoth(a: String, b: String, s: Scope) uses io: Int | fs.Error {
   first = fs.Open(a, s)?
   second = fs.Open(b, s)?
-  length([first, second])
+  [first, second].length()
 }
 
 fn countdown(n: Int) uses io {
@@ -68,7 +68,7 @@ fn main() {
   println(greet())
 
   // Scopes inside lambdas.
-  sizes = map([1, 2], i => scope s {
+  sizes = [1, 2].map(i => scope s {
     tracked(s"item $i", s)
     i * 10
   })

@@ -2,7 +2,7 @@ fn describe(xs: List[Int]): String {
   match (xs) {
     [] => "empty"
     [x] => s"one: $x"
-    [0, ...rest] => s"zero then ${toString(length(rest))} more"
+    [0, ...rest] => s"zero then ${toString(rest.length())} more"
     [a, b] => s"two: $a, $b"
     [a, ...] => s"starts with $a"
   }

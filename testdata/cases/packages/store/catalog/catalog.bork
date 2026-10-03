@@ -3,8 +3,8 @@ import "example.com/shop/money"
 type Item = { name: String, price: money.Amount }
 
 fn Total(items: List[Item]): Option[money.Amount] {
-  match (head(items)) {
+  match (items.head()) {
     Option.None => Option.None
-    Option.Some { value: first } => Option.Some { value: fold(drop(items, 1), first.price, (acc, i) => money.Add(acc, i.price)) }
+    Option.Some { value: first } => Option.Some { value: items.drop(1).fold(first.price, (acc, i) => money.Add(acc, i.price)) }
   }
 }

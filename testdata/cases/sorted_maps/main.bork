@@ -1,27 +1,22 @@
-import "bork/maps"
-
 type Version = { major: Int, minor: Int }
 
 fn main() {
   scores = { "cy": 3, "ada": 1, "bob": 2 }
-  sorted = maps.Sorted(scores)
+  sorted = scores.sorted()
   println(sorted)
   // It stays sorted as keys are put in, and every function keeps it so.
-  println(sorted |> maps.Put("abe", 0) |> maps.Put("zed", 9))
-  println(maps.Remove(sorted, "bob"))
-  println(maps.MapValues(sorted, s => s * 10))
-  println(maps.Filter(sorted, (k, v) => v > 1))
-  println(maps.Merge(sorted, { "aaa": 7 }))
+  println(sorted.put("abe", 0).put("zed", 9))
+  println(sorted.remove("bob"))
+  println(sorted.mapValues(s => s * 10))
+  println(sorted.filter((k, v) => v > 1))
+  println(sorted.merge({ "aaa": 7 }))
   // Equal to the unsorted map with the same entries.
   println(sorted == scores)
   // Back to insertion order: new keys go at the end.
-  println(maps.InOrder(sorted) |> maps.Put("abe", 0))
+  println(sorted.inOrder().put("abe", 0))
   // Numbers sort as numbers; other keys by a given order.
-  println(maps.Sorted({ 10: "ten", 9: "nine", 100: "hundred" }))
-  versions = maps.SortedBy(
-    { Version { major: 1, minor: 10 }: "b", Version { major: 1, minor: 2 }: "a", Version { major: 0, minor: 9 }: "z" },
-    (a, b) => a.major < b.major || (a.major == b.major && a.minor < b.minor),
-  )
-  println(maps.Keys(versions))
-  println(maps.Get(versions, Version { major: 1, minor: 2 }))
+  println({ 10: "ten", 9: "nine", 100: "hundred" }.sorted())
+  versions = { Version { major: 1, minor: 10 }: "b", Version { major: 1, minor: 2 }: "a", Version { major: 0, minor: 9 }: "z" }.sortedBy((a, b) => a.major < b.major || (a.major == b.major && a.minor < b.minor),)
+  println(versions.keys())
+  println(versions.get(Version { major: 1, minor: 2 }))
 }

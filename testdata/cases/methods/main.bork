@@ -36,6 +36,8 @@ fn (xs: List[Int]) total(): Int { xs.fold(0, (a, b) => a + b) }
 // A record's function field is called as before, not a method.
 fn (c: Counter) next(): Int { 0 }
 
+fn reverse(xs: List[Int]): List[Int] { xs.reverse() }
+
 fn more() uses io {
   println(Point { x: 1, y: 2 }.plus(Point { x: 3, y: 4 }))
   println([Shape.Circle { r: 1 }, Shape.Square { side: 2 }].map(s => s.area()).total())
@@ -44,8 +46,8 @@ fn more() uses io {
   // Facts carry through: a list known not to be empty has a first.
   xs = [5, 6].append(7)
   println(xs.first())
-  // Methods and |> mix.
-  println([1, 2, 3] |> map(x => x * 10) |> filter(x => x > 10) |> reverse)
+  // Methods and free-function pipelines mix.
+  println([1, 2, 3].map(x => x * 10).filter(x => x > 10) |> reverse)
   println(Option.Some { value: 4 }.map(x => x + 1).getOr(0))
 }
 

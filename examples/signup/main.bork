@@ -8,8 +8,8 @@ import "bork/fs"
 // clause, so a decoded request is proven: register can rely on its
 // facts without checking them again.
 
-pred nonEmpty(s: String) { byteLength(s) > 0 }
-pred maxBytes(s: String, n: Int) { byteLength(s) <= n }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
+pred maxBytes(s: String, n: Int) { s.byteLength() <= n }
 pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
 
 type UserName = String where nonEmpty and maxBytes(20)
@@ -71,7 +71,7 @@ fn main() {
     }
   }
   match (readFile(path)) {
-    text: String => forEach(handleAll(lines(text), 1), line => println(line))
+    text: String => (handleAll(text.lines(), 1)).forEach(line => println(line))
     e: fs.Error => {
       detail = fs.ErrorInfo(e)
       eprintln(s"signup: ${detail.path}: ${detail.message}")

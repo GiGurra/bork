@@ -682,7 +682,7 @@ func (f *factChecker) knownOf(con *Constraint, subst func(string) argVal) []know
 }
 
 // predsOf is what a predicate parameter's argument says about a value
-// it returns true for: a predicate (`filter(xs, positive)`), the
+// it returns true for: a predicate (`xs.filter(positive)`), the
 // caller's own predicate parameter, or the facts a lambda's body
 // establishes about its parameter (`x => positive(x) && small(x)`).
 func (f *factChecker) predsOf(arg argVal) []known {
@@ -1058,7 +1058,7 @@ func (f *factChecker) parametric(call *Call, ob obligation, e env, depth int) (b
 // lambdaParam proves ob for a parameter of a lambda passed to a generic
 // function, where the parameter takes values of a type parameter: the
 // function can only pass it values it was given, so it is proven for
-// those (`map(positives, p => transfer(p))`).
+// those (`positives.map(p => transfer(p))`).
 func (f *factChecker) lambdaParam(la lambdaArg, ob obligation, e env, depth int) (bool, []Query) {
 	fn := la.call.Func
 	ft, ok := fn.Params[la.arg].(*FuncType)
@@ -1878,9 +1878,9 @@ func (f *factChecker) hint(x Expr, ob obligation) string {
 			keep = ob.pred.QualifiedName(f.from())
 		}
 		if name == "this value" {
-			name = "..."
+			name = "xs"
 		}
-		return fmt.Sprintf(" (keep only those that are: filter(%s, %s))", name, keep)
+		return fmt.Sprintf(" (keep only those that are: %s.filter(%s))", name, keep)
 	}
 	if sel, ok := f.fieldSelector(x, ob.path); ok && name != "this value" {
 		// A field of a record can be checked directly.

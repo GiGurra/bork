@@ -1,7 +1,5 @@
-import "bork/maps"
-
 fn main() {
   // Nothing decides what these hold.
-  println(fold([1, 2], [], (acc, x) => acc))
-  println(maps.Unordered({:}))
+  println([1, 2].fold([], (acc, x) => acc))
+  println({:}.unordered())
 }

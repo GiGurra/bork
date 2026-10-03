@@ -118,7 +118,7 @@ type VarRef struct {
 	Var *Var
 }
 
-// FuncRef is a declared function used as a value: `map(xs, double)`.
+// FuncRef is a declared function used as a value: `xs.map(double)`.
 type FuncRef struct {
 	expr
 	Name string // as written

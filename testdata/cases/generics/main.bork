@@ -6,12 +6,12 @@ fn identity[T](x: T): T { x }
 fn twice[T](x: T, f: (T) => T): T { f(f(x)) }
 
 fn pairUp[A, B](xs: List[A], ys: List[B], combine: (A, B) => String): List[String] {
-  if (isEmpty(xs) || isEmpty(ys)) {
+  if (xs.isEmpty() || ys.isEmpty()) {
     []
   } else {
-    match (head(xs)) {
-      Option.Some { value: x } => match (head(ys)) {
-        Option.Some { value: y } => prepend(combine(x, y), pairUp(drop(xs, 1), drop(ys, 1), combine))
+    match (xs.head()) {
+      Option.Some { value: x } => match (ys.head()) {
+        Option.Some { value: y } => prepend(combine(x, y), pairUp(xs.drop(1), ys.drop(1), combine))
         Option.None => []
       }
       Option.None => []
@@ -32,7 +32,7 @@ fn lookup(key: String): Int | NotFound {
 }
 
 fn firstOr[T](xs: List[T], fallback: T): T {
-  match (head(xs)) {
+  match (xs.head()) {
     Option.Some { value: v } => v
     Option.None => fallback
   }
@@ -43,7 +43,7 @@ fn adder(n: Int): (Int) => Int { x => x + n }
 
 fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C { x => g(f(x)) }
 
-fn applyAll(fs: List[(Int) => Int], x: Int): List[Int] { map(fs, f => f(x)) }
+fn applyAll(fs: List[(Int) => Int], x: Int): List[Int] { fs.map(f => f(x)) }
 
 fn main() {
   println(identity(5), identity("s"), twice(3, x => x * x), twice("ab", s => s + s))

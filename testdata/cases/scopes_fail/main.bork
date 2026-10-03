@@ -20,7 +20,7 @@ fn viaGeneric(p: String) uses io: String | fs.Error {
 
 fn viaList(p: String) uses io: Int {
   files = scope s { [fs.Open(p, s), fs.Open(p, s)] }
-  length(files)
+  files.length()
 }
 
 fn scopeInLambda(p: String) uses io: Int {

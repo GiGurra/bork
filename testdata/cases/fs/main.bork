@@ -24,8 +24,8 @@ fn exercise(s: Scope) uses io: Unit | fs.Error {
   println((fs.Stat(path)?).size)
   println((fs.Stat(path)?).kind)
   fs.MkdirAll(fs.Join([root, "nested"]))?
-  println(map(fs.ReadDir(root)?, entry => entry.name))
-  println(map(fs.Walk(root)?, entry => entry.kind))
+  println((fs.ReadDir(root)?).map(entry => entry.name))
+  println((fs.Walk(root)?).map(entry => entry.kind))
   lines = fs.Create(fs.Join([root, "lines.txt"]), s)?
   written = fs.WriteText(lines, "a\r\nb\nlast")?
   reader = fs.Open(fs.Path(lines), s)?
@@ -36,19 +36,19 @@ fn exercise(s: Scope) uses io: Unit | fs.Error {
   endingsPath = fs.Join([root, "endings.txt"])
   fs.Write(endingsPath, utf8Bytes("\n\r\nlast\r"))?
   endings = fs.Open(endingsPath, s)?
-  fs.ForEachLine(endings, line => println(byteLength(line)))?
+  fs.ForEachLine(endings, line => println(line.byteLength()))?
   linkPath = fs.Join([root, "link"])
   symlink(fs.Join([root, "nested"]), linkPath)?
   println((fs.Stat(linkPath)?).kind)
-  println(length(filter(fs.Walk(root)?, entry => entry.kind == "directory")))
+  println(((fs.Walk(root)?).filter(entry => entry.kind == "directory")).length())
   println(fs.Base(path))
   println(fs.Ext(path))
   println(fs.Dir(path) == root)
-  println(startsWith(fs.Abs(path)?, root))
+  println((fs.Abs(path)?).startsWith(root))
   longFile = fs.Create(fs.Join([root, "long.txt"]), s)?
-  longWritten = fs.WriteText(longFile, repeat("x", 100000))?
+  longWritten = fs.WriteText(longFile, "x".repeat(100000))?
   longReader = fs.Open(fs.Path(longFile), s)?
-  fs.ForEachLine(longReader, line => println(byteLength(line)))?
+  fs.ForEachLine(longReader, line => println(line.byteLength()))?
   fs.Rename(path, fs.Join([root, "renamed.bin"]))?
   fs.Remove(fs.Join([root, "renamed.bin"]))?
   println(match (fs.Read(path)) {
@@ -65,7 +65,7 @@ fn main() {
   println(errorKinds())
   paths = scope cleanup { temporaryPaths(cleanup) }
   match (paths) {
-    names: List[String] => forEach(names, name => println(match (fs.Stat(name)) {
+    names: List[String] => names.forEach(name => println(match (fs.Stat(name)) {
       info: fs.Info => false
       error: fs.NotFound => true
       error: fs.PermissionDenied => false

@@ -23,7 +23,7 @@
 // Option is a value that may be missing.
 type Option[T] = sealed { Some { value: T }, None }
 
-// Entry is a key of a Map with its value (bork/maps lists a map's
+// Entry is a key of a Map with its value (m.entries() lists a map's
 // entries).
 type Entry[K, V] = { key: K, value: V }
 
@@ -120,7 +120,7 @@ type Closed = {}
 // state between requests:
 //
 //   store = atom({:})
-//   update(store, users => maps.Put(users, id, user))
+//   update(store, users => users.put(id, user))
 //
 // update may call f more than once (when another task updated the atom
 // in between), so f should do nothing but compute the new value.
@@ -391,115 +391,7 @@ fn parseBool(text: String): Bool | ParseError unsafe go {
   return ParseError{input: text, message: "expected true or false"}
 }
 
-// Strings. Lengths and indexes count bytes (UTF-8), as in Go.
-
-// fields splits s around runs of whitespace: fields(" a  b ") is ["a", "b"].
-fn fields(s: String): List[String] unsafe go {
-  import "strings"
-  return strings.Fields(s)
-}
-
-// lines splits s into lines, without their line endings. A final line
-// ending does not start another line.
-fn lines(s: String): List[String] unsafe go {
-  import "strings"
-  if s == "" {
-    return []string{}
-  }
-  out := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
-  for i, line := range out {
-    out[i] = strings.TrimSuffix(line, "\r")
-  }
-  return out
-}
-
-fn byteLength(s: String): Int unsafe go {
-  return int64(len(s))
-}
-
-fn contains(s: String, part: String): Bool unsafe go {
-  import "strings"
-  return strings.Contains(s, part)
-}
-
-fn startsWith(s: String, prefix: String): Bool unsafe go {
-  import "strings"
-  return strings.HasPrefix(s, prefix)
-}
-
-fn endsWith(s: String, suffix: String): Bool unsafe go {
-  import "strings"
-  return strings.HasSuffix(s, suffix)
-}
-
-// indexOf finds the first occurrence of part in s.
-fn indexOf(s: String, part: String): Option[Int] unsafe go {
-  import "strings"
-  i := strings.Index(s, part)
-  if i < 0 {
-    return Option_None[int64]{}
-  }
-  return Option_Some[int64]{value: int64(i)}
-}
-
-fn toUpper(s: String): String unsafe go {
-  import "strings"
-  return strings.ToUpper(s)
-}
-
-fn toLower(s: String): String unsafe go {
-  import "strings"
-  return strings.ToLower(s)
-}
-
-// trim removes leading and trailing white space.
-fn trim(s: String): String unsafe go {
-  import "strings"
-  return strings.TrimSpace(s)
-}
-
-fn replaceAll(s: String, old: String, replacement: String): String unsafe go {
-  import "strings"
-  return strings.ReplaceAll(s, old, replacement)
-}
-
-// repeat repeats s count times; a count below 1 gives "".
-fn repeat(s: String, count: Int): String unsafe go {
-  import "strings"
-  return strings.Repeat(s, int(max(count, 0)))
-}
-
 // Runes (Unicode code points). These count and index runes, not bytes.
-
-fn runeCount(s: String): Int unsafe go {
-  import "unicode/utf8"
-  return int64(utf8.RuneCountInString(s))
-}
-
-// runeAt is the rune at index (counting runes from 0), if there is one.
-fn runeAt(s: String, index: Int): Option[Rune] unsafe go {
-  if index >= 0 {
-    i := int64(0)
-    for _, r := range s {
-      if i == index {
-        return Option_Some[int32]{value: r}
-      }
-      i++
-    }
-  }
-  return Option_None[int32]{}
-}
-
-// substring is the runes from index from up to (not including) index
-// to. It is OutOfRange unless 0 <= from <= to <= runeCount(s).
-fn substring(s: String, from: Int, to: Int): String | OutOfRange unsafe go {
-  import "fmt"
-  runes := []rune(s)
-  if from < 0 || to < from || to > int64(len(runes)) {
-    return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: fmt.Sprintf("a String of %d runes", len(runes))}
-  }
-  return string(runes[from:to])
-}
 
 fn runeToString(r: Rune): String unsafe go {
   return string(r)
@@ -530,173 +422,14 @@ fn isLower(r: Rune): Bool unsafe go {
   return unicode.IsLower(r)
 }
 
-// Lists. A List is immutable: functions that "change" one build a new
-// list.
-
-fn length[T](xs: List[T]): Int unsafe go {
-  return int64(len(xs))
-}
-
-fn isEmpty[T](xs: List[T]): Bool unsafe go {
-  return len(xs) == 0
-}
+// List constructors build immutable lists.
 
 // notEmpty holds for a list with at least one element.
-pred notEmpty[T](xs: List[T]) { !isEmpty(xs) }
-
-// first is the first element of a list known to have one: no Option
-// needed. Check with if (notEmpty(xs)), or require it.
-fn first[T](xs: List[T] where notEmpty): T unsafe go {
-  return xs[0]
-}
-
-// get is the element at index (from 0), if there is one.
-fn get[T](xs: List[T], index: Int): Option[T] unsafe go {
-  if index < 0 || index >= int64(len(xs)) {
-    return Option_None[T]{}
-  }
-  return Option_Some[T]{value: xs[index]}
-}
-
-fn head[T](xs: List[T]): Option[T] unsafe go {
-  if len(xs) == 0 {
-    return Option_None[T]{}
-  }
-  return Option_Some[T]{value: xs[0]}
-}
-
-fn last[T](xs: List[T]): Option[T] unsafe go {
-  if len(xs) == 0 {
-    return Option_None[T]{}
-  }
-  return Option_Some[T]{value: xs[len(xs)-1]}
-}
-
-fn map[A, B](xs: List[A], f: (A) => B): List[B] unsafe go {
-  out := make([]B, len(xs))
-  for i, x := range xs {
-    out[i] = f(x)
-  }
-  return out
-}
-
-fn flatMap[A, B](xs: List[A], f: (A) => List[B]): List[B] unsafe go {
-  var out []B
-  for _, x := range xs {
-    out = append(out, f(x)...)
-  }
-  return out
-}
-
-// filter keeps the elements keep is true for. What keep says about
-// them is known afterwards: filter(xs, positive) is a
-// List[Int where positive].
-fn filter[T](xs: List[T], keep: (T) => Bool): List[T where keep] unsafe go {
-  var out []T
-  for _, x := range xs {
-    if keep(x) {
-      out = append(out, x)
-    }
-  }
-  return out
-}
-
-// fold combines the elements from the first to the last, starting
-// from initial: fold([1, 2, 3], 0, (sum, x) => sum + x) is 6.
-fn fold[T, A](xs: List[T], initial: A, f: (A, T) => A): A unsafe go {
-  acc := initial
-  for _, x := range xs {
-    acc = f(acc, x)
-  }
-  return acc
-}
-
-fn find[T](xs: List[T], matches: (T) => Bool): Option[T where matches] unsafe go {
-  for _, x := range xs {
-    if matches(x) {
-      return Option_Some[T]{value: x}
-    }
-  }
-  return Option_None[T]{}
-}
-
-fn any[T](xs: List[T], test: (T) => Bool): Bool unsafe go {
-  for _, x := range xs {
-    if test(x) {
-      return true
-    }
-  }
-  return false
-}
-
-fn all[T](xs: List[T], test: (T) => Bool): Bool unsafe go {
-  for _, x := range xs {
-    if !test(x) {
-      return false
-    }
-  }
-  return true
-}
-
-fn count[T](xs: List[T], test: (T) => Bool): Int unsafe go {
-  n := int64(0)
-  for _, x := range xs {
-    if test(x) {
-      n++
-    }
-  }
-  return n
-}
-
-fn forEach[T](xs: List[T], f: (T) => Unit) unsafe go {
-  for _, x := range xs {
-    f(x)
-  }
-}
-
-// take is the first n elements (all of them if there are fewer).
-fn take[T](xs: List[T], n: Int): List[T] unsafe go {
-  n = max(0, min(n, int64(len(xs))))
-  return xs[:n:n]
-}
-
-// drop is all but the first n elements.
-fn drop[T](xs: List[T], n: Int): List[T] unsafe go {
-  n = max(0, min(n, int64(len(xs))))
-  return xs[n:]
-}
-
-fn reverse[T](xs: List[T]): List[T] unsafe go {
-  out := make([]T, len(xs))
-  for i, x := range xs {
-    out[len(xs)-1-i] = x
-  }
-  return out
-}
-
-fn concat[T](xs: List[T], ys: List[T]): List[T] unsafe go {
-  out := make([]T, 0, len(xs)+len(ys))
-  return append(append(out, xs...), ys...)
-}
-
-fn append[T](xs: List[T], x: T): List[T] where notEmpty unsafe go {
-  out := make([]T, 0, len(xs)+1)
-  return append(append(out, xs...), x)
-}
+pred notEmpty[T](xs: List[T]) { !xs.isEmpty() }
 
 fn prepend[T](x: T, xs: List[T]): List[T] where notEmpty unsafe go {
   out := make([]T, 0, len(xs)+1)
   return append(append(out, x), xs...)
-}
-
-// sortWith sorts by a comparison: less(a, b) says whether a goes
-// before b. Equal elements keep their order.
-fn sortWith[T](xs: List[T], less: (T, T) => Bool): List[T] unsafe go {
-  import "sort"
-  out := make([]T, len(xs))
-  copy(out, xs)
-  sort.SliceStable(out, func(i, j int) bool { return less(out[i], out[j]) })
-  return out
 }
 
 // range is the Ints from start up to (not including) end.
@@ -706,17 +439,6 @@ fn range(start: Int, end: Int): List[Int] unsafe go {
     out = append(out, i)
   }
   return out
-}
-
-fn join(parts: List[String], separator: String): String unsafe go {
-  import "strings"
-  return strings.Join(parts, separator)
-}
-
-// split always gives at least one part.
-fn split(s: String, separator: String): List[String] where notEmpty unsafe go {
-  import "strings"
-  return strings.Split(s, separator)
 }
 
 // JSON.
@@ -1057,16 +779,6 @@ instance ordString: Ord[String] {
   fn compare(a: String, b: String): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
-// includes reports whether x is in xs.
-fn includes[T: Eq](xs: List[T], x: T): Bool {
-  any(xs, y => y == x)
-}
-
-// distinct keeps the first of each value in xs.
-fn distinct[T: Eq](xs: List[T]): List[T] {
-  fold(xs, [], (seen: List[T], x: T) => if (includes(seen, x)) { seen } else { append(seen, x) })
-}
-
 // decodeJson parses text and decodes it.
 fn decodeJson[T: Decode](text: String): T | JsonError | DecodeError {
   json = parseJson(text)?
@@ -1153,11 +865,11 @@ instance decodeList[T: Decode]: Decode[List[T]] {
 }
 
 fn decodeItems[T: Decode](items: List[Json], index: Int, done: List[T]): List[T] | DecodeError {
-  match (head(items)) {
-    Option.None => reverse(done)
+  match (items.head()) {
+    Option.None => done.reverse()
     Option.Some { value: item } => match (decode[T](item)) {
       e: DecodeError => atPath(e, s"[$index]")
-      x: T => decodeItems(drop(items, 1), index + 1, prepend(x, done))
+      x: T => decodeItems(items.drop(1), index + 1, prepend(x, done))
     }
   }
 }
@@ -1173,11 +885,11 @@ instance decodeMap[V: Decode]: Decode[Map[String, V]] {
 }
 
 fn decodeFields[V: Decode](fields: List[JsonField], done: Map[String, V]): Map[String, V] | DecodeError {
-  match (head(fields)) {
+  match (fields.head()) {
     Option.None => done
     Option.Some { value: field } => match (decode[V](field.value)) {
       e: DecodeError => atPath(e, s".${field.name}")
-      x: V => decodeFields(drop(fields, 1), jsonFieldPut(done, field.name, x))
+      x: V => decodeFields(fields.drop(1), jsonFieldPut(done, field.name, x))
     }
   }
 }
@@ -1216,12 +928,12 @@ instance encodeOption[T: Encode]: Encode[Option[T]] {
 }
 
 instance encodeList[T: Encode]: Encode[List[T]] {
-  fn encode(xs: List[T]): Json { Json.Array { items: map(xs, encode) } }
+  fn encode(xs: List[T]): Json { Json.Array { items: xs.map(encode) } }
 }
 
 instance encodeMap[V: Encode]: Encode[Map[String, V]] {
   fn encode(m: Map[String, V]): Json {
-    Json.Object { fields: map(jsonFieldsOf(m), e => JsonField { name: e.key, value: encode(e.value) }) }
+    Json.Object { fields: jsonFieldsOf(m).map(e => JsonField { name: e.key, value: encode(e.value) }) }
   }
 }
 
@@ -1238,46 +950,172 @@ instance encodeJson: Encode[Json] {
   fn encode(x: Json): Json { x }
 }
 
-// Methods, for chaining: xs.filter(f).map(g), m.get(k), s.trim().
+// List methods. A list never changes: operations build new lists.
+// Methods chain: xs.filter(f).map(g), m.get(k), s.trim().
 // Each List and String method is the function of the same name, with
 // the receiver as its first argument.
 
-fn (xs: List[T]) length[T](): Int { length(xs) }
-fn (xs: List[T]) isEmpty[T](): Bool { isEmpty(xs) }
-fn (xs: List[T] where notEmpty) first[T](): T { first(xs) }
-fn (xs: List[T]) get[T](index: Int): Option[T] { get(xs, index) }
-fn (xs: List[T]) head[T](): Option[T] { head(xs) }
-fn (xs: List[T]) last[T](): Option[T] { last(xs) }
-fn (xs: List[A]) map[A, B](f: (A) => B): List[B] { map(xs, f) }
-fn (xs: List[A]) flatMap[A, B](f: (A) => List[B]): List[B] { flatMap(xs, f) }
-fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] { filter(xs, keep) }
-fn (xs: List[T]) fold[T, A](initial: A, f: (A, T) => A): A { fold(xs, initial, f) }
-fn (xs: List[T]) find[T](matches: (T) => Bool): Option[T where matches] { find(xs, matches) }
-fn (xs: List[T]) any[T](test: (T) => Bool): Bool { any(xs, test) }
-fn (xs: List[T]) all[T](test: (T) => Bool): Bool { all(xs, test) }
-fn (xs: List[T]) count[T](test: (T) => Bool): Int { count(xs, test) }
-fn (xs: List[T]) forEach[T](f: (T) => Unit) { forEach(xs, f) }
-fn (xs: List[T]) take[T](n: Int): List[T] { take(xs, n) }
-fn (xs: List[T]) drop[T](n: Int): List[T] { drop(xs, n) }
-fn (xs: List[T]) reverse[T](): List[T] { reverse(xs) }
-fn (xs: List[T]) concat[T](ys: List[T]): List[T] { concat(xs, ys) }
-fn (xs: List[T]) append[T](x: T): List[T] where notEmpty { append(xs, x) }
-fn (xs: List[T]) sortWith[T](less: (T, T) => Bool): List[T] { sortWith(xs, less) }
-fn (xs: List[T]) includes[T: Eq](x: T): Bool { includes(xs, x) }
-fn (xs: List[T]) distinct[T: Eq](): List[T] { distinct(xs) }
-fn (parts: List[String]) join(separator: String): String { join(parts, separator) }
+fn (xs: List[T]) length[T](): Int unsafe go {
+  return int64(len(xs))
+}
+fn (xs: List[T]) isEmpty[T](): Bool unsafe go {
+  return len(xs) == 0
+}
+// first is the first element of a list known to have one: no Option
+// needed. Check with if (notEmpty(xs)), or require it.
+fn (xs: List[T] where notEmpty) first[T](): T unsafe go {
+  return xs[0]
+}
+// get is the element at index (from 0), if there is one.
+fn (xs: List[T]) get[T](index: Int): Option[T] unsafe go {
+  if index < 0 || index >= int64(len(xs)) {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[index]}
+}
+fn (xs: List[T]) head[T](): Option[T] unsafe go {
+  if len(xs) == 0 {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[0]}
+}
+fn (xs: List[T]) last[T](): Option[T] unsafe go {
+  if len(xs) == 0 {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[len(xs)-1]}
+}
+fn (xs: List[A]) map[A, B](f: (A) => B): List[B] unsafe go {
+  out := make([]B, len(xs))
+  for i, x := range xs {
+    out[i] = f(x)
+  }
+  return out
+}
+fn (xs: List[A]) flatMap[A, B](f: (A) => List[B]): List[B] unsafe go {
+  var out []B
+  for _, x := range xs {
+    out = append(out, f(x)...)
+  }
+  return out
+}
+// filter keeps the elements keep is true for. What keep says about
+// them is known afterwards: filter(xs, positive) is a
+// List[Int where positive].
+fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] unsafe go {
+  var out []T
+  for _, x := range xs {
+    if keep(x) {
+      out = append(out, x)
+    }
+  }
+  return out
+}
+// fold combines the elements from the first to the last, starting
+// from initial: fold([1, 2, 3], 0, (sum, x) => sum + x) is 6.
+fn (xs: List[T]) fold[T, A](initial: A, f: (A, T) => A): A unsafe go {
+  acc := initial
+  for _, x := range xs {
+    acc = f(acc, x)
+  }
+  return acc
+}
+fn (xs: List[T]) find[T](matches: (T) => Bool): Option[T where matches] unsafe go {
+  for _, x := range xs {
+    if matches(x) {
+      return Option_Some[T]{value: x}
+    }
+  }
+  return Option_None[T]{}
+}
+fn (xs: List[T]) any[T](test: (T) => Bool): Bool unsafe go {
+  for _, x := range xs {
+    if test(x) {
+      return true
+    }
+  }
+  return false
+}
+fn (xs: List[T]) all[T](test: (T) => Bool): Bool unsafe go {
+  for _, x := range xs {
+    if !test(x) {
+      return false
+    }
+  }
+  return true
+}
+fn (xs: List[T]) count[T](test: (T) => Bool): Int unsafe go {
+  n := int64(0)
+  for _, x := range xs {
+    if test(x) {
+      n++
+    }
+  }
+  return n
+}
+fn (xs: List[T]) forEach[T](f: (T) => Unit) unsafe go {
+  for _, x := range xs {
+    f(x)
+  }
+}
+// take is the first n elements (all of them if there are fewer).
+fn (xs: List[T]) take[T](n: Int): List[T] unsafe go {
+  n = max(0, min(n, int64(len(xs))))
+  return xs[:n:n]
+}
+// drop is all but the first n elements.
+fn (xs: List[T]) drop[T](n: Int): List[T] unsafe go {
+  n = max(0, min(n, int64(len(xs))))
+  return xs[n:]
+}
+fn (xs: List[T]) reverse[T](): List[T] unsafe go {
+  out := make([]T, len(xs))
+  for i, x := range xs {
+    out[len(xs)-1-i] = x
+  }
+  return out
+}
+fn (xs: List[T]) concat[T](ys: List[T]): List[T] unsafe go {
+  out := make([]T, 0, len(xs)+len(ys))
+  return append(append(out, xs...), ys...)
+}
+fn (xs: List[T]) append[T](x: T): List[T] where notEmpty unsafe go {
+  out := make([]T, 0, len(xs)+1)
+  return append(append(out, xs...), x)
+}
+// sortWith sorts by a comparison: less(a, b) says whether a goes
+// before b. Equal elements keep their order.
+fn (xs: List[T]) sortWith[T](less: (T, T) => Bool): List[T] unsafe go {
+  import "sort"
+  out := make([]T, len(xs))
+  copy(out, xs)
+  sort.SliceStable(out, func(i, j int) bool { return less(out[i], out[j]) })
+  return out
+}
+// includes reports whether x is in xs.
+fn (xs: List[T]) includes[T: Eq](x: T): Bool {
+  xs.any(y => y == x)
+}
+// distinct keeps the first of each value in xs.
+fn (xs: List[T]) distinct[T: Eq](): List[T] {
+  xs.fold([], (seen: List[T], x: T) => if (seen.includes(x)) { seen } else { seen.append(x) })
+}
+fn (parts: List[String]) join(separator: String): String unsafe go {
+  import "strings"
+  return strings.Join(parts, separator)
+}
 
 // sorted is xs in the order of Ord, keeping equal elements in their
 // order.
-fn (xs: List[T]) sorted[T: Ord](): List[T] { sortWith(xs, (a, b) => compare(a, b) < 0) }
+fn (xs: List[T]) sorted[T: Ord](): List[T] { xs.sortWith((a, b) => compare(a, b) < 0) }
 
 // sortBy is xs in the order of what key gives for each element.
-fn (xs: List[T]) sortBy[T, K: Ord](key: (T) => K): List[T] { sortWith(xs, (a, b) => compare(key(a), key(b)) < 0) }
+fn (xs: List[T]) sortBy[T, K: Ord](key: (T) => K): List[T] { xs.sortWith((a, b) => compare(key(a), key(b)) < 0) }
 
 // groupBy puts the elements in lists by what key gives for them, in
 // the order the keys first appear.
 fn (xs: List[T]) groupBy[T, K: Eq](key: (T) => K): Map[K, List[T]] {
-  fold(xs, {:}, (groups, x) => groups.put(key(x), append(groups.getOr(key(x), []), x)))
+  xs.fold({:}, (groups, x) => groups.put(key(x), groups.getOr(key(x), []).append(x)))
 }
 
 // toMap makes a map of entries; a key given twice keeps the later value.
@@ -1290,22 +1128,105 @@ fn (entries: List[Entry[K, V]]) toMap[K: Eq, V](): Map[K, V] unsafe go {
   return _mapOf(keys, vals)
 }
 
-fn (s: String) byteLength(): Int { byteLength(s) }
-fn (s: String) runeCount(): Int { runeCount(s) }
-fn (s: String) contains(part: String): Bool { contains(s, part) }
-fn (s: String) startsWith(prefix: String): Bool { startsWith(s, prefix) }
-fn (s: String) endsWith(suffix: String): Bool { endsWith(s, suffix) }
-fn (s: String) indexOf(part: String): Option[Int] { indexOf(s, part) }
-fn (s: String) toUpper(): String { toUpper(s) }
-fn (s: String) toLower(): String { toLower(s) }
-fn (s: String) trim(): String { trim(s) }
-fn (s: String) replaceAll(old: String, replacement: String): String { replaceAll(s, old, replacement) }
-fn (s: String) repeat(count: Int): String { repeat(s, count) }
-fn (s: String) runeAt(index: Int): Option[Rune] { runeAt(s, index) }
-fn (s: String) substring(from: Int, to: Int): String | OutOfRange { substring(s, from, to) }
-fn (s: String) split(separator: String): List[String] where notEmpty { split(s, separator) }
-fn (s: String) fields(): List[String] { fields(s) }
-fn (s: String) lines(): List[String] { lines(s) }
+// String methods. Lengths and indexes count bytes (UTF-8), except
+// runeCount() and runeAt(), which count Unicode code points.
+
+fn (s: String) byteLength(): Int unsafe go {
+  return int64(len(s))
+}
+fn (s: String) runeCount(): Int unsafe go {
+  import "unicode/utf8"
+  return int64(utf8.RuneCountInString(s))
+}
+fn (s: String) contains(part: String): Bool unsafe go {
+  import "strings"
+  return strings.Contains(s, part)
+}
+fn (s: String) startsWith(prefix: String): Bool unsafe go {
+  import "strings"
+  return strings.HasPrefix(s, prefix)
+}
+fn (s: String) endsWith(suffix: String): Bool unsafe go {
+  import "strings"
+  return strings.HasSuffix(s, suffix)
+}
+// indexOf finds the first occurrence of part in s.
+fn (s: String) indexOf(part: String): Option[Int] unsafe go {
+  import "strings"
+  i := strings.Index(s, part)
+  if i < 0 {
+    return Option_None[int64]{}
+  }
+  return Option_Some[int64]{value: int64(i)}
+}
+fn (s: String) toUpper(): String unsafe go {
+  import "strings"
+  return strings.ToUpper(s)
+}
+fn (s: String) toLower(): String unsafe go {
+  import "strings"
+  return strings.ToLower(s)
+}
+// trim removes leading and trailing white space.
+fn (s: String) trim(): String unsafe go {
+  import "strings"
+  return strings.TrimSpace(s)
+}
+fn (s: String) replaceAll(old: String, replacement: String): String unsafe go {
+  import "strings"
+  return strings.ReplaceAll(s, old, replacement)
+}
+// repeat repeats s count times; a count below 1 gives "".
+fn (s: String) repeat(count: Int): String unsafe go {
+  import "strings"
+  return strings.Repeat(s, int(max(count, 0)))
+}
+// runeAt is the rune at index (counting runes from 0), if there is one.
+fn (s: String) runeAt(index: Int): Option[Rune] unsafe go {
+  if index >= 0 {
+    i := int64(0)
+    for _, r := range s {
+      if i == index {
+        return Option_Some[int32]{value: r}
+      }
+      i++
+    }
+  }
+  return Option_None[int32]{}
+}
+// substring is the runes from index from up to (not including) index
+// to. It is OutOfRange unless 0 <= from <= to <= runeCount(s).
+fn (s: String) substring(from: Int, to: Int): String | OutOfRange unsafe go {
+  import "fmt"
+  runes := []rune(s)
+  if from < 0 || to < from || to > int64(len(runes)) {
+    return OutOfRange{value: fmt.Sprintf("%d to %d", from, to), target: fmt.Sprintf("a String of %d runes", len(runes))}
+  }
+  return string(runes[from:to])
+}
+// split always gives at least one part.
+fn (s: String) split(separator: String): List[String] where notEmpty unsafe go {
+  import "strings"
+  return strings.Split(s, separator)
+}
+// fields splits s around runs of whitespace: " a  b ".fields() is ["a", "b"].
+fn (s: String) fields(): List[String] unsafe go {
+  import "strings"
+  return strings.Fields(s)
+}
+// lines splits s into lines, without their line endings. A final line
+// ending does not start another line.
+fn (s: String) lines(): List[String] unsafe go {
+  import "strings"
+  if s == "" {
+    return []string{}
+  }
+  out := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+  for i, line := range out {
+    out[i] = strings.TrimSuffix(line, "\r")
+  }
+  return out
+}
 
 fn (o: Option[T]) map[T, U](f: (T) => U): Option[U] {
   match (o) {
@@ -1337,8 +1258,18 @@ fn (o: Option[T]) isSome[T](): Bool {
 
 fn (o: Option[T]) isNone[T](): Bool { !o.isSome() }
 
-// Map methods. A map never changes: put and remove give a new one,
-// sharing all but the changed path with it (see bork/maps).
+// Maps are persistent and immutable. A literal keeps its keys in the order
+// first added, as do keys(), values(), entries(), and printing. put() and
+// remove() take time proportional to log32(size), sharing the unchanged paths,
+// so keeping old versions is cheap. Keys have structural equality, including
+// list and map keys; two maps are equal when their entries agree in any order.
+// sorted() or sortedBy(less) keeps keys sorted in a persistent balanced tree
+// (get/put/remove take log2(size)); less must be a strict order agreeing with ==.
+// unordered() gives a smaller, quicker hash map with traversal order that can
+// differ between runs. Printing sorts numeric/string keys by value and other
+// keys by text, grouping mixed kinds, without changing traversal. inOrder()
+// goes back to insertion order, starting from the current traversal order.
+// Operations preserve the order policy of the map they start from.
 
 fn (m: Map[K, V]) get[K: Eq, V](key: K): Option[V] unsafe go {
   if v, ok := m.get(key); ok {

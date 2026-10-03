@@ -1,20 +1,20 @@
 pred positive(x: Int) { x > 0 }
 pred small(x: Int) { x < 10 }
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
 
 fn transfer(amount: Int where positive): Int { amount * 100 }
-fn total(amounts: List[Int where positive]): Int { length(amounts) }
+fn total(amounts: List[Int where positive]): Int { amounts.length() }
 fn noteText(note: Option[String where nonEmpty]): Int { 0 }
 
 fn unchecked(xs: List[Int]): Int { total(xs) }
 
-fn wrongFilter(xs: List[Int]): Int { total(filter(xs, small)) }
+fn wrongFilter(xs: List[Int]): Int { total(xs.filter(small)) }
 
 // map's results come from the lambda, which proves nothing.
-fn mapped(xs: List[Int where positive]): Int { total(map(xs, x => x - 1)) }
+fn mapped(xs: List[Int where positive]): Int { total(xs.map(x => x - 1)) }
 
 // Every source must have the fact.
-fn mixed(xs: List[Int where positive], ys: List[Int]): Int { total(concat(xs, ys)) }
+fn mixed(xs: List[Int where positive], ys: List[Int]): Int { total(xs.concat(ys)) }
 
 fn promise(xs: List[Int]): List[Int where positive] { xs }
 

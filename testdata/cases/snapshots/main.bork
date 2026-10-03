@@ -3,7 +3,7 @@ type Invoice = { customer: String, lines: List[Line] }
 
 fn render(inv: Invoice): String {
   rows = inv.lines.map((l) => s"  ${l.item}: ${l.cents}")
-  s"Invoice for ${inv.customer}\n${join(rows, "\n")}\ntotal: ${fold(inv.lines, 0, (acc, l) => acc + l.cents)}"
+  s"Invoice for ${inv.customer}\n${rows.join("\n")}\ntotal: ${inv.lines.fold(0, (acc, l) => acc + l.cents)}"
 }
 
 fn invoice(): Invoice {
@@ -33,7 +33,7 @@ test "a snapshot not yet taken" {
 }
 
 fn snapshotSquares(xs: List[Int]) uses io {
-  forEach(xs, (x) => assertSnapshot(x * x))
+  xs.forEach((x) => assertSnapshot(x * x))
 }
 
 test "snapshots from a helper are numbered in order" {
@@ -45,5 +45,5 @@ test "Names: with punctuation!" {
 }
 
 test "only the lines near a change are shown" {
-  assertSnapshot(join([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => s"line $n"), "\n"))
+  assertSnapshot([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => s"line $n").join("\n"))
 }

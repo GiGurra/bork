@@ -16,7 +16,7 @@ type SyntaxError = { at: Int, message: String }
 type DivisionByZero = { expr: Expr }
 
 fn skipSpaces(src: String, i: Int): Int {
-  match (runeAt(src, i)) {
+  match (src.runeAt(i)) {
     Option.Some { value: r } => if (isSpace(r)) { skipSpaces(src, i + 1) } else { i }
     Option.None => i
   }
@@ -30,7 +30,7 @@ fn parseExpr(src: String, i: Int): Parsed | SyntaxError {
 
 fn parseExprRest(src: String, left: Parsed): Parsed | SyntaxError {
   at = skipSpaces(src, left.next)
-  match (runeAt(src, at)) {
+  match (src.runeAt(at)) {
     Option.Some { value: r } => match (r) {
       '+' => {
         right = parseTerm(src, at + 1)?
@@ -54,7 +54,7 @@ fn parseTerm(src: String, i: Int): Parsed | SyntaxError {
 
 fn parseTermRest(src: String, left: Parsed): Parsed | SyntaxError {
   at = skipSpaces(src, left.next)
-  match (runeAt(src, at)) {
+  match (src.runeAt(at)) {
     Option.Some { value: r } => match (r) {
       '*' => {
         right = parseFactor(src, at + 1)?
@@ -73,11 +73,11 @@ fn parseTermRest(src: String, left: Parsed): Parsed | SyntaxError {
 // factor = number | "(" expr ")"
 fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
   at = skipSpaces(src, i)
-  match (runeAt(src, at)) {
+  match (src.runeAt(at)) {
     Option.Some { value: r } => if (r == '(') {
       inner = parseExpr(src, at + 1)?
       close = skipSpaces(src, inner.next)
-      match (runeAt(src, close)) {
+      match (src.runeAt(close)) {
         Option.Some { value: ')' } => Parsed { expr: inner.expr, next: close + 1 }
         _ => SyntaxError { at: close, message: "expected )" }
       }
@@ -91,7 +91,7 @@ fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
 }
 
 fn digitsEnd(src: String, i: Int): Int {
-  match (runeAt(src, i)) {
+  match (src.runeAt(i)) {
     Option.Some { value: r } => if (isDigit(r)) { digitsEnd(src, i + 1) } else { i }
     Option.None => i
   }
@@ -99,7 +99,7 @@ fn digitsEnd(src: String, i: Int): Int {
 
 fn parseNumber(src: String, i: Int): Parsed | SyntaxError {
   end = digitsEnd(src, i)
-  match (substring(src, i, end)) {
+  match (src.substring(i, end)) {
     digits: String => match (parseInt(digits)) {
       n: Int => Parsed { expr: Expr.Num { value: n }, next: end }
       e: ParseError => SyntaxError { at: i, message: s"bad number $digits: ${e.message}" }
@@ -111,7 +111,7 @@ fn parseNumber(src: String, i: Int): Parsed | SyntaxError {
 fn parse(src: String): Expr | SyntaxError {
   parsed = parseExpr(src, 0)?
   end = skipSpaces(src, parsed.next)
-  if (end == runeCount(src)) {
+  if (end == src.runeCount()) {
     parsed.expr
   } else {
     SyntaxError { at: end, message: "unexpected input after the expression" }

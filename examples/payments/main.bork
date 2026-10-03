@@ -4,7 +4,7 @@
 
 pred positive(x: Int) { x > 0 }
 pred atMost(x: Int, max: Int) { x <= max }
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
 pred differentFrom(x: String, other: String) { x != other }
 
 type AccountId = String where nonEmpty
@@ -29,7 +29,7 @@ fn parseAmount(raw: String): Cents | Invalid {
 }
 
 fn parseAccount(field: String, raw: String): AccountId | Invalid {
-  id = trim(raw)
+  id = raw.trim()
   if (nonEmpty(id)) { id } else { Invalid { field: field, reason: "missing" } }
 }
 

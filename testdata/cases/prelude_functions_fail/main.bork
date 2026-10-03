@@ -1,0 +1,7 @@
+fn main() {
+  println(length([1]))
+  println(trim(" x "))
+  println(includes([1], 1))
+  f: (String) => Int = byteLength
+  println(f("x"))
+}

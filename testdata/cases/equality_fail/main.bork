@@ -7,6 +7,6 @@ instance eqW: Eq[W] { fn equals(a: W, b: W): Bool { true } }
 fn same[T](a: T, b: T): Bool { a == b }
 
 fn main() {
-  println(includes([F { f: x => x }], F { f: x => x }))
+  println([F { f: x => x }].includes(F { f: x => x }))
   println([(x: Int) => x] == [])
 }

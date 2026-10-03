@@ -1,5 +1,4 @@
-// A package's own functions replace prelude functions of the same name,
-// and locals may use prelude function names.
+// Free functions may share names with methods, and locals may use method names.
 fn trim(s: String): String {
   s"[$s]"
 }
@@ -11,5 +10,5 @@ fn find(id: Int): Option[Int] {
 fn main() {
   count = 3
   last = trim(" x ")
-  println(count, last, find(2), toUpper("still here"))
+  println(count, last, find(2), "still here".toUpper())
 }
