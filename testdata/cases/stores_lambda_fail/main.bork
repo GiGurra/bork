@@ -1,0 +1,96 @@
+type Conn = resource
+
+fn connect(s: Scope): Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
+
+// Elements of a shorter list do not outlive the channel.
+fn shorterList() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    scope inner {
+      [connect(inner)].forEach(c => { _ = send(ch, c) })
+    }
+  }
+}
+
+// A function of Conn may make one in a scope of its own: nothing is
+// known of what it passes.
+fn withConn(f: (Conn) uses state => Unit) uses state {
+  scope s {
+    f(connect(s))
+  }
+}
+
+fn concrete() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    withConn(c => { _ = send(ch, c) })
+  }
+}
+
+// Nor of a channel of T: it could be one of its own scope.
+fn withChannel[T](xs: List[T], f: (Channel[T]) uses state => Unit) uses state {
+  scope s {
+    f(channel[T](s, 1))
+  }
+}
+
+fn channels() uses state {
+  scope app {
+    keep: Atom[List[Channel[Conn]]] = atom([])
+    withChannel([connect(app)], c => { _ = update(keep, cs => cs.append(c)) })
+  }
+}
+
+// fold's function gives back what it is given: its accumulator could
+// hold what the lambda captured.
+fn folded() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    _ = [connect(app)].fold(0, (n, c) => {
+      _ = send(ch, c)
+      n + 1
+    })
+  }
+}
+
+// Arguments after the lambda are not known when it is checked.
+fn eachAfter[T](f: (T) uses state => Unit, xs: List[T]) uses state {
+  match (xs) {
+    [x, ...rest] => {
+      f(x)
+      eachAfter(f, rest)
+    }
+    _ => {}
+  }
+}
+
+fn after() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    eachAfter(c => { _ = send(ch, c) }, [connect(app)])
+  }
+}
+
+// A bound with a method that makes a value of the type.
+class Make[T] {
+  fn make(s: Scope): T
+}
+
+fn made[T: Make](xs: List[T], f: (T) uses state => Unit) uses state {
+  scope s {
+    f(make(s))
+  }
+}
+
+instance makeConn: Make[Conn] {
+  fn make(s: Scope): Conn { connect(s) }
+}
+
+fn bounded() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    made([connect(app)], c => { _ = send(ch, c) })
+  }
+}

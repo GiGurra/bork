@@ -1,0 +1,16 @@
+open a
+open b
+open c
+open d
+open e
+open f
+open g
+["a", "b", "c", "d", "e", "f"]
+["g", "a", "b"]
+close g
+close f
+close e
+close d
+close c
+close b
+close a
