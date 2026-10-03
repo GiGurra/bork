@@ -87,3 +87,8 @@ fn drawPick[T](generator: Generator, values: List[T], build: (Option[T], Generat
   state, _ := source.MarshalBinary()
   return build(value, Generator_generator{state: _borkBytesFrom(state)})
 }
+
+fn (generator: Generator) IntBetween(lo: Int, hi: Int where Above(lo)): Draw[Int] { IntFrom(generator, lo, hi) }
+fn (generator: Generator) Float01(): Draw[Float] { FloatFrom(generator) }
+fn (generator: Generator) Shuffle[T](values: List[T]): Draw[List[T]] { ShuffleFrom(generator, values) }
+fn (generator: Generator) Pick[T](values: List[T]): Draw[Option[T]] { PickFrom(generator, values) }

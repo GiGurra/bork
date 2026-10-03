@@ -1,0 +1,6 @@
+import "bork/rand"
+fn main() {
+  println(rand.IntBetween(1, 1))
+  println(rand.IntFrom(rand.Seed(1), 10, 2))
+  println(rand.Seed(1).IntBetween(2, 2))
+}

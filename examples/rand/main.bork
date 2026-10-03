@@ -1,0 +1,10 @@
+import "bork/rand"
+fn main() {
+  generator = rand.Seed(1, 2)
+  first = generator.IntBetween(0, 100)
+  replay = generator.IntBetween(0, 100)
+  second = first.next.IntBetween(0, 100)
+  println(first == replay)
+  println(second.value >= 0 && second.value < 100)
+  println(generator.Shuffle([1, 2, 3]).value.sorted())
+}
