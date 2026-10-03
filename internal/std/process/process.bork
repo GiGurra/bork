@@ -8,6 +8,8 @@ fn Exit(code: Int) uses io: Never { exit(code) }
 
 // Run captures stdout/stderr. A nonzero exit is a Result, not an I/O error.
 // None environment inherits the parent environment; Some([]) clears it.
+// Inherited output pipes are bounded to one second after exit/cancellation.
+// A successful exit with open pipes is IoError; nonzero Result output may truncate.
 fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Option[Bytes] = Option.None) uses io + state: Result | IoError | Cancelled {
   child = Start(s, name, arguments, environment, directory, stdin)?
   Await(child)
