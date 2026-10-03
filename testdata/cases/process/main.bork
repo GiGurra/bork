@@ -67,6 +67,34 @@ fn server(path: String) uses io + state + clock {
     })
   }
 }
+fn cwd() uses io: String unsafe go {
+  import "os"
+  path, err := os.Getwd()
+  if err != nil { panic(err) }
+  return path
+}
+fn markerDir(path: String): String unsafe go {
+  import "path/filepath"
+  return filepath.Dir(path)
+}
+fn gone(pid: Int) uses io: Bool unsafe go {
+  import "os"
+  import "syscall"
+  p, err := os.FindProcess(int(pid))
+  return err != nil || p.Signal(syscall.Signal(0)) != nil
+}
+fn abandoned() uses io + state: Int | IoError | Cancelled {
+  scope child {
+    proc = process.Start(child, executable(), ["sleep"])?
+    process.Pid(proc)
+  }
+}
+fn attached(s: Scope) uses io + state: process.Process | IoError | Cancelled {
+  scope child {
+    proc = process.Start(child, executable(), ["sleep"])?
+    attach(proc, s)
+  }
+}
 fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
   output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: utf8Bytes("input") })?
   println(output.code)
@@ -77,6 +105,22 @@ fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
   second = process.Await(child)?
   println(first == second)
   println(process.Pid(child) > 0)
+  directory = markerDir(marker(s))
+  located = process.Run(s, executable(), ["cwd"], Option.None, directory)?
+  println(utf8String(located.stdout) == directory + "\n")
+  inherit = process.Run(s, executable(), ["child"])?
+  println(utf8String(inherit.stdout) == "Option.None\n\n")
+  println(utf8String(first.stdout) == "Option.None\n\n")
+  abandonedPid = abandoned()?
+  println(gone(abandonedPid))
+  shared = attached(s)?
+  println(!gone(process.Pid(shared)))
+  process.Stop(shared)
+  println(match (process.Await(shared)) {
+    result: process.Result => false
+    error: IoError => false
+    stopped: Cancelled => true
+  })
   signalTest(s, false)?
   signalTest(s, true)?
   stopped = process.Start(s, executable(), ["sleep"])?
@@ -101,6 +145,7 @@ fn main() {
       process.Exit(7)
     }
     ["sleep"] => childSleep()
+    ["cwd"] => println(cwd())
     ["signal-server", path] => server(path)
     _ => {
       result = scope s { exercise(s) }

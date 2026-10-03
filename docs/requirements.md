@@ -1030,3 +1030,22 @@ Encode and Decode for the schema and optional semantics. Zero-field records
 are unsupported; empty input encodes to empty text. Raw CSV follows Go CSV
 quoting, blank-line skipping, CRLF normalization and LF output, permitting
 ragged rows. No new syntax is introduced.
+
+### Processes and shutdown signals
+
+`bork/process` starts argv commands without a shell. Run captures stdout and
+stderr as Bytes and returns the exit code, including nonzero exits. Start gives
+a scoped Process with repeatable Await, explicit Stop, and Pid. Arguments,
+environment inheritance/replacement, working directory and optional Bytes stdin
+are supported. Missing stdin is empty. Launch/wait errors are IoError;
+explicit or owner cancellation returns Cancelled. Output is retained in memory.
+A final resource cleanup cancels, kills and reaps the child, including a child
+that was never awaited. Attachment selects the destination cancellation source.
+Kill targets the child process, not its descendant process tree.
+Args and Exit alias the prelude helpers. Process operations declare io + state;
+Args/Exit declare io. Pid reads the stored ID without effects.
+
+The scope runtime registers SIGINT/SIGTERM for the program lifetime, cancelling
+root scopes and their nested scopes. Scope-aware waits and checkpoints observe
+cancellation; cleanup runs when those scopes end. Pure work needs an explicit
+checkpoint to observe shutdown. This introduces no new language syntax.

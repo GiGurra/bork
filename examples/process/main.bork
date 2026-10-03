@@ -1,0 +1,15 @@
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Unit | IoError | Cancelled {
+  result = process.Run(s, "echo", ["hello", "from", "a", "subprocess"])?
+  println(result.code)
+  println(utf8String(result.stdout))
+}
+fn main() {
+  result = scope app { run(app) }
+  match (result) {
+    done: Unit => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

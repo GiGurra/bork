@@ -20,7 +20,8 @@ fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Opti
   import "context"
   import "errors"
   import "os/exec"
-  ctx, cancelChild := context.WithCancel(_borkScopeContext(s))
+  handle := _borkNewResourceHandle(nil, s)
+  ctx, cancelChild := context.WithCancel(handle.Context())
   cmd := exec.CommandContext(ctx, name, arguments...)
   cmd.Dir = directory
   if values, present := _borkOptionGet(environment); present { cmd.Env = append([]string{}, values...) }
@@ -29,43 +30,43 @@ fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Opti
   cmd.Stdout, cmd.Stderr = &stdout, &stderr
   if err := cmd.Start(); err != nil {
     cancelChild()
+    handle.Close()
     if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
     return IoError{path: name, message: err.Error()}
   }
   done := make(chan struct{})
   var result any
-  s.Go(func() any {
+  go func() {
     defer cancelChild()
     defer close(done)
     err := cmd.Wait()
     if reason := ctx.Err(); reason != nil {
       result = Cancelled{reason: reason.Error()}
-      return nil
+      return
     }
     var exitError *exec.ExitError
     if err != nil && !errors.As(err, &exitError) {
       result = IoError{path: name, message: err.Error()}
-      return nil
+      return
     }
     result = Result{code: int64(cmd.ProcessState.ExitCode()), stdout: _borkBytesFrom(stdout.Bytes()), stderr: _borkBytesFrom(stderr.Bytes())}
-    return nil
-  })
-  handle := struct { wait func() any; stop func(); pid int }{
+  }()
+  handle.Value = struct { wait func() any; stop func(); pid int }{
     wait: func() any { <-done; return result }, stop: cancelChild, pid: cmd.Process.Pid,
   }
-  return Process{handle: handle, owner: s.Own(cancelChild)}
+  return Process{handle: handle, owner: s.Own(func() { cancelChild(); handle.Close(); <-done })}
 }
 
 // Await may be called repeatedly; every call returns the same immutable result.
 fn Await(child: Process) uses io + state: Result | IoError | Cancelled unsafe go {
-  return child.handle.(struct { wait func() any; stop func(); pid int }).wait()
+  return child.handle.(*_borkResourceHandle).Value.(struct { wait func() any; stop func(); pid int }).wait()
 }
 
 // Stop cancels this child, without cancelling sibling tasks or its scope.
 fn Stop(child: Process) uses io + state unsafe go {
-  child.handle.(struct { wait func() any; stop func(); pid int }).stop()
+  child.handle.(*_borkResourceHandle).Value.(struct { wait func() any; stop func(); pid int }).stop()
 }
 
 fn Pid(child: Process): Int unsafe go {
-  return int64(child.handle.(struct { wait func() any; stop func(); pid int }).pid)
+  return int64(child.handle.(*_borkResourceHandle).Value.(struct { wait func() any; stop func(); pid int }).pid)
 }
