@@ -207,6 +207,11 @@ Import `bork/encoding` for CSV. `encoding.DecodeCsv[T]` reads header-based recor
 using each field's declared type and facts, collecting errors by row and column.
 `EncodeCsv` writes empty optional cells as None (Some("") cannot round-trip); [the CSV example](examples/csv/main.bork) shows both.
 
+Import `bork/process` to run argv commands with captured Bytes output, an exit
+code, optional environment/workdir/stdin, and scope-owned cancellation. SIGINT
+and SIGTERM cancel root scopes so scope-aware work can finish and clean up.
+See [examples/process](examples/process/main.bork).
+
 ## License
 
 [MIT](LICENSE)

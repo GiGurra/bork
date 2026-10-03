@@ -224,3 +224,30 @@ HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeo
   one field. Empty typed input writes empty text. Errors use one-based rows
   including the header and field-name columns (nested paths appended); CSV
   syntax errors use physical line and byte position. See [the CSV example](../examples/csv/main.bork).
+
+`bork/process` runs argv commands without a shell. `Run(scope, executable,
+arguments = [], environment = Option.None, directory = "", stdin = Option.None)`
+returns `Result | IoError | Cancelled`; Result contains `code`, `stdout: Bytes`,
+and `stderr: Bytes`. Nonzero exits are results. None environment inherits the
+parent environment, Some([]) clears it, and Some(values) supplies KEY=value
+entries. An empty directory inherits the current directory. Optional stdin is
+Bytes; None gives an empty input stream. Output is captured in memory.
+`Start` takes the same arguments and returns a scoped Process; `Await(process)`
+returns its result and can be repeated. `Stop(process)` cancels just that child,
+and `Pid` gives its process ID. Processes are killed on owner cancellation and
+reaped at final scope cleanup, even without Await. `attach` moves cancellation
+to the destination scope. These operations declare io and state effects;
+`process.Args` and `process.Exit` alias the prelude helpers with io effects.
+
+SIGINT and SIGTERM cancel root scopes; nested scopes inherit cancellation.
+Scope-aware waits and checkpoints observe it, and cleanup runs as scopes end.
+Code that does not reach a cancellation point continues running. Signals are
+registered for the program's lifetime when scope runtime is used. Stopping a
+subprocess kills that process; it does not manage its descendant process tree.
+See [the process example](../examples/process/main.bork).
+
+Process capture waits at most one second for inherited output pipes after the
+child exits or is cancelled. If a descendant keeps them open after a successful
+exit, the result is IoError rather than partial output. Nonzero exits retain
+their exit code as Result and output may be truncated at this bound.
+Cancellation still returns Cancelled. This bound keeps pipe capture from blocking cleanup forever.
