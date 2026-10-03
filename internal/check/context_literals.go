@@ -246,7 +246,9 @@ func (c *checker) contextRecord(e *syntax.RecordLit, name *syntax.ContextName, w
 func (c *checker) contextVariantCall(e *syntax.Call, name *syntax.ContextName, want Type) Type {
 	t := c.contextTarget(name, want)
 	c.diags.AddCode(name.Pos, "type.context_variant_call", "variants use named fields, not positional calls; write %s { ... }", contextText(name))
+	var valueWant Type
 	if s, ok := t.(*Sealed); ok && genericBaseOrSelf(s) == c.info.Named["Option"] && name.Name == "Some" && len(e.Args) == 1 && !hasNamedArgs(e) {
+		valueWant = s.Variant("Some").Fields[0].Type
 		end := e.End
 		end.Col--
 		openEnd := e.Pos
@@ -259,7 +261,7 @@ func (c *checker) contextVariantCall(e *syntax.Call, name *syntax.ContextName, w
 		})
 	}
 	for _, a := range e.Args {
-		c.expr(a)
+		c.exprWant(a, valueWant)
 	}
 	return Invalid
 }

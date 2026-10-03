@@ -50,6 +50,7 @@ func TestSuggestedEdits(t *testing.T) {
 		{"unknown argument", "fn config(port: Int): Int { port }\nfn main() { println(config(prot: 9)) }\n"},
 		{"duplicate argument", "fn config(port: Int): Int { port }\nfn main() { println(config(1, port: 9)) }\n"},
 		{"copy separator", "type Config = { port: Int }\nfn main() { println(Config { port: 1 }.copy(port = 2)) }\n"},
+		{"context nested Some call", "type Config = { value: Int }\nfn main() { x: Option[Config] = .Some(.{ value: 1 }); println(x) }\n"},
 		{"context Some call", "fn main() { x: Option[Int] = .Some(1); println(x) }\n"},
 		{"context generic variant typo", "fn option[T](value: Option[T]): Option[T] { value }\nfn main() { println(option(.Som { value: 1 })) }\n"},
 		{"context variant typo", "type State = sealed { Ready }\nfn main() { x: State = .Reedy; println(x) }\n"},
