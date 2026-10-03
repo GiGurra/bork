@@ -16,3 +16,5 @@ mirror union false
 fixed values fixed-value false
 fixed limit true
 all closed 22
+owned scope attachment false 22
+owned closed 23

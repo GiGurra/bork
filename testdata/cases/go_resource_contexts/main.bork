@@ -78,4 +78,12 @@ fn main() {
     }
   }
   println("all closed", Closes())
+  scope app {
+    child = openScope(app)
+    r = checked(OpenStruct(child.scope, Params { context: app }))
+    kept = attach(r, app)
+    closeScope(child)
+    println("owned scope attachment", WasCancelled(kept), Closes())
+  }
+  println("owned closed", Closes())
 }
