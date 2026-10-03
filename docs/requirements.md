@@ -1777,13 +1777,27 @@ fix).
 - **Effects.** `needs` is independent of `uses`: it adds no effect, and
   `uses nothing` parameters and predicates' purity are unaffected (predicates
   are excluded for facts, above, not for effects).
-- **Logging (follow-up).** `logged ambient traceId: String` would add the value
-  to every log line written while a `with` binds it, including lines from
-  functions that do not need it: logs are diagnostics, not results, so they may
-  follow the goroutine, as mocks do. The runtime would keep logged bindings in
-  the goroutine's labels (the mechanism [mocks](#propagation-mocks-follow-the-work-not-the-code)
-  use), set by `with` and inherited by tasks. Values of other ambient
-  declarations never reach logs implicitly.
+- **Logging and propagation (follow-ups): one dynamic mechanism.** Two kinds of
+  code need a value without being able to declare `needs` for it: a log line
+  in a function that does not need the trace id, and `bork/http`'s client,
+  which cannot name a user's ambient declarations. Both are opt-in markers on
+  the declaration: `logged ambient traceId: String` adds the value to every
+  log line written while a `with` binds it, and `propagated` (with the codec
+  that writes it into headers or message metadata, bork-gqxe4s) sends it
+  across process boundaries. Both ride one mechanism: `with` also records
+  marked bindings in the goroutine's labels (as
+  [mocks](#propagation-mocks-follow-the-work-not-the-code) do), inherited by
+  tasks. These labels are read only by effectful standard-library boundary code
+  (logging, and `net` clients and servers), never by pure code, so `needs`
+  remains the only way a value reaches what a function computes. Values of
+  unmarked declarations never leave through logs or the network implicitly.
+- **Needs versus markers: the trade-off.** A value read through `needs` must be
+  declared on every function between the `with` and the read, even those that
+  only pass it on. That visibility is the point for values that change what
+  code does, such as `principal` or `tenant`: a reviewer sees which functions
+  act on whose behalf. A trace id usually only labels logs and outgoing calls,
+  so it should be `logged` and `propagated` rather than needed, and then no
+  signature carries it.
 - **Mocking** ([bork-53lit4](#mocking-in-tests-design-bork-53lit4)). A mock's
   body is checked as the target's body, so it may read the target's needs;
   a test binds values with `with` rather than mocking where they come from.
@@ -1792,9 +1806,9 @@ fix).
   of its providers' needs, as it uses the union of their effects. Ambient
   values are never products: they are not resolved by type.
 - **Lifetimes and owned scopes.** None: ambient types hold no lifetime.
-- **Propagation across process boundaries** (bork-gqxe4s) is a separate design:
-  which values travel in http headers or message metadata, and how they are
-  bound on the receiving side.
+- **Propagation across process boundaries** (bork-gqxe4s) designs the
+  `propagated` marker above: the codecs, which headers or metadata carry the
+  values, and how a server binds them on the receiving side.
 - **describe** shows a function's needs beside its effects, in text and JSON
   (`needs: [traceId, locale?]`), and `ambient` declarations with their types.
 
@@ -1822,6 +1836,9 @@ main.bork:33:9: traceId is bound twice in one with
 - Lexical capture: lambdas, function values and tasks keep the bindings in
   force where they are made.
 - Hidden Go parameters, not a carried map.
+- `logged` and `propagated` are opt-in markers on the declaration, sharing one
+  goroutine-label mechanism that only effectful standard-library boundary code
+  reads; trace ids should usually use them rather than `needs`.
 
 ### Open questions
 
