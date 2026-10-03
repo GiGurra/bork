@@ -96,6 +96,9 @@ type _borkDecodeField struct {
  Type string
  Constraints []string
  Kind string
+ Doc string
+ HasDefault bool
+ Default func() any
  Optional bool
  Decode func(Json) any
 }

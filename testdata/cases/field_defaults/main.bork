@@ -1,0 +1,45 @@
+import "bork/env"
+import "bork/encoding"
+pred positive(x: Int) { x > 0 }
+type Level = sealed { Quiet, Loud } derive (Decode, Encode)
+type Child = { name: String = "child" } derive (Decode, Encode)
+type Options = {
+  // Port for incoming traffic.
+  // Uses the application default when omitted.
+  port: Int where positive = 8080
+  verbose: Bool = false
+  names: List[String] = ["one", "two"]
+  labels: Map[String, Int] = {:}
+  child: Child = Child {}
+  level: Level = Level.Quiet
+  optional: Option[Int] = Option.Some { value: 7 }
+  required: String
+} derive (Decode, Encode)
+type Box[T] = { value: T, extras: List[T] = [] } derive (Decode, Encode)
+type Choice = sealed { Item { count: Int = 1 }, Empty } derive (Decode, Encode)
+fn Schema[T: Decode](): List[String] unsafe go {
+ fields, supported := _borkDecodeFields(_d_T_Decode)
+ if !supported { return nil }
+ var out []string
+ for _, field := range fields {
+  if field.Doc != "" { out=append(out,field.Name+": "+field.Doc) }
+  if field.HasDefault { out=append(out,field.Name+": "+_show(field.Default())) }
+ }
+ return out
+}
+type CsvDefault = { name: String = "default", value: Int } derive (Decode, Encode)
+fn main() uses io {
+  println(Options { required: "input" })
+  println(Options { required: "input", port: 9090 })
+  println(decodeJson[Options]("{\"required\":\"json\"}"))
+  println(decodeJson[Options]("{\"required\":\"json\",\"optional\":null}"))
+  println(decodeJson[Options]("{\"required\":\"json\",\"port\":0}"))
+  println(decodeJson[Box[Int]]("{\"value\":1}"))
+  println(Box { value: "generic" })
+  println(Choice.Item {})
+  println(Schema[Options]())
+  println(Schema[Box[Int]]())
+  println(env.LoadWith[Child]("", (name) => Option.None))
+  println(encoding.DecodeCsv[CsvDefault]("name,value\n,1\n"))
+  println(encoding.DecodeCsv[Options]("required\nfrom-csv\n"))
+}

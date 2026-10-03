@@ -2,6 +2,7 @@ package gen
 
 import (
 	"fmt"
+	"go/ast"
 	"strconv"
 	"strings"
 
@@ -18,7 +19,11 @@ func (g *gen) decodeSchema(ci *check.ClassInstance, record *check.Record) string
 		for _, con := range field.Constraints {
 			constraints = append(constraints, strconv.Quote(con.String()))
 		}
-		fmt.Fprintf(&b, "{Name: %q, Type: %q, Constraints: []string{%s}, Kind: (%s).kind, Optional: (%s).optional, Decode: func(value Json) any {\n", field.Name, field.Type.String(), strings.Join(constraints, ", "), dict, dict)
+		defaultValue := "nil"
+		if field.Default != nil {
+			defaultValue = "func() any { return " + g.fieldDefault(field) + " }"
+		}
+		fmt.Fprintf(&b, "{Name: %q, Type: %q, Doc: %q, HasDefault: %t, Default: %s, Constraints: []string{%s}, Kind: (%s).kind, Optional: (%s).optional, Decode: func(value Json) any {\n", field.Name, field.Type.String(), field.Doc, field.Default != nil, defaultValue, strings.Join(constraints, ", "), dict, dict)
 		b.WriteString("_result := func() any {\n_obj := Json_Object{fields: []JsonField{{name: " + fmt.Sprintf("%q", field.Name) + ", value: value}}}\n")
 		b.WriteString(g.decodeFields([]*check.Field{field}, []*check.Dict{ci.Methods[0].Derived.FieldDicts[0][i]}, g.typeText(record)))
 		fmt.Fprintf(&b, "}()\nif err, ok := _result.(DecodeError); ok { return err }\nreturn _result.(%s).%s\n}},\n", g.typeText(record), name(field.Name).Name)
@@ -49,4 +54,13 @@ func (g *gen) decodeKind(typ check.Type) string {
 		return strconv.Quote("bool")
 	}
 	return strconv.Quote("json")
+}
+
+func (g *gen) fieldDefault(field *check.Field) string {
+	setup, value := g.value(field.Default)
+	if len(setup) == 0 {
+		return g.text(value)
+	}
+	setup = append(setup, &ast.ReturnStmt{Results: []ast.Expr{value}})
+	return g.text(&ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(field.Type)}}}}, Body: &ast.BlockStmt{List: setup}}})
 }

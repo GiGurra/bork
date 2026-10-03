@@ -1,0 +1,4 @@
+Item { state: State.hidden, names: ["first"] }
+Item { state: State.hidden, names: ["first"] }
+Box { value: 1, extras: [] }
+Box { value: "generic", extras: [] }

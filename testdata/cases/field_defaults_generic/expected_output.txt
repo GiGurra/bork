@@ -1,0 +1,3 @@
+Box { value: 1, xs: [] }
+Box { value: "one", xs: [] }
+Box { value: "decoded", xs: [] }

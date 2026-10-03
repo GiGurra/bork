@@ -1,0 +1,13 @@
+Options { port: 8080, verbose: false, names: ["one", "two"], labels: {:}, child: Child { name: "child" }, level: Level.Quiet, optional: Option.Some { value: 7 }, required: "input" }
+Options { port: 9090, verbose: false, names: ["one", "two"], labels: {:}, child: Child { name: "child" }, level: Level.Quiet, optional: Option.Some { value: 7 }, required: "input" }
+Options { port: 8080, verbose: false, names: ["one", "two"], labels: {:}, child: Child { name: "child" }, level: Level.Quiet, optional: Option.Some { value: 7 }, required: "json" }
+Options { port: 8080, verbose: false, names: ["one", "two"], labels: {:}, child: Child { name: "child" }, level: Level.Quiet, optional: Option.None, required: "json" }
+DecodeError { path: ".port", message: "must be positive" }
+Box { value: 1, extras: [] }
+Box { value: "generic", extras: [] }
+Choice.Item { count: 1 }
+["port: Port for incoming traffic.\nUses the application default when omitted.", "port: 8080", "verbose: false", "names: [\"one\", \"two\"]", "labels: {:}", "child: Child { name: \"child\" }", "level: Level.Quiet", "optional: Option.Some { value: 7 }"]
+["extras: []"]
+Child { name: "child" }
+[CsvDefault { name: "", value: 1 }]
+[Options { port: 8080, verbose: false, names: ["one", "two"], labels: {:}, child: Child { name: "child" }, level: Level.Quiet, optional: Option.Some { value: 7 }, required: "from-csv" }]

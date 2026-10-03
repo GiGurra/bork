@@ -15,7 +15,7 @@ import (
 // returned file holds whatever could be parsed.
 func Parse(path string, src []byte, diags *diag.List) *File {
 	toks, comments := Lex(path, src, diags)
-	p := &parser{toks: toks, diags: diags, imports: map[string]bool{}}
+	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}}
 	f := &File{Path: path, Comments: comments}
 	// Imports come first.
 	for {
@@ -91,9 +91,10 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 type bailout struct{}
 
 type parser struct {
-	toks  []Token
-	i     int
-	diags *diag.List
+	comments []Comment
+	toks     []Token
+	i        int
+	diags    *diag.List
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
@@ -296,7 +297,12 @@ func (p *parser) fieldDecls() []*FieldDecl {
 	p.list(RBrace, "a field", func() {
 		fname := p.expect(TIdent, "(field name)")
 		p.expect(Colon, "after field name")
-		fields = append(fields, &FieldDecl{Pos: fname.Pos, Name: fname.Text, Type: p.typeExpr()})
+		field := &FieldDecl{Pos: fname.Pos, Name: fname.Text, Type: p.typeExpr(), Doc: p.fieldDoc(fname.Pos)}
+		if p.at(Assign) {
+			p.next()
+			field.Default = p.expr()
+		}
+		fields = append(fields, field)
 	})
 	return fields
 }
@@ -1444,4 +1450,35 @@ func (p *parser) andList() []Expr {
 		list = append(list, p.expr())
 	}
 	return list
+}
+
+func (p *parser) fieldDoc(pos diag.Pos) string {
+	line := pos.Line - 1
+	var lines []string
+	for i := len(p.comments) - 1; i >= 0; i-- {
+		comment := p.comments[i]
+		if comment.Pos.Line > line {
+			continue
+		}
+		if comment.Pos.Line != line || !strings.HasPrefix(comment.Text, "//") {
+			break
+		}
+		// A trailing comment belongs to the preceding field or declaration.
+		trailing := false
+		for _, token := range p.toks {
+			if token.Pos.Line == line && token.Pos.Col < comment.Pos.Col && token.Kind != Semi {
+				trailing = true
+				break
+			}
+		}
+		if trailing {
+			break
+		}
+		lines = append(lines, strings.TrimSpace(strings.TrimPrefix(comment.Text, "//")))
+		line--
+	}
+	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+		lines[i], lines[j] = lines[j], lines[i]
+	}
+	return strings.Join(lines, "\n")
 }

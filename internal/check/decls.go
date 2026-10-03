@@ -204,7 +204,7 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 			c.errorf(fd.Type.Pos, "field %s cannot have type Unit", fd.Name)
 			t = Invalid
 		}
-		fields = append(fields, &Field{Name: fd.Name, Type: t})
+		fields = append(fields, &Field{Name: fd.Name, Type: t, Decl: fd, Pkg: c.pkg, Prelude: c.inPrelude, Doc: fd.Doc, defaultGeneric: hasTypeParam(t)})
 	}
 	return fields
 }
@@ -212,6 +212,13 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 // resolveType turns a written type into a Type. A nil type means Unit
 // (a function without a declared result).
 func (c *checker) resolveType(t *syntax.TypeExpr) Type {
+	out := c.resolveTypeInner(t)
+	if t != nil {
+		c.noteDefaultTypeUse(out, t.Pos)
+	}
+	return out
+}
+func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 	if t == nil {
 		return Unit
 	}

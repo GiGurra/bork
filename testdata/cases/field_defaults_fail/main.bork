@@ -1,0 +1,10 @@
+pred positive(x: Int) { x > 0 }
+fn Compute(): Int { 1 }
+type Wrong = { number: Int = "string" }
+type Open = { number: Int = Compute() }
+type BadFact = { number: Int where positive = 0 }
+type Missing = { number: Int }
+type Generic[T] = { value: T = 0 }
+type Nested = { child: Missing = Missing { number: "bad" } }
+type Recursive = { children: List[Recursive] = [Recursive {}] }
+fn main() { Missing {} }

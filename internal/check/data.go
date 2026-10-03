@@ -283,8 +283,26 @@ func (c *checker) fieldInits(e *syntax.RecordLit, fields []*Field, owner string)
 // fieldInitsTyped checks a literal's fields. If types is not nil, it
 // holds the types of the field values, already checked.
 func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner string, types []Type) {
+	inits := append([]*syntax.FieldInit(nil), e.Fields...)
+	present := map[string]bool{}
+	for _, fi := range inits {
+		present[fi.Name] = true
+	}
+	for _, field := range fields {
+		if present[field.Name] {
+			continue
+		}
+		c.ensureFieldDefault(field)
+		if x := c.info.fieldDefaults[field]; x != nil {
+			if isLiteral(x) {
+				x = copyLiteral(x)
+			}
+			inits = append(inits, &syntax.FieldInit{Pos: e.Position(), Name: field.Name, Value: x})
+		}
+	}
+	c.info.recordInits[e] = inits
 	given := map[string]bool{}
-	for i, fi := range e.Fields {
+	for i, fi := range inits {
 		f := findField(fields, fi.Name)
 		if f == nil {
 			c.errorf(fi.Pos, "%s has no field %s", owner, fi.Name)
@@ -298,8 +316,10 @@ func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner st
 		}
 		given[fi.Name] = true
 		var t Type
-		if types != nil {
+		if types != nil && i < len(types) {
 			t = types[i]
+		} else if c.sharedDefaults[fi.Value] {
+			t = c.info.types[fi.Value]
 		} else {
 			t = c.exprWant(fi.Value, f.Type)
 		}

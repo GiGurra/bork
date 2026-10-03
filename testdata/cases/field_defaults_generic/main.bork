@@ -1,0 +1,9 @@
+pred short[T](xs: List[T]) { xs.length() < 2 }
+type Unused[T] = { xs: List[T] where short = [] }
+type Box[T] = { value: T, xs: List[T] where short = [] } derive (Decode, Encode)
+fn Helper[T](value: T): Box[T] { Box { value: value } }
+fn main() uses io {
+  println(Helper(1))
+  println(Helper("one"))
+  println(decodeJson[Box[String]]("{\"value\":\"decoded\"}"))
+}
