@@ -16,9 +16,9 @@ fn put(ch: Channel[Conn], c: Conn in ch) uses state {
 }
 
 // handOver opens the next connection in a new owned scope, hands it to
-// the consumer through the channel (attached to the channel's scope, so
-// it stays open), and closes the previous generation.
-fn handOver(prev: OwnedScope, ch: Channel[Conn] in app, app: Scope, n: Int) uses io + state {
+// the consumer through the channel (attached to app, which outlives the
+// channel, so it stays open), and closes the previous generation.
+fn handOver(prev: OwnedScope, ch: Channel[Conn], app: Scope in ch, n: Int) uses io + state {
   next = openScope(app)
   c = connect(s"gen$n", next.scope)
   put(ch, attach(c, app))

@@ -43,6 +43,7 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 		children: map[*Var]*child{},
 		gone:     map[*Var]goneAt{},
 		bound:    map[*Var]int{},
+		inTarget: map[*Var]lifetime{},
 	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -109,6 +110,9 @@ type lifeChecker struct {
 	gone     map[*Var]goneAt
 	bound    map[*Var]int
 	owners   [][]*Var
+	// inTarget holds the scope each parameter declared `in` another
+	// belongs to: the parameter (as a scope of the caller) outlives it.
+	inTarget map[*Var]lifetime
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -130,7 +134,15 @@ func (l *lifeChecker) function(fn *Func) {
 	// its scope: an owner's child, or a Scope parameter's.
 	for i, p := range fn.ParamVars {
 		if i < len(fn.ParamIn) && fn.ParamIn[i] >= 0 {
-			l.env[p] = l.scopeOfVar(fn.ParamVars[fn.ParamIn[i]])
+			target := l.scopeOfVar(fn.ParamVars[fn.ParamIn[i]])
+			l.env[p] = target
+			l.inTarget[p] = target
+			// A channel or an atom declared in a scope is only known to
+			// outlive it: what is stored in it must outlive the parameter
+			// itself.
+			if holdsStore(p.Type) {
+				l.env[p] = target.union(lifetime{p})
+			}
 		}
 	}
 	for _, p := range fn.ParamVars {
@@ -274,6 +286,41 @@ func (l *lifeChecker) shorter(a, b lifetime) any {
 	return nil
 }
 
+// storeShorter returns a scope of lifetime a that may end before a
+// container of lifetime b does, or nil if a value of lifetime a can be
+// kept in it. Unlike shorter, each scope of a must outlive every scope of
+// b: a container whose lifetime was widened by mixing it with shorter
+// values (an if, a record, a generic call) is the same container, and
+// lives as long as before.
+func (l *lifeChecker) storeShorter(a, b lifetime) any {
+	for _, x := range a {
+		if !l.outlivesAll(x, b) {
+			return x
+		}
+	}
+	return nil
+}
+
+// funcRef reports a function used as a value whose call would keep an
+// argument (in a channel or an atom, or as a parameter declared in
+// another): a function value's caller is not checked for that.
+func (l *lifeChecker) funcRef(x *FuncRef) {
+	fn := x.Inst.Func
+	for i, t := range x.Inst.Params {
+		if !l.carriesLife(t) || i >= len(fn.Decl.Params) {
+			continue
+		}
+		keeps := i < len(fn.ParamIn) && fn.ParamIn[i] >= 0
+		if fn.Prelude && i == 1 && (fn.Decl.Name == "send" || fn.Decl.Name == "update" || fn.Decl.Name == "swap") {
+			keeps = true
+		}
+		if keeps {
+			l.errorf(x.Pos(), "%s cannot be used as a function value here: it keeps its argument %s, which a call through a function value does not check; call it in a lambda instead", x.Name, fn.Decl.Params[i].Name)
+			return
+		}
+	}
+}
+
 // scopeText names a scope of a lifetime, for messages.
 func (l *lifeChecker) scopeText(x any) string {
 	switch x := x.(type) {
@@ -290,6 +337,13 @@ func (l *lifeChecker) scopeText(x any) string {
 func (l *lifeChecker) scopeOutlives(x, y any) bool {
 	if x == y {
 		return true
+	}
+	if v, ok := x.(*Var); ok {
+		for _, t := range l.inTarget[v] {
+			if l.scopeOutlives(t, y) {
+				return true
+			}
+		}
 	}
 	// A child scope is outlived by its parent, and what outlives that:
 	// the scopes its owner belongs to.
@@ -488,6 +542,9 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return nil
 	case *Lambda:
 		return l.lambda(x)
+	case *FuncRef:
+		l.funcRef(x)
+		return nil
 	case *Call:
 		life := l.callLife(x)
 		if x.Type() == OwnedScope {
@@ -757,7 +814,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	// update's or swap's function), and gives it as a value of its own
 	// lifetime: it must live as long.
 	if fn != nil && fn.Prelude && len(args) == 2 && (fn.Decl.Name == "send" || fn.Decl.Name == "update" || fn.Decl.Name == "swap") {
-		if short := l.shorter(args[1], args[0]); short != nil {
+		if short := l.storeShorter(args[1], args[0]); short != nil {
 			what := "channel"
 			if fn.Decl.Name != "send" {
 				what = "atom"
@@ -768,7 +825,10 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 					hint = fmt.Sprintf("declare that it does: %s: ... in %s", v.Name, c.Var.Name)
 				}
 			}
-			l.errorf(xargs[1].Pos(), "%s may not live as long as the %s %s (it depends on %s), which keeps it; %s", describe(xargs[1]), what, describe(xargs[0]), l.scopeText(short), hint)
+			if d := describe(xargs[0]); d != "this value" {
+				what += " " + d
+			}
+			l.errorf(xargs[1].Pos(), "%s may not live as long as the %s (it depends on %s), which keeps it; %s", describe(xargs[1]), what, l.scopeText(short), hint)
 		}
 	}
 	// Go code given a scope may keep its other arguments until the scope

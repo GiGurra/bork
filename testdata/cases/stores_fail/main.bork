@@ -72,4 +72,86 @@ fn fromTask() uses state {
   }
 }
 
+// A container mixed with shorter values is still the same container.
+fn mixedIf() uses state {
+  scope app {
+    a: Atom[Option[Conn]] = atom(Option.Some { value: connect(app) })
+    scope inner {
+      b: Atom[Option[Conn]] = atom(Option.Some { value: connect(inner) })
+      x = if (true) { a } else { b }
+      c = connect(inner)
+      _ = update(x, old => Option.Some { value: c })
+    }
+  }
+}
+
+fn second[T](x: T, y: Conn): T {
+  x
+}
+
+fn mixedGeneric() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    scope inner {
+      c = connect(inner)
+      _ = send(second(ch, c), c)
+    }
+  }
+}
+
+type Holder = { ch: Channel[Conn], tmp: Conn }
+
+fn putHeld(h: Holder, c: Conn in h) uses state {
+  _ = send(h.ch, c)
+}
+
+fn mixedRecord() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    scope inner {
+      c = connect(inner)
+      putHeld(Holder { ch: ch, tmp: c }, c)
+    }
+  }
+}
+
+// A channel declared in a scope only outlives it: values of the scope
+// cannot be stored in it, unless the scope is declared in the channel.
+fn fill(s: Scope, ch: Channel[Conn] in s) uses state {
+  _ = send(ch, connect(s))
+}
+
+fn fillIn(ch: Channel[Conn], s: Scope in ch) uses state {
+  _ = send(ch, connect(s))
+}
+
+fn callsFillIn() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    scope inner {
+      fillIn(ch, inner)
+    }
+  }
+}
+
+// Functions that keep an argument cannot be used as values.
+fn apply2[A, B](f: (A, B) => Unit | Cancelled | Closed, a: A, b: B): Unit | Cancelled | Closed {
+  f(a, b)
+}
+
+fn applyPut[A, B](f: (A, B) => Unit, a: A, b: B) {
+  f(a, b)
+}
+
+fn functionValues(app: Scope) uses state {
+  ch = channel[Conn](app, 1)
+  ints = channel[Int](app, 1)
+  scope inner {
+    c = connect(inner)
+    _ = apply2(send, ch, c)
+    _ = apply2(send, ints, 1)
+    applyPut(putIn, ch, c)
+  }
+}
+
 fn main() {}

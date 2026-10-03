@@ -520,6 +520,9 @@ func (c *checker) try(e *syntax.Try) Type {
 // Reading and matching a private record stays public; only construction and
 // updates of its representation belong to the declaring package.
 func (c *checker) recordConstruction(pos diag.Pos, rec *Record, operation string) bool {
+	if c.storeFields(pos, rec) {
+		return false
+	}
 	if rec.Decl == nil || !rec.Decl.Private || rec.Pkg == c.pkg {
 		return true
 	}

@@ -55,6 +55,18 @@ func (c *checker) ownerSignature(fn *Func) {
 			fn.ParamIn[i] = j
 		}
 	}
+	// Parameters cannot belong to each other in a cycle.
+	for i := range fn.ParamIn {
+		j := fn.ParamIn[i]
+		for steps := 0; j >= 0 && steps < len(fn.ParamIn); steps++ {
+			if j == i {
+				c.errorf(fd.Params[i].InPos, "parameter %s belongs to itself through other parameters' in clauses", fd.Params[i].Name)
+				fn.ParamIn[i] = -1
+				break
+			}
+			j = fn.ParamIn[j]
+		}
+	}
 	if fn.Result != OwnedScope && containsOwned(fn.Result) {
 		c.errorf(fd.Result.Pos, "%s cannot return an OwnedScope inside another type; return the OwnedScope itself", fd.Name)
 	}
@@ -71,12 +83,52 @@ func (c *checker) ownerSignature(fn *Func) {
 }
 
 // holdsScope reports whether a value of type t may belong to a scope,
-// as far as the signature shows: it is not a plain basic value.
+// so that a parameter can be declared in it.
 func holdsScope(t Type) bool {
-	if b, ok := t.(*Basic); ok {
-		return t == Scope || t == OwnedScope || b == Invalid
+	return t == Invalid || (&lifeChecker{carries: map[Type]bool{}}).carriesLife(t)
+}
+
+// holdsStore reports whether a value of type t holds a Channel or an
+// Atom, which keep what is stored in them.
+func holdsStore(t Type) bool {
+	return holdsStoreSeen(t, map[Type]bool{})
+}
+
+func holdsStoreSeen(t Type, seen map[Type]bool) bool {
+	if seen[t] {
+		return false
 	}
-	return true
+	seen[t] = true
+	switch t := t.(type) {
+	case *Record:
+		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && (b.Name == "Channel" || b.Name == "Atom") {
+			return true
+		}
+		for _, f := range t.Fields {
+			if holdsStoreSeen(f.Type, seen) {
+				return true
+			}
+		}
+	case *Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if holdsStoreSeen(f.Type, seen) {
+					return true
+				}
+			}
+		}
+	case *List:
+		return holdsStoreSeen(t.Elem, seen)
+	case *Map:
+		return holdsStoreSeen(t.Key, seen) || holdsStoreSeen(t.Value, seen)
+	case *Union:
+		for _, m := range t.Members {
+			if holdsStoreSeen(m, seen) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // containsOwned reports whether values of type t hold an OwnedScope.
@@ -316,7 +368,7 @@ func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved m
 				}
 				continue
 			}
-			if short := l.shorter(args[j], target); short != nil {
+			if short := l.storeShorter(args[j], target); short != nil {
 				l.errorf(xargs[j].Pos(), "%s may not live as long as %s (it depends on %s), but %s declares parameter %s in %s", describe(xargs[j]), describe(xargs[t]), l.scopeText(short), fn.Decl.Name, fn.Decl.Params[j].Name, fn.Decl.Params[t].Name)
 				args[j] = target
 			}

@@ -73,7 +73,7 @@ GoBody     = "unsafe" "go" ( "{" { GoImport } GoStatements "}" | StringLit ) .
                                              (* unsafe go "os.Getenv": a binding to a Go function *)
 GoImport   = "import" StringLit newline .     (* import "strings" *)
 Params     = Param { "," Param } [ "," ] .
-Param      = Ident ":" Type [ "in" Ident ] [ "=" Expr ] .   (* a default: a literal; only on the last parameters. conn: Conn in prev: it belongs to the scope of parameter prev, or lives as long as it *)
+Param      = Ident ":" Type [ "in" Ident ] [ "=" Expr ] .   (* a default: a literal; only on the last parameters. conn: Conn in prev: it belongs to the scope of parameter prev, or lives as long as it; s: Scope in ch lets values of s be stored in channel ch *)
 Type       = Constrained { "|" Constrained } .  (* a union: Int | NotFound *)
 Constrained = TypeAtom [ Where ] .
 Where      = "where" Clause { "and" Clause } .

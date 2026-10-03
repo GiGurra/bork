@@ -1,2 +1,11 @@
 main.bork:4:10: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
 main.bork:7:5: the fields of Atom are internal; use its functions (send, receive, update, current, ...)
+main.bork:14:10: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
+main.bork:16:9: the fields of Atom are internal; use its functions (send, receive, update, current, ...)
+main.bork:17:10: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
+main.bork:21:3: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
+main.bork:21:24: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
+main.bork:21:46: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
+main.bork:21:69: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
+main.bork:25:34: parameter s cannot belong to xs, of type List[Int], which holds no scope
+main.bork:27:26: parameter a belongs to itself through other parameters' in clauses

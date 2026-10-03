@@ -5,3 +5,10 @@ main.bork:41:16: c may not live as long as the channel ch (it depends on owned s
 main.bork:47:16: c may not live as long as the channel ch (it depends on parameter c), which keeps it; declare that it does: c: ... in ch
 main.bork:58:17: this value may not live as long as ch (it depends on scope inner), but putIn declares parameter c in ch
 main.bork:69:22: this value may not live as long as the channel ch (it depends on scope t), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
+main.bork:83:21: the lambda may not live as long as the atom x (it depends on scope inner), which keeps it; store only values that outlive the atom, or attach a resource to its scope first
+main.bork:97:31: c may not live as long as the channel (it depends on scope inner), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
+main.bork:113:42: c may not live as long as this value (it depends on scope inner), but putHeld declares parameter c in h
+main.bork:121:16: this value may not live as long as the channel ch (it depends on parameter s), which keeps it; declare that it does: s: ... in ch
+main.bork:132:18: inner may not live as long as ch (it depends on scope inner), but fillIn declares parameter s in ch
+main.bork:151:16: send cannot be used as a function value here: it keeps its argument x, which a call through a function value does not check; call it in a lambda instead
+main.bork:153:14: putIn cannot be used as a function value here: it keeps its argument c, which a call through a function value does not check; call it in a lambda instead
