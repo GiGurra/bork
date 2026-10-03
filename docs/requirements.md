@@ -1592,6 +1592,246 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
   it can reach, so it can run without a network.
 - Mocking class instances, if real code shows the need.
 
+## Ambient values (design: bork-j68yln)
+
+> **Design, not implemented.** Typed request-scoped values: bork's answer to the
+> value half of Go's `context.Context`. The other half, cancellation and
+> deadlines, is already [scopes](#resources-and-scopes).
+
+A trace id, the signed-in principal, a tenant or a locale belongs to a request,
+not to any one function's job, and threading it through every signature
+between the handler and the log line is the noise Go's `ctx.Value(key)` avoids.
+But `ctx.Value` is untyped, can be missing at runtime, and does not show in a
+signature. In bork an ambient value is declared with a type, a function says
+which ones it reads (as it says which effects it uses), and the compiler checks
+that every caller provides them. The dependency is visible, not magic.
+
+```
+ambient traceId: String
+ambient principal: auth.Principal
+ambient locale: String
+
+fn audit(event: Event) uses io needs traceId + principal: Unit | IoError {
+  fs.Append(auditLog, s"${traceId} ${principal.name} ${event.kind}\n")
+}
+
+fn greeting(name: String) needs locale?: String {
+  match locale.getOr("en") { "sv" => s"Hej ${name}", _ => s"Hello ${name}" }
+}
+
+fn handle(req: http.Request, s: Scope) uses io + state: http.Response {
+  with (traceId: req.header("X-Trace-Id").getOr(newTraceId()), principal: authenticate(req)?) {
+    audit(Event.Viewed { path: req.path })?
+    http.Text(200, greeting(req.query("name").getOr("you")))
+  }
+}
+```
+
+### Declaring
+
+```ebnf
+AmbientDecl = "ambient" Ident ":" Type .
+```
+
+- **An ambient value is a package-level name with a type.** It has no value of
+  its own, and no default: it is unbound until a `with` binds it. It lives in
+  the value namespace, so the usual rules apply: an upper-case name is exported
+  and read as `trace.Id` from other packages, and no local can reuse the name.
+- **Its type must be data:** no `Scope`, `OwnedScope`, resource, task, atom,
+  channel, or function type, nor a type that contains one. An ambient value
+  describes the request; capabilities (a database, a clock, a client) stay
+  parameters, or come from [assembly](#compile-time-dependency-assembly-proposal).
+  This also keeps ambient values out of the lifetime check: a binding can be
+  captured by tasks that outlive its `with` block (below), which is only safe
+  for values that hold no lifetime.
+- **No defaults in v1.** "Unbound" has one meaning everywhere; a function that
+  can do without a value reads it as optional and picks its own fallback
+  (`locale.getOr("en")`), so the fallback is visible where it is used.
+
+### Reading: `needs`
+
+```ebnf
+Needs = "needs" Need { "+" Need } .
+Need  = ( Ident | Ident "." Ident ) [ "?" ] .
+```
+
+- **A function names what it reads after `uses`, before the result**, in
+  declarations and method signatures: `fn f(x: Int) uses io needs traceId: Int`.
+  Names are joined with `+`, as effects are. Inside the body the name is an
+  ordinary immutable value of the declared type.
+- **Reading is pure.** A needed value behaves exactly like a hidden parameter:
+  the same arguments and the same bindings give the same result. So `needs`
+  adds no effect, and a pure function may need values.
+- **Checked like `uses`.** A function's body may read only what it declares or
+  binds itself, and calling a function that needs `traceId` counts as reading
+  it. A missing `needs` is an error that names the call and the fix, carried as
+  a text edit in `bork check --json`. An unexported function may not declare a
+  need it never reads; exported functions may, to keep their API stable.
+  Needs never climb silently to callers, as with effects.
+- **Optional reads: `needs locale?`.** The body sees `locale: Option[String]`.
+  A call never fails for an optional need: the caller passes `Some` when it has
+  the value (bound by a `with` around the call, or needed itself), passes its
+  own `Option` when it needs it optionally too, and `None` otherwise. So adding
+  an optional need to a function breaks no caller, and only the functions that
+  care say so.
+- **A caller provides a need if it declares it or binds it.** A `needs locale?`
+  does not provide `locale` to a callee that requires it: the value may be
+  missing.
+
+### Binding: `with`
+
+```ebnf
+WithExpr = "with" "(" Ident ":" Expr { "," Ident ":" Expr } ")" Block .
+```
+
+- **`with (traceId: id, principal: p) { ... }` binds values for the block**,
+  and is an expression whose value is the block's, like a `scope` block. `?`
+  and `return` leave it as they leave any block. The names are ambient values
+  (`trace.Id` for another package's); the values are checked against their
+  declared types, facts included.
+- **Bindings are immutable and nest.** An inner `with` may bind a name again for
+  its own block (the one place a name is bound again, as a nested `mock` may);
+  nothing can change a binding in place. Binding one name twice in one `with`
+  is an error. The values are evaluated left to right before any of them is
+  bound, so `with (traceId: s"${traceId}/retry") { ... }` reads the outer one.
+- **`with` is a keyword where an expression starts and `(` follows.** A
+  function named `with` cannot be called as `with(...)` at the start of an
+  expression; elsewhere `with` stays usable as a name (`scope s with ...` is
+  unchanged).
+
+### Where values come from
+
+- **`main` and tests cannot declare `needs`.** They are the roots, so they bind
+  what the code below them reads. A test binds the values it wants
+  (`with (principal: admin) { ... }`) instead of mocking a `currentUser()`
+  function; that is the reason to prefer an ambient value over a function that
+  looks it up.
+- **Predicates and rules cannot read ambient values**, neither by `needs` nor
+  through a call that needs one. A fact is a property of a value that
+  travels with it: `doc: Doc where visible` proved while one principal is bound
+  must not still hold after a `with` binds another. A predicate may still bind
+  values with `with` and call functions that need them, since the result then
+  depends on its arguments alone.
+- **Class methods cannot declare `needs` in v1**, and neither can instances of
+  them: the class fixes the signature, and `Eq` or `Encode` reading the request
+  is not something a reader of `a == b` expects. A free function or a method
+  declared with a receiver can.
+- **Default parameter values** are closed values and cannot read ambient
+  values. Compile-time evaluation only runs code whose needs are bound in the
+  code being evaluated.
+- **`unsafe go` functions may declare `needs`.** The values are visible in the
+  Go body by their names (an optional one as the prelude's `Option` in Go).
+
+### Function values, lambdas, and tasks
+
+- **A lambda captures the bindings in force where it is created**, as it
+  captures locals: a lambda that calls `audit` needs `traceId` and `principal`
+  from the enclosing function, which must need or bind them. So function types
+  do not carry needs, and a callback passed down through code that knows
+  nothing about trace ids keeps the request's values.
+- **A named function used as a value is bound where it is named.**
+  `events.forEach(audit)` reads `traceId` and `principal` at that point, like
+  `events.forEach(e => audit(e))`. The same holds for method references.
+- **So tasks inherit the bindings.** `spawn(s, () => audit(e))` captures them
+  when the lambda is made, whatever goroutine runs it, and `http.Listen`'s
+  handler captures what is bound where the server starts. Per-request values
+  are bound by the handler (`handle` above), so each request has its own.
+- **Lexical, not dynamic.** A value reaches a function along the calls and
+  closures that the source shows, never through what happened to be bound on
+  a goroutine. This is where ambient values differ from mocks, which follow the
+  goroutine: a mock replaces code for a test, while an ambient value is an
+  input the code computes with, and must be the same on every path the checker
+  sees.
+
+### Implementation: hidden parameters
+
+The compiler threads each need through the functions that declare it as an
+extra Go parameter, after the ordinary ones, sorted by package and name so the
+Go signature does not depend on the order the `needs` clause is written in. A
+`with` block binds Go locals (`_amb_traceId := ...`), a call passes the locals
+or the caller's own hidden parameters, and a lambda or function value closes
+over them as it closes over any local. An optional need is an `Option` parameter.
+
+The alternative, a map of values carried by the scope (or the goroutine) and
+looked up at each read, was rejected:
+
+- **Hidden parameters are typed and static.** There is no lookup, no type
+  assertion, and no way to read a missing value. A map needs both a lookup and
+  a check that it was bound, at runtime, for what the compiler already knows.
+- **They cost nothing where they are not used.** Only functions that need a
+  value take it; a pure helper three calls down is unchanged. A carried map is
+  passed (or looked up from goroutine state) everywhere.
+- **Pure functions take no scope**, so a scope-carried map would not reach
+  them, and a goroutine-carried one would make reading depend on where code
+  runs, which breaks the purity that facts need.
+- **Capture comes for free:** a Go closure over a parameter is exactly the
+  lexical rule above.
+
+The cost: a function's Go signature changes when its needs do, which matters
+only for Go code that calls bork functions directly; and needs, like effects,
+are written by hand along a call chain (the compiler names each one, with the
+fix).
+
+### Interplay
+
+- **Effects.** `needs` is independent of `uses`: it adds no effect, and
+  `uses nothing` parameters and predicates' purity are unaffected (predicates
+  are excluded for facts, above, not for effects).
+- **Logging (follow-up).** `logged ambient traceId: String` would add the value
+  to every log line written while a `with` binds it, including lines from
+  functions that do not need it: logs are diagnostics, not results, so they may
+  follow the goroutine, as mocks do. The runtime would keep logged bindings in
+  the goroutine's labels (the mechanism [mocks](#propagation-mocks-follow-the-work-not-the-code)
+  use), set by `with` and inherited by tasks. Values of other ambient
+  declarations never reach logs implicitly.
+- **Mocking** ([bork-53lit4](#mocking-in-tests-design-bork-53lit4)). A mock's
+  body is checked as the target's body, so it may read the target's needs;
+  a test binds values with `with` rather than mocking where they come from.
+- **Assembly** ([bork-25nywe](#compile-time-dependency-assembly-proposal)).
+  A provider may need ambient values; an `assemble` call then needs the union
+  of its providers' needs, as it uses the union of their effects. Ambient
+  values are never products: they are not resolved by type.
+- **Lifetimes and owned scopes.** None: ambient types hold no lifetime.
+- **Propagation across process boundaries** (bork-gqxe4s) is a separate design:
+  which values travel in http headers or message metadata, and how they are
+  bound on the receiving side.
+- **describe** shows a function's needs beside its effects, in text and JSON
+  (`needs: [traceId, locale?]`), and `ambient` declarations with their types.
+
+### Diagnostics
+
+```
+main.bork:14:5: record needs traceId (it calls audit), but its signature does not provide it; declare it: needs traceId, or bind it with with (traceId: ...) { ... }
+main.bork:20:3: main cannot declare needs; bind the values instead: with (traceId: ...) { ... }
+main.bork:8:3: visible reads principal (it calls canSee), but predicates cannot read ambient values, or their facts would depend on what is bound
+main.bork:2:1: ambient session cannot hold Scope: ambient values are data, so pass scopes, resources and functions as parameters
+main.bork:5:40: save declares needs traceId, but never reads it
+main.bork:31:9: with binds ambient values, and total is not one
+main.bork:33:9: traceId is bound twice in one with
+```
+
+### Decisions recorded
+
+- Declaration `ambient name: Type`, data types only, no defaults.
+- `needs` after `uses`, joined with `+`; `name?` reads an `Option` and never
+  fails a caller.
+- `with (name: value, ...) { ... }` as an expression; immutable, nesting
+  shadows.
+- `main` and tests bind and cannot need; predicates, rules, class methods and
+  defaults cannot read.
+- Lexical capture: lambdas, function values and tasks keep the bindings in
+  force where they are made.
+- Hidden Go parameters, not a carried map.
+
+### Open questions
+
+- **Defaults on declarations** (`ambient locale: String = "en"`)? Left out so
+  "unbound" has one meaning; optional reads cover it for now.
+- **Bundles of needs** (`needs Request` for `traceId + principal + tenant`)?
+  Like effect aliases, not needed until real handlers show long lists.
+- **Unbinding** (`with (principal: none)`) for code that must run as nobody?
+  Rare; a fresh function that does not need the value does the same.
+
 ## Go interop
 
 Checked Go interop is implemented (bork-e6abw5). Bork declares the Go functions
