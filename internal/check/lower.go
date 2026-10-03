@@ -328,7 +328,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		return out
 	case *syntax.Selector:
 		if v := l.info.selectorVariants[x]; v != nil {
-			return &VariantValue{expr: at, Variant: v, Text: writtenText(x)}
+			return &VariantValue{expr: at, Variant: v, Text: writtenText(x), Head: l.constructorHead(x.X), Constraints: l.info.constructorConstraints[x]}
 		}
 		if fn := l.info.ownerScopes[x]; fn != nil {
 			return &Call{expr: at, Func: fn, Inst: &Instance{Func: fn, Params: fn.Params, Result: fn.Result}, Args: []Expr{l.expr(x.X)}, ReceiverCall: true}
@@ -342,7 +342,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		v := l.info.contextVariants[x]
 		return &VariantValue{expr: at, Variant: v, Text: "." + x.Name}
 	case *syntax.RecordLit:
-		out := &RecordLit{expr: at}
+		out := &RecordLit{expr: at, Head: l.constructorHead(x.Type), Constraints: l.info.constructorConstraints[x]}
 		var fields []*Field
 		switch t := l.info.recordTargets[x].(type) {
 		case *Record:
@@ -485,6 +485,8 @@ func writtenText(x syntax.Expr) string {
 	switch x := x.(type) {
 	case *syntax.Ident:
 		return x.Name
+	case *syntax.TypeHead:
+		return defaultText(x)
 	case *syntax.Selector:
 		return writtenText(x.X) + "." + x.Name
 	case *syntax.Call:
@@ -521,4 +523,61 @@ func mockTargetPos(x syntax.Expr) diag.Pos {
 		return mockTargetPos(sel.X)
 	}
 	return x.Position()
+}
+
+func (l *lowerer) constructorHead(x syntax.Expr) *ConstructorHead {
+	if sel, ok := x.(*syntax.Selector); ok {
+		x = sel.X
+	}
+	h, ok := x.(*syntax.TypeHead)
+	if !ok {
+		return nil
+	}
+	out := &ConstructorHead{Start: h.Position(), End: h.End}
+	var visit func(*syntax.TypeExpr)
+	visit = func(t *syntax.TypeExpr) {
+		typ := l.info.writtenTypes[t]
+		if t.Name != "" {
+			var pos diag.Pos
+			switch v := typ.(type) {
+			case *Record:
+				pos = v.Decl.Pos
+			case *Sealed:
+				pos = v.Decl.Pos
+			case *Opaque:
+				if v.Decl != nil {
+					pos = v.Decl.Pos
+				}
+			case *Resource:
+				if v.Decl != nil {
+					pos = v.Decl.Pos
+				}
+			case *TypeParam:
+				if v.Decl != nil {
+					pos = v.Decl.Pos
+				}
+			}
+			ref := TypeReference{Pos: t.Pos, Name: t.Name, Type: typ}
+			if pos.File != "" {
+				ref.Definition = &pos
+			}
+			out.Uses = append(out.Uses, ref)
+		}
+		for _, a := range t.Args {
+			visit(a)
+		}
+		for _, a := range t.Union {
+			visit(a)
+		}
+		if t.Func != nil {
+			for _, a := range t.Func.Params {
+				visit(a)
+			}
+			if t.Func.Result != nil {
+				visit(t.Func.Result)
+			}
+		}
+	}
+	visit(h.Type)
+	return out
 }

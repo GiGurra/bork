@@ -146,3 +146,10 @@ test('sequence producers and iteration control', () => {
     has(ls, 0, word, 'keyword.control.bork');
   }
 });
+
+test('specialized constructor heads retain type and variant scopes', () => {
+  const ls = tokenize('x = Box[Int] { values: [] }\ny = Option[String].Some { value: "trace" }\nz = api.State[List[Int]].Empty');
+  for (const [row, word] of [[0, 'Box'], [0, 'Int'], [1, 'Option'], [1, 'String'], [1, 'Some'], [2, 'State'], [2, 'List'], [2, 'Int'], [2, 'Empty']]) {
+    has(ls, row, word, 'entity.name.type.bork');
+  }
+});

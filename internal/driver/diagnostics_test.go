@@ -173,7 +173,12 @@ func TestContextConstructorAlternatives(t *testing.T) {
 		{"imported variants", "import chosen \"example.com/context/api\"\ntype Alias = chosen.A\nfn main() { x: Alias | chosen.B = .Reedy; println(x) }\n", "type.context_variant_unknown", 2, false},
 		{"union typo", "type A = sealed { Ready }\ntype B = sealed { Ready }\nfn main() { x: A | B = .Reedy; println(x) }\n", "type.context_variant_unknown", 2, false},
 		{"nested missing context", "type Config = { value: Int }\nfn main() { x = [.{ value: 1 }]; println(x) }\n", "type.context_missing", 1, true},
-		{"specializations", "type Box[T] = { values: List[T] }\nfn main() { x: Box[Int] | Box[String] = .{ values: [] }; println(x) }\n", "type.context_ambiguous", 2, true},
+		{"generic variants", "type State[T] = sealed { Empty }\nfn main() { x: State[Int] | State[String] = .Empty; println(x) }\n", "type.context_ambiguous", 2, false},
+		{"function union arguments", "type Box[T] = { values: List[T] }\nfn main() { x: Box[((Int) => Int) | String] | Box[String] = .{ values: [] }; println(x) }\n", "type.context_ambiguous", 2, false},
+
+		{"sequence arguments", "type Box[T] = { values: List[T] }\nfn main() { x: Box[Seq[Int] uses io] | Box[Seq[String] uses net] = .{ values: [] }; println(x) }\n", "type.context_ambiguous", 2, false},
+
+		{"specializations", "type Box[T] = { values: List[T] }\nfn main() { x: Box[Int] | Box[String] = .{ values: [] }; println(x) }\n", "type.context_ambiguous", 2, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "main.bork")
@@ -225,16 +230,7 @@ func TestContextConstructorAlternatives(t *testing.T) {
 					}
 					fixed = fixed[:offset(edit.Start)] + replacement + fixed[offset(edit.End):]
 				}
-				if tc.name == "specializations" {
-					annotation := "Box[Int]"
-					if strings.Contains(fix.Message, "Box[String]") {
-						annotation = "Box[String]"
-					}
-					if !strings.Contains(fix.Message, annotation) {
-						t.Fatalf("fix does not name specialization: %+v", fix)
-					}
-					fixed = strings.ReplaceAll(fixed, "Box[Int] | Box[String]", annotation)
-				}
+
 				if err := os.WriteFile(path, []byte(fixed), 0o644); err != nil {
 					t.Fatal(err)
 				}

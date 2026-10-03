@@ -77,6 +77,12 @@ func defaultText(x syntax.Expr) string {
 		return strings.Trim(x.Op.String(), "'") + defaultText(x.X)
 	case *syntax.Ident:
 		return x.Name
+	case *syntax.TypeHead:
+		var args []string
+		for _, a := range x.Type.Args {
+			args = append(args, writtenTypeText(a))
+		}
+		return x.Type.Name + "[" + strings.Join(args, ", ") + "]"
 	case *syntax.ContextName:
 		return "." + x.Name
 	case *syntax.Selector:
@@ -336,4 +342,89 @@ func MockTargetRef(m *Mock) *FuncRef {
 	t := &FuncType{Params: m.Target.Params, Result: m.Target.Result, Effects: m.Target.Effects}
 	inst := &Instance{Func: m.Target, Params: m.Target.Params, Result: m.Target.Result}
 	return &FuncRef{expr: expr{pos: m.TargetPos, typ: t, token: m.TargetPos}, Name: m.Text, Inst: inst}
+}
+
+func writtenTypeText(t *syntax.TypeExpr) string {
+	if t == nil {
+		return "Unit"
+	}
+	out := writtenTypeAtomText(t)
+	if t.Uses != nil {
+		var names []string
+		for _, e := range t.Uses.Effects {
+			names = append(names, e.Name)
+		}
+		if len(names) == 0 {
+			names = []string{"nothing"}
+		}
+		out += " uses " + strings.Join(names, " + ")
+	}
+	if len(t.Where) > 0 {
+		var parts []string
+		for _, ref := range t.Where {
+			text := writtenPredText(ref)
+			if len(ref.Or) > 0 && len(t.Where) > 1 {
+				text = "(" + text + ")"
+			}
+			parts = append(parts, text)
+		}
+		out += " where " + strings.Join(parts, " and ")
+	}
+	return out
+}
+func writtenPredText(ref *syntax.PredRef) string {
+	text := ref.Name
+	if len(ref.Args) > 0 {
+		var args []string
+		for _, a := range ref.Args {
+			args = append(args, defaultText(a))
+		}
+		text += "(" + strings.Join(args, ", ") + ")"
+	}
+	for _, alt := range ref.Or {
+		text += " or " + writtenPredText(alt)
+	}
+	return text
+}
+func writtenTypeAtomText(t *syntax.TypeExpr) string {
+	if t == nil {
+		return "Unit"
+	}
+	if t.Union != nil {
+		var parts []string
+		for _, m := range t.Union {
+			text := writtenTypeText(m)
+			if m.Func != nil {
+				text = "(" + text + ")"
+			}
+			parts = append(parts, text)
+		}
+		return strings.Join(parts, " | ")
+	}
+	if t.Func != nil {
+		var ps []string
+		for _, p := range t.Func.Params {
+			ps = append(ps, writtenTypeText(p))
+		}
+		effects := ""
+		if t.Func.Uses != nil {
+			var names []string
+			for _, e := range t.Func.Uses.Effects {
+				names = append(names, e.Name)
+			}
+			if len(names) == 0 {
+				names = []string{"nothing"}
+			}
+			effects = " uses " + strings.Join(names, " + ")
+		}
+		return "(" + strings.Join(ps, ", ") + ")" + effects + " => " + writtenTypeText(t.Func.Result)
+	}
+	if len(t.Args) == 0 {
+		return t.Name
+	}
+	var parts []string
+	for _, a := range t.Args {
+		parts = append(parts, writtenTypeText(a))
+	}
+	return t.Name + "[" + strings.Join(parts, ", ") + "]"
 }

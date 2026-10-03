@@ -218,6 +218,7 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 	out := c.resolveTypeInner(t)
 	if t != nil {
 		c.noteDefaultTypeUse(out, t.Pos)
+		c.info.writtenTypes[t] = out
 	}
 	return out
 }

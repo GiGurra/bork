@@ -2725,10 +2725,10 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   value position that lacks an expected type and suggests a typed binding or an
   explicit constructor. Ambiguous context lists the candidate types and offers
   one explicit-constructor edit per candidate, rather than selecting one for the
-  user. Until bork-idtpbx is implemented, generic constructors whose omitted type
-  arguments need an expected specialization mark the edit `requires_input` and
-  name that specialization for a type annotation. Explicit specialized literal
-  heads and complete edits are specified in the next section. Unknown variants
+  user. Generic constructors include explicit type arguments when their expected
+  specialization is known and visibly nameable; otherwise the edit marks
+  `requires_input` and explains the needed name or import. Explicit specialized
+  literal heads and complete edits are specified in the next section. Unknown variants
   search only visible variants of expected sealed types.
   Offer `.Variant` when that corrected spelling selects a unique candidate;
   otherwise offer separate explicitly qualified constructors for the close

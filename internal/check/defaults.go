@@ -131,7 +131,7 @@ func isClosed(x syntax.Expr) bool {
 
 func isPath(x syntax.Expr) bool {
 	switch x := x.(type) {
-	case *syntax.Ident:
+	case *syntax.Ident, *syntax.TypeHead:
 		return true
 	case *syntax.Selector:
 		return isPath(x.X)

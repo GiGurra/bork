@@ -545,10 +545,16 @@ type ContextName struct {
 	Name     string
 }
 
+// TypeHead specializes a constructor owner, as in Box[Int] or Option[Int].None.
+type TypeHead struct {
+	Type *TypeExpr
+	End  diag.Pos
+}
+
 // RecordLit is `User { name: "Ada", age: 36 }` or
 // `Shape.Circle { radius: 3 }`.
 type RecordLit struct {
-	Type   Expr // *Ident, *Selector or *ContextName
+	Type   Expr // *Ident, *TypeHead, *Selector or *ContextName
 	Fields []*FieldInit
 	End    diag.Pos
 }
@@ -702,6 +708,7 @@ func (e *ListLit) Position() diag.Pos   { return e.Pos }
 
 func (*Selector) exprNode()    {}
 func (*ContextName) exprNode() {}
+func (*TypeHead) exprNode()    {}
 func (*RecordLit) exprNode()   {}
 func (*Copy) exprNode()        {}
 func (*Match) exprNode()       {}
@@ -709,6 +716,7 @@ func (*Try) exprNode()         {}
 
 func (e *Selector) Position() diag.Pos    { return e.X.Position() }
 func (e *ContextName) Position() diag.Pos { return e.Pos }
+func (e *TypeHead) Position() diag.Pos    { return e.Type.Pos }
 func (e *RecordLit) Position() diag.Pos   { return e.Type.Position() }
 func (e *Copy) Position() diag.Pos        { return e.X.Position() }
 func (e *Match) Position() diag.Pos       { return e.Pos }

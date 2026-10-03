@@ -999,8 +999,8 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 		_, isID := x.(*Ident)
 		_, isSel := x.(*Selector)
 		if (isID || isSel) && p.at(LBrack) {
-			// Explicit type arguments of a call: empty[Int](), or of a
-			// method call: xs.map[String](f).
+			// Explicit arguments of a call, method call, or constructor
+			// owner: empty[Int](), xs.map[String](f), Box[Int] { ... }.
 			p.next()
 			for {
 				typeArgs = append(typeArgs, p.typeExpr())
@@ -1009,10 +1009,15 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 				}
 				p.next()
 			}
-			p.expect(RBrack, "to end the type arguments")
+			end := p.expect(RBrack, "to end the type arguments").End
 			if !p.at(LParen) {
-				p.errorf(p.tok().Pos, "expected '(' to call the function after its type arguments")
-				panic(bailout{})
+				id, ok := x.(*Ident)
+				if !ok || !p.at(LBrace) && !p.at(Dot) {
+					p.errorf(p.tok().Pos, "expected a call, record literal, or variant after the type arguments")
+					panic(bailout{})
+				}
+				x = &TypeHead{Type: &TypeExpr{Pos: id.Pos, Name: id.Name, Args: typeArgs}, End: end}
+				typeArgs = nil
 			}
 		}
 		switch {
@@ -1082,13 +1087,16 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 // (`User`, `Shape.Circle`), so a following '{' starts a record literal.
 func isTypePath(x Expr) bool {
 	switch x := x.(type) {
-	case *ContextName:
+	case *ContextName, *TypeHead:
 		return true
 	case *Ident:
 		return true
 	case *Selector:
-		_, ok := x.X.(*Ident)
-		return ok
+		switch x.X.(type) {
+		case *Ident, *TypeHead:
+			return true
+		}
+		return false
 	}
 	return false
 }

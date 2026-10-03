@@ -1,0 +1,33 @@
+import "example.com/literalheads/api"
+pred Positive(x: Int) { x > 0 }
+type Box[T] = { values: List[T] }
+type Pair[A, B] = { first: A, second: B }
+type State[T] = sealed { Empty, Value { value: T }, Defaults { values: List[T] = [] } }
+fn pair[T](value: T): Pair[T, T] { Pair[T, T] { first: value, second: value } }
+fn main() {
+  println(Box[Int] { values: [] })
+  println(Option[String].None)
+  println(Option[String].Some { value: "trace" })
+  println(Box[Option[String]] { values: [.Some { value: "x" }, .None] })
+  println(State[Int].Defaults {})
+  println(Option[Int where Positive].Some { value: 2 })
+  println(pair(3))
+  println(api.Box[Int] { value: 4 })
+  println(api.State[String].Empty)
+  println(api.State[String].Value { value: "imported" })
+  println(api.Ints { values: [] })
+  println(api.Make(5))
+  println(checked("ordered"))
+  println(constrained(2, 3))
+  println(constrainedNone(2))
+}
+
+type Range[T] = { label: T, lo: Int = 1, hi: Int = 2 } where Ordered
+pred Ordered[T](value: Range[T]) { value.lo <= value.hi }
+fn checked[T](label: T): Range[T] { Range[T] { label: label } }
+
+pred AtLeast(value: Int, minimum: Int) { value >= minimum }
+fn constrained(minimum: Int, value: Int where AtLeast(minimum)): Option[Int] {
+  Option[Int where AtLeast(minimum)].Some { value: value }
+}
+fn constrainedNone(minimum: Int): Option[Int] { Option[Int where AtLeast(minimum)].None }

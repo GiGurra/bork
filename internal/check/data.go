@@ -121,6 +121,28 @@ func (c *checker) isTypeRef(x syntax.Expr) (string, bool) {
 }
 
 func (c *checker) selector(e *syntax.Selector, want Type) Type {
+	if head, ok := e.X.(*syntax.TypeHead); ok {
+		typ := c.resolveType(head.Type)
+		s, ok := typ.(*Sealed)
+		if !ok {
+			if typ != Invalid {
+				c.errorf(e.Pos, "%s is not a sealed type, so it has no variants", head.Type.Name)
+			}
+			return Invalid
+		}
+		v := c.specializedVariant(e.Pos, s, e.Name)
+		if v == nil {
+			return Invalid
+		}
+		if len(v.Fields) > 0 {
+			c.errorf(e.Pos, "%s.%s has fields; build it with braces", head.Type.Name, e.Name)
+			return Invalid
+		}
+		c.info.selectorVariants[e] = v
+		c.info.constructorConstraints[e] = c.constraintsOf(head.Type, typ, c.paramScope())
+		return typ
+	}
+
 	if fn, why, isMethod := c.methodReference(e); isMethod {
 		if fn == nil {
 			c.errorf(e.Pos, "%s", why)
@@ -181,6 +203,8 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 	switch t := e.Type.(type) {
 	case *syntax.ContextName:
 		return c.contextRecord(e, t, want)
+	case *syntax.TypeHead:
+		return c.specializedLit(e, t, "")
 	case *syntax.Ident:
 		typ := c.typeNamed(t.Name)
 		if typ == nil {
@@ -208,6 +232,9 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 		c.skipFieldInits(e)
 		return Invalid
 	case *syntax.Selector:
+		if head, ok := t.X.(*syntax.TypeHead); ok {
+			return c.specializedLit(e, head, t.Name)
+		}
 		owner := t.X.(*syntax.Ident).Name
 		if s, ok := c.typeNamed(owner).(*Sealed); ok && len(s.TypeParams) > 0 {
 			return c.genericLit(e, s, t.Name, owner+"."+t.Name, want)
@@ -490,4 +517,54 @@ func (c *checker) recordConstruction(pos diag.Pos, rec *Record, operation string
 	}
 	c.diags.AddCode(pos, "construction.private_record", "cannot %s %s: package %s controls its construction; use an exported constructor or update method from that package", operation, rec.Name, pkg)
 	return false
+}
+
+// Explicit heads resolve once; expected types cannot replace their arguments.
+func (c *checker) specializedLit(e *syntax.RecordLit, head *syntax.TypeHead, variant string) Type {
+	typ := c.resolveType(head.Type)
+	var fields []*Field
+	switch t := typ.(type) {
+	case *Record:
+		if variant != "" {
+			c.errorf(e.Type.Position(), "%s is not a sealed type, so it has no variants", head.Type.Name)
+			break
+		}
+		if !c.recordConstruction(head.Position(), t, "construct") {
+			break
+		}
+		c.info.recordTargets[e], fields = t, t.Fields
+	case *Sealed:
+		if variant == "" {
+			c.errorf(head.Position(), "%s is a sealed type; build one of its variants", head.Type.Name)
+			break
+		}
+		v := c.specializedVariant(e.Type.Position(), t, variant)
+		if v == nil {
+			break
+		}
+		c.info.recordTargets[e], fields = v, v.Fields
+	default:
+		if typ != Invalid {
+			c.errorf(head.Position(), "%s is not a record type", head.Type.Name)
+		}
+	}
+	if c.info.recordTargets[e] == nil {
+		c.skipFieldInits(e)
+		return Invalid
+	}
+	c.info.constructorConstraints[e] = c.constraintsOf(head.Type, typ, c.paramScope())
+	c.fieldInits(e, fields, writtenText(e.Type))
+	return typ
+}
+
+func (c *checker) specializedVariant(pos diag.Pos, owner *Sealed, name string) *Variant {
+	v := owner.Variant(name)
+	if v == nil {
+		c.errorf(pos, "%s has no variant %s", TypeText(owner, c.pkg), name)
+		return nil
+	}
+	if !c.visibleVariant(pos, owner, name) {
+		return nil
+	}
+	return v
 }

@@ -1,6 +1,7 @@
 package check
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -36,11 +37,20 @@ func (c *checker) contextTarget(e *syntax.ContextName, want Type) Type {
 	}
 	var names []string
 	var fixes []diag.Fix
+	private := false
 	for _, t := range candidates {
 		names = append(names, TypeText(t, c.pkg))
-		fixes = append(fixes, c.explicitContextFix(e, t))
+		if fix := c.explicitContextFix(e, t); fix != nil {
+			fixes = append(fixes, *fix)
+		} else {
+			private = true
+		}
 	}
-	c.diags.AddCode(e.Pos, "type.context_ambiguous", "%s has several expected constructors: %s; write the constructor explicitly", contextText(e), strings.Join(names, ", "))
+	hint := ""
+	if private {
+		hint = "; use the owning package's public construction API for private candidates"
+	}
+	c.diags.AddCode(e.Pos, "type.context_ambiguous", "%s has several expected constructors: %s; write the constructor explicitly%s", contextText(e), strings.Join(names, ", "), hint)
 	c.diags.Suggest(e.Pos, "type.context_ambiguous", e.End, fixes...)
 	return Invalid
 }
@@ -85,7 +95,9 @@ func (c *checker) variantContextSuggestions(e *syntax.ContextName, want Type) []
 		if len(closest) == 1 && len(constructors) == 1 {
 			fixes = append(fixes, diag.Fix{Message: "use variant " + name.Name, Edits: []diag.TextEdit{{Start: e.Pos, End: e.End, Replacement: "." + name.Name}}})
 		} else {
-			fixes = append(fixes, c.explicitContextFix(&name, candidate.owner))
+			if fix := c.explicitContextFix(&name, candidate.owner); fix != nil {
+				fixes = append(fixes, *fix)
+			}
 		}
 	}
 	return fixes
@@ -140,20 +152,135 @@ func (c *checker) contextError(e *syntax.ContextName, code, format string, args 
 	})
 }
 
-func (c *checker) explicitContextFix(e *syntax.ContextName, t Type) diag.Fix {
-	name := ""
-	switch t := t.(type) {
+func (c *checker) explicitContextFix(e *syntax.ContextName, t Type) *diag.Fix {
+	switch v := t.(type) {
 	case *Record:
-		name = qualify(t.Name, t.Pkg, c.pkg)
+		if v.Decl.Private && v.Pkg != c.pkg {
+			return nil
+		}
 	case *Sealed:
-		name = qualify(t.Name, t.Pkg, c.pkg) + "." + e.Name
+		if v.Pkg != c.pkg && !Exported(e.Name) {
+			return nil
+		}
 	}
-	fix := diag.Fix{Message: "use constructor " + name, Edits: []diag.TextEdit{{Start: e.Pos, End: e.End, Replacement: name}}}
-	if len(TypeArgs(t)) > 0 {
-		fix.RequiresInput = true
-		fix.Message += " with expected type " + TypeText(t, c.pkg) + " (add a type annotation if needed)"
+	name, visible := c.constructorTypeName(t)
+	if !visible {
+		name = "Type"
+	}
+	if e.Name != "" {
+		name += "." + e.Name
+	}
+	fix := &diag.Fix{Message: "use constructor " + name, RequiresInput: !visible, Edits: []diag.TextEdit{{Start: e.Pos, End: e.End, Replacement: name}}}
+	if !visible {
+		fix.Message = "name or import a visible constructor for " + TypeText(t, c.pkg) + " (replace Type)"
 	}
 	return fix
+}
+
+// A public alias may expose a private or transitively imported nominal owner.
+// Prefer an unconstrained alias, then recursively spell resolvable names.
+func (c *checker) constructorTypeName(t Type) (string, bool) {
+	type alias struct {
+		name  string
+		entry *typeEntry
+	}
+	var aliases []alias
+	collect := func(pkg *Package, prefix string) {
+		for name, e := range pkg.types {
+			if e.decl.Kind == syntax.AliasType && (pkg == c.pkg || pkg == c.preludePkg || Exported(name)) {
+				aliases = append(aliases, alias{prefix + name, e})
+			}
+		}
+	}
+	collect(c.pkg, "")
+	collect(c.preludePkg, "")
+	for prefix, pkg := range c.pkg.imports {
+		collect(pkg, prefix+".")
+	}
+	sort.Slice(aliases, func(i, j int) bool { return aliases[i].name < aliases[j].name })
+	for _, a := range aliases {
+		if identical(c.resolveDecl(a.entry), t) && !c.hasFacts(&syntax.TypeExpr{Name: a.name}) {
+			return a.name, true
+		}
+	}
+	var name string
+	switch v := t.(type) {
+	case *Record:
+		name = qualify(v.Name, v.Pkg, c.pkg)
+	case *Sealed:
+		name = qualify(v.Name, v.Pkg, c.pkg)
+	case *Opaque:
+		name = qualify(v.Name, v.Pkg, c.pkg)
+	case *Resource:
+		name = qualify(v.Name, v.Pkg, c.pkg)
+	case *TypeParam:
+		return v.Name, c.typeParams[v.Name] == v
+	case *Seq:
+		elem, ok := c.constructorTypeName(v.Elem)
+		text := "Seq[" + elem + "]"
+		if v.Effects != 0 {
+			text += " uses " + v.Effects.String()
+		}
+		return text, ok
+	case *List:
+		elem, ok := c.constructorTypeName(v.Elem)
+		return "List[" + elem + "]", ok
+	case *Map:
+		key, kok := c.constructorTypeName(v.Key)
+		value, vok := c.constructorTypeName(v.Value)
+		return "Map[" + key + ", " + value + "]", kok && vok
+	case *Union:
+		var parts []string
+		for _, m := range v.Members {
+			n, ok := c.constructorTypeName(m)
+			if !ok {
+				return "", false
+			}
+			if _, function := m.(*FuncType); function {
+				n = "(" + n + ")"
+			}
+			parts = append(parts, n)
+		}
+		return strings.Join(parts, " | "), true
+	case *FuncType:
+		var parts []string
+		for _, p := range v.Params {
+			n, ok := c.constructorTypeName(p)
+			if !ok {
+				return "", false
+			}
+			parts = append(parts, n)
+		}
+		result, ok := c.constructorTypeName(v.Result)
+		effects := ""
+		if v.Effects != 0 {
+			effects = " uses " + v.Effects.String()
+		}
+		return "(" + strings.Join(parts, ", ") + ")" + effects + " => " + result, ok
+	default:
+		name := TypeText(t, c.pkg)
+		if b := basicTypes[name]; b != nil && identical(b, t) {
+			return name, true
+		}
+		return "", false
+	}
+	base := c.typeNamed(name)
+	if base == nil || !identical(genericBaseOrSelf(base), genericBaseOrSelf(t)) {
+		return "", false
+	}
+	args := TypeArgs(t)
+	if len(args) == 0 {
+		return name, true
+	}
+	var parts []string
+	for _, a := range args {
+		n, ok := c.constructorTypeName(a)
+		if !ok {
+			return "", false
+		}
+		parts = append(parts, n)
+	}
+	return name + "[" + strings.Join(parts, ", ") + "]", true
 }
 
 func (c *checker) contextVariant(e *syntax.ContextName, want Type) Type {
@@ -302,6 +429,14 @@ func (c *checker) contextNeedsType(x syntax.Expr, want Type) bool {
 		}
 		// An explicit generic owner supplies its nominal head, but its
 		// shorthand fields can still depend on another argument or result.
+		if _, ok := x.Type.(*syntax.TypeHead); ok {
+			return false
+		}
+		if sel, ok := x.Type.(*syntax.Selector); ok {
+			if _, ok := sel.X.(*syntax.TypeHead); ok {
+				return false
+			}
+		}
 		return hasContextLiteral(x) && (want == nil || c.open(want))
 	case *syntax.ListLit:
 		var elem Type

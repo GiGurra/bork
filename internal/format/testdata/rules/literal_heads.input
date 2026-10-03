@@ -1,0 +1,6 @@
+fn main(){
+box=Box [ Int ]{values:[]}
+value=Option [ String ] .Some{value:"x"}
+none=Option[ /* argument */ List [ Int ] ].None
+imported=api.Box[Int]{value:1}
+}
