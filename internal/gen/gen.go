@@ -337,6 +337,7 @@ type gen struct {
 	usesOpaque       bool
 	usesMirror       bool
 	usesBind         bool
+	usesBindContexts bool
 	// usesOptionHelpers is set when Go code uses _borkSome, _borkNone,
 	// or _borkOptionGet.
 	usesOptionHelpers bool

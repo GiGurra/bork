@@ -50,6 +50,8 @@ type GoBinding struct {
 	// Fallible is set when converting the result from Go can fail, so
 	// the bork result has GoValueError.
 	Fallible bool
+	// Contextual resource results share generated, attachable cancellation.
+	Contextual bool
 	// GoError and GoValueError are the prelude's records, when the
 	// result has them.
 	GoError, GoValueError Type
@@ -360,12 +362,17 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 		if hasValErr {
 			b.GoValueError = goValErr
 		}
-		c.info.GoBindings[fn] = b
-		for i := range b.ParamIndices {
-			if containsGoContext(b.Sig.Params().At(i).Type(), map[types.Type]bool{}) {
-				markContextResources(b.Value, fn, map[Type]bool{})
+		for i, pi := range b.ParamIndices {
+			gt := b.Sig.Params().At(i).Type()
+			if containsGoResource(b.Value, map[Type]bool{}) && containsGoContext(gt, map[types.Type]bool{}) {
+				b.Contextual = true
+				if !canWrapBindingContexts(fn.Params[pi], gt, map[goConvPair]bool{}) {
+					c.bindErr(fd.Params[pi].Pos, "a context inside an opaque Go value cannot be rebound for a resource binding\n  hint: expose its context fields in a mirror record or use an unsafe go wrapper")
+					return
+				}
 			}
 		}
+		c.info.GoBindings[fn] = b
 	}
 }
 
@@ -617,4 +624,48 @@ func isGoKeyType(t types.Type) bool {
 func goTypeVisible(t types.Type) bool {
 	n, ok := t.(*types.Named)
 	return !ok || n.Obj().Pkg() == nil || n.Obj().Exported()
+}
+
+// Opaque values pass through unchanged; only an explicit context or a mirrored
+// field can be replaced with the binding's stable cancellation context.
+func canWrapBindingContexts(t Type, gt types.Type, seen map[goConvPair]bool) bool {
+	if !containsGoContext(gt, map[types.Type]bool{}) || isGoContext(gt) {
+		return true
+	}
+	pair := goConvPair{t, gt}
+	if seen[pair] {
+		return true
+	}
+	seen[pair] = true
+	if GoTypeOf(t) != nil {
+		return false
+	}
+	if IsOption(t) {
+		t = TypeArgs(t)[0]
+	}
+	switch u := gt.Underlying().(type) {
+	case *types.Pointer:
+		return canWrapBindingContexts(t, u.Elem(), seen)
+	case *types.Slice:
+		l, ok := t.(*List)
+		return ok && canWrapBindingContexts(l.Elem, u.Elem(), seen)
+	case *types.Array:
+		l, ok := t.(*List)
+		return ok && canWrapBindingContexts(l.Elem, u.Elem(), seen)
+	case *types.Map:
+		m, ok := t.(*Map)
+		return ok && canWrapBindingContexts(m.Key, u.Key(), seen) && canWrapBindingContexts(m.Value, u.Elem(), seen)
+	case *types.Struct:
+		r, ok := t.(*Record)
+		if !ok {
+			return false
+		}
+		for i, field := range r.Fields {
+			if !canWrapBindingContexts(field.Type, r.GoFields[i].Type, seen) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }

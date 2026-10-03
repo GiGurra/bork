@@ -1,2 +1,0 @@
-main.bork:3:46: Handle was returned by OpenWithContexts at main.bork:2:1, which receives a context that can cancel it, so Handle cannot be attached
-  hint: use an unsafe go wrapper with _borkNewResourceHandle to support movable cancellation

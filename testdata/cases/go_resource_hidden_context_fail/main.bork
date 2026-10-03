@@ -1,0 +1,4 @@
+type R = resource go "*example.com/bindtest.ContextResource"
+type Params = go "example.com/bindtest.ContextParams"
+fn Open(owner: Scope, params: Params) uses state: R | GoValueError unsafe go "example.com/bindtest.ContextStructResource"
+fn main() {}

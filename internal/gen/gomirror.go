@@ -114,6 +114,12 @@ func _bindPathValid(errors []%[1]s, path string) bool {
 func (w *bindWriter) result(x string, t check.Type) string {
 	fn := w.fn
 	if fn == nil || len(fn.ResultConstraints) == 0 {
+		if w.group != "" {
+			v := w.newTmp()
+			w.line(v + " := " + x)
+			w.line("_bindSuccess = true")
+			return v
+		}
 		return x
 	}
 	v := w.newTmp()
@@ -139,6 +145,9 @@ func (w *bindWriter) result(x string, t check.Type) string {
 				w.line(w.g.text(stmt))
 			}
 		}
+	}
+	if w.group != "" {
+		w.line("_bindSuccess = true")
 	}
 	return v
 }

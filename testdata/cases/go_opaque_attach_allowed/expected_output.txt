@@ -1,0 +1,1 @@
+<go *example.com/bindtest.Handle>

@@ -21,7 +21,7 @@ func (g *gen) opaqueDecl(n string, pkg *check.Package, gt types.Type, resource b
 	if resource {
 		g.usesScopes = true
 		field = "handle"
-		extra = "; owner *_Owner"
+		extra = "; owner *_Owner; rebind func(*_Scope)"
 	}
 	label := "<go " + types.TypeString(gt, func(p *types.Package) string { return p.Path() }) + ">"
 	src := fmt.Sprintf(`package main
@@ -31,7 +31,7 @@ func (g *gen) opaqueDecl(n string, pkg *check.Package, gt types.Type, resource b
  func (v *%[1]s) _borkSetGo(x any) { v.%[2]s = x.(%[3]s) }
  `, name, field, goName, extra, strconv.Quote(label))
 	if resource {
-		src += fmt.Sprintf("func (v %s) _ownerOf() *_Owner { return v.owner }\nfunc (v %s) _borkRebind(*_Scope) {}\n", name, name)
+		src += fmt.Sprintf("func (v %s) _ownerOf() *_Owner { return v.owner }\nfunc (v %s) _borkRebind(s *_Scope) { if v.rebind != nil { v.rebind(s) } }\n", name, name)
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
 	if err != nil {

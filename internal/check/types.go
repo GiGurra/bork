@@ -151,12 +151,11 @@ func GoTypeOf(t Type) types.Type {
 }
 
 type Resource struct {
-	ContextBinding *Func
-	GoType         types.Type
-	Name           string
-	Decl           *syntax.TypeDecl
-	Prelude        bool
-	Pkg            *Package
+	GoType  types.Type
+	Name    string
+	Decl    *syntax.TypeDecl
+	Prelude bool
+	Pkg     *Package
 }
 
 func (r *Resource) String() string { return TypeText(r, nil) }
