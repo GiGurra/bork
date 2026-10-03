@@ -1,0 +1,114 @@
+import "bork/process"
+import "bork/env"
+
+fn executable() uses io: String unsafe go {
+  import "os"
+  path, err := os.Executable()
+  if err != nil { panic(err) }
+  return path
+}
+fn input() uses io: String unsafe go {
+  import "io"
+  import "os"
+  data, err := io.ReadAll(os.Stdin)
+  if err != nil { panic(err) }
+  return string(data)
+}
+fn childSleep() uses clock unsafe go {
+  import "time"
+  time.Sleep(time.Hour)
+}
+fn marker(s: Scope) uses io: String unsafe go {
+  import "os"
+  f, err := os.CreateTemp("", "bork-process-ready-*")
+  if err != nil { panic(err) }
+  f.Close()
+  s.Defer(func() { os.Remove(f.Name()) })
+  return f.Name()
+}
+fn ready(path: String) uses io unsafe go {
+  import "os"
+  if err := os.WriteFile(path, []byte("ready"), 0600); err != nil { panic(err) }
+}
+fn waitReady(path: String) uses io + clock unsafe go {
+  import "os"
+  import "time"
+  for i := 0; i < 500; i++ {
+    if data, _ := os.ReadFile(path); len(data) > 0 { return }
+    time.Sleep(10*time.Millisecond)
+  }
+  panic("child readiness timeout")
+}
+fn signalChild(pid: Int, interrupt: Bool) uses io unsafe go {
+  import "os"
+  import "syscall"
+  p, err := os.FindProcess(int(pid))
+  if err != nil { panic(err) }
+  signal := syscall.SIGTERM
+  if interrupt { signal = syscall.SIGINT }
+  if err := p.Signal(signal); err != nil { panic(err) }
+}
+fn signalTest(s: Scope, interrupt: Bool) uses io + state + clock: Unit | IoError | Cancelled {
+  path = marker(s)
+  child = process.Start(s, executable(), ["signal-server", path])?
+  waitReady(path)
+  signalChild(process.Pid(child), interrupt)
+  output = process.Await(child)?
+  println(output.code == 0)
+  println(utf8String(output.stdout))
+}
+fn server(path: String) uses io + state + clock {
+  scope child {
+    onClose(child, () => println("closed"))
+    ready(path)
+    println(match (delay(child, 60000)) {
+      done: Unit => false
+      stopped: Cancelled => true
+    })
+  }
+}
+fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
+  output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: utf8Bytes("input") })?
+  println(output.code)
+  println(utf8String(output.stdout))
+  println(utf8String(output.stderr))
+  child = process.Start(s, executable(), ["child"], Option.Some { value: [] })?
+  first = process.Await(child)?
+  second = process.Await(child)?
+  println(first == second)
+  println(process.Pid(child) > 0)
+  signalTest(s, false)?
+  signalTest(s, true)?
+  stopped = process.Start(s, executable(), ["sleep"])?
+  process.Stop(stopped)
+  println(match (process.Await(stopped)) {
+    result: process.Result => false
+    error: IoError => false
+    cancelled: Cancelled => true
+  })
+  println(match (process.Run(s, "/definitely/no/bork-executable")) {
+    result: process.Result => false
+    error: IoError => error.path == "/definitely/no/bork-executable"
+    cancelled: Cancelled => false
+  })
+}
+fn main() {
+  match (process.Args()) {
+    ["child"] => {
+      println(env.Get("BORK_PROCESS_TEST"))
+      println(input())
+      eprintln("stderr")
+      process.Exit(7)
+    }
+    ["sleep"] => childSleep()
+    ["signal-server", path] => server(path)
+    _ => {
+      result = scope s { exercise(s) }
+      match (result) {
+        done: Unit => println("ok")
+        error: IoError => println(error)
+        cancelled: Cancelled => println(cancelled)
+      }
+    }
+  }
+}

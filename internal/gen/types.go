@@ -566,6 +566,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -596,9 +599,13 @@ type _Scope struct {
 	name    string
 }
 
+// Root scopes inherit process-signal cancellation; nested scopes inherit
+// their parent's cancellation. The handler lives for the program's lifetime.
+var _mainContext, _ = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
 // _newScope opens the scope name inside parent (nil for none).
 func _newScope(parent *_Scope, name string) *_Scope {
-	ctx := context.Background()
+	ctx := _mainContext
 	if parent != nil {
 		ctx = parent.ctx
 	}

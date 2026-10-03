@@ -1,0 +1,11 @@
+7
+Option.Some { value: "ok" }
+input
+
+stderr
+
+true
+true
+true
+true
+ok

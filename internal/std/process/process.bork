@@ -1,0 +1,71 @@
+// Package process runs argv commands without a shell, owned by a scope.
+type Process = resource
+type Result = { code: Int, stdout: Bytes, stderr: Bytes }
+
+// Args and Exit are aliases for the prelude's process helpers.
+fn Args() uses io: List[String] { args() }
+fn Exit(code: Int) uses io: Never { exit(code) }
+
+// Run captures stdout/stderr. A nonzero exit is a Result, not an I/O error.
+// None environment inherits the parent environment; Some([]) clears it.
+fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Option[Bytes] = Option.None) uses io + state: Result | IoError | Cancelled {
+  child = Start(s, name, arguments, environment, directory, stdin)?
+  Await(child)
+}
+
+// Start starts a subprocess, killed on scope cancellation. Closing the scope
+// cancels and reaps it even if Await was never called.
+fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Option[Bytes] = Option.None) uses io + state: Process | IoError | Cancelled unsafe go {
+  import "bytes"
+  import "context"
+  import "errors"
+  import "os/exec"
+  ctx, cancelChild := context.WithCancel(_borkScopeContext(s))
+  cmd := exec.CommandContext(ctx, name, arguments...)
+  cmd.Dir = directory
+  if values, present := _borkOptionGet(environment); present { cmd.Env = append([]string{}, values...) }
+  if data, present := _borkOptionGet(stdin); present { cmd.Stdin = bytes.NewReader(_borkBytesData(data)) }
+  var stdout, stderr bytes.Buffer
+  cmd.Stdout, cmd.Stderr = &stdout, &stderr
+  if err := cmd.Start(); err != nil {
+    cancelChild()
+    if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+    return IoError{path: name, message: err.Error()}
+  }
+  done := make(chan struct{})
+  var result any
+  s.Go(func() any {
+    defer cancelChild()
+    defer close(done)
+    err := cmd.Wait()
+    if reason := ctx.Err(); reason != nil {
+      result = Cancelled{reason: reason.Error()}
+      return nil
+    }
+    var exitError *exec.ExitError
+    if err != nil && !errors.As(err, &exitError) {
+      result = IoError{path: name, message: err.Error()}
+      return nil
+    }
+    result = Result{code: int64(cmd.ProcessState.ExitCode()), stdout: _borkBytesFrom(stdout.Bytes()), stderr: _borkBytesFrom(stderr.Bytes())}
+    return nil
+  })
+  handle := struct { wait func() any; stop func(); pid int }{
+    wait: func() any { <-done; return result }, stop: cancelChild, pid: cmd.Process.Pid,
+  }
+  return Process{handle: handle, owner: s.Own(cancelChild)}
+}
+
+// Await may be called repeatedly; every call returns the same immutable result.
+fn Await(child: Process) uses io + state: Result | IoError | Cancelled unsafe go {
+  return child.handle.(struct { wait func() any; stop func(); pid int }).wait()
+}
+
+// Stop cancels this child, without cancelling sibling tasks or its scope.
+fn Stop(child: Process) uses io + state unsafe go {
+  child.handle.(struct { wait func() any; stop func(); pid int }).stop()
+}
+
+fn Pid(child: Process): Int unsafe go {
+  return int64(child.handle.(struct { wait func() any; stop func(); pid int }).pid)
+}
