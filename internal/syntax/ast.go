@@ -501,6 +501,7 @@ type Call struct {
 type Argument struct {
 	Name              string
 	Pos, NameEnd, End diag.Pos
+	ValueStart        diag.Pos
 	// RemovalStart includes the preceding comma, when no comment would
 	// be removed with it. Zero for the first argument or commented spans.
 	RemovalStart diag.Pos
@@ -574,9 +575,11 @@ type Copy struct {
 }
 
 type CopyUpdate struct {
-	Pos   diag.Pos
-	Path  []string
-	Value Expr
+	PathEnd              diag.Pos
+	ValueStart, ValueEnd diag.Pos
+	Pos                  diag.Pos
+	Path                 []string
+	Value                Expr
 }
 
 // Match is `match (x) { pattern => value, ... }`.

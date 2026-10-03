@@ -200,6 +200,15 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 }
 
 func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
+	if rec := c.info.conversionRecords[e]; rec != nil {
+		if !c.recordConstruction(e.Position(), rec, "convert into") {
+			c.skipFieldInits(e)
+			return Invalid
+		}
+		c.info.recordTargets[e] = rec
+		c.fieldInits(e, rec.Fields, rec.Name)
+		return rec
+	}
 	switch t := e.Type.(type) {
 	case *syntax.ContextName:
 		return c.contextRecord(e, t, want)

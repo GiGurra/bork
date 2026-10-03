@@ -1,0 +1,17 @@
+import "example.com/into-private-error/settings"
+type Raw = { port: Int, name: String }
+type Alias = settings.Config
+type Source = { config: Raw }
+type Target = { config: settings.Config }
+type SourceList = { configs: List[Raw] }
+type TargetList = { configs: List[settings.Config] }
+pred high(config: settings.Config) { config.port > 10000 }
+type Strict = settings.Config where high
+fn main() {
+  println(settings.New(9000).into[Strict]())
+  raw = Raw { port: 9000, name: "server" }
+  println(raw.into[Alias]())
+  println(Source { config: raw }.into[Target]())
+  println(SourceList { configs: [raw] }.into[TargetList]())
+  println(settings.New(9000).into[settings.Config](port: 8080))
+}

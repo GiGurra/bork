@@ -1,0 +1,5 @@
+PositiveList { values: [Nonnegative { n: 1 }, Nonnegative { n: 2 }] }
+RawNumber { n: 1 }
+Range { lo: 1, hi: 2 }
+Nonnegative { n: 1 }
+Range { lo: 1, hi: 2 }

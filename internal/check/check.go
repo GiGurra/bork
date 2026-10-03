@@ -243,6 +243,9 @@ type Info struct {
 	assemblyNames      map[any]string
 	ProviderBundles    []*ProviderBundle
 	providerBundleUses []*providerBundleUse
+	conversionCalls    map[*syntax.Call]*syntax.Block
+	conversionRecords  map[*syntax.RecordLit]*Record
+	conversionInputs   map[syntax.Expr]bool
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -349,6 +352,9 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 		info: &Info{
 			GoBindings:             map[*Func]*GoBinding{},
 			assemblyCalls:          map[*syntax.Call]*assemblyExpansion{},
+			conversionCalls:        map[*syntax.Call]*syntax.Block{},
+			conversionRecords:      map[*syntax.RecordLit]*Record{},
+			conversionInputs:       map[syntax.Expr]bool{},
 			assemblyTypes:          map[*syntax.TypeExpr]Type{},
 			assemblyNames:          map[any]string{},
 			Funcs:                  map[string]*Func{},
@@ -644,10 +650,11 @@ type checker struct {
 	typeParams map[string]*TypeParam
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
-	lambdaDepth    int
-	assemblySerial int
-	producer       *producerContext
-	loops          []int
+	lambdaDepth      int
+	assemblySerial   int
+	producer         *producerContext
+	loops            []int
+	conversionSerial int
 	// used collects the effects of the function or lambda being
 	// checked: of the calls in its body (see effects.go).
 	used Effects
@@ -1078,6 +1085,11 @@ func (c *checker) expr(e syntax.Expr) Type { return c.exprWant(e, nil) }
 // and values like `Option.None` whose type comes from the context. It
 // does not report mismatches; the caller does.
 func (c *checker) exprWant(e syntax.Expr, want Type) Type {
+	// Conversion expands already-checked inputs into bindings. Keep their
+	// original contextual typing and lexical bindings when checking the expansion.
+	if c.info.conversionInputs[e] {
+		return c.info.types[e]
+	}
 	if c.open(want) && !c.needsContext(e) {
 		// A type not fully known yet (see infer.go) guides only what
 		// takes its type from the context; the caller unifies the rest.
@@ -1343,6 +1355,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 }
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
+	if sel, ok := e.Fun.(*syntax.Selector); ok && sel.Name == "into" {
+		return c.into(e, sel)
+	}
 	if name, ok := e.Fun.(*syntax.ContextName); ok {
 		return c.contextVariantCall(e, name, want)
 	}

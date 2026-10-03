@@ -1022,6 +1022,17 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 		}
 		switch {
 		case p.at(LParen):
+			if sel, ok := x.(*Selector); ok && sel.Name == "into" {
+				callPos := p.tok().Pos
+				updates := p.copyExpr(sel.X, sel.Pos).(*Copy)
+				call := &Call{Start: start, Pos: callPos, End: p.toks[p.i-1].End, Fun: sel, FunEnd: funEnd, TypeArgs: typeArgs}
+				for _, update := range updates.Updates {
+					call.Args = append(call.Args, update.Value)
+					call.Arguments = append(call.Arguments, Argument{Pos: update.Pos, Name: strings.Join(update.Path, "."), NameEnd: update.PathEnd, ValueStart: update.ValueStart, End: update.ValueEnd})
+				}
+				x = call
+				continue
+			}
 			call := &Call{Start: start, Pos: p.next().Pos, Fun: x, FunEnd: funEnd, TypeArgs: typeArgs}
 			saved := p.noRecordLit
 			p.noRecordLit = false // within the parentheses, '{' is a literal again
@@ -1034,6 +1045,7 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 					p.next()
 					p.skipNewlines()
 				}
+				arg.ValueStart = p.tok().Pos
 				call.Args = append(call.Args, p.expr())
 				arg.End = p.toks[p.i-1].End
 				call.Arguments = append(call.Arguments, arg)
@@ -1118,10 +1130,12 @@ func (p *parser) copyExpr(x Expr, pos diag.Pos) Expr {
 	p.expect(LParen, "")
 	p.list(RParen, "a field update", func() {
 		first := p.expect(TIdent, "(field name)")
-		u := &CopyUpdate{Pos: first.Pos, Path: []string{first.Text}}
+		u := &CopyUpdate{Pos: first.Pos, PathEnd: first.End, Path: []string{first.Text}}
 		for p.at(Dot) {
 			p.next()
-			u.Path = append(u.Path, p.expect(TIdent, "(field name)").Text)
+			part := p.expect(TIdent, "(field name)")
+			u.Path = append(u.Path, part.Text)
+			u.PathEnd = part.End
 		}
 		if p.at(Assign) {
 			t := p.next()
@@ -1133,7 +1147,9 @@ func (p *parser) copyExpr(x Expr, pos diag.Pos) Expr {
 			p.expect(Colon, "after the field path (write `field: value`)")
 		}
 		p.skipNewlines()
+		u.ValueStart = p.tok().Pos
 		u.Value = p.expr()
+		u.ValueEnd = p.toks[p.i-1].End
 		c.Updates = append(c.Updates, u)
 	})
 	return c

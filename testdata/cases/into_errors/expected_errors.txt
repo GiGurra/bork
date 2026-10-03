@@ -1,0 +1,12 @@
+main.bork:9:1: into is reserved for record conversion; choose another method name
+main.bork:11:33: into requires a record target, found Int
+main.bork:12:40: cannot convert field n from String to Int
+main.bork:12:40: conversion target is missing required field missing
+main.bork:13:40: conversion target is missing required field child
+main.bork:14:41: target has no field unknown
+main.bork:15:41: target has no field missng
+main.bork:16:47: overrides of n and n overlap
+main.bork:17:56: cannot convert field child from Int to Target
+main.bork:18:44: failure member Target is also the conversion target; use ? or a wrapper error
+main.bork:19:44: override n requires Int, found String
+main.bork:20:47: recursive conversion cycle at children.[] from CycleA to CycleB

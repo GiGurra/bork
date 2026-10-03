@@ -164,6 +164,16 @@ func (s *sourceIndex) selectVar(v *check.Var, site diag.Pos) {
 }
 
 func (s *sourceIndex) walk(x check.Expr) {
+	if block, ok := x.(*check.Block); ok && block.Conversion != nil {
+		start, end := block.Conversion.Start, block.Conversion.End
+		if start.File == s.pos.File && (s.pos.Line > start.Line || s.pos.Line == start.Line && s.pos.Col >= start.Col) && (s.pos.Line < end.Line || s.pos.Line == end.Line && s.pos.Col < end.Col) {
+			s.choose(block, block.Type(), nil)
+			return
+		}
+	}
+	if ref, ok := x.(*check.VarRef); ok && strings.HasPrefix(ref.Var.Name, "_") {
+		return
+	}
 	if block, ok := x.(*check.Block); ok && block.Assembly != nil {
 		if s.contains(block.TokenPos(), len(block.Assembly.Mode)) || s.pos == block.Pos() {
 			s.choose(block, block.Type(), nil)
@@ -265,7 +275,7 @@ func (s *sourceIndex) walk(x check.Expr) {
 		for _, stmt := range x.Stmts {
 			switch stmt := stmt.(type) {
 			case *check.Let:
-				if s.contains(stmt.Var.Pos, len(stmt.Var.Name)) {
+				if !strings.HasPrefix(stmt.Var.Name, "_") && s.contains(stmt.Var.Pos, len(stmt.Var.Name)) {
 					s.selectVar(stmt.Var, stmt.Value.Pos())
 				}
 				s.walk(stmt.Value)
@@ -519,7 +529,7 @@ func (s *sourceIndex) pattern(p *check.Pat, site diag.Pos) {
 	if p == nil {
 		return
 	}
-	if p.Var != nil && s.contains(p.Var.Pos, len(p.Var.Name)) {
+	if p.Var != nil && !strings.HasPrefix(p.Var.Name, "_") && s.contains(p.Var.Pos, len(p.Var.Name)) {
 		s.selectVar(p.Var, site)
 	}
 	s.pattern(p.Sub, site)

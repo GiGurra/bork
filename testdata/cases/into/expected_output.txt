@@ -1,0 +1,23 @@
+receiver
+nested override
+root override
+Target { item: B { n: 1, text: "nested override" }, items: [B { n: 1, text: "default" }, B { n: 2, text: "default" }], optional: Option.Some { value: B { n: 1, text: "default" } }, text: "root override" }
+Target { item: B { n: 3, text: "default" }, items: [], optional: Option.None, text: "fallback" }
+DefaultParent { address: Address { city: "B", zip: 123 } }
+NoDefaultParent { address: Address { city: "C", zip: 42 } }
+Box { value: 3 }
+Defaults { value: 3, values: [] }
+Mixed { n: "text" }
+Failure { reason: "mixed" }
+Box { value: B { n: 4, text: "default" } }
+NestedTarget { values: [Option.Some { value: [B { n: 4, text: "default" }] }, Option.None] }
+5
+failure override
+retained union override
+Retained { n: Failure { reason: "stop" }, text: "retained union override" }
+receiver
+failure override
+Failure { reason: "stop" }
+receiver
+failure override
+Failure { reason: "stop" }

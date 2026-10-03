@@ -1,0 +1,8 @@
+source
+Target { n: 9, text: "default" }
+source
+first override
+Failure {}
+true
+source
+true

@@ -1,0 +1,43 @@
+type A = { n: Int, extra: String }
+type B = { n: Int, text: String = "default" }
+type Source = { item: A, items: List[A], optional: Option[A], ignored: Bool }
+type Target = { item: B, items: List[B], optional: Option[B], text: String = "fallback" }
+type Failure = { reason: String }
+fn source() uses io: Source {
+  println("receiver")
+  a = A { n: 1, extra: "hidden" }
+  Source { item: a, items: [a, A { n: 2, extra: "hidden" }], optional: Option.Some { value: a }, ignored: true }
+}
+fn text(label: String) uses io: String { println(label); label }
+fn failed() uses io: Int | Failure { println("failure override"); Failure { reason: "stop" } }
+type Address = { city: String, zip: Int }
+type Empty = {}
+type DefaultParent = { address: Address = Address { city: "A", zip: 123 } }
+type NoDefaultParent = { address: Address }
+type Retained = { n: Int | Failure, text: String }
+type Callback = { callback: (Int) => Int }
+type Mixed = { n: Int | String }
+type Box[T] = { value: T }
+type Defaults[T] = { value: T, values: List[T] = [] }
+type NumberBox = { value: Int, hidden: Bool }
+fn mixed(fail: Bool): Int | String | Failure { if (fail) { Failure { reason: "mixed" } } else { "text" } }
+type NestedSource = { values: List[Option[List[A]]] }
+type NestedTarget = { values: List[Option[List[B]]] }
+fn explicitTry() uses io: Target | Failure { source().into[Target](item.n: failed()?, text: text("unreachable try override")) }
+fn main() {
+  println(source().into[Target](item.text: text("nested override"), text: text("root override")))
+  println(Source { item: A { n: 3, extra: "x" }, items: [], optional: Option.None, ignored: false }.into[Target]())
+  println(Empty {}.into[DefaultParent](address.city: "B"))
+  println(Empty {}.into[NoDefaultParent](address.city: "C", address.zip: 42))
+  println(NumberBox { value: 3, hidden: false }.into[Box[Int]]())
+  println(NumberBox { value: 3, hidden: false }.into[Defaults[Int]]())
+  println(NumberBox { value: 3, hidden: false }.into[Mixed](n: mixed(false)))
+  println(NumberBox { value: 3, hidden: false }.into[Mixed](n: mixed(true)))
+  a = A { n: 4, extra: "extra" }
+  println(Box { value: a }.into[Box[B]]())
+  println(NestedSource { values: [Option.Some { value: [a] }, Option.None] }.into[NestedTarget]())
+  println(Empty {}.into[Callback](callback: n => n + 1).callback(4))
+  println(Empty {}.into[Retained](n: failed(), text: text("retained union override")))
+  println(explicitTry())
+  println(source().into[Target](item.n: failed(), text: text("unreachable override")))
+}

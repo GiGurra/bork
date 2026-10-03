@@ -1,0 +1,24 @@
+type Source = { n: Int }
+type Target = { n: Int, text: String = "default" }
+fn source() uses io: Source { println("source"); Source { n: 1 } }
+fn later() uses io: String { println("later"); "later" }
+fn protect(work: () => Unit): Bool unsafe go {
+  recovered := false
+  func() { defer func() { recovered = recover() != nil }(); work() }()
+  return recovered
+}
+fn early() uses io: Target { source().into[Target](n: { return Target { n: 9 } }, text: later()) }
+type Failure = {}
+type UnreachableFailure = {}
+type Extra = { n: Int, stop: Int, later: Int, absent: String }
+fn first() uses io: Int | Failure { println("first override"); Failure {} }
+fn laterFailure() uses io: Int | UnreachableFailure { println("unreachable failure"); UnreachableFailure {} }
+fn onlyFailure() uses io: Failure {
+  source().into[Extra](n: first(), stop: panic("stop"), later: laterFailure())
+}
+fn main() {
+  println(early())
+  println(onlyFailure())
+  println(protect(() => { panic("source panic").into[Target](text: later()) }))
+  println(protect(() => { source().into[Target](n: panic("override panic"), text: later()) }))
+}

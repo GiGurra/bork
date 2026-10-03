@@ -1,0 +1,4 @@
+main.bork:8:42: Range requires its completed value to be ordered, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:12:42: conversion target RawNumber must be positiveRecord, but positiveRecord(RawNumber { n: -1 }) or positive(-1) is false
+main.bork:13:45: Positive requires n to be positive, but positive(-1) is false
+main.bork:14:68: Range requires its completed value to be ordered, but that is not proven for this value (check the field values before construction, or use a checked constructor)

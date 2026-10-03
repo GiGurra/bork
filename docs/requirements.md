@@ -3208,7 +3208,7 @@ including `uses nothing`. A nil Go iterator maps to an empty sequence. Loops may
 borrow an outside owned scope but cannot consume its owner repeatedly. Cleanup
 inside loops retains only active scopes and owners, avoiding one deferred cleanup
 per produced item. Generated modules require Go 1.23 for range-over-function.
-### Record conversion (bork-2zn4s1 design)
+### Record conversion (implemented: bork-2zn4s1)
 
 A compiler-provided record method converts a source into a named target record:
 
@@ -3357,14 +3357,19 @@ cover target field/sibling/whole-value facts, invalid overridden relationships,
 independent candidate validation, private targets through every recursive path,
 allowed reuse and public projection of private source fields. Grammar, formatter,
 editor syntax, `describe`, requirements and README must match the shipped shape.
-Implementation starts only after bork-kum0ep's construction ownership and
-candidate/invariant validation machinery lands; then its checker is reused,
-with regression tests proving conversion cannot bypass it.
+Conversion reuses bork-kum0ep's construction ownership and candidate/invariant
+validation checks, with regression tests proving conversion cannot bypass them.
 
 The inspiration is [q's compile-time record conversion](https://gigurra.github.io/q/api/convert/),
 which resolves matching fields and overrides without runtime reflection. Bork
 adds ordinary named-expression overrides, union results, facts and package
 construction ownership rather than importing q's Go-specific callback API.
+
+The compiler implements record conversion by expanding each call into ordinary
+bindings, matches, record candidates, and eager List/Option mappings. This preserves
+source-order failures and runs the existing fact, construction-privacy, and lifetime
+checks on every newly constructed candidate. Identity reuse is annotated with the
+written target type so additional alias requirements are checked.
 
 ## Open questions
 

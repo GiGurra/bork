@@ -1,0 +1,20 @@
+pred positive(n: Int) { n > 0 }
+pred ordered(r: Range) { r.lo <= r.hi }
+type Raw = { lo: Int, hi: Int, hidden: Bool }
+type Range = { lo: Int, hi: Int } where ordered
+type Nonnegative = { n: Int where positive }
+type RawNumber = { n: Int }
+fn guarded(raw: Raw): Range {
+  if (raw.lo <= raw.hi) { raw.into[Range]() } else { Range { lo: 0, hi: 0 } }
+}
+type Alias = RawNumber where positiveRecord
+pred positiveRecord(r: RawNumber) { positive(r.n) }
+type NumberList = { values: List[RawNumber] }
+type PositiveList = { values: List[Nonnegative] }
+fn main() {
+  println(NumberList { values: [RawNumber { n: 1 }, RawNumber { n: 2 }] }.into[PositiveList]())
+  println(RawNumber { n: 1 }.into[Alias]())
+  println(guarded(Raw { lo: 1, hi: 2, hidden: true }))
+  println(RawNumber { n: 1 }.into[Nonnegative]())
+  println(Range { lo: 1, hi: 2 }.into[Range]())
+}
