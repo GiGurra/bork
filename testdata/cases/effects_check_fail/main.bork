@@ -8,7 +8,7 @@ fn describe(u: User): String {
 }
 
 fn fetch(url: String) uses net: String {
-  match (http.Get(url)) {
+  match (scope s { http.Get(url, s) }) {
     r: http.Response => r.body
     e: IoError => e.message
   }

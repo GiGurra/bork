@@ -44,11 +44,11 @@ fn notFound(id: Int): http.Response {
   http.JsonReply(404, encodeJson(Problem { path: "", message: s"no todo $id" }))
 }
 
-fn list(store: Atom[Store]): http.Response {
+fn list(store: Atom[Store]) uses state: http.Response {
   http.JsonReply(200, encodeJson(current(store).todos.values()))
 }
 
-fn create(store: Atom[Store], body: String): http.Response {
+fn create(store: Atom[Store], body: String) uses state: http.Response {
   r: NewTodo | JsonError | DecodeError = decodeJson(body)
   match (r) {
     req: NewTodo => {
@@ -69,14 +69,14 @@ fn create(store: Atom[Store], body: String): http.Response {
   }
 }
 
-fn show(store: Atom[Store], id: Int): http.Response {
+fn show(store: Atom[Store], id: Int) uses state: http.Response {
   match (current(store).todos.get(id)) {
     Option.Some { value: todo } => http.JsonReply(200, encodeJson(todo))
     Option.None => notFound(id)
   }
 }
 
-fn finish(store: Atom[Store], id: Int): http.Response {
+fn finish(store: Atom[Store], id: Int) uses state: http.Response {
   _ = update(store, st => match (st.todos.get(id)) {
     Option.Some { value: todo } => st.copy(todos = st.todos.put(id, todo.copy(done = true)))
     Option.None => st
@@ -84,7 +84,7 @@ fn finish(store: Atom[Store], id: Int): http.Response {
   show(store, id)
 }
 
-fn remove(store: Atom[Store], id: Int): http.Response {
+fn remove(store: Atom[Store], id: Int) uses state: http.Response {
   // swap gives the state the removal was made to: whether it had the
   // todo decides the answer, even if another request removed it too.
   old = swap(store, st => st.copy(todos = st.todos.remove(id)))
@@ -106,7 +106,7 @@ fn withId(segment: String, handle: (Int) => http.Response): http.Response {
 
 // route answers a request. Handlers get the store from here: it is the
 // one value they share.
-fn route(store: Atom[Store], req: http.Request): http.Response {
+fn route(store: Atom[Store], req: http.Request) uses state: http.Response {
   match (http.Segments(req.path)) {
     ["health"] => http.Text(200, "ok")
     ["todos"] => match (req.method) {
@@ -125,7 +125,7 @@ fn route(store: Atom[Store], req: http.Request): http.Response {
 }
 
 // handler logs each request with its answer's status.
-fn handler(store: Atom[Store]): (http.Request, Scope) => http.Response {
+fn handler(store: Atom[Store]): (http.Request, Scope) uses state => http.Response {
   (req, rs) => {
     resp = route(store, req)
     log.Info("request", { "method": req.method, "path": req.path, "status": resp.status })
@@ -133,7 +133,7 @@ fn handler(store: Atom[Store]): (http.Request, Scope) => http.Response {
   }
 }
 
-fn serve(addr: String): Unit | IoError {
+fn serve(addr: String) uses net + state: Unit | IoError {
   scope s {
     server = http.Listen(addr, s, handler(atom(emptyStore())))?
     log.Info("listening", { "address": http.Address(server) })
@@ -141,7 +141,7 @@ fn serve(addr: String): Unit | IoError {
   }
 }
 
-fn call(s: Scope, base: String, method: String, path: String, body: String = "") {
+fn call(s: Scope, base: String, method: String, path: String, body: String = "") uses io + net {
   label = if (body == "") { s"$method $path" } else { s"$method $path $body" }
   match (http.Send(method, base + path, {:}, body, s)) {
     resp: http.Response => println(s"$label -> ${resp.status} ${resp.body}")
@@ -151,7 +151,7 @@ fn call(s: Scope, base: String, method: String, path: String, body: String = "")
 
 // demo starts the server on a free port and sends it requests; the
 // server stops when the scope closes. Logs go to stdout, as plain text.
-fn demo(): Unit | IoError {
+fn demo() uses io + net + state: Unit | IoError {
   log.Configure(log.Defaults().copy(output = log.Output.Stdout, timestamps = false))
   scope s {
     server = http.Listen("127.0.0.1:0", s, handler(atom(emptyStore())))?
@@ -186,7 +186,7 @@ fn main() {
   }
 }
 
-fn request(store: Atom[Store], method: String, path: String, body: String): http.Response {
+fn request(store: Atom[Store], method: String, path: String, body: String) uses state: http.Response {
   route(store, http.Request { method: method, path: path, query: "", headers: {:}, body: body })
 }
 

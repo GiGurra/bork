@@ -35,7 +35,7 @@ fn protect(work: () => Unit): Bool unsafe go {
   }()
   return recovered
 }
-fn demo() uses io + net: Unit | sql.Error | DecodeError {
+fn demo() uses io + net + state: Unit | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)", [])?
@@ -91,7 +91,7 @@ fn demo() uses io + net: Unit | sql.Error | DecodeError {
     match (sql.Exec(db, "DELETE FROM users", [])) { error: sql.Error => println(error.operation); _ => println("unexpected") }
   }
 }
-fn attachments() uses io + net: Unit | sql.Error | DecodeError {
+fn attachments() uses io + net + state: Unit | sql.Error | DecodeError {
   scope outer {
     db = scope original {
       opened = sql.OpenSqlite(":memory:", original)?
