@@ -246,6 +246,8 @@ type Info struct {
 	// GoBindings holds every checked binding to a Go function
 	// (`unsafe go "os.Getenv"`).
 	GoBindings map[*Func]*GoBinding
+	// Comptimes lists explicit build-time computations in lowering order.
+	Comptimes []*Comptime
 	// Embeds lists compile-time asset requests in source order.
 	Embeds             []*Embedded
 	embedCalls         map[*syntax.Call]*Embedded
@@ -576,6 +578,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 					observe("contracts")
 				}
 				c.checkRequirementContracts()
+				c.checkComptimeTypes()
 			}
 		}
 	}
@@ -697,6 +700,7 @@ type checker struct {
 	typeParams map[string]*TypeParam
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
+	comptimeContext  *comptimeContext
 	lazyContext      *lazyContext
 	lambdaDepth      int
 	assemblySerial   int
@@ -1165,6 +1169,8 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		return c.constant(e, v, want)
 	}
 	switch e := e.(type) {
+	case *syntax.Comptime:
+		return c.record(e, c.comptimeInitializer(e, want))
 	case *syntax.Generate:
 		return c.record(e, c.generate(e))
 	case *syntax.Yield:
@@ -1244,6 +1250,7 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if l := c.lookup(e.Name); l != nil {
 		l.used = true
 		c.noteLazyCapture(l.decl, e.Name)
+		c.noteComptimeCapture(e, l.decl, l.typ)
 		c.info.defs[e] = l.decl
 		return l.typ
 	}
@@ -1716,12 +1723,12 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 func (c *checker) returnExpr(e *syntax.Return) {
 	if ctx := c.lazyContext; ctx != nil && ctx.depth == c.lambdaDepth {
 		if e.Value == nil {
-			c.errorf(e.Pos, "a lazy initializer must return a value")
+			c.errorf(e.Pos, "a %s must return a value", ctx.name)
 			return
 		}
 		t := c.exprWant(e.Value, ctx.want)
 		if ctx.want != nil && !assignable(t, ctx.want) {
-			c.errorf(e.Value.Position(), "lazy initializer must return %s, found %s", ctx.want, t)
+			c.errorf(e.Value.Position(), "%s must return %s, found %s", ctx.name, ctx.want, t)
 		}
 		ctx.returns = append(ctx.returns, t)
 		return

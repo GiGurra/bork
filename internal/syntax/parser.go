@@ -1407,6 +1407,11 @@ func (p *parser) primary() Expr {
 		if p.peekKind() == Arrow && !p.noLambda {
 			return p.lambda()
 		}
+		// `comptime` is contextual only before a computation block.
+		if t.Text == "comptime" && p.peekKind() == LBrace {
+			p.next()
+			return &Comptime{Pos: t.Pos, Body: p.block()}
+		}
 		// `with` is a keyword where an expression starts and '(' follows.
 		if t.Text == "with" && p.peekKind() == LParen {
 			return p.withExpr()

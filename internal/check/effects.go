@@ -149,6 +149,9 @@ func (c *checker) unannotatedFunc(te *syntax.TypeExpr, depth int) bool {
 // declares, and what the arguments to its open parameters do, unless
 // its result is open: then those are what the function it gives does.
 func (c *checker) chargeCall(fn *Func, result Type, args []Type) Type {
+	if c.comptimeContext != nil && len(fn.Needs) != 0 {
+		c.diags.AddCode(fn.Decl.Pos, "comptime.capture", "comptime cannot call %s with ambient needs", fn.Decl.Name)
+	}
 	// Only a result declared open carries effects: a type parameter
 	// bound to an open function type (id(f)) does not.
 	c.used |= fn.Effects

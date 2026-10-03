@@ -252,6 +252,12 @@ type If struct {
 	Else Expr
 }
 
+// Comptime retains a checked recipe until the driver evaluates it.
+type Comptime struct {
+	expr
+	Body *Block
+}
+
 // Block is `{ stmts; tail }`. Tail is nil when the block's value is
 // Ok (or it never finishes).
 type Block struct {

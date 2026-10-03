@@ -16,6 +16,7 @@ type LazyDescription struct {
 
 // A result boundary at exactly depth; nested lambdas retain their own rules.
 type lazyContext struct {
+	name     string
 	parent   *lazyContext
 	external map[any]bool
 	captures map[string]bool
@@ -25,9 +26,13 @@ type lazyContext struct {
 }
 
 func (c *checker) lazyInitializer(s *syntax.Binding, want Type) Type {
+	return c.valueInitializer(s, want, "lazy initializer")
+}
+
+func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string) Type {
 	saved := c.lazyContext
 	c.lambdaDepth++
-	ctx := &lazyContext{depth: c.lambdaDepth, want: want, parent: saved, external: map[any]bool{}, captures: map[string]bool{}}
+	ctx := &lazyContext{name: boundary, depth: c.lambdaDepth, want: want, parent: saved, external: map[any]bool{}, captures: map[string]bool{}}
 	for _, scope := range c.scopes {
 		for _, local := range scope {
 			ctx.external[local.decl] = true
@@ -37,12 +42,14 @@ func (c *checker) lazyInitializer(s *syntax.Binding, want Type) Type {
 	c.used = 0
 	c.lazyContext = ctx
 	defer func() {
-		names := []string{}
-		for name := range ctx.captures {
-			names = append(names, name)
+		if s.Lazy {
+			names := []string{}
+			for name := range ctx.captures {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			c.info.lazyBindings[s] = &LazyDescription{Kind: "binding", Effects: c.used.String(), Captures: names}
 		}
-		sort.Strings(names)
-		c.info.lazyBindings[s] = &LazyDescription{Kind: "binding", Effects: c.used.String(), Captures: names}
 		c.used |= outerEffects
 		c.lazyContext = saved
 		c.lambdaDepth--
@@ -59,7 +66,7 @@ func (c *checker) lazyInitializer(s *syntax.Binding, want Type) Type {
 		t = want
 	}
 	if containsOwned(t) || containsOwned(want) {
-		c.errorf(s.Pos, "a lazy initializer cannot return an OwnedScope; acquire and consume it inside the initializer")
+		c.errorf(s.Pos, "a %s cannot return an OwnedScope; acquire and consume it inside the initializer", boundary)
 		return Invalid
 	}
 	return t

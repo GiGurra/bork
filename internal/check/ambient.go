@@ -316,6 +316,9 @@ func (c *checker) unusedNeeds(fn *Func) {
 // ambientIdent reads an ambient value by name, where it is needed or
 // bound.
 func (c *checker) ambientIdent(e *syntax.Ident, a *Ambient) Type {
+	if c.comptimeContext != nil {
+		c.diags.AddCode(e.Pos, "comptime.capture", "comptime cannot capture ambient %s", e.Name)
+	}
 	if l := c.lookup(ambientKey(a)); l != nil {
 		l.used = true
 		c.noteLazyCapture(l.decl, e.Name)
