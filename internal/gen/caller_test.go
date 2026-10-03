@@ -26,6 +26,7 @@ fn Generic[A](value: A): String { _ = value; compilerCallerLocation() }
 fn Snapshot(value: String) uses io { _ = compilerCallerLocation(); assertSnapshot(value) }
 fn Later(): () => String { _ = compilerCallerLocation(); () => Location() }
 fn Crash(): Never { _ = compilerCallerLocation(); panic("fail") }
+fn EmitGeneric[A](value: A) uses io: String { _ = value; println("generic"); compilerCallerLocation() }
 `
 	cases := []struct {
 		name, source, want string
@@ -59,6 +60,15 @@ test "located mock" {
   assertEqual(saved(), "user.bork:5:11")
 }
 `, "real\nreal\nok    located mock\n1 passed, 0 failed\n", true},
+		{"generic mock passthrough and saved value", `import helper "bork/caller"
+test "located generic mock" {
+  mock helper.EmitGeneric(value) { helper.EmitGeneric(value) }
+  assertEqual(helper.EmitGeneric(42), "user.bork:4:15")
+  assertEqual(helper.EmitGeneric("text"), "user.bork:5:15")
+  saved: (Int) uses io => String = helper.EmitGeneric
+  assertEqual(saved(42), "user.bork:6:36")
+}
+`, "generic\ngeneric\ngeneric\nok    located generic mock\n1 passed, 0 failed\n", true},
 		{"snapshot in production", `import helper "bork/caller"
 fn main() { helper.Snapshot("value") }
 `, "panic: user.bork:2:13: assertSnapshot works only in tests (bork test)", false},
