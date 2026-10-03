@@ -336,6 +336,37 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
   inner := handler
   handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     now := time.Now()
+    var warned map[string]bool
+    warn := func(name string) {
+      name = http.CanonicalHeaderKey(name)
+      if warned == nil { warned = map[string]bool{} }
+      if !warned[name] { warned[name] = true; warnPropagationHeader(name) }
+    }
+    parent := func() (string, bool) {
+      values := r.Header.Values("traceparent")
+      if len(values) == 0 { return "", false }
+      if len(values) != 1 || !traceParentValid(values[0]) { warn("traceparent"); return "", false }
+      return values[0], true
+    }
+    restore := _borkBindPropagated(func(name string) (string, bool) {
+      switch strings.ToLower(name) {
+      case "bork-timeout-ns": return "", false
+      case "traceparent": return parent()
+      case "tracestate":
+        if _, valid := parent(); !valid { return "", false }
+        values := r.Header.Values(name)
+        if len(values) == 0 { return "", false }
+        text := strings.Join(values, ",")
+        if !traceStateValid(text) { warn(name); return "", false }
+        return text, true
+      default:
+        values := r.Header.Values(name)
+        if len(values) == 0 { return "", false }
+        if len(values) != 1 { warn(name); return "", false }
+        return values[0], true
+      }
+    })
+    defer restore()
     ctx := r.Context()
     deadline, bounded := ctx.Deadline()
     shorten := func(duration time.Duration) {
@@ -464,8 +495,19 @@ fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, t
     for _, value := range values { req.Header.Add(name, value) }
     return true
   })
+  for _, header := range _borkPropagated() {
+    if !strings.EqualFold(header.Name, "Bork-Timeout-Ns") { req.Header.Set(header.Name, header.Value) }
+  }
   prepare := func(request *http.Request) error {
     if err := ctx.Err(); err != nil { return err }
+    parent := request.Header.Values("traceparent")
+    if len(parent) != 1 || !traceParentValid(parent[0]) {
+      request.Header.Del("traceparent")
+      request.Header.Del("tracestate")
+    } else if values := request.Header.Values("tracestate"); len(values) > 0 {
+      text := strings.Join(values, ",")
+      if traceStateValid(text) { request.Header.Set("tracestate", text) } else { request.Header.Del("tracestate") }
+    }
     request.Header.Del("Bork-Timeout-Ns")
     if limit, found := deadline(); found {
       remaining := time.Until(limit)

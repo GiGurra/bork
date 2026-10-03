@@ -1,0 +1,131 @@
+import logging "bork/log"
+
+// TraceParent and TraceState carry checked W3C wire values, without creating
+// spans or changing sampling decisions. A declaration explicitly opts into
+// forwarding: propagated("traceparent") ambient trace: http.TraceParent.
+pred ValidTraceParent(text: String) { traceParentValid(text) }
+pred ValidTraceState(text: String) { traceStateValid(text) }
+type TraceParent = String where ValidTraceParent
+type TraceState = String where ValidTraceState
+
+instance TraceParentDecode: Decode[TraceParent] {
+  fn decode(json: Json): TraceParent | DecodeError {
+    match (json) {
+      Json.String { value } => if (ValidTraceParent(value)) { value } else { DecodeError { path: "", message: "invalid traceparent" } }
+      _ => DecodeError { path: "", message: "expected a traceparent string" }
+    }
+  }
+}
+instance TraceStateDecode: Decode[TraceState] {
+  fn decode(json: Json): TraceState | DecodeError {
+    match (json) {
+      Json.String { value } => if (ValidTraceState(value)) { value } else { DecodeError { path: "", message: "invalid tracestate" } }
+      _ => DecodeError { path: "", message: "expected a tracestate string" }
+    }
+  }
+}
+instances TraceCodecs { TraceParentDecode, TraceStateDecode }
+
+// TraceParentOf checks a singleton field, without regard to header-name case.
+// Missing is None; repeated or invalid input is DecodeError, without raw text.
+fn TraceParentOf(headers: Headers): Option[TraceParent] | DecodeError {
+  raw = singletonHeader(headers, "traceparent")?
+  match (raw) {
+    Option.None => Option.None
+    Option.Some { value } => Option.Some { value: decode[TraceParent](Json.String { value: value })? }
+  }
+}
+
+// TraceStateOf combines repeated fields in order, but only with a valid parent.
+// An absent or invalid parent leaves state None; state errors keep the parent.
+fn TraceStateOf(headers: Headers): Option[TraceState] | DecodeError {
+  match (TraceParentOf(headers)) {
+    Option.Some { value } => match (combinedHeader(headers, "tracestate")?) {
+      Option.None => Option.None
+      Option.Some { value: raw } => Option.Some { value: decode[TraceState](Json.String { value: raw })? }
+    }
+    _ => Option.None
+  }
+}
+fn singletonHeader(headers: Headers, name: String): Option[String] | DecodeError unsafe go {
+  import "strings"
+  found := false
+  values := []string{}
+  _borkMapEach(headers, func(key string, items []string) bool {
+    if strings.EqualFold(key, name) { found = true; values = append(values, items...) }
+    return true
+  })
+  if !found { return _borkNone[string]() }
+  if len(values) != 1 { return DecodeError{path: "", message: "expected exactly one " + name + " value"} }
+  return _borkSome(values[0])
+}
+fn combinedHeader(headers: Headers, name: String): Option[String] | DecodeError unsafe go {
+  import "strings"
+  names := 0
+  values := []string{}
+  _borkMapEach(headers, func(key string, items []string) bool {
+    if strings.EqualFold(key, name) { names++; values = append(values, items...) }
+    return true
+  })
+  if names == 0 { return _borkNone[string]() }
+  if names > 1 { return DecodeError{path: "", message: "ambiguous case variants of " + name} }
+  return _borkSome(strings.Join(values, ","))
+}
+fn traceParentValid(text: String): Bool unsafe go {
+  if len(text) < 55 || text[2] != '-' || text[35] != '-' || text[52] != '-' { return false }
+  hex := func(value string) bool {
+    for index := range len(value) {
+      character := value[index]
+      if !(character >= '0' && character <= '9' || character >= 'a' && character <= 'f') { return false }
+    }
+    return true
+  }
+  if !hex(text[:2]) || text[:2] == "ff" || !hex(text[3:35]) || !hex(text[36:52]) || !hex(text[53:55]) { return false }
+  if text[3:35] == "00000000000000000000000000000000" || text[36:52] == "0000000000000000" { return false }
+  if text[:2] == "00" { return len(text) == 55 }
+  if len(text) > 55 && text[55] != '-' { return false }
+  // Future fields remain opaque; only require an ASCII HTTP field value.
+  for index := 55; index < len(text); index++ {
+    if text[index] < 0x20 || text[index] > 0x7e { return false }
+  }
+  return true
+}
+fn traceStateValid(text: String): Bool unsafe go {
+  import "strings"
+  if len(text) > 512 { return false }
+  members := strings.Split(text, ",")
+  if len(members) > 32 { return false }
+  seen := map[string]bool{}
+  alpha := func(character byte) bool { return character >= 'a' && character <= 'z' }
+  identifier := func(value string, maximum int, digitFirst bool) bool {
+    if len(value) == 0 || len(value) > maximum { return false }
+    if !alpha(value[0]) && !(digitFirst && value[0] >= '0' && value[0] <= '9') { return false }
+    for index := range len(value) {
+      character := value[index]
+      if !alpha(character) && !(character >= '0' && character <= '9') && character != '_' && character != '-' && character != '*' && character != '/' { return false }
+    }
+    return true
+  }
+  for _, member := range members {
+    member = strings.Trim(member, " \t")
+    if member == "" { continue }
+    key, value, found := strings.Cut(member, "=")
+    if !found || seen[key] { return false }
+    if tenant, system, multiple := strings.Cut(key, "@"); multiple {
+      if !identifier(tenant, 241, true) || !identifier(system, 14, false) { return false }
+    } else if !identifier(key, 256, false) { return false }
+    if len(value) == 0 || len(value) > 256 { return false }
+    for index := range len(value) {
+      character := value[index]
+      if character < 0x20 || character > 0x7e || character == ',' || character == '=' { return false }
+    }
+    seen[key] = true
+  }
+  return true
+}
+
+// The server adapter can report duplicate fields even though the generated
+// bridge getter has only present/missing states. Logs never contain raw values.
+fn warnPropagationHeader(name: String) {
+  logging.Warn("invalid propagated HTTP header", { "header": name })
+}

@@ -1,0 +1,22 @@
+import "bork/http"
+fn parent(text: String): Bool { http.ValidTraceParent(text) }
+fn state(text: String): Bool { http.ValidTraceState(text) }
+fn vectors(checkParent: (String) => Bool, checkState: (String) => Bool): Bool unsafe go {
+  import "fmt"
+  import "strings"
+  root := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  test := func(check func(string) bool, value string, expected bool) {
+    if check(value) != expected { panic(fmt.Sprintf("unexpected validation %q expected %t", value, expected)) }
+  }
+  for _, value := range []string{root, root[:53]+"ff", "01"+root[2:], "fe"+root[2:]+"-unknown"} { test(checkParent, value, true) }
+  for _, value := range []string{"", "00", root[:54], root+"-extension", "ff"+root[2:], strings.ToUpper(root), "00-00000000000000000000000000000000-00f067aa0ba902b7-01", "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01", "01"+root[2:]+"wrong", "01"+root[2:]+"-\n", "01"+root[2:]+"-é"} { test(checkParent, value, false) }
+  for _, value := range []string{"", " \t", ",,,", "vendor=value", "vendor=two words", "vendor=value \t", "1tenant@system=value", "vendor=*/_", strings.Repeat("a",256)+"=v", strings.Repeat("a",241)+"@"+strings.Repeat("b",14)+"=v", "vendor="+strings.Repeat("v",256), strings.Repeat(",",31)} { test(checkState, value, true) }
+  for _, value := range []string{"Vendor=value", "1vendor=value", "vendor=", "vendor=\tvalue", "vendor=v\tal", "vendor=é", "vendor=v=al", "vendor=one,vendor=two", "vendor =value", "tenant@1sys=value", "tenant@sys@other=value", strings.Repeat("a",257)+"=v", strings.Repeat("a",242)+"@system=v", "tenant@"+strings.Repeat("b",15)+"=v", "vendor="+strings.Repeat("v",257), strings.Repeat(",",32)} { test(checkState, value, false) }
+  longest := "a="+strings.Repeat("x",256)+",b="+strings.Repeat("y",251)
+  test(checkState, longest, true)
+  test(checkState, longest+"y", false)
+  // Arbitrary short byte strings must be total even at separator boundaries.
+  for length := 0; length < 60; length++ { checkParent(strings.Repeat("-",length)); checkState(strings.Repeat("\x00",length)) }
+  return true
+}
+fn main() { println(vectors(parent, state)) }

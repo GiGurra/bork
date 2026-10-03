@@ -1,0 +1,5 @@
+level=WARN msg="invalid propagated HTTP header" header=Traceparent
+level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it does not have the facts of its type"
+level=WARN msg="invalid propagated HTTP header" header=Traceparent
+level=WARN msg="invalid propagated HTTP header" header=X-Attempt
+level=WARN msg="invalid propagated HTTP header" header=Tracestate
