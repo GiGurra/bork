@@ -187,6 +187,16 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 }
 
 func (l *lowerer) expr(x syntax.Expr) Expr {
+	if payload := l.info.optionPayloads[x]; payload != nil {
+		value := l.exprRaw(x, payload)
+		opt := l.info.types[x].(*Sealed)
+		some := opt.Variant("Some")
+		return &RecordLit{expr: expr{pos: x.Position(), typ: opt, token: sourceTokenPos(x)}, Variant: some, Promoted: true, Fields: []*FieldValue{{Name: "value", Field: some.Fields[0], Value: value}}}
+	}
+	return l.exprRaw(x, l.info.types[x])
+}
+
+func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	if call, ok := x.(*syntax.Call); ok {
 		if expansion := l.info.conversionCalls[call]; expansion != nil {
 			out := l.block(expansion)
@@ -203,7 +213,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 			return out
 		}
 	}
-	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
+	at := expr{pos: x.Position(), typ: typ, token: sourceTokenPos(x)}
 	if inst := l.info.funcRefs[x]; inst != nil {
 		at.token = x.Position()
 		return &FuncRef{expr: at, Name: writtenText(x), Inst: inst, Needs: l.needs(x)}

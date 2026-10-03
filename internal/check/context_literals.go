@@ -398,6 +398,12 @@ func (c *checker) contextVariantCall(e *syntax.Call, name *syntax.ContextName, w
 func (c *checker) contextNeedsType(x syntax.Expr, want Type) bool {
 	x = debugSyntaxValue(x)
 	want = c.zonk(want)
+	if IsOption(want) && !c.optionalConstructor(x) {
+		if c.open(want) {
+			return !c.knownOptionalSource(x)
+		}
+		want = c.promotionContext(x, want)
+	}
 	switch x := x.(type) {
 	case *syntax.ContextName:
 		_, unknown := c.contextCandidates(x.Name, want)
@@ -618,7 +624,8 @@ func (c *checker) genericContextLit(e *syntax.RecordLit, base Type, variant, lab
 	}
 	var pending []int
 	for i, fi := range e.Fields {
-		if c.needsContext(fi.Value) {
+		field := findField(fields, fi.Name)
+		if c.needsContext(fi.Value) || field != nil && c.contextNeedsType(fi.Value, field.Type) {
 			pending = append(pending, i)
 		} else {
 			check(i)
@@ -671,6 +678,11 @@ func (c *checker) genericContextLit(e *syntax.RecordLit, base Type, variant, lab
 			}
 		}
 		report := func() {
+			for _, t := range types {
+				if c.open(t) {
+					return
+				}
+			}
 			var missing []string
 			for i, tp := range typeParamsOf(base) {
 				if c.open(args[i]) {

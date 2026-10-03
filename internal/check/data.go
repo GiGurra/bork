@@ -267,77 +267,7 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 // generic sealed type (`Option.Some { value: 1 }`). The type arguments
 // come from the expected type, or else from the fields.
 func (c *checker) genericLit(e *syntax.RecordLit, base Type, variant, label string, want Type) Type {
-	if hasContextLiteral(e) {
-		return c.genericContextLit(e, base, variant, label, want)
-	}
-	var fields []*Field
-	if s, ok := base.(*Sealed); ok {
-		v := s.Variant(variant)
-		if v == nil {
-			c.errorf(e.Type.Position(), "%s has no variant %s", s.Name, variant)
-			c.skipFieldInits(e)
-			return Invalid
-		}
-		if !c.visibleVariant(e.Type.Position(), s, variant) {
-			c.skipFieldInits(e)
-			return Invalid
-		}
-		fields = v.Fields
-	} else {
-		fields = base.(*Record).Fields
-	}
-	in := typeInference(typeParamsOf(base))
-	if inst := instanceIn(want, base); inst != nil {
-		for i, a := range TypeArgs(inst) {
-			if !c.open(a) {
-				in.bound[in.params[i]] = a
-			}
-		}
-	}
-	types := make([]Type, len(e.Fields))
-	check := func(i int) {
-		fi := e.Fields[i]
-		f := findField(fields, fi.Name)
-		if f == nil {
-			types[i] = c.expr(fi.Value)
-			return
-		}
-		pw := in.subst(f.Type)
-		if in.open(pw) {
-			pw = nil
-		}
-		types[i] = c.exprWant(fi.Value, pw)
-		in.unify(f.Type, types[i])
-	}
-	for i, fi := range e.Fields {
-		if !c.needsContext(fi.Value) {
-			check(i)
-		}
-	}
-	for i, fi := range e.Fields {
-		if c.needsContext(fi.Value) {
-			check(i)
-		}
-	}
-	if missing := in.unsolved(); len(missing) > 0 {
-		for _, t := range types {
-			if t == Invalid {
-				return Invalid
-			}
-		}
-		c.errorf(e.Type.Position(), "cannot tell what %s is in this %s; use it where its type is known", strings.Join(missing, " and "), label)
-		return Invalid
-	}
-	inst := instantiate(base, in.args())
-	if s, ok := inst.(*Sealed); ok {
-		v := s.Variant(variant)
-		c.info.recordTargets[e] = v
-		c.fieldInitsTyped(e, v.Fields, label, types)
-		return s
-	}
-	c.info.recordTargets[e] = inst
-	c.fieldInitsTyped(e, inst.(*Record).Fields, label, types)
-	return inst
+	return c.genericContextLit(e, base, variant, label, want)
 }
 
 func (c *checker) fieldInits(e *syntax.RecordLit, fields []*Field, owner string) {

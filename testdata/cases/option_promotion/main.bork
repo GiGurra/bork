@@ -1,0 +1,23 @@
+type C = { first: Option[Int] = 1, second: Option[Int] = .None }
+fn mark(tag: String, value: Int) uses io: Int { println(tag); value }
+fn pair(first: Option[Int], second: Option[Int]): C { .{ first: first, second: second } }
+fn (c: C) Pick(value: Option[Int]): Option[Int] { value }
+fn choose[T](value: Option[T], witness: T): Option[T] { value }
+fn main() {
+  c = pair(second: mark("second", 2), first: mark("first", 1))
+  println(c)
+  println(c.copy(second: mark("copy second", 4), first: mark("copy first", 3)))
+  println(C {})
+  println(c.Pick(5))
+  println(choose(6, 7))
+  f: () => Option[Int] = () => 8
+  println(f())
+  xs: List[Option[Int]] = [9, .None]
+  println(xs)
+  r: Option[Int] = match (1) { 1 => 10, _ => .None }
+  println(r)
+  nested: Option[Option[Int]] = .Some { value: 11 }
+  println(nested)
+  w: Option[List[Int]] = []
+  println(w)
+}

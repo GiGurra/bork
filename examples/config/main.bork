@@ -16,7 +16,7 @@ fn main() {
   staging = settings.New(host: "staging.example", port: 8443,
     connectTimeoutMs: 250, readTimeoutMs: 3000,
     tls: .Files { cert: "staging.pem", key: "staging.key" },
-    debug: .Some { value: "requests" })
+    debug: "requests")
   production = settings.ForProduction(config: staging, host: "production.example",
     cert: "production.pem", key: "production.key")
 

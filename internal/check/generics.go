@@ -351,6 +351,7 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 // completes the call once the session closes. It gives the call's
 // type, which may have unknowns.
 func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax.Expr, recv Type, typeArgs []*syntax.TypeExpr, want Type, cs *callState) Type {
+	want = c.optionResultWant(want, fn.Result)
 	errorsBefore := c.diags.Len()
 	fail := func() Type {
 		cs.failed = true
@@ -466,11 +467,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			return
 		}
 		pw := c.zonk(params[i])
-		if l, ok := a.(*syntax.Lambda); ok {
-			types[i] = c.record(l, c.lambda(l, pw))
-		} else {
-			types[i] = c.exprWant(a, pw)
-		}
+		types[i] = c.exprWant(a, pw)
 		c.solve(params[i], types[i])
 	}
 	later := func(a syntax.Expr) bool {
