@@ -3,6 +3,7 @@ package check
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -61,11 +62,107 @@ func (c *checker) mockStmt(s *syntax.MockStmt) {
 	if s.Name != "" {
 		t := Type(Invalid)
 		if mt := c.preludePkg.TypeNamed("Mock"); mt != nil && target != nil {
-			t = mt
-			c.info.MockType = mt
+			t = instantiate(mt, []Type{c.callRecord(target)})
 		}
+		c.info.mockHandles[s] = t
 		c.bind(s.Name, s.Pos, t, s)
 	}
+}
+
+// callRecord is the record of a call of target, which a mock's handle
+// gives its calls' arguments as (Mock[A]): a field per parameter, named
+// as the target names them. It is made once per target, named after it
+// (FetchCall, StoreSaveCall, HttpGetCall), and declared only in test
+// builds.
+func (c *checker) callRecord(target *Func) *Record {
+	if r := c.info.MockCalls[target]; r != nil {
+		return r
+	}
+	var b strings.Builder
+	if target.Pkg != nil && target.Pkg != c.pkg {
+		parts := strings.Split(target.Pkg.Path, "/")
+		b.WriteString(identWord(parts[len(parts)-1]))
+	}
+	if target.Decl.IsMethod && len(target.Params) > 0 {
+		recv := target.Params[0]
+		switch t := recv.(type) {
+		case *Record:
+			b.WriteString(identWord(t.Name))
+		case *Sealed:
+			b.WriteString(identWord(t.Name))
+		default:
+			b.WriteString(identWord(TypeText(recv, c.pkg)))
+		}
+	}
+	b.WriteString(identWord(target.Decl.Name))
+	base := b.String() + "Call"
+	name := base
+	for n := 2; c.isTypeName(name) || c.pkg.Funcs[name] != nil || c.preludePkg.Funcs[name] != nil || c.mockCallTaken(name); n++ {
+		name = fmt.Sprintf("%s%d", base, n)
+	}
+	r := &Record{Name: name, Pkg: c.pkg, MockCall: true}
+	// A value that can belong to a scope (a scope, a resource, a Go
+	// value, a function, or what holds one) would outlive it in the
+	// handle, which the test keeps: such parameters get no field (the
+	// call's text still shows them).
+	life := &lifeChecker{carries: map[Type]bool{}}
+	for i, p := range target.Params {
+		if life.carriesLife(p) {
+			continue
+		}
+		field := fmt.Sprintf("p%d", i)
+		if i < len(target.Decl.Params) {
+			field = target.Decl.Params[i].Name
+		}
+		r.Fields = append(r.Fields, &Field{Name: field, Type: p, Pkg: c.pkg})
+	}
+	c.info.MockCalls[target] = r
+	c.info.MockCallOrder = append(c.info.MockCallOrder, r)
+	return r
+}
+
+// mockCallLeftOut explains, if r is a call record that left out the
+// target's parameter name, why.
+func (info *Info) mockCallLeftOut(r *Record, name string) string {
+	if !r.MockCall {
+		return ""
+	}
+	for target, rec := range info.MockCalls {
+		if rec != r {
+			continue
+		}
+		for i, p := range target.Decl.Params {
+			if p.Name == name && i < len(target.Params) {
+				return fmt.Sprintf("%s has no field %s: a call record leaves out parameters whose values can belong to a scope (%s), since the test keeps the records after their scopes end; check %s inside the mock's body instead", r.Name, name, target.Params[i], name)
+			}
+		}
+	}
+	return ""
+}
+
+func (c *checker) mockCallTaken(name string) bool {
+	for _, r := range c.info.MockCallOrder {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// identWord is s capitalized, with what an identifier cannot hold left
+// out: "http" is "Http", "List[Int]" is "ListInt".
+func identWord(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			b.WriteRune(r)
+		}
+	}
+	w := b.String()
+	if w == "" {
+		return w
+	}
+	return strings.ToUpper(w[:1]) + w[1:]
 }
 
 // mockBody checks a mock's body as the body of a function with

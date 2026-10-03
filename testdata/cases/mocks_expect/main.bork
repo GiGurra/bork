@@ -1,0 +1,110 @@
+// A mock's handle gives its calls' arguments as records, and declares
+// how many calls it must answer, checked when the mock ends.
+
+type Store = { name: String }
+
+// Fetch would call the network.
+fn Fetch(url: String, retries: Int) uses net: String {
+  panic(s"no network: $url")
+}
+
+fn (s: Store) Save(key: String) uses io {
+  panic(s"no disk: ${s.name}/$key")
+}
+
+fn pause(ms: Int) uses clock unsafe go {
+  import "time"
+  time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
+fn main() {
+  println(Fetch("x", 0))
+}
+
+test "args gives the calls' arguments as records" {
+  calls = mock Fetch(url, n) { s"fake $url" }
+  _ = Fetch("a", 1)
+  _ = Fetch("b", 2)
+  assertEqual(calls.args().map(c => c.url), ["a", "b"])
+  assertEqual(calls.args().map(c => c.retries), [1, 2])
+  println(calls.args())
+}
+
+test "a method's record has its receiver" {
+  saves = mock Store.Save(s, key) {}
+  Store { name: "db" }.Save("k")
+  assertEqual(saves.args().map(c => s"${c.s.name}/${c.key}"), ["db/k"])
+}
+
+test "expectations hold" {
+  calls = mock Fetch(url, n) { url }
+  calls.expect(times: 3)
+  calls.expect(atLeast: 2, atMost: 4)
+  calls.expect()
+  calls.expectWhere(c => c.url == "a", times: 2)
+  calls.expectWhere(c => c.retries > 5, times: 0)
+  _ = Fetch("a", 0)
+  _ = Fetch("a", 0)
+  _ = Fetch("b", 0)
+}
+
+test "a mock that must not be called" {
+  {
+    never = mock Fetch(url, n) { url }
+    never.expect(times: 0)
+  }
+  println("not called")
+}
+
+test "waitFor waits for calls from other tasks" {
+  calls = mock Fetch(url, n) { url }
+  scope s {
+    _ = spawn(s, () => {
+      pause(50)
+      Fetch("late", 0)
+    })
+    calls.waitFor(1)
+    calls.waitForWhere(c => c.url == "late", 1)
+    assertEqual(calls.calls(), ["Fetch(\"late\", 0)"])
+  }
+}
+
+test "a mock in a scope is checked after the scope's tasks" {
+  scope s {
+    calls = mock Fetch(url, n) { url }
+    calls.expect(times: 2)
+    _ = spawn(s, () => {
+      pause(30)
+      Fetch("a", 0)
+    })
+    _ = spawn(s, () => {
+      pause(10)
+      Fetch("b", 0)
+    })
+  }
+}
+
+fn finish(o: OwnedScope) uses state {
+  closeScope(o)
+}
+
+test "a target that takes an owned scope can still be counted" {
+  calls = mock finish(o) { closeScope(o) }
+  calls.expect(times: 1)
+  scope app {
+    finish(openScope(app))
+  }
+  assertEqual(calls.count(), 1)
+}
+
+// A function named as a call record would be makes the record take
+// another name.
+fn FetchCall(x: String): String {
+  x
+}
+
+test "a call record's name does not clash with a function" {
+  calls = mock Fetch(url, n) { FetchCall(url) }
+  assertEqual(Fetch("a", 0), "a")
+  assertEqual(calls.args().map(c => c.url), ["a"])
+}

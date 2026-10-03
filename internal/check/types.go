@@ -200,6 +200,9 @@ type Record struct {
 	Decl         *syntax.TypeDecl
 	Prelude      bool     // declared in prelude
 	Pkg          *Package // the declaring package
+	// MockCall is a mock's call record (see callRecord), which only
+	// test builds declare.
+	MockCall bool
 
 	TypeParams []*TypeParam
 	Base       *Record

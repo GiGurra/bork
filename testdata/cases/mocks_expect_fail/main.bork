@@ -1,0 +1,26 @@
+// A call record leaves out what can belong to a scope.
+
+type Conn = resource
+
+fn send(c: Conn, msg: String) uses io {
+  println(s"send $msg")
+}
+
+fn later(f: () uses io => Unit) uses io {
+  f()
+}
+
+fn main() {
+  later(() => println("now"))
+}
+
+test "a resource cannot outlive its scope through args" {
+  calls = mock send(c, msg) {}
+  println(calls.args().map(r => r.msg))
+  println(calls.args().map(r => r.c))
+}
+
+test "nor can a function" {
+  calls = mock later(f) {}
+  calls.args().forEach(r => r.f())
+}

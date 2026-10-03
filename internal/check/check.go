@@ -218,8 +218,11 @@ type Info struct {
 	// Func.MockOf), and mocks them by statement.
 	Mocks []*Func
 	mocks map[*syntax.MockStmt]*Func
-	// MockType is the prelude's Mock, the type of a mock's handle.
-	MockType Type
+	// MockCalls are the records of calls of the functions tests mock
+	// with a handle (see callRecord), declared only in test builds.
+	MockCalls     map[*Func]*Record
+	MockCallOrder []*Record
+	mockHandles   map[*syntax.MockStmt]Type
 	// Rules holds the inference rules of every package.
 	Rules []*Rule
 	// GoBindings holds every checked binding to a Go function
@@ -364,6 +367,8 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			instances:          map[*syntax.Call]*Instance{},
 			funcRefs:           map[syntax.Expr]*Instance{},
 			mocks:              map[*syntax.MockStmt]*Func{},
+			mockHandles:        map[*syntax.MockStmt]Type{},
+			MockCalls:          map[*Func]*Record{},
 		},
 	}
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
