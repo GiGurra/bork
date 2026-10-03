@@ -2260,7 +2260,8 @@ feature supplies synchronous lazy traversal.
 expr against T, emits it once, and terminates the current producer if its
 consumer stops. `return` with no value ends that producer. A value return is
 an error. The producer is a function boundary: neither return nor `?` escapes
-the enclosing function that created it. Initially, `?` in this Unit-returning
+the enclosing function that created it. A break/continue in a producer cannot target a loop
+outside its generate boundary. Initially, `?` in this Unit-returning
 body is rejected by the ordinary return-type rules; producers of fallible
 items yield error alternatives explicitly, then return when terminal.
 
@@ -2319,7 +2320,11 @@ functions. Diagnostics suggest the needed callback qualifier and Seq result
 qualifier instead of charging a deferred call as an immediate effect.
 Effects cannot be erased by aliases, generic containers, records, interface
 bindings or function returns. Pure sequences fit an effectful sequence slot;
-sequences with more effects do not fit one with fewer. The element type follows
+sequences with more effects do not fit one with fewer. Union alternatives with
+the same element type join their latent effects into one Seq type; effects are
+not a runtime discriminator. A sequence type pattern must retain or broaden
+the incoming latent qualifier, and cannot filter effectful values into a pure
+slot. The element type follows
 ordinary assignability, with no extra structural or numeric conversion.
 
 `map`, `filter` and other lazy adapters capture callbacks without invoking them.
@@ -2426,14 +2431,15 @@ unwinding; then adapters/facts; then Go iter binding and standard-library
 producers. Keep `bork describe` able to display element type, latent effects
 and known dependencies. Stable diagnostics distinguish invalid yield, result
 and callback types, forbidden fact observation, missing consumer effects,
-effect erasure and scope escape. Grammar, formatter, editor syntax, README and
+effect erasure (including union type patterns) and scope escape. Grammar, formatter, editor syntax, README and
 requirements must be updated alongside each implementation increment.
 
 Tests cover laziness, exact callback counts (including take(0)/take(1)), repeated
 pure/effectful traversal, adapter order, flatMap nesting, explicit error unions,
 nested flatMap followed by take/first/break (including an unbounded inner),
 whole-function return/`?` from consumers, nested producers, rejected nested
-callback/task yields, and no extra item after early stop. Effect negatives cover
+callback/task yields, break/continue across a generate boundary, and no extra
+item after early stop. Effect negatives cover
 pure consumers, alias/record/generic erasure and returned callbacks; lifetime
 negatives cover escaping captures and producer-local resource yields. Runtime
 cases verify resource cleanup on exhaustion/break/return/panic/cancellation,
