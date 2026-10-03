@@ -1,0 +1,71 @@
+type Error = { message: String }
+type Box = { value: Unit | Error }
+
+fn done() uses io { println("done") }
+fn consume(label: String, x: Unit | Error) uses io {
+  match (x) {
+    unit: Unit => println(label)
+    error: Error => println(error.message)
+  }
+}
+fn mark(label: String) uses io: String { println(label); label }
+fn returned(ok: Bool): Unit | Error {
+  if (ok) { return {} }
+  Error { message: "error" }
+}
+fn triple(first: String, x: Unit | Error, last: String) uses io {
+  consume(first, x)
+  println(last)
+}
+fn diverging() uses io: String {
+  triple(mark("before return"), { return "returned early" }, mark("after return"))
+  "unreachable tail"
+}
+fn elseIf(ok: Bool): String {
+  if (ok) { "ok" } else if ({ return "early" }) { "then" } else { "else" }
+}
+fn policy(label: String) uses io: ScopePolicy { println(label); logFailures() }
+fn policyOrder() uses io: String {
+  scope s with policy("first policy"), { println("second policy"); logFailures() } {
+    println("policy body")
+  }
+  "policy done"
+}
+fn policyReturn() uses io: String {
+  scope s with policy("before policy return"), { return "policy early" } {
+    println("unreachable policy body")
+  }
+  "unreachable policy tail"
+}
+fn main() {
+  consume("block", {})
+  consume("call", done())
+  consume("builtin", println("builtin effect"))
+  work = () => println("lambda effect")
+  consume("lambda", work())
+  consume("generic", forEach[Int]([1], n => println(n)))
+  consume("if", if (true) { done() } else {})
+  consume("empty if", if (false) { done() } else {})
+  consume("match", match (true) { true => done(), false => {} })
+  consume("scope", scope s { onClose(s, () => println("closed")); done() })
+  consume("statements", { done(); x = 1 })
+  consume(mark("first"), { println("second") })
+  consume("returned", returned(true))
+  consume("returned", returned(false))
+  box = Box { value: {} }
+  consume("field", box.value)
+  changed = box.copy(value = done())
+  consume("copy", changed.value)
+  xs: List[Unit | Error] = [{}, done()]
+  forEach(xs, x => consume("list", x))
+  m: Map[String, Unit | Error] = { "a": {}, "b": done() }
+  match (m.get("a")) {
+    Option.Some { value } => consume("map", value)
+    Option.None => println("missing")
+  }
+  println(diverging())
+  println(elseIf(true))
+  println(elseIf(false))
+  println(policyOrder())
+  println(policyReturn())
+}
