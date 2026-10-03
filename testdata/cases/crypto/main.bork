@@ -6,7 +6,15 @@ fn legacyHash() uses random: String unsafe go {
   if err != nil { panic(err) }
   return string(hash)
 }
-fn exercise() uses io + random: Unit | crypto.Error | ParseError {
+fn entropyFailures(draw: () uses random => Bool, token: () uses random => Bool, password: () uses random => Bool) uses random + state: Bool unsafe go {
+  import "crypto/rand"
+  import "strings"
+  previous := rand.Reader
+  rand.Reader = strings.NewReader("")
+  defer func() { rand.Reader = previous }()
+  return draw() && token() && password()
+}
+fn exercise() uses io + random + state: Unit | crypto.Error | ParseError {
   println(crypto.SHA256Hex(utf8Bytes("abc")))
   println(crypto.SHA512Hex(utf8Bytes("abc")))
   key = encoding.ParseHex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b")?
@@ -43,5 +51,16 @@ fn exercise() uses io + random: Unit | crypto.Error | ParseError {
   oversized = hashed.replaceAll("m=19456", "m=4294967295")
   println(match (crypto.VerifyPassword("secret", oversized)) { error: crypto.Error => true; _ => false })
   println(crypto.NeedsRehash("bad"))
+  println(entropyFailures(() => match (crypto.RandomBytes(1)) { error: crypto.Error => true; _ => false }, () => match (crypto.Token()) { error: crypto.Error => true; _ => false }, () => match (crypto.HashPassword("secret")) { error: crypto.Error => true; _ => false }))
+  // Fixed vector produced by the reference libargon2 C implementation.
+  imported = "$argon2id$v=19$m=1024,t=2,p=1$c29tZXNhbHQ$7FfsnA6vUe7qLpL/3Kqc3uR48ZJyFbUVt7jWZlf0Htk"
+  println(crypto.VerifyPassword("password", imported))
+  println(crypto.VerifyPassword("wrong", imported))
+  println(crypto.VerifyPassword("password", imported.replaceAll("m=1024,t=2,p=1", "p=1,m=1024,t=2")))
+  println(crypto.NeedsRehash(imported))
+  duplicated = imported.replaceAll("m=1024,t=2,p=1", "m=1024,m=1024,p=1")
+  println(match (crypto.VerifyPassword("password", duplicated)) { error: crypto.Error => true; _ => false })
+  println(match (crypto.VerifyPassword("password", imported + "=")) { error: crypto.Error => true; _ => false })
+
 }
 fn main() { println(exercise()) }
