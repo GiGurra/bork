@@ -214,7 +214,7 @@ Standard packages may use pinned Go modules. Generated builds use Go's module ca
 
 ## Status
 
-Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today.
+Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today. The [backpressure proposal](docs/design/backpressure.md) describes explicit bounded task pools, HTTP admission, and shared retry budgets; these APIs are not implemented yet.
 
 Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 `bytes([toByte(0), toByte(255)])`, and validated `utf8String(data)`.

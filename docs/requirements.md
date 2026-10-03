@@ -921,6 +921,15 @@ scope maint {
 - **Channels (implemented):** `channel[T](s, capacity)` makes a channel owned by scope `s`, which closes it when it closes (so, like a task, a channel cannot leave its scope). `send(ch, x)` gives `Unit | Cancelled | Closed`, `receive(ch)` gives `T | Cancelled | Closed`, `closeChannel(ch)` closes it (buffered values can still be received), and `received(ch)` collects values until it closes. Operations stop with `Cancelled` when the channel's scope is cancelled; sending to a closed channel gives `Closed` rather than panicking.
 - **Cancellation through scopes (implemented):** a scope carries what Go's `context.Context` does. `cancel(s)` cancels it, `cancelAfter(s, ms)` sets a deadline, a task that panics cancels its scope (so its siblings stop), the scope's end cancels it, and a scope nested in another (in the same function) is cancelled with it. Cancellation is cooperative: tasks see it at cancellation points, `delay(s, ms)` and `checkpoint(s)` (both `Unit | Cancelled`, so `checkpoint(s)?` stops a loop), and channel operations. A cancelled scope still waits for its tasks. **The scope does not decide how its tasks stop:** its end is the same signal whether the block finished, returned early, or panicked, and each task chooses what to do with it: stop at once (a worker waiting in `delay` or on a channel), clean up first, or finish its work (code that never checks for cancellation runs to the end). Work the block needs done is awaited before the block ends. In `bork/http`, each request has a scope, cancelled when the client goes away or the server's scope closes.
 
+### Backpressure (proposal)
+
+Bounded task pools, HTTP admission before body buffering, typed overload/deadline
+failures, and shared retry budgets are proposed in
+[the backpressure design](design/backpressure.md) (bork-l0kn5g). Ordinary
+spawn/launch keep their current signatures; callers explicitly select a bounded
+pool and handle admission failures. HTTP retries are opt-in, limited by a shared
+budget and remaining deadline. This proposal is not implemented yet.
+
 ### Partially overlapping scopes: owned child scopes
 
 > **Implemented** (bork-u6nhjb). Lexical scopes stay the default, and the
