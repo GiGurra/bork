@@ -3,6 +3,8 @@ false
 true true
 false
 true true
+http.Certificate
+true
 static asset
 reserved filename
 7

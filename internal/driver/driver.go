@@ -17,7 +17,6 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/gen"
-	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -68,6 +67,9 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 	if diags.Len() > 0 {
 		// Report syntax and import errors before attempting to type-check.
 		return nil, nil, &DiagError{Diags: diags}
+	}
+	if _, _, err := programGoModule(files); err != nil {
+		return nil, nil, err
 	}
 	info := check.Program(files, root, diags, goPackages{files: files})
 	if diags.Len() > 0 {
@@ -201,16 +203,12 @@ func buildGo(files []*syntax.File, goSrc []byte, out string, embeds ...*check.Em
 }
 
 // writeGoModule writes the go.mod (and go.sum) of a generated program
-// into dir: the Go modules the standard packages among files depend on.
+// into dir: the Go modules imported standard packages and the user module need.
 // It reports whether there are any.
 func writeGoModule(dir string, files []*syntax.File) (bool, error) {
-	var importPaths []string
-	for _, file := range files {
-		importPaths = append(importPaths, file.Package)
-	}
-	goMod, goSum, err := std.GoModuleFiles(importPaths)
+	goMod, goSum, err := programGoModule(files)
 	if err != nil {
-		return false, fmt.Errorf("standard package Go dependencies: %w", err)
+		return false, err
 	}
 	if goModuleHook != nil {
 		goMod = goModuleHook(goMod)

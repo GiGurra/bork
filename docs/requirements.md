@@ -151,7 +151,7 @@ In priority order. When two values conflict, the higher one wins.
 - **Both structural interfaces and type classes exist**, as different tools for different situations. Structural interfaces describe what a value can do. Type classes attach behaviour to a type, including types you don't own.
 - **No automatic default instances.** The compiler never picks up an instance on its own, not even one declared next to the type or the type class. A library may expose a default set of instances, but it must still be imported explicitly. This is an experiment: we'll try it and see how it feels in practice.
 - **Ambiguous instances are a compile error.** If more than one in-scope instance matches, including several instances for constrained types that a value satisfies, the build fails.
-- **Automatic derivation in v0.1:** `derive (Decode, Encode)` for records and ADTs. Structural equality and default text need no derive.
+- **Automatic derivation in v0.1:** `derive (Decode, Encode)` for records and ADTs. Derivation cannot inspect or construct foreign private variants, including variants reachable through fields, containers, and concrete generic specializations. At a field boundary it can delegate to an existing codec provided by the type's owning package, preserving that package's chosen public representation. Structural equality and default text need no derive.
 - **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
@@ -991,7 +991,7 @@ type Options = {
 
 - **The compiler loads the Go packages a program binds**, with `golang.org/x/tools/go/packages` (types from export data, through Go's build cache), in a temporary module with the same `go.mod` and `go.sum` the build will use. So the check sees exactly the Go code the build compiles, and third-party packages resolve as they will in the build (bork-8zh4yy).
 - **The checker does not run Go itself.** It asks an interface for the Go type of a name (`check.GoTypes`), which the driver implements with `go/packages`; tests can give it a fake.
-- **The standard library's bindings are checked when the compiler is built**, by a test, and the compiler carries their signatures. So a program whose own packages have no bindings never starts the Go tool for checking, and `bork check` still works without Go installed. Building always needs Go, as now.
+- **Shipped code currently uses unsafe Go bodies, without literal bindings or Go type declarations.** A guard test enforces this so checking a program without its own bindings does not invoke Go for signature resolution. Checked signature snapshots are deferred until shipped packages use bindings. Building and compile-time predicate evaluation still need Go.
 - **Checking is part of type checking**, after declarations are collected and before bodies, since a binding's signature is its declaration. Errors come out with the rest, with stable diagnostic codes in a `bind.` category (`bind.no-such-func`, `bind.mismatch`, `bind.result-shape`, ...), apart from `go.error`, which is for Go code in `unsafe go` bodies.
 - **The generated code is a wrapper per binding**: the Go function the compiler writes for it converts the arguments, calls the bound function, and converts the results, exactly as a hand-written `unsafe go` body would. Nothing new reaches the runtime besides the conversion helpers.
 
@@ -1023,12 +1023,12 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 ### Implementation plan
 
 1. **This proposal**, as its own PR.
-2. **Bindings of functions over basic types (implemented):** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `Bytes`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library Go packages only.
+2. **Bindings of functions over basic types (implemented):** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `Bytes`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library and declared third-party Go packages.
 3. **Opaque Go types (implemented)**: identity, boxing, nil checks, method bindings, assignability, `Scope` as `context.Context`, and resources of Go types.
 4. **Mirror records (implemented)**, conversions both ways with fact checks, and the `_borkToGo`/`_borkFromGo` helpers in [std-go.md](std-go.md).
 5. **Record field defaults and field doc comments (implemented)** (useful without Go: literals and `Decode`).
 6. **`derive (GoStruct)` (implemented)**, `go { ... }` tags, and the schema. This exposes checked conversions and reflection metadata to standard integrations.
-7. **Third-party Go packages**, with Go module dependencies (bork-8zh4yy), and the standard library's bindings checked by a test.
+7. **Third-party Go packages (implemented)**, with user `go-deps.mod`/`go-deps.sum` manifests merged with imported std dependencies. A guard test keeps shipped code free of literal bindings until checked signature snapshots exist.
 8. **Docs:** fold this section into the decided parts, and update `grammar.md`, the prelude's table, and the README.
 
 Effects in signatures and bodies have landed (bork-ot9ki9). Bindings declare their effects with `uses`, like `unsafe go` bodies, are checked against the Go function they call by the heuristics of the [`unsafe go` check](#unsafe-go), and need the `bork.mod` gate. A fuller table of the standard library's effects, beyond those heuristics, is still to come.

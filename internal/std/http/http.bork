@@ -86,18 +86,37 @@ fn ListenRoutes(addr: String, s: Scope, routes: List[Route], drainTimeoutMs: Tim
 
 // ListenTLS loads a certificate and private key before opening the listener.
 fn ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses io + net + clock + random + state: Server | IoError unsafe go {
-  pair := loadCertificate(certFile, keyFile)
+  pair := LoadCertificate(certFile, keyFile)
   if failure, failed := pair.(IoError); failed { return failure }
   return start(addr, s, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes)
 }
 
-// The certificate is opaque and immutable after construction.
-type Certificate = go "crypto/tls.Certificate"
-fn loadCertificate(certFile: String, keyFile: String) uses io: Certificate | IoError unsafe go {
+// Certificate keeps validated immutable PEM bytes in a private variant.
+// Its renderer never exposes the key material.
+type Certificate = sealed { certificate { certificatePem: Bytes, keyPem: Bytes } }
+instance ShowCertificate: Show[Certificate] {
+  fn show(certificate: Certificate): String { "http.Certificate" }
+}
+
+// ParseCertificate validates a PEM certificate chain and its private key.
+fn ParseCertificate(certificatePem: Bytes, keyPem: Bytes): Certificate | IoError unsafe go {
   import "crypto/tls"
-  cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+  if _, err := tls.X509KeyPair(_borkBytesData(certificatePem), _borkBytesData(keyPem)); err != nil {
+    return IoError{path: "", message: err.Error()}
+  }
+  return Certificate_certificate{certificatePem: certificatePem, keyPem: keyPem}
+}
+
+// LoadCertificate reads and validates a PEM certificate chain and its private key.
+fn LoadCertificate(certFile: String, keyFile: String) uses io: Certificate | IoError unsafe go {
+  import "os"
+  cert, err := os.ReadFile(certFile)
   if err != nil { return IoError{path: certFile, message: err.Error()} }
-  return _borkOpaque[Certificate](cert)
+  key, err := os.ReadFile(keyFile)
+  if err != nil { return IoError{path: keyFile, message: err.Error()} }
+  pair := ParseCertificate(_borkBytesFrom(cert), _borkBytesFrom(key))
+  if failure, failed := pair.(IoError); failed { failure.path = certFile; return failure }
+  return pair
 }
 
 fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs, maxBodyBytes: BodyLimit) uses net: Server | IoError unsafe go {
@@ -156,7 +175,9 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
   ln, err := net.Listen("tcp", addr)
   if err != nil { return IoError{path: addr, message: err.Error()} }
   if pair, secure := _borkOptionGet(certificate); secure {
-    cert := _borkGo(pair)
+    pem := pair.(Certificate_certificate)
+    cert, err := tls.X509KeyPair(_borkBytesData(pem.certificatePem), _borkBytesData(pem.keyPem))
+    if err != nil { panic("http: validated certificate became invalid") }
     ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
   }
   srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: mux, ReadHeaderTimeout: 10*time.Second}
