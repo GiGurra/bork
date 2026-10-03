@@ -317,6 +317,8 @@ type VariantValue struct {
 // are in the order written.
 type RecordLit struct {
 	expr
+	// Promoted marks an implicit Some around a source expression.
+	Promoted    bool
 	Record      *Record
 	Variant     *Variant
 	Fields      []*FieldValue

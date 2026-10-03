@@ -164,6 +164,14 @@ func (s *sourceIndex) selectVar(v *check.Var, site diag.Pos) {
 }
 
 func (s *sourceIndex) walk(x check.Expr) {
+	if lit, ok := x.(*check.RecordLit); ok && lit.Promoted {
+		payload := lit.Fields[0].Value
+		s.walk(payload)
+		if s.selected != nil && s.selected.Expr == payload && s.selected.Value && s.selected.Type == payload.Type() {
+			s.choose(lit, lit.Type(), definition(payload))
+		}
+		return
+	}
 	if block, ok := x.(*check.Block); ok && block.Conversion != nil {
 		start, end := block.Conversion.Start, block.Conversion.End
 		if start.File == s.pos.File && (s.pos.Line > start.Line || s.pos.Line == start.Line && s.pos.Col >= start.Col) && (s.pos.Line < end.Line || s.pos.Line == end.Line && s.pos.Col < end.Col) {

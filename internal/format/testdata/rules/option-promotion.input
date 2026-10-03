@@ -1,0 +1,3 @@
+type C={debug:Option[String]=.None}
+fn make(debug:Option[String]="requests"):C{.{debug:debug}}
+fn main(){x:Option[Int]=1;println(x);println(make(debug:"requests"));println(make(debug:.Some{value:"explicit"}))}

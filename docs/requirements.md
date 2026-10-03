@@ -2995,7 +2995,7 @@ construction, source order/lifetimes, formatting/comments, descriptions, and
 independent ambiguity-fix rechecks. Existing generic calls and pattern behavior
 must remain compatible.
 
-### Expected-type Option promotion (design: bork-5nxmcc)
+### Expected-type Option promotion
 
 A known optional value position accepts its ordinary value directly. The compiler
 builds `Some { value: ... }`, so config overrides can read

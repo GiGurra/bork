@@ -409,6 +409,9 @@ func (c *checker) zonkInfo() {
 		return
 	}
 	info := c.info
+	for x, t := range info.optionPayloads {
+		info.optionPayloads[x] = c.zonk(t)
+	}
 	for x, t := range info.types {
 		info.types[x] = c.zonk(t)
 	}

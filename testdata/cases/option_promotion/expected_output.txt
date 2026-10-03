@@ -1,0 +1,14 @@
+second
+first
+C { first: Option.Some { value: 1 }, second: Option.Some { value: 2 } }
+copy second
+copy first
+C { first: Option.Some { value: 3 }, second: Option.Some { value: 4 } }
+C { first: Option.Some { value: 1 }, second: Option.None }
+Option.Some { value: 5 }
+Option.Some { value: 6 }
+Option.Some { value: 8 }
+[Option.Some { value: 9 }, Option.None]
+Option.Some { value: 10 }
+Option.Some { value: Option.Some { value: 11 } }
+Option.Some { value: [] }

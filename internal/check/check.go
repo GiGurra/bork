@@ -261,8 +261,10 @@ type Info struct {
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
 
-	// types records the type of every expression.
-	types map[syntax.Expr]Type
+	// types records the resulting type of every expression. optionPayloads
+	// retains the checked payload type when an implicit Some is inserted.
+	types          map[syntax.Expr]Type
+	optionPayloads map[syntax.Expr]Type
 	// callFuncs and callBuiltins record which function each call
 	// targets.
 	callFuncs           map[*syntax.Call]*Func
@@ -317,7 +319,7 @@ type Info struct {
 	unused map[any]bool
 	// consts holds the value of every constant expression (number
 	// literals and arithmetic on them), already converted to the type
-	// recorded in types.
+	// recorded in types (or optionPayloads for a promoted value).
 	consts map[syntax.Expr]constant.Value
 	// bindings records the type of every binding, and
 	// bindingConstraints the where clauses of typed ones.
@@ -376,6 +378,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			FuncOf:                 map[*syntax.FuncDecl]*Func{},
 			Named:                  map[string]Type{},
 			types:                  map[syntax.Expr]Type{},
+			optionPayloads:         map[syntax.Expr]Type{},
 			callFuncs:              map[*syntax.Call]*Func{},
 			callBuiltins:           map[*syntax.Call]Builtin{},
 			seqCalls:               map[*syntax.Call]*seqCallInfo{},
@@ -755,8 +758,9 @@ func (c *checker) notFound(name string) string {
 // errorf reports an error. Types in args are shown as code in the
 // current package would write them (money.Cents).
 func (c *checker) errorf(pos diag.Pos, format string, args ...any) {
-	if strings.Contains(format, "must be %s") && strings.Contains(format, ", found %s") || strings.Contains(format, "but its body produces %s") {
+	if strings.Contains(format, "must be %s") && strings.Contains(format, ", found %s") || strings.Contains(format, "but its body produces %s") || strings.Contains(format, "but this returns %s") {
 		format += effectsNote(args)
+		format += c.optionPromotionNote(args)
 	}
 	for i, a := range args {
 		if t, ok := a.(Type); ok && t != nil {
@@ -1110,7 +1114,7 @@ func (c *checker) expr(e syntax.Expr) Type { return c.exprWant(e, nil) }
 // or nil. It guides branches that produce different members of a union,
 // and values like `Option.None` whose type comes from the context. It
 // does not report mismatches; the caller does.
-func (c *checker) exprWant(e syntax.Expr, want Type) Type {
+func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	// Conversion expands already-checked inputs into bindings. Keep their
 	// original contextual typing and lexical bindings when checking the expansion.
 	if c.info.conversionInputs[e] {
