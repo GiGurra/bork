@@ -7,6 +7,8 @@
 //   String, Bool           string, bool
 //   Bytes                  a distinct []byte; use _borkBytesFrom/Data to copy
 //   a record               a struct with the same field names
+//   a mirror/GoStruct      the same bork record; _borkToGo/FromGo convert
+//                          to a separate Go struct with exported fields
 //   Option[T]              Option[T]: Option_Some[T]{value: v} or Option_None[T]{}
 //   a union                any, holding one of the member types
 //   List[T]                []T, never modified once built
