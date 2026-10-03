@@ -1,0 +1,20 @@
+pred positive(n: Int) { n > 0 }
+pred smallPositive(n: Int8) { n > 0 }
+pred bytePositive(n: Uint8) { n > 0 }
+pred greater(n: Int8, other: Int8) { n > other }
+pred floatAtMost(n: Float, limit: Float) { n <= limit }
+fn uncheckedSum(a: Int, b: Int) where a > 10 and b > 10: Int where positive { a + b }
+fn uncheckedIncrement(n: Int8) where n >= 0: Int8 where smallPositive { n + 1 }
+fn uncheckedUnsigned(n: Uint8) where n > 0: Uint8 where bytePositive { n + 1 }
+fn uncheckedSubtract(n: Uint8): Uint8 where bytePositive { n - 1 }
+fn intermediateWrap(n: Int8) where n >= 126: Int8 where greater(n) { (n + 2) - 1 }
+fn floating(lo: Float, hi: Float) where lo < hi: Float where floatAtMost(hi) { lo + 1.0 }
+fn leakedAlternative(n: Int): Int where positive {
+  if (n >= 0 || n <= 100) { n + 1 } else { 1 }
+}
+fn main() {}
+fn allowedBody(n: Int): Bool { n > 0 }
+pred allowed(n: Int) { allowedBody(n) }
+rule safeIncrement(n: Int) { n > 0 and n + 1 > 0 => allowed(n) }
+fn uncheckedRule(n: Int) where n > 0: Int where allowed { n }
+fn uncheckedMultiply(n: Int) where n >= 1 and n <= 10: Int where positive { n * n }

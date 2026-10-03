@@ -1,0 +1,92 @@
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, hi: Int) { n <= hi }
+pred atLeast(n: Int, lo: Int) { n >= lo }
+pred byteAtMost(n: Uint8, hi: Uint8) { n <= hi }
+pred smallPositive(n: Int8) { n > 0 }
+fn successor(lo: Int, hi: Int) where lo < hi: Int where atMost(hi) { lo + 1 }
+fn predecessor(lo: Int, hi: Int) where lo < hi: Int where atLeast(lo) { hi - 1 }
+fn sum(a: Int, b: Int) where a >= 1 and a <= 100 and b >= 1 and b <= 100: Int where positive { a + b }
+fn gap(a: Uint8, b: Uint8) where a >= b: Uint8 where byteAtMost(a) { a - b }
+fn increment(n: Int8) where n >= 0 and n < 127: Int8 where smallPositive { n + 1 }
+fn main() {
+  println(succUint64(18446744073709551614, 18446744073709551615), prevUint64(0, 1))
+  println(succUint32(4294967294, 4294967295), prevUint32(0, 1))
+  println(succUint16(65534, 65535), prevUint16(0, 1))
+  println(succUint8(254, 255), prevUint8(0, 1))
+  println(succInt32(2147483646, 2147483647), prevInt32(-2147483648, -2147483647))
+  println(succInt16(32766, 32767), prevInt16(-32768, -32767))
+  println(succInt8(126, 127), prevInt8(-128, -127))
+  println(successor(9_223_372_036_854_775_806, 9_223_372_036_854_775_807))
+  println(predecessor(-9_223_372_036_854_775_808, -9_223_372_036_854_775_807))
+  println(sum(10, 20), gap(255, 254), increment(126))
+  xs = [1, 2]
+  if (xs.length() < 3) { println(listStep(xs, 3)) }
+  println(namedShift(9, 10), negated(9, 10), cancellation(100))
+  println(ruled(99), bumped(), bumpedField(Bounded { n: 100 }), impossible(0))
+  println(split(0), split(30), shared(100), shared(-100), lowerShift(-100))
+}
+fn split(n: Int): Int where positive {
+  if ((n >= 0 && n <= 10) || (n >= 20 && n <= 30)) { n + 1 } else { 1 }
+}
+fn shared(n: Int): Int where atMost(101) {
+  if (n <= 100 && (n >= 0 || n <= -100)) { n + 1 } else { 1 }
+}
+fn lowerShift(n: Int) where n >= -100 and n <= 100: Int where atLeast(-110) { n - 10 }
+
+pred leInt8(n: Int8, bound: Int8) { n <= bound }
+pred geInt8(n: Int8, bound: Int8) { n >= bound }
+fn succInt8(lo: Int8, hi: Int8) where lo < hi: Int8 where leInt8(hi) { lo + 1 }
+fn prevInt8(lo: Int8, hi: Int8) where lo < hi: Int8 where geInt8(lo) { hi - 1 }
+
+pred leInt16(n: Int16, bound: Int16) { n <= bound }
+pred geInt16(n: Int16, bound: Int16) { n >= bound }
+fn succInt16(lo: Int16, hi: Int16) where lo < hi: Int16 where leInt16(hi) { lo + 1 }
+fn prevInt16(lo: Int16, hi: Int16) where lo < hi: Int16 where geInt16(lo) { hi - 1 }
+
+pred leInt32(n: Int32, bound: Int32) { n <= bound }
+pred geInt32(n: Int32, bound: Int32) { n >= bound }
+fn succInt32(lo: Int32, hi: Int32) where lo < hi: Int32 where leInt32(hi) { lo + 1 }
+fn prevInt32(lo: Int32, hi: Int32) where lo < hi: Int32 where geInt32(lo) { hi - 1 }
+
+pred leUint8(n: Uint8, bound: Uint8) { n <= bound }
+pred geUint8(n: Uint8, bound: Uint8) { n >= bound }
+fn succUint8(lo: Uint8, hi: Uint8) where lo < hi: Uint8 where leUint8(hi) { lo + 1 }
+fn prevUint8(lo: Uint8, hi: Uint8) where lo < hi: Uint8 where geUint8(lo) { hi - 1 }
+
+pred leUint16(n: Uint16, bound: Uint16) { n <= bound }
+pred geUint16(n: Uint16, bound: Uint16) { n >= bound }
+fn succUint16(lo: Uint16, hi: Uint16) where lo < hi: Uint16 where leUint16(hi) { lo + 1 }
+fn prevUint16(lo: Uint16, hi: Uint16) where lo < hi: Uint16 where geUint16(lo) { hi - 1 }
+
+pred leUint32(n: Uint32, bound: Uint32) { n <= bound }
+pred geUint32(n: Uint32, bound: Uint32) { n >= bound }
+fn succUint32(lo: Uint32, hi: Uint32) where lo < hi: Uint32 where leUint32(hi) { lo + 1 }
+fn prevUint32(lo: Uint32, hi: Uint32) where lo < hi: Uint32 where geUint32(lo) { hi - 1 }
+
+pred leUint64(n: Uint64, bound: Uint64) { n <= bound }
+pred geUint64(n: Uint64, bound: Uint64) { n >= bound }
+fn succUint64(lo: Uint64, hi: Uint64) where lo < hi: Uint64 where leUint64(hi) { lo + 1 }
+fn prevUint64(lo: Uint64, hi: Uint64) where lo < hi: Uint64 where geUint64(lo) { hi - 1 }
+
+// Rule conditions use these same overflow-safe comparison implications.
+fn allowedBody(n: Int): Bool { n > 0 }
+pred allowed(n: Int) { allowedBody(n) }
+rule safeIncrement(n: Int) { n > 0 and n + 1 > 0 => allowed(n) }
+fn ruled(n: Int) where n > 0 and n < 100: Int where allowed { n }
+fn amount(): Int where atLeast(0) and atMost(100) { 100 }
+fn bumped(): Int where positive { amount() + 1 }
+type Bounded = { n: Int where atLeast(0) and atMost(100) }
+fn bumpedField(x: Bounded): Int where positive { x.n + 1 }
+fn impossible(n: Int): Int where positive {
+  if (n > 0 && n < 0) { n + 1 } else { 1 }
+}
+fn namedShift(lo: Int, hi: Int) where lo < hi: Int where atMost(hi) {
+  one = 1
+  next = lo + one
+  next
+}
+fn negated(lo: Int, hi: Int): Int where atMost(hi) {
+  if (!(lo >= hi)) { lo + 1 } else { panic("unordered") }
+}
+fn cancellation(n: Int) where n >= 0 and n <= 100: Int where atLeast(n) { (n + 10) - 10 }
+fn listStep(xs: List[Int], limit: Int) where xs.length() < limit: Int where atMost(limit) { xs.length() + 1 }

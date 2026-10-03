@@ -325,7 +325,7 @@ func (f *factChecker) comparisonKnown(want *comparison, facts []fact, depth int)
 			return true
 		}
 	}
-	return false
+	return f.arithmeticKnown(want, facts, depth+1)
 }
 
 // Parameter constraints do not carry a call instantiation. Recover it before
