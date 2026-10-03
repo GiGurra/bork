@@ -75,11 +75,18 @@ type TypeDecl struct {
 }
 
 type FieldDecl struct {
+	GoTags  []GoTag
 	Default Expr
 	Doc     string
 	Pos     diag.Pos
 	Name    string
 	Type    *TypeExpr
+}
+
+// GoTag is an ordered Go struct tag on a generated field.
+type GoTag struct {
+	Pos         diag.Pos
+	Name, Value string
 }
 
 type VariantDecl struct {

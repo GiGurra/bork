@@ -159,11 +159,13 @@ func (r *Resource) String() string { return TypeText(r, nil) }
 
 // Field is a named, typed field of a record or variant.
 type GoField struct {
+	Tag  string
 	Path []string
 	Type types.Type
 }
 
 type Field struct {
+	GoTags         []syntax.GoTag
 	Decl           *syntax.FieldDecl
 	Pkg            *Package
 	Prelude        bool
@@ -184,6 +186,8 @@ type Field struct {
 // TypeParams; its instances (`Pair[Int, String]`) have Base set to it,
 // Args, and Fields with the arguments filled in.
 type Record struct {
+	GoGenerated  bool
+	GoStruct     bool
 	GoTo, GoFrom bool
 	GoMirror     types.Type
 	GoFields     []GoField
@@ -210,7 +214,7 @@ func (r *Record) Instance(args []Type) *Record {
 	if t, ok := r.insts.byKey[key]; ok {
 		return t.(*Record)
 	}
-	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Pkg: r.Pkg, Base: r, Args: args}
+	inst := &Record{Name: r.Name, Decl: r.Decl, Prelude: r.Prelude, Pkg: r.Pkg, Base: r, Args: args, GoStruct: r.GoStruct, GoGenerated: r.GoGenerated, GoMirror: r.GoMirror, GoFields: r.GoFields, GoTo: r.GoTo, GoFrom: r.GoFrom}
 	r.insts.byKey[key] = inst
 	r.insts.whenResolved(func() {
 		inst.Fields = substFields(r.Fields, bindParams(r.TypeParams, args))

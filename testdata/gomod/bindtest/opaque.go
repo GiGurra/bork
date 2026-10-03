@@ -178,3 +178,8 @@ func MakeOpaqueNode(h *Handle) *OpaqueNode {
 	v := NewView(h)
 	return &OpaqueNode{Next: &OpaqueNode{View: v}, View: v}
 }
+
+// TaggedMirror exercises schema metadata from the Go declaration.
+type TaggedMirror struct {
+	Value int64 `json:"value" custom:"quote\"\\back"`
+}

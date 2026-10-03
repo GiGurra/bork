@@ -1,0 +1,13 @@
+main.bork:1:31: Go struct tags require a generated record with derive (GoStruct); mirrors cannot add tags
+main.bork:2:54: Go struct tags require a generated record with derive (GoStruct); mirrors cannot add tags
+main.bork:3:21: cannot derive GoStruct for Generic: field value has type T, which cannot convert to a Go struct field; use a concrete record for fields depending on type parameters
+main.bork:4:21: cannot derive GoStruct for UnionField: field value has type String | Int, which cannot convert to a Go struct field
+main.bork:5:18: cannot derive GoStruct for FnField: field value has type (Int) => Int, which cannot convert to a Go struct field
+main.bork:6:19: cannot derive GoStruct for NoMirror: field value has type Plain, which cannot convert to a Go struct field
+main.bork:7:19: cannot derive GoStruct for KeyField: field value has type Map[Plain, Int], which cannot convert to a Go struct field
+main.bork:9:24: cannot derive GoStruct for ResourceField: field value has type File, which cannot convert to a Go struct field
+main.bork:10:46: Go struct tags require a generated record with derive (GoStruct); mirrors cannot add tags
+main.bork:10:66: GoStruct can only be derived for a record
+main.bork:11:34: more than one field maps to Go field Name
+main.bork:12:52: Go struct tag json is repeated
+main.bork:13:16: GoStruct instances must be derived for records

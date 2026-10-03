@@ -50,6 +50,19 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("kind")}, Type: ast.NewIdent("string")},
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("optional")}, Type: ast.NewIdent("bool")})
 	}
+	if check.IsGoStruct(class) {
+		g.usesGoStruct = true
+		g.goType(g.info.Named["GoValueError"])
+		for _, spec := range []struct{ name, typ string }{
+			{"New", "func() any"}, {"FromGo", "func(any) (T, []" + g.typeText(g.info.Named["GoValueError"]) + ")"}, {"ToGo", "func(T) any"}, {"Fields", "func() []_borkGoStructField"},
+		} {
+			typ, err := parser.ParseExpr(spec.typ)
+			if err != nil {
+				panic(err)
+			}
+			st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent(spec.name)}, Type: typ})
+		}
+	}
 	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
 		Name:       className(class),
 		TypeParams: typeParamList([]*check.TypeParam{class.Param}),
@@ -86,6 +99,9 @@ func (g *gen) dictParams(tps []*check.TypeParam) []*ast.Field {
 // instanceDecl declares the function that builds an instance.
 func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 	lit := &ast.CompositeLit{Type: g.classType(ci.Class, ci.Type)}
+	if check.IsGoStruct(ci.Class) {
+		lit = g.goStructDictionary(ci)
+	}
 	for i, m := range ci.Methods {
 		var fn ast.Expr = g.funcName(m)
 		if len(ci.TypeParams) > 0 {

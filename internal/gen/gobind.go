@@ -300,7 +300,7 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 		if trace == "" {
 			trace = "map[any]bool{}"
 		}
-		w.line(fmt.Sprintf("%s, %s := _fromGo_%s(%s, %s, %s)", v, errors, typeName(r.Name, r.Pkg).Name, x, path, trace))
+		w.line(fmt.Sprintf("%s, %s := %s(%s, %s, %s)", v, errors, w.g.mirrorHelperName("_fromGo_", r), x, path, trace))
 		if w.collect != "" {
 			w.line(fmt.Sprintf("%s = append(%s, %s...)", w.collect, w.collect, errors))
 		} else if w.b.Fallible {

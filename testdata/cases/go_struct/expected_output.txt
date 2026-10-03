@@ -1,0 +1,9 @@
+["value:Value:", "json=value", "custom=quote\"\\back", "1"]
+Options { port: 8080, names: [], child: Child { name: "child" }, optional: Option.None }
+GoValueError { path: "result.port", message: "must be positive" }
+Options { port: 8080, names: [], child: Child { name: "child" }, optional: Option.None }
+Phantom { value: 7 }
+Phantom { value: 7 }
+Url { scheme: "https", host: "example.com" }
+["port:Port:Port to listen on.", "json=port", "short=p", "8080", "names:Names:", "json=names", "[]", "child:Child:", "json=child", "Child { name: \"child\" }", "optional:Optional:", "json=optional", "Option.None"]
+["value:Value:", "no decoder"]

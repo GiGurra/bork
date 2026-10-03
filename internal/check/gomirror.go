@@ -96,6 +96,7 @@ func (c *checker) resolveGoMirrors(files []*syntax.File) {
 						valid = false
 						break
 					}
+					gf.Tag = current.Underlying().(*types.Struct).Tag(j)
 					sf := current.Underlying().(*types.Struct).Field(j)
 					current = sf.Type()
 				}

@@ -1,0 +1,14 @@
+type Plain = { port: Int go { json: "port" } }
+type Mirror = go "net/url.URL" { scheme: String go { json: "scheme" } } derive (GoStruct)
+type Generic[T] = { value: T } derive (GoStruct)
+type UnionField = { value: String | Int } derive (GoStruct)
+type FnField = { value: (Int) => Int } derive (GoStruct)
+type NoMirror = { value: Plain } derive (GoStruct)
+type KeyField = { value: Map[Plain, Int] } derive (GoStruct)
+type File = resource go "*os.File"
+type ResourceField = { value: File } derive (GoStruct)
+type Sealed = sealed { One { value: Int go { json: "value" } } } derive (GoStruct)
+type Duplicate = { name: String, Name: Int } derive (GoStruct)
+type DuplicateTag = { value: Int go { json: "one", json: "two" } } derive (GoStruct)
+instance fake: GoStruct[Plain] {}
+fn main() {}

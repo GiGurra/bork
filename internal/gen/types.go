@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 )
@@ -995,8 +996,11 @@ func _fmtFloat(f float64, bits int) string {
 // comments print correctly.
 func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
-	if g.usesDecodeSchema {
+	if g.usesDecodeSchema || g.usesGoStruct {
 		src = append(src, decodeSchemaHelpers)
+	}
+	if g.usesGoStruct {
+		src = append(src, strings.ReplaceAll(goStructSchemaHelpers, "@strconv@", g.goImport("strconv")))
 	}
 	if g.usesAssert {
 		g.usesShow = true

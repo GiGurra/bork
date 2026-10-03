@@ -18,40 +18,53 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 	errType := g.typeText(g.info.Named["GoValueError"])
 	w := &bindWriter{g: g, b: &check.GoBinding{GoValueError: g.info.Named["GoValueError"]}}
 	n := typeName(r.Name, r.Pkg).Name
+	bt := g.typeText(r)
+	var tp, ta string
+	if len(r.TypeParams) > 0 {
+		var names []string
+		for _, p := range r.TypeParams {
+			names = append(names, p.Name)
+		}
+		ta = "[" + strings.Join(names, ",") + "]"
+		tp = "[" + strings.Join(names, ",") + " any]"
+	}
 	gt := w.goType(r.GoMirror)
 	var src strings.Builder
 	src.WriteString("package main\n")
+	if r.GoGenerated {
+		fmt.Fprintf(&src, "type %s %s\n", gt, w.goType(r.GoMirror.Underlying()))
+	}
 	if r.GoTo {
 		w.line("var out " + gt)
 		for i, f := range r.Fields {
-			w.line("out." + strings.Join(r.GoFields[i].Path, ".") + " = " + w.toGo("v."+f.Name, f.Type, r.GoFields[i].Type))
+			w.line("out." + strings.Join(r.GoFields[i].Path, ".") + " = " + w.toGo("v."+name(f.Name).Name, f.Type, r.GoFields[i].Type))
 		}
 		w.line("return out")
-		fmt.Fprintf(&src, "func _toGo_%s(v %s) %s {\n%s}\nfunc (v %s) _borkGoMirror() %s { return _toGo_%s(v) }\n", n, n, gt, w.body.String(), n, gt, n)
+		fmt.Fprintf(&src, "func _toGo_%s%s(v %s) %s {\n%s}\nfunc (v %s) _borkGoMirror() %s { return _toGo_%s(v) }\n", n, tp, bt, gt, w.body.String(), bt, gt, n)
 	}
 	if r.GoFrom {
 		w.body.Reset()
 		w.tmp = 0
 		w.collect = "_errs"
 		w.seen = "_seen"
-		w.line("var out " + n)
+		w.line("var out " + bt)
 		w.line("var _errs []" + errType)
 		for i, f := range r.Fields {
 			path := "_path + " + strconv.Quote("."+f.Name)
 			converted := w.fromGo("v."+strings.Join(r.GoFields[i].Path, "."), r.GoFields[i].Type, f.Type, path)
-			w.line("out." + f.Name + " = " + converted)
+			w.line("out." + name(f.Name).Name + " = " + converted)
 			if len(f.Constraints) > 0 {
 				saved := w.newTmp()
 				w.line(fmt.Sprintf("%s := append([]%s(nil), _errs...)", saved, errType))
 				for _, con := range f.Constraints {
-					w.factAtPath("out."+f.Name, f.Type, splitPath(con.Path), path, con, saved)
+					w.factAtPath("out."+name(f.Name).Name, f.Type, splitPath(con.Path), path, con, saved)
 				}
 			}
 
 		}
 		w.line("return out, _errs")
-		fmt.Fprintf(&src, "func _fromGo_%s(v %s, _path string, _seen map[any]bool) (%s, []%s) {\n%s}\n", n, gt, n, errType, w.body.String())
-		fmt.Fprintf(&src, "func (out *%s) _borkSetMirror(v any) []%s { var errs []%s; *out, errs = _fromGo_%s(v.(%s), \"result\", map[any]bool{}); return errs }\n", n, errType, errType, n, gt)
+		fmt.Fprintf(&src, "func _fromGo_%s%s(v %s, _path string, _seen map[any]bool) (%s, []%s) {\n%s}\n", n, tp, gt, bt, errType, w.body.String())
+		fmt.Fprintf(&src, "func (out *%s) _borkSetMirror(v any) []%s { var errs []%s; *out, errs = _fromGo_%s%s(v.(%s), \"result\", map[any]bool{}); return errs }\n", bt, errType, errType, n, ta, gt)
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), "", src.String(), 0)
 	if err != nil {
@@ -221,4 +234,16 @@ func (w *bindWriter) factAtPath(x string, t check.Type, steps []string, path str
 			}
 		}
 	}
+}
+
+func (g *gen) mirrorHelperName(prefix string, r *check.Record) string {
+	n := prefix + typeName(r.Name, r.Pkg).Name
+	if args := check.TypeArgs(r); len(args) > 0 {
+		var names []string
+		for _, t := range args {
+			names = append(names, g.typeText(t))
+		}
+		n += "[" + strings.Join(names, ",") + "]"
+	}
+	return n
 }

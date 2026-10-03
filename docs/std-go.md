@@ -206,3 +206,41 @@ conversion to Go, for example. A mirror cannot contain resource fields, because
 this helper has no scope to own them. An `unsafe go` body supplies the mirror's
 exact Go struct type to `_borkFromGo`; checked bindings also support pointers,
 including `Option` for nil.
+
+
+### Generated Go structs
+
+`derive (GoStruct)` creates a separate Go struct with exported fields, leaving
+bork's record representation intact. Fields map recursively using the binding
+rules. Nested ordinary records need `GoStruct`; nested mirrors use their Go type.
+Fields with unresolved type parameters or resources are rejected, while phantom
+generic parameters are allowed. A mirror can derive `GoStruct` when both
+conversion directions work; it keeps the mirrored struct and its tags.
+
+A field on a generated struct can add ordered tags:
+
+```bork
+type Options = {
+  // Port to listen on.
+  port: Int = 8080 go { json: "port", short: "p" }
+} derive (GoStruct)
+```
+
+A generic unsafe Go body with `[T: GoStruct]` receives `_d_T_GoStruct`:
+
+- `New()` returns `any`, holding a pointer to a fresh Go struct with declared
+  defaults filled in. Other fields keep Go's zero values; they must be checked
+  through `FromGo` before publishing a bork value.
+- `ToGo(value T)` returns `any`, holding the Go struct value. Collections and
+  nested records are copied; opaque fields share the Go value.
+- `FromGo(value any)` accepts that Go struct or a pointer to it and returns
+  `(T, []GoValueError)`. It collects conversion and fact errors. A nil pointer or
+  wrong Go type returns an error. Use the value only when the error list is empty.
+- `Fields()` returns `[]_borkGoStructField`. Each entry exposes the Decode schema
+  metadata (`Name`, `Type`, `Constraints`, `Kind`, `Optional`, `Doc`, `HasDefault`,
+  `Default`, `Decode`), plus `GoName` and ordered `Tags` (`Name`, `Value`).
+  `Decode` is nil when no decoder is available in the declaring package.
+
+`GoStruct` does not require deriving `Decode`. Its instances are created by
+`derive` and imported with `use`, like other derived instances. `_borkToGo` and
+`_borkFromGo[T]` also work for these generated records as they do for mirrors.
