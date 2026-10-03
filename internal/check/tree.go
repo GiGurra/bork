@@ -85,10 +85,12 @@ const (
 // Var is a variable: a parameter, a binding, a name bound by a pattern,
 // or a scope.
 type Var struct {
-	Name string
-	Pos  diag.Pos
-	Type Type
-	Kind VarKind
+	// Label describes a compiler-generated variable in diagnostics.
+	Label string
+	Name  string
+	Pos   diag.Pos
+	Type  Type
+	Kind  VarKind
 	// Index is a parameter's position among its function's (or
 	// lambda's, or rule's) parameters.
 	Index int
@@ -98,6 +100,13 @@ type Var struct {
 	Source *VarSource
 	// Unused is set for a binding or pattern name that is never read.
 	Unused bool
+}
+
+func (v *Var) displayName() string {
+	if v.Label != "" {
+		return v.Label
+	}
+	return v.Name
 }
 
 // VarSource is where a value bound by a match pattern comes from: the

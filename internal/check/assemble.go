@@ -62,6 +62,7 @@ type assemblyGraph struct {
 	rootTypes []Type
 	order     []int
 	problems  []assemblyProblem
+	ambiguous []Type
 	path      []int
 	target    Type
 	success   Type
@@ -94,7 +95,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 	if target == Invalid {
 		return Invalid
 	}
-	if _, union := target.(*Union); union || target == Scope || target == Unit || !isValue(target) || c.open(target) || hasTypeParam(target) {
+	if _, union := target.(*Union); union || target == Scope || assemblyOwner(target) || target == Unit || !isValue(target) || c.open(target) || hasTypeParam(target) {
 		c.diags.AddCode(call.Pos, "assemble.target", "%s requires a concrete non-union product type, found %s", mode, target)
 		return Invalid
 	}
@@ -132,7 +133,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		if u, ok := p.product.(*Union); ok {
 			p.product, p.errors = u.Members[0], u.Members[1:]
 		}
-		if p.product == Scope || p.product == Unit || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasTypeParam(p.typ) || hasOpenEffects(p.typ) {
+		if p.product == Scope || assemblyOwner(p.product) || p.product == Unit || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasTypeParam(p.typ) || hasOpenEffects(p.typ) {
 			g.problem("provider", x.Position(), "provider #%d has unsupported signature %s", i+1, p.typ)
 			p.product = nil
 		}
@@ -143,6 +144,9 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 			}
 			p.names = append(p.names, name)
 			p.deps = append(p.deps, -1)
+			if assemblyOwner(t) {
+				g.problem("provider", x.Position(), "provider #%d parameter %s is an OwnedScope; assembly only borrows Scope values", i+1, name)
+			}
 			if _, ok := t.(*Union); ok {
 				g.problem("provider", x.Position(), "provider #%d parameter %s has union type %s; use a wrapper product", i+1, name, t)
 			}
@@ -195,8 +199,11 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		g.rootNames = append(g.rootNames, "")
 		g.rootTypes = append(g.rootTypes, target)
 	}
+	for _, root := range g.roots {
+		g.visit(root)
+	}
 	for i, p := range g.providers {
-		if p.product == nil {
+		if p.product == nil || g.isAmbiguous(p.product) {
 			continue
 		}
 		for j := 0; j < i; j++ {
@@ -205,9 +212,6 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 				g.problem("duplicate", p.x.Position(), "duplicate providers #%d and #%d for %s", j+1, i+1, p.product)
 			}
 		}
-	}
-	for _, root := range g.roots {
-		g.visit(root)
 	}
 	// When a root or edge is ambiguous, its candidates have been marked used.
 	for i, p := range g.providers {
@@ -244,6 +248,13 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 	description.Effects = c.used.String()
 	c.info.assemblyCalls[call] = &assemblyExpansion{body: body, description: description}
 	return t
+}
+
+// OwnedScope is installed by the owned-child-scope feature. Assembly never
+// transfers closing rights, even when the provider itself could accept one.
+func assemblyOwner(t Type) bool {
+	owner := basicTypes["OwnedScope"]
+	return owner != nil && t == owner
 }
 
 func hasOpenEffects(t Type) bool {
@@ -284,9 +295,25 @@ func (g *assemblyGraph) find(t Type, pos diag.Pos, label string) int {
 			g.providers[i].used = true
 			labels = append(labels, fmt.Sprintf("#%d %s", i+1, writtenText(g.providers[i].x)))
 		}
-		g.problem("duplicate", pos, "ambiguous %s needed by %s: %s", t, label, strings.Join(labels, ", "))
+		if !g.isAmbiguous(t) {
+			g.ambiguous = append(g.ambiguous, t)
+			g.problem("duplicate", pos, "ambiguous %s needed by %s: %s", t, label, strings.Join(labels, ", "))
+		}
+		// Invalid graphs still expose every candidate's dependency problems.
+		for _, candidate := range found {
+			g.visit(candidate)
+		}
 	}
 	return -1
+}
+
+func (g *assemblyGraph) isAmbiguous(t Type) bool {
+	for _, other := range g.ambiguous {
+		if identical(t, other) {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *assemblyGraph) visit(i int) {
@@ -300,7 +327,14 @@ func (g *assemblyGraph) visit(i int) {
 	}
 	if p.state == 1 {
 		var path []string
-		for _, n := range append(append([]int(nil), g.path...), i) {
+		cycle := g.path
+		for j, n := range cycle {
+			if n == i {
+				cycle = cycle[j:]
+				break
+			}
+		}
+		for _, n := range append(append([]int(nil), cycle...), i) {
 			path = append(path, fmt.Sprintf("%s (#%d %s)", g.providers[n].product, n+1, writtenText(g.providers[n].x)))
 		}
 		g.problem("cycle", p.x.Position(), "dependency cycle: %s", strings.Join(path, " -> "))
@@ -416,10 +450,13 @@ func (g *assemblyGraph) typeExpr(t Type, pos diag.Pos) *syntax.TypeExpr {
 func (g *assemblyGraph) expand() *syntax.Block {
 	c, pos := g.c, g.call.Pos
 	c.assemblySerial++
+	// Leading underscores are reserved, so these names cannot shadow user code.
 	prefix := fmt.Sprintf("__assembly%d_", c.assemblySerial)
 	id := func(name string) *syntax.Ident { return &syntax.Ident{Pos: pos, Name: prefix + name} }
 	block := &syntax.Block{Pos: pos, End: g.call.End}
-	block.Stmts = append(block.Stmts, &syntax.Binding{Pos: pos, Name: prefix + "scope", Value: g.call.Args[0]})
+	scopeBinding := &syntax.Binding{Pos: pos, Name: prefix + "scope", Value: g.call.Args[0]}
+	c.info.assemblyNames[scopeBinding] = writtenText(g.call.Args[0])
+	block.Stmts = append(block.Stmts, scopeBinding)
 	for i, p := range g.providers {
 		if p.fn == nil {
 			block.Stmts = append(block.Stmts, &syntax.Binding{Pos: p.x.Position(), Name: prefix + fmt.Sprintf("provider%d", i), Value: p.x})
@@ -448,7 +485,9 @@ func (g *assemblyGraph) expand() *syntax.Block {
 	if g.call.Fun.(*syntax.Ident).Name == "assembleAll" {
 		targetExpr = &syntax.TypeExpr{Pos: pos, Name: "List", Args: []*syntax.TypeExpr{targetExpr}}
 	}
-	tail = &syntax.Block{Pos: pos, End: g.call.End, Stmts: []syntax.Stmt{&syntax.Binding{Pos: pos, Name: prefix + "result", Type: targetExpr, Value: tail}}, Tail: id("result")}
+	resultBinding := &syntax.Binding{Pos: pos, Name: prefix + "result", Type: targetExpr, Value: tail}
+	c.info.assemblyNames[resultBinding] = "assembly result"
+	tail = &syntax.Block{Pos: pos, End: g.call.End, Stmts: []syntax.Stmt{resultBinding}, Tail: id("result")}
 	for n := len(g.order) - 1; n >= 0; n-- {
 		i := g.order[n]
 		p := g.providers[i]
@@ -466,11 +505,15 @@ func (g *assemblyGraph) expand() *syntax.Block {
 		}
 		valueName := prefix + fmt.Sprintf("value%d", i)
 		if len(p.errors) == 0 {
-			tail = &syntax.Block{Pos: pos, End: g.call.End, Stmts: []syntax.Stmt{&syntax.Binding{Pos: pos, Name: valueName, Value: call}}, Tail: tail}
+			binding := &syntax.Binding{Pos: pos, Name: valueName, Value: call}
+			c.info.assemblyNames[binding] = "result of " + writtenText(p.x)
+			tail = &syntax.Block{Pos: pos, End: g.call.End, Stmts: []syntax.Stmt{binding}, Tail: tail}
 			continue
 		}
 		m := &syntax.Match{Pos: pos, X: call}
-		m.Arms = append(m.Arms, &syntax.Arm{Pattern: &syntax.TypePat{Pos: pos, Name: valueName, Type: g.typeExpr(p.product, pos)}, Body: tail})
+		success := &syntax.TypePat{Pos: pos, Name: valueName, Type: g.typeExpr(p.product, pos)}
+		c.info.assemblyNames[success] = "result of " + writtenText(p.x)
+		m.Arms = append(m.Arms, &syntax.Arm{Pattern: success, Body: tail})
 		for j, failure := range p.errors {
 			name := fmt.Sprintf("failure%d_%d", i, j)
 			m.Arms = append(m.Arms, &syntax.Arm{Pattern: &syntax.TypePat{Pos: pos, Name: prefix + name, Type: g.typeExpr(failure, pos)}, Body: id(name)})

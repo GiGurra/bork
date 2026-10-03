@@ -832,7 +832,7 @@ sharing, graph errors with full trees, failure short circuiting, success/failure
 cleanup, lifetime escapes, effect/fact violations, generic and constrained
 products, collection/record roots and test replacements. Include constrained
 direct providers versus saved function values, promised downstream facts, and
-rejection of union-valued specialized products. `examples/assemble`
+monomorphic adapters for generic providers. `examples/assemble`
 wires config, a database and HTTP server with scope-owned cleanup. Parallel construction, provider bundles,
 assignability matching and cross-call caching are outside this first increment.
 

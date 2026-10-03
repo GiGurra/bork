@@ -1,0 +1,15 @@
+type Product = {}
+type Dependency = {}
+type Missing = {}
+type Cycle = {}
+fn dependency(): Dependency { Dependency {} }
+fn first(value: Dependency): Product { Product {} }
+fn second(value: Missing): Product { Product {} }
+fn loop(value: Cycle): Cycle { value }
+fn third(value: Cycle): Product { Product {} }
+fn fourth(): Product | Dependency { Dependency {} }
+fn main() {
+  scope s {
+    println(assemble[Product](s, first, second, third, fourth, dependency, loop))
+  }
+}

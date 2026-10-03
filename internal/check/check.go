@@ -219,6 +219,7 @@ type Info struct {
 	embedCalls    map[*syntax.Call]*Embedded
 	assemblyCalls map[*syntax.Call]*assemblyExpansion
 	assemblyTypes map[*syntax.TypeExpr]Type
+	assemblyNames map[any]string
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -317,6 +318,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			GoBindings:       map[*Func]*GoBinding{},
 			assemblyCalls:    map[*syntax.Call]*assemblyExpansion{},
 			assemblyTypes:    map[*syntax.TypeExpr]Type{},
+			assemblyNames:    map[any]string{},
 			Funcs:            map[string]*Func{},
 			FuncOf:           map[*syntax.FuncDecl]*Func{},
 			Named:            map[string]Type{},

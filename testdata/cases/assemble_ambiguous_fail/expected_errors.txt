@@ -1,0 +1,72 @@
+main.bork:13:30: ambiguous Product needed by target: #1 first, #2 second, #3 third, #4 fourth
+assembly assemble[Product]:
+  Product ?? ambiguous providers
+    candidate <- #1 first (main.bork:13:34)
+      value: Dependency <- #5 dependency (main.bork:13:64)
+    candidate <- #2 second (main.bork:13:41)
+      value: Missing ?? missing provider
+    candidate <- #3 third (main.bork:13:49)
+      value: Cycle <- #6 loop (main.bork:13:76)
+        value: Cycle <- #6 loop (main.bork:13:76) [shared or cycle; see above]
+    candidate <- #4 fourth (main.bork:13:56)
+supplied:
+  #1 first -> Product
+  #2 second -> Product
+  #3 third -> Product
+  #4 fourth -> Product
+  #5 dependency -> Dependency
+  #6 loop -> Cycle
+main.bork:13:41: missing provider for Missing, needed by #2 second parameter value
+assembly assemble[Product]:
+  Product ?? ambiguous providers
+    candidate <- #1 first (main.bork:13:34)
+      value: Dependency <- #5 dependency (main.bork:13:64)
+    candidate <- #2 second (main.bork:13:41)
+      value: Missing ?? missing provider
+    candidate <- #3 third (main.bork:13:49)
+      value: Cycle <- #6 loop (main.bork:13:76)
+        value: Cycle <- #6 loop (main.bork:13:76) [shared or cycle; see above]
+    candidate <- #4 fourth (main.bork:13:56)
+supplied:
+  #1 first -> Product
+  #2 second -> Product
+  #3 third -> Product
+  #4 fourth -> Product
+  #5 dependency -> Dependency
+  #6 loop -> Cycle
+main.bork:13:56: provider #4 failure Dependency is also a graph product; use a distinct failure type
+assembly assemble[Product]:
+  Product ?? ambiguous providers
+    candidate <- #1 first (main.bork:13:34)
+      value: Dependency <- #5 dependency (main.bork:13:64)
+    candidate <- #2 second (main.bork:13:41)
+      value: Missing ?? missing provider
+    candidate <- #3 third (main.bork:13:49)
+      value: Cycle <- #6 loop (main.bork:13:76)
+        value: Cycle <- #6 loop (main.bork:13:76) [shared or cycle; see above]
+    candidate <- #4 fourth (main.bork:13:56)
+supplied:
+  #1 first -> Product
+  #2 second -> Product
+  #3 third -> Product
+  #4 fourth -> Product
+  #5 dependency -> Dependency
+  #6 loop -> Cycle
+main.bork:13:76: dependency cycle: Cycle (#6 loop) -> Cycle (#6 loop)
+assembly assemble[Product]:
+  Product ?? ambiguous providers
+    candidate <- #1 first (main.bork:13:34)
+      value: Dependency <- #5 dependency (main.bork:13:64)
+    candidate <- #2 second (main.bork:13:41)
+      value: Missing ?? missing provider
+    candidate <- #3 third (main.bork:13:49)
+      value: Cycle <- #6 loop (main.bork:13:76)
+        value: Cycle <- #6 loop (main.bork:13:76) [shared or cycle; see above]
+    candidate <- #4 fourth (main.bork:13:56)
+supplied:
+  #1 first -> Product
+  #2 second -> Product
+  #3 third -> Product
+  #4 fourth -> Product
+  #5 dependency -> Dependency
+  #6 loop -> Cycle

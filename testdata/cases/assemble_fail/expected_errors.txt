@@ -24,14 +24,6 @@ assembly assemble[Config]:
 supplied:
   #1 config -> Config
   #2 other -> Config
-main.bork:23:41: duplicate providers #1 and #2 for Config
-assembly assemble[Config]:
-  Config ?? ambiguous providers
-    candidate <- #1 config (main.bork:23:33)
-    candidate <- #2 other (main.bork:23:41)
-supplied:
-  #1 config -> Config
-  #2 other -> Config
 main.bork:24:28: dependency cycle: A (#1 a) -> B (#2 b) -> A (#1 a)
 assembly assemble[A]:
   A <- #1 a (main.bork:24:28)
@@ -108,6 +100,16 @@ assembly assemble[Config]:
 supplied:
   #1 defaulted -> Config
 main.bork:37:36: ambiguous Config needed by #1 recursive parameter value: #1 recursive, #2 config
+assembly assembleAll[Config]:
+  Config <- #1 recursive (main.bork:37:36)
+    value: Config ?? ambiguous providers
+      candidate <- #1 recursive (main.bork:37:36) [shared or cycle; see above]
+      candidate <- #2 config (main.bork:37:47)
+  Config <- #2 config (main.bork:37:47) [shared or cycle; see above]
+supplied:
+  #1 recursive -> Config
+  #2 config -> Config
+main.bork:37:36: dependency cycle: Config (#1 recursive) -> Config (#1 recursive)
 assembly assembleAll[Config]:
   Config <- #1 recursive (main.bork:37:36)
     value: Config ?? ambiguous providers

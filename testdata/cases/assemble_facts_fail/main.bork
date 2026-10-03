@@ -1,10 +1,13 @@
 pred positive(n: Int) { n > 0 }
+type Port = Int where positive
 type Good = { number: Int where positive }
 fn number(): Int { 0 }
 fn good(n: Int where positive): Good { Good { number: n } }
 fn main() {
   scope s {
     println(assemble[Good](s, good, number))
+    println(assemble[Port](s, number))
+    println(assembleAll[Port](s, number))
     saved = good
   }
 }

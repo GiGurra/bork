@@ -229,7 +229,7 @@ func (l *lifeChecker) isOpen(s *ScopeBlock) bool {
 func describe(x Expr) string {
 	switch x := x.(type) {
 	case *VarRef:
-		return x.Var.Name
+		return x.Var.displayName()
 	case *FuncRef:
 		return x.Name
 	case *Lambda:
@@ -708,12 +708,12 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 func scopeName(x Expr) string {
 	switch x := x.(type) {
 	case *VarRef:
-		return x.Var.Name
+		return x.Var.displayName()
 	case *Call:
 		// b.scope
 		if len(x.Args) == 1 && x.Func.Prelude && x.Func.Decl.Name == "scopeOf" {
 			if v, ok := x.Args[0].(*VarRef); ok {
-				return v.Var.Name + ".scope"
+				return v.Var.displayName() + ".scope"
 			}
 		}
 	}

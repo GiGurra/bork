@@ -15,3 +15,10 @@ Codes are stable identifiers independent of message wording. The current general
 A fix with `requires_input: true` is a template: replace the named type placeholders before applying it. Empty collection bindings suggest `: List[Element]` or `: Map[Key, Value]`; unknown lambda parameters suggest `: Type`, adding parentheses for a bare parameter. These placeholders represent types the compiler cannot infer, so they are not automatically safe defaults. Collection fixes are offered for directly bound empty literals; other contexts still receive diagnostics without fixes. Re-check after editing, since diagnostics can cascade and a fix may reveal later errors.
 
 Named-call diagnostics use `call.unknown_argument`, `call.duplicate_argument`, `call.missing_argument`, `call.positional_after_named`, `call.named_receiver`, `call.too_many_arguments`, and `call.named_argument_unavailable`. A unique close parameter name gets a label replacement; duplicate arguments get a removal edit when it does not discard comments. Missing values are never invented, and reordering is not suggested as an automatic edit because it may change effects. Old `copy(field = value)` syntax gets `syntax.copy_separator` with an edit replacing `=` with `:`.
+
+Dependency assembly uses `assemble.missing`, `assemble.duplicate`,
+`assemble.cycle`, `assemble.unused`, `assemble.provider`, `assemble.failure`
+and `assemble.target`. Each graph diagnostic's message includes the full rooted
+dependency tree and supplied provider list, with missing/ambiguous slots, shared
+nodes and cycle paths marked. Facts, effects and lifetime violations in resolved
+provider calls use their ordinary diagnostic codes.
