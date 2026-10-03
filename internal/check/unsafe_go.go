@@ -108,8 +108,9 @@ type goUse struct {
 // goEffectUses finds the uses of effects in an unsafe go body. The Go
 // imports of every body end up in one generated file, so a package
 // name counts even if another body imports it. funcs finds the bork
-// functions the body can call by their names.
-func goEffectUses(gc *syntax.GoCode, funcs func(name string) *Func) []goUse {
+// functions the body can call by their names; params are the names of
+// the function's parameters, which the body sees as locals.
+func goEffectUses(gc *syntax.GoCode, params map[string]bool, funcs func(name string) *Func) []goUse {
 	const prefix = "package p\n\nfunc _() {"
 	fset := gotoken.NewFileSet()
 	file, err := goparser.ParseFile(fset, "", prefix+gc.Body+"}\n", 0)
@@ -152,7 +153,7 @@ func goEffectUses(gc *syntax.GoCode, funcs func(name string) *Func) []goUse {
 		switch n := n.(type) {
 		case *ast.Ident:
 			// A bork function, unless the body declares the name.
-			if n.Obj != nil || notRefs[n] || gotypes.Universe.Lookup(n.Name) != nil {
+			if n.Obj != nil || notRefs[n] || params[n.Name] || gotypes.Universe.Lookup(n.Name) != nil {
 				return true
 			}
 			if fn := funcs(n.Name); fn != nil && fn.Effects&^EffOpen != 0 {
@@ -160,7 +161,7 @@ func goEffectUses(gc *syntax.GoCode, funcs func(name string) *Func) []goUse {
 			}
 		case *ast.SelectorExpr:
 			id, ok := n.X.(*ast.Ident)
-			if !ok || id.Obj != nil {
+			if !ok || id.Obj != nil || params[id.Name] {
 				return true
 			}
 			imp, ok := pkgs[id.Name]
@@ -206,8 +207,12 @@ func checkUnsafeGo(fn *Func, info *Info, diags *diag.List) {
 		}
 		return info.Funcs[name]
 	}
-	for _, u := range goEffectUses(fn.Decl.GoBody, funcs) {
-		if u.effect&^allowed != 0 && u.effect&^allowed&^missing != 0 {
+	params := map[string]bool{}
+	for _, p := range fn.Decl.Params {
+		params[p.Name] = true
+	}
+	for _, u := range goEffectUses(fn.Decl.GoBody, params, funcs) {
+		if u.effect&^allowed&^missing != 0 {
 			if first == nil {
 				first = &u
 			}

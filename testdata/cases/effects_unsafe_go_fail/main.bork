@@ -82,4 +82,11 @@ fn shadowed(): Int unsafe go {
   return int64(len(time)) + time[0]
 }
 
+// A parameter named like a package is the parameter.
+type Conn = { name: String }
+
+fn connName(net: Conn): String unsafe go {
+  return net.name
+}
+
 fn main() {}
