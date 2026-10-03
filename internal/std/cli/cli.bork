@@ -4,6 +4,7 @@ type Flag = {
   short: String = ""
   env: String = ""
   positional: Bool = false
+  configFile: Bool = false
 }
 type Error = { errors: List[DecodeError] }
 type Help = { text: String }
@@ -11,11 +12,13 @@ type Help = { text: String }
 // Parse accepts arguments without the executable name. Strings are literal;
 // numbers and compound fields use JSON. Lists take repeated flags; string
 // elements are literal, other elements use JSON. Help never runs the handler.
-// Explicit env tags permit environment lookup. All field failures are collected.
-fn Parse[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = []) uses io: T | Error | Help {
-  prepare[T](name, description, args, flags, parseJson, flagName)
+// Explicit env tags permit environment lookup. JSON configFiles overlay left to
+// right, below env/flags and above defaults. A configFile flag selects an extra
+// file. All final field failures are collected; help does not read files.
+fn Parse[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = []) uses io: T | Error | Help {
+  prepare[T](name, description, args, flags, configFiles, parseJson, flagName)
 }
-fn prepare[T: Decode](name: String, description: String, args: List[String], flags: List[Flag], parse: (String) => Json | JsonError, makeName: (String) => String) uses io: T | Error | Help unsafe go {
+fn prepare[T: Decode](name: String, description: String, args: List[String], flags: List[Flag], configFiles: List[String], parse: (String) => Json | JsonError, makeName: (String) => String) uses io: T | Error | Help unsafe go {
   import "bytes"
   import "fmt"
   import "reflect"
@@ -36,6 +39,7 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], fla
   }
   shorts, envs := map[string]string{}, map[string]string{}
   positional := ""
+  configField := ""
   for _, flag := range flags {
     found := false
     for _, field := range schema { if field.Name == flag.field { found = true; break } }
@@ -72,6 +76,13 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], fla
       if positional != "" { errors = append(errors, DecodeError{path: flag.field, message: "positional field duplicates " + positional}) }
       positional = flag.field
     }
+    if flag.configFile {
+      if configField != "" { errors = append(errors, DecodeError{path: flag.field, message: "config-file field duplicates " + configField}) }
+      for _, field := range schema {
+        if field.Name == flag.field && field.Kind != "string" { errors = append(errors, DecodeError{path: flag.field, message: "config-file field must be String or Option[String]"}) }
+      }
+      configField = flag.field
+    }
     metadata[flag.field] = flag
   }
   if len(errors) != 0 { return Error{errors: errors} }
@@ -102,18 +113,47 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], fla
     ParamEnrich: boa.ParamEnricherName,
     RunFunc: func(cmd *cobra.Command, remaining []string) {
       ran = true
+      files := append([]string{}, configFiles...)
+      for i, field := range schema {
+        if field.Name != configField { continue }
+        path := ""
+        value := shadow.Elem().Field(i)
+        if !value.IsNil() { path = value.Elem().String() } else if field.HasDefault {
+          switch value := field.Default().(type) {
+          case string: path = value
+          case Option_Some[string]: path = value.value
+          }
+        }
+        if path != "" { files = append(files, path) }
+      }
+      config := map[string]Json{}
+      err := boa.LoadConfigFiles(files, &config, func(data []byte, target any) error {
+        parsed := parse(string(data))
+        if err, bad := parsed.(JsonError); bad { return fmt.Errorf("%s", err.message) }
+        object, ok := parsed.(Json_Object)
+        if !ok { return fmt.Errorf("CLI config must be a JSON object") }
+        values := target.(*map[string]Json)
+        for _, entry := range object.fields {
+          known := false
+          for _, field := range schema { if field.Name == entry.name { known = true; break } }
+          if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
+          (*values)[entry.name] = entry.value
+        }
+        return nil
+      })
+      if err != nil { result = Error{errors: []DecodeError{{path: name, message: err.Error()}}}; return }
       jsonFields := []JsonField{}
       failures := []DecodeError{}
       for i, field := range schema {
         value := shadow.Elem().Field(i)
-        if value.IsNil() {
-          if field.HasDefault { continue }
-          if !field.Optional { failures = append(failures, DecodeError{path: "." + field.Name, message: "is missing"}); continue }
-          jsonFields = append(jsonFields, JsonField{name: field.Name, value: Json_Null{}})
-          continue
-        }
         var json Json
-        if strings.HasPrefix(field.Kind, "list:") {
+        if value.IsNil() {
+          if configured, exists := config[field.Name]; exists { json = configured } else {
+            if field.HasDefault { continue }
+            if !field.Optional { failures = append(failures, DecodeError{path: "." + field.Name, message: "is missing"}); continue }
+            json = Json_Null{}
+          }
+        } else if strings.HasPrefix(field.Kind, "list:") {
           values := []Json{}
           invalid := false
           for j, raw := range value.Elem().Interface().([]string) {
@@ -154,8 +194,8 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], fla
 
 // Run reads process arguments and invokes the handler in a scope after validation.
 // Help is printed; errors remain values for the application to render and exit.
-fn Run[T: Decode](name: String, description: String, run: (T, Scope) => Unit, flags: List[Flag] = []) uses io: Unit | Error {
-  match (Parse[T](name, description, args(), flags)) {
+fn Run[T: Decode](name: String, description: String, run: (T, Scope) => Unit, flags: List[Flag] = [], configFiles: List[String] = []) uses io: Unit | Error {
+  match (Parse[T](name, description, args(), flags, configFiles)) {
     help: Help => { print(help.text) }
     error: Error => error
     options: T => { scope s { run(options, s) } }
