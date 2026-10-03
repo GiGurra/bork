@@ -2102,9 +2102,9 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   error. Explicit type arguments work as usual.
 - **Construction guarantees are unchanged.** Reuse explicit record/variant
   checking and the typed tree targets: required fields, defaults, duplicate
-  fields, private variants and field facts apply equally. Preserve sibling/type
-  invariants and package-controlled construction when those features land;
-  their integration is tested before the complete config showcase is reported. `type Config = private { ... }`
+  fields, private variants and field facts apply equally. Sibling-field invariants and package-controlled construction use their shared
+  checks. Preserve whole-value type invariants when that feature lands;
+  its integration is tested before the complete config showcase is reported. `type Config = private { ... }`
   permits literals and copies only in its owning package, including nested copy
   paths that modify its fields; reading fields and replacing a whole field with
   an already valid private value remain allowed. An omitted type name cannot

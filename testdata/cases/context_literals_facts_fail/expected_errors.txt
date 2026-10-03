@@ -1,2 +1,4 @@
-main.bork:5:32: Bounded requires value to be positive, but positive(0) is false
-main.bork:6:34: State.Valid requires value to be positive, but positive(0) is false
+main.bork:7:39: Interval requires hi to be atLeast(lo), but atLeast(5, 10) is false
+main.bork:8:25: Interval requires hi to be atLeast(lo) (default declared at main.bork:3:28), but atLeast(10, 12) is false
+main.bork:9:32: Bounded requires value to be positive, but positive(0) is false
+main.bork:10:34: State.Valid requires value to be positive, but positive(0) is false

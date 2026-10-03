@@ -216,6 +216,10 @@ func (c *checker) contextRecord(e *syntax.RecordLit, name *syntax.ContextName, w
 	target := c.contextTarget(name, want)
 	switch t := target.(type) {
 	case *Record:
+		if !c.recordConstruction(name.Pos, t, "construct") {
+			c.skipFieldInits(e)
+			return Invalid
+		}
 		if c.open(t) {
 			return c.genericContextLit(e, genericBase(t), "", t.Name, t)
 		}

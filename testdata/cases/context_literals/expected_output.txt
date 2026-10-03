@@ -1,3 +1,6 @@
+Interval { lo: 1, hi: 10 }
+Interval { lo: 2, hi: 8 }
+Interval { lo: 3, hi: 12 }
 10
 20
 Both { first: 10, second: 20 }
