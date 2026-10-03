@@ -3,8 +3,11 @@ type Context = go "context.Context"
 type Params = go "example.com/bindtest.ContextParams" { context: Scope }
 fn Open(s: Scope, shape: String) uses state: List[R] | GoError | GoValueError unsafe go "example.com/bindtest.ContextResources"
 fn OpenMap(s: Scope) uses state: Map[String, R] | GoValueError unsafe go "example.com/bindtest.ContextMap"
+fn NamedMap(s: Scope) uses state: Map[Int, R] | GoValueError unsafe go "example.com/bindtest.ContextNamedMap"
+fn NestedMap(s: Scope) uses state: Map[String, Map[String, R]] | GoValueError unsafe go "example.com/bindtest.ContextNestedMap"
 fn OpenArray(s: Scope) uses state: List[R] | GoValueError unsafe go "example.com/bindtest.ContextArray"
 fn Optional(s: Scope, ok: Bool) uses state: Option[R] | GoValueError unsafe go "example.com/bindtest.OptionalContextResource"
+fn Discard(s: Scope) uses state: Option[List[R]] | GoValueError unsafe go "example.com/bindtest.DiscardContextResources"
 fn OpenList(owner: Scope, contexts: List[Scope]) uses state: List[R] | GoValueError unsafe go "example.com/bindtest.ContextListResources"
 fn OpenStruct(owner: Scope, params: Params) uses state: R | GoValueError unsafe go "example.com/bindtest.ContextStructResource"
 fn Fixed() uses state: Context | GoValueError unsafe go "example.com/bindtest.FixedContext"
@@ -51,11 +54,13 @@ fn main() {
     println(Open(failures, "error"), Closes())
     println(Open(failures, "nil"), Closes())
     println(Optional(failures, false), Closes())
+    println(Discard(failures), Closes())
   }
   println("failed cleanup", Closes())
   scope aggregates {
     println(checked(OpenMap(aggregates)).size(), checked(OpenArray(aggregates)).length())
     println(Resources(aggregates, "duplicate").length(), Closes())
+    println(checked(NamedMap(aggregates)).size(), checked(NestedMap(aggregates)).size())
   }
   println("aggregates closed", Closes())
   scope owner {

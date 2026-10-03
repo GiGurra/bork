@@ -151,7 +151,9 @@ func TestCloseCanWaitForCancellation(t *testing.T) {
   g.Attach(&_Scope{ctx:context.Background()})
   g.Start()
   g.Register("result",new(int),func(){<-ctx.Done()})
-  if owned { g.Own("result",s) }
+  if owned { g.Own("result",s) } else {
+   g.Register("second",new(int),func(){<-ctx.Done()})
+  }
   done:=make(chan struct{})
   go func(){ success:=true; g.Finish(&success); if owned { s.close() }; close(done) }()
   select {
@@ -169,5 +171,14 @@ func TestFailureClosesAllAfterPanic(t *testing.T) {
  g.Register("last",new(int),func(){count++;panic("close also failed")})
  func(){ defer func(){if recover()==nil {t.Error("close panic lost")}}(); success:=false; g.Finish(&success) }()
  if count!=2 || g.ctx.Err()==nil { t.Fatalf("failure cleanup: %d %v",count,g.ctx.Err()) }
+}
+
+type namedKey int
+func (namedKey) String() string { return "same" }
+func TestOwnershipMapKeys(t *testing.T) {
+ if _bindResourceKey("result",namedKey(1))==_bindResourceKey("result",namedKey(2)) { t.Fatal("named keys collided") }
+ a:=_bindResourceKey(_bindResourceKey("result","a][b"),"c")
+ b:=_bindResourceKey(_bindResourceKey("result","a"),"b][c")
+ if a==b { t.Fatal("nested string keys collided") }
 }
 `

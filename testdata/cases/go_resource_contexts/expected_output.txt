@@ -5,12 +5,14 @@ closed siblings 2
 GoError { message: "open failed", goType: "*errors.errorString" } 4
 GoValueError { path: "result[1]", message: "nil" } 6
 Option.None 7
-failed cleanup 7
+Option.None 9
+failed cleanup 9
 2 2
-2 7
-aggregates closed 12
+2 9
+2 2
+aggregates closed 18
 collection union [false, false]
 mirror union false
 fixed values fixed-value false
 fixed limit true
-all closed 16
+all closed 22

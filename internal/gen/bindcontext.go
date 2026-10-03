@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/GiGurra/bork/internal/check"
 	"go/types"
+	"strings"
 )
 
 // Generated binding contexts retain the union of scope lifetimes, bounded by
@@ -13,6 +14,7 @@ const bindContextRuntime = `package main
 import (
  "context"
  "reflect"
+ "strconv"
  "sync"
  "time"
 )
@@ -116,6 +118,21 @@ func (c *_bindOwnedContext) Deadline() (time.Time, bool) {
  return deadline, found
 }
 
+// Ownership addresses quote normalized map keys, independently of diagnostic
+// paths and any String method on a named Go primitive key.
+func _bindResourceKey(path string, key any) string {
+ value:=reflect.ValueOf(key)
+ var text string
+ switch value.Kind() {
+ case reflect.String: text=value.String()
+ case reflect.Bool: text=strconv.FormatBool(value.Bool())
+ case reflect.Int,reflect.Int8,reflect.Int16,reflect.Int32,reflect.Int64: text=strconv.FormatInt(value.Int(),10)
+ case reflect.Uint,reflect.Uint8,reflect.Uint16,reflect.Uint32,reflect.Uint64: text=strconv.FormatUint(value.Uint(),10)
+ default: panic("bork: invalid Go resource map key")
+ }
+ return path+"["+strconv.Quote(text)+"]"
+}
+
 func (g *_bindContextGroup) Register(path string, value any, closeFn func()) {
  g.mu.Lock()
  defer g.mu.Unlock()
@@ -139,8 +156,13 @@ func (g *_bindContextGroup) Own(path string, s *_Scope) *_Owner {
  return resource.owner
 }
 
+func (r *_bindContextResource) prepareClose() (closeFn func()) {
+ r.once.Do(func() { r.group.release(); closeFn=r.closeFn })
+ return closeFn
+}
+
 func (r *_bindContextResource) close() {
- r.once.Do(func() { r.group.release(); r.closeFn() })
+ if closeFn:=r.prepareClose(); closeFn!=nil { closeFn() }
 }
 
 func (g *_bindContextGroup) release() {
@@ -166,11 +188,15 @@ func (g *_bindContextGroup) Finish(success *bool) {
  // Drop the call reference before closing discarded results. Final Close
  // may wait for cancellation, so the last member releases before Close runs.
  g.release()
- var failure any
+ var closes []func()
  for resource := range resources {
+  if closeFn:=resource.prepareClose(); closeFn!=nil { closes=append(closes,closeFn) }
+ }
+ var failure any
+ for _, closeFn := range closes {
   func() {
    defer func() { if value:=recover(); value!=nil && failure==nil { failure=value } }()
-   resource.close()
+   closeFn()
   }()
  }
  if failure!=nil { panic(failure) }
@@ -192,7 +218,7 @@ func (w *bindWriter) registerResources(x string, gt types.Type, t check.Type, pa
 		if goNillable(gt) {
 			w.line("if " + x + " != nil {")
 		}
-		w.line(fmt.Sprintf("%s.Register(%s, %s, func() { %s.Close() })", w.group, path, x, x))
+		w.line(fmt.Sprintf("%s.Register(%s, %s, func() { %s.Close() })", w.group, bindingResourcePath(path), x, x))
 		if goNillable(gt) {
 			w.line("}")
 		}
@@ -238,4 +264,10 @@ func (w *bindWriter) registerResources(x string, gt types.Type, t check.Type, pa
 			w.line("}")
 		}
 	}
+}
+
+// Conversion paths also describe diagnostics. Replace only the generated map
+// path calls when identifying an owner, keeping diagnostics unchanged.
+func bindingResourcePath(path string) string {
+	return strings.ReplaceAll(path, "_bindKey(", "_bindResourceKey(")
 }

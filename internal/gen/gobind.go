@@ -474,7 +474,7 @@ func (w *bindWriter) opaqueValue(x string, t check.Type, path string) string {
 		v := w.newTmp()
 		w.line(v + " := " + x)
 		if w.group != "" {
-			return fmt.Sprintf("%s{handle: %s, owner: %s.Own(%s, _a%d), rebind: %s.Attach}", w.g.typeText(t), v, w.group, path, w.b.ScopeIndex, w.group)
+			return fmt.Sprintf("%s{handle: %s, owner: %s.Own(%s, _a%d), rebind: %s.Attach}", w.g.typeText(t), v, w.group, bindingResourcePath(path), w.b.ScopeIndex, w.group)
 		}
 		return fmt.Sprintf("%s{handle: %s, owner: _a%d.Own(func() { %s.Close() })}", w.g.typeText(t), v, w.b.ScopeIndex, v)
 	}

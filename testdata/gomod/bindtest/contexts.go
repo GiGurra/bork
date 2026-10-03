@@ -57,3 +57,17 @@ type ContextParams struct{ Context context.Context }
 func ContextStructResource(params ContextParams) *ContextResource {
 	return &ContextResource{params.Context}
 }
+
+func DiscardContextResources(ctx context.Context) ([]*ContextResource, bool) {
+	return []*ContextResource{{ctx}, {ctx}}, false
+}
+
+type ContextMapKey int
+
+func (ContextMapKey) String() string { return "same" }
+func ContextNamedMap(ctx context.Context) map[ContextMapKey]*ContextResource {
+	return map[ContextMapKey]*ContextResource{1: {ctx}, 2: {ctx}}
+}
+func ContextNestedMap(ctx context.Context) map[string]map[string]*ContextResource {
+	return map[string]map[string]*ContextResource{"a][b": {"c": {ctx}}, "a": {"b][c": {ctx}}}
+}
