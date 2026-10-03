@@ -452,12 +452,12 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 | Effect  | Allows | Prelude and standard library |
 |---------|--------|------------------------------|
 | `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `args`, `exit`, the `bork/fs` functions that touch the file system, `process.Args`, `process.Exit`, `log.Configure`, `env.Get`, `env.Require`, `env.All`, `env.Load`, `env.LoadJson` |
-| `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send` |
+| `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
 | `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep` |
 | `random` | random numbers | none yet (the future random number functions) |
 | `state` | state shared between tasks | `current`, `update`, `swap`, `send`, `receive`, `closeChannel`, `received`, `cancel`, `cancelled`, `checkpoint` |
 
-- **Some functions have two or more effects:** `delay(s, ms)`, `cancelAfter(s, ms)`, and `time.Sleep` are `clock + state` (they wait, and they observe or cause cancellation); `process.Run`, `Start`, `Await`, and `Stop` are `io + state`; the `bork/sql` functions are `io + net`, since a database may be a local file or a server.
+- **Some functions have two or more effects:** `delay(s, ms)`, `cancelAfter(s, ms)`, and `time.Sleep` are `clock + state` (they wait, and they observe or cause cancellation); `process.Run`, `Start`, `Await`, and `Stop` are `io + state`; the `bork/sql` functions are `io + net`, since a database may be a local file or a server; and the `bork/net` socket functions are `net + state` (`Listen`, `Wait`, `Bind`, `Resolve`), or `net + state + clock` where they read, write, or dial with a deadline.
 - **Pure means deterministic, with no outside action.** Calling a function that uses nothing twice with the same arguments gives the same result, and has no observable effect beyond allocating memory, logging, and maybe panicking. That is why reading an atom, or checking whether a scope was cancelled, is `state`: the answer can change between two calls. One known exception: an unordered map (`m.unordered()`) lists its entries in an order that differs between runs, and listing it stays pure. Seeding that order per program would close the gap, if it turns out to matter.
 - **The compiler's built-ins:** `println` and `assertSnapshot` (which writes snapshot files under `--update`) are `io`, and `toString`, `panic`, the conversions, `assert`, and `assertEqual` are pure.
 - **Making things is pure.** `atom(x)`, `channel(s, n)`, `spawn`, `launch`, `await`, `attach`, `onClose`, `scope` blocks and their policies, `http.Address`, `http.Text`, path functions such as `fs.Join`, JSON, CSV, strings, lists, and maps use nothing on their own. (`spawn` and `onClose` take on the effects of the work they are given; see open parameters below.)
@@ -527,7 +527,7 @@ The prelude's list, `Option`, and map methods have open function parameters; `up
 - **`unsafe` is not an effect.** If it were, every caller of the prelude's functions written in Go would be "unsafe", and the word would mean nothing. The trust boundary is the declaration.
 - **Which packages may contain `unsafe go` is declared in `bork.mod`:** `unsafe "example.com/shop/ffi"`. The prelude and the standard library always may. Every other package that has an `unsafe go` body is an error. So new Go code shows up in review as a change to `bork.mod`. The module's root package is named by the module path (`unsafe "example.com/shop"`). A program without a `bork.mod` cannot use `unsafe go`; `bork run` on a single directory still works, it just has to be all bork. Module paths `bork` and `bork/...` are reserved for the standard library.
 - **A check for honest declarations:** an `unsafe go` body that uses a Go name with an obvious effect must declare that effect. The check looks at the names used, not at the imports, since `time.Duration` alone is pure:
-  - `io`: `os` (except its error types and values, `Is...` functions, and file modes), `os/exec`, `os/signal`, `syscall`, `io/ioutil`, and `fmt.Print*`, `fmt.Fprint*`, `fmt.Scan*`, `fmt.Fscan*`;
+  - `io`: `os` (except its error types and values, `Is...` functions, `FileMode`, `FileInfo`, `DirEntry`, `ModeDir`, and `ModePerm`), `os/exec`, `os/signal`, `syscall`, `io/ioutil`, and `fmt.Print*`, `fmt.Fprint*`, `fmt.Scan*`, `fmt.Fscan*`;
   - `net`: `net` and `net/...`, except `net/url`, `net/netip`, and `net/mail`, which only parse and format;
   - `clock`: `time.Now`, `Since`, `Until`, `Sleep`, `After`, `AfterFunc`, `Tick`, `NewTimer`, `NewTicker`;
   - `random`: `math/rand`, `math/rand/v2`, `crypto/rand`;
@@ -805,7 +805,7 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 7. **Third-party Go packages**, with Go module dependencies (bork-8zh4yy), and the standard library's bindings checked by a test.
 8. **Docs:** fold this section into the decided parts, and update `grammar.md`, the prelude's table, and the README.
 
-Effects in signatures and bodies have landed (bork-ot9ki9). Bindings declare their effects with `uses`, like `unsafe go` bodies. The standard-library binding effects table and the `bork.mod` gate are still to come.
+Effects in signatures and bodies have landed (bork-ot9ki9). Bindings declare their effects with `uses`, like `unsafe go` bodies, are checked against the Go function they call by the heuristics of the [`unsafe go` check](#unsafe-go), and need the `bork.mod` gate. A fuller table of the standard library's effects, beyond those heuristics, is still to come.
 
 ### Open questions
 
