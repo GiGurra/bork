@@ -138,3 +138,11 @@ An `unsafe go` body using them is responsible for keeping its promise of a non-n
 opaque value. Generated bindings check nils themselves. Go resources use the same
 unboxing helper and keep their scope owner; generated bindings register `Close`
 with the scope and ignore its error.
+
+If a Go binding receives a context and returns a resource type, that resource
+type cannot use `attach` anywhere in the program: Go may retain the supplied
+context, which can cancel the resource. This includes converted scopes, contexts
+in collections, and opaque context arguments. The compiler names the responsible binding. An
+ownership-only scope that is not passed to Go has no such restriction. An
+`unsafe go` wrapper using `_borkNewResourceHandle` remains the way to make a
+resource whose cancellation follows its latest attachment.

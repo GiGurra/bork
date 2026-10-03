@@ -1,0 +1,6 @@
+type Dialer = go "*net.Dialer"
+type Context = go "context.Context"
+type Conn = resource go "net.Conn"
+fn Dial(d: Dialer, c: Context, network: String, address: String, owner: Scope) uses net: Conn | GoError unsafe go "(*net.Dialer).DialContext"
+fn Move(c: Conn, s: Scope): Conn { attach(c, s) }
+fn main() {}

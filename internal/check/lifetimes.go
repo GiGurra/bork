@@ -247,7 +247,7 @@ func (l *lifeChecker) carriesLife(t Type) bool {
 	l.carries[t] = false // for recursive types
 	v := false
 	switch t := t.(type) {
-	case *Resource, *FuncType, *TypeParam:
+	case *Resource, *Opaque, *FuncType, *TypeParam:
 		v = true
 	case *Basic:
 		v = t == Scope

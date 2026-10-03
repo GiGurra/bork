@@ -67,3 +67,20 @@ func NullableStringer(s fmt.Stringer) string {
 	}
 	return s.String()
 }
+
+type View struct{ handle *Handle }
+
+func NewView(h *Handle) *View { return &View{handle: h} }
+func (v *View) Closed() bool  { return v.handle.Closed() }
+
+var keptContext context.Context
+
+func KeepContext(ctx context.Context) { keptContext = ctx }
+func ContextWasCancelled() bool       { return keptContext.Err() != nil }
+
+func ContextsHandle(contexts []context.Context) *Handle { return OpenHandle() }
+
+type Formatter struct{}
+
+func (*Formatter) String() string    { return "typed nil" }
+func TypedNilStringer() fmt.Stringer { return (*Formatter)(nil) }

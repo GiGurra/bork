@@ -25,4 +25,5 @@ fn CompareList(ps: List[Payload]): Bool { ps == ps }
 fn StaleFact(p: Payload where stale) {}
 fn GenericFact(p: Payload) { assert(generic(p)) }
 type Config = { payload: Payload } derive (Decode, Encode)
+type Constraint = go "cmp.Ordered"
 fn main() {}

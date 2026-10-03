@@ -1,0 +1,4 @@
+type Duration = go "time.Duration"
+pred anyValue[T](v: T) { true }
+fn Use(d: Duration): Bool { p: (Duration) => Bool = anyValue; p(d) }
+fn main() {}

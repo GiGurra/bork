@@ -1,0 +1,6 @@
+main.bork:4:46: Handle was returned by ContextHandle at main.bork:3:1, which receives a context that can cancel it, so Handle cannot be attached
+  hint: use an unsafe go wrapper with _borkNewResourceHandle to support movable cancellation
+main.bork:6:37: Handle was returned by ContextHandle at main.bork:3:1, which receives a context that can cancel it, so Handle cannot be attached
+  hint: use an unsafe go wrapper with _borkNewResourceHandle to support movable cancellation
+main.bork:12:34: Handle was returned by ContextHandle at main.bork:3:1, which receives a context that can cancel it, so Handle cannot be attached
+  hint: use an unsafe go wrapper with _borkNewResourceHandle to support movable cancellation

@@ -312,6 +312,11 @@ func (c *checker) constraint(ref *syntax.PredRef, subject Type, scope map[string
 }
 
 func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {
+	if containsOpaque(subject, map[Type]bool{}) {
+		c.bindErr(ref.Pos, "facts cannot apply to %s, which holds a Go value that can change", subject)
+		return nil
+	}
+
 	if pt, ok := scope[ref.Name]; ok {
 		// A function parameter used as a predicate.
 		ft, isFunc := pt.(*FuncType)
@@ -401,6 +406,12 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 	if in != nil {
 		if missing := in.unsolved(); len(missing) > 0 {
 			c.errorf(ref.Pos, "cannot tell what %s is for %s here", strings.Join(missing, " and "), ref.Name)
+			return nil
+		}
+	}
+	for i := range fn.Params {
+		if containsOpaque(param(i), map[Type]bool{}) {
+			c.bindErr(ref.Pos, "predicate %s cannot take %s, which holds a Go value that can change", ref.Name, param(i))
 			return nil
 		}
 	}

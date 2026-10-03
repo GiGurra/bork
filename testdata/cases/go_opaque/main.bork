@@ -1,5 +1,7 @@
 import "example.com/opaque/other"
 
+type Envelope = { payload: Payload }
+
 type Payload = go "*example.com/bindtest.Payload"
 type Same = go "*example.com/bindtest.PayloadAlias"
 type Duration = go "time.Duration"
@@ -15,6 +17,7 @@ fn (p: Payload) text() uses state: String unsafe go "(*example.com/bindtest.Payl
 fn Text(p: Same) uses state: String unsafe go "(*example.com/bindtest.Payload).Text"
 fn GetStringer(ok: Bool): Option[Stringer] unsafe go "example.com/bindtest.Stringer"
 fn Show(s: Stringer) uses state: String unsafe go "(fmt.Stringer).String"
+fn TypedNilStringer(): Stringer | GoValueError unsafe go "example.com/bindtest.TypedNilStringer"
 fn StringerError() uses state: Stringer | GoError unsafe go "example.com/bindtest.StringerError"
 fn NullablePayload(p: Option[Payload]) uses state: String unsafe go "example.com/bindtest.NullablePayload"
 fn NullableStringer(s: Option[Stringer]) uses state: String unsafe go "example.com/bindtest.NullableStringer"
@@ -41,6 +44,7 @@ fn Raw(p: Payload): String unsafe go { return _borkGo(p).Value }
 fn main() {
   p = Box("hello")
   println(p, p.text(), Text(p), other.Identity(p).text(), Raw(p))
+  println(Envelope { payload: p })
   match (Choice(p)) {
     v: Payload => println(v.text())
     s: String => println(s)
@@ -57,7 +61,7 @@ fn main() {
     Option.None => println("missing")
   }
   println(GetStringer(false), GetDuration(), Seconds(GetDuration()), DurationInt(), DurationString(GetDuration()))
-  println(StringerError(), NullablePayload(PayloadOption(true)), NullablePayload(Option.None))
+  println(TypedNilStringer(), StringerError(), NullablePayload(PayloadOption(true)), NullablePayload(Option.None))
   println(NullableStringer(GetStringer(true)), NullableStringer(Option.None))
   scope s {
     println(ContextPresent(s))

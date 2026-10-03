@@ -120,7 +120,9 @@ func (c *checker) methodNamed(t Type, name string) (*Func, string) {
 	case *Sealed:
 		look(t.Pkg)
 	case *Resource:
-		look(t.Pkg)
+		if t.GoType == nil {
+			look(t.Pkg)
+		}
 	}
 	for _, p := range c.pkg.imports {
 		look(p)

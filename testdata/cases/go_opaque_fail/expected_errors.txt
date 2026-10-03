@@ -17,9 +17,10 @@ main.bork:18:48: Go type *bindtest.Payload has no method Missing
 main.bork:19:44: "(*example.com/bindtest.Payload).Value.Text" is not a Go function name; write its import path and name, such as "os.Getenv"
 main.bork:20:1: ContextWrong is bound to strings.Contains(s string, substr string) bool, which takes 2 parameters, but it has 1
 main.bork:21:12: predicate stale takes Payload, which holds a Go value that can change, so its facts could go stale
-main.bork:23:46: cannot compare values of type Payload with == (functions, scopes, and resources have no ==)
-main.bork:24:46: cannot compare values of type List[Payload] with == (functions, scopes, and resources have no ==)
+main.bork:23:46: cannot compare values of type Payload with ==: opaque Go values can change
+main.bork:24:46: cannot compare values of type List[Payload] with ==: opaque Go values can change
 main.bork:25:17: facts cannot apply to Payload, which holds a Go value that can change
 main.bork:26:45: predicate generic cannot take Payload, which holds a Go value that can change
 main.bork:27:36: cannot derive Decode for Config: field payload has type Payload, which has no Decode instance in scope (declare one: instance name: Decode[Payload] { ... })
 main.bork:27:36: cannot derive Encode for Config: field payload has type Payload, which has no Encode instance in scope (declare one: instance name: Encode[Payload] { ... })
+main.bork:28:22: cmp.Ordered is a constraint interface, so it cannot hold Go values

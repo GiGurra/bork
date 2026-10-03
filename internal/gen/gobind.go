@@ -211,12 +211,7 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 				fail(x+" == nil", `"nil"`)
 			}
 		}
-		if _, resource := t.(*check.Resource); resource {
-			v := w.newTmp()
-			w.line(v + " := " + x)
-			return fmt.Sprintf("%s{handle: %s, owner: _a%d.Own(func() { %s.Close() })}", w.g.typeText(t), v, w.b.ScopeIndex, v)
-		}
-		return w.g.typeText(t) + "{value: " + x + "}"
+		return w.opaqueValue(x, t)
 	}
 	if check.IsOption(t) && check.GoTypeOf(check.TypeArgs(t)[0]) != nil && goNillable(check.GoTypeOf(check.TypeArgs(t)[0])) {
 		elem := check.TypeArgs(t)[0]

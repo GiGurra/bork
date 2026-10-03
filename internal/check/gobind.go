@@ -362,6 +362,11 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 			b.GoValueError = goValErr
 		}
 		c.info.GoBindings[fn] = b
+		for i := range b.ParamIndices {
+			if containsGoContext(b.Sig.Params().At(i).Type(), map[types.Type]bool{}) {
+				markContextResources(b.Value, fn, map[Type]bool{})
+			}
+		}
 	}
 }
 

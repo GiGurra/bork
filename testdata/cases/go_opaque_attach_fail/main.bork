@@ -1,0 +1,16 @@
+type Handle = resource go "*example.com/bindtest.Handle"
+fn OpenHandle(s: Scope) uses state: Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
+fn ContextHandle(s: Scope) uses state: Handle | GoError unsafe go "example.com/bindtest.ContextHandle"
+fn Move(h: Handle, s: Scope): Handle { attach(h, s) }
+fn Indirect(h: Handle) {
+  move: (Handle, Scope) => Handle = attach
+  scope s { println(move(h, s)) }
+}
+fn main() {
+  scope s {
+    match (OpenHandle(s)) {
+      h: Handle => println(attach(h, s))
+      e: GoValueError => println(e)
+    }
+  }
+}

@@ -1,0 +1,8 @@
+type Duration = go "time.Duration"
+type Phantom[T] = { label: String }
+pred valid[T](p: Phantom[T]) { true }
+fn Check(): Bool {
+  p: Phantom[Duration] = Phantom { label: "x" }
+  valid(p)
+}
+fn main() {}

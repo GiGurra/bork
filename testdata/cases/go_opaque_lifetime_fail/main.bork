@@ -1,4 +1,14 @@
 type Handle = resource go "*example.com/bindtest.Handle"
 fn OpenHandle(s: Scope) uses state: Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
 fn Escape() uses state: Handle | GoValueError { scope s { OpenHandle(s) } }
+type View = go "*example.com/bindtest.View"
+fn NewView(h: Handle) uses state: View | GoValueError unsafe go "example.com/bindtest.NewView"
+fn EscapeView() uses state: View | GoValueError {
+  scope s {
+    match (OpenHandle(s)) {
+      h: Handle => NewView(h)
+      e: GoValueError => e
+    }
+  }
+}
 fn main() {}

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -88,6 +89,10 @@ func (c *checker) namedGoType(name string, pos *syntax.GoBind) types.Type {
 	named, ok := t.(*types.Named)
 	if !ok || named.TypeParams().Len() > 0 || !goTypeVisible(t) {
 		c.bindErr(pos.Pos, "%s is not a non-generic exported named Go type", name)
+		return nil
+	}
+	if iface, ok := named.Underlying().(*types.Interface); ok && !iface.IsMethodSet() {
+		c.bindErr(pos.Pos, "%s is a constraint interface, so it cannot hold Go values", name)
 		return nil
 	}
 	if pointer {
@@ -213,6 +218,298 @@ func containsGoResource(t Type, seen map[Type]bool) bool {
 	case *Union:
 		for _, m := range t.Members {
 			if containsGoResource(m, seen) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// A generic field may acquire an opaque type only after substitution.
+func (c *checker) checkOpaqueFields() {
+	seen := map[string]bool{}
+	check := func(fields, base []*Field, decls []*syntax.FieldDecl) {
+		for i, f := range fields {
+			if len(base[i].Constraints) == 0 || !containsOpaque(c.zonk(f.Type), map[Type]bool{}) {
+				continue
+			}
+			key := decls[i].Pos.String() + typeKey(c.zonk(f.Type))
+			if !seen[key] {
+				seen[key] = true
+				c.bindErr(decls[i].Pos, "facts cannot apply to instantiated field %s of type %s, which holds a Go value that can change", f.Name, c.zonk(f.Type))
+			}
+		}
+	}
+	for _, t := range c.info.TypeOrder {
+		switch t := t.(type) {
+		case *Record:
+			for _, key := range sortedInstanceKeys(t.insts) {
+				i := t.insts.byKey[key].(*Record)
+				check(i.Fields, t.Fields, t.Decl.Fields)
+			}
+		case *Sealed:
+			for _, key := range sortedInstanceKeys(t.insts) {
+				i := t.insts.byKey[key].(*Sealed)
+				for j, v := range i.Variants {
+					check(v.Fields, t.Variants[j].Fields, t.Decl.Variants[v.Index].Fields)
+				}
+			}
+		}
+	}
+}
+func sortedInstanceKeys(s *instanceSet) []string {
+	var keys []string
+	if s != nil {
+		for k := range s.byKey {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// Contexts passed to Go keep their original cancellation source. Until
+// rebinding wrappers exist, any such returned resource type cannot attach.
+func markContextResources(t Type, fn *Func, seen map[Type]bool) {
+	if t == nil || seen[t] {
+		return
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *Resource:
+		if t.GoType != nil && t.ContextBinding == nil {
+			t.ContextBinding = fn
+		}
+	case *List:
+		markContextResources(t.Elem, fn, seen)
+	case *Map:
+		markContextResources(t.Value, fn, seen)
+	case *Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				markContextResources(f.Type, fn, seen)
+			}
+		}
+	}
+}
+
+// Function references specialize the same promises as direct calls.
+func (c *checker) checkOpaqueInstance(inst *Instance, pos diag.Pos, args []syntax.Expr) bool {
+	fn := inst.Func
+	for i, pt := range inst.Params {
+		at := pos
+		if i < len(args) {
+			at = args[i].Position()
+		}
+		if i < len(fn.ParamConstraints) && len(fn.ParamConstraints[i]) > 0 && containsOpaque(pt, map[Type]bool{}) {
+			c.bindErr(at, "facts cannot apply to parameter %s of type %s, which holds a Go value that can change", fn.Decl.Params[i].Name, pt)
+			return false
+		}
+		if fn.Decl.IsPred && containsOpaque(pt, map[Type]bool{}) {
+			c.bindErr(at, "predicate %s cannot take %s, which holds a Go value that can change", fn.Decl.Name, pt)
+			return false
+		}
+	}
+	for _, mc := range fn.ResultConstraints {
+		t := subst(mc.Type, bindParams(fn.TypeParams, inst.TypeArgs))
+		if containsOpaque(t, map[Type]bool{}) {
+			c.bindErr(pos, "facts cannot apply to result %s, which holds a Go value that can change", t)
+			return false
+		}
+	}
+	if fn.Prelude && fn.Decl.Name == "attach" && len(inst.TypeArgs) == 1 {
+		r, ok := inst.TypeArgs[0].(*Resource)
+		if !ok {
+			c.errorf(pos, "attach takes a resource (a value of a resource type, such as File), found %s", inst.TypeArgs[0])
+			return false
+		}
+		if r.ContextBinding != nil {
+			binding := r.ContextBinding
+			c.bindErr(pos, "%s was returned by %s at %s, which receives a context that can cancel it, so %s cannot be attached\n  hint: use an unsafe go wrapper with _borkNewResourceHandle to support movable cancellation", r, binding.Decl.Name, binding.Decl.Pos, r)
+			return false
+		}
+	}
+	return true
+}
+
+// Generic bodies are checked once, with their parameters still abstract.
+// Propagate uses that require immutable bork data through specialization,
+// including calls through generic wrappers and constrained record fields.
+func (c *checker) checkOpaqueGenericUses() {
+	restricted := map[*TypeParam]string{}
+	var mark func(Type, string, map[Type]bool)
+	mark = func(t Type, why string, seen map[Type]bool) {
+		if seen[t] {
+			return
+		}
+		seen[t] = true
+		switch t := t.(type) {
+		case *TypeParam:
+			if !t.unknown && restricted[t] == "" {
+				restricted[t] = why
+			}
+		case *List:
+			mark(t.Elem, why, seen)
+		case *Map:
+			mark(t.Key, why, seen)
+			mark(t.Value, why, seen)
+		case *Record:
+			for _, f := range t.Fields {
+				mark(f.Type, why, seen)
+			}
+		case *Sealed:
+			for _, v := range t.Variants {
+				for _, f := range v.Fields {
+					mark(f.Type, why, seen)
+				}
+			}
+		case *Union:
+			for _, m := range t.Members {
+				mark(m, why, seen)
+			}
+		}
+	}
+	markType := func(t Type, why string) { mark(t, why, map[Type]bool{}) }
+	var constraints func([]*Constraint, *Func)
+	constraints = func(cs []*Constraint, fn *Func) {
+		for _, con := range cs {
+			constraints(con.Or, fn)
+			for _, a := range con.Args {
+				for i, p := range fn.Decl.Params {
+					if a.Param == p.Name {
+						markType(fn.Params[i], "facts")
+					}
+				}
+			}
+		}
+	}
+	for _, fn := range c.info.FuncOf {
+		if fn.Decl.IsPred {
+			for _, p := range fn.Params {
+				markType(p, "predicate "+fn.Decl.Name)
+			}
+		}
+		if fn.Class != nil && fn.Class.Prelude && (fn.Class.Name == "Encode" || fn.Class.Name == "Decode") {
+			for _, tp := range fn.TypeParams {
+				markType(tp, fn.Class.Name)
+			}
+		}
+		if fn.Of != nil && fn.Of.Class.Prelude && (fn.Of.Class.Name == "Encode" || fn.Of.Class.Name == "Decode") {
+			markType(fn.Of.Type, fn.Of.Class.Name)
+		}
+		for i, cs := range fn.ParamConstraints {
+			if len(cs) > 0 {
+				markType(fn.Params[i], "facts")
+				constraints(cs, fn)
+			}
+		}
+		for _, mc := range fn.ResultConstraints {
+			markType(mc.Type, "facts")
+			constraints(mc.Constraints, fn)
+		}
+	}
+	var allTypes []Type
+	for _, t := range c.info.types {
+		allTypes = append(allTypes, t)
+	}
+	for _, t := range c.info.TypeOrder {
+		allTypes = append(allTypes, t)
+		switch t := t.(type) {
+		case *Record:
+			for _, f := range t.Fields {
+				if len(f.Constraints) > 0 {
+					markType(f.Type, "facts")
+				}
+			}
+			for _, i := range t.insts.byKey {
+				allTypes = append(allTypes, i)
+			}
+		case *Sealed:
+			for _, v := range t.Variants {
+				for _, f := range v.Fields {
+					if len(f.Constraints) > 0 {
+						markType(f.Type, "facts")
+					}
+				}
+			}
+			for _, i := range t.insts.byKey {
+				allTypes = append(allTypes, i)
+			}
+		}
+	}
+	type use struct {
+		inst *Instance
+		pos  diag.Pos
+	}
+	var uses []use
+	for e, i := range c.info.instances {
+		uses = append(uses, use{i, e.Position()})
+	}
+	for e, i := range c.info.funcRefs {
+		uses = append(uses, use{i, e.Position()})
+	}
+	sort.Slice(uses, func(i, j int) bool {
+		a, b := uses[i].pos, uses[j].pos
+		if a.File != b.File {
+			return a.File < b.File
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		return a.Col < b.Col
+	})
+	for {
+		before := len(restricted)
+		for _, u := range uses {
+			for i, tp := range u.inst.Func.TypeParams {
+				if why := restricted[tp]; why != "" {
+					markType(u.inst.TypeArgs[i], why)
+				}
+			}
+		}
+		for _, t := range allTypes {
+			for i, a := range TypeArgs(t) {
+				ps := typeParamsOf(genericBaseOrSelf(t))
+				if i < len(ps) {
+					if why := restricted[ps[i]]; why != "" {
+						markType(a, why)
+					}
+				}
+			}
+		}
+		if len(restricted) == before {
+			break
+		}
+	}
+	for _, u := range uses {
+		for i, tp := range u.inst.Func.TypeParams {
+			if why := restricted[tp]; why != "" && containsOpaque(u.inst.TypeArgs[i], map[Type]bool{}) {
+				c.bindErr(u.pos, "%s of %s cannot be %s: its generic implementation uses %s, which cannot depend on opaque Go values", tp.Name, u.inst.Func.Decl.Name, u.inst.TypeArgs[i], why)
+			}
+		}
+	}
+}
+
+func containsGoContext(t types.Type, seen map[types.Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	if isGoContext(t) {
+		return true
+	}
+	switch t := t.Underlying().(type) {
+	case *types.Pointer:
+		return containsGoContext(t.Elem(), seen)
+	case *types.Slice:
+		return containsGoContext(t.Elem(), seen)
+	case *types.Array:
+		return containsGoContext(t.Elem(), seen)
+	case *types.Map:
+		return containsGoContext(t.Key(), seen) || containsGoContext(t.Elem(), seen)
+	case *types.Struct:
+		for i := 0; i < t.NumFields(); i++ {
+			if containsGoContext(t.Field(i).Type(), seen) {
 				return true
 			}
 		}

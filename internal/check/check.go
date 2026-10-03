@@ -323,6 +323,16 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	for _, f := range files {
 		c.inFile(f)
 		for _, td := range f.Types {
+			if td.GoName != nil {
+				if e := c.pkg.types[td.Name]; e != nil && e.decl == td {
+					c.resolveDecl(e)
+				}
+			}
+		}
+	}
+	for _, f := range files {
+		c.inFile(f)
+		for _, td := range f.Types {
 			if e := c.pkg.types[td.Name]; e != nil && e.decl == td {
 				c.resolveDecl(e)
 			}
@@ -404,7 +414,11 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	// program checks.
 	if c.diags.Len() == 0 {
 		c.zonkInfo()
-		c.lower(files)
+		c.checkOpaqueFields()
+		c.checkOpaqueGenericUses()
+		if c.diags.Len() == 0 {
+			c.lower(files)
+		}
 	}
 	return c.info
 }
@@ -1144,6 +1158,10 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 		}
 		if tp, ok := x.(*TypeParam); ok && !comparable(x) {
 			c.errorf(e.Pos, "cannot compare values of type parameter %s with %s; require it: [%s: Eq]", tp.Name, op, tp.Name)
+			return Invalid
+		}
+		if !comparable(x) && containsOpaque(x, map[Type]bool{}) {
+			c.bindErr(e.Pos, "cannot compare values of type %s with %s: opaque Go values can change", x, op)
 			return Invalid
 		}
 		if !comparable(x) {
