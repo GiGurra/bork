@@ -2483,8 +2483,12 @@ Renaming a field uses an override. Nested paths use the existing `copy` syntax:
 A nested path forces validation of the completed nested candidate even when
 that source field was otherwise directly assignable; unchanged fields retain
 their values, not a blanket assumption of whole-value validity. If the source
-parent is absent, the nested candidate must be completed from overrides and
-target defaults, with missing required leaves reported normally. A whole nested
+parent is absent, a default on that whole parent field supplies the baseline
+before applying nested overrides. For example, an absent `address` with default
+`Address { city: "A", zip: 123 }` and override `address.city: "B"` retains
+`zip: 123`. Without a whole-parent default, complete the nested candidate from
+its explicit overrides and nested type defaults, reporting missing required
+leaves normally. A whole nested
 conversion can also be supplied explicitly:
 `address: user.address.into[AddressDto](city: "Springfield")`. A builtin
 conversion cannot be shadowed by a user method named `into`; diagnostics point
@@ -2516,8 +2520,11 @@ Receiver evaluation occurs before overrides. Within the overrides, the first
 failure in source order stops conversion; later override expressions, defaults
 and recursive conversions are not evaluated. This is an intentional difference
 from ordinary function argument evaluation, made explicit by the conversion's
-union result. Recursive conversions follow the same policy in target field
-order. Only their successful fields enter the final candidate. An explicit
+union result. Automatic recursive mapping is infallible in this initial design: it performs
+no callbacks, defaults are closed values, and only explicit overrides lift
+errors. Per-element fallible mapping must be written explicitly with `.map`
+and supplied as a complete field override. Only successfully evaluated
+overrides enter the final candidate. An explicit
 `?`, `return` or panic inside any expression retains its existing enclosing
 function semantics. Diagnostics and `bork describe` show the inferred result
 union; no hidden exceptions or zero-filled target escape.
@@ -2527,8 +2534,8 @@ record fields and `List[A]` to `List[B]` / `Option[A]` to `Option[B]` when the
 element conversion is a record conversion under these same rules. Preserve
 list order; map a present Option once and keep `None` unchanged. Directly
 assignable containers are reused as values. Nested collection shapes can
-recurse through these two containers. The first failed element stops in list
-order and returns its error alternatives. Do not auto-convert Map keys/values,
+recurse through these two containers. Automatic element conversion introduces no runtime failure channel; a future
+per-element override API would need its own ordering and early-failure contract. Do not auto-convert Map keys/values,
 sealed variants or numeric types; explicit `.map` or an override supplies
 those policies. Repeated source/target pairs on the active conversion path
 produce a cycle diagnostic, rather than unbounded compiler recursion; a
@@ -2580,7 +2587,8 @@ a unique likely target-field spelling. Fixes must not duplicate evaluation of
 the receiver or invent a factory name.
 
 Acceptance cases cover flat/nested projection, generic records and aliases,
-default precedence, missing and incompatible fields, overrides in source order,
+default precedence (including whole-parent defaults plus nested overrides),
+missing and incompatible fields, overrides in source order,
 single receiver/override evaluation, direct versus lifted unions, early failure,
 `?`/return/panic control flow, List/Option recursion and order, function-valued
 fields, scope escape prevention, and source mutation opacity. Guarantee cases
