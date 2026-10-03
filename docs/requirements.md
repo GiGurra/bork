@@ -2451,6 +2451,163 @@ unfold plus take verifies bounded demand without accumulating an eager source.
 
 This is a design only. Implementation waits for lead approval and coordination
 with scope ownership, callback effect checking and Go rebinding work.
+### Record conversion (bork-2zn4s1 design)
+
+A compiler-provided record method converts a source into a named target record:
+
+```bork
+type User = { id: Int, name: String, internal: Bool }
+type UserDto = { id: Int, name: String, city: String = "unknown" }
+
+fn publicUser(user: User): UserDto {
+  user.into[UserDto](city: "Springfield")
+}
+```
+
+The conversion is target-driven. Extra source fields disappear. For each target
+field, an explicit named override wins; otherwise a same-named source field is
+copied when assignable; otherwise a same-named record is converted recursively.
+A target default is used only when that field is absent from the source. A
+present incompatible source field is an error, rather than silently discarded
+in favor of a default. An absent required field is an error naming its full
+path. No runtime reflection, numeric coercion, name matching heuristics or
+implicit `T` to `Option[T]` lifting is involved. Aliases are resolved without
+forgetting their underlying nominal construction owner or field requirements.
+The target must be a record, not a resource, opaque Go type, sealed type or
+union; concrete instantiations of generic records are supported.
+
+Overrides are ordinary expressions with the target field's expected type:
+`user.into[UserDto](name: user.name.toUpper())`. A lambda is a value only for a
+function-valued target field; it is never implicitly invoked on the source.
+This keeps the surface consistent with named function arguments and `copy`,
+and avoids ambiguity between a callback override and a function-valued field.
+Renaming a field uses an override. Nested paths use the existing `copy` syntax:
+`address.city: "Springfield"`. Ancestor/descendant overrides cannot overlap.
+A nested path forces validation of the completed nested candidate even when
+that source field was otherwise directly assignable; unchanged fields retain
+their values, not a blanket assumption of whole-value validity. If the source
+parent is absent, a default on that whole parent field supplies the baseline
+before applying nested overrides. For example, an absent `address` with default
+`Address { city: "A", zip: 123 }` and override `address.city: "B"` retains
+`zip: 123`. Without a whole-parent default, complete the nested candidate from
+its explicit overrides and nested type defaults, reporting missing required
+leaves normally. A whole nested
+conversion can also be supplied explicitly:
+`address: user.address.into[AddressDto](city: "Springfield")`. A builtin
+conversion cannot be shadowed by a user method named `into`; diagnostics point
+to the declaration and suggest another method name.
+
+**Evaluation and failures.** Evaluate the receiver once, then explicit
+overrides in source order, before filling the remaining fields. Every explicit
+override is evaluated once. Automatic recursive fields and default expressions
+are then processed in target declaration order. Ordinary effects of receiver,
+overrides and defaults are charged to the enclosing function; mapping fields
+itself has no effect. A conversion that reaches a bottom-typed expression
+terminates at that expression and does not evaluate later work.
+
+A fallible override can be written explicitly with `?`:
+`user.into[UserDto](id: parseInt(text)?)`. Its error leaves the enclosing
+function, as usual. We also accept a field override of type `V | E` when `V`
+is assignable to the target field and `E` is not: conversion returns
+`Target | E` without constructing a target on that failure. If the full union
+is assignable to the field, it is a field value, not a failure channel. All
+union members not admitted by the target field are error alternatives, and
+all errors are ordinary bork values. The compiler rejects an override with no
+success member and reports the expected field type. It does not guess based
+on names such as `Error`. A target `Int | ParseError` therefore retains that
+whole union as data, whereas a target `Int` lifts `ParseError` to the conversion
+result. Error alternatives equal to the target record type would collapse the
+success/error distinction and are rejected; use `?` or a wrapper error type.
+
+Receiver evaluation occurs before overrides. Within the overrides, the first
+failure in source order stops conversion; later override expressions, defaults
+and recursive conversions are not evaluated. This is an intentional difference
+from ordinary function argument evaluation, made explicit by the conversion's
+union result. Automatic recursive mapping is infallible in this initial design: it performs
+no callbacks, defaults are closed values, and only explicit overrides lift
+errors. Per-element fallible mapping must be written as explicit user code returning
+`List[B] | E` and supplied as a complete field override; `.map` alone would
+produce `List[B | E]`, not lift element failures into the outer result. Only successfully evaluated
+overrides enter the final candidate. An explicit
+`?`, `return` or panic inside any expression retains its existing enclosing
+function semantics. Diagnostics and `bork describe` show the inferred result
+union; no hidden exceptions or zero-filled target escape.
+
+**Nested records and containers.** Initial implementation includes recursive
+record fields and `List[A]` to `List[B]` / `Option[A]` to `Option[B]` when the
+element conversion is a record conversion under these same rules. Preserve
+list order; map a present Option once and keep `None` unchanged. Directly
+assignable containers are reused as values. Nested collection shapes can
+recurse through these two containers. Automatic element conversion introduces no runtime failure channel; a future
+per-element override API would need its own ordering and early-failure contract. Do not auto-convert Map keys/values,
+sealed variants or numeric types; explicit `.map` or an override supplies
+those policies. Repeated source/target pairs on the active conversion path
+produce a cycle diagnostic, rather than unbounded compiler recursion; a
+completed pair can be reused at a sibling path. Nested overrides apply only at their explicitly named paths; they do not
+propagate by matching leaf names elsewhere.
+
+**Guarantees and private construction.** Conversion is record construction,
+not a cast. The completed candidate is unvalidated until the same checker
+used for record literals has proved every target field constraint, sibling
+relation and whole-value invariant. Source field identities and already-known
+source facts can support those proofs; the target's nominal facts cannot prove
+its own validity. Overridden fields invalidate source relationships involving
+those identities. Copying an existing nested target value preserves that
+value's established guarantees. Converting a different nested record creates
+a new candidate and checks its obligations independently. There is no fallback
+that assumes a target's invariants because its Go struct has been allocated.
+
+The initial conversion does not invent a target validation-error type or
+silently turn failed proof into runtime validation. Facts must be statically
+proven, including for the successful branch of a fallible override. Guard the
+input, use an owning smart constructor, or expose a suitable promise on the
+override function when proof is unavailable. Runtime decoders and the owning
+package's explicit fallible factories remain the checked boundary for arbitrary
+external data. Automatic conversions may become fallible through explicit
+overrides; that does not relax facts on their successful values.
+
+`type Config = private { ... }` can be constructed only in its own package,
+including through `into`. Foreign conversion into Config is rejected even
+through an alias, generic wrapper, nested field or collection conversion. The
+compiler never searches for or calls a constructor implicitly. Foreign code
+can reuse an already-valid Config field without rebuilding it, or explicitly
+call the package's exported factory in an override. When source and target are
+identical and there are no overrides, return the existing value unchanged;
+this identity operation performs no private construction. It still proves any
+additional target-alias constraints: identical representation does not imply
+identical guarantees. With any overrides,
+a private record needs the owning package, just like `copy`. Readable source
+fields may be projected out of a private record into a public DTO. The result
+retains the scope dependencies of all source values and overrides it contains.
+
+**Diagnostics and acceptance.** Use stable `conversion.*` diagnostics for
+invalid target, missing field, incompatible field, duplicate/unknown override,
+ambiguous failure member and recursive conversion cycle. Construction privacy
+uses the existing `construction.private_record` diagnostic. Fact failures use
+the ordinary fact diagnostics, with a conversion field path or completed target
+as the subject. Missing/incompatible-field diagnostics offer an illustrative
+named override at the call site (`requires_input: true`); unknown labels offer
+a unique likely target-field spelling. Fixes must not duplicate evaluation of
+the receiver or invent a factory name.
+
+Acceptance cases cover flat/nested projection, generic records and aliases,
+default precedence (including whole-parent defaults plus nested overrides),
+missing and incompatible fields, overrides in source order,
+single receiver/override evaluation, direct versus lifted unions, early failure,
+`?`/return/panic control flow, List/Option recursion and order, function-valued
+fields, scope escape prevention, and source mutation opacity. Guarantee cases
+cover target field/sibling/whole-value facts, invalid overridden relationships,
+independent candidate validation, private targets through every recursive path,
+allowed reuse and public projection of private source fields. Grammar, formatter,
+editor syntax, `describe`, requirements and README must match the shipped shape.
+Implementation starts only after bork-kum0ep's construction ownership and
+candidate/invariant validation machinery lands; then its checker is reused,
+with regression tests proving conversion cannot bypass it.
+
+The inspiration is [q's compile-time record conversion](https://gigurra.github.io/q/api/convert/),
+which resolves matching fields and overrides without runtime reflection. Bork
+adds ordinary named-expression overrides, union results, facts and package
+construction ownership rather than importing q's Go-specific callback API.
 
 ## Open questions
 
