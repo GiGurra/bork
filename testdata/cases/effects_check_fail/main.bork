@@ -19,7 +19,7 @@ fn both(url: String) uses net {
 }
 
 fn process(xs: List[String]): List[String] {
-  map(xs, x => {
+  xs.map(x => {
     println(x)
     x
   })
@@ -76,6 +76,6 @@ pred snap(x: Int) {
   fetch("http://example.com") != ""
 }
 
-pred allOk(xs: List[Int], f: (Int) => Bool) { all(xs, f) }
+pred allOk(xs: List[Int], f: (Int) => Bool) { xs.all(f) }
 
-pred allOk2(xs: List[Int], f: (Int) => Bool) { all(xs, x => f(x)) }
+pred allOk2(xs: List[Int], f: (Int) => Bool) { xs.all(x => f(x)) }

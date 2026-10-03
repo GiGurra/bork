@@ -8,7 +8,7 @@ fn demo(s: Scope) uses io: Unit | fs.Error {
   file = fs.Open(path, s)?
   fs.ForEachLine(file, line => println(line))?
   println((fs.Stat(path)?).size)
-  println(map(fs.ReadDir(root)?, entry => entry.name))
+  println((fs.ReadDir(root)?).map(entry => entry.name))
   println(fs.Base(path))
   // The directory and all its contents disappear when s closes.
 }

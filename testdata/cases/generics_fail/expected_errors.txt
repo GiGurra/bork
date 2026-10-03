@@ -3,11 +3,11 @@ main.bork:3:11: type parameter T is declared twice
 main.bork:7:12: cannot tell what T is in this call to empty; give the arguments (or the result) a known type
 main.bork:8:11: cannot tell the type of an empty list; give it one, as in xs: List[Int] = []
 main.bork:9:7: cannot tell the type of parameter x; write it: (x: Type) => ...
-main.bork:11:23: argument 2 to map must be (Int) => B, found String
-main.bork:11:44: argument 2 to filter must be (Int) => Bool, found (Int) => Int
-main.bork:12:20: expected a function taking 1 argument(s), but this lambda takes 2
+main.bork:11:22: argument 1 to map must be (Int) => B, found String
+main.bork:11:42: argument 1 to filter must be (Int) => Bool, found (Int) => Int
+main.bork:12:19: expected a function taking 1 argument(s), but this lambda takes 2
 main.bork:14:11: list elements have different types: Int and String
-main.bork:18:23: return cannot be used in a lambda; a lambda's value is its body's value
-main.bork:19:34: ? cannot be used in a lambda (it would return from the enclosing function); use match
+main.bork:18:22: return cannot be used in a lambda; a lambda's value is its body's value
+main.bork:19:33: ? cannot be used in a lambda (it would return from the enclosing function); use match
 main.bork:22:11: cannot call a value of type Int
 main.bork:24:7: cannot tell what T is for empty here; use it where a function type is expected, or call it in a lambda

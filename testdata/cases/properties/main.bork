@@ -2,7 +2,7 @@ pred positive(x: Int) { x > 0 }
 pred atLeast(x: Int, n: Int) { x >= n }
 pred small(x: Int) { x < 1000 && x > -1000 }
 pred rare(x: Int) { x % 7919 == 1234 && x > 5000 }
-pred short(s: String) { byteLength(s) <= 3 }
+pred short(s: String) { s.byteLength() <= 3 }
 
 type Item = { name: String where short, qty: Int where positive }
 type Tree = sealed { Leaf, Node { left: Tree, value: Int, right: Tree } }
@@ -14,7 +14,7 @@ fn size(t: Tree): Int {
   }
 }
 
-fn total(items: List[Item]): Int { fold(items, 0, (acc, i) => acc + i.qty) }
+fn total(items: List[Item]): Int { items.fold(0, (acc, i) => acc + i.qty) }
 
 fn divide(a: Int, b: Int): Int { a / b }
 
@@ -28,16 +28,16 @@ fn main() {}
 test "facts hold for every generated value" (n: Int where positive, m: Int where atLeast(n), xs: List[Int where small]) {
   assert(m >= n)
   assert(m > 0)
-  assert(filter(xs, (x) => x >= 1000).isEmpty())
+  assert(xs.filter((x) => x >= 1000).isEmpty())
 }
 
 test "a field's facts hold" (items: List[Item]) {
-  assert(filter(items, (i) => !short(i.name) || i.qty <= 0).isEmpty())
+  assert(items.filter((i) => !short(i.name) || i.qty <= 0).isEmpty())
 }
 
 // Found: the sum overflows.
 test "totals are at least the count" (items: List[Item]) {
-  assert(total(items) >= length(items))
+  assert(total(items) >= items.length())
 }
 
 test "or facts" (n: Int where positive or atLeast(-5)) {
@@ -45,7 +45,7 @@ test "or facts" (n: Int where positive or atLeast(-5)) {
 }
 
 test "a failure is shrunk" (xs: List[Int where positive]) {
-  assert(length(xs) < 3)
+  assert(xs.length() < 3)
 }
 
 test "a failing tree is shrunk" (t: Tree) {
@@ -79,7 +79,7 @@ test "generated values cannot be snapshotted" (n: Int) {
 pred below(x: Int, n: Int) { x < n }
 
 test "facts may name later parameters" (xs: List[Int where atLeast(n)], o: Option[Int where atLeast(n)], n: Int where small) {
-  assert(filter(xs, (x) => x < n).isEmpty())
+  assert(xs.filter((x) => x < n).isEmpty())
 }
 
 test "parameters are made after those their facts name" (a: Int where atLeast(b), b: Int where positive) {

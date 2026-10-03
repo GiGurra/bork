@@ -1,7 +1,7 @@
-main.bork:9:42: total requires every element of amounts to be positive, but that is not proven for xs (keep only those that are: filter(xs, positive))
-main.bork:11:44: total requires every element of amounts to be positive, but that is not proven for this value (keep only those that are: filter(..., positive))
-main.bork:14:54: total requires every element of amounts to be positive, but that is not proven for this value (keep only those that are: filter(..., positive))
-main.bork:17:68: total requires every element of amounts to be positive, but that is not proven for this value (keep only those that are: filter(..., positive))
-main.bork:19:55: promise promises that every element of its result is positive, but that is not proven for xs (keep only those that are: filter(xs, positive))
+main.bork:9:42: total requires every element of amounts to be positive, but that is not proven for xs (keep only those that are: xs.filter(positive))
+main.bork:11:44: total requires every element of amounts to be positive, but that is not proven for this value (keep only those that are: xs.filter(positive))
+main.bork:14:54: total requires every element of amounts to be positive, but that is not proven for this value (keep only those that are: xs.filter(positive))
+main.bork:17:68: total requires every element of amounts to be positive, but that is not proven for this value (keep only those that are: xs.filter(positive))
+main.bork:19:55: promise promises that every element of its result is positive, but that is not proven for xs (keep only those that are: xs.filter(positive))
 main.bork:22:17: total requires every element of amounts to be positive, but positive(0) is false
 main.bork:22:38: noteText requires the value in note to be nonEmpty, but nonEmpty("") is false

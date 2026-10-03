@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -252,4 +253,59 @@ func (c *checker) isVariantPath(x syntax.Expr) bool {
 	}
 	_, isType := c.isTypeRef(s.X)
 	return isType
+}
+
+// pipeMethodError explains a pipeline targeting a method instead of a free
+// function. The parser keeps the original receiver range before desugaring.
+func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv, want Type) bool {
+	// A selector would call the field, which takes precedence over methods.
+	if r, ok := recv.(*Record); ok && r.Field(id.Name) != nil {
+		return false
+	}
+	fn, _ := c.methodNamed(recv, id.Name)
+	if fn == nil {
+		return false
+	}
+	const code = "call.pipe-method"
+	args := ""
+	if len(e.Args) > 1 {
+		args = "..."
+	}
+	c.diags.AddCode(e.Pipe, code, "%s is a method of %s, not a function: call it as x.%s(%s)", id.Name, recv, id.Name, args)
+	separator := "."
+	var edits []diag.TextEdit
+	if e.PipeWrap {
+		edits = append(edits, diag.TextEdit{Start: e.PipeStart, End: e.PipeStart, Replacement: "("})
+		separator = ")."
+	}
+	edits = append(edits, diag.TextEdit{Start: e.PipeEnd, End: id.Pos, Replacement: separator})
+	end := id.Pos
+	end.Col += len(id.Name)
+	if e.PipeBare {
+		edits = append(edits, diag.TextEdit{Start: end, End: e.PipeTargetEnd, Replacement: "()"})
+	} else {
+		if end != e.FunEnd {
+			edits = append(edits, diag.TextEdit{Start: end, End: e.FunEnd})
+		}
+		if e.End != e.PipeTargetEnd {
+			edits = append(edits, diag.TextEdit{Start: e.End, End: e.PipeTargetEnd})
+		}
+	}
+	c.diags.Suggest(e.Pipe, code, diag.Pos{File: e.Pipe.File, Line: e.Pipe.Line, Col: e.Pipe.Col + 2}, diag.Fix{
+		Message: "call the method on the receiver", Edits: edits,
+	})
+	// The receiver provides the lambda parameter types even though this call
+	// needs rewriting; avoid unrelated inference errors in its arguments.
+	method := *e
+	method.Fun = &syntax.Selector{Pos: id.Pos, X: e.Args[0], Name: id.Name}
+	typeArgs := e.TypeArgs
+	if len(typeArgs) > 0 {
+		var ok bool
+		typeArgs, ok = c.methodTypeArgs(&method, method.Fun.(*syntax.Selector), fn)
+		if !ok {
+			return true
+		}
+	}
+	c.callFunc(e, id.Name, fn, e.Args, recv, typeArgs, want)
+	return true
 }

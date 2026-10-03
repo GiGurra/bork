@@ -7,7 +7,7 @@ instance ShowInt: Show[Int] {
 }
 
 instance ShowList[T: Show]: Show[List[T]] {
-  fn show(xs: List[T]): String { "[" + join(map(xs, show), ", ") + "]" }
+  fn show(xs: List[T]): String { "[" + xs.map(show).join(", ") + "]" }
 }
 
-fn Shout[T: Show](x: T): String { toUpper(show(x)) + "!" }
+fn Shout[T: Show](x: T): String { show(x).toUpper() + "!" }

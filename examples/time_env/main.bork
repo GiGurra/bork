@@ -8,7 +8,7 @@ type Config = { host: String, port: Int where validPort } derive (Decode)
 fn report(result: Config | env.ConfigError, clock: time.Clock) uses io + clock {
   match (result) {
     config: Config => println(s"${time.Format(time.Read(clock), time.RFC3339())}: ${config.host}:${config.port}")
-    error: env.ConfigError => forEach(error.errors, issue => eprintln(s"${issue.path}: ${issue.message}"))
+    error: env.ConfigError => error.errors.forEach(issue => eprintln(s"${issue.path}: ${issue.message}"))
   }
 }
 fn main() {
@@ -23,7 +23,7 @@ test "config collects missing and invalid fields" {
   values = { "APP_PORT": "0" }
   result: Config | env.ConfigError = env.LoadWith("APP", name => values.get(name))
   match (result) {
-    errors: env.ConfigError => assertEqual(length(errors.errors), 2)
+    errors: env.ConfigError => assertEqual(errors.errors.length(), 2)
     _ => assert(false)
   }
 }
@@ -72,7 +72,7 @@ type RequiredOptions = {
 test "absent options still check every field fact" {
   result: RequiredOptions | env.ConfigError = env.LoadWith("APP", name => Option.None)
   match (result) {
-    errors: env.ConfigError => assertEqual(map(errors.errors, issue => issue.path), ["APP_FIRST", "APP_SECOND", "APP_PORT"])
+    errors: env.ConfigError => assertEqual(errors.errors.map(issue => issue.path), ["APP_FIRST", "APP_SECOND", "APP_PORT"])
     _ => assert(false)
   }
 }

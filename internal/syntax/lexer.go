@@ -55,7 +55,7 @@ func (lx *lexer) advance() byte {
 }
 
 func (lx *lexer) emit(k Kind, text string, pos diag.Pos) {
-	lx.toks = append(lx.toks, Token{Kind: k, Text: text, Pos: pos})
+	lx.toks = append(lx.toks, Token{Kind: k, Text: text, Pos: pos, End: lx.pos()})
 }
 
 // endsStatement reports whether a newline after the last emitted token

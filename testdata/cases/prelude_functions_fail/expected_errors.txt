@@ -1,0 +1,4 @@
+main.bork:2:11: undefined function: length
+main.bork:3:11: undefined function: trim
+main.bork:4:11: undefined function: includes
+main.bork:5:24: undefined: byteLength

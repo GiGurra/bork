@@ -71,6 +71,7 @@ func stable(t *testing.T, src, got []byte) {
 		}
 		for i := range ts {
 			ts[i].Pos = diag.Pos{}
+			ts[i].End = diag.Pos{}
 		}
 		for i := range cs {
 			cs[i].Pos = diag.Pos{}

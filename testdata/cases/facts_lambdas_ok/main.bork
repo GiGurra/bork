@@ -4,12 +4,12 @@ fn transfer(amount: Int where positive): Int { amount * 100 }
 
 // Facts known outside a lambda hold inside it: values never change.
 fn repeatTransfer(amount: Int where positive, times: Int): List[Int] {
-  map(range(0, times), i => transfer(amount))
+  range(0, times).map(i => transfer(amount))
 }
 
 // Guards inside a lambda work as anywhere else.
 fn transferAll(amounts: List[Int]): List[Int] {
-  map(amounts, a => if (positive(a)) { transfer(a) } else { 0 })
+  amounts.map(a => if (positive(a)) { transfer(a) } else { 0 })
 }
 
 // Functions without requirements are fine as values.
@@ -18,10 +18,10 @@ fn cents(x: Int): Int { x * 100 }
 // A lambda's parameter takes the facts of the values the function hands
 // it: map only passes it elements of checked.
 fn filtered(xs: List[Int]): List[Int] {
-  checked = filter(xs, x => positive(x))
-  map(checked, y => transfer(y))
+  checked = xs.filter(x => positive(x))
+  checked.map(y => transfer(y))
 }
 
 fn main() {
-  println(repeatTransfer(2, 3), transferAll([1, -1, 5]), map([1, 2], cents), filtered([3, -3]))
+  println(repeatTransfer(2, 3), transferAll([1, -1, 5]), [1, 2].map(cents), filtered([3, -3]))
 }

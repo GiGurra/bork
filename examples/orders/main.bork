@@ -17,7 +17,7 @@ type InvalidDiscount = { reason: String }
 type Priced = { order: Order, subtotal: Int, discountCents: Int, total: Int }
 
 fn parseQuantity(input: String): Int | InvalidQuantity {
-  match (parseInt(trim(input))) {
+  match (parseInt(input.trim())) {
     n: Int => if (n <= 0) {
       InvalidQuantity { input: input, reason: "must be at least 1" }
     } else if (n > 1000) {
@@ -35,7 +35,7 @@ fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
     Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
     Option.Some { value: "FIVEBUCKS" } => Discount.FixedOff { cents: 500 }
     Option.Some { value: "3FOR2" } => Discount.BuyNGetOneFree { n: 2 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${toUpper(code)}" }
+    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${code.toUpper()}" }
   }
 }
 

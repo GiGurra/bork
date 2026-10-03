@@ -612,7 +612,7 @@ func (c *checker) needsContext(x syntax.Expr) bool {
 		return len(x.Keys) == 0
 	case *syntax.Call:
 		// A generic call that is given `[]` or `{:}` may need the
-		// context too: maps.Sorted({:}).
+		// context too: makeMap({:}).
 		id, ok := x.Fun.(*syntax.Ident)
 		if !ok || c.lookup(id.Name) != nil {
 			return false
@@ -675,7 +675,7 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 	return ft.Result
 }
 
-// funcValue checks a function used as a value: `map(xs, double)`. A
+// funcValue checks a function used as a value: `xs.map(double)`. A
 // generic function takes its type arguments from the expected type.
 func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 	if c.fn != nil {
@@ -796,7 +796,7 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 }
 
 // hasEmptyLiteralArg reports whether an argument takes its type from
-// the context and is not a lambda (`[]`, `{:}`, `maps.Sorted({:})`).
+// the context and is not a lambda (`[]`, `{:}`, `makeMap({:})`).
 func (c *checker) hasEmptyLiteralArg(args []syntax.Expr) bool {
 	for _, a := range args {
 		if _, isLambda := a.(*syntax.Lambda); !isLambda && c.needsContext(a) {

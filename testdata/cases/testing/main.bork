@@ -34,8 +34,8 @@ test "add with a wrong expectation" {
 }
 
 test "lists" {
-  assertEqual(length(filter([1, -2, 3], positive)), 2)
-  assertEqual(first([7, 8]), 7)
+  assertEqual([1, -2, 3].filter(positive).length(), 2)
+  assertEqual([7, 8].first(), 7)
 }
 
 test "a trusted fact that holds" {

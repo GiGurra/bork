@@ -27,7 +27,7 @@ fn insert(t: Tree[Int], x: Int): Tree[Int] {
 fn toList[T](t: Tree[T]): List[T] {
   match (t) {
     Tree.Leaf => []
-    Tree.Node { left, value, right } => concat(append(toList(left), value), toList(right))
+    Tree.Node { left, value, right } => toList(left).append(value).concat(toList(right))
   }
 }
 
@@ -62,12 +62,12 @@ fn main() {
   p = Pair { first: 1, second: "one" }
   println(p, swap(p), swap(p).first)
   empty: Tree[Int] = Tree.Leaf
-  t = fold([5, 2, 8, 1], empty, (acc, x) => insert(acc, x))
+  t = [5, 2, 8, 1].fold(empty, (acc, x) => insert(acc, x))
   println(toList(t))
   small: Tree[String] = Tree.Node { left: Tree.Leaf, value: "x", right: Tree.Leaf }
   println(small)
   println(describe(parse("42")), describe(parse("x")))
   println(pay(Pair { first: "rent", second: 12 }), payIfPositive(Pair { first: "tip", second: -1 }))
   same = Pair { first: 1, second: 2 } == Pair { first: 1, second: 2 }
-  println(same, Option.Some { value: 3 }, head(toList(t)))
+  println(same, Option.Some { value: 3 }, toList(t).head())
 }

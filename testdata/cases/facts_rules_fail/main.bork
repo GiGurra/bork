@@ -1,6 +1,6 @@
 pred positive(x: Int) { x > 0 }
 pred atLeast(x: Int, min: Int) { x >= min }
-pred nonEmpty(s: String) { byteLength(s) > 0 }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
 
 fn double(x: Int): Int { x * 2 }
 

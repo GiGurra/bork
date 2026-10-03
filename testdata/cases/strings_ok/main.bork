@@ -10,10 +10,10 @@ fn main() {
   println(parseFloat("2.5"), parseBool("true"), parseBool("yes"))
   println(parseInt("99999999999999999999"))
   s = "  Hello, bork  "
-  t = trim(s)
-  println(t, byteLength(t), byteLength("åäö"))
-  println(contains(t, "bork"), startsWith(t, "Hello"), endsWith(t, "!"))
-  println(indexOf(t, "bork"), indexOf(t, "go"))
-  println(toUpper(t), toLower(t), replaceAll(t, "bork", "world"))
-  println(repeat("ab", 3), repeat("ab", -1) == "")
+  t = s.trim()
+  println(t, t.byteLength(), "åäö".byteLength())
+  println(t.contains("bork"), t.startsWith("Hello"), t.endsWith("!"))
+  println(t.indexOf("bork"), t.indexOf("go"))
+  println(t.toUpper(), t.toLower(), t.replaceAll("bork", "world"))
+  println("ab".repeat(3), "ab".repeat(-1) == "")
 }

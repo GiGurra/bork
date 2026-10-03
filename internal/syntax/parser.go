@@ -726,6 +726,7 @@ var precedence = map[Kind]int{
 func (p *parser) expr() Expr { return p.binary(1) }
 
 func (p *parser) binary(minPrec int) Expr {
+	start := p.tok().Pos
 	x := p.unary()
 	for {
 		op := p.tok()
@@ -733,11 +734,12 @@ func (p *parser) binary(minPrec int) Expr {
 		if !ok || prec < minPrec {
 			return x
 		}
+		end := p.toks[p.i-1].End
 		p.next()
 		p.skipNewlines() // an operator at the end of a line continues the expression
 		y := p.binary(prec + 1)
 		if op.Kind == PipeGt {
-			x = pipe(op, x, y)
+			x = pipe(op, x, y, start, end, p.toks[p.i-1].End)
 			continue
 		}
 		x = &Binary{Pos: op.Pos, Op: op.Kind, X: x, Y: y}
@@ -745,12 +747,22 @@ func (p *parser) binary(minPrec int) Expr {
 }
 
 // pipe desugars `x |> f(a, b)` to `f(x, a, b)`, and `x |> f` to `f(x)`.
-func pipe(op Token, x, y Expr) Expr {
-	if call, ok := y.(*Call); ok {
+func pipe(op Token, x, y Expr, start, end, targetEnd diag.Pos) Expr {
+	call, ok := y.(*Call)
+	if ok {
 		call.Args = append([]Expr{x}, call.Args...)
-		return call
+	} else {
+		call = &Call{Pos: op.Pos, Fun: y, Args: []Expr{x}, PipeBare: true}
 	}
-	return &Call{Pos: op.Pos, Fun: y, Args: []Expr{x}}
+	call.Pipe, call.PipeStart, call.PipeEnd = op.Pos, start, end
+	call.PipeTargetEnd = targetEnd
+	switch recv := x.(type) {
+	case *Binary, *Unary, *Lambda:
+		call.PipeWrap = true
+	case *Call:
+		call.PipeWrap = recv.Pipe.File != ""
+	}
+	return call
 }
 
 func (p *parser) unary() Expr {
@@ -763,6 +775,7 @@ func (p *parser) unary() Expr {
 
 func (p *parser) postfix(x Expr) Expr {
 	for {
+		funEnd := p.toks[p.i-1].End
 		var typeArgs []*TypeExpr
 		_, isID := x.(*Ident)
 		_, isSel := x.(*Selector)
@@ -785,7 +798,7 @@ func (p *parser) postfix(x Expr) Expr {
 		}
 		switch {
 		case p.at(LParen):
-			call := &Call{Pos: p.next().Pos, Fun: x, TypeArgs: typeArgs}
+			call := &Call{Pos: p.next().Pos, Fun: x, FunEnd: funEnd, TypeArgs: typeArgs}
 			saved := p.noRecordLit
 			p.noRecordLit = false // within the parentheses, '{' is a literal again
 			p.skipNewlines()
@@ -798,7 +811,7 @@ func (p *parser) postfix(x Expr) Expr {
 				p.next()
 				p.skipNewlines()
 			}
-			p.expect(RParen, "to end the argument list")
+			call.End = p.expect(RParen, "to end the argument list").End
 			p.noRecordLit = saved
 			x = call
 		case p.at(Dot):

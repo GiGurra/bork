@@ -24,7 +24,7 @@ instance showPoint: Show[Point] {
 }
 
 instance showList[T: Show]: Show[List[T]] {
-  fn show(xs: List[T]): String { "[" + join(map(xs, show), "; ") + "]" }
+  fn show(xs: List[T]): String { "[" + xs.map(show).join("; ") + "]" }
 }
 
 instance showTree: Show[Tree] {
@@ -47,7 +47,7 @@ instance joinString: Monoid[String] {
 }
 
 fn sum[T: Monoid](xs: List[T]): T {
-  fold(xs, empty[T](), combine)
+  xs.fold(empty[T](), combine)
 }
 
 fn describe[T: Show](label: String, x: T): String {
@@ -62,7 +62,7 @@ fn main() {
   println(describe("tree", Tree.Node { left: Tree.Leaf, value: 5, right: Tree.Node { left: Tree.Leaf, value: 7, right: Tree.Leaf } }))
   println(sum([1, 2, 3, 4]))
   println(sum(["a", "b", "c"]))
-  shown = map([1, 2, 3], show)
+  shown = [1, 2, 3].map(show)
   println(shown)
   println(empty[String]() == "", empty[Int]())
 }

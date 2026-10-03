@@ -1,6 +1,6 @@
 main.bork:10:18: f may be released: it belongs to scope s, which ended on line 9
 main.bork:15:10: g may be released: it belongs to scope s, which ended on line 14
-main.bork:23:10: files may be released: it belongs to scope s, which ended on line 22
+main.bork:23:3: files may be released: it belongs to scope s, which ended on line 22
 main.bork:28:10: h may be released: it belongs to scope s, which ended on line 27
 main.bork:35:18: the value of this scope block belongs to scope s, which has ended; use it inside the block
 main.bork:40:3: function escapes cannot return this value: it belongs to scope s, which ends on line 40

@@ -15,6 +15,20 @@ func TestSuggestedEdits(t *testing.T) {
 	cases := []struct {
 		name, source string
 	}{
+		{"pipe method", "fn main() { println([1, 2] |> map(x => x + 1)) }\n"},
+		{"pipe result context", "fn main() { ys: List[List[Int]] = [1] |> map(x => []); println(ys) }\n"},
+		{"pipe flatMap result context", "fn main() { ys: List[String] = [1] |> flatMap(x => []); println(ys) }\n"},
+		{"generic pipe method", "fn main() { println([1, 2] |> map[String](x => toString(x))) }\n"},
+		{"grouped bare target", "fn main() { println([1, 2] |> (length)) }\n"},
+		{"grouped callee", "fn main() { println([1, 2] |> (map)(x => x + 1)) }\n"},
+		{"grouped generic callee", "fn main() { println([1, 2] |> ((map))[String](x => toString(x))) }\n"},
+		{"grouped call target", "fn main() { println([1, 2] |> (map(x => x + 1))) }\n"},
+		{"bare pipe method", "fn main() { println([1, 2] |> length) }\n"},
+		{"binary pipe receiver", "fn (x: Int) doubled(): Int { x * 2 }\nfn main() { println(1 + 2 |> doubled()) }\n"},
+		{"unary pipe receiver", "fn (x: Int) doubled(): Int { x * 2 }\nfn main() { println(-2 |> doubled) }\n"},
+		{"chained pipe receiver", "fn keep(xs: List[Int]): List[Int] { xs }\nfn main() { println([1] |> keep |> length) }\n"},
+		{"multiline pipe receiver", "fn main() { println([\n 1, 2,\n ] |> length) }\n"},
+		{"pipe interpolation", "fn main() { println(s\"å ${[1, 2] |> length}\") }\n"},
 		{"operator", "fn main() { println(true & false) }\n"},
 		{"byte columns", "fn main() {\n\tprintln(\"å\"); xs = []; f = x => x\n}\n"},
 		{"interpolation", "fn main() { println(s\"å ${true & false}\") }\n"},
@@ -73,6 +87,48 @@ func TestSuggestedEdits(t *testing.T) {
 			}
 			if _, _, err := Check(path); err != nil {
 				t.Fatalf("suggested edits did not fix the program:\n%s\n%v", fixed, err)
+			}
+		})
+	}
+}
+
+func TestPipeMethodResultContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "main.bork")
+	source := "fn main() { ys: List[List[Int]] = [1] |> map(x => []); println(ys) }\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Check(path)
+	var de *DiagError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected diagnostics, got %v", err)
+	}
+	ds := de.Diags.Sorted()
+	if len(ds) != 1 || ds[0].Code != "call.pipe-method" {
+		t.Fatalf("expected only the pipe diagnostic, got %+v", ds)
+	}
+}
+
+func TestPipeMethodFieldPrecedence(t *testing.T) {
+	for _, field := range []string{"length: Int", "length: () => Int"} {
+		t.Run(field, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "main.bork")
+			value := "1"
+			if strings.Contains(field, "=>") {
+				value = "() => 1"
+			}
+			source := "type R = { " + field + " }\nfn (r: R) length(x: Int): Int { x }\nfn main() { r = R { length: " + value + " }; println(r |> length(2)) }\n"
+			if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := Check(path)
+			var de *DiagError
+			if !errors.As(err, &de) {
+				t.Fatalf("expected diagnostics, got %v", err)
+			}
+			ds := de.Diags.Sorted()
+			if len(ds) != 1 || ds[0].Msg != "undefined function: length" || len(ds[0].Fixes) != 0 {
+				t.Fatalf("expected undefined function without a method fix, got %+v", ds)
 			}
 		})
 	}

@@ -5,11 +5,11 @@
 ```bork
 fn firstOrZero(xs: List[Int]): Int {
   if (!notEmpty(xs)) { return 0 }
-  first(xs)
+  xs.first()
 }
 ```
 
-For this file saved as `main.bork`, `bork describe main.bork:3:9 --where notEmpty` reports `List[Int]`, the parameter's definition, its methods, and `proven: notEmpty`. Before the guard, the same query is not proven; the answer suggests a guard or parameter requirement using the compiler's existing diagnostic hints.
+For this file saved as `main.bork`, `bork describe main.bork:3:3 --where notEmpty` reports `List[Int]`, the parameter's definition, its methods, and `proven: notEmpty`. Before the guard, the same query is not proven; the answer suggests a guard or parameter requirement using the compiler's existing diagnostic hints.
 
 Write the constraint as in a `where` clause, with the selected value implicit: `--where notEmpty`, `--where 'between(1, 10)'`, or `--where 'positive and (small or zero)'`. Additional arguments can be constants or the enclosing function's parameters, as in `--where 'notEqual(other)'`. The actual compiler prover checks guards, declarations, aliases, returned values, rule inference and constant predicates. Constant queries run predicates just as compilation does. An unproven fact is an answer, so the command still exits successfully. Invalid source, positions, predicates, or incompatible predicate types fail with status 1.
 

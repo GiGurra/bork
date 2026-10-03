@@ -46,13 +46,13 @@ fn JsonReply(status: Status, body: String): Response {
 // Segments are the non-empty parts of a path: "/users/42/" gives
 // ["users", "42"], to match on.
 fn Segments(path: String): List[String] {
-  filter(split(path, "/"), part => part != "")
+  (path.split("/")).filter(part => part != "")
 }
 
 // HeaderOf is the value of the first header with the given name,
 // compared without regard to case.
 fn HeaderOf(headers: Headers, name: String): Option[String] {
-  match (find(headers.entries(), entry => toLower(entry.key) == toLower(name))) {
+  match ((headers.entries()).find(entry => entry.key.toLower() == name.toLower())) {
     Option.Some { value } => value.value.get(0)
     Option.None => Option.None
   }

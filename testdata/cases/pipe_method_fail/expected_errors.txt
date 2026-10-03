@@ -1,0 +1,3 @@
+main.bork:4:18: length is a method of List[Int], not a function: call it as x.length()
+main.bork:5:18: map is a method of List[Int], not a function: call it as x.map(...)
+main.bork:6:17: doubled is a method of Int, not a function: call it as x.doubled()

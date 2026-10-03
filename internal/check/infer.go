@@ -16,7 +16,7 @@ import (
 //
 // An empty `[]` or `{:}`, or `Option.None`, whose expected type is not
 // known yet gets unknowns of its own, which later arguments or a
-// lambda's body decide: in fold(words, {:}, (m, w) => m.put(w, 1)),
+// lambda's body decide: in words.fold({:}, (m, w) => m.put(w, 1)),
 // `{:}` is a Map of two unknowns, which put decides.
 //
 // The calls nested in a call's arguments (also in its lambdas' bodies)
