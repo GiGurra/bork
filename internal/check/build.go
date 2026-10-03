@@ -1,8 +1,11 @@
 package check
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"go/constant"
 	"slices"
+	"strconv"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -14,6 +17,14 @@ type BuildRead struct {
 	Pos        diag.Pos
 	Kind, Path string
 	Data       []byte
+	Captured   bool
+}
+
+func (read *BuildRead) literalText() string {
+	if read.Kind == "ReadString" {
+		return strconv.Quote(string(read.Data))
+	}
+	return fmt.Sprintf("build.ReadBytes(%q; %d bytes; sha256 %x)", read.Path, len(read.Data), sha256.Sum256(read.Data))
 }
 
 func buildIntrinsic(fn *Func) bool {

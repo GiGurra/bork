@@ -330,5 +330,7 @@ Both lazy and async initializers keep return/? within their own result boundary.
 `comptime { ... }` evaluates a closed, pure block during compilation and bakes
 scalar, list, record, sealed, union and insertion-ordered Map data into the
 program. Its own return boundary and preflight checks keep recipe promises
-separate from runtime guards. Module-file inputs and caching remain planned in the
+separate from runtime guards. Direct `bork/build.ReadString` and `ReadBytes` calls
+capture constant module-relative files under the `build` effect. Result caching
+remains planned in the
 [comptime design](docs/design/comptime.md).

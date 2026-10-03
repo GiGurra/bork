@@ -1905,6 +1905,8 @@ func (f *factChecker) closed(x Expr) bool {
 		return true
 	case *Block:
 		return x.Type() == Ok && len(x.Stmts) == 0 && x.Tail == nil
+	case *Call:
+		return x.BuildRead != nil && x.BuildRead.Captured
 	case *MapLit:
 		for i, key := range x.Keys {
 			if !f.closed(key) || !f.closed(x.Values[i]) {
@@ -1939,6 +1941,10 @@ func (f *factChecker) literalText(x Expr) string {
 		return CArg{Const: v}.String()
 	}
 	switch x := x.(type) {
+	case *Call:
+		if read := x.BuildRead; read != nil && read.Captured {
+			return read.literalText()
+		}
 	case *FloatBits:
 		return fmt.Sprintf("%s(bits=0x%x)", x.Type(), x.Bits)
 	case *Block:

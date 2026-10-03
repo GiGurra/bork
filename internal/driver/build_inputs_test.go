@@ -179,3 +179,103 @@ func TestBuildReadEstablishedRootLink(t *testing.T) {
 		t.Fatal("redirected root with same bytes failed to invalidate")
 	}
 }
+
+func TestComptimeBuildNativeEntrypoint(t *testing.T) {
+	for _, source := range []string{
+		"fn main() uses build unsafe go {}",
+		`import "bork/build"
+fn text() uses build:String{build.ReadString("x")}
+fn main() uses io + build unsafe go {fmt.Println(text())}`,
+	} {
+		dir := t.TempDir()
+		for name, data := range map[string]string{ModFile: "module example.com/buildinputs\nunsafe \"example.com/buildinputs\"\n", "main.bork": source, "x": "frozen"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, _, err := Check(dir)
+		if err == nil || !strings.Contains(err.Error(), "build effects may run only inside comptime") {
+			t.Fatalf("native build entrypoint accepted: %v", err)
+		}
+	}
+}
+
+func TestComptimeBuildInputPreflight(t *testing.T) {
+	for _, tc := range []struct{ name, source, data, want string }{
+		{"string", `pred good(s:String){s=="hello"}
+fn must(s:String where good):Int{42}
+fn main(){println(comptime{must(build.ReadString("input"))})}`, "hello", ""},
+		{"bytes", `pred good(xs:List[Byte]){xs==[toByte(1),toByte(2)]}
+fn must(xs:List[Byte] where good):Int{42}
+fn main(){println(comptime{must(build.ReadBytes("input"))})}`, string([]byte{1, 2}), ""},
+		{"empty rejected", `pred nonEmpty(s:String){s!=""}
+fn must(s:String where nonEmpty):Int{panic("must not execute")}
+fn main(){println(comptime{must(build.ReadString("input"))})}`, "", "nonEmpty(\"\") is false"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, data := range map[string]string{"main.bork": "import \"bork/build\"\n" + tc.source, "input": tc.data} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, _, err := Check(dir)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "must not execute") {
+				t.Fatalf("want preflight %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestBuildReadFrozenInventory(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, []byte("frozen"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	key := buildReadKey{dir, "ReadString", "file"}
+	inputs := &buildSnapshot{reads: map[buildReadKey]buildRead{key: readBuildInput(key)}}
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	data, err := inputs.frozen(key)
+	if err != nil || string(data) != "frozen" {
+		t.Fatalf("frozen replay reread disk: %q %v", data, err)
+	}
+	if _, err := inputs.frozen(buildReadKey{dir, "ReadString", "absent"}); err == nil || !strings.Contains(err.Error(), "absent from the captured inventory") {
+		t.Fatalf("unrecorded key accepted: %v", err)
+	}
+}
+
+func TestBuildReadComponentReplacement(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "file"), []byte("same"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	key := buildReadKey{dir, "ReadString", "sub/file"}
+	inputs := &buildSnapshot{reads: map[buildReadKey]buildRead{key: readBuildInput(key)}}
+	old := filepath.Join(dir, "old")
+	if err := os.Rename(sub, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Preserve the file identity and bytes; only its parent component changes.
+	if err := os.Link(filepath.Join(old, "file"), filepath.Join(sub, "file")); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+	if inputs.current() {
+		t.Fatal("component replacement with unchanged file identity was ignored")
+	}
+}

@@ -175,7 +175,50 @@ func (s *buildSnapshot) dependencies() []sourceDependency {
 	return out
 }
 
+// frozen reads only the owned capture. A semantic replay must not discover new
+// files or reopen disk; current() remains a separate publication/reuse check.
+func (s *buildSnapshot) frozen(key buildReadKey) ([]byte, error) {
+	value, ok := s.reads[key]
+	if !ok {
+		return nil, fmt.Errorf("build input is absent from the captured inventory")
+	}
+	if value.value.err != nil {
+		return nil, value.value.err
+	}
+	return value.value.files[0].Data, nil
+}
+
+func replayBuildInputs(inputs *buildSnapshot, info *check.Info, diags *diag.List, sources *sourceSnapshot) *buildSnapshot {
+	published := map[string][]byte{}
+	for _, request := range info.BuildReads {
+		mod, err := findModuleFrom(filepath.Dir(request.Pos.File), sources)
+		var data []byte
+		if err == nil {
+			data, err = inputs.frozen(buildReadKey{mod.root, request.Kind, request.Path})
+		}
+		if err != nil {
+			diags.AddCode(request.Pos, "build.input", "cannot read build input %q: %v", request.Path, err)
+			continue
+		}
+		identity := filepath.Join(mod.root, request.Path)
+		owned, ok := published[identity]
+		if !ok {
+			owned = slices.Clone(data)
+			published[identity] = owned
+		}
+		request.Data = owned
+		request.Captured = true
+	}
+	return inputs
+}
+
 func captureBuildInputs(info *check.Info, diags *diag.List, sources *sourceSnapshot) *buildSnapshot {
+	sources.mu.Lock()
+	existing := sources.rooted
+	sources.mu.Unlock()
+	if existing != nil {
+		return replayBuildInputs(existing, info, diags, sources)
+	}
 	for range 2 {
 		inputs := &buildSnapshot{reads: map[buildReadKey]buildRead{}}
 		keys := make([]buildReadKey, len(info.BuildReads))
@@ -223,6 +266,7 @@ func captureBuildInputs(info *check.Info, diags *diag.List, sources *sourceSnaps
 				published[identity] = owned
 			}
 			request.Data = owned
+			request.Captured = true
 		}
 		return inputs
 	}

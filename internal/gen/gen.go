@@ -1142,6 +1142,9 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		return stmts, g.builtinCall(e, xs)
 	case *check.Call:
 		if e.BuildRead != nil {
+			if !e.BuildRead.Captured {
+				panic("compiler bug: build input was not captured")
+			}
 			value := &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(string(e.BuildRead.Data))}
 			if e.BuildRead.Kind == "ReadBytes" {
 				return nil, &ast.CallExpr{Fun: g.goType(e.Type()), Args: []ast.Expr{value}}

@@ -93,8 +93,8 @@ The initial API is a compiler intrinsic package, `bork/build`:
 ```bork
 import "bork/build"
 
-// Provisional API: ReadString(path: String) uses build: String
-//                  ReadBytes(path: String) uses build: List[Byte]
+// ReadString(path: String) uses build: String
+// ReadBytes(path: String) uses build: List[Byte]
 fn configText() uses build: String {
   build.ReadString("config/defaults.json")
 }
@@ -121,7 +121,10 @@ Paths are relative to the declaring source's module root, identified by its
 `bork.mod`; a standalone package uses its source directory as that root.
 Imports resolve against their own module, never the caller's module or process
 working directory. Reject absolute paths, parent segments, symlinks in any
-component, special files, backslashes, colons and NULs. ReadString requires UTF-8;
+relative operand component, special files, backslashes, colons and NULs. Established module-root
+ancestors may be symlinks, as with macOS /tmp; capture their identities and the
+resolved root identity, and confine operands with os.Root. ReadString requires
+UTF-8;
 ReadBytes accepts arbitrary bytes. No directory enumeration, env, clock,
 network, write or dynamic file-open capability is included in the first API.
 Existing `bork/embed` remains package-relative and retains its existing rules.
@@ -131,7 +134,12 @@ embed. It records module/root identity, logical path, component kinds, bytes
 and failed lookups. Every evaluator receives the frozen bytes as generated
 constants; it cannot reread workspace files. Capture and reuse validate the
 inventory, retry a changing snapshot once, then diagnose concurrent change.
-The Session inventory includes these inputs so a file edit/addition/removal or
+The private rooted inventory composes with source inputs. Its dependency digest
+is a content summary; component and resolved-root identities are additionally
+validated with SameFile, so that digest alone is not a complete replay/value key.
+Semantic replay reads only the captured bytes/errors and diagnoses absent keys;
+current-input validation is separate. The Session inventory includes these inputs
+so a file edit/addition/removal or
 module-root change invalidates the whole checked result as well as comptime.
 
 ## Result representation and facts
