@@ -27,6 +27,7 @@ func TestComptimeStaticChecks(t *testing.T) {
 		{"runtime parameter", "fn f(n:Int):Int {comptime {n+3}}", "cannot capture runtime value n"},
 		{"runtime call", "fn id(n:Int):Int{n}\nfn f():Int {n=id(2);comptime {n+3}}", "cannot capture runtime value n"},
 		{"lazy capture", "fn f():Int {lazy n=2;comptime {n+3}}", "cannot capture runtime value n"},
+		{"async capture", "fn f():Int {scope s {async(s) n=2;comptime {n+3}}}", "cannot capture runtime value n"},
 		{"loop capture", "fn f(){for(n in [1]){x=comptime{n};println(x)}}", "cannot capture runtime value n"},
 		{"ambient capture", "ambient n:Int\nfn f() needs n:Int {comptime {n}}", "cannot capture ambient n"},
 		{"ambient callee", "ambient n:Int\nfn read() needs n:Int{n}\nfn f() needs n:Int {comptime {read()}}", "with ambient needs"},
