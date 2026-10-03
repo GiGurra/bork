@@ -309,3 +309,9 @@ in the result. List results and nested list parameters remain closed.
 
 Transparent async local bindings are proposed, not yet accepted:
 `async(scopeExpression) name [ : T ] = expr`. See [the async design](design/async.md).
+
+## Proposed compile-time computation
+
+`comptime { ... }` and the `build` effect are proposed in the
+[comptime design](design/comptime.md). They are not part of the accepted grammar
+yet; this proposal does not reserve `comptime` as a keyword.
