@@ -1,0 +1,5 @@
+import "bork/math"
+fn makeMoney(coefficient: Int, scale: Int): math.Decimal | OutOfRange { math.DecimalFrom(math.Integer(coefficient), scale) }
+fn addMoney(a: math.Decimal, b: math.Decimal): math.Decimal { a.Add(b) }
+fn divideMoney(a: math.Decimal, b: math.Decimal): math.Decimal | math.MathError | OutOfRange { a.Div(b, 2, math.Rounding.HalfEven) }
+fn main() { println(makeMoney(100, 2)) }

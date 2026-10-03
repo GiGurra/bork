@@ -325,3 +325,9 @@ leak into bork values. See [the UUID example](../examples/uuid/main.bork).
   trailing zero blocks, as Go does. File writes and callbacks
   may have already happened when a later error is returned. See
   [examples/compress_archive](../examples/compress_archive/main.bork).
+
+`bork/math` supplies pure float functions, immutable `BigInt` and `BigRat`, and
+fixed-point `Decimal` with explicit output scale and rounding. Their private
+variants prevent forged representations. Decimal equality includes scale:
+`1.0 != 1.00`; use `SameValue` or `Compare` for numeric comparison. No new syntax.
+See [exact arithmetic and money](math.md) and [examples/math](../examples/math/main.bork).

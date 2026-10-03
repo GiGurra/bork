@@ -1,0 +1,3 @@
+main.bork:3:23: BigInt.integer is not exported by package bork/math (only variants starting with an upper-case letter are)
+main.bork:4:23: BigRat.rational is not exported by package bork/math (only variants starting with an upper-case letter are)
+main.bork:5:24: Decimal.decimal is not exported by package bork/math (only variants starting with an upper-case letter are)

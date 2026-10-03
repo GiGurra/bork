@@ -1,0 +1,44 @@
+// Exact values encode as JSON strings so consumers cannot lose precision.
+instance EncodeBigInt: Encode[BigInt] {
+  fn encode(value: BigInt): Json { Json.String { value: value.ToString() } }
+}
+instance DecodeBigInt: Decode[BigInt] {
+  fn decode(json: Json): BigInt | DecodeError {
+    match (json) {
+      Json.String { value } => match (ParseInteger(value)) {
+        parsed: BigInt => parsed
+        error: ParseError => DecodeError { path: "", message: error.message }
+      }
+      _ => DecodeError { path: "", message: "expected a BigInt string" }
+    }
+  }
+}
+instance EncodeBigRat: Encode[BigRat] {
+  fn encode(value: BigRat): Json { Json.String { value: value.ToString() } }
+}
+instance DecodeBigRat: Decode[BigRat] {
+  fn decode(json: Json): BigRat | DecodeError {
+    match (json) {
+      Json.String { value } => match (ParseRational(value)) {
+        parsed: BigRat => parsed
+        error: ParseError => DecodeError { path: "", message: error.message }
+      }
+      _ => DecodeError { path: "", message: "expected a BigRat string" }
+    }
+  }
+}
+instance EncodeDecimal: Encode[Decimal] {
+  fn encode(value: Decimal): Json { Json.String { value: value.ToString() } }
+}
+instance DecodeDecimal: Decode[Decimal] {
+  fn decode(json: Json): Decimal | DecodeError {
+    match (json) {
+      Json.String { value } => match (ParseDecimal(value)) {
+        parsed: Decimal => parsed
+        error: ParseError => DecodeError { path: "", message: error.message }
+      }
+      _ => DecodeError { path: "", message: "expected a Decimal string" }
+    }
+  }
+}
+instances Codecs { EncodeBigInt, DecodeBigInt, EncodeBigRat, DecodeBigRat, EncodeDecimal, DecodeDecimal }

@@ -1,0 +1,70 @@
+type BigRat = sealed { rational { fraction: String } }
+fn rationalText(value: BigRat): String unsafe go { return value.(BigRat_rational).fraction }
+// ParseRational accepts Go big.Rat integer, fraction and floating-point syntax.
+fn ParseRational(text: String): BigRat | ParseError unsafe go {
+  import "math/big"
+  value, ok := new(big.Rat).SetString(text)
+  if !ok { return ParseError{input: text, message: "expected an exact rational"} }
+  return BigRat_rational{fraction: value.RatString()}
+}
+fn Rational(numerator: BigInt, denominator: BigInt): BigRat | MathError unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(numerator), 10)
+  b, _ := new(big.Int).SetString(integerText(denominator), 10)
+  if b.Sign() == 0 { return MathError{message: "division by zero"} }
+  return BigRat_rational{fraction: new(big.Rat).SetFrac(a, b).RatString()}
+}
+fn (value: BigRat) ToString(): String { rationalText(value) }
+fn (value: BigRat) Numerator(): BigInt unsafe go {
+  import "math/big"
+  n, _ := new(big.Rat).SetString(rationalText(value))
+  return BigInt_integer{digits: n.Num().String()}
+}
+fn (value: BigRat) Denominator(): BigInt unsafe go {
+  import "math/big"
+  n, _ := new(big.Rat).SetString(rationalText(value))
+  return BigInt_integer{digits: n.Denom().String()}
+}
+fn (value: BigRat) Compare(other: BigRat): Int unsafe go {
+  import "math/big"
+  a, _ := new(big.Rat).SetString(rationalText(value))
+  b, _ := new(big.Rat).SetString(rationalText(other))
+  return int64(a.Cmp(b))
+}
+fn (value: BigRat) Add(other: BigRat): BigRat unsafe go {
+  import "math/big"
+  a, _ := new(big.Rat).SetString(rationalText(value))
+  b, _ := new(big.Rat).SetString(rationalText(other))
+  return BigRat_rational{fraction: new(big.Rat).Add(a, b).RatString()}
+}
+fn (value: BigRat) Sub(other: BigRat): BigRat unsafe go {
+  import "math/big"
+  a, _ := new(big.Rat).SetString(rationalText(value))
+  b, _ := new(big.Rat).SetString(rationalText(other))
+  return BigRat_rational{fraction: new(big.Rat).Sub(a, b).RatString()}
+}
+fn (value: BigRat) Mul(other: BigRat): BigRat unsafe go {
+  import "math/big"
+  a, _ := new(big.Rat).SetString(rationalText(value))
+  b, _ := new(big.Rat).SetString(rationalText(other))
+  return BigRat_rational{fraction: new(big.Rat).Mul(a, b).RatString()}
+}
+fn (value: BigRat) Div(other: BigRat): BigRat | MathError unsafe go {
+  import "math/big"
+  a, _ := new(big.Rat).SetString(rationalText(value))
+  b, _ := new(big.Rat).SetString(rationalText(other))
+  if b.Sign() == 0 { return MathError{message: "division by zero"} }
+  return BigRat_rational{fraction: new(big.Rat).Quo(a, b).RatString()}
+}
+fn (value: BigRat) Abs(): BigRat unsafe go {
+  import "math/big"
+  n, _ := new(big.Rat).SetString(rationalText(value))
+  return BigRat_rational{fraction: new(big.Rat).Abs(n).RatString()}
+}
+fn (value: BigRat) Neg(): BigRat unsafe go {
+  import "math/big"
+  n, _ := new(big.Rat).SetString(rationalText(value))
+  return BigRat_rational{fraction: new(big.Rat).Neg(n).RatString()}
+}
+instance ShowBigRat: Show[BigRat] { fn show(value: BigRat): String { rationalText(value) } }
+instance OrdBigRat: Ord[BigRat] { fn compare(a: BigRat, b: BigRat): Int { a.Compare(b) } }
