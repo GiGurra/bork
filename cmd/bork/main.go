@@ -296,8 +296,19 @@ func main() {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
 				RunFunc: func(p *diagnosticParams, _ *cobra.Command, _ []string) {
-					if _, _, err := driver.Check(p.Path); err != nil {
+					_, info, err := driver.Check(p.Path)
+					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stdout)
+					}
+					warnings := check.DebugWarnings(info)
+					if p.JSON {
+						if err := warnings.WriteJSON(os.Stdout); err != nil {
+							fail(err)
+						}
+					} else {
+						for _, warning := range warnings.Sorted() {
+							fmt.Println(warning)
+						}
 					}
 				},
 			},

@@ -1,0 +1,3 @@
+fn read() uses io: Int { println("read"); 1 }
+fn pure(): Int { dbg(read()) }
+fn main() { println(pure()) }

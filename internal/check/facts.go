@@ -981,6 +981,7 @@ type branch struct {
 // not possible; otherwise the proof may still depend on predicates of
 // constants, returned as queries to evaluate at compile time.
 func (f *factChecker) prove(x Expr, ob obligation, e env, depth int) (bool, []Query) {
+	x = debugValue(x)
 	if depth > maxDepth || (ob.pred == nil && ob.or == nil) {
 		return false, nil
 	}
@@ -1490,6 +1491,7 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 // closed reports whether x is made of constants only: a constant, or a
 // list, record, or variant literal of them.
 func (f *factChecker) closed(x Expr) bool {
+	x = debugValue(x)
 	if constOf(x) != nil {
 		return true
 	}
@@ -1516,6 +1518,7 @@ func (f *factChecker) closed(x Expr) bool {
 
 // literalText shows a closed expression as written.
 func (f *factChecker) literalText(x Expr) string {
+	x = debugValue(x)
 	if v := constOf(x); v != nil {
 		return CArg{Const: v}.String()
 	}
@@ -1606,6 +1609,7 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 // how it was computed: facts from guards and trust, and the facts that
 // declarations and promises give it.
 func (f *factChecker) declared(x Expr, e env, depth int) []known {
+	x = debugValue(x)
 	var out []known
 	if k := f.key(x); k != "" {
 		for _, ft := range e.facts {
@@ -2081,6 +2085,7 @@ func alternatives(fs []fact) [][]fact {
 // conditionFacts lists the facts a condition establishes when it is
 // true (or, with positive false, when it is false).
 func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
+	cond = debugValue(cond)
 	switch c := cond.(type) {
 	case *Unary:
 		if c.Op == syntax.Not {
@@ -2134,6 +2139,7 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 // Bindings to another value share its key. Values that cannot be
 // identified (calls, arithmetic) have no key.
 func (f *factChecker) key(x Expr) string {
+	x = debugValue(x)
 	if v := constOf(x); v != nil {
 		return constKey(v)
 	}
@@ -2167,6 +2173,7 @@ func (f *factChecker) key(x Expr) string {
 
 // aliasKey is the key of x if binding x just gives a value another name.
 func (f *factChecker) aliasKey(x Expr) string {
+	x = debugValue(x)
 	switch x.(type) {
 	case *VarRef, *Select:
 		return f.key(x)
@@ -2178,6 +2185,7 @@ func constKey(v constant.Value) string { return "c:" + v.ExactString() }
 
 // constOf is the value of x if it is a constant, or nil.
 func constOf(x Expr) constant.Value {
+	x = debugValue(x)
 	if c, ok := x.(*Const); ok {
 		return c.Value
 	}

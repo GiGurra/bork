@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -63,11 +64,18 @@ func runOutputCase(t *testing.T, dir string) {
 	if err := Build(dir, exe); err != nil {
 		t.Fatalf("build failed:\n%v", err)
 	}
-	out, err := exec.Command(exe).Output()
+	cmd := exec.Command(exe)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("program failed: %v\n%s", err, out)
 	}
 	compare(t, filepath.Join(dir, "expected_output.txt"), string(out))
+	if _, err := os.Stat(filepath.Join(dir, "expected_stderr.txt")); err == nil {
+		got := strings.ReplaceAll(stderr.String(), dir+string(filepath.Separator), "")
+		compare(t, filepath.Join(dir, "expected_stderr.txt"), got)
+	}
 }
 
 // runTestCase runs a package's tests (bork test) and compares the

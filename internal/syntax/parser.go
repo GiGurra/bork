@@ -16,7 +16,7 @@ import (
 func Parse(path string, src []byte, diags *diag.List) *File {
 	toks, comments := Lex(path, src, diags)
 	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}}
-	f := &File{Path: path, Comments: comments}
+	f := &File{Path: path, Source: string(src), Comments: comments}
 	// Imports come first.
 	for {
 		p.skipSemis()
@@ -828,10 +828,11 @@ func (p *parser) unary() Expr {
 		op := p.next()
 		return &Unary{Pos: op.Pos, Op: op.Kind, X: p.unary()}
 	}
-	return p.postfix(p.primary())
+	start := p.tok().Pos
+	return p.postfix(p.primary(), start)
 }
 
-func (p *parser) postfix(x Expr) Expr {
+func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 	for {
 		funEnd := p.toks[p.i-1].End
 		var typeArgs []*TypeExpr
@@ -856,7 +857,7 @@ func (p *parser) postfix(x Expr) Expr {
 		}
 		switch {
 		case p.at(LParen):
-			call := &Call{Pos: p.next().Pos, Fun: x, FunEnd: funEnd, TypeArgs: typeArgs}
+			call := &Call{Start: start, Pos: p.next().Pos, Fun: x, FunEnd: funEnd, TypeArgs: typeArgs}
 			saved := p.noRecordLit
 			p.noRecordLit = false // within the parentheses, '{' is a literal again
 			p.skipNewlines()

@@ -66,6 +66,36 @@ func TestDiagnosticJSON(t *testing.T) {
 			t.Fatalf("unexpected tool error: %s / %s (%v)", &stdout, &stderr, err)
 		}
 	})
+	t.Run("nonfatal debug warnings", func(t *testing.T) {
+		if err := os.WriteFile(path, []byte("fn main() { _ = dbg(1); todo() }\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out, err := exec.Command(exe, "check", "--json", path).CombinedOutput()
+		if err != nil {
+			t.Fatalf("warnings should succeed: %v\n%s", err, out)
+		}
+		lines := bytes.Split(bytes.TrimSpace(out), []byte("\n"))
+		if len(lines) != 2 {
+			t.Fatalf("expected two warnings: %s", out)
+		}
+		for i, line := range lines {
+			var d struct {
+				Severity string            `json:"severity"`
+				Code     string            `json:"code"`
+				Fixes    []json.RawMessage `json:"fixes"`
+			}
+			if err := json.Unmarshal(line, &d); err != nil {
+				t.Fatal(err)
+			}
+			if d.Severity != "warning" || d.Code != []string{"debug.dbg", "debug.todo"}[i] || len(d.Fixes) != 1-i {
+				t.Fatalf("unexpected warning: %s", line)
+			}
+		}
+		out, err = exec.Command(exe, "check", path).CombinedOutput()
+		if err != nil || !bytes.Contains(out, []byte("warning: leftover dbg probe")) || !bytes.Contains(out, []byte("warning: unfinished todo marker")) {
+			t.Fatalf("unexpected text warnings: %s (%v)", out, err)
+		}
+	})
 	t.Run("successful check", func(t *testing.T) {
 		if err := os.WriteFile(path, []byte("fn main() {}\n"), 0o644); err != nil {
 			t.Fatal(err)

@@ -643,7 +643,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		if t == check.Never {
 			stmts = append(stmts, &ast.ExprStmt{X: call})
-			if b, ok := e.(*check.CallBuiltin); !ok || b.Builtin != check.BuiltinPanic {
+			if b, ok := e.(*check.CallBuiltin); !ok || b.Builtin != check.BuiltinPanic && b.Builtin != check.BuiltinTodo {
 				// Go does not know that the function never returns.
 				stmts = append(stmts, unreachable()...)
 			}
@@ -972,6 +972,25 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return g.stringOf(args[0], e.Args[0].Type())
 	case check.BuiltinConvert:
 		return g.conversion(e, args[0])
+	case check.BuiltinDbg:
+		g.imports["os"] = true
+		value := ast.NewIdent("value")
+		t := g.goType(e.Type())
+		label := fmt.Sprintf("%s:%d %s", e.Pos().File, e.Pos().Line, e.DebugText)
+		print := fmtCall("Fprintf", &ast.SelectorExpr{X: ast.NewIdent("os"), Sel: ast.NewIdent("Stderr")}, strLit("%s = %s\n"), strLit(label), g.stringOf(value, e.Type()))
+		return &ast.CallExpr{Fun: &ast.FuncLit{
+			Type: &ast.FuncType{
+				Params:  &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{value}, Type: t}}},
+				Results: &ast.FieldList{List: []*ast.Field{{Type: t}}},
+			},
+			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: print}, &ast.ReturnStmt{Results: []ast.Expr{value}}}},
+		}, Args: []ast.Expr{args[0]}}
+	case check.BuiltinTodo:
+		var message ast.Expr = strLit(fmt.Sprintf("%s:%d: todo", e.Pos().File, e.Pos().Line))
+		if len(args) == 1 {
+			message = &ast.BinaryExpr{X: strLit(fmt.Sprintf("%s:%d: todo: ", e.Pos().File, e.Pos().Line)), Op: token.ADD, Y: args[0]}
+		}
+		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{message}}
 	case check.BuiltinPanic:
 		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: args}
 	case check.BuiltinAssert:

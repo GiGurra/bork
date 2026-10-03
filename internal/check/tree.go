@@ -184,8 +184,10 @@ func (c *Call) EvaluationArgs() []Expr {
 type CallBuiltin struct {
 	expr
 	Builtin Builtin
-	Name    string
-	Args    []Expr
+	// DebugText is the original argument text for dbg.
+	DebugText string
+	Name      string
+	Args      []Expr
 	// Conv describes a numeric conversion of a value that is not a
 	// constant; nil for other builtins.
 	Conv *Conversion
