@@ -9,7 +9,7 @@ Docs/defaults drive help, `cli.Flag` maps short/env/positional metadata, and Lis
 fields take repeated flags. Unknown metadata names include a closest-field hint;
 duplicate short/env/positional mappings are errors before parsing. Environment
 loading stays independent. JSON configuration files use explicit precedence;
-subcommand APIs are deferred. See
+typed subcommands support heterogeneous option records. See
 [the schema adapter](cli.md#command-line-schema-adapter) and
 [the example](../../examples/cli/main.bork).
 
@@ -48,7 +48,7 @@ than printing it. `Run[T: Decode](name, description, handler, flags = [], config
 process arguments, prints help, and invokes `(T, Scope) => Unit` in a fresh scope
 on success. It returns `Unit | cli.Error`; applications choose how to render
 errors and exit. Both use `io` for environment access, and Run carries its
-handler's effects. Subcommands remain follow-up work.
+handler's effects. Typed subcommands close callback effects as described below.
 
 ## Configuration files
 

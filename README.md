@@ -115,6 +115,8 @@ bork deps download          # download pinned dependencies and fill checksums
 
 For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
 
+`bork/cli` supports typed subcommands with command-specific decoded options, generated help, and scoped handlers. See [the subcommand API](docs/std/cli.md#subcommands).
+
 `bork fmt [paths...]` defaults to the current directory and prints changed paths.
 It uses two spaces for indentation, normalizes spacing and blank-line runs, and keeps
 existing line breaks and comment text. Strings, interpolations, and raw `unsafe
