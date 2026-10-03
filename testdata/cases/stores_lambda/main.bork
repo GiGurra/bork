@@ -1,0 +1,64 @@
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  import "fmt"
+  fmt.Println("open " + name)
+  return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}
+}
+
+fn nameOf(c: Conn): String unsafe go {
+  return c.handle.(string)
+}
+
+// A generic function cannot make a value of its type parameters' types:
+// the elements forEach passes its lambda are those of xs, so a lambda
+// may send them to a channel xs outlives.
+fn sendAll(ch: Channel[Conn], xs: List[Conn] in ch) uses state {
+  xs.forEach(c => { _ = send(ch, c) })
+}
+
+// So may a lambda of a generic function of the program's own.
+fn each[T](xs: List[T], f: (T) uses state => Unit) uses state {
+  match (xs) {
+    [x, ...rest] => {
+      f(x)
+      each(rest, f)
+    }
+    _ => {}
+  }
+}
+
+// Entries of a map, and the values of an option, are its arguments' too.
+fn ifSome[T](o: Option[T], f: (T) uses state => Unit) uses state {
+  match (o) {
+    Option.Some { value: v } => f(v)
+    _ => {}
+  }
+}
+
+// What comes out of a channel lives as long as the channel.
+fn drain[T](from: Channel[T], f: (T) uses state => Unit) uses state {
+  received(from).forEach(f)
+}
+
+fn main() uses io + state {
+  scope app {
+    ch = channel[Conn](app, 8)
+    conns = [connect("a", app), connect("b", app)]
+    conns.forEach(c => { _ = send(ch, c) })
+    sendAll(ch, [connect("c", app)])
+    each([connect("d", app)], c => { _ = send(ch, c) })
+    byName = { "e": connect("e", app) }
+    byName.forEach((k, c) => { _ = send(ch, c) })
+    ifSome(Option.Some { value: connect("f", app) }, c => { _ = send(ch, c) })
+    store = atom([connect("g", app)])
+    conns.forEach(c => { _ = update(store, cs => cs.append(c)) })
+    first = channel[Conn](app, 1)
+    _ = send(first, connect("h", app))
+    closeChannel(first)
+    drain(first, c => { _ = send(ch, c) })
+    closeChannel(ch)
+    println(received(ch).map(nameOf))
+    println(current(store).map(nameOf))
+  }
+}

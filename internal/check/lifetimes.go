@@ -44,6 +44,8 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 		gone:     map[*Var]goneAt{},
 		bound:    map[*Var]int{},
 		inTarget: map[*Var]lifetime{},
+
+		lambdaParams: map[*Var]lifetime{},
 	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -122,6 +124,9 @@ type lifeChecker struct {
 	// inTarget holds the scope each parameter declared `in` another
 	// belongs to: the parameter (as a scope of the caller) outlives it.
 	inTarget map[*Var]lifetime
+	// lambdaParams holds the lifetimes inferred for the parameters of a
+	// lambda passed to a generic function (see inferParams).
+	lambdaParams map[*Var]lifetime
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -686,6 +691,12 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	for _, p := range x.Params {
 		l.frame[p] = x
 		l.env[p] = lifetime{p}
+		if life, ok := l.lambdaParams[p]; ok {
+			l.env[p] = life
+			if len(life) > 0 && l.carriesLife(p.Type) {
+				l.info.VarLifetimes[p] = l.lifeText(life)
+			}
+		}
 	}
 	var used lifetime
 	l.captures = append(l.captures, &used)
@@ -753,8 +764,10 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	// moved holds the owner variables the call takes, by argument.
 	moved := map[int]*Var{}
 	goneBefore := copyGone(l.gone)
+	done := map[int]bool{}
 	for _, i := range indices {
 		a := xargs[i]
+		done[i] = true
 		if fn != nil && a.Type() == OwnedScope && i < len(fn.Params) && fn.Params[i] == OwnedScope {
 			if v, ok := a.(*VarRef); ok {
 				var usable bool
@@ -772,6 +785,9 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 				args[i] = l.ownerValue(a, "pass")
 			}
 		} else {
+			if x, ok := a.(*Lambda); ok {
+				l.inferParams(fn, x, i, args, done)
+			}
 			args[i] = l.use(a, l.expr(a))
 		}
 		life = life.union(args[i])
@@ -880,6 +896,139 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 		}
 	}
 	return life
+}
+
+// inferParams infers the lifetimes of the parameters of lambda x, passed
+// as argument i of a call of fn, from fn's signature; done tells the
+// arguments evaluated, of lifetimes args. A generic function cannot make
+// a value of its type parameters' types: what it passes to x as one, or
+// as a value built from them alone (T, List[T], Option[T], but not Conn
+// or Channel[T], which it could make in a scope of its own), comes from
+// its arguments whose types mention them. So the parameter lives as long
+// as those arguments: `xs.forEach(x => send(ch, x))` sends a value of
+// xs. That needs those arguments to be evaluated first, the lambda not to
+// be one of them (fold's f gives back what it is given), and the type
+// parameters' bounds to have no method that makes a value of the type.
+// Otherwise the parameter keeps its own lifetime, which outlives nothing.
+func (l *lifeChecker) inferParams(fn *Func, x *Lambda, i int, args []lifetime, done map[int]bool) {
+	if fn == nil || len(fn.TypeParams) == 0 || fn.Class != nil || fn.Of != nil || fn.Synthetic || i >= len(fn.Params) {
+		return
+	}
+	ft, ok := fn.Params[i].(*FuncType)
+	if !ok || len(ft.Params) != len(x.Params) {
+		return
+	}
+	// own holds fn's type parameters, and can those of them it cannot
+	// make a value of.
+	own, can := map[*TypeParam]bool{}, map[*TypeParam]bool{}
+	for _, tp := range fn.TypeParams {
+		own[tp] = true
+		can[tp] = l.cannotMake(tp)
+	}
+	isOwn := func(tp *TypeParam) bool { return own[tp] }
+	// The lambda gives values of the type parameters back to fn.
+	if mentionsWhere(ft.Result, isOwn) {
+		return
+	}
+	for _, p := range ft.Params {
+		if mentionsWhere(p, isOwn) && !builtFrom(p, can, map[Type]bool{}) {
+			return
+		}
+	}
+params:
+	for k, p := range ft.Params {
+		if !mentionsWhere(p, isOwn) {
+			continue
+		}
+		mentioned := func(tp *TypeParam) bool { return isOwn(tp) && mentionsParam(p, tp) }
+		var life lifetime
+		for j, q := range fn.Params {
+			if j == i || j >= len(args) || !mentionsWhere(q, mentioned) {
+				continue
+			}
+			// A function among them could make one from what fn gives
+			// it (a scope of its own, say): only values held as data,
+			// or in a channel or an atom (which keep only values that
+			// outlive them), come out as they went in.
+			if !done[j] || !builtFrom(q, can, map[Type]bool{}) && !storesData(q, can) {
+				continue params
+			}
+			life = life.union(args[j])
+		}
+		l.lambdaParams[x.Params[k]] = life
+	}
+}
+
+// storesData reports whether t is a channel or an atom of values built
+// from the type parameters can holds (see builtFrom).
+func storesData(t Type, can map[*TypeParam]bool) bool {
+	r, ok := t.(*Record)
+	return ok && r.Prelude && (r.Name == "Channel" || r.Name == "Atom") && len(r.Args) == 1 && builtFrom(r.Args[0], can, map[Type]bool{})
+}
+
+// builtFrom reports whether a value of type t can only carry a lifetime
+// through values of the type parameters in can (those a function cannot
+// make): t holds no scope, resource, function or opaque value of its
+// own.
+func builtFrom(t Type, can map[*TypeParam]bool, seen map[Type]bool) bool {
+	if seen[t] {
+		return true
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *TypeParam:
+		return can[t]
+	case *Basic:
+		return t != Scope && t != OwnedScope
+	case *List:
+		return builtFrom(t.Elem, can, seen)
+	case *Map:
+		return builtFrom(t.Key, can, seen) && builtFrom(t.Value, can, seen)
+	case *Union:
+		for _, m := range t.Members {
+			if !builtFrom(m, can, seen) {
+				return false
+			}
+		}
+		return true
+	case *Record:
+		for _, f := range t.Fields {
+			if !builtFrom(f.Type, can, seen) {
+				return false
+			}
+		}
+		return true
+	case *Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if !builtFrom(f.Type, can, seen) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// cannotMake reports whether a function cannot make a value of type
+// parameter tp through its bounds: no method of them gives one (Eq, Ord
+// and Show only take them).
+func (l *lifeChecker) cannotMake(tp *TypeParam) bool {
+	for _, c := range tp.Bounds {
+		self := map[*TypeParam]bool{c.Param: true}
+		for _, m := range c.Methods {
+			if mentionsParam(m.Result, c.Param) {
+				return false
+			}
+			for _, p := range m.Params {
+				if mentionsParam(p, c.Param) && !builtFrom(p, self, map[Type]bool{}) {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
 
 func scopeName(x Expr) string {
