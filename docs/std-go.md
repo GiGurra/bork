@@ -171,13 +171,30 @@ opaque value. Generated bindings check nils themselves. Go resources use the sam
 unboxing helper and keep their scope owner; generated bindings register `Close`
 with the scope and ignore its error.
 
-If a Go binding receives a context and returns a resource type, that resource
-type cannot use `attach` anywhere in the program: Go may retain the supplied
-context, which can cancel the resource. This includes converted scopes, contexts
-in collections, and opaque context arguments. The compiler names the responsible binding. An
-ownership-only scope that is not passed to Go has no such restriction. An
-`unsafe go` wrapper using `_borkNewResourceHandle` remains the way to make a
-resource whose cancellation follows its latest attachment.
+Generated context-bound resource bindings pass stable cancellation contexts to Go. The opening
+scope and all Scope context arguments form a union; `attach` on any result adds
+its destination scope. All resources from that call share cancellation, but
+retain separate close owners. Cancellation waits until every contributing scope
+has ended or cancelled, or until the last returned resource releases ownership.
+The final member cancels the group before invoking Close, allowing that Close to
+wait for cancellation. Binding authors must ensure a member's Close does not
+wait for the group's cancellation while another sibling is still owned. Shared
+cancellation cannot end early without cancelling the retained sibling; such a
+Close can block scope cleanup. `cleanupTimeout(ms)` is the escape hatch for a
+misbehaving binding: it bounds each finalizer and lets remaining finalizers run. An explicit
+opaque context remains a fixed external limit: attach extends ownership but
+cannot outlive that context's cancellation or deadline.
+
+Each argument's context values are preserved. The context reports the earliest
+deadline among still-live scopes and explicit contexts; a Go library that copies
+a deadline may retain the earlier limit. In these bindings, Go errors and failed
+conversions close
+all raw results once, including resources conversion has not visited. Duplicate
+comparable handles from the same call share their close owner. A discarded raw
+value returned with `ok == false` also closes. Context fields inside a mirror
+record are supported; contexts hidden inside an opaque struct require a mirror
+or an unsafe wrapper. The `_borkNewResourceHandle` helper for handwritten unsafe
+wrappers retains its own attachment behavior described above.
 
 ## Mirror conversion helpers
 

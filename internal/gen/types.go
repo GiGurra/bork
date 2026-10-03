@@ -1111,6 +1111,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesBind {
 		src = append(src, bindRuntime)
 	}
+	if g.usesBindContexts {
+		src = append(src, bindContextRuntime)
+	}
 	if g.usesUnit {
 		src = append(src, unitRuntime)
 	}

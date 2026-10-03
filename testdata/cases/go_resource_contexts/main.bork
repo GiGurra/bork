@@ -1,0 +1,89 @@
+type R = resource go "*example.com/bindtest.ContextResource"
+type Context = go "context.Context"
+type Params = go "example.com/bindtest.ContextParams" { context: Scope }
+fn Open(s: Scope, shape: String) uses state: List[R] | GoError | GoValueError unsafe go "example.com/bindtest.ContextResources"
+fn OpenMap(s: Scope) uses state: Map[String, R] | GoValueError unsafe go "example.com/bindtest.ContextMap"
+fn NamedMap(s: Scope) uses state: Map[Int, R] | GoValueError unsafe go "example.com/bindtest.ContextNamedMap"
+fn NestedMap(s: Scope) uses state: Map[String, Map[String, R]] | GoValueError unsafe go "example.com/bindtest.ContextNestedMap"
+fn OpenArray(s: Scope) uses state: List[R] | GoValueError unsafe go "example.com/bindtest.ContextArray"
+fn Optional(s: Scope, ok: Bool) uses state: Option[R] | GoValueError unsafe go "example.com/bindtest.OptionalContextResource"
+fn Discard(s: Scope) uses state: Option[List[R]] | GoValueError unsafe go "example.com/bindtest.DiscardContextResources"
+fn OpenList(owner: Scope, contexts: List[Scope]) uses state: List[R] | GoValueError unsafe go "example.com/bindtest.ContextListResources"
+fn OpenStruct(owner: Scope, params: Params) uses state: R | GoValueError unsafe go "example.com/bindtest.ContextStructResource"
+fn Fixed() uses state: Context | GoValueError unsafe go "example.com/bindtest.FixedContext"
+fn StopFixed() uses state unsafe go "example.com/bindtest.CancelFixedContext"
+fn OpenFixed(owner: Scope, params: ContextParams) uses state: R | GoValueError unsafe go "example.com/bindtest.ContextStructResource"
+type ContextParams = go "example.com/bindtest.ContextParams" { context: Context }
+fn WasCancelled(r: R) uses state: Bool unsafe go "(*example.com/bindtest.ContextResource).Cancelled"
+fn Value(r: R) uses state: String unsafe go "(*example.com/bindtest.ContextResource).Value"
+fn Closes() uses state: Int unsafe go "example.com/bindtest.ContextCloseCount"
+fn Resources(s: Scope, shape: String) uses state: List[R] {
+  match (Open(s, shape)) {
+    rs: List[R] => rs
+    e: GoError | GoValueError => panic(toString(e))
+  }
+}
+fn At(rs: List[R], index: Int): R {
+  match (rs.get(index)) {
+    Option.Some { value: r } => r
+    Option.None => panic("missing")
+  }
+}
+fn checked[T](value: T | GoValueError): T {
+  match (value) {
+    e: GoValueError => panic(toString(e))
+    v: T => v
+  }
+}
+fn main() {
+  scope app {
+    r = scope request {
+      values = Resources(request, "normal")
+      _ = attach(At(values, 0), app)
+      scope short { _ = attach(At(values, 1), short) }
+      cancel(request)
+      println("live siblings", values.map(WasCancelled), Closes())
+      attach(At(values, 0), app)
+    }
+    println("after request", WasCancelled(r), Closes())
+    cancel(app)
+    println("after app cancel", WasCancelled(r))
+  }
+  println("closed siblings", Closes())
+  scope failures {
+    println(Open(failures, "error"), Closes())
+    println(Open(failures, "nil"), Closes())
+    println(Optional(failures, false), Closes())
+    println(Discard(failures), Closes())
+  }
+  println("failed cleanup", Closes())
+  scope aggregates {
+    println(checked(OpenMap(aggregates)).size(), checked(OpenArray(aggregates)).length())
+    println(Resources(aggregates, "duplicate").length(), Closes())
+    println(checked(NamedMap(aggregates)).size(), checked(NestedMap(aggregates)).size())
+  }
+  println("aggregates closed", Closes())
+  scope owner {
+    scope other {
+      rs = checked(OpenList(other, [other, owner]))
+      cancel(other)
+      println("collection union", rs.map(WasCancelled))
+      r = checked(OpenStruct(other, Params { context: owner }))
+      println("mirror union", WasCancelled(r))
+      fixed = checked(OpenFixed(owner, ContextParams { context: checked(Fixed()) }))
+      println("fixed values", Value(fixed), WasCancelled(fixed))
+      scope short { _ = attach(fixed, short) }
+      StopFixed()
+      println("fixed limit", WasCancelled(fixed))
+    }
+  }
+  println("all closed", Closes())
+  scope app {
+    child = openScope(app)
+    r = checked(OpenStruct(child.scope, Params { context: app }))
+    kept = attach(r, app)
+    closeScope(child)
+    println("owned scope attachment", WasCancelled(kept), Closes())
+  }
+  println("owned closed", Closes())
+}

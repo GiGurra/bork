@@ -291,31 +291,6 @@ func sortedInstanceKeys(s *instanceSet) []string {
 	return keys
 }
 
-// Contexts passed to Go keep their original cancellation source. Until
-// rebinding wrappers exist, any such returned resource type cannot attach.
-func markContextResources(t Type, fn *Func, seen map[Type]bool) {
-	if t == nil || seen[t] {
-		return
-	}
-	seen[t] = true
-	switch t := t.(type) {
-	case *Resource:
-		if t.GoType != nil && t.ContextBinding == nil {
-			t.ContextBinding = fn
-		}
-	case *List:
-		markContextResources(t.Elem, fn, seen)
-	case *Map:
-		markContextResources(t.Value, fn, seen)
-	case *Sealed:
-		for _, v := range t.Variants {
-			for _, f := range v.Fields {
-				markContextResources(f.Type, fn, seen)
-			}
-		}
-	}
-}
-
 // Function references specialize the same promises as direct calls.
 func (c *checker) checkOpaqueInstance(inst *Instance, pos diag.Pos, args []syntax.Expr) bool {
 	fn := inst.Func
@@ -341,14 +316,9 @@ func (c *checker) checkOpaqueInstance(inst *Instance, pos diag.Pos, args []synta
 		}
 	}
 	if fn.Prelude && fn.Decl.Name == "attach" && len(inst.TypeArgs) == 1 {
-		r, ok := inst.TypeArgs[0].(*Resource)
+		_, ok := inst.TypeArgs[0].(*Resource)
 		if !ok {
 			c.errorf(pos, "attach takes a resource (a value of a resource type, such as File), found %s", inst.TypeArgs[0])
-			return false
-		}
-		if r.ContextBinding != nil {
-			binding := r.ContextBinding
-			c.bindErr(pos, "%s was returned by %s at %s, which receives a context that can cancel it, so %s cannot be attached\n  hint: use an unsafe go wrapper with _borkNewResourceHandle to support movable cancellation", r, binding.Decl.Name, binding.Decl.Pos, r)
 			return false
 		}
 	}

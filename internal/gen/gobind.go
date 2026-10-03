@@ -42,13 +42,29 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	for i := range fd.Params {
 		sig.Type.Params.List[i].Names[0].Name = "_a" + strconv.Itoa(i)
 	}
+	if b.Contextual {
+		g.usesScopes = true
+		g.usesBindContexts = true
+		w.group = "_bindGroup"
+		w.line(fmt.Sprintf("_bindGroup := _bindNewContextGroup(_a%d)", b.ScopeIndex))
+		w.line("_bindSuccess := false")
+		w.line("defer _bindGroup.Finish(&_bindSuccess)")
+	}
 	for i, pi := range b.ParamIndices {
 		pname := "_a" + strconv.Itoa(pi)
 		arg := w.toGo(pname, fn.Params[pi], params.At(i).Type())
+		if w.group != "" {
+			value := w.newTmp()
+			w.line(value + " := " + arg)
+			arg = value
+		}
 		if b.Sig.Variadic() && i == params.Len()-1 {
 			arg += "..."
 		}
 		args = append(args, arg)
+	}
+	if w.group != "" {
+		w.line(w.group + ".Start()")
 	}
 	var target string
 	if b.Receiver != nil {
@@ -66,9 +82,11 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		w.line("return _Unit{}")
 	case check.GoValue:
 		w.line("_r := " + call)
+		w.registerResources("_r", b.Sig.Results().At(0).Type(), b.Value, `"result"`)
 		w.line("return " + w.result(w.fromGo("_r", b.Sig.Results().At(0).Type(), b.Value, `"result"`), b.Value))
 	case check.GoValueError:
 		w.line("_r, _err := " + call)
+		w.registerResources("_r", b.Sig.Results().At(0).Type(), b.Value, `"result"`)
 		w.line("if _err != nil { return _bindGoError(_err) }")
 		rt := b.Sig.Results().At(0).Type()
 		if check.GoTypeOf(b.Value) != nil && !check.IsOption(b.Value) {
@@ -87,6 +105,7 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		elem := check.TypeArgs(b.Value)[0]
 		g.usesOptionHelpers = true
 		w.line("_r, _ok := " + call)
+		w.registerResources("_r", b.Sig.Results().At(0).Type(), elem, `"result"`)
 		w.line("if !_ok {")
 		w.line("return " + w.result("_borkNone["+g.typeText(elem)+"]()", b.Value))
 		w.line("}")
@@ -129,6 +148,7 @@ type bindWriter struct {
 	fn      *check.Func
 	collect string
 	seen    string
+	group   string
 }
 
 func (w *bindWriter) line(s string) { w.body.WriteString("\t" + s + "\n") }
@@ -149,10 +169,16 @@ func (w *bindWriter) goType(t types.Type) string {
 func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
 	if check.GoTypeOf(t) != nil {
 		w.g.usesOpaque = true
+		if w.group != "" && isBindContext(gt) {
+			return w.group + ".External(_borkGo(" + x + "))"
+		}
 		return "_borkGo(" + x + ")"
 	}
 	if t == check.Scope {
 		w.g.usesScopes = true
+		if w.group != "" {
+			return w.group + ".Context(" + x + ")"
+		}
 		return "_borkScopeContext(" + x + ")"
 	}
 	if check.IsOption(t) && check.GoTypeOf(check.TypeArgs(t)[0]) != nil && goNillable(check.GoTypeOf(check.TypeArgs(t)[0])) {
@@ -161,6 +187,9 @@ func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
 		w.g.usesOpaque = true
 		w.line(fmt.Sprintf("var %s %s", v, w.goType(gt)))
 		w.line(fmt.Sprintf("if %s, %s := _borkOptionGet(%s); %s { %s = _borkGo(%s) }", e, ok, x, ok, v, e))
+		if w.group != "" && isBindContext(gt) {
+			return w.group + ".External(" + v + ")"
+		}
 		return v
 	}
 
@@ -192,6 +221,15 @@ func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
 		return v
 	case *types.Struct:
 		r := t.(*check.Record)
+		if w.group != "" {
+			v := w.newTmp()
+			w.line("var " + v + " " + w.goType(gt))
+			for i, field := range r.Fields {
+				converted := w.toGo("("+x+")."+name(field.Name).Name, field.Type, r.GoFields[i].Type)
+				w.line(v + "." + strings.Join(r.GoFields[i].Path, ".") + " = " + converted)
+			}
+			return v
+		}
 		return "_toGo_" + typeName(r.Name, r.Pkg).Name + "(" + x + ")"
 	case *types.Pointer:
 		v := w.newTmp()
@@ -232,7 +270,7 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 				fail(x+" == nil", `"nil"`)
 			}
 		}
-		return w.opaqueValue(x, t)
+		return w.opaqueValue(x, t, path)
 	}
 	if check.IsOption(t) && check.GoTypeOf(check.TypeArgs(t)[0]) != nil && goNillable(check.GoTypeOf(check.TypeArgs(t)[0])) {
 		elem := check.TypeArgs(t)[0]
@@ -241,7 +279,7 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 		w.line(fmt.Sprintf("%s := _borkNone[%s]()", v, w.g.typeText(elem)))
 		w.line("if " + x + " != nil {")
 		// Conversion is non-fallible after the nil check.
-		w.line(fmt.Sprintf("%s = _borkSome(%s)", v, w.opaqueValue(x, elem)))
+		w.line(fmt.Sprintf("%s = _borkSome(%s)", v, w.opaqueValue(x, elem, path)))
 		w.line("}")
 		return v
 	}
@@ -430,11 +468,14 @@ func goNillable(t types.Type) bool {
 	return false
 }
 
-func (w *bindWriter) opaqueValue(x string, t check.Type) string {
+func (w *bindWriter) opaqueValue(x string, t check.Type, path string) string {
 	w.g.usesOpaque = true
 	if _, resource := t.(*check.Resource); resource {
 		v := w.newTmp()
 		w.line(v + " := " + x)
+		if w.group != "" {
+			return fmt.Sprintf("%s{handle: %s, owner: %s.Own(%s, _a%d), rebind: %s.Attach}", w.g.typeText(t), v, w.group, bindingResourcePath(path), w.b.ScopeIndex, w.group)
+		}
 		return fmt.Sprintf("%s{handle: %s, owner: _a%d.Own(func() { %s.Close() })}", w.g.typeText(t), v, w.b.ScopeIndex, v)
 	}
 	return w.g.typeText(t) + "{value: " + x + "}"

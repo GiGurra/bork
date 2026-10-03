@@ -1,0 +1,2 @@
+main.bork:3:23: a context inside an opaque Go value cannot be rebound for a resource binding
+  hint: expose its context fields in a mirror record or use an unsafe go wrapper

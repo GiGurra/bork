@@ -1,0 +1,2 @@
+module example.com/go_resource_hidden_context_fail
+unsafe "example.com/go_resource_hidden_context_fail"

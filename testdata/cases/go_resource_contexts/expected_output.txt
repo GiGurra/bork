@@ -1,0 +1,20 @@
+live siblings [false, false] 0
+after request false 1
+after app cancel true
+closed siblings 2
+GoError { message: "open failed", goType: "*errors.errorString" } 4
+GoValueError { path: "result[1]", message: "nil" } 6
+Option.None 7
+Option.None 9
+failed cleanup 9
+2 2
+2 9
+2 2
+aggregates closed 18
+collection union [false, false]
+mirror union false
+fixed values fixed-value false
+fixed limit true
+all closed 22
+owned scope attachment false 22
+owned closed 23
