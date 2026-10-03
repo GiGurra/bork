@@ -1,0 +1,29 @@
+true
+3
+Bytes(00ff2a)
+Eof {}
+first
+last
+Eof {}
+3
+true
+true
+true
+Endpoint { host: "::1", port: "80" }
+[::1]:80
+["127.0.0.1"]
+true
+firstlast
+true
+Bytes(6669)
+rstlast
+true
+true
+true
+true
+0
+true
+true
+true
+true
+Unit
