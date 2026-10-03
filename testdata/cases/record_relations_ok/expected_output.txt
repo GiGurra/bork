@@ -1,0 +1,5 @@
+Shadow { positive: 1 }
+4 5 8 other
+Defaults { hi: 10, lo: 0 } Defaults { hi: 10, lo: 5 } 4 9
+4 4 4 b
+10 Names.Pair { a: "a", b: "b" }

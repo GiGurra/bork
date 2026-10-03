@@ -1,0 +1,39 @@
+pred atLeast(n: Int, lo: Int) { n >= lo }
+type Range = { hi: Int where atLeast(lo), lo: Int } derive (Decode, GoStruct)
+type Defaults = { lo: Int = 0, hi: Int where atLeast(lo) = 10 } derive (Decode)
+test "generated records retain sibling relations" (r: Range) { assert(r.hi >= r.lo) }
+test "decoded records retain sibling relations" {
+  good = decodeJson[Range]("{\"lo\":2,\"hi\":4}")
+  bad = decodeJson[Range]("{\"lo\":5,\"hi\":3}")
+  match (good) { r: Range => assert(r.hi >= r.lo), _ => assert(false) }
+  match (bad) { Range => assert(false), e: DecodeError => assertEqual(e.path, ".hi"), JsonError => assert(false) }
+  match (decodeJson[Defaults]("{\"lo\":20}")) { Defaults => assert(false), e: DecodeError => assertEqual(e.path, ".hi"), JsonError => assert(false) }
+}
+type Box[T] = { value: T }
+type Nested = { lo: Int, box: Box[Int where atLeast(lo)] }
+test "nested type arguments retain sibling relations" (r: Nested) { assert(r.box.value >= r.lo) }
+pred positiveWith[T: Eq](n: Int, ignored: T) { ignored == ignored && n > 0 }
+type Tagged = { tag: String, n: Int where positiveWith(tag) } derive (Decode, GoStruct)
+pred genericPositive[T](n: Int, ignored: T) { n > 0 }
+type Generic[T] = { tag: T, n: Int where genericPositive(tag) } derive (Decode)
+type GenericHolder = { value: Generic[String] }
+test "generic sibling predicates generate valid records" (r: Tagged, h: GenericHolder) { assert(r.n > 0 && h.value.n > 0) }
+test "valid generic construction" { r = Generic { tag: "x", n: 1 }; assert(r.n > 0) }
+test "generic sibling predicates validate decoding and Go conversion" {
+  match (decodeJson[Tagged]("{\"tag\":\"x\",\"n\":-1}")) { Tagged => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (decodeJson[Generic[String]]("{\"tag\":\"x\",\"n\":-1}")) { Generic => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (readGo[Tagged]("{\"Tag\":\"x\",\"N\":-1}")) { Tagged => assert(false), GoValueError => assert(true) }
+}
+fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
+  import "encoding/json"
+  value := _d_T_GoStruct.New()
+  if err := json.Unmarshal([]byte(text), value); err != nil { return GoValueError{path:"json",message:err.Error()} }
+  out, errors := _d_T_GoStruct.FromGo(value)
+  if len(errors)>0 { return errors[0] }
+  return out
+}
+test "Go conversions retain sibling relations" {
+  match (readGo[Range]("{\"Lo\":2,\"Hi\":4}")) { r: Range => assert(r.hi >= r.lo), GoValueError => assert(false) }
+  match (readGo[Range]("{\"Lo\":5,\"Hi\":3}")) { Range => assert(false), e: GoValueError => assertEqual(e.path, "result.hi") }
+}
+fn main() {}

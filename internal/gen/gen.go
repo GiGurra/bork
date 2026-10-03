@@ -100,7 +100,11 @@ func (g *gen) query(q check.Query, roots *[]*check.Func, setup *[]ast.Stmt) ast.
 		}
 		fun = idx
 	}
-	return &ast.CallExpr{Fun: fun, Args: args}
+	var dicts []ast.Expr
+	for _, dict := range q.Dicts {
+		dicts = append(dicts, g.dict(dict))
+	}
+	return &ast.CallExpr{Fun: fun, Args: append(dicts, args...)}
 }
 
 // constant is the Go expression for a constant of bork type t.

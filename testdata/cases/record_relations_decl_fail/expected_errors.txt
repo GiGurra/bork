@@ -1,0 +1,4 @@
+main.bork:2:40: lo is not a sibling field here; predicate arguments are constants or sibling field names
+main.bork:3:50: argument 1 of atLeast must be Int, found String
+main.bork:4:52: undefined: lo
+main.bork:5:72: lo is not a sibling field here; predicate arguments are constants or sibling field names

@@ -30,15 +30,18 @@ type Constraint struct {
 	Pos       diag.Pos
 	Or        []*Constraint
 	Path      string
+	Pkg       *Package // scope in which predicate dictionaries are resolved
 }
 
 // CArg is an argument of a constraint's predicate, after the value
-// itself: a constant, or the name of one of the function's parameters
+// itself: a constant, a function parameter, or a sibling field name
 // (`to: AccountId where notEqual(from)`).
 type CArg struct {
-	Const  constant.Value // nil for a parameter
-	Param  string
-	source syntax.Expr // the argument as written, for runtime pattern guards
+	Const   constant.Value // nil for a parameter or sibling
+	Param   string
+	Type    Type        // argument type, including inference from sibling fields
+	Sibling bool        // argument names a field of the enclosing record or variant
+	source  syntax.Expr // the argument as written, for runtime pattern guards
 }
 
 func (a CArg) String() string {
@@ -99,6 +102,30 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			}
 		}
 	}
+	// Instances made while resolving type declarations precede field facts.
+	// Refresh their constraint metadata without replacing their field identities.
+	for _, t := range c.info.TypeOrder {
+		switch base := t.(type) {
+		case *Record:
+			for _, t := range base.insts.byKey {
+				inst := t.(*Record)
+				bound := bindParams(base.TypeParams, inst.Args)
+				for i, field := range inst.Fields {
+					field.Constraints = substConstraints(base.Fields[i].Constraints, bound)
+				}
+			}
+		case *Sealed:
+			for _, t := range base.insts.byKey {
+				inst := t.(*Sealed)
+				bound := bindParams(base.TypeParams, inst.Args)
+				for i, variant := range inst.Variants {
+					for j, field := range variant.Fields {
+						field.Constraints = substConstraints(base.Variants[i].Fields[j].Constraints, bound)
+					}
+				}
+			}
+		}
+	}
 	c.inPrelude = false
 	for _, f := range files {
 		c.inFile(f)
@@ -133,10 +160,28 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 }
 
 func (c *checker) fieldConstraints(fields []*Field, decls []*syntax.FieldDecl) {
+	c.fieldWhere = true
+	defer func() { c.fieldWhere = false }()
+	scope := map[string]Type{}
+	for _, f := range fields {
+		scope[f.Name] = f.Type
+	}
 	for _, f := range fields {
 		for _, fd := range decls {
 			if fd.Name == f.Name {
-				f.Constraints = c.constraintsOf(fd.Type, f.Type, nil)
+				f.Constraints = c.constraintsOf(fd.Type, f.Type, scope)
+				var mark func(*Constraint)
+				mark = func(con *Constraint) {
+					for i := range con.Args {
+						con.Args[i].Sibling = con.Args[i].Const == nil
+					}
+					for _, alt := range con.Or {
+						mark(alt)
+					}
+				}
+				for _, con := range f.Constraints {
+					mark(con)
+				}
 			}
 		}
 	}
@@ -318,7 +363,7 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		return nil
 	}
 
-	if pt, ok := scope[ref.Name]; ok {
+	if pt, ok := scope[ref.Name]; ok && !c.fieldWhere {
 		// A function parameter used as a predicate.
 		ft, isFunc := pt.(*FuncType)
 		switch {
@@ -363,13 +408,17 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		c.errorf(ref.Pos, "%s takes %d argument(s) after the value, but %d were given", ref.Name, len(fn.Params)-1, len(ref.Args))
 		return nil
 	}
-	con := &Constraint{Pred: fn, Pos: ref.Pos}
+	con := &Constraint{Pred: fn, Pos: ref.Pos, Pkg: c.pkg}
 	for i, a := range ref.Args {
 		want := param(i + 1)
 		if id, ok := a.(*syntax.Ident); ok {
 			pt, ok := scope[id.Name]
 			if !ok {
-				c.errorf(a.Position(), "%s is not a parameter here; predicate arguments are constants or parameter names", id.Name)
+				if c.fieldWhere {
+					c.errorf(a.Position(), "%s is not a sibling field here; predicate arguments are constants or sibling field names", id.Name)
+				} else {
+					c.errorf(a.Position(), "%s is not a parameter here; predicate arguments are constants or parameter names", id.Name)
+				}
 				return nil
 			}
 			if in != nil {
@@ -380,7 +429,7 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 				c.errorf(a.Position(), "argument %d of %s must be %s, found %s", i+1, ref.Name, want, pt)
 				return nil
 			}
-			con.Args = append(con.Args, CArg{Param: id.Name, source: a})
+			con.Args = append(con.Args, CArg{Param: id.Name, Type: pt, source: a})
 			continue
 		}
 		if in.open(want) {
@@ -396,13 +445,17 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		case at == Invalid:
 			return nil
 		case v == nil:
-			c.errorf(a.Position(), "predicate arguments are constants or parameter names")
+			if c.fieldWhere {
+				c.errorf(a.Position(), "predicate arguments are constants or sibling field names")
+			} else {
+				c.errorf(a.Position(), "predicate arguments are constants or parameter names")
+			}
 			return nil
 		case !assignable(at, want):
 			c.errorf(a.Position(), "argument %d of %s must be %s, found %s", i+1, ref.Name, want, at)
 			return nil
 		}
-		con.Args = append(con.Args, CArg{Const: v, source: a})
+		con.Args = append(con.Args, CArg{Const: v, Type: at, source: a})
 	}
 	if in != nil {
 		if missing := in.unsolved(); len(missing) > 0 {
@@ -416,5 +469,74 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 			return nil
 		}
 	}
+	inst := con.InstanceFor(subject)
+	if inst != nil && !c.resolveDicts(inst, ref.Pos) {
+		return nil
+	}
 	return con
+}
+
+// HasSiblingArgs reports whether a field constraint depends on sibling values.
+func (c *Constraint) HasSiblingArgs() bool {
+	for _, a := range c.Args {
+		if a.Sibling {
+			return true
+		}
+	}
+	for _, a := range c.Or {
+		if a.HasSiblingArgs() {
+			return true
+		}
+	}
+	return false
+}
+
+// InstanceFor instantiates a constraint predicate using all its arguments.
+// Some type parameters occur only in a sibling or function parameter.
+func (c *Constraint) InstanceFor(subject Type) *Instance {
+	if c.Pred == nil {
+		return nil
+	}
+	in := newInference(c.Pred)
+	in.unify(c.Pred.Params[0], subject)
+	for i, arg := range c.Args {
+		if arg.Type != nil {
+			in.unify(c.Pred.Params[i+1], arg.Type)
+		}
+	}
+	if len(in.unsolved()) > 0 {
+		return nil
+	}
+	return in.instance()
+}
+
+func substConstraints(cons []*Constraint, bound map[*TypeParam]Type) []*Constraint {
+	if cons == nil {
+		return nil
+	}
+	out := make([]*Constraint, len(cons))
+	for i, con := range cons {
+		cp := *con
+		cp.Args = append([]CArg(nil), con.Args...)
+		for j, arg := range cp.Args {
+			if arg.Type != nil {
+				cp.Args[j].Type = subst(arg.Type, bound)
+			}
+		}
+		cp.Or = substConstraints(con.Or, bound)
+		out[i] = &cp
+	}
+	return out
+}
+
+// PredicateDicts resolves dictionaries in the scope that declared a constraint.
+// Runtime validation may instantiate that constraint at a concrete field type.
+func (info *Info) PredicateDicts(from *Package, inst *Instance) bool {
+	c := &checker{info: info, pkg: from, diags: &diag.List{}, typeParams: map[string]*TypeParam{}}
+	for _, typ := range inst.TypeArgs {
+		if tp, ok := typ.(*TypeParam); ok {
+			c.typeParams[tp.Name] = tp
+		}
+	}
+	return c.resolveDicts(inst, diag.Pos{})
 }

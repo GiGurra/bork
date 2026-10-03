@@ -312,13 +312,47 @@ with the existing guard/declaration suggestion.
 This first increment supports stable parameter, binding, and field identities;
 computed arithmetic and pure method results are not given new identities.
 Function-level `where sameLength(xs, ys)` or `where lo <= hi`, comparison
-conclusions, sibling-field invariants on record construction and `copy`, and
+conclusions and
 method projections such as `index < xs.length()` need separate syntax and
 identity work. They remain follow-ups, not promises of this implementation: function-level
-clauses (`bork-3ly6p0`), sibling-field invariants (`bork-k3nrwg`), and pure
+clauses (`bork-3ly6p0`) and pure
 method/computed identities (`bork-rgy4as`).
 Arithmetic implications must respect the sized-number overflow rules; no
 built-in `lo < hi => lo + 1 <= hi` shortcut is added here (`bork-ggj8ew`).
+
+### Sibling-field record invariants (bork-k3nrwg)
+
+Field predicates can name sibling fields, including fields declared later:
+
+```bork
+pred atLeast(n: Int, lo: Int) { n >= lo }
+type Range = { lo: Int, hi: Int where atLeast(lo) }
+```
+
+Every construction proves `atLeast(hi, lo)` with the completed field values.
+A field default is checked against its actual siblings at each construction,
+so `hi: Int where atLeast(lo) = 10` requires the supplied `lo` to be at most
+10. Unary constraints on closed defaults are still checked at declaration.
+Variant fields use their own variant's sibling scope. Predicate arguments
+remain constants or sibling names; expressions and outer function parameters
+are not accepted in a record declaration.
+
+`copy` checks relations against the resulting record. Changing `lo` rechecks
+the constraint on `hi` even when `hi` is unchanged. Updating both fields
+checks their new values together; nested updates such as `r.copy(range.lo:
+newLo)` recheck the nested record's relations. Relations whose subject and
+arguments are untouched remain valid. Selection and destructuring retain the
+relation with projections of the same record substituted for sibling names.
+No arithmetic or implicit transitivity is introduced.
+
+Derived `Decode` and Go-to-record conversions validate relations after all
+fields have been converted, including defaults. Property generators generate
+referenced fields first where possible, defer cyclic dependencies until all
+fields exist, and preserve constraints while shrinking. Highly restrictive
+cyclic predicates may exhaust generation and report that rejection; invalid
+values are never passed to a property. The field-only
+schema decoder validates independent constraints; sibling relations require
+the full record decoder. Schema metadata still lists all constraints.
 
 ### Construction control (bork-kum0ep design)
 

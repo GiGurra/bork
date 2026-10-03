@@ -342,7 +342,7 @@ func (g *gen) invariantChecks(fn *check.Func, x ast.Expr, t check.Type, seen map
 			for _, con := range f.Constraints {
 				what := fmt.Sprintf("%s whose %s is not %s", owner, f.Name, con)
 				out = append(out, g.atPath(v, f.Type, splitPath(con.Path), func(y ast.Expr, yt check.Type) []ast.Stmt {
-					return g.invariantCheck(fn, con, y, yt, what)
+					return g.invariantCheck(fn, fieldConstraint(con, func(n string) string { return g.text(&ast.SelectorExpr{X: x, Sel: name(n)}) }), y, yt, what)
 				})...)
 			}
 			out = append(out, g.invariantChecks(fn, v, f.Type, seen)...)
@@ -504,11 +504,15 @@ func (g *gen) constraintCond(con *check.Constraint, x ast.Expr, t check.Type) as
 		// The function value the caller passed.
 		return &ast.CallExpr{Fun: name(con.PredParam), Args: []ast.Expr{x}}
 	}
-	inst := con.Pred.InstanceFor(t)
-	if inst == nil {
+	inst := con.InstanceFor(t)
+	if inst == nil || !g.info.PredicateDicts(con.Pkg, inst) {
 		return nil
 	}
-	args := []ast.Expr{x}
+	var args []ast.Expr
+	for _, dict := range inst.Dicts {
+		args = append(args, g.dict(dict))
+	}
+	args = append(args, x)
 	for i, a := range con.Args {
 		if a.Const != nil {
 			args = append(args, g.constant(a.Const, inst.Params[i+1]))
@@ -517,4 +521,21 @@ func (g *gen) constraintCond(con *check.Constraint, x ast.Expr, t check.Type) as
 		}
 	}
 	return &ast.CallExpr{Fun: g.instance(inst), Args: args}
+}
+
+// fieldConstraint substitutes sibling fields with their completed Go values.
+func fieldConstraint(con *check.Constraint, value func(string) string) *check.Constraint {
+	cp := *con
+	cp.Args = append([]check.CArg(nil), con.Args...)
+	for i, a := range cp.Args {
+		if a.Sibling {
+			cp.Args[i].Param = value(a.Param)
+			cp.Args[i].Sibling = false
+		}
+	}
+	cp.Or = nil
+	for _, alt := range con.Or {
+		cp.Or = append(cp.Or, fieldConstraint(alt, value))
+	}
+	return &cp
 }

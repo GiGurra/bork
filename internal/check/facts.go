@@ -39,6 +39,7 @@ type Query struct {
 	// parameter types with them filled in.
 	TypeArgs []Type
 	Params   []Type
+	Dicts    []*Dict
 	Or       []Query
 	And      []Query
 	// Via names the function whose result the constant is, when the
@@ -112,7 +113,9 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 		f.defaultDecl = field.Decl.Pos
 		f.walk(field.Default, env{})
 		for _, con := range field.Constraints {
-			f.oblige(field.Default, con, noParams, env{}, "default of "+field.Name+" must be "+con.String())
+			if !con.HasSiblingArgs() {
+				f.oblige(field.Default, con, noParams, env{}, "default of "+field.Name+" must be "+con.String())
+			}
 		}
 	}
 	f.defaultUse = diag.Pos{}
@@ -204,6 +207,7 @@ type argVal struct {
 	value constant.Value
 	text  string
 	expr  Expr
+	typ   Type // used to infer predicates whose other arguments carry type parameters
 }
 
 func sameArgs(a, b []argVal) bool {
@@ -262,6 +266,7 @@ type obligation struct {
 	args []argVal
 	or   []obligation
 	path string
+	pkg  *Package // dictionary scope of the written constraint
 	// requirement says who requires what, for messages:
 	// "transfer requires amount to be positive".
 	requirement string
@@ -590,24 +595,146 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 		label = qualify(t.Parent.Name, t.Parent.Pkg, f.from()) + "." + t.Name
 	}
 	for _, fi := range lit.Fields {
-		if fd := fi.Field; fd != nil && !fi.IsDefault {
+		if fd := fi.Field; fd != nil {
 			for _, con := range fd.Constraints {
-				f.oblige(fi.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
+				if !fi.IsDefault || con.HasSiblingArgs() {
+					saveUse, saveDecl := f.defaultUse, f.defaultDecl
+					if fi.IsDefault {
+						f.defaultUse, f.defaultDecl = lit.Pos(), fd.Decl.Pos
+					}
+					f.oblige(fi.Value, con, f.recordArgs(lit), e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
+					f.defaultUse, f.defaultDecl = saveUse, saveDecl
+				}
 			}
 		}
 	}
 }
 
+// project selects a field, preserving the identity of a value supplied by a
+// literal or copy instead of inventing an identity for the whole expression.
+func (f *factChecker) project(x Expr, name string) Expr {
+	switch v := x.(type) {
+	case *VarRef:
+		if v.Var.Kind == VarLet {
+			value := f.project(v.Var.Let.Value, name)
+			if _, selected := value.(*Select); !selected || f.aliasKey(v.Var.Let.Value) != "" {
+				return value
+			}
+		}
+	case *RecordLit:
+		for _, field := range v.Fields {
+			if field.Name == name {
+				return field.Value
+			}
+		}
+	case *Copy:
+		for _, u := range v.Updates {
+			if u.Path[0] != name {
+				continue
+			}
+			if len(u.Path) == 1 {
+				return u.Value
+			}
+		}
+		var updates []*FieldUpdate
+		for _, u := range v.Updates {
+			if u.Path[0] == name {
+				cp := *u
+				cp.Path = cp.Path[1:]
+				updates = append(updates, &cp)
+			}
+		}
+		original := f.project(v.X, name)
+		if len(updates) > 0 {
+			return &Copy{expr: expr{pos: x.Pos(), typ: original.Type()}, X: original, Updates: updates}
+		}
+		return original
+	}
+	var field *Field
+	switch t := x.Type().(type) {
+	case *Record:
+		field = t.Field(name)
+	case *Sealed:
+		for _, v := range t.Variants {
+			if field = v.Field(name); field != nil {
+				break
+			}
+		}
+	}
+	if field == nil {
+		return nil
+	}
+	return &Select{expr: expr{pos: x.Pos(), typ: field.Type}, X: x, Name: name, Field: field}
+}
+
+func (f *factChecker) recordArgs(x Expr) func(string) argVal {
+	return func(name string) argVal {
+		if v := f.project(x, name); v != nil {
+			return f.argOf(v)
+		}
+		return noParams(name)
+	}
+}
+
+// A destructured sealed value needs the fields of its matched variant: other
+// variants may use the same field names with different types.
+func (f *factChecker) recordFieldArgs(x Expr, field *Field) func(string) argVal {
+	if sealed, ok := x.Type().(*Sealed); ok {
+		for _, variant := range sealed.Variants {
+			for _, candidate := range variant.Fields {
+				if candidate != field {
+					continue
+				}
+				return func(name string) argVal {
+					if sibling := variant.Field(name); sibling != nil {
+						return f.argOf(&Select{expr: expr{pos: x.Pos(), typ: sibling.Type}, X: x, Name: name, Field: sibling})
+					}
+					return noParams(name)
+				}
+			}
+		}
+	}
+	return f.recordArgs(x)
+}
+
+func constraintChanged(con *Constraint, subject string, updates []*FieldUpdate) bool {
+	for _, u := range updates {
+		if u.Path[0] == subject {
+			return true
+		}
+		for _, a := range con.Args {
+			if a.Sibling && a.Param == u.Path[0] {
+				return true
+			}
+		}
+	}
+	for _, alt := range con.Or {
+		if constraintChanged(alt, subject, updates) {
+			return true
+		}
+	}
+	return false
+}
+
 func (f *factChecker) copyObligations(cp *Copy, e env) {
 	rec, _ := cp.X.Type().(*Record)
-	for _, u := range cp.Updates {
-		fd := u.Field
-		if fd == nil {
-			continue
-		}
-		path := strings.Join(u.Path, ".")
+	if rec == nil {
+		return
+	}
+	for _, fd := range rec.Fields {
+		value := f.project(cp, fd.Name)
 		for _, con := range fd.Constraints {
-			f.oblige(u.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", qualify(rec.Name, rec.Pkg, f.from()), pathPhrase(con.Path, path), con.Text(f.from())))
+			if constraintChanged(con, fd.Name, cp.Updates) {
+				f.oblige(value, con, f.recordArgs(cp), e, fmt.Sprintf("%s requires %s to be %s", qualify(rec.Name, rec.Pkg, f.from()), pathPhrase(con.Path, fd.Name), con.Text(f.from())))
+			}
+		}
+		for _, update := range cp.Updates {
+			if update.Path[0] == fd.Name && len(update.Path) > 1 {
+				if inner, ok := value.(*Copy); ok {
+					f.copyObligations(inner, e)
+				}
+				break
+			}
 		}
 	}
 }
@@ -681,7 +808,7 @@ func (f *factChecker) settle(x Expr, ob obligation, ok bool, pending []Query) {
 // obligationOf is the obligation to prove con, with the constraint's
 // parameter arguments given by subst.
 func (f *factChecker) obligationOf(con *Constraint, subst func(string) argVal, requirement string) obligation {
-	ob := obligation{requirement: requirement, con: con.Text(f.from()), path: con.Path}
+	ob := obligation{requirement: requirement, con: con.Text(f.from()), path: con.Path, pkg: con.Pkg}
 	if con.Or != nil {
 		for _, alt := range con.Or {
 			a := f.obligationOf(alt, subst, requirement)
@@ -783,6 +910,7 @@ func (f *factChecker) substitute(con *Constraint, subst func(string) argVal) []a
 		} else {
 			args[i] = subst(a.Param)
 		}
+		args[i].typ = a.Type
 	}
 	return args
 }
@@ -818,6 +946,13 @@ func (f *factChecker) paramRef(p *Var) *VarRef {
 func noParams(param string) argVal { return argVal{text: param} }
 
 func (f *factChecker) argOf(x Expr) argVal {
+	if sel, ok := x.(*Select); ok {
+		if value := f.project(sel.X, sel.Name); value != nil {
+			if projected, ok := value.(*Select); !ok || projected.X != sel.X {
+				return f.argOf(value)
+			}
+		}
+	}
 	return argVal{key: f.key(x), value: constOf(x), text: f.describe(x), expr: x}
 }
 
@@ -1327,11 +1462,27 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 	if len(ob.pred.TypeParams) > 0 {
 		in := newInference(ob.pred)
 		in.unify(ob.pred.Params[0], x.Type())
+		for i, arg := range ob.args {
+			typ := arg.typ
+			if arg.expr != nil {
+				typ = arg.expr.Type()
+			}
+			if typ != nil {
+				in.unify(ob.pred.Params[i+1], typ)
+			}
+		}
 		if len(in.unsolved()) > 0 {
 			return Query{}, false
 		}
 		inst := in.instance()
-		q.TypeArgs, q.Params = inst.TypeArgs, inst.Params
+		scope := ob.pkg
+		if scope == nil {
+			scope = f.from()
+		}
+		if !f.info.PredicateDicts(scope, inst) {
+			return Query{}, false
+		}
+		q.TypeArgs, q.Params, q.Dicts = inst.TypeArgs, inst.Params, inst.Dicts
 	}
 	return q, true
 }
@@ -1486,7 +1637,14 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		case VarPattern:
 			if src := d.Source; src != nil && depth < maxDepth {
 				if src.Field != nil {
-					add(src.Field.Constraints, noParams)
+					owner := src.Subject
+					steps := strings.Split(strings.TrimPrefix(src.Path, "."), ".")
+					for _, step := range steps[:len(steps)-1] {
+						owner = f.project(owner, step)
+					}
+					if owner != nil {
+						add(src.Field.Constraints, f.recordFieldArgs(owner, src.Field))
+					}
 				}
 				if src.Member == nil {
 					out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
@@ -1512,10 +1670,20 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 	case *Select:
 		if rec, ok := x.X.Type().(*Record); ok {
 			if fd := rec.Field(x.Name); fd != nil {
-				add(fd.Constraints, noParams)
+				add(fd.Constraints, f.recordArgs(x.X))
 			}
 			if depth < maxDepth {
 				out = append(out, within(f.declared(x.X, e, depth+1), "."+x.Name)...)
+			}
+		}
+	}
+	if rec, ok := x.Type().(*Record); ok {
+		for _, fd := range rec.Fields {
+			for _, con := range fd.Constraints {
+				for _, known := range f.knownOf(con, f.recordArgs(x)) {
+					known.path = "." + fd.Name + known.path
+					out = append(out, known)
+				}
 			}
 		}
 	}

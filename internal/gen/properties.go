@@ -400,12 +400,44 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 	ret := func(x ast.Expr) []ast.Stmt { return []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{x}}} }
 	fields := func(typ ast.Expr, owner string, fs []*check.Field) ast.Expr {
 		lit := &ast.CompositeLit{Type: typ}
-		for _, f := range fs {
-			cons := append(append([]*check.Constraint{}, f.Constraints...), within(f.Name)...)
-			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(f.Name), Value: g.genValue(f.Type, cons, deeper, owner+"."+f.Name)})
+		params := make([]*syntax.Param, len(fs))
+		constraints := make([][]*check.Constraint, len(fs))
+		values := map[string]string{}
+		for i, field := range fs {
+			params[i] = &syntax.Param{Name: field.Name}
+			constraints[i] = append(append([]*check.Constraint{}, field.Constraints...), within(field.Name)...)
+			values[field.Name] = g.newTmp().Name
 		}
-		return lit
+		defined := map[string]bool{}
+		var body, deferred []ast.Stmt
+		for _, i := range genOrder(params, constraints) {
+			field := fs[i]
+			var now []*check.Constraint
+			for _, con := range constraints[i] {
+				bound := fieldConstraint(con, func(n string) string { return values[n] })
+				if !refersToUndefined(con, defined) {
+					now = append(now, bound)
+					continue
+				}
+				what := owner + "." + field.Name + " where " + con.String()
+				deferred = append(deferred, g.atPath(ast.NewIdent(values[field.Name]), field.Type, splitPath(con.Path), func(x ast.Expr, t check.Type) []ast.Stmt {
+					if cond := g.propCond(bound, x, t); cond != nil {
+						return []ast.Stmt{rejectUnless(cond, what)}
+					}
+					return nil
+				})...)
+			}
+			body = append(body, define(ast.NewIdent(values[field.Name]), g.genValue(field.Type, now, deeper, owner+"."+field.Name)))
+			defined[field.Name] = true
+		}
+		for _, field := range fs {
+			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: ast.NewIdent(values[field.Name])})
+		}
+		body = append(body, deferred...)
+		body = append(body, ret(lit)...)
+		return &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: typ}}}}, Body: &ast.BlockStmt{List: body}}}
 	}
+
 	switch t := t.(type) {
 	case *check.List:
 		elem := g.genValue(t.Elem, within("[]"), deeper, "elements of "+what)

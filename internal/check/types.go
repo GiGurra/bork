@@ -402,6 +402,7 @@ func substFields(fields []*Field, bound map[*TypeParam]Type) []*Field {
 	for i, f := range fields {
 		cp := *f
 		cp.Type = subst(f.Type, bound)
+		cp.Constraints = substConstraints(f.Constraints, bound)
 		cp.Default = nil
 		cp.defaultState = 0
 		out[i] = &cp

@@ -1,0 +1,20 @@
+pred atLeast(n: Int, lo: Int) { n >= lo }
+type Range = { lo: Int, hi: Int where atLeast(lo) }
+type Defaults = { lo: Int = 0, hi: Int where atLeast(lo) = 10 }
+type Outer = { range: Range }
+fn badConstruct(lo: Int, hi: Int): Range { Range { lo: lo, hi: hi } }
+fn changedDependency(r: Range, lo: Int): Range { r.copy(lo: lo) }
+fn changedSubject(r: Range, hi: Int): Range { r.copy(hi: hi) }
+fn nestedDependency(o: Outer, lo: Int): Outer { o.copy(range.lo: lo) }
+pred positiveWith[T: Eq](n: Int, ignored: T) { ignored == ignored && n > 0 }
+pred genericPositive[T](n: Int, ignored: T) { n > 0 }
+type Generic[T] = { tag: T, n: Int where genericPositive(tag) }
+type Tagged = { tag: String, n: Int where positiveWith(tag) }
+type Holder = { value: Generic[String] }
+fn main() {
+  println(Tagged { tag: "x", n: -1 }, Generic { tag: "x", n: -1 }, Holder { value: Generic { tag: "x", n: -1 } })
+  r = Range { lo: 2, hi: 4 }
+  println(Range { lo: 5, hi: 3 })
+  println(r.copy(lo: 5), r.copy(hi: 1), r.copy(lo: 8, hi: 7))
+  println(Defaults { lo: 20 })
+}

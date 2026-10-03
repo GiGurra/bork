@@ -25,7 +25,7 @@ func (g *gen) decodeSchema(ci *check.ClassInstance, record *check.Record) string
 		}
 		fmt.Fprintf(&b, "{Name: %q, Type: %q, Doc: %q, HasDefault: %t, Default: %s, Constraints: []string{%s}, Kind: (%s).kind, Optional: (%s).optional, Decode: func(value Json) any {\n", field.Name, field.Type.String(), field.Doc, field.Default != nil, defaultValue, strings.Join(constraints, ", "), dict, dict)
 		b.WriteString("_result := func() any {\n_obj := Json_Object{fields: []JsonField{{name: " + fmt.Sprintf("%q", field.Name) + ", value: value}}}\n")
-		b.WriteString(g.decodeFields([]*check.Field{field}, []*check.Dict{ci.Methods[0].Derived.FieldDicts[0][i]}, g.typeText(record)))
+		b.WriteString(g.decodeFields([]*check.Field{independentField(field)}, []*check.Dict{ci.Methods[0].Derived.FieldDicts[0][i]}, g.typeText(record)))
 		fmt.Fprintf(&b, "}()\nif err, ok := _result.(DecodeError); ok { return err }\nreturn _result.(%s).%s\n}},\n", g.typeText(record), name(field.Name).Name)
 	}
 	b.WriteString("} }")
@@ -66,4 +66,17 @@ func (g *gen) fieldDefault(field *check.Field) string {
 	}
 	setup = append(setup, &ast.ReturnStmt{Results: []ast.Expr{value}})
 	return g.text(&ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(field.Type)}}}}, Body: &ast.BlockStmt{List: setup}}})
+}
+
+// A schema field decoder has only one field; relational checks belong to the
+// complete record decoder, once its sibling values have been decoded.
+func independentField(f *check.Field) *check.Field {
+	cp := *f
+	cp.Constraints = nil
+	for _, con := range f.Constraints {
+		if !con.HasSiblingArgs() {
+			cp.Constraints = append(cp.Constraints, con)
+		}
+	}
+	return &cp
 }

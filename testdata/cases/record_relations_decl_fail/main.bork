@@ -1,0 +1,6 @@
+pred atLeast(n: Int, lo: Int) { n >= lo }
+type Missing = { hi: Int where atLeast(lo) }
+type Wrong = { lo: String, hi: Int where atLeast(lo) }
+type Expression = { lo: Int, hi: Int where atLeast(lo + 1) }
+type Separate = sealed { Low { lo: Int }, High { hi: Int where atLeast(lo) } }
+fn main() {}
