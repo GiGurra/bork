@@ -2433,9 +2433,11 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   value position that lacks an expected type and suggests a typed binding or an
   explicit constructor. Ambiguous context lists the candidate types and offers
   one explicit-constructor edit per candidate, rather than selecting one for the
-  user. Generic constructors whose omitted type arguments need an expected
-  specialization mark the edit `requires_input` and name that specialization
-  for a type annotation; explicit literal syntax has no type-argument list. Unknown variants search only visible variants of expected sealed types.
+  user. Until bork-idtpbx is implemented, generic constructors whose omitted type
+  arguments need an expected specialization mark the edit `requires_input` and
+  name that specialization for a type annotation. Explicit specialized literal
+  heads and complete edits are specified in the next section. Unknown variants
+  search only visible variants of expected sealed types.
   Offer `.Variant` when that corrected spelling selects a unique candidate;
   otherwise offer separate explicitly qualified constructors for the close
   candidates. Never suggest a spelling that remains ambiguous.
@@ -2464,6 +2466,77 @@ Include rejected no-context/all-shorthand containers, unknown/fieldless variants
 unsupported positional Option constructors and inaccessible private variants;
 test record/variant effects, lifetime checks, formatter, resolved descriptions,
 structured fixes and the config example's output.
+
+### Explicit type arguments on literal heads (design: bork-idtpbx)
+
+A constructor can name the generic specialization it builds, so empty/defaulted
+fields and fieldless variants do not need another value position to supply type
+arguments. This also makes context-literal ambiguity edits complete.
+
+```bork
+ints = Box[Int] { values: [] }
+some = Option[String].Some { value: "trace" }
+none = Option[String].None
+imported = settings.Box[String] { value: "value" }
+```
+
+- **The brackets specialize the owner.** Support `Record[Args] { fields }`,
+  `Sealed[Args].Variant { fields }`, and fieldless `Sealed[Args].Variant`.
+  Qualified imported owners work with the same syntax. `Sealed.Variant[Args]`
+  is not a literal head. Existing generic call syntax stays unchanged; a
+  bracket list followed by a call remains that call's type arguments.
+- **Use ordinary type resolution.** Resolve the named owner and its type
+  arguments with the same arity, aliases, visibility, argument facts, and
+  bounds as a type annotation. A concrete alias already supplies its arguments
+  and cannot be given another list.
+  Parameterized aliases remain unsupported, as they are today; this ticket
+  does not add them. Type arguments can themselves be generic or composite types
+  permitted in annotations. No partial argument list or placeholder inference is added.
+- **The head supplies field context.** The explicit specialization determines
+  each field's expected type, including shorthand literals nested in fields,
+  empty lists/maps, lambdas, and defaulted fields. A surrounding expected type
+  cannot replace explicitly written arguments. Ordinary assignability checks
+  reject a conflicting result annotation or field value. Unspecialized heads
+  keep existing field/result inference behavior.
+- **Construction rules still apply.** Reuse required/default/duplicate field
+  handling, sibling and whole-value facts, private records/variants, source
+  order, and lifetime checks. Argument constraints remain obligations rather
+  than becoming assumed facts of an unvalidated constructor. Parent and variant
+  invariants validate the completed value as for ordinary construction.
+- **Keep this expression syntax.** It is a constructor head, not a new value
+  representing a type. A head without braces or a sealed variant is rejected.
+  Patterns keep their current syntax; typed binding patterns already accept
+  generic type annotations. This does not introduce specialized method-owner
+  syntax beyond the existing concrete-alias method behavior.
+- **Tooling preserves the specialization.** Format brackets and dotted variants
+  consistently, retaining comments and argument order. Describe the owner and
+  variant as the resolved specialization with their existing definitions; type
+  arguments have the same queries as other type uses. Grammar and README show
+  record, fielded-variant, fieldless-variant, and imported forms.
+- **Ambiguity fixes become complete.** For an expected `Box[Int] | Box[String]`,
+  `.{ values: [] }` offers separate
+  `Box[Int] { values: [] }` and `Box[String] { values: [] }` edits. The same rule
+  applies to generic sealed candidates and imported aliases. Prefer a visible
+  concrete alias that is legal in constructor position when it supplies the full
+  specialization; constrained aliases cannot serve as constructor names. Otherwise
+  use owner and argument names that can actually be resolved in the calling package. Do
+  not render unimported packages or unexported underlying names exposed through
+  public aliases. If no owner/argument spelling is accessible, mark the edit
+  `requires_input` and explain what visible name or import is needed. Keep
+  inaccessible/private candidates in the ambiguity explanation, but omit
+  constructor edits that would violate private construction or variant
+  visibility; advise using the owning package's public construction API instead,
+  naming a factory only when one is known. Apply
+  each usable alternative independently and recheck it.
+
+Acceptance covers constructor kinds, fieldless/defaulted variants, nested
+shorthand, concrete aliases (and rejection of parameterized aliases), imported
+types and alias-exposed inaccessible owners, constrained-alias fix fallbacks,
+argument arity/kinds,
+conflicting context, bounds/argument facts, defaults and invariants, private
+construction, source order/lifetimes, formatting/comments, descriptions, and
+independent ambiguity-fix rechecks. Existing generic calls and pattern behavior
+must remain compatible.
 
 ### Numbers
 
