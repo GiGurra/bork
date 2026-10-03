@@ -1,0 +1,2 @@
+module example.com/go_import_aliases_effects_fail
+unsafe "example.com/go_import_aliases_effects_fail"

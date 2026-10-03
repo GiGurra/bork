@@ -1,0 +1,3 @@
+main.bork:5:40: Go packages "math/rand/v2" and "crypto/rand" both use name rand in this file; give them distinct import aliases
+main.bork:13:26: Go packages "strings" and "strconv" both use name same in this file; give them distinct import aliases
+other.bork:1:34: Go packages "example.com/bindtest/firstname" and "example.com/bindtest/secondname" both use name collision in generated Go; give one an explicit import alias

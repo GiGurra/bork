@@ -1,0 +1,21 @@
+fn first() uses random: Int unsafe go {
+  import "math/rand/v2"
+  return rand.Int64()
+}
+fn second() uses random: Int unsafe go {
+  import "crypto/rand"
+  return 0
+}
+fn a(): Int unsafe go {
+  import same "strings"
+  return int64(same.Count("a", "a"))
+}
+fn b(): String unsafe go {
+  import same "strconv"
+  return same.FormatInt(1,10)
+}
+fn main() {}
+fn actualFirst(): Int unsafe go {
+  import "example.com/bindtest/firstname"
+  return collision.Value
+}

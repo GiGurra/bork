@@ -191,10 +191,12 @@ type Use struct {
 }
 
 // GoCode is the body of `unsafe go { ... }`: Go statements, preceded
-// by optional `import "path"` lines.
+// by optional `import [alias] "path"` lines.
 type GoCode struct {
 	Pos     diag.Pos // position of '{'
 	Imports []string
+	// ImportAliases contains explicit aliases by path.
+	ImportAliases map[string]string
 	// Body is the text between the braces, with the import lines
 	// blanked out, so its lines still match the source.
 	Body string

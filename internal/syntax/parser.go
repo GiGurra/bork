@@ -1554,11 +1554,38 @@ func (p *parser) goCode(t Token) *GoCode {
 		if !ok {
 			break
 		}
-		path, err := strconv.Unquote(strings.TrimSpace(rest))
+		rest = strings.TrimSpace(rest)
+		alias := ""
+		if !strings.HasPrefix(rest, "\"") {
+			parts := strings.Fields(rest)
+			if len(parts) >= 2 && gotoken.IsIdentifier(parts[0]) {
+				alias = parts[0]
+				rest = strings.TrimSpace(strings.TrimPrefix(rest, alias))
+			}
+		}
+		path, err := strconv.Unquote(rest)
+		if alias == "_" {
+			p.errorf(p.goPos(t.Pos, i, 0), "blank Go import aliases are not supported")
+		}
+		duplicate := false
+		for _, previous := range gc.Imports {
+			if previous == path {
+				duplicate = true
+			}
+		}
+		if duplicate {
+			p.errorf(p.goPos(t.Pos, i, 0), "Go package %q is imported more than once in this unsafe go body", path)
+		}
 		if err != nil {
-			p.errorf(p.goPos(t.Pos, i, 0), "expected `import \"path\"` in unsafe go block")
+			p.errorf(p.goPos(t.Pos, i, 0), "expected `import [alias] \"path\"` in unsafe go block")
 		} else {
 			gc.Imports = append(gc.Imports, path)
+			if alias != "" {
+				if gc.ImportAliases == nil {
+					gc.ImportAliases = map[string]string{}
+				}
+				gc.ImportAliases[path] = alias
+			}
 		}
 		lines[i] = ""
 	}

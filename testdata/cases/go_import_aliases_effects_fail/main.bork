@@ -1,0 +1,10 @@
+fn now(): Int unsafe go {
+  import timer "time"
+  return timer.Now().UnixNano()
+}
+fn later(): Int unsafe go { return timer.Now().UnixNano() }
+fn random(): Int unsafe go {
+  import draw "math/rand/v2"
+  return draw.Int64()
+}
+fn main() {}

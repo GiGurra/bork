@@ -1,0 +1,4 @@
+fn otherFile(): String unsafe go {
+  import other "strings"
+  return other.ToUpper("file")
+}

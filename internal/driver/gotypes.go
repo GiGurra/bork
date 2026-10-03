@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/GiGurra/bork/internal/syntax"
 	"golang.org/x/tools/go/packages"
@@ -75,4 +76,55 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 		}
 	}
 	return pkgs, errs
+}
+
+// Standard package names do not depend on a user's module. Read their metadata
+// once per compiler process; external packages use the pinned module loader.
+var standardGoNames = sync.OnceValue(func() map[string]string {
+	names := map[string]string{}
+	out, err := exec.Command("go", "list", "-f", "{{.ImportPath}} {{.Name}}", "std").Output()
+	if err != nil {
+		return names
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if fields := strings.Fields(line); len(fields) == 2 {
+			names[fields[0]] = fields[1]
+		}
+	}
+	return names
+})
+
+func (gp goPackages) Names(paths []string) map[string]string {
+	names := map[string]string{}
+	var external []string
+	for _, path := range paths {
+		if name := standardGoNames()[path]; name != "" {
+			names[path] = name
+		} else {
+			external = append(external, path)
+		}
+	}
+	if len(external) > 0 {
+		dir, err := os.MkdirTemp("", "bork-gonames-*")
+		if err != nil {
+			return names
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		if _, err := writeGoModule(dir, gp.files); err != nil {
+			return names
+		}
+		loaded, err := packages.Load(&packages.Config{
+			Mode: packages.NeedName, Dir: dir,
+			Env: append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=readonly"),
+		}, external...)
+		if err != nil {
+			return names
+		}
+		for _, pkg := range loaded {
+			if len(pkg.Errors) == 0 {
+				names[pkg.PkgPath] = pkg.Name
+			}
+		}
+	}
+	return names
 }

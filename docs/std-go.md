@@ -326,3 +326,17 @@ codec provided by the field type's owning package, as with `math.Decimal`.
 Re-deriving an alias of that private sealed type still cannot inspect its variants.
 
 Checked iterator bindings map `iter.Seq[G]` to `Seq[T]` when element conversion is infallible, and convert elements lazily in both directions. Direct Seq annotations must declare latent effects explicitly (`uses nothing` for a pure iterator). A nil returned iterator is empty. Iterators must yield synchronously and stop when the callback returns false; retaining the callback or yielding again violates the unsafe contract. Compiler-owned `_Seq[T]` has a `run iter.Seq[T]` field for standard-library implementations.
+
+## Go import names
+
+Unsafe Go import lines accept explicit names, such as
+`import mathrand "math/rand/v2"`. Aliases belong to the Bork file, and other
+unsafe bodies in that file may use them. Different files may use the same alias
+for different packages. Go locals and Bork parameters can shadow an alias.
+Unaliased imports retain the shared namespace of generated Go; conflicting
+package names are diagnosed before generation. Declared Go package names are
+resolved from package metadata, including names that differ from path basenames.
+Give colliding packages distinct aliases, for example `mathrand` and `cryptorand`.
+Dot and blank imports are not supported, and a body cannot import the same path
+twice. Imports precede other Go statements. Effect checks follow the underlying
+package through its alias.
