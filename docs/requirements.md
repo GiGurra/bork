@@ -208,33 +208,7 @@ r: SignUp | JsonError | DecodeError = decodeJson(line)   // DecodeError { path: 
 
 - **Not yet:** classes with several type parameters, superclasses, default methods, `where` clauses on methods, and choosing an instance at a call site.
 
-#### Debug probes and unfinished code (implemented)
-
-`dbg(expr)` is a compiler built-in for inspecting a value in place. It evaluates
-its argument exactly once, prints `file:line expr = value` to stderr (capturing
-the original expression text at compile time), then returns that same value.
-Rendering uses the coherent Show machinery, including custom instances and
-generic values. Probing preserves the value's type, proven facts and scope
-lifetime. Like logging, the probe's output is deliberately outside the effect
-system; it may appear in pure functions and predicates. The argument's own
-effects still count. Unit is not a printable value.
-
-`todo()` and `todo("message")` are compiler built-ins of type `Never`: they fit
-any expected result type and panic with the source file and line when reached.
-The optional message is a String expression, evaluated normally. They are useful
-for sketching incomplete functions and branches; they are not recoverable errors.
-
-`bork check` emits nonfatal warnings for both markers, including in unused
-functions and checked imports. In `--json` output they use `severity: "warning"`
-and the codes `debug.dbg` and `debug.todo`. A dbg warning supplies a removal fix
-which retains grouping, argument evaluation and nested expressions; pipelines
-are supported too. A todo warning has no automatic fix, since the missing
-implementation requires a decision. Warnings do not change check's exit status.
-Build, run and test continue to accept these markers. We do not introduce a
-release build mode or marker rejection in this change: check surfaces unfinished
-code, and automated consumers can choose to enforce those warning codes.
-
-## Open questions
+### Open questions
 
 - Scala-style placeholder shorthand for lambdas (e.g. `_.name`), or always named parameters?
 - Can a sealed type's variants be spread over several files in one package, or must they sit in one declaration?
@@ -2186,6 +2160,32 @@ documents the shared implementation boundary.
 
 - **A decimal or money type** in the standard library. Backends need exact decimal arithmetic, and `Float` is wrong for money.
 - **Big integer literals and conversions** between `Int` and the big integer type.
+
+### Debug probes and unfinished code (implemented)
+
+`dbg(expr)` is a compiler built-in for inspecting a value in place. It evaluates
+its argument exactly once, prints `file:line expr = value` to stderr (capturing
+the original expression text at compile time), then returns that same value.
+Rendering uses the coherent Show machinery, including custom instances and
+generic values. Probing preserves the value's type, proven facts and scope
+lifetime. Like logging, the probe's output is deliberately outside the effect
+system; it may appear in pure functions and predicates. The argument's own
+effects still count. Unit is not a printable value.
+
+`todo()` and `todo("message")` are compiler built-ins of type `Never`: they fit
+any expected result type and panic with the source file and line when reached.
+The optional message is a String expression, evaluated normally. They are useful
+for sketching incomplete functions and branches; they are not recoverable errors.
+
+`bork check` emits nonfatal warnings for both markers, including in unused
+functions and checked imports. In `--json` output they use `severity: "warning"`
+and the codes `debug.dbg` and `debug.todo`. A dbg warning supplies a removal fix
+which retains grouping, argument evaluation and nested expressions; pipelines
+are supported too. A todo warning has no automatic fix, since the missing
+implementation requires a decision. Warnings do not change check's exit status.
+Build, run and test continue to accept these markers. We do not introduce a
+release build mode or marker rejection in this change: check surfaces unfinished
+code, and automated consumers can choose to enforce those warning codes.
 
 ## Open questions
 
