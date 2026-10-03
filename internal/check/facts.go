@@ -1679,7 +1679,7 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 				continue
 			}
 			f.active[goal] = true
-			proven, pending := f.premises(r, 0, bound, ob.path, e, depth+1)
+			proven, pending := f.rulePremises(r, r.Premises, bound, ob.path, e, depth+1)
 			delete(f.active, goal)
 			if cs.take(proven, pending) {
 				return true, nil
@@ -1701,14 +1701,9 @@ func bindArg(bound map[string]argVal, a RuleArg, v argVal) bool {
 	return true
 }
 
-// premises proves the rule's premises from index i on, binding the
-// variables that only premises mention to the facts that match them.
-// With a path, the rule is applied to that part of the values (every
-// element of a list).
-func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, path string, e env, depth int) (bool, []Query) {
-	return f.rulePremises(r, r.Premises[i:], bound, path, e, depth)
-}
-
+// rulePremises binds values mentioned only in premises from matching
+// facts, then proves every premise and condition. With a path, the rule
+// applies to that part of each value (for example, every list element).
 func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[string]argVal, path string, e env, depth int) (bool, []Query) {
 	if depth > maxDepth {
 		return false, nil
@@ -1752,12 +1747,14 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 		rest := append(append([]*RuleAtom{}, remaining[:i]...), remaining[i+1:]...)
 		if complete {
 			ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:], path: path}, e, depth+1)
-			if ok {
-				if done, more := f.rulePremises(r, rest, bound, path, e, depth+1); cs.take(done, append(pending, more...)) {
-					return true, nil
-				}
+			if !ok {
+				return cs.result()
 			}
-			continue
+			done, more := f.rulePremises(r, rest, bound, path, e, depth+1)
+			if cs.take(done, append(pending, more...)) {
+				return true, nil
+			}
+			return cs.result()
 		}
 		// An unbound variable may be the subject as well as an argument.
 		// Try each matching fact; another premise can provide the binding first.
