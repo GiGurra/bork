@@ -494,3 +494,20 @@ changes, directory membership, invalid unused defaults, failed-to-valid repair,
 configuration/mode changes and evaluator/export-data bypasses. This is an
 in-memory complete-graph boundary; package interfaces, disk artifacts and runtime
 results remain separate work.
+
+
+### Launcher digest validation
+
+In-memory launcher digests can reuse a matching path/device/inode/size/mode/
+mtime/ctime tuple after more than two seconds of monotonic observation. During
+that warm-up the compiler hashes bytes again; matching bytes and metadata retain
+the observation start, while changed metadata resets it. This assumes timestamp
+granularity at most two seconds and ordinary change-time semantics. FAT/exFAT
+and platforms without inode/change-time evidence always hash. The rule does not
+compare process wall time with a remote filesystem's timestamps.
+
+Digest capture hashes one open descriptor and verifies its before/after identity
+plus the final pathname identity. A persistent disk entry must never trust a
+serialized observation time: every process must hash once and establish its own
+monotonic observation period before using stat-only validation. Configuration,
+SDK source, module and embedded-file content validation remain separate.

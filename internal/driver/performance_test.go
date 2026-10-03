@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/GiGurra/bork/internal/gen"
 )
@@ -206,19 +207,25 @@ func BenchmarkSession(b *testing.B) {
 							}
 						}
 					})
-					b.Run("unchanged", func(b *testing.B) {
-						session := NewSession()
-						if err := request(session); err != nil {
-							b.Fatal(err)
-						}
-						b.ReportAllocs()
-						for b.Loop() {
+					for _, repeat := range []string{"unchanged", "unchanged_stable"} {
+						b.Run(repeat, func(b *testing.B) {
+							session := NewSession()
 							if err := request(session); err != nil {
 								b.Fatal(err)
 							}
-						}
-						b.ReportMetric(float64(session.Stats().Hits)/float64(b.N), "hit/op")
-					})
+							if repeat == "unchanged_stable" {
+								// Establish a real monotonic observation outside the timed loop.
+								time.Sleep(goToolTimestampMargin + time.Millisecond)
+							}
+							b.ReportAllocs()
+							for b.Loop() {
+								if err := request(session); err != nil {
+									b.Fatal(err)
+								}
+							}
+							b.ReportMetric(float64(session.Stats().Hits)/float64(b.N), "hit/op")
+						})
+					}
 				})
 			}
 		})
@@ -234,6 +241,8 @@ func BenchmarkSessionValidation(b *testing.B) {
 	if artifact == nil {
 		b.Fatal(session.Stats())
 	}
+	// Measure established validation after the portable launcher warm-up.
+	time.Sleep(goToolTimestampMargin + time.Millisecond)
 	b.Run("configuration", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
