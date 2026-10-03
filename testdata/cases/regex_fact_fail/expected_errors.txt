@@ -1,1 +1,3 @@
 main.bork:5:24: accepted requires text to be regex.Matches(re), but that is not proven for "bad" (check it first with if (regex.Matches("bad", re)) { ... })
+main.bork:8:58: accepted requires text to be regex.Matches(re), but that is not proven for text (check it first with if (regex.Matches(text, other)) { ... })
+main.bork:10:59: regex.Compile requires pattern to be regex.ValidPattern, but that is not proven for pattern (check it first with if (regex.ValidPattern(pattern)) { ... }, or require it: pattern: String where regex.ValidPattern)

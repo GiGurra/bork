@@ -14,6 +14,7 @@ Option.Some { value: Match { value: "ab", start: 0, end: 2, groups: [Option.Some
 ba
 [Match { value: "", start: 0, end: 0, groups: [], named: {:} }, Match { value: "", start: 2, end: 2, groups: [], named: {:} }, Match { value: "", start: 3, end: 3, groups: [], named: {:} }]
 true
+true
 regex.Compile([a-z]+)
 ParseError { input: "[", message: "invalid pattern" }
 abc

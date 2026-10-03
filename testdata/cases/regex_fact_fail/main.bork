@@ -3,4 +3,8 @@ fn accepted(re: regex.Regex, text: String where regex.Matches(re)): String { tex
 fn main() {
   re = regex.Compile("^ok$")
   println(accepted(re, "bad"))
+  other = regex.Compile("^bad$")
+  text = "ok"
+  if (regex.Matches(text, re)) { println(accepted(other, text)) }
 }
+fn unproven(pattern: String): regex.Regex { regex.Compile(pattern) }

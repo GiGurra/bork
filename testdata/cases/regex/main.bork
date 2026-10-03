@@ -22,6 +22,11 @@ fn main() {
   println(regex.Compile("(a)(b)").Replace("ab", "${2}${1}"))
   println(regex.Compile("").FindAll("éa"))
   println(match (regex.Parse("[")) { error: ParseError => error.input == "["; _ => false })
+  parsed = regex.Parse("[a-z]+")
+  println(match (parsed) {
+    value: regex.Regex => value.Matches("abc") && value.Replace("123 abc", "ok") == "123 ok"
+    error: ParseError => false
+  })
   println(checked("[a-z]+"))
   println(checked("["))
   text = "abc"
