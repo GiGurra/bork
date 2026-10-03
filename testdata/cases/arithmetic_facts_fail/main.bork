@@ -18,3 +18,5 @@ pred allowed(n: Int) { allowedBody(n) }
 rule safeIncrement(n: Int) { n > 0 and n + 1 > 0 => allowed(n) }
 fn uncheckedRule(n: Int) where n > 0: Int where allowed { n }
 fn uncheckedMultiply(n: Int) where n >= 1 and n <= 10: Int where positive { n * n }
+
+fn wrappedAtom(n: Int8) where n >= 0: Int8 where smallPositive { (n + 1) + 0 }

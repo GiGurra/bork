@@ -19,6 +19,7 @@ fn main() {
   println(successor(9_223_372_036_854_775_806, 9_223_372_036_854_775_807))
   println(predecessor(-9_223_372_036_854_775_808, -9_223_372_036_854_775_807))
   println(sum(10, 20), gap(255, 254), increment(126))
+  println(wrappedIdentity(127))
   xs = [1, 2]
   if (xs.length() < 3) { println(listStep(xs, 3)) }
   println(namedShift(9, 10), negated(9, 10), cancellation(100))
@@ -90,3 +91,7 @@ fn negated(lo: Int, hi: Int): Int where atMost(hi) {
 }
 fn cancellation(n: Int) where n >= 0 and n <= 100: Int where atLeast(n) { (n + 10) - 10 }
 fn listStep(xs: List[Int], limit: Int) where xs.length() < limit: Int where atMost(limit) { xs.length() + 1 }
+
+fn equalSmall(a: Int8, b: Int8) where a == b: Int8 { a }
+// The inner increment may wrap; adding zero preserves its wrapped value.
+fn wrappedIdentity(n: Int8): Int8 { equalSmall((n + 1) + 0, n + 1) }
