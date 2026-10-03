@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -397,7 +398,16 @@ type gen struct {
 	openMocks  []openMock
 	mockBodies []mockBody
 	mockN      int
-	usesMocks  bool
+	// genericMocks numbers the mocks of generic functions (by their
+	// Func), and captures collects what the one being generated uses.
+	genericMocks map[*check.Func]int
+	captures     []*mockCapture
+	// typeParamNames renames type parameters in Go (see
+	// mangleTypeParams), and mockErrors are what generating a generic
+	// mock's body found wrong.
+	typeParamNames map[*check.TypeParam]string
+	mockErrors     diag.List
+	usesMocks      bool
 	// blocks are the blocks being generated, and scopeBodies the scope
 	// blocks, so a mock can tell whether it is directly in a scope's
 	// body.
@@ -758,15 +768,17 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	case *check.Interp:
 		return g.interp(e)
 	case *check.FuncRef:
+		g.genericCall(e.Inst, e.Pos())
 		stmts, needs := g.values(e.Needs)
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
-			return stmts, g.nextRef(e.Inst.Func, frame, needs)
+			return stmts, g.nextRef(e.Inst, frame, needs)
 		}
 		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || collapsedUnion(inst) || len(needs) > 0 {
 			return stmts, g.funcRef(inst, needs...)
 		}
 		return nil, g.instance(e.Inst)
 	case *check.VarRef:
+		g.captured(e.Var, false)
 		if e.Type() == check.OwnedScope {
 			// An owner is only used to pass it on, which disarms the
 			// fallback of its variable.
@@ -1042,6 +1054,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if e.Func.Prelude && e.Func.Decl.Name == "scopeOf" {
 			// b.scope borrows the owner's scope, leaving b armed.
 			if v, ok := e.Args[0].(*check.VarRef); ok {
+				g.captured(v.Var, true)
 				return nil, borrowedName(v.Var.Name)
 			}
 		}
@@ -1071,11 +1084,12 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			fun, dicts := g.methodFunc(inst)
 			return stmts, g.instanceResult(inst, &ast.CallExpr{Fun: fun, Args: append(dicts, xs...)})
 		}
+		g.genericCall(inst, e.Pos())
 		// The ambient values it needs follow the arguments.
 		needStmts, needs := g.values(e.Needs)
 		stmts = append(stmts, needStmts...)
 		if frame := g.passthrough(inst.Func); frame != nil {
-			return stmts, g.nextCall(inst.Func, frame, append(xs, needs...))
+			return stmts, g.nextCall(inst, frame, append(xs, needs...))
 		}
 		var dicts []ast.Expr
 		for _, d := range inst.Dicts {

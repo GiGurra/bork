@@ -295,6 +295,10 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	}
 	goSrc, err := gen.Tests(files, info, opts.AutoProperties)
 	if err != nil {
+		var diags *diag.List
+		if errors.As(err, &diags) {
+			return 1, &DiagError{Diags: diags}
+		}
 		return 1, err
 	}
 	dir, err := os.MkdirTemp("", "bork-test-*")

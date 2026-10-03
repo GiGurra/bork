@@ -106,8 +106,10 @@ func (c *checker) callRecord(target *Func) *Record {
 	// handle, which the test keeps: such parameters get no field (the
 	// call's text still shows them).
 	life := &lifeChecker{carries: map[Type]bool{}}
+	// So does one whose type mentions the target's type parameters: the
+	// record is one type for every instantiation.
 	for i, p := range target.Params {
-		if life.carriesLife(p) {
+		if life.carriesLife(p) || MentionsTypeParams(p, target.TypeParams) {
 			continue
 		}
 		field := fmt.Sprintf("p%d", i)
@@ -132,12 +134,50 @@ func (info *Info) mockCallLeftOut(r *Record, name string) string {
 			continue
 		}
 		for i, p := range target.Decl.Params {
+			if p.Name == name && i < len(target.Params) && MentionsTypeParams(target.Params[i], target.TypeParams) {
+				return fmt.Sprintf("%s has no field %s: a call record leaves out parameters whose type mentions the target's type parameters (%s), since one record serves every instantiation; check %s inside the mock's body instead", r.Name, name, target.Params[i], name)
+			}
 			if p.Name == name && i < len(target.Params) {
 				return fmt.Sprintf("%s has no field %s: a call record leaves out parameters whose values can belong to a scope (%s), since the test keeps the records after their scopes end; check %s inside the mock's body instead", r.Name, name, target.Params[i], name)
 			}
 		}
 	}
 	return ""
+}
+
+// MentionsTypeParams reports whether t mentions one of tps.
+func MentionsTypeParams(t Type, tps []*TypeParam) bool {
+	return mentionsWhere(t, func(p *TypeParam) bool {
+		for _, tp := range tps {
+			if p == tp {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// Reaches reports whether calling from may call to (or is it), by
+// the functions each calls.
+func Reaches(from, to *Func) bool {
+	seen := map[*Func]bool{}
+	var walk func(f *Func) bool
+	walk = func(f *Func) bool {
+		if f == to {
+			return true
+		}
+		if f == nil || seen[f] {
+			return false
+		}
+		seen[f] = true
+		for _, c := range f.Calls {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(from)
 }
 
 func (c *checker) mockCallTaken(name string) bool {
@@ -188,6 +228,7 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 	fn := &Func{
 		Decl:              &syntax.FuncDecl{Pos: s.MockPos, Name: fd.Name, Params: s.Params, ParamsEnd: s.ParamsEnd, Uses: fd.Uses, Result: fd.Result, Body: s.Body},
 		Pkg:               c.pkg,
+		TypeParams:        target.TypeParams,
 		Params:            target.Params,
 		Result:            target.Result,
 		Effects:           target.Effects | EffState,
@@ -202,8 +243,15 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 		d := &syntax.Need{Pos: s.MockPos, Name: n.Decl.Name, Optional: n.Optional}
 		fn.Needs = append(fn.Needs, &FuncNeed{Ambient: n.Ambient, Optional: n.Optional, Decl: d, Type: n.Type})
 	}
-	savedFn, savedUsed, savedDepth := c.fn, c.used, c.lambdaDepth
-	c.fn, c.used, c.lambdaDepth = fn, 0, 0
+	// A generic target's mock is generic too: one body answers every
+	// instantiation, seeing the target's type parameters by their names,
+	// so it keeps the promises of each (decode[Port] as decode[Int]).
+	// The body is a function of its own: a loop or generator around the
+	// mock statement is not its to break, continue, or yield to.
+	savedFn, savedUsed, savedDepth, savedTypeParams := c.fn, c.used, c.lambdaDepth, c.typeParams
+	savedLoops, savedProducer := c.loops, c.producer
+	c.fn, c.used, c.lambdaDepth, c.loops, c.producer = fn, 0, 0, nil, nil
+	c.useTypeParams(fn)
 	c.pushScope()
 	for _, n := range fn.Needs {
 		c.scopes[len(c.scopes)-1][ambientKey(n.Ambient)] = &local{typ: n.Type, decl: n.Decl}
@@ -220,7 +268,8 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 	}
 	bodyType := c.block(s.Body, want)
 	c.popScope()
-	c.fn, c.used, c.lambdaDepth = savedFn, savedUsed, savedDepth
+	c.fn, c.used, c.lambdaDepth, c.typeParams = savedFn, savedUsed, savedDepth, savedTypeParams
+	c.loops, c.producer = savedLoops, savedProducer
 	name := writtenText(s.Target)
 	switch {
 	case fn.Result == Unit && isValue(bodyType):
@@ -298,8 +347,6 @@ func (c *checker) mockTarget(x syntax.Expr) *Func {
 		c.mockErr(pos, "main cannot be mocked: it cannot be called")
 	case fn.Effects&^EffOpen == 0:
 		c.mockErr(pos, "%s is pure, and only functions with effects can be mocked: the compiler relies on a pure function giving the same answer for the same arguments (facts named after it, and predicates calling it, would go stale); test it as it is, or have the code under test take it as a function value", text)
-	case len(fn.TypeParams) > 0:
-		c.mockErr(pos, "%s is generic, and generic functions cannot be mocked yet; mock a non-generic function that calls it", text)
 	default:
 		return fn
 	}

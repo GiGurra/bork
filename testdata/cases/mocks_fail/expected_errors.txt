@@ -3,7 +3,6 @@ main.bork:27:13: Fetch takes 1 parameter (url), but the mock names 2; write: moc
 main.bork:28:8: total is pure, and only functions with effects can be mocked: the compiler relies on a pure function giving the same answer for the same arguments (facts named after it, and predicates calling it, would go stale); test it as it is, or have the code under test take it as a function value
 main.bork:29:8: positive is a predicate, and only functions with effects can be mocked: the compiler relies on predicates' answers to prove facts
 main.bork:30:8: println is built into the compiler and cannot be mocked; mock the function that calls it
-main.bork:31:8: Pick is generic, and generic functions cannot be mocked yet; mock a non-generic function that calls it
 main.bork:32:8: cannot mock missing: there is no function named missing
 main.bork:33:8: cannot mock time.now: package bork/time has no now
 main.bork:34:19: the mock of Fetch must give String, but its body produces Int

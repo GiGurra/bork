@@ -1,0 +1,31 @@
+// A generic mock must keep the promise of every instantiation.
+
+pred positive(n: Int) { n > 0 }
+
+type Port = Int where positive
+
+fn Load[T](key: String, fallback: T) uses io: T {
+  fallback
+}
+
+fn main() {
+  p: Port = Load("port", 8080)
+  println(p)
+}
+
+test "a generic mock cannot give one type for every T" {
+  mock Load(key, fallback) { 0 }
+}
+
+test "nor read T's values as one type" {
+  mock Load(key, fallback) { fallback + 1 }
+}
+
+test "a mock's body cannot break the test's loop" {
+  for (i in [1, 2]) {
+    mock Load(key, fallback) {
+      if (i == 2) { continue }
+      fallback
+    }
+  }
+}

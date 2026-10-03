@@ -1776,17 +1776,34 @@ checked as if it were that function's body:
 | Another package's unexported functions | no | mock the exported function that calls them |
 | The prelude's functions and methods (`spawn`, `atom`, list and string methods, ...) and the compiler's built-ins (`println`, `toString`, `assert`, ...) | no | they implement the language; mock the function that calls them |
 | Class methods and instances (`Show`, `Decode`, ...) | no | instances are resolved per type; mock the function that uses them |
-| Generic functions and methods | not yet | see below |
+| Generic functions and methods | yes (bork-7gpl00) | one generic mock answers every instantiation; see below |
 | `main` and tests | no | `main` cannot be called; tests are roots |
 | A function value or a record field holding one | no | pass a different value instead |
 
-**Generic functions are left for later.** Bork generics compile to Go generics,
-so a call inside other generic code only knows the instantiation at runtime,
-in Go's terms, where facts are erased and every union is `any`. A mock of
-`decode[Int]` would then also answer `decode[Port]` (`Port = Int where positive`)
-and break its promise. Doing it soundly needs either one mock body for every
-instantiation (a generic mock) or runtime type descriptors; a follow-up
-ticket covers it.
+**A generic function's mock is generic** (bork-7gpl00). Bork generics compile
+to Go generics, so a call inside other generic code only knows the
+instantiation at runtime, in Go's terms, where facts are erased and every union
+is `any`. A mock written for `decode[Int]` would then also answer
+`decode[Port]` (`Port = Int where positive`) and break its promise. So a mock of
+a generic function or method is one body for every instantiation: it is checked
+against the target's generic signature, with the target's type parameters in
+scope under their names (`mock Load(key, fallback) { fallback }` gives a `T`;
+`{ 0 }` is rejected: "the mock of Load must give T, but its body produces
+Int"). Whatever it gives keeps the promise of each instantiation, as the
+target's own body does. In test builds the body is a generic Go function of
+its own (Go has no generic function values), which the dispatcher selects by
+the mock's environment: the test's values the body uses, copied when the
+`mock` statement runs (bork values never change, so the copy is the value).
+Its Go type parameters get names of their own, so they never hide the test's
+types or values. Parameters of a type that mentions a type parameter get no
+field in the call record (one record serves every instantiation); `calls()`
+shows them. One limit comes from Go: the body cannot reach its target again,
+directly or through other functions, at a type built from its type
+parameters (`Describe([x])` in a mock of `Describe[T]`), since each Go instance
+of the body would need another; `bork test` reports that
+(`mock.generic-recursion`), naming the function it goes through. Like any
+function's body, a mock's body cannot `break` or `continue` a loop of the
+test around it.
 
 ### Calling the real function
 
@@ -1892,7 +1909,6 @@ main_test.bork:4:8: positive is a predicate, and only functions with effects can
 main_test.bork:4:8: payments.charge is not exported, so the test cannot mock it
 main_test.bork:4:8: println is built into the compiler and cannot be mocked; mock the function that calls it
 main_test.bork:4:8: map is a prelude method and cannot be mocked; mock the function that calls it
-main_test.bork:4:8: decode is generic; generic functions cannot be mocked yet
 main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it again in a nested block
 ```
 
@@ -1938,7 +1954,6 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
 
 ### Follow-ups
 
-- Generic functions and methods (bork-7gpl00): one generic mock for every instantiation.
 - Hermetic tests (bork-x0g9au): report, or require, that a test mocks every `net` function
   it can reach, so it can run without a network.
 - Mocking class instances, if real code shows the need.

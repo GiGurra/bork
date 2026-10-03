@@ -1,11 +1,13 @@
 package gen
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"strconv"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/diag"
 )
 
 // Mocks (see "Mocking in tests" in docs/requirements.md). In the
@@ -50,6 +52,56 @@ func (g *gen) mockTargets(info *check.Info) {
 		if g.mockIDs[m.MockOf] == 0 {
 			g.mockIDs[m.MockOf] = len(g.mockIDs) + 1
 		}
+		if len(m.MockOf.TypeParams) > 0 {
+			// A generic mock's body is a generic Go function of its own
+			// (Go has no generic function values): _mockBody<n>, with
+			// what it captures from the test in a _mockEnv<n>.
+			if g.genericMocks == nil {
+				g.genericMocks = map[*check.Func]int{}
+			}
+			g.genericMocks[m] = len(g.genericMocks) + 1
+		}
+	}
+}
+
+// typeArgs instantiates the Go function fun with fn's type parameters,
+// if it has any: fun[T, U].
+func (g *gen) typeArgs(fun ast.Expr, fn *check.Func) ast.Expr {
+	if len(fn.TypeParams) == 0 {
+		return fun
+	}
+	idx := &ast.IndexListExpr{X: fun}
+	for _, tp := range fn.TypeParams {
+		idx.Indices = append(idx.Indices, g.goType(tp))
+	}
+	return idx
+}
+
+// typeParamFields declares fn's type parameters for a Go function.
+func (g *gen) typeParamFields(fn *check.Func) *ast.FieldList {
+	if len(fn.TypeParams) == 0 {
+		return nil
+	}
+	tps := &ast.Field{Type: ast.NewIdent("any")}
+	for _, tp := range fn.TypeParams {
+		tps.Names = append(tps.Names, g.goType(tp).(*ast.Ident))
+	}
+	return &ast.FieldList{List: []*ast.Field{tps}}
+}
+
+// mangleTypeParams names fn's type parameters _T<n> in Go while a
+// generic mock's body is generated, so they cannot hide the test's
+// types or values of the same name (on), and back (off).
+func (g *gen) mangleTypeParams(fn *check.Func, on bool) {
+	for i, tp := range fn.TypeParams {
+		if !on {
+			delete(g.typeParamNames, tp)
+			continue
+		}
+		if g.typeParamNames == nil {
+			g.typeParamNames = map[*check.TypeParam]string{}
+		}
+		g.typeParamNames[tp] = "_T" + strconv.Itoa(i)
 	}
 }
 
@@ -116,13 +168,20 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 		}
 		return []ast.Stmt{&ast.ExprStmt{X: call}, &ast.ReturnStmt{}}
 	}
+	// A generic function's instances of its bounds come first.
+	dictFields := g.dictParams(fn.TypeParams)
+	var dicts []ast.Expr
+	for _, d := range dictFields {
+		dicts = append(dicts, d.Names[0])
+	}
 	from, f := ast.NewIdent("_from"), ast.NewIdent("_f")
 	next := &ast.FuncDecl{
 		Name: ast.NewIdent("_next_" + goName),
 		Type: g.mockFuncType(fn, params),
 	}
-	next.Type.Params.List = append([]*ast.Field{{Names: []*ast.Ident{from}, Type: &ast.StarExpr{X: ast.NewIdent("_mockFrame")}}}, next.Type.Params.List...)
-	mockCall := &ast.CallExpr{
+	next.Type.TypeParams = g.typeParamFields(fn)
+	next.Type.Params.List = append(append([]*ast.Field{{Names: []*ast.Ident{from}, Type: &ast.StarExpr{X: ast.NewIdent("_mockFrame")}}}, dictFields...), next.Type.Params.List...)
+	var mockCall ast.Expr = &ast.CallExpr{
 		Fun:  &ast.TypeAssertExpr{X: &ast.SelectorExpr{X: f, Sel: ast.NewIdent("fn")}, Type: g.mockFuncType(fn, nil)},
 		Args: args,
 	}
@@ -147,16 +206,42 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{lit}}}},
 		}
 	}
-	found := append([]ast.Stmt{
+	found := []ast.Stmt{
 		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: f, Sel: ast.NewIdent("done")}}},
 		&ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: f, Sel: ast.NewIdent("called")}, Args: []ast.Expr{texts, typed}}},
-	}, result(mockCall)...)
+	}
+	if len(fn.TypeParams) == 0 {
+		found = append(found, result(mockCall)...)
+	} else {
+		// The mock's frame holds its body's environment, whose type
+		// says which generic body to run.
+		env := ast.NewIdent("_env")
+		sw := &ast.TypeSwitchStmt{
+			Assign: define(env, &ast.TypeAssertExpr{X: &ast.SelectorExpr{X: f, Sel: ast.NewIdent("fn")}}),
+			Body:   &ast.BlockStmt{},
+		}
+		for _, m := range g.info.Mocks {
+			k := g.genericMocks[m]
+			if m.MockOf != fn || k == 0 {
+				continue
+			}
+			call := &ast.CallExpr{
+				Fun:  g.typeArgs(ast.NewIdent("_mockBody"+strconv.Itoa(k)), fn),
+				Args: append(append([]ast.Expr{env, f}, dicts...), args...),
+			}
+			sw.Body.List = append(sw.Body.List, &ast.CaseClause{
+				List: []ast.Expr{&ast.StarExpr{X: ast.NewIdent("_mockEnv" + strconv.Itoa(k))}},
+				Body: result(call),
+			})
+		}
+		found = append(found, sw, &ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{strLit("bork: a mock of " + fn.Decl.Name + " has no body")}}})
+	}
 	body := []ast.Stmt{&ast.IfStmt{
 		Init: define(f, &ast.CallExpr{Fun: ast.NewIdent("_mockFind"), Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(id)}, from}}),
 		Cond: &ast.BinaryExpr{X: f, Op: token.NEQ, Y: ast.NewIdent("nil")},
 		Body: &ast.BlockStmt{List: found},
 	}}
-	real := &ast.CallExpr{Fun: ast.NewIdent("_real_" + goName), Args: args}
+	real := &ast.CallExpr{Fun: g.typeArgs(ast.NewIdent("_real_"+goName), fn), Args: append(append([]ast.Expr(nil), dicts...), args...)}
 	if returns {
 		body = append(body, &ast.ReturnStmt{Results: []ast.Expr{real}})
 	} else {
@@ -164,7 +249,9 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 	}
 	next.Body = &ast.BlockStmt{List: body}
 	dispatch := &ast.FuncDecl{Name: ast.NewIdent(goName), Type: g.mockFuncType(fn, params)}
-	call := &ast.CallExpr{Fun: next.Name, Args: append([]ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_mockCurrent")}}, args...)}
+	dispatch.Type.TypeParams = g.typeParamFields(fn)
+	dispatch.Type.Params.List = append(g.dictParams(fn.TypeParams), dispatch.Type.Params.List...)
+	call := &ast.CallExpr{Fun: g.typeArgs(next.Name, fn), Args: append(append([]ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_mockCurrent")}}, dicts...), args...)}
 	if returns {
 		dispatch.Body = &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{call}}}}
 	} else {
@@ -204,6 +291,17 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 	savedResult, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = m.Target.Result, nil, nil, nil
 	g.mockBodies = append(g.mockBodies, mockBody{target: m.Target, frame: frame})
+	// A loop around the mock is not the body's to break or continue.
+	savedYield, savedLoops := g.yieldName, g.loops
+	g.yieldName, g.loops = nil, nil
+	var capture *mockCapture
+	if g.genericMocks[m.Func] != 0 {
+		capture = &mockCapture{from: m.Pos, to: m.Func.Body.End, seen: map[string]bool{}, target: m.Target, text: m.Text}
+		g.captures = append(g.captures, capture)
+		// The body's code names the type parameters as its Go function
+		// does (genericMockBody).
+		g.mangleTypeParams(m.Target, true)
+	}
 	var body []ast.Stmt
 	if m.Target.Result == check.Unit {
 		body = g.blockInto(m.Func.Body, sink{})
@@ -211,8 +309,16 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 		body = g.blockInto(m.Func.Body, sink{ret: true})
 	}
 	g.mockBodies = g.mockBodies[:len(g.mockBodies)-1]
+	g.yieldName, g.loops = savedYield, savedLoops
+	if capture != nil {
+		g.captures = g.captures[:len(g.captures)-1]
+		g.mangleTypeParams(m.Target, false)
+	}
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = savedResult, savedScopes, savedOwners, savedMocks
-	lit := &ast.FuncLit{Type: g.mockFuncType(m.Target, names), Body: &ast.BlockStmt{List: body}}
+	var lit ast.Expr = &ast.FuncLit{Type: g.mockFuncType(m.Target, names), Body: &ast.BlockStmt{List: body}}
+	if k := g.genericMocks[m.Func]; k != 0 {
+		lit = g.genericMockBody(m, k, frame, names, body, capture)
+	}
 	var parent ast.Expr = ast.NewIdent("nil")
 	if n := len(g.openMocks); n > 0 {
 		parent = g.openMocks[n-1].frame
@@ -267,6 +373,116 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 	return stmts
 }
 
+// mockCapture collects the test's variables a generic mock's body uses:
+// those declared outside the mock statement (from..to).
+type mockCapture struct {
+	from, to diag.Pos
+	vars     []capturedVar
+	seen     map[string]bool
+	target   *check.Func
+	text     string // the mock's target as written
+}
+
+// capturedVar is a Go variable of the test that a generic mock's body
+// uses, and its Go type.
+type capturedVar struct {
+	name *ast.Ident
+	typ  ast.Expr
+}
+
+// captured notes that code being generated uses v, if a generic mock's
+// body is being generated and v is the test's; borrowed is for the
+// scope it borrows from an owned scope (b.scope), _scopeOf_b.
+func (g *gen) captured(v *check.Var, borrowed bool) {
+	if len(g.captures) == 0 {
+		return
+	}
+	c := g.captures[len(g.captures)-1]
+	p := v.Pos
+	inside := p.File == c.from.File &&
+		(p.Line > c.from.Line || p.Line == c.from.Line && p.Col >= c.from.Col) &&
+		(p.Line < c.to.Line || p.Line == c.to.Line && p.Col <= c.to.Col)
+	n, t := name(v.Name), ast.Expr(nil)
+	if borrowed {
+		n, t = borrowedName(v.Name), &ast.StarExpr{X: ast.NewIdent("_Scope")}
+	}
+	if inside || c.seen[n.Name] {
+		return
+	}
+	if t == nil {
+		saved := g.captures
+		g.captures = nil // the test's types, not the body's
+		t = g.goType(v.Type)
+		g.captures = saved
+	}
+	c.seen[n.Name] = true
+	c.vars = append(c.vars, capturedVar{name: n, typ: t})
+}
+
+// genericCall checks a call (or function value) inst in a generic
+// mock's body: Go cannot compile a generic body that reaches its own
+// target at a type built from its type parameters (decode[List[T]]
+// from decode[T]), since each instance would need another.
+func (g *gen) genericCall(inst *check.Instance, pos diag.Pos) {
+	if len(g.captures) == 0 || len(inst.TypeArgs) == 0 {
+		return
+	}
+	c := g.captures[len(g.captures)-1]
+	for _, a := range inst.TypeArgs {
+		if _, bare := a.(*check.TypeParam); bare || !check.MentionsTypeParams(a, c.target.TypeParams) {
+			continue
+		}
+		if check.Reaches(inst.Func, c.target) {
+			via := ""
+			if inst.Func != c.target {
+				via = fmt.Sprintf(" (through %s)", inst.Func.Decl.Name)
+			}
+			g.mockErrors.AddCode(pos, "mock.generic-recursion", "the mock of %s reaches %s again%s at type %s, made from its own type parameters; a generic mock's body can reach it only at the same type parameters (Go compiles one body per instantiation, and this one would need endlessly many)", c.text, c.text, via, check.TypeText(a, nil))
+			return
+		}
+	}
+}
+
+// genericMockBody declares the body of the generic mock m as the Go
+// function _mockBody<k>, generic in the target's type parameters, with
+// what it uses of the test in a _mockEnv<k>, and gives the environment
+// that the frame holds:
+//
+//	type _mockEnv1 struct{ fallback string }
+//	func _mockBody1[T any](_env *_mockEnv1, _mf1 *_mockFrame, dicts..., text string) T {
+//		fallback := _env.fallback
+//		...
+//	}
+//
+// and &_mockEnv1{fallback: fallback} for _mockPush.
+func (g *gen) genericMockBody(m *check.Mock, k int, frame *ast.Ident, names []*ast.Ident, body []ast.Stmt, c *mockCapture) ast.Expr {
+	envName := ast.NewIdent("_mockEnv" + strconv.Itoa(k))
+	env := ast.NewIdent("_env")
+	st := &ast.StructType{Fields: &ast.FieldList{}}
+	lit := &ast.CompositeLit{Type: envName}
+	var unpack []ast.Stmt
+	for _, v := range c.vars {
+		st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{v.name}, Type: v.typ})
+		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: v.name, Value: v.name})
+		unpack = append(unpack,
+			define(v.name, &ast.SelectorExpr{X: env, Sel: v.name}),
+			assign(ast.NewIdent("_"), v.name))
+	}
+	g.mangleTypeParams(m.Target, true)
+	defer g.mangleTypeParams(m.Target, false)
+	ft := g.mockFuncType(m.Target, names)
+	ft.TypeParams = g.typeParamFields(m.Target)
+	ft.Params.List = append(append([]*ast.Field{
+		{Names: []*ast.Ident{env}, Type: &ast.StarExpr{X: envName}},
+		{Names: []*ast.Ident{frame}, Type: &ast.StarExpr{X: ast.NewIdent("_mockFrame")}},
+	}, g.dictParams(m.Target.TypeParams)...), ft.Params.List...)
+	g.extraFuncs = append(g.extraFuncs,
+		&ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{Name: envName, Type: st}}},
+		&ast.FuncDecl{Name: ast.NewIdent("_mockBody" + strconv.Itoa(k)), Type: ft, Body: &ast.BlockStmt{List: append(unpack, body...)}},
+	)
+	return &ast.UnaryExpr{Op: token.AND, X: lit}
+}
+
 // endMocks ends the mocks pushed since the first `from` of openMocks
 // (innermost first), at the normal end of their block, then checks
 // their expectations.
@@ -312,31 +528,41 @@ func (g *gen) passthrough(fn *check.Func) *ast.Ident {
 	return nil
 }
 
-// nextCall calls fn as it was before the mock of frame: the outer mock
-// or the real function.
-func (g *gen) nextCall(fn *check.Func, frame *ast.Ident, args []ast.Expr) ast.Expr {
-	return &ast.CallExpr{
-		Fun:  ast.NewIdent("_next_" + g.funcName(fn).Name),
-		Args: append([]ast.Expr{&ast.SelectorExpr{X: frame, Sel: ast.NewIdent("parent")}}, args...),
+// nextCall calls fn (inst) as it was before the mock of frame: the
+// outer mock or the real function.
+func (g *gen) nextCall(inst *check.Instance, frame *ast.Ident, args []ast.Expr) ast.Expr {
+	var fun ast.Expr = ast.NewIdent("_next_" + g.funcName(inst.Func).Name)
+	if len(inst.TypeArgs) > 0 {
+		idx := &ast.IndexListExpr{X: fun}
+		for _, t := range inst.TypeArgs {
+			idx.Indices = append(idx.Indices, g.goType(t))
+		}
+		fun = idx
 	}
+	all := []ast.Expr{&ast.SelectorExpr{X: frame, Sel: ast.NewIdent("parent")}}
+	for _, d := range inst.Dicts {
+		all = append(all, g.dict(d))
+	}
+	return g.instanceResult(inst, &ast.CallExpr{Fun: fun, Args: append(all, args...)})
 }
 
-// nextRef is fn as a value, as it was before the mock of frame.
+// nextRef is fn (inst) as a value, as it was before the mock of frame.
 // The ambient values it needs are those in force where it is named.
-func (g *gen) nextRef(fn *check.Func, frame *ast.Ident, needs []ast.Expr) ast.Expr {
+func (g *gen) nextRef(inst *check.Instance, frame *ast.Ident, needs []ast.Expr) ast.Expr {
 	var names []*ast.Ident
 	var args []ast.Expr
-	for i := range fn.Params {
+	for i := range inst.Params {
 		p := ast.NewIdent("_a" + strconv.Itoa(i))
 		names = append(names, p)
 		args = append(args, p)
 	}
-	call := g.nextCall(fn, frame, append(args, needs...))
+	call := g.nextCall(inst, frame, append(args, needs...))
 	var body ast.Stmt = &ast.ExprStmt{X: call}
-	if fn.Result != check.Unit && fn.Result != check.Never {
+	if inst.Result != check.Unit && inst.Result != check.Never {
 		body = &ast.ReturnStmt{Results: []ast.Expr{call}}
 	}
-	return &ast.FuncLit{Type: g.funcType(&check.FuncType{Params: fn.Params, Result: fn.Result}, names), Body: &ast.BlockStmt{List: []ast.Stmt{body}}}
+	ft := g.funcType(&check.FuncType{Params: inst.Params, Result: inst.Result}, names)
+	return &ast.FuncLit{Type: ft, Body: &ast.BlockStmt{List: []ast.Stmt{body}}}
 }
 
 // mockRuntime keeps the mocks in force: a chain of frames, one per
