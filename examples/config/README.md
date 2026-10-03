@@ -1,0 +1,7 @@
+Run `bork run examples/config` to print local, staging, and production configurations. The example runs without network requests or certificate files.
+
+`settings.New` requires a non-empty host and supplies defaults for the port, timeouts, body limit, TLS mode, and debug option. Named arguments identify overrides; expected parameter types supply the constructors in `.Files { cert: "staging.pem", key: "staging.key" }` and `.Some { value: "requests" }`.
+
+The field facts require a valid port, positive sizes/timeouts, and a read timeout at least as large as the connect timeout. The type-level `Configured` predicate also requires a body limit of at least 1024 bytes. The decoded examples show defaults being filled and the type predicate rejecting an otherwise positive body limit of 512 bytes. Every valid `settings.Config` carries that fact, so `configuredHost` can accept the config without an extra guard.
+
+`Config` is private to the settings package for construction and copies. Clients read its fields and call the validated factory. `settings.ForProduction` uses colon-style `copy` inside the owning package. A client may replace an entire private-valued field with a valid config, as the deployment update shows. The commented invalid calls demonstrate rejected field values, direct construction, and nested copies across the package boundary.

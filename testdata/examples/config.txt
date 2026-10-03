@@ -1,0 +1,8 @@
+Config { host: "localhost", port: 8080, connectTimeoutMs: 1000, readTimeoutMs: 5000, bodyLimitBytes: 1048576, tls: TlsMode.Disabled, debug: Option.None }
+Config { host: "staging.example", port: 8443, connectTimeoutMs: 250, readTimeoutMs: 3000, bodyLimitBytes: 1048576, tls: TlsMode.Files { cert: "staging.pem", key: "staging.key" }, debug: Option.Some { value: "requests" } }
+Config { host: "production.example", port: 8443, connectTimeoutMs: 250, readTimeoutMs: 3000, bodyLimitBytes: 1048576, tls: TlsMode.Files { cert: "production.pem", key: "production.key" }, debug: Option.Some { value: "requests" } }
+production.example
+{"host":"production.example","port":8443,"connectTimeoutMs":250,"readTimeoutMs":3000,"bodyLimitBytes":1048576,"tls":{"type":"Files","cert":"production.pem","key":"production.key"},"debug":"requests"}
+Config { host: "decoded.example", port: 8080, connectTimeoutMs: 100, readTimeoutMs: 500, bodyLimitBytes: 4096, tls: TlsMode.Disabled, debug: Option.None }
+DecodeError { path: "", message: "must be Configured" }
+Deployment { name: "production", config: Config { host: "production.example", port: 8443, connectTimeoutMs: 250, readTimeoutMs: 3000, bodyLimitBytes: 1048576, tls: TlsMode.Files { cert: "production.pem", key: "production.key" }, debug: Option.Some { value: "requests" } } }
