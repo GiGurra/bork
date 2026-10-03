@@ -26,7 +26,7 @@ func Parse(diags *diag.List) []*syntax.File {
 		if err != nil {
 			panic(err)
 		}
-		f := syntax.Parse(path.Join("prelude", name), src, diags)
+		f := syntax.ParseEmbedded(path.Join("prelude", name), src, diags)
 		f.Prelude = true
 		files = append(files, f)
 	}

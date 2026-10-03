@@ -15,8 +15,12 @@ import (
 // returned file holds whatever could be parsed.
 func Parse(path string, src []byte, diags *diag.List) *File {
 	toks, comments := Lex(path, src, diags)
+	return parse(path, string(src), toks, comments, diags)
+}
+
+func parse(path, src string, toks []Token, comments []Comment, diags *diag.List) *File {
 	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}}
-	f := &File{Path: path, Source: string(src), Comments: comments}
+	f := &File{Path: path, Source: src, Comments: comments}
 	// Imports come first.
 	for {
 		p.skipSemis()
