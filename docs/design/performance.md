@@ -256,3 +256,61 @@ does not settle the CLI regression tracked above.
 ```sh
 go test ./internal/driver -run '^$' -bench '^BenchmarkSession/' -benchmem -benchtime=5x -count=3
 ```
+
+## Session content-validation measurements
+
+The next Session step avoids repeated `go env` and standard-package discovery
+for recognized, inventoried Go configurations. Main (#203 plus #199) and the final validator ran three five-request
+samples each on the same host:
+
+| Workload | First request before → after ms | Unchanged request before → after ms |
+| --- | ---: | ---: |
+| hello check | 43.97 → 74.22 | 38.75 → 18.74 |
+| hello emit | 52.49 → 81.60 | 38.30 → 18.70 |
+| synthetic1000 check | 74.89 → 106.54 | 38.92 → 18.99 |
+| synthetic1000 emit | 99.69 → 130.07 | 38.94 → 18.66 |
+
+These are medians including validation, with exactly one hit per unchanged
+request. Initial requests seed and verify inventories; this increases their
+cost. Ordinary one-shot APIs are unchanged. Hit allocation rises modestly:
+hello check 0.34 → 0.57 MB and synthetic1000 emit 0.71 → 0.95 MB, because the
+validator opens and streams all immediate files of observed standard packages.
+It retains digests rather than package-source bytes or mutable checker graphs.
+
+The isolated hit validation medians were configuration 17.22 → 10.06 ms,
+standard names 21.18 → 8.03 ms, and source/assets about 0.06 ms. Configuration is
+now dominated by hashing the selected Go executable. A follow-up can validate
+that digest with filesystem identity including inode/ctime where available;
+platforms lacking that evidence must keep content hashing. SDK/source/env file
+edits still require content checks, including equal-size/equal-mtime edits.
+Fresh-process CLI capture latency remains the separate unresolved #194 follow-up.
+
+`BenchmarkBuildStages` separates complete Bork emission (including Go metadata
+and any compiler-time proof work) from staged compilation/linking of that Go.
+It primes dependency build caches, uses the existing flat-output build path with
+a fresh staging directory per build, and executes no generated program. This
+is not a Go cache-hit-only measurement: staging paths can cause the generated
+main package to compile again. Go-child allocations are outside parent Go
+benchmark allocation counts.
+
+```sh
+go test ./internal/driver -run '^$' -bench '^BenchmarkSession/' -benchmem -benchtime=5x -count=3
+go test ./internal/driver -run '^$' -bench '^BenchmarkSessionValidation$' -benchmem -benchtime=5x -count=3
+go test ./internal/driver -run '^$' -bench '^BenchmarkBuildStages$' -benchmem -benchtime=1x -count=7
+```
+
+A separate seven-run measurement (`-benchtime=1x -count=7`) after local tests
+finished gave the following milliseconds; the earlier concurrent measurements
+were much noisier:
+
+| Program | Bork compile median (min–max) | Staged Go build median (min–max) | Emitted Go bytes |
+| --- | ---: | ---: | ---: |
+| config | 325.30 (299.20–454.41) | 282.31 (278.55–359.60) | 63,706 |
+| http_server | 450.89 (424.53–466.70) | 711.87 (705.66–717.83) | 166,369 |
+
+Both stages deserve attention, though these quieter emission samples are below
+the earlier roughly-one-second averages. Profile these realistic emission paths
+before the disk-cache step, separating Go metadata/proof subprocess latency from
+the compiler's own checking/generation work. These examples can load Go types
+and run proofs; the conservative complete-result Session does not claim hits
+for them.

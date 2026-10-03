@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/GiGurra/bork/internal/gen"
 )
 
 // BenchmarkCompiler covers every example without executing their effects.
@@ -173,8 +175,8 @@ func TestObservedEmission(t *testing.T) {
 	}
 }
 
-// BenchmarkSession includes configuration refresh, content validation and fresh
-// package-name metadata on hits; it must not be compared with fresh CLI startup.
+// BenchmarkSession includes content validation of configuration, tools and
+// package names on hits; it must not be compared with fresh CLI startup.
 func BenchmarkSession(b *testing.B) {
 	for _, corpus := range []struct{ name, path string }{
 		{"hello", "../../examples/hello"},
@@ -235,7 +237,7 @@ func BenchmarkSessionValidation(b *testing.B) {
 	b.Run("configuration", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			if ctx := captureGoContext(); ctx.err != nil {
+			if ctx := captureSessionGoContext(artifact.context); ctx.err != nil {
 				b.Fatal(ctx.err)
 			}
 		}
@@ -252,12 +254,61 @@ func BenchmarkSessionValidation(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			for _, input := range artifact.names {
-				usage := &goUsage{}
-				got := (goPackages{module: artifact.module, context: artifact.context, usage: usage}).Names(input.paths)
-				if !maps.Equal(got, input.names) {
-					b.Fatal("names changed")
+				if input.inputs != nil {
+					if !input.inputs.current() {
+						b.Fatal("name inputs changed")
+					}
+				} else {
+					usage := &goUsage{}
+					got := (goPackages{module: artifact.module, context: artifact.context, usage: usage}).Names(input.paths)
+					if !maps.Equal(got, input.names) {
+						b.Fatal("names changed")
+					}
 				}
 			}
 		}
 	})
+}
+
+// BenchmarkBuildStages separates Bork emission from compilation of its emitted
+// Go. Setup primes the Go build cache; go_build includes staging and linking,
+// but excludes Bork compilation and program execution.
+func BenchmarkBuildStages(b *testing.B) {
+	for _, item := range []struct{ name, path string }{
+		{"config", "../../examples/config"},
+		{"http_server", "../../examples/http_server"},
+	} {
+		b.Run(item.name, func(b *testing.B) {
+			program, err := checkProgramObserved(item.path, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			src, err := gen.Package(program.files, program.info)
+			if err != nil {
+				b.Fatal(err)
+			}
+			out := filepath.Join(b.TempDir(), "program")
+			if err := buildGoWithContext(program.files, src, out, program.module, program.context, program.info.Embeds...); err != nil {
+				b.Fatal(err)
+			}
+			b.Run("bork_compile", func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					if _, err := Emit(item.path); err != nil {
+						b.Fatal(err)
+					}
+				}
+				b.ReportMetric(float64(len(src)), "go-bytes")
+			})
+			b.Run("go_build", func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					if err := buildGoWithContext(program.files, src, out, program.module, program.context, program.info.Embeds...); err != nil {
+						b.Fatal(err)
+					}
+				}
+				b.ReportMetric(float64(len(src)), "go-bytes")
+			})
+		})
+	}
 }

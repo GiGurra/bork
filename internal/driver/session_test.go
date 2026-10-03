@@ -269,6 +269,13 @@ func TestSessionRefreshesStandardPackageNames(t *testing.T) {
 	if _, err := session.Emit(root); err != nil || session.Stats().Hits != 1 {
 		t.Fatalf("hit: %v, %+v", err, session.Stats())
 	}
+	if session.last.context.validation != nil {
+		for _, input := range session.last.names {
+			if input.inputs == nil {
+				t.Fatal("expected content validation for proven SDK name inputs")
+			}
+		}
+	}
 	files, err := filepath.Glob(filepath.Join(sdk, "src", "strings", "*.go"))
 	if err != nil {
 		t.Fatal(err)

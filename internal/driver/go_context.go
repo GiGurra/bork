@@ -28,9 +28,15 @@ type goContext struct {
 	driverErr  error
 	namesCache bool
 	namespace  [sha256.Size]byte
+	toolDigest [sha256.Size]byte
+	validation *goContextValidation
 }
 
 func captureGoContext() *goContext {
+	return loadGoContext(resolveGoContext())
+}
+
+func resolveGoContext() *goContext {
 	ctx := &goContext{processEnv: slices.Clone(os.Environ())}
 	ctx.env = slices.Clone(ctx.processEnv)
 	ctx.self, _ = os.Executable()
@@ -59,6 +65,13 @@ func captureGoContext() *goContext {
 	ctx.tool, err = filepath.Abs(tool)
 	if err != nil {
 		ctx.err = err
+		return ctx
+	}
+	return ctx
+}
+
+func loadGoContext(ctx *goContext) *goContext {
+	if ctx.err != nil {
 		return ctx
 	}
 	cmd := exec.Command(ctx.tool, "env", "-json")
@@ -92,23 +105,12 @@ func captureGoContext() *goContext {
 	ctx.env = append(ctx.env, "GOENV=off")
 	// Include launcher bytes, not just its path/version. A full toolchain/input
 	// inventory is still required before compilation-result reuse.
-	toolFile, err := os.Open(ctx.tool)
+	ctx.toolDigest, err = goToolDigest(ctx.tool)
 	if err != nil {
 		ctx.err = err
 		return ctx
 	}
-	toolHash := sha256.New()
-	_, hashErr := io.Copy(toolHash, toolFile)
-	closeErr := toolFile.Close()
-	if hashErr != nil {
-		ctx.err = hashErr
-		return ctx
-	}
-	if closeErr != nil {
-		ctx.err = closeErr
-		return ctx
-	}
-	identity = append(identity, ctx.tool, ctx.driver, fmt.Sprintf("%x", toolHash.Sum(nil)))
+	identity = append(identity, ctx.tool, ctx.driver, fmt.Sprintf("%x", ctx.toolDigest))
 	encoded, _ := json.Marshal(identity)
 	ctx.namespace = sha256.Sum256(encoded)
 	ctx.namesCache = ctx.values["GO111MODULE"] != "off" && ctx.driver == "off" && ctx.driverErr == nil
@@ -142,4 +144,20 @@ func (ctx *goContext) command(args ...string) *exec.Cmd {
 }
 func (ctx *goContext) metadataEnv() []string {
 	return append(slices.Clone(ctx.env), "GOWORK=off", "GOFLAGS=-mod=readonly")
+}
+
+func goToolDigest(path string) ([sha256.Size]byte, error) {
+	var digest [sha256.Size]byte
+	file, err := os.Open(path)
+	if err != nil {
+		return digest, err
+	}
+	hash := sha256.New()
+	_, err = io.Copy(hash, file)
+	closeErr := file.Close()
+	if err == nil {
+		err = closeErr
+	}
+	copy(digest[:], hash.Sum(nil))
+	return digest, err
 }

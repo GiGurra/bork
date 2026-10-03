@@ -465,11 +465,24 @@ result; a miss clears the previous entry. Parsed ASTs and `check.Info` are never
 retained or returned. Failed requests always compile again. Existing one-shot
 APIs retain their mutable graph behavior and do not use this result cache.
 
-A hit requires the same request path/mode and freshly captured Go configuration
-namespace, unchanged source/manifests and assets by content, and identical fresh
-builtin package-name metadata. The name loader bypasses its global name cache
-and verifies standard-source provenance on hit validation. This validates the
-exact name map observed by the checker without claiming a whole-SDK digest.
+A hit requires the same request path/mode and validated Go configuration,
+unchanged source/manifests and assets by content, and unchanged builtin
+package-name inputs. For recognized Go 1.26/1.27 launchers, Session inventories
+saved/SDK environment files, telemetry mode, enclosing module/workspace files
+(including missing candidates), temporary/cache directory availability and modes,
+and default C compiler lookup. Each request compares the process environment,
+resolved launcher/driver, launcher bytes and this inventory. On Linux the
+executing compiler's inode and mode prove its immutable executable identity;
+other hosts hash its executable bytes. This avoids repeating `go env` on hits.
+
+Positive standard-source provenance permits validating package-directory
+membership and all immediate file bytes instead of repeating the filtered
+metadata-only `-find` query. Ignored/test sources and assembly are included.
+Unknown launchers, unsupported Go versions, switched toolchains, workspaces,
+Go flags, FIPS modes and unproven configuration dependencies retain full
+configuration/name reloads. Filesystem content checks ignore mtimes and sizes.
+These inventories are metadata-only evidence, not a complete SDK/export-data or
+execution key.
 Go type/export metadata, custom drivers, unavailable/external package-name
 origins and any compile-time evaluator invocation bypass result reuse. Windows
 drive-relative/rooted filesystem operands also bypass until their drive context
