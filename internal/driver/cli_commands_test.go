@@ -13,6 +13,7 @@ func TestCLISubcommands(t *testing.T) {
 	source := `import "bork/cli"
 pred validPort(n: Int) { n > 0 && n < 65536 }
 type Serve = {
+ config: Option[String]
  // Host to serve.
  host: String
  // Listening port.
@@ -21,9 +22,10 @@ type Serve = {
 type Echo = { words: List[String] } derive (Decode)
 fn commands(): List[cli.Command] {
  [cli.Subcommand[Serve]("serve", "Serve a host", (options, s) => {
+    sleep(0)
     onClose(s, () => { println("serve closed") })
     println(options)
-  }, [cli.Flag { field: "port", short: "p", env: "BORK_SUBCOMMAND_PORT" }]),
+  }, [cli.Flag { field: "port", short: "p", env: "BORK_SUBCOMMAND_PORT" }, cli.Flag { field: "config", configFile: true }], configFiles: ["base.json"]),
   cli.Subcommand[Echo]("echo", "Echo words", (options, s) => {
     onClose(s, () => { println("echo closed") })
     println(options.words)
@@ -39,10 +41,12 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 		t.Fatal(err)
 	}
 	tests := []struct {
-		name, env          string
-		args, want, absent []string
+		name, env, base, config string
+		args, want, absent      []string
 	}{
 		{name: "serve-default", args: []string{"serve", "--host", "localhost"}, want: []string{`host: "localhost"`, "port: 8080", "serve closed\nUnit"}, absent: []string{"echo closed"}},
+		{name: "command-base-file", base: `{"host":"file","port":8081}`, args: []string{"serve"}, want: []string{`host: "file"`, "port: 8081", "serve closed"}},
+		{name: "command-selected-file", base: `{"host":"base"}`, config: `{"host":"selected","port":8082}`, args: []string{"serve", "--config", "config.json"}, want: []string{`host: "selected"`, "port: 8082", "serve closed"}},
 		{name: "serve-env", env: "9090", args: []string{"serve", "--host", "localhost"}, want: []string{"port: 9090", "serve closed"}},
 		{name: "serve-flags", env: "9090", args: []string{"serve", "--host", "localhost", "-p", "443"}, want: []string{"port: 443", "serve closed"}},
 		{name: "echo", args: []string{"echo", "one", "two"}, want: []string{`["one", "two"]`, "echo closed\nUnit"}, absent: []string{"serve closed"}},
@@ -54,6 +58,8 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 		{name: "prefixed-extra-help", args: []string{"-h=false", "help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Unit"}},
 		{name: "extra-help", args: []string{"help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Unit"}},
 		{name: "hidden-completion", args: []string{"__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
+		{name: "completion-after-unknown-value", args: []string{"--unknown", "value", "__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit", ":0"}},
+		{name: "completion-no-desc-after-unknown-value", args: []string{"-x", "value", "__completeNoDesc", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit", ":0"}},
 		{name: "hidden-completion-no-desc", args: []string{"__completeNoDesc", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
 		{name: "no-command", want: []string{"Example commands", "serve", "echo", "Unit"}, absent: []string{"closed", "Serve {"}},
 		{name: "root-help", args: []string{"--help"}, want: []string{"Example commands", "serve", "echo", "Unit"}, absent: []string{"closed", "Serve {"}},
@@ -63,7 +69,18 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			base := tt.base
+			if base == "" {
+				base = `{}`
+			}
+			for name, data := range map[string]string{"base.json": base, "config.json": tt.config} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
 			cmd := exec.Command(exe, tt.args...)
+			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "BORK_SUBCOMMAND_PORT="+tt.env)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -92,6 +109,8 @@ fn main() {
  println(cli.Dispatch("app", "", [], []))
  println(cli.Dispatch("app", "", [], [command("same"), command("same")]))
  println(cli.Dispatch("app", "", [], [command("bad name"), command("-flag"), command("help")]))
+ println(cli.Dispatch("app", "", ["ok", "--help"], [command("ok")]))
+ println(cli.Dispatch("app", "", ["bad"], [cli.Subcommand[Options]("bad", "", (options, s) => { println("handler") }, flags: [cli.Flag { field: "missing" }])]))
  println(cli.Dispatch("app", "", ["ok"], [command("ok")]))
 }
 `
@@ -106,7 +125,7 @@ fn main() {
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	for _, want := range []string{"at least one subcommand", "duplicate subcommand name same", "commands[0].name", "commands[1].name", "subcommand name help is reserved", "handler\nUnit"} {
+	for _, want := range []string{"at least one subcommand", "duplicate subcommand name same", "commands[0].name", "commands[1].name", "subcommand name help is reserved", "Help {", "unknown CLI field", "handler\nUnit"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}

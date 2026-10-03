@@ -113,7 +113,7 @@ bork run examples/cli -- --config examples/cli/config.json --port 9000
 
 ## Subcommands
 
-`Subcommand[T: Decode](name, description, handler, flags = [])` creates a
+`Subcommand[T: Decode](name, description, handler, flags = [], configFiles = [])` creates a
 `cli.Command`, capturing the derived decoder and a typed handler for `T`.
 Commands with different option records can share a `List[cli.Command]`; the public command stores an erased callback, while decoded options keep type
 `T` inside that callback. The handler never receives
@@ -123,7 +123,8 @@ raw JSON or another command's options.
 without the executable name and returns `Unit | cli.Error | cli.Help`.
 `RunCommands(name, description, commands)` reads process arguments and prints
 help, returning `Unit | cli.Error`. Both use cobra to select one subcommand and
-boa to parse its own derived option record. A selected handler runs in a fresh
+boa to parse its own derived option record, including command-specific flags,
+environment mappings, configFiles, and config-file selectors. A selected handler runs in a fresh
 scope, and cleanup finishes before dispatch returns. Errors and help never run
 a handler. No command, root `--help`, `<command> --help`, and `help <command>`
 produce help; command help includes field docs/defaults and its own flags.

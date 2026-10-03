@@ -7,12 +7,12 @@ type Command = {
 }
 
 // Subcommand keeps the handler typed; only validated options reach it.
-fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Unit, flags: List[Flag] = []): Command {
+fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Unit, flags: List[Flag] = [], configFiles: List[String] = []): Command {
   Command {
     name: name
     description: description
     execute: (displayName, arguments, s) => {
-      match (Parse[T](displayName, description, arguments, flags)) {
+      match (Parse[T](displayName, description, arguments, flags, configFiles)) {
         help: Help => help
         error: Error => error
         options: T => { run(options, s) }
@@ -45,14 +45,6 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     seen[command.name] = true
   }
   if len(failures) != 0 { return Error{errors: failures} }
-  // Cobra's built-in help swallows unknown-topic errors, and its hidden
-  // completion endpoints are installed even when visible completion is off.
-  // Keep routing limited to registered commands and supported help forms.
-  for _, argument := range arguments {
-    if strings.HasPrefix(argument, "-") { continue }
-    if argument == "__complete" || argument == "__completeNoDesc" { return Error{errors: []DecodeError{{path: name, message: "unknown command " + argument}}} }
-    break
-  }
   var output bytes.Buffer
   var result any
   ran := false
@@ -88,6 +80,11 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     })
     root.AddCommand(child)
   }
+  // Validate routing before Execute installs Cobra's hidden completion
+  // endpoints. Find uses Cobra's own root-flag/argument routing rules.
+  root.InitDefaultHelpFlag()
+  root.InitDefaultHelpCmd()
+  if _, _, err := root.Find(arguments); err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
   root.SetArgs(append([]string{}, arguments...))
   root.SetOut(&output)
   root.SetErr(&output)
