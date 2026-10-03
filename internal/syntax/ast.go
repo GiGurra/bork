@@ -336,10 +336,17 @@ type Binary struct {
 
 type Call struct {
 	Pos  diag.Pos // position of '('
+	End  diag.Pos // position after the closing ')'
 	Fun  Expr
 	Args []Expr
 	// TypeArgs are explicit type arguments: `empty[Int]()`.
 	TypeArgs []*TypeExpr
+	// Pipe retains the source of a desugared pipeline for diagnostics.
+	Pipe               diag.Pos
+	PipeStart, PipeEnd diag.Pos // range of the receiver expression
+	PipeTargetEnd      diag.Pos // end of the original pipeline target
+	PipeWrap           bool     // receiver needs parentheses before a selector
+	PipeBare           bool     // target was written without call parentheses
 }
 
 // If is `if (cond) { ... } else { ... }`. Else is nil, a *Block, or an

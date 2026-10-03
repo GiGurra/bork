@@ -1148,6 +1148,14 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	}
 	fn, ok := c.funcNamed(id.Name)
 	if !ok {
+		checked := 0
+		if e.Pipe.File != "" && len(e.Args) > 0 {
+			recv := c.expr(e.Args[0])
+			checked = 1
+			if c.pipeMethodError(e, id, recv) {
+				return Invalid
+			}
+		}
 		switch {
 		case c.isTypeName(id.Name):
 			c.errorf(id.Pos, "%s is a type; build a record with %s { field: value, ... }", id.Name, id.Name)
@@ -1156,7 +1164,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		default:
 			c.errorf(id.Pos, "undefined function: %s", id.Name)
 		}
-		for _, a := range e.Args {
+		for _, a := range e.Args[checked:] {
 			c.expr(a)
 		}
 		return Invalid

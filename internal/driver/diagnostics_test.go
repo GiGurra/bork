@@ -15,6 +15,16 @@ func TestSuggestedEdits(t *testing.T) {
 	cases := []struct {
 		name, source string
 	}{
+		{"pipe method", "fn main() { println([1, 2] |> map(x => x + 1)) }\n"},
+		{"generic pipe method", "fn main() { println([1, 2] |> map[String](x => toString(x))) }\n"},
+		{"grouped bare target", "fn main() { println([1, 2] |> (length)) }\n"},
+		{"grouped call target", "fn main() { println([1, 2] |> (map(x => x + 1))) }\n"},
+		{"bare pipe method", "fn main() { println([1, 2] |> length) }\n"},
+		{"binary pipe receiver", "fn (x: Int) doubled(): Int { x * 2 }\nfn main() { println(1 + 2 |> doubled()) }\n"},
+		{"unary pipe receiver", "fn (x: Int) doubled(): Int { x * 2 }\nfn main() { println(-2 |> doubled) }\n"},
+		{"chained pipe receiver", "fn keep(xs: List[Int]): List[Int] { xs }\nfn main() { println([1] |> keep |> length) }\n"},
+		{"multiline pipe receiver", "fn main() { println([\n 1, 2,\n ] |> length) }\n"},
+		{"pipe interpolation", "fn main() { println(s\"å ${[1, 2] |> length}\") }\n"},
 		{"operator", "fn main() { println(true & false) }\n"},
 		{"byte columns", "fn main() {\n\tprintln(\"å\"); xs = []; f = x => x\n}\n"},
 		{"interpolation", "fn main() { println(s\"å ${true & false}\") }\n"},

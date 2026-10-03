@@ -115,6 +115,7 @@ type Token struct {
 	Kind Kind
 	Text string
 	Pos  diag.Pos
+	End  diag.Pos // position immediately after the token
 }
 
 // Comment is a source comment, kept for future tooling (formatter,
@@ -122,4 +123,5 @@ type Token struct {
 type Comment struct {
 	Text string
 	Pos  diag.Pos
+	End  diag.Pos // position immediately after the token
 }

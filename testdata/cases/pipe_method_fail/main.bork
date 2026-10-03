@@ -1,0 +1,7 @@
+fn (x: Int) doubled(): Int { x * 2 }
+
+fn main() {
+  println([1, 2] |> length)
+  println([1, 2] |> map(x => x + 1))
+  println(1 + 2 |> doubled())
+}
