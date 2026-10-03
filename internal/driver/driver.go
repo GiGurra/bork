@@ -29,25 +29,27 @@ func (e *DiagError) Error() string { return e.Diags.Error() }
 
 // Sources lists the .bork files for path: the file itself, or every
 // .bork file directly inside a directory (one directory = one package).
-func Sources(path string) ([]string, error) {
-	st, err := os.Stat(path)
+func Sources(path string) ([]string, error) { return sourceFiles(path, diskSources{}) }
+
+func sourceFiles(path string, reader sourceReader) ([]string, error) {
+	isDir, err := reader.isDirectory(path)
 	if err != nil {
 		return nil, err
 	}
-	if !st.IsDir() {
+	if !isDir {
 		if filepath.Ext(path) != ".bork" {
 			return nil, fmt.Errorf("%s is not a .bork file", path)
 		}
 		return []string{path}, nil
 	}
-	entries, err := os.ReadDir(path)
+	entries, err := reader.directory(path)
 	if err != nil {
 		return nil, err
 	}
 	var files []string
 	for _, e := range entries {
-		if !e.IsDir() && filepath.Ext(e.Name()) == ".bork" {
-			files = append(files, filepath.Join(path, e.Name()))
+		if !e.directory && filepath.Ext(e.name) == ".bork" {
+			files = append(files, filepath.Join(path, e.name))
 		}
 	}
 	if len(files) == 0 {
