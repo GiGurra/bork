@@ -263,7 +263,11 @@ func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv Type) b
 		return false
 	}
 	const code = "call.pipe-method"
-	c.diags.AddCode(e.Pipe, code, "%s is a method of %s, not a function: call it as x.%s(a)", id.Name, recv, id.Name)
+	args := ""
+	if len(e.Args) > 1 {
+		args = "..."
+	}
+	c.diags.AddCode(e.Pipe, code, "%s is a method of %s, not a function: call it as x.%s(%s)", id.Name, recv, id.Name, args)
 	separator := "."
 	var edits []diag.TextEdit
 	if e.PipeWrap {
@@ -275,8 +279,13 @@ func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv Type) b
 	end.Col += len(id.Name)
 	if e.PipeBare {
 		edits = append(edits, diag.TextEdit{Start: end, End: e.PipeTargetEnd, Replacement: "()"})
-	} else if e.End != e.PipeTargetEnd {
-		edits = append(edits, diag.TextEdit{Start: e.End, End: e.PipeTargetEnd})
+	} else {
+		if end != e.FunEnd {
+			edits = append(edits, diag.TextEdit{Start: end, End: e.FunEnd})
+		}
+		if e.End != e.PipeTargetEnd {
+			edits = append(edits, diag.TextEdit{Start: e.End, End: e.PipeTargetEnd})
+		}
 	}
 	c.diags.Suggest(e.Pipe, code, diag.Pos{File: e.Pipe.File, Line: e.Pipe.Line, Col: e.Pipe.Col + 2}, diag.Fix{
 		Message: "call the method on the receiver", Edits: edits,

@@ -952,8 +952,6 @@ instance encodeJson: Encode[Json] {
 
 // List methods. A list never changes: operations build new lists.
 // Methods chain: xs.filter(f).map(g), m.get(k), s.trim().
-// Each List and String method is the function of the same name, with
-// the receiver as its first argument.
 
 fn (xs: List[T]) length[T](): Int unsafe go {
   return int64(len(xs))
@@ -1000,7 +998,7 @@ fn (xs: List[A]) flatMap[A, B](f: (A) => List[B]): List[B] unsafe go {
   return out
 }
 // filter keeps the elements keep is true for. What keep says about
-// them is known afterwards: filter(xs, positive) is a
+// them is known afterwards: xs.filter(positive) is a
 // List[Int where positive].
 fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] unsafe go {
   var out []T
@@ -1012,7 +1010,7 @@ fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] unsafe go {
   return out
 }
 // fold combines the elements from the first to the last, starting
-// from initial: fold([1, 2, 3], 0, (sum, x) => sum + x) is 6.
+// from initial: [1, 2, 3].fold(0, (sum, x) => sum + x) is 6.
 fn (xs: List[T]) fold[T, A](initial: A, f: (A, T) => A): A unsafe go {
   acc := initial
   for _, x := range xs {
@@ -1129,7 +1127,7 @@ fn (entries: List[Entry[K, V]]) toMap[K: Eq, V](): Map[K, V] unsafe go {
 }
 
 // String methods. Lengths and indexes count bytes (UTF-8), except
-// runeCount() and runeAt(), which count Unicode code points.
+// runeCount(), runeAt(), and substring(), which count Unicode code points.
 
 fn (s: String) byteLength(): Int unsafe go {
   return int64(len(s))
@@ -1195,7 +1193,7 @@ fn (s: String) runeAt(index: Int): Option[Rune] unsafe go {
   return Option_None[int32]{}
 }
 // substring is the runes from index from up to (not including) index
-// to. It is OutOfRange unless 0 <= from <= to <= runeCount(s).
+// to. It is OutOfRange unless 0 <= from <= to <= s.runeCount().
 fn (s: String) substring(from: Int, to: Int): String | OutOfRange unsafe go {
   import "fmt"
   runes := []rune(s)

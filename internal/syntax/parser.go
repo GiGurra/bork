@@ -775,6 +775,7 @@ func (p *parser) unary() Expr {
 
 func (p *parser) postfix(x Expr) Expr {
 	for {
+		funEnd := p.toks[p.i-1].End
 		var typeArgs []*TypeExpr
 		_, isID := x.(*Ident)
 		_, isSel := x.(*Selector)
@@ -797,7 +798,7 @@ func (p *parser) postfix(x Expr) Expr {
 		}
 		switch {
 		case p.at(LParen):
-			call := &Call{Pos: p.next().Pos, Fun: x, TypeArgs: typeArgs}
+			call := &Call{Pos: p.next().Pos, Fun: x, FunEnd: funEnd, TypeArgs: typeArgs}
 			saved := p.noRecordLit
 			p.noRecordLit = false // within the parentheses, '{' is a literal again
 			p.skipNewlines()

@@ -223,14 +223,14 @@ r: SignUp | JsonError | DecodeError = decodeJson(line)   // DecodeError { path: 
 - **Fact sources:** a predicate call in an `if` condition (in the branch it guards), guards that end in `return` or `panic` (for the code after them), `&&` and `||` (for their right side), `!`, a function's own requirements, a callee's promised result (also through `?` and `match` on a validated union, where the fact holds only for the promising member), field declarations, typed bindings, and `trust p(x)`.
 - **Facts are found by identity.** A fact about `x` also holds for `y = x`, and for field paths like `u.age`. A computed value (`a - 1`) has no facts unless something promises them.
 - **Promised results are verified** against every path of the body.
-- **Requirements on constants are decided by running the predicate at compile time**, using the program's own code (including `unsafe go`): `transfer(0)` fails the build with "positive(0) is false". This works for any predicate, and for literals made of constants too: `first([])` fails with "notEmpty([]) is false", `greet(User { name: "bob", age: 12 })` with "adult(User { name: "bob", age: 12 }) is false".
-- **Generic predicates:** `pred notEmpty[T](xs: List[T]) { !isEmpty(xs) }` applies to every list. The prelude has it, with `first(xs: List[T] where notEmpty): T`, which needs no `Option`; `prepend`, `append`, and `split` promise `notEmpty` results.
+- **Requirements on constants are decided by running the predicate at compile time**, using the program's own code (including `unsafe go`): `transfer(0)` fails the build with "positive(0) is false". This works for any predicate, and for literals made of constants too: `[].first()` fails with "notEmpty([]) is false", `greet(User { name: "bob", age: 12 })` with "adult(User { name: "bob", age: 12 }) is false".
+- **Generic predicates:** `pred notEmpty[T](xs: List[T]) { !xs.isEmpty() }` applies to every list. The prelude has it, with `fn (xs: List[T] where notEmpty) first[T](): T`, which needs no `Option`; `prepend`, `append`, and `split` promise `notEmpty` results.
 - **OR:** `x: Int where positive or zero` needs one of the alternatives; `and` and `or` mix only with parentheses (`(positive or zero) and small`). A `||` condition gives an OR fact. An OR obligation may be proven by different alternatives on different branches, and a known OR fact is used by cases: a goal that follows from each alternative follows from the fact.
 - **Inference rules** say what follows from what: `rule weaker(x: Int, a: Int, b: Int) { atLeast(x, a) and a >= b => atLeast(x, b) }`. Premises are predicate calls on the rule's variables (constants allowed after the first argument) and conditions on them using only operators and constants, which are decided at compile time. A rule may have several premises and conclusions; rules chain, and cycles between them are harmless. Rules are trusted, like `trust`, so `bork test` gives each one a property test: it tries many values of the variables (every combination of simple and extreme values, or a fixed random sample of them) and reports a counterexample where the premises hold but a conclusion does not.
 - **Derived results:** a function that declares no promise still passes on what its body proves. With `fn clamp(x: Int): Int { if (positive(x)) { x } else { 1 } }`, `retry(clamp(n))` proves `positive`: every path of the body is checked against the obligation. A path returning a parameter is checked at the call site, for the argument. Helpers chain, in any declaration order. A declared promise is still the way to make a fact part of the contract (and is verified).
 - **Facts inside type arguments:** `List[Int where positive]` constrains every element, `Option[String where nonEmpty]` the value if there is one. A list literal is checked element by element (`[1, 0]` fails with "positive(0) is false"), `Option.None` needs nothing, and a name bound by `Option.Some { value: v }` has the facts of the value. Rules apply to elements too.
-- **Predicate parameters:** a function parameter can be the predicate: `fn filter[T](xs: List[T], keep: (T) => Bool): List[T where keep]`. What the argument checks is then known: `filter(xs, positive)` is a `List[Int where positive]`, and `filter(xs, x => positive(x) && small(x))` has both facts. `find` refines its `Option` the same way.
-- **Facts flow through generic functions.** A generic function cannot make values of its type parameters, so the ones in its result come from its arguments: what holds for all of those holds for them. `head(positives)` holds a positive number, and so do `reverse`, `take`, `concat(positives, [5])`, and so on; a lambda's parameter gets the facts of the values the function can hand it (`map(positives, p => transfer(p))`). This holds for `unsafe go` generic functions by trust, like their signatures.
+- **Predicate parameters:** a function parameter can be the predicate: `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep]`. What the argument checks is then known: `xs.filter(positive)` is a `List[Int where positive]`, and `xs.filter(x => positive(x) && small(x))` has both facts. `find` refines its `Option` the same way.
+- **Facts flow through generic functions.** A generic function cannot make values of its type parameters, so the ones in its result come from its arguments: what holds for all of those holds for them. `positives.head()` holds a positive number, and so do `reverse`, `take`, `positives.concat([5])`, and so on; a lambda's parameter gets the facts of the values the function can hand it (`positives.map(p => transfer(p))`). This holds for `unsafe go` generic functions by trust, like their signatures.
 - **Test mode checks what is trusted.** `bork test` runs the tests with runtime checks of `trust` statements and of what `unsafe go` functions promise (through list elements, Option values, and fields), so trusted facts that drift from the truth are caught by tests: "validate promised a result that is positive, but returned 0".
 - **Property tests come from facts.** `where` clauses already say which inputs are valid, so `test "transfer scales" (amount: Int where positive) { ... }` runs on generated values that meet them (list elements' and record fields' facts too), shrinks a failing case to a simpler one with the same facts, and prints the seed that reproduces it. `bork test --auto-properties` property-tests the functions whose promises are trusted rather than proven (`unsafe go`, `trust`): their promises hold, and they don't panic, for generated arguments. It is opt-in until effects mark functions pure, which will then be tested by default.
 - **Snapshot tests** are cheap regression tests: `assertSnapshot(render(invoice))` compares the value's text with a file in the package's `snapshots` directory, and a failure shows a line diff. `bork test --update` writes the snapshots that are missing or different, as the compiler's own golden tests do with `-update`, so the change is reviewed in version control.
@@ -294,9 +294,9 @@ fn clamp(
 Generic functions that *add* knowledge, with a predicate parameter (implemented):
 
 ```
-fn filter[T](xs: List[T], keep: (T) => Bool): List[T where keep]
+fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep]
 
-positives = numbers |> filter(positive)   // List[Int where positive]
+positives = numbers.filter(positive)   // List[Int where positive]
 ```
 
 ### Syntax notes
@@ -499,10 +499,10 @@ fn handler(store: Atom[Store]): (Request, Scope) uses state => Response { ... }
 A function-typed parameter written without `uses` is **open**: it accepts a function with any effects. A call is then charged the declared effects plus the effects of the arguments given to open parameters. This is Swift's `rethrows`, applied to every effect:
 
 ```
-fn map[A, B](xs: List[A], f: (A) => B): List[B]              // the prelude's, unchanged
+fn (xs: List[A]) map[A, B](f: (A) => B): List[B]              // the prelude's, unchanged
 
-names = map(users, u => u.name)                              // this call is pure
-forEach(names, n => println(n))                              // this call uses io
+names = users.map(u => u.name)                              // this call is pure
+names.forEach(n => println(n))                              // this call uses io
 ```
 
 - **Inside the body, an open parameter can be called freely.** Its effects belong to the caller.
@@ -514,7 +514,7 @@ forEach(names, n => println(n))                              // this call uses i
 - **A function with open parameters used as a value** (`g = map`) has its open positions closed as pure: `g` is `(List[A], (A) => B) => List[B]`, all pure. Calling `map` directly keeps it open.
 - **Generic code needs nothing extra:** if `T` is `() uses io => Int`, the effect is part of `T`, so `identity`, `head`, and `Option[T]` carry it. Since effects are erased in the Go output, a type pattern on a function type (`f: () => Unit`) may only match a union member known statically to have the same effects, as facts are treated.
 - **`uses nothing` makes a parameter strictly pure.** `fn update[T](a: Atom[T], f: (T) uses nothing => T) uses state: T` is how the prelude says "f may run more than once, so it must not do anything".
-- **A fact named after a function argument needs a pure argument.** `filter(xs, keep)` gives `List[T where keep]`, and that fact, "keep holds", only means something if `keep` gives the same answer every time. So an effectful `keep` still filters, but the result is a plain `List[T]`. The facts its body proves with predicates are kept either way (predicates are pure): `filter(xs, x => { println(x); positive(x) })` uses `io` and still gives positive elements. Inside a function whose parameter is open, a fact named after that parameter holds on the same condition: the prelude's method `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] { filter(xs, keep) }` still checks, and at each call the fact is kept only if that argument is pure.
+- **A fact named after a function argument needs a pure argument.** `xs.filter(keep)` gives `List[T where keep]`, and that fact, "keep holds", only means something if `keep` gives the same answer every time. So an effectful `keep` still filters, but the result is a plain `List[T]`. The facts its body proves with predicates are kept either way (predicates are pure): `xs.filter(x => { println(x); positive(x) })` uses `io` and still gives positive elements. Inside a function whose parameter is open, a fact named after that parameter holds on the same condition: the prelude's method `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep]` promises the conditional fact, and at each call the fact is kept only if that argument is pure.
 
 The prelude's list, `Option`, and map functions stay as they are, and their function parameters are open. Only `update` and `swap` (strictly pure `f`) and the effectful functions in the table change.
 
@@ -523,7 +523,7 @@ The prelude's list, `Option`, and map functions stay as they are, and their func
 ### Lambdas, methods, and classes
 
 - **A lambda's effects are inferred from its body.** Nothing is written. A lambda checked against a function type with `uses X` may use at most `X`. A lambda checked against a pure function type must be pure. One passed to an open parameter may use anything, which charges the call.
-- **Named functions as values** have the effects they declare: `forEach(lines, println)` uses `io`.
+- **Named functions as values** have the effects they declare: `lines.forEach(line => println(line))` uses `io`.
 - **Function types are ordered by their effects.** A function that uses less fits where more is allowed: a pure `(Int) => Int` can be passed as `(Int) uses io => Int`, but not the other way round.
 - **Methods** declare `uses` as functions do. `fn (c: Client) fetch(url: String) uses net: Response | IoError`.
 - **Class methods** may declare `uses`, and an instance's method may use at most what the class declares. The prelude's classes (`Eq`, `Ord`, `Decode`, `Encode`) are pure, so their instances, including derived ones, must be pure.

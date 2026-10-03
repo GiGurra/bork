@@ -18,6 +18,8 @@ func TestSuggestedEdits(t *testing.T) {
 		{"pipe method", "fn main() { println([1, 2] |> map(x => x + 1)) }\n"},
 		{"generic pipe method", "fn main() { println([1, 2] |> map[String](x => toString(x))) }\n"},
 		{"grouped bare target", "fn main() { println([1, 2] |> (length)) }\n"},
+		{"grouped callee", "fn main() { println([1, 2] |> (map)(x => x + 1)) }\n"},
+		{"grouped generic callee", "fn main() { println([1, 2] |> ((map))[String](x => toString(x))) }\n"},
 		{"grouped call target", "fn main() { println([1, 2] |> (map(x => x + 1))) }\n"},
 		{"bare pipe method", "fn main() { println([1, 2] |> length) }\n"},
 		{"binary pipe receiver", "fn (x: Int) doubled(): Int { x * 2 }\nfn main() { println(1 + 2 |> doubled()) }\n"},

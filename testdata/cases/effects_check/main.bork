@@ -18,7 +18,7 @@ fn show(u: User) uses io { println(describe(u)) }
 
 // map's f is open: process is charged what its lambda does.
 fn showAll(users: List[User]) uses io {
-  _ = map(users, u => {
+  _ = users.map(u => {
     show(u)
     u
   })

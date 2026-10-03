@@ -335,10 +335,11 @@ type Binary struct {
 }
 
 type Call struct {
-	Pos  diag.Pos // position of '('
-	End  diag.Pos // position after the closing ')'
-	Fun  Expr
-	Args []Expr
+	Pos    diag.Pos // position of '('
+	End    diag.Pos // position after the closing ')'
+	Fun    Expr
+	FunEnd diag.Pos // position after the callee, before type arguments
+	Args   []Expr
 	// TypeArgs are explicit type arguments: `empty[Int]()`.
 	TypeArgs []*TypeExpr
 	// Pipe retains the source of a desugared pipeline for diagnostics.
