@@ -1,0 +1,7 @@
+fn noop() unsafe go {}
+
+fn spaced(x: Int) unsafe go {  }
+
+fn body() unsafe go {
+  return
+}

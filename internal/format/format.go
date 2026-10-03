@@ -47,7 +47,7 @@ func Source(path string, src []byte) ([]byte, error) {
 			continue
 		}
 		text := t.Text
-		if text == "" {
+		if text == "" && t.Kind != syntax.TGoCode {
 			text = strings.Trim(t.Kind.String(), "'")
 		}
 		if t.Kind == syntax.TInterp {
