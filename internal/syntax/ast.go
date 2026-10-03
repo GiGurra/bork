@@ -419,6 +419,15 @@ type Expr interface {
 	Position() diag.Pos
 }
 
+// Comptime is an explicit build-time value computation.
+type Comptime struct {
+	Pos  diag.Pos
+	Body *Block
+}
+
+func (*Comptime) exprNode()            {}
+func (e *Comptime) Position() diag.Pos { return e.Pos }
+
 type Generate struct {
 	Pos  diag.Pos
 	Elem *TypeExpr

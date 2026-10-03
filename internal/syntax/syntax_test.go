@@ -295,3 +295,18 @@ func TestParseGeneratedConstructors(t *testing.T) {
 		}
 	}
 }
+
+func TestComptimeContextualBlock(t *testing.T) {
+	diags := &diag.List{}
+	file := Parse("test.bork", []byte("fn comptime(n:Int):Int{n}\nfn f():Int{comptime{comptime(1)}}"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	block, ok := file.Funcs[1].Body.Tail.(*Comptime)
+	if !ok {
+		t.Fatalf("expected comptime block, got %T", file.Funcs[1].Body.Tail)
+	}
+	if _, ok := block.Body.Tail.(*Call); !ok {
+		t.Fatalf("expected ordinary call, got %T", block.Body.Tail)
+	}
+}

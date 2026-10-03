@@ -320,6 +320,7 @@ The proposed [transparent async binding](docs/design/async.md),
 `async(s) answer = expensiveComputation()`, starts work as a task of scope `s`
 and awaits on read while keeping type T. It shares lazy binding machinery.
 
-The [comptime proposal](docs/design/comptime.md) specifies explicit build-time
-computation, captured module-file inputs, baked typed values and facts. It is a
-design for review; the compiler does not accept `comptime` blocks yet.
+The [comptime design](docs/design/comptime.md) specifies explicit build-time
+computation. `comptime { ... }` syntax and static closure/purity checks are in
+progress. Evaluation currently reports `comptime.not-implemented`; build-time
+data baking, module-file inputs and caching follow in later implementation PRs.

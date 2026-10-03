@@ -7,7 +7,7 @@
 - **Source files** are UTF-8, with the `.bork` extension. A directory of `.bork` files is one package. Diagnostic and `bork describe` positions use one-based lines and byte columns (see [JSON diagnostics](diagnostics.md) and [compiler code queries](describe.md)).
 - **Comments:** `// to end of line` and `/* block */`. They are kept by the lexer and formatter; consecutive `//` lines directly above a field also become its doc comment.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs`, and `providers` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `lazy` is a keyword only before a local binding name. Lazy fields and package bindings are reserved for later phases. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs`, and `providers` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `comptime` is contextual only before `{` where an expression starts; its evaluation is not implemented yet. `lazy` is a keyword only before a local binding name. Lazy fields and package bindings are reserved for later phases. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -311,8 +311,11 @@ in the result. List results and nested list parameters remain closed.
 Transparent async local bindings are proposed, not yet accepted:
 `async(scopeExpression) name [ : T ] = expr`. See [the async design](design/async.md).
 
-## Proposed compile-time computation
+## Reserved compile-time computation
 
-`comptime { ... }` and the `build` effect are proposed in the
-[comptime design](design/comptime.md). They are not part of the accepted grammar
-yet; this proposal does not reserve `comptime` as a keyword.
+The parser recognizes `comptime { ... }` and checks its concrete result type,
+purity and closed captures, but the driver reports `comptime.not-implemented`
+until the evaluator lands. It never runs the recipe at runtime. Blocks have
+their own return/`?` boundary, like lazy initializers. Runtime parameters, calls,
+lazy cells and ambient needs cannot be captured; literals and earlier computed
+bindings can. Evaluation, build-file reads and caching remain planned.

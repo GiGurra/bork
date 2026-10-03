@@ -110,6 +110,12 @@ func checkLoadedProgramObserved(loaded *loadedSources, module *goModuleInputs, c
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
+	for _, node := range info.Comptimes {
+		diags.AddCode(node.Pos(), "comptime.not-implemented", "comptime evaluation is not implemented yet")
+	}
+	if diags.Len() > 0 {
+		return nil, &DiagError{Diags: diags}
+	}
 	phase(observe, "lifetimes")
 	check.Lifetimes(files, info, diags)
 	if diags.Len() > 0 {

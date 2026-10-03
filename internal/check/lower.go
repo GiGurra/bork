@@ -235,6 +235,10 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		return &Const{expr: at, Value: v, SourceSpan: span}
 	}
 	switch x := x.(type) {
+	case *syntax.Comptime:
+		node := &Comptime{expr: at, Body: l.block(x.Body)}
+		l.info.Comptimes = append(l.info.Comptimes, node)
+		return node
 	case *syntax.Generate:
 		saved := l.yieldElem
 		l.yieldElem = at.typ.(*Seq).Elem

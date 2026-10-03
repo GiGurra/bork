@@ -234,3 +234,15 @@ func TestDirectorySkips(t *testing.T) {
 		t.Fatal("explicit symlink accepted")
 	}
 }
+
+func TestComptimeFormatting(t *testing.T) {
+	source := []byte("fn f():Int{\nvalue=comptime{ // build value\nreturn 1+2\n}\nvalue\n}\n")
+	got, err := Source("test.bork", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stable(t, source, got)
+	if !bytes.Contains(got, []byte("value = comptime { // build value")) {
+		t.Fatalf("unexpected formatting: %s", got)
+	}
+}

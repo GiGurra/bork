@@ -425,7 +425,7 @@ func (c *checker) try(e *syntax.Try) Type {
 				c.info.tries[e] = &TryInfo{Kept: u.Members[0], Rest: u.Members[1:]}
 				return u.Members[0]
 			}
-			c.errorf(e.Pos, "? on an Option in a lazy initializer needs a result type annotation")
+			c.errorf(e.Pos, "? on an Option in a %s needs a result type annotation", ctx.name)
 			return Invalid
 		}
 	}

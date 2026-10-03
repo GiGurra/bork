@@ -304,6 +304,11 @@ func (u *effectUses) expr(x Expr) {
 		inner := &effectUses{from: u.from}
 		inner.expr(x.Body)
 		u.mainRefs = append(u.mainRefs, inner.mainRefs...)
+	case *Comptime:
+		// Its effects are validated at its own build-time boundary.
+		inner := &effectUses{from: u.from}
+		inner.block(x.Body)
+		u.mainRefs = append(u.mainRefs, inner.mainRefs...)
 	case *Const, *VarRef, *VariantValue:
 	case *Interp:
 		for _, e := range x.Exprs {
