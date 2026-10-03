@@ -259,7 +259,12 @@ SIGINT and SIGTERM cancel root scopes; nested scopes inherit cancellation.
 Scope-aware waits and checkpoints observe it, and cleanup runs as scopes end.
 Code that does not reach a cancellation point continues running. Signals are
 registered for the program's lifetime when scope runtime is used. Stopping a
-subprocess kills that process; it does not manage its descendant process tree.
+subprocess kills its Unix process group, including descendants that stay in the
+group. Each subprocess starts a new group; descendants that create another
+group or session are outside its ownership. Group cancellation applies while
+the direct child is running: descendants that outlive its normal exit are not
+killed by later cancellation or scope cleanup. Other targets kill only the
+direct child.
 See [the process example](../examples/process/main.bork).
 
 Process capture waits at most one second for inherited output pipes after the
