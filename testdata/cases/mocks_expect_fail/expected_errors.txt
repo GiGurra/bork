@@ -1,0 +1,2 @@
+main.bork:20:35: SendCall has no field c: a call record leaves out parameters whose values can belong to a scope (Conn), since the test keeps the records after their scopes end; check c inside the mock's body instead
+main.bork:25:31: LaterCall has no field f: a call record leaves out parameters whose values can belong to a scope (() uses io => Unit), since the test keeps the records after their scopes end; check f inside the mock's body instead

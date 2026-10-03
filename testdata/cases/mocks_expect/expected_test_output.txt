@@ -1,0 +1,12 @@
+[FetchCall2 { url: "a", retries: 1 }, FetchCall2 { url: "b", retries: 2 }]
+ok    args gives the calls' arguments as records
+ok    a method's record has its receiver
+ok    expectations hold
+not called
+ok    a mock that must not be called
+ok    waitFor waits for calls from other tasks
+ok    a mock in a scope is checked after the scope's tasks
+ok    a target that takes an owned scope can still be counted
+ok    a call record's name does not clash with a function
+8 passed, 0 failed
+exit code 0

@@ -165,6 +165,9 @@ func (g *gen) typeDecls() []ast.Decl {
 	needed := func(t check.Type) bool {
 		switch t := t.(type) {
 		case *check.Record:
+			if t.MockCall {
+				return g.testMode && g.usedTypes[t]
+			}
 			return !t.Prelude || g.usedTypes[t]
 		case *check.Sealed:
 			return !t.Prelude || g.usedTypes[t]
@@ -175,10 +178,14 @@ func (g *gen) typeDecls() []ast.Decl {
 		}
 		return false
 	}
+	types := append([]check.Type(nil), g.info.TypeOrder...)
+	for _, r := range g.info.MockCallOrder {
+		types = append(types, r)
+	}
 	// Declaring a type can make it use more prelude types (its fields).
 	for {
 		n := len(g.usedTypes)
-		for _, t := range g.info.TypeOrder {
+		for _, t := range types {
 			if needed(t) {
 				g.typeDecl(t)
 			}
@@ -188,7 +195,7 @@ func (g *gen) typeDecls() []ast.Decl {
 		}
 	}
 	var decls []ast.Decl
-	for _, t := range g.info.TypeOrder {
+	for _, t := range types {
 		if needed(t) {
 			decls = append(decls, g.typeDecl(t)...)
 		}
@@ -905,6 +912,18 @@ func (t *_task) Await() any {
 // panicked without being awaited, children that failed to close, and
 // finalizers that panicked) are raised as one panic once the scope is
 // closed.
+// failed reports whether a task of the scope failed.
+func (s *_Scope) failed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.tasks {
+		if t.failure != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *_Scope) close() {
 	s.mu.Lock()
 	if s.closed {

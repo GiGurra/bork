@@ -1525,9 +1525,11 @@ func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
 	// Scopes, owners and mocks end innermost first.
 	m := len(g.openMocks) - 1
 	for i := len(g.openScopes) - 1; i >= -1; i-- {
+		var ending []openMock
 		for ; m >= 0 && g.openMocks[m].depth > i; m-- {
-			stmts = append(stmts, endMock(g.openMocks[m]))
+			ending = append(ending, g.openMocks[m])
 		}
+		stmts = append(stmts, endMocksOK(ending)...)
 		if i < 0 {
 			break
 		}

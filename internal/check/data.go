@@ -158,6 +158,10 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 		if f := xt.Field(e.Name); f != nil {
 			return f.Type
 		}
+		if why := c.info.mockCallLeftOut(xt, e.Name); why != "" {
+			c.errorf(e.Pos, "%s", why)
+			return Invalid
+		}
 		c.errorf(e.Pos, "%s has no field %s", xt, e.Name)
 		return Invalid
 	case *Sealed:

@@ -95,10 +95,13 @@ Tests replace functions that have effects with `mock`, with no interfaces or inj
 test "an upstream answering 503 is down" {
   mock time.Now() { noon }
   gets = mock http.Get(url, s, timeoutMs) { http.Text(503, "") }
+  gets.expect(times: 1)
   assertEqual(checkAll(["https://a.example"]), [Health.Down { url: "https://a.example", status: 503, at: noon }])
-  assertEqual(gets.count(), 1)
+  assertEqual(gets.args().map(c => c.timeoutMs), [2000])
 }
 ```
+
+A handle records the calls as typed records (`gets.args()`), declares how many calls must come (`expect`, `expectWhere`, checked when the mock ends), and waits for calls from other tasks (`waitFor`).
 
 Production builds are unchanged. See [examples/mocking](examples/mocking/main.bork) and [mocking in tests](docs/requirements.md#mocking-in-tests-design-bork-53lit4).
 

@@ -1,20 +1,56 @@
 // Test support: the handle of a mock in a test.
 
 // Mock is the handle of a mock in a test (`calls = mock fetch(url) {
-// ... }`): it records the calls the mock answered, from every task.
+// ... }`): it records the calls the mock answered, from every task. A
+// is the target's call record, which the compiler makes: a record with
+// a field per parameter of the target (`FetchCall { url: String }`).
 // The test runtime makes its functions.
-type Mock = {
+type Mock[A] = {
   countFn: () uses state => Int,
   callsFn: () uses state => List[String],
+  argsFn: () uses state => List[A],
+  expectFn: ((A) uses nothing => Bool, Bool, Int, Int, Int) uses state => Unit,
+  waitFn: ((A) uses nothing => Bool, Bool, Int, Int) uses state + clock => Unit,
 }
 
 // count is how many calls the mock answered so far.
-fn (m: Mock) count() uses state: Int {
+fn (m: Mock[A]) count[A]() uses state: Int {
   m.countFn()
 }
 
 // calls lists the calls the mock answered, in the order they started,
 // as text: `fetch("https://example.com")`.
-fn (m: Mock) calls() uses state: List[String] {
+fn (m: Mock[A]) calls[A]() uses state: List[String] {
   m.callsFn()
+}
+
+// args lists the arguments of the calls the mock answered, in the
+// order they started, as call records: `[FetchCall { url: "..." }]`.
+fn (m: Mock[A]) args[A]() uses state: List[A] {
+  m.argsFn()
+}
+
+// expect declares how many calls the mock must answer, checked when it
+// ends (at the end of its block): exactly `times`, or at least
+// `atLeast` and at most `atMost`. With none of them, at least one;
+// `times: 0` means never.
+fn (m: Mock[A]) expect[A](times: Int = -1, atLeast: Int = -1, atMost: Int = -1) uses state {
+  m.expectFn((a) => true, false, times, atLeast, atMost)
+}
+
+// expectWhere is expect, counting only the calls whose arguments match.
+fn (m: Mock[A]) expectWhere[A](matches: (A) uses nothing => Bool, times: Int = -1, atLeast: Int = -1, atMost: Int = -1) uses state {
+  m.expectFn(matches, true, times, atLeast, atMost)
+}
+
+// waitFor waits until the mock has answered `calls` calls (from any
+// task), and fails the test if that takes more than `ms` milliseconds.
+fn (m: Mock[A]) waitFor[A](calls: Int, ms: Int = 5000) uses state + clock {
+  m.waitFn((a) => true, false, calls, ms)
+}
+
+// waitForWhere is waitFor, counting only the calls whose arguments
+// match.
+fn (m: Mock[A]) waitForWhere[A](matches: (A) uses nothing => Bool, calls: Int, ms: Int = 5000) uses state + clock {
+  m.waitFn(matches, true, calls, ms)
 }

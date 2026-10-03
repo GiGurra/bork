@@ -150,6 +150,11 @@ func (c *checker) methodNamed(t Type, name string) (*Func, string) {
 	if fn := c.preludePkg.methods[key][name]; fn != nil {
 		return fn, ""
 	}
+	if r, ok := t.(*Record); ok {
+		if why := c.info.mockCallLeftOut(r, name); why != "" {
+			return nil, why
+		}
+	}
 	return nil, fmt.Sprintf("%s has no method %s", t, name)
 }
 

@@ -78,7 +78,8 @@ func (g *gen) mockFuncType(fn *check.Func, names []*ast.Ident) *ast.FuncType {
 //	func _next_charge(_from *_mockFrame, card Card, amount int64) any {
 //		if _f := _mockFind(1, _from); _f != nil {
 //			defer _f.done()
-//			_f.called(func() []string { return []string{_show(card), _show(amount)} })
+//			_f.called(func() []string { return []string{_show(card), _show(amount)} },
+//				func() any { return ChargeCall{card: card, amount: amount} })
 //			return _f.fn.(func(Card, int64) any)(card, amount)
 //		}
 //		return _real_charge(card, amount)
@@ -120,9 +121,26 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 		Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: &ast.ArrayType{Elt: ast.NewIdent("string")}}}}},
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: &ast.ArrayType{Elt: ast.NewIdent("string")}, Elts: shown}}}}},
 	}
+	var typed ast.Expr = ast.NewIdent("nil")
+	if rec := g.info.MockCalls[fn]; rec != nil {
+		// The call record, for the handle's args, expect and waitFor.
+		lit := &ast.CompositeLit{Type: g.goType(rec)}
+		for _, field := range rec.Fields {
+			for i, p := range fn.Decl.Params {
+				if p.Name == field.Name || field.Name == "p"+strconv.Itoa(i) {
+					lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: params[i]})
+					break
+				}
+			}
+		}
+		typed = &ast.FuncLit{
+			Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("any")}}}},
+			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{lit}}}},
+		}
+	}
 	found := append([]ast.Stmt{
 		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: f, Sel: ast.NewIdent("done")}}},
-		&ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: f, Sel: ast.NewIdent("called")}, Args: []ast.Expr{texts}}},
+		&ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: f, Sel: ast.NewIdent("called")}, Args: []ast.Expr{texts, typed}}},
 	}, result(mockCall)...)
 	body := []ast.Stmt{&ast.IfStmt{
 		Init: define(f, &ast.CallExpr{Fun: ast.NewIdent("_mockFind"), Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(id)}, from}}),
@@ -151,12 +169,17 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 // block ends (see endMocks), or, if the test panics, by a deferred end.
 //
 //	var _mf1 *_mockFrame
-//	_mf1 = _mockPush(1, "fetch", true, func(url string) any { ... }, nil)
+//	_mf1 = _mockPush(1, "fetch", "main.bork:3:3", true, func(url string) any { ... }, nil)
 //	defer _mf1.end()
-//	calls := Mock{countFn: _mf1.count, callsFn: _mf1.calls}
+//	calls := Mock[FetchCall]{countFn: _mf1.count, callsFn: _mf1.calls,
+//		argsFn: _mockArgsFn[FetchCall](_mf1), ...}
+//
+// Its block's normal end calls _mf1.endOK() and then _mockVerify(_mf1),
+// which checks what the handle's expect calls declared; on a panic,
+// the deferred end checks nothing.
 //
 // A mock directly in a scope's body ends with the scope instead, after
-// its tasks: s.Defer(_mf1.finish), and its block's end (or a panic)
+// its tasks: s.Defer(func() { _mf1.finishIn(s) }), and its block's end (or a panic)
 // restores the test goroutine's labels with _mf1.restore().
 func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 	g.usesMocks = true
@@ -195,6 +218,7 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 		assign(frame, &ast.CallExpr{Fun: ast.NewIdent("_mockPush"), Args: []ast.Expr{
 			&ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(g.mockIDs[m.Target])},
 			strLit(m.Text),
+			at(m.Pos),
 			ast.NewIdent(strconv.FormatBool(m.Var != nil)),
 			lit,
 			parent,
@@ -203,15 +227,25 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 	}
 	if scope != nil {
 		stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{
-			Fun:  &ast.SelectorExpr{X: scope, Sel: ast.NewIdent("Defer")},
-			Args: []ast.Expr{&ast.SelectorExpr{X: frame, Sel: ast.NewIdent("finish")}},
+			Fun: &ast.SelectorExpr{X: scope, Sel: ast.NewIdent("Defer")},
+			Args: []ast.Expr{&ast.FuncLit{
+				Type: &ast.FuncType{Params: &ast.FieldList{}},
+				Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: frame, Sel: ast.NewIdent("finishIn")}, Args: []ast.Expr{scope}}}}},
+			}},
 		}})
 	}
 	g.openMocks = append(g.openMocks, openMock{frame: frame, depth: len(g.openScopes), scoped: scope != nil})
 	if m.Var != nil {
+		rec := g.goType(g.info.MockCalls[m.Target])
+		generic := func(fn string) ast.Expr {
+			return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent(fn), Index: rec}, Args: []ast.Expr{frame}}
+		}
 		handle := &ast.CompositeLit{Type: g.goType(m.Var.Type), Elts: []ast.Expr{
 			&ast.KeyValueExpr{Key: ast.NewIdent("countFn"), Value: &ast.SelectorExpr{X: frame, Sel: ast.NewIdent("count")}},
 			&ast.KeyValueExpr{Key: ast.NewIdent("callsFn"), Value: &ast.SelectorExpr{X: frame, Sel: ast.NewIdent("calls")}},
+			&ast.KeyValueExpr{Key: ast.NewIdent("argsFn"), Value: generic("_mockArgsFn")},
+			&ast.KeyValueExpr{Key: ast.NewIdent("expectFn"), Value: generic("_mockExpectFn")},
+			&ast.KeyValueExpr{Key: ast.NewIdent("waitFn"), Value: generic("_mockWaitFn")},
 		}}
 		stmts = append(stmts, define(name(m.Var.Name), handle))
 		if m.Var.Unused {
@@ -222,23 +256,36 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 }
 
 // endMocks ends the mocks pushed since the first `from` of openMocks
-// (innermost first), and forgets them.
+// (innermost first), at the normal end of their block, then checks
+// their expectations.
 func (g *gen) endMocks(from int) []ast.Stmt {
-	var out []ast.Stmt
+	var ending []openMock
 	for i := len(g.openMocks) - 1; i >= from; i-- {
-		out = append(out, endMock(g.openMocks[i]))
+		ending = append(ending, g.openMocks[i])
 	}
-	return out
+	return endMocksOK(ending)
 }
 
-// endMock ends a mock at the end of its block; a scoped one only
-// restores the labels (its scope ends it).
-func endMock(m openMock) ast.Stmt {
-	method := "end"
-	if m.scoped {
-		method = "restore"
+// endMocksOK ends mocks at the normal end of their block (a scoped one
+// only restores the labels: its scope ends and checks it), then checks
+// the others' expectations, all of them, so every unmet one is
+// reported.
+func endMocksOK(ending []openMock) []ast.Stmt {
+	var out []ast.Stmt
+	var check []ast.Expr
+	for _, m := range ending {
+		method := "endOK"
+		if m.scoped {
+			method = "restoreOK"
+		} else {
+			check = append(check, m.frame)
+		}
+		out = append(out, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: m.frame, Sel: ast.NewIdent(method)}}})
 	}
-	return &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: m.frame, Sel: ast.NewIdent(method)}}}
+	if len(check) > 0 {
+		out = append(out, &ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_mockVerify"), Args: check}})
+	}
+	return out
 }
 
 // passthrough is the frame of the mock whose body names fn, if code in
@@ -291,29 +338,46 @@ const mockRuntime = `package main
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type _mockFrame struct {
 	parent *_mockFrame
 	id     int    // the mocked function's
 	name   string // as the mock statement wrote it
+	at     string // the mock statement's position
 	fn     any    // the mock: a func of the function's Go type
-	record bool   // whether calls are recorded as text
+	record bool   // whether calls are recorded (it has a handle)
 	ctx      context.Context // the frame's labels
 	prev     context.Context // the labels to restore when it ends
 	restored atomic.Bool
+	ok       atomic.Bool // its block ended normally
+	checked  atomic.Bool // its expectations were checked (or never will be)
 	ended    atomic.Bool
 
-	mu     sync.Mutex
-	idle   *sync.Cond
-	active int // calls running now
-	n      int64
-	texts  []string
+	mu      sync.Mutex
+	idle    *sync.Cond
+	changed *sync.Cond // a call was counted
+	active  int        // calls running now
+	n       int64
+	texts   []string
+	args    []any // call records, as texts
+	expects []_mockExpect
+}
+
+// _mockExpect is what an expect call on a mock's handle declared: how
+// many calls (that match, if where) it must answer.
+type _mockExpect struct {
+	match  func(any) bool
+	where  bool
+	lo, hi int64 // hi < 0: no limit
 }
 
 // _mockFrames maps a label set (its pointer) to the frame it belongs
@@ -364,18 +428,227 @@ func (f *_mockFrame) done() {
 
 // called counts a call, and records its arguments if the mock has a
 // handle.
-func (f *_mockFrame) called(args func() []string) {
+func (f *_mockFrame) called(args func() []string, typed func() any) {
 	text := ""
+	var record any
 	if f.record {
 		text = f.name + "(" + strings.Join(args(), ", ") + ")"
+		if typed != nil {
+			record = typed()
+		}
 	}
 	f.mu.Lock()
 	f.n++
 	if f.record {
 		f.texts = append(f.texts, text)
+		f.args = append(f.args, record)
 	}
+	f.changed.Broadcast()
 	f.mu.Unlock()
 }
+
+// matching counts the calls that match (all of them, unless where).
+// The caller holds f.mu.
+func (f *_mockFrame) matching(match func(any) bool, where bool) int64 {
+	if !where {
+		return f.n
+	}
+	var n int64
+	for _, a := range f.args {
+		if match(a) {
+			n++
+		}
+	}
+	return n
+}
+
+func _mockArgsFn[A any](f *_mockFrame) func() []A {
+	return func() []A {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		out := make([]A, len(f.args))
+		for i, a := range f.args {
+			out[i] = a.(A)
+		}
+		return out
+	}
+}
+
+func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, int64) {
+	return func(match func(A) bool, where bool, times, atLeast, atMost int64) {
+		e := _mockExpect{match: func(a any) bool { return match(a.(A)) }, where: where, lo: 1, hi: -1}
+		bad := func(why string) {
+			panic(fmt.Sprintf("%s: cannot expect (times: %d, atLeast: %d, atMost: %d) of the mock of %s: %s", f.at, times, atLeast, atMost, f.name, why))
+		}
+		switch {
+		case f.ended.Load() || f.checked.Load():
+			panic(fmt.Sprintf("%s: an expectation on the mock of %s came after it ended, so it could never be checked; declare expectations while the mock is in force", f.at, f.name))
+		case times < -1 || atLeast < -1 || atMost < -1:
+			bad("bounds cannot be negative (-1 means not given)")
+		case times >= 0 && (atLeast >= 0 || atMost >= 0):
+			bad("give times, or atLeast and atMost, not both")
+		case atLeast >= 0 && atMost >= 0 && atLeast > atMost:
+			bad("atLeast is more than atMost")
+		case times >= 0:
+			e.lo, e.hi = times, times
+		case atLeast >= 0 || atMost >= 0:
+			e.lo, e.hi = max(atLeast, 0), atMost
+		}
+		f.mu.Lock()
+		f.expects = append(f.expects, e)
+		f.mu.Unlock()
+	}
+}
+
+func _mockWaitFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64) {
+	return func(match func(A) bool, where bool, calls, ms int64) {
+		m := func(a any) bool { return match(a.(A)) }
+		if calls < 0 || ms < 0 {
+			panic(fmt.Sprintf("%s: cannot wait for %d calls of the mock of %s for %dms: neither can be negative", f.at, calls, f.name, ms))
+		}
+		ms = min(ms, int64(math.MaxInt64/time.Millisecond))
+		wait := time.Duration(ms) * time.Millisecond
+		deadline := time.Now().Add(wait)
+		timer := time.AfterFunc(wait, func() {
+			f.mu.Lock()
+			f.changed.Broadcast()
+			f.mu.Unlock()
+		})
+		defer timer.Stop()
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		for {
+			n, err := f.matchingSafe(m, where)
+			if err != "" {
+				panic(err)
+			}
+			if n >= calls {
+				return
+			}
+			if !time.Now().Before(deadline) {
+				panic(fmt.Sprintf("%s: waited %dms for %s of the mock of %s, but it answered %d%s", f.at, ms, _mockCalls(calls, where), f.name, n, f.callList()))
+			}
+			f.changed.Wait()
+		}
+	}
+}
+
+// _mockCalls is "1 call", "2 matching calls".
+func _mockCalls(n int64, where bool) string {
+	s := strconv.FormatInt(n, 10)
+	if where {
+		s += " matching"
+	}
+	if n == 1 {
+		return s + " call"
+	}
+	return s + " calls"
+}
+
+// callList lists the calls answered, for a failure. The caller holds
+// f.mu.
+func (f *_mockFrame) callList() string {
+	if len(f.texts) == 0 {
+		return ""
+	}
+	return ":\n" + strings.Join(f.texts, "\n")
+}
+
+// failures lists the expectations the mock did not meet (once: later
+// calls give none).
+func (f *_mockFrame) failures() (failed []string) {
+	if f.checked.Swap(true) {
+		return nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, e := range f.expects {
+		n, err := f.matchingSafe(e.match, e.where)
+		if err != "" {
+			failed = append(failed, err)
+			continue
+		}
+		if n >= e.lo && (e.hi < 0 || n <= e.hi) {
+			continue
+		}
+		var want string
+		switch {
+		case e.lo == 0 && e.hi == 0:
+			want = "no calls"
+			if e.where {
+				want = "no matching calls"
+			}
+		case e.lo == e.hi:
+			want = "exactly " + _mockCalls(e.lo, e.where)
+		case e.hi < 0:
+			want = "at least " + _mockCalls(e.lo, e.where)
+		case e.lo == 0:
+			want = "at most " + _mockCalls(e.hi, e.where)
+		default:
+			want = fmt.Sprintf("between %d and %s", e.lo, _mockCalls(e.hi, e.where))
+		}
+		got := strconv.FormatInt(n, 10)
+		if e.where {
+			got += " matching"
+		}
+		failed = append(failed, fmt.Sprintf("%s: the mock of %s expected %s, but answered %s", f.at, f.name, want, got))
+	}
+	if len(failed) > 0 && len(f.texts) > 0 {
+		// The calls, once, after the mock's last failure.
+		failed[len(failed)-1] += f.callList()
+	}
+	return failed
+}
+
+// matchingSafe is matching, with a matcher's panic as a message. The
+// caller holds f.mu.
+func (f *_mockFrame) matchingSafe(match func(any) bool, where bool) (n int64, err string) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Sprintf("%s: a matcher given to the mock of %s panicked: %v", f.at, f.name, r)
+		}
+	}()
+	return f.matching(match, where), ""
+}
+
+// _mockVerify fails the test if the mocks, which ended normally, did not
+// meet their expectations: every unmet one is reported.
+func _mockVerify(frames ...*_mockFrame) {
+	var failed []string
+	for _, f := range frames {
+		failed = append(failed, f.failures()...)
+	}
+	if len(failed) > 0 {
+		panic(strings.Join(failed, "\n"))
+	}
+}
+
+// endOK ends the mock at the normal end of its block (which then
+// checks it, with _mockVerify).
+func (f *_mockFrame) endOK() {
+	f.ok.Store(true)
+	f.end()
+}
+
+// restoreOK is restore at the normal end of the block of a mock in a
+// scope's body: its scope checks it (finishIn) once its tasks are done.
+func (f *_mockFrame) restoreOK() {
+	f.ok.Store(true)
+	f.restore()
+}
+
+// finishIn ends a mock in a scope's body with the scope s, and checks
+// its expectations, unless the block or a task of s failed (the test
+// then reports that failure only).
+func (f *_mockFrame) finishIn(s interface{ failed() bool }) {
+	f.finish()
+	if !f.ok.Load() || s.failed() {
+		f.checked.Store(true)
+		return
+	}
+	_mockVerify(f)
+}
+
 
 func (f *_mockFrame) count() int64 {
 	f.mu.Lock()
@@ -393,7 +666,7 @@ func (f *_mockFrame) calls() []string {
 // on the goroutines it starts from now on, until the frame ends; parent
 // is the mock open around it in the test. Its labels add bork.mock to
 // the goroutine's labels, keeping those.
-func _mockPush(id int, name string, record bool, fn any, parent *_mockFrame) *_mockFrame {
+func _mockPush(id int, name, at string, record bool, fn any, parent *_mockFrame) *_mockFrame {
 	_labelsCheck.Do(_labelsCheckLayout)
 	base := context.Background()
 	if p := _labels(); p != nil {
@@ -403,8 +676,9 @@ func _mockPush(id int, name string, record bool, fn any, parent *_mockFrame) *_m
 			base = pprof.WithLabels(base, pprof.Labels(_labelList(p)...))
 		}
 	}
-	f := &_mockFrame{parent: parent, id: id, name: name, fn: fn, record: record, prev: base}
+	f := &_mockFrame{parent: parent, id: id, name: name, at: at, fn: fn, record: record, prev: base}
 	f.idle = sync.NewCond(&f.mu)
+	f.changed = sync.NewCond(&f.mu)
 	f.ctx = pprof.WithLabels(base, pprof.Labels("bork.mock", strconv.FormatInt(_mockSeq.Add(1), 10)))
 	pprof.SetGoroutineLabels(f.ctx)
 	_mockFrames.Store(_labels(), f)

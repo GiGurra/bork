@@ -1793,8 +1793,21 @@ gets the mock again, as any call under it does.
 
 ### Recording calls
 
-A `mock` statement can bind a handle, of the prelude's type `Mock`, that
-records the calls the mock answered, from every goroutine:
+A `mock` statement can bind a handle, of the prelude's type `Mock[A]`, that
+records the calls the mock answered, from every goroutine. `A` is the
+target's *call record* (bork-pvmyos): a record the compiler makes, with a
+field per parameter of the target, named as the target names them (a
+method's receiver first): `FetchCall { url: String, retries: Int }`,
+`StoreSaveCall { s: Store, key: String }`, `HttpGetCall { ... }` for
+another package's function. Its name cannot clash with a declared type or
+function (a number is added if it would), and it exists only in test builds;
+the test reads its fields, and does not write its name. A parameter whose
+value can belong to a scope (a scope, a resource, a Go value, a function, or
+anything holding one) gets no field: the handle outlives the test's scopes,
+so the record would hand back a closed resource, or a function that uses one.
+Reading such a field says so, and suggests checking the value inside the
+mock's body, while it is valid; `calls()` still shows it as text. Fields do
+not carry the parameters' facts.
 
 - `m.count(): Int` is how many calls it answered so far (always the length
   of `m.calls()`).
@@ -1804,12 +1817,36 @@ records the calls the mock answered, from every goroutine:
   every value a text, functions, scopes, and Go values included):
   `["payments.Charge(Card { last4: \"4242\" }, 100)"]`, so `assertEqual` and
   `assertSnapshot` can check them.
+- `m.args(): List[A]` lists the same calls as call records, so a test checks
+  arguments with their types: `m.args().map(c => c.amount)`.
+- `m.expect(times: n)`, `m.expect(atLeast: a, atMost: b)` (either bound
+  alone), and `m.expect()` (at least once) declare how many calls the mock
+  must answer; `times: 0` means never, and -1 means a bound is not given. `m.expectWhere(c => c.url == "a",
+  times: 1)` counts only the calls whose record matches; the matcher is pure
+  (`(A) uses nothing => Bool`), so it can run when the check does. They are
+  declared up front, as rewire's `expect` is, and checked when the mock ends:
+  at the normal end of its block, or, for a mock written directly in a
+  `scope` block, when that scope's tasks are done. An unmet one fails the
+  test, naming the mock statement, what was expected, what was answered, and
+  the calls (`main.bork:12:11: the mock of Fetch expected exactly 2 calls,
+  but answered 1:` and then `Fetch("a")`); every unmet expectation of every
+  mock ending there is reported. A test that already failed reports only its
+  own failure: on a panic, or a failed task of the scope a mock is checked
+  with, the mock ends without checking. An expectation declared after its
+  mock ended fails the test, since it could never be checked, and so does a
+  matcher that panics.
+- `m.waitFor(n)` waits until the mock has answered n calls, from any task, and
+  fails the test if that takes longer than `ms` (default 5000)
+  milliseconds; `m.waitForWhere(matcher, n)` counts matching calls. This is
+  how a test waits for work it started asynchronously (a server's handler, a
+  background task) without sleeping.
 
-Both use `state` (the answer changes as calls happen). Calls passed through to
-the real function by name are recorded by the outer mock or not at all.
-Typed access to the arguments and expectations (call counts declared up
-front, argument matchers, waiting for asynchronous calls, as rewire's
-`expect` does) are a follow-up ticket.
+All of them use `state` (the answer changes as calls happen), and the waits
+`clock`. Calls passed through to the real function by name are recorded by
+the outer mock or not at all. Bad bounds (negative, `times` together with a
+range, `atLeast` above `atMost`, a negative wait) fail the test at the
+`expect` or `waitFor` call. Failures name the mock statement's position (the
+handle's methods are prelude functions, which do not know their caller's).
 
 ### Production builds pay nothing
 
@@ -1883,8 +1920,6 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
 ### Follow-ups
 
 - Generic functions and methods (bork-7gpl00): one generic mock for every instantiation.
-- Typed call records and expectations (bork-pvmyos): (`Times`, `Never`, argument matchers,
-  waiting for asynchronous calls).
 - Hermetic tests (bork-x0g9au): report, or require, that a test mocks every `net` function
   it can reach, so it can run without a network.
 - Mocking class instances, if real code shows the need.

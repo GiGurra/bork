@@ -74,9 +74,11 @@ test "an upstream answering 503 is down, since the time it was checked" {
 }
 
 test "every task sees the test's mocks" {
-  mock http.Get(url, s, timeoutMs) {
+  gets = mock http.Get(url, s, timeoutMs) {
     if (url.contains("down")) { http.Text(500, "") } else { http.Text(200, "") }
   }
+  gets.expect(times: 20)
+  gets.expectWhere(c => c.timeoutMs != 2000, times: 0)
   mock time.Now() { time.Instant { unixNanos: 0 } }
   urls = range(0, 20).map(i => if (i % 2 == 0) { s"https://up$i" } else { s"https://down$i" })
   results = checkAll(urls).map(describe)

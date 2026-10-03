@@ -530,7 +530,7 @@ test "mocked" {
 		name, fragment, where, typ string
 		proven, defined            bool
 	}{
-		{"handle", "calls = mock", "", "Mock", false, true},
+		{"handle", "calls = mock", "", "Mock[ClampCall]", false, true},
 		{"target", "Clamp(m)", "", "(Int) uses io => Int", false, true},
 		{"parameter", "m) {", "positive", "Int", true, true},
 		{"parameter in the body", "m /* body", "positive", "Int", true, true},

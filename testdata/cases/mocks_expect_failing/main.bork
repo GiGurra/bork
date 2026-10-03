@@ -1,0 +1,102 @@
+// Unmet expectations fail the test when the mock ends.
+
+fn Fetch(url: String) uses net: String {
+  panic(s"no network: $url")
+}
+
+fn main() {
+  println(Fetch("x"))
+}
+
+test "too few calls" {
+  calls = mock Fetch(url) { url }
+  calls.expect(times: 2)
+  _ = Fetch("a")
+}
+
+test "a call to a mock that must not be called" {
+  calls = mock Fetch(url) { url }
+  calls.expect(times: 0)
+  _ = Fetch("a")
+}
+
+test "every unmet expectation is reported" {
+  calls = mock Fetch(url) { url }
+  calls.expect(atMost: 1)
+  calls.expectWhere(c => c.url == "c", atLeast: 1)
+  calls.expect(atLeast: 1, atMost: 2)
+  _ = Fetch("a")
+  _ = Fetch("b")
+  _ = Fetch("b")
+}
+
+test "an expectation is checked when its block ends" {
+  {
+    calls = mock Fetch(url) { url }
+    calls.expect()
+  }
+  println("not reached")
+}
+
+test "waitFor gives up" {
+  calls = mock Fetch(url) { url }
+  _ = Fetch("a")
+  calls.waitFor(2, ms: 20)
+}
+
+test "times and a range cannot both be given" {
+  calls = mock Fetch(url) { url }
+  calls.expect(times: 1, atMost: 2)
+}
+
+test "a test that fails first reports only its own failure" {
+  calls = mock Fetch(url) { url }
+  calls.expect(times: 5)
+  assertEqual(Fetch("a"), "b")
+}
+
+fn Save(key: String) uses io {
+  panic(s"no disk: $key")
+}
+
+test "the unmet expectations of every mock in a block are reported" {
+  fetches = mock Fetch(url) { url }
+  saves = mock Save(key) {}
+  fetches.expect(times: 1)
+  saves.expect(times: 1)
+}
+
+test "a scoped mock's expectations are not checked when its block fails" {
+  scope s {
+    calls = mock Fetch(url) { url }
+    calls.expect(times: 5)
+    assertEqual(Fetch("a"), "b")
+  }
+}
+
+test "nor when a task of its scope fails" {
+  scope s {
+    calls = mock Fetch(url) { url }
+    calls.expect(times: 5)
+    launch(s, () => assertEqual(Fetch("a"), "b"))
+  }
+}
+
+test "an expectation after the mock ended" {
+  calls = {
+    c = mock Fetch(url) { url }
+    c
+  }
+  calls.expect(times: 3)
+}
+
+test "a matcher that panics" {
+  calls = mock Fetch(url) { url }
+  calls.expectWhere(c => c.url.byteLength() / (c.url.byteLength() - 1) == 1, times: 1)
+  _ = Fetch("a")
+}
+
+test "waitFor cannot wait for a negative time" {
+  calls = mock Fetch(url) { url }
+  calls.waitFor(1, ms: -5)
+}
