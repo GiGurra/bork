@@ -1,0 +1,14 @@
+type IBox = Box[Int]
+type IResult = Result[Int]
+type Box[T] = { value: T }
+type Result[T] = sealed { Empty, Value { value: T } }
+
+fn (b: Box[T]) unwrap[T](): T { b.value }
+
+fn main() {
+  println(IBox { value: "wrong" })
+  println(IResult.Value { value: "wrong" })
+  wrong: (Box[String]) => String = IBox.unwrap
+  println(wrong(Box { value: "wrong" }))
+  println(IBox.unwrap(Box { value: "wrong" }))
+}
