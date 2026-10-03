@@ -101,7 +101,7 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	}
 	checkedDefaults := map[*syntax.FieldDecl]bool{}
 	for field := range info.fieldDefaults {
-		if field.Prelude || field.Default == nil || hasTypeParam(field.Type) {
+		if field.Prelude || field.Default == nil || hasTypeParam(field.Type) || importedDefault(field) {
 			continue
 		}
 		if !field.defaultGeneric {
@@ -123,6 +123,13 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	f.defaultUse = diag.Pos{}
 	f.defaultDecl = diag.Pos{}
 	f.evaluate(eval)
+}
+
+// Closed non-generic defaults are proven when their declaring package is
+// checked. Importers rely on that contract. Generic defaults still need proof
+// after specialization, and sibling-dependent constraints remain use-site checks.
+func importedDefault(field *Field) bool {
+	return field != nil && field.Pkg != nil && !field.Pkg.Root && !field.defaultGeneric
 }
 
 type factChecker struct {
@@ -482,7 +489,9 @@ func (f *factChecker) walk(x Expr, e env) {
 		f.walk(x.X, e)
 	case *RecordLit:
 		for _, fi := range x.Fields {
-			f.walk(fi.Value, e)
+			if !fi.IsDefault || !importedDefault(fi.Field) {
+				f.walk(fi.Value, e)
+			}
 		}
 		f.recordObligations(x, e)
 		f.nominalObligations(x, x.Variant, e)

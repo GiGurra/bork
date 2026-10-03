@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/prelude"
 	"github.com/GiGurra/bork/internal/std"
@@ -67,5 +68,85 @@ func TestHTTPTypeCheckWithoutGo(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	if _, _, err := Check(root); err != nil {
 		t.Fatalf("HTTP checking without Go: %v", err)
+	}
+}
+
+// Importing a declaration with checked defaults does not evaluate predicates
+// again; checking the declaring package itself still proves those defaults.
+func TestImportedDefaultFactsWithoutGo(t *testing.T) {
+	root := t.TempDir()
+	api := filepath.Join(root, "api")
+	if err := os.MkdirAll(api, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sources := map[string]string{
+		filepath.Join(root, "bork.mod"):  "module example.com/defaultfacts\n",
+		filepath.Join(root, "main.bork"): "import \"example.com/defaultfacts/api\"\nfn main() { _ = api.Outer {} }\n",
+		filepath.Join(api, "api.bork"):   "pred positive(x: Int) { x > 0 }\ntype Inner = { value: Int where positive = 1 }\ntype Outer = { inner: Inner = Inner { value: 1 } }\n",
+	}
+	for path, source := range sources {
+		if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := Check(api); err != nil {
+		t.Fatalf("declaring package: %v", err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	if _, _, err := Check(root); err != nil {
+		t.Fatalf("imported defaults without Go: %v", err)
+	}
+	if _, _, err := Check(api); err == nil {
+		t.Fatal("declaring package skipped default proof")
+	}
+}
+
+func TestImportedDefaultsRetainUseSiteFacts(t *testing.T) {
+	for name, main := range map[string]string{
+		"explicit": "_ = api.Inner { value: 0 }",
+		"sibling":  "_ = api.Pair { upper: 0 }",
+		"generic":  "box: api.Box[Int] = api.Box {}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			api := filepath.Join(root, "api")
+			if err := os.MkdirAll(api, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			sources := map[string]string{
+				filepath.Join(root, "bork.mod"):  "module example.com/defaultfacts\n",
+				filepath.Join(root, "main.bork"): "import \"example.com/defaultfacts/api\"\nfn main() { " + main + " }\n",
+				filepath.Join(api, "api.bork"):   "pred positive(x: Int) { x > 0 }\npred below(x: Int, upper: Int) { x < upper }\npred nonempty[T](xs: List[T]) { xs.length() > 0 }\ntype Inner = { value: Int where positive = 1 }\ntype Pair = { upper: Int, lower: Int where below(upper) = 0 }\ntype Box[T] = { xs: List[T] where nonempty = [] }\n",
+			}
+			for path, source := range sources {
+				if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, _, err := Check(root); err == nil || !strings.Contains(err.Error(), "is false") {
+				t.Fatalf("use-site facts unchecked: %v", err)
+			}
+		})
+	}
+}
+
+// The HTTP package is normally imported by fixtures. Check its default facts
+// with HTTP as the declaring root too, rather than trusting them in every test.
+func TestHTTPDeclaredDefaultFacts(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte("import \"bork/http\"\nfn Noop(request: http.Request) {}\nfn main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, _, diags, err := load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := check.Program(files, "bork/http", diags, goPackages{files: files})
+	if diags.Len() > 0 {
+		t.Fatal(diags.Error())
+	}
+	check.Facts(files, info, diags, evaluator(root, files, info))
+	if diags.Len() > 0 {
+		t.Fatal(diags.Error())
 	}
 }
