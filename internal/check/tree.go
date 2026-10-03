@@ -79,6 +79,7 @@ const (
 	VarLambdaParam                // a lambda's parameter
 	VarLet                        // a binding: name = value
 	VarPattern                    // a name a match pattern binds
+	VarLoop                       // an iteration binding
 	VarScope                      // the scope of `scope s { ... }`
 )
 
@@ -380,3 +381,32 @@ func (*Mock) stmtNode()     {}
 func (*Let) stmtNode()      {}
 func (*ExprStmt) stmtNode() {}
 func (*Trust) stmtNode()    {}
+
+// Generate constructs a producer without running its body.
+type Generate struct {
+	expr
+	Body        *Block
+	Constraints []*Constraint
+}
+type Yield struct {
+	expr
+	Value Expr
+	Elem  Type
+}
+type For struct {
+	expr
+	Var   *Var
+	Items Expr
+	Body  *Block
+}
+type LoopControl struct {
+	expr
+	Continue bool
+}
+
+type SeqCall struct {
+	expr
+	Op      string
+	Args    []Expr
+	Effects Effects
+}

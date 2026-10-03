@@ -23,7 +23,7 @@ type typeEntry struct {
 }
 
 // reservedTypeNames cannot be declared by user code.
-var reservedTypeNames = map[string]bool{"Never": true, "List": true, "Map": true}
+var reservedTypeNames = map[string]bool{"Never": true, "List": true, "Map": true, "Seq": true}
 
 func init() {
 	for name := range basicTypes {
@@ -274,6 +274,21 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 			c.appliedWhere[t] = true
 		}
 		return tp
+	}
+	if t.Name == "Seq" {
+		if len(t.Args) != 1 {
+			c.errorf(t.Pos, "Seq needs exactly one type argument, as in Seq[Int]")
+			return Invalid
+		}
+		elem := c.resolveType(t.Args[0])
+		if elem == Invalid {
+			return Invalid
+		}
+		if !isValue(elem) {
+			c.errorf(t.Args[0].Pos, "Seq[%s] is not allowed", elem)
+			return Invalid
+		}
+		return &Seq{Elem: elem, Effects: c.effectsOf(t.Uses)}
 	}
 	if t.Name == "List" {
 		if len(t.Args) != 1 {

@@ -1,0 +1,44 @@
+fn cleanup(s: Scope, text: String) uses io unsafe go {
+  import "fmt"
+  s.Defer(func() { fmt.Println(text) })
+}
+fn producer(): Seq[Int] uses io {
+  generate[Int] {
+    scope outer {
+      cleanup(outer, "producer closed")
+      for (n in Seq.range(1000, 1003)) {
+        scope inner {
+          cleanup(inner, "inner closed")
+          yield n
+          println("resumed")
+        }
+      }
+    }
+  }
+}
+fn early(xs: Seq[Int] uses io) uses io: Int {
+  for (n in xs) { return n }
+  0
+}
+fn failed(xs: Seq[Int] uses io) uses io: Unit | OutOfRange {
+  for (n in xs) { println(toInt8(n)?) }
+}
+fn protect(work: () => Unit): Bool unsafe go {
+  recovered := false
+  func() { defer func() { recovered = recover() != nil }(); work() }()
+  return recovered
+}
+fn main() {
+  println(producer().take(0).toList())
+  println(producer().take(1).toList())
+  for (n in producer()) {
+    scope consumer { cleanup(consumer, "consumer closed"); println(n); break }
+  }
+  println(early(producer()))
+  println(failed(producer()))
+  println(protect(() => { for (n in producer()) { println(n); panic("stop") } }))
+  println(Seq.range(0, 3).flatMap(n => generate[Int] {
+    println("outer", n)
+    for (value in Seq.range(0, 9223372036854775807)) { yield value }
+    }).take(1).toList())
+}

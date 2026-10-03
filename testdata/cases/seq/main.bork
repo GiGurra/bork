@@ -1,0 +1,41 @@
+fn numbers(): Seq[Int] uses io {
+  generate[Int] {
+    println("start")
+    for (n in [1, 2, 3]) {
+      yield n
+      println("after")
+    }
+  }
+}
+fn main() {
+  lazy = deferred()
+  println("before map")
+  println(lazy.toList())
+  println(joined().toList())
+  println(generate[Seq[Int]] { yield generate[Int] { yield 9 } }.flatMap(value => value).toList())
+  xs = numbers()
+  println("constructed")
+  println(xs)
+  println(xs.take(0).toList())
+  println(xs.take(1).toList())
+  println(xs.map(n => n + 10).toList())
+  for (n in xs) {
+    println(n)
+    break
+  }
+  println(Seq.empty[Int]().toList())
+  println(Seq.range(0, 6).filter(n => n % 2 == 0).drop(1).toList())
+  println([1, 2, 3].toSeq().fold(0, (acc, n) => acc + n))
+  println(Seq.range(5, 9).first())
+  println(Seq.empty[String]().first())
+  println([1, 2].toSeq().flatMap(n => Seq.range(n, n + 2)).take(3).toList())
+  [1, 2].toSeq().forEach(n => println(n))
+  for (n in [1, 2, 3]) {
+    if (n == 2) { continue }
+    println(n)
+  }
+  println(generate[Int | String] { yield 7; yield "x" }.toList())
+}
+fn deferred(): Seq[Int] uses io { Seq.range(0, 2).map(n => { println("map", n); n + 5 }) }
+fn pair[T](left: T, right: T): T { left }
+fn joined(): Seq[Int] uses io { pair(generate[Int] { yield 1 }, generate[Int] { println("effect"); yield 2 }) }

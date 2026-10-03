@@ -1,0 +1,2 @@
+// SeqStep is one unfold element and the state for the next step.
+type SeqStep[T, S] = { value: T, state: S }

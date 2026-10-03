@@ -1,0 +1,5 @@
+fn noisy(): Seq[Int] uses io { generate[Int] { println("hello"); yield 1 } }
+fn consume() { noisy().forEach(n => println(n)) }
+fn erase(): Seq[Int] { noisy() }
+fn capture(f: (Int) => Int): Seq[Int] { generate[Int] { yield f(1) } }
+fn main() { consume(); _ = erase(); _ = capture(n => n) }

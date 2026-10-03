@@ -139,3 +139,10 @@ test('private record construction is highlighted as a contextual keyword', () =>
   has(ls, 0, 'Config', 'entity.name.type.bork');
   has(ls, 0, 'private', 'keyword.control.bork');
 });
+
+test('sequence producers and iteration control', () => {
+  const ls = tokenize('generate[Int] { for (n in Seq.range(0, 3)) { yield n; continue; break } }');
+  for (const word of ['generate', 'for', 'yield', 'continue', 'break']) {
+    has(ls, 0, word, 'keyword.control.bork');
+  }
+});

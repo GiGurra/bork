@@ -178,6 +178,8 @@ func mentionsOpen(t Type) bool {
 				return true
 			}
 		}
+	case *Seq:
+		return t.Effects&EffOpen != 0 || mentionsOpen(t.Elem)
 	case *List:
 		return mentionsOpen(t.Elem)
 	case *Map:

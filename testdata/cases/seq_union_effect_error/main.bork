@@ -1,0 +1,5 @@
+fn source(): Seq[Int] uses io | String { generate[Int] { println("start"); yield 1 } }
+fn erase() {
+  match (source()) { values: Seq[Int] => println(values.toList()), text: String => println(text) }
+}
+fn main() { erase() }

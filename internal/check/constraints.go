@@ -252,6 +252,10 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 		return nil
 	}
 	c.appliedWhere[t] = true
+	if _, ok := typ.(*Seq); ok && len(t.Where) > 0 {
+		c.errorf(t.Pos, "predicates on a Seq are not supported; constrain its element type instead")
+		return nil
+	}
 	if len(t.Where) > 0 && containsOpaque(typ, map[Type]bool{}) {
 		c.bindErr(t.Pos, "facts cannot apply to %s, which holds a Go value that can change", typ)
 		return nil
@@ -275,6 +279,9 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 			cp.Path = step + con.Path
 			out = append(out, &cp)
 		}
+	}
+	if tt, ok := typ.(*Seq); ok && len(t.Args) == 1 {
+		inner(c.constraintsOf(t.Args[0], tt.Elem, scope), ".[]")
 	}
 	if tt, ok := typ.(*List); ok && len(t.Args) == 1 {
 		inner(c.constraintsOf(t.Args[0], tt.Elem, scope), ".[]")

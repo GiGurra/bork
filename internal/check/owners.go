@@ -84,6 +84,8 @@ func containsOwnedSeen(t Type, seen map[Type]bool) bool {
 	}
 	seen[t] = true
 	switch t := t.(type) {
+	case *Seq:
+		return containsOwnedSeen(t.Elem, seen)
 	case *List:
 		return containsOwnedSeen(t.Elem, seen)
 	case *Map:

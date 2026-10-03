@@ -353,6 +353,12 @@ type gen struct {
 	usesHash         bool
 	usesUnit         bool
 	usesMap          bool
+	usesSeq          bool
+	usesSeqFirst     bool
+	usesSeqUnfold    bool
+	usesLoopCleanup  bool
+	yieldName        *ast.Ident
+	loops            []loopFrame
 	usesDecodeSchema bool
 	usesGoStruct     bool
 	usesBytes        bool
@@ -612,6 +618,8 @@ func (g *gen) funcName(fn *check.Func) *ast.Ident {
 // methodTag names a receiver type in a method's Go name.
 func (g *gen) methodTag(t check.Type) string {
 	switch t := t.(type) {
+	case *check.Seq:
+		return "Seq"
 	case *check.List:
 		return "List"
 	case *check.Map:
@@ -740,9 +748,20 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if e.Type() == check.OwnedScope {
 			// An owner is only used to pass it on, which disarms the
 			// fallback of its variable.
+			if len(g.loops) > 0 {
+				root := g.loops[len(g.loops)-1].cleanup
+				root.used = true
+				return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeLoopOwner"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: root.name}, &ast.UnaryExpr{Op: token.AND, X: name(e.Var.Name)}}}
+			}
 			return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(e.Var.Name)}}}
 		}
 		return nil, name(e.Var.Name)
+	case *check.SeqCall:
+		return g.seqCall(e)
+	case *check.Generate:
+		return nil, g.generateSeq(e)
+	case *check.For, *check.Yield, *check.LoopControl:
+		return g.effect(e), nil
 	case *check.Lambda:
 		return nil, g.lambda(e)
 	case *check.ListLit:
@@ -1101,6 +1120,9 @@ func (g *gen) lambda(e *check.Lambda) ast.Expr {
 	for i, p := range e.Params {
 		names[i] = name(p.Name)
 	}
+	savedYield, savedLoops := g.yieldName, g.loops
+	g.yieldName, g.loops = nil, nil
+	defer func() { g.yieldName, g.loops = savedYield, savedLoops }()
 	saved, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = ft.Result, nil, nil, nil
 	defer func() { g.openScopes, g.blockOwners, g.openMocks = savedScopes, savedOwners, savedMocks }()
@@ -1215,6 +1237,18 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 // effect lowers an expression evaluated only for its effect.
 func (g *gen) effect(e check.Expr) []ast.Stmt {
 	switch e := e.(type) {
+	case *check.SeqCall:
+		stmts, call := g.seqCall(e)
+		if call != nil {
+			stmts = append(stmts, &ast.ExprStmt{X: call})
+		}
+		return stmts
+	case *check.For:
+		return g.forSeq(e)
+	case *check.Yield:
+		return g.yieldSeq(e)
+	case *check.LoopControl:
+		return g.loopControl(e)
 	case *check.Call, *check.CallBuiltin, *check.CallValue:
 		if e.Type() == check.Never {
 			stmts, _ := g.value(e)
@@ -1345,7 +1379,14 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 				out = append(out, assign(ast.NewIdent("_"), name(s.Var.Name)))
 			}
 			if bt == check.OwnedScope {
-				out = append(out, dropOwner(s.Var.Name)...)
+				if len(g.loops) > 0 {
+					root := g.loops[len(g.loops)-1].cleanup
+					root.used = true
+					out = append(out, dropOwner(s.Var.Name)[:2]...)
+					out = append(out, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("owner")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(s.Var.Name)}}}})
+				} else {
+					out = append(out, dropOwner(s.Var.Name)...)
+				}
 				g.blockOwners = append(g.blockOwners, blockOwner{s.Var.Name, len(g.openScopes)})
 			}
 		case *check.ExprStmt:
@@ -1420,11 +1461,15 @@ func (g *gen) scopeInto(e *check.ScopeBlock, k sink) []ast.Stmt {
 		fn := g.info.Funcs["setScopePolicy"]
 		policy = append(policy, &ast.ExprStmt{X: &ast.CallExpr{Fun: g.funcName(fn), Args: []ast.Expr{s, value}}})
 	}
-	stmts = append(stmts,
-		define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Var.Name)}}}),
-		// A panic in the block closes the scope too.
-		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("abort")}}},
-	)
+	stmts = append(stmts, define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Var.Name)}}}))
+	if len(g.loops) > 0 {
+		root := g.loops[len(g.loops)-1].cleanup
+		root.used = true
+		stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("scope")}, Args: []ast.Expr{s}}})
+		closeCall = &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("closeScope")}, Args: []ast.Expr{s}}
+	} else {
+		stmts = append(stmts, &ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("abort")}}})
+	}
 	stmts = append(stmts, policy...)
 	g.openScopes = append(g.openScopes, s)
 	g.scopeBodies = append(g.scopeBodies, scopeBody{body: e.Body, scope: s})
@@ -1648,7 +1693,7 @@ func (g *gen) str(x ast.Expr, t check.Type) ast.Expr {
 // than Go prints them.
 func needsStr(t check.Type) bool {
 	switch t.(type) {
-	case *check.Union, *check.List, *check.Map, *check.FuncType, *check.TypeParam, *check.Record, *check.Sealed:
+	case *check.Seq, *check.Union, *check.List, *check.Map, *check.FuncType, *check.TypeParam, *check.Record, *check.Sealed:
 		return true
 	}
 	return check.IsFloat(t)

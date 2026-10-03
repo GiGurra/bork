@@ -1,0 +1,3 @@
+fn noisy(): Seq[Int] uses io { generate[Int] { println("hello"); yield 1 } }
+fn consume() { noisy().forEach(n => println(n)) }
+fn main() { consume() }

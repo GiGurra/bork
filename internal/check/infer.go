@@ -131,6 +131,8 @@ func (c *checker) zonk(t Type) Type {
 		if r := c.resolve(t); r != Type(t) {
 			return c.zonk(r)
 		}
+	case *Seq:
+		return &Seq{Elem: c.zonk(t.Elem), Effects: t.Effects}
 	case *List:
 		return &List{Elem: c.zonk(t.Elem)}
 	case *Map:
@@ -185,6 +187,12 @@ func (c *checker) solve(p, a Type) {
 	if u, ok := p.(*TypeParam); ok && u.unknown {
 		// Functions that differ only in their effects: the unknown is
 		// one that may use what either uses.
+		if previous, ok := c.solved[u].(*Seq); ok {
+			if next, ok := c.resolve(a).(*Seq); ok && identical(previous.Elem, next.Elem) {
+				c.solved[u] = &Seq{Elem: previous.Elem, Effects: previous.Effects | next.Effects}
+				return
+			}
+		}
 		bf, ok1 := c.solved[u].(*FuncType)
 		af, ok2 := c.resolve(a).(*FuncType)
 		if ok1 && ok2 && sameSignature(bf, af) {
@@ -205,6 +213,10 @@ func (c *checker) solve(p, a Type) {
 		return
 	}
 	switch p := p.(type) {
+	case *Seq:
+		if a, ok := a.(*Seq); ok {
+			c.solve(p.Elem, a.Elem)
+		}
 	case *List:
 		if a, ok := a.(*List); ok {
 			c.solve(p.Elem, a.Elem)
@@ -285,6 +297,9 @@ func (c *checker) couldFit(p, a Type) bool {
 	switch p := p.(type) {
 	case *TypeParam, *Union:
 		return true
+	case *Seq:
+		a, ok := a.(*Seq)
+		return ok && a.Effects&^p.Effects == 0 && c.couldFit(p.Elem, a.Elem)
 	case *List:
 		a, ok := a.(*List)
 		return ok && c.couldFit(p.Elem, a.Elem)

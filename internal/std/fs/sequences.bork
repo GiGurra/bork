@@ -1,0 +1,66 @@
+// Lines opens a fresh file on each traversal. Errors are final elements.
+// ReadString copies line data; stopping closes the file immediately.
+fn Lines(path: String): Seq[String | Error] uses io unsafe go {
+  import "os"
+  import "bufio"
+  import "io"
+  import "strings"
+  return _Seq[any]{run: func(yield func(any) bool) {
+    failure := func(err error) any {
+      kind, message := _borkIoFailure(err)
+      switch kind {
+      case "notFound": return NotFound{path: path, message: message}
+      case "permissionDenied": return PermissionDenied{path: path, message: message}
+      case "exists": return Exists{path: path, message: message}
+      default: return IoError{path: path, message: message}
+      }
+    }
+    file, err := os.Open(path)
+    if err != nil { yield(failure(err)); return }
+    defer file.Close()
+    reader := bufio.NewReader(file)
+    for {
+      line, err := reader.ReadString('\n')
+      if len(line) > 0 {
+        if strings.HasSuffix(line, "\n") { line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r") }
+        if !yield(line) { return }
+      }
+      if err == io.EOF { break }
+      if err != nil { yield(failure(err)); return }
+    }
+    if err := file.Close(); err != nil { yield(failure(err)) }
+  }}
+}
+
+// Entries opens a fresh directory per traversal and visits filesystem order.
+// It reads one entry at a time and closes the handle on exhaustion or stop.
+fn Entries(path: String): Seq[DirEntry | Error] uses io unsafe go {
+  import "os"
+  import "io"
+  import "path/filepath"
+  return _Seq[any]{run: func(yield func(any) bool) {
+    failure := func(err error) any {
+      kind, message := _borkIoFailure(err)
+      switch kind {
+      case "notFound": return NotFound{path: path, message: message}
+      case "permissionDenied": return PermissionDenied{path: path, message: message}
+      case "exists": return Exists{path: path, message: message}
+      default: return IoError{path: path, message: message}
+      }
+    }
+    dir, err := os.Open(path)
+    if err != nil { yield(failure(err)); return }
+    defer dir.Close()
+    for {
+      entries, err := dir.ReadDir(1)
+      for _, entry := range entries {
+        kind := "file"
+        if entry.IsDir() { kind = "directory" } else if entry.Type() & os.ModeSymlink != 0 { kind = "symlink" } else if !entry.Type().IsRegular() { kind = "other" }
+        if !yield(DirEntry{name: entry.Name(), path: filepath.Join(path, entry.Name()), kind: kind}) { return }
+      }
+      if err == io.EOF { break }
+      if err != nil { yield(failure(err)); return }
+    }
+    if err := dir.Close(); err != nil { yield(failure(err)) }
+  }}
+}

@@ -281,6 +281,24 @@ func (u *effectUses) expr(x Expr) {
 		}
 	case *FuncRef:
 		_ = u.noMain(x.Inst.Func, x.Pos())
+	case *SeqCall:
+		for _, a := range x.Args {
+			u.expr(a)
+		}
+		u.add(x.Effects, x.Pos(), "sequence traversal")
+	case *Generate:
+		inner := &effectUses{from: u.from}
+		inner.block(x.Body)
+		u.mainRefs = append(u.mainRefs, inner.mainRefs...)
+	case *Yield:
+		u.expr(x.Value)
+	case *For:
+		u.expr(x.Items)
+		if t, ok := x.Items.Type().(*Seq); ok {
+			u.add(t.Effects, x.Pos(), "sequence traversal")
+		}
+		u.block(x.Body)
+	case *LoopControl:
 	case *Lambda:
 		// Not run here, but main may not be referred to in it either.
 		inner := &effectUses{from: u.from}

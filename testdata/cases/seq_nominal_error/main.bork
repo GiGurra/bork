@@ -1,0 +1,3 @@
+pred inspect(xs: Seq[Int]) { true }
+fn nominal(xs: Seq[Int] where inspect) uses io { println(xs) }
+fn main() { nominal(Seq.empty[Int]()) }

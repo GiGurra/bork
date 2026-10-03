@@ -27,6 +27,8 @@ import (
 // the basic types, and declared types (whatever their type arguments).
 func methodKey(t Type) (string, bool) {
 	switch t := t.(type) {
+	case *Seq:
+		return "Seq", true
 	case *List:
 		return "List", true
 	case *Map:
@@ -173,6 +175,9 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 		return nil, false
 	}
 	xt := c.expr(sel.X)
+	if t, ok := c.seqMethod(e, sel, xt); ok {
+		return t, true
+	}
 	if xt == Invalid {
 		for _, a := range e.Args {
 			c.expr(a)
@@ -337,6 +342,8 @@ func (c *checker) methodReference(sel *syntax.Selector) (*Func, string, bool) {
 	switch owner {
 	case "Never":
 		t = Never
+	case "Seq":
+		t = &Seq{Elem: listElem}
 	case "List":
 		t = &List{Elem: listElem}
 	case "Map":
@@ -360,7 +367,7 @@ func (c *checker) methodReferenceOwner(e syntax.Expr) Type {
 		return nil
 	}
 	name, ok := c.isTypeRef(sel.X)
-	if !ok || name == "List" || name == "Map" {
+	if !ok || name == "List" || name == "Map" || name == "Seq" {
 		return nil
 	}
 	t := c.typeNamed(name)

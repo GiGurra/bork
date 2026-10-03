@@ -149,7 +149,7 @@ module. Imports without declarations add no modules. Shared module requirements
 select the highest declared version, following Go's minimal version selection;
 conflicting hashes are errors. Maintainers must refresh and test declarations
 together when a shared dependency changes. The Go directive uses the highest
-required version, starting at 1.22. Builds use `-mod=readonly`, so missing or
+required version, starting at 1.23. Builds use `-mod=readonly`, so missing or
 incomplete declarations fail instead of resolving new dependency versions.
 
 Dependencies use Go's module cache; source is not vendored in the compiler.
@@ -319,3 +319,5 @@ variants reachable through records, containers, and concrete generic
 specializations. At a field boundary, derivation may delegate to an existing
 codec provided by the field type's owning package, as with `math.Decimal`.
 Re-deriving an alias of that private sealed type still cannot inspect its variants.
+
+Checked iterator bindings map `iter.Seq[G]` to `Seq[T]` when element conversion is infallible, and convert elements lazily in both directions. Direct Seq annotations must declare latent effects explicitly (`uses nothing` for a pure iterator). A nil returned iterator is empty. Iterators must yield synchronously and stop when the callback returns false; retaining the callback or yielding again violates the unsafe contract. Compiler-owned `_Seq[T]` has a `run iter.Seq[T]` field for standard-library implementations.

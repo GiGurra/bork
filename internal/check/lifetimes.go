@@ -329,7 +329,7 @@ func (l *lifeChecker) carriesLifeSeen(t Type, seen map[Type]bool) bool {
 	defer delete(seen, t)
 	v := false
 	switch t := t.(type) {
-	case *Resource, *Opaque, *FuncType, *TypeParam:
+	case *Resource, *Opaque, *FuncType, *Seq, *TypeParam:
 		v = true
 	case *Basic:
 		v = t == Scope || t == OwnedScope
@@ -457,6 +457,32 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 			}
 		}
 		return life
+	case *SeqCall:
+		var life lifetime
+		for _, a := range x.Args {
+			life = life.union(l.use(a, l.expr(a)))
+		}
+		return life
+	case *Generate:
+		return l.generate(x)
+	case *Yield:
+		l.result(x.Value, l.use(x.Value, l.expr(x.Value)), "the generator")
+		return nil
+	case *For:
+		l.env[x.Var] = l.use(x.Items, l.expr(x.Items))
+		l.frame[x.Var] = l.cur
+		before := copyGone(l.gone)
+		mark := len(l.bound)
+		l.expr(x.Body)
+		for owner, gone := range l.gone {
+			if _, ok := before[owner]; !ok && l.bound[owner] < mark {
+				l.errorf(gone.pos, "a loop cannot consume owned scope %s from outside its body; borrow its scope instead", owner.Name)
+			}
+		}
+		l.gone = before
+		return nil
+	case *LoopControl:
+		return nil
 	case *Lambda:
 		return l.lambda(x)
 	case *Call:
@@ -767,4 +793,22 @@ func scopeName(x Expr) string {
 		}
 	}
 	return "(a scope)"
+}
+
+func (l *lifeChecker) generate(x *Generate) lifetime {
+	saved, savedOpen := l.cur, l.open
+	l.parent[x] = l.cur
+	l.cur = x
+	var used lifetime
+	l.captures = append(l.captures, &used)
+	l.expr(x.Body)
+	l.captures = l.captures[:len(l.captures)-1]
+	l.cur, l.open = saved, savedOpen
+	var life lifetime
+	for _, s := range used {
+		if !l.within(s, x) {
+			life = life.union(lifetime{s})
+		}
+	}
+	return life
 }

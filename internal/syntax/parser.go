@@ -716,6 +716,9 @@ func (p *parser) typeAtom() *TypeExpr {
 		}
 		p.expect(RBrack, "to close the type arguments")
 	}
+	if te.Name == "Seq" {
+		te.Uses = p.uses()
+	}
 	return te
 }
 
@@ -1128,6 +1131,29 @@ func (p *parser) primary() Expr {
 		name := p.expect(TIdent, "after '.' (write .Variant or .{ field: value })")
 		x.Name, x.End = name.Text, name.End
 		return x
+	case KwGenerate:
+		p.next()
+		p.expect(LBrack, "after generate")
+		elem := p.typeExpr()
+		p.expect(RBrack, "after the generated element type")
+		return &Generate{Pos: t.Pos, Elem: elem, Body: p.block()}
+	case KwYield:
+		p.next()
+		return &Yield{Pos: t.Pos, Value: p.expr()}
+	case KwFor:
+		p.next()
+		p.expect(LParen, "after for")
+		n := p.expect(TIdent, "(iteration variable)")
+		in := p.expect(TIdent, "in after the iteration variable")
+		if in.Text != "in" {
+			p.errorf(in.Pos, "expected in after the iteration variable")
+		}
+		items := p.expr()
+		p.expect(RParen, "after the iteration source")
+		return &For{Pos: t.Pos, Name: n.Text, NamePos: n.Pos, Items: items, Body: p.block()}
+	case KwBreak, KwContinue:
+		p.next()
+		return &LoopControl{Pos: t.Pos, Continue: t.Kind == KwContinue}
 	case TInt:
 		p.next()
 		return &IntLit{Pos: t.Pos, Text: t.Text}

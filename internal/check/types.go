@@ -277,6 +277,12 @@ func TypeText(t Type, from *Package) string {
 		return named(t.Name, t.Pkg, nil)
 	case *Opaque:
 		return named(t.Name, t.Pkg, nil)
+	case *Seq:
+		text := "Seq[" + innerText(t.Elem, from) + "]"
+		if t.Effects != 0 {
+			text += " uses " + t.Effects.String()
+		}
+		return text
 	case *List:
 		return "List[" + innerText(t.Elem, from) + "]"
 	case *Map:
@@ -589,6 +595,14 @@ type List struct {
 
 func (l *List) String() string { return TypeText(l, nil) }
 
+// Seq is a lazy sequence whose effects are charged when traversed.
+type Seq struct {
+	Elem    Type
+	Effects Effects
+}
+
+func (s *Seq) String() string { return TypeText(s, nil) }
+
 // Map is the built-in immutable map type Map[K, V]. It keeps its keys
 // in the order they were first added.
 type Map struct {
@@ -617,6 +631,12 @@ func newUnion(members []Type) Type {
 			}
 			// Function types that differ only in their effects are one
 			// member, which may use either's.
+			if ms, ok := m.(*Seq); ok {
+				if ts, ok := t.(*Seq); ok && identical(ms.Elem, ts.Elem) {
+					flat[i] = &Seq{Elem: ms.Elem, Effects: ms.Effects | ts.Effects}
+					return
+				}
+			}
 			if mf, ok := m.(*FuncType); ok {
 				if tf, ok := t.(*FuncType); ok && sameSignature(mf, tf) {
 					flat[i] = &FuncType{Params: mf.Params, Result: mf.Result, Effects: mf.Effects | tf.Effects}
@@ -648,6 +668,9 @@ func identical(a, b Type) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *Seq:
+		b, ok := b.(*Seq)
+		return ok && a.Effects == b.Effects && identical(a.Elem, b.Elem)
 	case *List:
 		b, ok := b.(*List)
 		return ok && identical(a.Elem, b.Elem)
@@ -748,6 +771,11 @@ func assignable(src, dst Type) bool {
 	if src == Never || src == Invalid || dst == Invalid || identical(src, dst) {
 		return true
 	}
+	if ss, ok := src.(*Seq); ok {
+		if ds, ok := dst.(*Seq); ok {
+			return identical(ss.Elem, ds.Elem) && ss.Effects&^ds.Effects == 0
+		}
+	}
 	if sf, ok := src.(*FuncType); ok {
 		switch dst := dst.(type) {
 		case *FuncType:
@@ -808,7 +836,7 @@ func comparableIn(t Type, seen map[Type]bool) bool {
 			}
 		}
 		return false
-	case *FuncType, *Resource, *Opaque:
+	case *Seq, *FuncType, *Resource, *Opaque:
 		return false
 	case *Record:
 		for _, f := range t.Fields {

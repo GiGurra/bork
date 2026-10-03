@@ -1,0 +1,9 @@
+type Handle = resource
+fn open(s: Scope): Handle unsafe go { return Handle{handle: nil, owner:s.Own(func(){})} }
+fn escaped(): Seq[Handle] {
+  scope s { handle = open(s); generate[Handle] { yield handle } }
+}
+fn badYield(): Seq[Handle] {
+  generate[Handle] { scope s { yield open(s) } }
+}
+fn main() { _ = escaped(); _ = badYield() }

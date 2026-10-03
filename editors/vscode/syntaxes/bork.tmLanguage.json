@@ -211,7 +211,7 @@
           "name": "storage.type.bork"
         },
         {
-          "match": "\\b(if|else|match|return|sealed|scope|with|uses|trust|mock|derive|unsafe|go|resource|private|import|use|test|where|and|or)\\b",
+          "match": "\\b(if|else|match|return|generate|yield|for|break|continue|sealed|scope|with|uses|trust|mock|derive|unsafe|go|resource|private|import|use|test|where|and|or)\\b",
           "name": "keyword.control.bork"
         },
         {

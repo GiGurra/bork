@@ -1,0 +1,20 @@
+[]
+inner closed
+producer closed
+[1000]
+1000
+consumer closed
+inner closed
+producer closed
+inner closed
+producer closed
+1000
+inner closed
+producer closed
+OutOfRange { value: "1000", target: "Int8" }
+1000
+inner closed
+producer closed
+true
+outer 0
+[0]

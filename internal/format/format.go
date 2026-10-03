@@ -19,6 +19,7 @@ type item struct {
 	comment    bool
 	unary      bool
 	contextDot bool
+	loopIn     bool
 }
 
 // Source formats one file. Existing line breaks are retained, blank-line runs
@@ -61,7 +62,8 @@ func Source(path string, src []byte) ([]byte, error) {
 		}
 		start := offset(t.Pos)
 		u := t.Kind == syntax.Not || t.Kind == syntax.Minus && !endsExpr(prev)
-		items = append(items, item{kind: t.Kind, text: text, start: start, end: start + len(text), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev)})
+		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && items[len(items)-1].kind == syntax.TIdent && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
+		items = append(items, item{loopIn: loopIn, kind: t.Kind, text: text, start: start, end: start + len(text), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev)})
 		prev = t.Kind
 	}
 	for _, c := range comments {
@@ -185,6 +187,12 @@ func space(a, b item) bool {
 		}
 		return a.kind != syntax.TIdent && a.kind != syntax.RParen && a.kind != syntax.RBrack
 	case syntax.LBrack:
+		if a.kind == syntax.KwGenerate {
+			return false
+		}
+		if a.loopIn {
+			return true
+		}
 		return a.kind != syntax.TIdent && a.kind != syntax.RBrack
 	case syntax.RBrace:
 		return a.kind != syntax.LBrace && a.kind != syntax.Colon

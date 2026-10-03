@@ -198,6 +198,14 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 			return
 		}
 	}
+	for _, p := range fd.Params {
+		if p.Type.Name == "Seq" && p.Type.Uses == nil {
+			c.bindErr(p.Type.Pos, "a checked Go iterator binding must declare the Seq latent effects explicitly, including uses nothing")
+		}
+	}
+	if fd.Result != nil && fd.Result.Name == "Seq" && fd.Result.Uses == nil {
+		c.bindErr(fd.Result.Pos, "a checked Go iterator binding must declare the Seq latent effects explicitly, including uses nothing")
+	}
 	sig := obj.Type().(*types.Signature)
 	if recv != nil {
 		ps := []*types.Var{types.NewVar(0, nil, "receiver", recv)}
@@ -454,6 +462,13 @@ func (c *checker) fromGoSeen(g types.Type, t Type, seen map[goConvPair]bool) con
 	seen[pair] = true
 	defer delete(seen, pair)
 	no := convResult{}
+	if seq, ok := t.(*Seq); ok {
+		if elem := goSeqElem(g); elem != nil {
+			inner := c.fromGoSeen(elem, seq.Elem, seen)
+			return convResult{ok: inner.ok && !inner.fallible}
+		}
+		return no
+	}
 	rt := t
 	if IsOption(rt) {
 		rt = TypeArgs(rt)[0]
@@ -545,6 +560,10 @@ func (c *checker) toGoSeen(t Type, g types.Type, seen map[goConvPair]bool) bool 
 	}
 	seen[pair] = true
 	defer delete(seen, pair)
+	if seq, ok := t.(*Seq); ok {
+		elem := goSeqElem(g)
+		return elem != nil && c.toGoSeen(seq.Elem, elem, seen)
+	}
 	if gt := GoTypeOf(t); gt != nil {
 		return types.AssignableTo(gt, g)
 	}
@@ -668,4 +687,13 @@ func canWrapBindingContexts(t Type, gt types.Type, seen map[goConvPair]bool) boo
 		return true
 	}
 	return false
+}
+
+// goSeqElem recognizes the explicit one-value iterator bridge.
+func goSeqElem(t types.Type) types.Type {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != "iter" || named.Obj().Name() != "Seq" || named.TypeArgs().Len() != 1 {
+		return nil
+	}
+	return named.TypeArgs().At(0)
 }
