@@ -151,7 +151,11 @@ meaning of values or satisfy facts by decoding a different value. Transport
 includes nominal type IDs, field order and union/variant tags. Numeric values
 use their concrete runtime semantics, with exact integer widths and float bit
 patterns (including NaN, infinities and negative zero); Strings preserve bytes.
-Maps preserve their observable entry order. Cyclic foreign values are rejected.
+Only insertion-ordered Map cores may cross the result boundary. A sorted Map
+retains a comparator closure, and an unordered Map has nondeterministic
+traversal: both are rejected recursively, rather than reconstructed with a
+different policy. Call `.inOrder()` on a sorted map to export its current order
+as insertion order explicitly. Cyclic foreign values are rejected.
 
 The compiler decodes the transport into a closed typed literal/composite tree,
 validates the complete schema, ranges and sizes, and emits ordinary typed Go
@@ -184,13 +188,24 @@ out. Stable source order breaks ties between independent blocks.
 
 Facts and evaluation require staged cooperation, not an unconditional new
 phase before the current Facts pass. Before running each block, prove all
-requirements on its recipe's calls, construction and returned paths, including
-reachable helper promises under the normal facts rules. Prerequisite comptime
+requirements on its recipe's calls and construction, including reachable
+helpers' own declared result promises under the normal facts rules. The
+comptime expression's contextual output constraints are checked after execution,
+not required as a precondition or assumed inside the recipe. Thus
+`port: Int where positive = comptime { parsePort("8080") }` may evaluate a
+helper returning unconstrained Int, then prove positive on its baked result. Prerequisite comptime
 nodes are already closed values, so their predicates can run normally. A block
 cannot use a fact about its unevaluated result to justify executing its own
 recipe. Any cyclic proof/evaluation dependency fails with a source diagnostic.
 For example, `comptime { requiresPositive(-1) }` is rejected without executing
 the constrained function, even if it happens to tolerate -1 at runtime.
+
+Preflight proof starts from closed capture values and checked declarations,
+never runtime guards or the enclosing function's entry assumptions. Build-time
+execution is unconditional even inside an unreachable runtime branch. For
+example, `x = 0; if (positive(x)) { comptime { requiresPositive(x) } }` must
+fail: the surrounding guard cannot justify the build-time call. Facts established
+by guards evaluated inside the block follow the ordinary branch rules.
 
 After evaluation, replace the typed node's runtime payload with its validated
 closed value while retaining source/type information for describe/diagnostics.
@@ -229,8 +244,10 @@ partially decoded value or silently fall back to runtime evaluation.
 
 Initially computation supports native Go target builds only. Reject cross-target
 comptime requests explicitly until target execution is supported, rather than
-baking host-dependent Int behavior into another target. Record the resolved Go
-executable/toolchain, GOOS/GOARCH, integer width and applicable flags in keys.
+baking platform/foreign behavior into another target. Bork Int is always
+64-bit; native dependence comes from generated Go, foreign libraries and
+platform execution, not the width of Bork Int. Record the resolved Go
+executable/toolchain, GOOS/GOARCH and applicable flags in keys.
 Foreign/native-library and mutable local Go replacements must either have a
 complete input inventory or bypass reuse, as in the incremental design.
 
@@ -282,7 +299,9 @@ concrete generic/record/list/map/variant/union results; float edge cases; nested
 and dependent blocks; alias/field/element facts including false predicates;
 private records; imported helpers; rejected runtime/lazy/ambient captures,
 effects, function-valued results and open callbacks; unordered iteration;
-preconditions rejected before executing code; cycles; file escape/symlinks,
+preconditions rejected before executing code, including skipped-branch/entry
+assumptions; sorted/hash Map result rejection and explicit inOrder conversion;
+cycles; file escape/symlinks,
 missing/edited/added inputs, UTF-8 and snapshot races; panic/time/output limits;
 unsupported cross-target evaluation; clean versus warm/no-cache output; changed
 helpers/dictionaries/predicates/modules/limits and fresh describe locations.
