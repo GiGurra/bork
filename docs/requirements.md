@@ -1140,18 +1140,25 @@ process.Run(s, "tool", directory: "/tmp", arguments: ["--version"])
 - **Only direct calls expose names.** Unqualified and imported declared
   functions, declared receiver methods, and declared type-class methods accept
   labels, including generic and checked Go bindings. Function values, lambdas,
-  function-valued fields, and bound method references accept positional
+  function-valued fields, and method references passed as values accept positional
   arguments only: parameter names and defaults are not part of function types.
   Binding `f = http.Listen` does not preserve its parameter names. Names are
   taken from the selected declaration, never inferred from a function value's
   implementation. Class calls use the class declaration's parameter names,
   even if an instance implementation chooses different local names.
+  Compiler built-ins without a declared signature (such as `println` and
+  `assertEqual`) accept positional arguments only. Callable declarations must
+  have unique parameter names, including class signatures without bodies.
 - **The method receiver cannot be named.** `items.take(n: 3)` labels an
   ordinary method parameter; the receiver remains `items`. A pipeline's input
   fills the first positional parameter before labels are resolved:
   `connection |> sql.Query[Row](query: text, params: [])`. Explicitly naming
   that same parameter is a duplicate. Existing restrictions on pipeline
   targets remain in force.
+  A directly invoked method reference, `List.take(items, n: 3)`, still selects
+  a declaration and accepts names for ordinary parameters; its first argument
+  must supply the receiver positionally. Saving `f = List.take` erases names
+  and defaults, as for other function values.
 - **Evaluation follows source order.** Evaluate the callee or method receiver,
   then each supplied argument once, from left to right as written (including
   a pipeline's input before its target's arguments). Arrange the resulting
