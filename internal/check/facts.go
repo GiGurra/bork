@@ -1657,6 +1657,7 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 	if depth > maxDepth {
 		return false, nil
 	}
+	var cs candidates
 	for _, r := range f.info.Rules {
 		for _, c := range r.Conclusions {
 			if c.Pred != ob.pred || len(c.Args) != len(ob.args)+1 {
@@ -1680,12 +1681,12 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 			f.active[goal] = true
 			proven, pending := f.premises(r, 0, bound, ob.path, e, depth+1)
 			delete(f.active, goal)
-			if proven {
-				return true, pending
+			if cs.take(proven, pending) {
+				return true, nil
 			}
 		}
 	}
-	return false, nil
+	return cs.result()
 }
 
 // bindArg binds a rule argument to a value, or checks that it matches.
@@ -1735,6 +1736,7 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 		}
 		return true, pending
 	}
+	var cs candidates
 	for i, p := range remaining {
 		args := make([]argVal, len(p.Args))
 		complete := true
@@ -1751,8 +1753,8 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 		if complete {
 			ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:], path: path}, e, depth+1)
 			if ok {
-				if done, more := f.rulePremises(r, rest, bound, path, e, depth+1); done {
-					return true, append(pending, more...)
+				if done, more := f.rulePremises(r, rest, bound, path, e, depth+1); cs.take(done, append(pending, more...)) {
+					return true, nil
 				}
 			}
 			continue
@@ -1773,6 +1775,19 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 			for _, p := range f.fn.ParamVars {
 				v := f.argOf(f.paramRef(p))
 				subjects[v.key] = v
+			}
+		}
+		for _, ft := range e.facts {
+			if cmp := ft.comparison; cmp != nil {
+				subjects[cmp.left.key], subjects[cmp.right.key] = cmp.left, cmp.right
+			}
+			if ft.value.key != "" {
+				subjects[ft.value.key] = ft.value
+			}
+			for _, v := range ft.args {
+				if v.key != "" {
+					subjects[v.key] = v
+				}
 			}
 		}
 		for _, v := range subjects {
@@ -1803,13 +1818,70 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 				matches = matches && bindArg(next, a, ft.args[j])
 			}
 			if matches {
-				if ok, pending := f.rulePremises(r, rest, next, path, e, depth+1); ok {
-					return true, pending
+				if cs.take(f.rulePremises(r, rest, next, path, e, depth+1)) {
+					return true, nil
 				}
 			}
 		}
+		// A comparison guard can supply a missing value without naming a
+		// predicate. Try its stable values, then prove the instantiated atom.
+		if path == "" {
+			if ok, pending := f.bindRuleValues(r, p, 0, bound, subjects, depth+1, func(next map[string]argVal) (bool, []Query) {
+				args := make([]argVal, len(p.Args))
+				for j, a := range p.Args {
+					if a.Const != nil {
+						args[j] = constArg(a.Const)
+					} else {
+						args[j] = next[a.Var]
+					}
+				}
+				ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:]}, e, depth+1)
+				if !ok {
+					return false, nil
+				}
+				done, more := f.rulePremises(r, rest, next, path, e, depth+1)
+				return done, append(pending, more...)
+			}); cs.take(ok, pending) {
+				return true, nil
+			}
+		}
 	}
-	return false, nil
+	return cs.result()
+}
+
+func (f *factChecker) bindRuleValues(r *Rule, p *RuleAtom, i int, bound, values map[string]argVal, depth int, prove func(map[string]argVal) (bool, []Query)) (bool, []Query) {
+	if depth > maxDepth {
+		return false, nil
+	}
+	if i == len(p.Args) {
+		return prove(bound)
+	}
+	a := p.Args[i]
+	if _, ok := bound[a.Var]; ok || a.Const != nil {
+		return f.bindRuleValues(r, p, i+1, bound, values, depth+1, prove)
+	}
+	var typ Type
+	for j, param := range r.Decl.Params {
+		if param.Name == a.Var {
+			typ = r.VarTypes[j]
+			break
+		}
+	}
+	var cs candidates
+	for _, v := range values {
+		if v.expr == nil || !identical(v.expr.Type(), typ) {
+			continue
+		}
+		next := map[string]argVal{}
+		for name, v := range bound {
+			next[name] = v
+		}
+		next[a.Var] = v
+		if cs.take(f.bindRuleValues(r, p, i+1, next, values, depth+1, prove)) {
+			return true, nil
+		}
+	}
+	return cs.result()
 }
 
 // proveArg proves ob for a value that may only be known by key.

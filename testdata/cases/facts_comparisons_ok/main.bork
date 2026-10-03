@@ -30,6 +30,11 @@ type Box = { value: Int }
 fn fields(b: Box): Int {
   if (0 < b.value && 100 >= b.value) { take(b.value) } else { 0 }
 }
+pred floatNegative(n: Float) { !(n > 0.0) }
+fn takeFloat(n: Float where floatNegative): Float { n }
+fn floatGuard(n: Float): Float {
+  if (!(n > 0.0)) { takeFloat(n) } else { 0.0 }
+}
 fn main() {
   println(guards(5), guards(-1), guards(101), alternatives(-4), negativeAnd(101), names("a", "b"), fields(Box { value: 10 }))
 }

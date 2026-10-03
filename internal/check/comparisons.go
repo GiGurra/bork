@@ -75,6 +75,9 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		}
 		return x
 	case *Unary:
+		if x.Op != syntax.Not {
+			return nil
+		}
 		y := *x
 		y.X = substituteExpr(x.X, bound)
 		if y.X == nil {
@@ -82,6 +85,9 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		}
 		return &y
 	case *Binary:
+		if _, comparison := compareOps[x.Op]; !comparison && x.Op != syntax.AndAnd && x.Op != syntax.OrOr {
+			return nil
+		}
 		y := *x
 		y.X, y.Y = substituteExpr(x.X, bound), substituteExpr(x.Y, bound)
 		if y.X == nil || y.Y == nil {
@@ -233,8 +239,15 @@ func (f *factChecker) comparisonKnown(want *comparison, facts []fact, depth int)
 		for i, a := range ft.args {
 			bound[ft.pred.ParamVars[i+1]] = a
 		}
+		goal := "comparison " + factKey(ft) + " => " + factKey(fact{comparison: want})
+		if f.active[goal] {
+			continue
+		}
+		f.active[goal] = true
 		body := substituteExpr(ft.pred.Body, bound)
-		if body != nil && f.comparisonKnown(want, f.conditionFacts(body, true), depth+1) {
+		proven := body != nil && f.comparisonKnown(want, f.conditionFacts(body, true), depth+1)
+		delete(f.active, goal)
+		if proven {
 			return true
 		}
 	}
