@@ -1,0 +1,9 @@
+main.bork:5:64: Range requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, lo)) { ... }, or require it: hi: Int where atLeast(lo))
+main.bork:6:50: Range requires hi to be atLeast(lo), but that is not proven for r.hi (check it first with if (atLeast(r.hi, lo)) { ... })
+main.bork:7:59: Range requires hi to be atLeast(lo), but that is not proven for hi (check it first with if (atLeast(hi, r.lo)) { ... }, or require it: hi: Int where atLeast(lo))
+main.bork:8:49: Range requires hi to be atLeast(lo), but that is not proven for o.range.hi (check it first with if (atLeast(o.range.hi, lo)) { ... })
+main.bork:10:26: Range requires hi to be atLeast(lo), but atLeast(4, 5) is false
+main.bork:11:30: Range requires hi to be atLeast(lo), but atLeast(3, 5) is false
+main.bork:12:39: Range requires hi to be atLeast(lo), but atLeast(1, 2) is false
+main.bork:12:63: Range requires hi to be atLeast(lo), but atLeast(7, 8) is false
+main.bork:13:11: Defaults requires hi to be atLeast(lo) (default declared at main.bork:3:32), but atLeast(10, 20) is false

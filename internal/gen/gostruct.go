@@ -91,7 +91,7 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 			g.goType(g.info.Named["Json"])
 			g.goType(g.info.Named["JsonField"])
 			d := ci.GoFieldDecoders[i]
-			body := g.decodeFields([]*check.Field{f}, []*check.Dict{d}, bt)
+			body := g.decodeFields([]*check.Field{independentField(f)}, []*check.Dict{d}, bt)
 			decoder = fmt.Sprintf("func(value Json) any { _result := func() any { _obj := Json_Object{fields: []JsonField{{name:%q,value:value}}}; %s }(); if err,ok:=_result.(DecodeError); ok { return err }; return _result.(%s).%s }", f.Name, body, bt, name(f.Name).Name)
 		}
 		tagExpr := "[]_borkGoTag{" + strings.Join(tags, ",") + "}"

@@ -33,12 +33,13 @@ type Constraint struct {
 }
 
 // CArg is an argument of a constraint's predicate, after the value
-// itself: a constant, or the name of one of the function's parameters
+// itself: a constant, a function parameter, or a sibling field name
 // (`to: AccountId where notEqual(from)`).
 type CArg struct {
-	Const  constant.Value // nil for a parameter
-	Param  string
-	source syntax.Expr // the argument as written, for runtime pattern guards
+	Const   constant.Value // nil for a parameter or sibling
+	Param   string
+	Sibling bool        // argument names a field of the enclosing record or variant
+	source  syntax.Expr // the argument as written, for runtime pattern guards
 }
 
 func (a CArg) String() string {
@@ -133,10 +134,28 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 }
 
 func (c *checker) fieldConstraints(fields []*Field, decls []*syntax.FieldDecl) {
+	c.fieldWhere = true
+	defer func() { c.fieldWhere = false }()
+	scope := map[string]Type{}
+	for _, f := range fields {
+		scope[f.Name] = f.Type
+	}
 	for _, f := range fields {
 		for _, fd := range decls {
 			if fd.Name == f.Name {
-				f.Constraints = c.constraintsOf(fd.Type, f.Type, nil)
+				f.Constraints = c.constraintsOf(fd.Type, f.Type, scope)
+				var mark func(*Constraint)
+				mark = func(con *Constraint) {
+					for i := range con.Args {
+						con.Args[i].Sibling = con.Args[i].Const == nil
+					}
+					for _, alt := range con.Or {
+						mark(alt)
+					}
+				}
+				for _, con := range f.Constraints {
+					mark(con)
+				}
 			}
 		}
 	}
@@ -318,7 +337,7 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		return nil
 	}
 
-	if pt, ok := scope[ref.Name]; ok {
+	if pt, ok := scope[ref.Name]; ok && !c.fieldWhere {
 		// A function parameter used as a predicate.
 		ft, isFunc := pt.(*FuncType)
 		switch {
@@ -369,7 +388,11 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		if id, ok := a.(*syntax.Ident); ok {
 			pt, ok := scope[id.Name]
 			if !ok {
-				c.errorf(a.Position(), "%s is not a parameter here; predicate arguments are constants or parameter names", id.Name)
+				if c.fieldWhere {
+					c.errorf(a.Position(), "%s is not a sibling field here; predicate arguments are constants or sibling field names", id.Name)
+				} else {
+					c.errorf(a.Position(), "%s is not a parameter here; predicate arguments are constants or parameter names", id.Name)
+				}
 				return nil
 			}
 			if in != nil {
@@ -396,7 +419,11 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		case at == Invalid:
 			return nil
 		case v == nil:
-			c.errorf(a.Position(), "predicate arguments are constants or parameter names")
+			if c.fieldWhere {
+				c.errorf(a.Position(), "predicate arguments are constants or sibling field names")
+			} else {
+				c.errorf(a.Position(), "predicate arguments are constants or parameter names")
+			}
 			return nil
 		case !assignable(at, want):
 			c.errorf(a.Position(), "argument %d of %s must be %s, found %s", i+1, ref.Name, want, at)
@@ -417,4 +444,19 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 		}
 	}
 	return con
+}
+
+// HasSiblingArgs reports whether a field constraint depends on sibling values.
+func (c *Constraint) HasSiblingArgs() bool {
+	for _, a := range c.Args {
+		if a.Sibling {
+			return true
+		}
+	}
+	for _, a := range c.Or {
+		if a.HasSiblingArgs() {
+			return true
+		}
+	}
+	return false
 }

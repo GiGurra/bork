@@ -53,11 +53,21 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 			path := "_path + " + strconv.Quote("."+f.Name)
 			converted := w.fromGo("v."+strings.Join(r.GoFields[i].Path, "."), r.GoFields[i].Type, f.Type, path)
 			w.line("out." + name(f.Name).Name + " = " + converted)
+
+		}
+		for _, f := range r.Fields {
+			path := "_path + " + strconv.Quote("."+f.Name)
 			if len(f.Constraints) > 0 {
 				saved := w.newTmp()
 				w.line(fmt.Sprintf("%s := append([]%s(nil), _errs...)", saved, errType))
 				for _, con := range f.Constraints {
-					w.factAtPath("out."+name(f.Name).Name, f.Type, splitPath(con.Path), path, con, saved)
+					if con.HasSiblingArgs() {
+						w.line("if _bindPathValid(" + saved + ", _path) {")
+					}
+					w.factAtPath("out."+name(f.Name).Name, f.Type, splitPath(con.Path), path, fieldConstraint(con, func(n string) string { return "out." + name(n).Name }), saved)
+					if con.HasSiblingArgs() {
+						w.line("}")
+					}
 				}
 			}
 

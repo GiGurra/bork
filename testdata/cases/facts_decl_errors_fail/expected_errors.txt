@@ -3,6 +3,6 @@ main.bork:9:20: isPositive is a function, not a predicate (declare it with pred)
 main.bork:10:23: positive applies to Int, not String
 main.bork:11:20: between takes 2 argument(s) after the value, but 1 were given
 main.bork:12:28: argument 1 of between must be Int, found String
-main.bork:13:36: limit is not a parameter here; predicate arguments are constants or parameter names
+main.bork:13:36: limit is not a sibling field here; predicate arguments are constants or sibling field names
 main.bork:15:38: z is not a parameter here; predicate arguments are constants or parameter names
 main.bork:16:9: trust needs a predicate call, but isPositive is a function

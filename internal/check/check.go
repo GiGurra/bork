@@ -541,6 +541,7 @@ type checker struct {
 	// appliedWhere holds the written types whose where clauses
 	// constraints were made from (see unappliedWheres).
 	appliedWhere map[*syntax.TypeExpr]bool
+	fieldWhere   bool // resolving field constraints in their sibling scope
 
 	goTypes  GoTypes
 	goOpaque map[string]Type

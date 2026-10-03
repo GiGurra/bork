@@ -1,0 +1,24 @@
+pred atLeast(n: Int, lo: Int) { n >= lo }
+type Range = { hi: Int where atLeast(lo), lo: Int } derive (Decode, GoStruct)
+type Defaults = { lo: Int = 0, hi: Int where atLeast(lo) = 10 } derive (Decode)
+test "generated records retain sibling relations" (r: Range) { assert(r.hi >= r.lo) }
+test "decoded records retain sibling relations" {
+  good = decodeJson[Range]("{\"lo\":2,\"hi\":4}")
+  bad = decodeJson[Range]("{\"lo\":5,\"hi\":3}")
+  match (good) { r: Range => assert(r.hi >= r.lo), _ => assert(false) }
+  match (bad) { Range => assert(false), e: DecodeError => assertEqual(e.path, ".hi"), JsonError => assert(false) }
+  match (decodeJson[Defaults]("{\"lo\":20}")) { Defaults => assert(false), e: DecodeError => assertEqual(e.path, ".hi"), JsonError => assert(false) }
+}
+fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
+  import "encoding/json"
+  value := _d_T_GoStruct.New()
+  if err := json.Unmarshal([]byte(text), value); err != nil { return GoValueError{path:"json",message:err.Error()} }
+  out, errors := _d_T_GoStruct.FromGo(value)
+  if len(errors)>0 { return errors[0] }
+  return out
+}
+test "Go conversions retain sibling relations" {
+  match (readGo[Range]("{\"Lo\":2,\"Hi\":4}")) { r: Range => assert(r.hi >= r.lo), GoValueError => assert(false) }
+  match (readGo[Range]("{\"Lo\":5,\"Hi\":3}")) { Range => assert(false), e: GoValueError => assertEqual(e.path, "result.hi") }
+}
+fn main() {}

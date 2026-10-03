@@ -112,11 +112,27 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 		fmt.Fprintf(&b, "if _e, _isErr := _r.(%s); _isErr {\n", g.typeText(g.info.Named["DecodeError"]))
 		b.WriteString(g.decodeError(path+" + _e.path", "_e.message") + "}\n")
 		fmt.Fprintf(&b, "%s = _r.(%s)\n", v, g.typeText(f.Type))
-		// The field's where clause.
+
+		if f.Default != nil {
+			b.WriteString("}\n")
+		}
+		b.WriteString("}\n")
+		inits = append(inits, fmt.Sprintf("%s: %s", name(f.Name).Name, v))
+	}
+	for i, f := range fields {
+		v := fmt.Sprintf("_f%d", i)
+		path := strconv.Quote("." + f.Name)
 		for _, con := range f.Constraints {
 			msg := strconv.Quote("must be " + con.String())
 			stmts := g.atPath(ast.NewIdent(v), f.Type, splitPath(con.Path), func(x ast.Expr, t check.Type) []ast.Stmt {
-				cond := g.constraintCond(con, x, t)
+				cond := g.constraintCond(fieldConstraint(con, func(n string) string {
+					for j, sibling := range fields {
+						if sibling.Name == n {
+							return fmt.Sprintf("_f%d", j)
+						}
+					}
+					return name(n).Name
+				}), x, t)
 				if cond == nil {
 					return nil
 				}
@@ -134,12 +150,8 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 				b.WriteString(g.text(s) + "\n")
 			}
 		}
-		if f.Default != nil {
-			b.WriteString("}\n")
-		}
-		b.WriteString("}\n")
-		inits = append(inits, fmt.Sprintf("%s: %s", name(f.Name).Name, v))
 	}
+
 	fmt.Fprintf(&b, "return %s{%s}\n", goType, strings.Join(inits, ", "))
 	return b.String()
 }
