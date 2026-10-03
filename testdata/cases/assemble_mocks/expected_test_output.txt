@@ -1,0 +1,6 @@
+ok    assembly dispatches a shared provider through its native mock once
+ok    a saved provider function still sees the native mock
+ok    assembly inherits provider mocks in a task
+ok    a mocked provider failure returns through the assembly error union
+4 passed, 0 failed
+exit code 0
