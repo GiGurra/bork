@@ -11,9 +11,16 @@ type loopCleanup struct {
 	name *ast.Ident
 	used bool
 }
+type loopExit struct {
+	flag, result *ast.Ident
+	used         bool
+	labelUsed    bool
+}
 type loopFrame struct {
-	scopes, owners int
-	cleanup        *loopCleanup
+	scopes, owners, mocks int
+	cleanup               *loopCleanup
+	exit                  *loopExit
+	label                 *ast.Ident
 }
 
 func (g *gen) generateSeq(e *check.Generate) ast.Expr {
@@ -51,7 +58,9 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 	if !top {
 		root = g.loops[len(g.loops)-1].cleanup
 	}
-	g.loops = append(g.loops, loopFrame{len(g.openScopes), len(g.blockOwners), root})
+	exit := &loopExit{flag: g.newTmp(), result: g.newTmp()}
+	label := g.newTmp()
+	g.loops = append(g.loops, loopFrame{len(g.openScopes), len(g.blockOwners), len(g.openMocks), root, exit, label})
 	body := g.effect(e.Body)
 	g.loops = g.loops[:len(g.loops)-1]
 	if top && root.used {
@@ -59,23 +68,55 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 		g.usesScopes = true
 		stmts = append(stmts, typedVar(root.name, ast.NewIdent("_loopCleanup"), &ast.CompositeLit{Type: ast.NewIdent("_loopCleanup")}), &ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("close")}}})
 	}
+	if exit.used {
+		stmts = append(stmts, define(exit.flag, ast.NewIdent("false")))
+		if g.fnResult != check.Unit {
+			stmts = append(stmts, &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{exit.result}, Type: g.goType(g.fnResult)}}}})
+			if g.fnResult == check.OwnedScope {
+				stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("owner")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}})
+			}
+		}
+	}
 	// Iteration names are always legal when unused.
 	body = append([]ast.Stmt{assign(ast.NewIdent("_"), name(e.Var.Name))}, body...)
 	loop := &ast.RangeStmt{Tok: token.DEFINE, Body: &ast.BlockStmt{List: body}}
 	if _, ok := e.Items.Type().(*check.Seq); ok {
 		loop.Key = name(e.Var.Name)
+		if root.used {
+			source = &ast.CallExpr{Fun: ast.NewIdent("_seqLoop"), Args: []ast.Expr{source, &ast.UnaryExpr{Op: token.AND, X: root.name}}}
+		}
 		loop.X = &ast.SelectorExpr{X: source, Sel: ast.NewIdent("run")}
 	} else {
 		loop.Key = ast.NewIdent("_")
 		loop.Value = name(e.Var.Name)
 		loop.X = source
 	}
-	return append(stmts, loop)
+	if exit.labelUsed {
+		stmts = append(stmts, &ast.LabeledStmt{Label: label, Stmt: loop})
+	} else {
+		stmts = append(stmts, loop)
+	}
+	if exit.used {
+		if g.fnResult == check.OwnedScope {
+			stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("forget")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}})
+		}
+		var result []ast.Expr
+		if g.fnResult != check.Unit {
+			var value ast.Expr = exit.result
+			if g.fnResult == check.OwnedScope {
+				value = &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}
+			}
+			result = []ast.Expr{value}
+		}
+		stmts = append(stmts, &ast.IfStmt{Cond: exit.flag, Body: &ast.BlockStmt{List: g.returning(result...)}})
+	}
+	return stmts
 }
 
 func (g *gen) loopControl(e *check.LoopControl) []ast.Stmt {
 	frame := g.loops[len(g.loops)-1]
-	var stmts []ast.Stmt
+	frame.exit.labelUsed = true
+	stmts := g.endMocks(frame.mocks)
 	for j := len(g.blockOwners) - 1; j >= frame.owners; j-- {
 		o := g.blockOwners[j]
 		take := &ast.CallExpr{Fun: ast.NewIdent("_takeLoopOwner"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: frame.cleanup.name}, &ast.UnaryExpr{Op: token.AND, X: name(o.name)}}}
@@ -88,7 +129,7 @@ func (g *gen) loopControl(e *check.LoopControl) []ast.Stmt {
 	if e.Continue {
 		tok = token.CONTINUE
 	}
-	return append(stmts, &ast.BranchStmt{Tok: tok})
+	return append(stmts, &ast.BranchStmt{Tok: tok, Label: frame.label})
 }
 
 const seqRuntime = `package main
@@ -269,10 +310,22 @@ func (s *_loopCleanup) closeScope(scope *_Scope) {
 	}
 	scope.close()
 }
-func (s *_loopCleanup) close() {
-	if len(s.entries) > 0 {
-		defer s.close()
+func (s *_loopCleanup) closeFrom(mark int) {
+	if len(s.entries) > mark {
+		defer s.closeFrom(mark)
 		s.pop()
 	}
+}
+func (s *_loopCleanup) close() { s.closeFrom(0) }
+`
+const seqLoopRuntime = `package main
+func _seqLoop[T any](source _Seq[T], cleanup *_loopCleanup) _Seq[T] {
+	return _Seq[T]{func(yield func(T) bool) {
+		_seqRun(source, func(value T) bool {
+			mark := len(cleanup.entries)
+			defer cleanup.closeFrom(mark)
+			return yield(value)
+		})
+	}}
 }
 `

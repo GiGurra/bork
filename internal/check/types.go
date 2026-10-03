@@ -772,8 +772,15 @@ func assignable(src, dst Type) bool {
 		return true
 	}
 	if ss, ok := src.(*Seq); ok {
-		if ds, ok := dst.(*Seq); ok {
-			return identical(ss.Elem, ds.Elem) && ss.Effects&^ds.Effects == 0
+		switch dst := dst.(type) {
+		case *Seq:
+			return identical(ss.Elem, dst.Elem) && ss.Effects&^dst.Effects == 0
+		case *Union:
+			for _, member := range dst.Members {
+				if assignable(ss, member) {
+					return true
+				}
+			}
 		}
 	}
 	if sf, ok := src.(*FuncType); ok {

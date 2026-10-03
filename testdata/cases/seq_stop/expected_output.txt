@@ -1,3 +1,16 @@
+returned owner closed
+true
+after failed owner return
+return consumer closed
+captured producer closed
+captured finalizer
+enclosing closed
+1
+1000
+panic consumer closed
+inner closed
+producer closed
+true
 []
 inner closed
 producer closed

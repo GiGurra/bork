@@ -1750,6 +1750,30 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		add(TypeConstraints(x.Type()), noParams)
 	}
 	switch x := x.(type) {
+	case *SeqCall:
+		if x.Op == "filter" {
+			if ft, ok := x.Args[1].Type().(*FuncType); ok && ft.Effects == 0 {
+				for _, k := range f.predsOf(f.argOf(x.Args[1])) {
+					k.path = ".[]" + k.path
+					out = append(out, k)
+				}
+			}
+		}
+		if x.Op == "map" {
+			if ref, ok := debugValue(x.Args[1]).(*FuncRef); ok {
+				fn := ref.Inst.Func
+				for _, mc := range fn.ResultConstraints {
+					if identical(mc.Type, fn.Result) {
+						for _, con := range mc.Constraints {
+							for _, k := range f.knownOf(con, func(param string) argVal { return argVal{text: fmt.Sprintf("seq-element:%p:%s", x, param)} }) {
+								k.path = ".[]" + k.path
+								out = append(out, k)
+							}
+						}
+					}
+				}
+			}
+		}
 	case *VarRef:
 		switch d := x.Var; d.Kind {
 		case VarParam:

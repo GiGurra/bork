@@ -1089,6 +1089,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
 	if g.usesLoopCleanup {
 		src = append(src, loopCleanupRuntime)
+		if g.usesSeq {
+			src = append(src, seqLoopRuntime)
+		}
 	}
 	if g.usesSeq {
 		src = append(src, seqRuntime)

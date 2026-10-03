@@ -198,14 +198,31 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 			return
 		}
 	}
-	for _, p := range fd.Params {
-		if p.Type.Name == "Seq" && p.Type.Uses == nil {
-			c.bindErr(p.Type.Pos, "a checked Go iterator binding must declare the Seq latent effects explicitly, including uses nothing")
+	var checkSeqEffects func(*syntax.TypeExpr)
+	checkSeqEffects = func(t *syntax.TypeExpr) {
+		if t == nil {
+			return
+		}
+		if t.Name == "Seq" && t.Uses == nil {
+			c.bindErr(t.Pos, "a checked Go iterator binding must declare the Seq latent effects explicitly, including uses nothing")
+		}
+		for _, child := range t.Args {
+			checkSeqEffects(child)
+		}
+		for _, child := range t.Union {
+			checkSeqEffects(child)
+		}
+		if t.Func != nil {
+			for _, child := range t.Func.Params {
+				checkSeqEffects(child)
+			}
+			checkSeqEffects(t.Func.Result)
 		}
 	}
-	if fd.Result != nil && fd.Result.Name == "Seq" && fd.Result.Uses == nil {
-		c.bindErr(fd.Result.Pos, "a checked Go iterator binding must declare the Seq latent effects explicitly, including uses nothing")
+	for _, p := range fd.Params {
+		checkSeqEffects(p.Type)
 	}
+	checkSeqEffects(fd.Result)
 	sig := obj.Type().(*types.Signature)
 	if recv != nil {
 		ps := []*types.Var{types.NewVar(0, nil, "receiver", recv)}

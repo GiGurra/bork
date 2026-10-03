@@ -1494,6 +1494,19 @@ type blockOwner struct {
 // each scope block close before it, as they would at its end (their
 // tasks may use what it releases, or own its children).
 func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
+	if len(g.loops) > 0 {
+		frame := g.loops[len(g.loops)-1]
+		frame.exit.used = true
+		if g.fnResult == check.OwnedScope {
+			frame.cleanup.used = true
+		}
+		var stmts []ast.Stmt
+		if len(results) > 0 {
+			stmts = append(stmts, assign(frame.exit.result, results[0]))
+		}
+		stmts = append(stmts, assign(frame.exit.flag, ast.NewIdent("true")))
+		return append(stmts, g.loopControl(&check.LoopControl{})...)
+	}
 	if len(g.openScopes) == 0 && len(g.openMocks) == 0 {
 		return []ast.Stmt{&ast.ReturnStmt{Results: results}}
 	}
