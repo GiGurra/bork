@@ -1,0 +1,12 @@
+type Callback = (Int) => Int
+type Callbacks = { direct: (Int) => Int, aliased: Callback, effectful: (Int) uses io => Int }
+fn New = Callbacks.new
+fn save(f: (Int) uses io => Int): Callbacks {
+  New(direct: x => x, aliased: x => x + 1, effectful: f)
+}
+fn show(n: Int) uses io: Int { println("effectful"); n }
+fn main() {
+  callbacks = save(show)
+  println(callbacks.direct(3), callbacks.aliased(3))
+  println(callbacks.effectful(4))
+}

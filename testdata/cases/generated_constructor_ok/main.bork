@@ -14,6 +14,10 @@ fn guarded(lo: Int, hi: Int, limit: Int where positive): Config {
 }
 type Box[T] = { value: T, items: List[T] = [] }
 fn NewBox = Box.new
+type Named[T] = { T: T }
+fn NewNamed = Named.new
+type Empty = {}
+fn NewEmpty = Empty.new
 type GenericRange[T] = { tag: T, lo: Int, hi: Int where atLeast(lo) } where genericOrdered
 pred genericOrdered[T](r: GenericRange[T]) { r.lo <= r.hi }
 fn NewGenericRange = GenericRange.new
@@ -28,6 +32,11 @@ fn main() {
   println(New(host: "default"))
   println(guarded(3, 8, 4096))
   println(NewBox(value: "inferred"), NewBox[Int](value: 3))
+  println(NewNamed[Int](T: 3))
+  empty: () => Empty = NewEmpty
+  println(empty())
+  mixed: (Int, String) => Mixed = NewMixed
+  println(mixed(9, "function value"))
   println(NewGenericRange(tag: "range", lo: 2, hi: 3))
   println(NewMixed(required: "named"), NewMixed(8, "positional"))
   println(NewOrdered(lo: emit("lo", 2), hi: emit("hi", 9)))

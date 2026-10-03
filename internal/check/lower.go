@@ -102,6 +102,9 @@ func (c *checker) lower(files []*syntax.File) {
 func (l *lowerer) function(fn *Func) {
 	for i, p := range fn.Decl.Params {
 		v := &Var{Name: p.Name, Pos: p.Pos, Type: fn.Params[i], Kind: VarParam, Index: i}
+		if fn.Decl.Constructor != nil {
+			v.GoName = "_ctorArg" + strconv.Itoa(i)
+		}
 		l.vars[p] = v
 		fn.ParamVars = append(fn.ParamVars, v)
 	}

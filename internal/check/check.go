@@ -841,7 +841,9 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
 	c.ownerSignature(fn)
-	c.openSignature(fn)
+	if fd.Constructor == nil {
+		c.openSignature(fn)
+	}
 	c.typeParams = nil
 	c.pkg.Funcs[fd.Name] = fn
 	c.info.FuncOf[fd] = fn
