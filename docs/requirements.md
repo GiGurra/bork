@@ -565,14 +565,12 @@ As with requirements ("no inferred preconditions"), a function's effects are wri
 
 ### Diagnostics
 
-Each error names the effect, the call that needs it, and the fix, written out:
+Each error names the effect, the call that needs it, and the fix. Where the fix is a signature change, the message ends with the `uses` to declare, and `bork check --json` carries it as a text edit that replaces or inserts the `uses` clause (see [the diagnostic format](diagnostics.md)). The hints on other errors are planned:
 
 ```
-main.bork:14:3: describe uses io (it calls println), but its signature allows no effects
-  hint: declare it: fn describe(u: User) uses io: String
+main.bork:14:3: describe uses io (it calls println), but its signature allows no effects; declare it: uses io
 
-main.bork:30:5: serve uses state (it calls http.Listen, with a handler that uses state), but its signature allows only net
-  hint: declare it: fn serve(addr: String) uses net + state: Unit | IoError
+main.bork:30:5: serve uses state (it calls http.Listen, with a lambda that calls update), but its signature allows only net; declare it: uses net + state
 
 main.bork:62:3: handler returns a function that uses state (it calls update), but its result type allows no effects
   hint: declare it: fn handler(store: Atom[Store]): (http.Request, Scope) uses state => http.Response
@@ -580,8 +578,7 @@ main.bork:62:3: handler returns a function that uses state (it calls update), bu
 main.bork:20:11: field run takes a function that uses nothing, but this lambda uses io (it calls println)
   hint: declare the field's effects: run: () uses io => Unit
 
-main.bork:41:7: process uses io (it calls map, with a lambda that calls println), but its signature allows no effects
-  hint: declare it: fn process(xs: List[String]) uses io: List[String]
+main.bork:41:7: process uses io (it calls map, with a lambda that calls println), but its signature allows no effects; declare it: uses io
 
 main.bork:22:21: update needs a function that uses nothing (it may run f more than once), but this lambda uses io (it calls println)
   hint: print after update returns, with the value it gives
@@ -593,7 +590,6 @@ main.bork:17:24: f may use whatever effects its caller passes, so it cannot be s
   hint: give f the field's effects: fn job(name: String, f: () uses io => Unit): Job
 
 main.bork:5:1: save declares net, but never uses it
-  hint: remove it: fn save(path: String, text: String) uses io: Unit | IoError
 
 main.bork:3:1: now calls time.Now in its unsafe go body, which reads the clock, but declares no effects
   hint: declare it: fn now() uses clock: Int unsafe go { ... }
@@ -605,13 +601,13 @@ money/money.bork:12:1: package example.com/shop/money has unsafe go, but bork.mo
 (`now` in the predicate example stands for a clock function the standard library does not have yet.)
 
 - **The reason chain is one step deep.** It names the direct call (and, for an open parameter, the lambda's call). The callee's own signature says why that callee needs the effect.
-- **When the fix is a signature change, the hint is the full corrected line**, so an agent can apply it as written. A future `bork fix` could apply these mechanically.
+- **When the fix is a signature change, it comes as an edit**, so an agent can apply it as written. A future `bork fix` could apply these mechanically.
 
 ### Migration
 
 - **The prelude and the standard library** get `uses` on the functions in the table above, and `uses nothing` on the function parameters of `update` and `swap`. Their list, `Option`, map, string, and JSON functions do not change.
 - **Examples:** `main` needs nothing. Helpers that print, read files, wait, touch atoms, or call the network get what they use: `step` in `accounts` (`io`), `readFile` in `signup` and `countFile` and `report` in `wc` (`io`), and the server helpers. In `signup_api`: `slow`, `route`, and the test helper `get` get `uses clock + state` (`cancelAfter`, `delay`); `show` gets `uses io`; `post` gets `uses io + net`; `serve` and `demo` get `uses io + net + clock + state`. In `http_server`: `list`, `show`, `finish`, `create`, `remove`, `route`, and the test helper `request` get `uses state`; `handler` stays pure and returns `(http.Request, Scope) uses state => http.Response`; `call` gets `uses io + net`; `serve` gets `uses net + state` (it passes the handler to `http.Listen`), and `demo` `uses io + net + state`. `hello`, `calculator`, `orders`, `payments`, and `users` do not change at all: their helpers are pure, which shows that the pure core of a program is the default.
-- **Test cases:** only the helpers that print, read files, wait, touch atoms, or serve need `uses`; cases that do all of that in `main` and `test` blocks do not change. Expected outputs of passing cases do not change. Error positions in failing cases shift where a declaration's line gains `uses ...`. The effect check runs after type checking, like the lifetime check, and only when type checking found no errors, so cases that fail with type errors keep their messages. The nine cases with `unsafe go` get a `bork.mod` that allows it (seven of them have none yet). Their `unsafe go` helpers get what they do: `connect` in `attach` uses `io` (`fmt.Println`), `stubborn` in `scope_policies` uses `clock` (`time.Sleep`). The change is made by applying the compiler's own hints, and each golden diff is still checked by hand.
+- **Test cases:** only the helpers that print, read files, wait, touch atoms, or serve need `uses`; cases that do all of that in `main` and `test` blocks do not change. Expected outputs of passing cases do not change. Error positions in failing cases shift where a declaration's line gains `uses ...`. The effect check runs after type checking, like the lifetime check, and only when type checking found no errors, so cases that fail with type errors keep their messages. The nine cases with `unsafe go` get a `bork.mod` that allows it (seven of them have none yet). Their `unsafe go` helpers get what they do: `connect` in `attach` uses `io` (`fmt.Println`), `stubborn` in `scope_policies` uses `clock` (`time.Sleep`). In `time_env`, `report` gets `uses io + clock`. The change is made by applying the compiler's own hints, and each golden diff is still checked by hand.
 - **The check lands in one step** (the check, the prelude, and all migrations in one PR, after the syntax and types PRs), because a half-annotated prelude would make every program fail.
 
 ### Implementation plan
@@ -619,7 +615,7 @@ money/money.bork:12:1: package example.com/shop/money has unsafe go, but bork.mo
 1. **This proposal**, as its own PR.
 2. **Syntax:** `uses` on function declarations, methods, class methods, and function types, plus `uses nothing`. Parse it, keep it in the AST, show it in types in messages, and update `grammar.md`. No checking yet.
 3. **Types:** function types carry an effect set. Assignability follows it, lambdas infer their effects, and open parameters are instantiated per call.
-4. **The check, the prelude, and the migration:** a separate pass (`internal/check/effects.go`, beside the lifetime pass, so it stays out of the way of the checker's restructuring), with the diagnostics above, the prelude and standard library annotated, and every example and test case migrated.
+4. **The check, the prelude, and the migration:** a separate pass over the typed tree (`internal/check/effects_check.go`, run before the lifetime pass), with the diagnostics above, the prelude and standard library annotated, and every example and test case migrated.
 5. **Predicates, rules, and compile-time evaluation required pure; facts named after function arguments only for pure ones; the `unsafe go` call check.**
 6. **`unsafe` in `bork.mod`.**
 7. **Docs:** fold this section into the decided parts of this document, and update `grammar.md` and the README.

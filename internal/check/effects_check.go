@@ -15,6 +15,12 @@ import (
 // effect, unless main declares some. It reads the typed tree, so it
 // runs once the program type-checks.
 func CheckEffects(files []*syntax.File, info *Info, diags *diag.List) {
+	// Tests may use every effect, but not call main.
+	for _, fn := range info.Tests {
+		if fn.Body != nil {
+			checkEffects(fn, diags)
+		}
+	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
 			if fn := info.FuncOf[fd]; fn != nil && fn.Body != nil {
@@ -31,6 +37,13 @@ type effectReason struct {
 	text string
 }
 
+// reasonNames are the effects reasons are kept for: every effect, and
+// EffOpen (a call of an open parameter).
+var reasonNames = append(effectNames[:len(effectNames):len(effectNames)], struct {
+	eff  Effects
+	name string
+}{EffOpen, "open"})
+
 // effectUses collects the effects code uses, with the first reason for
 // each.
 type effectUses struct {
@@ -43,7 +56,7 @@ type effectUses struct {
 }
 
 func (u *effectUses) add(effs Effects, pos diag.Pos, text string) {
-	for _, n := range effectNames {
+	for _, n := range reasonNames {
 		if effs&n.eff != 0 && u.used&n.eff == 0 {
 			if u.reasons == nil {
 				u.reasons = map[Effects]effectReason{}
@@ -96,23 +109,57 @@ func checkEffects(fn *Func, diags *diag.List) {
 	if fd.IsPred {
 		if r, ok := u.reasons[EffIO]; ok && r.text == "assertSnapshot" {
 			diags.AddCode(r.pos, "effect.pred", "assertSnapshot can only be used in tests (and the functions they call), not in a predicate")
-			return
-		}
-		if used != 0 {
+		} else if used != 0 {
 			diags.AddCode(u.first(used, fd.Pos), "effect.pred", "%s uses %s (%s), but predicates must be pure, or their facts could go stale", fd.Name, used, u.why(used))
+		}
+		if r, ok := u.reasons[EffOpen]; ok {
+			diags.AddCode(r.pos, "effect.pred", "%s calls %s, which may use any effect its caller passes, but predicates must be pure; declare the parameter's type with uses nothing", fd.Name, r.text)
 		}
 		return
 	}
-	if missing := used &^ fn.Effects; missing != 0 {
+	declared := fn.Effects &^ EffOpen
+	// An unexported function declares exactly what it uses (calls of
+	// itself, or of functions that call it, count as uses: a limit of
+	// the check). Others may declare more.
+	exact := !Exported(fd.Name) && fn.Of == nil && fd.Name != "main"
+	target := declared | used
+	if exact {
+		target = used
+	}
+	missing := used &^ declared
+	if missing != 0 {
 		pos := u.first(missing, fd.Pos)
-		want := fn.Effects&^EffOpen | missing
-		diags.AddCode(pos, "effect.missing", "%s uses %s (%s), but its signature allows %s; declare it: uses %s", fd.Name, missing, u.why(missing), allowedText(fn.Effects), want)
-		diags.Suggest(pos, "effect.missing", pos, usesFix(fd, want))
+		if allowed, ok := classAllows(fn); ok && missing&^allowed != 0 {
+			diags.AddCode(pos, "effect.missing", "%s uses %s (%s), but class %s allows %s", fd.Name, missing, u.why(missing), fn.Of.Class.Name, allowedText(allowed))
+		} else {
+			diags.AddCode(pos, "effect.missing", "%s uses %s (%s), but its signature allows %s; declare it: uses %s", fd.Name, missing, u.why(missing), allowedText(declared), target)
+			diags.Suggest(pos, "effect.missing", pos, usesFix(fd, target))
+		}
 	}
-	if unused := fn.Effects &^ EffOpen &^ used; unused != 0 && !Exported(fd.Name) && fn.Of == nil && fd.Name != "main" {
-		diags.AddCode(fd.Uses.Pos, "effect.unused", "%s declares %s, but never uses it", fd.Name, unused)
-		diags.Suggest(fd.Uses.Pos, "effect.unused", fd.Uses.Pos, usesFix(fd, fn.Effects&^EffOpen&^unused))
+	if unused := declared &^ used; unused != 0 && exact {
+		them := "it"
+		if unused&(unused-1) != 0 {
+			them = "them"
+		}
+		diags.AddCode(fd.Uses.Pos, "effect.unused", "%s declares %s, but never uses %s", fd.Name, unused, them)
+		if missing == 0 { // else the missing effect's fix covers it
+			diags.Suggest(fd.Uses.Pos, "effect.unused", fd.Uses.Pos, usesFix(fd, target))
+		}
 	}
+}
+
+// classAllows is what the class method an instance method implements
+// allows, if fn is one.
+func classAllows(fn *Func) (Effects, bool) {
+	if fn.Of == nil {
+		return 0, false
+	}
+	for _, m := range fn.Of.Class.Methods {
+		if m.Decl.Name == fn.Decl.Name {
+			return m.Effects, true
+		}
+	}
+	return 0, false
 }
 
 // usesFix is the edit that makes fd declare effs.
@@ -126,16 +173,10 @@ func usesFix(fd *syntax.FuncDecl, effs Effects) diag.Fix {
 		at.Col++
 		return diag.Fix{Message: "declare " + text, Edits: []diag.TextEdit{{Start: at, End: at, Replacement: " " + text}}}
 	}
-	end := fd.Uses.Pos
-	end.Col += len("uses nothing")
-	if n := len(fd.Uses.Effects); n > 0 {
-		last := fd.Uses.Effects[n-1]
-		end = last.Pos
-		end.Col += len(last.Name)
-	}
-	start := fd.Uses.Pos
+	start, end := fd.Uses.Pos, fd.Uses.End
 	if effs == 0 {
-		start.Col-- // the space before uses
+		start = fd.ParamsEnd
+		start.Col++ // just after the ')'
 		return diag.Fix{Message: "remove the effects", Edits: []diag.TextEdit{{Start: start, End: end}}}
 	}
 	return diag.Fix{Message: "declare " + text, Edits: []diag.TextEdit{{Start: start, End: end, Replacement: text}}}

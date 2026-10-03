@@ -207,6 +207,7 @@ type FuncTypeExpr struct {
 // (Effects is then empty).
 type Uses struct {
 	Pos     diag.Pos
+	End     diag.Pos // just after the last effect (or nothing)
 	Effects []Effect
 }
 

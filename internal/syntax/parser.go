@@ -573,7 +573,8 @@ func (p *parser) uses() *Uses {
 		panic(bailout{})
 	}
 	if p.tok().Text == "nothing" {
-		p.next()
+		u.End = p.next().Pos
+		u.End.Col += len("nothing")
 		if p.at(Plus) {
 			p.errorf(p.tok().Pos, "uses nothing cannot be combined with effects")
 			panic(bailout{})
@@ -587,6 +588,8 @@ func (p *parser) uses() *Uses {
 			panic(bailout{})
 		}
 		u.Effects = append(u.Effects, Effect{Pos: name.Pos, Name: name.Text})
+		u.End = name.Pos
+		u.End.Col += len(name.Text)
 		if !p.at(Plus) {
 			return u
 		}

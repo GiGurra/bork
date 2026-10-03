@@ -40,10 +40,33 @@ fn callsField(job: Job) { job.run() }
 
 fn again() { main() }
 
+type Box = { n: Int }
+
+instance showBox: Show[Box] {
+  fn show(b: Box): String {
+    println(b.n)
+    "box"
+  }
+}
+
+pred ok(x: Int, f: (Int) => Bool) { f(x) }
+
+fn (b: Box) print() { println(b.n) }
+
+fn pureMain() uses nothing { println("x") }
+
+fn both2(s: String) uses net { println(s) }
+
+fn mainAsValue(): () uses io => Unit { main }
+
 fn main() uses io {
   _ = describe(User { name: "Ada", age: 36 })
   both("http://localhost:1")
   _ = process(["a"])
   save("x")
   run(() => println("y"))
+}
+
+test "tests cannot call main" {
+  main()
 }
