@@ -23,6 +23,44 @@ HTTP servers support `http.ListenRoutes(addr, s, routes, drainTimeoutMs: 0)` wit
 
 Closing the server scope cancels request scopes and stops accepting new connections, then waits for active handlers through Go's graceful shutdown. A zero drain timeout inherits `cleanupTimeout`; without that policy shutdown waits indefinitely. A positive per-server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). When draining times out, connections are forcibly closed; cooperative handlers may still be finishing. `Wait` waits for the listener to stop, while scope cleanup drains active requests. See [http_routes](../../examples/http_routes/main.bork).
 
+## Deadline budgets between Bork services
+
+Get, Post and Send automatically send the calling scope's remaining deadline
+as `Bork-Timeout-Ns`, including a tighter timeoutMs. They recompute it for each
+call and redirect, and return typed DeadlineExceeded without sending when the
+budget is exhausted. The client reserves this header: manual values are replaced
+by the effective budget, or removed when the call has no deadline. Other headers
+retain their existing behavior. Redirect policy and sensitive-header handling
+remain Go's defaults (or an explicitly configured native client policy).
+
+Listen, ListenRoutes and ListenTLS accept `requestTimeoutMs: TimeoutMs = 0`.
+A positive value caps each request from entry to the server handler; zero adds no
+server deadline. The request uses the earliest listener/context deadline, server
+cap and incoming budget. The header is one unsigned decimal nanosecond count,
+with at most 19 digits, in 0..9223372036854775807. Missing adds no caller limit;
+zero returns 504. Malformed, repeated, negative or out-of-range fields return
+400. Validation and deadline cancellation precede admission and body buffering.
+Deadline expiry while queued returns 504; an ordinary admission timeout remains
+429/503. Expiry interrupts blocked body reads and returns 504 where possible.
+HTTP/1 early rejections close the connection to avoid draining unfinished uploads.
+Current listeners serve HTTP/1; outgoing clients can negotiate HTTP/2. Native
+server transports must support response-controller read deadlines to
+buffer cancellable bodies; an unsupported transport returns 500 before reading.
+
+A handler scope exposes its effective deadline, including later changes to the
+listener scope, for outgoing calls and local operations. Cooperative handlers may
+return their own response after cancellation. Request deadlines do not forcibly
+stop tasks/finalizers or bound total cleanup time; request scopes keep their
+existing unbounded cleanup defaults and do not inherit listener cleanup policies.
+Use explicit taskTimeout/cleanupTimeout policies where bounded waits are needed.
+
+This is a bork-to-bork relative-budget protocol; a grpc-timeout bridge could be
+added later. Receiving timers start on arrival, so wire transit and internal Go
+transport replay time are not deducted exactly from the remote budget. The
+caller retains its own local deadline and cancels its HTTP call. A server cap
+bounds cooperative work when disconnect detection is delayed; clocks need not be
+synchronized. See the [boundary design](../design/http-propagation.md).
+
 ## Retry-After hints
 
 `Overloaded.retryAfter` is `Option[time.Duration]`. Exactly one Retry-After

@@ -1,0 +1,342 @@
+import "bork/http"
+
+fn mustServer(result: http.Server | IoError): http.Server {
+  match (result) { server: http.Server => server, error: IoError => panic(toString(error)) }
+}
+fn budget(s: Scope) uses clock: String unsafe go {
+  import "strconv"
+  import "time"
+  deadline, found := _borkScopeContext(s).Deadline()
+  if !found { return "none" }
+  return strconv.FormatInt(int64(time.Until(deadline)), 10)
+}
+fn resultText(result: http.Result): String {
+  match (result) {
+    response: http.Response => response.body
+    error: http.DeadlineExceeded => "deadline"
+    error: Cancelled => "cancelled"
+    error => panic(toString(error))
+  }
+}
+fn invoke(url: String, s: Scope, ms: Int) uses net + clock + state: String {
+  if (http.ValidTimeout(ms)) {
+    resultText(http.Send("POST", url, { "bork-timeout-ns": ["bogus"] }, "ok", s, timeoutMs: ms))
+  } else { panic("bad test timeout") }
+}
+fn waitDeadline(s: Scope) uses clock + state: String unsafe go {
+  import "context"
+  import "errors"
+  ctx := _borkScopeContext(s)
+  <-ctx.Done()
+  if errors.Is(context.Cause(ctx), context.DeadlineExceeded) && ctx.Err() == context.DeadlineExceeded { return "deadline" }
+  return "wrong cause"
+}
+type Cleanup = resource
+fn slowCleanup(s: Scope) uses clock: Cleanup unsafe go {
+  import "time"
+  return Cleanup{owner: s.Own(func() { time.Sleep(100*time.Millisecond) })}
+}
+fn rawChecks(addr: String, capped: Bool) uses io + net + clock: Bool unsafe go {
+  import "bufio"
+  import "fmt"
+  import "io"
+  import "net"
+  import "net/http"
+  import "strconv"
+  import "strings"
+  import "time"
+  request := func(values []string) *http.Response {
+    req, err := http.NewRequest("GET", "http://"+addr, nil)
+    if err != nil { panic(err) }
+    if values != nil { req.Header["Bork-Timeout-Ns"] = values }
+    client := &http.Client{Timeout: 2*time.Second}
+    response, err := client.Do(req)
+    if err != nil { panic(err) }
+    return response
+  }
+  check := func(values []string, expected int, upper int64) {
+    response := request(values)
+    body, err := io.ReadAll(response.Body)
+    response.Body.Close()
+    if err != nil || response.StatusCode != expected { panic(fmt.Sprintf("budget %v: %d %s %v", values, response.StatusCode, body, err)) }
+    if expected == 200 {
+      if upper == 0 && string(body) != "none" { panic("unexpected scope budget") }
+      if upper > 0 {
+        nanos, err := strconv.ParseInt(string(body), 10, 64)
+        if err != nil || nanos <= 0 || nanos > upper { panic("scope budget not shortened") }
+      }
+    }
+  }
+  upper := int64(0)
+  if capped { upper = int64(time.Second) }
+  check(nil, 200, upper)
+  check([]string{"500000000"}, 200, 500000000)
+  check([]string{"9223372036854775807"}, 200, func() int64 { if capped { return int64(time.Second) }; return 9223372036854775807 }())
+  for _, values := range [][]string{{""}, {"-1"}, {"+1"}, {"1.5"}, {"1,2"}, {"9223372036854775808"}, {"1", "2"}, {strings.Repeat("0", 20)}} {
+    check(values, 400, 0)
+  }
+  check([]string{"0"}, 504, 0)
+  for _, path := range []string{"wait", "cleanup"} {
+    req, _ := http.NewRequest("GET", "http://"+addr+"/"+path, nil)
+    req.Header.Set("Bork-Timeout-Ns", "30000000")
+    began := time.Now()
+    response, err := (&http.Client{Timeout: 2*time.Second}).Do(req)
+    if err != nil { panic(err) }
+    body, err := io.ReadAll(response.Body)
+    response.Body.Close()
+    if err != nil || response.StatusCode != 200 { panic("cooperative handler response was lost") }
+    if path == "wait" && string(body) != "deadline" { panic("deadline cause not preserved") }
+    if path == "cleanup" && time.Since(began) < 100*time.Millisecond { panic("request deadline incorrectly bounded cleanup") }
+  }
+  unread := func(header string, expected int) {
+    conn, err := net.DialTimeout("tcp", addr, time.Second)
+    if err != nil { panic(err) }
+    defer conn.Close()
+    conn.SetDeadline(time.Now().Add(2*time.Second))
+    fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: %s\r\nContent-Length: 100\r\nBork-Timeout-Ns: %s\r\n\r\n", addr, header)
+    response, err := http.ReadResponse(bufio.NewReader(conn), nil)
+    if err != nil { panic(err) }
+    defer response.Body.Close()
+    if response.StatusCode != expected || !response.Close { panic(fmt.Sprintf("unread: %d close=%t", response.StatusCode, response.Close)) }
+  }
+  unread("invalid", 400)
+  unread("0", 504)
+  unread("50000000", 504)
+  // The body hook must finish and clear its deadline before this connection
+  // handles a later request, after the first request's budget has elapsed.
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer conn.Close()
+  conn.SetDeadline(time.Now().Add(3*time.Second))
+  reader := bufio.NewReader(conn)
+  fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: %s\r\nContent-Length: 2\r\nBork-Timeout-Ns: 500000000\r\n\r\nok", addr)
+  response, err := http.ReadResponse(reader, nil)
+  if err != nil { panic(err) }
+  io.ReadAll(response.Body)
+  response.Body.Close()
+  if response.StatusCode != 200 || response.Close { panic("body read did not finish normally") }
+  time.Sleep(600*time.Millisecond)
+  fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\n\r\n", addr)
+  response, err = http.ReadResponse(reader, nil)
+  if err != nil { panic(err) }
+  io.ReadAll(response.Body)
+  response.Body.Close()
+  if response.StatusCode != 200 { panic("deadline leaked into next keep-alive request") }
+  return true
+}
+fn outgoingChecks(run: (String, Scope, Int) => String) uses io + net + clock + state: Bool unsafe go {
+  import "context"
+  import "fmt"
+  import "net/http"
+  import "net/http/httptest"
+  import "strconv"
+  import "sync/atomic"
+  import "time"
+  var calls atomic.Int64
+  var first, last atomic.Int64
+  var tighten atomic.Pointer[_Scope]
+  server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    calls.Add(1)
+    text := r.Header.Get("Bork-Timeout-Ns")
+    if r.URL.Path == "/redirect" {
+      value, _ := strconv.ParseInt(text, 10, 64)
+      first.Store(value)
+      time.Sleep(20*time.Millisecond)
+      w.Header().Set("Location", "/end")
+      w.WriteHeader(307)
+      return
+    }
+    if r.URL.Path == "/tighten" {
+      tighten.Load().cancelAfter(1000)
+      w.Header().Set("Location", "/end")
+      w.WriteHeader(307)
+      return
+    }
+    if r.URL.Path == "/end" { value, _ := strconv.ParseInt(text, 10, 64); last.Store(value) }
+    if text == "" { text = "none" }
+    fmt.Fprint(w, text)
+  }))
+  defer server.Close()
+  plain := _borkScopeWith(context.Background())
+  defer _borkScopeAbort(plain)
+  if run(server.URL, plain, 0) != "none" { panic("reserved header not removed") }
+  ctx, stop := context.WithTimeout(context.Background(), 30*time.Second)
+  defer stop()
+  bounded := _borkScopeWith(ctx)
+  defer _borkScopeAbort(bounded)
+  value, err := strconv.ParseInt(run(server.URL, bounded, 1000), 10, 64)
+  if err != nil || value <= 0 || value > int64(time.Second) { panic("explicit timeout not propagated") }
+  value, err = strconv.ParseInt(run(server.URL, bounded, 0), 10, 64)
+  if err != nil || value <= 0 || value > int64(30*time.Second) { panic("scope deadline not propagated") }
+  run(server.URL+"/redirect", bounded, 0)
+  if last.Load() <= 0 || last.Load() >= first.Load() { panic("redirect budget did not shrink") }
+  ancestor := _borkScopeWith(context.Background())
+  defer _borkScopeAbort(ancestor)
+  ancestor.cancelAfter(30000)
+  child := _newScope(ancestor, "redirect child")
+  defer _borkScopeAbort(child)
+  tighten.Store(ancestor)
+  value, err = strconv.ParseInt(run(server.URL+"/tighten", child, 10000), 10, 64)
+  if err != nil || value <= 0 || value > int64(time.Second) { panic("later ancestor deadline was hidden by explicit timeout") }
+  before := calls.Load()
+  expiredContext, stopExpired := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+  defer stopExpired()
+  expired := _borkScopeWith(expiredContext)
+  defer _borkScopeAbort(expired)
+  if run(server.URL, expired, 0) != "deadline" || calls.Load() != before { panic("expired request started") }
+  canceledContext, stopCanceled := context.WithCancel(context.Background())
+  stopCanceled()
+  canceled := _borkScopeWith(canceledContext)
+  defer _borkScopeAbort(canceled)
+  if run(server.URL, canceled, 0) != "cancelled" || calls.Load() != before { panic("cancelled request started") }
+  original := http.DefaultClient
+  http.DefaultClient = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { time.Sleep(60*time.Millisecond); return nil }}
+  defer func() { http.DefaultClient = original }()
+  last.Store(0)
+  if run(server.URL+"/redirect", plain, 40) != "deadline" || last.Load() != 0 { panic("expired redirect started") }
+  secure := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if r.ProtoMajor != 2 { panic("HTTP/2 not negotiated") }
+    fmt.Fprint(w, r.Header.Get("Bork-Timeout-Ns"))
+  }))
+  secure.EnableHTTP2 = true
+  secure.StartTLS()
+  defer secure.Close()
+  http.DefaultClient = secure.Client()
+  value, err = strconv.ParseInt(run(secure.URL, bounded, 1000), 10, 64)
+  if err != nil || value <= 0 || value > int64(time.Second) { panic("HTTP/2 budget not propagated") }
+  return true
+}
+fn queuedDeadline(addr: String) uses io + net + clock: Bool unsafe go {
+  import "bufio"
+  import "fmt"
+  import "net"
+  import "net/http"
+  import "time"
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer conn.Close()
+  conn.SetDeadline(time.Now().Add(2*time.Second))
+  fmt.Fprintf(conn, "POST /queued HTTP/1.1\r\nHost: %s\r\nContent-Length: 100\r\nBork-Timeout-Ns: 50000000\r\n\r\n", addr)
+  response, err := http.ReadResponse(bufio.NewReader(conn), nil)
+  if err != nil { panic(err) }
+  defer response.Body.Close()
+  return response.StatusCode == 504 && response.Close && response.Header.Get("Retry-After") == ""
+}
+fn completionRace(addr: String) uses io + net + clock: Bool unsafe go {
+  import "bufio"
+  import "fmt"
+  import "io"
+  import "net"
+  import "net/http"
+  import "time"
+  for attempt := 0; attempt < 40; attempt++ {
+    conn, err := net.DialTimeout("tcp", addr, time.Second)
+    if err != nil { panic(err) }
+    conn.SetDeadline(time.Now().Add(2*time.Second))
+    reader := bufio.NewReader(conn)
+    fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: %s\r\nContent-Length: 2\r\nBork-Timeout-Ns: 1000000\r\n\r\no", addr)
+    time.Sleep(time.Duration(attempt%3)*time.Millisecond)
+    fmt.Fprint(conn, "k")
+    response, err := http.ReadResponse(reader, nil)
+    if err != nil { conn.Close(); panic(err) }
+    io.ReadAll(response.Body)
+    response.Body.Close()
+    if response.StatusCode != 200 && response.StatusCode != 504 { conn.Close(); panic("unexpected completion race status") }
+    if response.StatusCode == 504 && !response.Close { conn.Close(); panic("expired unread body did not close connection") }
+    if response.StatusCode == 200 && !response.Close {
+      fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\n\r\n", addr)
+      response, err = http.ReadResponse(reader, nil)
+      if err != nil { conn.Close(); panic(err) }
+      io.ReadAll(response.Body)
+      response.Body.Close()
+      if response.StatusCode != 200 { conn.Close(); panic("race deadline leaked into keep-alive request") }
+    }
+    conn.Close()
+  }
+  return true
+}
+fn stalledCancel(addr: String, s: Scope) uses io + net + clock + state: Bool unsafe go {
+  import "bufio"
+  import "context"
+  import "fmt"
+  import "net"
+  import "net/http"
+  import "time"
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer conn.Close()
+  conn.SetDeadline(time.Now().Add(2*time.Second))
+  fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: %s\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n", addr)
+  reader := bufio.NewReader(conn)
+  response, err := http.ReadResponse(reader, nil)
+  if err != nil || response.StatusCode != 100 { panic("body read did not start") }
+  response.Body.Close()
+  // 100 Continue is emitted only after the controller hook is installed and
+  // the request body enters Read. This cancels an actually blocked body read.
+  s.cancel(context.Canceled)
+  response, err = http.ReadResponse(reader, nil)
+  if failure, ok := err.(net.Error); ok && failure.Timeout() { panic("scope cancellation did not interrupt body read") }
+  if response != nil { response.Body.Close() }
+  return true
+}
+fn withinBudget(value: String, upper: Int): Bool unsafe go {
+  import "strconv"
+  nanos, err := strconv.ParseInt(value, 10, 64)
+  return err == nil && nanos > 0 && nanos <= upper
+}
+fn main() {
+  scope app {
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      if (request.path == "/wait") { http.Text(200, waitDeadline(s)) } else {
+        if (request.path == "/cleanup") { _ = slowCleanup(s) }
+        http.Text(200, budget(s))
+      }
+    }))
+    println("incoming", rawChecks(http.Address(server), false))
+    println("completion race", completionRace(http.Address(server)))
+  }
+  scope app {
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      if (request.path == "/wait") { http.Text(200, waitDeadline(s)) } else {
+        if (request.path == "/cleanup") { _ = slowCleanup(s) }
+        http.Text(200, budget(s))
+      }
+      }, requestTimeoutMs: 1000))
+    println("policy", rawChecks(http.Address(server), true))
+  }
+  println("outgoing", outgoingChecks(invoke))
+  scope app {
+    owner = openScope(app)
+    server = mustServer(http.Listen("127.0.0.1:0", owner.scope, (request, s) => http.Text(200, "ok")))
+    println("stalled cancellation", stalledCancel(http.Address(server), owner.scope))
+    closeScope(owner)
+  }
+  scope app {
+    entered = channel[Bool](app, 1)
+    release = channel[Bool](app, 1)
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      _ = send(entered, true)
+      _ = receive(release)
+      http.Text(200, budget(s))
+    }))
+    active = spawn(app, () => http.Get(s"http://${http.Address(server)}", app, timeoutMs: 30000))
+    _ = receive(entered)
+    cancelAfter(app, 10000)
+    _ = send(release, true)
+    println("later listener deadline", withinBudget(resultText(await(active)), 10000000000))
+  }
+  scope app {
+    entered = channel[Bool](app, 1)
+    release = channel[Bool](app, 1)
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      if (request.path == "/held") { _ = send(entered, true); _ = receive(release) }
+      http.Text(200, "ok")
+      }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000 } }))
+    active = spawn(app, () => http.Get(s"http://${http.Address(server)}/held", app))
+    _ = receive(entered)
+    println("queued deadline", queuedDeadline(http.Address(server)))
+    println("queue released", http.AdmissionState(server))
+    _ = send(release, true)
+    _ = await(active)
+  }
+}
