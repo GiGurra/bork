@@ -53,15 +53,16 @@ fn scenario(s: Scope): Server { assemble[Server](s, server, db, config) }
 }
 
 func TestDescribeProviderBundle(t *testing.T) {
-	source := `type Config = {}
+	source := `ambient trace: String
+type Config = {}
 type Db = {}
 type Server = {}
 fn config(): Config { Config {} }
 fn fake(): Config { Config {} }
 fn db(c: Config, s: Scope): Db { Db {} }
-fn server(d: Db): Server { Server {} }
+fn server(d: Db) needs trace: Server { if (trace == "") { Server {} } else { Server {} } }
 providers Wiring = { config: config, database: db, server: server }
-fn scenario(s: Scope): Server { assemble[Server](s, Wiring(config: fake)) }
+fn scenario(s: Scope) needs trace: Server { assemble[Server](s, Wiring(config: fake)) }
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
@@ -87,6 +88,9 @@ fn scenario(s: Scope): Server { assemble[Server](s, Wiring(config: fake)) }
 		}
 		if bundle.Entries[1].Product != "Db" || fmt.Sprint(bundle.Entries[1].Dependencies) != "[Config Scope]" {
 			t.Fatalf("missing bundle contracts: %+v", bundle.Entries)
+		}
+		if fmt.Sprint(bundle.Entries[2].Needs) != "[trace]" {
+			t.Fatalf("missing ambient requirement: %+v", bundle.Entries[2])
 		}
 		replaced := result != declaration
 		if bundle.Entries[0].Replaced != replaced {

@@ -85,6 +85,9 @@ func printDescription(result *describe.Result) {
 			if len(e.Failures) > 0 {
 				fmt.Println("  failures:", strings.Join(e.Failures, " | "))
 			}
+			if len(e.Needs) > 0 {
+				fmt.Println("  needs:", strings.Join(e.Needs, ", "))
+			}
 			if e.Replaced {
 				fmt.Println("  replaced for this assembly")
 			}

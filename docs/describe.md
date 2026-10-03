@@ -60,6 +60,6 @@ bundle declaration name, bundle reference, or specialization's opening parenthes
 reports `type: "provider bundle"` and optional `provider_bundle` metadata:
 `name`, `definition`, and ordered `entries`. Entries expose `name`, `function`,
 `position`, `product`, `dependencies`, `effects`, `failures`, and optional
-`replaced`. This describes static wiring; it has no value facts or root graph.
+`replaced`, plus `needs` for declared providers with ambient requirements. This describes static wiring; it has no value facts or root graph.
 Specializations describe the actual replacement contracts. Ordinary assembly
 selection continues to describe the complete flattened graph.

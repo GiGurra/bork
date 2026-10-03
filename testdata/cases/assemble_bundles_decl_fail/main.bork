@@ -19,3 +19,6 @@ providers Product = { entry: provider }
 providers Repeated = { entry: provider }
 providers Repeated = { entry: provider }
 fn main() {}
+
+ambient Context: String
+providers Context = { entry: provider }

@@ -9,3 +9,4 @@ main.bork:15:3: provider bundle Invalid has duplicate entry duplicate
 main.bork:17:11: provider bundle provider conflicts with an existing declaration or imported package
 main.bork:18:11: provider bundle Product conflicts with an existing declaration or imported package
 main.bork:20:11: provider bundle Repeated conflicts with an existing declaration or imported package
+main.bork:24:11: provider bundle Context conflicts with an existing declaration or imported package

@@ -1,0 +1,3 @@
+import "example.com/assemble_bundles_ambient_fail/wiring"
+fn scenario(s: Scope): wiring.Label { assemble[wiring.Label](s, wiring.Wiring) }
+fn main() {}

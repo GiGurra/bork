@@ -74,7 +74,7 @@ func (c *checker) declareProviderBundles(files []*syntax.File) {
 					taken = taken || rule.Name == name
 				}
 			}
-			if taken || c.pkg.providers[name] != nil || c.pkg.Funcs[name] != nil || c.isTypeName(name) || c.pkg.classes[name] != nil || c.pkg.bundles[name] != nil || c.pkg.imports[name] != nil {
+			if taken || c.ambientNamed(name) != nil || c.pkg.providers[name] != nil || c.pkg.Funcs[name] != nil || c.isTypeName(name) || c.pkg.classes[name] != nil || c.pkg.bundles[name] != nil || c.pkg.imports[name] != nil {
 				c.bundleError(decl.NamePos, "provider bundle %s conflicts with an existing declaration or imported package", name)
 				continue
 			}
@@ -210,6 +210,7 @@ type ProviderBundleDescription struct {
 }
 
 type ProviderEntryDescription struct {
+	Needs        []string `json:"needs,omitempty"`
 	Name         string   `json:"name"`
 	Function     string   `json:"function"`
 	Position     diag.Pos `json:"position"`
@@ -234,6 +235,9 @@ func describeProviderBundle(name string, bundle *ProviderBundle, entries []*asse
 		e := ProviderEntryDescription{Name: bundle.Entries[i].Decl.Name, Function: writtenText(p.x), Position: p.x.Position(), Dependencies: []string{}, Failures: []string{}, Replaced: p.expected != nil}
 		if p.typ != nil {
 			e.Product, e.Effects = TypeText(providerProduct(p.typ), pkg), p.typ.Effects.String()
+			if p.fn != nil {
+				e.Needs = DescribeCallable(p.fn, p.typ.Params, pkg, false).Needs
+			}
 			for _, t := range p.typ.Params {
 				e.Dependencies = append(e.Dependencies, TypeText(t, pkg))
 			}
