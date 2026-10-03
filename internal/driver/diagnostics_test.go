@@ -65,6 +65,8 @@ func TestSuggestedEdits(t *testing.T) {
 		{"unused effect", "fn add(a: Int)uses io: Int { a + 1 }\nfn main() { println(add(1)) }\n"},
 		{"partly unused", "fn say(s: String) uses io + net { println(s) }\nfn main() { say(\"a\") }\n"},
 		{"missing and unused", "fn say(s: String) uses net { println(s) }\nfn main() { say(\"a\") }\n"},
+		{"missing needs", "ambient t: String\nambient u: String\nfn tag(m: String) needs t: String { t + m }\nfn tag2(m: String) needs u: String { u + m }\nfn f(): String { tag(\"a\") + tag(\"b\") + tag2(\"c\") + t }\nfn main() { println(with (t: \"x\", u: \"y\") { f() }) }\n"},
+		{"missing needs, existing clause", "ambient t: String\nambient u: String\nfn tag(m: String) needs t + u: String { t + u + m }\nfn f() uses io needs u { println(tag(\"a\") + tag(\"b\")) }\nfn main() { with (t: \"x\", u: \"y\") { f() } }\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

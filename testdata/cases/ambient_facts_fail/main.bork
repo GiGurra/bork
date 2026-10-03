@@ -1,0 +1,36 @@
+ambient traceId: String
+
+fn tag(msg: String) needs traceId: String {
+  s"[${traceId}] ${msg}"
+}
+
+// Facts from a predicate that binds its own value are still checked at
+// compile time.
+pred tiny(s: String) {
+  with (traceId: "p") {
+    tag(s).byteLength() < 8
+  }
+}
+
+fn small(s: String where tiny): String {
+  s
+}
+
+pred positive(x: Int) {
+  x > 0
+}
+
+fn needPositive(x: Int where positive): Int {
+  x
+}
+
+ambient count: Int
+
+fn counted() needs count: Int {
+  needPositive(count)
+}
+
+fn main() uses io {
+  println(small("ok"))
+  println(small("long enough"))
+}

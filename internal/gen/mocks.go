@@ -62,9 +62,14 @@ func (g *gen) realName(fn *check.Func, goName string) string {
 	return goName
 }
 
-// mockFuncType is the Go type of a mock of fn.
+// mockFuncType is the Go type of a mock of fn: its parameters, then
+// the ambient values it needs (names, if given, name both).
 func (g *gen) mockFuncType(fn *check.Func, names []*ast.Ident) *ast.FuncType {
-	return g.funcType(&check.FuncType{Params: fn.Params, Result: fn.Result}, names)
+	params := append([]check.Type(nil), fn.Params...)
+	for _, n := range fn.Needs {
+		params = append(params, n.Type)
+	}
+	return g.funcType(&check.FuncType{Params: params, Result: fn.Result}, names)
 }
 
 // dispatchers generates, for a function a test mocks, the dispatcher
@@ -99,6 +104,10 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 		params = append(params, p)
 		args = append(args, p)
 		shown = append(shown, &ast.CallExpr{Fun: ast.NewIdent("_show"), Args: []ast.Expr{p}})
+	}
+	for _, v := range fn.NeedVars {
+		params = append(params, varIdent(v))
+		args = append(args, varIdent(v))
 	}
 	returns := fn.Result != check.Unit && fn.Result != check.Never
 	result := func(call ast.Expr) []ast.Stmt {
@@ -188,6 +197,9 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 	names := make([]*ast.Ident, len(m.Func.ParamVars))
 	for i, p := range m.Func.ParamVars {
 		names[i] = name(p.Name)
+	}
+	for _, v := range m.Func.NeedVars {
+		names = append(names, varIdent(v))
 	}
 	savedResult, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = m.Target.Result, nil, nil, nil
@@ -310,7 +322,8 @@ func (g *gen) nextCall(fn *check.Func, frame *ast.Ident, args []ast.Expr) ast.Ex
 }
 
 // nextRef is fn as a value, as it was before the mock of frame.
-func (g *gen) nextRef(fn *check.Func, frame *ast.Ident) ast.Expr {
+// The ambient values it needs are those in force where it is named.
+func (g *gen) nextRef(fn *check.Func, frame *ast.Ident, needs []ast.Expr) ast.Expr {
 	var names []*ast.Ident
 	var args []ast.Expr
 	for i := range fn.Params {
@@ -318,12 +331,12 @@ func (g *gen) nextRef(fn *check.Func, frame *ast.Ident) ast.Expr {
 		names = append(names, p)
 		args = append(args, p)
 	}
-	call := g.nextCall(fn, frame, args)
+	call := g.nextCall(fn, frame, append(args, needs...))
 	var body ast.Stmt = &ast.ExprStmt{X: call}
 	if fn.Result != check.Unit && fn.Result != check.Never {
 		body = &ast.ReturnStmt{Results: []ast.Expr{call}}
 	}
-	return &ast.FuncLit{Type: g.mockFuncType(fn, names), Body: &ast.BlockStmt{List: []ast.Stmt{body}}}
+	return &ast.FuncLit{Type: g.funcType(&check.FuncType{Params: fn.Params, Result: fn.Result}, names), Body: &ast.BlockStmt{List: []ast.Stmt{body}}}
 }
 
 // mockRuntime keeps the mocks in force: a chain of frames, one per

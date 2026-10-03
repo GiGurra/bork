@@ -590,6 +590,14 @@ func name(s string) *ast.Ident {
 	return ast.NewIdent(s)
 }
 
+// varIdent is the Go name of a variable.
+func varIdent(v *check.Var) *ast.Ident {
+	if v.GoName != "" {
+		return name(v.GoName)
+	}
+	return name(v.Name)
+}
+
 // funcName is the Go name of a function. A prelude function the package
 // replaced (but the prelude still uses) gets a name of its own.
 func (g *gen) funcName(fn *check.Func) *ast.Ident {
@@ -648,6 +656,14 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 		ftype.Params.List = append(ftype.Params.List, &ast.Field{
 			Names: []*ast.Ident{name(p.Name)},
 			Type:  g.goType(fn.Params[i]),
+		})
+	}
+	// The ambient values it needs are hidden parameters, after the
+	// others.
+	for _, v := range fn.NeedVars {
+		ftype.Params.List = append(ftype.Params.List, &ast.Field{
+			Names: []*ast.Ident{varIdent(v)},
+			Type:  g.goType(v.Type),
 		})
 	}
 	if fn.Result != check.Unit && fn.Result != check.Never {
@@ -737,11 +753,12 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	case *check.Interp:
 		return g.interp(e)
 	case *check.FuncRef:
+		stmts, needs := g.values(e.Needs)
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
-			return nil, g.nextRef(e.Inst.Func, frame)
+			return stmts, g.nextRef(e.Inst.Func, frame, needs)
 		}
-		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || collapsedUnion(inst) {
-			return nil, g.funcRef(inst)
+		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || collapsedUnion(inst) || len(needs) > 0 {
+			return stmts, g.funcRef(inst, needs...)
 		}
 		return nil, g.instance(e.Inst)
 	case *check.VarRef:
@@ -755,7 +772,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			}
 			return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(e.Var.Name)}}}
 		}
-		return nil, name(e.Var.Name)
+		return nil, varIdent(e.Var)
 	case *check.SeqCall:
 		return g.seqCall(e)
 	case *check.Generate:
@@ -1049,14 +1066,17 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			fun, dicts := g.methodFunc(inst)
 			return stmts, g.instanceResult(inst, &ast.CallExpr{Fun: fun, Args: append(dicts, xs...)})
 		}
+		// The ambient values it needs follow the arguments.
+		needStmts, needs := g.values(e.Needs)
+		stmts = append(stmts, needStmts...)
 		if frame := g.passthrough(inst.Func); frame != nil {
-			return stmts, g.nextCall(inst.Func, frame, xs)
+			return stmts, g.nextCall(inst.Func, frame, append(xs, needs...))
 		}
 		var dicts []ast.Expr
 		for _, d := range inst.Dicts {
 			dicts = append(dicts, g.dict(d))
 		}
-		return stmts, g.instanceResult(inst, &ast.CallExpr{Fun: g.instance(inst), Args: append(dicts, xs...)})
+		return stmts, g.instanceResult(inst, &ast.CallExpr{Fun: g.instance(inst), Args: append(append(dicts, xs...), needs...)})
 	}
 	panic(fmt.Sprintf("unhandled call %T", e))
 }
@@ -1371,12 +1391,12 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 			if s.Declared || (check.IsNumeric(vt) && isConst(x)) {
 				// A declared type is kept, and an untyped Go constant would
 				// get Go's default type (int, float64).
-				out = append(out, typedVar(name(s.Var.Name), g.goType(bt), g.convert(x, vt, bt)))
+				out = append(out, typedVar(varIdent(s.Var), g.goType(bt), g.convert(x, vt, bt)))
 			} else {
-				out = append(out, define(name(s.Var.Name), g.convert(x, vt, vt)))
+				out = append(out, define(varIdent(s.Var), g.convert(x, vt, vt)))
 			}
 			if s.Var.Unused {
-				out = append(out, assign(ast.NewIdent("_"), name(s.Var.Name)))
+				out = append(out, assign(ast.NewIdent("_"), varIdent(s.Var)))
 			}
 			if bt == check.OwnedScope {
 				if len(g.loops) > 0 {

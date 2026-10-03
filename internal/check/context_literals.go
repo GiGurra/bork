@@ -331,6 +331,8 @@ func (c *checker) contextNeedsType(x syntax.Expr, want Type) bool {
 		return c.contextNeedsType(x.Body, result)
 	case *syntax.Block:
 		return c.contextNeedsType(x.Tail, want)
+	case *syntax.WithExpr:
+		return c.contextNeedsType(x.Body, want)
 	case *syntax.If:
 		return c.contextNeedsType(x.Then, want) || c.contextNeedsType(x.Else, want)
 	case *syntax.Match:
@@ -401,6 +403,8 @@ func hasContextLiteral(x syntax.Expr) bool {
 			}
 		}
 	case *syntax.Lambda:
+		return hasContextLiteral(x.Body)
+	case *syntax.WithExpr:
 		return hasContextLiteral(x.Body)
 	case *syntax.Block:
 		if hasContextLiteral(x.Tail) {

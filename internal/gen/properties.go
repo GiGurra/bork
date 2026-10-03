@@ -120,8 +120,10 @@ func (g *gen) propertyTest(title string, auto bool, params []*syntax.Param, type
 // trusted, because it is implemented in unsafe go and promises facts
 // about its result, or because its body trusts a fact.
 func (g *gen) autoPropertyCandidate(fn *check.Func) bool {
+	// A function that needs ambient values reads inputs the property
+	// cannot choose.
 	if fn.Pkg == nil || !fn.Pkg.Root || fn.Prelude || fn.Test != nil || fn.Class != nil || fn.Of != nil || fn.Synthetic ||
-		len(fn.TypeParams) > 0 || fn.Decl.Name == "main" || fn.Decl.IsPred {
+		len(fn.TypeParams) > 0 || fn.Decl.Name == "main" || fn.Decl.IsPred || len(fn.Needs) > 0 {
 		return false
 	}
 	for _, t := range fn.Params {

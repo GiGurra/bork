@@ -1927,7 +1927,8 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
 
 ## Ambient values (design: bork-j68yln)
 
-> **Design, not implemented.** Typed request-scoped values: bork's answer to the
+> **Implemented** (bork-j68yln), apart from the `logged` and `propagated`
+> markers (follow-ups, below). Typed request-scoped values: bork's answer to the
 > value half of Go's `context.Context`. The other half, cancellation and
 > deadlines, is already [scopes](#resources-and-scopes).
 
@@ -1949,12 +1950,15 @@ fn audit(event: Event) uses io needs traceId + principal: Unit | IoError {
 }
 
 fn greeting(name: String) needs locale?: String {
-  match locale.getOr("en") { "sv" => s"Hej ${name}", _ => s"Hello ${name}" }
+  match (locale.getOr("en")) {
+    "sv" => s"Hej ${name}"
+    _ => s"Hello ${name}"
+  }
 }
 
 fn handle(req: http.Request, s: Scope) uses io + state: http.Response {
-  with (traceId: req.header("X-Trace-Id").getOr(newTraceId()), principal: authenticate(req)?) {
-    audit(Event.Viewed { path: req.path })?
+  with (traceId: req.header("X-Trace-Id").getOr(newTraceId()), principal: authenticate(req)) {
+    _ = audit(Event.Viewed { path: req.path })
     http.Text(200, greeting(req.query("name").getOr("you")))
   }
 }
@@ -1977,6 +1981,8 @@ AmbientDecl = "ambient" Ident ":" Type .
   This also keeps ambient values out of the lifetime check: a binding can be
   captured by tasks that outlive its `with` block (below), which is only safe
   for values that hold no lifetime.
+- **No `where` clauses on the type yet**, as on other declarations the facts
+  check does not cover.
 - **No defaults in v1.** "Unbound" has one meaning everywhere; a function that
   can do without a value reads it as optional and picks its own fallback
   (`locale.getOr("en")`), so the fallback is visible where it is used.
@@ -1989,7 +1995,7 @@ Need  = ( Ident | Ident "." Ident ) [ "?" ] .
 ```
 
 - **A function names what it reads after `uses`, before the result**, in
-  declarations and method signatures: `fn f(x: Int) uses io needs traceId: Int`.
+  function and method declarations (not class methods, below): `fn f(x: Int) uses io needs traceId: Int`.
   Names are joined with `+`, as effects are. Inside the body the name is an
   ordinary immutable value of the declared type.
 - **Reading is pure.** A needed value behaves exactly like a hidden parameter:
@@ -2000,7 +2006,9 @@ Need  = ( Ident | Ident "." Ident ) [ "?" ] .
   it. A missing `needs` is an error that names the call and the fix, carried as
   a text edit in `bork check --json`. An unexported function may not declare a
   need it never reads; exported functions may, to keep their API stable.
-  Needs never climb silently to callers, as with effects.
+  Needs never climb silently to callers, as with effects. An exported function
+  cannot need an unexported ambient value: other packages could not bind it, so
+  they could not call the function.
 - **Optional reads: `needs locale?`.** The body sees `locale: Option[String]`.
   A call never fails for an optional need: the caller passes `Some` when it has
   the value (bound by a `with` around the call, or needed itself), passes its
@@ -2014,7 +2022,8 @@ Need  = ( Ident | Ident "." Ident ) [ "?" ] .
 ### Binding: `with`
 
 ```ebnf
-WithExpr = "with" "(" Ident ":" Expr { "," Ident ":" Expr } ")" Block .
+WithExpr = "with" "(" WithBind { Sep WithBind } [ Sep ] ")" Block .
+WithBind = ( Ident | Ident "." Ident ) ":" Expr .
 ```
 
 - **`with (traceId: id, principal: p) { ... }` binds values for the block**,
@@ -2053,7 +2062,10 @@ WithExpr = "with" "(" Ident ":" Expr { "," Ident ":" Expr } ")" Block .
   values. Compile-time evaluation only runs code whose needs are bound in the
   code being evaluated.
 - **`unsafe go` functions may declare `needs`.** The values are visible in the
-  Go body by their names (an optional one as the prelude's `Option` in Go).
+  Go body by their names (an optional one as the prelude's `Option` in Go); a
+  need of another package's value is named with that package's Go prefix, as
+  its functions are. A binding to a Go function (`unsafe go "os.Getenv"`)
+  cannot declare needs.
 
 ### Function values, lambdas, and tasks
 
@@ -2081,7 +2093,7 @@ WithExpr = "with" "(" Ident ":" Expr { "," Ident ":" Expr } ")" Block .
 The compiler threads each need through the functions that declare it as an
 extra Go parameter, after the ordinary ones, sorted by package and name so the
 Go signature does not depend on the order the `needs` clause is written in. A
-`with` block binds Go locals (`_amb_traceId := ...`), a call passes the locals
+`with` block binds Go locals of its own (`_with1_traceId := ...`), a call passes the locals
 or the caller's own hidden parameters, and a lambda or function value closes
 over them as it closes over any local. An optional need is an `Option` parameter.
 

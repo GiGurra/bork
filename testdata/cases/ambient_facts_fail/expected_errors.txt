@@ -1,0 +1,2 @@
+main.bork:30:16: needPositive requires x to be positive, but that is not proven for count (check it first with if (positive(count)) { ... })
+main.bork:35:17: small requires s to be tiny, but tiny("long enough") is false

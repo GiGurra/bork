@@ -89,6 +89,9 @@ func printDescription(result *describe.Result) {
 	}
 	if result.Callable != nil {
 		fmt.Println("named arguments:", callableParameters(result.Callable), "(parameter names are API)")
+		if len(result.Callable.Needs) > 0 {
+			fmt.Println("needs:", strings.Join(result.Callable.Needs, " + "))
+		}
 	}
 	for _, method := range result.Methods {
 		if method.Ambiguity != "" {
@@ -97,6 +100,9 @@ func printDescription(result *describe.Result) {
 			fmt.Printf("method: %s: %s (%s)", method.Name, method.Type, method.Definition)
 			if method.Callable != nil {
 				fmt.Printf(" named arguments (%s)", callableParameters(method.Callable))
+				if len(method.Callable.Needs) > 0 {
+					fmt.Printf(" needs %s", strings.Join(method.Callable.Needs, " + "))
+				}
 			}
 			if len(method.Requires) > 0 {
 				fmt.Printf(" requires %s", strings.Join(method.Requires, "; "))

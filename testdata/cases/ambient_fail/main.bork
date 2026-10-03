@@ -1,0 +1,119 @@
+import "example.com/ambfail/trace"
+
+ambient traceId: String
+ambient locale: String
+ambient session: Scope
+ambient callback: () => Unit
+ambient count: Int where positive
+ambient nothingAtAll: Unit
+
+pred positive(x: Int) {
+  x > 0
+}
+
+fn tag(msg: String) needs traceId: String {
+  s"[${traceId}] ${msg}"
+}
+
+// Reading needs a needs clause or a with around it.
+fn bare(): String {
+  traceId
+}
+
+fn calls(): String {
+  tag("x")
+}
+
+fn refers(): List[String] {
+  ["a"].map(tag)
+}
+
+fn lambdas(): () => String {
+  () => tag("x")
+}
+
+// An optional need does not provide a required one.
+fn maybe() needs traceId?: String {
+  tag("x")
+}
+
+// An unexported function must read what it needs; an exported one may
+// keep a need for its API.
+fn unused() needs locale: String {
+  "x"
+}
+
+fn Unused() needs locale: String {
+  "x"
+}
+
+fn unknown() needs nothere + traceId + traceId: String {
+  traceId
+}
+
+// Predicates cannot need values, nor read them unbound.
+pred tagged(s: String) needs traceId {
+  true
+}
+
+pred calling(s: String) {
+  tag(s) == s
+}
+
+class Show2[T] {
+  fn show2(x: T) needs traceId: String
+}
+
+instance showInt: Show2[Int] {
+  fn show2(x: Int) needs traceId: String {
+    traceId
+  }
+}
+
+fn getenv(key: String) needs traceId: String unsafe go "os.Getenv"
+
+// with binds only ambient values, each once, with their types.
+fn binds(): String {
+  total = 1
+  a = with (total: 2) { "x" }
+  b = with (traceId: "a", traceId: "b") { tag("x") }
+  c = with (traceId: 3) { tag("x") }
+  s"${a}${b}${c}"
+}
+
+// Another package's ambient values are named with the package.
+fn viaPkg() needs trace.Id: String {
+  trace.Ok()
+}
+
+fn unexported(): String {
+  with (trace.secret: "s") { "x" }
+}
+
+// Defaults are closed values.
+fn defaulted(id: String = traceId): String {
+  id
+}
+
+// Ambient names are taken.
+fn locale() {}
+
+fn shadows() {
+  traceId = "x"
+}
+
+fn main() needs traceId {
+  println(traceId)
+}
+
+fn Logged(msg: String) uses io needs traceId {
+  println(s"${traceId} ${msg}")
+}
+
+test "a mock reads only what its target needs" {
+  mock Logged(msg) { println(locale) }
+}
+
+test "tests bind what they read" {
+  assertEqual(tag("x"), "[t] x")
+}

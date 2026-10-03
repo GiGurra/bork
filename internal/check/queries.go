@@ -27,6 +27,9 @@ type CallableDescription struct {
 	NamedArguments       bool                   `json:"named_arguments"`
 	ParameterNamesAreAPI bool                   `json:"parameter_names_are_api"`
 	Parameters           []ParameterDescription `json:"parameters"`
+	// Needs lists the ambient values the function reads, as its
+	// signature declares them (locale? for an optional one).
+	Needs []string `json:"needs,omitempty"`
 }
 
 type ParameterDescription struct {
@@ -44,6 +47,13 @@ func DescribeCallable(fn *Func, params []Type, from *Package, bound bool) *Calla
 	}
 	for i, p := range fn.Decl.Params[skip:] {
 		out.Parameters = append(out.Parameters, ParameterDescription{Name: p.Name, Type: TypeText(params[i], from), Receiver: fn.Decl.IsMethod && !bound && i == 0, Default: defaultText(p.Default)})
+	}
+	for _, n := range fn.Needs {
+		name := n.Ambient.QualifiedName(from)
+		if n.Optional {
+			name += "?"
+		}
+		out.Needs = append(out.Needs, name)
 	}
 	return out
 }

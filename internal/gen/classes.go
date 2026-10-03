@@ -233,7 +233,7 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 // funcRef is the Go value of a function used as a value (inst), when it
 // is a class method or needs instances: those are filled in, by a
 // closure if needed.
-func (g *gen) funcRef(inst *check.Instance) ast.Expr {
+func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 	var fun ast.Expr
 	var dicts []ast.Expr
 	if inst.Func.Class != nil {
@@ -244,16 +244,17 @@ func (g *gen) funcRef(inst *check.Instance) ast.Expr {
 			dicts = append(dicts, g.dict(d))
 		}
 	}
-	if len(dicts) == 0 && !collapsedUnion(inst) {
+	if len(dicts) == 0 && len(needs) == 0 && !collapsedUnion(inst) {
 		return fun
 	}
 	ft := &check.FuncType{Params: inst.Params, Result: inst.Result}
 	var names []*ast.Ident
 	args := dicts
 	for j := range inst.Params {
-		names = append(names, ast.NewIdent("_p"+string(rune('0'+j))))
+		names = append(names, ast.NewIdent(fmt.Sprintf("_p%d", j)))
 		args = append(args, names[j])
 	}
+	args = append(args, needs...)
 	call := &ast.CallExpr{Fun: fun, Args: args}
 	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.instanceResult(inst, call)}}}
 	if inst.Result == check.Unit {

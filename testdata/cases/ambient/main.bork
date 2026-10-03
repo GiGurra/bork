@@ -1,0 +1,119 @@
+import "example.com/amb/trace"
+
+ambient traceId: String
+ambient locale: String
+ambient retries: Int
+// Ambient names do not hide the prelude's functions in generated code.
+ambient await: String
+
+type User = { name: String }
+
+fn tag(msg: String) needs traceId: String {
+  s"[${traceId}] ${msg}"
+}
+
+// An optional need never fails a caller: it reads None where nothing
+// is bound.
+fn greeting(name: String) needs locale?: String {
+  match (locale.getOr("en")) {
+    "sv" => s"Hej ${name}"
+    _ => s"Hello ${name}"
+  }
+}
+
+// A caller that needs a value optionally passes its own Option on.
+fn report(name: String) needs traceId + locale?: String {
+  tag(greeting(name))
+}
+
+fn (u: User) label() needs traceId: String {
+  tag(u.name)
+}
+
+fn wrap[T](x: T) needs retries: String {
+  s"${toString(x)} after ${retries} retries"
+}
+
+// A function that needs a value passes it on to itself.
+fn countdown(n: Int) needs traceId: List[String] {
+  if (n == 0) {
+    return []
+  }
+  [tag(toString(n))].concat(countdown(n - 1))
+}
+
+fn parse(s: String): Int | String {
+  if (s == "") { "empty" } else { s.byteLength() }
+}
+
+// ? and return leave a with block as any other.
+fn measured(s: String) needs traceId: String | String {
+  n = with (traceId: s"${traceId}/parse") {
+    parse(s)?
+  }
+  tag(toString(n))
+}
+
+// Another package's ambient value, needed by name.
+fn traced(msg: String) needs trace.Id: String {
+  trace.Tagged(msg)
+}
+
+// unsafe go code sees what it needs by name.
+fn goTag(msg: String) needs traceId: String unsafe go {
+  return traceId + " (go) " + msg
+}
+
+// A predicate cannot need values, but can bind them itself.
+pred short(s: String) {
+  with (traceId: "p") {
+    tag(s).byteLength() < 10
+  }
+}
+
+fn shout(s: String where short): String {
+  s.toUpper()
+}
+
+fn awaited(s: Scope) needs await: String {
+  t = spawn(s, () => 1)
+  s"${await} ${toString(await(t))}"
+}
+
+fn main() uses io + state {
+  println(greeting("Ada"))
+  with (traceId: "t1") {
+    println(report("Ada"))
+    with (locale: "sv", traceId: s"${traceId}/inner") {
+      // Inner bindings shadow outer ones, and each value is read where
+      // the with starts.
+      println(report("Bo"))
+      println(User { name: "Cy" }.label())
+    }
+    println(report("Di"))
+    // Function values and lambdas keep the bindings where they are made.
+    println(["x", "y"].map(tag))
+    later = (n: String) => tag(n)
+    println(with (traceId: "other") { later("lambda") })
+    println([User { name: "Ed" }].map(User.label))
+    // Tasks inherit them, as lambdas.
+    scope s {
+      t = spawn(s, () => tag("task"))
+      println(await(t))
+    }
+    println(goTag("call"))
+    println(countdown(2))
+    println(measured("abc"))
+    println(measured(""))
+    println(["a", "b"].map(s => with (traceId: s) { tag("each") }))
+  }
+  println(with (retries: 1) { [1, 2].map(wrap) })
+  println(with (retries: 3) { wrap(42) })
+  println(with (trace.Id: "abc") { traced("hi") })
+  println(shout("ok"))
+  println(with (await: "waited") {
+    scope s {
+      awaited(s)
+    }
+  })
+}

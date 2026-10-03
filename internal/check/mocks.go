@@ -196,9 +196,18 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 		MockOf:            target,
 		MockIn:            test,
 	}
+	// The mock reads the target's needs as the target does: the values
+	// the call passes, not those bound around the mock.
+	for _, n := range target.Needs {
+		d := &syntax.Need{Pos: s.MockPos, Name: n.Decl.Name, Optional: n.Optional}
+		fn.Needs = append(fn.Needs, &FuncNeed{Ambient: n.Ambient, Optional: n.Optional, Decl: d, Type: n.Type})
+	}
 	savedFn, savedUsed, savedDepth := c.fn, c.used, c.lambdaDepth
 	c.fn, c.used, c.lambdaDepth = fn, 0, 0
 	c.pushScope()
+	for _, n := range fn.Needs {
+		c.scopes[len(c.scopes)-1][ambientKey(n.Ambient)] = &local{typ: n.Type, decl: n.Decl}
+	}
 	for i, p := range s.Params {
 		if p.Name == "_" || c.nameTaken(p.Name, p.Pos) {
 			continue

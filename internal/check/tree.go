@@ -81,6 +81,7 @@ const (
 	VarPattern                    // a name a match pattern binds
 	VarLoop                       // an iteration binding
 	VarScope                      // the scope of `scope s { ... }`
+	VarAmbient                    // an ambient value a function needs
 )
 
 // Var is a variable: a parameter, a binding, a name bound by a pattern,
@@ -89,9 +90,12 @@ type Var struct {
 	// Label describes a compiler-generated variable in diagnostics.
 	Label string
 	Name  string
-	Pos   diag.Pos
-	Type  Type
-	Kind  VarKind
+	// GoName is the variable's name in the generated Go, when it is not
+	// Name (an ambient value's binding or hidden parameter).
+	GoName string
+	Pos    diag.Pos
+	Type   Type
+	Kind   VarKind
 	// Index is a parameter's position among its function's (or
 	// lambda's, or rule's) parameters.
 	Index int
@@ -133,6 +137,9 @@ type FuncRef struct {
 	expr
 	Name string // as written
 	Inst *Instance
+	// Needs is what the reference binds for the function's needs, as
+	// Call.Needs.
+	Needs []Expr
 }
 
 // Unary is `-x` or `!x`.
@@ -157,6 +164,10 @@ type Call struct {
 	Func *Func
 	Inst *Instance
 	Args []Expr
+	// Needs holds what the call passes for each of Func's needs (in
+	// the order of Func.Needs): a VarRef, Option.Some of one, or
+	// Option.None.
+	Needs []Expr
 	// ArgOrder lists parameter indices in source evaluation order; nil
 	// means declaration order. Args remains in declaration order for facts.
 	ArgOrder []int

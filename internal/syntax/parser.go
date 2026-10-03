@@ -75,12 +75,16 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 			if td := p.typeDecl(); td != nil {
 				f.Types = append(f.Types, td)
 			}
+		case p.at(TIdent) && p.tok().Text == "ambient" && p.peekKind() == TIdent:
+			if ad := p.ambientDecl(); ad != nil {
+				f.Ambients = append(f.Ambients, ad)
+			}
 		case p.at(TIdent) && p.tok().Text == "test" && p.peekKind() == TString:
 			if td := p.testDecl(); td != nil {
 				f.Tests = append(f.Tests, td)
 			}
 		default:
-			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', 'class', 'instance', or 'test'), found %s", p.tok().Kind)
+			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', 'ambient', 'class', 'instance', or 'test'), found %s", p.tok().Kind)
 			p.syncTopLevel()
 		}
 	}
@@ -381,6 +385,7 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 	}
 	fn.ParamsEnd = p.expect(RParen, "to end the parameter list").Pos
 	fn.Uses = p.uses()
+	fn.Needs = p.needs()
 	if isPred {
 		// A predicate always returns Bool.
 		fn.Result = &TypeExpr{Pos: name.Pos, Name: "Bool"}
@@ -634,6 +639,68 @@ func (p *parser) pred() *PredRef {
 		p.expect(RParen, "to end the predicate's arguments")
 	}
 	return ref
+}
+
+// ambientDecl parses `ambient name: Type`.
+func (p *parser) ambientDecl() (ad *AmbientDecl) {
+	defer p.recoverDecl(func() { ad = nil })
+	pos := p.next().Pos
+	name := p.expect(TIdent, "(the ambient value's name)")
+	p.expect(Colon, "after the ambient value's name")
+	ad = &AmbientDecl{Pos: pos, Name: name.Text, Type: p.typeExpr()}
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after the ambient declaration, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return ad
+}
+
+// needs parses `needs traceId + locale?`, if present: the ambient
+// values a function reads.
+func (p *parser) needs() *Needs {
+	if !p.at(TIdent) || p.tok().Text != "needs" || p.peekKind() != TIdent {
+		return nil
+	}
+	n := &Needs{Pos: p.next().Pos}
+	for {
+		t := p.expect(TIdent, "(ambient value name)")
+		need := &Need{Pos: t.Pos, Name: p.qualify(t)}
+		if p.at(Dot) {
+			p.errorf(t.Pos, "%s is not an imported package", t.Text)
+			panic(bailout{})
+		}
+		n.End = p.toks[p.i-1].Pos
+		n.End.Col += len(p.toks[p.i-1].Text)
+		if p.at(Quest) {
+			need.Optional = true
+			n.End = p.next().Pos
+			n.End.Col++
+		}
+		n.Items = append(n.Items, need)
+		if p.at(TIdent) && p.tok().Text == "uses" {
+			p.errorf(p.tok().Pos, "uses comes before needs: write uses ... needs ...")
+			panic(bailout{})
+		}
+		if !p.at(Plus) {
+			return n
+		}
+		p.next()
+	}
+}
+
+// withExpr parses `with (name: value, ...) { ... }`.
+func (p *parser) withExpr() Expr {
+	w := &WithExpr{Pos: p.next().Pos}
+	p.expect(LParen, "after with")
+	p.list(RParen, "an ambient value to bind", func() {
+		t := p.expect(TIdent, "(ambient value name)")
+		b := &WithBinding{Pos: t.Pos, Name: p.qualify(t)}
+		p.expect(Colon, "after the ambient value's name")
+		b.Value = p.expr()
+		w.Bindings = append(w.Bindings, b)
+	})
+	w.Body = p.block()
+	return w
 }
 
 // uses parses `uses io + net` or `uses nothing`, if present: the
@@ -1179,6 +1246,10 @@ func (p *parser) primary() Expr {
 	case TIdent:
 		if p.peekKind() == Arrow && !p.noLambda {
 			return p.lambda()
+		}
+		// `with` is a keyword where an expression starts and '(' follows.
+		if t.Text == "with" && p.peekKind() == LParen {
+			return p.withExpr()
 		}
 		// `scope` is a keyword only where a scope block starts.
 		if t.Text == "scope" && p.peekKind() == TIdent {

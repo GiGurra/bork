@@ -1,0 +1,44 @@
+ambient traceId: String
+
+fn Tag(msg: String) uses io needs traceId: String {
+  s"[${traceId}] ${msg}"
+}
+
+fn Report() uses io needs traceId: String {
+  Tag("r")
+}
+
+pred positive(x: Int) {
+  x > 0
+}
+
+// unsafe go code that promises a fact is checked in tests.
+fn limit() needs traceId: Int where positive unsafe go {
+  return int64(len(traceId))
+}
+
+fn main() uses io {
+  println(with (traceId: "m") { Report() })
+}
+
+test "unsafe go with a fact" {
+  assertEqual(with (traceId: "abc") { limit() }, 3)
+}
+
+// Tests bind the values the code reads.
+test "binds" {
+  assertEqual(with (traceId: "t") { Report() }, "[t] r")
+}
+
+// A mock reads its target's needs: the values the call passes.
+test "mock sees needs" {
+  mock Tag(msg) { s"mocked ${traceId} ${msg}" }
+  assertEqual(with (traceId: "t") { Report() }, "mocked t r")
+}
+
+// The target's name in a mock passes them on.
+test "real" {
+  calls = mock Tag(msg) { Tag(msg) }
+  assertEqual(with (traceId: "t") { Report() }, "[t] r")
+  assertEqual(calls.count(), 1)
+}

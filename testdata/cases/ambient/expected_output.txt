@@ -1,0 +1,19 @@
+Hello Ada
+[t1] Hello Ada
+[t1/inner] Hej Bo
+[t1/inner] Cy
+[t1] Hello Di
+["[t1] x", "[t1] y"]
+[t1] lambda
+["[t1] Ed"]
+[t1] task
+t1 (go) call
+["[t1] 2", "[t1] 1"]
+[t1] 3
+empty
+["[a] each", "[b] each"]
+["1 after 1 retries", "2 after 1 retries"]
+42 after 3 retries
+abc: hi
+OK
+waited 1

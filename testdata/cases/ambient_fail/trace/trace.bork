@@ -1,0 +1,11 @@
+ambient Id: String
+ambient secret: String
+
+// Other packages could not bind secret, so they could not call Leak.
+fn Leak() needs secret: String {
+  secret
+}
+
+fn Ok() needs Id: String {
+  Id
+}

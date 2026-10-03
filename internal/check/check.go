@@ -35,6 +35,8 @@ type Package struct {
 	inScope   []*ClassInstance
 	// bundles holds the package's named sets of instances.
 	bundles map[string]*bundle
+	// ambients holds the package's ambient values by name.
+	ambients map[string]*Ambient
 }
 
 // TypeNamed is the record, sealed, or resource type the package
@@ -68,6 +70,10 @@ type Func struct {
 	Result     Type
 	// Effects is what the function declares it may do (`uses io`).
 	Effects Effects
+	// Needs lists the ambient values it reads (`needs traceId`), in
+	// the order of its hidden parameters, and NeedVars their variables.
+	Needs    []*FuncNeed
+	NeedVars []*Var
 	// Prelude is set for the built-in functions of prelude.
 	Prelude bool
 	// Synthetic is set for a predicate that stands for a function
@@ -261,6 +267,11 @@ type Info struct {
 	// generic functions.
 	instances map[*syntax.Call]*Instance
 	funcRefs  map[syntax.Expr]*Instance
+	// needArgs records what each call or reference of a function that
+	// needs ambient values passes for them.
+	needArgs map[syntax.Expr][]needSource
+	// withTypes holds the ambient type each with binding binds.
+	withTypes map[*syntax.WithBinding]Type
 	// recordTargets records what each record literal builds: a *Record
 	// or a *Variant.
 	recordTargets map[*syntax.RecordLit]any
@@ -407,6 +418,8 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	c.resolveGoMirrors(files)
 	c.checkRecordCycles()
 	c.info.OutOfRange = c.info.Named["OutOfRange"]
+	c.declareAmbients(files)
+	c.needsPlacement(files)
 	// Pass 2: collect function signatures, so functions can call each
 	// other regardless of declaration order.
 	for _, f := range files {
@@ -587,6 +600,9 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
+	// needsFix is the needs clause the function being checked is
+	// missing, offered as one fix (see reportUnprovided).
+	needsFix *pendingNeeds
 	// appliedWhere holds the written types whose where clauses
 	// constraints were made from (see unappliedWheres).
 	appliedWhere map[*syntax.TypeExpr]bool
@@ -734,9 +750,14 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		c.errorf(fd.Pos, "pred %s needs a parameter: the value it is about", fd.Name)
 		return
 	}
+	if _, ok := c.pkg.ambients[fd.Name]; ok {
+		c.errorf(fd.Pos, "%s is already the name of an ambient value", fd.Name)
+		return
+	}
 	fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude}
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
 	fn.Effects = c.effectsOf(fd.Uses)
+	c.needsOf(fn)
 	if fd.IsPred && fd.Uses != nil {
 		c.diags.AddCode(fd.Uses.Pos, "effect.pred", "pred %s cannot declare effects: predicates must be pure, or their facts could go stale", fd.Name)
 	}
@@ -775,6 +796,7 @@ func (c *checker) checkFunc(fn *Func) {
 		c.scopes[0][p.Name] = &local{typ: fn.Params[i], decl: p}
 	}
 	c.ensureDefaults(fn)
+	c.bindNeeds(fn)
 	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Unit) {
 		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
 	}
@@ -789,6 +811,8 @@ func (c *checker) checkFunc(fn *Func) {
 	}
 	c.used = 0
 	bodyType := c.block(fn.Decl.Body, want)
+	c.unusedNeeds(fn)
+	c.suggestNeeds(fn)
 	if isOpen(fn.Result) && c.used&EffOpen != 0 {
 		c.diags.AddCode(fn.Decl.Pos, "effect.open-result", "%s returns an open function, so it cannot call its open parameters itself (its callers are not charged for them); give them effects, or only return them", fn.Decl.Name)
 	}
@@ -838,6 +862,10 @@ func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 	}
 	if c.isTypeName(name) {
 		c.errorf(pos, "%s is already the name of a type", name)
+		return true
+	}
+	if _, ok := c.pkg.ambients[name]; ok {
+		c.errorf(pos, "%s is already the name of an ambient value (bork does not allow shadowing)", name)
 		return true
 	}
 	return false
@@ -1095,6 +1123,8 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.block(e, want)
 	case *syntax.ScopeExpr:
 		return c.record(e, c.scopeExpr(e, want))
+	case *syntax.WithExpr:
+		return c.withExpr(e, want)
 	case *syntax.Return:
 		c.returnExpr(e)
 		return c.record(e, Never)
@@ -1119,6 +1149,9 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 		l.used = true
 		c.info.defs[e] = l.decl
 		return l.typ
+	}
+	if a := c.ambientNamed(e.Name); a != nil {
+		return c.ambientIdent(e, a)
 	}
 	if fn, ok := c.funcNamed(e.Name); ok {
 		return c.funcValue(e, e.Name, fn, want)
@@ -1454,6 +1487,9 @@ func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 // branchNeedsContext reports whether a branch's value (a block's tail)
 // gets its type from the context, as `[]` does.
 func (c *checker) branchNeedsContext(x syntax.Expr) bool {
+	if w, ok := x.(*syntax.WithExpr); ok {
+		return c.branchNeedsContext(w.Body)
+	}
 	if b, ok := x.(*syntax.Block); ok {
 		if b.Tail == nil {
 			return false
