@@ -1,0 +1,1 @@
+main.bork:8:37: good requires value to be positive, but that is not proven for result of Wiring.number (saved) (check it first with if (positive(result of Wiring.number (saved))) { ... })

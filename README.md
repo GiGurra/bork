@@ -281,7 +281,9 @@ Compile-time dependency assembly wires ordinary provider functions by their
 signatures: `assemble[Server](app, newConfig, openDb, newServer)`. Shared
 dependencies build once per call, effects and failures stay checked, and resources
 belong to the explicit scope. `assembleAll[T]` collects several providers and
-`assembleRecord[R]` assembles a record's fields. See the
+`assembleRecord[R]` assembles a record's fields. Reuse wiring with
+`providers Services = { config: newConfig, database: openDb, server: newServer }`
+and specialize an entry with `Services(database: fakeDb)` at an assembly call. See the
 [SQLite and HTTP service example](examples/assemble/main.bork) and
 [assembly semantics](docs/requirements.md#compile-time-dependency-assembly).
 

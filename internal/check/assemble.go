@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -21,11 +22,14 @@ type Assembly struct {
 }
 
 type AssemblyProvider struct {
-	ID           int                  `json:"id"`
-	Label        string               `json:"label"`
-	Position     diag.Pos             `json:"position"`
-	Product      string               `json:"product"`
-	Dependencies []AssemblyDependency `json:"dependencies"`
+	Bundle        string               `json:"bundle,omitempty"`
+	Entry         string               `json:"entry,omitempty"`
+	EntryPosition *diag.Pos            `json:"entry_position,omitempty"`
+	ID            int                  `json:"id"`
+	Label         string               `json:"label"`
+	Position      diag.Pos             `json:"position"`
+	Product       string               `json:"product"`
+	Dependencies  []AssemblyDependency `json:"dependencies"`
 }
 
 type AssemblyDependency struct {
@@ -42,15 +46,26 @@ type AssemblyRoot struct {
 }
 
 type assemblyProvider struct {
-	x       syntax.Expr
-	fn      *Func
-	typ     *FuncType
-	product Type
-	errors  []Type
-	deps    []int
-	names   []string
-	state   int
-	used    bool
+	bundle, entry string
+	entryPos      diag.Pos
+	expected      Type
+	eval          int
+	x             syntax.Expr
+	fn            *Func
+	typ           *FuncType
+	product       Type
+	errors        []Type
+	deps          []int
+	names         []string
+	state         int
+	used          bool
+}
+
+func (p *assemblyProvider) label() string {
+	if p.bundle != "" {
+		return p.bundle + "." + p.entry + " (" + writtenText(p.x) + ")"
+	}
+	return writtenText(p.x)
 }
 
 type assemblyGraph struct {
@@ -108,10 +123,10 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		return Invalid
 	}
 	g := &assemblyGraph{c: c, call: call, target: target, success: target}
-	for i, x := range call.Args[1:] {
-		p := &assemblyProvider{x: x}
+	for i, p := range c.providerInputs(call.Args[1:]) {
+		x := p.x
 		// Direct references retain declaration facts and become direct calls.
-		if id, ok := x.(*syntax.Ident); ok && c.lookup(id.Name) == nil {
+		if id, ok := x.(*syntax.Ident); ok && p.fn == nil && c.lookup(id.Name) == nil {
 			if fn, ok := c.funcNamed(id.Name); ok {
 				if len(fn.TypeParams) > 0 {
 					g.problem("provider", x.Position(), "provider #%d %s is generic; use a monomorphic adapter", i+1, id.Name)
@@ -132,6 +147,9 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		p.product = p.typ.Result
 		if u, ok := p.product.(*Union); ok {
 			p.product, p.errors = u.Members[0], u.Members[1:]
+		}
+		if p.expected != nil && !identical(p.product, p.expected) {
+			g.problem("bundle", x.Position(), "replacement for %s.%s must produce %s, found %s", p.bundle, p.entry, TypeText(p.expected, c.pkg), TypeText(p.product, c.pkg))
 		}
 		if p.product == Scope || assemblyOwner(p.product) || p.product == Unit || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasTypeParam(p.typ) || hasOpenEffects(p.typ) {
 			g.problem("provider", x.Position(), "provider #%d has unsupported signature %s", i+1, p.typ)
@@ -216,7 +234,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 	// When a root or edge is ambiguous, its candidates have been marked used.
 	for i, p := range g.providers {
 		if p.product != nil && !p.used {
-			g.problem("unused", p.x.Position(), "unused provider #%d %s produces %s", i+1, writtenText(p.x), p.product)
+			g.problem("unused", p.x.Position(), "unused provider #%d %s produces %s", i+1, p.label(), p.product)
 		}
 	}
 	resultTypes := []Type{g.success}
@@ -291,7 +309,7 @@ func (g *assemblyGraph) find(t Type, pos diag.Pos, label string) int {
 		var labels []string
 		for _, i := range found {
 			g.providers[i].used = true
-			labels = append(labels, fmt.Sprintf("#%d %s", i+1, writtenText(g.providers[i].x)))
+			labels = append(labels, fmt.Sprintf("#%d %s", i+1, g.providers[i].label()))
 		}
 		if !g.isAmbiguous(t) {
 			g.ambiguous = append(g.ambiguous, t)
@@ -333,7 +351,7 @@ func (g *assemblyGraph) visit(i int) {
 			}
 		}
 		for _, n := range append(append([]int(nil), cycle...), i) {
-			path = append(path, fmt.Sprintf("%s (#%d %s)", g.providers[n].product, n+1, writtenText(g.providers[n].x)))
+			path = append(path, fmt.Sprintf("%s (#%d %s)", g.providers[n].product, n+1, g.providers[n].label()))
 		}
 		g.problem("cycle", p.x.Position(), "dependency cycle: %s", strings.Join(path, " -> "))
 		return
@@ -344,7 +362,7 @@ func (g *assemblyGraph) visit(i int) {
 		if t == Scope {
 			continue
 		}
-		p.deps[j] = g.find(t, p.x.Position(), fmt.Sprintf("#%d %s parameter %s", i+1, writtenText(p.x), p.names[j]))
+		p.deps[j] = g.find(t, p.x.Position(), fmt.Sprintf("#%d %s parameter %s", i+1, p.label(), p.names[j]))
 		g.visit(p.deps[j])
 	}
 	g.path = g.path[:len(g.path)-1]
@@ -360,7 +378,10 @@ func (g *assemblyGraph) describe(mode string, result Type) *Assembly {
 		if p.product != nil {
 			product = TypeText(p.product, g.c.pkg)
 		}
-		out := AssemblyProvider{ID: i + 1, Label: writtenText(p.x), Position: p.x.Position(), Product: product, Dependencies: []AssemblyDependency{}}
+		out := AssemblyProvider{ID: i + 1, Label: p.label(), Position: p.x.Position(), Product: product, Dependencies: []AssemblyDependency{}}
+		if p.bundle != "" {
+			out.Bundle, out.Entry, out.EntryPosition = p.bundle, p.entry, &p.entryPos
+		}
 		if p.typ != nil {
 			for j, t := range p.typ.Params {
 				out.Dependencies = append(out.Dependencies, AssemblyDependency{Name: p.names[j], Type: TypeText(t, g.c.pkg), Provider: p.deps[j] + 1, Scope: t == Scope})
@@ -397,7 +418,7 @@ func (g *assemblyGraph) describe(mode string, result Type) *Assembly {
 			return
 		}
 		p := g.providers[i]
-		fmt.Fprintf(&tree, " <- #%d %s (%s)", i+1, writtenText(p.x), p.x.Position())
+		fmt.Fprintf(&tree, " <- #%d %s (%s)", i+1, p.label(), p.x.Position())
 		if seen[i] {
 			tree.WriteString(" [shared or cycle; see above]\n")
 			return
@@ -455,7 +476,13 @@ func (g *assemblyGraph) expand() *syntax.Block {
 	scopeBinding := &syntax.Binding{Pos: pos, Name: prefix + "scope", Value: g.call.Args[0]}
 	c.info.assemblyNames[scopeBinding] = writtenText(g.call.Args[0])
 	block.Stmts = append(block.Stmts, scopeBinding)
-	for i, p := range g.providers {
+	indices := make([]int, len(g.providers))
+	for i := range indices {
+		indices[i] = i
+	}
+	slices.SortFunc(indices, func(a, b int) int { return g.providers[a].eval - g.providers[b].eval })
+	for _, i := range indices {
+		p := g.providers[i]
 		if p.fn == nil {
 			block.Stmts = append(block.Stmts, &syntax.Binding{Pos: p.x.Position(), Name: prefix + fmt.Sprintf("provider%d", i), Value: p.x})
 		}
@@ -490,6 +517,15 @@ func (g *assemblyGraph) expand() *syntax.Block {
 		i := g.order[n]
 		p := g.providers[i]
 		fun := p.x
+		if p.fn != nil && p.bundle != "" {
+			ref := id(fmt.Sprintf("function%d", i))
+			ref.Pos = p.x.Position()
+			if c.assemblyFuncs == nil {
+				c.assemblyFuncs = map[string]*Func{}
+			}
+			c.assemblyFuncs[ref.Name] = p.fn
+			fun = ref
+		}
 		if p.fn == nil {
 			fun = id(fmt.Sprintf("provider%d", i))
 		}
@@ -504,13 +540,13 @@ func (g *assemblyGraph) expand() *syntax.Block {
 		valueName := prefix + fmt.Sprintf("value%d", i)
 		if len(p.errors) == 0 {
 			binding := &syntax.Binding{Pos: pos, Name: valueName, Value: call}
-			c.info.assemblyNames[binding] = "result of " + writtenText(p.x)
+			c.info.assemblyNames[binding] = "result of " + p.label()
 			tail = &syntax.Block{Pos: pos, End: g.call.End, Stmts: []syntax.Stmt{binding}, Tail: tail}
 			continue
 		}
 		m := &syntax.Match{Pos: pos, X: call}
 		success := &syntax.TypePat{Pos: pos, Name: valueName, Type: g.typeExpr(p.product, pos)}
-		c.info.assemblyNames[success] = "result of " + writtenText(p.x)
+		c.info.assemblyNames[success] = "result of " + p.label()
 		m.Arms = append(m.Arms, &syntax.Arm{Pattern: success, Body: tail})
 		for j, failure := range p.errors {
 			name := fmt.Sprintf("failure%d_%d", i, j)

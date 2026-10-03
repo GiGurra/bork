@@ -1,0 +1,2 @@
+Good { value: 5 }
+Good { value: 6 }

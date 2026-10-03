@@ -1,0 +1,12 @@
+main.bork:6:1: provider bundle Empty must contain at least one entry
+main.bork:8:11: provider bundle entry lambda must name a monomorphic declared function; use an adapter or a call-site replacement
+main.bork:9:12: provider bundle entry generic has unsupported signature (T) => T; use a monomorphic assembly provider
+main.bork:10:12: provider bundle entry builtin: println is not a declared function
+main.bork:11:10: provider bundle entry owner has unsupported signature (Scope) => OwnedScope; use a monomorphic assembly provider
+main.bork:12:10: provider bundle entry union has unsupported signature (Int | String) => Product; use a monomorphic assembly provider
+main.bork:13:12: provider bundle entry missing: unknown is not a declared function
+main.bork:15:3: provider bundle Invalid has duplicate entry duplicate
+main.bork:17:11: provider bundle provider conflicts with an existing declaration or imported package
+main.bork:18:11: provider bundle Product conflicts with an existing declaration or imported package
+main.bork:20:11: provider bundle Repeated conflicts with an existing declaration or imported package
+main.bork:24:11: provider bundle Context conflicts with an existing declaration or imported package

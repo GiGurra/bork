@@ -1,0 +1,6 @@
+open
+App { first: <Conn>, second: <Conn> }
+close
+open
+App { first: <Conn>, second: <Conn> }
+close

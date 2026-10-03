@@ -1,0 +1,1 @@
+main.bork:10:9: value may be released: it belongs to owned scope child, which was closed at line 9

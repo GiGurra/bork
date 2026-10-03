@@ -36,7 +36,8 @@ type Package struct {
 	// bundles holds the package's named sets of instances.
 	bundles map[string]*bundle
 	// ambients holds the package's ambient values by name.
-	ambients map[string]*Ambient
+	ambients  map[string]*Ambient
+	providers map[string]*ProviderBundle
 }
 
 // TypeNamed is the record, sealed, or resource type the package
@@ -235,11 +236,13 @@ type Info struct {
 	// (`unsafe go "os.Getenv"`).
 	GoBindings map[*Func]*GoBinding
 	// Embeds lists compile-time asset requests in source order.
-	Embeds        []*Embedded
-	embedCalls    map[*syntax.Call]*Embedded
-	assemblyCalls map[*syntax.Call]*assemblyExpansion
-	assemblyTypes map[*syntax.TypeExpr]Type
-	assemblyNames map[any]string
+	Embeds             []*Embedded
+	embedCalls         map[*syntax.Call]*Embedded
+	assemblyCalls      map[*syntax.Call]*assemblyExpansion
+	assemblyTypes      map[*syntax.TypeExpr]Type
+	assemblyNames      map[any]string
+	ProviderBundles    []*ProviderBundle
+	providerBundleUses []*providerBundleUse
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -433,6 +436,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	c.declareInstances(files)
 	c.declareDerived(files)
 	c.resolveUses(files)
+	c.declareProviderBundles(files)
 	for name, fn := range c.preludePkg.Funcs {
 		c.info.Funcs[name] = fn
 	}
@@ -472,6 +476,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	}
 	c.ensureAllFieldDefaults()
 	c.checkBindings(files, c.goTypes)
+	c.resolveProviderBundles()
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -603,6 +608,8 @@ type checker struct {
 	// needsFix is the needs clause the function being checked is
 	// missing, offered as one fix (see reportUnprovided).
 	needsFix *pendingNeeds
+	// assemblyFuncs resolves generated references to bundled declarations.
+	assemblyFuncs map[string]*Func
 	// appliedWhere holds the written types whose where clauses
 	// constraints were made from (see unappliedWheres).
 	appliedWhere map[*syntax.TypeExpr]bool
@@ -661,6 +668,9 @@ type local struct {
 // sees only the prelude). A qualified name ("money.add") is looked up in
 // an imported package, which must export it.
 func (c *checker) funcNamed(name string) (*Func, bool) {
+	if fn := c.assemblyFuncs[name]; fn != nil {
+		return fn, true
+	}
 	if c.inPrelude {
 		fn, ok := c.preludePkg.Funcs[name]
 		return fn, ok
@@ -703,7 +713,7 @@ func (c *checker) notFound(name string) string {
 	if isFunc && fn.Class != nil && !Exported(fn.Class.Name) {
 		return fmt.Sprintf("%s is a method of class %s, which package %s does not export", n, fn.Class.Name, pkg.Path)
 	}
-	if (isFunc || isType) && !Exported(n) {
+	if (isFunc || isType || pkg.providers[n] != nil) && !Exported(n) {
 		return fmt.Sprintf("%s is not exported by package %s (only names starting with an upper-case letter are)", n, pkg.Path)
 	}
 	return fmt.Sprintf("package %s has no %s", pkg.Path, n)
@@ -858,6 +868,10 @@ func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 	}
 	if _, ok := builtins[name]; ok {
 		c.errorf(pos, "%s is a built-in function (bork does not allow shadowing)", name)
+		return true
+	}
+	if c.providerBundleNamed(name) != nil {
+		c.errorf(pos, "%s is already the name of a provider bundle", name)
 		return true
 	}
 	if c.isTypeName(name) {
@@ -1153,6 +1167,10 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if a := c.ambientNamed(e.Name); a != nil {
 		return c.ambientIdent(e, a)
 	}
+	if c.providerBundleNamed(e.Name) != nil {
+		c.bundleError(e.Pos, "provider bundle %s can only be used in an assembly provider list", e.Name)
+		return Invalid
+	}
 	if fn, ok := c.funcNamed(e.Name); ok {
 		return c.funcValue(e, e.Name, fn, want)
 	}
@@ -1327,6 +1345,10 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	if t, ok := c.seqStatic(e); ok {
 		return t
 	}
+	if id, ok := e.Fun.(*syntax.Ident); ok && c.lookup(id.Name) == nil && c.providerBundleNamed(id.Name) != nil {
+		c.bundleError(id.Pos, "provider bundle %s can only be specialized in an assembly provider list", id.Name)
+		return Invalid
+	}
 	if t, ok := c.methodCallOf(e, want); ok {
 		return t
 	}
@@ -1370,7 +1392,11 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		}
 		return Invalid
 	}
-	return c.callFunc(e, id.Name, fn, e.Args, nil, e.TypeArgs, want)
+	name := id.Name
+	if c.assemblyFuncs[name] != nil {
+		name = fn.Decl.Name
+	}
+	return c.callFunc(e, name, fn, e.Args, nil, e.TypeArgs, want)
 }
 
 func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type) Type {

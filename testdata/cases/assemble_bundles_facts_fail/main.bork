@@ -1,0 +1,9 @@
+pred positive(n: Int) { n > 0 }
+type Good = { value: Int where positive }
+fn number(): Int where positive { 5 }
+fn good(value: Int where positive): Good { Good { value: value } }
+providers Wiring = { number: number, good: good }
+fn main() {
+  saved = number
+  scope app { println(assemble[Good](app, Wiring(number: saved))) }
+}

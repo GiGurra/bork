@@ -1,0 +1,13 @@
+type Label = { name: String }
+type Failure = { reason: String }
+fn label() uses io: Label { println("real provider"); Label { name: "real" } }
+fn unavailable(): Label | Failure { Failure { reason: "offline" } }
+providers Wiring = { label: label }
+fn pure(s: Scope): Label { assemble[Label](s, Wiring(label: () => Label { name: "pure" })) }
+fn main() {
+  scope s {
+    println(assemble[Label](s, Wiring))
+    println(pure(s))
+    println(assemble[Label](s, Wiring(label: unavailable)))
+  }
+}

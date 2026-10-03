@@ -1,0 +1,13 @@
+pred positive(n: Int) { n > 0 }
+type Good = { value: Int where positive }
+type Failure = { message: String }
+fn number(): Int where positive { 5 }
+fn fallible(): Int where positive | Failure { 6 }
+fn good(value: Int where positive): Good { Good { value: value } }
+providers Wiring = { number: number, good: good }
+fn main() {
+  scope s {
+    println(assemble[Good](s, Wiring))
+    println(assemble[Good](s, Wiring(number: fallible)))
+  }
+}

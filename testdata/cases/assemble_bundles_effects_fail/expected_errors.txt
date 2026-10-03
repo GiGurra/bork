@@ -1,0 +1,1 @@
+main.bork:3:29: pure uses io (it calls label), but its signature allows no effects; declare it: uses io

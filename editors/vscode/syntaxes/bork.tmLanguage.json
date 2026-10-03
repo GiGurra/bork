@@ -192,7 +192,7 @@
           }
         },
         {
-          "match": "\\b(type|class|instance|instances)\\s+([A-Za-z][A-Za-z0-9_]*)",
+          "match": "\\b(type|class|instance|instances|providers)\\s+([A-Za-z][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "storage.type.bork"
@@ -207,7 +207,7 @@
     "keywords": {
       "patterns": [
         {
-          "match": "\\b(fn|pred|type|class|instance|instances|rule)\\b",
+          "match": "\\b(fn|pred|type|class|instance|instances|providers|rule)\\b",
           "name": "storage.type.bork"
         },
         {

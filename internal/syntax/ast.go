@@ -9,11 +9,12 @@ type File struct {
 	Source string
 	// Package is the import path of the file's package (set by the
 	// driver), and Imports what the file imports.
-	Package string
-	Imports []*Import
-	Uses    []*Use
-	Bundles []*Bundle
-	Rules   []*RuleDecl
+	Package   string
+	Imports   []*Import
+	Uses      []*Use
+	Bundles   []*Bundle
+	Providers []*ProviderBundle
+	Rules     []*RuleDecl
 	// Classes and Instances; the instances' methods are also in Funcs.
 	Classes   []*ClassDecl
 	Instances []*InstanceDecl
@@ -24,6 +25,20 @@ type File struct {
 	Funcs    []*FuncDecl
 	Tests    []*TestDecl
 	Comments []Comment
+}
+
+// ProviderBundle is a compile-time named provider list.
+type ProviderBundle struct {
+	Pos     diag.Pos
+	NamePos diag.Pos
+	Name    string
+	Entries []*ProviderEntry
+}
+
+type ProviderEntry struct {
+	Pos      diag.Pos
+	Name     string
+	Provider Expr
 }
 
 // Import is `import "example.com/shop/money"` or, with a name to use

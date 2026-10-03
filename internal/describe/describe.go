@@ -13,14 +13,15 @@ import (
 )
 
 type Result struct {
-	Assembly      *check.Assembly           `json:"assembly,omitempty"`
-	SchemaVersion int                       `json:"schema_version"`
-	Position      diag.Pos                  `json:"position"`
-	Type          string                    `json:"type"`
-	Expression    string                    `json:"expression,omitempty"`
-	Definition    *diag.Pos                 `json:"definition,omitempty"`
-	Methods       []check.MethodDescription `json:"methods"`
-	Facts         []check.KnownFact         `json:"facts"`
+	ProviderBundle *check.ProviderBundleDescription `json:"provider_bundle,omitempty"`
+	Assembly       *check.Assembly                  `json:"assembly,omitempty"`
+	SchemaVersion  int                              `json:"schema_version"`
+	Position       diag.Pos                         `json:"position"`
+	Type           string                           `json:"type"`
+	Expression     string                           `json:"expression,omitempty"`
+	Definition     *diag.Pos                        `json:"definition,omitempty"`
+	Methods        []check.MethodDescription        `json:"methods"`
+	Facts          []check.KnownFact                `json:"facts"`
 	// BelongsTo lists the scopes the value belongs to: it is usable
 	// while all of them are open.
 	BelongsTo []string                   `json:"belongs_to,omitempty"`
@@ -30,16 +31,17 @@ type Result struct {
 
 // Selection is a source value and the position at which to query its facts.
 type Selection struct {
-	Expr       check.Expr
-	Func       *check.Func
-	Package    *check.Package
-	Type       check.Type
-	Expression string
-	Definition *diag.Pos
-	Site       diag.Pos
-	Value      bool
-	Callable   *check.CallableDescription
-	Assembly   *check.Assembly
+	ProviderBundle *check.ProviderBundleDescription
+	Expr           check.Expr
+	Func           *check.Func
+	Package        *check.Package
+	Type           check.Type
+	Expression     string
+	Definition     *diag.Pos
+	Site           diag.Pos
+	Value          bool
+	Callable       *check.CallableDescription
+	Assembly       *check.Assembly
 }
 
 func ParsePosition(text string) (diag.Pos, error) {
@@ -66,6 +68,9 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 	lines := strings.Split(string(src), "\n")
 	if pos.Line < 1 || pos.Col < 1 || pos.Line > len(lines) || pos.Col > len(lines[pos.Line-1]) {
 		return nil, fmt.Errorf("position %s is outside the source", pos)
+	}
+	if bundle, pkg := info.ProviderBundleAt(pos); bundle != nil {
+		return &Selection{ProviderBundle: bundle, Package: pkg, Type: check.Invalid, Definition: &bundle.Definition, Expression: bundle.Name}, nil
 	}
 	tokens, _ := syntax.Lex(pos.File, src, &diag.List{})
 	index := &sourceIndex{pos: pos, tokens: tokens, lines: lines}
