@@ -1,1 +1,1 @@
-main.bork:7:34: T of Wrap cannot be Duration: its generic implementation uses Encode, which cannot depend on opaque Go values
+main.bork:7:30: T of Wrap cannot be Duration: its generic implementation uses Encode, which cannot depend on opaque Go values
