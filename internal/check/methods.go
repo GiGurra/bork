@@ -348,3 +348,21 @@ func (c *checker) methodReference(sel *syntax.Selector) (*Func, string, bool) {
 	}
 	return fn, why, true
 }
+
+// methodReferenceOwner preserves a concrete alias's receiver specialization.
+// Bare generic namespaces leave their parameters to the reference's context.
+func (c *checker) methodReferenceOwner(e syntax.Expr) Type {
+	sel, ok := e.(*syntax.Selector)
+	if !ok {
+		return nil
+	}
+	name, ok := c.isTypeRef(sel.X)
+	if !ok || name == "List" || name == "Map" {
+		return nil
+	}
+	t := c.typeNamed(name)
+	if t == nil || genericBase(t) == t {
+		return nil
+	}
+	return t
+}

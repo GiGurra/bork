@@ -420,6 +420,15 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			}
 		}
 	}
+	if recv == nil && fn.Decl != nil && fn.Decl.IsMethod {
+		if owner := c.methodReferenceOwner(e.Fun); owner != nil {
+			c.solve(params[0], owner)
+			if !c.couldFit(params[0], owner) {
+				c.errorf(at, "%s requires receiver %s, found owner %s", name, c.zonk(params[0]), owner)
+				return fail()
+			}
+		}
+	}
 	types := make([]Type, len(args))
 	check := func(i int, a syntax.Expr) {
 		switch {
@@ -703,6 +712,9 @@ func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Typ
 			fresh[tp] = u
 			inst.TypeArgs = append(inst.TypeArgs, u)
 		}
+		if owner := c.methodReferenceOwner(e); owner != nil {
+			c.solve(subst(fn.Params[0], fresh), owner)
+		}
 		if want != nil {
 			c.solve(subst(fn.funcType(), fresh), want)
 		}
@@ -722,6 +734,10 @@ func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Typ
 		for _, p := range fn.Params {
 			inst.Params = append(inst.Params, subst(p, bound))
 		}
+	}
+	if owner := c.methodReferenceOwner(e); owner != nil && !c.couldFit(inst.Params[0], owner) {
+		c.errorf(e.Position(), "%s requires receiver %s, found owner %s", name, inst.Params[0], owner)
+		return Invalid
 	}
 	if !c.resolveDicts(inst, e.Position()) {
 		return Invalid

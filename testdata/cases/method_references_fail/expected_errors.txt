@@ -1,5 +1,10 @@
-main.bork:9:7: cannot tell what T is for List.length here; use it where a function type is expected, or call it in a lambda
-main.bork:11:18: String has no method missing
-main.bork:12:25: wrong must be (Int) => Int, found (String) => Int
-main.bork:14:44: printing must be (Point) => Unit, found (Point) uses io => Unit (it uses io, where a function that uses nothing is expected)
-main.bork:16:36: values of type F cannot be compared, so it has no Eq (functions, scopes, and resources have no ==)
+main.bork:13:39: aliasWrong must be (List[String]) => Int, found (List[Int]) => Int
+main.bork:15:24: list element must be Int, found String
+main.bork:16:30: Ints.length requires receiver List[String], found owner List[Int]
+main.bork:17:14: Strings.sum requires receiver List[Int], found owner List[String]
+main.bork:19:22: Strings.sum requires receiver List[Int], found owner List[String]
+main.bork:20:7: cannot tell what T is for List.length here; use it where a function type is expected, or call it in a lambda
+main.bork:22:18: String has no method missing
+main.bork:23:25: wrong must be (Int) => Int, found (String) => Int
+main.bork:25:44: printing must be (Point) => Unit, found (Point) uses io => Unit (it uses io, where a function that uses nothing is expected)
+main.bork:27:36: values of type F cannot be compared, so it has no Eq (functions, scopes, and resources have no ==)

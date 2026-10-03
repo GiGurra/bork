@@ -1,3 +1,6 @@
+type Ints = List[Int]
+type Counts = Map[String, Int]
+
 type Point = { x: Int, y: Int }
 type Callable = { value: () => Int }
 fn (c: Callable) value(): Int { 7 }
@@ -43,6 +46,10 @@ fn main() {
   printing = Point.print
   printing(Point { x: 4, y: 5 })
   List.forEach([Point { x: 5, y: 6 }], Point.print)
+  aliasLength = Ints.length
+  println(aliasLength([1, 2, 3]), Ints.length([1, 2]))
+  aliasPut = Counts.put
+  println(aliasPut({ "a": 1 }, "b", 2))
   // A directly called reference passes the receiver first.
   println(String.trim(" x "), List.length([1, 2]))
   println(List.map[Int, String]([1, 2], x => toString(x)))
