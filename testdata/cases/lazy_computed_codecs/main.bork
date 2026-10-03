@@ -1,8 +1,10 @@
+import "example.com/lazy_computed_codecs/settings"
 import "bork/env"
 import "bork/encoding"
 pred positive(n: Int) { n > 0 }
 fn double(n: Int where positive): Int { if (n <= 0) { panic("recipe ran before dependency validation") }; n * 2 }
 type Config = { lazy doubled: Int = double(n), n: Int where positive, tag: String = "default" } derive (Decode, Encode, GoStruct)
+type PrivateComputed = { n: Int, lazy secret: settings.Secret = settings.New(n) } derive (Decode, Encode, GoStruct)
 type Callback = { n: Int, lazy call: () => Int = () => n } derive (Decode, Encode, GoStruct)
 type Choice = sealed { Item { n: Int, lazy doubled: Int = n * 2 }, Empty } derive (Decode, Encode)
 fn round[T: GoStruct](value: T): T | GoValueError unsafe go {
@@ -14,6 +16,11 @@ fn zero[T: GoStruct](): T | GoValueError unsafe go {
  if len(errs)>0{return errs[0]};return result
 }
 fn fields[T: GoStruct](): Int unsafe go {return int64(len(_d_T_GoStruct.Fields()))}
+fn decoders[T: GoStruct](): Int unsafe go {
+ var count int64
+ for _,field:=range _d_T_GoStruct.Fields(){if field.Decode!=nil{count++}}
+ return count
+}
 fn decode(text: String) uses io {
   result: Config | JsonError | DecodeError = decodeJson(text)
   match (result) { c: Config => { println(c.doubled); println(encodeJson(c)) }, e: JsonError => println(e), e: DecodeError => println(s"error ${e.path}: ${e.message}") }
@@ -21,7 +28,7 @@ fn decode(text: String) uses io {
 fn main() {
   c = Config { n: 3 }; println(encodeJson(c))
   match (round(c)) { v: Config => println(v.doubled), e: GoValueError => println(e) }
-  println(fields[Config]())
+  println(fields[Config]()); println(decoders[Config]())
   println(zero[Config]())
   decode("{\"n\":5}")
   decode("{\"n\":0}")
@@ -34,4 +41,6 @@ fn main() {
   println(fields[Callback]())
   cb: Callback | DecodeError | JsonError = decodeJson("{\"n\":4}")
   match (cb) { value: Callback => { println(value.call()); println(encodeJson(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
+  privateResult: PrivateComputed | DecodeError | JsonError = decodeJson("{\"n\":7}")
+  match (privateResult) { value: PrivateComputed => { println(value.secret.value); println(encodeJson(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
 }

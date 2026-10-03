@@ -1,6 +1,7 @@
 {"n":3,"tag":"default"}
 6
 2
+2
 GoValueError { path: "result.n", message: "must be positive" }
 10
 {"n":5,"tag":"default"}
@@ -12,3 +13,5 @@ error .doubled: computed field is read-only
 1
 4
 {"n":4}
+7
+{"n":7}

@@ -1021,15 +1021,38 @@ func (c *checker) deriveInstance(td *syntax.TypeDecl, t Type, cl *Class, prelude
 	c.info.ClassInstances = append(c.info.ClassInstances, ci)
 }
 
+// A provisional derivation is available while defaults are checked, but a
+// rejected one must not participate in delegation or instance selection.
+func (c *checker) discardDerived(ci *ClassInstance) {
+	without := func(instances []*ClassInstance) []*ClassInstance {
+		out := make([]*ClassInstance, 0, len(instances))
+		for _, instance := range instances {
+			if instance != ci {
+				out = append(out, instance)
+			}
+		}
+		return out
+	}
+	c.info.ClassInstances = without(c.info.ClassInstances)
+	ci.Pkg.instances = without(ci.Pkg.instances)
+	for _, pkg := range c.pkgs {
+		pkg.inScope = without(pkg.inScope)
+	}
+	for _, method := range ci.Methods {
+		delete(c.info.FuncOf, method.Decl)
+	}
+}
+
 // resolveDerived finds the instances the fields of derived instances'
 // types need, now that it is known which instances are in scope.
 func (c *checker) resolveDerived() {
 	for _, ci := range c.info.ClassInstances {
-		if len(ci.Methods) == 0 || ci.Methods[0].Derived == nil {
+		if !IsGoStruct(ci.Class) && (len(ci.Methods) == 0 || ci.Methods[0].Derived == nil) {
 			continue
 		}
 		if IsGoStruct(ci.Class) {
 			if r, ok := ci.Type.(*Record); !ok || !r.GoStruct {
+				c.discardDerived(ci)
 				continue
 			}
 		}
@@ -1042,6 +1065,7 @@ func (c *checker) resolveDerived() {
 			case *Record:
 				c.errorf(ci.Decl.Pos, "cannot derive %s for %s: package %s controls construction of %s; use an instance provided by that package", ci.Class.Name, owner, t.Pkg.Path, t.Name)
 			}
+			c.discardDerived(ci)
 			continue
 		}
 		if IsGoStruct(ci.Class) {
