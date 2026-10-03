@@ -5,7 +5,7 @@ class Size[T] {
   fn size(x: T): Int
 }
 instance sizeString: Size[String] {
-  fn size(x: String): Int { byteLength(x) }
+  fn size(x: String): Int { x.byteLength() }
 }
 
 type Box[T] = { values: List[T] }
