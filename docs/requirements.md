@@ -320,6 +320,192 @@ method/computed identities (`bork-rgy4as`).
 Arithmetic implications must respect the sized-number overflow rules; no
 built-in `lo < hi => lo + 1 <= hi` shortcut is added here (`bork-ggj8ew`).
 
+### Construction control (bork-kum0ep design)
+
+A declared type can guarantee valid states independently of where a caller
+obtained its value. Required fields, closed defaults, sibling-field facts
+(bork-k3nrwg), and sealed alternatives already express much of this contract.
+This increment adds whole-value invariants and ownership of record construction.
+
+**Whole-value invariants.** A record or sealed declaration can carry ordinary
+predicate clauses after its body and before `derive`:
+
+```bork
+pred ordered(r: Range) { r.lo <= r.hi }
+type Range = { lo: Int, hi: Int } where ordered
+
+pred valid(s: State) {
+  match (s) {
+    State.Idle => true,
+    State.Running { lo, hi } => lo <= hi,
+  }
+}
+type State = sealed {
+  Idle,
+  Running { lo: Int, hi: Int } where valid,
+} where valid
+```
+
+A clause takes the completed value as its subject, with the existing `and`
+and `or` combinations and constant predicate arguments. A record declaration
+may also retain sibling-field clauses, such as `hi: Int where atLeast(lo)`;
+these are field relations within the same type contract. A clause on a sealed
+variant takes a value of the parent sealed type, since variants have no
+separate source-language type. It applies only to that variant. A clause on
+the sealed declaration applies to every variant, including fieldless ones.
+Generic declarations instantiate predicates against the concrete type.
+Mutable opaque Go values cannot be subjects of facts.
+
+Construction uses a completed but **unvalidated candidate**, whose underlying
+fields have ordinary types but whose own nominal invariants are unavailable.
+The facts pass proves its field and type obligations before publishing the
+candidate as a value carrying those facts. In particular, the constructor's
+own type cannot discharge its goal. Decoders and Go conversions use the same
+phases: convert and fill defaults, validate, then expose a valid value.
+
+Invariant predicates inspect this underlying representation without assuming
+the invariants they establish. The same restriction follows an unchecked
+candidate into predicates or helpers called by the validator: a helper may
+not obtain a nominal precondition merely because its argument has the type
+currently being validated. Such a requirement needs an independent proof.
+The implementation must check this validation call graph, including imported
+helpers, or reject a call whose assumptions cannot be checked. Self-dependent
+and mutually dependent preconditions are rejected with a cycle diagnostic;
+ordinary terminating predicate recursion does not itself establish a fact.
+Validation may use a field's already-checked independent constraints, but must
+not use the target invariant or a relation that depends on it to establish
+itself. Negative cases cover a trivially circular predicate/helper contract,
+mutual dependencies and invalid construction or decoding that would otherwise
+pass by the candidate's nominal type.
+
+Construction proves all field and whole-value invariants. A record `copy`
+rechecks its whole-value clauses against the completed changed record, and
+recursively checks changed nested records; unchanged nested values retain
+their guarantees. Every value of a declared type carries its type-level
+facts, whether it is a parameter, a returned value, a collection element, or
+a destructured value. A variant fact is known only after narrowing to that
+variant. An alias preserves both these guarantees and construction control.
+Invariants are nominal contracts, not extra requirements that must be
+repeated on every function parameter.
+
+An unchanged source record keeps its own facts during a copy, while the new
+candidate has no whole-value invariant until revalidation. The prover can
+unfold established simple invariants to recover comparison and predicate
+consequences on source fields. Only field identities whose value is unchanged
+survive into the candidate; changing a nested path invalidates facts about
+that path and any whole value containing it. Thus `configured(c)` can supply
+`admin == false || token != ""` for the unchanged admin/token fields in
+`c.copy(hi: hi)`, but cannot itself prove `configured` of the new value.
+A user rule can expose consequences of an opaque predicate; no general
+logical consequence solver is added. Tests include the shown `WithHi`,
+invalid admin/token changes, and nested changes invalidating an enclosing
+invariant as well as the nested type's invariant.
+
+The facts pass uses its existing backward search, comparison facts and rules.
+Simple predicate bodies can inspect the completed record's fields. A match
+on a constructor with a known variant can select its corresponding predicate
+branch and substitute that constructor's field values; it must not assume
+facts from a different branch. Opaque predicates still require declared facts,
+guards or rules. There is no implicit arithmetic solver, and no deferred
+runtime validation for ordinary bork construction. A smart constructor checks
+its inputs first and returns a typed error when they are invalid.
+
+**Construction belongs to a package.** Choose a contextual `private` modifier
+on a record's representation:
+
+```bork
+type Config = private {
+  lo: Int,
+  hi: Int,
+  admin: Bool = false,
+  token: String = "",
+  debug: Option[String] = Option.None,
+} where configured derive (Decode, Encode, GoStruct)
+
+pred configured(c: Config) {
+  c.lo <= c.hi && (c.admin == false || c.token != "")
+}
+```
+
+`Config` remains exported, and its fields remain readable and destructurable
+wherever the type is visible. Only its declaring package can construct a
+literal or use `copy` on it. A foreign nested copy cannot modify a private
+record's fields either; replacing a whole private-valued field with an
+already-valid value is allowed, provided the enclosing record's facts hold.
+The modifier is supported on record declarations, rather than aliases,
+resources, or sealed declarations. It does not change field visibility or
+make a type name private.
+
+The alternative is a sealed type with one lowercase variant:
+`type Config = sealed { config { ... } }`. That remains useful for a hidden
+representation, but foreign code cannot match its private variant, so it
+would need accessor methods for every readable field. It also introduces
+sealed dispatch for a value with exactly one shape. The record modifier
+expresses construction ownership while preserving the public field API.
+Lowercase sealed variants keep their existing stronger representation privacy.
+
+A package can expose smart constructors and checked updates:
+
+```bork
+// package settings
+type InvalidConfig = {}
+fn New(lo: Int, hi: Int, admin: Bool, token: String): Config | InvalidConfig {
+  if (lo > hi || (admin && token == "")) { return InvalidConfig {} }
+  Config { lo: lo, hi: hi, admin: admin, token: token }
+}
+fn (c: Config) WithHi(hi: Int): Config | InvalidConfig {
+  if (hi < c.lo) { return InvalidConfig {} }
+  c.copy(hi: hi)
+}
+```
+
+An importer can call `settings.New`, read `config.hi`, and pass the value on,
+but `settings.Config { ... }` and `config.copy(hi: ...)` report that the
+package controls construction. Diagnostics name the owning package and point
+to using its exported constructor or update method. The compiler does not
+invent a particular constructor name when none is declared. Required fields
+still have no default; optional data uses `Option` and can have `Option.None`
+as its default. Allowed alternatives still use sealed types: for example,
+`Transport.Tls { certificate: String, key: String }` requires both TLS inputs,
+while `Transport.Plain` requires neither. The config example will demonstrate
+these choices alongside the cross-field and admin-token invariants.
+
+**Runtime boundaries and derivation.** Package-owned `derive (Decode)` may
+construct a private record, and an importer can invoke that exported codec.
+Its generated decoder validates all field and type invariants after decoding
+and filling defaults, returning `DecodeError` before exposing an invalid
+value. CSV, environment and CLI decoding must reach the same complete-value
+validation through their schema/dictionary paths; field-only validation is
+insufficient for a whole-value or sibling constraint. `GoStruct.FromGo` and
+mirror conversions likewise validate the completed value and collect
+`GoValueError` diagnostics. A failed primitive conversion suppresses invariant
+checks that would inspect that invalid value. Exporting an owning package's
+codec or conversion dictionary is a deliberate checked construction API.
+
+Foreign derivation cannot manufacture a structural constructor for a private
+record, including one reachable through containers or generic specializations.
+It may delegate at a field boundary to a codec that the owning package exports,
+as existing private-variant derivation does (#105). Encoding may read public
+fields but cannot create a foreign decoding route. A foreign alias cannot
+remove the restriction. Generated constructors, default values, property
+inputs and shrunk property values must satisfy the same invariants. Property
+generation uses rejection filtering of completed values and reports exhausted
+generation for predicates it cannot satisfy; it must never execute a property
+on an invalid value. Test-mode validation also checks trusted `unsafe go`
+results. Explicit unsafe Go remains a trust boundary, rather than a way to
+obtain a compiler proof of arbitrary construction.
+
+**Acceptance cases.** Cover valid and invalid Range construction, a copy
+changing either bound, nested copies, defaults, generic records, known-variant
+and fieldless sealed construction, narrowing of per-variant facts, and opaque
+predicate requirements. Cover cross-package literal/copy rejection, readable
+fields and patterns, aliases, nested private records, smart constructors and
+updates. Exercise Decode, CSV/env/cli and Go conversion on invalid completed
+values, including defaults; verify owning codecs work across imports while
+foreign structural derive fails. Property generation and shrinking preserve
+both sibling and whole-value invariants. Update grammar, formatter, editor
+grammar, README and config examples with the implementation.
+
 ### Constrained inputs: examples
 
 Parameters carry their requirements in the signature. One parameter per line, with trailing commas, so the formatter can align columns and diffs stay small.
