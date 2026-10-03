@@ -103,6 +103,10 @@ type Var struct {
 	Let *Let
 	// Source is where a VarPattern's value comes from.
 	Source *VarSource
+	// Need is the need a VarAmbient reads.
+	Need *FuncNeed
+	// Ambient is the ambient value a with binding (a VarLet) binds.
+	Ambient *Ambient
 	// Unused is set for a binding or pattern name that is never read.
 	Unused bool
 }
@@ -258,6 +262,10 @@ type Block struct {
 	Stmts      []Stmt
 	Tail       Expr
 	End        diag.Pos // the closing '}'
+	// Labels are the bindings of a with's logged or propagated values,
+	// which the block publishes in the goroutine's labels once its
+	// statements (the with's bindings) have run, until it ends.
+	Labels []*Var
 }
 
 // ScopeBlock is `scope s { ... }`.

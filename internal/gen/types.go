@@ -1319,8 +1319,18 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 		g.usesEqual = true
 		src = append(src, assertRuntime)
 	}
+	marked := g.usesAmbients && len(g.ambientMarked()) > 0
+	if g.usesTests || marked {
+		src = append(src, labelRuntime)
+	}
 	if g.usesTests {
-		src = append(src, labelRuntime, testRuntime)
+		src = append(src, testRuntime)
+	}
+	switch {
+	case marked:
+		src = append(src, ambientRuntime, g.ambientDecls())
+	case g.usesAmbients:
+		src = append(src, ambientStubs)
 	}
 	if g.usesSnaps {
 		src = append(src, snapshotRuntime)

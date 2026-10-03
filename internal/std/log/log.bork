@@ -10,6 +10,12 @@
 // Configure changes the level, format, and destination. The runtime's
 // own messages (such as a scope's failures with logFailures()) are
 // written the same way.
+//
+// A record written while a with binds a logged ambient value
+// (`logged ambient requestId: String`, then
+// `with (requestId: id) { ... }`) also has that value, under the
+// declaration's name, before its own attributes: in every function, not
+// only those that need it.
 
 // Level is how important a record is. Records below the configured
 // level are dropped.
@@ -112,7 +118,11 @@ fn merge(a: Attrs, b: Attrs): Attrs unsafe go {
 fn write(level: Int, msg: String, attrs: Attrs) unsafe go {
   import "context"
   import "log/slog"
-  all := make([]slog.Attr, 0, _borkMapLen(attrs))
+  logged := _borkLogged()
+  all := make([]slog.Attr, 0, len(logged)+_borkMapLen(attrs))
+  for _, a := range logged {
+    all = append(all, slog.Any(a.Name, a.Value))
+  }
   _borkMapEach(attrs, func(k string, v any) bool {
     all = append(all, slog.Any(k, v))
     return true

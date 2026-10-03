@@ -26,6 +26,10 @@ type openMock struct {
 	frame  *ast.Ident
 	depth  int
 	scoped bool
+	// ambient is set for a with's publication of its marked values
+	// (see ambientPush), which ends as a mock does, by restoring the
+	// labels from before it.
+	ambient bool
 }
 
 // scopeBody is a scope block being generated: its body, and the Go
@@ -337,8 +341,11 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 		lit = g.genericMockBody(m, k, frame, names, body, capture)
 	}
 	var parent ast.Expr = ast.NewIdent("nil")
-	if n := len(g.openMocks); n > 0 {
-		parent = g.openMocks[n-1].frame
+	for i := len(g.openMocks) - 1; i >= 0; i-- {
+		if !g.openMocks[i].ambient {
+			parent = g.openMocks[i].frame
+			break
+		}
 	}
 	var scope *ast.Ident
 	if n, b := len(g.scopeBodies), len(g.blocks); n > 0 && b > 0 && g.scopeBodies[n-1].body == g.blocks[b-1] {
@@ -520,6 +527,10 @@ func endMocksOK(ending []openMock) []ast.Stmt {
 	var check []ast.Expr
 	for _, m := range ending {
 		method := "endOK"
+		if m.ambient {
+			out = append(out, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: m.frame, Sel: ast.NewIdent("restore")}}})
+			continue
+		}
 		if m.scoped {
 			method = "restoreOK"
 		} else {
@@ -586,22 +597,22 @@ func (g *gen) nextRef(inst *check.Instance, frame *ast.Ident, needs []ast.Expr) 
 // mock statement, each pointing to the frame in force where it was
 // pushed. A frame is attached to goroutines through Go's profiler
 // labels: it has a label set of its own (the labels before it, and
-// bork.mock), and _mockFrames maps that label set to it. The Go
+// bork.mock), and _mockFrames maps that label set to it, and to the
+// label sets a with makes from it while it is in force. The Go
 // runtime copies a goroutine's labels to every goroutine it starts, so
 // tasks, servers, and goroutines started by Go code see the mocks in
 // force where they were started.
 const mockRuntime = `package main
 
 import (
-	"context"
 	"fmt"
 	"math"
-	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 type _mockFrame struct {
@@ -611,8 +622,7 @@ type _mockFrame struct {
 	at     string // the mock statement's position
 	fn     any    // the mock: a func of the function's Go type
 	record bool   // whether calls are recorded (it has a handle)
-	ctx      context.Context // the frame's labels
-	prev     context.Context // the labels to restore when it ends
+	prev     unsafe.Pointer // the labels to restore when it ends
 	restored atomic.Bool
 	ok       atomic.Bool // its block ended normally
 	checked  atomic.Bool // its expectations were checked (or never will be)
@@ -924,22 +934,22 @@ func (f *_mockFrame) calls() []string {
 // is the mock open around it in the test. Its labels add bork.mock to
 // the goroutine's labels, keeping those.
 func _mockPush(id int, name, at string, record bool, fn any, parent *_mockFrame) *_mockFrame {
-	_labelsCheck.Do(_labelsCheckLayout)
-	base := context.Background()
-	if p := _labels(); p != nil {
-		if v, ok := _mockFrames.Load(p); ok {
-			base = v.(*_mockFrame).ctx
-		} else {
-			base = pprof.WithLabels(base, pprof.Labels(_labelList(p)...))
-		}
-	}
-	f := &_mockFrame{parent: parent, id: id, name: name, at: at, fn: fn, record: record, prev: base}
+	f := &_mockFrame{parent: parent, id: id, name: name, at: at, fn: fn, record: record, prev: _labels()}
 	f.idle = sync.NewCond(&f.mu)
 	f.changed = sync.NewCond(&f.mu)
-	f.ctx = pprof.WithLabels(base, pprof.Labels("bork.mock", strconv.FormatInt(_mockSeq.Add(1), 10)))
-	pprof.SetGoroutineLabels(f.ctx)
+	_labelsSet("bork.mock", strconv.FormatInt(_mockSeq.Add(1), 10))
 	_mockFrames.Store(_labels(), f)
 	return f
+}
+
+// Labels other code sets (a with's published values) keep the frame
+// in force.
+func init() {
+	_labelsMoved = func(from, to unsafe.Pointer) {
+		if f, ok := _mockFrames.Load(from); ok {
+			_mockFrames.Store(to, f)
+		}
+	}
 }
 
 // end ends the mock at the end of its block: restore, then finish.
@@ -952,7 +962,7 @@ func (f *_mockFrame) end() {
 // before (once), so the goroutines it starts from now on do not see it.
 func (f *_mockFrame) restore() {
 	if !f.restored.Swap(true) {
-		pprof.SetGoroutineLabels(f.prev)
+		_setLabels(f.prev)
 	}
 }
 

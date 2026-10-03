@@ -1,0 +1,22 @@
+level=INFO msg=unbound k=1
+level=INFO msg=bound requestId=r1 trace=00-abc-01 k=1
+send: traceparent=00-abc-01 
+level=INFO msg=nested requestId=r2 trace=00-abc-01 k=1
+send: traceparent=00-abc-01 x-attempt=2 
+level=INFO msg="after nested" requestId=r1 trace=00-abc-01 k=1
+level=INFO msg=task requestId=r1 trace=00-abc-01 k=1
+level=INFO msg=handler requestId=r1 trace=00-in-01 k=1
+send: traceparent=00-in-01 
+send: x-attempt=3 
+level=INFO msg="after serve" requestId=r1 trace=00-abc-01 k=1
+stopped
+level=INFO msg="after return" k=1
+level=INFO msg="not stopped" requestId=early k=1
+done
+send: x-attempt=2 
+send: 
+level=WARN msg="ignored an invalid propagated value" header=traceparent ambient=trace error="it does not have the facts of its type"
+level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it does not have the facts of its type"
+send: 
+level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it is not an Int"
+send: traceparent=t 

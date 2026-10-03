@@ -30,7 +30,23 @@ fn counted() needs count: Int {
   needPositive(count)
 }
 
+// An ambient type's facts are known where the value is needed, and a
+// with must prove them.
+ambient attempt: Int where positive
+
+fn attempted() needs attempt: Int {
+  needPositive(attempt)
+}
+
+fn bindAttempt(n: Int): Int {
+  a = with (attempt: 0) { attempted() }
+  b = with (attempt: n) { attempted() }
+  c = with (attempt: 2) { attempted() }
+  a + b + c
+}
+
 fn main() uses io {
   println(small("ok"))
   println(small("long enough"))
+  println(bindAttempt(1))
 }

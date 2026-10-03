@@ -270,11 +270,27 @@ type Uses struct {
 	Effects []Effect
 }
 
-// AmbientDecl declares an ambient value: `ambient traceId: String`.
+// AmbientDecl declares an ambient value: `ambient traceId: String`,
+// optionally marked `logged` (its value is added to every log line
+// written while a with binds it) or `propagated("header")` (sent
+// across process boundaries under that name).
 type AmbientDecl struct {
 	Pos  diag.Pos
 	Name string
 	Type *TypeExpr
+	// Logged is the position of the logged marker, if present.
+	Logged *diag.Pos
+	// Propagated is the propagated marker, if present.
+	Propagated *Propagated
+}
+
+// Propagated is the `propagated("traceparent")` marker of an ambient
+// declaration: the name of the header (or message metadata) that
+// carries the value.
+type Propagated struct {
+	Pos       diag.Pos
+	Header    string
+	HeaderPos diag.Pos
 }
 
 // Needs is a declaration of the ambient values a function reads:

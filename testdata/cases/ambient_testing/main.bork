@@ -1,4 +1,18 @@
 ambient traceId: String
+logged propagated("x-request") ambient requestId: String
+
+// What boundary code would send (effectful, as boundary code is).
+fn Sent() uses io: String unsafe go {
+  out := ""
+  for _, h := range _borkPropagated() {
+    out += h.Name + "=" + h.Value
+  }
+  return out
+}
+
+fn Label() uses io: String {
+  "real"
+}
 
 fn Tag(msg: String) uses io needs traceId: String {
   s"[${traceId}] ${msg}"
@@ -41,4 +55,33 @@ test "real" {
   calls = mock Tag(msg) { Tag(msg) }
   assertEqual(with (traceId: "t") { Report() }, "[t] r")
   assertEqual(calls.count(), 1)
+}
+
+// Mocks stay in force inside a with that publishes values, and a mock
+// pushed inside one keeps them.
+test "mocks and published values" {
+  mock Label() { "outer" }
+  with (requestId: "r1") {
+    assertEqual(Label(), "outer")
+    assertEqual(Sent(), "x-request=r1")
+    mock Label() { s"inner ${Sent()}" }
+    assertEqual(Label(), "inner x-request=r1")
+    with (requestId: "r2") {
+      assertEqual(Label(), "inner x-request=r2")
+    }
+    assertEqual(Label(), "inner x-request=r1")
+  }
+  assertEqual(Label(), "outer")
+  assertEqual(Sent(), "")
+}
+
+// Tasks see both.
+test "tasks see mocks and published values" {
+  mock Label() { "mocked" }
+  with (requestId: "r") {
+    scope s {
+      t = spawn(s, () => s"${Label()} ${Sent()}")
+      assertEqual(await(t), "mocked x-request=r")
+    }
+  }
 }

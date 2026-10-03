@@ -141,6 +141,8 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	for _, ci := range info.ClassInstances {
 		roots = append(roots, ci.Methods...)
 	}
+	// Incoming propagated values are checked with their facts.
+	roots = append(roots, g.ambientPreds()...)
 	emit := g.reachable(roots)
 	if main != nil {
 		emit[info.Funcs["main"]] = false
@@ -169,6 +171,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				}
 				if strings.Contains(fd.GoBody.Body, "_borkBytes") {
 					g.usesBytes = true
+				}
+				if strings.Contains(fd.GoBody.Body, "_borkLogged") || strings.Contains(fd.GoBody.Body, "_borkPropagated") || strings.Contains(fd.GoBody.Body, "_borkBindPropagated") {
+					g.usesAmbients = true
 				}
 				if strings.Contains(fd.GoBody.Body, "_borkMap") {
 					g.usesMap = true
@@ -410,6 +415,9 @@ type gen struct {
 	typeParamNames map[*check.TypeParam]string
 	mockErrors     diag.List
 	usesMocks      bool
+	// usesAmbients is set when the program publishes or reads logged
+	// or propagated ambient values (ambientRuntime).
+	usesAmbients bool
 	// blocks are the blocks being generated, and scopeBodies the scope
 	// blocks, so a mock can tell whether it is directly in a scope's
 	// body.
@@ -1394,6 +1402,9 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 	out := g.stmts(b.Stmts)
 	if g.diverges(b.Stmts) {
 		return out
+	}
+	if len(b.Labels) > 0 {
+		out = append(out, g.ambientPush(b.Labels)...)
 	}
 	if b.Tail == nil {
 		// A block without a value, where a union holding Unit is wanted.

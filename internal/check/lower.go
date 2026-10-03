@@ -107,7 +107,7 @@ func (l *lowerer) function(fn *Func) {
 	}
 	fn.NeedVars = nil
 	for i, n := range fn.Needs {
-		v := &Var{Name: n.Decl.Name, GoName: needVarName(fn, n), Pos: n.Decl.Pos, Type: n.Type, Kind: VarAmbient, Index: i}
+		v := &Var{Name: n.Decl.Name, GoName: needVarName(fn, n), Pos: n.Decl.Pos, Type: n.Type, Kind: VarAmbient, Index: i, Need: n}
 		l.vars[n.Decl] = v
 		fn.NeedVars = append(fn.NeedVars, v)
 	}
@@ -334,10 +334,19 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		out := &Block{expr: at, End: x.Body.End}
 		for _, b := range x.Bindings {
 			l.withs++
-			let := &Let{Pos: b.Pos, Value: l.expr(b.Value), Declared: true}
-			let.Var = &Var{Name: b.Name, GoName: fmt.Sprintf("_with%d_%s", l.withs, strings.ReplaceAll(b.Name, ".", "_")), Pos: b.Pos, Type: l.info.withTypes[b], Kind: VarLet, Let: let, Unused: l.info.unused[b]}
+			a := l.info.withAmbients[b]
+			if a == nil {
+				continue
+			}
+			// The ambient's facts are the binding's: the value must
+			// have them.
+			let := &Let{Pos: b.Pos, Value: l.expr(b.Value), Declared: true, Constraints: a.Constraints}
+			let.Var = &Var{Name: b.Name, GoName: fmt.Sprintf("_with%d_%s", l.withs, strings.ReplaceAll(b.Name, ".", "_")), Pos: b.Pos, Type: a.Type, Kind: VarLet, Let: let, Ambient: a, Unused: l.info.unused[b]}
 			l.vars[b] = let.Var
 			out.Stmts = append(out.Stmts, let)
+			if a.Marked() {
+				out.Labels = append(out.Labels, let.Var)
+			}
 		}
 		out.Tail = l.block(x.Body)
 		return out
