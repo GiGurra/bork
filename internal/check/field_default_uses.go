@@ -95,6 +95,16 @@ func (c *checker) materializeDefaultUses() {
 		}
 		return a.Col < b.Col
 	})
+	// Group the sorted lists once, so each specialization visits only its body.
+	usesByOwner := map[*Func][]use{}
+	for _, u := range uses {
+		usesByOwner[u.owner] = append(usesByOwner[u.owner], u)
+	}
+	exprsByOwner := map[*Func][]typed{}
+	for _, e := range exprs {
+		owner := c.info.exprOwners[e.expr]
+		exprsByOwner[owner] = append(exprsByOwner[owner], e)
+	}
 	seen := map[*Func]map[string]bool{}
 	var visit func(*Instance, diag.Pos)
 	var dict func(*Dict, map[*TypeParam]Type, diag.Pos, map[*Dict]bool)
@@ -135,23 +145,21 @@ func (c *checker) materializeDefaultUses() {
 		}
 		seen[fn][key] = true
 		bound := bindParams(fn.TypeParams, inst.TypeArgs)
-		for _, e := range exprs {
-			if c.info.exprOwners[e.expr] == fn && hasGenericFieldDefault(e.typ, map[Type]bool{}) {
+		for _, e := range exprsByOwner[fn] {
+			if hasGenericFieldDefault(e.typ, map[Type]bool{}) {
 				c.noteDefaultTypeUse(subst(e.typ, bound), pos)
 			}
 		}
-		for _, u := range uses {
-			if u.owner == fn {
-				args := make([]Type, len(u.inst.TypeArgs))
-				for i, t := range u.inst.TypeArgs {
-					args[i] = subst(t, bound)
-				}
-				next := *u.inst
-				next.TypeArgs = args
-				visit(&next, pos)
-				for _, d := range u.inst.Dicts {
-					dict(d, bound, pos, map[*Dict]bool{})
-				}
+		for _, u := range usesByOwner[fn] {
+			args := make([]Type, len(u.inst.TypeArgs))
+			for i, t := range u.inst.TypeArgs {
+				args[i] = subst(t, bound)
+			}
+			next := *u.inst
+			next.TypeArgs = args
+			visit(&next, pos)
+			for _, d := range u.inst.Dicts {
+				dict(d, bound, pos, map[*Dict]bool{})
 			}
 		}
 	}
