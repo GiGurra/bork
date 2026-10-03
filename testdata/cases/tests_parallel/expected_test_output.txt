@@ -1,0 +1,7 @@
+ok    a slow test's mock and snapshots are its own
+ok    a fast test's mock and snapshots are its own
+FAIL  a failure is reported as the failing test's
+      main.bork:45:3: expected "slow x", got "failing x"
+ok    a test without mocks calls the real function
+3 passed, 1 failed
+exit code 1

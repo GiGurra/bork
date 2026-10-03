@@ -48,6 +48,7 @@ type testParams struct {
 	AutoProperties bool   `optional:"true" descr:"also property-test the functions whose promises are trusted (unsafe go, or trust), on generated arguments"`
 	Seed           int64  `short:"s" optional:"true" descr:"the seed of every property test (default: one from the test's name)"`
 	Cases          int    `short:"c" optional:"true" descr:"how many cases each property test runs (default 100)"`
+	Parallel       int    `short:"p" optional:"true" descr:"how many tests run at a time, each on goroutines of its own (default 1); the report keeps their order"`
 }
 
 type runParams struct {
@@ -290,7 +291,10 @@ func main() {
 					if p.Cases < 0 {
 						fail(errors.New("--cases must be positive"))
 					}
-					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases})
+					if p.Parallel < 0 {
+						fail(errors.New("--parallel must be positive"))
+					}
+					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases, Parallel: p.Parallel})
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stderr)
 					}

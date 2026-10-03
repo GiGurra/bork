@@ -296,14 +296,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
-
-// _mockLabels gives the current goroutine's profiler label set (nil if
-// it has none). It is the hook profilers use; test builds only.
-//
-//go:linkname _mockLabels runtime/pprof.runtime_getProfLabel
-func _mockLabels() unsafe.Pointer
 
 type _mockFrame struct {
 	parent *_mockFrame
@@ -332,7 +325,7 @@ var _mockSeq atomic.Int64
 
 // _mockCurrent is the frame in force on this goroutine, or nil.
 func _mockCurrent() *_mockFrame {
-	p := _mockLabels()
+	p := _labels()
 	if p == nil {
 		return nil
 	}
@@ -401,20 +394,20 @@ func (f *_mockFrame) calls() []string {
 // is the mock open around it in the test. Its labels add bork.mock to
 // the goroutine's labels, keeping those.
 func _mockPush(id int, name string, record bool, fn any, parent *_mockFrame) *_mockFrame {
-	_mockCheck.Do(_mockCheckLabels)
+	_labelsCheck.Do(_labelsCheckLayout)
 	base := context.Background()
-	if p := _mockLabels(); p != nil {
+	if p := _labels(); p != nil {
 		if v, ok := _mockFrames.Load(p); ok {
 			base = v.(*_mockFrame).ctx
 		} else {
-			base = pprof.WithLabels(base, pprof.Labels(_mockForeign(p)...))
+			base = pprof.WithLabels(base, pprof.Labels(_labelList(p)...))
 		}
 	}
 	f := &_mockFrame{parent: parent, id: id, name: name, fn: fn, record: record, prev: base}
 	f.idle = sync.NewCond(&f.mu)
 	f.ctx = pprof.WithLabels(base, pprof.Labels("bork.mock", strconv.FormatInt(_mockSeq.Add(1), 10)))
 	pprof.SetGoroutineLabels(f.ctx)
-	_mockFrames.Store(_mockLabels(), f)
+	_mockFrames.Store(_labels(), f)
 	return f
 }
 
@@ -445,42 +438,5 @@ func (f *_mockFrame) finish() {
 	}
 	f.fn = nil // what it captured can go
 	f.mu.Unlock()
-}
-
-// _mockLabelSet is how runtime/pprof stores a label set: what
-// _mockLabels points to. _mockCheckLabels checks that it still is.
-type _mockLabelSet struct {
-	list []struct{ key, value string }
-}
-
-// _mockForeign lists the labels of a label set bork did not make, as
-// key, value, key, value, ..., so a mock keeps them.
-func _mockForeign(p unsafe.Pointer) []string {
-	var kv []string
-	for _, l := range (*_mockLabelSet)(p).list {
-		kv = append(kv, l.key, l.value)
-	}
-	return kv
-}
-
-var _mockCheck sync.Once
-
-// _mockCheckLabels fails loudly if this Go version stores profiler
-// labels differently than mocks expect.
-func _mockCheckLabels() {
-	ctx := pprof.WithLabels(context.Background(), pprof.Labels("bork.check", "1"))
-	done := make(chan []string)
-	go func() {
-		pprof.SetGoroutineLabels(ctx)
-		p := _mockLabels()
-		if p == nil {
-			done <- nil
-			return
-		}
-		done <- _mockForeign(p)
-	}()
-	if kv := <-done; len(kv) != 2 || kv[0] != "bork.check" || kv[1] != "1" {
-		panic("bork: mocks cannot read this Go version's profiler labels (runtime/pprof changed); please report it")
-	}
 }
 `

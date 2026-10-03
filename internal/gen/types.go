@@ -324,8 +324,11 @@ func _assertEqual[T any](actual, expected T, at string) {
 const testRuntime = `package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -339,50 +342,128 @@ type _test struct {
 // _skip is the panic of a test that finds it cannot run.
 type _skip struct{ why string }
 
-// The test running now, for assertSnapshot.
-var _tests struct {
-	sync.Mutex
-	current   *_test
-	snapshots int      // assertSnapshot calls so far in this test
-	written   []string // snapshot files written in this test
+// _testRun is a test running, or run: its state and its result.
+type _testRun struct {
+	t    *_test
+	done chan struct{}
+	msg  string
+	skip bool
+
+	mu        sync.Mutex
+	snapshots int      // assertSnapshot calls so far
+	written   []string // snapshot files written
 }
 
-// _runTests runs the tests, each until it fails (panics), and reports.
+// The tests running now, by their bork.test label. One at a time,
+// that is the one running; with $BORK_PARALLEL, each test's goroutine
+// carries its label, and so does every goroutine it starts.
+var _tests struct {
+	sync.Mutex
+	parallel bool
+	running  map[string]*_testRun
+}
+
+// _testCurrent is the test running on this goroutine, or nil.
+func _testCurrent() *_testRun {
+	key := ""
+	if _tests.parallel {
+		key = _label("bork.test")
+	}
+	_tests.Lock()
+	defer _tests.Unlock()
+	return _tests.running[key]
+}
+
+// _runTests runs the tests, each until it fails (panics), and reports
+// them in order. $BORK_PARALLEL tests run at a time (default 1).
 func _runTests(tests []_test) {
+	n, _ := strconv.Atoi(os.Getenv("BORK_PARALLEL"))
+	if n < 1 {
+		n = 1
+	}
+	_tests.parallel = n > 1
+	_tests.running = map[string]*_testRun{}
+	if _tests.parallel {
+		_labelsCheck.Do(_labelsCheckLayout)
+	}
+	// The report goes to stdout as it was: property tests silence
+	// os.Stdout while they run.
+	out := os.Stdout
+	runs := make([]*_testRun, len(tests))
+	for i := range tests {
+		runs[i] = &_testRun{t: &tests[i], done: make(chan struct{})}
+	}
+	// A test takes a slot until it ends, or, one at a time, until it is
+	// reported, so what it prints comes after the reports before it.
+	slots := make(chan struct{}, n)
+	go func() {
+		for i, r := range runs {
+			if r.t.run == nil {
+				close(r.done)
+				continue
+			}
+			slots <- struct{}{}
+			go func() {
+				if _tests.parallel {
+					defer func() { <-slots }()
+				}
+				r.start(strconv.Itoa(i + 1))
+			}()
+		}
+	}()
 	failed, skipped := 0, 0
-	for i, t := range tests {
-		if t.run == nil {
+	for _, r := range runs {
+		<-r.done
+		t := r.t
+		switch {
+		case t.run == nil:
 			skipped++
-			fmt.Printf("skip  %s\n", t.name)
-			continue
-		}
-		_tests.Lock()
-		_tests.current, _tests.snapshots, _tests.written = &tests[i], 0, nil
-		_tests.Unlock()
-		if msg, skip := _runTest(t.run); skip {
+			fmt.Fprintf(out, "skip  %s\n", t.name)
+		case r.skip:
 			skipped++
-			fmt.Printf("skip  %s (%s)\n", t.name, msg)
-		} else if msg != "" {
+			fmt.Fprintf(out, "skip  %s (%s)\n", t.name, r.msg)
+		case r.msg != "":
 			failed++
-			fmt.Printf("FAIL  %s\n      %s\n", t.name, _indent(msg))
-		} else {
-			fmt.Printf("ok    %s\n", t.name)
+			fmt.Fprintf(out, "FAIL  %s\n      %s\n", t.name, _indent(r.msg))
+		default:
+			fmt.Fprintf(out, "ok    %s\n", t.name)
 		}
-		_tests.Lock()
-		for _, path := range _tests.written {
-			fmt.Printf("      wrote %s\n", path)
+		r.mu.Lock()
+		for _, path := range r.written {
+			fmt.Fprintf(out, "      wrote %s\n", path)
 		}
-		_tests.current = nil
-		_tests.Unlock()
+		r.mu.Unlock()
+		if !_tests.parallel && r.t.run != nil {
+			<-slots
+		}
 	}
 	if skipped > 0 {
-		fmt.Printf("%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
+		fmt.Fprintf(out, "%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
 	} else {
-		fmt.Printf("%d passed, %d failed\n", len(tests)-failed, failed)
+		fmt.Fprintf(out, "%d passed, %d failed\n", len(tests)-failed, failed)
 	}
 	if failed > 0 {
 		os.Exit(1)
 	}
+}
+
+// start runs the test on this goroutine, as the test labelled key.
+func (r *_testRun) start(key string) {
+	defer close(r.done)
+	if !_tests.parallel {
+		key = ""
+	} else {
+		pprof.SetGoroutineLabels(pprof.WithLabels(context.Background(), pprof.Labels("bork.test", key)))
+	}
+	_tests.Lock()
+	_tests.running[key] = r
+	_tests.Unlock()
+	defer func() {
+		_tests.Lock()
+		delete(_tests.running, key)
+		_tests.Unlock()
+	}()
+	r.msg, r.skip = _runTest(r.t.run)
 }
 
 // _indent indents a failure message's lines after the first.
@@ -431,22 +512,24 @@ import (
 // read as \n). When updating, it writes the file instead if it is
 // missing or different.
 func _assertSnapshot(text, at string) {
-	_tests.Lock()
-	t := _tests.current
-	if t == nil {
-		_tests.Unlock()
+	r := _testCurrent()
+	if r == nil {
+		if _tests.parallel {
+			panic(at + ": assertSnapshot cannot tell which test is running here: with --parallel, call it from the test, or a task the test started")
+		}
 		panic(at + ": assertSnapshot works only while a test runs")
 	}
+	t := r.t
 	if t.snap == "" {
-		_tests.Unlock()
 		panic(at + ": assertSnapshot works only in tests, not in rules or property tests")
 	}
-	_tests.snapshots++
+	r.mu.Lock()
+	r.snapshots++
 	file := t.snap + ".snap"
-	if _tests.snapshots > 1 {
-		file = fmt.Sprintf("%s.%d.snap", t.snap, _tests.snapshots)
+	if r.snapshots > 1 {
+		file = fmt.Sprintf("%s.%d.snap", t.snap, r.snapshots)
 	}
-	_tests.Unlock()
+	r.mu.Unlock()
 	path := filepath.Join(os.Getenv("BORK_SNAPSHOTS"), file)
 	old, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -464,9 +547,9 @@ func _assertSnapshot(text, at string) {
 		if err := os.WriteFile(path, []byte(text+"\n"), 0o644); err != nil {
 			panic(at + ": " + err.Error())
 		}
-		_tests.Lock()
-		_tests.written = append(_tests.written, path)
-		_tests.Unlock()
+		r.mu.Lock()
+		r.written = append(r.written, path)
+		r.mu.Unlock()
 		return
 	}
 	if !found {
@@ -1096,7 +1179,7 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 		src = append(src, assertRuntime)
 	}
 	if g.usesTests {
-		src = append(src, testRuntime)
+		src = append(src, labelRuntime, testRuntime)
 	}
 	if g.usesSnaps {
 		src = append(src, snapshotRuntime)
