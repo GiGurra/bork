@@ -126,7 +126,7 @@ In priority order. When two values conflict, the higher one wins.
 
 ### General
 
-- **Strict evaluation**, not lazy. Laziness makes memory and performance hard to reason about in backend systems.
+- **Strict evaluation by default.** Explicit lazy bindings and fields are proposed below; ordinary expressions remain eager.
 - **A short propagation operator** (like Rust's `?`), so handling failures stays cheap. See section 4.
 - **No user-defined symbolic operators** (e.g. `|+|`, `>>=`).
 - **No hidden resolution magic.** Type class instances are resolved implicitly, but only from an explicitly imported, bounded set of places (see type classes below). Nothing like Scala 2's implicit conversions or whole-program implicit search.
@@ -1556,6 +1556,7 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 
 - **Some functions have two or more effects:** `delay(s, ms)`, `cancelAfter(s, ms)`, and `time.Sleep` are `clock + state` (they wait, and they observe or cause cancellation); `process.Run`, `Start`, `Await`, and `Stop` are `io + state`; the `bork/sql` functions are `io + net`, since a database may be a local file or a server; and the `bork/net` socket functions are `net + state` (`Listen`, `Wait`, `Bind`, `Resolve`), or `net + state + clock` where they read, write, or dial with a deadline.
 - **Pure means deterministic, with no outside action.** Calling a function that uses nothing twice with the same arguments gives the same result, and has no observable effect beyond allocating memory, logging, and maybe panicking. That is why reading an atom, or checking whether a scope was cancelled, is `state`: the answer can change between two calls. One known exception: an unordered map (`m.unordered()`) lists its entries in an order that differs between runs, and listing it stays pure. Seeding that order per program would close the gap, if it turns out to matter.
+- **Memo/task observations account for effects at creation.** Task.wait observes work charged at spawn. The proposed [lazy value](design/lazy.md) read similarly keeps type T and charges initializer effects at declaration/construction, although the first read can run that work. Such access is a stable memo observation, not permission to treat the initializer as a repeatable pure call. Compile-time predicate evaluation must never force a runtime lazy cell, including through an otherwise pure accessor or validator.
 - **The compiler's built-ins:** `println` and `assertSnapshot` (which writes snapshot files under `--update`) are `io`, and `toString`, `panic`, the conversions, `assert`, and `assertEqual` are pure.
 - **Making things is pure.** `atom(x)`, `channel(s, n)`, `spawn`, `launch`, `await`, `attach`, `onClose`, `scope` blocks and their policies, `http.Address`, `http.Text`, path functions such as `fs.Join`, JSON, CSV, strings, lists, and maps use nothing on their own. (`spawn` and `onClose` take on the effects of the work they are given; see open parameters below.)
 - **`panic` is pure.** It signals a bug, not an effect. The same goes for what the runtime does on its own when a scope ends: logging an orphaned task, or a failure under `logFailures()`, and the timing of `taskTimeout` and `cleanupTimeout`. These are runtime diagnostics, not actions of the code.
@@ -3257,6 +3258,16 @@ implementation requires a decision. Warnings do not change check's exit status.
 Build, run and test continue to accept these markers. We do not introduce a
 release build mode or marker rejection in this change: check surfaces unfinished
 code, and automated consumers can choose to enforce those warning codes.
+
+### Lazy bindings and record fields (proposal: bork-9zpf2t)
+
+`lazy name = expr` defers one initializer until its first read, memoizes its
+result and keeps the static type T. Lazy record fields provide a passable lazy
+value through `type Lazy[T] = { lazy value: T }`. Implement local bindings first,
+fields second and pure package bindings third. The complete design, including
+effects, facts, scopes, copies, derivation and tooling, is in
+[lazy bindings and record fields](design/lazy.md). Transparent async bindings
+(bork-mais5u) will share access machinery under a separate design.
 
 ### Generators and lazy sequences (implemented)
 
