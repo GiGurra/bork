@@ -220,6 +220,7 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 | [bork/rand](docs/std/rand.md) | Random draws and immutable seeded generators |
 | [bork/sql](docs/std/sql.md) | Scoped SQLite/Postgres connections and transactions |
 | [bork/time](docs/std/time.md) | Instants, durations and injectable clocks |
+| [bork/url](docs/std/url.md) | Immutable URLs, repeated query parameters and escaping |
 | [bork/uuid](docs/std/uuid.md) | Canonical UUIDs, generation and JSON string codecs |
 
 ## License
