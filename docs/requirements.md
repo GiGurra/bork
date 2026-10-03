@@ -885,7 +885,9 @@ A third-party Go package must be declared in `go-deps.mod` and `go-deps.sum`
 beside the user's `bork.mod`, or in an imported standard package's embedded
 manifests. The compiler merges requirements using Go's minimum version
 selection; user requirements can raise a standard package's pinned version.
-Unsupported module directives and conflicting checksums are errors. See
+Unsupported module directives and conflicting checksums are errors.
+`bork deps init`, `bork deps get <package@version>`, and `bork deps download`
+create and maintain the pinned user manifests using Go module tools. See
 [the dependency manifest format](std-go.md#user-go-dependencies).
 
 ### Opaque Go types

@@ -264,10 +264,35 @@ Different hashes for the same module/version are rejected. `replace`, `exclude`,
 
 Go resolves transitive requirements using its normal module graph. Builds and
 binding checks use `-mod=readonly`; the compiler does not edit the source
-manifests. Populate the manifests and checksums using Go's module tools and keep
-them under version control. Warm Go module caches support `GOPROXY=off`; an empty
+manifests. Populate the manifests and checksums with `bork deps` and keep them under
+version control. Warm Go module caches support `GOPROXY=off`; an empty
 offline cache fails with the missing module reported. Dependencies are not
-vendored. A future `bork deps` helper can make adding or updating manifests easier.
+vendored.
+
+The helper operates on the nearest `bork.mod` from the current directory (or
+`--path <directory>`), without needing valid bork source:
+
+```sh
+bork deps init                         # create empty manifests; refuse overwrite
+bork deps get github.com/google/uuid@v1.6.0  # add or pin a dependency
+bork deps get github.com/google/uuid@latest  # resolve and pin an update
+bork deps get github.com/google/uuid@none    # remove a dependency
+bork deps download                     # warm the cache and fill missing checksums
+```
+
+`get` accepts one or more Go package or module queries and creates the manifests
+if absent. It uses `go get`, retaining canonical resolved versions and indirect
+requirements, then `go mod download` to pin every requirement's checksums.
+`download` requires an existing manifest and can recreate a missing checksum
+file. These operations run in a temporary Go module; resolution or validation
+errors leave the project manifests untouched. An automatically added Go
+`toolchain` suggestion is omitted; the `go` directive records the minimum Go
+version. Other unsupported directives remain errors. The helper uses Go's normal
+proxy, checksum database, credentials, and module cache, while ignoring `GOWORK`
+and `GOFLAGS` so unrelated Go projects cannot redirect its work. It manages user
+requirements; imported standard packages continue to merge into the shared
+check/build graph when the program is compiled. `tidy` is intentionally absent:
+bork sources are not Go imports, so Go's tidy would remove needed dependencies.
 
 ## Codec privacy
 

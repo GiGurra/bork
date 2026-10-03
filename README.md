@@ -109,6 +109,8 @@ bork test --update .         # run the tests, writing the snapshots assertSnapsh
 bork test --auto-properties examples/payments  # also call trusted functions on generated arguments
 bork fmt examples           # format .bork files recursively in place
 bork fmt --check examples    # exit 1 if formatting would change a file
+bork deps get github.com/google/uuid@v1.6.0  # pin a Go dependency beside bork.mod
+bork deps download          # download pinned dependencies and fill checksums
 ```
 
 For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.

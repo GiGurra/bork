@@ -60,6 +60,15 @@ type describeParams struct {
 	JSON     bool   `optional:"true" descr:"write the compiler description as JSON"`
 }
 
+type depsParams struct {
+	Path string `optional:"true" default:"." descr:"directory in the bork module"`
+}
+
+type depsGetParams struct {
+	Packages []string `positional:"true" descr:"Go package or module queries (path@version, path@latest, or path@none)"`
+	Path     string   `optional:"true" default:"." descr:"directory in the bork module"`
+}
+
 func printDescription(result *describe.Result) {
 	if result.Expression != "" {
 		fmt.Println("expression:", result.Expression)
@@ -147,6 +156,36 @@ func main() {
 		Use:   "bork",
 		Short: "the bork compiler: a pragmatic backend language of guarantees",
 		SubCmds: boa.SubCmds(
+			boa.CmdT[boa.NoParams]{
+				Use:   "deps",
+				Short: "manage pinned user Go dependencies beside bork.mod",
+				SubCmds: boa.SubCmds(
+					boa.CmdT[depsParams]{
+						Use: "init", Short: "create empty go-deps.mod and go-deps.sum manifests",
+						RunFunc: func(p *depsParams, _ *cobra.Command, args []string) {
+							if err := driver.Deps(p.Path, "init", args); err != nil {
+								fail(err)
+							}
+						},
+					},
+					boa.CmdT[depsGetParams]{
+						Use: "get", Short: "add, update, or remove Go package dependencies",
+						RunFunc: func(p *depsGetParams, _ *cobra.Command, _ []string) {
+							if err := driver.Deps(p.Path, "get", p.Packages); err != nil {
+								fail(err)
+							}
+						},
+					},
+					boa.CmdT[depsParams]{
+						Use: "download", Short: "download pinned dependencies and fill in checksums",
+						RunFunc: func(p *depsParams, _ *cobra.Command, args []string) {
+							if err := driver.Deps(p.Path, "download", args); err != nil {
+								fail(err)
+							}
+						},
+					},
+				),
+			},
 			boa.CmdT[fmtParams]{
 				Use:   "fmt",
 				Short: "format bork source files in place",
