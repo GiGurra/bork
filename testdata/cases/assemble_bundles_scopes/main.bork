@@ -1,0 +1,19 @@
+type Conn = resource
+type App = { first: Conn, second: Conn }
+fn connect(s: Scope) uses io: Conn unsafe go {
+  import "fmt"
+  fmt.Println("open")
+  return Conn{handle: "connection", owner: s.Own(func() { fmt.Println("close") })}
+}
+fn application(conn: Conn in s, s: Scope): App { App { first: conn, second: conn } }
+providers Wiring = { connection: connect, application: application }
+fn main() {
+  scope root {
+    child = openScope(root)
+    first = assemble[App](child.scope, Wiring)
+    println(first)
+    closeScope(child)
+    second = assemble[App](root, Wiring)
+    println(second)
+  }
+}

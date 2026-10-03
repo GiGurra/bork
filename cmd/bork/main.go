@@ -76,6 +76,20 @@ func printDescription(result *describe.Result) {
 		fmt.Println("expression:", result.Expression)
 	}
 	fmt.Println("type:", result.Type)
+	if result.ProviderBundle != nil {
+		for _, e := range result.ProviderBundle.Entries {
+			fmt.Printf("provider %s: %s -> %s (uses %s)\n", e.Name, e.Function, e.Product, e.Effects)
+			if len(e.Dependencies) > 0 {
+				fmt.Println("  dependencies:", strings.Join(e.Dependencies, ", "))
+			}
+			if len(e.Failures) > 0 {
+				fmt.Println("  failures:", strings.Join(e.Failures, " | "))
+			}
+			if e.Replaced {
+				fmt.Println("  replaced for this assembly")
+			}
+		}
+	}
 	if result.Assembly != nil {
 		fmt.Println(result.Assembly.Tree)
 		fmt.Println("invocation order:", result.Assembly.Order)

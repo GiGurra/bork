@@ -1,0 +1,10 @@
+import "example.com/assemble-bundles-visibility/wiring"
+providers Invalid = { config: wiring.config }
+providers Number = { number: number }
+fn number(): Int { 1 }
+fn main() {
+  scope app {
+    println(assemble[wiring.Config](app, wiring.privateWiring))
+    println(assembleRecord[wiring.Secret](app, Number))
+  }
+}

@@ -72,6 +72,9 @@ func Describe(position, where string) (*describe.Result, error) {
 	if methods == nil {
 		methods = []check.MethodDescription{}
 	}
+	if selected.ProviderBundle != nil {
+		return &describe.Result{SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
+	}
 	return &describe.Result{SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
 }
 

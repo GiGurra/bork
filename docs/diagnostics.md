@@ -18,7 +18,8 @@ Named-call diagnostics use `call.unknown_argument`, `call.duplicate_argument`, `
 
 Dependency assembly uses `assemble.missing`, `assemble.duplicate`,
 `assemble.cycle`, `assemble.unused`, `assemble.provider`, `assemble.failure`
-and `assemble.target`. Each graph diagnostic's message includes the full rooted
+and `assemble.target`. `assemble.bundle` diagnoses invalid bundle declarations,
+misuse outside assembly, and invalid named replacements. Each graph diagnostic's message includes the full rooted
 dependency tree and supplied provider list, with missing/ambiguous slots, shared
 nodes and cycle paths marked. Facts, effects and lifetime violations in resolved
 provider calls use their ordinary diagnostic codes.

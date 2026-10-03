@@ -1,0 +1,4 @@
+ok    bundle providers retain native mock dispatch
+ok    a bundled mock can fail through the result union
+2 passed, 0 failed
+exit code 0

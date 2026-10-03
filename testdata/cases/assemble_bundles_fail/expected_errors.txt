@@ -1,0 +1,52 @@
+main.bork:7:30: unused provider #1 Wiring.config (config) produces Config
+assembly assemble[Database]:
+  Database <- #2 Wiring.database (fake) (main.bork:11:54)
+supplied:
+  #1 Wiring.config (config) -> Config (unused)
+  #2 Wiring.database (fake) -> Database
+main.bork:7:30: unused provider #1 Wiring.config (config) produces Config
+assembly assemble[Database]:
+  Database <- #2 Wiring.database (fake) (main.bork:13:54)
+supplied:
+  #1 Wiring.config (config) -> Config (unused)
+  #2 Wiring.database (fake) -> Database
+main.bork:7:30: unused provider #1 Wiring.config (config) produces Config
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring.config (config) -> Config (unused)
+  #2 Wiring.database (number) -> Int (unused)
+main.bork:7:48: ambiguous Config needed by #2 Wiring.database (database) parameter c: #1 Wiring.config (config), #3 Configs.config (config)
+assembly assemble[Database]:
+  Database <- #2 Wiring.database (database) (main.bork:7:48)
+    c: Config ?? ambiguous providers
+      candidate <- #1 Wiring.config (config) (main.bork:7:30)
+      candidate <- #3 Configs.config (config) (main.bork:8:31)
+supplied:
+  #1 Wiring.config (config) -> Config
+  #2 Wiring.database (database) -> Database
+  #3 Configs.config (config) -> Config
+main.bork:12:53: provider bundle Wiring has no entry unknown
+main.bork:13:70: provider bundle entry Wiring.database is replaced more than once
+main.bork:14:44: provider bundle Wiring takes only named entry replacements
+main.bork:15:48: provider bundle Wiring does not take type arguments
+main.bork:16:31: missing provider for Database, needed by target
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring.config (config) -> Config (unused)
+  #2 Wiring.database (number) -> Int (unused)
+main.bork:16:54: replacement for Wiring.database must produce Database, found Int
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring.config (config) -> Config (unused)
+  #2 Wiring.database (number) -> Int (unused)
+main.bork:16:54: unused provider #2 Wiring.database (number) produces Int
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring.config (config) -> Config (unused)
+  #2 Wiring.database (number) -> Int (unused)
+main.bork:18:13: provider bundle Wiring can only be used in an assembly provider list
+main.bork:20:5: provider bundle Wiring can only be specialized in an assembly provider list

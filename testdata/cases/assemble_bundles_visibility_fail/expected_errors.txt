@@ -1,0 +1,13 @@
+main.bork:2:31: provider bundle entry config: config is not exported by package example.com/assemble-bundles-visibility/wiring (only names starting with an upper-case letter are)
+main.bork:7:36: missing provider for Config, needed by target
+assembly assemble[wiring.Config]:
+  wiring.Config ?? missing provider
+supplied:
+  #1 wiring.privateWiring -> invalid (unused)
+main.bork:7:42: privateWiring is not exported by package example.com/assemble-bundles-visibility/wiring (only names starting with an upper-case letter are)
+main.bork:7:42: provider #1 must be a function with a concrete signature
+assembly assemble[wiring.Config]:
+  wiring.Config ?? missing provider
+supplied:
+  #1 wiring.privateWiring -> invalid (unused)
+main.bork:8:42: cannot construct Secret: package example.com/assemble-bundles-visibility/wiring controls its construction; use an exported constructor or update method from that package

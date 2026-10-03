@@ -1,0 +1,17 @@
+type Config = { name: String }
+type Database = { name: String }
+type Worker = { name: String }
+type App = { database: Database, worker: Worker }
+fn config(): Config { Config { name: "real" } }
+fn database(c: Config): Database { Database { name: c.name } }
+fn worker(db: Database): Worker { Worker { name: db.name } }
+fn extra(): Worker { Worker { name: "extra" } }
+providers Wiring = { config: config, database: database, worker: worker }
+providers Infrastructure = { config: config, database: database }
+providers Workers = { worker: worker }
+providers Extra = { worker: extra }
+
+type Secret = private { value: Int }
+fn secret(): Secret { Secret { value: 7 } }
+providers Secrets = { secret: secret }
+providers privateWiring = { config: config }

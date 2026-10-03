@@ -53,6 +53,10 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 				f.Instances = append(f.Instances, id)
 				f.Funcs = append(f.Funcs, id.Methods...)
 			}
+		case p.at(TIdent) && p.tok().Text == "providers" && p.peekKind() == TIdent:
+			if b := p.providerBundleDecl(); b != nil {
+				f.Providers = append(f.Providers, b)
+			}
 		case p.at(TIdent) && p.tok().Text == "instances" && p.peekKind() == TIdent:
 			if b := p.bundleDecl(); b != nil {
 				f.Bundles = append(f.Bundles, b)
@@ -176,7 +180,7 @@ func (p *parser) expect(k Kind, what string) Token {
 // syncTopLevel skips ahead to the next declaration at the start of a line.
 func (p *parser) syncTopLevel() {
 	for !p.at(EOF) {
-		if (p.at(KwFn) || p.at(KwType)) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
+		if (p.at(KwFn) || p.at(KwType) || p.at(TIdent) && p.tok().Text == "providers" && p.peekKind() == TIdent) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
 			return
 		}
 		p.next()
@@ -217,6 +221,21 @@ func (p *parser) list(closing Kind, what string, item func()) {
 		}
 	}
 	p.next()
+}
+
+func (p *parser) providerBundleDecl() (b *ProviderBundle) {
+	defer p.recoverDecl(func() { b = nil })
+	pos := p.next().Pos
+	name := p.expect(TIdent, "for provider bundle name")
+	b = &ProviderBundle{Pos: pos, NamePos: name.Pos, Name: name.Text}
+	p.expect(Assign, "after provider bundle name")
+	p.expect(LBrace, "before provider entries")
+	p.list(RBrace, "provider entry", func() {
+		entry := p.expect(TIdent, "for provider entry name")
+		p.expect(Colon, "after provider entry name")
+		b.Entries = append(b.Entries, &ProviderEntry{Pos: entry.Pos, Name: entry.Text, Provider: p.expr()})
+	})
+	return b
 }
 
 func (p *parser) typeDecl() (td *TypeDecl) {

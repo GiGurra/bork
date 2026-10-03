@@ -1,0 +1,27 @@
+import "example.com/assemble-bundles/wiring"
+type Config = { name: String }
+fn config(): Config { Config { name: "caller config must not be used" } }
+fn fake(c: wiring.Config): wiring.Database { wiring.Database { name: s"fake ${c.name}" } }
+fn extra(): wiring.Worker { wiring.Worker { name: "standalone" } }
+fn recipe(label: String) uses io: () => wiring.Config {
+  println(s"evaluate $label")
+  () => wiring.Config { name: label }
+}
+fn databaseRecipe(label: String) uses io: (wiring.Config) => wiring.Database {
+  println(s"evaluate $label")
+  (c: wiring.Config) => wiring.Database { name: s"$label ${c.name}" }
+}
+fn main() {
+  scope app {
+    println(assemble[wiring.Secret](app, wiring.Secrets).value)
+    println(assemble[wiring.Worker](app, wiring.Wiring))
+    println(assemble[wiring.Worker](app, wiring.Wiring()))
+    println(assembleRecord[wiring.App](app, wiring.Wiring(database: fake)))
+    fixture = wiring.Config { name: "fixture" }
+    println(assemble[wiring.Worker](app, wiring.Wiring(config: () => fixture)))
+    provider = fake
+    println(assemble[wiring.Worker](app, wiring.Wiring(database: provider)))
+    println(assembleAll[wiring.Worker](app, wiring.Infrastructure, wiring.Workers, wiring.Extra, extra))
+    println(assemble[wiring.Worker](app, wiring.Wiring(database: databaseRecipe("db"), config: recipe("cfg"))))
+  }
+}

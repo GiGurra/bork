@@ -1,0 +1,21 @@
+type Product = { name: String }
+fn provider(): Product { Product { name: "product" } }
+fn generic[T](x: T): T { x }
+fn owned(s: Scope): OwnedScope { openScope(s) }
+fn union(x: Int | String): Product { Product { name: toString(x) } }
+providers Empty = {}
+providers Invalid = {
+  lambda: () => Product { name: "lambda" },
+  generic: generic,
+  builtin: println,
+  owner: owned,
+  union: union,
+  missing: unknown,
+  duplicate: provider,
+  duplicate: provider,
+}
+providers provider = { entry: provider }
+providers Product = { entry: provider }
+providers Repeated = { entry: provider }
+providers Repeated = { entry: provider }
+fn main() {}
