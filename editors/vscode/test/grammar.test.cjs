@@ -54,14 +54,14 @@ function has(lines, row, text, scope) {
 }
 
 test('declarations, contextual keywords, maps, numbers, rune and pipeline', () => {
-  const ls = tokenize('fn f[T](x: T): T { x }\npred positive(x: Int) { x > 0 }\ntype T = sealed { Empty } derive (Encode)\nrule r(x: Int) { positive(x) => positive(x) }\nscope s with taskTimeout(1) { trust positive(1) }\n{"n": [0xff, 0b10, 0o7, 1_000, 1.5e-3], "r": \'\\n\'} |> show');
+  const ls = tokenize('fn f[T](x: T): T { x }\npred positive(x: Int) { x > 0 }\ntype T = sealed { Empty } derive (Encode)\nrule r(x: Int) { positive(x) => positive(x) }\nscope s with taskTimeout(1) { trust positive(1); mock Fetch(url) { url } }\n{"n": [0xff, 0b10, 0o7, 1_000, 1.5e-3], "r": \'\\n\'} |> show');
   has(ls, 0, 'fn', 'storage.type.function.bork');
   has(ls, 0, 'f[', 'entity.name.function.bork');
   has(ls, 1, 'positive', 'entity.name.function.bork');
   has(ls, 2, 'T', 'entity.name.type.bork');
   for (const word of ['sealed', 'derive']) has(ls, 2, word, 'keyword.control.bork');
   has(ls, 3, 'rule', 'storage.type.function.bork');
-  for (const word of ['scope', 'with', 'trust']) has(ls, 4, word, 'keyword.control.bork');
+  for (const word of ['scope', 'with', 'trust', 'mock']) has(ls, 4, word, 'keyword.control.bork');
   for (const number of ['0xff', '0b10', '0o7', '1_000', '1.5e-3']) has(ls, 5, number, 'constant.numeric.bork');
   has(ls, 5, '|>', 'keyword.operator.pipeline.bork');
   has(ls, 5, '\\n', 'constant.character.escape.bork');

@@ -75,6 +75,11 @@ type Func struct {
 	Synthetic bool
 	// Test is set for the function checking a test's body.
 	Test *syntax.TestDecl
+	// MockOf is set for the body of a `mock` statement in a test, checked
+	// as a function with the signature of the function it mocks. Its
+	// Decl.Params are the names the mock gives the parameters, and
+	// MockIn is the test it is in.
+	MockOf, MockIn *Func
 	// Calls lists the functions this function's body calls.
 	Calls []*Func
 	// ParamVars are the variables of the parameters, and Body the typed
@@ -209,6 +214,12 @@ type Info struct {
 	// VarLifetimes each variable's (see lifetimes.go), for queries.
 	Lifetimes    map[Expr][]string
 	VarLifetimes map[*Var][]string
+	// Mocks holds the bodies of the tests' `mock` statements (see
+	// Func.MockOf), and mocks them by statement.
+	Mocks []*Func
+	mocks map[*syntax.MockStmt]*Func
+	// MockType is the prelude's Mock, the type of a mock's handle.
+	MockType Type
 	// Rules holds the inference rules of every package.
 	Rules []*Rule
 	// GoBindings holds every checked binding to a Go function
@@ -348,6 +359,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			patSources:         map[any]*patSource{},
 			instances:          map[*syntax.Call]*Instance{},
 			funcRefs:           map[syntax.Expr]*Instance{},
+			mocks:              map[*syntax.MockStmt]*Func{},
 		},
 	}
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
@@ -923,6 +935,8 @@ func stmtPos(s syntax.Stmt) diag.Pos {
 		return s.X.Position()
 	case *syntax.TrustStmt:
 		return s.Pos
+	case *syntax.MockStmt:
+		return s.Pos
 	}
 	return diag.Pos{}
 }
@@ -994,6 +1008,8 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			c.errorf(s.X.Position(), "value of type %s is not used", t)
 		}
 		return t
+	case *syntax.MockStmt:
+		c.mockStmt(s)
 	}
 	return Unit
 }

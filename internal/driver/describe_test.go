@@ -515,3 +515,32 @@ fn main() {
 		})
 	}
 }
+
+func TestDescribeMocks(t *testing.T) {
+	source := `pred positive(n: Int) { n > 0 }
+fn Clamp(n: Int where positive) uses io: Int where positive { n }
+fn main() { println(Clamp(1)) }
+test "mocked" {
+  calls = mock Clamp(m) { m /* body */ }
+  assertEqual(Clamp(2), 2)
+  assertEqual(calls.count(), 1)
+}
+`
+	cases := []struct {
+		name, fragment, where, typ string
+		proven, defined            bool
+	}{
+		{"handle", "calls = mock", "", "Mock", false, true},
+		{"target", "Clamp(m)", "", "(Int) uses io => Int", false, true},
+		{"parameter", "m) {", "positive", "Int", true, true},
+		{"parameter in the body", "m /* body", "positive", "Int", true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := describeAt(t, source, c.fragment, c.where)
+			if got.typ != c.typ || got.proven != c.proven || got.defined != c.defined {
+				t.Fatalf("got %+v, want type %s, proven %v, defined %v", got, c.typ, c.proven, c.defined)
+			}
+		})
+	}
+}

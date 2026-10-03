@@ -19,6 +19,7 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and sleep |
 | [scopes.bork](scopes.bork) | Resource attachment, scope policies, and finalizers |
 | [environment.bork](environment.bork) | `IoError`, arguments, exit, and standard error output |
+| [testing.bork](testing.bork) | `Mock`, the handle of a mock in a test, and its `count` and `calls` |
 
 Parallel list callbacks are pure by default: `xs.parMap(f, workers: 4)`.
 For effects, use `xs.parMapIn(s, (child, x) => work(child, x))`; the supplied

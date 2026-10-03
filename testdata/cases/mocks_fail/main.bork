@@ -1,0 +1,53 @@
+import "bork/time"
+
+pred positive(n: Int) { n > 0 }
+
+fn Fetch(url: String) uses net: String {
+  panic(url)
+}
+
+fn total(xs: List[Int]): Int {
+  xs.fold(0, (a, b) => a + b)
+}
+
+fn Pick[T](xs: List[T]) uses random: Option[T] {
+  xs.get(0)
+}
+
+fn main() {
+  println(Fetch("x"), total([1]), Pick([1]))
+}
+
+fn helper() uses io {
+  mock Fetch(url) { "no" }
+  println("x")
+}
+
+test "mistakes" {
+  mock Fetch(url, extra) { "x" }
+  mock total(xs) { 1 }
+  mock positive(n) { true }
+  mock println(x) {}
+  mock Pick(xs) { Option.None }
+  mock missing(x) { 1 }
+  mock time.now() { time.Instant { unixNanos: 0 } }
+  mock Fetch(u) { 1 }
+  mock Fetch(u) { "again" }
+  f = (x: Int) => {
+    mock Fetch(u) { "in a lambda" }
+    x
+  }
+  _ = f
+  {
+    mock Fetch(u) {
+      if (u == "") {
+        return 1
+      }
+      "x"
+    }
+  }
+  mock time.Now() {
+    mock Fetch(u) { "nested" }
+    time.Instant { unixNanos: 0 }
+  }
+}

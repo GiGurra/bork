@@ -110,6 +110,15 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 		return t
 	case *syntax.ExprStmt:
 		return &ExprStmt{X: l.expr(s.X)}
+	case *syntax.MockStmt:
+		fn := l.info.mocks[s]
+		m := &Mock{Pos: s.MockPos, Target: fn.MockOf, Text: writtenText(s.Target), TargetPos: mockTargetPos(s.Target), Func: fn}
+		l.function(fn)
+		if s.Name != "" {
+			m.Var = &Var{Name: s.Name, Pos: s.Pos, Type: l.info.MockType, Kind: VarLet, Unused: l.info.unused[s]}
+			l.vars[s] = m.Var
+		}
+		return m
 	}
 	panic(fmt.Sprintf("unhandled statement %T", s))
 }
@@ -406,4 +415,12 @@ func (info *Info) constantOf(x syntax.Expr) constant.Value {
 		return constant.MakeBool(x.Value)
 	}
 	return nil
+}
+
+// mockTargetPos is where a mock's target starts: its first name.
+func mockTargetPos(x syntax.Expr) diag.Pos {
+	if sel, ok := x.(*syntax.Selector); ok {
+		return mockTargetPos(sel.X)
+	}
+	return x.Position()
 }

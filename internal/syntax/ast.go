@@ -285,6 +285,24 @@ type TrustStmt struct {
 	Call *Call
 }
 
+// MockStmt is `mock target(a, b) { ... }`, or `m = mock target(...)
+// { ... }` with a handle m that records the calls: in a test, it
+// replaces the function target until the end of the enclosing block.
+// Target is an *Ident (`fetch`, `payments.Charge`) or a *Selector
+// naming a method (`Store.save`, `model.Point.Value`). Params holds the
+// parameters' names only (no types); `_` ignores one.
+type MockStmt struct {
+	Pos     diag.Pos // the binding's name, or 'mock'
+	Name    string   // the handle's name, or ""
+	MockPos diag.Pos // 'mock'
+	Target  Expr
+	Params  []*Param
+	// ParamsStart and ParamsEnd are the positions of the '(' and ')'
+	// around the parameters.
+	ParamsStart, ParamsEnd diag.Pos
+	Body                   *Block
+}
+
 // Stmt is a statement inside a block.
 type Stmt interface{ stmtNode() }
 
@@ -305,6 +323,7 @@ type ExprStmt struct {
 func (*Binding) stmtNode()   {}
 func (*TrustStmt) stmtNode() {}
 func (*ExprStmt) stmtNode()  {}
+func (*MockStmt) stmtNode()  {}
 
 // Expr is an expression. Everything that produces a value is an
 // expression, including if, blocks, and return.

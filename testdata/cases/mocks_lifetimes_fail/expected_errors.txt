@@ -1,0 +1,2 @@
+main.bork:18:9: s2 may be released: it belongs to scope s, which ended on line 16
+main.bork:27:7: the mock of Reader cannot return this value: it belongs to scope s of the test, but callers of Reader expect a result that lives as long as its arguments

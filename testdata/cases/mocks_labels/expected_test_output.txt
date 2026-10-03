@@ -1,0 +1,4 @@
+ok    a mock keeps the labels it found, and restores them
+ok    a nested mock keeps its parent when Go code replaced the labels
+2 passed, 0 failed
+exit code 0

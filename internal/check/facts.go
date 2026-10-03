@@ -349,6 +349,13 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 					e = e.with(f.conditionFacts(ifx.Cond, true)...)
 				}
 			}
+		case *Mock:
+			// The mock's body keeps its target's promises, knowing what
+			// the test knows of the values it uses.
+			outer := f.fn
+			f.fn = s.Func
+			f.tail(s.Func.Body, e, f.checkResult)
+			f.fn = outer
 		case *Trust:
 			f.walk(s.Call, e)
 			facts := f.conditionFacts(s.Call, true)
@@ -763,6 +770,9 @@ func (f *factChecker) checkResult(x Expr, e env) {
 			if con.Path != "" {
 				req = fmt.Sprintf("%s promises that %s is %s", f.fn.Decl.Name, pathPhrase(con.Path, "its result"), con)
 			}
+			if f.fn.MockOf != nil {
+				req += ", so its mock must keep that promise"
+			}
 			ob := f.obligationOf(con, f.ownParams(), req)
 			var ok bool
 			var pending []Query
@@ -922,12 +932,23 @@ func constArg(v constant.Value) argVal {
 }
 
 // ownParams substitutes the current function's parameters.
-func (f *factChecker) ownParams() func(string) argVal {
-	fn := f.fn
+func (f *factChecker) ownParams() func(string) argVal { return f.paramsOf(f.fn) }
+
+// paramsOf substitutes fn's parameters by references to them.
+func (f *factChecker) paramsOf(fn *Func) func(string) argVal {
 	return func(param string) argVal {
 		for _, p := range fn.ParamVars {
 			if p.Name == param {
 				return f.argOf(f.paramRef(p))
+			}
+		}
+		// In a mock, a name can also be one of its test's parameters
+		// (names are never shadowed, so it is not ambiguous).
+		if in := fn.MockIn; in != nil {
+			for _, p := range in.ParamVars {
+				if p.Name == param {
+					return f.argOf(f.paramRef(p))
+				}
 			}
 		}
 		return argVal{text: param}
@@ -1635,6 +1656,9 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		case VarParam:
 			if f.ownsParam(d) {
 				add(f.fn.ParamConstraints[d.Index], f.ownParams())
+			} else if in := f.fn.MockIn; in != nil && isParamOf(d, in) {
+				// A property test's parameter, used in a mock.
+				add(in.ParamConstraints[d.Index], f.ownParams())
 			}
 		case VarLet:
 			add(d.Let.Constraints, f.ownParams())
@@ -1736,6 +1760,11 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 	// Another package's function promises only what its signature says,
 	// so that changing its body cannot break its importers.
 	if !fn.Prelude && f.fn != nil && fn.Pkg != f.fn.Pkg {
+		return false, nil
+	}
+	// Nor does a function a test mocks: the mock keeps only the
+	// signature's promises.
+	if f.info.Mocked(fn) {
 		return false, nil
 	}
 	f.active[activeKey] = true
@@ -2243,12 +2272,15 @@ func (f *factChecker) hint(x Expr, ob obligation) string {
 		if fn := call.Func; !fn.Prelude && f.fn != nil && fn.Pkg != f.fn.Pkg {
 			return fmt.Sprintf(" (%s does not promise it in its signature, and only what it promises is known outside its package; give the result a name and check it first)", fn.QualifiedName(f.from()))
 		}
+		if fn := call.Func; f.info.Mocked(fn) {
+			return fmt.Sprintf(" (%s does not promise it in its signature, and a test mocks it, so only what it promises is known; promise it in the signature, or give the result a name and check it first)", fn.QualifiedName(f.from()))
+		}
 	}
 	if ob.path != "" || name == "this value" {
 		return " (give it a name and check it first)"
 	}
 	check := fmt.Sprintf("if (%s) { ... }", checkText(name, ob, f.from()))
-	if ref, ok := x.(*VarRef); ok && f.ownsParam(ref.Var) {
+	if ref, ok := x.(*VarRef); ok && f.ownsParam(ref.Var) && f.fn.MockOf == nil {
 		p := ref.Var
 		return fmt.Sprintf(" (check it first with %s, or require it: %s: %s where %s)", check, p.Name, f.fn.Params[p.Index], ob.con)
 	}

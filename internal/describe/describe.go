@@ -253,6 +253,8 @@ func (s *sourceIndex) walk(x check.Expr) {
 				s.walk(stmt.X)
 			case *check.Trust:
 				s.walk(stmt.Call)
+			case *check.Mock:
+				s.mock(stmt)
 			}
 		}
 		s.walk(x.Tail)
@@ -467,6 +469,30 @@ func (s *sourceIndex) callee(call *check.Call) {
 	s.choose(call, &check.FuncType{Params: params, Result: call.Inst.Result, Effects: call.Func.Effects}, &pos)
 	s.selected.Value = false
 	s.selected.Callable = check.DescribeCallable(call.Func, params, s.fn.Pkg, call.ReceiverCall)
+}
+
+// mock selects in a mock statement: its handle, its target (the
+// function it mocks), its parameters (with the target's types), or code
+// in its body, which is checked as a function of its own.
+func (s *sourceIndex) mock(m *check.Mock) {
+	if m.Var != nil && s.contains(m.Var.Pos, len(m.Var.Name)) {
+		s.selectVar(m.Var, m.Pos)
+	}
+	if s.contains(m.TargetPos, len(m.Text)) {
+		pos := m.Target.Decl.Pos
+		s.choose(check.MockTargetRef(m), check.MockTargetRef(m).Type(), &pos)
+		s.selected.Value = false
+		s.selected.Callable = check.DescribeCallable(m.Target, m.Target.Params, s.fn.Pkg, false)
+	}
+	outer := s.fn
+	s.fn = m.Func
+	for _, p := range m.Func.ParamVars {
+		if s.contains(p.Pos, len(p.Name)) {
+			s.selectVar(p, m.Func.Body.Pos())
+		}
+	}
+	s.walk(m.Func.Body)
+	s.fn = outer
 }
 
 func (s *sourceIndex) pattern(p *check.Pat, site diag.Pos) {
