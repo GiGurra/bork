@@ -1,0 +1,94 @@
+// Package rand provides a default random source and pure immutable PCG draws.
+pred Above(value: Int, lower: Int) { value > lower }
+pred stateValid(state: Bytes) { validState(state) }
+type Generator = sealed { generator { state: Bytes where stateValid } }
+type Draw[T] = { value: T, next: Generator }
+
+fn validState(state: Bytes): Bool unsafe go {
+  import "math/rand/v2"
+  source := rand.NewPCG(0, 0)
+  return source.UnmarshalBinary(_borkBytesData(state)) == nil
+}
+fn Seed(first: Int, second: Int = 0): Generator unsafe go {
+  import "math/rand/v2"
+  source := rand.NewPCG(uint64(first), uint64(second))
+  state, _ := source.MarshalBinary()
+  return Generator_generator{state: _borkBytesFrom(state)}
+}
+instance ShowGenerator: Show[Generator] {
+  fn show(generator: Generator): String { "rand.Generator" }
+}
+
+// IntBetween draws lo <= value < hi, including ranges spanning Int's sign bit.
+fn IntBetween(lo: Int, hi: Int where Above(lo)) uses random: Int unsafe go {
+  import "math/rand/v2"
+  return int64(uint64(lo) + rand.Uint64N(uint64(hi)-uint64(lo)))
+}
+fn Float01() uses random: Float unsafe go {
+  import "math/rand/v2"
+  return rand.Float64()
+}
+fn Shuffle[T](values: List[T]) uses random: List[T] unsafe go {
+  import "math/rand/v2"
+  result := append([]T{}, values...)
+  rand.Shuffle(len(result), func(i, j int) { result[i], result[j] = result[j], result[i] })
+  return result
+}
+fn Pick[T](values: List[T]) uses random: Option[T] unsafe go {
+  import "math/rand/v2"
+  if len(values) == 0 { return _borkNone[T]() }
+  return _borkSome(values[rand.IntN(len(values))])
+}
+
+// From functions are pure: reuse an input Generator to replay the same draw.
+fn IntFrom(generator: Generator, lo: Int, hi: Int where Above(lo)): Draw[Int] {
+  drawInt(generator, lo, hi, (value, next) => Draw { value: value, next: next })
+}
+fn drawInt(generator: Generator, lo: Int, hi: Int where Above(lo), build: (Int, Generator) uses nothing => Draw[Int]): Draw[Int] unsafe go {
+  import "math/rand/v2"
+  source := rand.NewPCG(0, 0)
+  source.UnmarshalBinary(_borkBytesData(generator.(Generator_generator).state))
+  value := int64(uint64(lo) + rand.New(source).Uint64N(uint64(hi)-uint64(lo)))
+  state, _ := source.MarshalBinary()
+  return build(value, Generator_generator{state: _borkBytesFrom(state)})
+}
+fn FloatFrom(generator: Generator): Draw[Float] {
+  drawFloat(generator, (value, next) => Draw { value: value, next: next })
+}
+fn drawFloat(generator: Generator, build: (Float, Generator) uses nothing => Draw[Float]): Draw[Float] unsafe go {
+  import "math/rand/v2"
+  source := rand.NewPCG(0, 0)
+  source.UnmarshalBinary(_borkBytesData(generator.(Generator_generator).state))
+  value := rand.New(source).Float64()
+  state, _ := source.MarshalBinary()
+  return build(value, Generator_generator{state: _borkBytesFrom(state)})
+}
+fn ShuffleFrom[T](generator: Generator, values: List[T]): Draw[List[T]] {
+  drawShuffle(generator, values, (value, next) => Draw { value: value, next: next })
+}
+fn drawShuffle[T](generator: Generator, values: List[T], build: (List[T], Generator) uses nothing => Draw[List[T]]): Draw[List[T]] unsafe go {
+  import "math/rand/v2"
+  source := rand.NewPCG(0, 0)
+  source.UnmarshalBinary(_borkBytesData(generator.(Generator_generator).state))
+  result := append([]T{}, values...)
+  rand.New(source).Shuffle(len(result), func(i, j int) { result[i], result[j] = result[j], result[i] })
+  state, _ := source.MarshalBinary()
+  return build(result, Generator_generator{state: _borkBytesFrom(state)})
+}
+fn PickFrom[T](generator: Generator, values: List[T]): Draw[Option[T]] {
+  drawPick(generator, values, (value, next) => Draw { value: value, next: next })
+}
+fn drawPick[T](generator: Generator, values: List[T], build: (Option[T], Generator) uses nothing => Draw[Option[T]]): Draw[Option[T]] unsafe go {
+  import "math/rand/v2"
+  if len(values) == 0 { return build(_borkNone[T](), generator) }
+  source := rand.NewPCG(0, 0)
+  source.UnmarshalBinary(_borkBytesData(generator.(Generator_generator).state))
+  value := _borkSome(values[rand.New(source).IntN(len(values))])
+  state, _ := source.MarshalBinary()
+  return build(value, Generator_generator{state: _borkBytesFrom(state)})
+}
+
+fn (generator: Generator) IntBetween(lo: Int, hi: Int where Above(lo)): Draw[Int] { IntFrom(generator, lo, hi) }
+fn (generator: Generator) Float01(): Draw[Float] { FloatFrom(generator) }
+fn (generator: Generator) Shuffle[T](values: List[T]): Draw[List[T]] { ShuffleFrom(generator, values) }
+fn (generator: Generator) Pick[T](values: List[T]): Draw[Option[T]] { PickFrom(generator, values) }

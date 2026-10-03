@@ -1,0 +1,3 @@
+main.bork:3:15: Generator.generator is not exported by package bork/rand (only variants starting with an upper-case letter are)
+main.bork:5:41: cannot read state from a rand.Generator directly; use match to find out which variant it is
+main.bork:6:49: Generator.generator is not exported by package bork/rand (only variants starting with an upper-case letter are)
