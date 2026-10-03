@@ -19,7 +19,7 @@ instance decodePort: Decode[Port] {
 
 type Config = { host: String, port: Port, retries: Int } derive (Decode)
 
-fn show(text: String) {
+fn show(text: String) uses io {
   r: Config | JsonError | DecodeError = decodeJson(text)
   println(r)
 }

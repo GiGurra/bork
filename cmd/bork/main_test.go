@@ -191,11 +191,11 @@ func TestDescribeCLI(t *testing.T) {
 		t.Fatalf("build CLI: %v\n%s", err, out)
 	}
 	path := filepath.Join(dir, "main.bork")
-	source := "pred positive(n: Int) { n > 0 }\nfn example(n: Int) { println(n) }\n"
+	source := "pred positive(n: Int) { n > 0 }\nfn example(n: Int) uses io { println(n) }\n"
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	position := path + ":2:30"
+	position := path + ":2:38"
 	for _, asJSON := range []bool{false, true} {
 		t.Run(fmt.Sprintf("JSON %t", asJSON), func(t *testing.T) {
 			args := []string{"describe", position, "--where", "positive"}

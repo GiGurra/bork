@@ -1,4 +1,4 @@
-fn log(msg: String, value: Int): Int {
+fn log(msg: String, value: Int) uses io: Int {
   println("evaluating", msg)
   value
 }
@@ -7,7 +7,7 @@ fn pick(a: Int, b: Int): Int {
   a + b
 }
 
-fn loud(): Bool {
+fn loud() uses io: Bool {
   println("loud was called")
   true
 }

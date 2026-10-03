@@ -1,0 +1,20 @@
+main.bork:6:3: describe uses io (it calls println), but its signature allows no effects; declare it: uses io
+main.bork:18:3: both uses io (it calls println), but its signature allows only net; declare it: uses io + net
+main.bork:22:11: process uses io (it calls map, with a lambda that calls println), but its signature allows no effects; declare it: uses io
+main.bork:28:23: save declares net, but never uses it
+main.bork:31:3: loud uses io (it calls println), but predicates must be pure, or their facts could go stale
+main.bork:39:27: callsField uses io (it calls run), but its signature allows no effects; declare it: uses io
+main.bork:41:14: main cannot be called or used as a value: it may use every effect
+main.bork:47:5: show uses io (it calls println), but class Show allows no effects
+main.bork:52:37: ok calls f, but f may use any effect its caller passes, and predicates must be pure; declare f's type with uses nothing
+main.bork:54:23: print uses io (it calls println), but its signature allows no effects; declare it: uses io
+main.bork:56:30: pureMain uses io (it calls println), but its signature allows no effects; declare it: uses io
+main.bork:58:21: both2 declares net, but never uses it
+main.bork:58:32: both2 uses io (it calls println), but its signature allows only net; declare it: uses io
+main.bork:60:40: main cannot be called or used as a value: it may use every effect
+main.bork:64:3: main uses net (it calls both), but its signature allows only io; declare it: uses io + net
+main.bork:71:3: main cannot be called or used as a value: it may use every effect
+main.bork:75:3: assertSnapshot can only be used in tests (and the functions they call), not in a predicate
+main.bork:76:3: snap uses net (it calls fetch), but predicates must be pure, or their facts could go stale
+main.bork:79:55: allOk passes f to all, but f may use any effect its caller passes, and predicates must be pure; declare f's type with uses nothing
+main.bork:81:56: allOk2 passes a lambda that calls f to all, but f may use any effect its caller passes, and predicates must be pure; declare f's type with uses nothing

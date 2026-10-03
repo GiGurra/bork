@@ -10,11 +10,12 @@ Think Go's tooling simplicity, with the functional style of Scala and Haskell, a
 
 ## Why bork over Go
 
-bork compiles to Go and keeps Go's runtime, but adds three things Go can't give you:
+bork compiles to Go and keeps Go's runtime, but adds things Go can't give you:
 
 - **Immutability.** Values never change, so whatever is known about them stays true.
 - **Facts.** What you check about a value becomes part of its type, and the compiler proves every function's requirements at every call site.
 - **Scopes.** Outside resources (files, connections, transactions, leases) belong to scopes, and using one requires proof that a scope managing it is still open.
+- **Effects in signatures.** A function's signature says whether it does I/O, calls the network, reads the clock, or touches shared state (`uses io + net`), and one that says nothing is pure. Code can't do what its signature doesn't allow, which makes signatures something a reviewer can rely on.
 
 Facts already work:
 
@@ -54,6 +55,21 @@ fn broken(path: String) uses io: String | fs.Error {
 ```
 
 See [examples/wc](examples/wc/main.bork), a small `wc`.
+
+And effects:
+
+```
+fn describe(u: User): String {
+  println(u.name)        // error: describe uses io (it calls println), but its signature allows no effects; declare it: uses io
+  u.name
+}
+
+fn names(users: List[User]) uses io {
+  forEach(users, u => println(u.name))   // forEach takes any function: the call uses what its lambda does
+}
+```
+
+`main` and tests may do anything; everything below them says what it does. See [examples/http_server](examples/http_server/main.bork).
 
 ## Goals
 

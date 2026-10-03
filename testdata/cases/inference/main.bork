@@ -24,7 +24,7 @@ type Box[T] = { v: T, rest: List[T] }
 
 // Checks against a known type decide unknowns too: bindings, fields,
 // arguments of function values, and comparisons.
-fn laterChecks() {
+fn laterChecks() uses io {
   xs = [1, 2, 3]
   println(xs.fold([], (acc, x) => {
     y: List[Int] = acc

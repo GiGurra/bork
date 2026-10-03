@@ -1,6 +1,6 @@
 pred positive(n: Int) { n > 0 }
 fn promise(n: Int where positive): Int where positive { n }
-fn scenario(n: Int) {
+fn scenario(n: Int) uses io {
   println(n)
   if (positive(n)) { println(n) }
   println(promise(1))

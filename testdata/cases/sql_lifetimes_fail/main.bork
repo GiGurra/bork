@@ -1,8 +1,8 @@
 import "bork/sql"
-fn connection(): sql.Connection | sql.Error {
+fn connection() uses io + net: sql.Connection | sql.Error {
   scope s { sql.OpenSqlite(":memory:", s) }
 }
-fn transaction(db: sql.Connection): sql.Transaction | sql.Error {
+fn transaction(db: sql.Connection) uses io + net: sql.Transaction | sql.Error {
   scope s { sql.Begin(db, s) }
 }
 fn main() {}

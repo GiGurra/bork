@@ -1,0 +1,1 @@
+main.bork:3:3: assertSnapshot can only be used in tests (and the functions they call), not in a predicate

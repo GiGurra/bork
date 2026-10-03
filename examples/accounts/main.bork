@@ -56,7 +56,7 @@ fn describe(account: Account): String {
 
 // step applies a command and prints what happened. A refused command
 // leaves the account as it was.
-fn step(account: Account, command: Command): Account {
+fn step(account: Account, command: Command) uses io: Account {
   match (apply(account, command)) {
     next: Account => {
       println(s"  $command -> ${describe(next)}")

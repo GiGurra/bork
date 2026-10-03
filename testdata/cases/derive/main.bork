@@ -16,7 +16,7 @@ type Shape = sealed {
 // A decoded record is proven: its where clauses were checked.
 fn greet(name: String where nonEmpty): String { s"hello $name" }
 
-fn user(s: String) {
+fn user(s: String) uses io {
   r: CreateUser | JsonError | DecodeError = decodeJson(s)
   match (r) {
     u: CreateUser => println(s"${greet(u.name)}: ${encodeJson(u)}")
@@ -25,7 +25,7 @@ fn user(s: String) {
   }
 }
 
-fn shape(s: String) {
+fn shape(s: String) uses io {
   r: Shape | JsonError | DecodeError = decodeJson(s)
   match (r) {
     sh: Shape => println(encodeJson(sh))
@@ -54,7 +54,7 @@ fn main() {
 type Pair[A, B] = { first: A, second: B } derive (Decode, Encode)
 type Order = { id: Int, items: List[Pair[String, Int]], shape: Shape } derive (Decode, Encode)
 
-fn order(s: String) {
+fn order(s: String) uses io {
   r: Order | JsonError | DecodeError = decodeJson(s)
   match (r) {
     o: Order => println(encodeJson(o))
@@ -63,7 +63,7 @@ fn order(s: String) {
   }
 }
 
-fn orders() {
+fn orders() uses io {
   order("{\"id\": 1, \"items\": [{\"first\": \"pen\", \"second\": 2}], \"shape\": \"Empty\"}")
   order("{\"id\": 1, \"items\": [{\"first\": \"pen\", \"second\": 2}, {\"first\": \"ink\"}], \"shape\": \"Empty\"}")
   order("{\"id\": 1, \"items\": [], \"shape\": {\"type\": \"Square\", \"side\": \"big\"}}")

@@ -56,7 +56,7 @@ fn signup(body: String): http.Response {
 
 // slow does work that takes longer than the request's deadline allows;
 // the request scope is cancelled, and delay gives Cancelled.
-fn slow(rs: Scope): http.Response {
+fn slow(rs: Scope) uses clock + state: http.Response {
   cancelAfter(rs, 20)
   match (delay(rs, 2000)) {
     c: Cancelled => http.Text(503, s"gave up: ${c.reason}")
@@ -66,7 +66,7 @@ fn slow(rs: Scope): http.Response {
 
 // route answers a request; rs is the request's scope, cancelled if the
 // client goes away.
-fn route(req: http.Request, rs: Scope): http.Response {
+fn route(req: http.Request, rs: Scope) uses clock + state: http.Response {
   match (http.Segments(req.path)) {
     ["health"] => http.Text(200, "ok")
     ["slow"] => slow(rs)
@@ -75,7 +75,7 @@ fn route(req: http.Request, rs: Scope): http.Response {
   }
 }
 
-fn serve(addr: String): Unit | IoError {
+fn serve(addr: String) uses io + net + clock + state: Unit | IoError {
   scope s {
     server = http.Listen(addr, s, route)?
     eprintln(s"listening on ${http.Address(server)}")
@@ -83,20 +83,20 @@ fn serve(addr: String): Unit | IoError {
   }
 }
 
-fn show(label: String, r: http.Response | IoError) {
+fn show(label: String, r: http.Response | IoError) uses io {
   match (r) {
     resp: http.Response => println(s"$label -> ${toString(resp.status)} ${resp.body}")
     e: IoError => println(s"$label -> error: ${e.message}")
   }
 }
 
-fn post(s: Scope, base: String, body: String) {
+fn post(s: Scope, base: String, body: String) uses io + net {
   show(s"POST /signup $body", http.Post(base + "/signup", "application/json", body, s))
 }
 
 // demo starts the server on a free port and sends it requests; the
 // server stops when the scope closes.
-fn demo(): Unit | IoError {
+fn demo() uses io + net + clock + state: Unit | IoError {
   scope s {
     server = http.Listen("127.0.0.1:0", s, route)?
     base = "http://" + http.Address(server)
@@ -130,7 +130,7 @@ fn main() {
   }
 }
 
-fn get(path: String): http.Response {
+fn get(path: String) uses clock + state: http.Response {
   scope rs {
     route(http.Request { method: "GET", path: path, query: "", headers: {:}, body: "" }, rs)
   }

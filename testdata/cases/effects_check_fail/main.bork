@@ -1,0 +1,81 @@
+import "bork/http"
+
+type User = { name: String, age: Int }
+
+fn describe(u: User): String {
+  println(u.name)
+  u.name
+}
+
+fn fetch(url: String) uses net: String {
+  match (scope s { http.Get(url, s) }) {
+    r: http.Response => r.body
+    e: IoError => e.message
+  }
+}
+
+fn both(url: String) uses net {
+  println(fetch(url))
+}
+
+fn process(xs: List[String]): List[String] {
+  map(xs, x => {
+    println(x)
+    x
+  })
+}
+
+fn save(text: String) uses io + net { println(text) }
+
+pred loud(x: Int) {
+  println(x)
+  x > 0
+}
+
+fn run(f: () uses io => Unit) uses io { f() }
+
+type Job = { run: () uses io => Unit }
+
+fn callsField(job: Job) { job.run() }
+
+fn again() { main() }
+
+type Box = { n: Int }
+
+instance showBox: Show[Box] {
+  fn show(b: Box): String {
+    println(b.n)
+    "box"
+  }
+}
+
+pred ok(x: Int, f: (Int) => Bool) { f(x) }
+
+fn (b: Box) print() { println(b.n) }
+
+fn pureMain() uses nothing { println("x") }
+
+fn both2(s: String) uses net { println(s) }
+
+fn mainAsValue(): () uses io => Unit { main }
+
+fn main() uses io {
+  _ = describe(User { name: "Ada", age: 36 })
+  both("http://localhost:1")
+  _ = process(["a"])
+  save("x")
+  run(() => println("y"))
+}
+
+test "tests cannot call main" {
+  main()
+}
+
+pred snap(x: Int) {
+  assertSnapshot(x)
+  fetch("http://example.com") != ""
+}
+
+pred allOk(xs: List[Int], f: (Int) => Bool) { all(xs, f) }
+
+pred allOk2(xs: List[Int], f: (Int) => Bool) { all(xs, x => f(x)) }

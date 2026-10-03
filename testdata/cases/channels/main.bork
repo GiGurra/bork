@@ -1,6 +1,6 @@
 // A pipeline: a producer sends numbers, a worker squares them, and the
 // main routine collects the results.
-fn produce(ch: Channel[Int], n: Int, last: Int): Unit | Cancelled | Closed {
+fn produce(ch: Channel[Int], n: Int, last: Int) uses state: Unit | Cancelled | Closed {
   if (n <= last) {
     send(ch, n)?
     produce(ch, n + 1, last)
@@ -9,7 +9,7 @@ fn produce(ch: Channel[Int], n: Int, last: Int): Unit | Cancelled | Closed {
   }
 }
 
-fn square(input: Channel[Int], output: Channel[Int]): Unit | Cancelled | Closed {
+fn square(input: Channel[Int], output: Channel[Int]) uses state: Unit | Cancelled | Closed {
   match (receive(input)) {
     n: Int => {
       send(output, n * n)?

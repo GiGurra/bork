@@ -27,7 +27,7 @@ fn main() {
   piped()
 }
 
-fn piped() {
+fn piped() uses io {
   users = [User { name: "ann", age: 30 }, User { name: "bob", age: 12 }, User { name: "cy", age: 44 }]
   println(adults(users))
   total = users

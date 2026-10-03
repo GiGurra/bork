@@ -20,6 +20,12 @@ func TestSuggestedEdits(t *testing.T) {
 		{"interpolation", "fn main() { println(s\"å ${true & false}\") }\n"},
 		{"annotations", "fn main() {\n xs = []\n m = {:}\n f = x => x\n g = (y) => y\n h = (a, b) => a\n}\n"},
 		{"multiline", "fn main() {\n xs = [\n ]\n m = {\n :}\n f = (\n x,\n y\n ) => x\n}\n"},
+		{"missing effect", "fn say(s: String) { println(s) }\nfn main() { say(\"a\") }\n"},
+		{"missing effect, multi-line params", "fn say(\n  s: String,\n): String {\n  println(s)\n  s\n}\nfn main() { _ = say(\"a\") }\n"},
+		{"replacing uses nothing", "fn say(s: String) uses nothing { println(s) }\nfn main() { say(\"a\") }\n"},
+		{"unused effect", "fn add(a: Int)uses io: Int { a + 1 }\nfn main() { println(add(1)) }\n"},
+		{"partly unused", "fn say(s: String) uses io + net { println(s) }\nfn main() { say(\"a\") }\n"},
+		{"missing and unused", "fn say(s: String) uses net { println(s) }\nfn main() { say(\"a\") }\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,4 +1,4 @@
-fn slow(n: Int, ms: Int): Int {
+fn slow(n: Int, ms: Int) uses clock: Int {
   sleep(ms)
   n * n
 }

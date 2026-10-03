@@ -39,7 +39,7 @@ func TestDescribeProofs(t *testing.T) {
 	source := `pred positive(n: Int) { n > 0 }
 pred small(n: Int) { n < 10 }
 fn bounded(n: Int where positive): Int where positive { n }
-fn scenario(xs: List[Int], n: Int) {
+fn scenario(xs: List[Int], n: Int) uses io {
   println(n) // before
   if (positive(n)) { println(n) /* guarded */ }
   if (!notEmpty(xs)) { return }
@@ -77,7 +77,7 @@ func TestDescribeMethodsAndDefinitions(t *testing.T) {
 fn (u: User) ageText(): String { toString(u.age) }
 fn add(x: Int, y: Int = 2): Int { x + y }
 fn log(n: Int) uses io { println(n) }
-fn scenario(xs: List[Int], u: User) {
+fn scenario(xs: List[Int], u: User) uses io {
   println(add(1))
   println(xs.map(x => x + 1))
   println(u.ageText())
@@ -123,7 +123,7 @@ fn scenario(xs: List[Int], u: User) {
 func TestDescribeFoldedExpressions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
-	source := "pred positive(x: Int8) { x > 0 }\nfn example() {\n  n: Int8 = 128 - 1\n  println(n)\n}\n"
+	source := "pred positive(x: Int8) { x > 0 }\nfn example() uses io {\n  n: Int8 = 128 - 1\n  println(n)\n}\n"
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -137,10 +137,10 @@ func TestDescribeFoldedExpressions(t *testing.T) {
 		}
 	}
 	for _, expression := range []string{"(1 + 2) * (3 + 4)", "1 * (2 + 3)", "(1 + 2) * 3"} {
-		if err := os.WriteFile(path, []byte("fn example() { println("+expression+") }\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte("fn example() uses io { println("+expression+") }\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		column := len("fn example() { println(") + strings.Index(expression, "1") + 1
+		column := len("fn example() uses io { println(") + strings.Index(expression, "1") + 1
 		result, err := Describe(fmt.Sprintf("%s:1:%d", path, column), "")
 		if err != nil {
 			t.Fatal(err)
@@ -155,7 +155,7 @@ func TestDescribeInterpolationCallees(t *testing.T) {
 	source := `type User = { n: Int }
 fn add(x: Int): Int { x + 1 }
 fn (u: User) number(): Int { u.n }
-fn example(u: User) {
+fn example(u: User) uses io {
   println(s"value ${add(1)} and ${u.number()}")
   println((add)(1))
   println((u.number)())
@@ -178,7 +178,7 @@ fn example(u: User) {
 }
 
 func TestDescribeFunctionFieldResult(t *testing.T) {
-	source := "type Holder = { f: (Int) => Int }\nfn example(h: Holder) { println(h.f(1)) }\n"
+	source := "type Holder = { f: (Int) => Int }\nfn example(h: Holder) uses io { println(h.f(1)) }\n"
 	result := describeAt(t, source, "(1))", "")
 	if result.typ != "Int" {
 		t.Fatalf("unexpected field call result: %+v", result)
@@ -188,7 +188,7 @@ func TestDescribeFunctionFieldResult(t *testing.T) {
 func TestDescribeFoldedInterpolation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
-	source := "fn example() { println(s\"value ${(1 + 2) * 3}\") }\n"
+	source := "fn example() uses io { println(s\"value ${(1 + 2) * 3}\") }\n"
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestDescribeRulesAndConstraintArguments(t *testing.T) {
 pred nonNegative(x: Int) { x >= 0 }
 pred atLeast(x: Int, minimum: Int) { x >= minimum }
 rule weaken(x: Int) { positive(x) => nonNegative(x) }
-fn example(n: Int where positive, m: Int where atLeast(n)) {
+fn example(n: Int where positive, m: Int where atLeast(n)) uses io {
   println(n) // by rule
   println(m) // relational
   println(3) // constants
@@ -318,7 +318,7 @@ fn main() {
 func TestDescribeInvalidQueries(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
-	if err := os.WriteFile(path, []byte("fn example(n: Int) { println(n) }\npred positive(n: Int) { n > 0 }\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("fn example(n: Int) uses io { println(n) }\npred positive(n: Int) { n > 0 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct{ position, where, message string }{
@@ -327,11 +327,11 @@ func TestDescribeInvalidQueries(t *testing.T) {
 		{path + ":1:0", "", "positive integers"},
 		{path + ":999:1", "", "outside the source"},
 		{path + ":1:3", "", "no expression or local name"},
-		{path + ":1:30", "missing", "unknown predicate"},
-		{path + ":1:30", "notEmpty", "applies to"},
-		{path + ":1:30", "positive and missing", "unknown predicate"},
-		{path + ":1:30", "positive and notEmpty", "applies to"},
-		{path + ":1:30", "(", "invalid where query"},
+		{path + ":1:38", "missing", "unknown predicate"},
+		{path + ":1:38", "notEmpty", "applies to"},
+		{path + ":1:38", "positive and missing", "unknown predicate"},
+		{path + ":1:38", "positive and notEmpty", "applies to"},
+		{path + ":1:38", "(", "invalid where query"},
 	} {
 		t.Run(tc.position+tc.where, func(t *testing.T) {
 			_, err := Describe(tc.position, tc.where)
@@ -344,7 +344,7 @@ func TestDescribeInvalidQueries(t *testing.T) {
 
 func TestDescribeBytePositionsAndDeclarations(t *testing.T) {
 	source := `pred positive(n: Int) { n > 0 }
-fn example(n: Int where positive) {
+fn example(n: Int where positive) uses io {
 	println("å"); println(n) // utf8
 	bound: Int where positive = n
 	println(bound)

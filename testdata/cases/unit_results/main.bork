@@ -1,15 +1,15 @@
 type Failed = { why: String }
 
-fn step(ok: Bool): Unit | Failed {
+fn step(ok: Bool) uses io: Unit | Failed {
   if (ok) { println("step ok") } else { Failed { why: "nope" } }
 }
 
-fn both(a: Bool, b: Bool): Unit | Failed {
+fn both(a: Bool, b: Bool) uses io: Unit | Failed {
   step(a)?
   step(b)?
 }
 
-fn scoped(): Unit | Failed {
+fn scoped() uses io: Unit | Failed {
   scope s {
     step(true)?
     println("in scope")
