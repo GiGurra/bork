@@ -223,14 +223,14 @@ fn siblingIn(app: Scope) uses state {
   ownerIn(c, d)
 }
 
-fn with(b: OwnedScope, s: Scope): OwnedScope {
+fn keep(b: OwnedScope, s: Scope): OwnedScope {
   b
 }
 
 fn extraArgs(app: Scope) uses io + state {
   a = openScope(app)
   ra = connect(a.scope)
-  q = with(openScope(app), a.scope)
+  q = keep(openScope(app), a.scope)
   launch(q.scope, () => use(ra))
   closeScope(a)
   closeScope(q)

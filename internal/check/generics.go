@@ -358,6 +358,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 		return Invalid
 	}
 	c.info.callFuncs[e] = fn
+	c.provideNeeds(e, fn, name)
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 	}
@@ -800,6 +801,7 @@ func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Typ
 		return Invalid
 	}
 	c.info.funcRefs[e] = inst
+	c.provideNeeds(e, fn, name)
 	return closeOpen(&FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects})
 }
 

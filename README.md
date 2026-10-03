@@ -16,6 +16,7 @@ bork compiles to Go and keeps Go's runtime, but adds things Go can't give you:
 - **Facts.** What you check about a value becomes part of its type, and the compiler proves every function's requirements at every call site.
 - **Scopes.** Outside resources (files, connections, transactions, leases) belong to scopes, and using one requires proof that a scope managing it is still open.
 - **Effects in signatures.** A function's signature says whether it does I/O, calls the network, reads the clock, or touches shared state (`uses io + net`), and one that says nothing is pure. Code can't do what its signature doesn't allow, which makes signatures something a reviewer can rely on.
+- **Typed ambient values.** Request-scoped values such as a trace id or the signed-in principal are declared with a type (`ambient principal: Principal`), read by functions that say so (`needs principal`), and bound for a block with `with (principal: p) { ... }`. The compiler checks that every caller provides them, so the dependency shows in signatures instead of hiding in an untyped context.
 
 Facts already work:
 

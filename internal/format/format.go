@@ -20,6 +20,9 @@ type item struct {
 	unary      bool
 	contextDot bool
 	loopIn     bool
+	// with is set for the word with where it may start a with block
+	// (not after a '.'), which is spaced from its '('.
+	with bool
 }
 
 // Source formats one file. Existing line breaks are retained, blank-line runs
@@ -63,7 +66,8 @@ func Source(path string, src []byte) ([]byte, error) {
 		start := offset(t.Pos)
 		u := t.Kind == syntax.Not || t.Kind == syntax.Minus && !endsExpr(prev)
 		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && items[len(items)-1].kind == syntax.TIdent && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
-		items = append(items, item{loopIn: loopIn, kind: t.Kind, text: text, start: start, end: start + len(text), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev)})
+		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
+		items = append(items, item{loopIn: loopIn, kind: t.Kind, text: text, start: start, end: start + len(text), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev), with: w})
 		prev = t.Kind
 	}
 	for _, c := range comments {
@@ -182,7 +186,7 @@ func space(a, b item) bool {
 	case syntax.Comma, syntax.Colon, syntax.Quest, syntax.Semi, syntax.RParen, syntax.RBrack:
 		return false
 	case syntax.LParen:
-		if a.kind == syntax.TIdent && a.text == "derive" {
+		if a.kind == syntax.TIdent && a.text == "derive" || a.with {
 			return true
 		}
 		return a.kind != syntax.TIdent && a.kind != syntax.RParen && a.kind != syntax.RBrack

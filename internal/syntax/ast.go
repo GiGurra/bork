@@ -20,6 +20,7 @@ type File struct {
 	// Prelude is set for the compiler's built-in prelude.
 	Prelude  bool
 	Types    []*TypeDecl
+	Ambients []*AmbientDecl
 	Funcs    []*FuncDecl
 	Tests    []*TestDecl
 	Comments []Comment
@@ -117,7 +118,10 @@ type FuncDecl struct {
 	ParamsEnd diag.Pos
 	// Uses lists the effects the function may have, `uses io + net`,
 	// or is nil when it declares none.
-	Uses   *Uses
+	Uses *Uses
+	// Needs lists the ambient values it reads, `needs traceId +
+	// locale?`, or is nil when it reads none.
+	Needs  *Needs
 	Result *TypeExpr
 	Body   *Block
 	GoBody *GoCode
@@ -245,6 +249,44 @@ type Uses struct {
 	Pos     diag.Pos
 	End     diag.Pos // just after the last effect (or nothing)
 	Effects []Effect
+}
+
+// AmbientDecl declares an ambient value: `ambient traceId: String`.
+type AmbientDecl struct {
+	Pos  diag.Pos
+	Name string
+	Type *TypeExpr
+}
+
+// Needs is a declaration of the ambient values a function reads:
+// `needs traceId + locale?`.
+type Needs struct {
+	Pos   diag.Pos
+	End   diag.Pos // just after the last need
+	Items []*Need
+}
+
+// Need is one ambient value named in a `needs` declaration; Optional is
+// set for `locale?`, which is read as an Option.
+type Need struct {
+	Pos      diag.Pos
+	Name     string // as written: traceId, or trace.Id
+	Optional bool
+}
+
+// WithExpr binds ambient values for a block:
+// `with (traceId: id, principal: p) { ... }`.
+type WithExpr struct {
+	Pos      diag.Pos
+	Bindings []*WithBinding
+	Body     *Block
+}
+
+// WithBinding is one `name: value` of a with.
+type WithBinding struct {
+	Pos   diag.Pos
+	Name  string // as written: traceId, or trace.Id
+	Value Expr
 }
 
 // Effect is one effect named in a `uses` declaration.
@@ -636,6 +678,8 @@ func (*MapLit) exprNode()               {}
 func (e *MapLit) Position() diag.Pos    { return e.Pos }
 func (*ScopeExpr) exprNode()            {}
 func (e *ScopeExpr) Position() diag.Pos { return e.Pos }
+func (*WithExpr) exprNode()             {}
+func (e *WithExpr) Position() diag.Pos  { return e.Pos }
 func (*Lambda) exprNode()               {}
 func (*ListLit) exprNode()              {}
 func (e *Lambda) Position() diag.Pos    { return e.Pos }

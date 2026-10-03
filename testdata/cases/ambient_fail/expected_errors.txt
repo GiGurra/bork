@@ -1,0 +1,30 @@
+main.bork:5:18: ambient session cannot hold Scope: ambient values are data, so pass scopes, resources, tasks, atoms, channels and functions as parameters
+main.bork:6:19: ambient callback cannot hold () => Unit: ambient values are data, so pass scopes, resources, tasks, atoms, channels and functions as parameters
+main.bork:7:26: where clauses here are not supported yet, so the fact would not be checked
+main.bork:8:23: ambient nothingAtAll must hold values, not Unit
+main.bork:20:3: bare reads traceId, but its signature does not provide it; declare it: needs traceId, or bind it: with (traceId: ...) { ... }
+main.bork:24:3: calls reads traceId (it calls tag), but its signature does not provide it; declare it: needs traceId, or bind it: with (traceId: ...) { ... }
+main.bork:28:13: refers reads traceId (it calls tag), but its signature does not provide it; declare it: needs traceId, or bind it: with (traceId: ...) { ... }
+main.bork:32:9: lambdas reads traceId (it calls tag), but its signature does not provide it; declare it: needs traceId, or bind it: with (traceId: ...) { ... }
+main.bork:37:3: tag needs traceId, which may be unbound here (needs traceId?); bind it: with (traceId: ...) { ... }
+main.bork:42:19: unused declares needs locale, but never reads it
+main.bork:50:20: nothere is not an ambient value
+main.bork:50:40: traceId is needed twice
+main.bork:55:24: pred tagged cannot declare needs: predicates cannot read ambient values, or their facts would depend on what is bound
+main.bork:60:3: calling reads traceId (it calls tag), but predicates cannot read ambient values, or their facts would depend on what is bound; bind it inside: with (traceId: ...) { ... }
+main.bork:64:18: class methods cannot declare needs
+main.bork:68:20: instance methods cannot declare needs: the class fixes their signature
+main.bork:69:5: show2 reads traceId, but instance methods cannot declare needs; bind it: with (traceId: ...) { ... }
+main.bork:73:24: getenv binds a Go function, which cannot read ambient values
+main.bork:78:13: with binds ambient values, and total is not one
+main.bork:79:27: traceId is bound twice in one with
+main.bork:80:22: traceId must be String, found Int
+main.bork:90:9: trace.secret is not exported by example.com/ambfail/trace
+main.bork:94:27: a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)
+main.bork:99:1: locale is already the name of an ambient value
+main.bork:102:3: traceId is already the name of an ambient value (bork does not allow shadowing)
+main.bork:105:11: main cannot declare needs; bind the values instead: with (traceId: ...) { ... }
+main.bork:106:11: main reads traceId, but does not bind it: with (traceId: ...) { ... }
+main.bork:114:30: the mock of Logged reads locale, which Logged does not need; bind it: with (locale: ...) { ... }
+main.bork:118:15: the test reads traceId (it calls tag), but does not bind it: with (traceId: ...) { ... }
+trace/trace.bork:5:17: Leak is exported, but needs secret, which other packages cannot bind; export the ambient value, or the function's callers there cannot call it

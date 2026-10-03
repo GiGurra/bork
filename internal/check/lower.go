@@ -20,6 +20,45 @@ type lowerer struct {
 	// that refer to it.
 	vars      map[any]*Var
 	yieldElem Type
+	// withs counts the with bindings, to name them apart.
+	withs int
+}
+
+// needs is what the call or reference x passes for its callee's needs.
+func (l *lowerer) needs(x syntax.Expr) []Expr {
+	var out []Expr
+	for _, s := range l.info.needArgs[x] {
+		at := expr{pos: x.Position(), typ: s.need.Type}
+		if s.decl == nil {
+			opt := s.need.Type.(*Sealed)
+			out = append(out, &VariantValue{expr: at, Variant: opt.Variant("None"), Text: "Option.None"})
+			continue
+		}
+		v := l.vars[s.decl]
+		var value Expr = &VarRef{expr: expr{pos: x.Position(), typ: v.Type}, Var: v}
+		if s.some {
+			opt := s.need.Type.(*Sealed)
+			some := opt.Variant("Some")
+			value = &RecordLit{expr: at, Variant: some, Fields: []*FieldValue{{Name: "value", Field: some.Fields[0], Value: value}}}
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+// needVarName is the Go name of the hidden parameter holding need n of
+// fn. An unsafe go body sees it by the ambient's own name, or for
+// another package's, with that package's prefix; elsewhere it is a name
+// of its own, which cannot hide a Go name the generated code uses.
+func needVarName(fn *Func, n *FuncNeed) string {
+	name := n.Ambient.Name
+	if n.Ambient.Pkg != fn.Pkg {
+		name = n.Ambient.Pkg.GoPrefix + name
+	}
+	if fn.Decl.IsGo() {
+		return name
+	}
+	return "_need_" + name
 }
 
 // lower builds the typed tree of every function body, test, and rule.
@@ -51,6 +90,12 @@ func (l *lowerer) function(fn *Func) {
 		v := &Var{Name: p.Name, Pos: p.Pos, Type: fn.Params[i], Kind: VarParam, Index: i}
 		l.vars[p] = v
 		fn.ParamVars = append(fn.ParamVars, v)
+	}
+	fn.NeedVars = nil
+	for i, n := range fn.Needs {
+		v := &Var{Name: n.Decl.Name, GoName: needVarName(fn, n), Pos: n.Decl.Pos, Type: n.Type, Kind: VarAmbient, Index: i}
+		l.vars[n.Decl] = v
+		fn.NeedVars = append(fn.NeedVars, v)
 	}
 	if fn.Decl.Body != nil {
 		fn.Body = l.block(fn.Decl.Body)
@@ -136,7 +181,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
 	if inst := l.info.funcRefs[x]; inst != nil {
 		at.token = x.Position()
-		return &FuncRef{expr: at, Name: writtenText(x), Inst: inst}
+		return &FuncRef{expr: at, Name: writtenText(x), Inst: inst, Needs: l.needs(x)}
 	}
 	if v := l.info.constantOf(x); v != nil {
 		var span *SourceSpan
@@ -201,7 +246,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 			return &SeqCall{expr: at, Op: call.op, Args: args, Effects: call.effects}
 		}
 		if fn := l.info.callFuncs[x]; fn != nil {
-			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x)), ArgOrder: l.info.callOrder[x], Embedded: l.info.embedCalls[x]}
+			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x)), ArgOrder: l.info.callOrder[x], Embedded: l.info.embedCalls[x], Needs: l.needs(x)}
 			if sel, ok := x.Fun.(*syntax.Selector); ok {
 				args := l.info.args(x)
 				call.ReceiverCall = len(args) > 0 && args[0] == sel.X
@@ -258,6 +303,19 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		return out
 	case *syntax.Block:
 		return l.block(x)
+	case *syntax.WithExpr:
+		// The bindings are lets of a block around the body, under names
+		// of their own: an inner with may bind the same value again.
+		out := &Block{expr: at, End: x.Body.End}
+		for _, b := range x.Bindings {
+			l.withs++
+			let := &Let{Pos: b.Pos, Value: l.expr(b.Value), Declared: true}
+			let.Var = &Var{Name: b.Name, GoName: fmt.Sprintf("_with%d_%s", l.withs, strings.ReplaceAll(b.Name, ".", "_")), Pos: b.Pos, Type: l.info.withTypes[b], Kind: VarLet, Let: let, Unused: l.info.unused[b]}
+			l.vars[b] = let.Var
+			out.Stmts = append(out.Stmts, let)
+		}
+		out.Tail = l.block(x.Body)
+		return out
 	case *syntax.ScopeExpr:
 		v := &Var{Name: x.Name, Pos: x.Pos, Type: Scope, Kind: VarScope}
 		l.vars[x] = v

@@ -544,3 +544,32 @@ test "mocked" {
 		})
 	}
 }
+
+func TestDescribeNeeds(t *testing.T) {
+	source := `ambient traceId: String
+ambient locale: String
+
+fn tag(msg: String) needs traceId + locale?: String {
+  s"[${traceId}] ${msg} ${locale.getOr("")}"
+}
+
+fn use() needs traceId: String {
+  tag("x")
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	offset := strings.Index(source, `tag("x")`)
+	line := strings.Count(source[:offset], "\n") + 1
+	column := offset - strings.LastIndex(source[:offset], "\n")
+	result, err := Describe(fmt.Sprintf("%s:%d:%d", path, line, column), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Callable == nil || strings.Join(result.Callable.Needs, " + ") != "locale? + traceId" {
+		t.Fatalf("got %+v, want needs locale? + traceId", result.Callable)
+	}
+}

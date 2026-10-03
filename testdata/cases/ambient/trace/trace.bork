@@ -1,0 +1,7 @@
+// Id is the trace id of the work being done.
+ambient Id: String
+
+// Tagged prefixes msg with the trace id.
+fn Tagged(msg: String) needs Id: String {
+  s"${Id}: ${msg}"
+}

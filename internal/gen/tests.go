@@ -209,6 +209,9 @@ func (g *gen) checkedWrapper(fn *check.Func) ast.Decl {
 	for _, p := range fn.Decl.Params {
 		args = append(args, name(p.Name))
 	}
+	for _, v := range fn.NeedVars {
+		args = append(args, varIdent(v))
+	}
 	var impl ast.Expr = ast.NewIdent("_unchecked_" + g.funcName(fn).Name)
 	if len(fn.TypeParams) > 0 {
 		idx := &ast.IndexListExpr{X: impl}
