@@ -1,0 +1,2 @@
+main.bork:5:32: Bounded requires value to be positive, but positive(0) is false
+main.bork:6:34: State.Valid requires value to be positive, but positive(0) is false

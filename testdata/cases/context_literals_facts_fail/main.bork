@@ -1,0 +1,7 @@
+pred positive(n: Int) { n > 0 }
+type Bounded = { value: Int where positive }
+type State = sealed { Valid { value: Int where positive } }
+fn main() {
+  bounded: Bounded = .{ value: 0 }
+  state: State = .Valid { value: 0 }
+}

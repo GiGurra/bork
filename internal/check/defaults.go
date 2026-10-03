@@ -95,6 +95,8 @@ func (c *checker) withDefaults(args []syntax.Expr, fn *Func) []syntax.Expr {
 // map, record, or variant value made of closed values.
 func isClosed(x syntax.Expr) bool {
 	switch x := x.(type) {
+	case *syntax.ContextName:
+		return x.Name != ""
 	case *syntax.Ident:
 		return false
 	case *syntax.Selector:

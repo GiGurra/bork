@@ -1,0 +1,45 @@
+10
+20
+Both { first: 10, second: 20 }
+50
+60
+[Both { first: 60, second: 1 }, Both { first: 50, second: 2 }]
+30
+40
+Tls.Files { cert: "30", key: "40" }
+Config { host: "one", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Config { host: "named", port: 8080, tls: Tls.Files { cert: "c", key: "k" }, debug: Option.Some { value: "trace" } }
+[Config { host: "value first", port: 8080, tls: Tls.Disabled, debug: Option.None }, Config { host: "value second", port: 8080, tls: Tls.Disabled, debug: Option.None }]
+[Config { host: "method first", port: 8080, tls: Tls.Disabled, debug: Option.None }, Config { host: "method second", port: 8080, tls: Tls.Disabled, debug: Option.None }]
+Config { host: "default", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Config { host: "return", port: 8080, tls: Tls.Files { cert: "cert", key: "key" }, debug: Option.None }
+Config { host: "copy", port: 8080, tls: Tls.Auto { retries: 2 }, debug: Option.None }
+[Config { host: "first", port: 8080, tls: Tls.Disabled, debug: Option.None }, Config { host: "second", port: 8080, tls: Tls.Disabled, debug: Option.None }]
+[Config { host: "first", port: 8080, tls: Tls.Disabled, debug: Option.None }, Config { host: "second", port: 8080, tls: Tls.Disabled, debug: Option.None }]
+[[Config { host: "first", port: 8080, tls: Tls.Disabled, debug: Option.None }], [Config { host: "second", port: 8080, tls: Tls.Disabled, debug: Option.None }]]
+[[Config { host: "first", port: 8080, tls: Tls.Disabled, debug: Option.None }], [Config { host: "second", port: 8080, tls: Tls.Disabled, debug: Option.None }]]
+Config { host: "nested", port: 8080, tls: Tls.Disabled, debug: Option.None }
+[Config { host: "a", port: 8080, tls: Tls.Disabled, debug: Option.None }, Config { host: "b", port: 8080, tls: Tls.Disabled, debug: Option.None }]
+[Box { value: Config { host: "boxed first", port: 8080, tls: Tls.Disabled, debug: Option.None } }, Box { value: Config { host: "boxed second", port: 8080, tls: Tls.Disabled, debug: Option.None } }]
+[Box { value: Config { host: "boxed first", port: 8080, tls: Tls.Disabled, debug: Option.None } }, Box { value: Config { host: "boxed second", port: 8080, tls: Tls.Disabled, debug: Option.None } }]
+Both { first: Config { host: "first field", port: 8080, tls: Tls.Disabled, debug: Option.None }, second: Config { host: "second field", port: 8080, tls: Tls.Disabled, debug: Option.None } }
+Both { first: Config { host: "first field", port: 8080, tls: Tls.Disabled, debug: Option.None }, second: Config { host: "second field", port: 8080, tls: Tls.Disabled, debug: Option.None } }
+Wrapped { value: Option.Some { value: 7 } }
+Box { value: 1 }
+Box { value: Option.Some { value: 1 } }
+Config { host: "callback evidence", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Config { host: "callback", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Option.Some { value: 2 }
+Response { status: 200, body: "ok" }
+Tls.Disabled
+Config { host: "pipe", port: 8080, tls: Tls.Disabled, debug: Option.None }
+[Config { host: "list", port: 8080, tls: Tls.Disabled, debug: Option.None }]
+{"config": Config { host: "map", port: 8080, tls: Tls.Disabled, debug: Option.None }}
+Config { host: "if", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Config { host: "generic if", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Config { host: "generic match", port: 8080, tls: Tls.Disabled, debug: Option.None }
+[Config { host: "generic list", port: 8080, tls: Tls.Disabled, debug: Option.None }, Config { host: "other", port: 8080, tls: Tls.Disabled, debug: Option.None }]
+Option.Some { value: [] }
+Config { host: "if inferred", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Config { host: "match", port: 8080, tls: Tls.Disabled, debug: Option.None }
+Tls.Disabled

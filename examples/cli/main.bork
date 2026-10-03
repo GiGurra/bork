@@ -14,7 +14,7 @@ fn main() {
   result = cli.Run[Options]("greet", "A proven command-line configuration", (options, s) => {
     println(s"Hello ${options.name} on port ${options.port}")
     println(options.tags)
-    }, flags: [cli.Flag { field: "port", short: "p" }, cli.Flag { field: "config", configFile: true }])
+    }, flags: [.{ field: "port", short: "p" }, .{ field: "config", configFile: true }])
   match (result) {
     error: cli.Error => { println(error); exit(2) }
     Unit => {}

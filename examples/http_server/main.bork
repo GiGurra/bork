@@ -37,7 +37,7 @@ type Store = { todos: Map[Int, Todo], nextId: Int }
 
 fn emptyStore(): Store {
   todos: Map[Int, Todo] = {:}
-  Store { todos: todos.sorted(), nextId: 1 }
+  .{ todos: todos.sorted(), nextId: 1 }
 }
 
 fn notFound(id: Int): http.Response {
@@ -152,7 +152,7 @@ fn call(s: Scope, base: String, method: String, path: String, body: String = "")
 // demo starts the server on a free port and sends it requests; the
 // server stops when the scope closes. Logs go to stdout, as plain text.
 fn demo() uses io + net + state: Unit | IoError {
-  log.Configure(log.Defaults().copy(output: log.Output.Stdout, timestamps: false))
+  log.Configure(log.Defaults().copy(output: .Stdout, timestamps: false))
   scope s {
     server = http.Listen("127.0.0.1:0", s, handler: handler(atom(emptyStore())))?
     base = "http://" + http.Address(server)

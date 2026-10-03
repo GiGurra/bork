@@ -181,10 +181,19 @@ func (s *sourceIndex) walk(x check.Expr) {
 	case *check.RecordLit:
 		_, i := s.token(x.TokenPos())
 		if i >= 0 {
+			if s.tokens[i].Kind == syntax.Dot && i+1 < len(s.tokens) && s.tokens[i+1].Kind == syntax.TIdent {
+				i++
+				width = s.tokens[i].Pos.Col + len(s.tokens[i].Text) - x.TokenPos().Col
+			}
 			for i+2 < len(s.tokens) && s.tokens[i+1].Kind == syntax.Dot && s.tokens[i+2].Kind == syntax.TIdent && s.tokens[i+2].Pos.Line == x.TokenPos().Line {
 				i += 2
 				width = s.tokens[i].Pos.Col + len(s.tokens[i].Text) - x.TokenPos().Col
 			}
+		}
+	case *check.VariantValue:
+		_, i := s.token(x.TokenPos())
+		if i >= 0 && s.tokens[i].Kind == syntax.Dot && i+1 < len(s.tokens) && s.tokens[i+1].Kind == syntax.TIdent {
+			width = s.tokens[i+1].Pos.Col + len(s.tokens[i+1].Text) - x.TokenPos().Col
 		}
 	}
 	if s.contains(x.TokenPos(), width) || s.foldedContains(x) {

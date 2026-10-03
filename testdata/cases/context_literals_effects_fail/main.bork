@@ -1,0 +1,6 @@
+type A = { value: Int }
+type State = sealed { Value { value: Int } }
+fn effect() uses io: Int { println(1); 1 }
+fn record(): A { .{ value: effect() } }
+fn variant(): State { .Value { value: effect() } }
+fn main() {}

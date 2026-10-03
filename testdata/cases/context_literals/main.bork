@@ -1,0 +1,74 @@
+type Tls = sealed { Disabled, Files { cert: String, key: String }, Auto { retries: Int = 2 } }
+type Config = { host: String, port: Int = 8080, tls: Tls = .Disabled, debug: Option[String] = .None }
+type Both[T] = { first: T, second: T }
+fn both[T](value: Both[T]): Both[T] { value }
+type Wrapped[T] = { value: Option[T] }
+type Box[T] = { value: T }
+type Response = { status: Int, body: String }
+fn (cfg: Config) chosen(value: Config): Config { value }
+fn config(value: Config): Config { value }
+fn defaults(value: Config = .{ host: "default" }): Config { value }
+fn pair[T](first: T, second: T): List[T] { [first, second] }
+fn id[T](value: T): T { value }
+fn boxed[T](value: Box[T]): Box[T] { value }
+fn callback[T](value: T, make: () => T): T { make() }
+fn returned(): Config { return .{ host: "return", tls: .Files { cert: "cert", key: "key" } } }
+fn option[T](value: Option[T]): Option[T] { value }
+fn response(): Response | String { .{ status: 200, body: "ok" } }
+fn union(value: Tls | String): Tls | String { value }
+fn trace(value: Int) uses io: Int { println(value); value }
+fn main() {
+  effects: Both[Int] = .{ first: trace(10), second: trace(20) }
+  println(effects)
+  effectsPair: List[Both[Int]] = pair(second: .{ first: trace(50), second: 2 }, first: .{ first: trace(60), second: 1 })
+  println(effectsPair)
+  variantEffects: Tls = .Files { cert: toString(trace(30)), key: toString(trace(40)) }
+  println(variantEffects)
+  one: Config = .{ host: "one" }
+  println(one)
+  println(config(value: .{ host: "named", tls: .Files { cert: "c", key: "k" }, debug: .Some { value: "trace" } }))
+  f = config
+  println(pair(.{ host: "value first" }, f(.{ host: "value second" })))
+  println(pair(.{ host: "method first" }, one.chosen(value: .{ host: "method second" })))
+  println(defaults())
+  println(returned())
+  println(one.copy(host: "copy", tls: .Auto {}))
+  println(pair(first: .{ host: "first" }, second: Config { host: "second" }))
+  println(pair(second: .{ host: "second" }, first: Config { host: "first" }))
+  println(pair(first: [.{ host: "first" }], second: [Config { host: "second" }]))
+  println([[.{ host: "first" }], [Config { host: "second" }]])
+  println(id(value: .{ host: "nested" }) |> config)
+  result: List[Config] = pair(first: .{ host: "a" }, second: .{ host: "b" })
+  println(result)
+  println(pair(Box { value: .{ host: "boxed first" } }, Box { value: Config { host: "boxed second" } }))
+  println(pair(Box { value: Config { host: "boxed first" } }, Box { value: .{ host: "boxed second" } }))
+  println(both(.{ first: .{ host: "first field" }, second: Config { host: "second field" } }))
+  println(both(.{ second: .{ host: "second field" }, first: Config { host: "first field" } }))
+  println(Wrapped { value: .Some { value: 7 } })
+  println(boxed(value: .{ value: 1 }))
+  nested: Box[Option[Int]] = boxed(value: .{ value: .Some { value: 1 } })
+  println(nested)
+  println(callback(value: .{ host: "delayed callback" }, make: () => Config { host: "callback evidence" }))
+  println(callback(value: one, make: () => .{ host: "callback" }))
+  println(option(value: .Some { value: 2 }))
+  println(response())
+  println(union(value: .Disabled))
+  println(.{ host: "pipe" } |> config)
+  xs: List[Config] = [.{ host: "list" }]
+  println(xs)
+  m: Map[String, Config] = { "config": .{ host: "map" } }
+  println(m)
+  branch: Config = if (true) { .{ host: "if" } } else { .{ host: "else" } }
+  println(branch)
+  println(id(if (true) { .{ host: "generic if" } } else { Config { host: "else" } }))
+  println(id(match (true) { true => .{ host: "generic match" }, false => Config { host: "other" } }))
+  println(id([.{ host: "generic list" }, Config { host: "other" }]))
+  emptySome: Option[List[Int]] = option(.Some { value: [] })
+  println(emptySome)
+  inferred = if (true) { .{ host: "if inferred" } } else { Config { host: "else" } }
+  println(inferred)
+  matched: Config = match (true) { true => .{ host: "match" }, false => .{ host: "other" } }
+  println(matched)
+  empty: Tls = .Disabled {}
+  println(empty)
+}

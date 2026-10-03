@@ -25,8 +25,8 @@ fn waitForStop(s: Scope) uses clock + state {
 fn main() {
   scope app with cleanupTimeout(5000) {
     match (http.ListenRoutes(if (args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
-      http.Route { pattern: "GET /users/{id}", handler: logged(user) },
-      http.Route { pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },
+      .{ pattern: "GET /users/{id}", handler: logged(user) },
+      .{ pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },
     ])) {
       server: http.Server => {
         if (args() == ["demo"]) {

@@ -86,14 +86,18 @@ Postfix    = Primary { [ "[" Type { "," Type } "]" ] "(" [ Args ] ")"
                      | ".copy" "(" Update { Sep Update } [ Sep ] ")"
                      | "?"
                      | RecordLit } .
-RecordLit  = "{" [ FieldInit { Sep FieldInit } [ Sep ] ] "}" .  (* after User or Shape.Circle *)
+RecordLit  = "{" [ FieldInit { Sep FieldInit } [ Sep ] ] "}" .  (* after User, Shape.Circle, ".", or "." Ident *)
 FieldInit  = Ident ":" Expr .
 Update     = Ident { "." Ident } ":" Expr .  (* u.copy(address.city: "Oslo") *)
 Args       = Argument { "," Argument } [ "," ] .
 Argument   = [ Ident ":" ] Expr .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | "true" | "false" | Ident
+           | "." [ Ident ]
            | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr .
+(* A bare leading "." must be followed by RecordLit: .{ field: value }.
+   .Variant and .Variant { field: value } need an expected sealed type;
+   .{ field: value } needs an expected record type. Patterns stay explicit. *)
 ScopeExpr  = "scope" Ident [ "with" Expr { "," Expr } ] Block .  (* scope s { f = fs.Open(path, s)? ... }; scope s with taskTimeout(100), cleanupTimeout(500) { ... } *)
 Lambda     = ( Ident | "(" [ LParam { "," LParam } ] ")" ) "=>" Expr .  (* x => x + 1 *)
 LParam     = Ident [ ":" Type ] .

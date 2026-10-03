@@ -2,6 +2,9 @@ import "example.com/private/api"
 type Local = api.Secret
 type LocalBox = api.Box[Int]
 fn main() {
+  context: api.Secret = .hidden { value: 1 }
+  contextAlias: LocalBox = .hidden { value: 2 }
+  contextBare: api.Box[Int] = .empty
   aliased = Local.hidden { value: 1 }
   genericAlias = LocalBox.hidden { value: 1 }
   first = api.Secret.hidden { value: 1 }

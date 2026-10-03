@@ -1996,11 +1996,12 @@ with positional arguments), missing parameters and positional-after-named;
 formatter, describe and structured diagnostics cover the same source forms.
 Copy cases cover nested paths, rejected `=` syntax and its structured fix.
 
-### Context-typed record and variant literals (design: bork-vk07ec)
+### Context-typed record and variant literals (implemented; config showcase: bork-vk07ec)
 
 Named arguments identify an option; context literals let its expected type name
 the value. Keep explicit constructors available wherever they clarify a boundary.
-This section is the proposed implementation contract.
+The compiler implements the syntax and inference rules below; the package-owned
+config showcase follows the construction/invariant work in bork-kum0ep.
 
 ```bork
 // internal/std/log/log.bork: the function result names Config; fields name enums.
@@ -2122,7 +2123,9 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   value position that lacks an expected type and suggests a typed binding or an
   explicit constructor. Ambiguous context lists the candidate types and offers
   one explicit-constructor edit per candidate, rather than selecting one for the
-  user. Unknown variants search only visible variants of expected sealed types.
+  user. Generic constructors whose omitted type arguments need an expected
+  specialization mark the edit `requires_input` and name that specialization
+  for a type annotation; explicit literal syntax has no type-argument list. Unknown variants search only visible variants of expected sealed types.
   Offer `.Variant` when that corrected spelling selects a unique candidate;
   otherwise offer separate explicitly qualified constructors for the close
   candidates. Never suggest a spelling that remains ambiguous.
