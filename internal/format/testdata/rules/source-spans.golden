@@ -1,0 +1,8 @@
+// Preserved text may span several lines.
+fn text(): String unsafe go {
+return "å"
+} // Go tail
+fn main() {
+  /* block
+  comment */ println(s"å ${text()}") // interpolation tail
+}

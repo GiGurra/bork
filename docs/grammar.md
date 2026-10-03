@@ -145,6 +145,10 @@ FieldPat   = Ident [ ":" Pattern ] .         (* radius, radius: r, radius: 0, ce
 EOL        = newline | ";" .
 ```
 
+The formatter writes LF line endings, including after line comments, while
+preserving bytes inside block comments, literals, interpolations and raw Go bodies.
+Source spans follow the lexer's token ends, independently of printed token text.
+
 ## Semantics in brief
 
 - **Everything is an expression.** A block's value is its last expression. An empty block or a block that ends with a statement has type `Unit`; in a function returning a union containing `Unit`, it returns that member, including in an `if` branch or `match` arm.

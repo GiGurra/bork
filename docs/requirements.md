@@ -7,7 +7,9 @@
 
 The toolchain includes `bork fmt [paths...]`: one canonical whitespace format,
 with two spaces for indentation and normalized spacing and blank-line grouping.
-Existing line breaks, comment text, and raw Go bodies are retained. `--check`
+Existing line breaks, comment text, and raw Go bodies are retained. CRLF line
+endings become LF, including line-comment endings; bytes inside block comments,
+strings, interpolations, and raw Go bodies stay unchanged. `--check`
 reports files that would change and exits non-zero without writing them.
 
 v0.1 is deliberately feature-sparse. It exists to prove the core idea (below): **when everything is immutable, every proven fact stays true**, so correctness checks are cheap, local, and permanent. Anything that doesn't serve that idea waits.

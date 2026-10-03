@@ -1,0 +1,6 @@
+// heading
+
+fn main() { // inline
+  println(1) // tail
+}
+// final
