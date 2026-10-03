@@ -1,0 +1,21 @@
+f81d4fae-7dec-11d0-a765-00a0c91e6bf6
+f81d4fae-7dec-11d0-a765-00a0c91e6bf6
+f81d4fae-7dec-11d0-a765-00a0c91e6bf6
+1
+true
+true
+true
+true
+"f81d4fae-7dec-11d0-a765-00a0c91e6bf6"
+true
+DecodeError { path: "", message: "expected a UUID string" }
+DecodeError { path: ".id", message: "invalid UUID length: 3" }
+Option.Some { value: "value" }
+00000000-0000-0000-0000-000000000000
+true
+true
+true
+true
+[true, true]
+Settings { id: f81d4fae-7dec-11d0-a765-00a0c91e6bf6 }
+Unit

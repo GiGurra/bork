@@ -283,3 +283,15 @@ transport and timeout errors are IoError, and invalid UTF-8 is ParseError.
 `SplitAddress`/`JoinAddress` are pure host/port helpers; `Resolve(host, scope)`
 resolves IP addresses with scope cancellation and sorts them. TLS is future work.
 See [the network example](../examples/net/main.bork).
+
+`bork/uuid` provides `Uuid`, a canonical lowercase UUID value guarded by the
+`Canonical` fact. `Parse(text)` accepts dashed, compact, braced, and urn:uuid
+forms supported by the backend and normalizes them, returning Uuid or ParseError.
+`V4()` generates a random UUID (`uses random`); `V7()` generates a time-ordered
+UUID (`uses random + clock`); entropy errors are IoError. `Nil()`, `Version(id)`,
+and `Format(id)` are pure. Printing and `toString(id)` use canonical text, and
+Uuid works as a map key. `use uuid.Codecs` enables Encode/Decode as JSON strings,
+including nested records and environment config. `env.Load` UUID cells therefore
+use JSON string syntax; `env.LoadJson` works with ordinary JSON UUID strings.
+The backend is pinned google/uuid v1.6.0 to retain Go 1.26 support; it does not
+leak into bork values. See [the UUID example](../examples/uuid/main.bork).

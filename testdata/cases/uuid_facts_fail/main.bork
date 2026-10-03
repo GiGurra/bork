@@ -1,0 +1,5 @@
+import "bork/uuid"
+fn main() {
+  bad = uuid.Uuid { value: "bad" }
+  unnormalized = uuid.Uuid { value: "F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6" }
+}

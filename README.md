@@ -217,6 +217,9 @@ See [examples/process](examples/process/main.bork).
 Import `bork/net` for scope-owned TCP/UDP sockets, binary data and UTF-8 lines,
 per-call timeouts, and address helpers. See [examples/net](examples/net/main.bork).
 
+Import `bork/uuid` for canonical UUIDs, v4/v7 generation, map keys, and JSON
+string codecs (`use uuid.Codecs`). See [examples/uuid](examples/uuid/main.bork).
+
 ## License
 
 [MIT](LICENSE)

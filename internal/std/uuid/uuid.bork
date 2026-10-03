@@ -1,0 +1,57 @@
+// Package uuid provides canonical immutable UUIDs, encoded as JSON strings.
+pred Canonical(text: String) { canonical(text) }
+type Uuid = { value: String where Canonical }
+
+fn canonical(text: String): Bool unsafe go {
+  import "github.com/google/uuid"
+  id, err := uuid.Parse(text)
+  return err == nil && id.String() == text
+}
+fn Parse(text: String): Uuid | ParseError unsafe go {
+  import "github.com/google/uuid"
+  id, err := uuid.Parse(text)
+  if err != nil { return ParseError{input: text, message: err.Error()} }
+  return Uuid{value: id.String()}
+}
+fn V4() uses random: Uuid | IoError unsafe go {
+  import "github.com/google/uuid"
+  id, err := uuid.NewRandom()
+  if err != nil { return IoError{path: "uuid", message: err.Error()} }
+  return Uuid{value: id.String()}
+}
+fn V7() uses random + clock: Uuid | IoError unsafe go {
+  import "github.com/google/uuid"
+  id, err := uuid.NewV7()
+  if err != nil { return IoError{path: "uuid", message: err.Error()} }
+  return Uuid{value: id.String()}
+}
+fn Format(id: Uuid): String { id.value }
+fn Nil(): Uuid unsafe go {
+  import "github.com/google/uuid"
+  return Uuid{value: uuid.Nil.String()}
+}
+fn Version(id: Uuid): Int unsafe go {
+  import "github.com/google/uuid"
+  parsed, _ := uuid.Parse(id.value)
+  return int64(parsed.Version())
+}
+
+instance ShowUuid: Show[Uuid] {
+  fn show(id: Uuid): String { id.value }
+}
+instance EncodeUuid: Encode[Uuid] {
+  fn encode(id: Uuid): Json { Json.String { value: id.value } }
+}
+instance DecodeUuid: Decode[Uuid] {
+  fn decode(json: Json): Uuid | DecodeError {
+    match (json) {
+      Json.String { value } => match (Parse(value)) {
+        id: Uuid => id
+        error: ParseError => DecodeError { path: "", message: error.message }
+      }
+      _ => DecodeError { path: "", message: "expected a UUID string" }
+    }
+  }
+}
+
+instances Codecs { EncodeUuid, DecodeUuid }
