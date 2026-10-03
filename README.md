@@ -220,6 +220,10 @@ per-call timeouts, and address helpers. See [examples/net](examples/net/main.bor
 Import `bork/uuid` for canonical UUIDs, v4/v7 generation, map keys, and JSON
 string codecs (`use uuid.Codecs`). See [examples/uuid](examples/uuid/main.bork).
 
+Import `bork/crypto` for SHA-256/512, HMAC, secure bytes/tokens and Argon2id
+password hashes. Verification also accepts legacy bcrypt hashes; `NeedsRehash`
+supports upgrading them on login. See [examples/crypto](examples/crypto/main.bork).
+
 Import `bork/rand` for bounded integers, floats, shuffling and picking. A seeded
 opaque `Generator` returns `{ value, next }` draws, so replay needs no mutable
 state. See [examples/rand](examples/rand/main.bork).

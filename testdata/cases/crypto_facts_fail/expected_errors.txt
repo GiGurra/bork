@@ -1,0 +1,5 @@
+main.bork:3:30: crypto.RandomBytes requires size to be crypto.ValidSize, but crypto.ValidSize(-1) is false
+main.bork:4:24: crypto.Token requires size to be crypto.ValidTokenSize, but crypto.ValidTokenSize(1) is false
+main.bork:5:44: crypto.PasswordParams requires memoryKiB to be crypto.ValidMemory, but crypto.ValidMemory(0) is false
+main.bork:5:59: crypto.PasswordParams requires iterations to be crypto.ValidIterations, but crypto.ValidIterations(0) is false
+main.bork:5:75: crypto.PasswordParams requires parallelism to be crypto.ValidParallelism, but crypto.ValidParallelism(0) is false
