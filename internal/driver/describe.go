@@ -76,11 +76,13 @@ func Describe(position, where string) (*describe.Result, error) {
 	if selected.ProviderBundle != nil {
 		return &describe.Result{SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
 	}
+	var async *check.AsyncDescription
 	var lazy *check.LazyDescription
 	if v, ok := selected.Expr.(*check.VarRef); ok && v.Var.Let != nil {
 		lazy = v.Var.Let.Lazy
+		async = v.Var.Let.Async
 	}
-	return &describe.Result{Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
+	return &describe.Result{Async: async, Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
 }
 
 // belongsTo names the scopes the selected value belongs to.

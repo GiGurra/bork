@@ -377,16 +377,27 @@ type Try struct {
 // Stmt is a statement of a block.
 type Stmt interface{ stmtNode() }
 
-// Let binds a variable: `name = value` or `name: Type = value`. Var's
-// name is "_" for a value that is only computed.
+// DeferredKind distinguishes when a memoized initializer starts.
+type DeferredKind uint8
+
+const (
+	EagerBinding DeferredKind = iota
+	LazyBinding
+	AsyncBinding
+)
+
+// Let binds a variable; name "_" only evaluates and drops its value.
 type Let struct {
-	// Thunk holds a lazy initializer's function boundary; Value retains
+	Deferred   DeferredKind
+	AsyncScope Expr
+	Async      *AsyncDescription
+	// Initializer holds a deferred initializer's function boundary; Value retains
 	// its ordinary source type for effects and static proof checking.
-	Thunk *Lambda
-	Lazy  *LazyDescription
-	Pos   diag.Pos
-	Var   *Var
-	Value Expr
+	Initializer *Lambda
+	Lazy        *LazyDescription
+	Pos         diag.Pos
+	Var         *Var
+	Value       Expr
 	// Declared is set when the binding's type is written; Constraints
 	// are then its where clauses.
 	Declared    bool

@@ -13,6 +13,7 @@ import (
 )
 
 type Result struct {
+	Async          *check.AsyncDescription          `json:"async,omitempty"`
 	Lazy           *check.LazyDescription           `json:"lazy,omitempty"`
 	ProviderBundle *check.ProviderBundleDescription `json:"provider_bundle,omitempty"`
 	Assembly       *check.Assembly                  `json:"assembly,omitempty"`
@@ -284,9 +285,10 @@ func (s *sourceIndex) walk(x check.Expr) {
 		for _, stmt := range x.Stmts {
 			switch stmt := stmt.(type) {
 			case *check.Let:
-				if !strings.HasPrefix(stmt.Var.Name, "_") && (s.contains(stmt.Var.Pos, len(stmt.Var.Name)) || stmt.Thunk != nil && s.contains(stmt.Thunk.Pos(), 4)) {
+				if !strings.HasPrefix(stmt.Var.Name, "_") && (s.contains(stmt.Var.Pos, len(stmt.Var.Name)) || stmt.Initializer != nil && s.contains(stmt.Initializer.Pos(), len("async"))) {
 					s.selectVar(stmt.Var, stmt.Value.Pos())
 				}
+				s.walk(stmt.AsyncScope)
 				s.walk(stmt.Value)
 			case *check.ExprStmt:
 				s.walk(stmt.X)

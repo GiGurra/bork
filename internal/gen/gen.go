@@ -375,6 +375,7 @@ type gen struct {
 	usesOk           bool
 	usesMap          bool
 	usesLazy         bool
+	usesAsync        bool
 	evalMode         bool
 	usesSeq          bool
 	usesSeqFirst     bool
@@ -819,7 +820,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		return nil, g.instance(e.Inst)
 	case *check.VarRef:
 		g.captured(e.Var, false)
-		if e.Var.Let != nil && e.Var.Let.Thunk != nil {
+		if e.Var.Let != nil && e.Var.Let.Initializer != nil {
 			return nil, &ast.CallExpr{Fun: &ast.SelectorExpr{X: varIdent(e.Var), Sel: ast.NewIdent("get")}}
 		}
 		if e.Type() == check.OwnedScope {
@@ -1283,8 +1284,12 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		location := e.Pos()
 		location.Col = 0
 		debugText := e.DebugText
-		if v, ok := e.Args[0].(*check.VarRef); ok && v.Var.Let != nil && v.Var.Let.Thunk != nil {
-			debugText += " (forces lazy)"
+		if v, ok := e.Args[0].(*check.VarRef); ok && v.Var.Let != nil && v.Var.Let.Initializer != nil {
+			if v.Var.Let.Deferred == check.AsyncBinding {
+				debugText += " (awaits async)"
+			} else {
+				debugText += " (forces lazy)"
+			}
 		}
 		label := &ast.BinaryExpr{X: g.callerLocation(location), Op: token.ADD, Y: strLit(" " + debugText)}
 		print := fmtCall("Fprintf", &ast.SelectorExpr{X: ast.NewIdent("os"), Sel: ast.NewIdent("Stderr")}, strLit("%s = %s\n"), label, g.stringOf(value, e.Type()))
@@ -1454,14 +1459,25 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 	for _, s := range list {
 		switch s := s.(type) {
 		case *check.Let:
-			if s.Thunk != nil {
+			if s.Initializer != nil {
 				g.usesLazy = true
 				constructor := "_lazyNew"
+				args := []ast.Expr{g.lambda(s.Initializer)}
+				if s.Deferred == check.AsyncBinding {
+					g.usesAsync, g.usesScopes = true, true
+					constructor = "_asyncNew"
+					stmts, scope := g.value(s.AsyncScope)
+					out = append(out, stmts...)
+					if scope == nil {
+						return out
+					}
+					args = append([]ast.Expr{scope}, args...)
+				}
 				if g.evalMode && s.Lazy != nil && s.Lazy.Effects == "nothing" {
 					constructor = "_lazyConstNew"
 				}
 				ctor := &ast.IndexExpr{X: ast.NewIdent(constructor), Index: g.goType(s.Var.Type)}
-				out = append(out, define(varIdent(s.Var), &ast.CallExpr{Fun: ctor, Args: []ast.Expr{g.lambda(s.Thunk)}}))
+				out = append(out, define(varIdent(s.Var), &ast.CallExpr{Fun: ctor, Args: args}))
 				if s.Var.Unused {
 					out = append(out, assign(ast.NewIdent("_"), varIdent(s.Var)))
 				}

@@ -1,0 +1,22 @@
+owner evaluated
+both started
+11
+11
+22
+11
+Failed {}
+Failed {}
+3
+5
+Failed {}
+Option.Some { value: 9 }
+captured
+10
+generic
+1
+1
+2
+2
+1
+true
+9

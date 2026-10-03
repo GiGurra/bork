@@ -1,0 +1,46 @@
+pred positive(x: Int) { x > 0 }
+type Failed = {}
+ambient label: String
+fn bad(): Int | Failed { Failed {} }
+fn named() needs label: String { label }
+fn async(n: Int): Int { n }
+fn generic[T](s: Scope, value: T in s): T { async(s) saved = value; saved }
+fn owner(s: Scope) uses io: Scope { println("owner evaluated"); s }
+fn earlyOwner(): Int { scope s { async({ if (true) { return 9 }; s }) value = 99; value } }
+fn main() {
+  scope s {
+    ready = channel[Int](s, 2)
+    release = channel[Int](s, 2)
+    async(owner(s)) first = { _ = send(ready, 1); _ = receive(release); 11 }
+    async(s) second = { _ = send(ready, 2); _ = receive(release); 22 }
+    _ = receive(ready); _ = receive(ready)
+    println("both started")
+    _ = send(release, 1); _ = send(release, 2)
+    reader = () => first
+    println(reader()); println(first); println(second)
+    alias = first; println(alias)
+    async(s) failed = bad()
+    println(failed); println(failed)
+    async(s) early: Int where positive = { if (true) { return 3 }; 4 }
+    println(early)
+    async(s) inferred = { if (true) { return 5 }; 6 }
+    println(inferred)
+    async(s) propagate = { number = bad()?; number + 1 }
+    println(propagate)
+    async(s) optional: Option[Int] = { number = Option.Some { value: 8 }?; number + 1 }
+    println(optional)
+    with (label: "captured") {
+      async(s) name = named()
+      with (label: "reader") { println(name) }
+    }
+    async(s) keyword = async(10)
+    println(keyword); println(generic(s, "generic"))
+    for (n in [1, 2]) { async(s) item = n; println(item); println(item) }
+    done = atom(0)
+    scope child { async(child) unused = update(done, n => n + 1) }
+    println(current(done))
+    async(s) checked: Int where positive = 7
+    println(positive(checked))
+  }
+  println(earlyOwner())
+}

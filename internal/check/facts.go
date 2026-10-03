@@ -398,8 +398,11 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 	for _, s := range list {
 		switch s := s.(type) {
 		case *Let:
-			if s.Thunk != nil {
-				f.lazyBinding(s, e)
+			if s.Initializer != nil {
+				if s.AsyncScope != nil {
+					f.walk(s.AsyncScope, e)
+				}
+				f.deferredBinding(s, e)
 				continue
 			}
 			f.walk(s.Value, e)

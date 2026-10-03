@@ -105,6 +105,13 @@ func printDescription(result *describe.Result) {
 	if len(result.BelongsTo) > 0 {
 		fmt.Println("belongs to:", strings.Join(result.BelongsTo, ", "))
 	}
+	if result.Async != nil {
+		fmt.Println("async: scope", result.Async.Scope, "(read awaits)")
+		fmt.Println("initializer effects:", result.Async.Effects)
+		if len(result.Async.Captures) > 0 {
+			fmt.Println("captures:", strings.Join(result.Async.Captures, ", "))
+		}
+	}
 	if result.Lazy != nil {
 		fmt.Println("lazy:", result.Lazy.Kind, "(first read forces)")
 		fmt.Println("initializer effects:", result.Lazy.Effects)

@@ -166,9 +166,19 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 	case *syntax.Binding:
 		let := &Let{Pos: s.Pos, Value: l.expr(s.Value), Declared: s.Type != nil, Constraints: l.info.bindingConstraints[s]}
 		let.Var = &Var{Label: l.info.assemblyNames[s], Name: s.Name, Pos: s.Pos, Type: l.info.bindings[s], Kind: VarLet, Let: let, Unused: l.info.unused[s]}
-		if s.Lazy {
-			let.Lazy = l.info.lazyBindings[s]
-			let.Thunk = &Lambda{expr: expr{pos: s.LazyPos, typ: &FuncType{Result: let.Var.Type}}, Body: let.Value}
+		if s.Lazy || s.AsyncScope != nil {
+			let.Deferred = LazyBinding
+			pos := s.LazyPos
+			metadata := l.info.lazyBindings[s]
+			if s.AsyncScope != nil {
+				let.Deferred = AsyncBinding
+				pos = s.AsyncPos
+				let.AsyncScope = l.expr(s.AsyncScope)
+				let.Async = &AsyncDescription{Scope: writtenText(s.AsyncScope), Effects: metadata.Effects, Captures: metadata.Captures}
+			} else {
+				let.Lazy = metadata
+			}
+			let.Initializer = &Lambda{expr: expr{pos: pos, typ: &FuncType{Result: let.Var.Type}}, Body: let.Value}
 		}
 		l.vars[s] = let.Var
 		return let

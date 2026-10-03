@@ -394,12 +394,14 @@ type Stmt interface{ stmtNode() }
 // Binding is `name = value`, or `name: Type = value`. Bindings are
 // immutable.
 type Binding struct {
-	Lazy    bool
-	LazyPos diag.Pos
-	Pos     diag.Pos
-	Name    string
-	Type    *TypeExpr // nil if not written
-	Value   Expr
+	AsyncScope Expr
+	AsyncPos   diag.Pos
+	Lazy       bool
+	LazyPos    diag.Pos
+	Pos        diag.Pos
+	Name       string
+	Type       *TypeExpr // nil if not written
+	Value      Expr
 }
 
 // ExprStmt is an expression evaluated for its effect.

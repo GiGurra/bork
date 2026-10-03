@@ -321,7 +321,7 @@ func (c *checker) ambientIdent(e *syntax.Ident, a *Ambient) Type {
 	}
 	if l := c.lookup(ambientKey(a)); l != nil {
 		l.used = true
-		c.noteLazyCapture(l.decl, e.Name)
+		c.noteInitializerCapture(l.decl, e.Name)
 		c.info.defs[e] = l.decl
 		return l.typ
 	}
@@ -441,7 +441,7 @@ func (c *checker) provideNeeds(e syntax.Expr, fn *Func, callee string) {
 				optionalHere = true
 			}
 			l.used = true
-			c.noteLazyCapture(l.decl, name)
+			c.noteInitializerCapture(l.decl, name)
 		}
 		switch {
 		case n.Optional && l == nil:
