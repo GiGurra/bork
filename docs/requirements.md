@@ -839,7 +839,7 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 7. **Third-party Go packages**, with Go module dependencies (bork-8zh4yy), and the standard library's bindings checked by a test.
 8. **Docs:** fold this section into the decided parts, and update `grammar.md`, the prelude's table, and the README.
 
-Effects land separately (bork-ot9ki9). Until they do, a binding has no `uses`, and the `bork.mod` gate does not exist yet; both apply to bindings from the moment they apply to `unsafe go` bodies.
+Effects in signatures and bodies have landed (bork-ot9ki9). Bindings declare their effects with `uses`, like `unsafe go` bodies. The standard-library binding effects table and the `bork.mod` gate are still to come.
 
 ### Open questions
 

@@ -5,8 +5,8 @@ fn QueryEscape(s: String): String unsafe go "net/url.QueryEscape"
 fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"
 fn Fields(s: String): List[String] unsafe go "strings.Fields"
 fn Join(parts: List[String], sep: String): String unsafe go "strings.Join"
-fn LookupEnv(key: String): Option[String] unsafe go "os.LookupEnv"
-fn Chdir(dir: String): Unit | GoError unsafe go "os.Chdir"
+fn LookupEnv(key: String) uses io: Option[String] unsafe go "os.LookupEnv"
+fn Chdir(dir: String) uses io: Unit | GoError unsafe go "os.Chdir"
 fn Abs(x: Float): Float unsafe go "math.Abs"
 
 // Numbers: lossless to Go, checked from Go.
@@ -30,8 +30,8 @@ fn Sha256(data: Bytes): List[Byte] unsafe go "crypto/sha256.Sum256"
 
 // Pointers: Option or a checked value from Go. The value is copied when
 // the binding returns, so a later flag.Parse would not show here.
-fn FlagString(name: String, value: String, usage: String): String | GoValueError unsafe go "flag.String"
-fn FlagInt(name: String, value: Int, usage: String): Option[Int] unsafe go "flag.Int"
+fn FlagString(name: String, value: String, usage: String) uses io: String | GoValueError unsafe go "flag.String"
+fn FlagInt(name: String, value: Int, usage: String) uses io: Option[Int] unsafe go "flag.Int"
 
 // A method can bind a Go function too: the receiver is its first
 // parameter.
