@@ -595,11 +595,23 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	g.fnResult = fn.Result
 	decl := g.signature(fd)
 	// An owned scope given to the function is closed if it ends early.
+	// A parameter declared in another closes before it: its fallback is
+	// deferred after that one's.
 	var drops []ast.Stmt
-	for i, t := range fn.Params {
-		if t == check.OwnedScope {
-			drops = append(drops, dropOwner(fd.Params[i].Name)...)
+	deferred := map[int]bool{}
+	var drop func(i int)
+	drop = func(i int) {
+		if deferred[i] || fn.Params[i] != check.OwnedScope {
+			return
 		}
+		deferred[i] = true
+		if t := fn.ParamIn[i]; t >= 0 {
+			drop(t)
+		}
+		drops = append(drops, dropOwner(fd.Params[i].Name)...)
+	}
+	for i := range fn.Params {
+		drop(i)
 	}
 	if fn.Result == check.Unit {
 		decl.Body = &ast.BlockStmt{List: append(drops, g.blockInto(fn.Body, sink{})...)}
@@ -714,6 +726,10 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			return g.effect(e), g.unitValue()
 		}
 		res := g.newTmp()
+		if t == check.OwnedScope {
+			// The owner the block gives keeps a fallback until its use.
+			return []ast.Stmt{varDecl(res, g.goType(t)), dropOwner(res.Name)[2], &ast.BlockStmt{List: g.blockInto(e, sink{res: res, resType: t})}}, &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: res}}}
+		}
 		return []ast.Stmt{varDecl(res, g.goType(t)), &ast.BlockStmt{List: g.blockInto(e, sink{res: res, resType: t})}}, res
 	case *check.ScopeBlock:
 		if t == check.Never {

@@ -1,6 +1,10 @@
 package check
 
-import "github.com/GiGurra/bork/internal/diag"
+import (
+	"slices"
+
+	"github.com/GiGurra/bork/internal/diag"
+)
 
 // Owned child scopes: `b = openScope(app)` opens a child scope of app
 // that b owns, `closeScope(b)` ends it, and `b.scope` borrows its Scope.
@@ -183,7 +187,13 @@ func (l *lifeChecker) ownerValue(x Expr, how string) lifetime {
 		}
 		return life
 	case *Block:
-		return l.block(x, func(t Expr) lifetime { return l.ownerValue(t, how) })
+		return l.block(x, func(t Expr) lifetime {
+			// The block's own owner is moved out of it: bound outside.
+			if v, ok := t.(*VarRef); ok && how == "bind" && slices.Contains(l.owners[len(l.owners)-1], v.Var) {
+				return l.ownerValue(t, "pass")
+			}
+			return l.ownerValue(t, how)
+		})
 	case *Call:
 		return l.callLife(x)
 	}
@@ -277,7 +287,12 @@ func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved m
 				target = lifetime{l.childOf(m)}
 			}
 			if fn.Params[j] == OwnedScope {
-				// prev: OwnedScope in app: app outlives prev's child.
+				// prev: OwnedScope in app: app outlives prev's child. A new
+				// owner (not a variable) outlives no existing child.
+				if fn.Params[t] == OwnedScope && moved[t] == nil {
+					l.errorf(xargs[t].Pos(), "parameter %s of %s is declared in %s, so give %s as an owner variable, whose scope it belongs to", fn.Decl.Params[j].Name, fn.Decl.Name, fn.Decl.Params[t].Name, fn.Decl.Params[t].Name)
+					continue
+				}
 				child := args[j]
 				if m, ok := moved[j]; ok {
 					child = lifetime{l.childOf(m)}

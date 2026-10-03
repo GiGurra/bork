@@ -36,3 +36,5 @@ main.bork:234:19: the lambda may not live as long as scope q.scope (it depends o
 main.bork:236:14: q may be released: it belongs to owned scope a, which was closed at line 235
 main.bork:244:7: c may be released: it belongs to owned scope a, which was closed at line 243
 main.bork:245:14: b may be released: it belongs to owned scope a, which was closed at line 243
+main.bork:262:3: g may be released: it belongs to owned scope b, which was passed on at line 262
+main.bork:272:15: parameter prev of inNew is declared in a, so give a as an owner variable, whose scope it belongs to

@@ -47,6 +47,9 @@ failed
 open consumed later
 close consumed later
 failed
+open from a block
+close from a block
+failed
 -- a task opens and closes its own owned scope
 open task's own
 task uses task's own

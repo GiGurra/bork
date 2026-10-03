@@ -1057,7 +1057,11 @@ fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io
   could close the owner and go on using the value. `prev: OwnedScope in app`
   says that `app` outlives the child, so its tasks may use `app`'s values:
   the caller must give an owner whose scope `app` outlives (its child, or a
-  child of it, not a sibling). For a
+  child of it, not a sibling); when `app` is itself an `OwnedScope`
+  parameter, it must be given as an owner variable. A function value called
+  after an argument closed an owner it belongs to is also rejected. When the
+  function ends early, a parameter's fallback closes it before the
+  parameter it is declared in. For a
   `Scope` it also lets a task of `app` use the value without `attach`
   (`pool: Pool in app`).
 - **Cleanup ordering.** Closing a scope cancels it, waits for its own tasks,
@@ -1070,7 +1074,8 @@ fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io
   first (a task of a child can own a newer child, which it closes itself once
   the older child's close cancels and waits for it). Their failures join the
   parent's: task failures, then the children's, then the finalizers', as one
-  panic. A second close of a scope already closing returns at once.
+  panic. A second close of a scope already closing returns at once, possibly before
+  the first has finished (only an orphaned task can race its parent so).
 - **Cancellation.** A child is cancelled with its parent (its context derives
   from the parent's); `cancel(b.scope)` cancels only the child. Cancellation
   alone neither closes a child nor proves it closed. A child opened in a

@@ -246,3 +246,28 @@ fn grandparent(app: Scope) uses io + state {
 }
 
 fn main() {}
+
+// Found in the second review: a function value run after an argument
+// closed its owner, and a new owner given where an existing child is
+// declared.
+fn closer(b: OwnedScope) uses state: Int {
+  closeScope(b)
+  1
+}
+
+fn functionValue(app: Scope) uses io + state {
+  b = openScope(app)
+  c = connect(b.scope)
+  g = (n: Int) => use(c)
+  g(closer(b))
+}
+
+fn inNew(prev: OwnedScope in a, a: OwnedScope) uses state {
+  closeScope(prev)
+  closeScope(a)
+}
+
+fn newOwnerIn(app: Scope) uses state {
+  prev = openScope(app)
+  inNew(prev, openScope(app))
+}

@@ -133,6 +133,16 @@ fn main() uses io + clock + state {
       f: Failed => println(f.reason)
       _ => println("unexpected")
     }
+    match (consumeBlock(app)) {
+      f: Failed => println(f.reason)
+      _ => println("unexpected")
+    }
+    // A block can give the owner it opened.
+    bound = {
+      inner = openScope(app)
+      inner
+    }
+    closeScope(bound)
     println("-- a task opens and closes its own owned scope")
     own = spawn(app, () => {
       mine = openScope(app)
@@ -187,6 +197,16 @@ fn consumeLater(app: Scope) uses io + state: Unit | Failed {
   b = openScope(app)
   _ = connect("consumed later", b.scope)
   consume(b, mayFail(true)?)
+}
+
+// consumeBlock gives a call an owner made by a block, and then fails
+// in a later argument: the owner is closed on the way out.
+fn consumeBlock(app: Scope) uses io + state: Unit | Failed {
+  consume({
+    b = openScope(app)
+    _ = connect("from a block", b.scope)
+    b
+    }, mayFail(true)?)
 }
 
 fn withTask(b: OwnedScope, f: () uses io => Unit in b) uses io: OwnedScope {

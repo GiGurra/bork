@@ -469,7 +469,13 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return l.call(nil, true, x.Args)
 	case *CallValue:
 		life := l.use(x.Fun, l.expr(x.Fun))
-		return life.union(l.call(nil, false, x.Args))
+		args := l.call(nil, false, x.Args)
+		// The function runs after its arguments, which may have closed an
+		// owner it belongs to.
+		if len(life) > 0 {
+			life = l.use(x.Fun, life)
+		}
+		return life.union(args)
 	case *Select:
 		return l.use(x.X, l.expr(x.X))
 	case *RecordLit:
