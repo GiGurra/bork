@@ -163,7 +163,13 @@ func evaluatorWithContext(files []*syntax.File, info *check.Info, module *goModu
 
 func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext, timeout time.Duration) check.Evaluator {
 	return func(queries []check.Query) ([]bool, error) {
-		goSrc, err := gen.EvalProgram(files, info, queries)
+		var goSrc []byte
+		var err error
+		if timeout > 0 {
+			goSrc, err = gen.EvalComptimeProgram(files, info, queries)
+		} else {
+			goSrc, err = gen.EvalProgram(files, info, queries)
+		}
 		if err != nil {
 			return nil, err
 		}

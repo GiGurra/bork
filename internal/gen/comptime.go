@@ -19,6 +19,7 @@ import (
 func ComptimeProgram(files []*syntax.File, info *check.Info, node *check.Comptime) ([]byte, error) {
 	g := newGen(info)
 	g.evalMode = true
+	g.comptimeMode = true
 	g.comptimeCaptures = map[*check.Var]check.Expr{}
 	var captureValue func(*check.Var)
 	captureValue = func(v *check.Var) {

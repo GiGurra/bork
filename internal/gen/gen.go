@@ -53,8 +53,18 @@ func newGen(info *check.Info) *gen {
 // on constants and prints each result (true or false) on its own line.
 // The compiler uses it to evaluate predicates at compile time.
 func EvalProgram(files []*syntax.File, info *check.Info, queries []check.Query) ([]byte, error) {
+	return evalProgram(files, info, queries, false)
+}
+
+// EvalComptimeProgram uses explicit-computation restrictions for proof execution.
+func EvalComptimeProgram(files []*syntax.File, info *check.Info, queries []check.Query) ([]byte, error) {
+	return evalProgram(files, info, queries, true)
+}
+
+func evalProgram(files []*syntax.File, info *check.Info, queries []check.Query, comptime bool) ([]byte, error) {
 	g := newGen(info)
 	g.evalMode = true
+	g.comptimeMode = comptime
 	var roots []*check.Func
 	body := &ast.BlockStmt{}
 	for _, q := range queries {
@@ -384,6 +394,7 @@ type gen struct {
 	usesAsync        bool
 	evalMode         bool
 	comptimeCaptures map[*check.Var]check.Expr
+	comptimeMode     bool
 	// Captures disappear from emitted recipes; retain valid Go bindings for their declarations.
 	comptimeReads    map[*check.Var]bool
 	usesSeq          bool

@@ -136,7 +136,7 @@ module-root change invalidates the whole checked result as well as comptime.
 
 ## Result representation and facts
 
-Support Bool, String, numeric types, Unit/Ok (whichever name the prelude has),
+Support Bool, String, numeric types, Ok,
 lists, ordered Maps, records, sealed variants, unions and concrete generic data
 made recursively from those types. Aliases retain their nominal/constraint
 metadata. Reject function values, scopes/resources, tasks/channels/atoms, Seq,

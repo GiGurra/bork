@@ -1378,7 +1378,12 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 		g.usesHash = true
 		g.usesShow = true
 		g.usesEqual = true
-		src = append(src, mapRuntime, mapHelpers)
+		mapSource := mapRuntime
+		if g.comptimeMode {
+			mapSource = strings.Replace(mapSource, "func (c *_hashCore) each(f func(e *_mapEntry) bool) { c.trie.each(f) }", "func (c *_hashCore) each(f func(e *_mapEntry) bool) { panic(\"comptime cannot iterate an unordered map\") }", 1)
+			mapSource = strings.Replace(mapSource, "func (c *_hashCore) mapVals(f func(v any) any) _mapImpl {", "func (c *_hashCore) mapVals(f func(v any) any) _mapImpl {panic(\"comptime cannot iterate an unordered map\");", 1)
+		}
+		src = append(src, mapSource, mapHelpers)
 	}
 	if g.usesHash {
 		src = append(src, hashRuntime)
