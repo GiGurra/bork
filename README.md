@@ -37,6 +37,8 @@ transfer(0)              // error: transfer requires amount to be positive, but 
 
 Predicates are ordinary bork functions; on constants, the compiler runs them at build time. See [examples/payments](examples/payments/main.bork).
 
+Facts in positions the checker cannot enforce yet, such as Map keys and values or constrained match type patterns, produce a compile error. See the [supported fact positions](docs/grammar.md#semantics-in-brief).
+
 So do scopes:
 
 ```

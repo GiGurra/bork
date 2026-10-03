@@ -1,0 +1,17 @@
+pred positive(x: Int) { x > 0 }
+type T = Int where positive
+
+class Size[T] {
+  fn size(x: T): Int
+}
+instance sizeString: Size[String] {
+  fn size(x: String): Int { byteLength(x) }
+}
+
+type Box[T] = { values: List[T] }
+
+fn main() {
+  println(size("a"))
+  b: Box[String] = Box { values: ["d"] }
+  println(b)
+}

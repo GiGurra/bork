@@ -1,0 +1,9 @@
+pred Positive(x: Int) { x > 0 }
+type internalPositive = Int where Positive
+type PositiveInt = internalPositive
+type plainBase = Int
+type PlainInt = plainBase
+
+test "library positive" (x: Int where Positive) {
+  assert(Positive(x))
+}

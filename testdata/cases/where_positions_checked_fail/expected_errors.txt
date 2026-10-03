@@ -1,11 +1,12 @@
 main.bork:19:35: result promises a result that is positive, but positive(0) is false
 main.bork:20:44: member promises a result that is positive, but positive(0) is false
 main.bork:21:45: listResult promises that every element of its result is positive, but positive(0) is false
-main.bork:24:17: param requires n to be positive, but positive(0) is false
-main.bork:25:17: alias requires n to be positive, but positive(0) is false
-main.bork:26:20: elements requires every element of xs to be positive, but positive(0) is false
-main.bork:27:20: optional requires the value in o to be positive, but positive(0) is false
-main.bork:28:16: pair requires the a of p to be positive, but positive(0) is false
-main.bork:29:30: Account requires balance to be positive, but positive(0) is false
-main.bork:30:32: Shape.Square requires side to be positive, but positive(0) is false
-main.bork:31:27: n must be positive, but positive(0) is false
+main.bork:22:32: defaultPositive requires n to be positive, but positive(0) is false
+main.bork:26:17: param requires n to be positive, but positive(0) is false
+main.bork:27:17: alias requires n to be positive, but positive(0) is false
+main.bork:28:20: elements requires every element of xs to be positive, but positive(0) is false
+main.bork:29:20: optional requires the value in o to be positive, but positive(0) is false
+main.bork:30:16: pair requires the a of p to be positive, but positive(0) is false
+main.bork:31:30: Account requires balance to be positive, but positive(0) is false
+main.bork:32:32: Shape.Square requires side to be positive, but positive(0) is false
+main.bork:33:27: n must be positive, but positive(0) is false

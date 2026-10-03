@@ -22,6 +22,12 @@ func (c *checker) unappliedWheres(files []*syntax.File) {
 			continue
 		}
 		c.inFile(f)
+		if !c.pkg.Root {
+			// Imported tests are not checked as part of the root package.
+			copy := *f
+			copy.Tests = nil
+			f = &copy
+		}
 		forTypeExprs(reflect.ValueOf(f), func(t *syntax.TypeExpr, where string) {
 			c.unappliedIn(t, where)
 		})
@@ -36,12 +42,16 @@ func (c *checker) unappliedIn(t *syntax.TypeExpr, where string) {
 		if at == "" {
 			at = "here"
 		}
+		hint := ""
+		if where == "in a type pattern" {
+			hint = "; match the base type and then guard with the predicate"
+		}
 		switch {
 		case len(t.Where) > 0:
-			c.errorf(t.Where[0].Pos, "where clauses %s are not supported yet, so the fact would not be checked", at)
+			c.errorf(t.Where[0].Pos, "where clauses %s are not supported yet, so the fact would not be checked%s", at, hint)
 		case len(c.constrainedAlias(t)) > 0:
-			c.errorf(t.Pos, "%s is a constrained type (where %s), and constrained types %s are not supported yet, so the fact would not be checked",
-				t.Name, constraintsText(c.constrainedAlias(t), c.pkg), at)
+			c.errorf(t.Pos, "%s is a constrained type (where %s), and constrained types %s are not supported yet, so the fact would not be checked%s",
+				t.Name, constraintsText(c.constrainedAlias(t), c.pkg), at, hint)
 		}
 	}
 	// Inside a type whose facts are dropped, the parts' facts are
@@ -92,10 +102,17 @@ func (c *checker) hasFacts(t *syntax.TypeExpr) bool {
 			return true
 		}
 		if t.Union == nil && t.Func == nil && len(t.Args) == 0 {
+			if c.typeParams[t.Name] != nil {
+				return false
+			}
 			// An alias, unless it is part of a cycle (an error already).
 			if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType && !visiting[e.decl] {
 				visiting[e.decl] = true
-				return has(e.decl.Alias)
+				savedPkg, savedParams := c.pkg, c.typeParams
+				c.pkg, c.typeParams = e.pkg, nil
+				facts := has(e.decl.Alias)
+				c.pkg, c.typeParams = savedPkg, savedParams
+				return facts
 			}
 		}
 		return false
@@ -136,15 +153,20 @@ func (c *checker) whereReported(t *syntax.TypeExpr) {
 // forTypeExprs calls f on each written type in v that is not part of
 // another written type, with a description of its position if known.
 func forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where string)) {
-	seen := map[uintptr]bool{}
+	type pointerKey struct {
+		typ reflect.Type
+		ptr uintptr
+	}
+	key := func(v reflect.Value) pointerKey { return pointerKey{v.Type(), v.Pointer()} }
+	seen := map[pointerKey]bool{}
 	var walk func(v reflect.Value, where string)
 	walk = func(v reflect.Value, where string) {
 		switch v.Kind() {
 		case reflect.Pointer:
-			if v.IsNil() || seen[v.Pointer()] {
+			if v.IsNil() || seen[key(v)] {
 				return
 			}
-			seen[v.Pointer()] = true
+			seen[key(v)] = true
 			// The parameters of rules and lambdas are described; types
 			// written in a lambda's body are not its parameters'.
 			var params []*syntax.Param
@@ -159,13 +181,13 @@ func forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where string)) {
 				params, at = n.Params, "on a lambda's parameters"
 			case *syntax.TypePat:
 				if n.Type != nil {
-					seen[reflect.ValueOf(n.Type).Pointer()] = true
+					seen[key(reflect.ValueOf(n.Type))] = true
 					f(n.Type, "in a type pattern")
 				}
 			}
 			for _, p := range params {
 				if p.Type != nil {
-					seen[reflect.ValueOf(p.Type).Pointer()] = true
+					seen[key(reflect.ValueOf(p.Type))] = true
 					f(p.Type, at)
 				}
 			}

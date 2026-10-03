@@ -176,7 +176,8 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 	}
 	c.appliedWhere[t] = true
 	var out []*Constraint
-	if t.Union == nil && len(t.Args) == 0 {
+	_, isParam := typ.(*TypeParam)
+	if t.Union == nil && len(t.Args) == 0 && !isParam {
 		if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {
 			out = append(out, c.aliasConstraints(e)...)
 		}

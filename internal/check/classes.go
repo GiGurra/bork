@@ -166,9 +166,10 @@ func (c *checker) signatureReported(md *syntax.FuncDecl) {
 // noParamWhere rejects where clauses on an instance method's
 // parameters: calls through the class could not prove them. (Results
 // may promise facts; a constrained instance's must.)
-func (c *checker) noParamWhere(md *syntax.FuncDecl, instType *syntax.TypeExpr) {
-	for _, p := range md.Params {
-		if c.hasFacts(p.Type) && !sameWrittenType(p.Type, instType) {
+func (c *checker) noParamWhere(md *syntax.FuncDecl, instType *syntax.TypeExpr, method *Func, param *TypeParam) {
+	for i, p := range md.Params {
+		assumed := i < len(method.Params) && method.Params[i] == Type(param) && sameWrittenType(p.Type, instType)
+		if c.hasFacts(p.Type) && !assumed {
 			c.errorf(p.Type.Pos, "where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)")
 			for _, p := range md.Params {
 				c.whereReported(p.Type)
@@ -379,7 +380,7 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 			c.errorf(md.Pos, "an instance's method cannot have type parameters; give the instance its type parameters")
 			continue
 		}
-		c.noParamWhere(md, id.Type)
+		c.noParamWhere(md, id.Type, m, cl.Param)
 		fn := &Func{Decl: md, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: ci.TypeParams}
 		fn.Effects = c.effectsOf(md.Uses)
 		fn.Result = c.resolveType(md.Result)

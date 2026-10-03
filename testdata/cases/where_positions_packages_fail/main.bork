@@ -1,0 +1,26 @@
+import "example.com/wherepositions/values"
+
+// Alias bodies resolve in their declaring package, even if the caller
+// declares names that would hide or introduce facts.
+type internalPositive = Int
+pred positive(x: Int) { x > 0 }
+type plainBase = Int where positive
+
+fn apply(f: (values.PositiveInt) => Int): Int { 0 }
+fn plain(f: (values.PlainInt) => Int): Int { f(0) }
+
+class Scored[T] {
+  fn score(x: T, bonus: values.PositiveInt): Int
+}
+class Named[T] {
+  fn name(x: T, n: Int): String
+}
+instance namedString: Named[String] {
+  fn name(x: String, n: values.PositiveInt): String { x }
+}
+
+fn main() {
+  f = (x: values.PositiveInt) => x
+  g = (x: values.PlainInt) => x
+  println(g(0))
+}

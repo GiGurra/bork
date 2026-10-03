@@ -19,8 +19,10 @@ fn pair(p: Pair[Int where positive, String]): Int { 0 }
 fn result(): Int where positive { 0 }
 fn member(): Int where positive | String { 0 }
 fn listResult(): List[Int where positive] { [0] }
+fn defaultPositive(n: PosInt = 0): Int { n }
 
 fn main() {
+  println(defaultPositive())
   println(param(0))
   println(alias(0))
   println(elements([1, 0]))

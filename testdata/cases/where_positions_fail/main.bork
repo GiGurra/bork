@@ -8,6 +8,7 @@ pred nonEmpty(s: String) { byteLength(s) > 0 }
 type PosInt = Int where positive
 type Box[T] = { item: T, items: List[T] }
 type Only[T] = { items: List[T] }
+type Decoded = { values: Map[String, PosInt] } derive (Decode, Encode)
 
 // Union members, in an alias, a field, a parameter, and a list.
 type Either = Int where positive | String
@@ -24,6 +25,7 @@ fn aliasValues(m: Map[String, PosInt]): Int { 0 }
 fn optionalMap(o: Option[Map[String, Int where positive]]): Int { 0 }
 fn boxedValues(m: Map[String, Box[PosInt]]): Int { 0 }
 fn mapResult(): Map[String, Int where positive] { {:} }
+fn defaultMap(m: Map[String, PosInt] = {:}): Int { 0 }
 
 // Type arguments that fields hold inside other types.
 fn box(b: Box[Int where positive]): Int { 0 }
@@ -58,6 +60,11 @@ class Weighed[T] {
 instance weighedString: Weighed[String] {
   fn weigh(x: String, n: PosInt): Int { n }
 }
+instance weighedPositive: Weighed[PosInt] {
+  // Only the class's T parameter assumes the instance's constraints;
+  // its separate Int parameter cannot acquire a stronger requirement.
+  fn weigh(x: PosInt, n: PosInt): Int { n }
+}
 
 fn id[T](x: T): T { x }
 fn listOf[T](n: Int): List[T] { [] }
@@ -70,6 +77,7 @@ fn main() {
   println(id[Option[PosInt]](Option.Some { value: 1 }))
   println(listOf[PosInt](1))
   a = atom[PosInt](1)
+  println([1].map[PosInt]((x: Int) => x))
   // Type patterns.
   match (pick()) {
     p: PosInt => println(p)

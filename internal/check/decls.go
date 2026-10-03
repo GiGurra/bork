@@ -247,6 +247,10 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 			c.errorf(t.Pos, "type parameter %s does not take type arguments", t.Name)
 			return Invalid
 		}
+		if len(t.Where) == 0 {
+			// This name is a parameter, not an alias in the package.
+			c.appliedWhere[t] = true
+		}
 		return tp
 	}
 	if t.Name == "List" {
