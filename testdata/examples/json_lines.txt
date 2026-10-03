@@ -1,0 +1,5 @@
+Option.Some { value: Json.String { value: "started" } }
+{
+  "kind": "started",
+  "count": 1
+}

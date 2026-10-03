@@ -1,0 +1,21 @@
+import "bork/json"
+fn main() {
+  match (parseJson("{\"items\":[{\"name\":\"bork\",\"nothing\":null}],\"exact\":12345678901234567890}")) {
+    value: Json => {
+      println(json.At(value, ["items", 0, "name"]))
+      println(json.At(value, ["items", 0, "nothing"]))
+      println(json.At(value, ["items", -1]))
+      println(json.At(value, ["items", 1]))
+      println(json.At(value, ["missing"]))
+      println(json.At(value, ["exact", "x"]))
+      println(json.At(value, []))
+      println(json.Pretty(value))
+      println(json.Pretty(Json.Array { items: [Json.Bool { value: true }] }, 0))
+    }
+    error: JsonError => println(error.message)
+  }
+  println(match (json.Pretty(Json.Number { text: "invalid" })) { error: JsonError => true; _ => false })
+  println(match (json.Pretty(Json.Array { items: [Json.Number { text: "1,2" }] })) { error: JsonError => true; _ => false })
+  println(match (json.Pretty(Json.Number { text: "true" })) { error: JsonError => true; _ => false })
+  println(json.Field(Json.Object { fields: [JsonField { name: "x", value: Json.Null }, JsonField { name: "x", value: Json.Bool { value: true } }] }, "x"))
+}

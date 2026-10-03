@@ -1,0 +1,69 @@
+// Package json queries dynamic JSON values and streams JSON Lines. Typed
+// decoding/encoding remains available through the prelude's Decode and Encode.
+
+// Field returns the first matching object field. None also covers other kinds.
+fn Field(value: Json, name: String): Option[Json] {
+  match (value) {
+    Json.Object { fields } => (fields.find(field => field.name == name)).map(field => field.value)
+    _ => Option.None
+  }
+}
+// Index returns an array element; negative or out-of-range indices give None.
+fn Index(value: Json, index: Int): Option[Json] {
+  match (value) {
+    Json.Array { items } => items.get(index)
+    _ => Option.None
+  }
+}
+// At follows object names and array indices. An empty path returns the input;
+// a JSON null remains Some(Null), distinct from a missing path.
+fn At(value: Json, path: List[String | Int]): Option[Json] {
+  match (path) {
+    [] => Option.Some { value: value }
+    [step, ...rest] => match (match (step) {
+      name: String => Field(value, name)
+      index: Int => Index(value, index)
+    }) {
+      Option.Some { value: next } => At(next, rest)
+      Option.None => Option.None
+    }
+  }
+}
+
+pred ValidIndent(spaces: Int) { spaces >= 0 && spaces <= 8 }
+type Indent = Int where ValidIndent
+// Pretty preserves field order and exact number text. Invalid manually
+// constructed number values give JsonError. Zero adds newlines with no indent.
+fn Pretty(value: Json, spaces: Indent = 2): String | JsonError {
+  validateNumbers(value)?
+  indentJson(renderJson(value), spaces)
+}
+fn indentJson(text: String, spaces: Indent): String | JsonError unsafe go {
+  import "bytes"
+  import "encoding/json"
+  import "strings"
+  var result bytes.Buffer
+  if err := json.Indent(&result, []byte(text), "", strings.Repeat(" ", int(spaces))); err != nil { return JsonError{message: err.Error()} }
+  return result.String()
+}
+
+// Check each number token before rendering: an invalid token must not inject
+// additional array elements or turn a number into another JSON kind.
+fn validateNumbers(value: Json): Unit | JsonError unsafe go {
+  var check func(Json) *JsonError
+  check = func(value Json) *JsonError {
+    switch value := value.(type) {
+    case Json_Number:
+      parsed := parseJson(value.text)
+      if failure, failed := parsed.(JsonError); failed { return &failure }
+      if _, number := parsed.(Json_Number); !number { return &JsonError{message: "expected a JSON number"} }
+    case Json_Array:
+      for _, item := range value.items { if failure := check(item); failure != nil { return failure } }
+    case Json_Object:
+      for _, field := range value.fields { if failure := check(field.value); failure != nil { return failure } }
+    }
+    return nil
+  }
+  if failure := check(value); failure != nil { return *failure }
+  return _Unit{}
+}

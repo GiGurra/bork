@@ -1,0 +1,26 @@
+// bork run examples/json_lines
+// A writer emits each line immediately; Next reads one value at a time.
+import "bork/json"
+import "bork/fs"
+
+type Event = { kind: String, count: Int } derive (Encode)
+fn demo(s: Scope) uses io: Unit | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | JsonError {
+  directory = fs.TempDir(s)?
+  path = fs.Join([fs.DirectoryPath(directory), "events.jsonl"])
+  scope writing {
+    output = json.CreateLines(path, writing)?
+    json.Write(output, Event { kind: "started", count: 1 })?
+    json.Write(output, Event { kind: "finished", count: 2 })?
+  }
+  input = json.OpenLines(path, s)?
+  match (json.Next(input)) {
+    Option.Some { value } => {
+      println(json.At(value, ["kind"]))
+      println(json.Pretty(value))
+    }
+    error: json.LineError => println(s"line ${error.line}: ${error.message}")
+    error: IoError => println(error.message)
+    Option.None => println("empty stream")
+  }
+}
+fn main() { scope app { _ = demo(app) } }

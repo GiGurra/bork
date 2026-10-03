@@ -1,0 +1,23 @@
+Option.Some { value: Json.String { value: "bork" } }
+Option.Some { value: Json.Null }
+Option.None
+Option.None
+Option.None
+Option.None
+Option.Some { value: Json.Object { fields: [JsonField { name: "items", value: Json.Array { items: [Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "bork" } }, JsonField { name: "nothing", value: Json.Null }] }] } }, JsonField { name: "exact", value: Json.Number { text: "12345678901234567890" } }] } }
+{
+  "items": [
+    {
+      "name": "bork",
+      "nothing": null
+    }
+  ],
+  "exact": 12345678901234567890
+}
+[
+true
+]
+true
+true
+true
+Option.Some { value: Json.Null }
