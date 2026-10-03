@@ -1124,13 +1124,13 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
 
 ### Follow-ups
 
-- Parallel tests: `bork test --parallel N`. Mocks are per goroutine already;
+- Parallel tests (bork-gadfaf): `bork test --parallel N`. Mocks are per goroutine already;
   snapshot numbering and failure attribution (`_tests.current` in the test
   runtime) still need per-test state, through the same carrier.
-- Generic functions and methods (one generic mock for every instantiation).
-- Typed call records and expectations (`Times`, `Never`, argument matchers,
+- Generic functions and methods (bork-7gpl00): one generic mock for every instantiation.
+- Typed call records and expectations (bork-pvmyos): (`Times`, `Never`, argument matchers,
   waiting for asynchronous calls).
-- Hermetic tests: report, or require, that a test mocks every `net` function
+- Hermetic tests (bork-x0g9au): report, or require, that a test mocks every `net` function
   it can reach, so it can run without a network.
 - Mocking class instances, if real code shows the need.
 
