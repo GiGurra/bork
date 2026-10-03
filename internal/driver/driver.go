@@ -138,7 +138,7 @@ func emit(path string) ([]*syntax.File, []byte, error) {
 	}
 	if _, ok := info.Funcs["main"]; !ok {
 		diags := &diag.List{}
-		diags.AddCode(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package.no-main", "package has no main function (add `fn main() { ... }`)")
+		diags.AddCode(packagePos(files), "package.no-main", "package has no main function (add `fn main() { ... }`)")
 		return nil, nil, &DiagError{Diags: diags}
 	}
 	goSrc, err := gen.Package(files, info)
@@ -282,7 +282,7 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	}
 	if len(info.Tests) == 0 && len(info.Rules) == 0 && !opts.AutoProperties {
 		diags := &diag.List{}
-		diags.AddCode(diag.Pos{File: files[1].Path, Line: 1, Col: 1}, "package.no-tests", "package has no tests or rules (add `test \"name\" { ... }`)")
+		diags.AddCode(packagePos(files), "package.no-tests", "package has no tests or rules (add `test \"name\" { ... }`)")
 		return 1, &DiagError{Diags: diags}
 	}
 	goSrc, err := gen.Tests(files, info, opts.AutoProperties)

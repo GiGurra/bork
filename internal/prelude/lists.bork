@@ -1,0 +1,194 @@
+// List constructors build immutable lists.
+
+// notEmpty holds for a list with at least one element.
+pred notEmpty[T](xs: List[T]) { !xs.isEmpty() }
+
+fn prepend[T](x: T, xs: List[T]): List[T] where notEmpty unsafe go {
+  out := make([]T, 0, len(xs)+1)
+  return append(append(out, x), xs...)
+}
+
+// range is the Ints from start up to (not including) end.
+fn range(start: Int, end: Int): List[Int] unsafe go {
+  var out []int64
+  for i := start; i < end; i++ {
+    out = append(out, i)
+  }
+  return out
+}
+
+// List methods. A list never changes: operations build new lists.
+// Methods chain: xs.filter(f).map(g), m.get(k), s.trim().
+
+fn (xs: List[T]) length[T](): Int unsafe go {
+  return int64(len(xs))
+}
+fn (xs: List[T]) isEmpty[T](): Bool unsafe go {
+  return len(xs) == 0
+}
+// first is the first element of a list known to have one: no Option
+// needed. Check with if (notEmpty(xs)), or require it.
+fn (xs: List[T] where notEmpty) first[T](): T unsafe go {
+  return xs[0]
+}
+// get is the element at index (from 0), if there is one.
+fn (xs: List[T]) get[T](index: Int): Option[T] unsafe go {
+  if index < 0 || index >= int64(len(xs)) {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[index]}
+}
+fn (xs: List[T]) head[T](): Option[T] unsafe go {
+  if len(xs) == 0 {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[0]}
+}
+fn (xs: List[T]) last[T](): Option[T] unsafe go {
+  if len(xs) == 0 {
+    return Option_None[T]{}
+  }
+  return Option_Some[T]{value: xs[len(xs)-1]}
+}
+fn (xs: List[A]) map[A, B](f: (A) => B): List[B] unsafe go {
+  out := make([]B, len(xs))
+  for i, x := range xs {
+    out[i] = f(x)
+  }
+  return out
+}
+fn (xs: List[A]) flatMap[A, B](f: (A) => List[B]): List[B] unsafe go {
+  var out []B
+  for _, x := range xs {
+    out = append(out, f(x)...)
+  }
+  return out
+}
+// filter keeps the elements keep is true for. What keep says about
+// them is known afterwards: xs.filter(positive) is a
+// List[Int where positive].
+fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep] unsafe go {
+  var out []T
+  for _, x := range xs {
+    if keep(x) {
+      out = append(out, x)
+    }
+  }
+  return out
+}
+// fold combines the elements from the first to the last, starting
+// from initial: [1, 2, 3].fold(0, (sum, x) => sum + x) is 6.
+fn (xs: List[T]) fold[T, A](initial: A, f: (A, T) => A): A unsafe go {
+  acc := initial
+  for _, x := range xs {
+    acc = f(acc, x)
+  }
+  return acc
+}
+fn (xs: List[T]) find[T](matches: (T) => Bool): Option[T where matches] unsafe go {
+  for _, x := range xs {
+    if matches(x) {
+      return Option_Some[T]{value: x}
+    }
+  }
+  return Option_None[T]{}
+}
+fn (xs: List[T]) any[T](test: (T) => Bool): Bool unsafe go {
+  for _, x := range xs {
+    if test(x) {
+      return true
+    }
+  }
+  return false
+}
+fn (xs: List[T]) all[T](test: (T) => Bool): Bool unsafe go {
+  for _, x := range xs {
+    if !test(x) {
+      return false
+    }
+  }
+  return true
+}
+fn (xs: List[T]) count[T](test: (T) => Bool): Int unsafe go {
+  n := int64(0)
+  for _, x := range xs {
+    if test(x) {
+      n++
+    }
+  }
+  return n
+}
+fn (xs: List[T]) forEach[T](f: (T) => Unit) unsafe go {
+  for _, x := range xs {
+    f(x)
+  }
+}
+// take is the first n elements (all of them if there are fewer).
+fn (xs: List[T]) take[T](n: Int): List[T] unsafe go {
+  n = max(0, min(n, int64(len(xs))))
+  return xs[:n:n]
+}
+// drop is all but the first n elements.
+fn (xs: List[T]) drop[T](n: Int): List[T] unsafe go {
+  n = max(0, min(n, int64(len(xs))))
+  return xs[n:]
+}
+fn (xs: List[T]) reverse[T](): List[T] unsafe go {
+  out := make([]T, len(xs))
+  for i, x := range xs {
+    out[len(xs)-1-i] = x
+  }
+  return out
+}
+fn (xs: List[T]) concat[T](ys: List[T]): List[T] unsafe go {
+  out := make([]T, 0, len(xs)+len(ys))
+  return append(append(out, xs...), ys...)
+}
+fn (xs: List[T]) append[T](x: T): List[T] where notEmpty unsafe go {
+  out := make([]T, 0, len(xs)+1)
+  return append(append(out, xs...), x)
+}
+// sortWith sorts by a comparison: less(a, b) says whether a goes
+// before b. Equal elements keep their order.
+fn (xs: List[T]) sortWith[T](less: (T, T) => Bool): List[T] unsafe go {
+  import "sort"
+  out := make([]T, len(xs))
+  copy(out, xs)
+  sort.SliceStable(out, func(i, j int) bool { return less(out[i], out[j]) })
+  return out
+}
+// includes reports whether x is in xs.
+fn (xs: List[T]) includes[T: Eq](x: T): Bool {
+  xs.any(y => y == x)
+}
+// distinct keeps the first of each value in xs.
+fn (xs: List[T]) distinct[T: Eq](): List[T] {
+  xs.fold([], (seen: List[T], x: T) => if (seen.includes(x)) { seen } else { seen.append(x) })
+}
+fn (parts: List[String]) join(separator: String): String unsafe go {
+  import "strings"
+  return strings.Join(parts, separator)
+}
+
+// sorted is xs in the order of Ord, keeping equal elements in their
+// order.
+fn (xs: List[T]) sorted[T: Ord](): List[T] { xs.sortWith((a, b) => compare(a, b) < 0) }
+
+// sortBy is xs in the order of what key gives for each element.
+fn (xs: List[T]) sortBy[T, K: Ord](key: (T) => K): List[T] { xs.sortWith((a, b) => compare(key(a), key(b)) < 0) }
+
+// groupBy puts the elements in lists by what key gives for them, in
+// the order the keys first appear.
+fn (xs: List[T]) groupBy[T, K: Eq](key: (T) => K): Map[K, List[T]] {
+  xs.fold({:}, (groups, x) => groups.put(key(x), groups.getOr(key(x), []).append(x)))
+}
+
+// toMap makes a map of entries; a key given twice keeps the later value.
+fn (entries: List[Entry[K, V]]) toMap[K: Eq, V](): Map[K, V] unsafe go {
+  keys := make([]K, len(entries))
+  vals := make([]V, len(entries))
+  for i, e := range entries {
+    keys[i], vals[i] = e.key, e.value
+  }
+  return _mapOf(keys, vals)
+}

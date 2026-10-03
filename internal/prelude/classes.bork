@@ -1,0 +1,65 @@
+// Eq is built in: every type whose values can be compared (all but
+// functions, scopes, and resources) has it, with structural ==. A bound
+// [T: Eq] lets generic code compare values of T.
+class Eq[T] {
+  fn equals(a: T, b: T): Bool
+}
+
+// Show customizes text consistently, including generic and nested values.
+// One universal instance may be declared in a record or sealed type's own
+// package. Every value has a default renderer, so Show bounds always hold.
+class Show[T] {
+  fn show(x: T): String
+}
+
+// Ord orders the values of a type: compare(a, b) is negative when a
+// comes before b, positive when it comes after, and 0 when they are
+// equal (it must agree with ==). Numbers and Strings have instances
+// (Strings compare by bytes); declare one for other types.
+class Ord[T] {
+  fn compare(a: T, b: T): Int
+}
+
+instance ordInt: Ord[Int] {
+  fn compare(a: Int, b: Int): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordInt8: Ord[Int8] {
+  fn compare(a: Int8, b: Int8): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordInt16: Ord[Int16] {
+  fn compare(a: Int16, b: Int16): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordInt32: Ord[Int32] {
+  fn compare(a: Int32, b: Int32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint8: Ord[Uint8] {
+  fn compare(a: Uint8, b: Uint8): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint16: Ord[Uint16] {
+  fn compare(a: Uint16, b: Uint16): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint32: Ord[Uint32] {
+  fn compare(a: Uint32, b: Uint32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordUint64: Ord[Uint64] {
+  fn compare(a: Uint64, b: Uint64): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordFloat: Ord[Float] {
+  fn compare(a: Float, b: Float): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordFloat32: Ord[Float32] {
+  fn compare(a: Float32, b: Float32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}
+
+instance ordString: Ord[String] {
+  fn compare(a: String, b: String): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
+}

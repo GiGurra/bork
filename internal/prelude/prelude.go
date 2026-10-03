@@ -1,23 +1,34 @@
-// Package prelude holds prelude.bork: the built-in types and functions
+// Package prelude holds the built-in types and functions
 // that every bork package can use.
 package prelude
 
 import (
-	_ "embed"
+	"embed"
+	"io/fs"
+	"path"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-//go:embed prelude.bork
-var src []byte
-
-// Path is the file name prelude positions are reported with.
-const Path = "prelude.bork"
+//go:embed *.bork
+var sources embed.FS
 
 // Parse parses the prelude.
-func Parse(diags *diag.List) *syntax.File {
-	f := syntax.Parse(Path, src, diags)
-	f.Prelude = true
-	return f
+func Parse(diags *diag.List) []*syntax.File {
+	names, err := fs.Glob(sources, "*.bork")
+	if err != nil {
+		panic(err)
+	}
+	var files []*syntax.File
+	for _, name := range names {
+		src, err := sources.ReadFile(name)
+		if err != nil {
+			panic(err)
+		}
+		f := syntax.Parse(path.Join("prelude", name), src, diags)
+		f.Prelude = true
+		files = append(files, f)
+	}
+	return files
 }

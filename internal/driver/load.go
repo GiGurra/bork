@@ -134,7 +134,7 @@ func load(path string) ([]*syntax.File, string, *diag.List, error) {
 		return nil, "", nil, err
 	}
 	l := &loader{mod: mod, diags: diags, state: map[string]int{}}
-	l.files = append(l.files, prelude.Parse(diags))
+	l.files = append(l.files, prelude.Parse(diags)...)
 	root := mod.importPath(dir)
 	if err := l.loadPackage(root, paths); err != nil {
 		return nil, "", nil, err
@@ -264,15 +264,21 @@ func validName(s string) bool {
 func isLetter(r rune) bool { return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' }
 func isDigit(r rune) bool  { return r >= '0' && r <= '9' }
 
+// packagePos locates the root package, which follows the prelude files.
+func packagePos(files []*syntax.File) diag.Pos {
+	for _, f := range files {
+		if !f.Prelude {
+			return diag.Pos{File: f.Path, Line: 1, Col: 1}
+		}
+	}
+	return diag.Pos{Line: 1, Col: 1}
+}
+
 // sourcePaths lists the paths of files, for mapping Go errors back.
 func sourcePaths(files []*syntax.File) []string {
 	var out []string
 	for _, f := range files {
-		if f.Prelude {
-			out = append(out, prelude.Path)
-		} else {
-			out = append(out, f.Path)
-		}
+		out = append(out, f.Path)
 	}
 	return out
 }

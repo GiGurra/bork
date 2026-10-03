@@ -150,7 +150,7 @@ type Record struct {
 	Name    string
 	Fields  []*Field
 	Decl    *syntax.TypeDecl
-	Prelude bool     // declared in prelude.bork
+	Prelude bool     // declared in prelude
 	Pkg     *Package // the declaring package
 
 	TypeParams []*TypeParam
@@ -436,7 +436,7 @@ type Sealed struct {
 	Name     string
 	Variants []*Variant
 	Decl     *syntax.TypeDecl
-	Prelude  bool     // declared in prelude.bork
+	Prelude  bool     // declared in prelude
 	Pkg      *Package // the declaring package
 
 	TypeParams []*TypeParam

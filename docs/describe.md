@@ -13,7 +13,7 @@ For this file saved as `main.bork`, `bork describe main.bork:3:3 --where notEmpt
 
 Write the constraint as in a `where` clause, with the selected value implicit: `--where notEmpty`, `--where 'between(1, 10)'`, or `--where 'positive and (small or zero)'`. Additional arguments can be constants or the enclosing function's parameters, as in `--where 'notEqual(other)'`. The actual compiler prover checks guards, declarations, aliases, returned values, rule inference and constant predicates. Constant queries run predicates just as compilation does. An unproven fact is an answer, so the command still exits successfully. Invalid source, positions, predicates, or incompatible predicate types fail with status 1.
 
-The file's entire directory is checked as a package, along with its imports. A main function is not required. Queries currently require a valid package; the command does not return partial semantic results for broken source. Paths in answers are absolute for disk sources. Embedded prelude and standard package definitions retain their compiler source paths, such as `prelude.bork`.
+The file's entire directory is checked as a package, along with its imports. A main function is not required. Queries currently require a valid package; the command does not return partial semantic results for broken source. Paths in answers are absolute for disk sources. Embedded prelude and standard package definitions retain their compiler source paths, such as `prelude/lists.bork`.
 
 ## Positions and selections
 
