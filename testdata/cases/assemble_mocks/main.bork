@@ -1,0 +1,59 @@
+type Config = { name: String }
+type Database = { name: String }
+type Left = { database: Database }
+type Right = { database: Database }
+type App = { left: Left, right: Right }
+type Failed = { reason: String }
+
+fn config(): Config { Config { name: "production" } }
+fn database(c: Config, s: Scope) uses io: Database | Failed {
+  println("opening real database")
+  panic(s"real database called: ${c.name}")
+}
+fn left(db: Database): Left { Left { database: db } }
+fn right(db: Database): Right { Right { database: db } }
+fn assembled(s: Scope) uses io: App | Failed {
+  assembleRecord[App](s, left, right, database, config)
+}
+
+fn main() {}
+
+test "assembly dispatches a shared provider through its native mock once" {
+  calls = mock database(c, s) { Database { name: s"fake ${c.name}" } }
+  scope app {
+    match (assembled(app)) {
+      value: App => {
+        assertEqual(value.left.database.name, "fake production")
+        assertEqual(value.right.database.name, "fake production")
+      }
+      failure: Failed => assertEqual(failure.reason, "unexpected failure")
+    }
+    assertEqual(calls.count(), 1)
+  }
+}
+
+test "a saved provider function still sees the native mock" {
+  provider = database
+  calls = mock database(c, s) { Database { name: "saved" } }
+  scope app {
+    assertEqual(assemble[Database](app, provider, config), Database { name: "saved" })
+    assertEqual(calls.count(), 1)
+  }
+}
+
+test "assembly inherits provider mocks in a task" {
+  calls = mock database(c, s) { Database { name: "task" } }
+  scope app {
+    task = spawn(app, () => assemble[Database](app, database, config))
+    assertEqual(await(task), Database { name: "task" })
+    assertEqual(calls.count(), 1)
+  }
+}
+
+test "a mocked provider failure returns through the assembly error union" {
+  calls = mock database(c, s) { Failed { reason: "unavailable" } }
+  scope app {
+    assertEqual(assembled(app), Failed { reason: "unavailable" })
+    assertEqual(calls.count(), 1)
+  }
+}
