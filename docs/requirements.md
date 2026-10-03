@@ -671,8 +671,11 @@ predicate on the completed candidate, after supplying defaults. These are
 function preconditions, proved at the call site with the ordinary facts pass.
 They apply to an unvalidated structural candidate: its nominal record invariant
 cannot prove itself. Simple invariant predicates unfold against field arguments;
-opaque predicates require the existing predicate facts or rules. No predicate
-body is copied into the declaration, and the ordinary literal checks remain the
+a predicate calling an exported field predicate can unfold to facts from that
+field predicate (for example `BudgetOk(bodyLimitBytes)`). An opaque predicate
+on the private record itself may require an owning-package handwritten wrapper:
+a foreign caller cannot manufacture an unchecked record just to guard it. No
+predicate body is copied into the declaration, and ordinary literal checks remain the
 source of truth. A caller can therefore prove Configured's body-limit requirement
 with a guard or a parameter fact without repeating that requirement in `New`.
 
@@ -684,7 +687,13 @@ cannot be used as a function value, just like an ordinary constrained function;
 a checked lambda can wrap it. Diagnostics identify the generated function, the
 failed field or invariant and the record declaration rather than suggesting a
 foreign literal. Formatter and description output retain the short declaration
-and expose the generated signature and its obligations, respectively.
+and expose the generated signature and its obligations, respectively. For
+example, the callable description lists `host: String`, every defaulted field,
+and `completed Config requires Configured`. A failed call reports
+`settings.New requires its completed Config to be Configured`, with the field
+arguments available as the subjects of proof; it does not suggest guarding
+`Configured` on an inaccessible private literal. Cover an exported field-predicate
+guard and rejection of an unprovable opaque record predicate.
 
 This increment supplies all fields and uses compile-time requirements. Selecting
 only some fields, returning a generated validation-error value and direct
