@@ -194,7 +194,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 		// closes it once the last scope it is attached to closes:
 		// File{handle: f, owner: s.Own(func() { f.Close() })}.
 		g.usesScopes = true
-		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any; owner *_Owner }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\nfunc (r %[1]s) _ownerOf() *_Owner { return r.owner }\n", typeName(t.Name, t.Pkg).Name, t.Name)
+		src := fmt.Sprintf("package main\ntype %[1]s struct{ handle any; owner *_Owner }\nfunc (%[1]s) String() string { return \"<%[2]s>\" }\nfunc (r %[1]s) _ownerOf() *_Owner { return r.owner }\nfunc (r %[1]s) _borkRebind(s *_Scope) { if h, ok := r.handle.(interface { _borkRebind(*_Scope) }); ok { h._borkRebind(s) } }\n", typeName(t.Name, t.Pkg).Name, t.Name)
 		f, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
 		if err != nil {
 			panic(err)

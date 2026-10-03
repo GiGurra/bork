@@ -1,0 +1,2 @@
+main.bork:3:3: function connection cannot return this value: it belongs to scope s, which ends on line 3
+main.bork:6:3: function transaction cannot return this value: it belongs to scope s, which ends on line 6

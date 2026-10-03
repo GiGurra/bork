@@ -146,7 +146,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				if strings.Contains(fd.GoBody.Body, "_borkMap") {
 					g.usesMap = true
 				}
-				if strings.Contains(fd.GoBody.Body, "_borkScope") {
+				if strings.Contains(fd.GoBody.Body, "_borkScope") || strings.Contains(fd.GoBody.Body, "_borkNewResourceHandle") || strings.Contains(fd.GoBody.Body, "_borkResourceHandle") {
 					g.usesScopes = true
 				}
 				if strings.Contains(fd.GoBody.Body, "_borkSome") || strings.Contains(fd.GoBody.Body, "_borkNone") || strings.Contains(fd.GoBody.Body, "_borkOptionGet") {
@@ -358,12 +358,15 @@ func (g *gen) packageAliases(fd *syntax.FuncDecl) string {
 	var sc goscanner.Scanner
 	src := []byte(fd.GoBody.Body)
 	sc.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)
+	previous := token.ILLEGAL
 	for {
 		_, tok, lit := sc.Scan()
+		selector := previous == token.PERIOD
+		previous = tok
 		if tok == token.EOF {
 			break
 		}
-		if tok != token.IDENT || seen[lit] {
+		if tok != token.IDENT || selector || seen[lit] {
 			continue
 		}
 		seen[lit] = true

@@ -6,15 +6,60 @@ package gen
 // Maps are persistent; iteration follows the map's order and stops when the
 // callback returns false. Scope contexts carry cancellation; closing a scope
 // waits for tasks and runs finalizers, while deferred abort also handles panic.
+// Resource handles keep a stable cancellation context, rebind its source on
+// attachment, and close on final release. Cancellation remains terminal.
 // Option constructors return the prelude's Option, regardless of package names.
 const scopeHelpers = `package main
 import "context"
+import "sync"
 
 // Stable scope helpers for unsafe go bodies.
 func _borkScopeContext(s *_Scope) context.Context { return s.ctx }
 func _borkScopeWith(ctx context.Context) *_Scope { return _scopeWith(ctx) }
 func _borkScopeClose(s *_Scope) { s.close() }
 func _borkScopeAbort(s *_Scope) { s.abort() }
+
+// A stable cancellation context whose source follows resource attachment.
+// Value is immutable after construction. Close must run with final release.
+type _borkResourceHandle struct {
+ Value any
+ mu sync.Mutex
+ source context.Context
+ ctx context.Context
+ cancel context.CancelCauseFunc
+ generation uint64
+}
+func _borkNewResourceHandle(value any, s *_Scope) *_borkResourceHandle {
+ ctx, cancel := context.WithCancelCause(context.Background())
+ h := &_borkResourceHandle{Value: value, ctx: ctx, cancel: cancel}
+ h._borkRebind(s)
+ return h
+}
+func (h *_borkResourceHandle) _borkRebind(s *_Scope) {
+ h.mu.Lock()
+ if h.source != nil && h.source.Err() != nil { h.cancel(context.Cause(h.source)) }
+ h.source = s.ctx
+ h.generation++
+ generation := h.generation
+ if s.ctx.Err() != nil { h.cancel(context.Cause(s.ctx)) }
+ h.mu.Unlock()
+ go func() {
+  select {
+  case <-s.ctx.Done():
+   h.mu.Lock()
+   if h.generation == generation { h.cancel(context.Cause(s.ctx)) }
+   h.mu.Unlock()
+  case <-h.ctx.Done():
+  }
+ }()
+}
+func (h *_borkResourceHandle) Context() context.Context {
+ h.mu.Lock()
+ if h.source.Err() != nil { h.cancel(context.Cause(h.source)) }
+ h.mu.Unlock()
+ return h.ctx
+}
+func (h *_borkResourceHandle) Close() { h.cancel(context.Canceled) }
 
 `
 
