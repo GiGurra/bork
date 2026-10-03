@@ -49,8 +49,8 @@ func (c *checker) ownerSignature(fn *Func) {
 			c.errorf(p.InPos, "%s is not a parameter of %s", p.In, fd.Name)
 		case j == i:
 			c.errorf(p.InPos, "parameter %s cannot belong to itself", p.Name)
-		case j < len(fn.Params) && fn.Params[j] != Scope && fn.Params[j] != OwnedScope && fn.Params[j] != Invalid:
-			c.errorf(p.InPos, "parameter %s can only belong to a parameter of type Scope or OwnedScope, and %s has type %s", p.Name, p.In, fn.Params[j])
+		case j < len(fn.Params) && !holdsScope(fn.Params[j]):
+			c.errorf(p.InPos, "parameter %s cannot belong to %s, of type %s, which holds no scope", p.Name, p.In, fn.Params[j])
 		default:
 			fn.ParamIn[i] = j
 		}
@@ -68,6 +68,15 @@ func (c *checker) ownerSignature(fn *Func) {
 			c.errorf(fd.Result.Pos, "an unsafe go function cannot return an OwnedScope")
 		}
 	}
+}
+
+// holdsScope reports whether a value of type t may belong to a scope,
+// as far as the signature shows: it is not a plain basic value.
+func holdsScope(t Type) bool {
+	if b, ok := t.(*Basic); ok {
+		return t == Scope || t == OwnedScope || b == Invalid
+	}
+	return true
 }
 
 // containsOwned reports whether values of type t hold an OwnedScope.
@@ -437,4 +446,21 @@ func (l *lifeChecker) conditional(x Expr, check func()) {
 			return
 		}
 	}
+}
+
+// storeFields reports (as an error) a use of the fields of a Channel or
+// an Atom outside the prelude: they store values, and the lifetimes
+// check what is stored through send, update and swap only.
+func (c *checker) storeFields(pos diag.Pos, rec *Record) bool {
+	if c.inPrelude {
+		return false
+	}
+	base := genericBaseOrSelf(rec)
+	for _, name := range []string{"Channel", "Atom"} {
+		if base == genericBaseOrSelf(c.preludePkg.TypeNamed(name)) {
+			c.errorf(pos, "the fields of %s are internal; use its functions (send, receive, update, current, ...)", name)
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,54 @@
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  import "fmt"
+  fmt.Println("open " + name)
+  return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}
+}
+
+fn nameOf(c: Conn): String unsafe go {
+  return c.handle.(string)
+}
+
+// put stores c in ch, which it declares c belongs to.
+fn put(ch: Channel[Conn], c: Conn in ch) uses state {
+  _ = send(ch, c)
+}
+
+// handOver opens the next connection in a new owned scope, hands it to
+// the consumer through the channel (attached to the channel's scope, so
+// it stays open), and closes the previous generation.
+fn handOver(prev: OwnedScope, ch: Channel[Conn] in app, app: Scope, n: Int) uses io + state {
+  next = openScope(app)
+  c = connect(s"gen$n", next.scope)
+  put(ch, attach(c, app))
+  closeScope(prev)
+  if (n > 1) {
+    handOver(next, ch, app, n - 1)
+  } else {
+    closeScope(next)
+  }
+}
+
+fn main() uses io + state {
+  scope app {
+    ch = channel[Conn](app, 3)
+    first = openScope(app)
+    handOver(first, ch, app, 3)
+    closeChannel(ch)
+    println("channel gives:")
+    names = received(ch).map(nameOf)
+    println(names)
+    // An atom lives as long as its first value: one of app keeps
+    // values of app.
+    kept = connect("kept", app)
+    latest = atom(Option.Some { value: kept })
+    newer = connect("newer", app)
+    _ = update(latest, old => Option.Some { value: newer })
+    match (current(latest)) {
+      Option.Some { value } => println(s"atom holds ${nameOf(value)}")
+      Option.None => println("empty")
+    }
+    println("app ends")
+  }
+}

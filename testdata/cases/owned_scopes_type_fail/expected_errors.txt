@@ -1,6 +1,6 @@
 main.bork:7:15: parameter bs cannot hold an OwnedScope inside another type; take the OwnedScope itself
 main.bork:8:25: inUnion cannot return an OwnedScope inside another type; return the OwnedScope itself
-main.bork:11:26: parameter c can only belong to a parameter of type Scope or OwnedScope, and x has type Int
+main.bork:11:26: parameter c cannot belong to x, of type Int, which holds no scope
 main.bork:12:19: parameter c cannot belong to itself
 main.bork:13:22: nowhere is not a parameter of unknownIn
 main.bork:14:15: an unsafe go function cannot take an OwnedScope: Go code could keep or copy it

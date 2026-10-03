@@ -23,10 +23,13 @@ import (
 //     be used;
 //   - a function (or lambda) may not return a value of a scope it opened;
 //   - an `unsafe go` function that takes a scope may keep its other
-//     arguments until that scope closes, so they must live as long as it.
+//     arguments until that scope closes, so they must live as long as it;
+//   - a value stored in a channel or an atom must live as long as it.
 //
 // bork values are immutable and there is nothing global to store them
-// in, so these are the only ways for a value to escape its scope.
+// in; the stores there are, channels and atoms, keep only values that
+// live as long as they do (see call). So these are the only ways for a
+// value to escape its scope.
 func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 	info.Lifetimes = map[Expr][]string{}
 	info.VarLifetimes = map[*Var][]string{}
@@ -748,6 +751,24 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 		switch fn.Decl.Name {
 		case "awaitFirst", "awaitAllUntil", "select":
 			return life
+		}
+	}
+	// A channel or an atom keeps what is stored in it (sent, or made by
+	// update's or swap's function), and gives it as a value of its own
+	// lifetime: it must live as long.
+	if fn != nil && fn.Prelude && len(args) == 2 && (fn.Decl.Name == "send" || fn.Decl.Name == "update" || fn.Decl.Name == "swap") {
+		if short := l.shorter(args[1], args[0]); short != nil {
+			what := "channel"
+			if fn.Decl.Name != "send" {
+				what = "atom"
+			}
+			hint := "store only values that outlive the " + what + ", or attach a resource to its scope first"
+			if v, ok := short.(*Var); ok && v.Kind == VarParam {
+				if c, ok := xargs[0].(*VarRef); ok && c.Var.Kind == VarParam {
+					hint = fmt.Sprintf("declare that it does: %s: ... in %s", v.Name, c.Var.Name)
+				}
+			}
+			l.errorf(xargs[1].Pos(), "%s may not live as long as the %s %s (it depends on %s), which keeps it; %s", describe(xargs[1]), what, describe(xargs[0]), l.scopeText(short), hint)
 		}
 	}
 	// Go code given a scope may keep its other arguments until the scope

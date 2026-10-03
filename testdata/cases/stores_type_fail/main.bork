@@ -1,0 +1,11 @@
+// The fields are internal.
+fn fields(app: Scope) uses io {
+  ch = channel[Int](app, 1)
+  f = ch.sendFn
+  a = atom(1)
+  match (a) {
+    Atom { currentFn } => println("x")
+  }
+}
+
+fn main() {}

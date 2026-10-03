@@ -1,0 +1,7 @@
+main.bork:17:20: c may not live as long as the channel ch (it depends on scope inner), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
+main.bork:31:23: the lambda may not live as long as the atom store (it depends on scope s), which keeps it; store only values that outlive the atom, or attach a resource to its scope first
+main.bork:32:21: the lambda may not live as long as the atom store (it depends on scope s), which keeps it; store only values that outlive the atom, or attach a resource to its scope first
+main.bork:41:16: c may not live as long as the channel ch (it depends on owned scope b), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
+main.bork:47:16: c may not live as long as the channel ch (it depends on parameter c), which keeps it; declare that it does: c: ... in ch
+main.bork:58:17: this value may not live as long as ch (it depends on scope inner), but putIn declares parameter c in ch
+main.bork:69:22: this value may not live as long as the channel ch (it depends on scope t), which keeps it; store only values that outlive the channel, or attach a resource to its scope first

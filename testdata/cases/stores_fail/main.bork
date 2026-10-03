@@ -1,0 +1,75 @@
+type Conn = resource
+
+fn connect(s: Scope): Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
+
+fn use(c: Conn) uses io {
+  println(toString(c))
+}
+
+// A channel keeps what is sent: it must outlive the channel.
+fn sendShorter() uses io + state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    scope inner {
+      c = connect(inner)
+      _ = send(ch, c)
+    }
+    match (receive(ch)) {
+      c: Conn => use(c)
+      _ => println("none")
+    }
+  }
+}
+
+// So does an atom, through update and swap.
+fn atomShorter() uses state {
+  store: Atom[Option[Conn]] = atom(Option.None)
+  scope s {
+    c = connect(s)
+    _ = update(store, old => Option.Some { value: c })
+    _ = swap(store, old => Option.Some { value: c })
+  }
+}
+
+// Owned scopes: a channel of app cannot take a value of a child.
+fn ownedChild(app: Scope) uses state {
+  ch = channel[Conn](app, 1)
+  b = openScope(app)
+  c = connect(b.scope)
+  _ = send(ch, c)
+  closeScope(b)
+}
+
+// A helper that stores a parameter must declare it in the channel.
+fn put(ch: Channel[Conn], c: Conn) uses state {
+  _ = send(ch, c)
+}
+
+fn putIn(ch: Channel[Conn], c: Conn in ch) uses state {
+  _ = send(ch, c)
+}
+
+fn callsPutIn() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    scope inner {
+      putIn(ch, connect(inner))
+    }
+  }
+}
+
+// A task cannot send a value of its own scope to a channel of app.
+fn fromTask() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    launch(app, () => {
+      scope t {
+        _ = send(ch, connect(t))
+      }
+    })
+  }
+}
+
+fn main() {}

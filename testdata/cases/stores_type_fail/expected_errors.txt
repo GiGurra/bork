@@ -1,0 +1,2 @@
+main.bork:4:10: the fields of Channel are internal; use its functions (send, receive, update, current, ...)
+main.bork:7:5: the fields of Atom are internal; use its functions (send, receive, update, current, ...)

@@ -177,6 +177,9 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 	}
 	switch xt := xt.(type) {
 	case *Record:
+		if c.storeFields(e.Pos, xt) {
+			return Invalid
+		}
 		if f := xt.Field(e.Name); f != nil {
 			return f.Type
 		}
