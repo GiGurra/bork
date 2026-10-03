@@ -117,7 +117,12 @@ fn inheritedPipes(s: Scope) uses io + state + clock: Unit | IoError | Cancelled 
   })
   println(millis() - start2 < 2500)
 }
+fn parentEnv() uses io unsafe go {
+  import "os"
+  if err := os.Setenv("BORK_PROCESS_TEST", "parent"); err != nil { panic(err) }
+}
 fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
+  parentEnv()
   output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: utf8Bytes("input") })?
   println(output.code)
   println(utf8String(output.stdout))
@@ -131,7 +136,7 @@ fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
   located = process.Run(s, executable(), ["cwd"], Option.None, directory)?
   println(utf8String(located.stdout) == directory + "\n")
   inherit = process.Run(s, executable(), ["child"])?
-  println(utf8String(inherit.stdout) == "Option.None\n\n")
+  println(utf8String(inherit.stdout) == "Option.Some { value: \"parent\" }\n\n")
   println(utf8String(first.stdout) == "Option.None\n\n")
   abandonedPid = abandoned()?
   println(gone(abandonedPid))
