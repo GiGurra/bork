@@ -1,0 +1,118 @@
+// Package math provides IEEE-754 functions and immutable exact arithmetic.
+// Float functions follow Go math: domain failures give NaN or infinity.
+fn Abs(value: Float): Float unsafe go {
+  import "math"
+  return math.Abs(value)
+}
+fn Sqrt(value: Float): Float unsafe go {
+  import "math"
+  return math.Sqrt(value)
+}
+fn Floor(value: Float): Float unsafe go {
+  import "math"
+  return math.Floor(value)
+}
+fn Ceil(value: Float): Float unsafe go {
+  import "math"
+  return math.Ceil(value)
+}
+fn Round(value: Float): Float unsafe go {
+  import "math"
+  return math.Round(value)
+}
+fn RoundToEven(value: Float): Float unsafe go {
+  import "math"
+  return math.RoundToEven(value)
+}
+fn Sin(value: Float): Float unsafe go {
+  import "math"
+  return math.Sin(value)
+}
+fn Cos(value: Float): Float unsafe go {
+  import "math"
+  return math.Cos(value)
+}
+fn Tan(value: Float): Float unsafe go {
+  import "math"
+  return math.Tan(value)
+}
+fn Asin(value: Float): Float unsafe go {
+  import "math"
+  return math.Asin(value)
+}
+fn Acos(value: Float): Float unsafe go {
+  import "math"
+  return math.Acos(value)
+}
+fn Atan(value: Float): Float unsafe go {
+  import "math"
+  return math.Atan(value)
+}
+fn Log(value: Float): Float unsafe go {
+  import "math"
+  return math.Log(value)
+}
+fn Log2(value: Float): Float unsafe go {
+  import "math"
+  return math.Log2(value)
+}
+fn Log10(value: Float): Float unsafe go {
+  import "math"
+  return math.Log10(value)
+}
+fn Exp(value: Float): Float unsafe go {
+  import "math"
+  return math.Exp(value)
+}
+fn Exp2(value: Float): Float unsafe go {
+  import "math"
+  return math.Exp2(value)
+}
+fn Min(a: Float, b: Float): Float unsafe go {
+  import "math"
+  return math.Min(a, b)
+}
+fn Max(a: Float, b: Float): Float unsafe go {
+  import "math"
+  return math.Max(a, b)
+}
+fn Pow(a: Float, b: Float): Float unsafe go {
+  import "math"
+  return math.Pow(a, b)
+}
+fn Atan2(a: Float, b: Float): Float unsafe go {
+  import "math"
+  return math.Atan2(a, b)
+}
+fn Hypot(a: Float, b: Float): Float unsafe go {
+  import "math"
+  return math.Hypot(a, b)
+}
+fn Pi(): Float unsafe go {
+  import "math"
+  return math.Pi
+}
+fn E(): Float unsafe go {
+  import "math"
+  return math.E
+}
+fn NaN(): Float unsafe go {
+  import "math"
+  return math.NaN()
+}
+fn Inf(sign: Int = 1): Float unsafe go {
+  import "math"
+  if sign < 0 { return math.Inf(-1) }
+  return math.Inf(1)
+}
+fn IsNaN(value: Float): Bool unsafe go {
+  import "math"
+  return math.IsNaN(value)
+}
+fn IsInf(value: Float): Bool unsafe go {
+  import "math"
+  return math.IsInf(value, 0)
+}
+
+// MathError reports undefined exact arithmetic, never a domain panic.
+type MathError = { message: String }

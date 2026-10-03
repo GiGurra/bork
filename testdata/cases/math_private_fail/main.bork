@@ -1,0 +1,6 @@
+import "bork/math"
+fn main() {
+  println(math.BigInt.integer { digits: "broken" })
+  println(math.BigRat.rational { fraction: "1/0" })
+  println(math.Decimal.decimal { coefficient: math.Integer(1), scale: 2 })
+}

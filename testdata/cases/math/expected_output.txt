@@ -1,0 +1,165 @@
+3.0
+1024.0
+2.5
+-1.0
+3.0
+-2.0
+-1.0
+3.0
+2.0
+0.0
+1.0
+0.0
+0.0
+true
+true
+true
+true
+922337203685477580812346
+922337203685477580812345
+OutOfRange { value: "922337203685477580812345", target: "Int" }
+9223372036854775807
+-9223372036854775808
+1267650600228229401496703205376
+MathError { message: "integer exponent must be nonnegative" }
+3
+MathError { message: "integer square root requires a nonnegative value" }
+true
+1
+-2
+-1
+2
+2
+MathError { message: "division by zero" }
+MathError { message: "division by zero" }
+MathError { message: "division by zero" }
+7
+ParseError { input: "1_000", message: "expected a base-10 integer" }
+ParseError { input: "bad", message: "expected a base-10 integer" }
+-1/3
+-2/3
+1/9
+1
+-1
+3
+0
+1/3
+-1
+MathError { message: "division by zero" }
+MathError { message: "division by zero" }
+ParseError { input: "1/0", message: "expected an exact rational" }
+true
+10.125
+9.975
+0.75375
+10.05
+3.35
+-3.35
+MathError { message: "division by zero" }
+10.05
+201/20
+-0.34
+-0.33
+OutOfRange { value: "10001", target: "Decimal scale (0..10000)" }
+OutOfRange { value: "-1", target: "Decimal scale (0..10000)" }
+OutOfRange { value: "10001", target: "Decimal scale (0..10000)" }
+0.0100
+0.00
+ParseError { input: ".5", message: "expected decimal digits with an optional fractional part" }
+ParseError { input: "1.", message: "expected decimal digits with an optional fractional part" }
+ParseError { input: "1e3", message: "expected decimal digits" }
+ParseError { input: "NaN", message: "expected decimal digits" }
+ParseError { input: "1.2.3", message: "expected decimal digits with an optional fractional part" }
+ParseError { input: "-", message: "expected decimal digits with an optional fractional part" }
+ParseError { input: " 1.0", message: "expected decimal digits" }
+decimal scale exceeds 10000
+false
+0
+true
+10
+1
+2
+1
+Rounding.TowardZero
+2
+-2
+3
+2
+-2
+-3
+0
+0
+-2
+Rounding.AwayFromZero
+3
+-3
+4
+3
+-3
+-4
+1
+-1
+-3
+Rounding.Floor
+2
+-3
+3
+2
+-3
+-4
+0
+-1
+-3
+Rounding.Ceiling
+3
+-2
+4
+3
+-2
+-3
+1
+0
+-2
+Rounding.HalfEven
+2
+-2
+4
+2
+-3
+-4
+0
+0
+-2
+Rounding.HalfAwayFromZero
+3
+-3
+4
+2
+-3
+-4
+1
+-1
+-3
+OutOfRange { value: "10001", target: "Decimal scale (0..10000)" }
+0
+1
+OutOfRange { value: "10001", target: "Decimal scale (0..10000)" }
+OutOfRange { value: "-1", target: "Decimal scale (0..10000)" }
+OutOfRange { value: "10001", target: "Decimal scale (0..10000)" }
+2.500
+0.12
+-0.13
+100.00
+10.05
+Json.String { value: "10.05" }
+1.2300
+DecodeError { path: "", message: "expected a Decimal string" }
+922337203685477580812345
+2/3
+true
+true
+true
+DecodeError { path: "", message: "expected a base-10 integer" }
+DecodeError { path: "", message: "expected an exact rational" }
+DecodeError { path: "", message: "expected decimal digits" }
+Unit

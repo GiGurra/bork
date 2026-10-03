@@ -1,0 +1,146 @@
+import "bork/math"
+use math.Codecs
+
+fn calculations() uses io: Unit | ParseError | math.MathError | OutOfRange {
+  huge = math.ParseInteger("922337203685477580812345")?
+  println(huge.Add(math.Integer(1)))
+  println(huge)
+  println(huge.ToInt())
+  println(math.Integer(9223372036854775807).ToInt())
+  println(math.ParseInteger("-9223372036854775808")?.ToInt())
+  println(math.Integer(2).Pow(100))
+  println(math.Integer(2).Pow(-1))
+  println(math.Integer(10).Sqrt())
+  println(math.Integer(-1).Sqrt())
+  println(huge.Neg().Abs() == huge)
+  println(huge.Compare(math.Integer(1)))
+  println(math.Integer(-7).Div(math.Integer(3)))
+  println(math.Integer(-7).Rem(math.Integer(3)))
+  println(math.Integer(-7).Mod(math.Integer(3)))
+  println(math.Integer(-7).Mod(math.Integer(-3)))
+  println(math.Integer(1).Rem(math.Integer(0)))
+  println(math.Integer(1).Mod(math.Integer(0)))
+  println(math.Integer(1).Div(math.Integer(0)))
+  println(math.ParseInteger("+0007"))
+  println(math.ParseInteger("1_000"))
+  println(math.ParseInteger("bad"))
+  ratio = math.Rational(math.Integer(2), math.Integer(-6))?
+  println(ratio)
+  println(ratio.Add(ratio))
+  println(ratio.Mul(ratio))
+  println(ratio.Div(ratio))
+  println(ratio.Numerator())
+  println(ratio.Denominator())
+  println(ratio.Sub(ratio))
+  println(ratio.Neg().Abs())
+  println(ratio.Compare(math.ParseRational("0")?))
+  println(math.Rational(math.Integer(1), math.Integer(0)))
+  println(ratio.Div(math.ParseRational("0")?))
+  println(math.ParseRational("1/0"))
+  println(math.ParseRational("2/6") == math.ParseRational("1/3"))
+  amount = math.ParseDecimal("10.05")?
+  tax = math.ParseDecimal("0.075")?
+  println(amount.Add(tax))
+  println(amount.Sub(tax))
+  println(amount.Mul(tax))
+  println(amount)
+  println(amount.Div(math.ParseDecimal("3")?, 2, math.Rounding.HalfEven))
+  println(amount.Div(math.ParseDecimal("-3")?, 2, math.Rounding.HalfEven))
+  println(amount.Div(math.ParseDecimal("0")?, 2, math.Rounding.HalfEven))
+  println(amount.Neg().Abs())
+  println(amount.ToRational())
+  println(ratio.ToDecimal(2, math.Rounding.Floor))
+  println(ratio.ToDecimal(2, math.Rounding.Ceiling))
+  println(ratio.ToDecimal(10001, math.Rounding.HalfEven))
+  println(amount.Round(-1, math.Rounding.TowardZero))
+  println(math.DecimalFrom(math.Integer(0), 10001))
+  println(math.ParseDecimal("+000.0100"))
+  println(math.ParseDecimal("-0.00"))
+  println(math.ParseDecimal(".5"))
+  println(math.ParseDecimal("1."))
+  println(math.ParseDecimal("1e3"))
+  println(math.ParseDecimal("NaN"))
+  println(math.ParseDecimal("1.2.3"))
+  println(math.ParseDecimal("-"))
+  println(math.ParseDecimal(" 1.0"))
+  match (math.ParseDecimal("0." + "0".repeat(10001))) {
+    error: ParseError => println(error.message)
+    value: math.Decimal => println(value.Scale())
+  }
+  one = math.ParseDecimal("1.0")?
+  another = math.ParseDecimal("1.00")?
+  println(one == another)
+  println(one.Compare(another))
+  println(one.SameValue(another))
+  println(one.Coefficient())
+  println(one.Scale())
+  println({ one: "first", another: "second" }.size())
+  canonical = math.ParseInteger("+0007")?
+  println({ canonical: "first", math.Integer(7): "second" }.size())
+  modes = [math.Rounding.TowardZero, math.Rounding.AwayFromZero, math.Rounding.Floor, math.Rounding.Ceiling, math.Rounding.HalfEven, math.Rounding.HalfAwayFromZero]
+  positive = math.ParseDecimal("2.5")?
+  negative = math.ParseDecimal("-2.5")?
+  odd = math.ParseDecimal("3.5")?
+  below = math.ParseDecimal("2.49")?
+  above = math.ParseDecimal("-2.51")?
+  negativeOdd = math.ParseDecimal("-3.5")?
+  positiveHalf = math.ParseDecimal("0.5")?
+  negativeHalf = math.ParseDecimal("-0.5")?
+  negativeOne = math.ParseDecimal("-1.0")?
+  modes.forEach(mode => {
+    println(mode)
+    println(positive.Round(0, mode))
+    println(negative.Round(0, mode))
+    println(odd.Round(0, mode))
+    println(below.Round(0, mode))
+    println(above.Round(0, mode))
+    println(negativeOdd.Round(0, mode))
+    println(positiveHalf.Round(0, mode))
+    println(negativeHalf.Round(0, mode))
+    println(positive.Div(negativeOne, 0, mode))
+  })
+  println(math.DecimalFrom(math.Integer(1), 10000)?.Mul(math.DecimalFrom(math.Integer(1), 1)?))
+  smallest = math.DecimalFrom(math.Integer(1), 10000)?
+  assert(smallest.ToString().byteLength() == 10002)
+  println(smallest.Round(0, math.Rounding.HalfEven))
+  println(smallest.Div(math.ParseDecimal("1")?, 0, math.Rounding.AwayFromZero))
+  println(amount.Round(10001, math.Rounding.HalfEven))
+  println(amount.Div(one, -1, math.Rounding.HalfEven))
+  println(amount.Div(one, 10001, math.Rounding.HalfEven))
+  println(positive.Round(3, math.Rounding.HalfEven))
+  println(one.Div(math.ParseDecimal("8")?, 2, math.Rounding.HalfEven))
+  println(one.Div(math.ParseDecimal("-8")?, 2, math.Rounding.HalfAwayFromZero))
+  println(one.Div(math.ParseDecimal("0.01")?, 2, math.Rounding.HalfEven))
+  println(amount.Round(2, math.Rounding.HalfEven))
+  println(encode(amount))
+  println(decode[math.Decimal](Json.String { value: "0001.2300" }))
+  println(decode[math.Decimal](Json.Number { text: "123" }))
+  println(decode[math.BigInt](Json.String { value: huge.ToString() }))
+  println(decode[math.BigRat](Json.String { value: "4/6" }))
+  println(decode[math.BigInt](encode(huge)) == huge)
+  println(decode[math.BigRat](encode(ratio)) == ratio)
+  println(decode[math.Decimal](encode(amount)) == amount)
+  println(decode[math.BigInt](Json.String { value: "abc" }))
+  println(decode[math.BigRat](Json.String { value: "1/0" }))
+  println(decode[math.Decimal](Json.String { value: "1e2" }))
+}
+fn main() {
+  println(math.Sqrt(9.0))
+  println(math.Pow(2.0, 10.0))
+  println(math.Abs(-2.5))
+  println(math.Min(-1.0, 3.0))
+  println(math.Max(-1.0, 3.0))
+  println(math.Floor(-1.2))
+  println(math.Ceil(-1.2))
+  println(math.Round(2.5))
+  println(math.RoundToEven(2.5))
+  println(math.Sin(0.0))
+  println(math.Cos(0.0))
+  println(math.Tan(0.0))
+  println(math.Log(1.0))
+  println(math.IsNaN(math.Sqrt(-1.0)))
+  println(math.IsNaN(math.NaN()))
+  println(math.IsInf(math.Inf()))
+  println(math.Inf(-1) < 0.0)
+  println(calculations())
+}

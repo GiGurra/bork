@@ -1,0 +1,162 @@
+// Decimal is coefficient * 10^-scale. Scale is preserved, including trailing zeroes.
+// Equality includes scale: 1.0 != 1.00. Use SameValue for numeric equality.
+// Scale is bounded to keep decimal expansion and powers of ten finite in size.
+pred DecimalScale(value: Int) { value >= 0 && value <= 10000 }
+type Decimal = sealed { decimal { coefficient: BigInt, scale: Int where DecimalScale } }
+fn decimalCoefficient(value: Decimal): BigInt unsafe go { return value.(Decimal_decimal).coefficient }
+fn decimalScale(value: Decimal): Int where DecimalScale unsafe go { return value.(Decimal_decimal).scale }
+fn (value: Decimal) Coefficient(): BigInt { decimalCoefficient(value) }
+fn (value: Decimal) Scale(): Int where DecimalScale { decimalScale(value) }
+type Rounding = sealed {
+  TowardZero,
+  AwayFromZero,
+  Floor,
+  Ceiling,
+  HalfEven,
+  HalfAwayFromZero,
+}
+
+fn DecimalFrom(coefficient: BigInt, scale: Int): Decimal | OutOfRange unsafe go {
+  import "strconv"
+  if scale < 0 || scale > 10000 { return OutOfRange{value: strconv.FormatInt(scale, 10), target: "Decimal scale (0..10000)"} }
+  return Decimal_decimal{coefficient: coefficient, scale: scale}
+}
+// ParseDecimal accepts [+-]?digits[.digits], never a binary float or exponent.
+fn ParseDecimal(text: String): Decimal | ParseError unsafe go {
+  import "math/big"
+  import "strings"
+  digits := text
+  negative := false
+  if strings.HasPrefix(digits, "-") || strings.HasPrefix(digits, "+") {
+    negative = digits[0] == '-'
+    digits = digits[1:]
+  }
+  parts := strings.Split(digits, ".")
+  if len(parts) > 2 || len(parts[0]) == 0 || (len(parts) == 2 && len(parts[1]) == 0) {
+    return ParseError{input: text, message: "expected decimal digits with an optional fractional part"}
+  }
+  scale := int64(0)
+  if len(parts) == 2 { scale = int64(len(parts[1])) }
+  if scale > 10000 { return ParseError{input: text, message: "decimal scale exceeds 10000"} }
+  for _, part := range parts {
+    for _, digit := range part {
+      if digit < '0' || digit > '9' { return ParseError{input: text, message: "expected decimal digits"} }
+    }
+  }
+  n, _ := new(big.Int).SetString(strings.Join(parts, ""), 10)
+  if negative { n.Neg(n) }
+  return Decimal_decimal{coefficient: BigInt_integer{digits: n.String()}, scale: scale}
+}
+fn (value: Decimal) ToString(): String unsafe go {
+  import "strings"
+  digits := integerText(decimalCoefficient(value))
+  sign := ""
+  if strings.HasPrefix(digits, "-") { sign, digits = "-", digits[1:] }
+  if decimalScale(value) == 0 { return sign + digits }
+  if int64(len(digits)) <= decimalScale(value) { digits = strings.Repeat("0", int(decimalScale(value))-len(digits)+1) + digits }
+  split := len(digits) - int(decimalScale(value))
+  return sign + digits[:split] + "." + digits[split:]
+}
+fn (value: Decimal) Neg(): Decimal { Decimal.decimal { coefficient: decimalCoefficient(value).Neg(), scale: decimalScale(value) } }
+fn (value: Decimal) Abs(): Decimal { Decimal.decimal { coefficient: decimalCoefficient(value).Abs(), scale: decimalScale(value) } }
+
+// alignDecimals scales both coefficients to the larger input scale.
+type decimalPair = { left: BigInt, right: BigInt, scale: Int where DecimalScale }
+fn alignDecimals(a: Decimal, b: Decimal): decimalPair unsafe go {
+  import "math/big"
+  scale := decimalScale(a)
+  if decimalScale(b) > scale { scale = decimalScale(b) }
+  left, _ := new(big.Int).SetString(integerText(decimalCoefficient(a)), 10)
+  right, _ := new(big.Int).SetString(integerText(decimalCoefficient(b)), 10)
+  left.Mul(left, new(big.Int).Exp(big.NewInt(10), big.NewInt(scale-decimalScale(a)), nil))
+  right.Mul(right, new(big.Int).Exp(big.NewInt(10), big.NewInt(scale-decimalScale(b)), nil))
+  return decimalPair{left: BigInt_integer{digits: left.String()}, right: BigInt_integer{digits: right.String()}, scale: scale}
+}
+fn (value: Decimal) Add(other: Decimal): Decimal {
+  aligned = alignDecimals(value, other)
+  Decimal.decimal { coefficient: aligned.left.Add(aligned.right), scale: aligned.scale }
+}
+fn (value: Decimal) Sub(other: Decimal): Decimal {
+  aligned = alignDecimals(value, other)
+  Decimal.decimal { coefficient: aligned.left.Sub(aligned.right), scale: aligned.scale }
+}
+// Compare is numeric: unlike ==, it ignores the stored scale.
+fn (value: Decimal) Compare(other: Decimal): Int {
+  aligned = alignDecimals(value, other)
+  aligned.left.Compare(aligned.right)
+}
+fn (value: Decimal) Mul(other: Decimal): Decimal | OutOfRange {
+  DecimalFrom(decimalCoefficient(value).Mul(decimalCoefficient(other)), decimalScale(value) + decimalScale(other))
+}
+
+// roundedQuotient requires a positive denominator and never changes its inputs.
+fn roundedQuotient(numerator: BigInt, denominator: BigInt, rounding: Rounding): BigInt unsafe go {
+  import "math/big"
+  n, _ := new(big.Int).SetString(integerText(numerator), 10)
+  d, _ := new(big.Int).SetString(integerText(denominator), 10)
+  q, r := new(big.Int), new(big.Int)
+  q.QuoRem(n, d, r)
+  if r.Sign() == 0 { return BigInt_integer{digits: q.String()} }
+  sign := int64(n.Sign())
+  increment := false
+  switch rounding.(type) {
+  case Rounding_TowardZero:
+  case Rounding_AwayFromZero: increment = true
+  case Rounding_Floor: increment = sign < 0
+  case Rounding_Ceiling: increment = sign > 0
+  case Rounding_HalfEven, Rounding_HalfAwayFromZero:
+    twice := new(big.Int).Lsh(new(big.Int).Abs(r), 1)
+    comparison := twice.Cmp(d)
+    _, away := rounding.(Rounding_HalfAwayFromZero)
+    increment = comparison > 0 || (comparison == 0 && (away || q.Bit(0) == 1))
+  }
+  if increment { q.Add(q, big.NewInt(sign)) }
+  return BigInt_integer{digits: q.String()}
+}
+fn (value: Decimal) Round(scale: Int, rounding: Rounding): Decimal | OutOfRange unsafe go {
+  import "math/big"
+  import "strconv"
+  if scale < 0 || scale > 10000 { return OutOfRange{value: strconv.FormatInt(scale, 10), target: "Decimal scale (0..10000)"} }
+  n, _ := new(big.Int).SetString(integerText(decimalCoefficient(value)), 10)
+  if scale >= decimalScale(value) {
+    n.Mul(n, new(big.Int).Exp(big.NewInt(10), big.NewInt(scale-decimalScale(value)), nil))
+    return Decimal_decimal{coefficient: BigInt_integer{digits: n.String()}, scale: scale}
+  }
+  divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(decimalScale(value)-scale), nil)
+  result := roundedQuotient(decimalCoefficient(value), BigInt_integer{digits: divisor.String()}, rounding)
+  return Decimal_decimal{coefficient: result, scale: scale}
+}
+// Div requires both an output scale and a rounding policy, even for exact results.
+fn (value: Decimal) Div(other: Decimal, scale: Int, rounding: Rounding): Decimal | MathError | OutOfRange unsafe go {
+  import "math/big"
+  import "strconv"
+  if scale < 0 || scale > 10000 { return OutOfRange{value: strconv.FormatInt(scale, 10), target: "Decimal scale (0..10000)"} }
+  n, _ := new(big.Int).SetString(integerText(decimalCoefficient(value)), 10)
+  d, _ := new(big.Int).SetString(integerText(decimalCoefficient(other)), 10)
+  if d.Sign() == 0 { return MathError{message: "division by zero"} }
+  exponent := decimalScale(other) - decimalScale(value) + scale
+  factor := new(big.Int).Exp(big.NewInt(10), big.NewInt(absExponent(exponent)), nil)
+  if exponent >= 0 { n.Mul(n, factor) } else { d.Mul(d, factor) }
+  if d.Sign() < 0 { n.Neg(n); d.Neg(d) }
+  result := roundedQuotient(BigInt_integer{digits: n.String()}, BigInt_integer{digits: d.String()}, rounding)
+  return Decimal_decimal{coefficient: result, scale: scale}
+}
+fn absExponent(value: Int): Int { if (value < 0) { -value } else { value } }
+instance ShowDecimal: Show[Decimal] { fn show(value: Decimal): String { value.ToString() } }
+fn (value: Decimal) ToRational(): BigRat unsafe go {
+  import "math/big"
+  n, _ := new(big.Int).SetString(integerText(decimalCoefficient(value)), 10)
+  d := new(big.Int).Exp(big.NewInt(10), big.NewInt(decimalScale(value)), nil)
+  return BigRat_rational{fraction: new(big.Rat).SetFrac(n, d).RatString()}
+}
+fn (value: BigRat) ToDecimal(scale: Int, rounding: Rounding): Decimal | OutOfRange unsafe go {
+  import "math/big"
+  import "strconv"
+  if scale < 0 || scale > 10000 { return OutOfRange{value: strconv.FormatInt(scale, 10), target: "Decimal scale (0..10000)"} }
+  r, _ := new(big.Rat).SetString(rationalText(value))
+  n := new(big.Int).Mul(r.Num(), new(big.Int).Exp(big.NewInt(10), big.NewInt(scale), nil))
+  result := roundedQuotient(BigInt_integer{digits: n.String()}, BigInt_integer{digits: r.Denom().String()}, rounding)
+  return Decimal_decimal{coefficient: result, scale: scale}
+}
+// SameValue compares numeric amounts independently of their stored scales.
+fn (value: Decimal) SameValue(other: Decimal): Bool { value.Compare(other) == 0 }

@@ -1133,6 +1133,19 @@ Closing the server scope cancels request scopes and stops accepting new connecti
 
 - **Standard packages can depend on pinned Go modules (implemented):** native Go module/checksum declarations (`go-deps.mod` and `go-deps.sum`) ship with the compiler. Generated builds include only loaded std packages' declarations, use `-mod=readonly`, and use Go's module cache. Warm caches support `GOPROXY=off`; cold offline builds fail clearly. Dependency sources are not vendored. See [the std Go dependency contract](std-go.md).
 
+- **Math (implemented):** `bork/math` has pure IEEE float functions and constants,
+  immutable arbitrary-size `BigInt` and reduced `BigRat`, and fixed-point `Decimal`
+  using `math/big.Int` coefficients. Private variants prevent forged values.
+  Decimal preserves scale: **`1.0 != 1.00` with `==`**, including as map keys;
+  `SameValue` and `Compare` compare numeric amounts. Division and rescaling require
+  explicit scale and rounding (`TowardZero`, `AwayFromZero`, `Floor`, `Ceiling`,
+  `HalfEven`, `HalfAwayFromZero`); scales are checked in 0..10000. Exact arithmetic
+  errors return unions; floats retain IEEE NaN/infinity behavior. Exact JSON codecs
+  use strings, preserving precision and Decimal scale. Canonical string storage
+  keeps mutable Go numbers inside operations, with measurable parsing/allocation
+  overhead. See [math](math.md), [examples/math](../examples/math/main.bork), and the
+  [benchmark](../testdata/benchmarks/math/README.md).
+
 - **SQL (implemented):** `bork/sql` owns database pools and transactions as scope resources, using `database/sql` with pinned pure-Go SQLite and pgx Postgres drivers. `OpenSqlite(dataSource, s)` and `OpenPostgres(dataSource, s)` connect and ping. `Begin(db, transactionScope)` rolls back when that scope closes unless `Commit` succeeds. `Exec` binds typed scalar/Bytes/Null parameters, and `Query[T: Decode]` decodes column-name row objects into proven values. Operations use their connection or transaction owner's cancellation context; attachment rebinds cancellation to the destination scope through the general resource hook. `QueryJson` exposes the JSON representation for custom decoding. SQLite uses one connection; Postgres uses Go's default pool. See [examples/sql](../examples/sql/main.bork).
 
 - **Another package's functions promise only what their signatures say.** Facts derived from a function's body are used within its package, but not by importers, so a package's body can change without breaking them. (This settles the "exported return types" question below.)

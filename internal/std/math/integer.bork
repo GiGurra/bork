@@ -1,0 +1,93 @@
+// Canonical strings keep Go's mutable big.Int representation out of bork values.
+type BigInt = sealed { integer { digits: String } }
+fn integerText(value: BigInt): String unsafe go { return value.(BigInt_integer).digits }
+fn Integer(value: Int): BigInt unsafe go {
+  import "strconv"
+  return BigInt_integer{digits: strconv.FormatInt(value, 10)}
+}
+// ParseInteger accepts an optional sign and decimal digits, with no whitespace.
+fn ParseInteger(text: String): BigInt | ParseError unsafe go {
+  import "math/big"
+  value, ok := new(big.Int).SetString(text, 10)
+  if !ok { return ParseError{input: text, message: "expected a base-10 integer"} }
+  return BigInt_integer{digits: value.String()}
+}
+fn (value: BigInt) ToString(): String { integerText(value) }
+fn (value: BigInt) ToInt(): Int | OutOfRange unsafe go {
+  import "math/big"
+  n, _ := new(big.Int).SetString(integerText(value), 10)
+  if !n.IsInt64() { return OutOfRange{value: integerText(value), target: "Int"} }
+  return n.Int64()
+}
+fn (value: BigInt) Compare(other: BigInt): Int unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(value), 10)
+  b, _ := new(big.Int).SetString(integerText(other), 10)
+  return int64(a.Cmp(b))
+}
+fn (value: BigInt) Add(other: BigInt): BigInt unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(value), 10)
+  b, _ := new(big.Int).SetString(integerText(other), 10)
+  return BigInt_integer{digits: new(big.Int).Add(a, b).String()}
+}
+fn (value: BigInt) Sub(other: BigInt): BigInt unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(value), 10)
+  b, _ := new(big.Int).SetString(integerText(other), 10)
+  return BigInt_integer{digits: new(big.Int).Sub(a, b).String()}
+}
+fn (value: BigInt) Mul(other: BigInt): BigInt unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(value), 10)
+  b, _ := new(big.Int).SetString(integerText(other), 10)
+  return BigInt_integer{digits: new(big.Int).Mul(a, b).String()}
+}
+fn (value: BigInt) Div(other: BigInt): BigInt | MathError unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(value), 10)
+  b, _ := new(big.Int).SetString(integerText(other), 10)
+  if b.Sign() == 0 { return MathError{message: "division by zero"} }
+  return BigInt_integer{digits: new(big.Int).Quo(a, b).String()}
+}
+// Rem is the remainder of truncating division, with the dividend's sign.
+fn (value: BigInt) Rem(other: BigInt): BigInt | MathError unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(value), 10)
+  b, _ := new(big.Int).SetString(integerText(other), 10)
+  if b.Sign() == 0 { return MathError{message: "division by zero"} }
+  return BigInt_integer{digits: new(big.Int).Rem(a, b).String()}
+}
+// Mod is the nonnegative Euclidean modulus, independent of divisor sign.
+fn (value: BigInt) Mod(other: BigInt): BigInt | MathError unsafe go {
+  import "math/big"
+  a, _ := new(big.Int).SetString(integerText(value), 10)
+  b, _ := new(big.Int).SetString(integerText(other), 10)
+  if b.Sign() == 0 { return MathError{message: "division by zero"} }
+  return BigInt_integer{digits: new(big.Int).Mod(a, b).String()}
+}
+fn (value: BigInt) Abs(): BigInt unsafe go {
+  import "math/big"
+  n, _ := new(big.Int).SetString(integerText(value), 10)
+  return BigInt_integer{digits: new(big.Int).Abs(n).String()}
+}
+fn (value: BigInt) Neg(): BigInt unsafe go {
+  import "math/big"
+  n, _ := new(big.Int).SetString(integerText(value), 10)
+  return BigInt_integer{digits: new(big.Int).Neg(n).String()}
+}
+instance ShowBigInt: Show[BigInt] { fn show(value: BigInt): String { integerText(value) } }
+instance OrdBigInt: Ord[BigInt] { fn compare(a: BigInt, b: BigInt): Int { a.Compare(b) } }
+// Pow accepts only nonnegative exponents; results have no fixed integer width.
+fn (value: BigInt) Pow(exponent: Int): BigInt | MathError unsafe go {
+  import "math/big"
+  if exponent < 0 { return MathError{message: "integer exponent must be nonnegative"} }
+  n, _ := new(big.Int).SetString(integerText(value), 10)
+  return BigInt_integer{digits: new(big.Int).Exp(n, big.NewInt(exponent), nil).String()}
+}
+fn (value: BigInt) Sqrt(): BigInt | MathError unsafe go {
+  import "math/big"
+  n, _ := new(big.Int).SetString(integerText(value), 10)
+  if n.Sign() < 0 { return MathError{message: "integer square root requires a nonnegative value"} }
+  return BigInt_integer{digits: new(big.Int).Sqrt(n).String()}
+}

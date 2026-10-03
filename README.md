@@ -228,6 +228,12 @@ Import `bork/rand` for bounded integers, floats, shuffling and picking. A seeded
 opaque `Generator` returns `{ value, next }` draws, so replay needs no mutable
 state. See [examples/rand](examples/rand/main.bork).
 
+`bork/math` provides float functions, arbitrary integers and rationals, and exact
+fixed-point Decimal arithmetic for money with explicit rounding. **Decimal `==`
+includes scale (`1.0 != 1.00`); use `SameValue` for numeric equality.** Exact values
+have private representations and JSON string codecs. See [math](docs/math.md)
+and the [invoice example](examples/math/main.bork).
+
 ## License
 
 [MIT](LICENSE)
