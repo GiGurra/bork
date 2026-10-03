@@ -106,16 +106,23 @@ var standardGoNames sync.Map // configuration namespace + import path -> package
 func (gp goPackages) Names(paths []string) map[string]string {
 	names := map[string]string{}
 	standard := map[string]bool{}
+	ctx := gp.goContext()
+	var nameInputs *goNameValidation
+	if gp.usage != nil {
+		nameInputs = captureStandardNameInputs(ctx, paths)
+	}
 	if gp.usage != nil {
 		defer func() {
 			input := goNameInput{paths: slices.Clone(paths), names: maps.Clone(names), standard: true}
 			for _, path := range paths {
 				input.standard = input.standard && standard[path]
 			}
+			if input.standard && nameInputs != nil && nameInputs.current() {
+				input.inputs = nameInputs
+			}
 			gp.usage.names = append(gp.usage.names, input)
 		}()
 	}
-	ctx := gp.goContext()
 	if ctx.err != nil || ctx.driverErr != nil {
 		return names
 	}

@@ -14,6 +14,7 @@ type goNameInput struct {
 	paths    []string
 	names    map[string]string
 	standard bool
+	inputs   *goNameValidation
 }
 type goUsage struct {
 	names            []goNameInput
@@ -73,7 +74,11 @@ func (s *Session) Stats() SessionStats {
 func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	context := captureGoContext()
+	var previous *goContext
+	if s.last != nil {
+		previous = s.last.context
+	}
+	context := captureSessionGoContext(previous)
 	if reason := s.hitMissReason(path, emit, context); reason == "" {
 		s.stats.Hits++
 		s.stats.Reason = "unchanged validated inputs"
@@ -150,10 +155,15 @@ func (s *Session) hitMissReason(path string, emit bool, context *goContext) stri
 	case !artifact.assets.current():
 		return "asset inputs changed"
 	}
-	// The checker observes package names only through this map. Recompute it
-	// through the builtin driver on each hit attempt, with name reuse disabled;
-	// SDK/tool changes and failures must produce the same observed metadata.
+	// Validate proven builtin name-query inputs by content. Unknown query
+	// configurations keep the complete metadata reload with name reuse disabled.
 	for _, input := range artifact.names {
+		if input.inputs != nil {
+			if !input.inputs.current() {
+				return "Go package names changed"
+			}
+			continue
+		}
 		usage := &goUsage{}
 		names := (goPackages{module: artifact.module, context: context, usage: usage}).Names(input.paths)
 		if !maps.Equal(names, input.names) || len(usage.names) != 1 || !usage.names[0].standard {
