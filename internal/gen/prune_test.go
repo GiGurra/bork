@@ -76,3 +76,21 @@ func pruneFunctions(src []byte, preserved map[string]bool) ([]byte, error) {
 	}
 	return out.Bytes(), nil
 }
+
+func TestRemoveFunctionsPhysicalOffsets(t *testing.T) {
+	src := []byte("package main\n//line source.bork:70:4\nfunc unused() { /*line inner.bork:900:2*/ println(1) }\nfunc main() { /*line kept.bork:7:3*/ println(2) }\n")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "helpers.go", src, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := liveFunctions(file.Decls, map[string]bool{"main": true}, file.Comments)
+	got := removeFunctions(src, fset, file.Decls, live)
+	want := "package main\n//line source.bork:70:4\n\nfunc main() { /*line kept.bork:7:3*/ println(2) }\n"
+	if string(got) != want {
+		t.Fatalf("raw deletion changed preserved text:\ngot %q\nwant %q", got, want)
+	}
+	if _, err := parser.ParseFile(token.NewFileSet(), "helpers.go", got, parser.ParseComments); err != nil {
+		t.Fatal(err)
+	}
+}
