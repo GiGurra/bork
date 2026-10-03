@@ -2,8 +2,10 @@ package driver
 
 import (
 	"errors"
+	"fmt"
 	"go/types"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/syntax"
@@ -26,6 +28,15 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 			errs[p] = err
 		}
 		return pkgs, errs
+	}
+	target, err := exec.Command("go", "env", "GOARCH").Output()
+	if err != nil {
+		return fail(fmt.Errorf("determining Go target: %w", err))
+	}
+	arch := strings.TrimSpace(string(target))
+	sizes := types.SizesFor("gc", arch)
+	if sizes == nil || sizes.Sizeof(types.Typ[types.Int]) != 8 {
+		return fail(fmt.Errorf("bindings require a 64-bit Go target; GOARCH=%s is not supported", arch))
 	}
 	dir, err := os.MkdirTemp("", "bork-gotypes-*")
 	if err != nil {
