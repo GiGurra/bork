@@ -44,8 +44,11 @@ type mockBody struct {
 
 // mockTargets numbers the functions the tests mock, which the runtime
 // identifies them by.
-func (g *gen) mockTargets(info *check.Info) {
+func (g *gen) mockTargets(info *check.Info, notRun map[*check.Func]string) {
 	for _, m := range info.Mocks {
+		if _, skipped := notRun[m.MockIn]; skipped {
+			continue // its test's body is not generated
+		}
 		if g.mockIDs == nil {
 			g.mockIDs = map[*check.Func]int{}
 		}

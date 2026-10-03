@@ -58,6 +58,14 @@ func (c *checker) mockStmt(s *syntax.MockStmt) {
 			top[key] = &local{typ: Invalid, decl: s, used: true}
 		}
 		c.mockBody(s, target, test)
+		// In force from here to the end of the block (not in its own
+		// body, where the target's name means the function before it).
+		// A mock in the test's own block before its first call is in
+		// force for all of the test, on every goroutine it starts.
+		// (Pure calls before it cannot start work that would run
+		// without it.)
+		whole := c.fn == test && c.lambdaDepth == 0 && len(c.scopes) == 2 && !c.testActed(test)
+		c.inForce = append(c.inForce, mockInForce{target: target, depth: len(c.scopes), whole: whole})
 	}
 	if s.Name != "" {
 		t := Type(Invalid)
@@ -121,6 +129,17 @@ func (c *checker) callRecord(target *Func) *Record {
 	c.info.MockCalls[target] = r
 	c.info.MockCallOrder = append(c.info.MockCallOrder, r)
 	return r
+}
+
+// testActed reports whether the test has made a call with effects so
+// far (which could have started a task).
+func (c *checker) testActed(test *Func) bool {
+	for _, site := range c.info.testSites[test] {
+		if site.fn.Effects&^EffOpen != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // mockCallLeftOut explains, if r is a call record that left out the

@@ -23,16 +23,60 @@ import (
 // with autoProperties, so is every function whose promises are trusted
 // (see autoPropertyCandidate).
 func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte, error) {
+	return TestsWith(files, info, TestOptions{AutoProperties: autoProperties})
+}
+
+// TestOptions are how Tests builds the test program.
+type TestOptions struct {
+	// AutoProperties property-tests the functions whose promises are
+	// trusted (see autoPropertyCandidate).
+	AutoProperties bool
+	// Hermetic fails, without running it, every test that can reach a
+	// function doing net in Go code with no mock of it in force (see
+	// check.Info.Unmocked).
+	Hermetic bool
+}
+
+// TestsWith is Tests with options.
+func TestsWith(files []*syntax.File, info *check.Info, opts TestOptions) ([]byte, error) {
+	autoProperties := opts.AutoProperties
 	g := newGen(info)
 	g.testMode = true
 	g.usesTests = true
-	g.mockTargets(info)
+	// With Hermetic, the tests that could reach the network fail
+	// without running, and their bodies (mocks included) are left out.
+	notRun := map[*check.Func]string{}
+	if opts.Hermetic {
+		for _, fn := range info.Tests {
+			if paths := info.Unmocked(fn, check.EffNet); len(paths) > 0 {
+				notRun[fn] = notHermetic(paths, fn.Pkg)
+			}
+		}
+	}
+	g.mockTargets(info, notRun)
 	var roots []*check.Func
 	list := &ast.CompositeLit{Type: &ast.ArrayType{Elt: ast.NewIdent("_test")}}
 	snaps := map[string]bool{}
+	failing := func(goName *ast.Ident, msg string) {
+		g.extraFuncs = append(g.extraFuncs, &ast.FuncDecl{
+			Name: goName,
+			Type: &ast.FuncType{Params: &ast.FieldList{}},
+			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{strLit(msg)}}}}},
+		})
+	}
 	for i, fn := range info.Tests {
-		roots = append(roots, fn.Calls...)
 		goName := ast.NewIdent("_test" + strconv.Itoa(i+1))
+		if msg, ok := notRun[fn]; ok {
+			failing(goName, msg)
+			snap := ""
+			if len(fn.Params) == 0 {
+				// Named as when it runs, so the other tests' names stay.
+				snap = snapshotName(fn.Test.Name, snaps)
+			}
+			list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{strLit(fn.Test.Name), strLit(snap), goName}})
+			continue
+		}
+		roots = append(roots, fn.Calls...)
 		if len(fn.Params) > 0 {
 			// Its generated values cannot be snapshotted.
 			body := func() []ast.Stmt { return g.blockInto(fn.Body, sink{}) }
@@ -92,6 +136,18 @@ func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte,
 				}
 				n++
 				goName := ast.NewIdent("_auto" + strconv.Itoa(n))
+				if opts.Hermetic {
+					if paths := info.Reaching(fn, check.EffNet); len(paths) > 0 {
+						// It is called on generated arguments, with no mocks.
+						var up []check.UnmockedPath
+						for _, p := range paths {
+							up = append(up, check.UnmockedPath{Pos: fn.Decl.Pos, Funcs: p})
+						}
+						failing(goName, notHermetic(up, fn.Pkg))
+						list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{strLit(autoPropertyName(fn)), strLit(""), goName}})
+						continue
+					}
+				}
 				roots = append(roots, fn)
 				g.extraFuncs = append(g.extraFuncs, g.autoProperty(fn, goName))
 				list.Elts = append(list.Elts, &ast.CompositeLit{Elts: []ast.Expr{strLit(autoPropertyName(fn)), strLit(""), goName}})
@@ -108,6 +164,36 @@ func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte,
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_runTests"), Args: []ast.Expr{list}}}}},
 	}
 	return generate(g, files, roots, main)
+}
+
+// notHermetic explains how a test reaches the network unmocked: per
+// path, the call in the test, the functions on the way, and the last of
+// them the test can mock.
+func notHermetic(paths []check.UnmockedPath, from *check.Package) string {
+	var b strings.Builder
+	b.WriteString("not hermetic (bork test --hermetic): it can reach the network with no mock in force:")
+	for _, p := range paths {
+		var names []string
+		mockable := ""
+		for _, f := range p.Funcs {
+			n := f.QualifiedName(from)
+			names = append(names, n)
+			if f.Mockable(from) {
+				mockable = n
+			}
+		}
+		fmt.Fprintf(&b, "\n%s: %s", p.Pos, strings.Join(names, " -> "))
+		switch {
+		case p.InMock != nil && p.Funcs[0] == p.InMock:
+			fmt.Fprintf(&b, " (in the mock of %s, its name means the function before the mock)", p.InMock.QualifiedName(from))
+		case mockable == "":
+			b.WriteString(" (no function on the way can be mocked)")
+		default:
+			fmt.Fprintf(&b, "; mock %s", mockable)
+		}
+	}
+	b.WriteString("\nA mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.")
+	return b.String()
 }
 
 // snapshotName is the base name of a test's snapshot files: its name

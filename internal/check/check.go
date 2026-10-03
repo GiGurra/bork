@@ -234,6 +234,7 @@ type Info struct {
 	MockCalls     map[*Func]*Record
 	MockCallOrder []*Record
 	mockHandles   map[*syntax.MockStmt]Type
+	testSites     map[*Func][]testSite
 	// Rules holds the inference rules of every package.
 	Rules []*Rule
 	// GoBindings holds every checked binding to a Go function
@@ -397,6 +398,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			funcRefs:           map[syntax.Expr]*Instance{},
 			mocks:              map[*syntax.MockStmt]*Func{},
 			mockHandles:        map[*syntax.MockStmt]Type{},
+			testSites:          map[*Func][]testSite{},
 			MockCalls:          map[*Func]*Record{},
 		},
 	}
@@ -662,6 +664,9 @@ type checker struct {
 	producer         *producerContext
 	loops            []int
 	conversionSerial int
+	// inForce lists the mocks in force at the current point of a test:
+	// their targets, and how many scopes were open when each started.
+	inForce []mockInForce
 	// used collects the effects of the function or lambda being
 	// checked: of the calls in its body (see effects.go).
 	used Effects
@@ -807,6 +812,7 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 
 func (c *checker) checkFunc(fn *Func) {
 	c.fn = fn
+	c.inForce = nil
 	c.pkg = fn.Pkg
 	c.inPrelude = fn.Prelude
 	defer func() { c.inPrelude = false }()
@@ -931,6 +937,9 @@ func (c *checker) popScope() {
 		}
 	}
 	c.scopes = c.scopes[:len(c.scopes)-1]
+	for len(c.inForce) > 0 && c.inForce[len(c.inForce)-1].depth > len(c.scopes) {
+		c.inForce = c.inForce[:len(c.inForce)-1]
+	}
 }
 
 func (c *checker) record(e syntax.Expr, t Type) Type {

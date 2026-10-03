@@ -1884,6 +1884,49 @@ range, `atLeast` above `atMost`, a negative wait) fail the test at the
 `expect` or `waitFor` call. Failures name the mock statement's position (the
 handle's methods are prelude functions, which do not know their caller's).
 
+### Hermetic tests
+
+`bork test --hermetic` (bork-x0g9au) fails, without running it, every test
+that can reach the network with no mock in force, so a suite that passes with
+it runs offline. The network is a function that declares `net` and does it
+in Go code (an `unsafe go` body or a Go binding: `http.Get`, `http.Listen`,
+`net.Dial`); a bork function that uses `net` only reaches one. The check is
+static, on the checker's call graph:
+
+- The checker records each call in a test (its body, lambdas, and mock
+  bodies) together with the mocks that cover it. Mocks apply by goroutine,
+  where code runs, so a call written directly in the test (or a mock's body)
+  is covered by the mocks of the enclosing blocks, from their `mock`
+  statement on: a call before a `mock`, or after its block, is not. A call
+  in a lambda, or a function used as a value, may run later or on another
+  task (one started before the mock, receiving work on a channel), so only
+  the mocks in force for all of the test cover it: those in the test's own
+  block, before its first call with effects.
+- From each call it follows what the called functions call (function values
+  included, and for a class method, its instances' methods), stopping at a
+  function a mock covering the call replaces: the mock answers instead. A
+  mock of any function on the way covers what is below it (`mock page(url)`
+  covers the `http.Get` that `page` calls).
+- Inside a mock's body its own target means the function before the mock, so
+  a mock that calls the real function is not hermetic, unless an outer mock
+  of it is in force.
+- The failure lists each unmocked network function once, with the call in the
+  test that reaches it, the functions on the way, and the last of them the
+  test can mock: `main.bork:41:11: page -> Get; mock Get`.
+- With `--auto-properties`, a trusted function whose property test would reach
+  the network (it is called on generated arguments, with no mocks) fails the
+  same way. A test that does not run keeps its snapshot names, so the others'
+  do not shift.
+
+It errs on the side of reporting: a call on a branch the test never takes
+counts, and so does a function value passed around but never called. Calls
+through Go code that bork does not see (a callback a Go library runs) are not
+followed. Only `net` is checked; `io` (files, processes) is left out on
+purpose, since tests often use temporary files. By that definition an
+in-memory database opened through `bork/sql` (which declares `net`) or a
+server on the loopback interface is not hermetic; mock its functions, or
+leave such tests out of an offline run.
+
 ### Production builds pay nothing
 
 `bork build` and `bork run` generate exactly what they did before. In the
@@ -1954,8 +1997,6 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
 
 ### Follow-ups
 
-- Hermetic tests (bork-x0g9au): report, or require, that a test mocks every `net` function
-  it can reach, so it can run without a network.
 - Mocking class instances, if real code shows the need.
 
 ## Ambient values (design: bork-j68yln)

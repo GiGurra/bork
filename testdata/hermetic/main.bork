@@ -1,0 +1,108 @@
+// bork test --hermetic: a test that can reach the network with no mock
+// in force fails without running (see TestHermetic).
+
+// Get would call the network.
+fn Get(url: String) uses net: String unsafe go {
+  panic("no network in tests: " + url)
+}
+
+// Read would read a file: io, not net.
+fn Read(path: String) uses io: String unsafe go {
+  return "contents of " + path
+}
+
+fn page(url: String) uses net: String {
+  s"<${Get(url)}>"
+}
+
+fn twice(f: () => String): String {
+  f() + f()
+}
+
+fn main() {
+  println(page("https://example.com"))
+}
+
+test "a mock of the function that reaches the network" {
+  mock Get(url) { "fake" }
+  assertEqual(page("a"), "<fake>")
+}
+
+test "a mock of a function on the way" {
+  mock page(url) { "page" }
+  assertEqual(page("a"), "page")
+}
+
+test "io is not the network" {
+  assertEqual(Read("x"), "contents of x")
+}
+
+test "a call before the mock" {
+  _ = page("a")
+  mock Get(url) { "fake" }
+}
+
+test "a call after the mock's block" {
+  {
+    mock Get(url) { "fake" }
+  }
+  _ = page("a")
+}
+
+test "a mock that calls the real function" {
+  mock Get(url) { Get(url) }
+  _ = page("a")
+}
+
+test "a call in a lambda" {
+  _ = twice(() => page("a"))
+}
+
+test "a property test" (url: String) {
+  _ = page(url)
+}
+
+test "a lambda that leaves the mock's block" {
+  f = {
+    mock Get(url) { "fake" }
+    () => page("a")
+  }
+  _ = f()
+}
+
+test "a mock at the start of the test covers its tasks" {
+  mock Get(url) { "fake" }
+  scope s {
+    t = spawn(s, () => page("a"))
+    assertEqual(await(t), "<fake>")
+  }
+}
+
+class Fetcher[T] {
+  fn fetchIt(x: T) uses net: String
+}
+
+instance fetchInt: Fetcher[Int] {
+  fn fetchIt(x: Int) uses net: String {
+    Get("int")
+  }
+}
+
+test "a class method reaches its instances" {
+  _ = fetchIt(1)
+}
+
+fn Describe[T: Show](x: T) uses net: String {
+  Get(show(x))
+}
+
+test "a b" {
+  mock Describe(x) { "d" }
+  _ = Get("a")
+}
+
+test "a-b" {
+  mock Get(url) { url }
+  assertEqual(Describe(1), "1")
+  assertSnapshot("second")
+}
