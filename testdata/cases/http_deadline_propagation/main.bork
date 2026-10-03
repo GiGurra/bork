@@ -194,6 +194,16 @@ fn outgoingChecks(run: (String, Scope, Int) => String) uses io + net + clock + s
   defer func() { http.DefaultClient = original }()
   last.Store(0)
   if run(server.URL+"/redirect", plain, 40) != "deadline" || last.Load() != 0 { panic("expired redirect started") }
+  secure := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if r.ProtoMajor != 2 { panic("HTTP/2 not negotiated") }
+    fmt.Fprint(w, r.Header.Get("Bork-Timeout-Ns"))
+  }))
+  secure.EnableHTTP2 = true
+  secure.StartTLS()
+  defer secure.Close()
+  http.DefaultClient = secure.Client()
+  value, err = strconv.ParseInt(run(secure.URL, bounded, 1000), 10, 64)
+  if err != nil || value <= 0 || value > int64(time.Second) { panic("HTTP/2 budget not propagated") }
   return true
 }
 fn queuedDeadline(addr: String) uses io + net + clock: Bool unsafe go {
@@ -212,6 +222,63 @@ fn queuedDeadline(addr: String) uses io + net + clock: Bool unsafe go {
   defer response.Body.Close()
   return response.StatusCode == 504 && response.Close && response.Header.Get("Retry-After") == ""
 }
+fn completionRace(addr: String) uses io + net + clock: Bool unsafe go {
+  import "bufio"
+  import "fmt"
+  import "io"
+  import "net"
+  import "net/http"
+  import "time"
+  for attempt := 0; attempt < 40; attempt++ {
+    conn, err := net.DialTimeout("tcp", addr, time.Second)
+    if err != nil { panic(err) }
+    conn.SetDeadline(time.Now().Add(2*time.Second))
+    reader := bufio.NewReader(conn)
+    fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: %s\r\nContent-Length: 2\r\nBork-Timeout-Ns: 1000000\r\n\r\no", addr)
+    time.Sleep(time.Duration(attempt%3)*time.Millisecond)
+    fmt.Fprint(conn, "k")
+    response, err := http.ReadResponse(reader, nil)
+    if err != nil { conn.Close(); panic(err) }
+    io.ReadAll(response.Body)
+    response.Body.Close()
+    if response.StatusCode != 200 && response.StatusCode != 504 { conn.Close(); panic("unexpected completion race status") }
+    if response.StatusCode == 504 && !response.Close { conn.Close(); panic("expired unread body did not close connection") }
+    if response.StatusCode == 200 && !response.Close {
+      fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\n\r\n", addr)
+      response, err = http.ReadResponse(reader, nil)
+      if err != nil { conn.Close(); panic(err) }
+      io.ReadAll(response.Body)
+      response.Body.Close()
+      if response.StatusCode != 200 { conn.Close(); panic("race deadline leaked into keep-alive request") }
+    }
+    conn.Close()
+  }
+  return true
+}
+fn stalledCancel(addr: String, s: Scope) uses io + net + clock + state: Bool unsafe go {
+  import "bufio"
+  import "context"
+  import "fmt"
+  import "net"
+  import "net/http"
+  import "time"
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer conn.Close()
+  conn.SetDeadline(time.Now().Add(2*time.Second))
+  fmt.Fprintf(conn, "POST / HTTP/1.1\r\nHost: %s\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n", addr)
+  reader := bufio.NewReader(conn)
+  response, err := http.ReadResponse(reader, nil)
+  if err != nil || response.StatusCode != 100 { panic("body read did not start") }
+  response.Body.Close()
+  // 100 Continue is emitted only after the controller hook is installed and
+  // the request body enters Read. This cancels an actually blocked body read.
+  s.cancel(context.Canceled)
+  response, err = http.ReadResponse(reader, nil)
+  if failure, ok := err.(net.Error); ok && failure.Timeout() { panic("scope cancellation did not interrupt body read") }
+  if response != nil { response.Body.Close() }
+  return true
+}
 fn withinBudget(value: String, upper: Int): Bool unsafe go {
   import "strconv"
   nanos, err := strconv.ParseInt(value, 10, 64)
@@ -226,6 +293,7 @@ fn main() {
       }
     }))
     println("incoming", rawChecks(http.Address(server), false))
+    println("completion race", completionRace(http.Address(server)))
   }
   scope app {
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
@@ -237,6 +305,12 @@ fn main() {
     println("policy", rawChecks(http.Address(server), true))
   }
   println("outgoing", outgoingChecks(invoke))
+  scope app {
+    owner = openScope(app)
+    server = mustServer(http.Listen("127.0.0.1:0", owner.scope, (request, s) => http.Text(200, "ok")))
+    println("stalled cancellation", stalledCancel(http.Address(server), owner.scope))
+    closeScope(owner)
+  }
   scope app {
     entered = channel[Bool](app, 1)
     release = channel[Bool](app, 1)

@@ -1,8 +1,8 @@
 # HTTP deadline and ambient propagation
 
-Design proposal for bork-gqxe4s. Implementation follows approval and the
-bork-avr3ns marker helpers. Typed ambient values and the scope deadline bridge
-are already implemented.
+Approved design for bork-gqxe4s. Deadline-budget propagation is implemented;
+Ambient/trace forwarding follows the bork-avr3ns marker helpers. Typed ambient
+values and the scope deadline bridge are already implemented.
 
 ## Deadline budget
 
@@ -36,7 +36,9 @@ body-read-scoped cancellation hook. When buffering finishes, stop and join any
 running hook, then clear an unexpired read deadline before invoking the handler
 so it cannot affect handler work or a later keep-alive request. Recheck
 cancellation before invoking the handler; request context cancellation remains
-active independently. Never use the controller after ServeHTTP returns. Verify HTTP/1 and HTTP/2 behavior; an unsupported deadline
+active independently. Never use the controller after ServeHTTP returns. Current Bork listeners serve HTTP/1; verify its body cancellation and
+outgoing negotiated HTTP/2 budget propagation. Server HTTP/2 controller tests
+follow when that transport is exposed; an unsupported deadline
 controller receives 500 with the same HTTP/1 unread-body rejection strategy
 before reading a deadline-bound body, rather than
 introducing detached read goroutines. Expiry
@@ -52,10 +54,11 @@ Send takes its scope context and optional timeout as today. Immediately before
 sending, it checks cancellation and the effective absolute deadline, refuses an
 exhausted budget with typed DeadlineExceeded, and serializes the positive
 remaining duration. Retry recomputes the header for every attempt, and a
-per-call RoundTripper wrapper recomputes it before each redirect hop without
-changing http.DefaultClient or its shared transport. The wrapper clones the
-request and headers before mutation, respecting RoundTripper request ownership. Exhausted redirects stop
-with typed DeadlineExceeded. The wrapper refreshes only the budget; normal Go
+per-call copy of http.DefaultClient refreshes it in CheckRedirect before each
+redirect hop, preserving the configured redirect policy and shared transport.
+Header changes happen before transport ownership. This avoids requiring a native
+RoundTripper adapter type in the generated runtime. Exhausted redirects stop
+with typed DeadlineExceeded. The hook refreshes only the budget; normal Go
 redirect handling retains its existing sensitive-header rules. Native internal
 transport replays happen inside RoundTrip and may retain its initial budget;
 like wire transit, their elapsed time is still bounded by the caller's local

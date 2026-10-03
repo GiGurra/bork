@@ -94,6 +94,7 @@ fn HeaderOf(headers: Headers, name: String): Option[String] {
 // returns, and cancelled if the client goes away or s closes: the
 // handler can open resources in it and spawn tasks in it.
 // maxBodyBytes defaults to 16 MiB; oversized requests receive HTTP 413.
+// requestTimeoutMs caps incoming budgets; zero adds no server deadline.
 fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None, requestTimeoutMs: TimeoutMs = 0) uses net + clock + state: Server | IoError unsafe go {
   return start(addr, s, []Route{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
 }
@@ -418,6 +419,8 @@ fn Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: Tim
 
 // Send reads the entire response. Overload, deadline and cancellation are typed;
 // other HTTP statuses remain responses and transport failures remain IoError.
+// Effective scope/timeout budgets propagate through Bork-Timeout-Ns, refreshed
+// on redirects; manually supplied values of that header are replaced or removed.
 fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result unsafe go {
   import "context"
   import "errors"
