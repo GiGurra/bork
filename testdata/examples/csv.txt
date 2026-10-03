@@ -1,0 +1,3 @@
+[Stock { code: "007", quantity: 3, note: Option.None }]
+[["code", "quantity", "note"], ["007", "3", ""]]
+CsvErrors { errors: [CsvError { row: 2, column: "quantity", message: "must be positive" }, CsvError { row: 3, column: "quantity", message: "must be positive" }] }

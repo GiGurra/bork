@@ -186,6 +186,10 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 Import `bork/encoding` for hex and standard or URL-safe base64; malformed
 input returns `ParseError`. See [the encoding example](examples/bytes_encoding/main.bork).
 
+Import `bork/encoding` for CSV. `encoding.DecodeCsv[T]` reads header-based records
+using each field's declared type and facts, collecting errors by row and column.
+`EncodeCsv` writes empty optional cells as None (Some("") cannot round-trip); [the CSV example](examples/csv/main.bork) shows both.
+
 ## License
 
 [MIT](LICENSE)

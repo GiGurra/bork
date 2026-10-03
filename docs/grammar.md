@@ -200,3 +200,27 @@ HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeo
   prelude `File`, `openFile`, `createFile`, `readAll`, and `write` have moved
   to this package. I/O functions declare `uses io`; ForEachLine accepts an
   open callback and also charges its effects. See [the filesystem example](../examples/fs/main.bork).
+
+- **CSV:** `encoding.CsvRows(text)` parses comma-separated text into
+  `List[List[String]] | encoding.CsvError`; `encoding.Csv(rows)` writes rows
+  with LF endings and CSV quoting. Raw parsing permits ragged rows and
+  quoted newlines, skips blank lines, and normalizes CRLF as Go's CSV parser
+  does. `encoding.DecodeCsv[T: Decode](text)` reads a header row and a derived
+  record schema, returning `List[T] | encoding.CsvError | encoding.CsvErrors`.
+  String fields are literal (so `007` stays `007`); other fields use JSON
+  syntax. Empty optional cells and missing optional columns become None;
+  nonempty optional cells become Some, parsed like the required field. Thus
+  an optional String cell `hello` needs no JSON quotes. Encoding None and
+  Some("") both writes empty cells, which decode as None: Some("") cannot
+  round-trip. Optional non-String cells containing nonempty JSON `null` are
+  rejected with a cell error; None must use an empty cell. The JSON bridge
+  also cannot preserve Some(Json.Null), which encodes like None. These are
+  known limitations of the CSV representation.
+  Headers match field names exactly; duplicate, unknown, and missing required
+  columns are errors. Field types and facts are checked, collecting every
+  row/field error without returning partial records. `EncodeCsv[T: Encode + Decode]`
+  writes headers in schema order; both classes are required to obtain the
+  schema and preserve optional-cell semantics. Record schemas need at least
+  one field. Empty typed input writes empty text. Errors use one-based rows
+  including the header and field-name columns (nested paths appended); CSV
+  syntax errors use physical line and byte position. See [the CSV example](../examples/csv/main.bork).
