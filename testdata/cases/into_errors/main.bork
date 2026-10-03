@@ -1,0 +1,21 @@
+type Raw = { n: String }
+type Target = { n: Int = 1, missing: Bool }
+type Nested = { child: Target }
+type RecordField = { child: Target }
+type PrimitiveField = { child: Int }
+fn failureTarget(): Int | Target { Target { n: 1, missing: false } }
+type CycleA = { children: List[CycleA] }
+type CycleB = { children: List[CycleB] }
+fn (r: Raw) into(): Raw { r }
+fn main() {
+  println(Raw { n: "bad" }.into[Int]())
+  println(Raw { n: "bad" }.into[Target]())
+  println(Raw { n: "bad" }.into[Nested]())
+  println(Raw { n: "bad" }.into[Target](unknown: 1))
+  println(Raw { n: "bad" }.into[Target](missng: false))
+  println(Raw { n: "bad" }.into[Target](n: 1, n: 2))
+  println(PrimitiveField { child: 1 }.into[RecordField]())
+  println(Raw { n: "bad" }.into[Target](n: failureTarget(), missing: false))
+  println(Raw { n: "bad" }.into[Target](n: "no success", missing: false))
+  println(CycleA { children: [] }.into[CycleB]())
+}

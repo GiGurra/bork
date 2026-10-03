@@ -1,0 +1,4 @@
+main.bork:13:26: cannot convert into Config: package example.com/into-private-error/settings controls its construction; use an exported constructor or update method from that package
+main.bork:14:46: cannot convert into Config: package example.com/into-private-error/settings controls its construction; use an exported constructor or update method from that package
+main.bork:15:57: cannot convert into Config: package example.com/into-private-error/settings controls its construction; use an exported constructor or update method from that package
+main.bork:16:51: cannot convert into Config: package example.com/into-private-error/settings controls its construction; use an exported constructor or update method from that package

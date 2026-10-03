@@ -1,0 +1,10 @@
+import "example.com/into-private/settings"
+type Public = { port: Int, name: String }
+type Wrapper = { config: settings.Config }
+type RawWrapper = { config: settings.Config, ignored: Bool }
+fn main() {
+  config = settings.New(9000)
+  println(config.into[settings.Config]())
+  println(config.into[Public]())
+  println(RawWrapper { config: config, ignored: true }.into[Wrapper]())
+}

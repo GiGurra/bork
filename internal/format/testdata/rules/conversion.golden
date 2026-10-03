@@ -1,0 +1,4 @@
+type User = { name: String }
+type Dto = { name: String, address: Address }
+type Address = { city: String }
+fn convert(user: User): Dto { user.into[Dto](name: user.name, address.city: "Oslo") }

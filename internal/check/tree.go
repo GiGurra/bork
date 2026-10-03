@@ -253,10 +253,11 @@ type If struct {
 // Unit (or it never finishes).
 type Block struct {
 	expr
-	Assembly *Assembly
-	Stmts    []Stmt
-	Tail     Expr
-	End      diag.Pos // the closing '}'
+	Assembly   *Assembly
+	Conversion *SourceSpan
+	Stmts      []Stmt
+	Tail       Expr
+	End        diag.Pos // the closing '}'
 }
 
 // ScopeBlock is `scope s { ... }`.

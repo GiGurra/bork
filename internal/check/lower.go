@@ -171,6 +171,14 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 
 func (l *lowerer) expr(x syntax.Expr) Expr {
 	if call, ok := x.(*syntax.Call); ok {
+		if expansion := l.info.conversionCalls[call]; expansion != nil {
+			out := l.block(expansion)
+			end := call.Pos
+			end.Col++
+			out.Conversion = &SourceSpan{Start: call.Fun.Position(), End: end}
+			out.token = call.Fun.Position()
+			return out
+		}
 		if expansion := l.info.assemblyCalls[call]; expansion != nil {
 			out := l.block(expansion.body)
 			out.Assembly = expansion.description

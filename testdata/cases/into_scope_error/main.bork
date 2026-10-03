@@ -1,0 +1,10 @@
+type Handle = resource
+fn New(s: Scope): Handle unsafe go { return Handle{handle: 1, owner: s.Own(func() {})} }
+type Source = { handle: Handle, extra: Bool }
+type Target = { handle: Handle }
+fn escape(): Target {
+  scope local {
+    Source { handle: New(local), extra: true }.into[Target]()
+  }
+}
+fn main() { println(escape()) }

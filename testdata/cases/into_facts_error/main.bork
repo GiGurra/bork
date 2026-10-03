@@ -1,0 +1,15 @@
+pred positive(n: Int) { n > 0 }
+pred ordered(r: Range) { r.lo <= r.hi }
+type Raw = { lo: Int, hi: Int }
+type Range = { lo: Int, hi: Int } where ordered
+type Envelope = { range: Range }
+type RawNumber = { n: Int }
+type Positive = { n: Int where positive }
+fn bad(raw: Raw): Range { raw.into[Range]() }
+type Alias = RawNumber where positiveRecord
+pred positiveRecord(r: RawNumber) { positive(r.n) }
+fn main() {
+  println(RawNumber { n: -1 }.into[Alias]())
+  println(RawNumber { n: -1 }.into[Positive]())
+  println(Envelope { range: Range { lo: 1, hi: 2 } }.into[Envelope](range.lo: 5))
+}

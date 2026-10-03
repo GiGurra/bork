@@ -635,3 +635,23 @@ fn main() { take() }
 		}
 	}
 }
+
+func TestDescribeRecordConversion(t *testing.T) {
+	source := `type A = { n: Int }
+type B = { n: Int, text: String }
+type Err = { reason: String }
+fn fail(flag: Bool): Int | Err { if (flag) { Err { reason: "failed" } } else { 1 } }
+fn convert(a: A, flag: Bool): B | Err { a.into[B](n: fail(flag), text: "ok") }
+fn main() {}
+`
+	for _, token := range []string{"into[B]", "[B]", "(n:"} {
+		result := describeAt(t, source, token, "")
+		if result.typ != "B | Err" {
+			t.Errorf("%s describes %s; want B | Err", token, result.typ)
+		}
+	}
+	result := describeAt(t, source, "(flag), text:", "")
+	if result.typ != "Int | Err" {
+		t.Errorf("override describes %s; want Int | Err", result.typ)
+	}
+}

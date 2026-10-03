@@ -46,6 +46,10 @@ func methodKey(t Type) (string, bool) {
 }
 
 func (c *checker) declareMethod(fd *syntax.FuncDecl, prelude bool) {
+	if fd.Name == "into" {
+		c.diags.AddCode(fd.Pos, "conversion.method", "into is reserved for record conversion; choose another method name")
+		return
+	}
 	fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude}
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
 	fn.Effects = c.effectsOf(fd.Uses)

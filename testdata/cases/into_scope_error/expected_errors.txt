@@ -1,0 +1,1 @@
+main.bork:6:3: function escape cannot return this value: it belongs to scope local, which ends on line 8
