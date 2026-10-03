@@ -383,7 +383,7 @@ func (f *factChecker) walk(x Expr, e env) {
 	switch x := x.(type) {
 	case *Call:
 		for i, a := range x.Args {
-			if l, ok := a.(*Lambda); ok {
+			if l, ok := debugValue(a).(*Lambda); ok {
 				for k, p := range l.Params {
 					f.lambdaArgs[p] = lambdaArg{call: x, arg: i, param: k}
 				}
@@ -856,7 +856,7 @@ func (f *factChecker) knownOf(con *Constraint, subst func(string) argVal) []know
 // caller's own predicate parameter, or the facts a lambda's body
 // establishes about its parameter (`x => positive(x) && small(x)`).
 func (f *factChecker) predsOf(arg argVal) []known {
-	switch x := arg.expr.(type) {
+	switch x := debugValue(arg.expr).(type) {
 	case *FuncRef:
 		if x.Inst.Func.Decl.IsPred && len(x.Inst.Func.Params) == 1 {
 			return []known{{pred: x.Inst.Func}}
@@ -1581,6 +1581,7 @@ func (f *factChecker) all(ob obligation, depth int, bs ...branch) (bool, []Query
 // proveMember proves ob for the values of member type m that x (of a
 // union type) can produce.
 func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth int) (bool, []Query) {
+	x = debugValue(x)
 	if depth > maxDepth {
 		return false, nil
 	}
@@ -1697,6 +1698,7 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 // declaredMember lists what a function promises about the member m of
 // the union x produces.
 func (f *factChecker) declaredMember(x Expr, m Type) []known {
+	x = debugValue(x)
 	var out []known
 	switch x := x.(type) {
 	case *Call:
@@ -1759,7 +1761,7 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 		f.fn = saveFn
 		if !ok {
 			// Returning a parameter: prove it for the argument.
-			if ref, isRef := path.x.(*VarRef); isRef && isParamOf(ref.Var, fn) && ref.Var.Index < len(call.Args) {
+			if ref, isRef := debugValue(path.x).(*VarRef); isRef && isParamOf(ref.Var, fn) && ref.Var.Index < len(call.Args) {
 				ok, p = f.prove(call.Args[ref.Var.Index], ob, e, depth+1)
 			}
 		}
@@ -2121,7 +2123,7 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 		}
 		return []fact{ft}
 	case *CallValue:
-		if p, ok := c.Fun.(*VarRef); ok && positive && p.Var.Kind == VarParam && len(c.Args) == 1 {
+		if p, ok := debugValue(c.Fun).(*VarRef); ok && positive && p.Var.Kind == VarParam && len(c.Args) == 1 {
 			if ft, ok := p.Var.Type.(*FuncType); ok && ft.Effects == 0 && ft.Result == Bool {
 				if subject := f.key(c.Args[0]); subject != "" {
 					return []fact{{pred: f.paramPred(p.Var), subject: subject}}

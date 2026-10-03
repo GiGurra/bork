@@ -460,6 +460,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 		c.solve(params[i], types[i])
 	}
 	later := func(a syntax.Expr) bool {
+		a = debugSyntaxValue(a)
 		_, isLambda := a.(*syntax.Lambda)
 		return isLambda || c.genericFuncRef(a)
 	}
@@ -622,6 +623,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 // type: a lambda (for its parameters), an empty list, or a variant
 // without fields of a generic type (Option.None).
 func (c *checker) needsContext(x syntax.Expr) bool {
+	x = debugSyntaxValue(x)
 	if c.genericFuncRef(x) {
 		return true
 	}

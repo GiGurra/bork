@@ -1,0 +1,26 @@
+pred positive(x: Int) { x > 0 }
+type Err = { value: Int }
+fn valid(x: Int): Int where positive | Err {
+  if (positive(x)) { x } else { Err { value: x } }
+}
+fn transfer(x: Int where positive): Int { x }
+fn id(x: Int): Int { dbg(x) }
+fn throughId(x: Int where positive): Int { transfer(id(x)) }
+fn total(xs: List[Int where positive]): Int { xs.length() }
+fn keep(x: Int, p: (Int) uses nothing => Bool): Int where p {
+  if (dbg(p)(x)) { x } else { todo() }
+}
+fn mapValid(xs: List[Int where positive]): List[Int] {
+  xs.map(dbg(x => transfer(x)))
+}
+fn main() {
+  match (dbg(valid(1))) {
+    x: Int => println(transfer(x))
+    Err { value } => println(value)
+  }
+  println(total([1, -1].filter(dbg(positive))))
+  println(total([1, -1].filter(dbg(x => positive(x)))))
+  println(transfer(keep(1, positive)))
+  println(mapValid([1, 2]))
+  println(throughId(3))
+}

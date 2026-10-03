@@ -80,3 +80,17 @@ func debugValue(x Expr) Expr {
 		x = call.Args[0]
 	}
 }
+
+func debugSyntaxValue(x syntax.Expr) syntax.Expr {
+	for {
+		call, ok := x.(*syntax.Call)
+		if !ok || len(call.Args) != 1 {
+			return x
+		}
+		id, ok := call.Fun.(*syntax.Ident)
+		if !ok || id.Name != "dbg" {
+			return x
+		}
+		x = call.Args[0]
+	}
+}
