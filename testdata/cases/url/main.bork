@@ -22,6 +22,11 @@ fn exercise() uses io: Unit | ParseError {
   println(opaque.String())
   relative = url.Parse("../a%2Fb?x=1#two")?
   println(relative.String())
+  noPassword = url.Parse("https://user@example.com/")?
+  println(noPassword.user)
+  println(noPassword.String())
+  networkPath = url.Parse("//example.com/a")?
+  println(networkPath.String())
   emptyPassword = url.Parse("https://user:@example.com/")?
   println(emptyPassword.user)
   println(emptyPassword.String())

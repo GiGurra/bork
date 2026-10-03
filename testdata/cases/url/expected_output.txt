@@ -15,6 +15,9 @@ Url { scheme: "", host: "", path: "../a/b", query: {"x": ["1"]}, fragment: "two"
 Url { scheme: "mailto", host: "", path: "", query: {:}, fragment: "", user: Option.None, opaque: "user@example.com", rawPath: "", rawFragment: "", forceQuery: false, omitHost: false }
 mailto:user@example.com
 ../a%2Fb?x=1#two
+Option.Some { value: UserInfo { username: "user", password: Option.None } }
+https://user@example.com/
+//example.com/a
 Option.Some { value: UserInfo { username: "user", password: Option.Some { value: "" } } }
 https://user:@example.com/
 true
