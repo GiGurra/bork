@@ -1,0 +1,10 @@
+pred Positive(n: Int) { n > 0 }
+pred Budget(n: Int) unsafe go { return n >= 1024 }
+type Mode = sealed { internal, Public }
+type Config = private {
+  // Request budget in bytes.
+  budget: Int where Positive = 2048
+  mode: Mode = Mode.internal
+} where Valid
+pred Valid(c: Config) { Budget(c.budget) }
+fn New = Config.new

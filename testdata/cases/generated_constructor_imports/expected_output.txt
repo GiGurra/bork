@@ -1,0 +1,2 @@
+2048 Mode.internal
+Config { budget: 4096, mode: Mode.internal }

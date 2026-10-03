@@ -147,6 +147,7 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			if fn == nil {
 				continue
 			}
+			fd = fn.Decl
 			c.pkg = fn.Pkg
 			c.inPrelude = fn.Prelude
 			scope := map[string]Type{}
@@ -154,10 +155,12 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 				scope[p.Name] = fn.Params[i]
 			}
 			c.useTypeParams(fn)
+			c.fieldWhere = fd.Constructor != nil
 			fn.ParamConstraints = make([][]*Constraint, len(fd.Params))
 			for i, p := range fd.Params {
 				fn.ParamConstraints[i] = c.constraintsOf(p.Type, fn.Params[i], scope)
 			}
+			c.fieldWhere = false
 			fn.ResultConstraints = c.memberConstraints(fd.Result, fn.Result, scope)
 			c.useTypeParams(nil)
 			c.inPrelude = false

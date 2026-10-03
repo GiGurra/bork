@@ -66,6 +66,10 @@ func (f *factChecker) validates(typ Type) bool {
 }
 
 func (f *factChecker) nominalObligations(x Expr, variant *Variant, e env) {
+	f.nominalObligationsFor(x, variant, e, TypeText(x.Type(), f.from())+" requires its completed value to be ")
+}
+
+func (f *factChecker) nominalObligationsFor(x Expr, variant *Variant, e env, requirement string) {
 	cons := TypeConstraints(x.Type())
 	if variant != nil {
 		cons = append(append([]*Constraint{}, cons...), variant.Constraints...)
@@ -81,7 +85,7 @@ func (f *factChecker) nominalObligations(x Expr, variant *Variant, e env) {
 	saved := f.candidate
 	f.candidate = x
 	for _, con := range cons {
-		f.oblige(x, con, noParams, e, TypeText(x.Type(), f.from())+" requires its completed value to be "+con.Text(f.from()))
+		f.oblige(x, con, noParams, e, requirement+con.Text(f.from()))
 	}
 	f.candidate = saved
 }

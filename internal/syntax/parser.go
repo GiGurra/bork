@@ -379,6 +379,28 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 	}
 	name := p.expect(TIdent, "(function name)")
 	fn := &FuncDecl{Pos: pos, Name: name.Text, IsPred: isPred}
+	if p.at(Assign) {
+		p.next()
+		target := p.expect(TIdent, "(record name)")
+		owner := target.Text
+		p.expect(Dot, "before new")
+		member := p.expect(TIdent, "(new)")
+		if p.at(Dot) {
+			owner += "." + member.Text
+			p.next()
+			member = p.expect(TIdent, "(new)")
+		}
+		if member.Text != "new" || isPred || receiver != nil || !withBody || inBraces {
+			p.errorf(pos, "generated constructors use a top-level fn declaration: fn New = Config.new")
+			panic(bailout{})
+		}
+		fn.Constructor = &TypeExpr{Pos: target.Pos, Name: owner}
+		if !p.at(Semi) && !p.at(EOF) {
+			p.errorf(p.tok().Pos, "expected end of line after generated constructor declaration")
+			panic(bailout{})
+		}
+		return fn
+	}
 	fn.TypeParams = p.typeParams()
 	if receiver != nil {
 		fn.IsMethod = true

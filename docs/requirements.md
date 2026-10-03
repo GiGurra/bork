@@ -632,7 +632,7 @@ foreign structural derive fails. Property generation and shrinking preserve
 both sibling and whole-value invariants. Update grammar, formatter, editor
 grammar, README and config examples with the implementation.
 
-### Generated checked constructors (design: bork-aull6h)
+### Generated checked constructors (implemented: bork-aull6h)
 
 An owning package can export a record's checked construction without repeating
 its fields, defaults and facts:
@@ -660,8 +660,8 @@ usual source evaluation order. Defaults mean what they mean in the owning
 package, including private variants. Adding a required field changes the API;
 adding a defaulted field retains existing named calls.
 
-Generic records produce generic functions with the record's type parameters
-and class bounds. Calls infer them from arguments, or supply them explicitly:
+Generic records produce generic functions with the record's type parameters.
+Calls infer them from arguments, or supply them explicitly:
 `fn NewBox = Box.new` supports `NewBox[Int](value: 3)`. Field facts retain
 references to sibling parameters, even when the referenced field is defaulted
 or follows the constrained field in declaration order.
@@ -675,8 +675,8 @@ a predicate calling an exported field predicate can unfold to facts from that
 field predicate (for example `BudgetOk(bodyLimitBytes)`). An opaque predicate
 on the private record itself may require an owning-package handwritten wrapper:
 a foreign caller cannot manufacture an unchecked record just to guard it. No
-predicate body is copied into the declaration, and ordinary literal checks remain the
-source of truth. A caller can therefore prove Configured's body-limit requirement
+predicate body is copied into the declaration, and ordinary literal checks
+remain the source of truth. A caller can therefore prove Configured's body-limit requirement
 with a guard or a parameter fact without repeating that requirement in `New`.
 
 Construction still validates field and whole-value obligations before publishing

@@ -39,7 +39,7 @@ func (c *checker) ensureDefaults(fn *Func) {
 	}()
 	for i, p := range params {
 		if p.Default == nil {
-			if i > 0 && params[i-1].Default != nil {
+			if fn.Decl.Constructor == nil && i > 0 && params[i-1].Default != nil {
 				c.errorf(p.Pos, "parameter %s needs a default value too: parameters after one with a default must have one", p.Name)
 			}
 			continue

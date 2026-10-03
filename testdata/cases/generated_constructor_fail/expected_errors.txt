@@ -1,0 +1,7 @@
+main.bork:6:49: New requires its completed Config to be configured, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:8:11: New requires its completed Config to be configured, but configured(Config { hi: 10, lo: 0, limit: 512 }) is false
+main.bork:9:11: New requires hi to be atLeast(lo) (default declared at main.bork:3:25), but atLeast(10, 12) is false
+main.bork:10:11: New requires its completed Config to be configured, but configured(Config { hi: 10, lo: 0, limit: 0 }) is false
+main.bork:10:22: New requires limit to be positive, but positive(0) is false
+main.bork:11:7: New has function-level where requirements, so it cannot be used as a value; use a lambda that checks them
+main.bork:11:7: New requires hi to be atLeast(lo), so it cannot be used as a value; use a lambda that checks it: x => if (...) { New(x) } else { ... }

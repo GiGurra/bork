@@ -1,0 +1,4 @@
+type Config = private { value: Int } where Valid
+pred Valid(c: Config) { New(value: c.value).value > 0 }
+fn New = Config.new
+fn main() { println(New(value: 0)) }

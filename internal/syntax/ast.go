@@ -120,8 +120,10 @@ type VariantDecl struct {
 // the function returns Unit. A function implemented in Go has GoBody
 // instead of Body.
 type FuncDecl struct {
-	Pos  diag.Pos
-	Name string
+	// Constructor names the owning record in `fn New = Config.new`.
+	Constructor *TypeExpr
+	Pos         diag.Pos
+	Name        string
 	// IsPred is set for `pred name(x: T, ...) { ... }`: a function
 	// returning Bool that can be used in `where` clauses.
 	IsPred bool

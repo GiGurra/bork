@@ -688,7 +688,7 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 	fn := g.info.FuncOf[fd]
 	// The instances its type parameters' bounds need come first.
 	ftype := &ast.FuncType{Params: &ast.FieldList{List: g.dictParams(fn.TypeParams)}}
-	for i, p := range fd.Params {
+	for i, p := range fn.Decl.Params {
 		ftype.Params.List = append(ftype.Params.List, &ast.Field{
 			Names: []*ast.Ident{name(p.Name)},
 			Type:  g.goType(fn.Params[i]),
@@ -747,7 +747,7 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 		if t := fn.ParamIn[i]; t >= 0 {
 			drop(t)
 		}
-		drops = append(drops, dropOwner(fd.Params[i].Name)...)
+		drops = append(drops, dropOwner(fn.Decl.Params[i].Name)...)
 	}
 	for i := range fn.Params {
 		drop(i)

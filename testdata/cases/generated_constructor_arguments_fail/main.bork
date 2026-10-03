@@ -1,0 +1,7 @@
+type Mixed = { optional: Int = 7, required: String }
+fn New = Mixed.new
+fn main() {
+  println(New())
+  println(New(optional: 1))
+  println(New(required: "a", required: "b"))
+}

@@ -1,0 +1,3 @@
+main.bork:6:11: New requires its completed Box[String] to be valid, but valid(Box { value: "bad", n: 3 }) is false
+main.bork:7:11: New requires its completed Box[Int] to be valid, but valid(Box { value: 1, n: 0 }) is false
+main.bork:7:33: New requires n to be positive, but positive(0) is false

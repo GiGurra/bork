@@ -269,3 +269,29 @@ func TestParseAmbientMarkers(t *testing.T) {
 		}
 	}
 }
+
+func TestParseGeneratedConstructors(t *testing.T) {
+	diags := &diag.List{}
+	file := Parse("t.bork", []byte("fn New = Config.new\nfn Imported = settings.Config.new\n"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	if len(file.Funcs) != 2 || file.Funcs[0].Constructor.Name != "Config" || file.Funcs[1].Constructor.Name != "settings.Config" || file.Funcs[0].Body != nil || len(file.Funcs[0].Params) != 0 {
+		t.Fatalf("unexpected declarations: %+v", file.Funcs)
+	}
+	for _, source := range []string{
+		"pred New = Config.new",
+		"fn (c: Config) New = Config.new",
+		"class Make[T] { fn New = Config.new }",
+		"instance MakeInt: Make[Int] { fn New = Config.new }",
+		"fn New = Config.copy",
+		"fn New = Config.new()",
+		"fn New[T] = Config.new",
+	} {
+		diags := &diag.List{}
+		Parse("t.bork", []byte(source+"\n"), diags)
+		if diags.Len() == 0 {
+			t.Errorf("accepted invalid generated declaration: %s", source)
+		}
+	}
+}

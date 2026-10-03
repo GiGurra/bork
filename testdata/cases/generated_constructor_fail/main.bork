@@ -1,0 +1,13 @@
+pred positive(n: Int) { n > 0 }
+pred atLeast(n: Int, minimum: Int) { n >= minimum }
+type Config = private { hi: Int where atLeast(lo) = 10, lo: Int = 0, limit: Int where positive = 2048 } where configured
+pred configured(c: Config) { c.limit >= 1024 }
+fn New = Config.new
+fn invalid(limit: Int where positive): Config { New(limit: limit) }
+fn main() {
+  println(New(limit: 512))
+  println(New(lo: 12))
+  println(New(limit: 0))
+  f = New
+  println(f(10, 0, 2048))
+}

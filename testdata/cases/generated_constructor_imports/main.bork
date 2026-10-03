@@ -1,0 +1,9 @@
+import "example.com/ctors/settings"
+fn guarded(n: Int where settings.Positive): settings.Config {
+  if (settings.Budget(n)) { settings.New(budget: n) } else { settings.New() }
+}
+fn main() {
+  c = settings.New()
+  println(c.budget, c.mode)
+  println(guarded(4096))
+}
