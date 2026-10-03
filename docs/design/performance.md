@@ -163,3 +163,44 @@ go test -race ./internal/syntax -run '^TestParseFiles' -count=1
 The [incremental compilation proposal](incremental.md) keeps this boundary
 separate from parallel checking, which first needs immutable package artifacts
 and complete semantic dependency manifests.
+
+## Follow-up profile and traversal metadata
+
+After the default-use index, selective Go-name loading, embedded tokens and
+parallel parsing, a three-second synthetic1000 check profile measured ~39 ms
+and 29.7 MB per whole in-process check. Default materialization contributed
+~8% of sampled CPU, down from the baseline ~76%. The reflective type-expression
+walker used by unapplied-fact diagnostics contributed ~15%; its pointer-tracking
+map also remains a significant allocation source. This does not justify a
+union, option, closure or dictionary representation change.
+
+Cache immutable struct traversal metadata by `reflect.Type`: exported field
+indexes in declaration order, restricted to kinds the walker actually visits.
+Pointer tracking, context labels and per-source checker state stay local.
+The isolated 1,000-function walker benchmark measured baseline
+2.69/2.74/2.77 ms versus cached 1.93/2.49/1.77 ms on the shared host. Both versions
+allocated ~1.31 MB and 79 objects; this optimization reduces metadata discovery
+work, not the pointer-tracking allocations. Whole check-phase samples are noisy
+and show a much smaller change; do not extrapolate the isolated speedup to CLI
+latency.
+
+```sh
+go test ./internal/check -run '^$' -bench '^BenchmarkTypeExprTraversal$' -benchmem -count=5
+```
+
+## Implementation progress
+
+The initial ranked list has these boundaries now:
+
+| Work | Implemented / remaining |
+| --- | --- |
+| Default-use indexing | [#172](https://github.com/GiGurra/bork/pull/172) removes the measured quadratic owner scans. |
+| Go-name startup | [#174](https://github.com/GiGurra/bork/pull/174) avoids whole-standard-library discovery; [#177](https://github.com/GiGurra/bork/pull/177) handles GOPATH and effective GOENV settings conservatively. |
+| Source/package reuse | [#175](https://github.com/GiGurra/bork/pull/175) reuses immutable embedded tokens. Checked interfaces/session/disk reuse follow [the incremental design](incremental.md), not shared mutable checker state. |
+| Emitted helpers | [#176](https://github.com/GiGurra/bork/pull/176) prunes unreachable free helpers before printing; user validation and method/global roots remain. Further pruning needs evidence and root coverage. |
+| Parallelism | [#180](https://github.com/GiGurra/bork/pull/180) parses independent sources with deterministic joins. Parallel checking waits for immutable package artifacts and explicit dependencies. |
+| Representations | Deferred until targeted runtime or Go-build profiles establish a benefit; current compiler profiles identify frontend work instead. |
+
+[#179](https://github.com/GiGurra/bork/pull/179) fixes the imported-user-default
+proof gap discovered during design review. Cache artifacts may rely on those
+proofs only after the clean compiler performs them for every user package.
