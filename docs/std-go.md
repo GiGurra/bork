@@ -69,7 +69,7 @@ order and have these stable members:
 - `Doc`: consecutive `//` comment lines directly above the field, without markers.
 - `HasDefault`: whether the field declares a closed default value.
 - `Default`: a `func() any` producing that value, or nil when absent.
-- `Kind`: `string`, `number`, `bool`, or `json`; Option uses its element's kind.
+- `Kind`: `string`, `number`, `bool`, `json`, or `list:<element kind>` recursively; Option uses its element's kind. Generic element kinds come from their decoder dictionary.
 - `Optional`: whether the field is an Option. `HasDefault` independently permits an absent field.
 - `Decode`: a `func(Json) any` that returns the field's decoded value or a
   `DecodeError`, checking its facts just as the derived record decoder does.
@@ -295,3 +295,32 @@ reads and validates files; `ParseCertificate` validates supplied Bytes. Both
 return `Certificate | IoError`. Its Show instance prints only `http.Certificate`.
 `ListenTLS` reconstructs the Go certificate from immutable bytes when opening the
 listener; certificate or key file changes after loading cannot alter the value.
+
+### Command-line schema adapter
+
+`bork/cli` wraps boa with a `reflect.StructOf` shadow struct built from the
+derived Decode field schema. It requires `Decode`, without a GoStruct bound.
+Docs and defaults appear in generated help. Optional shadow pointers track
+which fields were omitted, so defaults and Option values follow the same rules
+as regular decoding. After parsing, the adapter validates each supplied field,
+collects missing, JSON conversion, and fact errors across fields, then decodes the complete record. Boa flag syntax errors (including invalid booleans) stop parsing and return one error before field validation.
+Only that proven record can reach the handler.
+
+`cli.Flag { field, short, env, positional }` maps boa metadata to a bork field.
+The adapter validates these names and rejects duplicate field metadata, short
+flags, environment names, or positional fields. Short flags must be single ASCII characters; `-h` and `--help` are reserved. Field names that produce the same kebab-case flag are rejected. Unknown fields include a closest
+name hint. There is at most one positional field; a List can collect its values.
+Flag names use kebab case (`httpPort` becomes `--http-port`). Strings are literal,
+booleans support `--verbose` and `--verbose=false`, and numbers use JSON syntax.
+Lists take repeated flags (`--tag a --tag b`); string elements are literal and
+other elements use JSON. Nested lists use a JSON array for each occurrence.
+Explicit `env` mappings use boa's environment parsing, and CLI values override
+them. Boa treats an empty environment value as absent. Environment loading through `bork/env` remains independent.
+
+`Parse[T: Decode](name, description, args, flags = [])` returns `T | cli.Error |
+cli.Help`. Arguments exclude the executable name. It captures help text rather
+than printing it. `Run[T: Decode](name, description, handler, flags = [])` reads
+process arguments, prints help, and invokes `(T, Scope) => Unit` in a fresh scope
+on success. It returns `Unit | cli.Error`; applications choose how to render
+errors and exit. Both use `io` for environment access, and Run carries its
+handler's effects. Config-file and subcommand APIs remain follow-up work.

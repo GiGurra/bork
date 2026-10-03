@@ -1,0 +1,35 @@
+import "bork/cli"
+pred port(n: Int) { n > 0 && n < 65536 }
+type Box[T] = { items: List[T], optional: Option[List[T]] } derive (Decode)
+type Collision = { httpPort: Int, HTTPPort: Int } derive (Decode)
+type Options = {
+  // Your name.
+  name: String
+  // Server port.
+  httpPort: Int where port = 8080
+  verbose: Bool = false
+  retries: Option[Int]
+  labels: List[String] = []
+} derive (Decode)
+fn main() {
+  println(cli.Parse[Options]("app", "Demo", ["--name", "Ada"]))
+  println(cli.Parse[Options]("app", "Demo", ["--name=", "--http-port", "443", "--verbose", "--retries", "0", "--labels", "a", "--labels", "b"]))
+  println(cli.Parse[Options]("app", "Demo", ["Ada", "-p", "80"], [cli.Flag { field: "name", positional: true }, cli.Flag { field: "httpPort", short: "p" }]))
+  println(cli.Parse[Options]("app", "Demo", ["--http-port", "0", "--retries", "invalid"]))
+  println(cli.Parse[Box[String]]("app", "Lists", ["--items", "one,two", "--items", "", "--optional", "a", "--optional", "b"]))
+  println(cli.Parse[Box[Int]]("app", "Lists", ["--items", "1", "--items", "2"]))
+  println(cli.Parse[Box[List[Int]]]("app", "Lists", ["--items", "[1,2]", "--items", "[]"]))
+  println(cli.Parse[Box[Int]]("app", "Lists", ["--items", "bad", "--items", "wrong"]))
+  println(cli.Parse[Options]("app", "Metadata", [], [cli.Flag { field: "httpPrt" }]))
+  println(cli.Parse[Options]("app", "Metadata", [], [cli.Flag { field: "name", short: "n", env: "TEST_NAME", positional: true }, cli.Flag { field: "httpPort", short: "n", env: "TEST_NAME", positional: true }]))
+  println(cli.Parse[Options]("app", "Metadata", [], [cli.Flag { field: "name" }, cli.Flag { field: "name" }]))
+  println(cli.Parse[Options]("app", "Metadata", [], [cli.Flag { field: "name", short: "long" }]))
+  println(cli.Parse[Options]("app", "Metadata", [], [cli.Flag { field: "name", short: "ö" }]))
+  println(cli.Parse[Options]("app", "Metadata", [], [cli.Flag { field: "name", short: "h" }]))
+  println(cli.Parse[Collision]("app", "Metadata", []))
+  println(cli.Parse[Int]("app", "Unsupported", []))
+  match (cli.Parse[Options]("app", "Demo", ["--help"])) {
+    h: cli.Help => { println(h.text.contains("Your name.")); println(h.text.contains("default 8080")); println(h.text.contains("--http-port")) }
+    other => println(other)
+  }
+}
