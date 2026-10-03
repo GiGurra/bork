@@ -271,6 +271,9 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 
 See the [benchmark harness and profiling report](docs/design/performance.md) for
 compiler phase timings, CLI latency, generated code sizes and CI artifacts.
+The [incremental compilation proposal](docs/design/incremental.md) describes
+package interfaces, cache invalidation, watch sessions and a per-package Go
+output experiment.
 
 ## License
 
