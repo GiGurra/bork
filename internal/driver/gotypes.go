@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"go/types"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -18,8 +18,9 @@ import (
 // code that the build compiles. Types come from export data, through
 // Go's build cache.
 type goPackages struct {
-	files  []*syntax.File
-	module *goModuleInputs
+	files   []*syntax.File
+	module  *goModuleInputs
+	context *goContext
 }
 
 func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string]error) {
@@ -31,11 +32,14 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 		}
 		return pkgs, errs
 	}
-	target, err := exec.Command("go", "env", "GOARCH").Output()
-	if err != nil {
-		return fail(fmt.Errorf("determining Go target: %w", err))
+	ctx := gp.goContext()
+	if ctx.err != nil {
+		return fail(fmt.Errorf("determining Go target: %w", ctx.err))
 	}
-	arch := strings.TrimSpace(string(target))
+	if ctx.driverErr != nil {
+		return fail(fmt.Errorf("loading Go metadata: %w", ctx.driverErr))
+	}
+	arch := ctx.values["GOARCH"]
 	sizes := types.SizesFor("gc", arch)
 	if sizes == nil || sizes.Sizeof(types.Typ[types.Int]) != 8 {
 		return fail(fmt.Errorf("bindings require a 64-bit Go target; GOARCH=%s is not supported", arch))
@@ -48,10 +52,14 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 	if _, err := gp.writeModule(dir); err != nil {
 		return fail(err)
 	}
+	env, err := ctx.driverEnv(dir)
+	if err != nil {
+		return fail(err)
+	}
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedTypes,
 		Dir:  dir,
-		Env:  append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=readonly"),
+		Env:  env,
 	}
 	loaded, err := packages.Load(cfg, paths...)
 	if err != nil {
@@ -82,14 +90,23 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 // Standard package names do not depend on a user's module. Discover only the
 // imports a program needs and reuse their names; external names are loaded in
 // the pinned module on each check.
-var standardGoNames sync.Map // import path -> package name
+type standardGoNameKey struct {
+	namespace [32]byte
+	path      string
+}
+
+var standardGoNames sync.Map // configuration namespace + import path -> package name
 
 func (gp goPackages) Names(paths []string) map[string]string {
 	names := map[string]string{}
-	cache := cacheStandardGoNames()
+	ctx := gp.goContext()
+	if ctx.err != nil || ctx.driverErr != nil {
+		return names
+	}
+	cache := ctx.namesCache
 	var missing []string
 	for _, path := range paths {
-		if name, ok := standardGoNames.Load(path); cache && ok {
+		if name, ok := standardGoNames.Load(standardGoNameKey{ctx.namespace, path}); cache && ok {
 			names[path] = name.(string)
 		} else {
 			missing = append(missing, path)
@@ -106,9 +123,13 @@ func (gp goPackages) Names(paths []string) map[string]string {
 	if _, err := gp.writeModule(dir); err != nil {
 		return names
 	}
+	env, err := ctx.driverEnv(dir)
+	if err != nil {
+		return names
+	}
 	loaded, err := packages.Load(&packages.Config{
-		Mode: packages.NeedName | packages.NeedModule, Dir: dir,
-		Env: append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=readonly"),
+		Mode: packages.NeedName | packages.NeedFiles, Dir: dir,
+		Env: env,
 	}, missing...)
 	if err != nil {
 		return names
@@ -116,39 +137,19 @@ func (gp goPackages) Names(paths []string) map[string]string {
 	for _, pkg := range loaded {
 		if len(pkg.Errors) == 0 {
 			names[pkg.PkgPath] = pkg.Name
-			if cache && pkg.Module == nil {
-				standardGoNames.Store(pkg.PkgPath, pkg.Name)
+			if cache && ctx.standardPackage(pkg) {
+				standardGoNames.Store(standardGoNameKey{ctx.namespace, pkg.PkgPath}, pkg.Name)
 			}
 		}
 	}
 	return names
 }
 
-// External package drivers may omit module metadata for user packages. Their
-// results must not enter or reuse the standard-library-only cache.
-func cacheStandardGoNames() bool {
-	// GOPATH packages also have no module metadata, even with Go's driver.
-	mode := os.Getenv("GO111MODULE")
-	if mode == "" {
-		// Include settings in Go's GOENV file, without caching mutable configuration.
-		out, err := exec.Command("go", "env", "GO111MODULE").Output()
-		if err != nil {
-			return false
-		}
-		mode = strings.TrimSpace(string(out))
+func (gp goPackages) goContext() *goContext {
+	if gp.context != nil {
+		return gp.context
 	}
-	if mode == "off" {
-		return false
-	}
-	switch os.Getenv("GOPACKAGESDRIVER") {
-	case "off":
-		return true
-	case "":
-		_, err := exec.LookPath("gopackagesdriver")
-		return err != nil
-	default:
-		return false
-	}
+	return captureGoContext()
 }
 
 func (gp goPackages) writeModule(dir string) (bool, error) {
@@ -156,4 +157,21 @@ func (gp goPackages) writeModule(dir string) (bool, error) {
 		return gp.module.write(dir)
 	}
 	return writeGoModule(dir, gp.files)
+}
+
+// The external-driver wire schema omits Module, including for our builtin
+// metadata bridge. Positively prove standard origin from Go file locations;
+// missing module metadata alone is never a proof of standard-library origin.
+func (ctx *goContext) standardPackage(pkg *packages.Package) bool {
+	first, _, _ := strings.Cut(pkg.PkgPath, "/")
+	if strings.Contains(first, ".") || len(pkg.GoFiles) == 0 || ctx.values["GOROOT"] == "" {
+		return false
+	}
+	dir := filepath.Join(ctx.values["GOROOT"], "src", filepath.FromSlash(pkg.PkgPath))
+	for _, file := range pkg.GoFiles {
+		if filepath.Dir(file) != dir {
+			return false
+		}
+	}
+	return true
 }

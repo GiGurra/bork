@@ -40,7 +40,7 @@ func Describe(position, where string) (*describe.Result, error) {
 	var facts []check.KnownFact
 	var proof *check.Proof
 	if selected.Value {
-		facts, proof, err = check.DescribeFacts(info, selected.Func, selected.Expr, selected.Site, where, evaluatorWithModule(files, info, program.module))
+		facts, proof, err = check.DescribeFacts(info, selected.Func, selected.Expr, selected.Site, where, evaluatorWithContext(files, info, program.module, program.context))
 	} else if where != "" {
 		return nil, fmt.Errorf("where queries need a value expression; select the call's opening parenthesis for its result")
 	}

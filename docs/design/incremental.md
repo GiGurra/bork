@@ -368,7 +368,7 @@ boundaries still need explicit capture and invalidation:
 | --- | --- |
 | User Go manifests/checksums | Captured alongside sources; one frozen merged module is shared by metadata loading, predicate builds and final staging. Test staging hooks receive private copies. |
 | Embedded assets | A private asset snapshot freezes bytes, component kinds, symlink checks and recursive membership (including empty directories and failed reads), with independent replay and content validation. |
-| Effective Go environment/toolchain | `goPackages`, package drivers and `buildGo` read process/saved configuration and run subprocesses. Capture effective configuration, resolved tool identity and target; inventory or bypass mutable external metadata. |
+| Effective Go environment/toolchain | One request freezes process/effective Go settings and launcher/driver selection, shared by metadata, predicates and builds. Standard-name caches use a configuration/launcher namespace. Full toolchain/external metadata contents remain to inventory or bypass before result reuse. |
 | Compile-time evaluator | `Facts` invokes generated predicate programs. Track arguments, implementation/input closure and execution context; untracked reads/effects prevent reuse of any success depending on evaluation. |
 | Graph and mode | Whole-graph source content covers semantic bodies, facts/rules and candidate-set changes initially. Root selection, source locations, tests/mocks and entry/evaluator mode must remain explicit context. |
 | Runtime effects | `Run`, test execution, assertions and snapshot updates remain fresh executions. Dependency-management commands mutate manifests; they are not cached compilation results. |
@@ -410,3 +410,30 @@ private compiled-program context retains the asset inventory alongside the
 source/manifest inventory. This adds no checked-result reuse: effective Go
 configuration, external metadata/toolchain inputs and evaluator execution remain
 required boundaries before Session artifacts can be published or reused.
+
+### Phase 1: effective Go configuration
+
+A private request context captures process environment, effective `go env` values,
+resolved Go launcher, launcher content identity and package-driver selection.
+Generated Go subprocesses receive explicit settings with `GOENV=off`, so later
+saved-config edits do not change the request. Target sizing, metadata lookup,
+compile-time predicate environment and final compilation share the context.
+Runtime programs and test execution retain fresh runtime environments. Missing
+Go remains a deferred error for pure check-only requests.
+
+`go/packages` resolves its launcher using the parent's process PATH rather than
+`Config.Env`. Metadata therefore runs in a private child of the compiler
+executable whose PATH and driver choice come from the context. A private Go-only launcher
+shim pins `go` while preserving auxiliary executable lookup from the captured
+PATH. External driver responses retain their protocol fields; `NotHandled`
+fallback also uses the captured launcher. That child uses
+the library's metadata loader and documented driver wire format; the parent
+still decodes type/export data. The wire format omits module provenance, so
+standard-name caching positively checks source-file locations under the
+captured GOROOT instead of treating missing Module as evidence of standard
+origin. External/custom-driver names stay fresh.
+
+The namespace includes effective configuration, resolved driver choice and Go
+launcher bytes. This is not a full compilation-result key: complete toolchain
+contents, mutable external package/driver inputs and evaluator effects remain
+untracked. No Session result reuse is enabled by this step.
