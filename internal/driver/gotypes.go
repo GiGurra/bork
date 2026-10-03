@@ -18,7 +18,8 @@ import (
 // code that the build compiles. Types come from export data, through
 // Go's build cache.
 type goPackages struct {
-	files []*syntax.File
+	files  []*syntax.File
+	module *goModuleInputs
 }
 
 func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string]error) {
@@ -44,7 +45,7 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 		return fail(err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if _, err := writeGoModule(dir, gp.files); err != nil {
+	if _, err := gp.writeModule(dir); err != nil {
 		return fail(err)
 	}
 	cfg := &packages.Config{
@@ -102,7 +103,7 @@ func (gp goPackages) Names(paths []string) map[string]string {
 		return names
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if _, err := writeGoModule(dir, gp.files); err != nil {
+	if _, err := gp.writeModule(dir); err != nil {
 		return names
 	}
 	loaded, err := packages.Load(&packages.Config{
@@ -148,4 +149,11 @@ func cacheStandardGoNames() bool {
 	default:
 		return false
 	}
+}
+
+func (gp goPackages) writeModule(dir string) (bool, error) {
+	if gp.module != nil {
+		return gp.module.write(dir)
+	}
+	return writeGoModule(dir, gp.files)
 }

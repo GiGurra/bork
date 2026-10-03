@@ -366,7 +366,7 @@ boundaries still need explicit capture and invalidation:
 
 | Read / context | Existing consumers and required follow-up |
 | --- | --- |
-| User Go manifests/checksums | `userGoDependencies` and `programGoModule` reread manifests during metadata loading, predicate builds and final staging. Thread one frozen manifest context through all those consumers. |
+| User Go manifests/checksums | Captured alongside sources; one frozen merged module is shared by metadata loading, predicate builds and final staging. Test staging hooks receive private copies. |
 | Embedded assets | `captureEmbeds` freezes data in `Info`, but file kinds, symlink checks and recursive directory membership need recorded input dependencies and replay during snapshot verification. |
 | Effective Go environment/toolchain | `goPackages`, package drivers and `buildGo` read process/saved configuration and run subprocesses. Capture effective configuration, resolved tool identity and target; inventory or bypass mutable external metadata. |
 | Compile-time evaluator | `Facts` invokes generated predicate programs. Track arguments, implementation/input closure and execution context; untracked reads/effects prevent reuse of any success depending on evaluation. |
@@ -377,3 +377,19 @@ Only after these inputs are complete may Session artifacts reuse immutable
 outputs. The clean-versus-cached verifier must land before or alongside that
 reuse and compare the same captured snapshot; the source snapshot by itself
 cannot satisfy the verifier's whole-compiler contract.
+
+### Phase 1: frozen Go manifests
+
+Compilation requests capture user `go-deps.mod`/`go-deps.sum` and module-resolution
+lookups through the same source snapshot. They merge user and embedded standard
+manifests once, then validate the combined source/manifest inventory before
+semantic checking. A bounded retry covers edits during capture; syntax/import
+diagnostics retain precedence over manifest validation errors. Missing user
+manifests are inventoried too.
+
+A private compiled-program context carries immutable module bytes through Go
+name/type loading, compile-time predicate builds, final executable/test builds
+and additional `describe` proofs. Staging receives copies so test hooks cannot
+mutate a request's module. Independent helper calls used by compiler tests retain
+one-shot captures. Effective Go configuration, external module contents and
+execution effects remain separate inputs to capture before Session reuse.
