@@ -420,6 +420,15 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			}
 		}
 	}
+	if recv == nil && fn.Decl != nil && fn.Decl.IsMethod {
+		if owner := c.methodReferenceOwner(e.Fun); owner != nil {
+			c.solve(params[0], owner)
+			if !c.couldFit(params[0], owner) {
+				c.errorf(at, "%s requires receiver %s, found owner %s", name, c.zonk(params[0]), owner)
+				return fail()
+			}
+		}
+	}
 	types := make([]Type, len(args))
 	check := func(i int, a syntax.Expr) {
 		switch {
@@ -642,6 +651,10 @@ func (c *checker) needsContext(x syntax.Expr) bool {
 // genericFuncRef reports whether x names a generic function (used as a
 // value), whose type arguments come from the context.
 func (c *checker) genericFuncRef(x syntax.Expr) bool {
+	if sel, ok := x.(*syntax.Selector); ok {
+		fn, _, _ := c.methodReference(sel)
+		return fn != nil && len(fn.TypeParams) > 0
+	}
 	id, ok := x.(*syntax.Ident)
 	if !ok || c.lookup(id.Name) != nil {
 		return false
@@ -686,7 +699,7 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 
 // funcValue checks a function used as a value: `xs.map(double)`. A
 // generic function takes its type arguments from the expected type.
-func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
+func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Type {
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 	}
@@ -699,6 +712,9 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 			fresh[tp] = u
 			inst.TypeArgs = append(inst.TypeArgs, u)
 		}
+		if owner := c.methodReferenceOwner(e); owner != nil {
+			c.solve(subst(fn.Params[0], fresh), owner)
+		}
 		if want != nil {
 			c.solve(subst(fn.funcType(), fresh), want)
 		}
@@ -710,7 +726,7 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 			inst.TypeArgs[i] = c.zonk(ta)
 		}
 		if len(missing) > 0 {
-			c.errorf(e.Pos, "cannot tell what %s is for %s here; use it where a function type is expected, or call it in a lambda", strings.Join(missing, " and "), e.Name)
+			c.errorf(e.Position(), "cannot tell what %s is for %s here; use it where a function type is expected, or call it in a lambda", strings.Join(missing, " and "), name)
 			return Invalid
 		}
 		bound := bindParams(fn.TypeParams, inst.TypeArgs)
@@ -719,7 +735,11 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 			inst.Params = append(inst.Params, subst(p, bound))
 		}
 	}
-	if !c.resolveDicts(inst, e.Pos) {
+	if owner := c.methodReferenceOwner(e); owner != nil && !c.couldFit(inst.Params[0], owner) {
+		c.errorf(e.Position(), "%s requires receiver %s, found owner %s", name, inst.Params[0], owner)
+		return Invalid
+	}
+	if !c.resolveDicts(inst, e.Position()) {
 		return Invalid
 	}
 	c.info.funcRefs[e] = inst

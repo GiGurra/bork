@@ -416,18 +416,22 @@ func (s *sourceIndex) callee(call *check.Call) {
 	}
 	name := s.tokens[i]
 	width := len(name.Text)
-	if !call.Func.Decl.IsMethod && i >= 2 && s.tokens[i-1].Kind == syntax.Dot && s.tokens[i-2].Kind == syntax.TIdent {
-		first := s.tokens[i-2]
-		if first.Pos.Line == name.Pos.Line {
+	if !call.ReceiverCall {
+		for i >= 2 && s.tokens[i-1].Kind == syntax.Dot && s.tokens[i-2].Kind == syntax.TIdent {
+			first := s.tokens[i-2]
+			if first.Pos.Line != name.Pos.Line {
+				break
+			}
 			width = name.Pos.Col + width - first.Pos.Col
 			name = first
+			i -= 2
 		}
 	}
 	if !s.contains(name.Pos, width) {
 		return
 	}
 	params := call.Inst.Params
-	if call.Func.Decl.IsMethod {
+	if call.ReceiverCall {
 		params = params[1:]
 	}
 	pos := call.Func.Decl.Pos

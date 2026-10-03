@@ -1,0 +1,29 @@
+type Ints = List[Int]
+type Strings = List[String]
+fn (xs: List[Int]) sum(): Int { xs.fold(0, (a, b) => a + b) }
+
+type Point = { x: Int }
+pred positive(p: Point) { p.x > 0 }
+fn (p: Point where positive) checked(): Int { p.x }
+fn (p: Point) print() uses io { println(p.x) }
+
+type F = { f: (Int) => Int }
+
+fn main() {
+  aliasWrong: (List[String]) => Int = Ints.length
+  println(aliasWrong(["a"]))
+  println(Ints.length(["a"]))
+  println(Ints.length[String](["a"]))
+  badOwner = Strings.sum
+  println(badOwner([1]))
+  println(Strings.sum([1]))
+  f = List.length
+  println(f([1]))
+  println(String.missing)
+  wrong: (Int) => Int = String.byteLength
+  println(wrong(1))
+  printing: (Point) uses nothing => Unit = Point.print
+  printing(Point { x: 1 })
+  includes: (List[F], F) => Bool = List.includes
+  println(includes([], F { f: x => x }))
+}

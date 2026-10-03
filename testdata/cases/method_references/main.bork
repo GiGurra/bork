@@ -1,0 +1,56 @@
+type Ints = List[Int]
+type Counts = Map[String, Int]
+
+type Point = { x: Int, y: Int }
+type Callable = { value: () => Int }
+fn (c: Callable) value(): Int { 7 }
+
+type Box[T] = { value: T }
+type Shape = sealed { Empty, Count { n: Int } }
+
+fn (p: Point) total(): Int { p.x + p.y }
+fn (b: Box[T]) unwrap[T](): T { b.value }
+fn (s: Shape) size(): Int {
+  match (s) {
+    Shape.Empty => 0
+    Shape.Count { n } => n
+  }
+}
+// An existing variant keeps its meaning even when a method shares its name.
+fn (s: Shape) Empty(): Int { 42 }
+fn (p: Point) print() uses io { println(p.total()) }
+
+fn main() {
+  println(["a", "abc"].map(String.byteLength))
+  println([[1, 2], [3]].map(List.length))
+  println([Point { x: 1, y: 2 }, Point { x: 3, y: 4 }].map(Point.total))
+  println([Box { value: "one" }, Box { value: "two" }].map(Box.unwrap))
+  println([Shape.Empty, Shape.Count { n: 3 }].map(Shape.size))
+  empty = Shape.Empty
+  println(empty.Empty())
+  call = Callable.value
+  c = Callable { value: () => 9 }
+  println(call(c), c.value())
+  trim = String.trim
+  println(trim("  hi  "))
+  length: (List[Int]) => Int = List.length
+  println(length([1, 2, 3]))
+  mapping: (List[Int], (Int) uses nothing => String) => List[String] = List.map
+  println(mapping([1, 2], x => toString(x)))
+  put: (Map[String, Int], String, Int) => Map[String, Int] = Map.put
+  println(put({ "a": 1 }, "b", 2))
+  includes: (List[String], String) => Bool = List.includes
+  println(includes(["a", "b"], "b"))
+  some: (Option[Int]) => Bool = Option.isSome
+  println(some(Option.Some { value: 7 }), some(Option.None))
+  printing = Point.print
+  printing(Point { x: 4, y: 5 })
+  List.forEach([Point { x: 5, y: 6 }], Point.print)
+  aliasLength = Ints.length
+  println(aliasLength([1, 2, 3]), Ints.length([1, 2]))
+  aliasPut = Counts.put
+  println(aliasPut({ "a": 1 }, "b", 2))
+  // A directly called reference passes the receiver first.
+  println(String.trim(" x "), List.length([1, 2]))
+  println(List.map[Int, String]([1, 2], x => toString(x)))
+}

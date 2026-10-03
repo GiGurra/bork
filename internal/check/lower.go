@@ -109,6 +109,10 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 
 func (l *lowerer) expr(x syntax.Expr) Expr {
 	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
+	if inst := l.info.funcRefs[x]; inst != nil {
+		at.token = x.Position()
+		return &FuncRef{expr: at, Name: writtenText(x), Inst: inst}
+	}
 	if v := l.info.constantOf(x); v != nil {
 		var span *SourceSpan
 		switch x.(type) {
@@ -122,9 +126,6 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 	case *syntax.Interp:
 		return &Interp{expr: at, Parts: x.Parts, Exprs: l.exprs(x.Exprs)}
 	case *syntax.Ident:
-		if inst := l.info.funcRefs[x]; inst != nil {
-			return &FuncRef{expr: at, Name: x.Name, Inst: inst}
-		}
 		v := l.vars[l.info.defs[x]]
 		if v == nil {
 			panic(fmt.Sprintf("%s: %s refers to no variable (compiler bug)", x.Pos, x.Name))
@@ -137,6 +138,10 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 	case *syntax.Call:
 		if fn := l.info.callFuncs[x]; fn != nil {
 			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x))}
+			if sel, ok := x.Fun.(*syntax.Selector); ok {
+				args := l.info.args(x)
+				call.ReceiverCall = len(args) > 0 && args[0] == sel.X
+			}
 			for _, ta := range l.info.callTypeArgs[x] {
 				name := ""
 				if ta != nil && ta.Name != "" && len(ta.Args) == 0 && len(ta.Where) == 0 {

@@ -127,7 +127,13 @@ func (c *checker) methodNamed(t Type, name string) (*Func, string) {
 	}
 	switch len(found) {
 	case 1:
-		return found[0], ""
+		fn := found[0]
+		for name, pkg := range c.pkg.imports {
+			if pkg == fn.Pkg {
+				c.pkg.used[name] = true
+			}
+		}
+		return fn, ""
 	case 0:
 	default:
 		var where []string
@@ -149,6 +155,13 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	sel, ok := e.Fun.(*syntax.Selector)
 	if !ok {
 		return nil, false
+	}
+	if fn, why, isMethod := c.methodReference(sel); isMethod {
+		if fn == nil {
+			c.errorf(sel.Pos, "%s", why)
+			return Invalid, true
+		}
+		return c.callFunc(e, writtenText(sel), fn, e.Args, nil, e.TypeArgs, want), true
 	}
 	if _, isType := c.isTypeRef(sel.X); isType {
 		return nil, false
@@ -308,4 +321,48 @@ func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv, want T
 	}
 	c.callFunc(e, id.Name, fn, e.Args, recv, typeArgs, want)
 	return true
+}
+
+// methodReference finds Type.method. Existing sealed variants take precedence,
+// so Option.None and Shape.Circle keep their constructor meaning.
+func (c *checker) methodReference(sel *syntax.Selector) (*Func, string, bool) {
+	owner, ok := c.isTypeRef(sel.X)
+	if !ok {
+		return nil, "", false
+	}
+	t := c.typeNamed(owner)
+	switch owner {
+	case "Never":
+		t = Never
+	case "List":
+		t = &List{Elem: listElem}
+	case "Map":
+		t = &Map{Key: mapKey, Value: mapValue}
+	}
+	if s, ok := t.(*Sealed); ok && s.Variant(sel.Name) != nil {
+		return nil, "", false
+	}
+	fn, why := c.methodNamed(t, sel.Name)
+	if _, sealed := t.(*Sealed); sealed && fn == nil {
+		return nil, "", false // retain the existing missing-variant diagnostic
+	}
+	return fn, why, true
+}
+
+// methodReferenceOwner preserves a concrete alias's receiver specialization.
+// Bare generic namespaces leave their parameters to the reference's context.
+func (c *checker) methodReferenceOwner(e syntax.Expr) Type {
+	sel, ok := e.(*syntax.Selector)
+	if !ok {
+		return nil
+	}
+	name, ok := c.isTypeRef(sel.X)
+	if !ok || name == "List" || name == "Map" {
+		return nil
+	}
+	t := c.typeNamed(name)
+	if t == nil || genericBase(t) == t {
+		return nil
+	}
+	return t
 }

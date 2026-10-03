@@ -367,3 +367,13 @@ fn example(n: Int where positive) uses io {
 		})
 	}
 }
+
+func TestDescribeMethodReferences(t *testing.T) {
+	source := "fn main() {\n f: (List[Int]) => Int = List.length\n println(f([1]))\n println(List.length([1]))\n}\n"
+	for _, fragment := range []string{"List.length", "length\n", "List.length([", "length(["} {
+		result := describeAt(t, source, fragment, "")
+		if result.typ != "(List[Int]) => Int" || !result.defined {
+			t.Fatalf("unexpected method reference description: %+v", result)
+		}
+	}
+}

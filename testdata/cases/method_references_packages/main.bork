@@ -1,0 +1,8 @@
+import "example.com/refs/model"
+import "example.com/refs/extension"
+
+fn main() {
+  println([model.Point { x: 3 }, model.Point { x: 7 }].map(model.Point.Value))
+  println([model.Point { x: 3 }].map(model.Point.Double))
+  println([" hi "].map(String.Decorated))
+}
