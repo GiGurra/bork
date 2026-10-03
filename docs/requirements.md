@@ -237,6 +237,86 @@ r: SignUp | JsonError | DecodeError = decodeJson(line)   // DecodeError { path: 
 - **Snapshot tests** are cheap regression tests: `assertSnapshot(render(invoice))` compares the value's text with a file in the package's `snapshots` directory, and a failure shows a line diff. `bork test --update` writes the snapshots that are missing or different, as the compiler's own golden tests do with `-update`, so the change is reviewed in version control.
 - **Diagnostics** name the requirer, the parameter or field, and the predicate, and suggest a guard or a declaration. A failing constant from inside a helper says where it came from: "sometimes can return 0, and positive(0) is false".
 
+### Relational facts through rules (bork-uooboq design)
+
+Relations remain ordinary predicates, with one value as the subject and the
+others as arguments. `examples/payments` already uses
+`to: AccountId where differentFrom(from)`. A caller can pass the same
+requirement through its own signature; no tuple type or special relation
+registry is needed. This increment extends the existing backward rule search
+and guard facts, rather than introducing a second proof engine.
+
+**Comparison guards and simple predicate bodies.** With
+`pred positive(n: Int) { n > 0 }`, the successful branch of `if (n > 0)`
+proves `positive(n)` without a written rule. A pure predicate consisting of
+comparisons, positive predicate calls, comparison negation, `&&`, and `||`
+may be unfolded on demand:
+all parts of an AND must hold; one part of an OR suffices. Recursive bodies
+must terminate proof search through the existing depth and cycle limits.
+Negated predicate calls are not proved by a missing positive fact. An opaque
+body or `unsafe go` predicate still needs a predicate guard or rule.
+
+In `examples/payments`, `parseAmount` can reject `n <= 0` and
+`n > 1_000_000` directly, then return `Cents`: the remaining path establishes
+both `positive(n)` and `atMost(n, 1_000_000)`. Similarly, `request` can reject
+`to == from` and prove `differentFrom(to, from)` on the remaining path.
+In `examples/accounts`, the successful withdrawal branch's
+`amount <= balance` can satisfy a helper's `amount: Int where atMost(balance)`.
+These implications concern the input values; they do not prove that
+`balance - amount` is nonnegative or that `balance + amount` cannot overflow.
+
+**Comparison premises on runtime values.** Existing syntax stays unchanged:
+
+```bork
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, limit: Int) { n <= limit }
+pred differentFrom(id: String, other: String) { id != other }
+
+rule positiveGuard(n: Int) { n > 0 => positive(n) }
+rule ordered(a: Int, b: Int, c: Int) {
+  atMost(a, b) and atMost(b, c) => atMost(a, c)
+}
+rule differentSymmetric(a: String, b: String) {
+  differentFrom(a, b) => differentFrom(b, a)
+}
+```
+
+A rule condition is satisfied either by constant evaluation, as today, or by
+matching comparisons already established in the current branch after binding
+rule variables. Negation and reversed operands normalize equivalent
+comparisons (`!(a > b)` and `b >= a` both establish `a <= b` for integers
+and strings). Float guards retain negation: with NaN, `!(a > b)` does not
+establish `a <= b`. No implicit
+transitive or arithmetic solver is added: user rules express those
+implications. Values bound only in premises must be found in matching facts,
+including a subject not present in the conclusion; the order of premises must
+not change which inference succeeds. Repeated variables must name the same
+value. Facts keep their branch scope, including case splits for OR guards.
+
+**Verification and limits.** `bork test` migrates rule tests to the property
+generators introduced in #60, including special floats and composite values,
+executing comparison premises on the
+generated values before checking conclusions. Include valid transitivity,
+symmetry, mixed predicate/comparison rules, and an invalid rule with a
+counterexample. Compiler rule fixtures use opaque conclusion predicates so
+unfolding cannot mask a broken rule search. Include hidden middle variables,
+both premise orders, repeated-variable mismatches, OR cross-branch negatives,
+and a NaN guard rejection. Compiler cases cover aliases, several input values, reversed
+comparisons, negated guards, early returns, conjunction/disjunction, missing
+proofs, and cycles. Keep diagnostics naming the callee and relation arguments,
+with the existing guard/declaration suggestion.
+
+This first increment supports stable parameter, binding, and field identities;
+computed arithmetic and pure method results are not given new identities.
+Function-level `where sameLength(xs, ys)` or `where lo <= hi`, comparison
+conclusions, sibling-field invariants on record construction and `copy`, and
+method projections such as `index < xs.length()` need separate syntax and
+identity work. They remain follow-ups, not promises of this implementation: function-level
+clauses (`bork-3ly6p0`), sibling-field invariants (`bork-k3nrwg`), and pure
+method/computed identities (`bork-rgy4as`).
+Arithmetic implications must respect the sized-number overflow rules; no
+built-in `lo < hi => lo + 1 <= hi` shortcut is added here (`bork-ggj8ew`).
+
 ### Constrained inputs: examples
 
 Parameters carry their requirements in the signature. One parameter per line, with trailing commas, so the formatter can align columns and diffs stay small.
