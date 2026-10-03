@@ -18,4 +18,6 @@ Option.Some { value: Json.Object { fields: [JsonField { name: "items", value: Js
 true
 ]
 true
+true
+true
 Option.Some { value: Json.Null }

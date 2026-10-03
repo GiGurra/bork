@@ -35,6 +35,7 @@ type Indent = Int where ValidIndent
 // Pretty preserves field order and exact number text. Invalid manually
 // constructed number values give JsonError. Zero adds newlines with no indent.
 fn Pretty(value: Json, spaces: Indent = 2): String | JsonError {
+  validateNumbers(value)?
   indentJson(renderJson(value), spaces)
 }
 fn indentJson(text: String, spaces: Indent): String | JsonError unsafe go {
@@ -44,4 +45,25 @@ fn indentJson(text: String, spaces: Indent): String | JsonError unsafe go {
   var result bytes.Buffer
   if err := json.Indent(&result, []byte(text), "", strings.Repeat(" ", int(spaces))); err != nil { return JsonError{message: err.Error()} }
   return result.String()
+}
+
+// Check each number token before rendering: an invalid token must not inject
+// additional array elements or turn a number into another JSON kind.
+fn validateNumbers(value: Json): Unit | JsonError unsafe go {
+  var check func(Json) *JsonError
+  check = func(value Json) *JsonError {
+    switch value := value.(type) {
+    case Json_Number:
+      parsed := parseJson(value.text)
+      if failure, failed := parsed.(JsonError); failed { return &failure }
+      if _, number := parsed.(Json_Number); !number { return &JsonError{message: "expected a JSON number"} }
+    case Json_Array:
+      for _, item := range value.items { if failure := check(item); failure != nil { return failure } }
+    case Json_Object:
+      for _, field := range value.fields { if failure := check(field.value); failure != nil { return failure } }
+    }
+    return nil
+  }
+  if failure := check(value); failure != nil { return *failure }
+  return _Unit{}
 }

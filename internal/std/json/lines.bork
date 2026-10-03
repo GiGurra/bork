@@ -45,8 +45,9 @@ fn CreateLines(path: String, s: Scope) uses io: Writer | IoError unsafe go {
   return Writer{handle: file, owner: s.Own(func() { file.Close() })}
 }
 fn Write[T: Encode](writer: Writer, value: T) uses io: Unit | JsonError | IoError {
-  text = encodeJson(value)
-  parsed = parseJson(text)?
+  encoded = encode[T](value)
+  validateNumbers(encoded)?
+  parsed = parseJson(renderJson(encoded))?
   writeLine(writer, renderJson(parsed))
 }
 fn writeLine(writer: Writer, text: String) uses io: Unit | IoError unsafe go {
