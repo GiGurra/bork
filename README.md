@@ -325,7 +325,7 @@ unread work is cancelled and joined when the scope ends, as with `spawn`.
 Both lazy and async initializers keep return/? within their own result boundary.
 
 `comptime { ... }` evaluates a closed, pure block during compilation and bakes
-scalar, list or plain-record results into the program. Its own return boundary
-and preflight checks keep recipe promises separate from runtime guards. Other
-result shapes, module-file inputs and caching remain planned in the
+scalar, list, record, sealed, union and insertion-ordered Map data into the
+program. Its own return boundary and preflight checks keep recipe promises
+separate from runtime guards. Module-file inputs and caching remain planned in the
 [comptime design](docs/design/comptime.md).

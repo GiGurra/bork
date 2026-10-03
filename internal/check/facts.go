@@ -1950,7 +1950,7 @@ func (f *factChecker) literalText(x Expr) string {
 		for i, key := range x.Keys {
 			parts[i] = f.literalText(key) + ": " + f.literalText(x.Values[i])
 		}
-		return "[" + strings.Join(parts, ", ") + "]"
+		return "{" + strings.Join(parts, ", ") + "}"
 	case *ListLit:
 		if x.Nil {
 			return "nil"

@@ -13,6 +13,12 @@ func TestComptimeDataShapes(t *testing.T) {
 		{"map order and facts", `pred nonEmpty(m:Map[String,Int]){m.size()>0}
 fn main(){m:Map[String,Int] where nonEmpty=comptime{{"b":2,"a":1}};println(m.keys());println(m.values());println(comptime{m.size()})}`, "[\"b\", \"a\"]\n[2, 1]\n2\n"},
 		{"sorted export", `fn main(){m=comptime{{"b":2,"a":1}.sorted().inOrder()};println(m.keys())}`, "[\"a\", \"b\"]\n"},
+		{"fieldless sealed variants", `type Flag=sealed{On,Off}
+fn flag():Flag{Flag.On}
+fn main(){println(comptime{flag()})}`, "Flag.On\n"},
+		{"keyword sealed field", `type Value=sealed{N{var:Int}}
+fn make():Value{Value.N{var:42}}
+fn main(){println(comptime{make()})}`, "Value.N { var: 42 }\n"},
 		{"sealed variants", `fn some():Option[Int]{.Some{value:42}}
 fn none():Option[Int]{.None}
 fn main(){println(comptime{some()});println(comptime{none()})}`, "Option.Some { value: 42 }\nOption.None\n"},
@@ -62,5 +68,30 @@ fn main(){println(comptime{Box{value:{"a":1}.sorted()}})}`,
 		if err == nil || !strings.Contains(err.Error(), "comptime map result must use insertion order") {
 			t.Fatalf("unexpected behavioral map result: %v", err)
 		}
+	}
+}
+
+func TestComptimeDataShapeValidation(t *testing.T) {
+	for _, tc := range []struct{ name, source, want string }{
+		{"cyclic foreign data", `type Node={kids:List[Node]}
+fn cycle():Node unsafe go{kids:=make([]Node,1);root:=Node{kids:kids};kids[0]=root;return root}
+fn main(){println(comptime{cycle()})}`, "result exceeds depth limit"},
+		{"decoded sealed invariant", `pred valid(v:Value){match(v){Value.N{n}=>n>0;Value.Empty=>true}}
+type Value=sealed{N{n:Int},Empty} where valid
+fn bad():Value unsafe go{return Value_N{n:-1}}
+fn main(){println(comptime{bad()})}`, "valid(Value.N { n: -1 }) is false"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, data := range map[string]string{ModFile: "module example.com/comptime\nunsafe \"example.com/comptime\"\n", "main.bork": tc.source} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, _, err := Check(dir)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want %q, got %v", tc.want, err)
+			}
+		})
 	}
 }

@@ -322,11 +322,14 @@ calls, lazy cells and ambient needs cannot be captured; literals, composite
 literals and earlier computed bindings can. Types must be concrete, including
 recipe type arguments and capture types.
 
-The current evaluator bakes scalars, lists and plain records with ordered fields.
-Other result shapes report a diagnostic. Internal helper promises and recipe
-preconditions must check before execution, independently of enclosing runtime
+The evaluator bakes scalars, lists, plain records, sealed variants, unions and
+insertion-ordered Maps. Sorted Map outputs retain a comparator closure and must
+use `.inOrder()` before export; unordered map outputs and iteration are rejected.
+Runtime closures, resources, opaque handles and lazy cells cannot be baked.
+Internal helper promises and recipe preconditions must check before execution,
+independently of enclosing runtime
 guards; constraints on the resulting value check afterward. Recipes run only for
 native targets, have a ten-second evaluation timeout and a 16 MiB result limit.
 The compiler trusts pure `unsafe go` signatures; this is not process isolation.
-Build-file reads, other data shapes and caching remain planned in the
+Build-file reads and caching remain planned in the
 [comptime design](design/comptime.md).
