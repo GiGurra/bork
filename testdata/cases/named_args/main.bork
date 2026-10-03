@@ -18,6 +18,8 @@ class Combine[T] { fn combine(left: T, right: T): T }
 instance ints: Combine[Int] { fn combine(a: Int, b: Int): Int { a + b } }
 
 pred namedPositive(x: Int) { total(second: 0, first: x) > 0 }
+pred sourceOrder(x: Int) { total(second: { return x > 0 }, first: panic("unreachable compile-time")) > 0 }
+fn provenOrder(n: Int where sourceOrder): Int { n }
 fn proven(n: Int where namedPositive): Int { n }
 
 fn maybe(value: Int): Int | String { if (value > 0) { value } else { "stop" } }
@@ -46,6 +48,7 @@ fn main() {
   println(pair(second: 2, first: 1))
   println(apply(transform: x => x + 1, value: 5))
   println(proven(n: 1))
+  println(provenOrder(n: 1))
   println(apply(value: 5, transform: x => { println("callback"); x + 1 }))
   println(checked(value: 5, limit: 10))
   println(filled(second: [1, 2]))

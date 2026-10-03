@@ -11,5 +11,6 @@ main.bork:17:13: named arguments require a direct call to a declared function or
 main.bork:17:24: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
 main.bork:18:19: Int.plus is missing required argument(s): n: Int
 main.bork:18:20: the receiver of Int.plus cannot be named; supply it positionally
-main.bork:19:20: named arguments require a direct call to a declared function or method: compiler built-ins have no declared parameter names
-main.bork:20:26: parameter host of options is already supplied at main.bork:20:11
+main.bork:19:18: plus has no parameter named nn
+main.bork:20:20: named arguments require a direct call to a declared function or method: compiler built-ins have no declared parameter names
+main.bork:21:26: parameter host of options is already supplied at main.bork:21:11

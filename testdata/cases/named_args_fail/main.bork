@@ -16,6 +16,7 @@ fn main() {
   f = options
   println(f(host: "x", port: 9))
   println(Int.plus(n: 1, value: 2))
+  println(1.plus(nn: 1, value: 2))
   println(toString(value: 1))
   println("x" |> options(host: "y"))
 }
