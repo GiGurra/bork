@@ -316,9 +316,11 @@ read: `lazy answer = expensiveComputation()`. Effects count at declaration;
 unused bindings do no work. See [the lazy design](docs/design/lazy.md) for
 scopes, cached failures and the planned record-field phase.
 
-The proposed [transparent async binding](docs/design/async.md),
+A [transparent async binding](docs/design/async.md),
 `async(s) answer = expensiveComputation()`, starts work as a task of scope `s`
-and awaits on read while keeping type T. It shares lazy binding machinery.
+and awaits on read while keeping type T. Initializer effects count at declaration;
+unread work is cancelled and joined when the scope ends, as with `spawn`.
+Both lazy and async initializers keep return/? within their own result boundary.
 
 The [comptime design](docs/design/comptime.md) specifies explicit build-time
 computation. `comptime { ... }` syntax and static closure/purity checks are in

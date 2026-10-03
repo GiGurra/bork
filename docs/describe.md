@@ -68,3 +68,8 @@ Local lazy bindings report `lazy.kind: "binding"`, `initializer_effects` and
 known lexical capture names in JSON. Text output states that first read forces.
 Describe does not execute an initializer. A `dbg(value)` on a lazy binding
 observes the value and marks its output `(forces lazy)`.
+
+Local async bindings report `async.scope`, `async.initializer_effects` and
+`async.captures` while retaining their ordinary type T. Describe neither starts
+nor awaits a task. A `dbg(value)` on an async binding awaits its value and marks
+its output `(awaits async)`.

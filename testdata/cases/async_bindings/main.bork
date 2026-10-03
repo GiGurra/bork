@@ -7,6 +7,8 @@ fn async(n: Int): Int { n }
 fn generic[T](s: Scope, value: T in s): T { async(s) saved = value; saved }
 fn owner(s: Scope) uses io: Scope { println("owner evaluated"); s }
 fn earlyOwner(): Int { scope s { async({ if (true) { return 9 }; s }) value = 99; value } }
+fn failedScope(s: Scope): Scope | Failed { Failed {} }
+fn earlyTry(): Int | Failed { scope s { async(failedScope(s)?) value = 99; value } }
 fn main() {
   scope s {
     ready = channel[Int](s, 2)
@@ -42,5 +44,5 @@ fn main() {
     async(s) checked: Int where positive = 7
     println(positive(checked))
   }
-  println(earlyOwner())
+  println(earlyOwner()); println(earlyTry())
 }

@@ -285,7 +285,11 @@ func (s *sourceIndex) walk(x check.Expr) {
 		for _, stmt := range x.Stmts {
 			switch stmt := stmt.(type) {
 			case *check.Let:
-				if !strings.HasPrefix(stmt.Var.Name, "_") && (s.contains(stmt.Var.Pos, len(stmt.Var.Name)) || stmt.Initializer != nil && s.contains(stmt.Initializer.Pos(), len("async"))) {
+				width := len("lazy")
+				if stmt.Deferred == check.AsyncBinding {
+					width = len("async")
+				}
+				if !strings.HasPrefix(stmt.Var.Name, "_") && (s.contains(stmt.Var.Pos, len(stmt.Var.Name)) || stmt.Initializer != nil && s.contains(stmt.Initializer.Pos(), width)) {
 					s.selectVar(stmt.Var, stmt.Value.Pos())
 				}
 				s.walk(stmt.AsyncScope)
