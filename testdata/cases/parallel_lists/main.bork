@@ -1,0 +1,40 @@
+type Failure = { message: String }
+
+fn double(x: Int): Int { x * 2 }
+fn checked(x: Int): Int | Failure {
+  if (x == 3) { Failure { message: "three" } } else { x * 2 }
+}
+fn slow(s: Scope, x: Int) uses clock: Int {
+  sleep(4 - x)
+  x * 2
+}
+
+fn main() {
+  xs = [1, 2, 3]
+  println(xs.parMap(double, workers: 2))
+  println(xs.parFilter(x => x > 1, workers: 2))
+  println(xs.parFlatMap(x => [x, -x], workers: 2))
+  xs.parForEach(x => {})
+  empty: List[Int] = []
+  println(empty.parMap(double))
+  println([4].parMap(double, workers: 99))
+  println(xs.parMap(double, workers: -1))
+  println(xs.parMapUntil[Int, Failure](checked, workers: 1))
+  println([1, 2].parMapUntil[Int, Failure](checked, workers: 2))
+  result = scope s {
+    xs.parMapIn(s, slow, workers: 2)
+  }
+  println(result)
+  stopped = scope s {
+    cancel(s)
+    xs.parMapIn(s, slow)
+  }
+  println(stopped)
+  scope s {
+    println(xs.parFilterIn(s, (child, x) => x > 1))
+    println(xs.parFlatMapIn(s, (child, x) => [x, -x]))
+    println(xs.parForEachIn(s, (child, x) => {}))
+    println(xs.parMapUntilIn[Int, Failure](s, (child, x) => checked(x), workers: 1))
+    println(cancelled(s))
+  }
+}

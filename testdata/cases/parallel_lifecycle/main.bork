@@ -1,0 +1,73 @@
+type Failure = { message: String }
+
+fn opening(s: Scope, x: Int): Channel[Int] | Failure { channel[Int](s, x) }
+
+fn risky(child: Scope, x: Int, started: Channel[Int], finished: Atom[Bool]) uses clock + state: Int | Failure {
+  if (x == 0) {
+    signal = receive(started)
+    match (signal) {
+      n: Int => Failure { message: "first failure" }
+      _ => Failure { message: "channel stopped" }
+    }
+  } else {
+    sent = send(started, 1)
+    assertEqual(sent, {})
+    waited = delay(child, 10000)
+    assertEqual(update(finished, old => true), true)
+    match (waited) {
+      done: Unit => x
+      c: Cancelled => Failure { message: "sibling stopped" }
+    }
+  }
+}
+
+test "early failure cancels and joins siblings without cancelling the parent" {
+  scope s {
+    started = channel[Int](s, 1)
+    finished = atom(false)
+    result = [0, 1].parMapUntilIn[Int, Failure](s, (child, x) => risky(child, x, started, finished), workers: 2)
+    assertEqual(result, Failure { message: "first failure" })
+    assertEqual(current(finished), true)
+    assertEqual(cancelled(s), false)
+  }
+}
+
+test "successful callback resources remain open in the caller scope" {
+  scope s {
+    result = [1].parMapUntilIn[Channel[Int], Failure](s, opening)
+    match (result) {
+      channels: List[Channel[Int]] => channels.forEach(ch => assertEqual(send(ch, 7), {}))
+      _ => panic("expected channels")
+    }
+  }
+}
+
+test "cancelling the callback scope returns cancellation, not partial results" {
+  scope s {
+    result = [1, 2].parMapUntilIn[Int, Failure](s, (child, x) => { cancel(child); x }, workers: 1)
+    match (result) {
+      c: Cancelled => assertEqual(c.reason, "cancelled")
+      _ => panic("expected cancellation")
+    }
+  }
+}
+
+fn waiting(child: Scope, x: Int, started: Channel[Int]) uses clock + state: Int | Cancelled {
+  match (send(started, x)) { sent: Unit => {}; c: Cancelled => return c; _ => panic("start channel closed") }
+  delay(child, 10000)?
+  x
+}
+
+test "external cancellation interrupts callbacks already running" {
+  scope s {
+    started = channel[Int](s, 2)
+    stopper = spawn(s, () => {
+      signal = receive(started)
+      match (signal) { n: Int => cancel(s); _ => panic("expected start signal") }
+      true
+    })
+    result = [1, 2].parMapIn(s, (child, x) => waiting(child, x, started), workers: 2)
+    match (result) { c: Cancelled => assertEqual(c.reason, "cancelled"); _ => panic("expected cancellation") }
+    assertEqual(await(stopper), true)
+  }
+}

@@ -1,0 +1,33 @@
+import "bork/time"
+
+// Model eight independent I/O waits with cancellation-aware delays.
+fn work(s: Scope, n: Int) uses clock + state: Int | Cancelled {
+  delay(s, 50)?
+  n * n
+}
+
+fn elapsed(start: time.Instant) uses clock: String {
+  match (time.Between(start, time.Now())) {
+    duration: time.Duration => time.FormatDuration(duration)
+    _ => "duration out of range"
+  }
+}
+
+// Run with -- --benchmark to print serial and parallel elapsed times.
+fn main() {
+  xs = range(1, 9)
+  println(xs.parMap(n => n * n))
+  benchmark = args().includes("--benchmark")
+  scope s {
+    if (benchmark) {
+      start = time.Now()
+      serial = xs.map(n => work(s, n))
+      println(s"serial: ${elapsed(start)} $serial")
+    }
+    parallelStart = time.Now()
+    parallel = xs.parMapUntilIn[Int, Cancelled](s, work, workers: 4)
+    if (benchmark) {
+      println(s"parallel (4 workers): ${elapsed(parallelStart)} $parallel")
+    } else { println(parallel) }
+  }
+}

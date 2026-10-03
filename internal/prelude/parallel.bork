@@ -1,0 +1,127 @@
+// Parallel list methods preserve input order and bound the worker count.
+// workers <= 0 uses the CPUs available to the Go runtime.
+// Pure callbacks need no scope; In methods accept effects and cancellation.
+
+fn (xs: List[A]) parMap[A, B](f: (A) uses nothing => B, workers: Int = 0): List[B] unsafe go {
+  out := make([]B, len(xs))
+  _borkParallel(nil, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    out[i] = f(x)
+    return true
+  })
+  return out
+}
+
+fn (xs: List[A]) parMapIn[A, B](s: Scope, f: (Scope, A) => B, workers: Int = 0) uses state: List[B] | Cancelled unsafe go {
+  out := make([]B, len(xs))
+  if !_borkParallel(s, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    out[i] = f(s, x)
+    return true
+  }) { return Cancelled{reason: s._cancelReason()} }
+  return out
+}
+
+fn (xs: List[A]) parFilter[A](f: (A) uses nothing => Bool, workers: Int = 0): List[A where f] unsafe go {
+  keep := make([]bool, len(xs))
+  _borkParallel(nil, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    keep[i] = f(x)
+    return true
+  })
+  out := []A{}
+  for i, x := range xs { if keep[i] { out = append(out, x) } }
+  return out
+}
+
+fn (xs: List[A]) parFilterIn[A](s: Scope, f: (Scope, A) => Bool, workers: Int = 0) uses state: List[A] | Cancelled unsafe go {
+  keep := make([]bool, len(xs))
+  if !_borkParallel(s, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    keep[i] = f(s, x)
+    return true
+  }) { return Cancelled{reason: s._cancelReason()} }
+  out := []A{}
+  for i, x := range xs { if keep[i] { out = append(out, x) } }
+  return out
+}
+
+fn (xs: List[A]) parFlatMap[A, B](f: (A) uses nothing => List[B], workers: Int = 0): List[B] unsafe go {
+  parts := make([][]B, len(xs))
+  _borkParallel(nil, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    parts[i] = f(x)
+    return true
+  })
+  out := []B{}
+  for _, part := range parts { out = append(out, part...) }
+  return out
+}
+
+fn (xs: List[A]) parFlatMapIn[A, B](s: Scope, f: (Scope, A) => List[B], workers: Int = 0) uses state: List[B] | Cancelled unsafe go {
+  parts := make([][]B, len(xs))
+  if !_borkParallel(s, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    parts[i] = f(s, x)
+    return true
+  }) { return Cancelled{reason: s._cancelReason()} }
+  out := []B{}
+  for _, part := range parts { out = append(out, part...) }
+  return out
+}
+
+fn (xs: List[A]) parForEach[A](f: (A) uses nothing => Unit, workers: Int = 0): Unit unsafe go {
+  _borkParallel(nil, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    f(x)
+    return true
+  })
+  return
+}
+
+fn (xs: List[A]) parForEachIn[A](s: Scope, f: (Scope, A) => Unit, workers: Int = 0) uses state: Unit | Cancelled unsafe go {
+  if !_borkParallel(s, len(xs), workers, func(i int) bool {
+    x := xs[i]
+    f(s, x)
+    return true
+  }) { return Cancelled{reason: s._cancelReason()} }
+  return _Unit{}
+}
+
+// Stops scheduling when a callback returns E. Specify success B and failure E
+// explicitly when inference cannot distinguish the two union members.
+fn (xs: List[A]) parMapUntil[A, B, E](f: (A) uses nothing => B | E, workers: Int = 0): List[B] | E unsafe go {
+  import "sync"
+  out := make([]B, len(xs))
+  var failure any
+  var once sync.Once
+  _borkParallel(nil, len(xs), workers, func(i int) bool {
+    v := f(xs[i])
+    if x, ok := v.(B); ok { out[i] = x; return true }
+    once.Do(func() { failure = v })
+    return false
+  })
+  if failure != nil { return failure }
+  return out
+}
+
+// Stops scheduling when a callback returns E. Specify success B and failure E
+// explicitly when inference cannot distinguish the two union members.
+fn (xs: List[A]) parMapUntilIn[A, B, E](s: Scope, f: (Scope, A) => B | E, workers: Int = 0) uses state: List[B] | E | Cancelled unsafe go {
+  import "sync"
+  child := _scopeWith(s.ctx)
+  child.name = "parMapUntilIn"
+  s.Defer(child.close)
+  out := make([]B, len(xs))
+  var failure any
+  var once sync.Once
+  complete := _borkParallel(child, len(xs), workers, func(i int) bool {
+    v := f(child, xs[i])
+    if x, ok := v.(B); ok { out[i] = x; return true }
+    once.Do(func() { failure = v; child.cancel(_errCancelled) })
+    return false
+  })
+  if failure != nil { return failure }
+  if !complete { return Cancelled{reason: child._cancelReason()} }
+  return out
+}

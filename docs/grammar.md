@@ -180,3 +180,10 @@ Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module
 
 Standard packages introduce no new grammar. Their API descriptions, examples
 and limits are in the [per-package documentation](std/README.md).
+
+Parallel list methods use ordinary method calls and named/defaulted arguments:
+`xs.parMap(f, workers: 4)`, `parFilter`, `parFlatMap`, and `parForEach` require
+pure callbacks. Their `In` counterparts take a scope and a `(Scope, T)`
+callback, charge its effects plus `state`, and return cancellation as a value.
+`parMapUntil[B, E]` and `parMapUntilIn[B, E]` stop on the first failure in a
+`B | E` callback result. See [parallel collection semantics](requirements.md#parallel-collections-implemented-bork-pd7rjm).
