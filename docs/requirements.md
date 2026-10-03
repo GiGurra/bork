@@ -413,6 +413,148 @@ scope maint {
 - **Channels (implemented):** `channel[T](s, capacity)` makes a channel owned by scope `s`, which closes it when it closes (so, like a task, a channel cannot leave its scope). `send(ch, x)` gives `Unit | Cancelled | Closed`, `receive(ch)` gives `T | Cancelled | Closed`, `closeChannel(ch)` closes it (buffered values can still be received), and `received(ch)` collects values until it closes. Operations stop with `Cancelled` when the channel's scope is cancelled; sending to a closed channel gives `Closed` rather than panicking.
 - **Cancellation through scopes (implemented):** a scope carries what Go's `context.Context` does. `cancel(s)` cancels it, `cancelAfter(s, ms)` sets a deadline, a task that panics cancels its scope (so its siblings stop), the scope's end cancels it, and a scope nested in another (in the same function) is cancelled with it. Cancellation is cooperative: tasks see it at cancellation points, `delay(s, ms)` and `checkpoint(s)` (both `Unit | Cancelled`, so `checkpoint(s)?` stops a loop), and channel operations. A cancelled scope still waits for its tasks. **The scope does not decide how its tasks stop:** its end is the same signal whether the block finished, returned early, or panicked, and each task chooses what to do with it: stop at once (a worker waiting in `delay` or on a channel), clean up first, or finish its work (code that never checks for cancellation runs to the end). Work the block needs done is awaited before the block ends. In `bork/http`, each request has a scope, cancelled when the client goes away or the server's scope closes.
 
+### Partially overlapping scopes (proposal)
+
+> **Design proposal, not implemented** (bork-u6nhjb). Keep lexical scopes as the
+> default. Use the existing enclosing-scope operations where they suffice; the
+> remaining case needs a separately checked ownership capability before new
+> syntax or runtime operations can be accepted.
+
+The question is whether B can begin while A is open, then remain open after A
+ends. Distinguish keeping a resource usable from releasing its previous owner
+promptly, and keeping a task running from moving its ownership.
+
+| Concrete case | Enclosing-scope solution | What remains |
+|---------------|--------------------------|--------------|
+| A request creates a pool that must survive the request | Give the acquiring function the application's scope, or `attach(pool, app)` while the pool is live and return that attached value | Already supported; the caller must supply the application's capability |
+| Stream an old file into a new file, release the old file, then keep writing the new one | Open the destination in an enclosing scope, open the source in a nested scope, copy, then leave the source block | Already supported; choose the destination owner before the copy |
+| Prepare a connection in a setup scope, then run a worker after setup ends | Attach the connection to the worker's enclosing scope before `spawn` there; capture the attached value | Already supported; setup's tasks still finish with setup |
+| Transfer an already running task out of a request | Start it in the longer-lived scope initially, with captures proven to live that long | Moving the task handle cannot migrate its captured scopes, channels, cancellation points, or failures |
+| Repeatedly acquire the next lock before releasing the previous lock, or rotate sessions with at most two live connections | An enclosing scope keeps every attached acquisition until that scope ends | Prompt release of each old acquisition is missing; retaining all generations changes lock behavior and grows live resources |
+
+For example, copying into a destination that survives the source needs no new
+scope construct (the helpers here stand for ordinary scoped resource functions):
+
+```
+fn replace(path: String, app: Scope) uses io: File | IoError {
+  output = createReplacement(path, app)?
+  scope inputScope {
+    input = openPrevious(path, inputScope)?
+    copy(input, output)?
+  }                                        // input released here
+  output                                   // owned by the caller's app
+}
+```
+
+A finite number of handovers can similarly be rearranged into nested blocks.
+The unbounded rolling case is different: A must end with B still open, then B
+must end with C still open, with cleanup at each transition. Opening every
+successor in the application scope, or recursively retaining all predecessors,
+does not meet that bound. A worker routine owning each generation could provide
+independent lexical lifetimes, but requires a handover/acknowledgement protocol,
+cancellation and failure handling; it is an alternative to evaluate, not a
+transparent resource move.
+
+**What `attach` means today.** It adds shared ownership; it does not remove the
+source owner's finalizer. The resource closes only when every retained owner
+ends. Its returned value carries the destination lifetime; older aliases do not
+acquire a new lifetime. For handles using the [rebinding hook](std-go.md), the
+latest attachment selects the cancellation source, even while multiple owners
+remain. An already cancelled resource cannot be revived. Any proposed move must
+state both its ownership and cancellation semantics; copying the lifetime of a
+value alone would be insufficient.
+
+**Resource handoff before scope values.** A move from an inner scope to an
+already open enclosing scope would have to retain the destination before
+removing the source registration, rebind cancellation before the source ends,
+and preserve one final cleanup even on failure. It could simplify ownership
+bookkeeping for the first three cases, but `attach` already supplies their
+required lifetime. It does not solve rolling cleanup: the destination still
+retains the old acquisition until it closes. A sibling destination is not a
+capability visible from the source in ordinary lexical code. Task migration is
+excluded: moving a task's registration without rechecking every capture and
+changing its cancellation and failure ownership breaks structured concurrency.
+
+**Candidate for the remaining case: explicit start and end, as owned child scopes
+with checked close.** This is the explicit-start/explicit-end idea, restricted so
+that the right to end a scope cannot be confused with an ordinary borrowed scope.
+Opening would require an existing scope capability and produce an owner plus a
+borrowed `Scope` for ordinary acquisitions. The owner alone could close the
+child early; existing `Scope` parameters would remain borrowed and could not
+close a caller's scope. Names such as `openChild(parent)` and `owner.close()` are
+illustrative, not proposed grammar:
+
+```
+scope app {
+  a = openChild(app)                       // owned closing capability
+  old = acquire(a.scope)?                  // borrow its Scope for acquisition
+  b = openChild(app)
+  next = acquire(b.scope)?                 // both generations are live
+  handover(old, next)?
+  a.close()                               // cancels, joins, releases old
+  continueWith(next)                       // b is still open
+  b.close()
+}                                         // fallback cleanup on any earlier exit
+```
+
+Here `a.scope` and `b.scope` mean borrowed capabilities; only `a` and `b` may
+close their respective children. A rolling loop repeats this transition with
+checked transfer of `b` into the next iteration, which is one of the rules still
+to settle. Before accepting this candidate, settle:
+
+- **Exactly one cleanup, on every exit.** Each open child registers an unwind
+  fallback in its owning function or block, plus parent cleanup as a backstop. Explicit close cancels, joins tasks, runs
+  finalizers under the child's policies, and disarms that fallback. Early return,
+  `?`, and panic must still clean up. The compiler rejects duplicate explicit
+  close and use after close; runtime idempotence is only a backstop. A loop must
+  transfer ownership of the successor and discharge the predecessor each time,
+  with no accumulating fallback registrations.
+- **Ownership is distinct from borrowing.** The closing capability cannot be
+  copied into a record, lambda, channel or task to create a second closer.
+  Passing it to a helper or through a loop requires an explicit ownership
+  transfer contract that also transfers its unwind registration, unlike today's
+  ordinary `Scope` arguments. General owners
+  returned beyond their enclosing scope are excluded. Decide whether the
+  necessary restricted transfer rules are worth adding to an immutable language.
+- **Close invalidates every dependent alias.** Check by scope identity, including
+  resources inside records, lists, unions and closures, task handles, channel
+  handles and user-defined scoped facts. A branch that closes on only one path
+  leaves the child possibly closed at the join; subsequent uses require proof
+  it is open on every reaching path. Resource aliases explicitly attached to a
+  different open scope retain that proof; their cancellation is still governed
+  by the attachment rules above.
+- **Borrowing cannot race close.** Synchronous calls may borrow while the owner
+  is open. Child-owned tasks are joined during close before resources finalize,
+  subject to the existing timeout policies. A task of an enclosing or sibling scope must not retain
+  the child's borrowed scope or child-only values: otherwise it could use them
+  concurrently with close. For example, `spawn(b.scope, () => use(old))` followed
+  by `a.close()` must fail when `old` belongs only to `a`; attaching `old` to `b`
+  first proves the resource lifetime, but does not transfer a borrowed `a.scope`. Closing an owner captured by its own task would
+  deadlock on joining itself and must be rejected.
+- **Parents and cancellation remain explicit.** A parent's cancellation cancels
+  its owned children; cancellation alone neither releases resources nor grants
+  a proof of closure. Parent cleanup closes remaining children before releasing
+  resources they depend on. Children must not close borrowed parents. The
+  ordering for multiple overlapping children, including failure aggregation and
+  timeout behavior, needs runtime tests before adoption.
+- **Capabilities and effects are both required.** Opening requires the parent's
+  capability, not a global allocator. `uses state` alone never authorizes closing
+  someone else's scope. An explicit close changes shared cancellation and should
+  use `state`. The effects of spawned work and finalizers remain charged at
+  registration, as under [Effects in signatures](#effects-in-signatures);
+  passing an owner across functions must preserve that accounting and cannot
+  let pure code register effectful work through an untracked callback.
+
+**Recommendation.** Do not add a generic `Scope.close` or migrating `Task`
+operation. Document and use enclosing-scope acquisition and `attach` first.
+Keep checked owner capabilities as the candidate for bounded rolling lifetimes,
+with the transfer, alias and unwind rules above as acceptance conditions. This
+proposal does not decide an affine type system, new syntax, or an implementation.
+An implementation proposal must compare the worker-routine alternative and
+include success and rejection cases for branching, loops, helper calls, captured
+borrows, attachment after cancellation, panic cleanup, finalizer failures and
+close-time task cancellation.
+
 ### Crash isolation and supervision (planned, not v0.1)
 
 Erlang-style isolation, where a crashing routine is cleaned up and handled by a supervisor without taking the rest of the program down, becomes cheap in bork, because the two hard parts are solved by design:
