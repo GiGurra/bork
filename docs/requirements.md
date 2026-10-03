@@ -191,7 +191,7 @@ use api.Json
 - **Lowered to dictionary passing.** A call whose instance is known calls the instance's method directly; only generic code passes instances around.
 - **`derive (Decode, Encode)`** on a record or sealed type asks the compiler to write the instances, named after the type (`CreateUserDecode`). They follow the same rules as written instances: in scope in their own package, used elsewhere with `use api.CreateUserDecode`. Each field needs an instance in scope. Only the prelude's `Decode` and `Encode` (JSON) can be derived so far.
 - **JSON:** the prelude has a `Json` sealed type, `parseJson`/`renderJson`, the classes `Decode` and `Encode` with instances for the basic types, `Option`, `List`, and `Json`, and `decodeJson[T]`/`encodeJson[T]`. Records are objects, including empty records: their derived decoder accepts objects and rejects other JSON kinds, and their encoder produces `{}`. A sealed value is an object whose `"type"` names the variant (a variant without fields may be just its name, `"Free"`); a missing `Option` field is `None`. A `DecodeError` says where (`.items[1].qty`) and what went wrong.
-- **Dynamic JSON and JSON Lines (implemented):** `bork/json` queries the prelude's Json without moving its typed Decode/Encode API: Field selects the first matching object field, Index selects an array element, and At follows a list of string keys and integer indices. None denotes a missing path; Some(Null) preserves a present JSON null, and an empty path returns the input. Pretty preserves field order and exact number text, with 0–8 spaces (default 2); invalid manually constructed number text returns JsonError. OpenLines/CreateLines own files in a scope. Next reads one line at a time without a scanner token limit, accepts LF/CRLF and a final unterminated line, and returns None at EOF. Blank/malformed lines give LineError with path, one-based line number and message; a later Next continues at the next line. Read/write failures give IoError. Write accepts any Encode value, validates the rendered JSON, and immediately writes one compact document plus LF without a deferred flush. Concurrent calls on one reader are serialized; concurrent writes on one writer keep each line together, with unspecified order. A failed write may leave a partial final line. Resources can be attached to another scope under the standard ownership rules; there is no whole-file buffering. See [json_lines](../examples/json_lines/main.bork).
+- **Dynamic JSON and JSON Lines:** see [bork/json](std/json.md).
 
 - **Instances on constrained types:** `instance decodePort: Decode[Port]`, with `type Port = Int where between(1, 65535)`, is used for values known to be ports: the fields of derived instances whose where clauses include the instance's; calls whose arguments of the type parameter are all declared ports (a parameter, binding, or field with that where clause): `encodeJson(port)`; and calls with an explicit constrained type argument: `decodeJson[Port](text)`. The most specific instance wins (`Int where positive` over `Int`). Its methods assume the constraints of parameters of the type, and must promise them of results (`fn decode(json: Json): Port | DecodeError`), which the facts checker verifies.
 - **Constrained type arguments are facts, by parametricity.** A generic function gets values of a type parameter only from its arguments of that type and from the instances of its bounds. So with `decodeJson[Port](text)`, arguments of type `T` must be ports, every instance for `T` that can produce values must promise `Port` (or it is an error), and the result's `T` member is then proven a port. Functions whose other parameters could produce `T` values (`map`'s `f: (A) => B`) cannot take a constrained type argument.
@@ -1027,7 +1027,6 @@ db.bork:9:1: Query returns a *sql.Rows, which has a Close method, but Rows is no
 pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can change, so a fact about it could go stale
 ```
 
-
 ### Codec privacy
 
 Derived codecs cannot structurally inspect another package's private variants.
@@ -1128,35 +1127,20 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **Visibility follows Go:** names starting with an upper-case letter are exported. This applies to top-level declarations (functions, predicates, types); the fields of an exported type are visible wherever the type is. Upper-case sealed variants are visible there too; lower-case variants are private to their declaring package and cannot be constructed or matched elsewhere, including generic variants.
 - **How it works (implemented).** `bork.mod` at the module's root holds `module example.com/shop`, and then a line `unsafe "example.com/shop/ffi"` for each package allowed to contain `unsafe go` (see [Effects in signatures](#effects-in-signatures)). A file starts with its imports, `import "example.com/shop/money"` or `import cash "example.com/shop/money"`, and refers to the package's names as `money.Cents`, `money.Amount`, `money.Currency.Eur`. Unused imports are errors, import cycles are rejected, and an import name cannot be shadowed. For now the compiler checks the whole program at once (with each package's names kept apart), rather than each package against summaries of its imports.
 - **Messages name types as the code would:** another package's types are qualified (`found money.Cents`), relative to the package the error is in.
-- **Time and configuration (implemented):** `bork/time` has immutable Unix-nanosecond instants, durations, formatting/parsing, checked arithmetic, scope-cancellable sleep, and a `Clock` whose `now` function tests can replace. `bork/env` distinguishes missing and empty variables, snapshots the environment, and loads derived records with `Load[T: Decode](prefix)`: `httpPort` maps to `PREFIX_HTTP_PORT`, strings are literal, other values use JSON syntax, absent Option fields are None. All invalid/missing variables are collected, including field fact violations; `LoadWith` injects a reader for tests. Custom decoders can use `LoadJson` for a JSON configuration variable. Derived record schemas expose general field metadata to std Go code ([helper API](std-go.md)).
 
-- **Standard packages** are imported as `bork/name` and ship with the compiler (no `bork.mod` needed). So far: `bork/http`, a server whose lifetime is a scope (`http.Listen(addr, s, handler)` serves until `s` closes, each request on its own goroutine, with a scope of its own that the handler gets), a scope-cancellable client (`http.Get(url, s, timeoutMs = 0)`, `http.Post(url, contentType, body, s, timeoutMs = 0)`, `http.Send(method, url, headers, body, s, timeoutMs = 0)`), whose optional millisecond timeout covers both the request and reading the response body; headers are maps of names to value lists, preserving repeated values, and transport/cancellation/timeout failures return `IoError`, and helpers (`http.Text`, `http.JsonReply`, `http.Segments` for matching paths with list patterns). Status codes are facts: `http.Text(42, "x")` does not compile. See [examples/signup_api](../examples/signup_api/main.bork). The built-in, persistent `Map[K, V]` (`{"a": 1}`) has methods and needs no import; it is insertion-ordered (the default), sorted (`m.sorted()`), or unordered (`m.unordered()`, a hash map whose printing sorts numeric and string keys by value, and other keys by their text, with mixed kinds grouped). List and map keys use structural equality independently of their text. And `bork/log`, structured logging through Go's `log/slog`: `log.Info(msg)` or `log.Info(msg, {"user": name, "age": 37})` (also `Debug`, `Warn`, `Error`), attributes a `log.Attrs` (`Map[String, String | Int | Float | Bool]`) kept in order, loggers that carry attributes (`log.With(attrs)`, `log.Extend`, `logger |> log.Log(level, msg, attrs)`), and `log.Configure(log.Defaults().copy(...))` for the level, text or JSON, stdout or stderr, and timestamps. The runtime's own records (orphaned tasks, a scope's failures under `logFailures()`) go through the same configuration.
-
-HTTP servers support `http.ListenRoutes(addr, s, routes, drainTimeoutMs = 0)` with immutable `http.Route { pattern: "GET /users/{id}", handler: ... }` records. Patterns follow Go 1.22 ServeMux: method matching, HEAD for GET, redirects, `{name}` and `{name...}` path captures (in `request.params`), and 404/405 responses. Invalid/conflicting patterns return `IoError` before listening. `http.Handler` permits all five effects, so routed server functions declare `uses io + net + clock + random + state`; ordinary functions `(http.Handler) => http.Handler` implement middleware. The original `Listen` retains open handler effects.
-
-`http.Body[T: Decode](request)` decodes JSON with field facts. `Query` parses query values; `QueryAs[T]` and `PathAs[T]` load derived records, using literal strings and JSON syntax for other fields. Missing Option fields become None; repeated values for record fields are errors. `Form` parses URL-encoded body values separately from the query. `Multipart` returns value lists and immutable upload Bytes; multipart and incoming server bodies default to 16 MiB. Listen, ListenRoutes, ListenTLS and Multipart accept a nonnegative maxBodyBytes override; zero rejects nonempty bodies. A server rejects oversized bodies with HTTP 413. `Static(request, root, prefix = "")` serves a directory through Go's file server, buffering the response; it supports directory listings, symlinks, ranges and conditional requests. `ListenTLS(addr, s, routes, certFile, keyFile, drainTimeoutMs = 0)` loads PEM certificate/key files and requires TLS 1.2 or newer.
-
-Closing the server scope cancels request scopes and stops accepting new connections, then waits for active handlers through Go's graceful shutdown. A zero drain timeout inherits `cleanupTimeout`; without that policy shutdown waits indefinitely. A positive per-server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). When draining times out, connections are forcibly closed; cooperative handlers may still be finishing. `Wait` waits for the listener to stop, while scope cleanup drains active requests. See [http_routes](../examples/http_routes/main.bork).
+- **Built-in maps.** The built-in, persistent `Map[K, V]` (`{"a": 1}`) has methods and needs no import; it is insertion-ordered (the default), sorted (`m.sorted()`), or unordered (`m.unordered()`, a hash map whose printing sorts numeric and string keys by value, and other keys by their text, with mixed kinds grouped). List and map keys use structural equality independently of their text.
 
 - **Standard packages can depend on pinned Go modules (implemented):** native Go module/checksum declarations (`go-deps.mod` and `go-deps.sum`) ship with the compiler. Generated builds include only loaded std packages' declarations, use `-mod=readonly`, and use Go's module cache. Warm caches support `GOPROXY=off`; cold offline builds fail clearly. Dependency sources are not vendored. See [the std Go dependency contract](std-go.md).
 
-- **Math (implemented):** `bork/math` has pure IEEE float functions and constants,
-  immutable arbitrary-size `BigInt` and reduced `BigRat`, and fixed-point `Decimal`
-  using `math/big.Int` coefficients. Private variants prevent forged values.
-  Decimal preserves scale: **`1.0 != 1.00` with `==`**, including as map keys;
-  `SameValue` and `Compare` compare numeric amounts. Division and rescaling require
-  explicit scale and rounding (`TowardZero`, `AwayFromZero`, `Floor`, `Ceiling`,
-  `HalfEven`, `HalfAwayFromZero`); scales are checked in 0..10000. Exact arithmetic
-  errors return unions; floats retain IEEE NaN/infinity behavior. Exact JSON codecs
-  use strings, preserving precision and Decimal scale. Canonical string storage
-  keeps mutable Go numbers inside operations, with measurable parsing/allocation
-  overhead. See [math](math.md), [examples/math](../examples/math/main.bork), and the
-  [benchmark](../testdata/benchmarks/math/README.md).
-
-- **SQL (implemented):** `bork/sql` owns database pools and transactions as scope resources, using `database/sql` with pinned pure-Go SQLite and pgx Postgres drivers. `OpenSqlite(dataSource, s)` and `OpenPostgres(dataSource, s)` connect and ping. `Begin(db, transactionScope)` rolls back when that scope closes unless `Commit` succeeds. `Exec` binds typed scalar/Bytes/Null parameters, and `Query[T: Decode]` decodes column-name row objects into proven values. Operations use their connection or transaction owner's cancellation context; attachment rebinds cancellation to the destination scope through the general resource hook. `QueryJson` exposes the JSON representation for custom decoding. SQLite uses one connection; Postgres uses Go's default pool. See [examples/sql](../examples/sql/main.bork).
-
 - **Another package's functions promise only what their signatures say.** Facts derived from a function's body are used within its package, but not by importers, so a package's body can change without breaking them. (This settles the "exported return types" question below.)
 - **Inference rules apply everywhere** their predicates are used, and `bork test` property-tests the rules of the package being tested.
+
+### Standard packages
+
+Standard packages are imported as `bork/name` and ship with the compiler (no
+`bork.mod` needed). API descriptions, examples and limits live in the
+[per-package documentation](std/README.md). The [Go helper API](std-go.md)
+documents the shared implementation boundary.
 
 ### Open questions
 
@@ -1168,16 +1152,6 @@ Closing the server scope cancels request scopes and stops accepting new connecti
 - Should "rigor must be cheap" rank above "if it compiles, bugs cannot happen", meaning a guarantee is dropped if it cannot be made cheap?
 - Limited operator overloading (e.g. `+` for money or vector types), or none at all?
 - Other principles to adopt: strong backwards-compatibility promises? No macros?
-
-`bork/cli` wraps boa through a reflection shadow struct built from a derived
-Decode schema. `Parse[T]` returns proven options, collected field errors, or help;
-`Run[T]` invokes a `(T, Scope) => Unit` handler only after successful validation.
-Docs/defaults drive help, `cli.Flag` maps short/env/positional metadata, and List
-fields take repeated flags. Unknown metadata names include a closest-field hint;
-duplicate short/env/positional mappings are errors before parsing. Environment
-loading stays independent. Config-file and subcommand APIs are deferred. See
-[the schema adapter](std-go.md#command-line-schema-adapter) and
-[the example](../examples/cli/main.bork).
 
 ## Topics still to discuss
 
@@ -1198,7 +1172,7 @@ See also [roadmap.md](roadmap.md) for the implementation plan.
 - `recover`
 - Erlang-style routine isolation and supervision
 
-### Binary data and encoding
+### Binary data
 
 `Bytes` is built-in immutable binary data, represented by a distinct named Go
 byte slice. It has content equality and may be a map key. It remains distinct
@@ -1208,163 +1182,3 @@ Go boundaries; bork has no mutation operations. Construction uses `bytes` or
 returns a union error. Immutable access uses `length`, `isEmpty`, `get`,
 `toList`, `slice` (bounds errors are unions), and `concat`. Printing uses
 `Bytes(lowercase hex)` rather than guessing text.
-
-`bork/encoding` supplies hex and padded standard/URL-safe base64 encoders and
-parsers. Invalid encodings return `ParseError` without partial data. The
-base64 parsers enforce zero trailing padding bits and accept CR/LF.
-
-### Filesystem package
-
-`bork/fs` owns `File`, moved from the prelude, and provides whole-file binary
-Read/Write/Append, scoped Open/Create/CreateNew, ReadAll/WriteTo on handles,
-text compatibility helpers ReadAllText/WriteText, and streaming ForEachLine.
-File data is Bytes; caller-visible slices never mutate. Text compatibility
-helpers preserve the former prelude behavior; validated UTF-8 decoding is
-explicit. Streaming has no Scanner line-size limit. File resource lifetimes
-remain enforced, including imported resources returned through generic wrappers.
-
-Directories have lexical listing/walking, MkdirAll, Remove/RemoveAll, Rename,
-and Stat with size, time.Instant modification time and kind. Walk and Stat do
-not follow symbolic links. Host filepath helpers join and split paths and
-resolve absolute paths. TempFile/TempDir resources close and remove themselves
-at scope end, including early-return and panic cleanup; TempDir removes its
-contents. Cleanup is best effort, as existing scope file finalizers were.
-Files create with mode 0666 and directories with 0777, modified by the host
-umask. Write truncates; Append appends; CreateNew reports Exists for an
-existing path. Operational errors are typed union values NotFound,
-PermissionDenied, Exists or IoError with the path and underlying message.
-There are no new language constructs.
-
-
-### CSV encoding
-
-CSV has raw row parsing/writing and typed record parsing/writing through
-`Decode`/`Encode`. Typed CSV uses the derived Decode field schema: String
-fields are verbatim; numbers, booleans and compound fields use JSON. Empty
-optional cells and missing optional columns become None. Nonempty optional
-cells become Some, parsed exactly like the required field (no JSON quotes
-for String). Encoding Some("") writes empty like None; Some("") cannot
-round-trip and decodes as None. Nonempty JSON null in optional non-String cells
-is rejected with a per-cell error; use an empty cell for None. The JSON bridge
-cannot preserve Some(Json.Null), which encodes like None. Header names match
-fields exactly; unknown,
-duplicate and missing required headers are errors. Ragged typed rows are
-errors. Facts and field types are checked before constructing records, with
-all field errors collected in `CsvErrors` by row and column. Malformed CSV
-returns `CsvError`; partial records are never returned. Encoding requires both
-Encode and Decode for the schema and optional semantics. Zero-field records
-are unsupported; empty input encodes to empty text. Raw CSV follows Go CSV
-quoting, blank-line skipping, CRLF normalization and LF output, permitting
-ragged rows. No new syntax is introduced.
-
-### Processes and shutdown signals
-
-`bork/process` starts argv commands without a shell. Run captures stdout and
-stderr as Bytes and returns the exit code, including nonzero exits. Start gives
-a scoped Process with repeatable Await, explicit Stop, and Pid. Arguments,
-environment inheritance/replacement, working directory and optional Bytes stdin
-are supported. Missing stdin is empty. Launch/wait errors are IoError;
-explicit or owner cancellation returns Cancelled. Output is retained in memory.
-A final resource cleanup cancels, kills and reaps the child, including a child
-that was never awaited. Attachment selects the destination cancellation source.
-Each subprocess starts a new Unix process group. Cancellation kills that whole
-group, including shell-wrapper descendants. Descendants that leave the group
-or outlive the direct child's normal exit are outside its ownership. Group
-cancellation applies while the direct child is running; other targets kill only
-the direct child.
-Args and Exit alias the prelude helpers. Process operations declare io + state;
-Args/Exit declare io. Pid reads the stored ID without effects.
-
-The scope runtime registers SIGINT/SIGTERM for the program lifetime, cancelling
-root scopes and their nested scopes. Scope-aware waits and checkpoints observe
-cancellation; cleanup runs when those scopes end. Pure work needs an explicit
-checkpoint to observe shutdown. This introduces no new language syntax.
-
-Process capture waits at most one second for inherited output pipes after the
-child exits or is cancelled. If a descendant keeps them open after a successful
-exit, the result is IoError rather than partial output. Nonzero exits retain
-their exit code as Result and output may be truncated at this bound.
-Cancellation still returns Cancelled. This bound keeps pipe capture from blocking cleanup forever.
-
-### TCP and UDP sockets
-
-`bork/net` uses Bytes for binary TCP and UDP data and scope-owned Connection,
-Server and Socket resources. Dial opens TCP with scope cancellation and an
-optional opening timeout. Listen serves each connection on a task in its own
-scope; server cleanup cancels active connections and waits for handlers.
-Handler errors/panics are logged and isolated. Connections support bounded byte
-reads, validated UTF-8 lines, writes, address inspection and per-call deadlines.
-Line timeouts preserve consumed prefixes for retry or byte reads. Eof marks
-clean stream closure; cancellation is Cancelled and transport/timeouts IoError.
-Failed writes can be partial. One reader and one writer may run concurrently.
-
-UDP Bind and Send use numeric IP:port addresses; Receive returns a complete
-datagram with its sender, including zero-length data. Resources follow their
-owner's cancellation, with attachment rebinding the cancellation source. Pure
-host/port helpers parse and join addresses; scope-aware Resolve returns sorted
-IP strings. Timeouts and buffer sizes have checked facts; there is no new syntax.
-TLS can be added later alongside HTTP.
-
-### UUID values
-
-`bork/uuid` exposes immutable, canonical lowercase UUIDs, random v4 and
-chronologically ordered v7 generation, parsing, formatting, nil and version
-inspection. Parse normalizes backend-supported text forms; a field fact prevents
-constructing an invalid or noncanonical Uuid. Uuids compare structurally and
-work as map keys. The Codecs instance bundle encodes/decodes JSON strings and
-validates nested values, including environment configuration. V4 declares
-random, V7 random + clock; entropy failures return IoError and parsing returns
-ParseError. google/uuid v1.6.0 is pinned behind this API for Go 1.26/offline
-compatibility; switch to the Go standard UUID backend when the minimum is 1.27.
-
-### Compression and archives
-
-`bork/compress` supplies gzip Bytes codecs, suitable for HTTP bodies, and
-streaming `GzipTo` / `GunzipTo` transfers between scope-owned `bork/fs.File`
-handles. Codecs are pure; file operations declare `uses io`. All failures are
-IoError union results. Files remain owned by their original scopes. Transfers
-start at the current offsets and return the uncompressed byte count.
-
-`bork/archive` encodes/decodes ZIP and TAR with immutable `Member` records
-(name, binary data, directory flag). Direct file writers avoid buffering the
-entire encoded archive. File iterators buffer one member's data at a time;
-ZIP also holds its central directory metadata. TAR consumes the file's current
-offset; ZIP reads the whole file with random access. File writers use the
-current offset; a ZIP output should be empty at offset zero. Callbacks may use
-effects, which are charged to their callers. Writers preserve entry order and
-use fixed regular-file/directory permissions (0644/0755), without preserving
-source timestamps or ownership. ZIP directory names are normalized with a
-trailing slash. These APIs return data rather than extracting onto disk.
-
-Readers and writers reject path traversal, absolute paths, backslashes, colons, NULs,
-links and special entries; directories cannot carry data. Decompression limits
-(default 64 MiB, configurable and nonnegative) count total uncompressed data
-across archive entries and concatenated gzip members. They do not bound header
-metadata, member count, compressed input or CPU time. Gzip and ZIP checksums are
-verified, and malformed headers or truncated member data becomes IoError.
-TAR permits omitted trailing zero blocks, following Go's archive reader. Pure APIs return no
-partial data on error; file operations and callbacks may already have produced
-partial output. Stream output never exceeds its configured byte limit.
-
-### Compile-time embedded assets
-
-`bork/embed` embeds regular files as immutable Bytes or validated UTF-8 Strings,
-and directories as immutable `FS` snapshots. ReadBytes/ReadString/Directory are
-pure compiler intrinsics with a compile-time constant String path, resolved
-relative to the source package of the call (including imported packages).
-Only direct calls are allowed; function references and dynamic paths fail at
-checking. There is no new syntax or filesystem effect. Directory snapshots
-include dotfiles recursively, expose lexical `Paths()` and pure `Read(name)`,
-and return IoError for a missing snapshot name. Empty directories are supported;
-only files appear in Paths. Globs and directory metadata are not included.
-
-Missing or unreadable assets, wrong file/directory types, invalid UTF-8 text,
-symlinks and special files produce compile diagnostics at the call. Paths must
-stay within the source package: absolute paths, parent segments, backslashes,
-colons and NULs are rejected. The driver captures each request once during
-checking before evaluating facts. Evaluators, normal builds and test builds
-stage captured bytes in the generated module and use `go:embed`, preserving
-assets even if their source files disappear after capture. Large assets do not
-inflate generated Go source. `bork emit` lists staged file names and their source
-paths in a comment beside the embed directives; consumers must stage the listed
-assets themselves. The emitted source by itself is not a complete build artifact.

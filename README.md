@@ -90,14 +90,11 @@ fn names(users: List[User]) uses io {
 - Maximum efficiency on embedded devices.
 - Being a proof assistant. Guarantees must stay pragmatic.
 
-`bork/cli` wraps boa to parse proven options from a record deriving `Decode`.
-It generates help from field docs and defaults, supports short flags, explicit
-environment bindings, positionals, and repeated list flags, and collects field
-errors before invoking a handler. See [examples/cli](examples/cli/main.bork).
+
 
 ## Getting started
 
-The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, `Map`, methods (`xs.filter(f).map(g)`, references such as `words.map(String.byteLength)`), and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); packages; and type classes with JSON decoding (M3, under way: `derive (Decode)` decodes requests into proven values); and standard packages `bork/http`, `bork/log`, `bork/time`, and `bork/env` (see [examples/http_server](examples/http_server/main.bork), a REST API, and [examples/signup_api](examples/signup_api/main.bork), JSON requests with constrained fields). Record and variant fields can declare closed defaults (`port: Int = 8080`), used by literals and derived decoding when a field is absent. Field docs and defaults are available through the derived schema for standard integrations. `derive (GoStruct)` supplies a separate exported Go struct, checked conversions, and ordered field tags (`go { json: "port" }`) for reflection-based libraries. A `Show[T]` instance in a declared type's own package customizes its text consistently, including inside generic code and nested values. List and map keys use structural equality independently of their text. Unordered maps print deterministically (numeric and string keys by value, other keys by their text, with mixed kinds grouped). Third-party Go bindings use pinned `go-deps.mod` and `go-deps.sum` manifests beside `bork.mod`. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
+The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, `Map`, methods (`xs.filter(f).map(g)`, references such as `words.map(String.byteLength)`), and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); packages; and type classes with JSON decoding (M3, under way: `derive (Decode)` decodes requests into proven values); and [standard packages](docs/std/README.md). Record and variant fields can declare closed defaults (`port: Int = 8080`), used by literals and derived decoding when a field is absent. Field docs and defaults are available through the derived schema for standard integrations. `derive (GoStruct)` supplies a separate exported Go struct, checked conversions, and ordered field tags (`go { json: "port" }`) for reflection-based libraries. A `Show[T]` instance in a declared type's own package customizes its text consistently, including inside generic code and nested values. List and map keys use structural equality independently of their text. Unordered maps print deterministically (numeric and string keys by value, other keys by their text, with mixed kinds grouped). Third-party Go bindings use pinned `go-deps.mod` and `go-deps.sum` manifests beside `bork.mod`. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.
 
 ```bash
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -195,64 +192,36 @@ see the [local bork editor extension](editors/vscode/README.md).
 
 Standard packages may use pinned Go modules. Generated builds use Go's module cache; populate it while online before building with `GOPROXY=off`. See the [dependency and offline build contract](docs/std-go.md).
 
-HTTP clients take a scope (`http.Get(url, s, timeoutMs = 0)`); cancellation and optional timeouts cover the response body too. Request/response headers are `Map[String, List[String]]`, preserving repeated header values.
-
-`bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](examples/sql/main.bork).
-
 ## Status
 
 Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today.
 
-`bork/time` provides instants, durations, formatting/parsing, cancellable sleep, and injectable clocks. `bork/env` loads one environment variable per record field through `Decode`, checking facts and reporting all invalid or missing variables. See [examples/time_env](examples/time_env/main.bork).
-
 Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 `bytes([toByte(0), toByte(255)])`, and validated `utf8String(data)`.
-Import `bork/encoding` for hex and standard or URL-safe base64; malformed
-input returns `ParseError`. See [the encoding example](examples/bytes_encoding/main.bork).
 
-Import `bork/encoding` for CSV. `encoding.DecodeCsv[T]` reads header-based records
-using each field's declared type and facts, collecting errors by row and column.
-`EncodeCsv` writes empty optional cells as None (Some("") cannot round-trip); [the CSV example](examples/csv/main.bork) shows both.
+## Standard packages
 
-Import `bork/process` to run argv commands with captured Bytes output, an exit
-code, optional environment/workdir/stdin, and scope-owned cancellation. SIGINT
-and SIGTERM cancel root scopes so scope-aware work can finish and clean up.
-See [examples/process](examples/process/main.bork).
-
-Import `bork/net` for scope-owned TCP/UDP sockets, binary data and UTF-8 lines,
-per-call timeouts, and address helpers. See [examples/net](examples/net/main.bork).
-
-Import `bork/uuid` for canonical UUIDs, v4/v7 generation, map keys, and JSON
-string codecs (`use uuid.Codecs`). See [examples/uuid](examples/uuid/main.bork).
-
-Import `bork/crypto` for SHA-256/512, HMAC, secure bytes/tokens and Argon2id
-password hashes. Verification also accepts legacy bcrypt hashes; `NeedsRehash`
-supports upgrading them on login. See [examples/crypto](examples/crypto/main.bork).
-
-Import `bork/rand` for bounded integers, floats, shuffling and picking. A seeded
-opaque `Generator` returns `{ value, next }` draws, so replay needs no mutable
-state. See [examples/rand](examples/rand/main.bork).
-
-`bork/math` provides float functions, arbitrary integers and rationals, and exact
-fixed-point Decimal arithmetic for money with explicit rounding. **Decimal `==`
-includes scale (`1.0 != 1.00`); use `SameValue` for numeric equality.** Exact values
-have private representations and JSON string codecs. See [math](docs/math.md)
-and the [invoice example](examples/math/main.bork).
-
-Import `bork/embed` to capture files as Bytes or UTF-8 Strings and directories as
-immutable snapshots at compile time. Missing assets are compiler errors; binaries
-need no source files at runtime. See [examples/embed](examples/embed/main.bork).
+| Package | Description |
+| --- | --- |
+| [bork/archive](docs/std/archive.md) | ZIP and TAR Bytes codecs and file iteration |
+| [bork/cli](docs/std/cli.md) | Derived record command-line options through boa |
+| [bork/compress](docs/std/compress.md) | Gzip Bytes codecs and scoped file transfers |
+| [bork/crypto](docs/std/crypto.md) | Hashes, HMAC, secure bytes and password hashing |
+| [bork/embed](docs/std/embed.md) | Compile-time file and directory snapshots |
+| [bork/encoding](docs/std/encoding.md) | Hex, base64 and CSV encoding |
+| [bork/env](docs/std/env.md) | Environment variables and derived record configuration |
+| [bork/fs](docs/std/fs.md) | Scoped files, directories and filesystem operations |
+| [bork/http](docs/std/http.md) | Scoped HTTP clients, routes, TLS and server shutdown |
+| [bork/json](docs/std/json.md) | Dynamic JSON, pretty printing and JSON Lines |
+| [bork/log](docs/std/log.md) | Structured logging through Go slog |
+| [bork/math](docs/std/math.md) | Float math, exact integers, rationals and Decimal money |
+| [bork/net](docs/std/net.md) | Scoped TCP and UDP sockets |
+| [bork/process](docs/std/process.md) | Argv processes, captured output and scope cancellation |
+| [bork/rand](docs/std/rand.md) | Random draws and immutable seeded generators |
+| [bork/sql](docs/std/sql.md) | Scoped SQLite/Postgres connections and transactions |
+| [bork/time](docs/std/time.md) | Instants, durations and injectable clocks |
+| [bork/uuid](docs/std/uuid.md) | Canonical UUIDs, generation and JSON string codecs |
 
 ## License
 
 [MIT](LICENSE)
-
-HTTP servers accept method/path routes, middleware functions, typed body/query/path decoding, TLS, static files and forms. Server body limits are configurable (16 MiB by default). Scope cleanup drains active requests, bounded by `cleanupTimeout` or a per-server timeout. See [http_routes](examples/http_routes/main.bork).
-
-Import `bork/compress` for gzip Bytes codecs and streaming transfers between
-`bork/fs.File` handles. `bork/archive` reads and writes ZIP/TAR file and directory
-members, with Bytes codecs and file iteration/writing. Readers default to a
-64 MiB cumulative decompression limit and reject unsafe archive names and links;
-errors are `IoError` values. See [examples/compress_archive](examples/compress_archive/main.bork).
-
-`bork/json` queries dynamic JSON values, pretty-prints them, and streams JSON Lines through scope-owned readers and writers. See [json_lines](examples/json_lines/main.bork).

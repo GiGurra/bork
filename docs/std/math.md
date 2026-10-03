@@ -93,7 +93,7 @@ and numeric `Ord` instances (`use math.OrdBigInt`, `use math.OrdBigRat`). Their
 operations allocate fresh Go big numbers rather than changing their inputs.
 Canonical strings cross the bork boundary; arithmetic parses them into
 `math/big` values and formats the result. This favors immutable value semantics
-over arithmetic throughput: the [benchmark fixture](../testdata/benchmarks/math/README.md)
+over arithmetic throughput: the [benchmark fixture](../../testdata/benchmarks/math/README.md)
 measures the parsing, formatting and allocation overhead.
 
 ## JSON
@@ -105,4 +105,35 @@ consumers that would otherwise parse a JSON number as a binary float. Decimal
 encoding preserves scale; decoding invokes the same checked parsers. JSON number
 values and malformed strings return `DecodeError`.
 
-See [examples/math](../examples/math/main.bork) for invoice arithmetic.
+See [examples/math](../../examples/math/main.bork) for invoice arithmetic.
+
+## Package summary
+
+- **Math (implemented):** `bork/math` has pure IEEE float functions and constants,
+  immutable arbitrary-size `BigInt` and reduced `BigRat`, and fixed-point `Decimal`
+  using `math/big.Int` coefficients. Private variants prevent forged values.
+  Decimal preserves scale: **`1.0 != 1.00` with `==`**, including as map keys;
+  `SameValue` and `Compare` compare numeric amounts. Division and rescaling require
+  explicit scale and rounding (`TowardZero`, `AwayFromZero`, `Floor`, `Ceiling`,
+  `HalfEven`, `HalfAwayFromZero`); scales are checked in 0..10000. Exact arithmetic
+  errors return unions; floats retain IEEE NaN/infinity behavior. Exact JSON codecs
+  use strings, preserving precision and Decimal scale. Canonical string storage
+  keeps mutable Go numbers inside operations, with measurable parsing/allocation
+  overhead. See [math](math.md), [examples/math](../../examples/math/main.bork), and the
+  [benchmark](../../testdata/benchmarks/math/README.md).
+
+## Math API
+
+`bork/math` supplies pure float functions, immutable `BigInt` and `BigRat`, and
+fixed-point `Decimal` with explicit output scale and rounding. Their private
+variants prevent forged representations. Decimal equality includes scale:
+`1.0 != 1.00`; use `SameValue` or `Compare` for numeric comparison. No new syntax.
+See [exact arithmetic and money](math.md) and [examples/math](../../examples/math/main.bork).
+
+## Examples
+
+`bork/math` provides float functions, arbitrary integers and rationals, and exact
+fixed-point Decimal arithmetic for money with explicit rounding. **Decimal `==`
+includes scale (`1.0 != 1.00`); use `SameValue` for numeric equality.** Exact values
+have private representations and JSON string codecs. See [math](math.md)
+and the [invoice example](../../examples/math/main.bork).
