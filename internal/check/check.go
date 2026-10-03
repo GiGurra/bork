@@ -310,6 +310,8 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	}
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
 	c.declarePackages(files, root)
+	c.goOpaque = map[string]Type{}
+	c.goTypes = loadGoTypes(files, goTypes)
 	// Pass 1: declare types, then resolve their bodies, so types can
 	// refer to each other regardless of declaration order.
 	for _, f := range files {
@@ -351,11 +353,23 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	}
 	// Where clauses refer to predicates, so they are resolved once all
 	// functions are declared.
+	for _, f := range files {
+		c.inFile(f)
+		for _, fd := range f.Funcs {
+			if fn := c.info.FuncOf[fd]; fn != nil && fd.IsPred {
+				for i, pt := range fn.Params {
+					if containsOpaque(pt, map[Type]bool{}) {
+						c.bindErr(fd.Params[i].Pos, "predicate %s takes %s, which holds a Go value that can change, so its facts could go stale", fd.Name, pt)
+					}
+				}
+			}
+		}
+	}
 	c.resolveConstraints(files)
 	c.instanceConstraints()
 	c.resolveDerived()
 	c.checkRules(files)
-	c.checkBindings(files, goTypes)
+	c.checkBindings(files, c.goTypes)
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -479,6 +493,8 @@ type checker struct {
 	// constraints were made from (see unappliedWheres).
 	appliedWhere map[*syntax.TypeExpr]bool
 
+	goTypes  GoTypes
+	goOpaque map[string]Type
 	// have holds the facts known of the value an instance is looked up
 	// for (a field's where clause), which constrained instances need.
 	have []*Constraint

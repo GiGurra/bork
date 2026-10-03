@@ -243,10 +243,30 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 	case p.at(LBrace):
 		td.Kind = RecordType
 		td.Fields = p.fieldDecls()
-	case p.at(TIdent) && p.tok().Text == "resource" && (p.peekKind() == Semi || p.peekKind() == EOF):
+	case p.at(TIdent) && p.tok().Text == "go" && p.peekKind() == TString:
+		td.Kind = GoType
+		p.next()
+		n := p.expect(TString, "(Go type name)")
+		name, err := strconv.Unquote(n.Text)
+		if err != nil {
+			p.errorf(n.Pos, "invalid Go type name: %v", err)
+			panic(bailout{})
+		}
+		td.GoName = &GoBind{Pos: n.Pos, Name: name}
+	case p.at(TIdent) && p.tok().Text == "resource" && (p.peekKind() == Semi || p.peekKind() == EOF || p.peekKind() == TIdent):
 		// `resource` is a keyword only here.
 		td.Kind = ResourceType
 		p.next()
+		if p.at(TIdent) && p.tok().Text == "go" {
+			p.next()
+			n := p.expect(TString, "(Go resource type name)")
+			name, err := strconv.Unquote(n.Text)
+			if err != nil {
+				p.errorf(n.Pos, "invalid Go type name: %v", err)
+				panic(bailout{})
+			}
+			td.GoName = &GoBind{Pos: n.Pos, Name: name}
+		}
 	default:
 		td.Kind = AliasType
 		td.Alias = p.typeExpr()

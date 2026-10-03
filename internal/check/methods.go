@@ -33,7 +33,7 @@ func methodKey(t Type) (string, bool) {
 		return "Map", true
 	case *Record, *Sealed:
 		return fmt.Sprintf("%p", genericBaseOrSelf(t)), true
-	case *Resource:
+	case *Opaque, *Resource:
 		return fmt.Sprintf("%p", t), true
 	case *Basic:
 		if isValue(t) && t != Scope {

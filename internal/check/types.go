@@ -3,6 +3,7 @@ package check
 
 import (
 	"fmt"
+	"go/types"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/syntax"
@@ -124,7 +125,28 @@ func alwaysFits(from, to Type) bool {
 // Resource is a resource type (`type File = resource`): a handle to
 // something outside the program that a scope closes. Its values are
 // made by `unsafe go` functions, which register the finalizer.
+type Opaque struct {
+	Name   string
+	Decl   *syntax.TypeDecl
+	Pkg    *Package
+	GoType types.Type
+}
+
+func (o *Opaque) String() string { return TypeText(o, nil) }
+
+// GoTypeOf is the underlying Go type of an opaque value or Go resource.
+func GoTypeOf(t Type) types.Type {
+	switch t := t.(type) {
+	case *Opaque:
+		return t.GoType
+	case *Resource:
+		return t.GoType
+	}
+	return nil
+}
+
 type Resource struct {
+	GoType  types.Type
 	Name    string
 	Decl    *syntax.TypeDecl
 	Prelude bool
@@ -226,6 +248,8 @@ func TypeText(t Type, from *Package) string {
 		return named(t.Name, t.Pkg, t.Args)
 	case *Resource:
 		return named(t.Name, t.Pkg, nil)
+	case *Opaque:
+		return named(t.Name, t.Pkg, nil)
 	case *List:
 		return "List[" + innerText(t.Elem, from) + "]"
 	case *Map:
@@ -306,6 +330,8 @@ func argsKey(args []Type) string {
 
 func typeKey(t Type) string {
 	switch t := t.(type) {
+	case *Opaque, *Resource:
+		return fmt.Sprintf("%p", t)
 	case *TypeParam:
 		return fmt.Sprintf("%s#%p", t.Name, t)
 	case *List:
@@ -747,7 +773,7 @@ func comparableIn(t Type, seen map[Type]bool) bool {
 			}
 		}
 		return false
-	case *FuncType, *Resource:
+	case *FuncType, *Resource, *Opaque:
 		return false
 	case *Record:
 		for _, f := range t.Fields {

@@ -36,16 +36,23 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	var args []string
 	params := b.Sig.Params()
 	for i := range fd.Params {
-		pname := "_a" + strconv.Itoa(i)
-		sig.Type.Params.List[i].Names[0].Name = pname
-		gt := params.At(i).Type()
-		arg := w.toGo(pname, fn.Params[i], gt)
+		sig.Type.Params.List[i].Names[0].Name = "_a" + strconv.Itoa(i)
+	}
+	for i, pi := range b.ParamIndices {
+		pname := "_a" + strconv.Itoa(pi)
+		arg := w.toGo(pname, fn.Params[pi], params.At(i).Type())
 		if b.Sig.Variadic() && i == params.Len()-1 {
 			arg += "..."
 		}
 		args = append(args, arg)
 	}
-	call := g.goImport(b.Path) + "." + b.Name + "(" + strings.Join(args, ", ") + ")"
+	var target string
+	if b.Receiver != nil {
+		target = "(" + w.goType(b.Receiver) + ")." + b.Name[strings.Index(b.Name, ").")+2:]
+	} else {
+		target = g.goImport(b.Path) + "." + b.Name
+	}
+	call := target + "(" + strings.Join(args, ", ") + ")"
 	switch b.Shape {
 	case check.GoNoResult:
 		w.line(call)
@@ -60,7 +67,12 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		w.line("_r, _err := " + call)
 		w.line("if _err != nil { return _bindGoError(_err) }")
 		rt := b.Sig.Results().At(0).Type()
-		if p, ok := rt.Underlying().(*types.Pointer); ok && !check.IsOption(b.Value) {
+		if check.GoTypeOf(b.Value) != nil && !check.IsOption(b.Value) {
+			if goNillable(rt) {
+				w.line(`if _r == nil { return _bindGoError(nil) }`)
+			}
+			w.line("return " + w.fromGo("_r", rt, b.Value, `"result"`))
+		} else if p, ok := rt.Underlying().(*types.Pointer); ok && !check.IsOption(b.Value) {
 			// A nil result without an error is the Go function's bug.
 			w.line(`if _r == nil { return _bindGoError(nil) }`)
 			w.line("return " + w.fromGo("*_r", p.Elem(), b.Value, `"result"`))
@@ -121,6 +133,23 @@ func (w *bindWriter) goType(t types.Type) string {
 // to Go never fails (the checker allows only lossless conversions), and
 // always copies, so Go code cannot change a bork value.
 func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
+	if check.GoTypeOf(t) != nil {
+		w.g.usesOpaque = true
+		return "_borkGo(" + x + ")"
+	}
+	if t == check.Scope {
+		w.g.usesScopes = true
+		return "_borkScopeContext(" + x + ")"
+	}
+	if check.IsOption(t) && check.GoTypeOf(check.TypeArgs(t)[0]) != nil && goNillable(check.GoTypeOf(check.TypeArgs(t)[0])) {
+		v, e, ok := w.newTmp(), w.newTmp(), w.newTmp()
+		w.g.usesOptionHelpers = true
+		w.g.usesOpaque = true
+		w.line(fmt.Sprintf("var %s %s", v, w.goType(gt)))
+		w.line(fmt.Sprintf("if %s, %s := _borkOptionGet(%s); %s { %s = _borkGo(%s) }", e, ok, x, ok, v, e))
+		return v
+	}
+
 	switch u := gt.Underlying().(type) {
 	case *types.Basic:
 		return w.goType(gt) + "(" + x + ")"
@@ -173,6 +202,32 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 	fail := func(cond, message string) {
 		w.g.goType(w.b.GoValueError)
 		w.line(fmt.Sprintf("if %s { return _bindValueError(%s, %s) }", cond, path, message))
+	}
+	if check.GoTypeOf(t) != nil {
+		w.g.usesOpaque = true
+		if goNillable(gt) {
+			// A top-level nil paired with a nil error was checked by bindFunc.
+			if !(x == "_r" && w.b.Shape == check.GoValueError) {
+				fail(x+" == nil", `"nil"`)
+			}
+		}
+		if _, resource := t.(*check.Resource); resource {
+			v := w.newTmp()
+			w.line(v + " := " + x)
+			return fmt.Sprintf("%s{handle: %s, owner: _a%d.Own(func() { %s.Close() })}", w.g.typeText(t), v, w.b.ScopeIndex, v)
+		}
+		return w.g.typeText(t) + "{value: " + x + "}"
+	}
+	if check.IsOption(t) && check.GoTypeOf(check.TypeArgs(t)[0]) != nil && goNillable(check.GoTypeOf(check.TypeArgs(t)[0])) {
+		elem := check.TypeArgs(t)[0]
+		v := w.newTmp()
+		w.g.usesOptionHelpers = true
+		w.line(fmt.Sprintf("%s := _borkNone[%s]()", v, w.g.typeText(elem)))
+		w.line("if " + x + " != nil {")
+		// Conversion is non-fallible after the nil check.
+		w.line(fmt.Sprintf("%s = _borkSome(%s)", v, w.opaqueValue(x, elem)))
+		w.line("}")
+		return v
 	}
 	switch u := gt.Underlying().(type) {
 	case *types.Basic:
@@ -304,3 +359,21 @@ func _bindGoError(err error) (e GoError) {
 	return e
 }
 `
+
+func goNillable(t types.Type) bool {
+	switch t.Underlying().(type) {
+	case *types.Pointer, *types.Interface:
+		return true
+	}
+	return false
+}
+
+func (w *bindWriter) opaqueValue(x string, t check.Type) string {
+	w.g.usesOpaque = true
+	if _, resource := t.(*check.Resource); resource {
+		v := w.newTmp()
+		w.line(v + " := " + x)
+		return fmt.Sprintf("%s{handle: %s, owner: _a%d.Own(func() { %s.Close() })}", w.g.typeText(t), v, w.b.ScopeIndex, v)
+	}
+	return w.g.typeText(t) + "{value: " + x + "}"
+}

@@ -563,6 +563,15 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 				}
 			}
 		}
+		if fn.Decl.IsPred {
+			for i, pt := range inst.Params {
+				if i < len(args) && containsOpaque(pt, map[Type]bool{}) {
+					c.bindErr(args[i].Position(), "predicate %s cannot take %s, which holds a Go value that can change", name, pt)
+					fail()
+					return
+				}
+			}
+		}
 		for i, ta := range inst.TypeArgs {
 			if mentionsOpen(ta) && !reported {
 				c.diags.AddCode(e.Pos, "effect.open-type-argument", "%s of %s cannot be %s: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result", fn.TypeParams[i].Name, name, innerText(ta, c.pkg))

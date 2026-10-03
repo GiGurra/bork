@@ -1,0 +1,28 @@
+type Payload = go "*example.com/bindtest.Payload"
+type Duration = go "time.Duration"
+type Handle = resource go "*example.com/bindtest.Handle"
+type Unowned = go "*os.File"
+type Generic[T] = go "time.Duration"
+type Basic = go "string"
+type Composite = go "[]int"
+type Missing = go "time.Missing"
+type Hidden = go "example.com/bindtest.lower"
+type NotCloseable = resource go "*strings.Reader"
+
+fn MissingOwner(): Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
+fn TwoOwners(a: Scope, b: Scope): Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
+fn UnownedResult(name: String): Unowned | GoError unsafe go "os.Open"
+fn NoNilError(): Payload unsafe go "example.com/bindtest.NilPayload"
+fn ResultMismatch(s: String): Duration unsafe go "example.com/bindtest.NewPayload"
+fn BadReceiver(p: Payload): Int unsafe go "(example.com/bindtest.Payload).Text"
+fn MissingMethod(p: Payload): String unsafe go "(*example.com/bindtest.Payload).Missing"
+fn FieldPath(p: Payload): String unsafe go "(*example.com/bindtest.Payload).Value.Text"
+fn ContextWrong(s: Scope): Bool unsafe go "strings.Contains"
+pred stale(p: Payload) { true }
+pred generic[T](p: T) { true }
+fn Compare(p: Payload, q: Payload): Bool { p == q }
+fn CompareList(ps: List[Payload]): Bool { ps == ps }
+fn StaleFact(p: Payload where stale) {}
+fn GenericFact(p: Payload) { assert(generic(p)) }
+type Config = { payload: Payload } derive (Decode, Encode)
+fn main() {}

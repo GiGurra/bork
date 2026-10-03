@@ -355,6 +355,10 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 	if ci.Type == Invalid {
 		return
 	}
+	if cl.Prelude && (cl.Name == "Decode" || cl.Name == "Encode") && containsOpaque(ci.Type, map[Type]bool{}) {
+		c.bindErr(id.Pos, "%s cannot be defined for %s, which holds an opaque Go value", cl.Name, ci.Type)
+		return
+	}
 	if IsShow(cl) && !c.validShow(ci) {
 		return
 	}

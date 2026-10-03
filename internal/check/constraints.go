@@ -175,6 +175,10 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 		return nil
 	}
 	c.appliedWhere[t] = true
+	if len(t.Where) > 0 && containsOpaque(typ, map[Type]bool{}) {
+		c.bindErr(t.Pos, "facts cannot apply to %s, which holds a Go value that can change", typ)
+		return nil
+	}
 	var out []*Constraint
 	_, isParam := typ.(*TypeParam)
 	if t.Union == nil && len(t.Args) == 0 && !isParam {

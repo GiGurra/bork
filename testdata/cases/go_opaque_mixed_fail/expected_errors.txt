@@ -1,0 +1,1 @@
+other/other.bork:1:1: Go type *example.com/bindtest.Handle is declared both resource and non-resource: Handle at main.bork:2:1 and Handle at other/other.bork:1:1

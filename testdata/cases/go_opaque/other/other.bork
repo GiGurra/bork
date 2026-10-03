@@ -1,0 +1,2 @@
+type Payload = go "*example.com/bindtest.PayloadAlias"
+fn Identity(p: Payload): Payload { p }

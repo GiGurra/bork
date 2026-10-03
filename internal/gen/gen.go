@@ -205,6 +205,30 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	}
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)
+	for _, f := range files {
+		for _, td := range f.Types {
+			if td.GoName == nil {
+				continue
+			}
+			for _, pkg := range info.Packages {
+				if pkg.Path != f.Package {
+					continue
+				}
+				t := pkg.TypeNamed(td.Name)
+				if t == nil || check.GoTypeOf(t) == nil {
+					continue
+				}
+				canonical := g.goType(t)
+				alias := typeName(td.Name, pkg)
+				if alias.Name != canonical.(*ast.Ident).Name {
+					decls = append(decls, &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{Name: alias, Assign: 1, Type: canonical}}})
+				}
+			}
+		}
+	}
+	if g.usesOpaque {
+		goFuncs = append(goFuncs, opaqueRuntime)
+	}
 	for i := len(info.Classes) - 1; i >= 0; i-- {
 		decls = append([]ast.Decl{g.classDecl(info.Classes[i])}, decls...)
 	}
@@ -291,6 +315,7 @@ type gen struct {
 	usesDecodeSchema bool
 	usesBytes        bool
 	usesIoFailure    bool
+	usesOpaque       bool
 	usesBind         bool
 	// usesOptionHelpers is set when Go code uses _borkSome, _borkNone,
 	// or _borkOptionGet.

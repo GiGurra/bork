@@ -130,3 +130,11 @@ same context while attachment changes its cancellation source.
 for a non-nil Go error. It preserves `errors.Is` classification through wrapped
 errors. Standard packages translate these strings into their public union
 errors, supplying the path appropriate to the operation.
+
+Opaque Go declarations (`type Request = go "*net/http.Request"`) use a generated
+box. `_borkGo(value)` returns its statically typed Go value; `_borkOpaque[T](value)`
+boxes a Go value as the declared bork type `T`. These helpers share the Go value.
+An `unsafe go` body using them is responsible for keeping its promise of a non-nil
+opaque value. Generated bindings check nils themselves. Go resources use the same
+unboxing helper and keep their scope owner; generated bindings register `Close`
+with the scope and ignore its error.

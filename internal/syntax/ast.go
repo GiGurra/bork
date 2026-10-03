@@ -54,6 +54,7 @@ const (
 	SealedType                   // type Shape = sealed { Circle { radius: Int }, Empty }
 	AliasType                    // type Result = User | NotFound
 	ResourceType                 // type File = resource
+	GoType                       // type Request = go "*net/http.Request"
 )
 
 // TypeDecl is `type Name = ...`.
@@ -62,6 +63,7 @@ type TypeDecl struct {
 	Name string
 	// TypeParams lists a generic type's parameters: `type Pair[A, B]`.
 	TypeParams []*TypeParam
+	GoName     *GoBind
 	Kind       TypeKind
 	Fields     []*FieldDecl   // RecordType
 	Variants   []*VariantDecl // SealedType
