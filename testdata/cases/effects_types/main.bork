@@ -58,9 +58,11 @@ fn main() {
   println(update(counter, n => n + 1))
 
   // A function with open parameters used as a value has pure ones.
-  apply: (List[Int], (Int) uses nothing => Int) => List[Int] = (xs, f) => xs.map(f)
+  apply: (List[Int], (Int) uses nothing => Int) => List[Int] = transform
   println(apply([1, 2], double))
 }
+
+fn transform[A, B](xs: List[A], f: (A) => B): List[B] { xs.map(f) }
 
 fn pick[T](a: T, b: T): T { b }
 
