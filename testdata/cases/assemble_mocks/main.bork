@@ -26,7 +26,7 @@ test "assembly dispatches a shared provider through its native mock once" {
         assertEqual(value.left.database.name, "fake production")
         assertEqual(value.right.database.name, "fake production")
       }
-      failure: Failed => assertEqual(failure.reason, "unexpected failure")
+      failure: Failed => panic(s"unexpected failure: ${failure.reason}")
     }
     assertEqual(calls.count(), 1)
   }
