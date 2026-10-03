@@ -1,0 +1,30 @@
+main.bork:17:7: c may be released: it belongs to owned scope b, which was closed at line 16
+main.bork:18:26: t may be released: it belongs to owned scope b, which was closed at line 16
+main.bork:19:14: owned scope b was already closed at line 16
+main.bork:25:3: owned scope b is closed on only some paths of this if (line 26); close or pass it on in every branch that goes on
+main.bork:29:1: owned scope c is still open at the end of its block: close it with closeScope(c), pass it on, or return it
+main.bork:33:13: owned scope b cannot be closed or passed on in a condition that may not run
+main.bork:55:24: a lambda cannot close or pass on owned scope b; it can borrow b.scope
+main.bork:56:7: owned scope b cannot be bound again: there is one owner; use b itself
+main.bork:57:8: a value of type List[OwnedScope] cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
+main.bork:58:3: an owned scope cannot be dropped: bind it and close it with closeScope, or pass it on
+main.bork:59:11: owned scope b can only be closed (closeScope(b)), passed to a parameter of type OwnedScope, or returned; b.scope borrows its Scope
+main.bork:69:7: g may be released: it belongs to owned scope b, which was closed at line 68
+main.bork:77:19: the lambda may not live as long as scope b.scope (it depends on owned scope a), but launch may keep it until b.scope closes; to give a task of b.scope a resource of a shorter scope, attach it first: r2 = attach(r, b.scope)
+main.bork:88:15: the lambda may not live as long as scope app (it depends on owned scope b), but launch may keep it until app closes; to give a task of app a resource of a shorter scope, attach it first: r2 = attach(r, app)
+main.bork:90:15: the lambda may not live as long as scope app (it depends on owned scope b), but launch may keep it until app closes; to give a task of app a resource of a shorter scope, attach it first: r2 = attach(r, app)
+main.bork:102:7: c may be released: it belongs to owned scope b, which was closed at line 101
+main.bork:107:16: this value belongs to owned scope b, which withOwner takes and may close while it still uses this; declare its parameter in the owner's (c: ... in b)
+main.bork:110:18: this value may not live as long as d (it depends on owned scope e), but withOwnerIn declares parameter c in b
+main.bork:120:3: c may be released: it belongs to owned scope b, which was closed at line 119
+main.bork:124:3: function returnsLive cannot return this value: it belongs to owned scope b, which is closed when returnsLive returns
+main.bork:125:1: owned scope b is still open at the end of its block: close it with closeScope(b), pass it on, or return it
+main.bork:131:12: function leavesParent cannot return this value: it belongs to scope s, which ends on line 132
+main.bork:140:14: c may be released: it belongs to owned scope b, which was closed at line 139
+main.bork:147:7: c may be released: it belongs to owned scope b, which was closed at line 146
+main.bork:157:15: f.scope may not live as long as e (it depends on owned scope f), but borrowIn declares parameter s in b
+main.bork:164:3: c may be released: it belongs to owned scope b, which was closed at line 163
+main.bork:169:19: the lambda may not live as long as scope b.scope (it depends on parameter pool), but launch may keep it until b.scope closes; to give a task of b.scope a resource of a shorter scope, attach it first: r2 = attach(r, b.scope)
+main.bork:180:7: a value of type Holder cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
+main.bork:181:7: a value of type (OwnedScope) uses state => Bool cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
+main.bork:182:7: an owned scope cannot be the value of an if, a match or a scope block: close, pass on or return it in each branch instead

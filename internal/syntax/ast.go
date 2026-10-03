@@ -206,6 +206,10 @@ type Param struct {
 	// Default is the value of a function parameter that a call may
 	// leave out (`attrs: Map[String, Int] = {:}`), or nil.
 	Default Expr
+	// In names the parameter (a Scope or an OwnedScope) whose scope this
+	// one belongs to, in `conn: Conn in prev`; "" if none.
+	In    string
+	InPos diag.Pos
 }
 
 // TypeExpr is a written type: a name with optional type arguments

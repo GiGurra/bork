@@ -842,7 +842,7 @@ Outside resources (files, sockets, database connections, transactions, locks) ar
 
 ### Decided (v0.1)
 
-- **Resources belong to scopes.** Opening a resource requires a scope. A resource can be attached to one or more scopes, and it is **closed when the last of them closes**. There is no manual `close`, so there is neither use-after-close nor forgot-to-close.
+- **Resources belong to scopes.** Opening a resource requires a scope. A resource can be attached to one or more scopes, and it is **closed when the last of them closes**. There is no manual `close`, so there is neither use-after-close nor forgot-to-close. (A scope can have an explicit end, as an [owned child scope](#partially-overlapping-scopes-owned-child-scopes), which is checked the same way.)
 - **Scopes are blocks.** `scope s { ... }` opens a scope, which closes when the block ends. Finalizers run in reverse order of acquisition (LIFO), like Go's `defer`.
 - **Scope values can be passed down, never escape.** A scope can be passed as a function argument, and follows the same lifetime rules as resources: it can be returned, stored in a record, or captured by a lambda only where the result cannot outlive the scope.
 - **Using a resource requires proof of an open scope managing it.** Every access to a resource is a proof obligation: the compiler must be able to prove, locally, that the resource is attached to a scope that is still open at that point. It is resolved backwards like any other fact. Only scopes visible locally count. If some other scope elsewhere keeps the resource alive at runtime, that does not help the proof.
@@ -921,12 +921,11 @@ scope maint {
 - **Channels (implemented):** `channel[T](s, capacity)` makes a channel owned by scope `s`, which closes it when it closes (so, like a task, a channel cannot leave its scope). `send(ch, x)` gives `Unit | Cancelled | Closed`, `receive(ch)` gives `T | Cancelled | Closed`, `closeChannel(ch)` closes it (buffered values can still be received), and `received(ch)` collects values until it closes. Operations stop with `Cancelled` when the channel's scope is cancelled; sending to a closed channel gives `Closed` rather than panicking.
 - **Cancellation through scopes (implemented):** a scope carries what Go's `context.Context` does. `cancel(s)` cancels it, `cancelAfter(s, ms)` sets a deadline, a task that panics cancels its scope (so its siblings stop), the scope's end cancels it, and a scope nested in another (in the same function) is cancelled with it. Cancellation is cooperative: tasks see it at cancellation points, `delay(s, ms)` and `checkpoint(s)` (both `Unit | Cancelled`, so `checkpoint(s)?` stops a loop), and channel operations. A cancelled scope still waits for its tasks. **The scope does not decide how its tasks stop:** its end is the same signal whether the block finished, returned early, or panicked, and each task chooses what to do with it: stop at once (a worker waiting in `delay` or on a channel), clean up first, or finish its work (code that never checks for cancellation runs to the end). Work the block needs done is awaited before the block ends. In `bork/http`, each request has a scope, cancelled when the client goes away or the server's scope closes.
 
-### Partially overlapping scopes (proposal)
+### Partially overlapping scopes: owned child scopes
 
-> **Design proposal, not implemented** (bork-u6nhjb). Keep lexical scopes as the
-> default. Use the existing enclosing-scope operations where they suffice; the
-> remaining case needs a separately checked ownership capability before new
-> syntax or runtime operations can be accepted.
+> **Implemented** (bork-u6nhjb). Lexical scopes stay the default, and the
+> enclosing-scope operations below cover most cases. Owned child scopes, with
+> an explicit start and end, cover the rest.
 
 The question is whether B can begin while A is open, then remain open after A
 ends. Distinguish keeping a resource usable from releasing its previous owner
@@ -983,85 +982,103 @@ capability visible from the source in ordinary lexical code. Task migration is
 excluded: moving a task's registration without rechecking every capture and
 changing its cancellation and failure ownership breaks structured concurrency.
 
-**Candidate for the remaining case: explicit start and end, as owned child scopes
-with checked close.** This is the explicit-start/explicit-end idea, restricted so
-that the right to end a scope cannot be confused with an ordinary borrowed scope.
-Opening would require an existing scope capability and produce an owner plus a
-borrowed `Scope` for ordinary acquisitions. The owner alone could close the
-child early; existing `Scope` parameters would remain borrowed and could not
-close a caller's scope. Names such as `openChild(parent)` and `owner.close()` are
-illustrative, not proposed grammar:
+**Owned child scopes (implemented).** The rolling case needs an explicit
+start and end, restricted so that the right to end a scope cannot be confused
+with an ordinary borrowed `Scope`, nor copied:
 
 ```
-scope app {
-  a = openChild(app)                       // owned closing capability
-  old = acquire(a.scope)?                  // borrow its Scope for acquisition
-  b = openChild(app)
-  next = acquire(b.scope)?                 // both generations are live
-  handover(old, next)?
-  a.close()                               // cancels, joins, releases old
-  continueWith(next)                       // b is still open
-  b.close()
-}                                         // fallback cleanup on any earlier exit
+fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io + state: Unit | Failed {
+  next = openScope(app)                    // opens while prev is open
+  nextConn = connect(next.scope)?          // b.scope borrows the child's Scope
+  handOver(conn, nextConn)?
+  closeScope(prev)                         // cancels, joins, releases conn
+  if (n > 1) {
+    roll(next, nextConn, app, n - 1)       // passes next on, with nextConn
+  } else {
+    closeScope(next)
+  }
+}
 ```
 
-Here `a.scope` and `b.scope` mean borrowed capabilities; only `a` and `b` may
-close their respective children. A rolling loop repeats this transition with
-checked transfer of `b` into the next iteration, which is one of the rules still
-to settle. Before accepting this candidate, settle:
-
-- **Exactly one cleanup, on every exit.** Each open child registers an unwind
-  fallback in its owning function or block, plus parent cleanup as a backstop. Explicit close cancels, joins tasks, runs
-  finalizers under the child's policies, and disarms that fallback. Early return,
-  `?`, and panic must still clean up. The compiler rejects duplicate explicit
-  close and use after close; runtime idempotence is only a backstop. A loop must
-  transfer ownership of the successor and discharge the predecessor each time,
-  with no accumulating fallback registrations.
-- **Ownership is distinct from borrowing.** The closing capability cannot be
-  copied into a record, lambda, channel or task to create a second closer.
-  Passing it to a helper or through a loop requires an explicit ownership
-  transfer contract that also transfers its unwind registration, unlike today's
-  ordinary `Scope` arguments. General owners
-  returned beyond their enclosing scope are excluded. Decide whether the
-  necessary restricted transfer rules are worth adding to an immutable language.
-- **Close invalidates every dependent alias.** Check by scope identity, including
-  resources inside records, lists, unions and closures, task handles, channel
-  handles and user-defined scoped facts. A branch that closes on only one path
-  leaves the child possibly closed at the join; subsequent uses require proof
-  it is open on every reaching path. Resource aliases explicitly attached to a
-  different open scope retain that proof; their cancellation is still governed
-  by the attachment rules above.
-- **Borrowing cannot race close.** Synchronous calls may borrow while the owner
-  is open. Child-owned tasks are joined during close before resources finalize,
-  subject to the existing timeout policies. A task of an enclosing or sibling scope must not retain
-  the child's borrowed scope or child-only values: otherwise it could use them
-  concurrently with close. For example, `spawn(b.scope, () => use(old))` followed
-  by `a.close()` must fail when `old` belongs only to `a`; attaching `old` to `b`
-  first proves the resource lifetime, but does not transfer a borrowed `a.scope`. Closing an owner captured by its own task would
-  deadlock on joining itself and must be rejected.
-- **Parents and cancellation remain explicit.** A parent's cancellation cancels
-  its owned children; cancellation alone neither releases resources nor grants
-  a proof of closure. Parent cleanup closes remaining children before releasing
-  resources they depend on. Children must not close borrowed parents. The
-  ordering for multiple overlapping children, including failure aggregation and
-  timeout behavior, needs runtime tests before adoption.
-- **Capabilities and effects are both required.** Opening requires the parent's
-  capability, not a global allocator. `uses state` alone never authorizes closing
-  someone else's scope. An explicit close changes shared cancellation and should
-  use `state`. The effects of spawned work and finalizers remain charged at
-  registration, as under [Effects in signatures](#effects-in-signatures);
-  passing an owner across functions must preserve that accounting and cannot
-  let pure code register effectful work through an untracked callback.
-
-**Recommendation.** Do not add a generic `Scope.close` or migrating `Task`
-operation. Document and use enclosing-scope acquisition and `attach` first.
-Keep checked owner capabilities as the candidate for bounded rolling lifetimes,
-with the transfer, alias and unwind rules above as acceptance conditions. This
-proposal does not decide an affine type system, new syntax, or an implementation.
-An implementation proposal must compare the worker-routine alternative and
-include success and rejection cases for branching, loops, helper calls, captured
-borrows, attachment after cancellation, panic cleanup, finalizer failures and
-close-time task cancellation.
+- **Opening and closing.** `openScope(parent)` (or `openScope(parent, policies)`)
+  opens a child of `parent`, a `Scope` the caller already has, and gives an
+  `OwnedScope`. `b.scope` borrows its `Scope`, for acquisitions and tasks.
+  `closeScope(b)` ends it as a scope block's end does: it cancels it, waits
+  for its tasks (under its own `taskTimeout`), closes its own children, runs
+  its finalizers, and raises their failures as one panic (or logs them, under
+  `logFailures()`). There is no `Scope.close`: an ordinary `Scope` remains a
+  borrowed capability, and cannot close a caller's scope.
+- **Owners are affine.** An owner is consumed exactly once on every path that
+  finishes normally: by `closeScope`, by passing it to a parameter declared
+  exactly `OwnedScope`, or by returning it (a function's whole result can be
+  `OwnedScope`). Anything else is a compile error: binding it again (`c = b`),
+  closing or passing it on in a lambda (a lambda can borrow `b.scope`, and then
+  belongs to the child),
+  holding it in a record, list, union, option, map or function type, giving it
+  as a type argument or to a function value, or to user `unsafe go`. Owners
+  are flow-checked: a use after close or hand-over is an error, an `if` or
+  `match` must consume the same owners on every branch that goes on (a
+  branch that returns or panics does not count), and a match guard or the
+  right side of `&&` or `||` cannot consume one, since it may not run. An
+  owner still open where its block (or, for a parameter, its function) ends
+  normally is an error: the end is explicit. A path that ends early (`?`,
+  `return`, a panic) closes the owners still open in the function, as a scope
+  block's end does. In Go, each owner variable defers a fallback that a
+  hand-over disarms.
+- **Close invalidates every dependent value.** The child of an owner is a
+  scope in the lifetimes: values made with `b.scope` (resources, tasks,
+  channels, records and lists holding them, lambdas using them) belong to it,
+  and are "possibly released" once `b` is closed or passed on, including after
+  a branch that did so. A resource attached to another open scope
+  (`attach(r, other)`) keeps that proof. Values of a child never leave the
+  function owning it: by the time it returns, the owner is closed or returned
+  instead.
+- **Outlives is only the parent chain.** A child is outlived by its parent,
+  and by what outlives the parent: the scopes the owner value belongs to.
+  Function parameters and enclosing scope blocks do not outlive it
+  automatically, because an owner can be returned and so outlive them. A task
+  of the child can use values of its parent; a value of a sibling or of an
+  enclosing scope block needs `attach(r, b.scope)` first. A task of an
+  enclosing scope cannot use the child's values or its borrowed scope, which
+  could close under it. A child's children must be closed before it.
+- **Belonging is declared at calls.** A parameter can say which scope its value
+  belongs to: `conn: Conn in prev`, where `prev` is a parameter of type
+  `OwnedScope` (the value belongs to its child) or `Scope` (the value belongs to
+  that scope). The caller must give a value that lives at least that long. A
+  call that takes an owner cannot also be given a value of its child, unless
+  that parameter is declared `in` the owner's: the callee could close the
+  owner and go on using the value. `prev: OwnedScope in app` says the child's
+  parent is (at least) `app`, so its tasks may use `app`'s values. For a
+  `Scope` it also lets a task of `app` use the value without `attach`
+  (`pool: Pool in app`).
+- **Cleanup ordering.** Closing a scope cancels it, waits for its own tasks,
+  closes its owned children still open (newest first), and then runs its
+  finalizers (LIFO). Children close after the tasks, because a task may own a
+  child of its scope, and before the finalizers, because the children's
+  tasks and resources may use what they release. Children that are still open
+  then are those an early exit left (when the parent block closes before the
+  owner's fallback runs) or that an orphaned task owns. Their failures join the
+  parent's: task failures, then the children's, then the finalizers', as one
+  panic.
+- **Cancellation.** A child is cancelled with its parent (its context derives
+  from the parent's); `cancel(b.scope)` cancels only the child. Cancellation
+  alone neither closes a child nor proves it closed. A child opened in a
+  cancelled parent starts cancelled.
+- **Effects.** `openScope` is pure, like a scope block; `closeScope` uses
+  `state`, as `cancel` does. The effects of tasks and finalizers are charged
+  where they are started or registered, so passing an owner on does not hide
+  any.
+- **Not done.** Moving a running task or a resource registration between
+  scopes is not offered: a task's captures, cancellation and failures stay with
+  the scope it started in. A worker routine owning each generation was the
+  alternative; it needs a hand-over protocol, and its owned resources still
+  could not leave its routine. Rolling uses recursion, so an unbounded roll
+  grows the Go stack, as any bork recursion does.
+- **Tests.** `testdata/cases/owned_scopes` (hand-over-hand rolling, early exits,
+  attach, cancellation, returned owners, parent closing children first),
+  `owned_scopes_testing` (panics in the owner and in the receiver, failures of
+  finalizers and tasks, parent aggregation, `logFailures`), and
+  `owned_scopes_fail` / `owned_scopes_type_fail` (rejections).
 
 ### Crash isolation and supervision (planned, not v0.1)
 

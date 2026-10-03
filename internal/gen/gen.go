@@ -591,12 +591,39 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	g.tmp = 0
 	g.fnResult = fn.Result
 	decl := g.signature(fd)
+	// An owned scope given to the function is closed if it ends early.
+	var drops []ast.Stmt
+	for i, t := range fn.Params {
+		if t == check.OwnedScope {
+			drops = append(drops, dropOwner(fd.Params[i].Name)...)
+		}
+	}
 	if fn.Result == check.Unit {
-		decl.Body = &ast.BlockStmt{List: g.blockInto(fn.Body, sink{})}
+		decl.Body = &ast.BlockStmt{List: append(drops, g.blockInto(fn.Body, sink{})...)}
 	} else {
-		decl.Body = &ast.BlockStmt{List: g.blockInto(fn.Body, sink{ret: true})}
+		decl.Body = &ast.BlockStmt{List: append(drops, g.blockInto(fn.Body, sink{ret: true})...)}
 	}
 	return decl
+}
+
+// dropOwner defers the fallback of the owner variable v: the owned
+// scope it still holds when the function ends (by a return, ?, or a
+// panic) is closed then. Passing the owner on disarms it, by clearing
+// v, so b.scope reads a copy that stays set (borrowedName), which
+// lambdas can capture.
+func dropOwner(v string) []ast.Stmt {
+	drop := &ast.CallExpr{Fun: ast.NewIdent("_dropScope"), Args: []ast.Expr{name(v)}}
+	return []ast.Stmt{
+		define(borrowedName(v), name(v)),
+		assign(ast.NewIdent("_"), borrowedName(v)),
+		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}}, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: drop}}}}}},
+	}
+}
+
+// borrowedName is the Go variable holding the scope of the owner
+// variable v, for b.scope.
+func borrowedName(v string) *ast.Ident {
+	return ast.NewIdent("_scopeOf_" + name(v).Name)
 }
 
 // value lowers an expression whose result is needed. It returns the
@@ -622,6 +649,11 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		return nil, g.instance(e.Inst)
 	case *check.VarRef:
+		if e.Type() == check.OwnedScope {
+			// An owner is only used to pass it on, which disarms the
+			// fallback of its variable.
+			return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(e.Var.Name)}}}
+		}
 		return nil, name(e.Var.Name)
 	case *check.Lambda:
 		return nil, g.lambda(e)
@@ -855,6 +887,12 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	case *check.Call:
 		if e.Embedded != nil {
 			return nil, g.embedCall(e)
+		}
+		if e.Func.Prelude && e.Func.Decl.Name == "scopeOf" {
+			// b.scope borrows the owner's scope, leaving b armed.
+			if v, ok := e.Args[0].(*check.VarRef); ok {
+				return nil, borrowedName(v.Var.Name)
+			}
 		}
 		stmts, xs := g.values(e.EvaluationArgs())
 		if xs == nil {
@@ -1140,6 +1178,9 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 			}
 			if s.Var.Unused {
 				out = append(out, assign(ast.NewIdent("_"), name(s.Var.Name)))
+			}
+			if bt == check.OwnedScope {
+				out = append(out, dropOwner(s.Var.Name)...)
 			}
 		case *check.ExprStmt:
 			out = append(out, g.effect(s.X)...)

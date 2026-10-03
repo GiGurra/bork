@@ -215,6 +215,9 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		if v := l.info.selectorVariants[x]; v != nil {
 			return &VariantValue{expr: at, Variant: v, Text: writtenText(x)}
 		}
+		if fn := l.info.ownerScopes[x]; fn != nil {
+			return &Call{expr: at, Func: fn, Inst: &Instance{Func: fn, Params: fn.Params, Result: fn.Result}, Args: []Expr{l.expr(x.X)}, ReceiverCall: true}
+		}
 		out := &Select{expr: at, X: l.expr(x.X), Name: x.Name}
 		if rec, ok := out.X.Type().(*Record); ok {
 			out.Field = rec.Field(x.Name)

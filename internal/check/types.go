@@ -47,6 +47,9 @@ var (
 	// Scope is the type of a scope (`scope s { ... }`): resources are
 	// opened in a scope, and closed when it closes.
 	Scope Type = &Basic{name: "Scope"}
+	// OwnedScope is the type of an owned child scope (openScope): the
+	// right to end it, which is passed on, never copied (see owners.go).
+	OwnedScope Type = &Basic{name: "OwnedScope"}
 	// Invalid marks an expression that already failed to type-check, to
 	// avoid cascades of follow-up errors.
 	Invalid Type = &Basic{name: "invalid"}
@@ -67,12 +70,13 @@ var (
 var NumericTypes = []Type{Int8, Int16, Int32, Int, Uint8, Uint16, Uint32, Uint64, Float32, Float}
 
 var basicTypes = map[string]Type{
-	"Int":    Int,
-	"Bool":   Bool,
-	"String": String,
-	"Bytes":  Bytes,
-	"Unit":   Unit,
-	"Scope":  Scope,
+	"Int":        Int,
+	"Bool":       Bool,
+	"String":     String,
+	"Bytes":      Bytes,
+	"Unit":       Unit,
+	"Scope":      Scope,
+	"OwnedScope": OwnedScope,
 
 	"Int8": Int8, "Int16": Int16, "Int32": Int32, "Int64": Int,
 	"Uint8": Uint8, "Uint16": Uint16, "Uint32": Uint32, "Uint64": Uint64,
@@ -781,7 +785,7 @@ func comparable(t Type) bool {
 }
 
 func comparableIn(t Type, seen map[Type]bool) bool {
-	if t == Scope {
+	if t == Scope || t == OwnedScope {
 		return false
 	}
 	if seen[t] {

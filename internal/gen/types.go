@@ -56,7 +56,7 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		g.usesBytes = true
 		return ast.NewIdent("_Bytes")
 	}
-	if t == check.Scope {
+	if t == check.Scope || t == check.OwnedScope {
 		g.usesScopes = true
 		return &ast.StarExpr{X: ast.NewIdent("_Scope")}
 	}
@@ -612,6 +612,10 @@ type _Scope struct {
 	logFailures bool
 	closed      bool
 	name    string
+	// parent is the scope an owned child scope was opened in (openScope),
+	// and children the owned child scopes still open in this one.
+	parent   *_Scope
+	children []*_Scope
 }
 
 // Root scopes inherit process-signal cancellation; nested scopes inherit
@@ -640,6 +644,35 @@ var (
 	_errCancelled  = errors.New("cancelled")
 	_errScopeEnded = errors.New("the scope ended")
 )
+
+// _openScope opens an owned child scope of parent: its owner closes it
+// (closeScope), or, if the owner's function ends early, the owner's
+// fallback does (_dropScope). It is cancelled with parent, and parent
+// closes it, if it is still open when parent closes.
+func _openScope(parent *_Scope) *_Scope {
+	s := _newScope(parent, "(an owned scope)")
+	s.parent = parent
+	parent.mu.Lock()
+	parent.children = append(parent.children, s)
+	parent.mu.Unlock()
+	return s
+}
+
+// _takeScope moves an owned scope out of the owner's variable *p, which
+// then no longer closes it when its function ends.
+func _takeScope(p **_Scope) *_Scope {
+	s := *p
+	*p = nil
+	return s
+}
+
+// _dropScope is the fallback of an owner's variable, deferred where it
+// is bound: it closes the owned scope s, unless it was passed on (nil).
+func _dropScope(s *_Scope) {
+	if s != nil {
+		s.close()
+	}
+}
 
 // _cancelReason says why a scope was cancelled, or "" if it was not.
 func (s *_Scope) _cancelReason() string {
@@ -759,14 +792,17 @@ func (t *_task) Await() any {
 
 // close ends the scope, however its block ended: it cancels the scope,
 // so its tasks learn that it is ending (how they stop, quickly or with
-// cleanup of their own, is up to them), waits for them, and then runs
-// the finalizers. A task that panicked without being awaited panics the
-// scope's routine. A scope is closed once: when its block ends, or by
-// abort when the block panics.
+// cleanup of their own, is up to them), waits for them, closes its owned
+// child scopes that are still open, and then runs the finalizers. A
+// task that panicked without being awaited panics the scope's routine.
+// A scope is closed once: when its block ends, or by abort when the
+// block panics (an owned scope: by closeScope, its owner's fallback, or
+// its parent).
 //
-// Every finalizer runs, even when others fail. Failures (finalizers that
-// panicked, and tasks that panicked without being awaited) are raised as
-// one panic once the scope is closed.
+// Every finalizer runs, even when others fail. Failures (tasks that
+// panicked without being awaited, children that failed to close, and
+// finalizers that panicked) are raised as one panic once the scope is
+// closed.
 func (s *_Scope) close() {
 	s.mu.Lock()
 	if s.closed {
@@ -775,8 +811,12 @@ func (s *_Scope) close() {
 	}
 	s.closed = true
 	s.mu.Unlock()
+	defer s.detach()
 	s.cancel(_errScopeEnded)
 	s.waitForTasks()
+	// Children close after the tasks, which may own some of them, and
+	// before the finalizers, which release what they may use.
+	childFailures := s.closeChildren()
 	var failures []any
 	for {
 		s.mu.Lock()
@@ -801,7 +841,7 @@ func (s *_Scope) close() {
 			taskFailures = append(taskFailures, t.failure)
 		}
 	}
-	failures = append(taskFailures, failures...)
+	failures = append(append(taskFailures, childFailures...), failures...)
 	if s.logFailures {
 		for _, f := range failures {
 			slog.Error("bork: a failure while the scope closed", "scope", s.name, "failure", fmt.Sprint(f))
@@ -819,6 +859,45 @@ func (s *_Scope) close() {
 		}
 		panic(msg)
 	}
+}
+
+// closeChildren closes the owned child scopes still open, newest first,
+// and gives what they failed with.
+func (s *_Scope) closeChildren() (failures []any) {
+	for {
+		s.mu.Lock()
+		if len(s.children) == 0 {
+			s.mu.Unlock()
+			return failures
+		}
+		c := s.children[len(s.children)-1]
+		s.children = s.children[:len(s.children)-1]
+		s.mu.Unlock()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					failures = append(failures, r)
+				}
+			}()
+			c.close()
+		}()
+	}
+}
+
+// detach removes a closed owned scope from its parent's children.
+func (s *_Scope) detach() {
+	p := s.parent
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	for i, c := range p.children {
+		if c == s {
+			p.children = append(p.children[:i:i], p.children[i+1:]...)
+			break
+		}
+	}
+	p.mu.Unlock()
 }
 
 // finalize runs one finalizer under the scope's policy, and gives what

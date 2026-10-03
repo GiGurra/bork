@@ -1,0 +1,25 @@
+type Conn = resource
+
+fn connect(s: Scope): Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
+
+fn inList(bs: List[OwnedScope]) {}
+fn inUnion(app: Scope): OwnedScope | Conn {
+  connect(app)
+}
+fn badIn(x: Int, c: Conn in x) {}
+fn selfIn(c: Conn in c) {}
+fn unknownIn(c: Conn in nowhere) {}
+fn goOwner(b: OwnedScope) unsafe go {
+  _ = b
+}
+
+fn dropped(app: Scope) uses state {
+  b = openScope(app)
+  openScope(app)
+  _ = b.close
+  closeScope(b)
+}
+
+fn main() {}

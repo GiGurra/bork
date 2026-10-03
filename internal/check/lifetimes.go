@@ -2,6 +2,8 @@ package check
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -26,13 +28,18 @@ import (
 // bork values are immutable and there is nothing global to store them
 // in, so these are the only ways for a value to escape its scope.
 func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
+	info.Lifetimes = map[Expr][]string{}
+	info.VarLifetimes = map[*Var][]string{}
 	l := &lifeChecker{
-		info:    info,
-		diags:   diags,
-		env:     map[*Var]lifetime{},
-		frame:   map[any]any{},
-		parent:  map[any]any{},
-		carries: map[Type]bool{},
+		info:     info,
+		diags:    diags,
+		env:      map[*Var]lifetime{},
+		frame:    map[any]any{},
+		parent:   map[any]any{},
+		carries:  map[Type]bool{},
+		children: map[*Var]*child{},
+		gone:     map[*Var]goneAt{},
+		bound:    map[*Var]int{},
 	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -47,9 +54,9 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 }
 
 // A lifetime is a set of scopes: a value is usable while all of them
-// are open. Each scope is a *ScopeBlock, or a *Var of a parameter (the
-// scope of a function's or lambda's caller). The empty lifetime is
-// forever.
+// are open. Each scope is a *ScopeBlock, a *Var of a parameter (the
+// scope of a function's or lambda's caller), or a *child: the scope an
+// owner variable owns (see owners.go). The empty lifetime is forever.
 type lifetime []any
 
 func (a lifetime) union(b lifetime) lifetime {
@@ -90,6 +97,15 @@ type lifeChecker struct {
 	// lambda being checked, which become the lambda's lifetime.
 	captures []*lifetime
 	carries  map[Type]bool
+	// children holds the child scope of each owner variable, gone the
+	// owners already closed or passed on, and bound the order in which
+	// owner variables were bound (to tell, at the end of a branch, those
+	// bound before it). owners lists the owner variables bound in each
+	// block being checked.
+	children map[*Var]*child
+	gone     map[*Var]goneAt
+	bound    map[*Var]int
+	owners   [][]*Var
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -103,8 +119,30 @@ func (l *lifeChecker) function(fn *Func) {
 	for _, p := range fn.ParamVars {
 		l.frame[p] = fn
 		l.env[p] = lifetime{p}
+		if p.Type == OwnedScope {
+			l.bind(p)
+		}
 	}
-	l.result(fn.Body, l.expr(fn.Body), l.what())
+	// A parameter declared in another (`conn: Conn in prev`) belongs to
+	// its scope: an owner's child, or a Scope parameter's.
+	for i, p := range fn.ParamVars {
+		if i < len(fn.ParamIn) && fn.ParamIn[i] >= 0 {
+			l.env[p] = l.scopeOfVar(fn.ParamVars[fn.ParamIn[i]])
+		}
+	}
+	for _, p := range fn.ParamVars {
+		if l.carriesLife(p.Type) {
+			l.info.VarLifetimes[p] = l.lifeText(l.env[p])
+		}
+	}
+	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
+	if fn.Body.Type() != Never {
+		for _, p := range fn.ParamVars {
+			if p.Type == OwnedScope {
+				l.mustBeGone(p, fn.Body.End)
+			}
+		}
+	}
 }
 
 // result checks that a function's or lambda's result does not belong to
@@ -113,6 +151,12 @@ func (l *lifeChecker) result(x Expr, life lifetime, what string) {
 	for _, s := range life {
 		if s, ok := s.(*ScopeBlock); ok && l.within(s, l.cur) {
 			l.errorf(valuePos(x), "%s cannot return this value: it belongs to scope %s, which ends on line %d", what, s.Var.Name, s.Body.End.Line)
+			return
+		}
+		// The child of an owner here is closed by the time it returns,
+		// unless the owner is returned instead.
+		if c, ok := s.(*child); ok && l.within(c.owner, l.cur) {
+			l.errorf(valuePos(x), "%s cannot return this value: it belongs to owned scope %s, which is closed when %s returns", what, c.owner.Name, strings.TrimPrefix(what, "function "))
 			return
 		}
 	}
@@ -132,22 +176,35 @@ func (l *lifeChecker) within(x, f any) bool {
 // use checks that a value about to be used has not been released, and
 // returns its lifetime (nil if it was, to avoid follow-up errors).
 func (l *lifeChecker) use(x Expr, life lifetime) lifetime {
-	if s := l.closed(life); s != nil {
+	switch s := l.closed(life).(type) {
+	case *ScopeBlock:
 		if _, ok := x.(*ScopeBlock); ok {
 			l.errorf(x.Pos(), "the value of this scope block belongs to scope %s, which has ended; use it inside the block", s.Var.Name)
 		} else {
 			l.errorf(x.Pos(), "%s may be released: it belongs to scope %s, which ended on line %d", describe(x), s.Var.Name, s.Body.End.Line)
 		}
 		return nil
+	case *child:
+		g := l.gone[s.owner]
+		l.errorf(x.Pos(), "%s may be released: it belongs to owned scope %s, which was %s at line %d", describe(x), s.owner.Name, g.how, g.pos.Line)
+		return nil
 	}
 	return life
 }
 
-// closed is a scope of life that has ended, or nil.
-func (l *lifeChecker) closed(life lifetime) *ScopeBlock {
+// closed is a scope of life that has ended (a *ScopeBlock or a *child),
+// or nil.
+func (l *lifeChecker) closed(life lifetime) any {
 	for _, s := range life {
-		if s, ok := s.(*ScopeBlock); ok && !l.isOpen(s) {
-			return s
+		switch s := s.(type) {
+		case *ScopeBlock:
+			if !l.isOpen(s) {
+				return s
+			}
+		case *child:
+			if _, ok := l.gone[s.owner]; ok {
+				return s
+			}
 		}
 	}
 	return nil
@@ -172,6 +229,10 @@ func describe(x Expr) string {
 		return "the lambda"
 	case *ScopeBlock:
 		return "the value of scope " + x.Var.Name
+	case *Call:
+		if n := scopeName(x); n != "(a scope)" {
+			return n
+		}
 	}
 	return "this value"
 }
@@ -210,6 +271,8 @@ func (l *lifeChecker) scopeText(x any) string {
 		return "scope " + x.Var.Name
 	case *Var:
 		return "parameter " + x.Name
+	case *child:
+		return "owned scope " + x.owner.Name
 	}
 	return "?"
 }
@@ -217,6 +280,16 @@ func (l *lifeChecker) scopeText(x any) string {
 func (l *lifeChecker) scopeOutlives(x, y any) bool {
 	if x == y {
 		return true
+	}
+	// A child scope is outlived by its parent, and what outlives that:
+	// the scopes its owner belongs to.
+	if c, ok := y.(*child); ok {
+		for _, z := range l.env[c.owner] {
+			if l.scopeOutlives(x, z) {
+				return true
+			}
+		}
+		return false
 	}
 	switch x := x.(type) {
 	case *Var:
@@ -257,7 +330,7 @@ func (l *lifeChecker) carriesLifeSeen(t Type, seen map[Type]bool) bool {
 	case *Resource, *Opaque, *FuncType, *TypeParam:
 		v = true
 	case *Basic:
-		v = t == Scope
+		v = t == Scope || t == OwnedScope
 	case *List:
 		v = l.carriesLifeSeen(t.Elem, seen)
 	case *Map:
@@ -287,11 +360,27 @@ func (l *lifeChecker) carriesLifeSeen(t Type, seen map[Type]bool) bool {
 
 // expr checks an expression and returns its lifetime.
 func (l *lifeChecker) expr(x Expr) lifetime {
+	if t := x.Type(); t != OwnedScope && containsOwned(t) {
+		l.errorf(x.Pos(), "a value of type %s cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function", t)
+		return nil
+	}
 	life := l.exprLife(x)
 	if t := x.Type(); t == nil || !l.carriesLife(t) {
 		return nil
 	}
+	if len(life) > 0 {
+		l.info.Lifetimes[x] = l.lifeText(life)
+	}
 	return life
+}
+
+// lifeText names the scopes of a lifetime, for queries.
+func (l *lifeChecker) lifeText(life lifetime) []string {
+	var out []string
+	for _, s := range life {
+		out = append(out, l.scopeText(s))
+	}
+	return out
 }
 
 func (l *lifeChecker) exprLife(x Expr) lifetime {
@@ -300,19 +389,17 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		if !l.carriesLife(x.Type()) {
 			return nil
 		}
+		if x.Type() == OwnedScope {
+			l.errorf(x.Pos(), "owned scope %s can only be closed (closeScope(%s)), passed to a parameter of type OwnedScope, or returned; %s.scope borrows its Scope", x.Var.Name, x.Var.Name, x.Var.Name)
+			return nil
+		}
 		life := l.env[x.Var]
 		for _, c := range l.captures {
 			*c = c.union(life)
 		}
 		return l.use(x, life)
 	case *Block:
-		for _, s := range x.Stmts {
-			l.stmt(s)
-		}
-		if x.Tail == nil {
-			return nil
-		}
-		return l.expr(x.Tail)
+		return l.block(x, l.expr)
 	case *ScopeBlock:
 		for _, p := range x.Policies {
 			l.use(p, l.expr(p))
@@ -328,25 +415,34 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return life
 	case *If:
 		l.use(x.Cond, l.expr(x.Cond))
+		b := l.fork()
 		life := l.expr(x.Then)
+		b.done(x.Then)
 		if x.Else != nil {
 			life = life.union(l.expr(x.Else))
+			b.done(x.Else)
+		} else {
+			b.done(nil)
 		}
+		b.join(x.Pos(), "if")
 		return life
 	case *Match:
 		subject := l.use(x.X, l.expr(x.X))
 		var life lifetime
+		b := l.fork()
 		for _, arm := range x.Arms {
 			l.bindPattern(arm.Pat, subject)
 			for _, guard := range arm.Pat.Guards() {
-				l.use(guard, l.expr(guard))
+				l.conditional(guard, func() { l.use(guard, l.expr(guard)) })
 			}
 			life = life.union(l.expr(arm.Body))
+			b.done(arm.Body)
 		}
+		b.join(x.Pos(), "match")
 		return life
 	case *Return:
 		if x.Value != nil {
-			l.result(x.Value, l.use(x.Value, l.expr(x.Value)), l.what())
+			l.result(x.Value, l.use(x.Value, l.value(x.Value, "return")), l.what())
 		}
 		return nil
 	case *Try:
@@ -362,7 +458,11 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 	case *Lambda:
 		return l.lambda(x)
 	case *Call:
-		return l.call(x.Func, true, x.Args, x.ArgOrder)
+		life := l.callLife(x)
+		if x.Type() == OwnedScope {
+			l.errorf(x.Pos(), "this owned scope is dropped: bind it (b = ...) and close it with closeScope(b), or pass it on")
+		}
+		return life
 	case *CallBuiltin:
 		return l.call(nil, true, x.Args)
 	case *CallValue:
@@ -398,7 +498,11 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return l.expr(x.X)
 	case *Binary:
 		l.use(x.X, l.expr(x.X))
-		l.use(x.Y, l.expr(x.Y))
+		if x.Op == syntax.AndAnd || x.Op == syntax.OrOr {
+			l.conditional(x.Y, func() { l.use(x.Y, l.expr(x.Y)) })
+		} else {
+			l.use(x.Y, l.expr(x.Y))
+		}
 		return nil
 	case *Interp:
 		for _, e := range x.Exprs {
@@ -422,8 +526,29 @@ func (l *lifeChecker) what() string {
 func (l *lifeChecker) stmt(s Stmt) {
 	switch s := s.(type) {
 	case *Let:
+		if s.Var.Type == OwnedScope {
+			if s.Var.Name == "_" {
+				l.errorf(s.Pos, "an owned scope cannot be dropped: bind it and close it with closeScope, or pass it on")
+				l.ownerValue(s.Value, "pass")
+				return
+			}
+			l.env[s.Var] = l.ownerValue(s.Value, "bind")
+			if _, ok := s.Value.(*VarRef); ok {
+				return // rebinding is the error
+			}
+			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
+			l.frame[s.Var] = l.cur
+			l.bind(s.Var)
+			if n := len(l.owners); n > 0 {
+				l.owners[n-1] = append(l.owners[n-1], s.Var)
+			}
+			return
+		}
 		// A possibly released value can be bound; using it is the error.
 		l.env[s.Var] = l.expr(s.Value)
+		if len(l.env[s.Var]) > 0 {
+			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
+		}
 	case *ExprStmt:
 		l.use(s.X, l.expr(s.X))
 	case *Trust:
@@ -486,10 +611,33 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	if len(order) > 0 && order[0] != nil {
 		indices = order[0]
 	}
+	// moved holds the owner variables the call takes, by argument.
+	moved := map[int]*Var{}
 	for _, i := range indices {
 		a := xargs[i]
-		args[i] = l.use(a, l.expr(a))
+		if fn != nil && a.Type() == OwnedScope && i < len(fn.Params) && fn.Params[i] == OwnedScope {
+			if v, ok := a.(*VarRef); ok {
+				var usable bool
+				args[i], usable = l.ownerRef(v)
+				for _, w := range moved {
+					if w == v.Var {
+						l.errorf(a.Pos(), "owned scope %s is passed twice", v.Var.Name)
+						usable = false
+					}
+				}
+				if usable {
+					moved[i] = v.Var
+				}
+			} else {
+				args[i] = l.ownerValue(a, "pass")
+			}
+		} else {
+			args[i] = l.use(a, l.expr(a))
+		}
 		life = life.union(args[i])
+	}
+	if fn != nil {
+		l.ownerArgs(fn, xargs, args, moved)
 	}
 	// attach(r, s) gives r as a value of s: it stays open until s closes.
 	if fn != nil && fn.Prelude && fn.Decl.Name == "attach" && len(args) == 2 {
@@ -526,8 +674,16 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 }
 
 func scopeName(x Expr) string {
-	if v, ok := x.(*VarRef); ok {
-		return v.Var.Name
+	switch x := x.(type) {
+	case *VarRef:
+		return x.Var.Name
+	case *Call:
+		// b.scope
+		if len(x.Args) == 1 && x.Func.Prelude && x.Func.Decl.Name == "scopeOf" {
+			if v, ok := x.Args[0].(*VarRef); ok {
+				return v.Var.Name + ".scope"
+			}
+		}
 	}
 	return "(a scope)"
 }

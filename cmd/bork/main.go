@@ -78,6 +78,9 @@ func printDescription(result *describe.Result) {
 	if result.Definition != nil {
 		fmt.Println("defined at:", result.Definition)
 	}
+	if len(result.BelongsTo) > 0 {
+		fmt.Println("belongs to:", strings.Join(result.BelongsTo, ", "))
+	}
 	if result.Callable != nil {
 		fmt.Println("named arguments:", callableParameters(result.Callable), "(parameter names are API)")
 	}

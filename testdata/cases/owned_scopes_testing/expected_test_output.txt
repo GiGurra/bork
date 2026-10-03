@@ -1,0 +1,22 @@
+close child of failing
+close app
+FAIL  a panic closes the owned scopes of the function
+      boom
+close handed on
+close b
+FAIL  the receiver of an owned scope closes it when it panics
+      boom after the hand-over
+close last
+close first
+FAIL  closeScope raises the failures of the child
+      finalizer failed
+close b
+close app
+FAIL  a parent raises the failures of the children it closes
+      child finalizer failed; and then: parent finalizer failed
+FAIL  a task's failure fails its owned scope's close
+      task failed
+closed b
+ok    logFailures logs instead
+1 passed, 5 failed
+exit code 1
