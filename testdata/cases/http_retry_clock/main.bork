@@ -1,0 +1,44 @@
+import "bork/http"
+import "bork/time"
+import "bork/rand"
+fn busy(): http.Result { http.Overloaded { retryAfter: .None, response: http.Text(503, "busy") } }
+fn attempts(s: Scope, budget: http.RetryBudget in s) uses clock + random + state: Int {
+  calls = atom(0)
+  _ = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, maxAttempts: 100, baseDelayMs: 0, maxDelayMs: 0)
+  current(calls)
+}
+fn main() {}
+test "an injected SystemClock uses native time mocks and preserves refill phase" {
+  now = atom(0)
+  mock time.Now() { time.Instant { unixNanos: current(now) } }
+  scope s {
+    budget = http.OpenRetryBudget(s, capacity: 2, refillMs: 1, clock: .Some { value: time.SystemClock() })
+    assertEqual(attempts(s, budget), 3)
+    _ = update(now, n => 2500000)
+    assertEqual(attempts(s, budget), 3)
+    _ = update(now, n => 3000000)
+    assertEqual(attempts(s, budget), 2)
+    _ = update(now, n => 1000000)
+    assertEqual(attempts(s, budget), 1)
+    _ = update(now, n => 4000000)
+    assertEqual(attempts(s, budget), 2)
+    _ = update(now, n => 100000000000)
+    assertEqual(attempts(s, budget), 3)
+  }
+}
+test "FixedClock holds a budget steady" {
+  scope s {
+    budget = http.OpenRetryBudget(s, capacity: 1, refillMs: 1, clock: .Some { value: time.FixedClock(.{ unixNanos: 0 }) })
+    assertEqual(attempts(s, budget), 2)
+    assertEqual(attempts(s, budget), 1)
+  }
+}
+test "default jitter uses the standard random source and can be mocked" {
+  draws = mock rand.IntBetween(lo, hi) { lo }
+  scope s {
+    budget = http.OpenRetryBudget(s, capacity: 2, refillMs: 60000)
+    _ = http.Retry(s, budget, attempt => busy(), maxAttempts: 3, baseDelayMs: 2, maxDelayMs: 4)
+    assertEqual(draws.count(), 2)
+    assertEqual(draws.calls(), ["rand.IntBetween(0, 2000001)", "rand.IntBetween(0, 4000001)"])
+  }
+}

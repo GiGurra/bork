@@ -1,0 +1,9 @@
+import "bork/http"
+fn open(s: Scope): http.RetryBudget { http.OpenRetryBudget(s, capacity: 1, refillMs: 1) }
+fn pure(s: Scope, budget: http.RetryBudget in s): http.Result {
+  http.Retry(s, budget, attempt => http.Text(200, "ok"))
+}
+fn missingNet(s: Scope, budget: http.RetryBudget in s) uses clock + random + state: http.Result {
+  http.Retry(s, budget, attempt => http.Get("http://localhost", attempt))
+}
+fn main() {}

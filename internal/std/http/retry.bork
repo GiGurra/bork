@@ -1,0 +1,132 @@
+import "bork/time"
+import "bork/rand"
+
+pred PositiveRetryCount(count: Int) { count > 0 }
+pred ValidRefill(ms: Int) { ms > 0 && ms <= 9223372036854 }
+pred AtLeastBase(ms: Int, base: Int) { ms >= base }
+type RetryCount = Int where PositiveRetryCount
+type RefillMs = Int where ValidRefill
+type RetryBudget = resource
+
+// OpenRetryBudget begins full and lazily adds one token per refill interval.
+// None uses monotonic system time. An injected Clock supports deterministic tests.
+fn OpenRetryBudget(s: Scope, capacity: RetryCount, refillMs: RefillMs, clock: Option[time.Clock] in s = .None) uses clock + state: RetryBudget unsafe go {
+  import "context"
+  import "errors"
+  import "sync"
+  import "time"
+  now := time.Now
+  if supplied, ok := _borkOptionGet(clock); ok {
+    now = func() time.Time { return time.Unix(0, supplied.now().unixNanos) }
+  }
+  ctx, closeBudget := context.WithCancelCause(context.Background())
+  var mu sync.Mutex
+  tokens := capacity
+  interval := time.Duration(refillMs) * time.Millisecond
+  last := now()
+  available := func(spend bool) bool {
+    mu.Lock()
+    defer mu.Unlock()
+    if ctx.Err() != nil { return false }
+    elapsed := now().Sub(last)
+    if elapsed >= interval {
+      ticks := int64(elapsed / interval)
+      if ticks >= capacity-tokens { tokens = capacity } else { tokens += ticks }
+      last = last.Add(time.Duration(ticks) * interval)
+    }
+    if tokens == 0 { return false }
+    if spend { tokens-- }
+    return true
+  }
+  handle := &struct { peek func() bool; take func() bool; ctx context.Context }{
+    peek: func() bool { return available(false) },
+    take: func() bool { return available(true) },
+    ctx: ctx,
+  }
+  return RetryBudget{handle:handle, owner:s.Own(func(){
+    mu.Lock()
+    defer mu.Unlock()
+    closeBudget(errors.New("retry budget closed"))
+  })}
+}
+
+fn drawRetryJitter(ceiling: Int) uses random: Int {
+  upper = ceiling + 1
+  if (rand.Above(upper, 0)) { rand.IntBetween(0, upper) } else { 0 }
+}
+
+// Retry asserts replay safety. Only Overloaded is retried; maxAttempts includes
+// the free initial attempt. Each retry consumes a shared token just before work.
+// jitter receives a nanosecond ceiling; its result is clamped to 0..ceiling.
+fn Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAttempts: RetryCount = 3, baseDelayMs: TimeoutMs = 20, maxDelayMs: TimeoutMs where AtLeastBase(baseDelayMs) = 1000, jitter: Option[(Int) uses random + state => Int] = .None) uses clock + random + state: Result unsafe go {
+  import "context"
+  import "errors"
+  import "time"
+  handle := budget.handle.(*struct { peek func() bool; take func() bool; ctx context.Context })
+  ctx, stop := context.WithCancelCause(_borkScopeContext(s))
+  defer stop(nil)
+  stopBudget := context.AfterFunc(handle.ctx, func(){stop(context.Cause(handle.ctx))})
+  defer stopBudget()
+  // Check the absolute deadline too: a deadline timer may not have fired yet.
+  cancelled := func() any {
+    if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+      return DeadlineExceeded{message:context.DeadlineExceeded.Error()}
+    }
+    if ctx.Err() != nil {
+      cause := context.Cause(ctx)
+      if errors.Is(cause, context.DeadlineExceeded) { return DeadlineExceeded{message:cause.Error()} }
+      return Cancelled{reason:cause.Error()}
+    }
+    if handle.ctx.Err() != nil { return Cancelled{reason:context.Cause(handle.ctx).Error()} }
+    return nil
+  }
+  run := func() any {
+    attempt := _borkScopeWith(ctx)
+    defer _borkScopeAbort(attempt)
+    result := operation(attempt)
+    _borkScopeClose(attempt)
+    return result
+  }
+  backoff := int64(time.Duration(baseDelayMs) * time.Millisecond)
+  capDelay := int64(time.Duration(maxDelayMs) * time.Millisecond)
+  for attempt := int64(1); ; attempt++ {
+    if failure := cancelled(); failure != nil { return failure }
+    result := run()
+    if failure := cancelled(); failure != nil { return failure }
+    overloaded, ok := result.(Overloaded)
+    if !ok || attempt >= maxAttempts { return result }
+    if !handle.peek() {
+      if failure := cancelled(); failure != nil { return failure }
+      return overloaded
+    }
+    minimum := int64(0)
+    if hint, ok := _borkOptionGet(overloaded.retryAfter); ok && hint.nanos > 0 { minimum = hint.nanos }
+    local := int64(0)
+    if injected, ok := _borkOptionGet(jitter); ok { local = injected(backoff) } else { local = drawRetryJitter(backoff) }
+    if local < 0 { local = 0 }
+    if local > backoff { local = backoff }
+    if failure := cancelled(); failure != nil { return failure }
+    if minimum > (1<<63-1)-local { return overloaded }
+    wait := time.Duration(minimum + local)
+    if deadline, ok := ctx.Deadline(); ok {
+      remaining := time.Until(deadline)
+      if remaining <= 0 { return DeadlineExceeded{message:context.DeadlineExceeded.Error()} }
+      if wait >= remaining { return overloaded }
+    }
+    if wait > 0 {
+      timer := time.NewTimer(wait)
+      select {
+      case <-ctx.Done():
+      case <-handle.ctx.Done():
+      case <-timer.C:
+      }
+      timer.Stop()
+    }
+    if failure := cancelled(); failure != nil { return failure }
+    if !handle.take() {
+      if failure := cancelled(); failure != nil { return failure }
+      return overloaded
+    }
+    if backoff >= capDelay-backoff { backoff = capDelay } else { backoff *= 2 }
+  }
+}

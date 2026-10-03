@@ -1,0 +1,3 @@
+main.bork:2:39: open uses clock + state (it calls http.OpenRetryBudget), but its signature allows no effects; declare it: uses clock + state
+main.bork:4:3: pure uses clock + random + state (it calls http.Retry), but its signature allows no effects; declare it: uses clock + random + state
+main.bork:7:25: missingNet uses net (it calls http.Retry, with a lambda that calls http.Get), but its signature allows only clock + random + state; declare it: uses net + clock + random + state

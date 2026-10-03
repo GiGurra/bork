@@ -1,0 +1,8 @@
+main.bork:4:43: http.OpenRetryBudget requires capacity to be http.PositiveRetryCount, but http.PositiveRetryCount(0) is false
+main.bork:5:56: http.OpenRetryBudget requires refillMs to be http.ValidRefill, but http.ValidRefill(0) is false
+main.bork:6:56: http.OpenRetryBudget requires refillMs to be http.ValidRefill, but http.ValidRefill(9223372036855) is false
+main.bork:8:77: http.Retry requires maxAttempts to be http.PositiveRetryCount, but http.PositiveRetryCount(0) is false
+main.bork:9:77: http.Retry requires baseDelayMs to be http.ValidTimeout, but http.ValidTimeout(-1) is false
+main.bork:10:76: http.Retry requires maxDelayMs to be http.ValidTimeout, but http.ValidTimeout(9223372036855) is false
+main.bork:11:93: http.Retry requires maxDelayMs to be http.AtLeastBase(baseDelayMs), but http.AtLeastBase(10, 20) is false
+bork/http/retry.bork:61:189: http.Retry requires maxDelayMs to be http.AtLeastBase(baseDelayMs), but http.AtLeastBase(1000, 2000) is false

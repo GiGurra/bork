@@ -1,0 +1,2 @@
+main.bork:9:27: budget may not live as long as app (it depends on scope short), but Retry declares parameter budget in s
+main.bork:11:70: this value may not live as long as app (it depends on scope short), but OpenRetryBudget declares parameter clock in s

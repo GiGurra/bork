@@ -1,0 +1,72 @@
+// bork run examples/slow_downstream
+// Six GET callers share four retry tokens. The downstream admits two requests,
+// queues two, and sheds two. Gates keep it busy until those callers give up.
+import "bork/http"
+import "bork/tasks"
+import "bork/time"
+fn task(result: Task[String] | tasks.TaskLimitReached | Cancelled): Task[String] {
+  match (result) {
+    value: Task[String] => value
+    error => panic(toString(error))
+  }
+}
+fn response(result: http.Result): String {
+  match (result) {
+    value: http.Response => if (value.status == 200) { "ok" } else { panic(toString(value)) }
+    value: http.Overloaded => "overloaded"
+    error => panic(toString(error))
+  }
+}
+fn got(result: String | Closed | Cancelled): String {
+  match (result) {
+    value: String => value
+    error => panic(toString(error))
+  }
+}
+fn main() {
+  scope app with cleanupTimeout(5000) {
+    finish = channel[Bool](app, 4)
+    completed = channel[String](app, 6)
+    active = atom(0)
+    peak = atom(0)
+    calls = atom(0)
+    listener = http.Listen("127.0.0.1:0", app, handler: (request, s) => {
+      count = update(active, n => n + 1)
+      _ = update(peak, n => if (count > n) { count } else { n })
+      _ = receive(finish)
+      _ = update(active, n => n - 1)
+      http.Text(200, "finished")
+      }, admission: .Some { value: http.Admission { maxInFlight: 2, maxQueued: 2, queueTimeoutMs: 60000, retryAfterMs: 0 } })
+    match (listener) {
+      server: http.Server => {
+        url = "http://" + http.Address(server) + "/work"
+        pool = tasks.Open(app, maxTasks: 6)
+        budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 60000,
+          clock: .Some { value: time.FixedClock(.{ unixNanos: 0 }) })
+        callers = range(0, 6).map(i => task(tasks.TrySpawn(pool, app, () => {
+          value = response(http.Retry(app, budget, operation: attempt => {
+            _ = update(calls, n => n + 1)
+            http.Get(url, attempt)
+            }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0))
+          _ = send(completed, value)
+          value
+        })))
+        // Accepted requests are gated, so the first completions are overloads.
+        first = got(receive(completed))
+        second = got(receive(completed))
+        println("shed", first, second)
+        match (http.AdmissionState(server)) {
+          Option.Some { value } => println("bounded downstream", value.inFlight, "active", value.queued, "queued")
+          Option.None => panic("admission not enabled")
+        }
+        range(0, 4).forEach(i => { _ = send(finish, true) })
+        remaining = range(0, 4).map(i => got(receive(completed)))
+        results = callers.map(await)
+        println("finished", results.count(value => value == "ok"), "overloaded", results.count(value => value == "overloaded"))
+        println("attempts", current(calls), "initial", 6, "retries", current(calls) - 6)
+        println("peak handlers", current(peak))
+      }
+      error: IoError => panic(toString(error))
+    }
+  }
+}
