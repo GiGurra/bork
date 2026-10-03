@@ -631,10 +631,10 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 - **Inline predicates:** only named predicates (`positive`), or also inline expressions (`where it > 0`)? Inline expressions require the compiler to recognise equivalent expressions.
 - **Exported return types:** do callers see only the facts a signature declares, or also facts the compiler derives from the body? A proposal: exported functions expose only the declared facts (the signature is the contract), and private functions may expose derived ones.
 
-## Compile-time dependency assembly (proposal)
+## Compile-time dependency assembly
 
-> **Design proposal, not implemented** (bork-25nywe). Resolve ordinary provider
-> functions at compile time, then invoke them at runtime without a container.
+Assembly resolves ordinary provider functions at compile time, then invokes
+them at runtime without a container (bork-25nywe).
 
 Inspired by [q.Assemble](https://gigurra.github.io/q/api/assemble/), assembly
 uses explicit provider signatures for wiring and Bork's ordinary scopes,
@@ -819,21 +819,21 @@ and root field names. This is a compiler artifact, not runtime tracing.
 Tests replace an entry explicitly:
 `assemble[Server](s, newConfig, fakeDb, newServer)`. Listing both real and fake
 providers is a duplicate error; list order never overrides. A zero-argument
-lambda injects a fixture. Native test mocks apply to generated ordinary provider
-calls using the same test-local dispatch and inherited task context. A mock
+lambda injects a fixture. Native test mocks of effectful providers apply to generated ordinary calls
+using the same test-local dispatch and inherited task context. Pure providers
+are replaced explicitly in the provider list. A mock
 preserves the declared contract; choosing a distinct fake can change effects
 and failure types. Assembly intrinsics are not mockable, and have no separate
 override registry.
 
-Implement checker resolution, ordinary facts/effects/lifetimes, Go generation,
+Implemented: checker resolution, ordinary facts/effects/lifetimes, Go generation,
 formatting, describe and structured diagnostics. Goldens cover ordering and
 sharing, graph errors with full trees, failure short circuiting, success/failure
 cleanup, lifetime escapes, effect/fact violations, generic and constrained
 products, collection/record roots and test replacements. Include constrained
 direct providers versus saved function values, promised downstream facts, and
 rejection of union-valued specialized products. `examples/assemble`
-wires config, a database and HTTP server with scope-owned cleanup. Update grammar
-and README when implementation lands. Parallel construction, provider bundles,
+wires config, a database and HTTP server with scope-owned cleanup. Parallel construction, provider bundles,
 assignability matching and cross-call caching are outside this first increment.
 
 ## Resources and scopes

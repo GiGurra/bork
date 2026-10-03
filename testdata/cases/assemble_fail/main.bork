@@ -4,6 +4,8 @@ type Server = {}
 type A = {}
 type B = {}
 type Failure = {}
+type WithDefault = { value: Int = 7 }
+type Brand = { value: Int }
 fn config(): Config { Config {} }
 fn other(): Config { Config {} }
 fn server(d: Db, c: Config): Server { Server {} }
@@ -11,6 +13,9 @@ fn a(value: B): A { A {} }
 fn b(value: A): B { B {} }
 fn failed(): Config | Db { Db {} }
 fn id[T](x: T): T { x }
+fn defaulted(n: Int = 7): Config { Config {} }
+fn recursive(value: Config): Config { value }
+fn brand(): Brand { Brand { value: 1 } }
 fn main() {
   scope s {
     println(assemble[Server](s, server, config))
@@ -28,6 +33,10 @@ fn main() {
     println(assemble[Config]())
     println(assemble(s, config))
     println(assemble[Config](scope: s, config))
+    println(assemble[Config](s, defaulted))
+    println(assembleAll[Config](s, recursive, config))
+    println(assembleRecord[WithDefault](s, config))
+    println(assemble[Int](s, brand))
     callback = assemble
   }
 }

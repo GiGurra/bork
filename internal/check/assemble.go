@@ -94,7 +94,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 	if target == Invalid {
 		return Invalid
 	}
-	if _, union := target.(*Union); union || target == Scope || target == Unit || !isValue(target) || c.open(target) {
+	if _, union := target.(*Union); union || target == Scope || target == Unit || !isValue(target) || c.open(target) || hasTypeParam(target) {
 		c.diags.AddCode(call.Pos, "assemble.target", "%s requires a concrete non-union product type, found %s", mode, target)
 		return Invalid
 	}
@@ -132,7 +132,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		if u, ok := p.product.(*Union); ok {
 			p.product, p.errors = u.Members[0], u.Members[1:]
 		}
-		if p.product == Scope || p.product == Unit || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasOpenEffects(p.typ) {
+		if p.product == Scope || p.product == Unit || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasTypeParam(p.typ) || hasOpenEffects(p.typ) {
 			g.problem("provider", x.Position(), "provider #%d has unsupported signature %s", i+1, p.typ)
 			p.product = nil
 		}
@@ -201,7 +201,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		}
 		for j := 0; j < i; j++ {
 			other := g.providers[j]
-			if other.product != nil && identical(p.product, other.product) && !(mode == "assembleAll" && identical(p.product, target)) {
+			if other.product != nil && identical(p.product, other.product) && (mode != "assembleAll" || !identical(p.product, target)) {
 				g.problem("duplicate", p.x.Position(), "duplicate providers #%d and #%d for %s", j+1, i+1, p.product)
 			}
 		}
@@ -448,9 +448,7 @@ func (g *assemblyGraph) expand() *syntax.Block {
 	if g.call.Fun.(*syntax.Ident).Name == "assembleAll" {
 		targetExpr = &syntax.TypeExpr{Pos: pos, Name: "List", Args: []*syntax.TypeExpr{targetExpr}}
 	}
-	{
-		tail = &syntax.Block{Pos: pos, End: g.call.End, Stmts: []syntax.Stmt{&syntax.Binding{Pos: pos, Name: prefix + "result", Type: targetExpr, Value: tail}}, Tail: id("result")}
-	}
+	tail = &syntax.Block{Pos: pos, End: g.call.End, Stmts: []syntax.Stmt{&syntax.Binding{Pos: pos, Name: prefix + "result", Type: targetExpr, Value: tail}}, Tail: id("result")}
 	for n := len(g.order) - 1; n >= 0; n-- {
 		i := g.order[n]
 		p := g.providers[i]

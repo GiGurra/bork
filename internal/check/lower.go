@@ -119,7 +119,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		if expansion := l.info.assemblyCalls[call]; expansion != nil {
 			out := l.block(expansion.body)
 			out.Assembly = expansion.description
-			out.expr.token = call.Fun.Position()
+			out.token = call.Fun.Position()
 			return out
 		}
 	}

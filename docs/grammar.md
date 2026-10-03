@@ -182,6 +182,42 @@ EOL        = newline | ";" .
 Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. A user module can also declare these manifests beside `bork.mod`; requirements merge with imported std dependencies by Go minimum version selection. `bork deps init/get/download` maintains user manifests with Go module tools. See [std Go dependencies](std-go.md).
 
 
+## Dependency assembly
+
+The prelude compiler intrinsics use ordinary generic-call syntax:
+
+```bork
+assemble[Server](app, newConfig, openDb, newServer)
+assembleAll[Plugin](app, authPlugin, logPlugin)
+assembleRecord[Application](app, newConfig, openDb, newServer, newWorker)
+```
+
+Supply one explicit concrete target type, a live Scope, then positional provider
+functions. Direct declared providers preserve their parameter/result facts;
+function values and typed lambdas are also providers. Generic functions require
+monomorphic adapters. Inject an existing value with `() => value`.
+
+Resolution uses exact Bork type identity; wrapper records distinguish brands,
+while aliases retain their base identity. Providers run once per call, after
+their dependencies, and shared dependencies reuse the same value. Every Scope
+parameter receives the target scope. Every provider must be needed. Missing,
+duplicate, cyclic, invalid and unused providers produce compile errors with the
+full dependency tree.
+
+The expression returns the target followed by its providers' failure union;
+`?` and `match` work normally. Its effects combine invoked providers and argument
+evaluation. Partial acquisitions remain owned by the target scope until it
+closes. There is no implicit rollback, cleanup callback or cross-call cache.
+
+`assembleAll[T]` collects all T providers into a List in provider-list order;
+there must be at least one. Singular dependencies must still be unambiguous.
+`assembleRecord[R]` resolves each record field separately, sharing repeated
+field types and checking ordinary literal facts and construction visibility.
+Field defaults do not remove provider requirements; list fields do not aggregate
+automatically. `bork describe` on an assembly name or opening parenthesis shows
+the graph, invocation order, result union and effects, also available as JSON.
+See [assembly requirements](requirements.md#compile-time-dependency-assembly).
+
 ## Standard packages
 
 Standard packages introduce no new grammar. Their API descriptions, examples
