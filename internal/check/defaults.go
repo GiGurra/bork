@@ -33,9 +33,9 @@ func (c *checker) ensureDefaults(fn *Func) {
 	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
 	c.session = nil // the defaults' calls are inferred on their own
 	defer func() {
-		shared, solved := c.sharedDefaults, c.solved
+		shared, solved, mapKeys := c.sharedDefaults, c.solved, c.mapKeyChecks
 		*c = saved
-		c.sharedDefaults, c.solved = shared, solved
+		c.sharedDefaults, c.solved, c.mapKeyChecks = shared, solved, mapKeys
 	}()
 	for i, p := range params {
 		if p.Default == nil {
@@ -262,11 +262,15 @@ func (c *checker) ensureFieldDefault(field *Field) {
 	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
 	c.session = nil
 	defer func() {
-		shared, solved := c.sharedDefaults, c.solved
+		shared, solved, mapKeys := c.sharedDefaults, c.solved, c.mapKeyChecks
 		*c = saved
-		c.sharedDefaults, c.solved = shared, solved
+		c.sharedDefaults, c.solved, c.mapKeyChecks = shared, solved, mapKeys
 	}()
 	x := field.Decl.Default
+	if field.Lazy && (!isClosed(x) || closedDefaultUsesSibling(x, field.siblings)) {
+		c.computedFieldDefault(field)
+		return
+	}
 	switch {
 	case isLiteral(x):
 		x = copyLiteral(x)
@@ -299,6 +303,7 @@ func (c *checker) ensureAllFieldDefaults() {
 			for _, f := range t.Fields {
 				c.ensureFieldDefault(f)
 			}
+			c.checkComputedCycles(t.Fields)
 			for _, inst := range t.insts.byKey {
 				for _, f := range inst.(*Record).Fields {
 					if f.defaultGeneric {
@@ -306,12 +311,14 @@ func (c *checker) ensureAllFieldDefaults() {
 					}
 					c.ensureFieldDefault(f)
 				}
+				c.checkComputedCycles(inst.(*Record).Fields)
 			}
 		case *Sealed:
 			for _, v := range t.Variants {
 				for _, f := range v.Fields {
 					c.ensureFieldDefault(f)
 				}
+				c.checkComputedCycles(v.Fields)
 			}
 			for _, inst := range t.insts.byKey {
 				for _, v := range inst.(*Sealed).Variants {
@@ -321,6 +328,7 @@ func (c *checker) ensureAllFieldDefaults() {
 						}
 						c.ensureFieldDefault(f)
 					}
+					c.checkComputedCycles(v.Fields)
 				}
 			}
 		}

@@ -81,18 +81,21 @@ type Interp struct {
 type VarKind int
 
 const (
-	VarParam       VarKind = iota // a function's parameter, or a rule's variable
-	VarLambdaParam                // a lambda's parameter
-	VarLet                        // a binding: name = value
-	VarPattern                    // a name a match pattern binds
-	VarLoop                       // an iteration binding
-	VarScope                      // the scope of `scope s { ... }`
-	VarAmbient                    // an ambient value a function needs
+	VarParam        VarKind = iota // a function's parameter, or a rule's variable
+	VarLambdaParam                 // a lambda's parameter
+	VarLet                         // a binding: name = value
+	VarPattern                     // a name a match pattern binds
+	VarLoop                        // an iteration binding
+	VarScope                       // the scope of `scope s { ... }`
+	VarAmbient                     // an ambient value a function needs
+	VarDefaultField                // a computed default's synthetic sibling parameter
 )
 
 // Var is a variable: a parameter, a binding, a name bound by a pattern,
 // or a scope.
 type Var struct {
+	Sibling     *Field
+	Unvalidated bool
 	// Label describes a compiler-generated variable in diagnostics.
 	Label string
 	Name  string
@@ -334,6 +337,7 @@ type VariantValue struct {
 // are in the order written.
 type RecordLit struct {
 	expr
+	Candidate *Var
 	// Promoted marks an implicit Some around a source expression.
 	Promoted    bool
 	Record      *Record
@@ -356,8 +360,9 @@ type FieldValue struct {
 // Copy is `x.copy(a: 1, b.c: 2)`.
 type Copy struct {
 	expr
-	X       Expr
-	Updates []*FieldUpdate
+	Candidate *Var
+	X         Expr
+	Updates   []*FieldUpdate
 }
 
 // FieldUpdate is a (possibly nested) field a copy changes: Field is the

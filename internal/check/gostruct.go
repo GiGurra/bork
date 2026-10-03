@@ -69,22 +69,31 @@ func (c *checker) resolveGoStructs(files []*syntax.File) {
 			}
 		}
 	}
+}
+
+// Field shapes follow computed-default classification.
+func (c *checker) finishGoStructs() {
 	for _, t := range c.info.TypeOrder {
 		r, ok := t.(*Record)
 		if !ok || !r.GoGenerated {
 			continue
 		}
+		c.pkg, c.inPrelude = r.Pkg, r.Prelude
 		var fields []*types.Var
 		var tags []string
 		seen := map[string]bool{}
 		for _, f := range r.Fields {
+			if f.Computed {
+				r.GoFields = append(r.GoFields, GoField{})
+				continue
+			}
 			gt := c.generatedGoType(f.Type)
 			if gt == nil || containsResource(f.Type, map[Type]bool{}) {
 				why := ""
 				if hasTypeParam(f.Type) {
 					why = "; use a concrete record for fields depending on type parameters"
 				}
-				c.errorf(f.Decl.Pos, "cannot derive GoStruct for %s: field %s has type %s, which cannot convert to a Go struct field%s", r.Name, f.Name, f.Type, why)
+				c.errorf(f.Decl.Pos, "cannot derive GoStruct for %s: field %s has type %s, which cannot convert to a Go struct field%s", r.Name, f.Name, TypeText(f.Type, nil), why)
 				r.GoStruct = false
 				gt = types.Typ[types.Invalid]
 			}
@@ -188,6 +197,10 @@ func (c *checker) resolveGoStructDecoders(ci *ClassInstance) {
 		c.typeParams[p.Name] = p
 	}
 	for _, f := range r.Fields {
+		if f.Computed {
+			ci.GoFieldDecoders = append(ci.GoFieldDecoders, nil)
+			continue
+		}
 		saved := c.diags
 		c.diags = &diag.List{}
 		c.have = nil

@@ -277,6 +277,10 @@ func (c *checker) fieldInits(e *syntax.RecordLit, fields []*Field, owner string)
 // fieldInitsTyped checks a literal's fields. If types is not nil, it
 // holds the types of the field values, already checked.
 func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner string, types []Type) {
+	for _, field := range fields {
+		c.ensureFieldDefault(field)
+	}
+	c.checkComputedCycles(fields)
 	inits := append([]*syntax.FieldInit(nil), e.Fields...)
 	present := map[string]bool{}
 	for _, fi := range inits {
@@ -286,7 +290,6 @@ func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner st
 		if present[field.Name] {
 			continue
 		}
-		c.ensureFieldDefault(field)
 		if x := c.info.fieldDefaults[field]; x != nil {
 			if isLiteral(x) {
 				x = copyLiteral(x)
@@ -307,6 +310,9 @@ func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner st
 		}
 		if given[fi.Name] {
 			c.errorf(fi.Pos, "field %s is given twice", fi.Name)
+		}
+		if f.Computed && present[fi.Name] {
+			c.errorf(fi.Pos, "computed field %s cannot be supplied; change its dependencies instead", fi.Name)
 		}
 		given[fi.Name] = true
 		var t Type
@@ -382,6 +388,11 @@ func (c *checker) copyTarget(rec *Record, u *syntax.CopyUpdate) *Field {
 		f := cur.Field(name)
 		if f == nil {
 			c.errorf(u.Pos, "%s has no field %s", cur, name)
+			return nil
+		}
+		c.ensureFieldDefault(f)
+		if f.Computed {
+			c.errorf(u.Pos, "computed field %s cannot be updated; change its dependencies instead", f.Name)
 			return nil
 		}
 		if i == len(u.Path)-1 {

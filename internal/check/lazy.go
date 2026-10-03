@@ -15,9 +15,10 @@ type AsyncDescription struct {
 }
 
 type LazyDescription struct {
-	Kind     string   `json:"kind"`
-	Effects  string   `json:"initializer_effects"`
-	Captures []string `json:"captures,omitempty"`
+	Kind         string   `json:"kind"`
+	Effects      string   `json:"initializer_effects"`
+	Captures     []string `json:"captures,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty"`
 }
 
 // A result boundary at exactly depth; nested lambdas retain their own rules.
@@ -240,6 +241,13 @@ func (info *Info) LazyFieldDescription(value Expr) *LazyDescription {
 		return metadata
 	}
 	if read, ok := value.(*Select); ok && read.Field != nil && read.Field.Lazy {
+		if read.Field.Computed {
+			metadata := &LazyDescription{Kind: "computed field", Effects: "nothing"}
+			for _, dependency := range read.Field.Dependencies {
+				metadata.Dependencies = append(metadata.Dependencies, dependency.Name)
+			}
+			return metadata
+		}
 		return &LazyDescription{Kind: "independent field", Effects: "charged at construction"}
 	}
 	return nil

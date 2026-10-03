@@ -13,7 +13,7 @@ import (
 
 // Mirrors keep bork record identity and representation. The Go type only
 // describes conversions at the boundary.
-func (c *checker) resolveGoMirrors(files []*syntax.File) {
+func (c *checker) resolveGoMirrors(files []*syntax.File, matchFields bool) {
 	for _, f := range files {
 		c.inFile(f)
 		for _, td := range f.Types {
@@ -28,11 +28,17 @@ func (c *checker) resolveGoMirrors(files []*syntax.File) {
 			if !ok {
 				continue
 			}
+			if matchFields && r.GoMirror == nil {
+				continue
+			} // diagnosed during preparation
 			if len(r.TypeParams) > 0 {
 				c.bindErr(td.Pos, "a Go mirror cannot have type parameters")
 				continue
 			}
-			gt := c.namedGoType(td.GoName.Name, td.GoName)
+			gt := r.GoMirror
+			if !matchFields {
+				gt = c.namedGoType(td.GoName.Name, td.GoName)
+			}
 			if gt == nil {
 				continue
 			}
@@ -45,8 +51,15 @@ func (c *checker) resolveGoMirrors(files []*syntax.File) {
 				continue
 			}
 			r.GoMirror = gt
+			if !matchFields {
+				continue
+			}
 			matched := map[*types.Var]string{}
 			for i, field := range r.Fields {
+				if field.Computed {
+					r.GoFields = append(r.GoFields, GoField{})
+					continue
+				}
 				if containsResource(field.Type, map[Type]bool{}) {
 					c.bindErr(td.Fields[i].Pos, "mirror field %s contains a resource, but _borkFromGo has no ownership Scope; keep the outer Go object opaque or use an unsafe resource wrapper", field.Name)
 					r.GoFields = append(r.GoFields, GoField{})
@@ -125,6 +138,9 @@ func (c *checker) resolveGoMirrors(files []*syntax.File) {
 				continue
 			}
 			for i, field := range r.Fields {
+				if field.Computed {
+					continue
+				}
 				gt := r.GoFields[i].Type
 				if gt != nil && !c.toGo(field.Type, gt) && !c.fromGo(gt, field.Type).ok {
 					c.bindErr(td.Fields[i].Pos, "mirror field %s has bork type %s, which cannot convert to or from Go %s", field.Name, field.Type, goTypeText(gt))

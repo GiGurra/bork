@@ -364,11 +364,12 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 }
 
 type gen struct {
-	info     *check.Info
-	tmp      int
-	fnResult check.Type // result type of the function being generated
-	callerAt ast.Expr   // hidden caller location in an internal helper
-	imports  map[string]bool
+	candidateNames map[*check.Var]*ast.Ident
+	info           *check.Info
+	tmp            int
+	fnResult       check.Type // result type of the function being generated
+	callerAt       ast.Expr   // hidden caller location in an internal helper
+	imports        map[string]bool
 	// bindImports holds the Go packages bindings call, by import path,
 	// with the names they are imported as.
 	bindImports map[string]string
@@ -506,6 +507,22 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 	// Mirror helpers are generated for declarations, including helpers used
 	// inside unsafe Go bodies, so their field predicates must be available.
 	for _, t := range g.info.TypeOrder {
+		var groups [][]*check.Field
+		switch t := t.(type) {
+		case *check.Record:
+			groups = append(groups, t.Fields)
+		case *check.Sealed:
+			for _, variant := range t.Variants {
+				groups = append(groups, variant.Fields)
+			}
+		}
+		for _, fields := range groups {
+			for _, field := range fields {
+				for _, callee := range field.DefaultCalls {
+					visit(callee)
+				}
+			}
+		}
 		if r, ok := t.(*check.Record); ok && r.GoMirror != nil {
 			for _, pred := range invariantPreds(r, map[check.Type]bool{}) {
 				visit(pred)
@@ -869,6 +886,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			return g.value(value)
 		}
 		g.captured(e.Var, false)
+		if candidate := g.candidateNames[e.Var]; candidate != nil {
+			return nil, candidate
+		}
 		if e.Var.Let != nil && e.Var.Let.Initializer != nil {
 			return nil, &ast.CallExpr{Fun: &ast.SelectorExpr{X: varIdent(e.Var), Sel: ast.NewIdent("get")}}
 		}

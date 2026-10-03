@@ -1,0 +1,9 @@
+pred small(n: Int) { n >= -100 && n <= 100 }
+pred ordered(c: Item) { c.next == c.n + 1 }
+type Item = { n: Int where small, lazy next: Int = n + 1, lazy callback: () => Int = () => n } where ordered
+type Choice = sealed { Some { n: Int, lazy same: Int = n }, None }
+type Box[T] = { item: T, lazy repeated: T = item }
+fn main() {}
+test "computed fields are reconstructed" (item: Item) { assertEqual(item.next, item.n + 1); assertEqual(item.callback(), item.n) }
+test "computed variants are reconstructed" (choice: Choice) { match (choice) { Choice.Some { n: x, same: y } => assertEqual(x, y), Choice.None => {} } }
+test "computed generics are reconstructed" (box: Box[Int]) { assertEqual(box.item, box.repeated) }

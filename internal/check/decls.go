@@ -206,6 +206,10 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 		}
 		fields = append(fields, &Field{Lazy: fd.Lazy, Name: fd.Name, Type: t, Decl: fd, Pkg: c.pkg, Prelude: c.inPrelude, Doc: fd.Doc, GoTags: fd.GoTags, defaultGeneric: hasTypeParam(t)})
 	}
+	for _, field := range fields {
+		field.siblings = fields
+		field.defaultTypes = c.typeParams
+	}
 	return fields
 }
 
@@ -321,8 +325,17 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 				return Invalid
 			}
 		}
-		if !comparable(key) {
-			c.errorf(t.Args[0].Pos, "a Map's keys must be comparable with ==, and %s is not (for a type parameter, bound it: [K: Eq])", key)
+		checkKey := func() {
+			if !comparable(key) {
+				c.errorf(t.Args[0].Pos, "a Map's keys must be comparable with ==, and %s is not (for a type parameter, bound it: [K: Eq])", key)
+			}
+		}
+		if !comparable(key) && unresolvedLazyFields(key, map[Type]bool{}) {
+			// Signatures precede default checking, which determines which
+			// fields participate in structural equality and hashing.
+			c.mapKeyChecks = append(c.mapKeyChecks, checkKey)
+		} else if !comparable(key) {
+			checkKey()
 			return Invalid
 		}
 		return &Map{Key: key, Value: value}

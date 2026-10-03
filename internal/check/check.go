@@ -463,7 +463,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.declareClasses(files)
 	c.declareClassMethods()
 	c.resolveGoStructs(files)
-	c.resolveGoMirrors(files)
+	c.resolveGoMirrors(files, false)
 	c.checkRecordCycles()
 	c.info.OutOfRange = c.info.Named["OutOfRange"]
 	c.declareAmbients(files)
@@ -516,6 +516,13 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.resolveConstraints(files)
 	c.ambientConstraints(files)
 	c.instanceConstraints()
+	c.ensureAllFieldDefaults()
+	for _, checkKey := range c.mapKeyChecks {
+		checkKey()
+	}
+	c.mapKeyChecks = nil
+	c.finishGoStructs()
+	c.resolveGoMirrors(files, true)
 	c.resolveDerived()
 	c.checkRules(files)
 	for _, t := range c.info.TypeOrder {
@@ -671,6 +678,8 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
+	mapKeyChecks []func()
+
 	// needsFix is the needs clause the function being checked is
 	// missing, offered as one fix (see reportUnprovided).
 	needsFix *pendingNeeds

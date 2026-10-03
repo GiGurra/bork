@@ -36,8 +36,13 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 		return stmts, nil
 	}
 	lit := &ast.CompositeLit{Type: typ}
+	var computed []*check.FieldValue
 	i := 0
 	for _, field := range e.Fields {
+		if field.Field.Computed {
+			computed = append(computed, field)
+			continue
+		}
 		var value ast.Expr
 		if field.Thunk != nil {
 			value = g.fieldCell(field.Thunk, field.Lazy)
@@ -46,6 +51,15 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 			i++
 		}
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: value})
+	}
+	if len(computed) > 0 {
+		root := g.newTmp()
+		g.nameCandidate(e.Candidate, root)
+		stmts = append(stmts, define(root, lit))
+		for _, field := range computed {
+			stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{&ast.SelectorExpr{X: root, Sel: name(field.Name)}}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.fieldCell(field.Thunk, field.Lazy)}})
+		}
+		return stmts, root
 	}
 	return stmts, lit
 }
@@ -62,6 +76,9 @@ func (g *gen) copyExpr(e *check.Copy) ([]ast.Stmt, ast.Expr) {
 		return stmts, nil
 	}
 	result := g.newTmp()
+	if e.Candidate != nil {
+		g.nameCandidate(e.Candidate, result)
+	}
 	stmts = append(stmts, define(result, xs[0]))
 	rec := e.X.Type().(*check.Record)
 	i := 1

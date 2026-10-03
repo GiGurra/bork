@@ -2,6 +2,7 @@ package gen
 
 import (
 	"go/ast"
+	"go/token"
 
 	"github.com/GiGurra/bork/internal/check"
 )
@@ -59,4 +60,43 @@ func (g *gen) patternFieldRead(root ast.Expr, typ check.Type, variant *check.Var
 		}
 	}
 	return &ast.SelectorExpr{X: root, Sel: name(fieldName)}
+}
+
+func independentFields(fields []*check.Field) []*check.Field {
+	var data []*check.Field
+	for _, field := range fields {
+		if !field.Computed {
+			data = append(data, field)
+		}
+	}
+	return data
+}
+
+func (g *gen) computedCells(root *ast.Ident, fields []*check.Field, typ check.Type) []ast.Stmt {
+	var stmts []ast.Stmt
+	for _, field := range fields {
+		if !field.Computed {
+			continue
+		}
+		recipe := check.ComputedFieldInitializer(field, root.Name, typ)
+		cell := g.fieldCell(recipe, &check.LazyDescription{Kind: "computed field", Effects: "nothing"})
+		stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{&ast.SelectorExpr{X: root, Sel: name(field.Name)}}, Tok: token.ASSIGN, Rhs: []ast.Expr{cell}})
+	}
+	return stmts
+}
+
+func (g *gen) nameCandidate(candidate *check.Var, name *ast.Ident) {
+	if g.candidateNames == nil {
+		g.candidateNames = map[*check.Var]*ast.Ident{}
+	}
+	g.candidateNames[candidate] = name
+}
+
+func hasComputedFields(fields []*check.Field) bool {
+	for _, field := range fields {
+		if field.Computed {
+			return true
+		}
+	}
+	return false
 }

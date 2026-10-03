@@ -1,0 +1,2 @@
+type Secret = private { value: Int }
+fn New(n: Int): Secret { Secret { value: n } }

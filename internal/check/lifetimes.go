@@ -598,20 +598,42 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 	case *RecordLit:
 		var life lifetime
 		for _, f := range x.Fields {
+			if f.Field.Computed {
+				continue
+			}
 			if f.Thunk != nil {
 				life = life.union(l.lambda(f.Thunk))
 			} else {
 				life = life.union(l.expr(f.Value))
 			}
 		}
+		if x.Candidate != nil {
+			l.env[x.Candidate], l.frame[x.Candidate] = life, l.cur
+			for _, field := range x.Fields {
+				if field.Field.Computed {
+					life = life.union(l.lambda(field.Thunk))
+				}
+			}
+		}
 		return life
 	case *Copy:
 		life := l.expr(x.X)
 		for _, u := range x.Updates {
+			if u.Field.Computed {
+				continue
+			}
 			if u.Thunk != nil {
 				life = life.union(l.lambda(u.Thunk))
 			} else {
 				life = life.union(l.expr(u.Value))
+			}
+		}
+		if x.Candidate != nil {
+			l.env[x.Candidate], l.frame[x.Candidate] = life, l.cur
+			for _, update := range x.Updates {
+				if update.Field.Computed {
+					life = life.union(l.lambda(update.Thunk))
+				}
 			}
 		}
 		return life

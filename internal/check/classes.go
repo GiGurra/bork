@@ -981,15 +981,6 @@ func (c *checker) declareDerived(files []*syntax.File) {
 						continue
 					}
 				}
-				if private := c.foreignPrivateRepresentation(e.typ, cl, c.pkg, map[Type]bool{}, false); private != nil {
-					switch t := private.(type) {
-					case *Sealed:
-						c.errorf(td.DerivePos, "cannot derive %s for %s: %s has private variants in package %s; use an instance provided by that package", cl.Name, td.Name, t.Name, t.Pkg.Path)
-					case *Record:
-						c.errorf(td.DerivePos, "cannot derive %s for %s: package %s controls construction of %s; use an instance provided by that package", cl.Name, td.Name, t.Pkg.Path, t.Name)
-					}
-					continue
-				}
 				c.deriveInstance(td, e.typ, cl, f.Prelude)
 			}
 		}
@@ -1030,10 +1021,53 @@ func (c *checker) deriveInstance(td *syntax.TypeDecl, t Type, cl *Class, prelude
 	c.info.ClassInstances = append(c.info.ClassInstances, ci)
 }
 
+// A provisional derivation is available while defaults are checked, but a
+// rejected one must not participate in delegation or instance selection.
+func (c *checker) discardDerived(ci *ClassInstance) {
+	without := func(instances []*ClassInstance) []*ClassInstance {
+		out := make([]*ClassInstance, 0, len(instances))
+		for _, instance := range instances {
+			if instance != ci {
+				out = append(out, instance)
+			}
+		}
+		return out
+	}
+	c.info.ClassInstances = without(c.info.ClassInstances)
+	ci.Pkg.instances = without(ci.Pkg.instances)
+	for _, pkg := range c.pkgs {
+		pkg.inScope = without(pkg.inScope)
+	}
+	for _, method := range ci.Methods {
+		delete(c.info.FuncOf, method.Decl)
+	}
+}
+
 // resolveDerived finds the instances the fields of derived instances'
 // types need, now that it is known which instances are in scope.
 func (c *checker) resolveDerived() {
 	for _, ci := range c.info.ClassInstances {
+		if !IsGoStruct(ci.Class) && (len(ci.Methods) == 0 || ci.Methods[0].Derived == nil) {
+			continue
+		}
+		if IsGoStruct(ci.Class) {
+			if r, ok := ci.Type.(*Record); !ok || !r.GoStruct {
+				c.discardDerived(ci)
+				continue
+			}
+		}
+		c.pkg, c.inPrelude = ci.Pkg, ci.Prelude
+		if private := c.foreignPrivateRepresentation(ci.Type, ci.Class, ci.Pkg, map[Type]bool{}, false); private != nil {
+			owner := strings.TrimSuffix(ci.Name, ci.Class.Name)
+			switch t := private.(type) {
+			case *Sealed:
+				c.errorf(ci.Decl.Pos, "cannot derive %s for %s: %s has private variants in package %s; use an instance provided by that package", ci.Class.Name, owner, t.Name, t.Pkg.Path)
+			case *Record:
+				c.errorf(ci.Decl.Pos, "cannot derive %s for %s: package %s controls construction of %s; use an instance provided by that package", ci.Class.Name, owner, t.Pkg.Path, t.Name)
+			}
+			c.discardDerived(ci)
+			continue
+		}
 		if IsGoStruct(ci.Class) {
 			c.resolveGoStructDecoders(ci)
 			continue
@@ -1061,6 +1095,10 @@ func (c *checker) resolveDerived() {
 		for i, fields := range groups {
 			var row []*Dict
 			for _, f := range fields {
+				if f.Computed {
+					row = append(row, nil)
+					continue
+				}
 				// The field's where clause selects constrained instances.
 				c.have = nil
 				for _, con := range f.Constraints {
@@ -1172,7 +1210,9 @@ func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Packa
 		}
 		for _, v := range t.Variants {
 			for _, f := range v.Fields {
-				children = append(children, f.Type)
+				if !f.Computed {
+					children = append(children, f.Type)
+				}
 			}
 		}
 	case *Record:
@@ -1180,7 +1220,9 @@ func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Packa
 			return t
 		}
 		for _, f := range t.Fields {
-			children = append(children, f.Type)
+			if !f.Computed {
+				children = append(children, f.Type)
+			}
 		}
 	case *Seq:
 		children = append(children, t.Elem)

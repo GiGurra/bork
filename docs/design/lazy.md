@@ -10,9 +10,9 @@ The inspiration is [q's lazy values](https://gigurra.github.io/q/api/lazy/),
 including once-only evaluation, concurrent readers and cached failures. Bork
 uses transparent binding/field reads instead of a wrapper accessor, immutable
 captures instead of mutable Go closure capture, and checked scope lifetimes.
-This document specifies the complete feature. Local bindings and independent record fields are implemented;
-computed sibling defaults and package bindings remain proposed follow-on phases. Local
-bindings ship first, record fields second, package bindings third. Until a
+This document specifies the complete feature. Local bindings, independent record
+fields and computed sibling defaults are implemented. Pure package bindings
+remain a proposed follow-on phase. Until a
 phase ships, its syntax receives a deliberate unsupported-feature diagnostic.
 
 ## Bindings and demand

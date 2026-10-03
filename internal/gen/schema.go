@@ -14,6 +14,9 @@ func (g *gen) decodeSchema(ci *check.ClassInstance, record *check.Record) string
 	var b strings.Builder
 	b.WriteString("func() []_borkDecodeField { return []_borkDecodeField{\n")
 	for i, field := range record.Fields {
+		if field.Computed {
+			continue
+		}
 		dict := g.text(g.dict(ci.Methods[0].Derived.FieldDicts[0][i]))
 		var constraints []string
 		for _, con := range field.Constraints {

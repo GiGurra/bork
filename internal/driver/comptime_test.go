@@ -55,6 +55,10 @@ fn must(n:Int where good):Int{n}
 pred p(n:Int){good(n) && must(1)>0}
 fn recipe(n:Int where p):Int{n}
 fn main(){println(comptime{recipe(1)})}`, "1\n"},
+		{"fresh pure computed fields", `type C={n:Int,lazy twice:Int=n*2,lazy more:Int=twice+1}
+fn main(){println(comptime{c=C{n:20};c.more})}`, "41\n"},
+		{"fresh computed copy", `type C={n:Int,lazy twice:Int=n*2}
+fn main(){println(comptime{c=C{n:20};c.copy(n:21).twice})}`, "42\n"},
 		{"fresh pure lazy cell", `fn main(){println(comptime{lazy n=21;n*2})}`, "42\n"},
 		{"unordered lookup", `fn main(){println(comptime{{"x":1}.unordered().getOr("x",0)})}`, "1\n"},
 		{"sorted traversal", `fn main(){println(comptime{{"b":2,"a":1}.sorted().keys()})}`, "[\"a\", \"b\"]\n"},

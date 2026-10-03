@@ -280,6 +280,7 @@ func (g *gen) structDecl(n *ast.Ident, params []*check.TypeParam, fields []*chec
 // value as `Label { field: value, ... }`. String fields are quoted.
 // A variant without fields renders as just its label.
 func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, isRecord bool) ast.Decl {
+	fields = independentFields(fields)
 	strLit := func(s string) ast.Expr { return &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(s)} }
 	var result ast.Expr
 	switch {

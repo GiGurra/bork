@@ -101,6 +101,10 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 	var b strings.Builder
 	var inits []string
 	for i, f := range fields {
+		if f.Computed {
+			fmt.Fprintf(&b, "if _, present := _jsonField(_obj, %q); present {\n%s}\n", f.Name, g.decodeError(strconv.Quote("."+f.Name), strconv.Quote("computed field is read-only")))
+			continue
+		}
 		v := fmt.Sprintf("_f%d", i)
 		path := strconv.Quote("." + f.Name)
 		fmt.Fprintf(&b, "var %s %s\n{\n", v, g.typeText(f.Type))
@@ -125,36 +129,54 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 		b.WriteString("}\n")
 		inits = append(inits, fmt.Sprintf("%s: %s", name(f.Name).Name, g.text(g.fieldResolved(ast.NewIdent(v), f))))
 	}
-	for i, f := range fields {
-		v := fmt.Sprintf("_f%d", i)
-		for _, con := range f.Constraints {
-			stmts := g.atFailurePath(ast.NewIdent(v), f.Type, splitPath(con.Path), stringLit("."+f.Name), func(x ast.Expr, t check.Type, path ast.Expr) []ast.Stmt {
-				runtime := fieldConstraint(con, func(n string) string {
-					for j, sibling := range fields {
-						if sibling.Name == n {
-							return fmt.Sprintf("_f%d", j)
-						}
-					}
-					return name(n).Name
-				})
-				cond := g.constraintCond(runtime, x, t)
-				if cond == nil {
-					return nil
+	fmt.Fprintf(&b, "_out := %s{%s}\n", goType, strings.Join(inits, ", "))
+	owner := check.Invalid
+	if len(invariants) > 0 {
+		owner = invariants[0].typ
+	}
+	phases := 1
+	if hasComputedFields(fields) {
+		phases = 2
+	}
+	for phase := 0; phase < phases; phase++ {
+		if phase == 1 {
+			for _, stmt := range g.computedCells(ast.NewIdent("_out"), fields, owner) {
+				b.WriteString(g.text(stmt) + "\n")
+			}
+		}
+		for _, f := range fields {
+			for _, con := range f.Constraints {
+				early := !f.Computed && !con.HasSiblingArgs()
+				if phases == 2 && (phase == 0) != early {
+					continue
 				}
-				setup, failurePath, message := g.constraintFailure(runtime, x, t, path, con)
-				ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.info.Named["DecodeError"]), Elts: []ast.Expr{
-					&ast.KeyValueExpr{Key: ast.NewIdent("path"), Value: failurePath},
-					&ast.KeyValueExpr{Key: ast.NewIdent("message"), Value: message},
-				}}}}
-				return []ast.Stmt{&ast.IfStmt{Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)}, Body: &ast.BlockStmt{List: append(setup, ret)}}}
-			})
-			for _, s := range stmts {
-				b.WriteString(g.text(s) + "\n")
+				stmts := g.atFailurePath(g.fieldRead(ast.NewIdent("_out"), f), f.Type, splitPath(con.Path), stringLit("."+f.Name), func(x ast.Expr, t check.Type, path ast.Expr) []ast.Stmt {
+					runtime := fieldConstraint(con, func(n string) string {
+						for _, sibling := range fields {
+							if sibling.Name == n {
+								return g.fieldReadText("_out", sibling)
+							}
+						}
+						return name(n).Name
+					})
+					cond := g.constraintCond(runtime, x, t)
+					if cond == nil {
+						return nil
+					}
+					setup, failurePath, message := g.constraintFailure(runtime, x, t, path, con)
+					ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.info.Named["DecodeError"]), Elts: []ast.Expr{
+						&ast.KeyValueExpr{Key: ast.NewIdent("path"), Value: failurePath},
+						&ast.KeyValueExpr{Key: ast.NewIdent("message"), Value: message},
+					}}}}
+					return []ast.Stmt{&ast.IfStmt{Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)}, Body: &ast.BlockStmt{List: append(setup, ret)}}}
+				})
+				for _, s := range stmts {
+					b.WriteString(g.text(s) + "\n")
+				}
 			}
 		}
 	}
 
-	fmt.Fprintf(&b, "_out := %s{%s}\n", goType, strings.Join(inits, ", "))
 	for _, inv := range invariants {
 		for _, con := range inv.constraints {
 			if cond := g.constraintCond(con, ast.NewIdent("_out"), inv.typ); cond != nil {
@@ -182,6 +204,9 @@ func (g *gen) deriveEncode(fn *check.Func) string {
 			parts = append(parts, fmt.Sprintf("{name: \"type\", value: %s{value: %q}}", str, tag))
 		}
 		for i, f := range fs {
+			if f.Computed {
+				continue
+			}
 			fun, ds := g.dictMethod(dicts[i], "encode")
 			call := g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent(x), f))})
 			parts = append(parts, fmt.Sprintf("{name: %q, value: %s}", f.Name, call))

@@ -67,6 +67,13 @@ func (c *checker) lower(files []*syntax.File) {
 	for _, f := range files {
 		l.sources[f.Path] = f
 	}
+	for field := range c.info.fieldDefaults {
+		for i, param := range field.defaultParams {
+			v := &Var{Name: param.Name, Pos: param.Pos, Type: field.siblings[i].Type, Kind: VarDefaultField, Index: i, Sibling: field.siblings[i]}
+			l.vars[param] = v
+			field.DefaultVars = append(field.DefaultVars, v)
+		}
+	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
 			if fn := c.info.FuncOf[fd]; fn != nil {
@@ -84,6 +91,9 @@ func (c *checker) lower(files []*syntax.File) {
 	}
 	for field, x := range c.info.fieldDefaults {
 		field.Default = l.expr(x)
+		if metadata := c.info.lazyFields[x]; metadata != nil {
+			c.info.fieldRecipes[field.Default] = metadata
+		}
 	}
 	for _, fn := range c.info.mocks {
 		if fn.MockOf.Requires != nil {
@@ -442,6 +452,18 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			}
 			out.Fields = append(out.Fields, value)
 		}
+		for _, value := range out.Fields {
+			if !value.Field.Computed {
+				continue
+			}
+			if out.Candidate == nil {
+				out.Candidate = completedCandidate(out)
+			}
+			root := &VarRef{expr: at, Var: out.Candidate}
+			value.Value = computedRecipe(l.info, value.Field, value.Value, root)
+			value.Thunk.Body = value.Value
+			l.info.fieldRecipes[value.Value] = value.Lazy
+		}
 		return out
 	case *syntax.Copy:
 		out := &Copy{expr: at, X: l.expr(x.X)}
@@ -466,6 +488,7 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			}
 			out.Updates = append(out.Updates, fu)
 		}
+		l.refreshComputedCopy(out)
 		return out
 	case *syntax.Match:
 		out := &Match{expr: at, X: l.expr(x.X)}
