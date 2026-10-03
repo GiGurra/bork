@@ -1,0 +1,2 @@
+up: http://upstream/up
+down (503): http://upstream/down

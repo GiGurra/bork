@@ -168,10 +168,17 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 					g.usesOptionHelpers = true
 				}
 				goName := g.funcName(fn).Name
+				if g.mockIDs[fn] != 0 {
+					funcs = append(funcs, g.dispatchers(fn)...)
+				}
 				if g.testMode && (len(fn.ResultConstraints) > 0 || g.hasInvariants(fn.Result, map[check.Type]bool{})) {
 					// Check what the Go code promises.
-					funcs = append(funcs, g.checkedWrapper(fn))
+					wrapper := g.checkedWrapper(fn).(*ast.FuncDecl)
+					wrapper.Name = ast.NewIdent(g.realName(fn, goName))
+					funcs = append(funcs, wrapper)
 					goName = "_unchecked_" + goName
+				} else {
+					goName = g.realName(fn, goName)
 				}
 				text, err := g.goFunc(fd, goName)
 				if err != nil {
@@ -181,14 +188,23 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				continue
 			}
 			if fd.GoBind != nil {
-				text, err := g.bindFunc(fd, g.funcName(info.FuncOf[fd]).Name)
+				fn := info.FuncOf[fd]
+				if g.mockIDs[fn] != 0 {
+					funcs = append(funcs, g.dispatchers(fn)...)
+				}
+				text, err := g.bindFunc(fd, g.realName(fn, g.funcName(fn).Name))
 				if err != nil {
 					return nil, err
 				}
 				goFuncs = append(goFuncs, text)
 				continue
 			}
-			funcs = append(funcs, g.funcDecl(fd))
+			decl := g.funcDecl(fd)
+			if fn := info.FuncOf[fd]; g.mockIDs[fn] != 0 {
+				funcs = append(funcs, g.dispatchers(fn)...)
+				decl.Name = ast.NewIdent(g.realName(fn, decl.Name.Name))
+			}
+			funcs = append(funcs, decl)
 		}
 	}
 	if g.usesBind {
@@ -355,6 +371,20 @@ type gen struct {
 	// and propRoots the predicates their facts call.
 	genFuncs  []genFunc
 	propRoots []*check.Func
+	// mockIDs numbers the functions the tests mock (see mocks.go), which
+	// get dispatchers; openMocks are the mock statements whose blocks
+	// are being generated, mockBodies the mocks' bodies, and mockN
+	// numbers mock statements.
+	mockIDs    map[*check.Func]int
+	openMocks  []openMock
+	mockBodies []mockBody
+	mockN      int
+	usesMocks  bool
+	// blocks are the blocks being generated, and scopeBodies the scope
+	// blocks, so a mock can tell whether it is directly in a scope's
+	// body.
+	blocks      []*check.Block
+	scopeBodies []scopeBody
 }
 
 // reachable lists the functions to emit: the roots, and the functions
@@ -692,6 +722,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	case *check.Interp:
 		return g.interp(e)
 	case *check.FuncRef:
+		if frame := g.passthrough(e.Inst.Func); frame != nil {
+			return nil, g.nextRef(e.Inst.Func, frame)
+		}
 		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 {
 			return nil, g.funcRef(inst)
 		}
@@ -990,6 +1023,9 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			fun, dicts := g.methodFunc(inst)
 			return stmts, &ast.CallExpr{Fun: fun, Args: append(dicts, xs...)}
 		}
+		if frame := g.passthrough(inst.Func); frame != nil {
+			return stmts, g.nextCall(inst.Func, frame, xs)
+		}
 		var dicts []ast.Expr
 		for _, d := range inst.Dicts {
 			dicts = append(dicts, g.dict(d))
@@ -1043,9 +1079,9 @@ func (g *gen) lambda(e *check.Lambda) ast.Expr {
 	for i, p := range e.Params {
 		names[i] = name(p.Name)
 	}
-	saved, savedScopes, savedOwners := g.fnResult, g.openScopes, g.blockOwners
-	g.fnResult, g.openScopes, g.blockOwners = ft.Result, nil, nil
-	defer func() { g.openScopes, g.blockOwners = savedScopes, savedOwners }()
+	saved, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
+	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = ft.Result, nil, nil, nil
+	defer func() { g.openScopes, g.blockOwners, g.openMocks = savedScopes, savedOwners, savedMocks }()
 	var body []ast.Stmt
 	if ft.Result == check.Unit {
 		body = g.effect(e.Body)
@@ -1231,7 +1267,14 @@ func (g *gen) unitValue() ast.Expr {
 // blockInto lowers a block: its statements, then its tail into k.
 func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 	mark := len(g.blockOwners)
-	defer func() { g.blockOwners = g.blockOwners[:mark] }()
+	// The block's mocks end with it.
+	mocks := len(g.openMocks)
+	g.blocks = append(g.blocks, b)
+	defer func() {
+		g.blockOwners = g.blockOwners[:mark]
+		g.openMocks = g.openMocks[:mocks]
+		g.blocks = g.blocks[:len(g.blocks)-1]
+	}()
 	out := g.stmts(b.Stmts)
 	if g.diverges(b.Stmts) {
 		return out
@@ -1240,13 +1283,17 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 		// A block without a value, where a union holding Unit is wanted.
 		switch {
 		case k.ret && g.fnResult != check.Unit && g.fnResult != check.Never:
-			out = append(out, g.returning(g.unitValue())...)
+			return append(out, g.returning(g.unitValue())...)
 		case k.res != nil:
 			out = append(out, assign(k.res, g.unitValue()))
 		}
-		return out
+		return append(out, g.endMocks(mocks)...)
 	}
-	return append(out, g.into(b.Tail, k)...)
+	out = append(out, g.into(b.Tail, k)...)
+	if k.ret || b.Tail.Type() == check.Never {
+		return out // returning ended them
+	}
+	return append(out, g.endMocks(mocks)...)
 }
 
 // stmts lowers a block's statements (not its tail).
@@ -1285,6 +1332,8 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 			if g.testMode {
 				out = append(out, g.trustCheck(s)...)
 			}
+		case *check.Mock:
+			out = append(out, g.mockStmt(s)...)
 		}
 	}
 	return out
@@ -1356,7 +1405,9 @@ func (g *gen) scopeInto(e *check.ScopeBlock, k sink) []ast.Stmt {
 	)
 	stmts = append(stmts, policy...)
 	g.openScopes = append(g.openScopes, s)
+	g.scopeBodies = append(g.scopeBodies, scopeBody{body: e.Body, scope: s})
 	stmts = append(stmts, g.blockInto(e.Body, k)...)
+	g.scopeBodies = g.scopeBodies[:len(g.scopeBodies)-1]
 	g.openScopes = g.openScopes[:len(g.openScopes)-1]
 	if !k.ret && e.Body.Type() != check.Never {
 		stmts = append(stmts, &ast.ExprStmt{X: closeCall})
@@ -1376,7 +1427,7 @@ type blockOwner struct {
 // each scope block close before it, as they would at its end (their
 // tasks may use what it releases, or own its children).
 func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
-	if len(g.openScopes) == 0 {
+	if len(g.openScopes) == 0 && len(g.openMocks) == 0 {
 		return []ast.Stmt{&ast.ReturnStmt{Results: results}}
 	}
 	var stmts []ast.Stmt
@@ -1391,7 +1442,15 @@ func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
 			results = []ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: r}}}}
 		}
 	}
-	for i := len(g.openScopes) - 1; i >= 0; i-- {
+	// Scopes, owners and mocks end innermost first.
+	m := len(g.openMocks) - 1
+	for i := len(g.openScopes) - 1; i >= -1; i-- {
+		for ; m >= 0 && g.openMocks[m].depth > i; m-- {
+			stmts = append(stmts, endMock(g.openMocks[m]))
+		}
+		if i < 0 {
+			break
+		}
 		for j := len(g.blockOwners) - 1; j >= 0; j-- {
 			if o := g.blockOwners[j]; o.scopes == i+1 {
 				take := &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(o.name)}}}

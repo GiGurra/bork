@@ -89,6 +89,19 @@ fn names(users: List[User]) uses io {
 
 For development, `dbg(expr)` prints the expression and its value to stderr and returns it, including in pure code. `todo()` or `todo("message")` fills an unfinished branch and panics with its location if reached. `bork check` warns about both; `--json` includes a fix to remove each dbg wrapper.
 
+Tests replace functions that have effects with `mock`, with no interfaces or injected clients. A mock lasts until the end of its block, belongs to its test, and is seen by the tasks the test starts. Its body is checked against the function's signature, facts and effects included:
+
+```
+test "an upstream answering 503 is down" {
+  mock time.Now() { noon }
+  gets = mock http.Get(url, s, timeoutMs) { http.Text(503, "") }
+  assertEqual(checkAll(["https://a.example"]), [Health.Down { url: "https://a.example", status: 503, at: noon }])
+  assertEqual(gets.count(), 1)
+}
+```
+
+Production builds are unchanged. See [examples/mocking](examples/mocking/main.bork) and [mocking in tests](docs/requirements.md#mocking-in-tests-design-bork-53lit4).
+
 ## Goals
 
 - **Pragmatic high correctness for backend systems.** That is the whole point.

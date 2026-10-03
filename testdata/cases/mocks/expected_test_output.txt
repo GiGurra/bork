@@ -1,0 +1,15 @@
+ok    a mock replaces a function
+ok    a nested block replaces a mock until it ends
+ok    mocks keep promises and see the test's values
+ok    methods and the standard library can be mocked
+ok    tasks see the mocks in force where they started
+ok    blocks one after the other have their own mocks
+ok    a stateful fake
+ok    a mock's body can return early and use ?
+ok    the target's name inside its mock is the function before it
+ok    functions without a result, and recorded arguments
+ok    property tests can mock
+ok    a mock in a scope's body lasts until the scope's tasks are done
+ok    a task that outlives a block gets the mock from outside it
+13 passed, 0 failed
+exit code 0

@@ -198,7 +198,12 @@ func DescribeFacts(info *Info, fn *Func, x Expr, site diag.Pos, where string, ev
 			at, found = e, true
 		}
 	}
-	f.function(fn)
+	if fn.MockIn != nil {
+		// A mock's body is walked as part of its test.
+		f.function(fn.MockIn)
+	} else {
+		f.function(fn)
+	}
 	f.observe = nil
 	f.fn = fn
 	if !found {
@@ -312,4 +317,12 @@ func knownText(k known, from *Package) string {
 // Reference gives a variable declaration a typed reference for code queries.
 func Reference(v *Var) *VarRef {
 	return &VarRef{expr: expr{pos: v.Pos, typ: v.Type}, Var: v}
+}
+
+// MockTargetRef is a mock's target as a function value, for code
+// queries on its name.
+func MockTargetRef(m *Mock) *FuncRef {
+	t := &FuncType{Params: m.Target.Params, Result: m.Target.Result, Effects: m.Target.Effects}
+	inst := &Instance{Func: m.Target, Params: m.Target.Params, Result: m.Target.Result}
+	return &FuncRef{expr: expr{pos: m.TargetPos, typ: t, token: m.TargetPos}, Name: m.Text, Inst: inst}
 }

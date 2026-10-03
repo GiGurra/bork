@@ -1,0 +1,6 @@
+test "x" {
+  calls   =   mock   Fetch( url ,b )   {  "x" }
+  mock User.save(u,k){
+    u
+  }
+}

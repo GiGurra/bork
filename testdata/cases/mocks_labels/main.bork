@@ -1,0 +1,72 @@
+// Mocks keep the profiler labels Go code set, and give them back.
+
+fn Fetch(url: String) uses net: String {
+  panic(s"no network: $url")
+}
+
+// SetLabel sets a profiler label on the current goroutine, as Go
+// libraries and tracing code do.
+fn SetLabel(key: String, value: String) uses state unsafe go {
+  import "context"
+  import "runtime/pprof"
+  pprof.SetGoroutineLabels(pprof.WithLabels(context.Background(), pprof.Labels(key, value)))
+}
+
+// Labels lists the profiler label sets of the program's goroutines
+// (from a goroutine profile), keeping only the given key's labels.
+fn Labels(key: String) uses state: List[String] unsafe go {
+  import "bytes"
+  import "regexp"
+  import "runtime/pprof"
+  import "sort"
+  var buf bytes.Buffer
+  _ = pprof.Lookup("goroutine").WriteTo(&buf, 1)
+  seen := map[string]bool{}
+  for _, m := range regexp.MustCompile(`"`+regexp.QuoteMeta(key)+`":"[^"]*"`).FindAllString(buf.String(), -1) {
+    seen[m] = true
+  }
+  out := []string{}
+  for m := range seen {
+    out = append(out, m)
+  }
+  sort.Strings(out)
+  return out
+}
+
+// FetchFromGo calls Fetch on a goroutine Go code starts.
+fn FetchFromGo(url: String) uses net + state: String unsafe go {
+  done := make(chan string)
+  go func() { done <- Fetch(url) }()
+  return <-done
+}
+
+fn main() {
+  println(Fetch("x"))
+}
+
+test "a mock keeps the labels it found, and restores them" {
+  SetLabel("team", "payments")
+  {
+    mock Fetch(url) { s"fake $url" }
+    assertEqual(Labels("team"), ["\"team\":\"payments\""])
+    assertEqual(Labels("bork.mock").length(), 1)
+    assertEqual(Fetch("b"), "fake b")
+    assertEqual(FetchFromGo("a"), "fake a")
+  }
+  assertEqual(Labels("team"), ["\"team\":\"payments\""])
+  assertEqual(Labels("bork.mock"), [])
+}
+
+test "a nested mock keeps its parent when Go code replaced the labels" {
+  mock Fetch(url) { "outer" }
+  // This drops the test goroutine's labels, and with them the outer
+  // mock for calls made here, but not for the mocks nested in it.
+  SetLabel("team", "search")
+  {
+    mock Fetch(url) { s"inner+${Fetch(url)}" }
+    assertEqual(Fetch("a"), "inner+outer")
+    assertEqual(Labels("team"), ["\"team\":\"search\""])
+  }
+  assertEqual(Labels("team"), ["\"team\":\"search\""])
+  assertEqual(Labels("bork.mock"), [])
+}

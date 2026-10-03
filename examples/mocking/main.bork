@@ -1,0 +1,111 @@
+// mocking checks the health of upstream services, and its tests replace
+// the network and the clock with mocks: no interfaces, no injected
+// clients, and nothing in the code under test changes for them.
+//
+// The program starts a small server of its own (on a free port) with an
+// upstream that is up and one that is down, and checks both. The tests
+// mock http.Get and time.Now: per test, in force until the end of their
+// block, and seen by the tasks the checks run on.
+
+import "bork/http"
+import "bork/time"
+
+type Health = sealed {
+  Up { url: String },
+  Down { url: String, status: Int, at: time.Instant },
+  Unreachable { url: String, message: String },
+}
+
+// check asks url how it is, and notes when it found it down.
+fn check(url: String, s: Scope) uses net + clock: Health {
+  match (http.Get(url, s, timeoutMs: 2000)) {
+    r: http.Response => if (r.status < 500) {
+      Health.Up { url: url }
+    } else {
+      Health.Down { url: url, status: r.status, at: time.Now() }
+    }
+    e: IoError => Health.Unreachable { url: url, message: e.message }
+  }
+}
+
+// checkAll checks the urls at the same time, one task each.
+fn checkAll(urls: List[String]) uses net + clock: List[Health] {
+  scope s {
+    tasks = urls.map(url => spawn(s, () => check(url, s)))
+    tasks.map(t => await(t))
+  }
+}
+
+fn describe(h: Health): String {
+  match (h) {
+    Health.Up { url } => s"up: $url"
+    Health.Down { url, status } => s"down ($status): $url"
+    Health.Unreachable { url } => s"unreachable: $url"
+  }
+}
+
+fn upstream(req: http.Request, s: Scope): http.Response {
+  match (req.path) {
+    "/up" => http.Text(200, "ok")
+    _ => http.Text(503, "maintenance")
+  }
+}
+
+fn main() {
+  scope s {
+    match (http.Listen("127.0.0.1:0", s, handler: upstream)) {
+      server: http.Server => {
+        base = "http://" + http.Address(server)
+        lines = checkAll([base + "/up", base + "/down"]).map(h => describe(h).replaceAll(base, "http://upstream"))
+        lines.forEach(line => println(line))
+        cancel(s)
+      }
+      e: IoError => println(s"cannot listen: ${e.message}")
+    }
+  }
+}
+
+test "an upstream answering 503 is down, since the time it was checked" {
+  noon = time.Instant { unixNanos: 1_760_000_000_000_000_000 }
+  mock time.Now() { noon }
+  gets = mock http.Get(url, s, timeoutMs) { http.Text(503, "") }
+  assertEqual(checkAll(["https://a.example"]), [Health.Down { url: "https://a.example", status: 503, at: noon }])
+  assertEqual(gets.calls(), ["http.Get(\"https://a.example\", <scope>, 2000)"])
+}
+
+test "every task sees the test's mocks" {
+  mock http.Get(url, s, timeoutMs) {
+    if (url.contains("down")) { http.Text(500, "") } else { http.Text(200, "") }
+  }
+  mock time.Now() { time.Instant { unixNanos: 0 } }
+  urls = range(0, 20).map(i => if (i % 2 == 0) { s"https://up$i" } else { s"https://down$i" })
+  results = checkAll(urls).map(describe)
+  assertEqual(results.count(r => r.startsWith("up")), 10)
+  assertEqual(results.count(r => r.startsWith("down")), 10)
+}
+
+test "a nested block changes the mock, and the outer one comes back" {
+  mock http.Get(url, s, timeoutMs) { http.Text(200, "") }
+  {
+    mock http.Get(url, s, timeoutMs) { IoError { path: "", message: "connection refused" } }
+    assertEqual(checkAll(["https://a"]).map(describe), ["unreachable: https://a"])
+  }
+  assertEqual(checkAll(["https://a"]).map(describe), ["up: https://a"])
+}
+
+test "a mock can pass calls on to the real function" {
+  scope s {
+    match (http.Listen("127.0.0.1:0", s, handler: upstream)) {
+      server: http.Server => {
+        local = "http://" + http.Address(server)
+        // Only the outside world is faked; the local server is real.
+        mock http.Get(url, s2, timeoutMs) {
+          if (url.startsWith(local)) { http.Get(url, s2, timeoutMs) } else { http.Text(200, "") }
+        }
+        assertEqual(checkAll([local + "/down", "https://elsewhere"]).map(h => describe(h).replaceAll(local, "local")), ["down (503): local/down", "up: https://elsewhere"])
+        cancel(s)
+      }
+      e: IoError => panic(e.message)
+    }
+  }
+}

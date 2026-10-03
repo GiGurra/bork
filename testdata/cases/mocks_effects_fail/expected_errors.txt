@@ -1,0 +1,1 @@
+main.bork:11:5: the mock of Fetch uses io (it calls println), but a mock may use only what its target declares, and state: here net + state; compute what the mock needs in the test, and capture it

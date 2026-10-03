@@ -26,6 +26,7 @@ func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte,
 	g := newGen(info)
 	g.testMode = true
 	g.usesTests = true
+	g.mockTargets(info)
 	var roots []*check.Func
 	list := &ast.CompositeLit{Type: &ast.ArrayType{Elt: ast.NewIdent("_test")}}
 	snaps := map[string]bool{}

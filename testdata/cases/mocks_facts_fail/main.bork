@@ -1,0 +1,70 @@
+pred positive(n: Int) { n > 0 }
+pred atLeast(n: Int, lo: Int) { n >= lo }
+
+fn Port() uses io: Int where positive {
+  8080
+}
+
+fn Clamp(n: Int where positive) uses io: Int where positive {
+  n
+}
+
+// Get's body gives 1, but a test mocks it: callers know only what its
+// signature promises.
+fn Get() uses io: Int {
+  1
+}
+
+fn need(n: Int where positive): Int {
+  n
+}
+
+fn run() uses io: Int {
+  need(Get())
+}
+
+fn Between(lo: Int, hi: Int where atLeast(lo)) uses io: Int where atLeast(lo) {
+  hi
+}
+
+type Range = { lo: Int, hi: Int where atLeast(lo) }
+
+fn Span() uses io: Range {
+  Range { lo: 1, hi: 2 }
+}
+
+fn Ports() uses io: List[Int where positive] {
+  [80]
+}
+
+type Missing = { key: String }
+
+fn Find() uses io: Int where positive | Missing {
+  1
+}
+
+fn main() {
+  println(Port(), Clamp(1), run(), Between(1, 2), Span(), Ports(), Find())
+}
+
+test "a mock keeps its target's promises" {
+  mock Port() { 0 }
+  mock Clamp(n) { n }
+  mock Get() { 0 }
+  // The parameters' facts follow the mock's names for them.
+  mock Between(low, high) { high }
+  {
+    mock Between(high, low) { low }
+  }
+  mock Span() { Range { lo: 5, hi: 1 } }
+  mock Ports() { [0] }
+  mock Find() { 0 }
+  assertEqual(Port(), 0)
+}
+
+test "a test's facts are its own" (lo: Int, y: Int) {
+  if (atLeast(y, lo)) {
+    x: Int where atLeast(lo) = y
+    mock Between(a, b) { x }
+  }
+}

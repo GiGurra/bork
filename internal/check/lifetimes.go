@@ -526,6 +526,9 @@ func (l *lifeChecker) what() string {
 		if fn.Test != nil {
 			return "the test"
 		}
+		if fn.MockOf != nil {
+			return "the mock of " + fn.Decl.Name
+		}
 		return "function " + fn.Decl.Name
 	}
 	return "the lambda"
@@ -561,6 +564,8 @@ func (l *lifeChecker) stmt(s Stmt) {
 		l.use(s.X, l.expr(s.X))
 	case *Trust:
 		l.use(s.Call, l.expr(s.Call))
+	case *Mock:
+		l.mock(s)
 	}
 }
 
@@ -604,6 +609,41 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 		}
 	}
 	return life
+}
+
+// mock checks a mock's body as a lambda written at the mock statement:
+// it may use what is alive there, since the mock ends with its block
+// (after the calls of it still running have finished).
+func (l *lifeChecker) mock(m *Mock) {
+	saved := l.cur
+	l.parent[m.Func] = l.cur
+	l.cur = m.Func
+	for _, p := range m.Func.ParamVars {
+		l.frame[p] = m.Func
+		l.env[p] = lifetime{p}
+	}
+	life := l.use(m.Func.Body, l.expr(m.Func.Body))
+	l.result(m.Func.Body, life, l.what())
+	// Callers give the result the lifetime the target's signature
+	// implies: that of the arguments. So it may not hold what the mock
+	// captured from the test.
+	for _, x := range life {
+		switch x := x.(type) {
+		case *ScopeBlock:
+			if !l.within(x, m.Func) {
+				l.errorf(valuePos(m.Func.Body), "the mock of %s cannot return this value: it belongs to scope %s of the test, but callers of %s expect a result that lives as long as its arguments", m.Text, x.Var.Name, m.Text)
+				l.cur = saved
+				return
+			}
+		case *Var:
+			if !isParamOf(x, m.Func) {
+				l.errorf(valuePos(m.Func.Body), "the mock of %s cannot return this value: it belongs to the scope of %s, but callers of %s expect a result that lives as long as its arguments", m.Text, x.Name, m.Text)
+				l.cur = saved
+				return
+			}
+		}
+	}
+	l.cur = saved
 }
 
 // call checks the arguments of a call, and returns the lifetime of its

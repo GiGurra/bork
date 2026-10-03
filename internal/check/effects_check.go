@@ -59,6 +59,14 @@ type effectUses struct {
 	// is passed to a function that may call it: name is the parameter,
 	// text says what the code does with it.
 	open *openUse
+	// mocks are the effects of the mocks in a test's body, which are
+	// checked against what their targets allow.
+	mocks []mockUses
+}
+
+type mockUses struct {
+	mock *Mock
+	uses *effectUses
 }
 
 type openUse struct {
@@ -111,6 +119,13 @@ func checkEffects(fn *Func, diags *diag.List) {
 	u.block(fn.Body)
 	for _, pos := range u.mainRefs {
 		diags.AddCode(pos, "effect.main", "main cannot be called or used as a value: it may use every effect")
+	}
+	// A mock may use what its target declares, and state.
+	for _, m := range u.mocks {
+		allowed := m.mock.Target.Effects | EffState | EffOpen
+		if missing := m.uses.used &^ allowed; missing != 0 {
+			diags.AddCode(m.uses.first(missing, m.mock.Pos), "effect.mock", "the mock of %s uses %s (%s), but a mock may use only what its target declares, and state: here %s; compute what the mock needs in the test, and capture it", m.mock.Text, missing, m.uses.why(missing), (allowed &^ EffOpen).String())
+		}
 	}
 	fd := fn.Decl
 	if fn.Test != nil || fd.Name == "main" && fd.Uses == nil {
@@ -207,6 +222,12 @@ func (u *effectUses) block(b *Block) {
 			u.expr(s.X)
 		case *Trust:
 			u.expr(s.Call)
+		case *Mock:
+			// Not run here: a mock's body runs when the target is called.
+			inner := &effectUses{from: u.from}
+			inner.block(s.Func.Body)
+			u.mainRefs = append(u.mainRefs, inner.mainRefs...)
+			u.mocks = append(u.mocks, append([]mockUses{{s, inner}}, inner.mocks...)...)
 		}
 	}
 	u.expr(b.Tail)

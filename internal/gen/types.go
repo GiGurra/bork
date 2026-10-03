@@ -1096,6 +1096,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesProps {
 		src = append(src, propertyRuntime)
 	}
+	if g.usesMocks {
+		src = append(src, mockRuntime)
+	}
 	if g.usesScopes {
 		src = append(src, scopeRuntime, scopeHelpers)
 	}

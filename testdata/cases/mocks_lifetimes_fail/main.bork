@@ -1,0 +1,35 @@
+fn Fetch(url: String) uses net: String {
+  panic(url)
+}
+
+fn Reader() uses io: () uses io => String | IoError {
+  () => IoError { path: "", message: "no reader" }
+}
+
+fn main() {
+  println(Fetch("x"))
+}
+
+test "a mock cannot use what has been released" {
+  s2 = scope s {
+    s
+  }
+  mock Fetch(url) {
+    _ = s2
+    url
+  }
+  assertEqual(Fetch("a"), "a")
+}
+
+test "a mock cannot return what its test's scope holds" {
+  g = scope s {
+    mock Reader() {
+      () => {
+        _ = s
+        IoError { path: "", message: "closed" }
+      }
+    }
+    Reader()
+  }
+  _ = g
+}

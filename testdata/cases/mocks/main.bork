@@ -1,0 +1,176 @@
+import "bork/time"
+
+pred positive(n: Int) { n > 0 }
+
+type Store = { name: String }
+
+// Fetch would call the network.
+fn Fetch(url: String) uses net: String {
+  panic(s"no network in tests: $url")
+}
+
+fn Port() uses io: Int where positive {
+  8080
+}
+
+fn (s: Store) Save(key: String) uses io: String {
+  panic(s"no disk in tests: ${s.name}/$key")
+}
+
+fn page(url: String) uses net: String {
+  s"<${Fetch(url)}>"
+}
+
+fn stamp(label: String) uses clock: String {
+  s"$label@${time.Now().unixNanos}"
+}
+
+fn main() {
+  println(Port())
+}
+
+test "a mock replaces a function" {
+  calls = mock Fetch(url) { s"fake $url" }
+  assertEqual(page("a"), "<fake a>")
+  assertEqual(page("b"), "<fake b>")
+  assertEqual(calls.count(), 2)
+  assertEqual(calls.calls(), ["Fetch(\"a\")", "Fetch(\"b\")"])
+}
+
+test "a nested block replaces a mock until it ends" {
+  mock Fetch(url) { "outer" }
+  {
+    inner = mock Fetch(url) { s"inner, then ${Fetch(url)}" }
+    assertEqual(page("x"), "<inner, then outer>")
+    assertEqual(inner.count(), 1)
+  }
+  assertEqual(page("x"), "<outer>")
+}
+
+test "mocks keep promises and see the test's values" {
+  port = 9000
+  mock Port() { port }
+  assertEqual(Port(), 9000)
+}
+
+test "methods and the standard library can be mocked" {
+  mock Store.Save(s, key) { s"${s.name}:$key" }
+  mock time.Now() { time.Instant { unixNanos: 42 } }
+  assertEqual(Store { name: "db" }.Save("k"), "db:k")
+  assertEqual(stamp("t"), "t@42")
+}
+
+test "tasks see the mocks in force where they started" {
+  mock Fetch(url) { s"task $url" }
+  scope s {
+    tasks = ["a", "b", "c"].map(u => spawn(s, () => page(u)))
+    assertEqual(tasks.map(t => await(t)), ["<task a>", "<task b>", "<task c>"])
+  }
+}
+
+test "blocks one after the other have their own mocks" {
+  scope s {
+    first = {
+      mock Fetch(url) { "first" }
+      t = spawn(s, () => page("1"))
+      await(t)
+    }
+    second = {
+      mock Fetch(url) { "second" }
+      t = spawn(s, () => page("2"))
+      await(t)
+    }
+    assertEqual([first, second], ["<first>", "<second>"])
+  }
+}
+
+test "a stateful fake" {
+  clock = atom(0)
+  mock time.Now() { time.Instant { unixNanos: update(clock, n => n + 1) } }
+  assertEqual([stamp("a"), stamp("b")], ["a@1", "b@2"])
+}
+
+type NotFound = { key: String }
+
+fn Lookup(key: String) uses io: Int | NotFound | ParseError {
+  NotFound { key: key }
+}
+
+fn Notify(user: String, text: String) uses net {
+  panic(s"no network: $user $text")
+}
+
+fn total(keys: List[String]) uses io: Int | NotFound | ParseError {
+  match (keys) {
+    [] => 0
+    [first, ...rest] => Lookup(first)? + total(rest)?
+  }
+}
+
+test "a mock's body can return early and use ?" {
+  mock Lookup(key) {
+    if (key == "missing") {
+      return NotFound { key: key }
+    }
+    n = parseInt(key)?
+    n * 10
+  }
+  assertEqual(total(["1", "2"]), 30)
+  assertEqual(total(["1", "missing"]), NotFound { key: "missing" })
+}
+
+test "the target's name inside its mock is the function before it" {
+  mock Fetch(url) { s"real-ish $url" }
+  {
+    mock Fetch(url) { ["x", url].map(Fetch).join("+") }
+    assertEqual(Fetch("y"), "real-ish x+real-ish y")
+  }
+}
+
+test "functions without a result, and recorded arguments" {
+  sent = mock Notify(user, text) {}
+  Notify("ada", "hi")
+  scope s {
+    launch(s, () => Notify("bob", "yo"))
+  }
+  assertEqual(sent.calls(), ["Notify(\"ada\", \"hi\")", "Notify(\"bob\", \"yo\")"])
+}
+
+test "property tests can mock" (n: Int where positive) {
+  mock Port() { n }
+  assertEqual(Port(), n)
+}
+
+test "a mock in a scope's body lasts until the scope's tasks are done" {
+  none: List[String] = []
+  results = atom(none)
+  scope s {
+    mock Fetch(url) { s"fake $url" }
+    launch(s, () => {
+      sleep(30)
+      rLate = Fetch("late")
+      _ = update(results, rs => rs.append(rLate))
+    })
+  }
+  assertEqual(current(results), ["fake late"])
+}
+
+test "a task that outlives a block gets the mock from outside it" {
+  mock Fetch(url) { "outer" }
+  none: List[String] = []
+  results = atom(none)
+  scope s {
+    {
+      mock Fetch(url) { "inner" }
+      launch(s, () => {
+        rNow = Fetch("now")
+        _ = update(results, rs => rs.append(rNow))
+        sleep(30)
+        rLater = Fetch("later")
+        _ = update(results, rs => rs.append(rLater))
+      })
+      sleep(10)
+    }
+  }
+  assertEqual(current(results), ["inner", "outer"])
+}

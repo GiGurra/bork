@@ -1,0 +1,20 @@
+// Test support: the handle of a mock in a test.
+
+// Mock is the handle of a mock in a test (`calls = mock fetch(url) {
+// ... }`): it records the calls the mock answered, from every task.
+// The test runtime makes its functions.
+type Mock = {
+  countFn: () uses state => Int,
+  callsFn: () uses state => List[String],
+}
+
+// count is how many calls the mock answered so far.
+fn (m: Mock) count() uses state: Int {
+  m.countFn()
+}
+
+// calls lists the calls the mock answered, in the order they started,
+// as text: `fetch("https://example.com")`.
+fn (m: Mock) calls() uses state: List[String] {
+  m.callsFn()
+}

@@ -361,6 +361,22 @@ type Trust struct {
 	SubjectText string
 }
 
+// Mock is `mock target(a, b) { ... }` in a test: until the end of the
+// block, calls of Target run Func's body instead. Func is the mock's
+// body as a function, with Target's signature (see Func.MockOf); Var is
+// the handle that records the calls, or nil. Text is the target as
+// written, which recorded calls are shown with.
+type Mock struct {
+	Pos    diag.Pos
+	Target *Func
+	// Text is the target as written, at TargetPos.
+	Text      string
+	TargetPos diag.Pos
+	Var       *Var
+	Func      *Func
+}
+
+func (*Mock) stmtNode()     {}
 func (*Let) stmtNode()      {}
 func (*ExprStmt) stmtNode() {}
 func (*Trust) stmtNode()    {}

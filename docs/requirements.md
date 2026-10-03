@@ -1288,6 +1288,8 @@ main.bork:17:26: field run of Job must be () uses io => Unit, found () => Unit (
 
 ## Mocking in tests (design: bork-53lit4)
 
+> **Implemented** (bork-53lit4). The syntax is in [grammar.md](grammar.md); [examples/mocking](../examples/mocking/main.bork) mocks `http.Get` and `time.Now` across tasks.
+
 A test can replace a declared function for part of its run, with no interfaces, no
 dependency injection, and no change to the code under test. This is
 [rewire](https://gigurra.github.io/rewire/) built into the compiler: bork owns
@@ -1358,6 +1360,12 @@ test "retries after a failure" {
 }
 ```
 
+- **A mock written directly in a `scope` block's body lasts until the scope's
+  tasks are done.** The scope ends it as one of its finalizers, after waiting
+  for its tasks (and before the finalizers of what was opened before the
+  mock), so a task launched there sees the mock however late it calls. A
+  panic in the block closes the scope first, so a task stuck in such a mock
+  is cancelled, not waited for forever.
 - **One mock per target per block.** Mocking the same target twice in one block
   is an error (as rebinding a name is); a nested block may mock it again, and
   wins there.
@@ -1418,7 +1426,10 @@ started:
   A frame is marked ended when its block ends, and lookups skip ended frames.
   The labels stay valid for profilers. `unsafe go` code that sets its own
   profiler labels (`pprof.Do`) hides the test's mocks from what runs under
-  them; it then gets the real functions.
+  them; it then gets the real functions. On the test's own goroutine that
+  holds until the block of the next mock ends (which restores the labels it
+  found); mocks written later still pass calls on to the ones around them,
+  since each frame's parent is the mock the compiler sees around it.
 
 ### Contracts: a mock must keep the target's promises
 
@@ -1453,10 +1464,19 @@ checked as if it were that function's body:
   own body.
 - **Lifetimes.** The body is checked like a lambda written at the `mock`
   statement: it may capture what lives at least as long as the block.
-- **Declared facts only.** The contract is the target's signature. If private
-  functions ever expose facts derived from their bodies (an
-  [open question](#open-questions-1)), a mock would have to meet those too, or
-  such functions could not be mocked.
+- **Declared facts only.** A caller in the same package can usually prove
+  facts about a call's result from the callee's body (`fn Get(): Int { 1 }`
+  gives a positive result). A function a test mocks gives its callers only
+  what its signature promises, as another package's function does, in
+  programs and tests alike: a mock keeps the signature's promises, not the
+  body's. Code that needs more says so in the signature.
+- **Names.** In a mock's body, the target's facts are about the mock's names
+  for the parameters (`mock Between(low, high)` reads `hi: Int where
+  atLeast(lo)` as `high` being at least `low`), and a `where` written in the
+  body names the mock's parameters, or the test's.
+- **Results live as long as the arguments.** Callers give a mock's result the
+  lifetime the target's signature implies, so the result may not hold a
+  resource or scope the mock captured from the test.
 
 ### What can be mocked
 
@@ -1508,8 +1528,10 @@ gets the mock again, as any call under it does.
 A `mock` statement can bind a handle, of the prelude's type `Mock`, that
 records the calls the mock answered, from every goroutine:
 
-- `m.count(): Int` is how many calls it answered so far.
-- `m.calls(): List[String]` lists them in the order they started, each as the
+- `m.count(): Int` is how many calls it answered so far (always the length
+  of `m.calls()`).
+- `m.calls(): List[String]` lists them in the order they were recorded (as they
+  started, give or take calls racing on other tasks), each as the
   call's text with its arguments rendered as `toString` does (which gives
   every value a text, functions, scopes, and Go values included):
   `["payments.Charge(Card { last4: \"4242\" }, 100)"]`, so `assertEqual` and

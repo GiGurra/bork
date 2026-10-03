@@ -723,6 +723,12 @@ func (p *parser) block() *Block {
 		}
 		var stmt Stmt
 		switch {
+		case p.atMock():
+			stmt = p.mockStmt(p.tok().Pos, "")
+		case p.at(TIdent) && p.peekKind() == Assign && p.toks[min(p.i+2, len(p.toks)-1)].Text == "mock" && p.toks[min(p.i+3, len(p.toks)-1)].Kind == TIdent:
+			name := p.next()
+			p.next() // '='
+			stmt = p.mockStmt(name.Pos, name.Text)
 		case (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == Assign:
 			// `_ = f()` evaluates f() and drops its value.
 			name := p.next()
@@ -776,6 +782,53 @@ func (p *parser) block() *Block {
 		}
 		p.i = save
 	}
+}
+
+// atMock reports whether a mock statement starts here: `mock` followed
+// by a name. (`mock` is a keyword only there.)
+func (p *parser) atMock() bool {
+	return p.at(TIdent) && p.tok().Text == "mock" && p.peekKind() == TIdent
+}
+
+// mockStmt parses `mock target(a, b) { ... }`, at 'mock'; pos and name
+// are those of the handle it is bound to, if any.
+func (p *parser) mockStmt(pos diag.Pos, name string) *MockStmt {
+	m := &MockStmt{Pos: pos, Name: name, MockPos: p.next().Pos}
+	t := p.next()
+	if t.Kind != TIdent {
+		p.errorf(t.Pos, "expected the function to mock after 'mock', found %s", t.Kind)
+		panic(bailout{})
+	}
+	m.Target = &Ident{Pos: t.Pos, Name: p.qualify(t)}
+	if p.at(Dot) && p.peekKind() == TIdent {
+		p.next()
+		method := p.next()
+		m.Target = &Selector{Pos: method.Pos, X: m.Target, Name: method.Text}
+	}
+	if p.at(LBrack) {
+		p.errorf(p.tok().Pos, "generic functions cannot be mocked yet")
+		panic(bailout{})
+	}
+	m.ParamsStart = p.expect(LParen, "to start the mock's parameters").Pos
+	for !p.at(RParen) {
+		par := p.next()
+		switch par.Kind {
+		case TIdent:
+		case Underscore:
+			par.Text = "_"
+		default:
+			p.errorf(par.Pos, "a mock's parameters are names only (their types come from the function it mocks), found %s", par.Kind)
+			panic(bailout{})
+		}
+		m.Params = append(m.Params, &Param{Pos: par.Pos, Name: par.Text})
+		if !p.at(Comma) {
+			break
+		}
+		p.next()
+	}
+	m.ParamsEnd = p.expect(RParen, "to close the mock's parameters").Pos
+	m.Body = p.block()
+	return m
 }
 
 // Binary operator precedence, lowest first.

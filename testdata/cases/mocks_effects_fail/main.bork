@@ -1,0 +1,15 @@
+fn Fetch(url: String) uses net: String {
+  panic(url)
+}
+
+fn main() {
+  println(Fetch("x"))
+}
+
+test "a mock may not do more than its target" {
+  mock Fetch(url) {
+    println(url)
+    "fake"
+  }
+  assertEqual(Fetch("a"), "fake")
+}
