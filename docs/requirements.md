@@ -2171,7 +2171,10 @@ fix).
 - **Lifetimes and owned scopes.** None: ambient types hold no lifetime.
 - **Propagation across process boundaries** (bork-gqxe4s) designs the
   `propagated` marker above: the codecs, which headers or metadata carry the
-  values, and how a server binds them on the receiving side.
+  values, and how a server binds them on the receiving side. The proposed
+  [HTTP boundary design](design/http-propagation.md) specifies remaining
+  deadline budgets, server policy caps, W3C trace forwarding, and the distinction
+  between incoming labels and explicit checked bindings for typed `needs`.
 - **describe** shows a function's needs beside its effects, in text and JSON
   (`needs: [traceId, locale?]`), and `ambient` declarations with their types.
 
