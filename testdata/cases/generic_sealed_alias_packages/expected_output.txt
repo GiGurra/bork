@@ -1,0 +1,4 @@
+Box.Visible { value: 7 } 7
+Box.Visible { value: 8 } 8
+Box.Empty 0
+9
