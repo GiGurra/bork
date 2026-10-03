@@ -156,10 +156,12 @@ type lambdaArg struct {
 // `a || b`) has a nil pred and the alternatives in or, each a list of
 // facts that hold together; at least one alternative holds.
 type fact struct {
-	pred    *Func
-	subject string
-	args    []argVal
-	or      [][]fact
+	pred       *Func
+	subject    string
+	args       []argVal
+	or         [][]fact
+	comparison *comparison
+	value      argVal
 }
 
 // factKey identifies a fact, to tell when it is already in use.
@@ -174,6 +176,9 @@ func factKey(ft fact) string {
 			alts = append(alts, strings.Join(all, " && "))
 		}
 		return "(" + strings.Join(alts, " || ") + ")"
+	}
+	if c := ft.comparison; c != nil {
+		return fmt.Sprintf("%s %v %s %t", c.left.key, c.op, c.right.key, c.positive)
 	}
 	out := ft.pred.Decl.Name + "(" + ft.subject
 	for _, a := range ft.args {
@@ -994,6 +999,9 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 		}
 	}
 	if ob.or == nil {
+		if cs.take(f.unfold(f.argOf(x), ob, e, depth)) {
+			return true, nil
+		}
 		if cs.take(f.byRules(f.argOf(x), ob, e, depth)) {
 			return true, nil
 		}
@@ -1649,6 +1657,7 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 	if depth > maxDepth {
 		return false, nil
 	}
+	var cs candidates
 	for _, r := range f.info.Rules {
 		for _, c := range r.Conclusions {
 			if c.Pred != ob.pred || len(c.Args) != len(ob.args)+1 {
@@ -1670,14 +1679,14 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 				continue
 			}
 			f.active[goal] = true
-			proven, pending := f.premises(r, 0, bound, ob.path, e, depth+1)
+			proven, pending := f.rulePremises(r, r.Premises, bound, ob.path, e, depth+1)
 			delete(f.active, goal)
-			if proven {
-				return true, pending
+			if cs.take(proven, pending) {
+				return true, nil
 			}
 		}
 	}
-	return false, nil
+	return cs.result()
 }
 
 // bindArg binds a rule argument to a value, or checks that it matches.
@@ -1692,80 +1701,184 @@ func bindArg(bound map[string]argVal, a RuleArg, v argVal) bool {
 	return true
 }
 
-// premises proves the rule's premises from index i on, binding the
-// variables that only premises mention to the facts that match them.
-// With a path, the rule is applied to that part of the values (every
-// element of a list).
-func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, path string, e env, depth int) (bool, []Query) {
-	if i == len(r.Premises) {
-		vars := map[string]constant.Value{}
-		for name, v := range bound {
-			vars[name] = v.value
-		}
-		for _, cond := range r.Conditions {
-			v := evalCondition(cond, vars)
-			if v == nil || v.Kind() != constant.Bool || !constant.BoolVal(v) {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	p := r.Premises[i]
-	subject, ok := bound[p.Args[0].Var]
-	if !ok {
+// rulePremises binds values mentioned only in premises from matching
+// facts, then proves every premise and condition. With a path, the rule
+// applies to that part of each value (for example, every list element).
+func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[string]argVal, path string, e env, depth int) (bool, []Query) {
+	if depth > maxDepth {
 		return false, nil
 	}
-	free := false
-	args := make([]argVal, len(p.Args)-1)
-	for j, a := range p.Args[1:] {
-		switch {
-		case a.Const != nil:
-			args[j] = constArg(a.Const)
-		default:
-			v, isBound := bound[a.Var]
-			if !isBound {
-				free = true
+	if len(remaining) == 0 {
+		vars := map[string]constant.Value{}
+		subst := map[*Var]argVal{}
+		for _, v := range r.Vars {
+			subst[v] = bound[v.Name]
+			vars[v.Name] = bound[v.Name].value
+		}
+		var pending []Query
+		for _, cond := range r.Conditions {
+			if v := evalCondition(cond, vars); v != nil && v.Kind() == constant.Bool {
+				if !constant.BoolVal(v) {
+					return false, nil
+				}
+				continue
 			}
-			args[j] = v
+			ok, queries := f.proveCondition(substituteExpr(cond, subst), true, e, depth+1)
+			if !ok {
+				return false, nil
+			}
+			pending = append(pending, queries...)
 		}
+		return true, pending
 	}
-	if !free {
-		ok, pending := f.proveArg(subject, obligation{pred: p.Pred, args: args, path: path}, e, depth)
-		if !ok {
-			return false, nil
+	var cs candidates
+	for i, p := range remaining {
+		args := make([]argVal, len(p.Args))
+		complete := true
+		for j, a := range p.Args {
+			if a.Const != nil {
+				args[j] = constArg(a.Const)
+			} else {
+				v, ok := bound[a.Var]
+				args[j] = v
+				complete = complete && ok
+			}
 		}
-		rest, more := f.premises(r, i+1, bound, path, e, depth)
-		return rest, append(pending, more...)
-	}
-	// Bind the free variables to a fact about the subject.
-	var candidates []known
-	if subject.expr != nil {
-		for _, k := range f.declared(subject.expr, e, depth) {
-			if k.path == path {
-				candidates = append(candidates, k)
+		rest := append(append([]*RuleAtom{}, remaining[:i]...), remaining[i+1:]...)
+		if complete {
+			ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:], path: path}, e, depth+1)
+			if !ok {
+				return cs.result()
+			}
+			done, more := f.rulePremises(r, rest, bound, path, e, depth+1)
+			if cs.take(done, append(pending, more...)) {
+				return true, nil
+			}
+			return cs.result()
+		}
+		// An unbound variable may be the subject as well as an argument.
+		// Try each matching fact; another premise can provide the binding first.
+		var candidates []fact
+		if path == "" {
+			candidates = append(candidates, e.facts...)
+		}
+		subjects := map[string]argVal{}
+		for _, v := range bound {
+			if v.key != "" {
+				subjects[v.key] = v
+			}
+		}
+		if f.fn != nil {
+			for _, p := range f.fn.ParamVars {
+				v := f.argOf(f.paramRef(p))
+				subjects[v.key] = v
+			}
+		}
+		for _, ft := range e.facts {
+			if cmp := ft.comparison; cmp != nil {
+				subjects[cmp.left.key], subjects[cmp.right.key] = cmp.left, cmp.right
+			}
+			if ft.value.key != "" {
+				subjects[ft.value.key] = ft.value
+			}
+			for _, v := range ft.args {
+				if v.key != "" {
+					subjects[v.key] = v
+				}
+			}
+		}
+		for _, v := range subjects {
+			if v.expr == nil {
+				continue
+			}
+			for _, k := range f.declared(v.expr, e, depth+1) {
+				if k.path == path && k.pred != nil {
+					candidates = append(candidates, fact{pred: k.pred, subject: v.key, args: k.args, value: v})
+				}
+			}
+		}
+		for _, ft := range candidates {
+			if ft.pred != p.Pred || len(ft.args)+1 != len(p.Args) {
+				continue
+			}
+			next := map[string]argVal{}
+			for name, v := range bound {
+				next[name] = v
+			}
+			subject := ft.value
+			if subject.key == "" {
+				subject = subjects[ft.subject]
+				subject.key = ft.subject
+			}
+			matches := bindArg(next, p.Args[0], subject)
+			for j, a := range p.Args[1:] {
+				matches = matches && bindArg(next, a, ft.args[j])
+			}
+			if matches {
+				if cs.take(f.rulePremises(r, rest, next, path, e, depth+1)) {
+					return true, nil
+				}
+			}
+		}
+		// A comparison guard can supply a missing value without naming a
+		// predicate. Try its stable values, then prove the instantiated atom.
+		if path == "" {
+			if ok, pending := f.bindRuleValues(r, p, 0, bound, subjects, depth+1, func(next map[string]argVal) (bool, []Query) {
+				args := make([]argVal, len(p.Args))
+				for j, a := range p.Args {
+					if a.Const != nil {
+						args[j] = constArg(a.Const)
+					} else {
+						args[j] = next[a.Var]
+					}
+				}
+				ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:]}, e, depth+1)
+				if !ok {
+					return false, nil
+				}
+				done, more := f.rulePremises(r, rest, next, path, e, depth+1)
+				return done, append(pending, more...)
+			}); cs.take(ok, pending) {
+				return true, nil
 			}
 		}
 	}
-	for _, k := range candidates {
-		if k.pred != p.Pred {
+	return cs.result()
+}
+
+func (f *factChecker) bindRuleValues(r *Rule, p *RuleAtom, i int, bound, values map[string]argVal, depth int, prove func(map[string]argVal) (bool, []Query)) (bool, []Query) {
+	if depth > maxDepth {
+		return false, nil
+	}
+	if i == len(p.Args) {
+		return prove(bound)
+	}
+	a := p.Args[i]
+	if _, ok := bound[a.Var]; ok || a.Const != nil {
+		return f.bindRuleValues(r, p, i+1, bound, values, depth+1, prove)
+	}
+	var typ Type
+	for j, param := range r.Decl.Params {
+		if param.Name == a.Var {
+			typ = r.VarTypes[j]
+			break
+		}
+	}
+	var cs candidates
+	for _, v := range values {
+		if v.expr == nil || !identical(v.expr.Type(), typ) {
 			continue
 		}
 		next := map[string]argVal{}
 		for name, v := range bound {
 			next[name] = v
 		}
-		matches := true
-		for j, a := range p.Args[1:] {
-			matches = matches && bindArg(next, a, k.args[j])
-		}
-		if !matches {
-			continue
-		}
-		if ok, pending := f.premises(r, i+1, next, path, e, depth); ok {
-			return true, pending
+		next[a.Var] = v
+		if cs.take(f.bindRuleValues(r, p, i+1, next, values, depth+1, prove)) {
+			return true, nil
 		}
 	}
-	return false, nil
+	return cs.result()
 }
 
 // proveArg proves ob for a value that may only be known by key.
@@ -1809,13 +1922,16 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 		switch {
 		case c.Op == syntax.AndAnd && positive, c.Op == syntax.OrOr && !positive:
 			return append(f.conditionFacts(c.X, positive), f.conditionFacts(c.Y, positive)...)
-		case c.Op == syntax.OrOr && positive:
+		case (c.Op == syntax.OrOr && positive) || (c.Op == syntax.AndAnd && !positive):
 			// One side holds: only useful if both sides say something.
-			l, r := f.conditionFacts(c.X, true), f.conditionFacts(c.Y, true)
+			l, r := f.conditionFacts(c.X, positive), f.conditionFacts(c.Y, positive)
 			if len(l) == 0 || len(r) == 0 {
 				return nil
 			}
 			return []fact{{or: append(alternatives(l), alternatives(r)...)}}
+		}
+		if cmp := f.comparison(c, positive); cmp != nil {
+			return []fact{{comparison: cmp}}
 		}
 	case *Call:
 		fn, args := c.Func, c.Args
@@ -1826,7 +1942,7 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 		if subject == "" {
 			return nil
 		}
-		ft := fact{pred: fn, subject: subject}
+		ft := fact{pred: fn, subject: subject, value: f.argOf(args[0])}
 		for _, a := range args[1:] {
 			ft.args = append(ft.args, f.argOf(a))
 		}

@@ -4,13 +4,24 @@ ok    rule narrower
 ok    rule fractionBelowOne
 ok    rule onIsOn
 FAIL  rule nonNegativeIsPositive
-      main.bork:29:1: rule nonNegativeIsPositive does not hold for x = 0: the premises hold, but positive(x) is false
+      main.bork:29:1: rule nonNegativeIsPositive: the premises hold, but positive(x) is false
+      for x = 0
+      case 2, seed 688106933858114386 (bork test --seed 688106933858114386)
 FAIL  rule shortIsNonEmpty
-      main.bork:30:1: rule shortIsNonEmpty does not hold for s = "": the premises hold, but nonEmpty(s) is false
+      main.bork:30:1: rule shortIsNonEmpty: the premises hold, but nonEmpty(s) is false
+      for s = ""
+      case 16, seed 3134290500771445980 (bork test --seed 3134290500771445980)
 FAIL  rule smallDoubles
-      main.bork:32:1: rule smallDoubles does not hold for x = 100: the premises hold, but doubles8(x) is false
+      main.bork:32:1: rule smallDoubles: the premises hold, but doubles8(x) is false
+      for x = 64 (shrunk from x = 101)
+      case 32, seed 887142683976933405 (bork test --seed 887142683976933405)
 FAIL  rule wrongWeakening
-      main.bork:33:1: rule wrongWeakening does not hold for x = 0, a = 0, b = 1: the premises hold, but atLeast(x, b) is false
-skip  rule shortLists (no values are generated for List[Int])
-5 passed, 4 failed, 1 skipped
+      main.bork:33:1: rule wrongWeakening: the premises hold, but atLeast(x, b) is false
+      for x = 0, a = 0, b = 1 (shrunk from x = 3, a = -12, b = 7)
+      case 15, seed 8456910392741842535 (bork test --seed 8456910392741842535)
+FAIL  rule shortLists
+      main.bork:36:1: rule shortLists: the premises hold, but notEmpty(xs) is false
+      for xs = []
+      case 8, seed 743134816766710285 (bork test --seed 743134816766710285)
+5 passed, 5 failed
 exit code 1

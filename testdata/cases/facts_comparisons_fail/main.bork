@@ -1,0 +1,46 @@
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, limit: Int) { n <= limit }
+pred ordered(a: Float, b: Float) { a <= b }
+pred notPositive(n: Int) { !positive(n) }
+pred loop(n: Int) { loop(n) }
+fn need(n: Int where positive): Int { n }
+fn needOrdered(a: Float, b: Float where ordered(a)): Float { b }
+fn needNegative(n: Int where notPositive): Int { n }
+fn needLoop(n: Int where loop): Int { n }
+fn missing(n: Int): Int { need(n) }
+fn wrong(n: Int): Int { if (n < 0) { need(n) } else { 0 } }
+fn leaked(n: Int) uses io: Int {
+  if (n > 0) { println(n) }
+  need(n)
+}
+fn disjunction(n: Int, m: Int): Int {
+  if (n > 0 || m > 0) { need(n) } else { 0 }
+}
+// For NaN, !(b > a) holds, but b <= a does not.
+fn floatNegation(a: Float, b: Float): Float {
+  if (!(b > a)) { needOrdered(a, b) } else { 0.0 }
+}
+fn absent(n: Int): Int { needNegative(n) }
+fn cycle(n: Int): Int { needLoop(n) }
+pred recursiveGuard(n: Int) { recursiveGuard(n) && recursiveGuard(n) }
+fn guardedCycle(n: Int): Int {
+  if (recursiveGuard(n)) { need(n) } else { 0 }
+}
+// Arithmetic is outside simple unfolding: substituted constants still
+// have the predicate's fixed-width runtime semantics.
+pred positiveSum(n: Int8, limit: Int8) { limit + 1 > 0 }
+fn needSum(n: Int8 where positiveSum(127)): Int8 { n }
+fn uncheckedSum(n: Int8): Int8 { needSum(n) }
+pred rounded(n: Float32, bound: Float32) { bound + 1.0 > bound }
+fn needRounded(n: Float32 where rounded(16777216.0)): Float32 { n }
+fn uncheckedRounded(n: Float32): Float32 { needRounded(n) }
+pred negated(n: Int8, bound: Int8) { -bound > 0 }
+fn needNegated(n: Int8 where negated(-128)): Int8 { n }
+fn uncheckedNegated(n: Int8): Int8 { needNegated(n) }
+pred roundedLiteral32(n: Int, bound: Float32) { bound > 16777216.0 }
+fn needLiteral32(n: Int where roundedLiteral32(16777217.0)): Int { n }
+fn uncheckedLiteral32(n: Int): Int { needLiteral32(n) }
+pred roundedLiteral64(n: Int, bound: Float) { bound > 9007199254740992.0 }
+fn needLiteral64(n: Int where roundedLiteral64(9007199254740993.0)): Int { n }
+fn uncheckedLiteral64(n: Int): Int { needLiteral64(n) }
+fn main() {}

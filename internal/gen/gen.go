@@ -308,7 +308,6 @@ type gen struct {
 	usesTests        bool
 	usesSnaps        bool
 	usesProps        bool
-	usesRules        bool
 	usesScopes       bool
 	usesDerive       bool
 	usesEqual        bool

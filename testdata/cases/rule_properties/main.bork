@@ -32,7 +32,7 @@ rule shortIsNonEmpty(s: String) { short(s) => nonEmpty(s) }
 rule smallDoubles(x: Int8) { small8(x) => doubles8(x) }
 rule wrongWeakening(x: Int, a: Int, b: Int) { atLeast(x, a) and a <= b => atLeast(x, b) }
 
-// No values are generated for lists, so this rule is not tested.
+// Composite values are generated too, so this invalid rule is checked.
 rule shortLists(xs: List[Int]) { short2(xs) => notEmpty(xs) }
 
 fn main() {}
