@@ -1,0 +1,246 @@
+// Package net provides scope-owned TCP and UDP sockets.
+type Connection = resource
+type Server = resource
+type Socket = resource
+type Eof = {}
+type Packet = { data: Bytes, address: String }
+type Endpoint = { host: String, port: String }
+pred ValidTimeout(ms: Int) { ms >= 0 && ms <= 9223372036854 }
+type TimeoutMs = Int where ValidTimeout
+pred ValidReadSize(size: Int) { size > 0 && size <= 16777216 }
+type ReadSize = Int where ValidReadSize
+
+// Dial opens a TCP connection. Zero timeout uses only scope cancellation.
+fn Dial(address: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + state + clock: Connection | IoError | Cancelled unsafe go {
+  import "bufio"
+  import "context"
+  import "net"
+  import "time"
+  ctx := _borkScopeContext(s)
+  if timeoutMs > 0 {
+    var stop context.CancelFunc
+    ctx, stop = context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+    defer stop()
+  }
+  raw, err := (&net.Dialer{}).DialContext(ctx, "tcp", address)
+  if err != nil {
+    if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+    return IoError{path: address, message: err.Error()}
+  }
+  handle := _borkNewResourceHandle(struct { conn net.Conn; reader *bufio.Reader }{raw, bufio.NewReader(raw)}, s)
+  go func() { <-handle.Context().Done(); raw.Close() }()
+  return Connection{handle: handle, owner: s.Own(func() { handle.Close(); raw.Close() })}
+}
+
+// Listen starts a TCP server. Each handler receives a connection and its own
+// scope. Closing the server's scope cancels connections and waits for handlers.
+fn Listen(address: String, s: Scope, handler: (Connection, Scope) => Unit | IoError | Cancelled) uses net + state: Server | IoError | Cancelled unsafe go {
+  import "bufio"
+  import "net"
+  import "sync"
+  import "log/slog"
+  if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  listener, err := (&net.ListenConfig{}).Listen(_borkScopeContext(s), "tcp", address)
+  if err != nil { return IoError{path: address, message: err.Error()} }
+  done := make(chan struct{})
+  handle := _borkNewResourceHandle(struct { listener net.Listener; done chan struct{} }{listener, done}, s)
+  go func() { <-handle.Context().Done(); listener.Close() }()
+  go func() {
+    defer close(done)
+    var handlers sync.WaitGroup
+    defer handlers.Wait()
+    for {
+      raw, err := listener.Accept()
+      if err != nil { return }
+      handlers.Add(1)
+      go func() {
+        defer handlers.Done()
+        defer func() { if failure := recover(); failure != nil { slog.Error("bork: TCP handler failed", "failure", failure) } }()
+        child := _borkScopeWith(handle.Context())
+        defer _borkScopeAbort(child)
+        connHandle := _borkNewResourceHandle(struct { conn net.Conn; reader *bufio.Reader }{raw, bufio.NewReader(raw)}, child)
+        go func() { <-connHandle.Context().Done(); raw.Close() }()
+        conn := Connection{handle: connHandle, owner: child.Own(func() { connHandle.Close(); raw.Close() })}
+        task := child.Go(func() any { return handler(conn, child) })
+        result := task.Await()
+        switch result.(type) {
+        case _Unit, Cancelled:
+        default: slog.Error("bork: TCP handler returned an error", "error", result)
+        }
+        _borkScopeClose(child)
+      }()
+    }
+  }()
+  return Server{handle: handle, owner: s.Own(func() { handle.Close(); listener.Close(); <-done })}
+}
+
+fn Address(server: Server): String unsafe go {
+  import "net"
+  return server.handle.(*_borkResourceHandle).Value.(struct { listener net.Listener; done chan struct{} }).listener.Addr().String()
+}
+fn Wait(server: Server) uses net + state unsafe go {
+  import "net"
+  <-server.handle.(*_borkResourceHandle).Value.(struct { listener net.Listener; done chan struct{} }).done
+}
+fn LocalAddress(conn: Connection): String unsafe go {
+  import "bufio"
+  import "net"
+  return conn.handle.(*_borkResourceHandle).Value.(struct { conn net.Conn; reader *bufio.Reader }).conn.LocalAddr().String()
+}
+fn RemoteAddress(conn: Connection): String unsafe go {
+  import "bufio"
+  import "net"
+  return conn.handle.(*_borkResourceHandle).Value.(struct { conn net.Conn; reader *bufio.Reader }).conn.RemoteAddr().String()
+}
+
+// Read returns available bytes, up to size. Eof means a clean closed stream.
+// One reader and one writer may run concurrently; concurrent readers may not.
+fn Read(conn: Connection, size: ReadSize = 4096, timeoutMs: TimeoutMs = 0) uses net + state + clock: Bytes | Eof | IoError | Cancelled unsafe go {
+  import "bufio"
+  import "io"
+  import "net"
+  import "time"
+  handle := conn.handle.(*_borkResourceHandle)
+  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader })
+  if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  deadline := time.Time{}
+  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if err := state.conn.SetReadDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
+  data := make([]byte, int(size))
+  n, err := state.reader.Read(data)
+  if n > 0 { return _borkBytesFrom(data[:n]) }
+  if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  if err == io.EOF { return Eof{} }
+  if err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
+  return _borkBytesFrom(nil)
+}
+
+// ReadLine removes LF or CRLF and preserves a final unterminated line.
+// Invalid UTF-8 is ParseError; a final bare CR is preserved.
+fn ReadLine(conn: Connection, timeoutMs: TimeoutMs = 0) uses net + state + clock: String | Eof | IoError | Cancelled | ParseError {
+  raw = readLine(conn, timeoutMs)?
+  utf8String(raw)
+}
+fn readLine(conn: Connection, timeoutMs: TimeoutMs) uses net + state + clock: Bytes | Eof | IoError | Cancelled unsafe go {
+  import "bufio"
+  import "io"
+  import "net"
+  import "time"
+  handle := conn.handle.(*_borkResourceHandle)
+  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader })
+  if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  deadline := time.Time{}
+  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if err := state.conn.SetReadDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
+  data, err := state.reader.ReadBytes('\n')
+  if len(data) > 0 && (err == nil || err == io.EOF) {
+    if data[len(data)-1] == '\n' {
+      data = data[:len(data)-1]
+      if len(data) > 0 && data[len(data)-1] == '\r' { data = data[:len(data)-1] }
+    }
+    return _borkBytesFrom(data)
+  }
+  if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  if err == io.EOF { return Eof{} }
+  return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()}
+}
+
+// Write returns the number sent; an error may follow a partial write.
+fn Write(conn: Connection, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int | IoError | Cancelled unsafe go {
+  import "bufio"
+  import "net"
+  import "time"
+  handle := conn.handle.(*_borkResourceHandle)
+  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader })
+  if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  deadline := time.Time{}
+  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if err := state.conn.SetWriteDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
+  n, err := state.conn.Write(_borkBytesData(data))
+  if err != nil {
+    if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+    return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()}
+  }
+  return int64(n)
+}
+fn WriteLine(conn: Connection, line: String, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int | IoError | Cancelled {
+  Write(conn, utf8Bytes(line + "\n"), timeoutMs)
+}
+
+// Bind opens a UDP socket. Address accepts a numeric IP and port, including 0.
+fn Bind(address: String, s: Scope) uses net + state: Socket | IoError | Cancelled unsafe go {
+  import "net"
+  import "net/netip"
+  if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  local, err := netip.ParseAddrPort(address)
+  if err != nil { return IoError{path: address, message: err.Error()} }
+  raw, err := net.ListenUDP("udp", net.UDPAddrFromAddrPort(local))
+  if err != nil { return IoError{path: address, message: err.Error()} }
+  handle := _borkNewResourceHandle(raw, s)
+  go func() { <-handle.Context().Done(); raw.Close() }()
+  return Socket{handle: handle, owner: s.Own(func() { handle.Close(); raw.Close() })}
+}
+fn SocketAddress(socket: Socket): String unsafe go {
+  import "net"
+  return socket.handle.(*_borkResourceHandle).Value.(*net.UDPConn).LocalAddr().String()
+}
+fn Receive(socket: Socket, timeoutMs: TimeoutMs = 0) uses net + state + clock: Packet | IoError | Cancelled unsafe go {
+  import "net"
+  import "time"
+  handle := socket.handle.(*_borkResourceHandle)
+  raw := handle.Value.(*net.UDPConn)
+  if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  deadline := time.Time{}
+  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if err := raw.SetReadDeadline(deadline); err != nil { return IoError{path: raw.LocalAddr().String(), message: err.Error()} }
+  data := make([]byte, 65535)
+  n, from, err := raw.ReadFromUDP(data)
+  if err != nil {
+    if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+    return IoError{path: raw.LocalAddr().String(), message: err.Error()}
+  }
+  return Packet{data: _borkBytesFrom(data[:n]), address: from.String()}
+}
+fn Send(socket: Socket, address: String, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int | IoError | Cancelled unsafe go {
+  import "net"
+  import "net/netip"
+  import "time"
+  handle := socket.handle.(*_borkResourceHandle)
+  raw := handle.Value.(*net.UDPConn)
+  target, err := netip.ParseAddrPort(address)
+  if err != nil { return IoError{path: address, message: err.Error()} }
+  if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+  deadline := time.Time{}
+  if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
+  if err := raw.SetWriteDeadline(deadline); err != nil { return IoError{path: address, message: err.Error()} }
+  n, err := raw.WriteToUDPAddrPort(_borkBytesData(data), target)
+  if err != nil {
+    if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+    return IoError{path: address, message: err.Error()}
+  }
+  return int64(n)
+}
+
+fn SplitAddress(address: String): Endpoint | ParseError unsafe go {
+  import "net"
+  host, port, err := net.SplitHostPort(address)
+  if err != nil { return ParseError{input: address, message: err.Error()} }
+  return Endpoint{host: host, port: port}
+}
+fn JoinAddress(host: String, port: String): String unsafe go {
+  import "net"
+  return net.JoinHostPort(host, port)
+}
+fn Resolve(host: String, s: Scope) uses net + state: List[String] | IoError | Cancelled unsafe go {
+  import "net"
+  import "sort"
+  addresses, err := net.DefaultResolver.LookupIPAddr(_borkScopeContext(s), host)
+  if err != nil {
+    if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+    return IoError{path: host, message: err.Error()}
+  }
+  result := make([]string, 0, len(addresses))
+  for _, address := range addresses { result = append(result, address.String()) }
+  sort.Strings(result)
+  return result
+}
