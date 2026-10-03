@@ -570,7 +570,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 				}
 			}
 		}
-		if !c.checkOpaqueInstance(inst, e.Pos, args) {
+		if !c.checkParallelInstance(inst, e.Pos) || !c.checkOpaqueInstance(inst, e.Pos, args) {
 			fail()
 			return
 		}
@@ -744,7 +744,7 @@ func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Typ
 		c.errorf(e.Position(), "%s requires receiver %s, found owner %s", name, inst.Params[0], owner)
 		return Invalid
 	}
-	if !c.checkOpaqueInstance(inst, e.Position(), nil) {
+	if !c.checkParallelInstance(inst, e.Position()) || !c.checkOpaqueInstance(inst, e.Position(), nil) {
 		return Invalid
 	}
 	if !c.resolveDicts(inst, e.Position()) {

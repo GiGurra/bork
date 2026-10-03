@@ -1,0 +1,22 @@
+type Failure = { message: String }
+type Success = Int | String
+fn checked(x: Int): Success | Failure { Failure { message: "failed" } }
+fn generic[T](xs: List[T], f: (T) uses nothing => T | Failure): List[T] | Failure {
+  xs.parMapUntil[T, Failure](f)
+}
+fn main() {
+  println([1].parMapUntil[Success, Failure](checked))
+  println([1].parMapUntil[Int, Int](x => x))
+}
+type Left = Int | String
+type Right = Int | Bool
+fn erased(x: Int): List[Left] | List[Right] {
+  ys: List[Right] = [true]
+  ys
+}
+fn erasedCall(): List[List[Left]] | List[Right] {
+  [1].parMapUntil[List[Left], List[Right]](erased)
+}
+fn genericError[E](f: (Int) uses nothing => Int | E): List[Int] | E {
+  [1].parMapUntil[Int, E](f)
+}

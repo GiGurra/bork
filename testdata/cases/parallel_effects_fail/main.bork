@@ -1,0 +1,10 @@
+fn noisy(x: Int) uses io: Int {
+  println(x)
+  x
+}
+fn main() {
+  println([1, 2].parMap(noisy))
+  [1, 2].parForEach(x => println(x))
+  println([1, 2].parFilter(x => { println(x); true }))
+  println([1, 2].parFlatMap(x => { println(x); [x] }))
+}

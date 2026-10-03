@@ -148,6 +148,10 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			}
 			if fd.GoBody != nil {
 				fn := info.FuncOf[fd]
+				if strings.Contains(fd.GoBody.Body, "_borkParallel") {
+					g.usesParallel = true
+					g.usesScopes = true
+				}
 				if strings.Contains(fd.GoBody.Body, "_borkIoFailure") {
 					g.usesIoFailure = true
 				}
@@ -320,6 +324,7 @@ type gen struct {
 	usesSnaps        bool
 	usesProps        bool
 	usesScopes       bool
+	usesParallel     bool
 	usesDerive       bool
 	usesEqual        bool
 	usesHash         bool

@@ -2196,3 +2196,53 @@ Go boundaries; bork has no mutation operations. Construction uses `bytes` or
 returns a union error. Immutable access uses `length`, `isEmpty`, `get`,
 `toList`, `slice` (bounds errors are unions), and `concat`. Printing uses
 `Bytes(lowercase hex)` rather than guessing text.
+
+## Parallel collections (implemented, bork-pd7rjm)
+
+Lists expose `parMap`, `parFilter`, `parFlatMap` and `parForEach`. Each takes
+an explicitly pure callback (`uses nothing`), needs no scope, and joins its
+workers before returning. Results retain input order, including flattened
+sublists and filtered elements; pure `parFilter` retains its predicate fact.
+For successful pure computations, scheduling does not change the result.
+`workers: n` bounds concurrency; omitted or nonpositive values use Go's
+`GOMAXPROCS` (the CPUs available to the process), and the count is capped at
+the input length. Empty inputs start no workers; singleton pure inputs and
+`workers: 1` run on the calling goroutine. Parallel overhead makes ordinary
+`map` preferable for cheap callbacks and short lists.
+
+Effects require `parMapIn(s, f)`, `parFilterIn`, `parFlatMapIn`, or
+`parForEachIn`. The `In` suffix avoids adding method overloading. Their
+callbacks take `(Scope, T)` so cancellation-aware work receives its scope
+explicitly. Calls charge `state` plus the open callback's effects and return
+`List[U] | Cancelled` (or `Unit | Cancelled` for for-each). Cancellation stops
+scheduling more elements, and a call waits for callbacks already started.
+Those callbacks cooperate through `checkpoint`, `delay`, channel operations,
+or scoped standard-library I/O. Partial results are discarded. Side-effect
+order is unspecified even though result order is stable. Worker panics stop
+scheduling, cancel an effectful worker's scope, join all workers, and panic
+the caller. Cancellation never forcibly terminates a callback.
+
+`parMapUntil[B, E](f)` maps a pure callback returning `B | E` into
+`List[B] | E`. Supply the success and failure type arguments explicitly when
+inference cannot separate them. `B` must be a concrete, non-union type,
+distinguishable from every member of `E` in Go; `E` can itself be a union.
+Both types must be concrete, including any nested type arguments. This restriction
+keeps success distinguishable in Go's erased union representation. By
+convention `B` is the callback's leftmost result, as with `?`. The first
+observed failure stops further scheduling; callbacks already running finish
+before the call returns. If failures race, which failure wins is unspecified.
+
+`parMapUntilIn[B, E](s, f)` also returns `Cancelled`. Its callback receives
+an internal child cancellation scope: the first observed failure cancels
+siblings without cancelling `s`. The call joins its workers, while the child
+scope's resources and any tasks a callback explicitly spawned remain owned
+until `s` closes. This allows successful callbacks to return resources whose
+checked lifetime is `s`. Callbacks should await their own spawned work if its
+completion is part of the element operation. An observed callback failure
+wins over concurrent external cancellation; otherwise cancellation returns
+`Cancelled` and discards partial results.
+
+Maps can use `entries().parMap(...)` or `values().parMap(...)`; no parallel
+map mutation API is introduced. See [the runnable example](../examples/parallel_lists/main.bork)
+for pure mapping and an eight-wait comparison with four scoped workers:
+`bork run examples/parallel_lists -- --benchmark`.

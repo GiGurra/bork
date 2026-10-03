@@ -233,3 +233,11 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 ## License
 
 [MIT](LICENSE)
+
+Lists also support ordered, bounded parallel work: `xs.parMap(x => x * x,
+workers: 4)` accepts pure callbacks. `xs.parMapIn(s, (child, x) => work(child,
+x))` runs effectful work in a scope and reports cancellation as a value.
+`parFilter`, `parFlatMap`, `parForEach`, and their scoped `In` forms follow
+that pattern; `parMapUntil` stops on a failure value. See the
+[parallel list example](examples/parallel_lists/main.bork) and
+[design](docs/requirements.md#parallel-collections-implemented-bork-pd7rjm).

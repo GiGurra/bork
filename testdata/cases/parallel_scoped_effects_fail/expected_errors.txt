@@ -1,0 +1,2 @@
+main.bork:6:3: missingState uses state (it calls parMapIn), but its signature allows only io; declare it: uses io + state
+main.bork:9:19: missingIO uses io (it calls parMapIn, with a lambda that calls noisy), but its signature allows only state; declare it: uses io + state

@@ -1,0 +1,11 @@
+fn noisy(x: Int) uses io: Int {
+  println(x)
+  x
+}
+fn missingState(s: Scope) uses io: List[Int] | Cancelled {
+  [1].parMapIn(s, (child, x) => noisy(x))
+}
+fn missingIO(s: Scope) uses state: List[Int] | Cancelled {
+  [1].parMapIn(s, (child, x) => noisy(x))
+}
+fn main() {}

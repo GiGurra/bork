@@ -1,0 +1,5 @@
+ok    early failure cancels and joins siblings without cancelling the parent
+ok    successful callback resources remain open in the caller scope
+ok    cancelling the callback scope returns cancellation, not partial results
+3 passed, 0 failed
+exit code 0
