@@ -1,0 +1,41 @@
+// Opaque bodies force the compiler to use the rules.
+pred atMost(a: Int, b: Int) { a <= b }
+fn orderedBody(a: Int, b: Int): Bool { a <= b }
+fn differentBody(a: String, b: String): Bool { a != b }
+fn positiveBody(n: Int): Bool { n > 0 }
+pred chain(a: Int, b: Int) { orderedBody(a, b) }
+pred reverseChain(a: Int, b: Int) { orderedBody(a, b) }
+pred different(a: String, b: String) { a != b }
+pred swapped(a: String, b: String) { differentBody(a, b) }
+pred isPositive(n: Int) { n > 0 }
+pred accepted(n: Int) { positiveBody(n) }
+pred mixed(a: Int, b: Int) { positiveBody(a) && orderedBody(a, b) }
+rule transitive(a: Int, b: Int, c: Int) {
+  atMost(a, b) and atMost(b, c) => chain(a, c)
+}
+rule reversedPremises(a: Int, b: Int, c: Int) {
+  atMost(b, c) and atMost(a, b) => reverseChain(a, c)
+}
+rule symmetric(a: String, b: String) { different(a, b) => swapped(b, a) }
+rule runtimeComparison(n: Int) { n > 0 => accepted(n) }
+rule mixedInputs(a: Int, b: Int) { atMost(a, b) and a > 0 => mixed(a, b) }
+fn consume(a: Int where chain(c), c: Int): Int { a }
+fn consumeReverse(a: Int where reverseChain(c), c: Int): Int { a }
+fn consumeSwap(a: String, b: String where swapped(a)): String { b }
+fn consumeAccepted(n: Int where accepted): Int { n }
+fn consumeMixed(a: Int where mixed(b), b: Int): Int { a }
+fn guard(a: Int, b: Int, c: Int): Int {
+  if (atMost(a, b) && atMost(b, c) && a > 0) {
+    consume(a, c) + consumeReverse(a, c) + consumeMixed(a, b) + consumeAccepted(a)
+  } else { 0 }
+}
+fn declared(a: Int where atMost(b), b: Int where atMost(c), c: Int): Int {
+  consume(a, c) + consumeReverse(a, c)
+}
+fn swap(a: String, b: String): String {
+  if (different(a, b)) { consumeSwap(a, b) } else { "same" }
+}
+fn positiveGuard(n: Int): Int {
+  if (isPositive(n)) { consumeAccepted(n) } else { 0 }
+}
+fn main() { println(guard(1, 2, 3), declared(1, 2, 3), swap("a", "b")) }

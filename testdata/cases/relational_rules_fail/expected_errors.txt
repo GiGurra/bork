@@ -1,0 +1,5 @@
+main.bork:14:40: need requires a to be result(c), but that is not proven for a (check it first with if (result(a, c)) { ... }, or require it: a: Int where result(c))
+main.bork:17:34: needRepeated requires a to be repeated, but that is not proven for a (check it first with if (repeated(a)) { ... }, or require it: a: Int where repeated)
+main.bork:20:40: need requires a to be result(c), but that is not proven for a (check it first with if (result(a, c)) { ... }, or require it: a: Int where result(c))
+main.bork:22:50: needAccepted requires a to be accepted, but that is not proven for n (check it first with if (accepted(n)) { ... }, or require it: n: Int where accepted)
+main.bork:23:62: needAccepted requires a to be accepted, but that is not proven for n (check it first with if (accepted(n)) { ... }, or require it: n: Int where accepted)

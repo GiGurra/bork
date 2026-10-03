@@ -29,7 +29,7 @@ fn payOut(amount: Int) {
 }                        //   (check it first with if (positive(amount)) { ... }, or require it: amount: Int where positive)
 
 fn payOutChecked(amount: Int) {
-  if (positive(amount)) { transfer(amount) }   // proven by the guard
+  if (amount > 0) { transfer(amount) }          // positive unfolds to this comparison
 }
 
 transfer(0)              // error: transfer requires amount to be positive, but positive(0) is false

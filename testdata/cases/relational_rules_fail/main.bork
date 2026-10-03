@@ -1,0 +1,24 @@
+fn linked(a: Int, b: Int): Bool { a <= b }
+fn isPositive(n: Int): Bool { n > 0 }
+pred link(a: Int, b: Int) { linked(a, b) }
+pred result(a: Int, b: Int) { linked(a, b) }
+pred repeated(a: Int) { linked(a, a) }
+pred accepted(n: Int) { isPositive(n) }
+rule chain(a: Int, b: Int, c: Int) { link(a, b) and link(b, c) => result(a, c) }
+rule same(a: Int) { link(a, a) => repeated(a) }
+rule comparison(n: Int) { n > 0 => accepted(n) }
+fn need(a: Int where result(c), c: Int): Int { a }
+fn needRepeated(a: Int where repeated): Int { a }
+fn needAccepted(a: Int where accepted): Int { a }
+fn noSharedMiddle(a: Int, b: Int, c: Int, d: Int): Int {
+  if (link(a, b) && link(d, c)) { need(a, c) } else { 0 }
+}
+fn repeatedMismatch(a: Int, b: Int): Int {
+  if (link(a, b)) { needRepeated(a) } else { 0 }
+}
+fn disjointAlternatives(a: Int, b: Int, c: Int): Int {
+  if (link(a, b) || link(b, c)) { need(a, c) } else { 0 }
+}
+fn missingComparison(n: Int): Int { needAccepted(n) }
+fn wrongComparison(n: Int): Int { if (n <= 0) { needAccepted(n) } else { 0 } }
+fn main() {}

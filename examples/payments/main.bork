@@ -17,9 +17,9 @@ type Invalid = { field: String, reason: String }
 // The boundary: raw values in, proven values (or a reason) out.
 fn parseAmount(raw: String): Cents | Invalid {
   match (parseInt(raw)) {
-    n: Int => if (!positive(n)) {
+    n: Int => if (n <= 0) {
       Invalid { field: "amount", reason: s"$n is not positive" }
-    } else if (!atMost(n, 1_000_000)) {
+    } else if (n > 1_000_000) {
       Invalid { field: "amount", reason: s"$n is over the limit" }
     } else {
       n
@@ -46,7 +46,7 @@ fn request(fromRaw: String, toRaw: String, amountRaw: String): Transfer | Invali
   from = parseAccount("from", fromRaw)?
   to = parseAccount("to", toRaw)?
   amount = parseAmount(amountRaw)?
-  if (!differentFrom(to, from)) {
+  if (to == from) {
     return Invalid { field: "to", reason: "cannot transfer to the same account" }
   }
   makeTransfer(from, to, amount)

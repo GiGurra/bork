@@ -8,14 +8,15 @@ import (
 )
 
 // Rule is a checked inference rule: when facts matching Premises hold
-// (and the Conditions on constants are true), the Conclusions hold too.
+// (and the Conditions are established), the Conclusions hold too.
 type Rule struct {
 	Decl     *syntax.RuleDecl
 	Pkg      *Package
 	VarTypes []Type // the types of Decl.Params
 	Premises []*RuleAtom
 	// Conditions are the premises that compute with the variables'
-	// values (see evalCondition), as typed expressions; conditions holds
+	// values, as typed expressions. They are evaluated on constants or
+	// matched against branch comparisons; conditions holds
 	// them as written.
 	Conditions  []Expr
 	conditions  []syntax.Expr

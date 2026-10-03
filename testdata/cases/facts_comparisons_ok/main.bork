@@ -1,0 +1,35 @@
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, limit: Int) { n <= limit }
+pred different(a: String, b: String) { a != b }
+pred bounded(n: Int) { positive(n) && atMost(n, 100) }
+pred outside(n: Int) { n < 0 || n > 100 }
+pred recursive(n: Int) { recursive(n) || n > 0 }
+
+fn take(n: Int where bounded): Int { n }
+fn pair(a: String, b: String where different(a)): String { b }
+fn useOutside(n: Int where outside): Int { n }
+fn useRecursive(n: Int where recursive): Int { n }
+
+fn guards(n: Int): Int {
+  if (n <= 0) { return 0 }
+  if (n > 100) { return 0 }
+  alias = n
+  take(alias) + useRecursive(n)
+}
+fn alternatives(n: Int): Int {
+  if (n < 0 || 100 < n) { useOutside(n) } else { 0 }
+}
+fn negativeAnd(n: Int): Int {
+  if (!(n >= 0 && n <= 100)) { useOutside(n) } else { 0 }
+}
+fn names(a: String, b: String): String {
+  if (a == b) { return "same" }
+  pair(a, b)
+}
+type Box = { value: Int }
+fn fields(b: Box): Int {
+  if (0 < b.value && 100 >= b.value) { take(b.value) } else { 0 }
+}
+fn main() {
+  println(guards(5), guards(-1), guards(101), alternatives(-4), negativeAnd(101), names("a", "b"), fields(Box { value: 10 }))
+}

@@ -1,0 +1,7 @@
+main.bork:10:32: need requires n to be positive, but that is not proven for n (check it first with if (positive(n)) { ... }, or require it: n: Int where positive)
+main.bork:11:43: need requires n to be positive, but that is not proven for n (check it first with if (positive(n)) { ... }, or require it: n: Int where positive)
+main.bork:14:8: need requires n to be positive, but that is not proven for n (check it first with if (positive(n)) { ... }, or require it: n: Int where positive)
+main.bork:17:30: need requires n to be positive, but that is not proven for n (check it first with if (positive(n)) { ... }, or require it: n: Int where positive)
+main.bork:21:34: needOrdered requires b to be ordered(a), but that is not proven for b (check it first with if (ordered(b, a)) { ... }, or require it: b: Float where ordered(a))
+main.bork:23:39: needNegative requires n to be notPositive, but that is not proven for n (check it first with if (notPositive(n)) { ... }, or require it: n: Int where notPositive)
+main.bork:24:34: needLoop requires n to be loop, but that is not proven for n (check it first with if (loop(n)) { ... }, or require it: n: Int where loop)

@@ -156,10 +156,12 @@ type lambdaArg struct {
 // `a || b`) has a nil pred and the alternatives in or, each a list of
 // facts that hold together; at least one alternative holds.
 type fact struct {
-	pred    *Func
-	subject string
-	args    []argVal
-	or      [][]fact
+	pred       *Func
+	subject    string
+	args       []argVal
+	or         [][]fact
+	comparison *comparison
+	value      argVal
 }
 
 // factKey identifies a fact, to tell when it is already in use.
@@ -174,6 +176,9 @@ func factKey(ft fact) string {
 			alts = append(alts, strings.Join(all, " && "))
 		}
 		return "(" + strings.Join(alts, " || ") + ")"
+	}
+	if c := ft.comparison; c != nil {
+		return fmt.Sprintf("%s %v %s %t", c.left.key, c.op, c.right.key, c.positive)
 	}
 	out := ft.pred.Decl.Name + "(" + ft.subject
 	for _, a := range ft.args {
@@ -994,6 +999,9 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 		}
 	}
 	if ob.or == nil {
+		if cs.take(f.unfold(f.argOf(x), ob, e, depth)) {
+			return true, nil
+		}
 		if cs.take(f.byRules(f.argOf(x), ob, e, depth)) {
 			return true, nil
 		}
@@ -1697,72 +1705,108 @@ func bindArg(bound map[string]argVal, a RuleArg, v argVal) bool {
 // With a path, the rule is applied to that part of the values (every
 // element of a list).
 func (f *factChecker) premises(r *Rule, i int, bound map[string]argVal, path string, e env, depth int) (bool, []Query) {
-	if i == len(r.Premises) {
-		vars := map[string]constant.Value{}
-		for name, v := range bound {
-			vars[name] = v.value
-		}
-		for _, cond := range r.Conditions {
-			v := evalCondition(cond, vars)
-			if v == nil || v.Kind() != constant.Bool || !constant.BoolVal(v) {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	p := r.Premises[i]
-	subject, ok := bound[p.Args[0].Var]
-	if !ok {
+	return f.rulePremises(r, r.Premises[i:], bound, path, e, depth)
+}
+
+func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[string]argVal, path string, e env, depth int) (bool, []Query) {
+	if depth > maxDepth {
 		return false, nil
 	}
-	free := false
-	args := make([]argVal, len(p.Args)-1)
-	for j, a := range p.Args[1:] {
-		switch {
-		case a.Const != nil:
-			args[j] = constArg(a.Const)
-		default:
-			v, isBound := bound[a.Var]
-			if !isBound {
-				free = true
+	if len(remaining) == 0 {
+		vars := map[string]constant.Value{}
+		subst := map[*Var]argVal{}
+		for _, v := range r.Vars {
+			subst[v] = bound[v.Name]
+			vars[v.Name] = bound[v.Name].value
+		}
+		var pending []Query
+		for _, cond := range r.Conditions {
+			if v := evalCondition(cond, vars); v != nil && v.Kind() == constant.Bool {
+				if !constant.BoolVal(v) {
+					return false, nil
+				}
+				continue
 			}
-			args[j] = v
+			ok, queries := f.proveCondition(substituteExpr(cond, subst), true, e, depth+1)
+			if !ok {
+				return false, nil
+			}
+			pending = append(pending, queries...)
 		}
+		return true, pending
 	}
-	if !free {
-		ok, pending := f.proveArg(subject, obligation{pred: p.Pred, args: args, path: path}, e, depth)
-		if !ok {
-			return false, nil
-		}
-		rest, more := f.premises(r, i+1, bound, path, e, depth)
-		return rest, append(pending, more...)
-	}
-	// Bind the free variables to a fact about the subject.
-	var candidates []known
-	if subject.expr != nil {
-		for _, k := range f.declared(subject.expr, e, depth) {
-			if k.path == path {
-				candidates = append(candidates, k)
+	for i, p := range remaining {
+		args := make([]argVal, len(p.Args))
+		complete := true
+		for j, a := range p.Args {
+			if a.Const != nil {
+				args[j] = constArg(a.Const)
+			} else {
+				v, ok := bound[a.Var]
+				args[j] = v
+				complete = complete && ok
 			}
 		}
-	}
-	for _, k := range candidates {
-		if k.pred != p.Pred {
+		rest := append(append([]*RuleAtom{}, remaining[:i]...), remaining[i+1:]...)
+		if complete {
+			ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:], path: path}, e, depth+1)
+			if ok {
+				if done, more := f.rulePremises(r, rest, bound, path, e, depth+1); done {
+					return true, append(pending, more...)
+				}
+			}
 			continue
 		}
-		next := map[string]argVal{}
-		for name, v := range bound {
-			next[name] = v
+		// An unbound variable may be the subject as well as an argument.
+		// Try each matching fact; another premise can provide the binding first.
+		var candidates []fact
+		if path == "" {
+			candidates = append(candidates, e.facts...)
 		}
-		matches := true
-		for j, a := range p.Args[1:] {
-			matches = matches && bindArg(next, a, k.args[j])
+		subjects := map[string]argVal{}
+		for _, v := range bound {
+			if v.key != "" {
+				subjects[v.key] = v
+			}
 		}
-		if !matches {
-			continue
+		if f.fn != nil {
+			for _, p := range f.fn.ParamVars {
+				v := f.argOf(f.paramRef(p))
+				subjects[v.key] = v
+			}
 		}
-		if ok, pending := f.premises(r, i+1, next, path, e, depth); ok {
-			return true, pending
+		for _, v := range subjects {
+			if v.expr == nil {
+				continue
+			}
+			for _, k := range f.declared(v.expr, e, depth+1) {
+				if k.path == path && k.pred != nil {
+					candidates = append(candidates, fact{pred: k.pred, subject: v.key, args: k.args, value: v})
+				}
+			}
+		}
+		for _, ft := range candidates {
+			if ft.pred != p.Pred || len(ft.args)+1 != len(p.Args) {
+				continue
+			}
+			next := map[string]argVal{}
+			for name, v := range bound {
+				next[name] = v
+			}
+			subject := ft.value
+			if subject.key == "" {
+				subject = subjects[ft.subject]
+				subject.key = ft.subject
+			}
+			matches := bindArg(next, p.Args[0], subject)
+			for j, a := range p.Args[1:] {
+				matches = matches && bindArg(next, a, ft.args[j])
+			}
+			if matches {
+				if ok, pending := f.rulePremises(r, rest, next, path, e, depth+1); ok {
+					return true, pending
+				}
+			}
 		}
 	}
 	return false, nil
@@ -1809,13 +1853,16 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 		switch {
 		case c.Op == syntax.AndAnd && positive, c.Op == syntax.OrOr && !positive:
 			return append(f.conditionFacts(c.X, positive), f.conditionFacts(c.Y, positive)...)
-		case c.Op == syntax.OrOr && positive:
+		case (c.Op == syntax.OrOr && positive) || (c.Op == syntax.AndAnd && !positive):
 			// One side holds: only useful if both sides say something.
-			l, r := f.conditionFacts(c.X, true), f.conditionFacts(c.Y, true)
+			l, r := f.conditionFacts(c.X, positive), f.conditionFacts(c.Y, positive)
 			if len(l) == 0 || len(r) == 0 {
 				return nil
 			}
 			return []fact{{or: append(alternatives(l), alternatives(r)...)}}
+		}
+		if cmp := f.comparison(c, positive); cmp != nil {
+			return []fact{{comparison: cmp}}
 		}
 	case *Call:
 		fn, args := c.Func, c.Args
@@ -1826,7 +1873,7 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 		if subject == "" {
 			return nil
 		}
-		ft := fact{pred: fn, subject: subject}
+		ft := fact{pred: fn, subject: subject, value: f.argOf(args[0])}
 		for _, a := range args[1:] {
 			ft.args = append(ft.args, f.argOf(a))
 		}

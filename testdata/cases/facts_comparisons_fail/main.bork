@@ -1,0 +1,25 @@
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, limit: Int) { n <= limit }
+pred ordered(a: Float, b: Float) { a <= b }
+pred notPositive(n: Int) { !positive(n) }
+pred loop(n: Int) { loop(n) }
+fn need(n: Int where positive): Int { n }
+fn needOrdered(a: Float, b: Float where ordered(a)): Float { b }
+fn needNegative(n: Int where notPositive): Int { n }
+fn needLoop(n: Int where loop): Int { n }
+fn missing(n: Int): Int { need(n) }
+fn wrong(n: Int): Int { if (n < 0) { need(n) } else { 0 } }
+fn leaked(n: Int) uses io: Int {
+  if (n > 0) { println(n) }
+  need(n)
+}
+fn disjunction(n: Int, m: Int): Int {
+  if (n > 0 || m > 0) { need(n) } else { 0 }
+}
+// For NaN, !(b > a) holds, but b <= a does not.
+fn floatNegation(a: Float, b: Float): Float {
+  if (!(b > a)) { needOrdered(a, b) } else { 0.0 }
+}
+fn absent(n: Int): Int { needNegative(n) }
+fn cycle(n: Int): Int { needLoop(n) }
+fn main() {}

@@ -247,6 +247,29 @@ fn example(n: Int where positive, m: Int where atLeast(n)) uses io {
 	}
 }
 
+func TestDescribeComparisonGuards(t *testing.T) {
+	source := `pred positive(n: Int) { n > 0 }
+pred ordered(n: Int, bound: Int) { n <= bound }
+fn example(n: Int, bound: Int) uses io {
+  if (n > 0 && n <= bound) { println(n) } // guarded
+  println(n) // outside
+}
+`
+	for _, tc := range []struct {
+		fragment, where string
+		proven          bool
+	}{
+		{"n) } // guarded", "positive", true},
+		{"n) } // guarded", "ordered(bound)", true},
+		{"n) // outside", "positive", false},
+	} {
+		result := describeAt(t, source, tc.fragment, tc.where)
+		if result.proven != tc.proven {
+			t.Fatalf("%s at %s: %+v", tc.where, tc.fragment, result)
+		}
+	}
+}
+
 func TestDescribeGolden(t *testing.T) {
 	dir := filepath.Join("..", "..", "testdata", "cases", "describe_queries")
 	data, err := os.ReadFile(filepath.Join(dir, "queries.json"))
