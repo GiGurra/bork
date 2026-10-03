@@ -3,4 +3,4 @@
 {"schema_version":1,"position":{"file":"main.bork","line":6,"column":18},"type":"Int","definition":{"file":"main.bork","line":2,"column":1},"methods":[],"facts":[{"constraint":"positive"}],"proof":{"where":"positive","proven":true}}
 {"schema_version":1,"position":{"file":"main.bork","line":7,"column":11},"type":"Int","methods":[],"facts":[],"proof":{"where":"positive","proven":true}}
 {"schema_version":1,"position":{"file":"main.bork","line":8,"column":11},"type":"Int","methods":[],"facts":[],"proof":{"where":"positive","proven":false,"reason":"positive(0) is false"}}
-{"schema_version":1,"position":{"file":"main.bork","line":6,"column":11},"type":"(Int) =\u003e Int","definition":{"file":"main.bork","line":2,"column":1},"methods":[],"facts":[]}
+{"schema_version":1,"position":{"file":"main.bork","line":6,"column":11},"type":"(Int) =\u003e Int","definition":{"file":"main.bork","line":2,"column":1},"methods":[],"facts":[],"callable":{"named_arguments":true,"parameter_names_are_api":true,"parameters":[{"name":"n","type":"Int"}]}}

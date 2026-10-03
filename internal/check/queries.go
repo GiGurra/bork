@@ -3,6 +3,7 @@ package check
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -12,11 +13,85 @@ import (
 // MethodDescription is a method as seen from the querying package. Ambiguous
 // names are reported separately from callable methods.
 type MethodDescription struct {
-	Name       string    `json:"name"`
-	Type       string    `json:"type,omitempty"`
-	Definition *diag.Pos `json:"definition,omitempty"`
-	Ambiguity  string    `json:"ambiguity,omitempty"`
-	Requires   []string  `json:"requires,omitempty"`
+	Name       string               `json:"name"`
+	Type       string               `json:"type,omitempty"`
+	Definition *diag.Pos            `json:"definition,omitempty"`
+	Ambiguity  string               `json:"ambiguity,omitempty"`
+	Requires   []string             `json:"requires,omitempty"`
+	Callable   *CallableDescription `json:"callable,omitempty"`
+}
+
+// CallableDescription exposes declaration names, which are intentionally
+// absent from function types. Renaming a named parameter breaks named callers.
+type CallableDescription struct {
+	NamedArguments       bool                   `json:"named_arguments"`
+	ParameterNamesAreAPI bool                   `json:"parameter_names_are_api"`
+	Parameters           []ParameterDescription `json:"parameters"`
+}
+
+type ParameterDescription struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Receiver bool   `json:"receiver,omitempty"`
+	Default  string `json:"default,omitempty"`
+}
+
+func DescribeCallable(fn *Func, params []Type, from *Package, bound bool) *CallableDescription {
+	out := &CallableDescription{NamedArguments: true, ParameterNamesAreAPI: true, Parameters: []ParameterDescription{}}
+	skip := 0
+	if bound {
+		skip = 1
+	}
+	for i, p := range fn.Decl.Params[skip:] {
+		out.Parameters = append(out.Parameters, ParameterDescription{Name: p.Name, Type: TypeText(params[i], from), Receiver: fn.Decl.IsMethod && !bound && i == 0, Default: defaultText(p.Default)})
+	}
+	return out
+}
+
+// Defaults are closed values; render their source syntax rather than a Go value.
+func defaultText(x syntax.Expr) string {
+	switch x := x.(type) {
+	case nil:
+		return ""
+	case *syntax.IntLit:
+		return x.Text
+	case *syntax.FloatLit:
+		return x.Text
+	case *syntax.RuneLit:
+		return x.Text
+	case *syntax.StringLit:
+		return strconv.Quote(x.Value)
+	case *syntax.BoolLit:
+		return strconv.FormatBool(x.Value)
+	case *syntax.Unary:
+		return strings.Trim(x.Op.String(), "'") + defaultText(x.X)
+	case *syntax.Ident:
+		return x.Name
+	case *syntax.Selector:
+		return defaultText(x.X) + "." + x.Name
+	case *syntax.ListLit:
+		var parts []string
+		for _, e := range x.Elems {
+			parts = append(parts, defaultText(e))
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	case *syntax.MapLit:
+		if len(x.Keys) == 0 {
+			return "{:}"
+		}
+		var parts []string
+		for i, k := range x.Keys {
+			parts = append(parts, defaultText(k)+": "+defaultText(x.Values[i]))
+		}
+		return "{ " + strings.Join(parts, ", ") + " }"
+	case *syntax.RecordLit:
+		var parts []string
+		for _, f := range x.Fields {
+			parts = append(parts, f.Name+": "+defaultText(f.Value))
+		}
+		return defaultText(x.Type) + " { " + strings.Join(parts, ", ") + " }"
+	}
+	return ""
 }
 
 // VisibleMethods uses the same precedence and visibility rules as a call.
@@ -71,7 +146,7 @@ func VisibleMethods(info *Info, from *Package, t Type) []MethodDescription {
 			}
 		}
 		pos := fn.Decl.Pos
-		out = append(out, MethodDescription{Name: name, Type: TypeText(ft, from), Definition: &pos, Requires: requires})
+		out = append(out, MethodDescription{Name: name, Type: TypeText(ft, from), Definition: &pos, Requires: requires, Callable: DescribeCallable(fn, ft.Params, from, true)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

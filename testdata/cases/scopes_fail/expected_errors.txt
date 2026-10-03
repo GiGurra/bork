@@ -7,5 +7,5 @@ main.bork:40:3: function escapes cannot return this value: it belongs to scope s
 main.bork:46:12: function escapesByReturn cannot return this value: it belongs to scope s, which ends on line 47
 main.bork:51:3: function inRecord cannot return this value: it belongs to scope s, which ends on line 54
 main.bork:58:3: function inLambda cannot return this value: it belongs to scope s, which ends on line 61
-main.bork:69:22: the lambda may not live as long as scope outer (it depends on scope inner), but onClose may keep it until outer closes
+main.bork:69:18: the lambda may not live as long as scope outer (it depends on scope inner), but onClose may keep it until outer closes
 main.bork:75:14: the lambda may not live as long as scope s (it depends on parameter f), but onClose may keep it until s closes

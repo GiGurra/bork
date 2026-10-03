@@ -54,7 +54,7 @@ fn main() {
   consume("returned", returned(false))
   box = Box { value: {} }
   consume("field", box.value)
-  changed = box.copy(value = done())
+  changed = box.copy(value: done())
   consume("copy", changed.value)
   xs: List[Unit | Error] = [{}, done()]
   xs.forEach(x => consume("list", x))

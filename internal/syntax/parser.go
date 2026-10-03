@@ -808,6 +808,7 @@ func pipe(op Token, x, y Expr, start, end, targetEnd diag.Pos) Expr {
 	call, ok := y.(*Call)
 	if ok {
 		call.Args = append([]Expr{x}, call.Args...)
+		call.Arguments = append([]Argument{{Pos: start, End: end}}, call.Arguments...)
 	} else {
 		call = &Call{Pos: op.Pos, Fun: y, Args: []Expr{x}, PipeBare: true}
 	}
@@ -860,7 +861,16 @@ func (p *parser) postfix(x Expr) Expr {
 			p.noRecordLit = false // within the parentheses, '{' is a literal again
 			p.skipNewlines()
 			for !p.at(RParen) {
+				arg := Argument{Pos: p.tok().Pos}
+				if p.at(TIdent) && p.peekKind() == Colon {
+					label := p.next()
+					arg.Name, arg.NameEnd = label.Text, label.End
+					p.next()
+					p.skipNewlines()
+				}
 				call.Args = append(call.Args, p.expr())
+				arg.End = p.toks[p.i-1].End
+				call.Arguments = append(call.Arguments, arg)
 				p.skipNewlines()
 				if !p.at(Comma) {
 					break
@@ -869,6 +879,24 @@ func (p *parser) postfix(x Expr) Expr {
 				p.skipNewlines()
 			}
 			call.End = p.expect(RParen, "to end the argument list").End
+			for i := 1; i < len(call.Arguments); i++ {
+				arg := &call.Arguments[i]
+				if arg.Name == "" {
+					continue
+				}
+				start := call.Arguments[i-1].End
+				commented := false
+				for _, comment := range p.comments {
+					if (comment.Pos.Line > start.Line || comment.Pos.Line == start.Line && comment.Pos.Col >= start.Col) &&
+						(comment.Pos.Line < arg.End.Line || comment.Pos.Line == arg.End.Line && comment.Pos.Col < arg.End.Col) {
+						commented = true
+						break
+					}
+				}
+				if !commented {
+					arg.RemovalStart = start
+				}
+			}
 			p.noRecordLit = saved
 			x = call
 		case p.at(Dot):
@@ -924,7 +952,15 @@ func (p *parser) copyExpr(x Expr, pos diag.Pos) Expr {
 			p.next()
 			u.Path = append(u.Path, p.expect(TIdent, "(field name)").Text)
 		}
-		p.expect(Assign, "after the field path (write `field = value`)")
+		if p.at(Assign) {
+			t := p.next()
+			p.diags.AddCode(t.Pos, "syntax.copy_separator", "copy updates use ':'; write `field: value`")
+			p.diags.Suggest(t.Pos, "syntax.copy_separator", t.End, diag.Fix{
+				Message: "replace '=' with ':'", Edits: []diag.TextEdit{{Start: t.Pos, End: t.End, Replacement: ":"}},
+			})
+		} else {
+			p.expect(Colon, "after the field path (write `field: value`)")
+		}
 		p.skipNewlines()
 		u.Value = p.expr()
 		c.Updates = append(c.Updates, u)

@@ -1,0 +1,2 @@
+class Combine[T] { fn combine(value: T, value: T): T }
+fn main() {}

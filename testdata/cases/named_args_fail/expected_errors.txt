@@ -1,0 +1,16 @@
+main.bork:5:24: options has no parameter named prot
+main.bork:6:24: parameter host of options is already supplied at main.bork:6:19
+main.bork:7:30: parameter host of options is already supplied at main.bork:7:25
+main.bork:8:18: options is missing required argument(s): host: String
+main.bork:9:30: move positional arguments before named arguments in options
+main.bork:11:13: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:13:13: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:13:19: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:15:20: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:17:13: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:17:24: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:18:19: Int.plus is missing required argument(s): n: Int
+main.bork:18:20: the receiver of Int.plus cannot be named; supply it positionally
+main.bork:19:18: plus has no parameter named nn
+main.bork:20:20: named arguments require a direct call to a declared function or method: compiler built-ins have no declared parameter names
+main.bork:21:26: parameter host of options is already supplied at main.bork:21:11

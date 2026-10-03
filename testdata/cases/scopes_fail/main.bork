@@ -66,13 +66,13 @@ fn keptLonger(path: String) uses io {
   scope outer {
     scope inner {
       f = fs.Open(path, inner)
-      onClose(outer, () => println(toString(f)))
+      onClose(f: () => println(toString(f)), s: outer)
     }
   }
 }
 
 fn keptByParam(f: fs.File, s: Scope) uses io {
-  onClose(s, () => println(toString(f)))
+  onClose(f: () => println(toString(f)), s: s)
 }
 
 // These are fine.
@@ -83,7 +83,7 @@ fn fine(path: String, s: Scope) uses io: fs.File | fs.Error {
 fn fine2(path: String) uses io: String | fs.Error {
   scope s {
     f = fine(path, s)?
-    onClose(s, () => println(toString(f)))
+    onClose(f: () => println(toString(f)), s: s)
     fs.ReadAllText(f)
   }
 }

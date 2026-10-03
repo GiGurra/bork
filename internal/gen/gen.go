@@ -847,9 +847,22 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if e.Embedded != nil {
 			return nil, g.embedCall(e)
 		}
-		stmts, xs := g.values(e.Args)
+		stmts, xs := g.values(e.EvaluationArgs())
 		if xs == nil {
 			return stmts, nil
+		}
+		if e.ArgOrder != nil {
+			ordered := make([]ast.Expr, len(xs))
+			for i, param := range e.ArgOrder {
+				x := xs[i]
+				if !stable(x) {
+					t := g.newTmp()
+					stmts = append(stmts, define(t, x))
+					x = t
+				}
+				ordered[param] = x
+			}
+			xs = ordered
 		}
 		inst := e.Inst
 		for i := range xs {

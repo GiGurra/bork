@@ -5,7 +5,7 @@ import "bork/fs"
 
 fn tracked(name: String, s: Scope) uses io {
   println(s"open $name")
-  onClose(s, () => println(s"close $name"))
+  onClose(f: () => println(s"close $name"), s: s)
 }
 
 fn early(flag: Bool) uses io: String {

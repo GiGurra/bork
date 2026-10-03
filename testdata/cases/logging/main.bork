@@ -2,7 +2,7 @@ import "bork/log"
 
 fn main() {
   // Plain text on stdout without timestamps, so the output is stable.
-  log.Configure(log.Defaults().copy(output = log.Output.Stdout, timestamps = false))
+  log.Configure(log.Defaults().copy(output: log.Output.Stdout, timestamps: false))
   log.Info("started")
   log.Info("signed up", { "user": "ada", "age": 37 })
   log.Debug("dropped: below the level")
@@ -11,7 +11,7 @@ fn main() {
   request |> log.Log(log.Level.Error, "failed", { "status": 500 })
   log.Extend(request, { "user": "bob" }) |> log.Log(log.Level.Info, "done")
 
-  log.Configure(log.Defaults().copy(output = log.Output.Stdout, timestamps = false, format = log.Format.Json, level = log.Level.Debug))
+  log.Configure(log.Defaults().copy(output: log.Output.Stdout, timestamps: false, format: log.Format.Json, level: log.Level.Debug))
   log.Debug("now shown", { "user": "ada" })
   // The runtime's own messages are written the same way.
   scope s with logFailures() {

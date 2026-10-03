@@ -24,7 +24,7 @@ fn endpoint(index: Int, request: http.Request, rs: Scope): http.Response {
 // Middleware is an ordinary function returning a handler with the server
 // effect set. Pure and narrower handlers can be passed to it.
 fn tagged(handler: http.Handler): http.Handler {
-  (req, rs) => handler(req, rs).copy(headers = { "X-Middleware": ["yes"] })
+  (req, rs) => handler(req, rs).copy(headers: { "X-Middleware": ["yes"] })
 }
 fn call(base: String, path: String, s: Scope, method: String = "GET", body: String = "") uses net + io {
   match (http.Send(method, base + path, {:}, body, s, 2000)) {

@@ -13,4 +13,4 @@ main.bork:82:20: transfer requires amount to be positive, but positive(0) is fal
 main.bork:83:19: connect requires host to be nonEmpty, but nonEmpty("") is false
 main.bork:83:23: connect requires port to be between(1, 65535), but between(70000, 1, 65535) is false
 main.bork:84:15: bad must be between(1, 65535), but between(0, 1, 65535) is false
-main.bork:86:27: Request requires port to be between(1, 65535), but between(-1, 1, 65535) is false
+main.bork:86:26: Request requires port to be between(1, 65535), but between(-1, 1, 65535) is false

@@ -1,0 +1,35 @@
+local false 9000
+example true 443
+pipe false 9001
+[2, 3]
+[1, 2]
+[1, 2]
+6
+1
+1
+callback
+6
+5
+[1, 2]
+receiver
+method B
+method A
+6
+pipe input
+pipe C
+pipe B
+6
+9
+9
+5
+a=b+c
+B
+A
+6
+block B
+block A
+6
+stop
+return
+42
+true

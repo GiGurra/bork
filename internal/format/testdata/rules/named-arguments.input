@@ -1,0 +1,4 @@
+fn f(){send(1,limit:2,callback:x=>x);send(
+ label:"x",// keep order
+ limit:2,
+);v.copy(port:9000,tls.cert:"server")}

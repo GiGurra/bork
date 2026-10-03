@@ -349,7 +349,14 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 	}
-	args = c.withDefaults(args, fn)
+	var valid bool
+	args, valid = c.namedArgs(e, name, fn, args)
+	if !valid {
+		for _, a := range e.Args {
+			c.expr(a)
+		}
+		return fail()
+	}
 	c.info.callArgs[e] = args
 	// Errors about the call itself are reported at the method's name in
 	// a method call, x.m(a).
@@ -667,6 +674,7 @@ func (c *checker) callValue(e *syntax.Call) Type {
 
 // callFuncValue checks a call of a function value, e.Fun, of type t.
 func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
+	c.rejectNamedArgs(e, "function types do not carry parameter names; call the declaration directly")
 	ft, ok := t.(*FuncType)
 	if !ok {
 		if t != Invalid {

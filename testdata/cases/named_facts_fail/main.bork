@@ -1,0 +1,7 @@
+pred positive(x: Int) { x > 0 }
+pred below(x: Int, limit: Int) { x < limit }
+fn checked(limit: Int, value: Int where positive and below(limit)): Int { value }
+fn main() {
+  println(checked(value: 0, limit: 10))
+  println(checked(value: 10, limit: 5))
+}

@@ -1,0 +1,1 @@
+{"schema_version":1,"file":"main.bork","line":2,"column":50,"end_line":2,"end_column":51,"message":"copy updates use ':'; write `field: value`","code":"syntax.copy_separator","fixes":[{"message":"replace '=' with ':'","edits":[{"start":{"file":"main.bork","line":2,"column":50},"end":{"file":"main.bork","line":2,"column":51},"replacement":":"}]}]}

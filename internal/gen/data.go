@@ -44,7 +44,7 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 	return stmts, lit
 }
 
-// copyExpr lowers `x.copy(a = 1, b.c = 2)`. Records are Go struct
+// copyExpr lowers `x.copy(a: 1, b.c: 2)`. Records are Go struct
 // values, so copying the struct and assigning the changed (possibly
 // nested) fields never affects x.
 func (g *gen) copyExpr(e *check.Copy) ([]ast.Stmt, ast.Expr) {

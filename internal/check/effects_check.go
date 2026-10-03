@@ -218,7 +218,7 @@ func (u *effectUses) expr(x Expr) {
 	switch x := x.(type) {
 	case nil:
 	case *Call:
-		for _, a := range x.Args {
+		for _, a := range x.EvaluationArgs() {
 			u.expr(a)
 		}
 		if u.noMain(x.Func, x.Pos()) {
