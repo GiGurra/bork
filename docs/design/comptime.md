@@ -283,8 +283,8 @@ that wider inventory is complete. Do not introduce a second independently stale
 whole-program cache. Initial value
 reuse may remain in memory until a safe versioned disk artifact exists. Unknown
 execution dependencies disable both value and enclosing checked-result reuse.
-Cache misses and `--no-cache` produce identical values, diagnostics and emitted
-Go. Comptime implementation fragments remain dependencies of importing users
+For the same captured tracked inputs and truthful unsafe signatures, cache
+misses and `--no-cache` produce identical values, diagnostics and emitted Go. Comptime implementation fragments remain dependencies of importing users
 even when the ordinary runtime public interface is unchanged.
 
 ## Implementation and acceptance
@@ -305,5 +305,10 @@ cycles; file escape/symlinks,
 missing/edited/added inputs, UTF-8 and snapshot races; panic/time/output limits;
 unsupported cross-target evaluation; clean versus warm/no-cache output; changed
 helpers/dictionaries/predicates/modules/limits and fresh describe locations.
+Include no-edit Session requests where a pure unsafe helper observes a changed
+untracked file/environment input, verifying both value and enclosing-artifact
+cache bypass; predicates/helpers containing comptime to exercise proof/evaluation
+cycles; and both true and false contextual result constraints checked only after
+evaluation, separately from invalid recipe preconditions.
 Run the baked program after removing its source data files, and inspect emitted
 Go to verify that recipes and file reads are absent from execution paths.
