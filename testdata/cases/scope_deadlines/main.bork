@@ -1,0 +1,49 @@
+import "bork/http"
+fn hasDeadline(s: Scope) uses state: Bool unsafe go {
+  _, ok := _borkScopeContext(s).Deadline()
+  return ok
+}
+fn deadline(s: Scope) uses state: Option[Int] unsafe go {
+  value, ok := _borkScopeContext(s).Deadline()
+  if !ok { return _borkNone[int64]() }
+  return _borkSome(value.UnixNano())
+}
+fn sameDeadline(a: Option[Int], b: Option[Int]): Bool { a == b && a != Option.None }
+fn earlier(a: Option[Int], b: Option[Int]): Bool { a.getOr(0) < b.getOr(0) }
+fn farFuture(s: Scope) uses clock + state: Bool unsafe go {
+  import "time"
+  deadline, ok := _borkScopeContext(s).Deadline()
+  return ok && time.Until(deadline) > time.Hour
+}
+fn deadlineResult(result: http.Result): Bool {
+  match (result) { error: http.DeadlineExceeded => true, _ => false }
+}
+fn main() {
+  scope parent {
+    child = openScope(parent)
+    println("initial", hasDeadline(child.scope))
+    cancelAfter(parent, 60000)
+    println("existing child", sameDeadline(deadline(parent), deadline(child.scope)))
+    cancelAfter(parent, 120000)
+    println("cannot extend", sameDeadline(deadline(parent), deadline(child.scope)))
+    cancelAfter(child.scope, 10000)
+    println("child earlier", earlier(deadline(child.scope), deadline(parent)))
+    cancelAfter(parent, 0)
+    println("new parent earlier", sameDeadline(deadline(parent), deadline(child.scope)))
+    println("HTTP ancestor deadline", deadlineResult(http.Get("://invalid", child.scope)))
+    closeScope(child)
+  }
+  scope parent {
+    scope lexical {
+      println("lexical initial", hasDeadline(lexical))
+      cancelAfter(parent, 60000)
+      println("lexical later parent", sameDeadline(deadline(parent), deadline(lexical)))
+    }
+  }
+  scope huge {
+    cancelAfter(huge, 9223372036854775807)
+    println("saturated", farFuture(huge), cancelled(huge))
+    cancelAfter(huge, -9223372036854775808)
+    println("negative immediate", cancelled(huge))
+  }
+}

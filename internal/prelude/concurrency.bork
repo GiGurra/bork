@@ -32,7 +32,7 @@ fn launch(s: Scope, work: () => Unit) unsafe go {
 }
 
 // Cancelled is what a cancellation-aware operation gives when its scope
-// is cancelled; reason says why ("cancelled", "deadline exceeded", ...).
+// is cancelled; reason says why ("cancelled", "context deadline exceeded", ...).
 type Cancelled = { reason: String }
 
 // cancel cancels the scope s: its tasks see it at their next
@@ -48,13 +48,11 @@ fn cancelled(s: Scope) uses state: Bool unsafe go {
   return s.ctx.Err() != nil
 }
 
-// cancelAfter cancels s once ms milliseconds have passed, unless it has
-// closed by then: a deadline.
+// cancelAfter sets an observable deadline and only ever shortens it. Existing
+// children see later ancestor deadlines too. Nonpositive ms cancels immediately;
+// huge positive values saturate rather than overflowing the Go duration.
 fn cancelAfter(s: Scope, ms: Int) uses clock + state unsafe go {
-  import "errors"
-  import "time"
-  t := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() { s.cancel(errors.New("deadline exceeded")) })
-  s.Defer(func() { t.Stop() })
+  s.cancelAfter(ms)
 }
 
 // checkpoint gives Cancelled if s has been cancelled: a cancellation

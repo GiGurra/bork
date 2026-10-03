@@ -1,0 +1,10 @@
+initial false
+existing child true
+cannot extend true
+child earlier true
+new parent earlier true
+HTTP ancestor deadline true
+lexical initial false
+lexical later parent true
+saturated true false
+negative immediate true

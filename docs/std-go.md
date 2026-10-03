@@ -70,11 +70,16 @@ values passed into these helpers must never subsequently be mutated.
 | Helper | Behavior |
 | --- | --- |
 | `_borkScopeCleanupTimeout(s) time.Duration` | Returns the scope cleanup timeout; zero means unbounded. |
-| `_borkScopeContext(s) context.Context` | Returns the scope's cancellation context. |
+| `_borkScopeContext(s) context.Context` | Returns the scope's context, preserving values and exposing its effective deadline and typed cancellation cause. |
 | `_borkScopeWith(ctx context.Context)` | Opens a scope cancelled with ctx; the caller must close it. |
 | `_borkScopeClose(s)` | Cancels the scope, waits for tasks, runs finalizers; may panic for a task or finalizer failure. Repeated closure does nothing. |
 | `_borkTryScopeTask(s, work func() any) (func() any, bool)` | Atomically admits work while s is open and uncancelled. Returns a waiter with normal task panic reporting; rejection returns nil/false and never invokes work. |
 | `_borkScopeAbort(s)` | Deferred cleanup: closes an unclosed scope even when its body panics; closure failures may themselves panic. |
+
+`cancelAfter` deadlines are visible through `_borkScopeContext(s).Deadline()`,
+including deadlines added later to ancestors. They can only shorten; Go code
+that caches a deadline still receives subsequent cancellation through Done.
+Deadline expiry reports `context.DeadlineExceeded` through Err and Cause.
 
 To bridge a Go operation's context into a scope:
 

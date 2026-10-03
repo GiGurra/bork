@@ -202,13 +202,15 @@ is already exhausted, return DeadlineExceeded. If no deadline exists, attempts
 and the shared budget still bound retries; each operation retains its own
 explicit timeout where needed.
 
-The current cancelAfter implementation schedules cancellation without exposing
-a context Deadline. Retry needs a small shared deadline bridge: record the
+The shared deadline bridge is implemented: cancelAfter exposes its deadline
+through the scope context. Record the
 scope's earliest explicit/parent deadline, use monotonic time to calculate its
 remaining budget, and never extend it through another cancelAfter call. Descendants
 opened before a later parent deadline must also observe that tighter budget;
 query effective deadline through scope ancestry rather than a creation-time copy.
-Preserve deadlines on incoming Go contexts and keep deadline causes typed. Keep
+Preserve deadlines on incoming Go contexts and keep deadline causes typed.
+Nonpositive millisecond delays cancel immediately; huge positive values saturate
+without wrapping. Scope contexts expose DeadlineExceeded through Err and Cause. Keep
 this bridge distinct from cross-service propagation and ambient values, which
 remain bork-gqxe4s. Request criticality scheduling and adaptive per-destination
 limits are deferred until basic admission and budgets have clear measurements.
