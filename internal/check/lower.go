@@ -249,7 +249,10 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	}
 	switch x := x.(type) {
 	case *syntax.Comptime:
-		node := &Comptime{expr: at, Body: l.block(x.Body)}
+		node := &Comptime{expr: at, Body: l.block(x.Body), Owner: l.info.exprOwners[x]}
+		for _, decl := range l.info.comptimeCaptureDecls[x] {
+			node.Captures = append(node.Captures, l.vars[decl])
+		}
 		l.info.Comptimes = append(l.info.Comptimes, node)
 		return node
 	case *syntax.Generate:

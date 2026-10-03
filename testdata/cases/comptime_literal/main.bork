@@ -1,0 +1,12 @@
+pred nonEmpty(xs: List[Int]) { xs.length() > 0 }
+
+type Table = { values: List[Int], sum: Int }
+
+fn squares(): List[Int] { range(1, 5).map(n => n * n) }
+
+fn main() {
+  xs: List[Int] where nonEmpty = comptime { squares() }
+  table = comptime { Table { values: xs, sum: xs.fold(0, (a, n) => a + n) } }
+  println(table.values)
+  println(table.sum)
+}

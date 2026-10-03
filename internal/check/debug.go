@@ -73,6 +73,10 @@ func sourceText(file *syntax.File, start, end diag.Pos) string {
 // debugValue identifies the value a probe returns, for proofs about that value.
 func debugValue(x Expr) Expr {
 	for {
+		if node, ok := x.(*Comptime); ok && node.Value != nil {
+			x = node.Value
+			continue
+		}
 		call, ok := x.(*CallBuiltin)
 		if !ok || call.Builtin != BuiltinDbg {
 			return x

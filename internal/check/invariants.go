@@ -78,6 +78,12 @@ func (f *factChecker) nominalObligationsFor(x Expr, variant *Variant, e env, req
 		return
 	}
 	if f.validates(x.Type()) {
+		// A proof's supplied candidate already exists. Its field/default
+		// promises need validation before the predicate runs, while the type's
+		// own invariants are precisely what that predicate is establishing.
+		if f.proofArguments {
+			return
+		}
 		f.diags.AddCode(x.Pos(), "facts.invariant_cycle", "a validator of %s cannot construct that type before its invariant is established", x.Type())
 		f.validatorInvalid = true
 		return

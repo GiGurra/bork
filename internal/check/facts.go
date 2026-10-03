@@ -44,6 +44,7 @@ type Query struct {
 	TypeArgs []Type
 	Params   []Type
 	Dicts    []*Dict
+	ArgFacts [][]*Constraint
 	Or       []Query
 	And      []Query
 	// Via names the function whose result the constant is, when the
@@ -155,6 +156,9 @@ func importedDefault(field *Field) bool {
 }
 
 type factChecker struct {
+	// Preflight cannot rely on the later whole-program field-default proof.
+	preflightDefaults bool
+	proofArguments    bool
 	// Deferred initializers check every exit, including implicit ? failures.
 	expandedRecipes     map[Expr]bool
 	initializerResultFn *Func
@@ -464,6 +468,12 @@ func (f *factChecker) walk(x Expr, e env) {
 		f.observe(x.Pos(), e)
 	}
 	switch x := x.(type) {
+	case *Comptime:
+		if x.Value == nil {
+			f.diags.AddCode(x.Pos(), "comptime.cycle", "comptime value is required before it is evaluated")
+		} else {
+			f.walk(x.Value, e)
+		}
 	case *Call:
 		if len(f.validators[f.fn]) > 0 && x.Func.Class != nil {
 			f.diags.AddCode(x.Pos(), "facts.invariant_call", "an invariant validator cannot call a class method with an unknown implementation; use a declared helper")
@@ -578,7 +588,7 @@ func (f *factChecker) walk(x Expr, e env) {
 		f.walk(x.X, e)
 	case *RecordLit:
 		for _, fi := range x.Fields {
-			if !fi.IsDefault || !importedDefault(fi.Field) {
+			if !fi.IsDefault || !importedDefault(fi.Field) || f.preflightDefaults {
 				if fi.Thunk != nil {
 					f.fieldBoundary(fi.Value, fi.Field.Type, e, func(x Expr, e env) {})
 				} else {
@@ -758,7 +768,7 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 	for _, fi := range lit.Fields {
 		if fd := fi.Field; fd != nil {
 			for _, con := range fd.Constraints {
-				if !fi.IsDefault || con.HasSiblingArgs() {
+				if !fi.IsDefault || con.HasSiblingArgs() || f.preflightDefaults {
 					saveUse, saveDecl := f.defaultUse, f.defaultDecl
 					if fi.IsDefault {
 						f.defaultUse, f.defaultDecl = lit.Pos(), fd.Decl.Pos
@@ -1752,7 +1762,7 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 			}
 			texts = append(texts, text)
 		}
-		return Query{Pred: ob.pred, Values: values, ValueTexts: texts, Params: ob.inst.Params, TypeArgs: ob.inst.TypeArgs, Dicts: ob.inst.Dicts}, true
+		return Query{Pred: ob.pred, Values: values, ValueTexts: texts, Params: ob.inst.Params, TypeArgs: ob.inst.TypeArgs, Dicts: ob.inst.Dicts, ArgFacts: ob.inst.ArgFacts}, true
 	}
 
 	q := Query{Pred: ob.pred, Params: ob.pred.Params}
@@ -1799,7 +1809,7 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 		if !f.info.PredicateDicts(scope, inst) {
 			return Query{}, false
 		}
-		q.TypeArgs, q.Params, q.Dicts = inst.TypeArgs, inst.Params, inst.Dicts
+		q.TypeArgs, q.Params, q.Dicts, q.ArgFacts = inst.TypeArgs, inst.Params, inst.Dicts, inst.ArgFacts
 	}
 	return q, true
 }
@@ -1812,6 +1822,8 @@ func (f *factChecker) closed(x Expr) bool {
 		return true
 	}
 	switch x := x.(type) {
+	case *FloatBits:
+		return true
 	case *ListLit:
 		for _, el := range x.Elems {
 			if !f.closed(el) {
@@ -1839,7 +1851,12 @@ func (f *factChecker) literalText(x Expr) string {
 		return CArg{Const: v}.String()
 	}
 	switch x := x.(type) {
+	case *FloatBits:
+		return fmt.Sprintf("%s(bits=0x%x)", x.Type(), x.Bits)
 	case *ListLit:
+		if x.Nil {
+			return "nil"
+		}
 		parts := make([]string, len(x.Elems))
 		for i, el := range x.Elems {
 			parts[i] = f.literalText(el)
@@ -2838,6 +2855,11 @@ func queryKey(q Query) string {
 		return prefix + strings.Join(keys, ";")
 	}
 	key := q.String() + "[" + argsKey(q.TypeArgs) + "]"
+	for i, cons := range q.ArgFacts {
+		for _, con := range cons {
+			key += fmt.Sprintf("|argfact:%d:%p:%s:%s", i, con.Pred, con.Path, con.Text(nil))
+		}
+	}
 	// Expression-valued arguments can contain distinct union members with the
 	// same printed value. Keep their typed tree identities rather than merging
 	// them by display text (including member types nested inside records/lists).

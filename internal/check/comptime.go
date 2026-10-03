@@ -10,10 +10,12 @@ import (
 type comptimeContext struct {
 	parent   *comptimeContext
 	external map[any]bool
+	captures []any
+	seen     map[any]bool
 }
 
 func (c *checker) comptimeInitializer(node *syntax.Comptime, want Type) Type {
-	ctx := &comptimeContext{parent: c.comptimeContext, external: map[any]bool{}}
+	ctx := &comptimeContext{parent: c.comptimeContext, external: map[any]bool{}, seen: map[any]bool{}}
 	for _, scope := range c.scopes {
 		for _, local := range scope {
 			ctx.external[local.decl] = true
@@ -28,6 +30,10 @@ func (c *checker) comptimeInitializer(node *syntax.Comptime, want Type) Type {
 	c.used = savedEffects
 	c.comptimeContext = ctx.parent
 	c.info.comptimeSyntax = append(c.info.comptimeSyntax, node)
+	if c.info.comptimeCaptureDecls == nil {
+		c.info.comptimeCaptureDecls = map[*syntax.Comptime][]any{}
+	}
+	c.info.comptimeCaptureDecls[node] = ctx.captures
 	if effects != 0 {
 		c.diags.AddCode(node.Pos, "comptime.effects", "comptime requires pure code, found uses %s", effects)
 	}
@@ -39,6 +45,10 @@ func (c *checker) noteComptimeCapture(node *syntax.Ident, decl any, typ Type) {
 		if ctx.external[decl] && (hasTypeParam(typ) || !c.closedComptimeDeclaration(decl, map[any]bool{})) {
 			c.diags.AddCode(node.Pos, "comptime.capture", "comptime cannot capture runtime value %s", node.Name)
 			return
+		}
+		if ctx.external[decl] && !ctx.seen[decl] {
+			ctx.seen[decl] = true
+			ctx.captures = append(ctx.captures, decl)
 		}
 	}
 }

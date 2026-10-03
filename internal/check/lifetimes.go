@@ -564,6 +564,9 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return nil
 	case *LoopControl:
 		return nil
+	case *Comptime:
+		// Validate scopes created inside the independent build-time boundary.
+		return l.lambda(ComptimeLambda(x))
 	case *Lambda:
 		return l.lambda(x)
 	case *FuncRef:

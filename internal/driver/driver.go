@@ -3,6 +3,7 @@
 package driver
 
 import (
+	stdcontext "context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
@@ -114,27 +116,25 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
-	for _, node := range info.Comptimes {
-		diags.AddCode(node.Pos(), "comptime.not-implemented", "comptime evaluation is not implemented yet")
-	}
-	if diags.Len() > 0 {
-		return nil, &DiagError{Diags: diags}
-	}
 	phase(observe, "lifetimes")
 	check.Lifetimes(files, info, diags)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
-	phase(observe, "facts")
-	evaluate := evaluatorWithContext(files, info, module, context)
-	if usage != nil {
-		inner := evaluate
-		evaluate = func(queries []check.Query) ([]bool, error) {
-			usage.evaluator = true
-			return inner(queries)
+	eval := evaluatorWithContext(files, info, module, context)
+	if len(info.Comptimes) > 0 {
+		phase(observe, "comptime")
+		eval = evaluateComptimes(files, info, diags, module, context, usage)
+		if diags.Len() > 0 {
+			return nil, &DiagError{Diags: diags}
 		}
 	}
-	check.Facts(files, info, diags, evaluate)
+	phase(observe, "facts")
+	if usage != nil {
+		inner := eval
+		eval = func(queries []check.Query) ([]bool, error) { usage.evaluator = true; return inner(queries) }
+	}
+	check.Facts(files, info, diags, eval)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
@@ -158,8 +158,18 @@ func evaluatorWithModule(files []*syntax.File, info *check.Info, module *goModul
 }
 
 func evaluatorWithContext(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext) check.Evaluator {
+	return evaluatorWithTimeout(files, info, module, context, 0)
+}
+
+func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext, timeout time.Duration) check.Evaluator {
 	return func(queries []check.Query) ([]bool, error) {
-		goSrc, err := gen.EvalProgram(files, info, queries)
+		var goSrc []byte
+		var err error
+		if timeout > 0 {
+			goSrc, err = gen.EvalComptimeProgram(files, info, queries)
+		} else {
+			goSrc, err = gen.EvalProgram(files, info, queries)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -172,11 +182,25 @@ func evaluatorWithContext(files []*syntax.File, info *check.Info, module *goModu
 		if err := buildGoWithContext(files, goSrc, exe, module, context, info.Embeds...); err != nil {
 			return nil, err
 		}
-		var stderr strings.Builder
-		cmd := exec.Command(exe)
+		stderr := &boundedOutput{limit: 64 << 10}
+		deadline := stdcontext.Background()
+		if timeout > 0 {
+			var cancel stdcontext.CancelFunc
+			deadline, cancel = stdcontext.WithTimeout(deadline, timeout)
+			defer cancel()
+		}
+		cmd := exec.CommandContext(deadline, exe)
+		cmd.WaitDelay = time.Second
+		configureEvaluationProcess(cmd)
 		cmd.Env = slices.Clone(context.processEnv)
-		cmd.Stderr = &stderr
-		out, err := cmd.Output()
+		cmd.Stderr = stderr
+		stdout := &boundedOutput{limit: max(64<<10, len(queries)*6)}
+		cmd.Stdout = stdout
+		err = cmd.Run()
+		out := stdout.data
+		if deadline.Err() != nil {
+			return nil, fmt.Errorf("predicate evaluation exceeded %s", timeout)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("a predicate failed: %s", strings.TrimSpace(stderr.String()))
 		}

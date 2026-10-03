@@ -28,6 +28,7 @@ func TestCompilationReplayMatchesClean(t *testing.T) {
 		{"embed_missing", true}, {"embed_invalid", true},
 		{"mocks_generic", false}, {"lazy_bindings", false}, {"lazy_mocks", false},
 		{"go_user_deps", false},
+		{"comptime_literal", false},
 	}
 	for _, fixture := range cases {
 		name := fixture.name
