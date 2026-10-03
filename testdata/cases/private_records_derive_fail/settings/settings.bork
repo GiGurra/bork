@@ -4,3 +4,4 @@ type Box[T] = private { value: T }
 fn New(port: Int where positive): Config { Config { port: port } }
 fn (c: Config) WithPort(port: Int where positive): Config { c.copy(port: port) }
 fn MakeBox[T](value: T): Box[T] { Box { value: value } }
+type Secret = private { value: Int }

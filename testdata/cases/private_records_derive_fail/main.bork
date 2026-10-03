@@ -6,4 +6,6 @@ type Wrapped = { box: settings.Box[Int] } derive (Decode)
 type Container = { boxes: List[Option[settings.Box[Int]]] } derive (Decode)
 type LocalBox[T] = { value: T } derive (Decode)
 type Nested = LocalBox[settings.Box[Int]] derive (Decode)
+type GoWrapped = { secret: settings.Secret } derive (GoStruct)
+type GoContainer = { secrets: List[settings.Secret] } derive (GoStruct)
 fn main() {}

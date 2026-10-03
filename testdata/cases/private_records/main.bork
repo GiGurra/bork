@@ -5,9 +5,21 @@ type Outer = { config: settings.Config, name: String }
 type ExportBox = settings.Box[Int] derive (Encode)
 type Envelope = { config: settings.Config } derive (Decode, Encode)
 fn read(c: settings.Config): Int { match (c) { settings.Config { port } => port } }
+fn GoRound[T: GoStruct](value: T): T | GoValueError unsafe go {
+  out, errors := _d_T_GoStruct.FromGo(_d_T_GoStruct.ToGo(value))
+  if len(errors)>0 { return errors[0] }; return out
+}
+fn GoBad[T: GoStruct](): List[GoValueError] unsafe go {
+  import "reflect"
+  raw := _d_T_GoStruct.New()
+  reflect.ValueOf(raw).Elem().FieldByName("Port").SetInt(0)
+  _, errors := _d_T_GoStruct.FromGo(raw)
+  return errors
+}
 fn main() {
   println(encodeJson(settings.MakeBox(7)))
   c = settings.New(9000)
+  println(GoRound(c), GoBad[settings.Config]())
   println(c.port, read(c), c.WithPort(9001).port, settings.MakeBox("value").value)
   o = Outer { config: c, name: "outer" }
   println(o.copy(config: settings.New(8000)).config.port, o.copy(name: "renamed").name)
