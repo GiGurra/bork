@@ -250,11 +250,9 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 	return t
 }
 
-// OwnedScope is installed by the owned-child-scope feature. Assembly never
-// transfers closing rights, even when the provider itself could accept one.
+// Assembly never transfers closing rights, even when a provider could accept one.
 func assemblyOwner(t Type) bool {
-	owner := basicTypes["OwnedScope"]
-	return owner != nil && t == owner
+	return t == OwnedScope
 }
 
 func hasOpenEffects(t Type) bool {

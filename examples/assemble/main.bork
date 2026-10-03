@@ -16,9 +16,9 @@ fn openDb(config: Config, s: Scope) uses io + net: Database | sql.Error {
   Database { connection: connection }
 }
 
-fn newService(config: Config, database: Database, s: Scope) uses io + net: Service | IoError {
-  // Establish the lifetime used by the server's retained request handler.
-  connection = attach(database.connection, s)
+fn newService(config: Config, database: Database in s, s: Scope) uses io + net: Service | IoError {
+  // The parameter contract lets the server retain this connection in s.
+  connection = database.connection
   server = http.Listen(config.address, s, (request: http.Request, requestScope: Scope) => {
     match (sql.Query[Greeting](connection, "SELECT message FROM greetings", [])) {
       rows: List[Greeting] => match (rows.get(0)) {

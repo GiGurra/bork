@@ -1,0 +1,9 @@
+fn newOwner(s: Scope): OwnedScope { openScope(s) }
+fn consumes(owner: OwnedScope): Int { closeScope(owner); 1 }
+fn main() {
+  scope app {
+    assemble[OwnedScope](app, newOwner)
+    assemble[Int](app, consumes)
+    assemble[Int](app, newOwner, () => 1)
+  }
+}

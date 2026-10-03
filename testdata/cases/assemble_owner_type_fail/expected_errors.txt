@@ -1,0 +1,19 @@
+main.bork:5:25: assemble requires a concrete non-union product type, found OwnedScope
+main.bork:6:24: provider #1 parameter owner is an OwnedScope; assembly only borrows Scope values
+assembly assemble[Int]:
+  Int <- #1 consumes (main.bork:6:24)
+    owner: OwnedScope ?? missing provider
+supplied:
+  #1 consumes -> Int
+main.bork:6:24: missing provider for OwnedScope, needed by #1 consumes parameter owner
+assembly assemble[Int]:
+  Int <- #1 consumes (main.bork:6:24)
+    owner: OwnedScope ?? missing provider
+supplied:
+  #1 consumes -> Int
+main.bork:7:24: provider #1 has unsupported signature (Scope) => OwnedScope
+assembly assemble[Int]:
+  Int <- #2 ... (main.bork:7:34)
+supplied:
+  #1 newOwner -> invalid (unused)
+  #2 ... -> Int
