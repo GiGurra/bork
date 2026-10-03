@@ -43,10 +43,15 @@ func (c *checker) unappliedIn(t *syntax.TypeExpr, where string) {
 			at = "here"
 		}
 		hint := ""
-		if where == "in a type pattern" {
+		switch where {
+		case "in a type pattern":
 			hint = "; match the base type and then guard with the predicate"
+		case "in a bare or destructuring pattern":
+			hint = "; use a bound type pattern (value: " + t.Name + "), then destructure inside its arm"
 		}
 		switch {
+		case where == "in a bare or destructuring pattern" && c.nestedPatternFacts(t):
+			c.errorf(t.Pos, "nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate")
 		case len(t.Where) > 0:
 			c.errorf(t.Where[0].Pos, "where clauses %s are not supported yet, so the fact would not be checked%s", at, hint)
 		case len(c.constrainedAlias(t)) > 0:
@@ -188,7 +193,7 @@ func (c *checker) forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where
 				if len(n.Path) == 1 || len(n.Path) == 2 {
 					// Bare type names, record patterns, and variant owners
 					// have no TypeExpr.
-					f(&syntax.TypeExpr{Pos: n.Pos, Name: n.Path[0]}, "in a type pattern")
+					f(&syntax.TypeExpr{Pos: n.Pos, Name: n.Path[0]}, "in a bare or destructuring pattern")
 				}
 			case *syntax.RecordLit:
 				owner := n.Type

@@ -1,0 +1,17 @@
+pred positive(n: Int) { n > 0 }
+type PosInt = Int where positive
+fn missing(n: Int): Int { match (n) { x: PosInt => x } }
+fn unreachable(n: Int): Int { match (n) { x: Int => x; x: PosInt => x } }
+fn nested(xs: List[Int]): Int { match (xs) { ys: List[Int where positive] => 1; _ => 0 } }
+fn bare(n: Int | String): Int { match (n) { PosInt => 1; s: String => 0 } }
+fn effectful(n: Int, keep: (Int) uses io => Bool): Int { match (n) { x: Int where keep => x; _ => 0 } }
+fn unknown(n: Int): Int { match (n) { v: Int where missingPredicate => v; _ => 0 } }
+fn wrong(n: String): Int { match (n) { v: String where positive => 1; _ => 0 } }
+type Phantom[T] = sealed { Empty }
+type PhantomPositive = Phantom[Int where positive]
+type ChainedPhantom = PhantomPositive
+fn phantom(x: Phantom[Int]): Int { match (x) { p: Phantom[Int where positive] => 1 } }
+fn chained(x: Phantom[Int]): Int { match (x) { p: ChainedPhantom => 1 } }
+fn barePhantom(x: Phantom[Int]): Int { match (x) { PhantomPositive => 1 } }
+fn variantPhantom(x: Phantom[Int]): Int { match (x) { PhantomPositive.Empty => 1 } }
+fn main() {}

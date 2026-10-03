@@ -1,0 +1,6 @@
+ok    type mismatch skips predicate
+ok    false predicate falls through
+FAIL  predicate panic propagates
+      guard panic 1
+2 passed, 1 failed
+exit code 1

@@ -310,6 +310,9 @@ func (u *effectUses) expr(x Expr) {
 	case *Match:
 		u.expr(x.X)
 		for _, a := range x.Arms {
+			for _, guard := range a.Pat.Guards() {
+				u.expr(guard)
+			}
 			u.expr(a.Body)
 		}
 	case *Try:

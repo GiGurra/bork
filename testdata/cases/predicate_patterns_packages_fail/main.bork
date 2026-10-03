@@ -1,0 +1,4 @@
+import "example.com/patternfail/api"
+type Local = api.PhantomPositive
+fn phantom(x: api.Phantom[Int]): Int { match (x) { p: Local => 1 } }
+fn main() {}

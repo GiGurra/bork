@@ -1,0 +1,9 @@
+pred above(n: Float, cutoff: Float) { n > cutoff }
+type Above = Float where above(0.1 + 0.2)
+type AnotherAbove = Above
+pred Positive(n: Int) { n > 0 }
+type Result[T] = sealed { Fail, Ok { value: T } }
+pred good(x: Result[Int]) {
+  match (x) { Result.Fail => false; Result.Ok { value } => value > 0 }
+}
+type GoodResult = Result[Int] where good

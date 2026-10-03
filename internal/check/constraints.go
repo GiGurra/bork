@@ -36,8 +36,9 @@ type Constraint struct {
 // itself: a constant, or the name of one of the function's parameters
 // (`to: AccountId where notEqual(from)`).
 type CArg struct {
-	Const constant.Value // nil for a parameter
-	Param string
+	Const  constant.Value // nil for a parameter
+	Param  string
+	source syntax.Expr // the argument as written, for runtime pattern guards
 }
 
 func (a CArg) String() string {
@@ -379,7 +380,7 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 				c.errorf(a.Position(), "argument %d of %s must be %s, found %s", i+1, ref.Name, want, pt)
 				return nil
 			}
-			con.Args = append(con.Args, CArg{Param: id.Name})
+			con.Args = append(con.Args, CArg{Param: id.Name, source: a})
 			continue
 		}
 		if in.open(want) {
@@ -401,7 +402,7 @@ func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[st
 			c.errorf(a.Position(), "argument %d of %s must be %s, found %s", i+1, ref.Name, want, at)
 			return nil
 		}
-		con.Args = append(con.Args, CArg{Const: v})
+		con.Args = append(con.Args, CArg{Const: v, source: a})
 	}
 	if in != nil {
 		if missing := in.unsolved(); len(missing) > 0 {

@@ -134,6 +134,9 @@ func (g *gen) matchStmt(m *check.Match, k sink) []ast.Stmt {
 	for i, arm := range m.Arms {
 		p := arm.Pat
 		pats[i] = p
+		if p.HasGuard() {
+			flat, lits = false, false
+		}
 		if !flatPattern(p) {
 			flat = false
 		}
@@ -306,6 +309,21 @@ func (g *gen) litExpr(p *check.Pat) ast.Expr {
 
 // tests are the conditions under which the value x matches p.
 func (g *gen) tests(p *check.Pat, x ast.Expr) []ast.Expr {
+	conds := g.patternTests(p, x)
+	if p.Guard != nil {
+		stmts, value := g.value(p.Guard)
+		body := append(g.binds(p, x, false), stmts...)
+		body = append(body, &ast.ReturnStmt{Results: []ast.Expr{value}})
+		guard := &ast.CallExpr{Fun: &ast.FuncLit{
+			Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("bool")}}}},
+			Body: &ast.BlockStmt{List: body},
+		}}
+		conds = append(conds, guard)
+	}
+	return conds
+}
+
+func (g *gen) patternTests(p *check.Pat, x ast.Expr) []ast.Expr {
 	switch p.Kind {
 	case check.PatLit:
 		if p.Lit.Kind() == constant.Bool {
