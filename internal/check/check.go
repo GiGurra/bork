@@ -701,13 +701,13 @@ type checker struct {
 	typeParams map[string]*TypeParam
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
-	comptimeContext  *comptimeContext
-	lazyContext      *lazyContext
-	lambdaDepth      int
-	assemblySerial   int
-	producer         *producerContext
-	loops            []int
-	conversionSerial int
+	comptimeContext    *comptimeContext
+	initializerContext *initializerContext
+	lambdaDepth        int
+	assemblySerial     int
+	producer           *producerContext
+	loops              []int
+	conversionSerial   int
 	// inForce lists the mocks in force at the current point of a test:
 	// their targets, and how many scopes were open when each started.
 	inForce []mockInForce
@@ -1077,8 +1077,17 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			declared = c.resolveType(s.Type)
 		}
 		var t Type
-		if s.Lazy {
-			t = c.lazyInitializer(s, declared)
+		if s.AsyncScope != nil {
+			scope := c.expr(s.AsyncScope)
+			if scope == Never {
+				return Never
+			}
+			if scope != Scope && scope != Invalid {
+				c.errorf(s.AsyncScope.Position(), "async requires a Scope, found %s", scope)
+			}
+		}
+		if s.Lazy || s.AsyncScope != nil {
+			t = c.deferredInitializer(s, declared)
 		} else {
 			t = c.exprWant(s.Value, declared)
 		}
@@ -1250,7 +1259,7 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if l := c.lookup(e.Name); l != nil {
 		l.used = true
-		c.noteLazyCapture(l.decl, e.Name)
+		c.noteInitializerCapture(l.decl, e.Name)
 		c.noteComptimeCapture(e, l.decl, l.typ)
 		c.info.defs[e] = l.decl
 		return l.typ
@@ -1722,7 +1731,7 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 }
 
 func (c *checker) returnExpr(e *syntax.Return) {
-	if ctx := c.lazyContext; ctx != nil && ctx.depth == c.lambdaDepth {
+	if ctx := c.initializerContext; ctx != nil && ctx.depth == c.lambdaDepth {
 		if e.Value == nil {
 			c.errorf(e.Pos, "a %s must return a value", ctx.name)
 			return

@@ -91,6 +91,9 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List)
 			if td := p.testDecl(); td != nil {
 				f.Tests = append(f.Tests, td)
 			}
+		case p.atAsyncBinding():
+			p.errorf(p.tok().Pos, "package async bindings are not supported; use an async local binding inside a function")
+			p.syncTopLevel()
 		case p.at(TIdent) && p.tok().Text == "lazy" && p.peekKind() == TIdent:
 			p.errorf(p.tok().Pos, "package lazy bindings are not implemented yet; use a local lazy binding inside a function")
 			p.syncTopLevel()
@@ -928,6 +931,20 @@ func (p *parser) block() *Block {
 		}
 		var stmt Stmt
 		switch {
+		case p.atAsyncBinding():
+			pos := p.next().Pos
+			p.next() // '('
+			scope := p.expr()
+			p.expect(RParen, "after the async scope")
+			name := p.expect(TIdent, "after async(scope) (a single binding name)")
+			binding := &Binding{Pos: name.Pos, Name: name.Text, AsyncScope: scope, AsyncPos: pos}
+			if p.at(Colon) {
+				p.next()
+				binding.Type = p.typeExpr()
+			}
+			p.expect(Assign, "after the async binding's name or type")
+			binding.Value = p.expr()
+			stmt = binding
 		case p.at(TIdent) && p.tok().Text == "lazy" && (p.peekKind() == TIdent || p.peekKind() == Underscore):
 			pos := p.next().Pos
 			name := p.expect(TIdent, "after lazy (a single binding name)")
@@ -1904,4 +1921,26 @@ func (p *parser) fieldDoc(pos diag.Pos) string {
 		lines[i], lines[j] = lines[j], lines[i]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// Distinguish the binding modifier from ordinary calls of a function named async.
+func (p *parser) atAsyncBinding() bool {
+	if !p.at(TIdent) || p.tok().Text != "async" || p.peekKind() != LParen {
+		return false
+	}
+	depth := 0
+	for i := p.i + 1; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case LParen:
+			depth++
+		case RParen:
+			depth--
+			if depth == 0 {
+				return i+1 < len(p.toks) && (p.toks[i+1].Kind == TIdent || p.toks[i+1].Kind == Underscore)
+			}
+		case EOF:
+			return false
+		}
+	}
+	return false
 }

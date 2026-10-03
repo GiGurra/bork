@@ -8,6 +8,12 @@ import (
 )
 
 // LazyDescription reports initializer metadata without evaluating a cell.
+type AsyncDescription struct {
+	Scope    string   `json:"scope"`
+	Effects  string   `json:"initializer_effects"`
+	Captures []string `json:"captures,omitempty"`
+}
+
 type LazyDescription struct {
 	Kind     string   `json:"kind"`
 	Effects  string   `json:"initializer_effects"`
@@ -15,9 +21,9 @@ type LazyDescription struct {
 }
 
 // A result boundary at exactly depth; nested lambdas retain their own rules.
-type lazyContext struct {
+type initializerContext struct {
 	name     string
-	parent   *lazyContext
+	parent   *initializerContext
 	external map[any]bool
 	captures map[string]bool
 	depth    int
@@ -25,14 +31,18 @@ type lazyContext struct {
 	returns  []Type
 }
 
-func (c *checker) lazyInitializer(s *syntax.Binding, want Type) Type {
-	return c.valueInitializer(s, want, "lazy initializer")
+func (c *checker) deferredInitializer(s *syntax.Binding, want Type) Type {
+	kind := "lazy"
+	if s.AsyncScope != nil {
+		kind = "async"
+	}
+	return c.valueInitializer(s, want, kind+" initializer")
 }
 
 func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string) Type {
-	saved := c.lazyContext
+	saved := c.initializerContext
 	c.lambdaDepth++
-	ctx := &lazyContext{name: boundary, depth: c.lambdaDepth, want: want, parent: saved, external: map[any]bool{}, captures: map[string]bool{}}
+	ctx := &initializerContext{name: boundary, depth: c.lambdaDepth, want: want, parent: saved, external: map[any]bool{}, captures: map[string]bool{}}
 	for _, scope := range c.scopes {
 		for _, local := range scope {
 			ctx.external[local.decl] = true
@@ -40,9 +50,9 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 	}
 	outerEffects := c.used
 	c.used = 0
-	c.lazyContext = ctx
+	c.initializerContext = ctx
 	defer func() {
-		if s.Lazy {
+		if s.Lazy || s.AsyncScope != nil {
 			names := []string{}
 			for name := range ctx.captures {
 				names = append(names, name)
@@ -51,7 +61,7 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 			c.info.lazyBindings[s] = &LazyDescription{Kind: "binding", Effects: c.used.String(), Captures: names}
 		}
 		c.used |= outerEffects
-		c.lazyContext = saved
+		c.initializerContext = saved
 		c.lambdaDepth--
 	}()
 	t := c.exprWant(s.Value, want)
@@ -75,13 +85,24 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 // Check every normal/early result against the binding's promises, retaining
 // outer parameter facts but without collecting this thunk's returns as returns
 // of a pure function the caller is currently unfolding.
-func (f *factChecker) lazyBinding(s *Let, e env) {
+func (f *factChecker) deferredBinding(s *Let, e env) {
 	outer, collect := f.fn, f.collect
+	savedFn, savedResult := f.initializerResultFn, f.initializerResult
 	fn := *outer
 	decl := *outer.Decl
-	decl.Name = "lazy " + s.Var.Name
+	kind := "lazy"
+	if s.Deferred == AsyncBinding {
+		kind = "async"
+	}
+	decl.Name = kind + " " + s.Var.Name
 	fn.Decl, fn.Body, fn.Result = &decl, nil, s.Var.Type
-	fn.ResultConstraints = []MemberConstraints{{Type: s.Var.Type, Constraints: s.Constraints}}
+	fn.ResultConstraints = nil
+	f.initializerResultFn = &fn
+	f.initializerResult = func(value Expr, facts env) {
+		for _, con := range s.Constraints {
+			f.oblige(value, con, f.ownParams(), facts, s.Var.displayName()+" must be "+con.String())
+		}
+	}
 	// A thunk changes the result boundary, not the validator's proof context.
 	if f.validators != nil {
 		f.validators[&fn] = f.validators[outer]
@@ -89,6 +110,7 @@ func (f *factChecker) lazyBinding(s *Let, e env) {
 	f.fn, f.collect = &fn, nil
 	defer func() {
 		f.fn, f.collect = outer, collect
+		f.initializerResultFn, f.initializerResult = savedFn, savedResult
 		delete(f.validators, &fn)
 	}()
 	f.tail(s.Value, e, f.checkResult)
@@ -117,7 +139,7 @@ func LazyWarnings(info *Info) *diag.List {
 			if i+1 < len(block.Stmts) {
 				switch stmt := block.Stmts[i+1].(type) {
 				case *syntax.Binding:
-					if !stmt.Lazy {
+					if !stmt.Lazy && stmt.AsyncScope == nil {
 						next = stmt.Value
 					}
 				case *syntax.ExprStmt:
@@ -165,8 +187,8 @@ func simpleLazyInitializer(x syntax.Expr) bool {
 	return false
 }
 
-func (c *checker) noteLazyCapture(decl any, name string) {
-	for ctx := c.lazyContext; ctx != nil; ctx = ctx.parent {
+func (c *checker) noteInitializerCapture(decl any, name string) {
+	for ctx := c.initializerContext; ctx != nil; ctx = ctx.parent {
 		if ctx.external[decl] {
 			ctx.captures[name] = true
 		}

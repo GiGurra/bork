@@ -217,6 +217,7 @@ func (u *effectUses) block(b *Block) {
 	for _, s := range b.Stmts {
 		switch s := s.(type) {
 		case *Let:
+			u.expr(s.AsyncScope)
 			u.expr(s.Value)
 		case *ExprStmt:
 			u.expr(s.X)

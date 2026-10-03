@@ -50,7 +50,7 @@ func (c *checker) closedComptimeDeclaration(decl any, seen map[any]bool) bool {
 	seen[decl] = true
 	defer delete(seen, decl)
 	binding, ok := decl.(*syntax.Binding)
-	return ok && !binding.Lazy && c.closedComptimeSyntax(binding.Value, seen)
+	return ok && !binding.Lazy && binding.AsyncScope == nil && c.closedComptimeSyntax(binding.Value, seen)
 }
 
 func (c *checker) closedComptimeSyntax(x syntax.Expr, seen map[any]bool) bool {

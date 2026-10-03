@@ -1,12 +1,12 @@
-# Transparent async bindings (design: bork-mais5u)
+# Transparent async bindings (local bindings implemented: bork-mais5u)
 
 `async(s) name = expr` starts one initializer immediately as a task of scope
 `s`. Reading `name` waits for that task and returns its result. The binding has
 its ordinary type T, including failure alternatives and facts; it exposes no
 Task wrapper. This is the scheduling counterpart of [lazy bindings](lazy.md),
 sharing their initializer boundary, capture checks and transparent memo reads.
-Local bindings are the first implementation; async fields and package bindings
-are outside this design.
+Local bindings are implemented; async fields and package bindings are outside
+this design.
 
 ```bork
 fn page(id: Int) uses net: String = scope request {
@@ -108,7 +108,7 @@ memo accessor. No separate transparent-read subsystem is needed.
 `bork describe` reports T, async classification, owning scope, initializer effects
 and lexical captures without starting or awaiting anything. `dbg` explains that
 it awaits. Formatting and editor syntax preserve the modifier. Grammar and user
-docs distinguish proposed syntax from implemented syntax until it ships.
+docs describe local bindings as implemented.
 Immediate-read lazy warnings do not apply to async bindings: even a first read
 can synchronize with other work already started.
 

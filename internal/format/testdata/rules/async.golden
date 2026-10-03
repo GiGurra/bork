@@ -1,0 +1,7 @@
+fn main() {
+  scope s {
+    async(s) value: Int = { if (true) { return 7 }; 9 }
+    async(s) inferred = compute()
+    println(value)
+  }
+}

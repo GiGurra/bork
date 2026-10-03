@@ -45,8 +45,8 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 		bound:    map[*Var]int{},
 		inTarget: map[*Var]lifetime{},
 
-		lambdaParams: map[*Var]lifetime{},
-		lazyCaptures: map[*Var]lifetime{},
+		lambdaParams:     map[*Var]lifetime{},
+		deferredCaptures: map[*Var]lifetime{},
 	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -99,8 +99,8 @@ type lifeChecker struct {
 	diags *diag.List
 	// env holds the lifetime of each variable (a scope's lives as long
 	// as its scope block).
-	env          map[*Var]lifetime
-	lazyCaptures map[*Var]lifetime
+	env              map[*Var]lifetime
+	deferredCaptures map[*Var]lifetime
 	// open lists the scope blocks around the current point.
 	open []*ScopeBlock
 	// enclosing holds, for each scope block, the scopes open when it
@@ -457,9 +457,9 @@ func (l *lifeChecker) lifeText(life lifetime) []string {
 func (l *lifeChecker) exprLife(x Expr) lifetime {
 	switch x := x.(type) {
 	case *VarRef:
-		if x.Var.Let != nil && x.Var.Let.Thunk != nil {
+		if x.Var.Let != nil && x.Var.Let.Initializer != nil {
 			// Capture/validate the cell even when its eventual payload is scalar.
-			life := l.lazyCaptures[x.Var]
+			life := l.deferredCaptures[x.Var]
 			for _, c := range l.captures {
 				*c = c.union(life)
 			}
@@ -647,12 +647,23 @@ func (l *lifeChecker) what() string {
 func (l *lifeChecker) stmt(s Stmt) {
 	switch s := s.(type) {
 	case *Let:
-		if s.Thunk != nil {
-			life := l.lambda(s.Thunk)
-			l.lazyCaptures[s.Var] = life
+		if s.Initializer != nil {
+			var owner lifetime
+			if s.Deferred == AsyncBinding {
+				owner = l.use(s.AsyncScope, l.expr(s.AsyncScope))
+			}
+			life := l.lambda(s.Initializer)
+			payload := life
+			if s.Deferred == AsyncBinding {
+				if short := l.storeShorter(life, owner); short != nil {
+					l.errorf(s.Pos, "async initializer may not live as long as scope %s (it depends on %s); attach shorter resources to the task scope first", scopeName(s.AsyncScope), l.scopeText(short))
+				}
+				life = life.union(owner)
+			}
+			l.deferredCaptures[s.Var] = life
 			l.info.VarLifetimes[s.Var] = l.lifeText(life)
 			if l.carriesLife(s.Var.Type) {
-				l.env[s.Var] = life
+				l.env[s.Var] = payload
 			}
 			return
 		}

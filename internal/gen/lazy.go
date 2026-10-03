@@ -96,3 +96,11 @@ func (c *_lazyCell[T]) run() {
  completed = true
 }
 `
+
+const asyncRuntime = `package main
+func _asyncNew[T any](s *_Scope, work func() T) *_lazyCell[T] {
+ if _lazyCompileTime { panic("bork: compile-time evaluation cannot schedule an async initializer") }
+ task := s.Go(func() any { return work() })
+ return _lazyNew(func() T { return task.Await().(T) })
+}
+`

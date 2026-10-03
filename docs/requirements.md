@@ -3288,11 +3288,14 @@ can contribute to an inferred result. Lazy record fields will provide a passable
 value through `type Lazy[T] = { lazy value: T }`. Implement local bindings first,
 fields second and pure package bindings third. The complete design, including
 effects, facts, scopes, copies, derivation and tooling, is in
-[lazy bindings and record fields](design/lazy.md). Transparent async bindings
-(bork-mais5u) share access machinery under the proposed
+[lazy bindings and record fields](design/lazy.md). Transparent async local bindings
+(bork-mais5u, implemented) share access machinery under the
 [transparent async design](design/async.md): `async(s) name = expr` starts a task
 now, keeps type T, and awaits on read. Unread tasks follow ordinary scope
-cancellation, joining and panic reporting. Implementation follows this design.
+cancellation, joining and panic reporting. The cell retains its owning scope
+and captured lifetimes, even for scalar results; eagerly resolved data follows
+its ordinary lifetime rules. Both lazy and async initializers are local result
+boundaries for return/?.
 
 ### Generators and lazy sequences (implemented)
 
