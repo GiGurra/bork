@@ -395,7 +395,7 @@ consequences on source fields. Only field identities whose value is unchanged
 survive into the candidate; changing a nested path invalidates facts about
 that path and any whole value containing it. Thus `configured(c)` can supply
 `admin == false || token != ""` for the unchanged admin/token fields in
-`c.copy(hi = hi)`, but cannot itself prove `configured` of the new value.
+`c.copy(hi: hi)`, but cannot itself prove `configured` of the new value.
 A user rule can expose consequences of an opaque predicate; no general
 logical consequence solver is added. Tests include the shown `WithHi`,
 invalid admin/token changes, and nested changes invalidating an enclosing
@@ -455,12 +455,12 @@ fn New(lo: Int, hi: Int, admin: Bool, token: String): Config | InvalidConfig {
 }
 fn (c: Config) WithHi(hi: Int): Config | InvalidConfig {
   if (hi < c.lo) { return InvalidConfig {} }
-  c.copy(hi = hi)
+  c.copy(hi: hi)
 }
 ```
 
 An importer can call `settings.New`, read `config.hi`, and pass the value on,
-but `settings.Config { ... }` and `config.copy(hi = ...)` report that the
+but `settings.Config { ... }` and `config.copy(hi: ...)` report that the
 package controls construction. Diagnostics name the owning package and point
 to using its exported constructor or update method. The compiler does not
 invent a particular constructor name when none is declared. Required fields
