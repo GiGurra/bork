@@ -28,6 +28,9 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 	for _, p := range fd.Params {
 		params[p.Name] = true
 	}
+	for _, v := range g.info.FuncOf[fd].NeedVars {
+		params[varIdent(v).Name] = true
+	}
 	type edit struct {
 		offset            int
 		name, replacement string

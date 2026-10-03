@@ -13,7 +13,7 @@ fn shadowed(): Int unsafe go {
   return n
 }
 fn main() {
-  println(integer(), formatted(), shadowed(), otherFile(), declaredName(), parameter(Number { value: 88 }))
+  println(integer(), formatted(), shadowed(), otherFile(), declaredName(), parameter(Number { value: 88 }), with (timer: Number { value: 89 }) { needed() })
   println(rand.IntBetween(0, 1))
   match (crypto.RandomBytes(0)) { bytes: Bytes => println(bytes.length()), error => panic(toString(error)) }
 }
@@ -24,3 +24,11 @@ fn declaredName(): Int unsafe go {
 
 type Number = { value: Int }
 fn parameter(other: Number): Int unsafe go { return other.value }
+
+ambient timer: Number
+fn needed() needs timer: Int unsafe go { return timer.value }
+
+fn stamped() uses clock: Int unsafe go {
+  import timer "time"
+  return timer.Now().UnixNano()
+}

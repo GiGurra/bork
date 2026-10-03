@@ -228,6 +228,13 @@ func checkUnsafeGo(fn *Func, info *Info, diags *diag.List) {
 	for _, p := range fn.Decl.Params {
 		params[p.Name] = true
 	}
+	for _, v := range fn.NeedVars {
+		name := v.GoName
+		if name == "" {
+			name = v.Name
+		}
+		params[name] = true
+	}
 	var uses []goUse
 	if fn.Decl.GoBind != nil {
 		uses = goBindUses(fn.Decl.GoBind)
