@@ -1,0 +1,4 @@
+import "example.com/opaque/other"
+type Handle = resource go "*example.com/bindtest.Handle"
+fn Pass(h: Handle): other.Handle { h }
+fn main() {}

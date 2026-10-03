@@ -33,7 +33,7 @@ func methodKey(t Type) (string, bool) {
 		return "Map", true
 	case *Record, *Sealed:
 		return fmt.Sprintf("%p", genericBaseOrSelf(t)), true
-	case *Resource:
+	case *Opaque, *Resource:
 		return fmt.Sprintf("%p", t), true
 	case *Basic:
 		if isValue(t) && t != Scope {
@@ -120,7 +120,9 @@ func (c *checker) methodNamed(t Type, name string) (*Func, string) {
 	case *Sealed:
 		look(t.Pkg)
 	case *Resource:
-		look(t.Pkg)
+		if t.GoType == nil {
+			look(t.Pkg)
+		}
 	}
 	for _, p := range c.pkg.imports {
 		look(p)

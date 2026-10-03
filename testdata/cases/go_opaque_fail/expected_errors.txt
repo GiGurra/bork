@@ -1,0 +1,26 @@
+main.bork:5:1: an opaque Go type cannot have type parameters
+main.bork:6:17: "string" is not an exported named Go type or a pointer to one
+main.bork:7:21: "[]int" is not an exported named Go type or a pointer to one
+main.bork:8:19: time has no named Go type Missing
+main.bork:9:18: "example.com/bindtest.lower" is not an exported named Go type or a pointer to one
+main.bork:10:1: Go resource *strings.Reader needs a Close() or Close() error method
+main.bork:12:1: a binding returning a Go resource needs a Scope parameter to own its Close method
+main.bork:13:1: a binding returning a Go resource needs exactly one Scope parameter
+main.bork:13:1: TwoOwners is bound to example.com/bindtest.OpenHandle() *bindtest.Handle, which takes 0 parameters, but it has 2
+main.bork:14:33: UnownedResult returns *os.File, which has a Close method, but Unowned is not a resource, so nothing would close it
+  hint: declare the Go type with resource go
+main.bork:15:18: NoNilError is bound to example.com/bindtest.NilPayload() *bindtest.Payload, whose result *bindtest.Payload may not fit Payload, but its result has no GoValueError
+  hint: declare the result as Payload | GoValueError
+main.bork:16:31: ResultMismatch is bound to example.com/bindtest.NewPayload(s string) *bindtest.Payload, whose result *bindtest.Payload does not convert to Duration
+main.bork:17:43: Go type bindtest.Payload has no method Text
+main.bork:18:48: Go type *bindtest.Payload has no method Missing
+main.bork:19:44: "(*example.com/bindtest.Payload).Value.Text" is not a Go function name; write its import path and name, such as "os.Getenv"
+main.bork:20:1: ContextWrong is bound to strings.Contains(s string, substr string) bool, which takes 2 parameters, but it has 1
+main.bork:21:12: predicate stale takes Payload, which holds a Go value that can change, so its facts could go stale
+main.bork:23:46: cannot compare values of type Payload with ==: opaque Go values can change
+main.bork:24:46: cannot compare values of type List[Payload] with ==: opaque Go values can change
+main.bork:25:17: facts cannot apply to Payload, which holds a Go value that can change
+main.bork:26:45: predicate generic cannot take Payload, which holds a Go value that can change
+main.bork:27:36: cannot derive Decode for Config: field payload has type Payload, which has no Decode instance in scope (declare one: instance name: Decode[Payload] { ... })
+main.bork:27:36: cannot derive Encode for Config: field payload has type Payload, which has no Encode instance in scope (declare one: instance name: Encode[Payload] { ... })
+main.bork:28:22: cmp.Ordered is a constraint interface, so it cannot hold Go values

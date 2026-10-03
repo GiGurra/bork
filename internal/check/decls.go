@@ -100,11 +100,17 @@ func (c *checker) declareType(td *syntax.TypeDecl, prelude bool) {
 		if len(td.TypeParams) > 0 {
 			c.errorf(td.Pos, "a type alias cannot have type parameters (yet); declare a record or sealed type")
 		}
+	case syntax.GoType:
+		if len(td.TypeParams) > 0 {
+			c.bindErr(td.Pos, "an opaque Go type cannot have type parameters")
+		}
 	case syntax.ResourceType:
 		if len(td.TypeParams) > 0 {
 			c.errorf(td.Pos, "a resource type cannot have type parameters")
 		}
-		e.typ = &Resource{Name: td.Name, Decl: td, Prelude: prelude, Pkg: c.pkg}
+		if td.GoName == nil {
+			e.typ = &Resource{Name: td.Name, Decl: td, Prelude: prelude, Pkg: c.pkg}
+		}
 	}
 	if e.typ != nil {
 		c.info.TypeOrder = append(c.info.TypeOrder, e.typ)
@@ -137,6 +143,12 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 	}
 	defer func() { c.typeParams = savedParams }()
 	switch td.Kind {
+	case syntax.GoType:
+		e.typ = c.resolveGoDecl(e)
+	case syntax.ResourceType:
+		if td.GoName != nil {
+			e.typ = c.resolveGoDecl(e)
+		}
 	case syntax.RecordType:
 		r := e.typ.(*Record)
 		r.Fields = c.resolveFields(td.Fields, "record "+td.Name)

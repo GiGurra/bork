@@ -1,0 +1,1 @@
+main.bork:3:17: facts cannot apply to instantiated field value of type Duration, which holds a Go value that can change

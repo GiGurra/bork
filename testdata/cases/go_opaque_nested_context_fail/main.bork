@@ -1,0 +1,4 @@
+type Handle = resource go "*example.com/bindtest.Handle"
+fn OpenWithContexts(owner: Scope, contexts: List[Scope]) uses state: Handle | GoValueError unsafe go "example.com/bindtest.ContextsHandle"
+fn Move(h: Handle, s: Scope): Handle { attach(h, s) }
+fn main() {}

@@ -1,0 +1,20 @@
+type Handle = resource go "*example.com/bindtest.Handle"
+fn OpenHandle(s: Scope) uses state: Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
+fn IsClosed(h: Handle) uses state: Bool unsafe go "(*example.com/bindtest.Handle).Closed"
+fn CloseCount() uses state: Int unsafe go "example.com/bindtest.CloseCount"
+fn KeepContext(s: Scope) uses state unsafe go "example.com/bindtest.KeepContext"
+fn ContextWasCancelled() uses state: Bool unsafe go "example.com/bindtest.ContextWasCancelled"
+fn main() {
+  scope outer {
+    h = scope inner {
+      match (OpenHandle(inner)) {
+        r: Handle => attach(r, outer)
+        e: GoValueError => panic(toString(e))
+      }
+    }
+    println(IsClosed(h), CloseCount())
+  }
+  println(CloseCount())
+  scope s { KeepContext(s) }
+  println(ContextWasCancelled())
+}

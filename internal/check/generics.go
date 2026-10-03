@@ -563,6 +563,10 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 				}
 			}
 		}
+		if !c.checkOpaqueInstance(inst, e.Pos, args) {
+			fail()
+			return
+		}
 		for i, ta := range inst.TypeArgs {
 			if mentionsOpen(ta) && !reported {
 				c.diags.AddCode(e.Pos, "effect.open-type-argument", "%s of %s cannot be %s: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result", fn.TypeParams[i].Name, name, innerText(ta, c.pkg))
@@ -575,13 +579,6 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 					hint = " (to run work that gives no value, use launch)"
 				}
 				c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, name, ta, hint)
-				fail()
-				return
-			}
-		}
-		if fn.Prelude && fn.Decl.Name == "attach" && !reported {
-			if _, ok := inst.TypeArgs[0].(*Resource); !ok {
-				c.errorf(e.Pos, "attach takes a resource (a value of a resource type, such as File), found %s", inst.TypeArgs[0])
 				fail()
 				return
 			}
@@ -737,6 +734,9 @@ func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Typ
 	}
 	if owner := c.methodReferenceOwner(e); owner != nil && !c.couldFit(inst.Params[0], owner) {
 		c.errorf(e.Position(), "%s requires receiver %s, found owner %s", name, inst.Params[0], owner)
+		return Invalid
+	}
+	if !c.checkOpaqueInstance(inst, e.Position(), nil) {
 		return Invalid
 	}
 	if !c.resolveDicts(inst, e.Position()) {

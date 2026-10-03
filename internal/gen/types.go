@@ -43,6 +43,10 @@ func (g *gen) goType(t check.Type) ast.Expr {
 			g.goType(m) // the members' declarations are needed
 		}
 		return ast.NewIdent("any")
+	case *check.Opaque:
+		g.usedTypes[t] = true
+		g.usesOpaque = true
+		return typeName(t.Name, t.Pkg)
 	case *check.Resource:
 		g.usedTypes[t] = true
 		return typeName(t.Name, t.Pkg)
@@ -160,6 +164,8 @@ func (g *gen) typeDecls() []ast.Decl {
 			return !t.Prelude || g.usedTypes[t]
 		case *check.Sealed:
 			return !t.Prelude || g.usedTypes[t]
+		case *check.Opaque:
+			return true
 		case *check.Resource:
 			return !t.Prelude || g.usedTypes[t]
 		}
@@ -189,7 +195,12 @@ func (g *gen) typeDecls() []ast.Decl {
 func (g *gen) typeDecl(t check.Type) []ast.Decl {
 	var decls []ast.Decl
 	switch t := t.(type) {
+	case *check.Opaque:
+		return g.opaqueDecl(t.Name, t.Pkg, t.GoType, false)
 	case *check.Resource:
+		if t.GoType != nil {
+			return g.opaqueDecl(t.Name, t.Pkg, t.GoType, true)
+		}
 		// A handle that unsafe go code fills in, and the owner that
 		// closes it once the last scope it is attached to closes:
 		// File{handle: f, owner: s.Own(func() { f.Close() })}.

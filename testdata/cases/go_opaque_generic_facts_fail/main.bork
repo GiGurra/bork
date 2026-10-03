@@ -1,0 +1,5 @@
+type Duration = go "time.Duration"
+pred anyValue[T](v: T) { true }
+type Box[T] = { value: T where anyValue }
+fn BoxIt(v: Duration): Box[Duration] { Box { value: v } }
+fn main() {}

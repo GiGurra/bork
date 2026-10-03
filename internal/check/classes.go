@@ -355,6 +355,10 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 	if ci.Type == Invalid {
 		return
 	}
+	if cl.Prelude && (cl.Name == "Decode" || cl.Name == "Encode") && containsOpaque(ci.Type, map[Type]bool{}) {
+		c.bindErr(id.Pos, "%s cannot be defined for %s, which holds an opaque Go value", cl.Name, ci.Type)
+		return
+	}
 	if IsShow(cl) && !c.validShow(ci) {
 		return
 	}
@@ -704,6 +708,11 @@ func (c *checker) declaredFacts(x syntax.Expr) []*Constraint {
 // dict finds the instance of class for type t, reporting an error at
 // pos if there is none, or more than one.
 func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
+	if class.Prelude && (class.Name == "Decode" || class.Name == "Encode") && containsOpaque(t, map[Type]bool{}) {
+		c.bindErr(pos, "%s cannot apply to %s, which holds an opaque Go value", class.Name, t)
+		return nil
+	}
+
 	if t == Invalid || t == nil {
 		return nil
 	}

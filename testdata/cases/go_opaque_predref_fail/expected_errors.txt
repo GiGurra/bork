@@ -1,0 +1,1 @@
+main.bork:3:53: predicate anyValue cannot take Duration, which holds a Go value that can change

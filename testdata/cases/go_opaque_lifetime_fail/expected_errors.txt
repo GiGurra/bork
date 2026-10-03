@@ -1,0 +1,2 @@
+main.bork:3:49: function Escape cannot return this value: it belongs to scope s, which ends on line 3
+main.bork:7:3: function EscapeView cannot return this value: it belongs to scope s, which ends on line 12

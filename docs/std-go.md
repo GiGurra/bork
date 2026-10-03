@@ -130,3 +130,19 @@ same context while attachment changes its cancellation source.
 for a non-nil Go error. It preserves `errors.Is` classification through wrapped
 errors. Standard packages translate these strings into their public union
 errors, supplying the path appropriate to the operation.
+
+Opaque Go declarations (`type Request = go "*net/http.Request"`) use a generated
+box. `_borkGo(value)` returns its statically typed Go value; `_borkOpaque[T](value)`
+boxes a Go value as the declared bork type `T`. These helpers share the Go value.
+An `unsafe go` body using them is responsible for keeping its promise of a non-nil
+opaque value. Generated bindings check nils themselves. Go resources use the same
+unboxing helper and keep their scope owner; generated bindings register `Close`
+with the scope and ignore its error.
+
+If a Go binding receives a context and returns a resource type, that resource
+type cannot use `attach` anywhere in the program: Go may retain the supplied
+context, which can cancel the resource. This includes converted scopes, contexts
+in collections, and opaque context arguments. The compiler names the responsible binding. An
+ownership-only scope that is not passed to Go has no such restriction. An
+`unsafe go` wrapper using `_borkNewResourceHandle` remains the way to make a
+resource whose cancellation follows its latest attachment.

@@ -38,9 +38,12 @@ const (
 // GoBinding is a checked binding of a bork function to a Go function.
 type GoBinding struct {
 	// Path is the Go package's import path, and Name the function's.
-	Path, Name string
-	Sig        *types.Signature
-	Shape      GoResultShape
+	Path, Name   string
+	Receiver     types.Type
+	ParamIndices []int
+	ScopeIndex   int
+	Sig          *types.Signature
+	Shape        GoResultShape
 	// Value is the bork type the Go result value converts to: the
 	// result's leftmost member (an Option for GoValueOk), or nil.
 	Value Type
@@ -55,6 +58,20 @@ type GoBinding struct {
 // splitGoName splits "crypto/sha256.Sum256" into its import path and
 // name. The path is everything before the last "." after the last "/".
 func splitGoName(s string) (path, name string, ok bool) {
+	if strings.HasPrefix(s, "(") {
+		end := strings.Index(s, ").")
+		if end < 0 {
+			return "", "", false
+		}
+		path, recv, ok := splitGoName(strings.TrimPrefix(s[1:end], "*"))
+		if !ok || strings.Contains(s[end+2:], ".") {
+			return "", "", false
+		}
+		if strings.HasPrefix(s[1:end], "*") {
+			recv = "*" + recv
+		}
+		return path, "(" + recv + ")." + s[end+2:], true
+	}
 	slash := strings.LastIndex(s, "/")
 	dot := strings.LastIndex(s, ".")
 	if dot <= slash || dot == len(s)-1 {
@@ -80,16 +97,12 @@ func (c *checker) checkBindings(files []*syntax.File, goTypes GoTypes) {
 				continue
 			}
 			c.inFile(f)
-			if strings.HasPrefix(fd.GoBind.Name, "(") {
-				c.bindErr(fd.GoBind.Pos, "binding Go methods is not supported yet; write an unsafe go body")
-				continue
-			}
 			path, name, ok := splitGoName(fd.GoBind.Name)
 			if !ok {
 				c.bindErr(fd.GoBind.Pos, "%q is not a Go function name; write its import path and name, such as \"os.Getenv\"", fd.GoBind.Name)
 				continue
 			}
-			if path == "internal" || strings.HasPrefix(path, "internal/") || strings.Contains(path, "/internal/") || strings.HasSuffix(path, "/internal") || strings.HasPrefix(path, "vendor/") {
+			if forbiddenGoPath(path) {
 				c.bindErr(fd.GoBind.Pos, "Go package %s is internal, so it cannot be bound", path)
 				continue
 			}
@@ -138,25 +151,59 @@ func (c *checker) bindErr(pos diag.Pos, format string, args ...any) {
 func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) {
 	fd := fn.Decl
 	pos := fd.GoBind.Pos
-	full := path + "." + name
+	full := fd.GoBind.Name
 	if pkg == nil {
 		c.bindErr(pos, "Go package %q not found", path)
 		return
 	}
-	if !ast.IsExported(name) {
-		c.bindErr(pos, "%s is not exported, so it cannot be bound", full)
-		return
-	}
-	obj, _ := pkg.Scope().Lookup(name).(*types.Func)
-	if obj == nil {
-		if pkg.Scope().Lookup(name) == nil {
-			c.bindErr(pos, "Go package %s has no function %s", path, name)
-		} else {
-			c.bindErr(pos, "%s is not a function, so it cannot be bound", full)
+	var obj *types.Func
+	var recv types.Type
+	if strings.HasPrefix(name, "(") {
+		end := strings.Index(name, ").")
+		method := name[end+2:]
+		recvName := name[1:end]
+		pointer := strings.HasPrefix(recvName, "*")
+		recvName = strings.TrimPrefix(recvName, "*")
+		if !ast.IsExported(method) {
+			c.bindErr(pos, "%s is not exported, so it cannot be bound", full)
+			return
 		}
-		return
+		recv = c.namedGoType(path+"."+recvName, fd.GoBind)
+		if recv == nil {
+			return
+		}
+		if pointer {
+			recv = types.NewPointer(recv)
+		}
+		selection := types.NewMethodSet(recv).Lookup(nil, method)
+		if selection == nil {
+			c.bindErr(pos, "Go type %s has no method %s", goTypeText(recv), method)
+			return
+		}
+		obj = selection.Obj().(*types.Func)
+	} else {
+		if !ast.IsExported(name) {
+			c.bindErr(pos, "%s is not exported, so it cannot be bound", full)
+			return
+		}
+		obj, _ = pkg.Scope().Lookup(name).(*types.Func)
+		if obj == nil {
+			if pkg.Scope().Lookup(name) == nil {
+				c.bindErr(pos, "Go package %s has no function %s", path, name)
+			} else {
+				c.bindErr(pos, "%s is not a function, so it cannot be bound", full)
+			}
+			return
+		}
 	}
 	sig := obj.Type().(*types.Signature)
+	if recv != nil {
+		ps := []*types.Var{types.NewVar(0, nil, "receiver", recv)}
+		for i := 0; i < sig.Params().Len(); i++ {
+			ps = append(ps, sig.Params().At(i))
+		}
+		sig = types.NewSignatureType(nil, nil, nil, types.NewTuple(ps...), sig.Results(), sig.Variadic())
+	}
 	goText := full + strings.TrimPrefix(types.TypeString(sig, goQualifier), "func")
 	if sig.TypeParams().Len() > 0 {
 		c.bindErr(pos, "%s is generic, and generic Go functions cannot be bound yet", full)
@@ -170,20 +217,37 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 		c.bindErr(fd.Result.Pos, "facts on a binding's result are not supported yet; check them in bork after the call")
 		return
 	}
-	b := &GoBinding{Path: path, Name: name, Sig: sig}
+	b := &GoBinding{Path: path, Name: name, Sig: sig, Receiver: recv, ScopeIndex: -1}
 	ok := true
 	params := sig.Params()
-	if params.Len() != len(fn.Params) {
+	for i, pt := range fn.Params {
+		if pt == Scope {
+			if b.ScopeIndex >= 0 && containsGoResource(fn.Result, map[Type]bool{}) {
+				c.bindErr(fd.Pos, "a binding returning a Go resource needs exactly one Scope parameter")
+				ok = false
+			}
+			b.ScopeIndex = i
+		}
+	}
+	if containsGoResource(fn.Result, map[Type]bool{}) && b.ScopeIndex < 0 {
+		c.bindErr(fd.Pos, "a binding returning a Go resource needs a Scope parameter to own its Close method")
+		ok = false
+	}
+	for i := range fn.Params {
+		if containsGoResource(fn.Result, map[Type]bool{}) && len(fn.Params) == params.Len()+1 && i == b.ScopeIndex {
+			continue
+		}
+		b.ParamIndices = append(b.ParamIndices, i)
+	}
+	if params.Len() != len(b.ParamIndices) {
 		c.bindErr(fd.Pos, "%s is bound to %s, which takes %d parameters, but it has %d", fd.Name, goText, params.Len(), len(fn.Params))
 		ok = false
 	} else {
-		for i, pt := range fn.Params {
+		for i, pi := range b.ParamIndices {
+			pt := fn.Params[pi]
 			gt := params.At(i).Type()
-			if sig.Variadic() && i == params.Len()-1 {
-				gt = gt.(*types.Slice) // ...T is []T
-			}
 			if !c.toGo(pt, gt) {
-				c.bindErr(fd.Params[i].Pos, "%s is bound to %s, but parameter %s is %s, which does not convert to Go %s", fd.Name, goText, fd.Params[i].Name, pt, goTypeText(gt))
+				c.bindErr(fd.Params[pi].Pos, "%s is bound to %s, but parameter %s is %s, which does not convert to Go %s", fd.Name, goText, fd.Params[pi].Name, pt, goTypeText(gt))
 				ok = false
 			}
 		}
@@ -246,10 +310,22 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 			if b.Shape == GoValueError && conv.ok && isGoNillable(value) && !IsOption(b.Value) {
 				// A nil result without an error is a GoError (the Go
 				// function is broken), not bad data.
-				conv = c.fromGo(goElemOfNil(value), b.Value)
+				if GoTypeOf(b.Value) != nil {
+					conv.fallible = false
+				} else {
+					conv = c.fromGo(goElemOfNil(value), b.Value)
+				}
 			}
 		}
 		if !conv.ok {
+			rt := b.Value
+			if IsOption(rt) {
+				rt = TypeArgs(rt)[0]
+			}
+			if _, resource := rt.(*Resource); hasGoClose(value) && !resource {
+				c.bindErr(resultPos(fd), "%s returns %s, which has a Close method, but %s is not a resource, so nothing would close it\n  hint: declare the Go type with resource go", fd.Name, goTypeText(value), rt)
+				return
+			}
 			c.bindErr(resultPos(fd), "%s is bound to %s, whose result %s does not convert to %s", fd.Name, goText, goTypeText(value), b.Value)
 			return
 		}
@@ -286,6 +362,11 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 			b.GoValueError = goValErr
 		}
 		c.info.GoBindings[fn] = b
+		for i := range b.ParamIndices {
+			if containsGoContext(b.Sig.Params().At(i).Type(), map[types.Type]bool{}) {
+				markContextResources(b.Value, fn, map[Type]bool{})
+			}
+		}
 	}
 }
 
@@ -303,8 +384,11 @@ func isGoError(t types.Type) bool {
 // isGoNillable reports whether a Go result can be nil where bork expects
 // a value.
 func isGoNillable(t types.Type) bool {
-	_, ok := t.Underlying().(*types.Pointer)
-	return ok
+	switch t.Underlying().(type) {
+	case *types.Pointer, *types.Interface:
+		return true
+	}
+	return false
 }
 
 // goElemOfNil is what a nil-able result converts as, once a nil without
@@ -350,6 +434,21 @@ func goNumber(b *types.Basic) Type {
 // fromGo says how a Go value of type g converts to bork type t.
 func (c *checker) fromGo(g types.Type, t Type) convResult {
 	no := convResult{}
+	rt := t
+	if IsOption(rt) {
+		rt = TypeArgs(rt)[0]
+	}
+	if _, resource := rt.(*Resource); hasGoClose(g) && !resource {
+		return no
+	}
+	if gt := GoTypeOf(t); gt != nil {
+		return convResult{ok: types.Identical(g, gt), fallible: isGoNillable(g)}
+	}
+	if IsOption(t) && GoTypeOf(TypeArgs(t)[0]) != nil && isGoNillable(GoTypeOf(TypeArgs(t)[0])) {
+		r := c.fromGo(g, TypeArgs(t)[0])
+		r.fallible = false
+		return r
+	}
 	if !goTypeVisible(g) {
 		return no
 	}
@@ -403,6 +502,15 @@ func (c *checker) fromGo(g types.Type, t Type) convResult {
 // toGo reports whether a bork value of type t converts to Go type g.
 // Converting to Go never fails.
 func (c *checker) toGo(t Type, g types.Type) bool {
+	if gt := GoTypeOf(t); gt != nil {
+		return types.AssignableTo(gt, g)
+	}
+	if t == Scope {
+		return isGoContext(g)
+	}
+	if IsOption(t) && GoTypeOf(TypeArgs(t)[0]) != nil && isGoNillable(GoTypeOf(TypeArgs(t)[0])) {
+		return types.AssignableTo(GoTypeOf(TypeArgs(t)[0]), g)
+	}
 	if !goTypeVisible(g) {
 		return false
 	}

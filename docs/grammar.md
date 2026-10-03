@@ -38,7 +38,7 @@ RuleDecl   = "rule" Ident "(" Params ")" "{" Premises "=>" Conclusions "}" .
 Premises   = Expr { "and" Expr } .  (* predicate calls on the variables, and conditions *)
 Conclusions = Call { "and" Call } .
 
-TypeDecl   = "type" Ident [ TypeParams ] "=" ( Fields | Sealed | "resource" | Type ) [ Derive ] .
+TypeDecl   = "type" Ident [ TypeParams ] "=" ( Fields | Sealed | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
                                              (* type Pair[A, B] = { ... }; type File = resource: values made by unsafe go *)
 Derive     = "derive" "(" Ident { "," Ident } ")" .  (* derive (Decode, Encode): instances written by the compiler *)
 Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
@@ -52,6 +52,7 @@ Uses       = "uses" ( "nothing" | Ident { "+" Ident } ) .  (* uses io + net: the
 Receiver   = "(" Ident ":" Type ")" .   (* a method: fn (xs: List[T]) second[T](): Option[T] { ... } *)
 TypeParams = "[" TypeParam { "," TypeParam } "]" .   (* fn map[A, B](...) *)
 TypeParam  = Ident [ ":" Ident { "+" Ident } ] .     (* T: Show + Eq: T needs instances of Show and Eq *)
+GoName     = "go" StringLit .               (* go "*net/http.Request" *)
 GoBody     = "unsafe" "go" ( "{" { GoImport } GoStatements "}" | StringLit ) .
                                              (* unsafe go "os.Getenv": a binding to a Go function *)
 GoImport   = "import" StringLit newline .     (* import "strings" *)

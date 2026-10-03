@@ -1,0 +1,76 @@
+import "example.com/opaque/other"
+
+type Envelope = { payload: Payload }
+
+type Payload = go "*example.com/bindtest.Payload"
+type Same = go "*example.com/bindtest.PayloadAlias"
+type Duration = go "time.Duration"
+type Stringer = go "fmt.Stringer"
+type Handle = resource go "*example.com/bindtest.Handle"
+
+fn NewPayload(s: String): Payload | GoValueError unsafe go "example.com/bindtest.NewPayload"
+fn NilPayload(): Payload | GoValueError unsafe go "example.com/bindtest.NilPayload"
+fn PayloadError(): Payload | GoError unsafe go "example.com/bindtest.PayloadError"
+fn PayloadOption(ok: Bool): Option[Payload] unsafe go "example.com/bindtest.PayloadOption"
+fn Payloads(): List[Payload] | GoValueError unsafe go "example.com/bindtest.Payloads"
+fn (p: Payload) text() uses state: String unsafe go "(*example.com/bindtest.Payload).Text"
+fn Text(p: Same) uses state: String unsafe go "(*example.com/bindtest.Payload).Text"
+fn GetStringer(ok: Bool): Option[Stringer] unsafe go "example.com/bindtest.Stringer"
+fn Show(s: Stringer) uses state: String unsafe go "(fmt.Stringer).String"
+fn TypedNilStringer(): Stringer | GoValueError unsafe go "example.com/bindtest.TypedNilStringer"
+fn StringerError() uses state: Stringer | GoError unsafe go "example.com/bindtest.StringerError"
+fn NullablePayload(p: Option[Payload]) uses state: String unsafe go "example.com/bindtest.NullablePayload"
+fn NullableStringer(s: Option[Stringer]) uses state: String unsafe go "example.com/bindtest.NullableStringer"
+fn DurationString(d: Duration): String unsafe go "(fmt.Stringer).String"
+fn GetDuration(): Duration unsafe go "example.com/bindtest.Duration"
+fn Seconds(d: Duration): Float unsafe go "(time.Duration).Seconds"
+fn DurationInt(): Int unsafe go "example.com/bindtest.Duration"
+fn ContextPresent(s: Scope): Bool unsafe go "example.com/bindtest.ContextPresent"
+fn OpenHandle(s: Scope) uses state: Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
+fn ContextHandle(s: Scope) uses state: Handle | GoError unsafe go "example.com/bindtest.ContextHandle"
+fn NilHandle(s: Scope) uses state: Handle | GoError unsafe go "example.com/bindtest.NilHandle"
+fn IsClosed(h: Handle) uses state: Bool unsafe go "(*example.com/bindtest.Handle).Closed"
+fn CloseCount() uses state: Int unsafe go "example.com/bindtest.CloseCount"
+
+fn id[T](v: T): T { v }
+fn Choice(p: Payload): Payload | String { id(p) }
+fn StringerChoice(s: Stringer): Stringer | Duration { id(s) }
+fn Box(s: String): Payload unsafe go {
+  import "example.com/bindtest"
+  return _borkOpaque[Same](bindtest.NewPayload(s))
+}
+fn Raw(p: Payload): String unsafe go { return _borkGo(p).Value }
+
+fn main() {
+  p = Box("hello")
+  println(p, p.text(), Text(p), other.Identity(p).text(), Raw(p))
+  println(Envelope { payload: p })
+  match (Choice(p)) {
+    v: Payload => println(v.text())
+    s: String => println(s)
+  }
+  println(NewPayload("new"), NilPayload(), PayloadError(), PayloadOption(false), PayloadOption(true), Payloads())
+  match (GetStringer(true)) {
+    Option.Some { value: v } => {
+      println(v, Show(v))
+      match (StringerChoice(v)) {
+        s: Stringer => println("stringer", Show(s))
+        d: Duration => println("duration", Seconds(d))
+      }
+    }
+    Option.None => println("missing")
+  }
+  println(GetStringer(false), GetDuration(), Seconds(GetDuration()), DurationInt(), DurationString(GetDuration()))
+  println(TypedNilStringer(), StringerError(), NullablePayload(PayloadOption(true)), NullablePayload(Option.None))
+  println(NullableStringer(GetStringer(true)), NullableStringer(Option.None))
+  scope s {
+    println(ContextPresent(s))
+    match (OpenHandle(s)) {
+      h: Handle => println(h, IsClosed(h))
+      e: GoValueError => println(e)
+    }
+    println(ContextHandle(s), NilHandle(s))
+    println(CloseCount())
+  }
+  println(CloseCount())
+}
