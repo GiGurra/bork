@@ -75,6 +75,19 @@ test "mocks and published values" {
   assertEqual(Sent(), "")
 }
 
+// A mock in a generator passes calls on to the mock around it.
+test "mock in generate" {
+  mock Label() { "outer" }
+  g = generate[String] {
+    mock Label() { s"inner ${Label()}" }
+    yield Label()
+  }
+  for (x in g) {
+    assertEqual(x, "inner outer")
+  }
+  assertEqual(Label(), "outer")
+}
+
 // Tasks see both.
 test "tasks see mocks and published values" {
   mock Label() { "mocked" }

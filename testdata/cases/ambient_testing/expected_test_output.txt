@@ -3,6 +3,7 @@ ok    binds
 ok    mock sees needs
 ok    real
 ok    mocks and published values
+ok    mock in generate
 ok    tasks see mocks and published values
-6 passed, 0 failed
+7 passed, 0 failed
 exit code 0

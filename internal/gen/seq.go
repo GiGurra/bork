@@ -29,13 +29,16 @@ func (g *gen) generateSeq(e *check.Generate) ast.Expr {
 	// The producer is a function of its own: a return in it ends
 	// only what it opened.
 	savedResult, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
-	savedYield, savedLoops := g.yieldName, g.loops
+	savedYield, savedLoops, savedOuter := g.yieldName, g.loops, g.outerMocks
+	// A mock in the producer still passes calls on to the mocks around
+	// the generate.
+	g.outerMocks = append(append([]openMock(nil), g.outerMocks...), g.openMocks...)
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = check.Unit, nil, nil, nil
 	g.yieldName, g.loops = g.newTmp(), nil
 	yield := g.yieldName
 	body := g.guardLabels(func() []ast.Stmt { return g.effect(e.Body) })
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = savedResult, savedScopes, savedOwners, savedMocks
-	g.yieldName, g.loops = savedYield, savedLoops
+	g.yieldName, g.loops, g.outerMocks = savedYield, savedLoops, savedOuter
 	cb := &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Type: g.goType(t.Elem)}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("bool")}}}}
 	producer := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{yield}, Type: cb}}}}, Body: &ast.BlockStmt{List: body}}
 	return &ast.CompositeLit{Type: seqType, Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent("run"), Value: producer}}}

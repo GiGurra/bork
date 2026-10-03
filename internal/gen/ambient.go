@@ -63,8 +63,9 @@ func (g *gen) ambientPush(labels []*check.Var) []ast.Stmt {
 	g.openMocks = append(g.openMocks, openMock{frame: frame, depth: len(g.openScopes), ambient: true})
 	push := define(frame, &ast.CallExpr{Fun: ast.NewIdent("_ambientPush"), Args: args})
 	if g.labelGuard != nil {
+		// A body that never ends normally has no restore to use it.
 		*g.labelGuard = true
-		return []ast.Stmt{push}
+		return []ast.Stmt{push, assign(ast.NewIdent("_"), frame)}
 	}
 	return []ast.Stmt{push, &ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: frame, Sel: ast.NewIdent("restore")}}}}
 }
@@ -93,17 +94,32 @@ func (g *gen) ambientDecls() string {
 	src := "package main\n\nvar _ambientDecls = []*_ambientDecl{\n"
 	// A logged value is logged under its name, or, where two
 	// packages log the same name, under its package's and its name.
-	logged := map[string]int{}
+	// (or its package's path and its name, where the last elements of
+	// two packages' paths are the same).
+	logNames := map[*check.Ambient]string{}
+	count := func(name func(*check.Ambient) string) map[string]int {
+		n := map[string]int{}
+		for _, a := range g.ambientMarked() {
+			if a.Logged {
+				n[name(a)]++
+			}
+		}
+		return n
+	}
+	plain := count(func(a *check.Ambient) string { return a.Name })
+	short := count(func(a *check.Ambient) string { return path.Base(a.Pkg.Path) + "." + a.Name })
 	for _, a := range g.ambientMarked() {
-		if a.Logged {
-			logged[a.Name]++
+		switch {
+		case plain[a.Name] < 2 || a.Pkg.Root:
+			logNames[a] = a.Name
+		case short[path.Base(a.Pkg.Path)+"."+a.Name] < 2:
+			logNames[a] = path.Base(a.Pkg.Path) + "." + a.Name
+		default:
+			logNames[a] = a.Pkg.Path + "." + a.Name
 		}
 	}
 	for _, a := range g.ambientMarked() {
-		logName := a.Name
-		if logged[a.Name] > 1 && !a.Pkg.Root {
-			logName = path.Base(a.Pkg.Path) + "." + a.Name
-		}
+		logName := logNames[a]
 		kind := map[check.Type]string{check.String: "s", check.Int: "i", check.Float: "f", check.Bool: "b"}[a.Type]
 		valid := "nil"
 		if a.Header != "" && len(a.Constraints) > 0 {
@@ -213,8 +229,9 @@ func _ambientText(v any) string {
 // read is the value text stands for, or an error if it stands for
 // none: a value of the declaration's type, with its facts.
 func (d *_ambientDecl) read(text string) (v any, err error) {
-	// Only plain decimal text is read (no "+", "_", hex, inf or nan,
-	// and Bool only true or false). The errors never quote the text,
+	// Only the text bork shows is read: plain decimal numbers (no "+",
+	// "_" or hex; a Float's NaN, +Inf and -Inf as shown), and Bool only
+	// true or false. The errors never quote the text,
 	// which came from outside.
 	switch d.kind {
 	case 's':
@@ -227,6 +244,14 @@ func (d *_ambientDecl) read(text string) (v any, err error) {
 			return nil, fmt.Errorf("it is not an Int")
 		}
 	case 'f':
+		switch text {
+		case "NaN":
+			return math.NaN(), nil
+		case "+Inf":
+			return math.Inf(1), nil
+		case "-Inf":
+			return math.Inf(-1), nil
+		}
 		if !_ambientNumber(text, true) {
 			return nil, fmt.Errorf("it is not a Float")
 		}

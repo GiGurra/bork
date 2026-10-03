@@ -1,0 +1,6 @@
+// Two packages whose paths end alike log under their whole paths.
+logged ambient requestId: String
+
+fn Run(f: () => Unit) {
+  with (requestId: "a") { f() }
+}

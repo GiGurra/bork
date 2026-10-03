@@ -1,5 +1,7 @@
 import "bork/log"
 import "example.com/marked/audit"
+import autil "example.com/marked/a/util"
+import butil "example.com/marked/b/util"
 
 pred nonEmpty(s: String) { s != "" }
 pred small(n: Int) { n < 10 }
@@ -68,6 +70,13 @@ fn receive(header: String, text: String) uses io unsafe go {
   fmt.Printf("received %s %q: send: %s\n", header, text, out)
 }
 
+// A with whose block never ends normally.
+fn never(): Int {
+  with (requestId: "never") {
+    panic("never")
+  }
+}
+
 // A generator's return ends only its own withs.
 fn generated(): Seq[Int] {
   generate[Int] {
@@ -132,7 +141,7 @@ fn main() uses io + state {
   serve("t", "x", () => println(s"send: ${headers()}"))
   // Only plain decimal text is read, and values are sent as bork shows
   // them.
-  for (text in ["2.50", "3", "-1e3", "+1", "1_0", "inf", "0x1p4", "1."]) {
+  for (text in ["2.50", "3", "-1e3", "NaN", "-Inf", "+1", "1_0", "inf", "0x1p4", "1."]) {
     receive("x-ratio", text)
   }
   for (text in ["true", "false", "1", "TRUE"]) {
@@ -151,6 +160,10 @@ fn main() uses io + state {
     work("after generated")
     // Two packages log requestId.
     audit.Run(() => audit.Note())
+    autil.Run(() => butil.Run(() => work("utils")))
+  }
+  if (false) {
+    println(never())
   }
   // A with in a loop restores on each iteration.
   for (i in Seq.range(0, 3)) {

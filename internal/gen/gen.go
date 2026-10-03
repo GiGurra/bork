@@ -401,8 +401,11 @@ type gen struct {
 	// get dispatchers; openMocks are the mock statements whose blocks
 	// are being generated, mockBodies the mocks' bodies, and mockN
 	// numbers mock statements.
-	mockIDs    map[*check.Func]int
-	openMocks  []openMock
+	mockIDs   map[*check.Func]int
+	openMocks []openMock
+	// outerMocks are the mock statements open around a generate's
+	// producer being generated, which a mock in it passes calls on to.
+	outerMocks []openMock
 	mockBodies []mockBody
 	mockN      int
 	// genericMocks numbers the mocks of generic functions (by their

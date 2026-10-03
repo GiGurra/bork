@@ -2203,9 +2203,8 @@ propagated("traceparent") logged ambient trace: TraceParent   // String where va
 - **A marked value is a `String`, `Int`, `Float` or `Bool`**, facts allowed:
   logs and headers carry it as text, and an incoming value is read back from
   its text and checked against its facts. A `String` goes as it is; numbers
-  and `Bool` go as bork shows them (`3.0`, `true`), and only that plain text
-  is read back (no `+`, `_`, hex, `inf` or `nan`; `Bool` only `true` or
-  `false`). Records would need a codec per declaration; none is needed yet.
+  and `Bool` go as bork shows them (`3.0`, `NaN`, `true`), and only that
+  text is read back (no `+`, `_` or hex; `Bool` only `true` or `false`). Records would need a codec per declaration; none is needed yet.
 - **A header name is an HTTP token, used once per program** (ignoring case):
   two declarations sent under one header would be confused on the receiving
   side.
@@ -2223,8 +2222,8 @@ propagated("traceparent") logged ambient trace: TraceParent   // String where va
 - **Only effectful standard-library boundary code reads them**, through the
   helpers in [the Go helpers for standard packages](std-go.md#ambient-values):
   `bork/log` adds logged values (under the declaration's name, or
-  `audit.requestId` where two packages log one name, before a record's own
-  attributes); `net` clients send `_borkPropagated()`, and
+  `audit.requestId` where two packages log one name, or the whole package
+  path where their paths end alike, before a record's own attributes); `net` clients send `_borkPropagated()`, and
   servers bind an incoming request's values with `_borkBindPropagated`. Bork
   code reads ambient values only through `needs`.
 - **An incoming request is a boundary.** Binding its values first clears every

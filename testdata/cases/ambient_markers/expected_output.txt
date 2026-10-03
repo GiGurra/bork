@@ -23,6 +23,8 @@ send: traceparent=t
 received x-ratio "2.50": send: x-ratio=2.5 
 received x-ratio "3": send: x-ratio=3.0 
 received x-ratio "-1e3": send: x-ratio=-1000.0 
+received x-ratio "NaN": send: x-ratio=NaN 
+received x-ratio "-Inf": send: x-ratio=-Inf 
 level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
 received x-ratio "+1": send: 
 level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
@@ -48,5 +50,6 @@ send: x-ratio=3.0 x-flag=true
 level=INFO msg="item 1" requestId=outer k=1
 level=INFO msg="after generated" requestId=outer k=1
 level=INFO msg=audit requestId=outer audit.requestId=audit-1
+level=INFO msg=utils requestId=outer example.com/marked/a/util.requestId=a example.com/marked/b/util.requestId=b k=1
 level=INFO msg=loop requestId="loop 1" k=1
 level=INFO msg="after loop" k=1

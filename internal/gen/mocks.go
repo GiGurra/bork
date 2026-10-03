@@ -336,9 +336,10 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 		lit = g.genericMockBody(m, k, frame, names, body, capture)
 	}
 	var parent ast.Expr = ast.NewIdent("nil")
-	for i := len(g.openMocks) - 1; i >= 0; i-- {
-		if !g.openMocks[i].ambient {
-			parent = g.openMocks[i].frame
+	open := append(append([]openMock(nil), g.outerMocks...), g.openMocks...)
+	for i := len(open) - 1; i >= 0; i-- {
+		if !open[i].ambient {
+			parent = open[i].frame
 			break
 		}
 	}
