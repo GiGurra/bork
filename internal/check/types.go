@@ -99,6 +99,10 @@ func isUnsigned(t Type) bool { return numKindOf(t) == unsignedInt }
 
 func bitsOf(t Type) int { return t.(*Basic).bits }
 
+// AlwaysFits reports whether every value of the numeric type from fits
+// the numeric type to.
+func AlwaysFits(from, to Type) bool { return alwaysFits(from, to) }
+
 // alwaysFits reports whether every value of the numeric type from can
 // be converted to the numeric type to without going out of range.
 // Integers always fit in floats (large ones are rounded).

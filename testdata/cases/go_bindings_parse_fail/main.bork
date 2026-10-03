@@ -1,0 +1,3 @@
+fn F(): Int unsafe go 42
+
+fn main() {}

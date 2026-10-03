@@ -39,7 +39,7 @@ func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
 }
 
 func newGen(info *check.Info) *gen {
-	return &gen{info: info, imports: map[string]bool{}, usedTypes: map[check.Type]bool{}}
+	return &gen{info: info, imports: map[string]bool{}, bindImports: map[string]string{}, usedTypes: map[check.Type]bool{}}
 }
 
 // EvalProgram generates a program that runs the given predicate calls
@@ -132,7 +132,6 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	}
 	var funcs []ast.Decl
 	var goFuncs []string
-	usesOptionHelpers := false
 	for _, f := range files {
 		for _, fd := range f.Funcs {
 			if fn := info.FuncOf[fd]; fn == nil || !emit[fn] {
@@ -153,7 +152,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 					g.usesScopes = true
 				}
 				if strings.Contains(fd.GoBody.Body, "_borkSome") || strings.Contains(fd.GoBody.Body, "_borkNone") || strings.Contains(fd.GoBody.Body, "_borkOptionGet") {
-					usesOptionHelpers = true
+					g.usesOptionHelpers = true
 				}
 				goName := g.funcName(fn).Name
 				if g.testMode && (len(fn.ResultConstraints) > 0 || g.hasInvariants(fn.Result, map[check.Type]bool{})) {
@@ -168,8 +167,21 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				goFuncs = append(goFuncs, text)
 				continue
 			}
+			if fd.GoBind != nil {
+				text, err := g.bindFunc(fd, g.funcName(info.FuncOf[fd]).Name)
+				if err != nil {
+					return nil, err
+				}
+				goFuncs = append(goFuncs, text)
+				continue
+			}
 			funcs = append(funcs, g.funcDecl(fd))
 		}
+	}
+	if g.usesBind {
+		// The wrappers' runtime returns both.
+		g.goType(info.Named["GoError"])
+		g.goType(info.Named["GoValueError"])
 	}
 	for _, ci := range info.ClassInstances {
 		for _, m := range ci.Methods {
@@ -183,7 +195,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	if main != nil {
 		funcs = append(funcs, main)
 	}
-	if usesOptionHelpers {
+	if g.usesOptionHelpers {
 		for _, t := range info.TypeOrder {
 			if st, ok := t.(*check.Sealed); ok && st.Prelude && st.Name == "Option" {
 				g.usedTypes[st] = true
@@ -200,10 +212,17 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	if err != nil {
 		return nil, err
 	}
-	if len(g.imports) > 0 {
+	bindPaths := map[string]bool{}
+	for path := range g.bindImports {
+		bindPaths[path] = true
+	}
+	if len(g.imports)+len(bindPaths) > 0 {
 		imp := &ast.GenDecl{Tok: token.IMPORT, Lparen: 1}
 		for _, path := range sortedKeys(g.imports) {
 			imp.Specs = append(imp.Specs, &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(path)}})
+		}
+		for _, path := range sortedKeys(bindPaths) {
+			imp.Specs = append(imp.Specs, &ast.ImportSpec{Name: ast.NewIdent(g.bindImports[path]), Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(path)}})
 		}
 		decls = append([]ast.Decl{imp}, decls...)
 	}
@@ -249,6 +268,9 @@ type gen struct {
 	tmp      int
 	fnResult check.Type // result type of the function being generated
 	imports  map[string]bool
+	// bindImports holds the Go packages bindings call, by import path,
+	// with the names they are imported as.
+	bindImports map[string]string
 	// usedTypes holds the declared types the generated code refers to.
 	usedTypes map[check.Type]bool
 	// Runtime support the program needs.
@@ -269,6 +291,10 @@ type gen struct {
 	usesDecodeSchema bool
 	usesBytes        bool
 	usesIoFailure    bool
+	usesBind         bool
+	// usesOptionHelpers is set when Go code uses _borkSome, _borkNone,
+	// or _borkOptionGet.
+	usesOptionHelpers bool
 	// openScopes lists the Go variables of the scope blocks around the
 	// code being generated, which are closed before returning.
 	openScopes []*ast.Ident

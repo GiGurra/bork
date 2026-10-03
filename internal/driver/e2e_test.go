@@ -13,6 +13,19 @@ import (
 
 var update = flag.Bool("update", false, "rewrite expected files with actual results")
 
+// TestMain lets test cases bind example.com/bindtest, a local Go module
+// with the shapes Go's standard library does not have.
+func TestMain(m *testing.M) {
+	dir, err := filepath.Abs(filepath.Join("..", "..", "testdata", "gomod", "bindtest"))
+	if err != nil {
+		panic(err)
+	}
+	goModuleHook = func(goMod []byte) []byte {
+		return fmt.Appendf(goMod, "\nrequire example.com/bindtest v0.0.0\n\nreplace example.com/bindtest => %s\n", dir)
+	}
+	os.Exit(m.Run())
+}
+
 // TestCases runs every case under testdata/cases. A case is a directory
 // of .bork files plus either:
 //

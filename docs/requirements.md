@@ -117,7 +117,7 @@ In priority order. When two values conflict, the higher one wins.
 
 - **Compiles to Go.** Go is purely a compilation target, chosen so bork gets Go's runtime, GC, goroutine scheduler, and cross-platform compilation without building its own backend.
 - **Ordinary bork code does not call Go.** bork has its own standard library. The Go code the compiler generates can freely use Go's standard library under the hood; that is an implementation detail, invisible to bork programs.
-- **`unsafe go` is the explicit boundary.** A function's body can be raw Go: `fn f(x: Int): String unsafe go { import "strconv"; return strconv.FormatInt(x, 10) }`. It is allowed anywhere, in user code as well as in the standard library, which is itself written this way (the built-in prelude). bork trusts the signature: the guarantees (immutability, no null, the declared result) hold outside these bodies, and inside them only as far as the Go code keeps them. The Go code sees bork values as the compiler represents them, which is documented in the prelude. Standard packages use a documented [Go helper API](std-go.md) for maps, options, and scope context/lifecycle operations, with a compilation test covering every helper. Go errors in the body are reported at their bork positions. Importing Go packages as bork modules is not planned for v0.1; checked bindings to Go functions and types are proposed in [Go interop](#go-interop-proposal).
+- **`unsafe go` is the explicit boundary.** A function's body can be raw Go: `fn f(x: Int): String unsafe go { import "strconv"; return strconv.FormatInt(x, 10) }`. It is allowed anywhere, in user code as well as in the standard library, which is itself written this way (the built-in prelude). bork trusts the signature: the guarantees (immutability, no null, the declared result) hold outside these bodies, and inside them only as far as the Go code keeps them. The Go code sees bork values as the compiler represents them, which is documented in the prelude. Standard packages use a documented [Go helper API](std-go.md) for maps, options, and scope context/lifecycle operations, with a compilation test covering every helper. Go errors in the body are reported at their bork positions. Importing Go packages as bork modules is not planned for v0.1; instead, bindings call Go functions directly, checked against their Go signatures (`fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"`), and Go types are proposed in [Go interop](#go-interop-proposal).
 - **bork's syntax is independent of Go.** bork has its own grammar and its own hand-written parser. Go is only the language the first compiler is written in, and the first compilation target.
 - **The compiler models bork, not Go.** The compiler's internal model holds the full language and all of its constraints; that is the product. Its Go output is a lowering, not a one-to-one mapping of bork types to Go types. It can drop knowledge once it has been checked (facts are erased entirely), and it can lean on runtime helpers and generated functions where that is simpler. Inspired by TypeScript: the type checker carries the guarantees, and the output just runs. Go is the first target; others may follow.
 
@@ -631,7 +631,7 @@ money/money.bork:12:1: package example.com/shop/money has unsafe go, but bork.mo
 
 ## Go interop (proposal)
 
-> **Proposal, under review** (bork-e6abw5). Nothing here is implemented yet. If it is accepted, it replaces "importing Go packages as bork modules is not planned" under *Compilation target and Go*, and the matching line under *Explicitly not in v0.1*. It also scopes "no mutable state" (under *Core values*, *Language fundamentals*, and *Explicitly not in v0.1*) to bork values: an opaque Go value (below) is Go state that bork holds but cannot change or see into. It builds on the [effects proposal](#effects-in-signatures-proposal) (`uses`, and the `unsafe` opt-in in `bork.mod`) and on the [Go helper API](std-go.md).
+> **Proposal, under review** (bork-e6abw5). Step 2 of the plan below (bindings of functions over basic types) is implemented; the rest is not yet. If it is accepted, it replaces "importing Go packages as bork modules is not planned" under *Compilation target and Go*, and the matching line under *Explicitly not in v0.1*. It also scopes "no mutable state" (under *Core values*, *Language fundamentals*, and *Explicitly not in v0.1*) to bork values: an opaque Go value (below) is Go state that bork holds but cannot change or see into. It builds on the [effects proposal](#effects-in-signatures-proposal) (`uses`, and the `unsafe` opt-in in `bork.mod`) and on the [Go helper API](std-go.md).
 
 Today Go types never cross into bork. An `unsafe go` body sees bork values in their generated form (the table at the top of the prelude), and calling a Go function means writing that glue by hand, unchecked until the Go compiler runs over the generated code. This proposal makes the common cases declarations that the compiler checks against the real Go packages, with `go/types`:
 
@@ -831,7 +831,7 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 ### Implementation plan
 
 1. **This proposal**, as its own PR.
-2. **Bindings of functions over basic types:** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, result facts, and the generated wrappers. Standard-library Go packages only.
+2. **Bindings of functions over basic types (implemented):** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `Bytes`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library Go packages only. Facts on a binding's result are an error for now; checking them moves to step 4, with the mirror records' facts.
 3. **Opaque Go types**: identity, boxing, nil checks, method bindings, assignability, `Scope` as `context.Context`, and resources of Go types.
 4. **Mirror records**, conversions both ways with fact checks, and the `_borkToGo`/`_borkFromGo` helpers in [std-go.md](std-go.md).
 5. **Record field defaults and field doc comments** (useful without Go: literals and `Decode`).
@@ -839,7 +839,7 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 7. **Third-party Go packages**, with Go module dependencies (bork-8zh4yy), and the standard library's bindings checked by a test.
 8. **Docs:** fold this section into the decided parts, and update `grammar.md`, the prelude's table, and the README.
 
-Effects land separately (bork-ot9ki9). Until they do, a binding has no `uses`, and the `bork.mod` gate does not exist yet; both apply to bindings from the moment they apply to `unsafe go` bodies.
+Effects in signatures and bodies have landed (bork-ot9ki9). Bindings declare their effects with `uses`, like `unsafe go` bodies. The standard-library binding effects table and the `bork.mod` gate are still to come.
 
 ### Open questions
 
@@ -968,7 +968,7 @@ See also [roadmap.md](roadmap.md) for the implementation plan.
 ## Explicitly not in v0.1
 
 - Mutable state of any kind
-- Importing Go packages as bork modules (calling Go goes through `unsafe go` bodies)
+- Importing Go packages as bork modules (calling Go goes through `unsafe go` bodies and bindings)
 - `recover`
 - Erlang-style routine isolation and supervision
 

@@ -1,0 +1,21 @@
+[Option.Some { value: 1 }, Option.None, Option.Some { value: 3 }]
+GoValueError { path: "result[1]", message: "nil" }
+Option.Some { value: Option.Some { value: 7 } }
+Option.Some { value: Option.None }
+{"a": [1, 2], "b": []}
+GoValueError { path: "result[b]", message: "1000 does not fit Int8" }
+["x", "y"]
+Bytes(cafebabe)
+[] 0
+{:}
+GoError { message: "nil result without an error", goType: "" }
+GoError { message: "it failed", goType: "*errors.errorString" }
+Option.Some { value: 5 } Option.None GoValueError { path: "result", message: "1000 does not fit Int8" }
+ada nobody
+2
+["x", "y"]
+["#1", "#nil"]
+GoError { message: "nil result without an error", goType: "" }
+[1, 2]
+[1, 2]
+abc!

@@ -1010,6 +1010,9 @@ func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	if g.usesBytes {
 		src = append(src, bytesRuntime)
 	}
+	if g.usesBind {
+		src = append(src, bindRuntime)
+	}
 	if g.usesUnit {
 		src = append(src, unitRuntime)
 	}

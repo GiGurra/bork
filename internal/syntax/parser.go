@@ -339,6 +339,18 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 	case !withBody:
 	case p.at(KwUnsafe):
 		p.next()
+		if p.at(TIdent) && p.tok().Text == "go" {
+			// A binding: unsafe go "os.Getenv".
+			p.next()
+			t := p.expect(TString, "after 'unsafe go' (write `unsafe go { ... }`, or `unsafe go \"pkg.Func\"` to bind a Go function)")
+			name, err := strconv.Unquote(t.Text)
+			if err != nil || name == "" {
+				p.errorf(t.Pos, "invalid Go function name %s", t.Text)
+				panic(bailout{})
+			}
+			fn.GoBind = &GoBind{Pos: t.Pos, Name: name}
+			break
+		}
 		t := p.expect(TGoCode, "after 'unsafe' (write `unsafe go { ... }`)")
 		fn.GoBody = p.goCode(t)
 	default:

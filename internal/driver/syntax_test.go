@@ -37,7 +37,7 @@ func TestCheckLeavesSyntax(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			info := check.Program(files, root, diags)
+			info := check.Program(files, root, diags, nil)
 			if diags.Len() == 0 {
 				check.Lifetimes(files, info, diags)
 			}

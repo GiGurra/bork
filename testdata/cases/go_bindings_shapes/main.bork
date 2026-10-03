@@ -1,0 +1,62 @@
+// Conversions Go's standard library has no functions for, bound from
+// example.com/bindtest (testdata/gomod/bindtest).
+
+fn Ptrs(): List[Option[Int]] unsafe go "example.com/bindtest.Ptrs"
+fn PtrsChecked(): List[Int] | GoValueError unsafe go "example.com/bindtest.Ptrs"
+fn PtrPtr(): Option[Option[Int]] unsafe go "example.com/bindtest.PtrPtr"
+fn NilPtrPtr(): Option[Option[Int]] unsafe go "example.com/bindtest.NilPtrPtr"
+fn Nested(): Map[String, List[Int]] unsafe go "example.com/bindtest.Nested"
+fn Big(): Map[String, Int8] | GoValueError unsafe go "example.com/bindtest.Big"
+fn Pair(): List[String] unsafe go "example.com/bindtest.Pair"
+fn Digest(): Bytes unsafe go "example.com/bindtest.Digest"
+fn NilSlice(): List[String] unsafe go "example.com/bindtest.NilSlice"
+fn NilMap(): Map[String, Int] unsafe go "example.com/bindtest.NilMap"
+fn NilResult(): Int | GoError unsafe go "example.com/bindtest.NilResult"
+fn Failing(): Option[Int] | GoError unsafe go "example.com/bindtest.Failing"
+fn Found(n: Int): Option[Int8] | GoValueError unsafe go "example.com/bindtest.Found"
+fn Name(p: Option[String]): String unsafe go "example.com/bindtest.Name"
+fn Count(m: Map[String, List[Option[Int8]]]): Int unsafe go "example.com/bindtest.Count"
+fn Deref(p: List[String]): List[String] unsafe go "example.com/bindtest.Deref"
+fn Prefixed(prefix: String, xs: List[Option[Int]]): List[String] unsafe go "example.com/bindtest.Prefixed"
+fn NamedNil(): Int | GoError unsafe go "example.com/bindtest.NamedNil"
+fn Keep(xs: List[Int]) unsafe go "example.com/bindtest.Keep"
+fn ChangeKept() unsafe go "example.com/bindtest.ChangeKept"
+fn Held(): List[Int] unsafe go "example.com/bindtest.Held"
+fn ChangeHeld() unsafe go "example.com/bindtest.ChangeHeld"
+
+// Any bork name works for a parameter: the wrapper names its own.
+fn Len(len: String): Int unsafe go "unicode/utf8.RuneCountInString"
+
+// A predicate can call a binding, also at compile time.
+pred short(s: String) { Len(s) < 5 }
+
+fn shout(s: String where short): String { s + "!" }
+
+fn main() {
+  println(Ptrs())
+  println(PtrsChecked())
+  println(PtrPtr())
+  println(NilPtrPtr())
+  println(Nested())
+  println(Big())
+  println(Pair())
+  println(Digest())
+  println(NilSlice(), NilSlice().length())
+  println(NilMap())
+  println(NilResult())
+  println(Failing())
+  println(Found(5), Found(-1), Found(1000))
+  println(Name(Option.Some { value: "ada" }), Name(Option.None))
+  println(Count({ "a": [Option.Some { value: 1 }, Option.None], "b": [Option.Some { value: 2 }] }))
+  println(Deref(["x", "y"]))
+  println(Prefixed("#", [Option.Some { value: 1 }, Option.None]))
+  println(NamedNil())
+  xs = [1, 2]
+  Keep(xs)
+  ChangeKept()
+  println(xs)
+  ys = Held()
+  ChangeHeld()
+  println(ys)
+  println(shout("abc"))
+}

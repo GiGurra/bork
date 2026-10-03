@@ -80,7 +80,7 @@ fn names(users: List[User]) uses io {
 - **Methods for value operations.** `xs.filter(f).map(g)`, `text.trim()`, and `m.put(k, v)` need no imports. Use `|>` for free functions and lambdas when passing a method operation as a value.
 - **Functional style.** Algebraic data types, pattern matching, expressions over statements, and first-class functions.
 - **Go-like tooling.** One binary with commands like `bork build`, `bork test`, `bork fmt`. Fast builds. No build-system archaeology.
-- **Compiles to Go** (first version). Go is only a compilation target: we get its runtime, GC, goroutines, and cross-platform builds without writing our own backend. bork code does not import Go packages; the explicit boundary is `unsafe go` function bodies, with a [stable Go helper API](docs/std-go.md) for standard packages.
+- **Compiles to Go** (first version). Go is only a compilation target: we get its runtime, GC, goroutines, and cross-platform builds without writing our own backend. bork code does not import Go packages; the explicit boundary is `unsafe go` function bodies, with a [stable Go helper API](docs/std-go.md) for standard packages, and bindings that call a Go function directly, checked against its Go signature (`fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"`).
 
 ## Non-goals
 

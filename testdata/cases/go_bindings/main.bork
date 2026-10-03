@@ -1,0 +1,71 @@
+// Bindings call Go functions directly, checked against their Go
+// signatures, with values converted at the boundary.
+
+fn QueryEscape(s: String): String unsafe go "net/url.QueryEscape"
+fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"
+fn Fields(s: String): List[String] unsafe go "strings.Fields"
+fn Join(parts: List[String], sep: String): String unsafe go "strings.Join"
+fn LookupEnv(key: String) uses io: Option[String] unsafe go "os.LookupEnv"
+fn Chdir(dir: String) uses io: Unit | GoError unsafe go "os.Chdir"
+fn Abs(x: Float): Float unsafe go "math.Abs"
+
+// Numbers: lossless to Go, checked from Go.
+fn Repeat(s: String, count: Uint8): String unsafe go "strings.Repeat"
+fn OnesCount(x: Uint64): Int unsafe go "math/bits.OnesCount"
+fn RuneCount(s: String): Int8 | GoValueError unsafe go "unicode/utf8.RuneCountInString"
+fn FromBits(b: Uint32): Float32 unsafe go "math.Float32frombits"
+fn Index(s: String, sub: String): Uint64 | GoValueError unsafe go "strings.Index"
+
+// Variadic parameters take a List.
+fn JoinPath(parts: List[String]): String unsafe go "path.Join"
+
+// Maps both ways; a Go map becomes an unordered map.
+fn ParseQuery(q: String): Map[String, List[String]] | GoError unsafe go "net/url.ParseQuery"
+fn FormatMediaType(t: String, params: Map[String, String]): String unsafe go "mime.FormatMediaType"
+
+// Bytes, and arrays from Go.
+fn DecodeHex(s: String): Bytes | GoError unsafe go "encoding/hex.DecodeString"
+fn EncodeHex(data: Bytes): String unsafe go "encoding/hex.EncodeToString"
+fn Sha256(data: Bytes): List[Byte] unsafe go "crypto/sha256.Sum256"
+
+// Pointers: Option or a checked value from Go. The value is copied when
+// the binding returns, so a later flag.Parse would not show here.
+fn FlagString(name: String, value: String, usage: String) uses io: String | GoValueError unsafe go "flag.String"
+fn FlagInt(name: String, value: Int, usage: String) uses io: Option[Int] unsafe go "flag.Int"
+
+// A method can bind a Go function too: the receiver is its first
+// parameter.
+fn (s: String) escaped(): String unsafe go "net/url.PathEscape"
+
+fn main() {
+  println(QueryEscape("a b&c"))
+  println(Atoi("42"))
+  println(Atoi("x"))
+  println(Join(Fields("  a  b c "), ","))
+  println(LookupEnv("BORK_SURELY_UNSET"))
+  println(Chdir("/nonexistent-dir"))
+  println(Abs(-1.5))
+  println(Repeat("ab", 3))
+  println(OnesCount(255))
+  println(RuneCount("héllo"))
+  println(RuneCount("x".repeat(200)))
+  println(FromBits(1065353216))
+  println(Index("hello", "l"))
+  println(Index("hello", "z"))
+  println(JoinPath(["a", "b/", "../c"]))
+  println(JoinPath([]))
+  println(ParseQuery("b=2&a=1&a=3"))
+  println(ParseQuery("%zz"))
+  println(FormatMediaType("text/plain", { "charset": "utf-8" }))
+  match (DecodeHex("cafe")) {
+    data: Bytes => {
+      println(EncodeHex(data))
+      println(Sha256(data).length())
+    }
+    e: GoError => println(e)
+  }
+  println(DecodeHex("xyz"))
+  println(FlagString("name", "ada", "a name"))
+  println(FlagInt("count", 3, "a count"))
+  println("a b/c".escaped())
+}

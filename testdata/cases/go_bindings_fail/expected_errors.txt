@@ -1,0 +1,30 @@
+main.bork:1:15: WrongParam is bound to net/url.QueryEscape(s string) string, but parameter s is Int, which does not convert to Go string
+main.bork:2:26: NoGoError is bound to strconv.Atoi(s string) (int, error), which can fail with an error, but its result has no GoError
+  hint: declare the result as Int | GoError
+main.bork:3:29: ExtraGoError is bound to strings.ToUpper(s string) string, which returns no error, so its result cannot have GoError
+  hint: declare the result as String
+main.bork:4:29: NoValueError is bound to unicode/utf8.RuneCountInString(s string) (n int), whose result int may not fit Int8, but its result has no GoValueError
+  hint: declare the result as Int8 | GoValueError
+main.bork:5:32: ExtraValueError is bound to unicode/utf8.RuneCountInString(s string) (n int), whose result always converts, so its result cannot have GoValueError
+  hint: declare the result as Int
+main.bork:6:1: Count is bound to strings.Count(s string, substr string) int, which takes 2 parameters, but it has 1
+main.bork:7:32: math.Pi is not a function, so it cannot be bound
+main.bork:8:44: strings.explode is not exported, so it cannot be bound
+main.bork:9:40: binding Go methods is not supported yet; write an unsafe go body
+main.bork:10:42: slices.Max is generic, and generic Go functions cannot be bound yet
+main.bork:11:29: Go package "example.com/nowhere" cannot be loaded: cannot find module providing package example.com/nowhere: import lookup disabled by -mod=readonly
+main.bork:12:50: strings.Cut returns (before string, after string, found bool), which cannot be bound: only one result, a result and an error, or a result and a bool can be; write an unsafe go body
+main.bork:13:28: NotOption is bound to os.LookupEnv(key string) (string, bool), which returns a value and a bool, so its result is an Option, not String
+main.bork:14:1: a binding cannot have type parameters: strings.ToUpper has none
+main.bork:16:24: facts on a binding's result are not supported yet; check them in bork after the call
+main.bork:17:21: Lossy is bound to strings.Repeat(s string, count int) string, but parameter n is Uint64, which does not convert to Go int
+main.bork:18:12: TooWide is bound to math/bits.Len32(x uint32) (n int), but parameter x is Int, which does not convert to Go uint32
+main.bork:19:16: FloatNarrow is bound to math.Float32bits(f float32) uint32, but parameter x is Float, which does not convert to Go float32
+main.bork:20:22: Other is bound to strconv.Atoi(s string) (int, error), which cannot return OutOfRange: a binding's result can only add GoError and GoValueError
+main.bork:21:16: NoResult is bound to os.Clearenv(), which returns no value, but its result is Int
+main.bork:22:30: "Atoi" is not a Go function name; write its import path and name, such as "os.Getenv"
+main.bork:23:49: Go package internal/bytealg is internal, so it cannot be bound
+main.bork:24:52: Go package vendor/golang.org/x/net/idna is internal, so it cannot be bound
+main.bork:25:14: TakeLower is bound to example.com/bindtest.TakeLower(x bindtest.lower) int, but parameter x is Int, which does not convert to Go bindtest.lower
+main.bork:26:15: PtrKeys is bound to example.com/bindtest.PtrKeys() map[*int]string, whose result map[*int]string does not convert to Map[Int, String]
+main.bork:27:17: FloatKeys is bound to example.com/bindtest.FloatKeys() map[float64]string, whose result map[float64]string does not convert to Map[Float, String]
