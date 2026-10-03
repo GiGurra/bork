@@ -43,7 +43,7 @@ fn main() {
   consume("builtin", println("builtin effect"))
   work = () => println("lambda effect")
   consume("lambda", work())
-  consume("generic", forEach[Int]([1], n => println(n)))
+  consume("generic", [1].forEach(n => println(n)))
   consume("if", if (true) { done() } else {})
   consume("empty if", if (false) { done() } else {})
   consume("match", match (true) { true => done(), false => {} })
@@ -57,7 +57,7 @@ fn main() {
   changed = box.copy(value = done())
   consume("copy", changed.value)
   xs: List[Unit | Error] = [{}, done()]
-  forEach(xs, x => consume("list", x))
+  xs.forEach(x => consume("list", x))
   m: Map[String, Unit | Error] = { "a": {}, "b": done() }
   match (m.get("a")) {
     Option.Some { value } => consume("map", value)
