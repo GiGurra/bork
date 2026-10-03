@@ -78,51 +78,44 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 	return pkgs, errs
 }
 
-// Standard package names do not depend on a user's module. Read their metadata
-// once per compiler process; external packages use the pinned module loader.
-var standardGoNames = sync.OnceValue(func() map[string]string {
-	names := map[string]string{}
-	out, err := exec.Command("go", "list", "-f", "{{.ImportPath}} {{.Name}}", "std").Output()
-	if err != nil {
-		return names
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if fields := strings.Fields(line); len(fields) == 2 {
-			names[fields[0]] = fields[1]
-		}
-	}
-	return names
-})
+// Standard package names do not depend on a user's module. Discover only the
+// imports a program needs and reuse their names; external names are loaded in
+// the pinned module on each check.
+var standardGoNames sync.Map // import path -> package name
 
 func (gp goPackages) Names(paths []string) map[string]string {
 	names := map[string]string{}
-	var external []string
+	var missing []string
 	for _, path := range paths {
-		if name := standardGoNames()[path]; name != "" {
-			names[path] = name
+		if name, ok := standardGoNames.Load(path); ok {
+			names[path] = name.(string)
 		} else {
-			external = append(external, path)
+			missing = append(missing, path)
 		}
 	}
-	if len(external) > 0 {
-		dir, err := os.MkdirTemp("", "bork-gonames-*")
-		if err != nil {
-			return names
-		}
-		defer func() { _ = os.RemoveAll(dir) }()
-		if _, err := writeGoModule(dir, gp.files); err != nil {
-			return names
-		}
-		loaded, err := packages.Load(&packages.Config{
-			Mode: packages.NeedName, Dir: dir,
-			Env: append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=readonly"),
-		}, external...)
-		if err != nil {
-			return names
-		}
-		for _, pkg := range loaded {
-			if len(pkg.Errors) == 0 {
-				names[pkg.PkgPath] = pkg.Name
+	if len(missing) == 0 {
+		return names
+	}
+	dir, err := os.MkdirTemp("", "bork-gonames-*")
+	if err != nil {
+		return names
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	if _, err := writeGoModule(dir, gp.files); err != nil {
+		return names
+	}
+	loaded, err := packages.Load(&packages.Config{
+		Mode: packages.NeedName | packages.NeedModule, Dir: dir,
+		Env: append(os.Environ(), "GOWORK=off", "GOFLAGS=-mod=readonly"),
+	}, missing...)
+	if err != nil {
+		return names
+	}
+	for _, pkg := range loaded {
+		if len(pkg.Errors) == 0 {
+			names[pkg.PkgPath] = pkg.Name
+			if pkg.Module == nil {
+				standardGoNames.Store(pkg.PkgPath, pkg.Name)
 			}
 		}
 	}
