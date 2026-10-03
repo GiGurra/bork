@@ -151,7 +151,7 @@ func (c *checker) bindErr(pos diag.Pos, format string, args ...any) {
 func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) {
 	fd := fn.Decl
 	pos := fd.GoBind.Pos
-	full := path + "." + name
+	full := fd.GoBind.Name
 	if pkg == nil {
 		c.bindErr(pos, "Go package %q not found", path)
 		return
@@ -437,9 +437,6 @@ func (c *checker) fromGo(g types.Type, t Type) convResult {
 		return no
 	}
 	if gt := GoTypeOf(t); gt != nil {
-		if _, resource := t.(*Resource); hasGoClose(g) && !resource {
-			return no
-		}
 		return convResult{ok: types.Identical(g, gt), fallible: isGoNillable(g)}
 	}
 	if IsOption(t) && GoTypeOf(TypeArgs(t)[0]) != nil && isGoNillable(GoTypeOf(TypeArgs(t)[0])) {

@@ -10,7 +10,7 @@ main.bork:5:32: ExtraValueError is bound to unicode/utf8.RuneCountInString(s str
 main.bork:6:1: Count is bound to strings.Count(s string, substr string) int, which takes 2 parameters, but it has 1
 main.bork:7:32: math.Pi is not a function, so it cannot be bound
 main.bork:8:44: strings.explode is not exported, so it cannot be bound
-main.bork:9:40: binding Go methods is not supported yet; write an unsafe go body
+main.bork:9:11: Method is bound to (*strings.Builder).String(receiver *strings.Builder) string, but parameter s is String, which does not convert to Go *strings.Builder
 main.bork:10:42: slices.Max is generic, and generic Go functions cannot be bound yet
 main.bork:11:29: Go package "example.com/nowhere" cannot be loaded: cannot find module providing package example.com/nowhere: import lookup disabled by -mod=readonly
 main.bork:12:50: strings.Cut returns (before string, after string, found bool), which cannot be bound: only one result, a result and an error, or a result and a bool can be; write an unsafe go body

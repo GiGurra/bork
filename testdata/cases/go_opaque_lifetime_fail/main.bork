@@ -1,0 +1,4 @@
+type Handle = resource go "*example.com/bindtest.Handle"
+fn OpenHandle(s: Scope) uses state: Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
+fn Escape() uses state: Handle | GoValueError { scope s { OpenHandle(s) } }
+fn main() {}

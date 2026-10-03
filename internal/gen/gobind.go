@@ -207,7 +207,7 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 		w.g.usesOpaque = true
 		if goNillable(gt) {
 			// A top-level nil paired with a nil error was checked by bindFunc.
-			if !(x == "_r" && w.b.Shape == check.GoValueError) {
+			if x != "_r" || w.b.Shape != check.GoValueError {
 				fail(x+" == nil", `"nil"`)
 			}
 		}
