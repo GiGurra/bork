@@ -340,3 +340,40 @@ requires the versioned artifact boundary and validation manifest. No universal b
 predicates, generic/default implementations or body-derived proofs. Daemon
 transport, editor-buffer protocol and cross-package specialization placement
 remain follow-up designs with conservative fallback in the meantime.
+
+## Phase 1: source-load snapshot boundary
+
+The first implementation step captures the source loader's reads in a private
+`sourceSnapshot`: file bytes, source-directory membership, directory/file
+selection and module-resolution reads (including missing ancestor `bork.mod`
+files). Relative reads resolve against the captured working directory; diagnostics
+retain the original display paths. Replays receive copies of source bytes and
+membership and construct independent ASTs. The inventory reports captured filesystem
+operands, read kinds and content digests in deterministic order. IO preserves
+path components (including symlinks followed by `..`); module identity retains
+its existing lexical normalization.
+
+Loading validates the captured bytes and membership after traversal and retries
+once if inputs changed. Equal sizes or mtimes cannot establish freshness.
+Continuous edits return a source-input-change error. This validation covers the
+load attempt, not atomic filesystem isolation for the entire compilation.
+
+This is deliberately **not a semantic cache key**, and enables no reuse of
+checked results. Embedded prelude/std contents belong to the compiler namespace;
+ordered logical source paths and selected root/context remain required in a
+future compilation manifest alongside this filesystem inventory. The next
+boundaries still need explicit capture and invalidation:
+
+| Read / context | Existing consumers and required follow-up |
+| --- | --- |
+| User Go manifests/checksums | `userGoDependencies` and `programGoModule` reread manifests during metadata loading, predicate builds and final staging. Thread one frozen manifest context through all those consumers. |
+| Embedded assets | `captureEmbeds` freezes data in `Info`, but file kinds, symlink checks and recursive directory membership need recorded input dependencies and replay during snapshot verification. |
+| Effective Go environment/toolchain | `goPackages`, package drivers and `buildGo` read process/saved configuration and run subprocesses. Capture effective configuration, resolved tool identity and target; inventory or bypass mutable external metadata. |
+| Compile-time evaluator | `Facts` invokes generated predicate programs. Track arguments, implementation/input closure and execution context; untracked reads/effects prevent reuse of any success depending on evaluation. |
+| Graph and mode | Whole-graph source content covers semantic bodies, facts/rules and candidate-set changes initially. Root selection, source locations, tests/mocks and entry/evaluator mode must remain explicit context. |
+| Runtime effects | `Run`, test execution, assertions and snapshot updates remain fresh executions. Dependency-management commands mutate manifests; they are not cached compilation results. |
+
+Only after these inputs are complete may Session artifacts reuse immutable
+outputs. The clean-versus-cached verifier must land before or alongside that
+reuse and compare the same captured snapshot; the source snapshot by itself
+cannot satisfy the verifier's whole-compiler contract.

@@ -2,7 +2,6 @@ package driver
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -31,13 +30,15 @@ type module struct {
 // findModule finds the module of the package in dir: the nearest
 // bork.mod in dir or above it. Without one, the package is on its own,
 // and cannot import other packages.
-func findModule(dir string) (module, error) {
-	abs, err := filepath.Abs(dir)
+func findModule(dir string) (module, error) { return findModuleFrom(dir, diskSources{}) }
+
+func findModuleFrom(dir string, reader sourceReader) (module, error) {
+	abs, err := reader.absolute(dir)
 	if err != nil {
 		return module{}, err
 	}
 	for d := abs; ; d = filepath.Dir(d) {
-		data, err := os.ReadFile(filepath.Join(d, ModFile))
+		data, err := reader.readFile(filepath.Join(d, ModFile))
 		if err == nil {
 			mod, err := parseModFile(string(data))
 			if err != nil {
@@ -105,8 +106,9 @@ func (m module) importPath(dir string) string {
 
 // loader loads a package and the packages it imports.
 type loader struct {
-	mod   module
-	diags *diag.List
+	mod    module
+	diags  *diag.List
+	inputs sourceReader
 	// files holds the parsed files: the prelude, the root package, and
 	// then the packages it imports.
 	files []*syntax.File
@@ -116,36 +118,78 @@ type loader struct {
 	stack []string
 }
 
+type loadedSources struct {
+	Files  []*syntax.File
+	Root   string
+	Diags  *diag.List
+	Inputs *sourceSnapshot
+}
+
 // load parses the package at path (a directory, or a single .bork file)
 // and every package it imports. It returns the files, starting with the
 // prelude and the root package's, and the root's import path.
 func load(path string) ([]*syntax.File, string, *diag.List, error) {
+	loaded, err := loadSnapshot(path)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	return loaded.Files, loaded.Root, loaded.Diags, nil
+}
+
+func loadSnapshot(path string) (*loadedSources, error) {
+	return loadStableSources(path, newSourceSnapshot)
+}
+
+func loadStableSources(path string, capture func() *sourceSnapshot) (*loadedSources, error) {
+	for range 2 {
+		inputs := capture()
+		files, root, diags, err := loadFrom(path, inputs)
+		if !inputs.current() {
+			continue
+		}
+		return &loadedSources{files, root, diags, inputs}, err
+	}
+	return nil, fmt.Errorf("source inputs changed while loading; retry the command")
+}
+
+func loadFrom(path string, reader sourceReader) ([]*syntax.File, string, *diag.List, error) {
 	diags := &diag.List{}
-	paths, err := Sources(path)
+	paths, err := sourceFiles(path, reader)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	dir := path
-	if st, err := os.Stat(path); err == nil && !st.IsDir() {
+	if isDir, err := reader.isDirectory(path); err == nil && !isDir {
 		dir = filepath.Dir(path)
 	}
-	mod, err := findModule(dir)
+	mod, err := findModuleFrom(dir, reader)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	l := &loader{mod: mod, diags: diags, state: map[string]int{}}
+	l := &loader{mod: mod, diags: diags, state: map[string]int{}, inputs: reader}
 	l.files = append(l.files, prelude.Parse(diags)...)
-	root := mod.importPath(dir)
+	absoluteDir, err := reader.absolute(dir)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	root := mod.importPath(absoluteDir)
 	if err := l.loadPackage(root, paths); err != nil {
 		return nil, "", nil, err
 	}
 	return l.files, root, diags, nil
 }
 
+func (l *loader) sourceReader() sourceReader {
+	if l.inputs != nil {
+		return l.inputs
+	}
+	return diskSources{}
+}
+
 func (l *loader) loadPackage(importPath string, paths []string) error {
 	var srcs [][]byte
 	for _, p := range paths {
-		src, err := os.ReadFile(p)
+		src, err := l.sourceReader().readFile(p)
 		if err != nil {
 			return err
 		}
@@ -208,12 +252,12 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 	}
 	dir := filepath.Join(l.mod.root, filepath.FromSlash(rel))
 	// Paths in messages are relative to the working directory, if it can.
-	if wd, err := os.Getwd(); err == nil {
+	if wd, err := l.sourceReader().workingDirectory(); err == nil {
 		if r, err := filepath.Rel(wd, dir); err == nil {
 			dir = r
 		}
 	}
-	paths, err := Sources(dir)
+	paths, err := sourceFiles(dir, l.sourceReader())
 	if err != nil {
 		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: %v", imp.Path, err)
 		return nil
