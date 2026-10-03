@@ -1,0 +1,66 @@
+// Package compress provides gzip codecs and streaming file transfers.
+import "bork/fs"
+
+fn Gzip(data: Bytes): Bytes | IoError unsafe go {
+  import "strings"
+  import "compress/gzip"
+  var out strings.Builder
+  writer := gzip.NewWriter(&out)
+  if _, err := writer.Write(_borkBytesData(data)); err != nil { return IoError{path: "gzip", message: err.Error()} }
+  if err := writer.Close(); err != nil { return IoError{path: "gzip", message: err.Error()} }
+  return _borkBytesFrom([]byte(out.String()))
+}
+
+// Gunzip validates checksums and limits the total output of all gzip members.
+fn Gunzip(data: Bytes, maxBytes: Int = 67108864): Bytes | IoError unsafe go {
+  import "strings"
+  import "compress/gzip"
+  import "io"
+  if maxBytes < 0 { return IoError{path: "gzip", message: "maxBytes must be nonnegative"} }
+  reader, err := gzip.NewReader(strings.NewReader(string(_borkBytesData(data))))
+  if err != nil { return IoError{path: "gzip", message: err.Error()} }
+  defer reader.Close()
+  var out strings.Builder
+  if _, err = io.Copy(&out, io.LimitReader(reader, maxBytes)); err != nil { return IoError{path: "gzip", message: err.Error()} }
+  var probe [1]byte
+  n, err := reader.Read(probe[:])
+  if n != 0 { return IoError{path: "gzip", message: "decompressed data exceeds maxBytes"} }
+  if err != io.EOF { if err == nil { err = io.ErrNoProgress }; return IoError{path: "gzip", message: err.Error()} }
+  return _borkBytesFrom([]byte(out.String()))
+}
+
+// GzipTo consumes source from its current offset and writes at target's offset.
+// Neither file is closed; the caller's scope owns both handles.
+fn GzipTo(source: fs.File, target: fs.File) uses io: Int | IoError unsafe go {
+  import "os"
+  import "compress/gzip"
+  import "io"
+  input := source.handle.(*os.File)
+  output := target.handle.(*os.File)
+  writer := gzip.NewWriter(output)
+  count, err := io.Copy(writer, input)
+  closeErr := writer.Close()
+  if err == nil { err = closeErr }
+  if err != nil { return IoError{path: output.Name(), message: err.Error()} }
+  return count
+}
+
+// GunzipTo streams up to maxBytes. Errors can leave partial output in target.
+fn GunzipTo(source: fs.File, target: fs.File, maxBytes: Int = 67108864) uses io: Int | IoError unsafe go {
+  import "os"
+  import "compress/gzip"
+  import "io"
+  input := source.handle.(*os.File)
+  output := target.handle.(*os.File)
+  if maxBytes < 0 { return IoError{path: input.Name(), message: "maxBytes must be nonnegative"} }
+  reader, err := gzip.NewReader(input)
+  if err != nil { return IoError{path: input.Name(), message: err.Error()} }
+  defer reader.Close()
+  count, err := io.Copy(output, io.LimitReader(reader, maxBytes))
+  if err != nil { return IoError{path: output.Name(), message: err.Error()} }
+  var probe [1]byte
+  n, err := reader.Read(probe[:])
+  if n != 0 { return IoError{path: input.Name(), message: "decompressed data exceeds maxBytes"} }
+  if err != io.EOF { if err == nil { err = io.ErrNoProgress }; return IoError{path: input.Name(), message: err.Error()} }
+  return count
+}
