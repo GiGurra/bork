@@ -915,6 +915,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		for i := range xs {
 			xs[i] = g.convert(xs[i], e.Args[i].Type(), inst.Params[i])
 		}
+		stmts = append(stmts, g.takeOwnersLast(e.Args, inst.Params, xs)...)
 		if inst.Func.Class != nil {
 			fun, dicts := g.methodFunc(inst)
 			return stmts, &ast.CallExpr{Fun: fun, Args: append(dicts, xs...)}
@@ -926,6 +927,29 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		return stmts, &ast.CallExpr{Fun: g.instance(inst), Args: append(dicts, xs...)}
 	}
 	panic(fmt.Sprintf("unhandled call %T", e))
+}
+
+// takeOwnersLast evaluates the other arguments of a call that takes an
+// owner first, so that the owner leaves its variable (and its fallback)
+// only once nothing else can panic before the callee has it.
+func (g *gen) takeOwnersLast(args []check.Expr, params []check.Type, xs []ast.Expr) []ast.Stmt {
+	owner := false
+	for _, a := range args {
+		owner = owner || a.Type() == check.OwnedScope
+	}
+	if !owner {
+		return nil
+	}
+	var stmts []ast.Stmt
+	for i, a := range args {
+		if _, simple := xs[i].(*ast.Ident); simple || a.Type() == check.OwnedScope {
+			continue
+		}
+		tmp := g.newTmp()
+		stmts = append(stmts, typedVar(tmp, g.goType(params[i]), xs[i]))
+		xs[i] = tmp
+	}
+	return stmts
 }
 
 // instance is the Go expression for a function, instantiated with its
