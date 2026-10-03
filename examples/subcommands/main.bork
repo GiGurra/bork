@@ -1,0 +1,24 @@
+import "bork/cli"
+pred validPort(n: Int) { n > 0 && n < 65536 }
+type Serve = {
+  // Host to serve.
+  host: String
+  // Listening port.
+  port: Int where validPort = 8080
+} derive (Decode)
+type Echo = { words: List[String] } derive (Decode)
+fn main() {
+  commands = [
+    cli.Subcommand[Serve]("serve", "Serve a host", (options, s) => {
+      onClose(s, () => { println("serve scope closed") })
+      println(s"Serving ${options.host}:${options.port}")
+      }, flags: [cli.Flag { field: "port", short: "p" }]),
+    cli.Subcommand[Echo]("echo", "Echo words", (options, s) => {
+      println(options.words)
+      }, flags: [cli.Flag { field: "words", positional: true }])
+  ]
+  match (cli.RunCommands("app", "Typed subcommands", commands)) {
+    error: cli.Error => { println(error); exit(2) }
+    Unit => {}
+  }
+}

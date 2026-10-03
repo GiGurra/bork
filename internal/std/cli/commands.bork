@@ -1,0 +1,85 @@
+// Command stores a callback with a fixed effect bound, allowing heterogeneous
+// option records in one list. Subcommand captures each typed decoder/handler.
+type Command = {
+  name: String
+  description: String
+  execute: (String, List[String], Scope) uses io + net + clock + random + state => Unit | Error | Help
+}
+
+// Subcommand keeps the handler typed; only validated options reach it.
+fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Unit, flags: List[Flag] = []): Command {
+  Command {
+    name: name
+    description: description
+    execute: (displayName, arguments, s) => {
+      match (Parse[T](displayName, description, arguments, flags)) {
+        help: Help => help
+        error: Error => error
+        options: T => { run(options, s) }
+      }
+    }
+  }
+}
+
+// Dispatch accepts explicit arguments without the executable name. A selected
+// handler runs in a fresh scope; help and errors stay values for the caller.
+fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command]) uses io + net + clock + random + state: Unit | Error | Help {
+  scope s { dispatch(name, description, arguments, commands, s) }
+}
+
+fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope) uses io + net + clock + random + state: Unit | Error | Help unsafe go {
+  import "bytes"
+  import "fmt"
+  import "strings"
+  import "unicode"
+  import "github.com/spf13/cobra"
+  failures := []DecodeError{}
+  seen := map[string]bool{}
+  if len(commands) == 0 { failures = append(failures, DecodeError{path: name, message: "CLI needs at least one subcommand"}) }
+  for i, command := range commands {
+    path := fmt.Sprintf("commands[%d].name", i)
+    invalid := command.name == "" || strings.HasPrefix(command.name, "-") || strings.IndexFunc(command.name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) >= 0
+    if invalid { failures = append(failures, DecodeError{path: path, message: "subcommand name must contain only letters, digits, hyphens, or underscores and not start with a hyphen"}) }
+    if command.name == "help" { failures = append(failures, DecodeError{path: path, message: "subcommand name help is reserved"}) }
+    if seen[command.name] { failures = append(failures, DecodeError{path: path, message: "duplicate subcommand name " + command.name}) }
+    seen[command.name] = true
+  }
+  if len(failures) != 0 { return Error{errors: failures} }
+  var output bytes.Buffer
+  var result any
+  ran := false
+  root := &cobra.Command{Use: name, Short: description, SilenceUsage: true, SilenceErrors: true}
+  root.CompletionOptions.DisableDefaultCmd = true
+  for _, command := range commands {
+    child := &cobra.Command{
+      Use: command.name, Short: command.description, DisableFlagParsing: true,
+      Run: func(cmd *cobra.Command, args []string) {
+        ran = true
+        result = command.execute(cmd.CommandPath(), args, s)
+      },
+    }
+    // Cobra's `help <command>` must use the same derived option help as
+    // `<command> --help`, rather than the flag-free routing command's help.
+    child.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+      value := command.execute(cmd.CommandPath(), []string{"--help"}, s)
+      if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text) } else { ran = true; result = value }
+    })
+    root.AddCommand(child)
+  }
+  root.SetArgs(append([]string{}, arguments...))
+  root.SetOut(&output)
+  root.SetErr(&output)
+  if err := root.Execute(); err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
+  if !ran { return Help{text: output.String()} }
+  return result
+}
+
+// RunCommands reads process arguments and prints help. Applications render
+// returned errors and choose an exit code, as with Run.
+fn RunCommands(name: String, description: String, commands: List[Command]) uses io + net + clock + random + state: Unit | Error {
+  match (Dispatch(name, description, args(), commands)) {
+    help: Help => { print(help.text) }
+    error: Error => error
+    Unit => {}
+  }
+}
