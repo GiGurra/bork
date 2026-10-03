@@ -87,6 +87,7 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 // of a pure function the caller is currently unfolding.
 func (f *factChecker) deferredBinding(s *Let, e env) {
 	outer, collect := f.fn, f.collect
+	savedFn, savedResult := f.initializerResultFn, f.initializerResult
 	fn := *outer
 	decl := *outer.Decl
 	kind := "lazy"
@@ -95,7 +96,13 @@ func (f *factChecker) deferredBinding(s *Let, e env) {
 	}
 	decl.Name = kind + " " + s.Var.Name
 	fn.Decl, fn.Body, fn.Result = &decl, nil, s.Var.Type
-	fn.ResultConstraints = []MemberConstraints{{Type: s.Var.Type, Constraints: s.Constraints}}
+	fn.ResultConstraints = nil
+	f.initializerResultFn = &fn
+	f.initializerResult = func(value Expr, facts env) {
+		for _, con := range s.Constraints {
+			f.oblige(value, con, f.ownParams(), facts, s.Var.displayName()+" must be "+con.String())
+		}
+	}
 	// A thunk changes the result boundary, not the validator's proof context.
 	if f.validators != nil {
 		f.validators[&fn] = f.validators[outer]
@@ -103,6 +110,7 @@ func (f *factChecker) deferredBinding(s *Let, e env) {
 	f.fn, f.collect = &fn, nil
 	defer func() {
 		f.fn, f.collect = outer, collect
+		f.initializerResultFn, f.initializerResult = savedFn, savedResult
 		delete(f.validators, &fn)
 	}()
 	f.tail(s.Value, e, f.checkResult)

@@ -155,15 +155,18 @@ func importedDefault(field *Field) bool {
 }
 
 type factChecker struct {
-	validatorInvalid bool
-	validators       map[*Func]map[Type]bool
-	candidate        Expr
-	info             *Info
-	diags            *diag.List
-	fn               *Func
-	defaultUse       diag.Pos
-	defaultDecl      diag.Pos
-	pending          []pendingQuery
+	// Deferred initializers check every exit, including implicit ? failures.
+	initializerResultFn *Func
+	initializerResult   func(Expr, env)
+	validatorInvalid    bool
+	validators          map[*Func]map[Type]bool
+	candidate           Expr
+	info                *Info
+	diags               *diag.List
+	fn                  *Func
+	defaultUse          diag.Pos
+	defaultDecl         diag.Pos
+	pending             []pendingQuery
 	// collect, when set, receives result values instead of checking
 	// them, and obligations are not checked (see resultPaths).
 	collect *[]branch
@@ -601,9 +604,25 @@ func (f *factChecker) walk(x Expr, e env) {
 		}
 	case *Try:
 		f.walk(x.X, e)
+		if f.initializerResultFn != nil && f.fn == f.initializerResultFn {
+			f.tryResults(x, e)
+		}
 	case *Interp:
 		for _, ix := range x.Exprs {
 			f.walk(ix, e)
+		}
+	}
+}
+
+// tryResults checks each implicit failure return without changing its boundary.
+func (f *factChecker) tryResults(x *Try, e env) {
+	if x.Option != nil {
+		none := x.NoneOf.Variant("None")
+		f.checkResult(&VariantValue{expr: expr{pos: x.Pos(), typ: x.NoneOf}, Variant: none, Text: "Option.None"}, e)
+	} else {
+		for _, member := range x.Rest {
+			failure := &Try{expr: expr{pos: x.Pos(), typ: member}, X: x.X, TryInfo: TryInfo{Kept: member}}
+			f.checkResult(failure, e)
 		}
 	}
 }
@@ -882,6 +901,10 @@ func (f *factChecker) copyObligations(cp *Copy, e env) {
 // checkResult checks a value the current function returns against the
 // facts its signature promises.
 func (f *factChecker) checkResult(x Expr, e env) {
+	if f.fn == f.initializerResultFn && f.initializerResult != nil {
+		f.initializerResult(x, e)
+		return
+	}
 	if f.collect != nil {
 		*f.collect = append(*f.collect, branch{x: x, e: e})
 		return
@@ -1692,7 +1715,8 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 	}
 
 	q := Query{Pred: ob.pred, Params: ob.pred.Params}
-	if v := constOf(x); v != nil {
+	// Widening to a union must preserve the literal's concrete runtime type.
+	if v := constOf(x); v != nil && identical(x.Type(), ob.pred.Params[0]) {
 		q.Args = []constant.Value{v}
 	} else {
 		q.Subject, q.SubjectText = x, f.literalText(x)
@@ -1839,6 +1863,12 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 	if ob.or != nil {
 		if ok, pending := anyOf(ob, func(alt obligation) (bool, []Query) { return f.proveMember(x, m, alt, e, depth+1) }); ok {
 			return true, pending
+		}
+	}
+	// Narrowing a union preserves facts about the same whole value.
+	for _, k := range f.declared(x, e, depth) {
+		if k.proves(ob) {
+			return true, nil
 		}
 	}
 	for _, k := range f.declaredMember(x, m) {
