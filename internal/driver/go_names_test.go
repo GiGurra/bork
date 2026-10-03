@@ -48,3 +48,23 @@ func TestGoNamesExternalDriver(t *testing.T) {
 		}
 	}
 }
+
+func TestGoNamesGOPATH(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GO111MODULE", "off")
+	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Setenv("GOPATH", root)
+	dir := filepath.Join(root, "src", "example.com", "gopathname")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"firstName", "secondName"} {
+		if err := os.WriteFile(filepath.Join(dir, "name.go"), []byte("package "+name+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		names := (goPackages{}).Names([]string{"example.com/gopathname"})
+		if got := names["example.com/gopathname"]; got != name {
+			t.Fatalf("GOPATH name = %q, want %q", got, name)
+		}
+	}
+}

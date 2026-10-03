@@ -126,6 +126,10 @@ func (gp goPackages) Names(paths []string) map[string]string {
 // External package drivers may omit module metadata for user packages. Their
 // results must not enter or reuse the standard-library-only cache.
 func builtInGoDriver() bool {
+	// GOPATH packages also have no module metadata, even with Go's driver.
+	if os.Getenv("GO111MODULE") == "off" {
+		return false
+	}
 	switch os.Getenv("GOPACKAGESDRIVER") {
 	case "off":
 		return true
