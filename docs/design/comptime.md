@@ -258,8 +258,12 @@ facts under that request's predicates/rules. Changed predicate implementations
 invalidate proof results even if the serialized table bytes remain identical.
 Do not cache timeout/panic/transient toolchain failures persistently initially.
 
-Integrate with the Session source/embed snapshot and dependency inventory; do
-not introduce a second independently stale whole-program cache. Initial value
+Integrate with the Session source/embed snapshot and dependency inventory.
+Captured Go settings/launcher selection are distinct from complete toolchain
+identity: the current private helpers do not freeze all toolchain bytes or
+external metadata, and are not a versioned cache API. Keep reuse disabled until
+that wider inventory is complete. Do not introduce a second independently stale
+whole-program cache. Initial value
 reuse may remain in memory until a safe versioned disk artifact exists. Unknown
 execution dependencies disable both value and enclosing checked-result reuse.
 Cache misses and `--no-cache` produce identical values, diagnostics and emitted
