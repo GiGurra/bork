@@ -85,9 +85,10 @@ var standardGoNames sync.Map // import path -> package name
 
 func (gp goPackages) Names(paths []string) map[string]string {
 	names := map[string]string{}
+	cache := builtInGoDriver()
 	var missing []string
 	for _, path := range paths {
-		if name, ok := standardGoNames.Load(path); ok {
+		if name, ok := standardGoNames.Load(path); cache && ok {
 			names[path] = name.(string)
 		} else {
 			missing = append(missing, path)
@@ -114,10 +115,24 @@ func (gp goPackages) Names(paths []string) map[string]string {
 	for _, pkg := range loaded {
 		if len(pkg.Errors) == 0 {
 			names[pkg.PkgPath] = pkg.Name
-			if pkg.Module == nil {
+			if cache && pkg.Module == nil {
 				standardGoNames.Store(pkg.PkgPath, pkg.Name)
 			}
 		}
 	}
 	return names
+}
+
+// External package drivers may omit module metadata for user packages. Their
+// results must not enter or reuse the standard-library-only cache.
+func builtInGoDriver() bool {
+	switch os.Getenv("GOPACKAGESDRIVER") {
+	case "off":
+		return true
+	case "":
+		_, err := exec.LookPath("gopackagesdriver")
+		return err != nil
+	default:
+		return false
+	}
 }
