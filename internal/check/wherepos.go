@@ -28,7 +28,7 @@ func (c *checker) unappliedWheres(files []*syntax.File) {
 			copy.Tests = nil
 			f = &copy
 		}
-		forTypeExprs(reflect.ValueOf(f), func(t *syntax.TypeExpr, where string) {
+		c.forTypeExprs(reflect.ValueOf(f), func(t *syntax.TypeExpr, where string) {
 			c.unappliedIn(t, where)
 		})
 	}
@@ -152,7 +152,7 @@ func (c *checker) whereReported(t *syntax.TypeExpr) {
 
 // forTypeExprs calls f on each written type in v that is not part of
 // another written type, with a description of its position if known.
-func forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where string)) {
+func (c *checker) forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where string)) {
 	type pointerKey struct {
 		typ reflect.Type
 		ptr uintptr
@@ -189,6 +189,20 @@ func forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where string)) {
 					// Bare type names, record patterns, and variant owners
 					// have no TypeExpr.
 					f(&syntax.TypeExpr{Pos: n.Pos, Name: n.Path[0]}, "in a type pattern")
+				}
+			case *syntax.RecordLit:
+				owner := n.Type
+				if sel, ok := owner.(*syntax.Selector); ok {
+					owner = sel.X
+				}
+				if id, ok := owner.(*syntax.Ident); ok {
+					f(&syntax.TypeExpr{Pos: id.Pos, Name: id.Name}, "on a constructor's type")
+				}
+			case *syntax.Selector:
+				if c.info.selectorVariants[n] != nil {
+					if id, ok := n.X.(*syntax.Ident); ok {
+						f(&syntax.TypeExpr{Pos: id.Pos, Name: id.Name}, "on a constructor's type")
+					}
 				}
 			}
 			for _, p := range params {

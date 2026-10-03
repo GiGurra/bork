@@ -17,6 +17,16 @@ pred square(s: Shape) {
   }
 }
 type SquareOnly = Shape where square
+type Point = { x: Int }
+pred positivePoint(p: Point) { p.x > 0 }
+type PosPoint = Point where positivePoint
+type Circle = sealed { At { x: Int } }
+pred positiveCircle(c: Circle) {
+  match (c) {
+    Circle.At { x } => x > 0
+  }
+}
+type PosCircle = Circle where positiveCircle
 
 // Union members, in an alias, a field, a parameter, and a list.
 type Either = Int where positive | String
@@ -99,6 +109,9 @@ fn main() {
     SquareOnly.Dot => println("square")
     Shape.Square => println("square")
   }
+  println(PosPoint { x: 0 })
+  println(SquareOnly.Dot)
+  println(PosCircle.At { x: 0 })
   // Inside a type whose facts are dropped, the reason is the outer one.
   f = (xs: List[PosInt]) => 0
 }

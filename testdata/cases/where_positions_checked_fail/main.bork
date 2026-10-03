@@ -9,6 +9,9 @@ type MaybeInt = Option[Int]
 type Pair[A, B] = { a: A, b: B }
 type Account = { balance: Int where positive }
 type Shape = sealed { Square { side: Int where positive }, Dot }
+type Point = { x: Int }
+pred positivePoint(p: Point) { p.x > 0 }
+type PosPoint = Point where positivePoint
 
 fn param(n: Int where positive): Int { n }
 fn alias(n: PosInt): Int { n }
@@ -32,4 +35,6 @@ fn main() {
   println(Shape.Square { side: 0 })
   n: Int where positive = 0
   println(n)
+  p: PosPoint = Point { x: 0 }
+  println(p)
 }

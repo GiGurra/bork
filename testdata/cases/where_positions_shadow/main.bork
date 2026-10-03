@@ -9,9 +9,16 @@ instance sizeString: Size[String] {
 }
 
 type Box[T] = { values: List[T] }
+type Point = { x: Int }
+type PlainPoint = Point
+type Shape = sealed { At { p: Point }, Dot }
+type PlainShape = Shape
 
 fn main() {
   println(size("a"))
   b: Box[String] = Box { values: ["d"] }
   println(b)
+  println(PlainPoint { x: 0 })
+  println(PlainShape.At { p: PlainPoint { x: 0 } })
+  println(PlainShape.Dot)
 }

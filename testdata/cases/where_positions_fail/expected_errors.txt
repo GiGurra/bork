@@ -1,35 +1,38 @@
 main.bork:11:38: PosInt is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
-main.bork:22:25: where clauses on a member of a union are not supported yet, so the fact would not be checked
-main.bork:23:30: where clauses on a member of a union are not supported yet, so the fact would not be checked
-main.bork:24:24: where clauses on a member of a union are not supported yet, so the fact would not be checked
-main.bork:25:37: where clauses on a member of a union are not supported yet, so the fact would not be checked
-main.bork:26:19: PosInt is a constrained type (where positive), and constrained types on a member of a union are not supported yet, so the fact would not be checked
-main.bork:27:25: PosInt is a constrained type (where positive), and constrained types on a member of a union are not supported yet, so the fact would not be checked
-main.bork:30:36: where clauses on a Map's values are not supported yet, so the fact would not be checked
-main.bork:31:29: where clauses on a Map's keys are not supported yet, so the fact would not be checked
-main.bork:32:31: PosInt is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
-main.bork:33:48: where clauses on a Map's values are not supported yet, so the fact would not be checked
-main.bork:34:35: PosInt is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
-main.bork:35:39: where clauses on a Map's values are not supported yet, so the fact would not be checked
-main.bork:36:30: PosInt is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
-main.bork:39:15: facts on the type argument T of Box are not supported yet, so they would not be checked: its field items holds T inside List[T]
-main.bork:40:19: facts on the type argument of Atom are not supported yet, so they would not be checked
-main.bork:41:17: facts on the type argument T of Only are not supported yet, so they would not be checked: its field items holds T inside List[T]
-main.bork:44:13: where clauses inside function types are not supported yet
-main.bork:47:24: where clauses on a rule's variables are not supported yet, so the fact would not be checked
-main.bork:50:21: where clauses on a lambda's parameters are not supported yet, so the fact would not be checked
-main.bork:51:11: PosInt is a constrained type (where positive), and constrained types on a lambda's parameters are not supported yet, so the fact would not be checked
-main.bork:57:25: where clauses on the methods of classes and instances are not supported yet
-main.bork:69:26: where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)
-main.bork:74:26: where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)
-main.bork:84:14: facts inside a type argument (on the parts of List[Int]) are not supported yet, so they would not be checked; only facts on the whole type argument are
-main.bork:85:14: facts inside a type argument (on the parts of Option[Int]) are not supported yet, so they would not be checked; only facts on the whole type argument are
-main.bork:86:25: listOf cannot take a constrained type argument for T: its result holds T inside List[T], where the facts would not be kept (only a result of type T itself keeps them)
-main.bork:87:19: atom cannot take a constrained type argument for T: its result holds T inside Atom[T], where the facts would not be kept (only a result of type T itself keeps them)
-main.bork:88:26: map cannot take a constrained type argument for B: its parameter f could give it values that are not checked (only parameters of type B itself are)
-main.bork:91:8: PosInt is a constrained type (where positive), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
-main.bork:95:5: PosInt is a constrained type (where positive), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
-main.bork:99:5: SquareOnly is a constrained type (where square), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
-main.bork:103:17: PosInt is a constrained type (where positive), and constrained types on a lambda's parameters are not supported yet, so the fact would not be checked
-main.bork:107:44: where clauses on a Map's values are not supported yet, so the fact would not be checked
-main.bork:107:68: where clauses on a member of a union are not supported yet, so the fact would not be checked
+main.bork:32:25: where clauses on a member of a union are not supported yet, so the fact would not be checked
+main.bork:33:30: where clauses on a member of a union are not supported yet, so the fact would not be checked
+main.bork:34:24: where clauses on a member of a union are not supported yet, so the fact would not be checked
+main.bork:35:37: where clauses on a member of a union are not supported yet, so the fact would not be checked
+main.bork:36:19: PosInt is a constrained type (where positive), and constrained types on a member of a union are not supported yet, so the fact would not be checked
+main.bork:37:25: PosInt is a constrained type (where positive), and constrained types on a member of a union are not supported yet, so the fact would not be checked
+main.bork:40:36: where clauses on a Map's values are not supported yet, so the fact would not be checked
+main.bork:41:29: where clauses on a Map's keys are not supported yet, so the fact would not be checked
+main.bork:42:31: PosInt is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
+main.bork:43:48: where clauses on a Map's values are not supported yet, so the fact would not be checked
+main.bork:44:35: PosInt is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
+main.bork:45:39: where clauses on a Map's values are not supported yet, so the fact would not be checked
+main.bork:46:30: PosInt is a constrained type (where positive), and constrained types on a Map's values are not supported yet, so the fact would not be checked
+main.bork:49:15: facts on the type argument T of Box are not supported yet, so they would not be checked: its field items holds T inside List[T]
+main.bork:50:19: facts on the type argument of Atom are not supported yet, so they would not be checked
+main.bork:51:17: facts on the type argument T of Only are not supported yet, so they would not be checked: its field items holds T inside List[T]
+main.bork:54:13: where clauses inside function types are not supported yet
+main.bork:57:24: where clauses on a rule's variables are not supported yet, so the fact would not be checked
+main.bork:60:21: where clauses on a lambda's parameters are not supported yet, so the fact would not be checked
+main.bork:61:11: PosInt is a constrained type (where positive), and constrained types on a lambda's parameters are not supported yet, so the fact would not be checked
+main.bork:67:25: where clauses on the methods of classes and instances are not supported yet
+main.bork:79:26: where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)
+main.bork:84:26: where clauses on the parameters of instance methods are not supported (an instance for a constrained type assumes its constraints)
+main.bork:94:14: facts inside a type argument (on the parts of List[Int]) are not supported yet, so they would not be checked; only facts on the whole type argument are
+main.bork:95:14: facts inside a type argument (on the parts of Option[Int]) are not supported yet, so they would not be checked; only facts on the whole type argument are
+main.bork:96:25: listOf cannot take a constrained type argument for T: its result holds T inside List[T], where the facts would not be kept (only a result of type T itself keeps them)
+main.bork:97:19: atom cannot take a constrained type argument for T: its result holds T inside Atom[T], where the facts would not be kept (only a result of type T itself keeps them)
+main.bork:98:26: map cannot take a constrained type argument for B: its parameter f could give it values that are not checked (only parameters of type B itself are)
+main.bork:101:8: PosInt is a constrained type (where positive), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
+main.bork:105:5: PosInt is a constrained type (where positive), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
+main.bork:109:5: SquareOnly is a constrained type (where square), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
+main.bork:112:11: PosPoint is a constrained type (where positivePoint), and constrained types on a constructor's type are not supported yet, so the fact would not be checked
+main.bork:113:11: SquareOnly is a constrained type (where square), and constrained types on a constructor's type are not supported yet, so the fact would not be checked
+main.bork:114:11: PosCircle is a constrained type (where positiveCircle), and constrained types on a constructor's type are not supported yet, so the fact would not be checked
+main.bork:116:17: PosInt is a constrained type (where positive), and constrained types on a lambda's parameters are not supported yet, so the fact would not be checked
+main.bork:120:44: where clauses on a Map's values are not supported yet, so the fact would not be checked
+main.bork:120:68: where clauses on a member of a union are not supported yet, so the fact would not be checked
