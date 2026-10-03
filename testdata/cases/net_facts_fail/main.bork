@@ -1,0 +1,11 @@
+import "bork/net"
+fn main() {
+  scope app {
+    bad = net.Dial("127.0.0.1:1", app, -1)
+    bad2 = net.Dial("127.0.0.1:1", app, 9223372036855)
+    match (net.Dial("127.0.0.1:1", app)) {
+      conn: net.Connection => println(net.Read(conn, 0))
+      _ => {}
+    }
+  }
+}

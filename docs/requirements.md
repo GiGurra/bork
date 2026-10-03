@@ -1055,3 +1055,22 @@ child exits or is cancelled. If a descendant keeps them open after a successful
 exit, the result is IoError rather than partial output. Nonzero exits retain
 their exit code as Result and output may be truncated at this bound.
 Cancellation still returns Cancelled. This bound keeps pipe capture from blocking cleanup forever.
+
+### TCP and UDP sockets
+
+`bork/net` uses Bytes for binary TCP and UDP data and scope-owned Connection,
+Server and Socket resources. Dial opens TCP with scope cancellation and an
+optional opening timeout. Listen serves each connection on a task in its own
+scope; server cleanup cancels active connections and waits for handlers.
+Handler errors/panics are logged and isolated. Connections support bounded byte
+reads, validated UTF-8 lines, writes, address inspection and per-call deadlines.
+Line timeouts preserve consumed prefixes for retry or byte reads. Eof marks
+clean stream closure; cancellation is Cancelled and transport/timeouts IoError.
+Failed writes can be partial. One reader and one writer may run concurrently.
+
+UDP Bind and Send use numeric IP:port addresses; Receive returns a complete
+datagram with its sender, including zero-length data. Resources follow their
+owner's cancellation, with attachment rebinding the cancellation source. Pure
+host/port helpers parse and join addresses; scope-aware Resolve returns sorted
+IP strings. Timeouts and buffer sizes have checked facts; there is no new syntax.
+TLS can be added later alongside HTTP.

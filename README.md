@@ -212,6 +212,9 @@ code, optional environment/workdir/stdin, and scope-owned cancellation. SIGINT
 and SIGTERM cancel root scopes so scope-aware work can finish and clean up.
 See [examples/process](examples/process/main.bork).
 
+Import `bork/net` for scope-owned TCP/UDP sockets, binary data and UTF-8 lines,
+per-call timeouts, and address helpers. See [examples/net](examples/net/main.bork).
+
 ## License
 
 [MIT](LICENSE)

@@ -27,7 +27,7 @@ fn Dial(address: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + state + 
     if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
     return IoError{path: address, message: err.Error()}
   }
-  handle := _borkNewResourceHandle(struct { conn net.Conn; reader *bufio.Reader }{raw, bufio.NewReader(raw)}, s)
+  handle := _borkNewResourceHandle(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte }{raw, bufio.NewReader(raw), new([]byte)}, s)
   go func() { <-handle.Context().Done(); raw.Close() }()
   return Connection{handle: handle, owner: s.Own(func() { handle.Close(); raw.Close() })}
 }
@@ -58,7 +58,7 @@ fn Listen(address: String, s: Scope, handler: (Connection, Scope) => Unit | IoEr
         defer func() { if failure := recover(); failure != nil { slog.Error("bork: TCP handler failed", "failure", failure) } }()
         child := _borkScopeWith(handle.Context())
         defer _borkScopeAbort(child)
-        connHandle := _borkNewResourceHandle(struct { conn net.Conn; reader *bufio.Reader }{raw, bufio.NewReader(raw)}, child)
+        connHandle := _borkNewResourceHandle(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte }{raw, bufio.NewReader(raw), new([]byte)}, child)
         go func() { <-connHandle.Context().Done(); raw.Close() }()
         conn := Connection{handle: connHandle, owner: child.Own(func() { connHandle.Close(); raw.Close() })}
         task := child.Go(func() any { return handler(conn, child) })
@@ -85,12 +85,12 @@ fn Wait(server: Server) uses net + state unsafe go {
 fn LocalAddress(conn: Connection): String unsafe go {
   import "bufio"
   import "net"
-  return conn.handle.(*_borkResourceHandle).Value.(struct { conn net.Conn; reader *bufio.Reader }).conn.LocalAddr().String()
+  return conn.handle.(*_borkResourceHandle).Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte }).conn.LocalAddr().String()
 }
 fn RemoteAddress(conn: Connection): String unsafe go {
   import "bufio"
   import "net"
-  return conn.handle.(*_borkResourceHandle).Value.(struct { conn net.Conn; reader *bufio.Reader }).conn.RemoteAddr().String()
+  return conn.handle.(*_borkResourceHandle).Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte }).conn.RemoteAddr().String()
 }
 
 // Read returns available bytes, up to size. Eof means a clean closed stream.
@@ -101,11 +101,17 @@ fn Read(conn: Connection, size: ReadSize = 4096, timeoutMs: TimeoutMs = 0) uses 
   import "net"
   import "time"
   handle := conn.handle.(*_borkResourceHandle)
-  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader })
+  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte })
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
   if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
   if err := state.conn.SetReadDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
+  if len(*state.pending) > 0 {
+    n := min(int(size), len(*state.pending))
+    data := _borkBytesFrom((*state.pending)[:n])
+    *state.pending = (*state.pending)[n:]
+    return data
+  }
   data := make([]byte, int(size))
   n, err := state.reader.Read(data)
   if n > 0 { return _borkBytesFrom(data[:n]) }
@@ -127,12 +133,14 @@ fn readLine(conn: Connection, timeoutMs: TimeoutMs) uses net + state + clock: By
   import "net"
   import "time"
   handle := conn.handle.(*_borkResourceHandle)
-  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader })
+  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte })
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
   if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
   if err := state.conn.SetReadDeadline(deadline); err != nil { return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()} }
-  data, err := state.reader.ReadBytes('\n')
+  suffix, err := state.reader.ReadBytes('\n')
+  data := append(*state.pending, suffix...)
+  *state.pending = nil
   if len(data) > 0 && (err == nil || err == io.EOF) {
     if data[len(data)-1] == '\n' {
       data = data[:len(data)-1]
@@ -140,6 +148,7 @@ fn readLine(conn: Connection, timeoutMs: TimeoutMs) uses net + state + clock: By
     }
     return _borkBytesFrom(data)
   }
+  *state.pending = data
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   if err == io.EOF { return Eof{} }
   return IoError{path: state.conn.RemoteAddr().String(), message: err.Error()}
@@ -151,7 +160,7 @@ fn Write(conn: Connection, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + sta
   import "net"
   import "time"
   handle := conn.handle.(*_borkResourceHandle)
-  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader })
+  state := handle.Value.(struct { conn net.Conn; reader *bufio.Reader; pending *[]byte })
   if reason := handle.Context().Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   deadline := time.Time{}
   if timeoutMs > 0 { deadline = time.Now().Add(time.Duration(timeoutMs)*time.Millisecond) }
@@ -234,6 +243,7 @@ fn JoinAddress(host: String, port: String): String unsafe go {
 fn Resolve(host: String, s: Scope) uses net + state: List[String] | IoError | Cancelled unsafe go {
   import "net"
   import "sort"
+  if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
   addresses, err := net.DefaultResolver.LookupIPAddr(_borkScopeContext(s), host)
   if err != nil {
     if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
