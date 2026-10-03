@@ -825,8 +825,8 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 
 - **Predicates on compile-time-known values are evaluated during compilation.** `connect("db", 5432)` is accepted because `between(1, 65535)(5432)` is computed at build time. `connect("db", 0)` fails the build. Unlike proven, this works for *any* predicate, not just a built-in set.
 - **Constants and named constrained values.** `defaultPort: Port = 8080` is checked once, when compiled.
-- **Explicit compile-time computation:** `comptime { ... }` evaluates pure code with closed captures and concrete types at compilation, with its own return boundary. Scalars, lists, records, sealed variants, unions and insertion-ordered Maps become typed literals and ordinary facts. Internal promises check before execution; result constraints check afterward. Native-target execution is bounded by ten seconds and a 16 MiB result limit. Runtime behavior and lazy cells cannot be baked; sorted maps require explicit `.inOrder()` export. Module-file inputs and caching follow the [comptime design](design/comptime.md).
-- **Explicit build inputs (proposed):** `bork/build` supplies captured module-relative files only within computations allowed to use the proposed `build` effect. Runtime effects and file escapes are rejected. Existing predicate evaluation still trusts pure `unsafe go` signatures (see purity below).
+- **Explicit compile-time computation:** `comptime { ... }` evaluates pure code with closed captures and concrete types at compilation, with its own return boundary. Scalars, lists, records, sealed variants, unions and insertion-ordered Maps become typed literals and ordinary facts. Internal promises check before execution; result constraints check afterward. Native-target execution is bounded by ten seconds and a 16 MiB result limit. Runtime behavior and lazy cells cannot be baked; sorted maps require explicit `.inOrder()` export. Result caching follows the [comptime design](design/comptime.md).
+- **Explicit build inputs:** `bork/build.ReadString` and `ReadBytes` supply frozen module-relative files within comptime blocks and helpers declaring `uses build`. Calls require constant String paths; guarded sites are captured before execution. Runtime entrypoints, file escapes, operand symlinks, special files and invalid UTF-8 Strings are rejected. Established root symlinks retain tracked identities. Capture limits are 16 MiB per file and 64 MiB total; successful captures include content, negative lookup and component identity evidence. Existing predicate evaluation still trusts pure `unsafe go` signatures (see purity below).
 
 ### Facts, purity, and the outside world
 
@@ -1545,7 +1545,7 @@ The capability values bork already has stay: scopes, resources, atoms, and chann
 
 ### The effects
 
-The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`. Libraries cannot declare their own effects. Each effect is coarse enough to annotate cheaply, and fine enough to answer the questions a reviewer asks.
+The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, `state`, and compile-time-only `build`. Libraries cannot declare their own effects. Each effect is coarse enough to annotate cheaply, and fine enough to answer the questions a reviewer asks.
 
 | Effect  | Allows | Prelude and standard library |
 |---------|--------|------------------------------|
@@ -1553,6 +1553,7 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 | `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
 | `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep`, HTTP listener admission waits and client Retry-After dates |
 | `random` | random numbers | none yet (the future random number functions) |
+| `build` | captured module files inside comptime blocks | `bork/build.ReadString`, `bork/build.ReadBytes` |
 | `state` | state shared between tasks | `current`, `update`, `swap`, `send`, `receive`, `closeChannel`, `received`, `cancel`, `cancelled`, `checkpoint`, HTTP admission, `http.AdmissionState`, and client cancellation |
 
 - **Some functions have two or more effects:** `delay(s, ms)`, `cancelAfter(s, ms)`, and `time.Sleep` are `clock + state` (they wait, and they observe or cause cancellation); `process.Run`, `Start`, `Await`, and `Stop` are `io + state`; the `bork/sql` functions are `io + net`, since a database may be a local file or a server; and the `bork/net` socket functions are `net + state` (`Listen`, `Wait`, `Bind`, `Resolve`), or `net + state + clock` where they read, write, or dial with a deadline.
@@ -1570,7 +1571,7 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 fn describe(u: User): String { ... }                          // pure
 fn save(path: String, text: String) uses io: Ok | IoError { ... }
 fn serve(addr: String) uses net + state: Ok | IoError { ... }
-fn main() { ... }                                             // may use every effect
+fn main() { ... }                                             // may use every runtime effect
 fn now() uses clock: Int unsafe go { ... }
 
 type Job = { name: String, run: () uses io => Ok }         // a function type with effects
@@ -1646,7 +1647,7 @@ The prelude's list, `Option`, and map methods have open function parameters; `up
 
 ### `main` and tests
 
-- **`main` and test bodies may use every effect**, with nothing declared (`main` is the one function where no `uses` does not mean pure). They are the program's roots: everything a program does starts there, so a declaration on them would say little, and tests print, read fixtures, and start servers. The functions they call are still checked against their own declarations, which is where the guarantee matters: below `main`, a function that declares nothing does nothing. `main` may still declare `uses`, which is then checked like any other function's (useful for a program that should be provably free of, say, network access), and `fn main() uses nothing` declares a pure program.
+- **`main` and test bodies may use every runtime effect**, with nothing declared (`main` is the one function where no `uses` does not mean pure). They are the program's roots: everything a program does starts there, so a declaration on them would say little, and tests print, read fixtures, and start servers. The functions they call are still checked against their own declarations, which is where the guarantee matters: below `main`, a function that declares nothing does nothing. The `build` effect is permitted only inside comptime blocks, whose enclosing function does not acquire it. Build helpers declare `uses build`; runtime entrypoints and predicates cannot use it. `main` may still declare `uses`, which is then checked like any other function's (useful for a program that should be provably free of, say, network access), and `fn main() uses nothing` declares a pure program.
 - **`main` cannot be called or used as a value**, not even from a test or a lambda, so no other code can reach "every effect" through it.
 
 ### Predicates and compile-time evaluation

@@ -1,4 +1,4 @@
-main.bork:1:18: unknown effect disk; the effects are io, net, clock, random, and state
+main.bork:1:18: unknown effect disk; the effects are io, net, clock, random, state, and build
 main.bork:3:18: effect io is listed twice
 main.bork:5:16: pred c cannot declare effects: predicates must be pure, or their facts could go stale
 main.bork:16:20: method greet of instance greetInt uses net, but class Greeter allows only io

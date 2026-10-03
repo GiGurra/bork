@@ -321,7 +321,7 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			return &SeqCall{expr: at, Op: call.op, Args: args, Effects: call.effects}
 		}
 		if fn := l.info.callFuncs[x]; fn != nil {
-			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x)), ArgOrder: l.info.callOrder[x], Embedded: l.info.embedCalls[x], Needs: l.needs(x)}
+			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x)), ArgOrder: l.info.callOrder[x], Embedded: l.info.embedCalls[x], BuildRead: l.info.buildCalls[x], Needs: l.needs(x)}
 			if sel, ok := x.Fun.(*syntax.Selector); ok {
 				args := l.info.args(x)
 				call.ReceiverCall = len(args) > 0 && args[0] == sel.X

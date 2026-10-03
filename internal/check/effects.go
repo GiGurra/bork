@@ -18,6 +18,7 @@ const (
 	EffClock                      // time and waiting
 	EffRandom                     // random numbers
 	EffState                      // state shared between tasks
+	EffBuild                      // captured module files, only inside comptime
 
 	// EffOpen stands for the effects of an open function parameter:
 	// one written without `uses`, which takes a function with any
@@ -35,6 +36,7 @@ var effectNames = []struct {
 	{EffClock, "clock"},
 	{EffRandom, "random"},
 	{EffState, "state"},
+	{EffBuild, "build"},
 }
 
 // String writes the effects as a uses declaration lists them:
@@ -75,7 +77,7 @@ func (c *checker) effectsOf(u *syntax.Uses) Effects {
 		eff := effectNamed(e.Name)
 		switch {
 		case eff == 0:
-			c.diags.AddCode(e.Pos, "effect.unknown", "unknown effect %s; the effects are io, net, clock, random, and state", e.Name)
+			c.diags.AddCode(e.Pos, "effect.unknown", "unknown effect %s; the effects are io, net, clock, random, state, and build", e.Name)
 		case effs&eff != 0:
 			c.diags.AddCode(e.Pos, "effect.duplicate", "effect %s is listed twice", e.Name)
 		}

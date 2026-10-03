@@ -12,11 +12,12 @@ import (
 // signature declares (see "Effects in signatures" in
 // docs/requirements.md): a function that declares nothing does nothing
 // outside its arguments and result. main and tests may use every
-// effect, unless main declares some. It reads the typed tree, so it
+// runtime effect, unless main declares some. It reads the typed tree, so it
 // runs once the program type-checks.
 func CheckEffects(files []*syntax.File, info *Info, diags *diag.List) {
-	// Tests may use every effect, but not call main.
+	// Tests may use every runtime effect, but not call main.
 	for _, fn := range info.Tests {
+		checkRuntimeBuildSignature(fn, diags)
 		if fn.Body != nil {
 			checkEffects(fn, diags)
 		}
@@ -28,6 +29,9 @@ func CheckEffects(files []*syntax.File, info *Info, diags *diag.List) {
 		std := f.Prelude || strings.HasPrefix(f.Package, "bork/")
 		for _, fd := range f.Funcs {
 			fn := info.FuncOf[fd]
+			if fn != nil {
+				checkRuntimeBuildSignature(fn, diags)
+			}
 			switch {
 			case fn == nil:
 			case fn.Body != nil:
@@ -36,6 +40,12 @@ func CheckEffects(files []*syntax.File, info *Info, diags *diag.List) {
 				checkUnsafeGo(fn, info, diags)
 			}
 		}
+	}
+}
+
+func checkRuntimeBuildSignature(fn *Func, diags *diag.List) {
+	if (fn.Test != nil || fn.Decl.Name == "main") && fn.Effects&EffBuild != 0 {
+		diags.AddCode(fn.Decl.Pos, "build.runtime", "build effects may run only inside comptime blocks")
 	}
 }
 
@@ -128,8 +138,11 @@ func checkEffects(fn *Func, diags *diag.List) {
 		}
 	}
 	fd := fn.Decl
+	if (fn.Test != nil || fd.Name == "main") && u.used&EffBuild != 0 && fn.Effects&EffBuild == 0 {
+		diags.AddCode(u.first(EffBuild, fd.Pos), "build.runtime", "build effects may run only inside comptime blocks")
+	}
 	if fn.Test != nil || fd.Name == "main" && fd.Uses == nil {
-		return // may use every effect
+		return // may use every runtime effect
 	}
 	used := u.used &^ EffOpen
 	if fd.IsPred {

@@ -28,13 +28,13 @@ func TestCompilationReplayMatchesClean(t *testing.T) {
 		{"embed_missing", true}, {"embed_invalid", true},
 		{"mocks_generic", false}, {"lazy_bindings", false}, {"lazy_mocks", false},
 		{"go_user_deps", false},
-		{"comptime_literal", false}, {"comptime_data_shapes", false},
+		{"comptime_literal", false}, {"comptime_data_shapes", false}, {"comptime_build_inputs", false},
 	}
 	for _, fixture := range cases {
 		name := fixture.name
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join("../../testdata/cases", name)
-			if name == "embed" {
+			if name == "embed" || name == "comptime_build_inputs" {
 				copy := t.TempDir()
 				if err := os.CopyFS(copy, os.DirFS(path)); err != nil {
 					t.Fatal(err)
@@ -60,10 +60,10 @@ func TestCompilationReplayMatchesClean(t *testing.T) {
 			if assets != nil {
 				assetInventory = assets.dependencies()
 			}
-			if name == "embed" {
+			if name == "embed" || name == "comptime_build_inputs" {
 				// Replaying captured bytes must survive deletion of both source
 				// and asset inputs; a fresh request must observe that deletion.
-				for _, operand := range []string{"main.bork", "assets"} {
+				for _, operand := range []string{"main.bork", "assets", "config.txt"} {
 					if err := os.RemoveAll(filepath.Join(path, operand)); err != nil {
 						t.Fatal(err)
 					}

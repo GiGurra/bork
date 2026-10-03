@@ -253,6 +253,8 @@ type Info struct {
 	// Embeds lists compile-time asset requests in source order.
 	Embeds             []*Embedded
 	embedCalls         map[*syntax.Call]*Embedded
+	BuildReads         []*BuildRead
+	buildCalls         map[*syntax.Call]*BuildRead
 	assemblyCalls      map[*syntax.Call]*assemblyExpansion
 	assemblyTypes      map[*syntax.TypeExpr]Type
 	assemblyNames      map[any]string
@@ -582,6 +584,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 		c.checkOpaqueGenericUses()
 		if c.diags.Len() == 0 {
 			c.checkEmbeds()
+			c.checkBuildReads()
 			if c.diags.Len() == 0 {
 				if observe != nil {
 					observe("lower")

@@ -1,0 +1,8 @@
+import "bork/build"
+
+fn text() uses build: String { build.ReadString("config.txt") }
+
+fn main() {
+  println(comptime { text() })
+  println(comptime { build.ReadBytes("config.txt") })
+}
