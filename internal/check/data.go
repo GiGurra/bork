@@ -315,7 +315,7 @@ func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner st
 		} else if c.sharedDefaults[fi.Value] {
 			t = c.info.types[fi.Value]
 		} else {
-			t = c.exprWant(fi.Value, f.Type)
+			t = c.fieldInitializer(fi.Value, f)
 		}
 		ft := f.Type
 		if t, ft = c.settle(t, ft); !assignable(t, ft) {
@@ -355,11 +355,7 @@ func (c *checker) copyExpr(e *syntax.Copy) Type {
 	var paths []string
 	for _, u := range e.Updates {
 		target := c.copyTarget(rec, u)
-		var want Type
-		if target != nil {
-			want = target.Type
-		}
-		t := c.exprWant(u.Value, want)
+		t := c.fieldInitializer(u.Value, target)
 		if target != nil {
 			if t, tt := c.settle(t, target.Type); !assignable(t, tt) {
 				c.errorf(u.Value.Position(), "%s must be %s, found %s", strings.Join(u.Path, "."), tt, t)

@@ -1,3 +1,5 @@
+type Lazy[T] = { lazy value: T }
+type Default = { lazy value: Int = 7 }
 fn main() {
   lazy value: Int = expensive()
   lazy other = { if (true) { return 1 }; value }

@@ -336,13 +336,15 @@ func (p *parser) fieldDecls() []*FieldDecl {
 	var fields []*FieldDecl
 	p.expect(LBrace, "to start the fields")
 	p.list(RBrace, "a field", func() {
+		var lazy bool
+		var lazyPos diag.Pos
 		if p.at(TIdent) && p.tok().Text == "lazy" && p.peekKind() == TIdent {
-			p.errorf(p.tok().Pos, "lazy record fields are not implemented yet; local lazy bindings are supported")
-			panic(bailout{})
+			lazy, lazyPos = true, p.tok().Pos
+			p.next()
 		}
 		fname := p.expect(TIdent, "(field name)")
 		p.expect(Colon, "after field name")
-		field := &FieldDecl{Pos: fname.Pos, Name: fname.Text, Type: p.typeExpr(), Doc: p.fieldDoc(fname.Pos)}
+		field := &FieldDecl{Lazy: lazy, LazyPos: lazyPos, Pos: fname.Pos, Name: fname.Text, Type: p.typeExpr(), Doc: p.fieldDoc(fname.Pos)}
 		if p.at(Assign) {
 			p.next()
 			field.Default = p.expr()

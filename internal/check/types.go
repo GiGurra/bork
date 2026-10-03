@@ -169,6 +169,7 @@ type GoField struct {
 }
 
 type Field struct {
+	Lazy           bool
 	GoTags         []syntax.GoTag
 	Decl           *syntax.FieldDecl
 	Pkg            *Package

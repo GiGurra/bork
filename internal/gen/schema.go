@@ -26,7 +26,7 @@ func (g *gen) decodeSchema(ci *check.ClassInstance, record *check.Record) string
 		fmt.Fprintf(&b, "{Name: %q, Type: %q, Doc: %q, HasDefault: %t, Default: %s, Constraints: []string{%s}, Kind: (%s).kind, Optional: (%s).optional, Decode: func(value Json) any {\n", field.Name, field.Type.String(), field.Doc, field.Default != nil, defaultValue, strings.Join(constraints, ", "), dict, dict)
 		b.WriteString("_result := func() any {\n_obj := Json_Object{fields: []JsonField{{name: " + fmt.Sprintf("%q", field.Name) + ", value: value}}}\n")
 		b.WriteString(g.decodeFields([]*check.Field{independentField(field)}, []*check.Dict{ci.Methods[0].Derived.FieldDicts[0][i]}, g.typeText(record)))
-		fmt.Fprintf(&b, "}()\nif err, ok := _result.(DecodeError); ok { return err }\nreturn _result.(%s).%s\n}},\n", g.typeText(record), name(field.Name).Name)
+		fmt.Fprintf(&b, "}()\nif err, ok := _result.(DecodeError); ok { return err }\nreturn _result.(%s).%s\n}},\n", g.typeText(record), g.fieldReadSuffix(field))
 	}
 	b.WriteString("} }")
 	return b.String()

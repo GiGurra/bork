@@ -15,8 +15,8 @@ func (g *gen) valueMethods(recv ast.Expr, fields []*check.Field) []ast.Decl {
 	var equal ast.Expr = ast.NewIdent("true")
 	hash := []ast.Stmt{define(h, &ast.CallExpr{Fun: ast.NewIdent("uint64"), Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "0"}}})}
 	for _, f := range fields {
-		x := &ast.SelectorExpr{X: v, Sel: name(f.Name)}
-		y := &ast.SelectorExpr{X: w, Sel: name(f.Name)}
+		x := g.fieldRead(v, f)
+		y := g.fieldRead(w, f)
 		equal = &ast.BinaryExpr{X: equal, Op: token.LAND, Y: g.equalValue(x, y, f.Type)}
 		hash = append(hash, assign(h, &ast.CallExpr{Fun: ast.NewIdent("_hashMix"), Args: []ast.Expr{h, g.hashValue(x, f.Type)}}))
 	}

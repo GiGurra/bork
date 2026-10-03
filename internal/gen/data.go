@@ -14,7 +14,7 @@ func (g *gen) selector(e *check.Select) ([]ast.Stmt, ast.Expr) {
 	if x == nil {
 		return stmts, nil
 	}
-	return stmts, &ast.SelectorExpr{X: paren(x), Sel: name(e.Name)}
+	return stmts, g.fieldRead(paren(x), e.Field)
 }
 
 func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
@@ -24,56 +24,72 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 	} else {
 		typ = g.variantType(e.Variant)
 	}
-	// Field values are evaluated in the order they are written.
-	vals := make([]check.Expr, len(e.Fields))
-	for i, fi := range e.Fields {
-		vals[i] = fi.Value
+	// Only eager fields enter source-order evaluation; recipes retain all arguments.
+	var vals []check.Expr
+	for _, field := range e.Fields {
+		if field.Thunk == nil {
+			vals = append(vals, field.Value)
+		}
 	}
 	stmts, xs := g.values(vals)
-	if xs == nil {
+	if xs == nil && len(vals) != 0 {
 		return stmts, nil
 	}
 	lit := &ast.CompositeLit{Type: typ}
-	for i, fi := range e.Fields {
-		var ft check.Type
-		if fi.Field != nil {
-			ft = fi.Field.Type
+	i := 0
+	for _, field := range e.Fields {
+		var value ast.Expr
+		if field.Thunk != nil {
+			value = g.fieldCell(field.Thunk, field.Lazy)
+		} else {
+			value = g.convert(xs[i], field.Value.Type(), field.Field.Type)
+			i++
 		}
-		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(fi.Name), Value: g.convert(xs[i], fi.Value.Type(), ft)})
+		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: value})
 	}
 	return stmts, lit
 }
 
-// copyExpr lowers `x.copy(a: 1, b.c: 2)`. Records are Go struct
-// values, so copying the struct and assigning the changed (possibly
-// nested) fields never affects x.
 func (g *gen) copyExpr(e *check.Copy) ([]ast.Stmt, ast.Expr) {
 	exprs := []check.Expr{e.X}
-	for _, u := range e.Updates {
-		exprs = append(exprs, u.Value)
+	for _, update := range e.Updates {
+		if update.Thunk == nil {
+			exprs = append(exprs, update.Value)
+		}
 	}
 	stmts, xs := g.values(exprs)
 	if xs == nil {
 		return stmts, nil
 	}
-	res := g.newTmp()
-	stmts = append(stmts, define(res, xs[0]))
+	result := g.newTmp()
+	stmts = append(stmts, define(result, xs[0]))
 	rec := e.X.Type().(*check.Record)
-	for i, u := range e.Updates {
-		var lhs ast.Expr = res
-		cur := rec
-		var ft check.Type
-		for _, field := range u.Path {
-			lhs = &ast.SelectorExpr{X: lhs, Sel: name(field)}
-			f := cur.Field(field)
-			ft = f.Type
-			if next, ok := f.Type.(*check.Record); ok {
-				cur = next
-			}
+	i := 1
+	for _, update := range e.Updates {
+		var value ast.Expr
+		if update.Thunk != nil {
+			value = g.fieldCell(update.Thunk, update.Lazy)
+		} else {
+			value = g.convert(xs[i], update.Value.Type(), update.Field.Type)
+			i++
 		}
-		stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.convert(xs[i+1], u.Value.Type(), ft)}})
+		stmts = append(stmts, g.copyField(result, rec, update.Path, value)...)
 	}
-	return stmts, res
+	return stmts, result
+}
+
+// A nested update copies each memo-backed parent before replacing its cell.
+func (g *gen) copyField(root ast.Expr, rec *check.Record, path []string, value ast.Expr) []ast.Stmt {
+	field := rec.Field(path[0])
+	lhs := &ast.SelectorExpr{X: root, Sel: name(field.Name)}
+	if len(path) == 1 {
+		return []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{value}}}
+	}
+	child := g.newTmp()
+	stmts := []ast.Stmt{define(child, g.fieldRead(root, field))}
+	stmts = append(stmts, g.copyField(child, field.Type.(*check.Record), path[1:], value)...)
+	stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.fieldResolved(child, field)}})
+	return stmts
 }
 
 // try lowers `x?` to a type switch that keeps one case and returns the
@@ -338,9 +354,9 @@ func (g *gen) patternTests(p *check.Pat, x ast.Expr) []ast.Expr {
 	case check.PatVariant:
 		vt := g.variantType(p.Variant)
 		conds := []ast.Expr{g.isType(vt, x)}
-		return append(conds, g.fieldTests(p.Fields, &ast.TypeAssertExpr{X: x, Type: vt})...)
+		return append(conds, g.fieldTests(p, &ast.TypeAssertExpr{X: x, Type: vt})...)
 	case check.PatRecord:
-		return g.fieldTests(p.Fields, x)
+		return g.fieldTests(p, x)
 	case check.PatType:
 		var alts []ast.Expr
 		for _, m := range p.Members {
@@ -377,10 +393,10 @@ func listIndex(x ast.Expr, i int) ast.Expr {
 	return &ast.IndexExpr{X: x, Index: &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(i)}}
 }
 
-func (g *gen) fieldTests(fields []*check.PatField, x ast.Expr) []ast.Expr {
+func (g *gen) fieldTests(pattern *check.Pat, x ast.Expr) []ast.Expr {
 	var conds []ast.Expr
-	for _, f := range fields {
-		conds = append(conds, g.tests(f.Pat, &ast.SelectorExpr{X: x, Sel: name(f.Name)})...)
+	for _, f := range pattern.Fields {
+		conds = append(conds, g.tests(f.Pat, g.patternFieldRead(x, pattern.Type, pattern.Variant, f.Name))...)
 	}
 	return conds
 }
@@ -421,11 +437,11 @@ func (g *gen) binds(p *check.Pat, x ast.Expr, narrowed bool) []ast.Stmt {
 			vx = &ast.TypeAssertExpr{X: x, Type: g.variantType(p.Variant)}
 		}
 		for _, f := range p.Fields {
-			out = append(out, g.binds(f.Pat, &ast.SelectorExpr{X: vx, Sel: name(f.Name)}, false)...)
+			out = append(out, g.binds(f.Pat, g.patternFieldRead(vx, p.Type, p.Variant, f.Name), false)...)
 		}
 	case check.PatRecord:
 		for _, f := range p.Fields {
-			out = append(out, g.binds(f.Pat, &ast.SelectorExpr{X: x, Sel: name(f.Name)}, false)...)
+			out = append(out, g.binds(f.Pat, g.patternFieldRead(x, p.Type, p.Variant, f.Name), false)...)
 		}
 	case check.PatList:
 		for i, e := range p.Elems {

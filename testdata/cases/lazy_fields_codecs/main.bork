@@ -1,0 +1,35 @@
+import "bork/env"
+import "bork/encoding"
+pred positive(x: Int) { x > 0 }
+pred ordered(c: Config) { c.lo <= c.hi }
+type Config = {
+  lazy lo: Int where positive = 1
+  lazy hi: Int where positive = 8
+} where ordered derive (Decode, Encode, GoStruct)
+type Choice = sealed { Item { lazy value: Int }, Empty } derive (Decode, Encode)
+fn round[T: GoStruct](value: T): T | GoValueError unsafe go {
+  result, errs := _d_T_GoStruct.FromGo(_d_T_GoStruct.ToGo(value))
+  if len(errs)>0 { return errs[0] }; return result
+}
+fn json[T: Decode + Encode](text: String) uses io {
+  result: T | JsonError | DecodeError = decodeJson(text)
+  match (result) {
+    value: T => println(encodeJson(value))
+    err: JsonError => println(err)
+    err: DecodeError => println(s"error ${err.path}: ${err.message}")
+  }
+}
+fn work(n: Int) uses io: Int { println(s"force $n"); n }
+fn main() {
+  c = Config { lo: 2, hi: 6 }
+  println("encode")
+  println(encodeJson(c))
+  println(round(c))
+  json[Config]("{}")
+  json[Config]("{\"lo\":3,\"hi\":4}")
+  json[Config]("{\"lo\":0,\"hi\":4}")
+  json[Config]("{\"lo\":5,\"hi\":4}")
+  json[Choice]("{\"type\":\"Item\",\"value\":3}")
+  println(env.LoadWith[Config]("", name => Option.None))
+  println(encoding.DecodeCsv[Config]("lo,hi\n3,5\n"))
+}

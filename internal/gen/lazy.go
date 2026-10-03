@@ -22,6 +22,9 @@ type _lazyCell[T any] struct {
 func _lazyNew[T any](init func() T) *_lazyCell[T] {
  return &_lazyCell[T]{init:init, done:make(chan struct{})}
 }
+func _lazyResolved[T any](value T) *_lazyCell[T] {
+ return &_lazyCell[T]{state:2, value:value, constant:_lazyCompileTime}
+}
 func _lazyConstNew[T any](init func() T) *_lazyCell[T] {
  cell := _lazyNew(init)
  cell.constant = true

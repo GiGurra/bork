@@ -1,0 +1,10 @@
+pred positive(x: Int) { x > 0 }
+type Lazy[T] = { lazy value: T }
+type Item = { lazy value: Int where positive }
+type Choice = sealed { Item { lazy value: Int where positive }, Empty }
+fn main() {}
+test "generated lazy record fields" (item: Item) { assert(positive(item.value)) }
+test "generated generic lazy fields" (value: Lazy[Int]) { assertEqual(value.value, value.value) }
+test "generated lazy variant fields" (choice: Choice) {
+  match (choice) { Choice.Item { value: x } => assert(positive(x)), Choice.Empty => {} }
+}

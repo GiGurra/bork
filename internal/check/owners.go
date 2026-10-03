@@ -118,14 +118,14 @@ func keepsValuesSeen(t Type, seen map[Type]bool, typeParams bool) bool {
 		return t == Scope || t == OwnedScope
 	case *Record:
 		for _, f := range t.Fields {
-			if keepsValuesSeen(f.Type, seen, typeParams) {
+			if f.Lazy || keepsValuesSeen(f.Type, seen, typeParams) {
 				return true
 			}
 		}
 	case *Sealed:
 		for _, v := range t.Variants {
 			for _, f := range v.Fields {
-				if keepsValuesSeen(f.Type, seen, typeParams) {
+				if f.Lazy || keepsValuesSeen(f.Type, seen, typeParams) {
 					return true
 				}
 			}

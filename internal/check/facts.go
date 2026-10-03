@@ -156,6 +156,7 @@ func importedDefault(field *Field) bool {
 
 type factChecker struct {
 	// Deferred initializers check every exit, including implicit ? failures.
+	expandedRecipes     map[Expr]bool
 	initializerResultFn *Func
 	initializerResult   func(Expr, env)
 	validatorInvalid    bool
@@ -578,7 +579,11 @@ func (f *factChecker) walk(x Expr, e env) {
 	case *RecordLit:
 		for _, fi := range x.Fields {
 			if !fi.IsDefault || !importedDefault(fi.Field) {
-				f.walk(fi.Value, e)
+				if fi.Thunk != nil {
+					f.fieldBoundary(fi.Value, fi.Field.Type, e, func(x Expr, e env) {})
+				} else {
+					f.walk(fi.Value, e)
+				}
 			}
 		}
 		f.recordObligations(x, e)
@@ -594,7 +599,11 @@ func (f *factChecker) walk(x Expr, e env) {
 	case *Copy:
 		f.walk(x.X, e)
 		for _, u := range x.Updates {
-			f.walk(u.Value, e)
+			if u.Thunk != nil {
+				f.fieldBoundary(u.Value, u.Field.Type, e, func(x Expr, e env) {})
+			} else {
+				f.walk(u.Value, e)
+			}
 		}
 		f.copyObligations(x, e)
 	case *Match:
@@ -754,7 +763,14 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 					if fi.IsDefault {
 						f.defaultUse, f.defaultDecl = lit.Pos(), fd.Decl.Pos
 					}
-					f.oblige(fi.Value, con, f.recordArgs(lit), e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
+					oblige := func(value Expr, facts env) {
+						f.oblige(value, con, f.recordArgs(lit), facts, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
+					}
+					if fi.Thunk != nil {
+						f.fieldBoundary(fi.Value, fi.Field.Type, e, oblige)
+					} else {
+						oblige(fi.Value, e)
+					}
 					f.defaultUse, f.defaultDecl = saveUse, saveDecl
 				}
 			}
@@ -883,7 +899,20 @@ func (f *factChecker) copyObligations(cp *Copy, e env) {
 		value := f.project(cp, fd.Name)
 		for _, con := range fd.Constraints {
 			if constraintChanged(con, fd.Name, cp.Updates) {
-				f.oblige(value, con, f.recordArgs(cp), e, fmt.Sprintf("%s requires %s to be %s", qualify(rec.Name, rec.Pkg, f.from()), pathPhrase(con.Path, fd.Name), con.Text(f.from())))
+				oblige := func(value Expr, facts env) {
+					f.oblige(value, con, f.recordArgs(cp), facts, fmt.Sprintf("%s requires %s to be %s", qualify(rec.Name, rec.Pkg, f.from()), pathPhrase(con.Path, fd.Name), con.Text(f.from())))
+				}
+				deferred := false
+				for _, update := range cp.Updates {
+					if update.Thunk != nil && len(update.Path) == 1 && update.Path[0] == fd.Name {
+						f.fieldBoundary(update.Value, fd.Type, e, oblige)
+						deferred = true
+						break
+					}
+				}
+				if !deferred {
+					oblige(value, e)
+				}
 			}
 		}
 		for _, update := range cp.Updates {
@@ -1161,6 +1190,18 @@ func (f *factChecker) prove(x Expr, ob obligation, e env, depth int) (bool, []Qu
 	x = debugValue(x)
 	if depth > maxDepth || (ob.pred == nil && ob.or == nil) {
 		return false, nil
+	}
+	// A deferred recipe's value includes every local return, not only its tail.
+	// Constructor type-argument facts can reach recipes through projection, too.
+	if f.info.fieldRecipes[x] != nil && !f.expandedRecipes[x] {
+		if f.expandedRecipes == nil {
+			f.expandedRecipes = map[Expr]bool{}
+		}
+		f.expandedRecipes[x] = true
+		defer delete(f.expandedRecipes, x)
+		var paths []branch
+		f.fieldBoundary(x, x.Type(), e, func(value Expr, facts env) { paths = append(paths, branch{x: value, e: facts}) })
+		return f.all(ob, depth, paths...)
 	}
 	if ob.or != nil {
 		// One alternative for the whole value, or different ones for

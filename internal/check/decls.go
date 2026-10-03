@@ -204,7 +204,7 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 			c.errorf(fd.Type.Pos, "field %s cannot have type Ok", fd.Name)
 			t = Invalid
 		}
-		fields = append(fields, &Field{Name: fd.Name, Type: t, Decl: fd, Pkg: c.pkg, Prelude: c.inPrelude, Doc: fd.Doc, GoTags: fd.GoTags, defaultGeneric: hasTypeParam(t)})
+		fields = append(fields, &Field{Lazy: fd.Lazy, Name: fd.Name, Type: t, Decl: fd, Pkg: c.pkg, Prelude: c.inPrelude, Doc: fd.Doc, GoTags: fd.GoTags, defaultGeneric: hasTypeParam(t)})
 	}
 	return fields
 }

@@ -1290,6 +1290,8 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 			} else {
 				debugText += " (forces lazy)"
 			}
+		} else if read, ok := e.Args[0].(*check.Select); ok && read.Field != nil && read.Field.Lazy {
+			debugText += " (forces lazy)"
 		}
 		label := &ast.BinaryExpr{X: g.callerLocation(location), Op: token.ADD, Y: strLit(" " + debugText)}
 		print := fmtCall("Fprintf", &ast.SelectorExpr{X: ast.NewIdent("os"), Sel: ast.NewIdent("Stderr")}, strLit("%s = %s\n"), label, g.stringOf(value, e.Type()))

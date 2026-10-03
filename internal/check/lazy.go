@@ -39,6 +39,26 @@ func (c *checker) deferredInitializer(s *syntax.Binding, want Type) Type {
 	return c.valueInitializer(s, want, kind+" initializer")
 }
 
+// fieldInitializer checks the recipe with its own return/try boundary.
+func (c *checker) fieldInitializer(value syntax.Expr, field *Field) Type {
+	if field == nil || !field.Lazy {
+		return c.exprWant(value, fieldType(field))
+	}
+	binding := &syntax.Binding{Lazy: true, LazyPos: value.Position(), Pos: value.Position(), Name: field.Name, Value: value}
+	typ := c.deferredInitializer(binding, field.Type)
+	metadata := c.info.lazyBindings[binding]
+	metadata.Kind = "field"
+	c.info.lazyFields[value] = metadata
+	delete(c.info.lazyBindings, binding)
+	return typ
+}
+func fieldType(field *Field) Type {
+	if field != nil {
+		return field.Type
+	}
+	return nil
+}
+
 func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string) Type {
 	saved := c.initializerContext
 	c.lambdaDepth++
@@ -73,7 +93,7 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 		t = newUnion(members)
 	}
 	if t == Never && want != nil {
-		t = want
+		t = c.zonk(want)
 	}
 	if containsOwned(t) || containsOwned(want) {
 		c.errorf(s.Pos, "a %s cannot return an OwnedScope; acquire and consume it inside the initializer", boundary)
@@ -89,6 +109,7 @@ func (f *factChecker) deferredBinding(s *Let, e env) {
 	outer, collect := f.fn, f.collect
 	savedFn, savedResult := f.initializerResultFn, f.initializerResult
 	fn := *outer
+	f.initializerResultFn, f.initializerResult = &fn, nil
 	decl := *outer.Decl
 	kind := "lazy"
 	if s.Deferred == AsyncBinding {
@@ -97,7 +118,6 @@ func (f *factChecker) deferredBinding(s *Let, e env) {
 	decl.Name = kind + " " + s.Var.Name
 	fn.Decl, fn.Body, fn.Result = &decl, nil, s.Var.Type
 	fn.ResultConstraints = nil
-	f.initializerResultFn = &fn
 	f.initializerResult = func(value Expr, facts env) {
 		for _, con := range s.Constraints {
 			f.oblige(value, con, f.ownParams(), facts, s.Var.displayName()+" must be "+con.String())
@@ -193,4 +213,34 @@ func (c *checker) noteInitializerCapture(decl any, name string) {
 			ctx.captures[name] = true
 		}
 	}
+}
+
+// Retain validator exclusions while changing only the initializer's result boundary.
+func (f *factChecker) fieldBoundary(value Expr, typ Type, facts env, result func(Expr, env)) {
+	outer, collect := f.fn, f.collect
+	savedFn, savedResult := f.initializerResultFn, f.initializerResult
+	fn := *outer
+	fn.Result, fn.ResultConstraints = typ, nil
+	f.fn, f.collect = &fn, nil
+	f.initializerResultFn, f.initializerResult = &fn, result
+	if f.validators != nil {
+		f.validators[&fn] = f.validators[outer]
+	}
+	defer func() {
+		f.fn, f.collect = outer, collect
+		f.initializerResultFn, f.initializerResult = savedFn, savedResult
+		delete(f.validators, &fn)
+	}()
+	f.tail(value, facts, f.checkResult)
+}
+
+// LazyFieldDescription distinguishes a recipe from a transparent field read.
+func (info *Info) LazyFieldDescription(value Expr) *LazyDescription {
+	if metadata := info.fieldRecipes[value]; metadata != nil {
+		return metadata
+	}
+	if read, ok := value.(*Select); ok && read.Field != nil && read.Field.Lazy {
+		return &LazyDescription{Kind: "independent field", Effects: "charged at construction"}
+	}
+	return nil
 }

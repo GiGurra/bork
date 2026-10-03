@@ -271,7 +271,11 @@ func (c *checker) ensureFieldDefault(field *Field) {
 	case isLiteral(x):
 		x = copyLiteral(x)
 	case !isClosed(x):
-		c.errorf(x.Position(), "a field's default must be a closed value: a literal, or a record or variant of them")
+		if field.Lazy {
+			c.errorf(x.Position(), "computed lazy field defaults are not implemented yet; independent lazy fields require closed defaults")
+		} else {
+			c.errorf(x.Position(), "a field's default must be a closed value: a literal, or a record or variant of them")
+		}
 		return
 	case hasTypeParam(field.Type):
 		c.errorf(x.Position(), "the default of %s can only be a literal, since its type depends on a type parameter", field.Name)
@@ -282,7 +286,7 @@ func (c *checker) ensureFieldDefault(field *Field) {
 		}
 		c.sharedDefaults[x] = true
 	}
-	if t := c.exprWant(x, field.Type); t != Invalid && !assignable(t, field.Type) {
+	if t := c.fieldInitializer(x, field); t != Invalid && !assignable(t, field.Type) {
 		c.errorf(field.Decl.Default.Position(), "the default of %s must be %s, found %s", field.Name, field.Type, t)
 	}
 	c.info.fieldDefaults[field] = x

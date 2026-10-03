@@ -333,6 +333,8 @@ type RecordLit struct {
 
 // FieldValue is a field of a record literal.
 type FieldValue struct {
+	Thunk     *Lambda
+	Lazy      *LazyDescription
 	IsDefault bool
 	Name      string
 	Field     *Field
@@ -349,6 +351,8 @@ type Copy struct {
 // FieldUpdate is a (possibly nested) field a copy changes: Field is the
 // last one on Path.
 type FieldUpdate struct {
+	Thunk *Lambda
+	Lazy  *LazyDescription
 	Path  []string
 	Field *Field
 	Value Expr

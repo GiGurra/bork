@@ -95,6 +95,8 @@ type TypeDecl struct {
 }
 
 type FieldDecl struct {
+	Lazy    bool
+	LazyPos diag.Pos
 	GoTags  []GoTag
 	Default Expr
 	Doc     string

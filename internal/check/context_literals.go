@@ -617,7 +617,12 @@ func (c *checker) genericContextLit(e *syntax.RecordLit, base Type, variant, lab
 		if f := findField(fields, fi.Name); f != nil {
 			pw = c.zonk(f.Type)
 		}
-		types[i] = c.exprWant(fi.Value, pw)
+		field := findField(fields, fi.Name)
+		if field != nil && field.Lazy {
+			types[i] = c.fieldInitializer(fi.Value, field)
+		} else {
+			types[i] = c.exprWant(fi.Value, pw)
+		}
 		if pw != nil {
 			c.solve(pw, types[i])
 		}
