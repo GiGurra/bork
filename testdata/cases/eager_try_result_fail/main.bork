@@ -56,4 +56,14 @@ fn lazyTailPromise(flag: Bool): Int | Problem where Approved {
   lazy value: Int | Problem = { if (flag) { return Problem { code: 0 } }; approvedSource() }
   value?
 }
+pred NumericOk(x: Int | Ok) { match (x) { n: Int => true; unit: Ok => false } }
+fn empty(): Int | Ok {}
+fn bareReturn(): Int | Ok { return Ok }
+fn noElse(flag: Bool): Int | Ok { if (flag) { return 1 } }
+fn emptyFailure(): (Int | Ok) where NumericOk { _ = empty()?; 1 }
+fn bareFailure(): (Int | Ok) where NumericOk { _ = bareReturn()?; 1 }
+fn noElseFailure(flag: Bool): (Int | Ok) where NumericOk { _ = noElse(flag)?; 1 }
+fn lazyEmptyFailure(): (Int | Ok) where NumericOk { lazy value: Int | Ok = { _ = empty()?; 1 }; value? }
+pred RejectOk(x: Int | Ok) { false }
+fn bareUnit(): Ok where RejectOk { return }
 fn main() {}

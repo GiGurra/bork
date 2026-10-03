@@ -373,6 +373,8 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		e = f.stmts(x.Stmts, e)
 		if x.Tail != nil {
 			f.tail(x.Tail, e, result)
+		} else if x.Type() != Never {
+			result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e)
 		}
 	case *ScopeBlock:
 		for _, p := range x.Policies {
@@ -380,12 +382,17 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		}
 		f.tail(x.Body, e, result)
 	case *If:
-		if x.Else == nil {
-			f.walk(x, e)
+		f.walk(x.Cond, e)
+		if x.Cond.Type() == Never {
 			return
 		}
-		f.walk(x.Cond, e)
 		f.tail(x.Then, e.with(f.conditionFacts(x.Cond, true)...), result)
+		if x.Else == nil {
+			if v := constOf(x.Cond); v == nil || v.Kind() != constant.Bool || !constant.BoolVal(v) {
+				result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e.with(f.conditionFacts(x.Cond, false)...))
+			}
+			return
+		}
 		f.tail(x.Else, e.with(f.conditionFacts(x.Cond, false)...), result)
 	case *Match:
 		f.walk(x.X, e)
@@ -583,6 +590,8 @@ func (f *factChecker) walk(x Expr, e env) {
 	case *Return:
 		if x.Value != nil {
 			f.tail(x.Value, e, f.checkResult)
+		} else {
+			f.checkResult(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e)
 		}
 	case *Select:
 		f.walk(x.X, e)
@@ -1848,6 +1857,8 @@ func (f *factChecker) closed(x Expr) bool {
 	switch x := x.(type) {
 	case *FloatBits:
 		return true
+	case *Block:
+		return x.Type() == Ok && len(x.Stmts) == 0 && x.Tail == nil
 	case *ListLit:
 		for _, el := range x.Elems {
 			if !f.closed(el) {
@@ -1877,6 +1888,10 @@ func (f *factChecker) literalText(x Expr) string {
 	switch x := x.(type) {
 	case *FloatBits:
 		return fmt.Sprintf("%s(bits=0x%x)", x.Type(), x.Bits)
+	case *Block:
+		if x.Type() == Ok && len(x.Stmts) == 0 && x.Tail == nil {
+			return "Ok"
+		}
 	case *ListLit:
 		if x.Nil {
 			return "nil"

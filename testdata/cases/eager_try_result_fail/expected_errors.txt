@@ -15,3 +15,8 @@ main.bork:45:44: needsSuccess requires x to be Success, but for a value bad can 
 main.bork:48:3: lazyFailure promises a result that is Approved, but for a value problem can return, Approved(Problem { code: 0 }) is false
 main.bork:52:3: lazyReturn promises a result that is Approved, but Approved(Problem { code: 0 }) is false
 main.bork:57:3: lazyTailPromise promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:63:53: emptyFailure promises a result that is NumericOk, but for a value empty can return, NumericOk(Ok) is false
+main.bork:64:52: bareFailure promises a result that is NumericOk, but for a value bareReturn can return, NumericOk(Ok) is false
+main.bork:65:64: noElseFailure promises a result that is NumericOk, but for a value noElse can return, NumericOk(Ok) is false
+main.bork:66:97: lazyEmptyFailure promises a result that is NumericOk, but for a value empty can return, NumericOk(Ok) is false
+main.bork:68:36: bareUnit promises a result that is RejectOk, but RejectOk(Ok) is false
