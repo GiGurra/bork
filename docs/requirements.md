@@ -1302,11 +1302,12 @@ use fixed regular-file/directory permissions (0644/0755), without preserving
 source timestamps or ownership. ZIP directory names are normalized with a
 trailing slash. These APIs return data rather than extracting onto disk.
 
-Readers and writers reject path traversal, absolute paths, backslashes, colons,
+Readers and writers reject path traversal, absolute paths, backslashes, colons, NULs,
 links and special entries; directories cannot carry data. Decompression limits
 (default 64 MiB, configurable and nonnegative) count total uncompressed data
 across archive entries and concatenated gzip members. They do not bound header
 metadata, member count, compressed input or CPU time. Gzip and ZIP checksums are
-verified, and malformed/truncated data becomes IoError. Pure APIs return no
+verified, and malformed headers or truncated member data becomes IoError.
+TAR permits omitted trailing zero blocks, following Go's archive reader. Pure APIs return no
 partial data on error; file operations and callbacks may already have produced
 partial output. Stream output never exceeds its configured byte limit.

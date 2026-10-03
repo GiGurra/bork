@@ -1,6 +1,7 @@
 import "bork/compress"
 import "bork/archive"
 import "bork/fs"
+import "bork/time"
 
 fn codecs() uses io: Unit | IoError {
   data = bytes([toByte(0), toByte(255), toByte(65)])
@@ -33,6 +34,17 @@ fn codecs() uses io: Unit | IoError {
   double = [archive.Member { name: "one", data: data, directory: false }, archive.Member { name: "two", data: data, directory: false }]
   println(match (archive.ReadZip(archive.Zip(double)?, 5)) { value: List[archive.Member] => false, error: IoError => true })
   println(match (archive.ReadTar(archive.Tar(double)?, 5)) { value: List[archive.Member] => false, error: IoError => true })
+  println(match (compress.Gunzip(defaultLimitGzip())) { value: Bytes => false, error: IoError => true })
+  println(match (archive.ReadZip(defaultLimitZip())) { value: List[archive.Member] => false, error: IoError => error.message.contains("maxBytes") })
+  println(match (archive.ReadTar(defaultLimitTar())) { value: List[archive.Member] => false, error: IoError => error.message.contains("maxBytes") })
+  ["hardlink", "device", "fifo"].forEach(kind => {
+    println(match (archive.ReadTar(specialTar(kind))) { value: List[archive.Member] => false, error: IoError => true })
+  })
+  println(match (archive.ReadZip(specialZip())) { value: List[archive.Member] => false, error: IoError => true })
+  nulMember = [archive.Member { name: "bad\u0000name", data: bytes([]), directory: false }]
+  println(match (archive.Zip(nulMember)) { value: Bytes => false, error: IoError => true })
+  println(match (archive.Tar(nulMember)) { value: Bytes => false, error: IoError => true })
+  println(match (archive.ReadZip(rawZip("bad\u0000name", false))) { value: List[archive.Member] => false, error: IoError => true })
   names = ["../escape", "/absolute", "a/../escape", "a\\escape", "C:/escape", ".", ""]
   names.forEach(name => {
     println(match (archive.ReadZip(rawZip(name, false))) { value: List[archive.Member] => false, error: IoError => true })
@@ -43,7 +55,7 @@ fn codecs() uses io: Unit | IoError {
   })
 }
 
-fn files(s: Scope) uses io: Unit | fs.Error {
+fn files(s: Scope) uses io + clock: Unit | fs.Error {
   source = fs.TempFile(s)?
   sourceWritten = fs.WriteTo(source, utf8Bytes("file stream"))?
   input = fs.Open(fs.Path(source), s)?
@@ -58,6 +70,12 @@ fn files(s: Scope) uses io: Unit | fs.Error {
   archive.WriteZip(zipFile, entries)?
   // ZIP needs random access and reads the whole file, regardless of offset.
   archive.ForEachZip(zipFile, entry => println(entry.name))?
+  archive.ForEachZip(zipFile, entry => println(time.Now().unixNanos > 0))?
+  bad = [archive.Member { name: "bad\u0000name", data: bytes([]), directory: false }]
+  println(match (archive.WriteZip(zipFile, bad)) { value: Unit => false, error: IoError => true })
+  malicious = fs.TempFile(s)?
+  maliciousWritten = fs.WriteTo(malicious, rawZip("bad\u0000name", false))?
+  println(match (archive.ForEachZip(malicious, entry => println("unexpected"))) { value: Unit => false, error: IoError => true })
   cappedInput = fs.Open(fs.Path(zipped), s)?
   cappedOutput = fs.TempFile(s)?
   println(match (compress.GunzipTo(cappedInput, cappedOutput, 4)) { value: Int => false, error: IoError => true })
@@ -67,6 +85,9 @@ fn files(s: Scope) uses io: Unit | fs.Error {
   archive.WriteTar(tarFile, entries)?
   tarInput = fs.Open(fs.Path(tarFile), s)?
   archive.ForEachTar(tarInput, entry => println(utf8String(entry.data)))?
+  clockTar = fs.Open(fs.Path(tarFile), s)?
+  archive.ForEachTar(clockTar, entry => println(time.Now().unixNanos > 0))?
+  println(match (archive.WriteTar(tarFile, bad)) { value: Unit => false, error: IoError => true })
   cappedTar = fs.Open(fs.Path(tarFile), s)?
   println(match (archive.ForEachTar(cappedTar, entry => println("unexpected"), 1)) { value: Unit => false, error: IoError => true })
 }

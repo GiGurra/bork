@@ -1,4 +1,4 @@
-// Package archive reads and writes portable regular-file/directory archives.
+// Package archive reads and writes relative-path regular-file/directory archives.
 // Entries are data, never extracted automatically. Links and special files fail.
 import "bork/fs"
 
@@ -8,7 +8,7 @@ fn validName(name: String, directory: Bool): Bool unsafe go {
   import "io/fs"
   import "strings"
   if directory { name = strings.TrimSuffix(name, "/") }
-  return name != "." && fs.ValidPath(name) && !strings.ContainsAny(name, "\\:")
+  return name != "." && fs.ValidPath(name) && !strings.ContainsAny(name, "\\:\x00")
 }
 
 fn validate(entries: List[Member]): Unit | IoError {

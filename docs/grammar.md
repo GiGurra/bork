@@ -317,10 +317,11 @@ leak into bork values. See [the UUID example](../examples/uuid/main.bork).
   declare `uses io` and charge callback effects. Callers retain file ownership.
   TAR and gzip consume the current file offset; ZIP iteration uses random access
   over the whole file. Writers use the current output offset; ZIP files should
-  start empty at offset zero. Archives contain portable relative paths;
-  traversal, absolute paths, backslashes, colons, links and special files are
+  start empty at offset zero. Archives contain relative paths;
+  traversal, absolute paths, backslashes, colons, NULs, links and special files are
   errors. No API extracts entries onto disk. Limits are nonnegative, cumulative
   uncompressed data bytes across members (including concatenated gzip members).
-  Checksum and malformed input failures return IoError. File writes and callbacks
+  Checksum and malformed input failures return IoError; TAR permits omitted
+  trailing zero blocks, as Go does. File writes and callbacks
   may have already happened when a later error is returned. See
   [examples/compress_archive](../examples/compress_archive/main.bork).

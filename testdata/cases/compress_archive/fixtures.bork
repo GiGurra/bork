@@ -43,3 +43,57 @@ fn concat(a: Bytes, b: Bytes): Bytes unsafe go {
 fn truncateTar(data: Bytes): Bytes unsafe go {
   return _borkBytesFrom(_borkBytesData(data)[:514])
 }
+fn defaultLimitGzip(): Bytes unsafe go {
+  import "compress/gzip"
+  import "strings"
+  var out strings.Builder
+  writer := gzip.NewWriter(&out)
+  chunk := []byte(strings.Repeat("x", 65536))
+  for i := 0; i < 1024; i++ { writer.Write(chunk) }
+  writer.Write([]byte("x"))
+  writer.Close()
+  return _borkBytesFrom([]byte(out.String()))
+}
+fn defaultLimitZip(): Bytes unsafe go {
+  import "archive/zip"
+  import "strings"
+  var out strings.Builder
+  writer := zip.NewWriter(&out)
+  target, _ := writer.CreateRaw(&zip.FileHeader{Name: "huge", UncompressedSize64: 67108865})
+  target.Write(nil)
+  writer.Close()
+  return _borkBytesFrom([]byte(out.String()))
+}
+fn defaultLimitTar(): Bytes unsafe go {
+  import "archive/tar"
+  import "strings"
+  var out strings.Builder
+  writer := tar.NewWriter(&out)
+  writer.WriteHeader(&tar.Header{Name: "huge", Size: 67108865, Typeflag: tar.TypeReg})
+  return _borkBytesFrom([]byte(out.String()))
+}
+fn specialTar(kind: String): Bytes unsafe go {
+  import "archive/tar"
+  import "strings"
+  var out strings.Builder
+  writer := tar.NewWriter(&out)
+  entryType := byte(tar.TypeLink)
+  if kind == "device" { entryType = tar.TypeChar }
+  if kind == "fifo" { entryType = tar.TypeFifo }
+  writer.WriteHeader(&tar.Header{Name: "special", Typeflag: entryType, Linkname: "target"})
+  writer.Close()
+  return _borkBytesFrom([]byte(out.String()))
+}
+fn specialZip(): Bytes unsafe go {
+  import "archive/zip"
+  import "io/fs"
+  import "strings"
+  var out strings.Builder
+  writer := zip.NewWriter(&out)
+  header := &zip.FileHeader{Name: "special"}
+  header.SetMode(fs.ModeNamedPipe | 0644)
+  target, _ := writer.CreateHeader(header)
+  target.Write(nil)
+  writer.Close()
+  return _borkBytesFrom([]byte(out.String()))
+}
