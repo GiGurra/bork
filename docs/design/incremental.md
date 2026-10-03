@@ -151,6 +151,8 @@ skips closed non-generic defaults in non-root packages. Imported user packages
 must prove their own defaults once per build, even when no caller uses the
 field. Fix that in the clean compiler first and test invalid imported defaults;
 then cached package artifacts can carry successful declaring-package proofs.
+Embedded standard defaults can rely on compiler-test validation tied to the
+compiler namespace; this exemption must never include mutable user packages.
 Until that fix is present, imported success cannot certify these defaults and
 is not eligible for a universally proved artifact. Generic and sibling-dependent
 use-site obligations remain separate. Root tests are still context-specific;
