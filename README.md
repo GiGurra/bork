@@ -142,6 +142,7 @@ bork emit examples/hello     # show the generated Go
 bork test examples/payments  # run the tests, checking trusted facts and rules
 bork test --update .         # run the tests, writing the snapshots assertSnapshot finds missing or changed
 bork test --parallel 8 .     # run up to 8 tests at a time, each with its own mocks and snapshots
+bork test --hermetic .       # fail, without running, the tests that could reach the network unmocked
 bork test --auto-properties examples/payments  # also call trusted functions on generated arguments
 bork fmt examples           # format .bork files recursively in place
 bork fmt --check examples    # exit 1 if formatting would change a file

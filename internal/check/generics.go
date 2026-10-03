@@ -361,6 +361,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 	c.provideNeeds(e, fn, name)
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
+		c.testCall(fn, e.Pos, false)
 	}
 	var valid bool
 	args, valid = c.namedArgs(e, name, fn, args)
@@ -757,6 +758,7 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Type {
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
+		c.testCall(fn, e.Position(), true)
 	}
 	inst := &Instance{Func: fn, Params: fn.Params, Result: fn.Result}
 	if len(fn.TypeParams) > 0 {

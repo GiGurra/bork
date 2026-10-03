@@ -266,6 +266,9 @@ type TestOptions struct {
 	// one from its name. Cases, if not 0, is how many cases each runs.
 	Seed  int64
 	Cases int
+	// Hermetic fails, without running it, every test that can reach the
+	// network (a function doing net in Go code) with no mock in force.
+	Hermetic bool
 	// Parallel, if more than 1, is how many tests run at a time. Each
 	// runs on goroutines of its own, and the report keeps their order.
 	Parallel int
@@ -293,7 +296,7 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 		diags.AddCode(packagePos(files), "package.no-tests", "package has no tests or rules (add `test \"name\" { ... }`)")
 		return 1, &DiagError{Diags: diags}
 	}
-	goSrc, err := gen.Tests(files, info, opts.AutoProperties)
+	goSrc, err := gen.TestsWith(files, info, gen.TestOptions{AutoProperties: opts.AutoProperties, Hermetic: opts.Hermetic})
 	if err != nil {
 		var diags *diag.List
 		if errors.As(err, &diags) {

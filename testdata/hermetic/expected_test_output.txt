@@ -1,0 +1,39 @@
+ok    a mock of the function that reaches the network
+ok    a mock of a function on the way
+ok    io is not the network
+FAIL  a call before the mock
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:41:11: page -> Get; mock Get
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+FAIL  a call after the mock's block
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:49:11: page -> Get; mock Get
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+FAIL  a mock that calls the real function
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:53:22: Get (in the mock of Get, its name means the function before the mock)
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+FAIL  a call in a lambda
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:58:23: page -> Get; mock Get
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+FAIL  a property test
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:62:11: page -> Get; mock Get
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+FAIL  a lambda that leaves the mock's block
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:68:15: page -> Get; mock Get
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+ok    a mock at the start of the test covers its tasks
+FAIL  a class method reaches its instances
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:92:14: fetchIt -> fetchIt -> Get; mock Get
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+FAIL  a b
+      not hermetic (bork test --hermetic): it can reach the network with no mock in force:
+      main.bork:101:10: Get; mock Get
+      A mock covers a call written in its block after it; a call in a lambda, or a function passed as a value, may run elsewhere, and only mocks at the start of the test cover it.
+ok    a-b
+5 passed, 8 failed
+exit code 1

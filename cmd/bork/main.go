@@ -48,6 +48,7 @@ type testParams struct {
 	AutoProperties bool   `optional:"true" descr:"also property-test the functions whose promises are trusted (unsafe go, or trust), on generated arguments"`
 	Seed           int64  `short:"s" optional:"true" descr:"the seed of every property test (default: one from the test's name)"`
 	Cases          int    `short:"c" optional:"true" descr:"how many cases each property test runs (default 100)"`
+	Hermetic       bool   `optional:"true" descr:"fail, without running them, the tests that can reach the network (net in Go code) with no mock in force"`
 	Parallel       int    `short:"p" optional:"true" descr:"how many tests run at a time, each on goroutines of its own (default 1); the report keeps their order"`
 }
 
@@ -320,7 +321,7 @@ func main() {
 					if p.Parallel < 0 {
 						fail(errors.New("--parallel must be positive"))
 					}
-					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases, Parallel: p.Parallel})
+					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases, Parallel: p.Parallel, Hermetic: p.Hermetic})
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stderr)
 					}
