@@ -31,6 +31,7 @@ type Session struct {
 	stats   SessionStats
 	watch   bool
 	attempt *watchAttempt
+	observe func(string)
 }
 
 // SessionStats counts requests and explains the most recent hit or miss.
@@ -76,6 +77,8 @@ func (s *Session) Stats() SessionStats {
 func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	defer func() { phase(s.observe, "") }()
+	phase(s.observe, "configuration")
 	var previous *goContext
 	if s.last != nil {
 		previous = s.last.context
@@ -83,6 +86,7 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 		previous = s.attempt.context
 	}
 	context := captureSessionGoContext(previous)
+	phase(s.observe, "validate")
 	if reason := s.hitMissReason(path, emit, context); reason == "" {
 		s.stats.Hits++
 		s.stats.Reason = "unchanged validated inputs"
@@ -97,13 +101,13 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 	var err error
 	if s.watch {
 		s.attempt = newWatchAttempt(context)
-		loaded, module, err = loadCompilationInputsFrom(path, nil, func() *sourceSnapshot {
+		loaded, module, err = loadCompilationInputsFrom(path, s.observe, func() *sourceSnapshot {
 			inputs := newSourceSnapshot()
 			s.attempt.inputs = inputs
 			return inputs
 		})
 	} else {
-		loaded, module, err = loadCompilationInputs(path, nil)
+		loaded, module, err = loadCompilationInputs(path, s.observe)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -121,21 +125,24 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 			return assets
 		}
 	}
-	program, err := checkLoadedProgramTracked(loaded, module, context, captureAssets, usage, nil)
+	program, err := checkLoadedProgramTracked(loaded, module, context, captureAssets, usage, s.observe)
 	if err != nil {
 		return nil, nil, err
 	}
+	phase(s.observe, "warnings")
 	warnings := check.DebugWarnings(program.info)
 	warnings.Append(check.LazyWarnings(program.info))
 	warnings.Append(check.MigrationWarnings(program.info))
 	warningData := warnings.Sorted()
 	var src []byte
 	if emit {
+		phase(s.observe, "generate")
 		src, err = gen.Package(program.files, program.info)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
+	phase(s.observe, "retain")
 	if reason := sessionBypassReason(context, usage); reason != "" {
 		s.stats.Bypasses++
 		s.stats.Reason = reason

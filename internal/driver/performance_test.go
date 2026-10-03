@@ -72,12 +72,14 @@ func BenchmarkCompilerPhases(b *testing.B) {
 		{"hello", "../../examples/hello"},
 		{"calculator", "../../examples/calculator"},
 		{"signup_api", "../../examples/signup_api"},
+		{"config", "../../examples/config"},
+		{"http_server", "../../examples/http_server"},
 		{"synthetic100", syntheticProgram(b, 100)},
 		{"synthetic1000", syntheticProgram(b, 1000)},
 	}
 	for _, item := range paths {
 		b.Run(item.name, func(b *testing.B) {
-			for _, target := range []string{"parse", "module", "check", "lower", "contracts", "embeds", "effects", "lifetimes", "facts", "generate", "go_build"} {
+			for _, target := range []string{"parse", "module", "configuration", "check", "lower", "contracts", "embeds", "effects", "lifetimes", "comptime", "facts", "generate", "go_build"} {
 				b.Run(target, func(b *testing.B) {
 					out := filepath.Join(b.TempDir(), "program")
 					// Prime process-local metadata and the Go cache independently of
@@ -85,6 +87,9 @@ func BenchmarkCompilerPhases(b *testing.B) {
 					files, info, src, err := emitObserved(item.path, nil)
 					if err != nil {
 						b.Fatal(err)
+					}
+					if target == "comptime" && len(info.Comptimes) == 0 {
+						b.Skip("program has no comptime expressions")
 					}
 					if target == "go_build" {
 						if err := buildGo(files, src, out, info.Embeds...); err != nil {
@@ -170,7 +175,7 @@ func TestObservedEmission(t *testing.T) {
 	if string(got) != string(want) {
 		t.Fatal("observation changed generated Go")
 	}
-	expected := []string{"parse", "module", "check", "lower", "contracts", "embeds", "effects", "lifetimes", "facts", "generate"}
+	expected := []string{"parse", "module", "configuration", "check", "lower", "contracts", "embeds", "effects", "lifetimes", "facts", "generate"}
 	if !slices.Equal(phases, expected) {
 		t.Fatalf("phases = %v, want %v", phases, expected)
 	}
@@ -318,6 +323,118 @@ func BenchmarkBuildStages(b *testing.B) {
 				}
 				b.ReportMetric(float64(len(src)), "go-bytes")
 			})
+		})
+	}
+}
+
+// BenchmarkSessionFirstPhases reports first-request costs including configuration
+// and inventory seeding. Every iteration owns a fresh Session; no result hits.
+func BenchmarkSessionFirstPhases(b *testing.B) {
+	for _, item := range []struct{ name, path string }{
+		{"hello", "../../examples/hello"}, {"config", "../../examples/config"},
+		{"http_server", "../../examples/http_server"}, {"synthetic1000", syntheticProgram(b, 1000)},
+	} {
+		b.Run(item.name, func(b *testing.B) {
+			for _, target := range []string{"configuration", "validate", "parse", "module", "check", "lower", "contracts", "embeds", "effects", "lifetimes", "comptime", "facts", "warnings", "generate", "retain"} {
+				b.Run(target, func(b *testing.B) {
+					// Calibrate against full requests, including very short or absent phases.
+					// Otherwise a sub-microsecond phase schedules millions of full compiles.
+					var elapsed time.Duration
+					var started time.Time
+					observed := false
+					observe := func(name string) {
+						if !started.IsZero() {
+							elapsed += time.Since(started)
+							started = time.Time{}
+						}
+						pprof.SetGoroutineLabels(pprof.WithLabels(context.Background(), pprof.Labels("phase", name, "program", item.name)))
+						if name == target {
+							observed = true
+							started = time.Now()
+						}
+					}
+					b.ReportAllocs()
+					b.ResetTimer()
+					for b.Loop() {
+						session := NewSession()
+						session.observe = observe
+						if _, err := session.Emit(item.path); err != nil {
+							b.Fatal(err)
+						}
+					}
+					pprof.SetGoroutineLabels(context.Background())
+					if !observed {
+						b.Skip("program does not execute this phase")
+					}
+					b.ReportMetric(float64(elapsed.Nanoseconds())/float64(b.N), "phase-ns/op")
+				})
+			}
+		})
+	}
+}
+
+// BenchmarkGoStaging compares identical captured emitted inputs. Each mode
+// primes its own cache variant before timing; stable keeps a directory for the
+// benchmark's lifetime. It measures staging and Go compilation/linking only.
+func BenchmarkGoStaging(b *testing.B) {
+	for _, item := range []struct{ name, path string }{
+		{"config", "../../examples/config"}, {"http_server", "../../examples/http_server"},
+	} {
+		b.Run(item.name, func(b *testing.B) {
+			program, err := checkProgramObserved(item.path, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			src, err := gen.Package(program.files, program.info)
+			if err != nil {
+				b.Fatal(err)
+			}
+			for _, mode := range []string{"random", "trimpath", "stable"} {
+				b.Run(mode, func(b *testing.B) {
+					stable := filepath.Join(b.TempDir(), "stage")
+					out := filepath.Join(b.TempDir(), "program")
+					build := func() {
+						dir := stable
+						if mode != "stable" {
+							var err error
+							dir, err = os.MkdirTemp("", "bork-stage-benchmark-*")
+							if err != nil {
+								b.Fatal(err)
+							}
+							defer func() { _ = os.RemoveAll(dir) }()
+						}
+						if err := os.MkdirAll(dir, 0o755); err != nil {
+							b.Fatal(err)
+						}
+						if err := os.WriteFile(filepath.Join(dir, "main.go"), src, 0o644); err != nil {
+							b.Fatal(err)
+						}
+						if err := stageEmbeds(dir, program.info.Embeds); err != nil {
+							b.Fatal(err)
+						}
+						if _, err := program.module.write(dir); err != nil {
+							b.Fatal(err)
+						}
+						args := []string{"build", "-mod=readonly", "-buildvcs=false", "-o", out, "."}
+						if mode == "trimpath" {
+							args = append([]string{"build", "-trimpath"}, args[1:]...)
+						}
+						cmd := program.context.command(args...)
+						cmd.Dir = dir
+						cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
+						if output, err := cmd.CombinedOutput(); err != nil {
+							b.Fatalf("%v:\n%s", err, output)
+						}
+					}
+					build()
+					b.ReportAllocs()
+					b.ResetTimer()
+					for b.Loop() {
+						build()
+					}
+					b.ReportMetric(float64(len(src)), "go-bytes")
+				})
+			}
 		})
 	}
 }
