@@ -94,9 +94,13 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 // Rebuild semantic state from independently parsed captured inputs. Callers own
 // the parsed files; immutable source/module/context snapshots may be shared.
 func checkLoadedProgramObserved(loaded *loadedSources, module *goModuleInputs, context *goContext, captureAssets func(*check.Info, *diag.List, *sourceSnapshot) *embedSnapshot, observe func(string)) (*compiledProgram, error) {
+	return checkLoadedProgramTracked(loaded, module, context, captureAssets, nil, observe)
+}
+
+func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, context *goContext, captureAssets func(*check.Info, *diag.List, *sourceSnapshot) *embedSnapshot, usage *goUsage, observe func(string)) (*compiledProgram, error) {
 	files, root, diags := loaded.Files, loaded.Root, loaded.Diags
 	phase(observe, "check")
-	info := check.ProgramObserved(files, root, diags, goPackages{files: files, module: module, context: context}, observe)
+	info := check.ProgramObserved(files, root, diags, goPackages{files: files, module: module, context: context, usage: usage}, observe)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
@@ -122,7 +126,15 @@ func checkLoadedProgramObserved(loaded *loadedSources, module *goModuleInputs, c
 		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "facts")
-	check.Facts(files, info, diags, evaluatorWithContext(files, info, module, context))
+	evaluate := evaluatorWithContext(files, info, module, context)
+	if usage != nil {
+		inner := evaluate
+		evaluate = func(queries []check.Query) ([]bool, error) {
+			usage.evaluator = true
+			return inner(queries)
+		}
+	}
+	check.Facts(files, info, diags, evaluate)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}

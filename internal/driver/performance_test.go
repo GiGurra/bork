@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
@@ -170,4 +171,93 @@ func TestObservedEmission(t *testing.T) {
 	if !slices.Equal(phases, expected) {
 		t.Fatalf("phases = %v, want %v", phases, expected)
 	}
+}
+
+// BenchmarkSession includes configuration refresh, content validation and fresh
+// package-name metadata on hits; it must not be compared with fresh CLI startup.
+func BenchmarkSession(b *testing.B) {
+	for _, corpus := range []struct{ name, path string }{
+		{"hello", "../../examples/hello"},
+		{"synthetic1000", syntheticProgram(b, 1000)},
+	} {
+		b.Run(corpus.name, func(b *testing.B) {
+			path := corpus.path
+			for _, emit := range []bool{false, true} {
+				name := "check"
+				if emit {
+					name = "emit"
+				}
+				b.Run(name, func(b *testing.B) {
+					request := func(session *Session) error {
+						if emit {
+							_, err := session.Emit(path)
+							return err
+						}
+						_, err := session.Check(path)
+						return err
+					}
+					b.Run("first", func(b *testing.B) {
+						b.ReportAllocs()
+						for b.Loop() {
+							if err := request(NewSession()); err != nil {
+								b.Fatal(err)
+							}
+						}
+					})
+					b.Run("unchanged", func(b *testing.B) {
+						session := NewSession()
+						if err := request(session); err != nil {
+							b.Fatal(err)
+						}
+						b.ReportAllocs()
+						for b.Loop() {
+							if err := request(session); err != nil {
+								b.Fatal(err)
+							}
+						}
+						b.ReportMetric(float64(session.Stats().Hits)/float64(b.N), "hit/op")
+					})
+				})
+			}
+		})
+	}
+}
+
+func BenchmarkSessionValidation(b *testing.B) {
+	session := NewSession()
+	if _, err := session.Emit("../../examples/hello"); err != nil {
+		b.Fatal(err)
+	}
+	artifact := session.last
+	if artifact == nil {
+		b.Fatal(session.Stats())
+	}
+	b.Run("configuration", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if ctx := captureGoContext(); ctx.err != nil {
+				b.Fatal(ctx.err)
+			}
+		}
+	})
+	b.Run("source_assets", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			if !artifact.inputs.current() || !artifact.assets.current() {
+				b.Fatal("inputs changed")
+			}
+		}
+	})
+	b.Run("names", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			for _, input := range artifact.names {
+				usage := &goUsage{}
+				got := (goPackages{module: artifact.module, context: artifact.context, usage: usage}).Names(input.paths)
+				if !maps.Equal(got, input.names) {
+					b.Fatal("names changed")
+				}
+			}
+		}
+	})
 }

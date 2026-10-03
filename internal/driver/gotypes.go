@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"go/types"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -21,9 +23,13 @@ type goPackages struct {
 	files   []*syntax.File
 	module  *goModuleInputs
 	context *goContext
+	usage   *goUsage
 }
 
 func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string]error) {
+	if gp.usage != nil {
+		gp.usage.types = true
+	}
 	pkgs := map[string]*types.Package{}
 	errs := map[string]error{}
 	fail := func(err error) (map[string]*types.Package, map[string]error) {
@@ -99,11 +105,21 @@ var standardGoNames sync.Map // configuration namespace + import path -> package
 
 func (gp goPackages) Names(paths []string) map[string]string {
 	names := map[string]string{}
+	standard := map[string]bool{}
+	if gp.usage != nil {
+		defer func() {
+			input := goNameInput{paths: slices.Clone(paths), names: maps.Clone(names), standard: true}
+			for _, path := range paths {
+				input.standard = input.standard && standard[path]
+			}
+			gp.usage.names = append(gp.usage.names, input)
+		}()
+	}
 	ctx := gp.goContext()
 	if ctx.err != nil || ctx.driverErr != nil {
 		return names
 	}
-	cache := ctx.namesCache
+	cache := ctx.namesCache && gp.usage == nil
 	var missing []string
 	for _, path := range paths {
 		if name, ok := standardGoNames.Load(standardGoNameKey{ctx.namespace, path}); cache && ok {
@@ -137,7 +153,8 @@ func (gp goPackages) Names(paths []string) map[string]string {
 	for _, pkg := range loaded {
 		if len(pkg.Errors) == 0 {
 			names[pkg.PkgPath] = pkg.Name
-			if cache && ctx.standardPackage(pkg) {
+			standard[pkg.PkgPath] = ctx.standardPackage(pkg)
+			if cache && standard[pkg.PkgPath] {
 				standardGoNames.Store(standardGoNameKey{ctx.namespace, pkg.PkgPath}, pkg.Name)
 			}
 		}
