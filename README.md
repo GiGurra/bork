@@ -40,6 +40,8 @@ Predicates are ordinary bork functions; on constants, the compiler runs them at 
 
 Functions can relate their inputs directly: `fn interval(lo: Int, hi: Int) where lo <= hi: Range { ... }`, or `where sameLength(xs, ys)` using an ordinary predicate. The clause precedes `uses` and the result type; callers prove it and function bodies can rely on it.
 
+Integer arithmetic facts respect sized overflow: `lo < hi` proves `lo + 1 <= hi`, while positive operands alone cannot prove a positive sum. Addition and subtraction require bounds that exclude wrapping at every intermediate.
+
 Record fields can require facts about siblings: `type Range = { lo: Int, hi: Int where atLeast(lo) }`. Construction and `copy` prove the relation using the completed values; changing `lo` also rechecks the requirement on `hi`.
 
 Matching `Option.Some { value }` preserves fact aliases on the payload, including when an imported function returns `Option[Alias] | Error`. The value can be returned as the alias or bound in `with` without checking its predicate again.

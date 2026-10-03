@@ -349,6 +349,18 @@ Sized arithmetic constant evaluation declines overflowing intermediate results,
 and Float arithmetic rounds to its runtime precision. Float guards retain NaN
 polarity. Branch facts keep their existing scope and OR alternatives.
 
+### Overflow-safe integer arithmetic implications (bork-ggj8ew)
+
+The facts pass may prove comparisons involving sized integer addition and subtraction from established bounds. Arithmetic keeps its ordinary wrapping runtime behavior. An expression is treated as mathematical addition/subtraction only after every intermediate is proven to fit its concrete integer type. Float arithmetic is excluded because of rounding, infinities and NaN.
+
+Use exact compiler constants for proof calculations and the concrete type's minimum/maximum as initial bounds. Branch comparisons add relative bounds; strict integer order supplies the one-unit gap. For `lo < hi`, the domain bound `hi <= max` implies `lo <= max - 1`, so `lo + 1` cannot wrap and is at most `hi`. Similarly, `lo < hi` makes `hi - 1` safe and at least `lo`. A general literal shift requires enough bounds to rule out overflow at each step. Addition/subtraction of two runtime operands uses conservative interval bounds; `a > 10` and `b > 10` alone cannot prove anything about their mathematical sum, while explicit upper bounds can establish a safe positive result.
+
+Arithmetic goals use a bounded difference-constraint graph over stable integer expression identities and a distinguished zero. Comparisons constrain the difference of two values, and type domains constrain each value relative to zero. Safe shifts add equations between the shifted result and its operand. Safe sums/differences add interval bounds. Reachability combines the established constraints; it never normalizes an unchecked wrapping operation. An operation that cannot be normalized keeps its wrapped runtime value as an atom; proving a surrounding operation safe never unwraps that atom. Wrapped values may still be compared by their own stable identity when a guard states that comparison directly.
+
+Proof search unfolds only the existing simple predicate forms and preserves disjunction alternatives separately. Every feasible alternative must establish a requested bound; no facts leak between alternatives or across branches. The graph is limited to 48 nodes and 32 alternatives; reaching a limit returns an unproven result rather than weakening the safety conditions. Opaque/effectful calls, multiplication/division/remainder and nonlinear identities are outside this increment. User-written rules remain trusted statements; their arithmetic premises use the same conservative typed evaluation and bound proof, and rule property tests keep running with runtime sized arithmetic.
+
+Verification covers signed and unsigned domains at their limits, strict-successor/predecessor implications, safe literal shifts, safe bounded sums/differences, unsafe overflow/underflow, intermediate wrap before cancellation, negative literals and negated comparisons, and separate OR alternatives. Floats and unchecked arithmetic must remain unproven.
+
 ### Function-level relational requirements (bork-3ly6p0)
 
 A function may require facts relating any of its inputs, without choosing one
@@ -3184,7 +3196,7 @@ it would make the intended optional layer or inference context clear.
 - **Numbers never mix implicitly.** `Int + Int8` is a compile error. Literals and arithmetic on literals are exact compile-time constants that take their type from where they are used (`x: Int8 = 100`); a constant that does not fit is a compile error. Unlike Go, a constant is computed as its type computes, so `x: Float = 1 / 3` is `0.333...`, not `0`.
 - **Conversions are explicit free functions:** `toInt8(x)`, `toFloat(x)`, and so on. A conversion that always fits (widening, or any integer to a float) returns the plain type. One that may not fit (narrowing, signed to unsigned, float to integer) returns `Target | OutOfRange`, so `?` or `match` must handle it. A constant is converted at compile time. Later, facts can let a value proven to be in range convert directly.
 - **Floats print as floats:** `3.0`, `1000000.0`, `0.25`, with an exponent only for very large or small values (`1e+21`). The digits are the shortest that read back as the same value.
-- **Facts respect overflow.** `a > 10` and `b > 10` do not prove `a + b > 10`, because the sum can wrap. Arithmetic implications need upper bounds that rule out overflow.
+- **Facts respect overflow.** `a > 10` and `b > 10` do not prove `a + b > 10`, because the sum can wrap. Integer addition/subtraction facts use bounds that rule out overflow for each intermediate; strict order can supply those bounds (`lo < hi` proves `lo + 1 <= hi`). See [overflow-safe implications](#overflow-safe-integer-arithmetic-implications-bork-ggj8ew).
 - **Native big integers.** An arbitrary-precision integer type is built in, for when wrapping is not acceptable.
 
 ### Equality
