@@ -24,11 +24,18 @@ fn waitForStop(s: Scope) uses clock + state {
 }
 fn main() {
   scope app with cleanupTimeout(5000) {
-    match (http.ListenRoutes("localhost:8080", app, [
+    match (http.ListenRoutes(if (args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
       http.Route { pattern: "GET /users/{id}", handler: logged(user) },
       http.Route { pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },
     ])) {
-      server: http.Server => { println(http.Address(server)); waitForStop(app) }
+      server: http.Server => {
+        if (args() == ["demo"]) {
+          match (http.Get("http://" + http.Address(server) + "/users/42", app)) {
+            response: http.Response => println(response.status, response.body)
+            error: IoError => println(error.message)
+          }
+        } else { println(http.Address(server)); waitForStop(app) }
+      }
       error: IoError => println(error.message)
     }
   }
