@@ -1,0 +1,35 @@
+type Node = { value: Int = 1, next: Option[Node] = Option.None } derive (GoStruct)
+fn Cycle[T: GoStruct](): List[GoValueError] unsafe go {
+ import "reflect"
+ p:=_d_T_GoStruct.New()
+ v:=reflect.ValueOf(p).Elem()
+ v.FieldByName("Next").Set(reflect.ValueOf(p))
+ _, errors:=_d_T_GoStruct.FromGo(p)
+ return errors
+}
+fn Nil[T: GoStruct](): List[GoValueError] unsafe go {
+ import "reflect"
+ p:=_d_T_GoStruct.New()
+ _, errors:=_d_T_GoStruct.FromGo(reflect.Zero(reflect.TypeOf(p)).Interface())
+ return errors
+}
+fn Wrong[T: GoStruct](): List[GoValueError] unsafe go {
+ _, errors:=_d_T_GoStruct.FromGo(42)
+ return errors
+}
+fn DecodeField[T: GoStruct](): String unsafe go {
+ fields:=_d_T_GoStruct.Fields()
+ return _show(fields[0].Decode(Json_Number{text:"3"}))
+}
+type Keywords = { map: Int = 2, func: String = "keyword" } derive (GoStruct)
+fn Round[T: GoStruct](value: T): T | GoValueError unsafe go {
+ out, errors:=_d_T_GoStruct.FromGo(_d_T_GoStruct.ToGo(value))
+ if len(errors)>0 { return errors[0] }; return out
+}
+fn main() uses io {
+  println(Round(Keywords {}))
+  println(Cycle[Node]())
+  println(Nil[Node]())
+  println(Wrong[Node]())
+  println(DecodeField[Node]())
+}

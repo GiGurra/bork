@@ -119,6 +119,11 @@ func (g *gen) constant(v constant.Value, t check.Type) ast.Expr {
 // replaced.
 func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncDecl) ([]byte, error) {
 	info := g.info
+	for _, class := range info.Classes {
+		if check.IsGoStruct(class) {
+			g.goType(info.Named["GoValueError"])
+		}
+	}
 	if main != nil {
 		g.imports["fmt"] = true
 	}
@@ -317,6 +322,7 @@ type gen struct {
 	usesUnit         bool
 	usesMap          bool
 	usesDecodeSchema bool
+	usesGoStruct     bool
 	usesBytes        bool
 	usesIoFailure    bool
 	usesOpaque       bool

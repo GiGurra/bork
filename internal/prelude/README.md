@@ -13,7 +13,7 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [runes.bork](runes.bork) | Unicode rune helpers |
 | [maps.bork](maps.bork) | `Entry` and persistent map methods |
 | [bytes.bork](bytes.bork) | Immutable bytes and UTF-8 conversions |
-| [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, and primitive ordering instances |
+| [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, `GoStruct`, and primitive ordering instances |
 | [json.bork](json.bork) | JSON values, parsing, rendering, `Decode`, `Encode`, and their instances |
 | [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and sleep |
 | [scopes.bork](scopes.bork) | Resource attachment, scope policies, and finalizers |

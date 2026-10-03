@@ -1,0 +1,49 @@
+pred positive(n: Int) { n > 0 }
+type Child = { name: String = "child" } derive (GoStruct, Decode, Encode)
+type Options = {
+  // Port to listen on.
+  port: Int where positive = 8080 go { json: "port", short: "p" }
+  names: List[String] = [] go { json: "names" }
+  child: Child = Child {} go { json: "child" }
+  optional: Option[Int] = Option.None go { json: "optional" }
+} derive (GoStruct, Decode, Encode)
+type Phantom[T] = { value: Int = 7 } derive (GoStruct)
+type Url = go "net/url.URL" { scheme: String = "https", host: String = "example.com" } derive (GoStruct)
+type Duration = go "time.Duration"
+type OpaqueField = { value: Duration } derive (GoStruct)
+fn Read[T: GoStruct](text: String): T | GoValueError unsafe go {
+  import "encoding/json"
+  value := _d_T_GoStruct.New()
+  if err := json.Unmarshal([]byte(text), value); err != nil { return GoValueError{path:"json",message:err.Error()} }
+  out, errors := _d_T_GoStruct.FromGo(value)
+  if len(errors)>0 { return errors[0] }
+  return out
+}
+fn Round[T: GoStruct](value: T): T | GoValueError unsafe go {
+  out, errors := _d_T_GoStruct.FromGo(_d_T_GoStruct.ToGo(value))
+  if len(errors)>0 { return errors[0] }
+  return out
+}
+fn Fields[T: GoStruct](): List[String] unsafe go {
+  var out []string
+  for _, f := range _d_T_GoStruct.Fields() {
+    out = append(out, f.Name + ":" + f.GoName + ":" + f.Doc)
+    for _, tag := range f.Tags { out=append(out,tag.Name+"="+tag.Value) }
+    if f.HasDefault { out=append(out,_show(f.Default())) }
+    if f.Decode==nil { out=append(out,"no decoder") }
+  }
+  return out
+}
+type Tagged = go "example.com/bindtest.TaggedMirror" { value: Int = 1 } derive (GoStruct)
+fn main() uses io {
+  println(Fields[Tagged]())
+  println(Read[Options]("{}"))
+  println(Read[Options]("{\"port\":0}"))
+  println(Round(Options {}))
+  phantom: Phantom[String] = Phantom {}
+  println(Round(phantom))
+  println(Read[Phantom[Int]]("{}"))
+  println(Read[Url]("{}"))
+  println(Fields[Options]())
+  println(Fields[OpaqueField]())
+}

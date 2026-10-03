@@ -1,0 +1,5 @@
+Keywords { map: 2, func: "keyword" }
+[GoValueError { path: "result.next.next", message: "cyclic Go value" }]
+[GoValueError { path: "result", message: "is nil" }]
+[GoValueError { path: "result", message: "has the wrong Go type" }]
+3

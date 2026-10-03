@@ -38,13 +38,14 @@ func (c *Class) Method(name string) *Func {
 // (`instance showList[T: Show]: Show[List[T]]`) has type parameters,
 // which may need instances themselves.
 type ClassInstance struct {
-	Name       string
-	Decl       *syntax.InstanceDecl
-	Pkg        *Package
-	Prelude    bool
-	Class      *Class
-	TypeParams []*TypeParam
-	Type       Type
+	GoFieldDecoders []*Dict
+	Name            string
+	Decl            *syntax.InstanceDecl
+	Pkg             *Package
+	Prelude         bool
+	Class           *Class
+	TypeParams      []*TypeParam
+	Type            Type
 	// Methods holds the implementations, in the class's method order.
 	Methods []*Func
 	// Constraints are those of a constrained instance's type
@@ -337,6 +338,10 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 		}
 	}
 	cl := c.lookupClass(id.Class)
+	if IsGoStruct(cl) {
+		c.errorf(id.ClassPos, "GoStruct instances must be derived for records")
+		return
+	}
 	if cl != nil && IsEq(cl) {
 		c.errorf(id.ClassPos, "Eq is built in: every type whose values can be compared has it, with structural ==")
 		return
@@ -925,7 +930,7 @@ type Derived struct {
 
 // derivable reports whether instances of class can be derived.
 func derivable(class *Class) bool {
-	return class.Prelude && (class.Name == "Decode" || class.Name == "Encode")
+	return class.Prelude && (class.Name == "Decode" || class.Name == "Encode" || IsGoStruct(class))
 }
 
 // declareDerived declares the instances that `derive (...)` asks for.
@@ -959,8 +964,13 @@ func (c *checker) declareDerived(files []*syntax.File) {
 					c.errorf(td.DerivePos, "Eq is built in: every type whose values can be compared has it, with no derive needed")
 					continue
 				case !derivable(cl):
-					c.errorf(td.DerivePos, "%s cannot be derived; only Decode and Encode can (yet)", name)
+					c.errorf(td.DerivePos, "%s cannot be derived; only Decode, Encode and GoStruct can (yet)", name)
 					continue
+				}
+				if IsGoStruct(cl) {
+					if r, ok := e.typ.(*Record); !ok || !r.GoStruct {
+						continue
+					}
 				}
 				c.deriveInstance(td, e.typ, cl, f.Prelude)
 			}
@@ -974,7 +984,10 @@ func (c *checker) deriveInstance(td *syntax.TypeDecl, t Type, cl *Class, prelude
 	var tps []*TypeParam
 	var args []Type
 	for _, p := range typeParamsOf(t) {
-		tp := &TypeParam{Name: p.Name, Decl: p.Decl, Bounds: []*Class{cl}}
+		tp := &TypeParam{Name: p.Name, Decl: p.Decl}
+		if !IsGoStruct(cl) {
+			tp.Bounds = []*Class{cl}
+		}
 		tps = append(tps, tp)
 		args = append(args, tp)
 	}
@@ -1003,6 +1016,10 @@ func (c *checker) deriveInstance(td *syntax.TypeDecl, t Type, cl *Class, prelude
 // types need, now that it is known which instances are in scope.
 func (c *checker) resolveDerived() {
 	for _, ci := range c.info.ClassInstances {
+		if IsGoStruct(ci.Class) {
+			c.resolveGoStructDecoders(ci)
+			continue
+		}
 		if len(ci.Methods) == 0 || ci.Methods[0].Derived == nil {
 			continue
 		}

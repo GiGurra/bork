@@ -349,11 +349,12 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			}
 		}
 	}
+	c.declareClasses(files)
+	c.declareClassMethods()
+	c.resolveGoStructs(files)
 	c.resolveGoMirrors(files)
 	c.checkRecordCycles()
 	c.info.OutOfRange = c.info.Named["OutOfRange"]
-	c.declareClasses(files)
-	c.declareClassMethods()
 	// Pass 2: collect function signatures, so functions can call each
 	// other regardless of declaration order.
 	for _, f := range files {
@@ -395,6 +396,13 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 		if r, ok := t.(*Record); ok && r.GoMirror != nil {
 			r.GoTo = c.toGo(r, r.GoMirror)
 			r.GoFrom = c.fromGo(r.GoMirror, r).ok
+			for _, t := range r.insts.byKey {
+				inst := t.(*Record)
+				inst.GoStruct, inst.GoGenerated, inst.GoMirror, inst.GoFields, inst.GoTo, inst.GoFrom = r.GoStruct, r.GoGenerated, r.GoMirror, r.GoFields, r.GoTo, r.GoFrom
+			}
+			if r.GoStruct && (!r.GoTo || !r.GoFrom) {
+				c.errorf(r.Decl.DerivePos, "cannot derive GoStruct for %s: its fields must convert both to and from Go", r.Name)
+			}
 		}
 	}
 	c.ensureAllFieldDefaults()

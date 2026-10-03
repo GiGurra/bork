@@ -302,6 +302,21 @@ func (p *parser) fieldDecls() []*FieldDecl {
 			p.next()
 			field.Default = p.expr()
 		}
+		if p.at(TIdent) && p.tok().Text == "go" && p.peekKind() == LBrace {
+			p.next()
+			p.next()
+			p.list(RBrace, "a Go struct tag", func() {
+				key := p.expect(TIdent, "(Go struct tag name)")
+				p.expect(Colon, "after the Go struct tag name")
+				value := p.expect(TString, "(Go struct tag value)")
+				decoded, err := strconv.Unquote(value.Text)
+				if err != nil {
+					p.errorf(value.Pos, "invalid Go struct tag value: %v", err)
+					panic(bailout{})
+				}
+				field.GoTags = append(field.GoTags, GoTag{Pos: key.Pos, Name: key.Text, Value: decoded})
+			})
+		}
 		fields = append(fields, field)
 	})
 	return fields
