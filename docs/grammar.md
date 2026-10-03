@@ -38,7 +38,7 @@ RuleDecl   = "rule" Ident "(" Params ")" "{" Premises "=>" Conclusions "}" .
 Premises   = Expr { "and" Expr } .  (* predicate calls on the variables, and conditions *)
 Conclusions = Call { "and" Call } .
 
-TypeDecl   = "type" Ident [ TypeParams ] "=" ( Fields | Sealed | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
+TypeDecl   = "type" Ident [ TypeParams ] "=" ( Fields | Sealed | "resource" [ GoName ] | GoName [ Fields ] | Type ) [ Derive ] .
                                              (* type Pair[A, B] = { ... }; type File = resource: values made by unsafe go *)
 Derive     = "derive" "(" Ident { "," Ident } ")" .  (* derive (Decode, Encode): instances written by the compiler *)
 Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .

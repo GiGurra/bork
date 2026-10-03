@@ -1,0 +1,12 @@
+type Wrong = go "time.Duration" { value: Int }
+type Pointer = go "*net/url.URL" { host: String }
+type Generic[T] = go "net/url.URL" { host: T }
+type Missing = go "net/url.URL" { hostname: String }
+type Embedded = go "example.com/bindtest.MirrorPointerEmbedded" { id: Int }
+type Array = go "example.com/bindtest.MirrorArray" { values: List[Int] }
+type Payload = go "example.com/bindtest.Payload" { value: Int }
+type Handle = resource go "*example.com/bindtest.Handle"
+type WithResource = go "example.com/bindtest.Payload" { text: List[Handle] }
+fn PassArray(a: Array): Array unsafe go "example.com/bindtest.EchoArray"
+fn BadPayload(s: String): Payload | GoValueError unsafe go "example.com/bindtest.NewPayload"
+fn main() {}

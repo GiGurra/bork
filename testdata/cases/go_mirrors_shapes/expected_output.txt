@@ -1,0 +1,10 @@
+GoValueError { path: "result.items[0].count", message: "300 does not fit Int8" }
+[GoValueError { path: "result.items[0].count", message: "300 does not fit Int8" }, GoValueError { path: "result.items[1].count", message: "must be nonNegative8" }]
+GoValueError { path: "result.next", message: "cyclic Go value" }
+[Node { value: 1, next: Option.None }, Node { value: 1, next: Option.None }]
+Embedded { id: 9, label: "embedded" }
+Array { values: [1, 2] }
+GoValueError { path: "result", message: "must be nonNegative" }
+3
+1
+GoValueError { path: "result", message: "must be atMost(bound)" }

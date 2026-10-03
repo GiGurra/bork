@@ -157,6 +157,11 @@ type Resource struct {
 func (r *Resource) String() string { return TypeText(r, nil) }
 
 // Field is a named, typed field of a record or variant.
+type GoField struct {
+	Path []string
+	Type types.Type
+}
+
 type Field struct {
 	Name string
 	Type Type
@@ -170,11 +175,14 @@ type Field struct {
 // TypeParams; its instances (`Pair[Int, String]`) have Base set to it,
 // Args, and Fields with the arguments filled in.
 type Record struct {
-	Name    string
-	Fields  []*Field
-	Decl    *syntax.TypeDecl
-	Prelude bool     // declared in prelude
-	Pkg     *Package // the declaring package
+	GoTo, GoFrom bool
+	GoMirror     types.Type
+	GoFields     []GoField
+	Name         string
+	Fields       []*Field
+	Decl         *syntax.TypeDecl
+	Prelude      bool     // declared in prelude
+	Pkg          *Package // the declaring package
 
 	TypeParams []*TypeParam
 	Base       *Record

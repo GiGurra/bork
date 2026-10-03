@@ -1,0 +1,21 @@
+type Url = go "net/url.URL" { scheme: String, host: String, path: String, rawQuery: String }
+fn Parse(s: String): Url | GoError unsafe go "net/url.Parse"
+fn (u: Url) text(): String unsafe go "(*net/url.URL).String"
+fn Helper(s: String) uses net: Url | GoError unsafe go {
+ import "net/url"
+ u, err := url.Parse(s)
+ if err != nil { return _bindGoError(err) }
+ value, errs := _borkFromGo[Url](*u)
+ if len(errs) != 0 { panic("unexpected conversion error") }
+ return value
+}
+fn main() uses io + net {
+  match (Parse("https://example.com/path?q=1")) {
+    u: Url => {
+      println(u)
+      println(u.text())
+    }
+    e: GoError => println(e.message)
+  }
+  println(Helper("https://example.org/other"))
+}

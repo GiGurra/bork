@@ -212,6 +212,9 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 		}
 		decls = append(decls, f.Decls...)
 	case *check.Record:
+		if t.GoMirror != nil {
+			decls = append(decls, g.mirrorDecl(t)...)
+		}
 		recv := g.instantiated(typeName(t.Name, t.Pkg), t)
 		decls = append(decls, g.structDecl(typeName(t.Name, t.Pkg), t.TypeParams, t.Fields))
 		decls = append(decls, g.showStringMethod(recv, t, t.Name, t.Fields, true))

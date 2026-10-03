@@ -195,14 +195,6 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	if main != nil {
 		funcs = append(funcs, main)
 	}
-	if g.usesOptionHelpers {
-		for _, t := range info.TypeOrder {
-			if st, ok := t.(*check.Sealed); ok && st.Prelude && st.Name == "Option" {
-				g.usedTypes[st] = true
-			}
-		}
-		goFuncs = append(goFuncs, optionHelpers)
-	}
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)
 	for _, f := range files {
@@ -225,6 +217,17 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				}
 			}
 		}
+	}
+	if g.usesOptionHelpers {
+		for _, t := range info.TypeOrder {
+			if st, ok := t.(*check.Sealed); ok && st.Prelude && st.Name == "Option" {
+				g.usedTypes[st] = true
+			}
+		}
+		goFuncs = append(goFuncs, optionHelpers)
+	}
+	if g.usesMirror {
+		goFuncs = append(goFuncs, g.mirrorRuntime())
 	}
 	if g.usesOpaque {
 		goFuncs = append(goFuncs, opaqueRuntime)
@@ -316,6 +319,7 @@ type gen struct {
 	usesBytes        bool
 	usesIoFailure    bool
 	usesOpaque       bool
+	usesMirror       bool
 	usesBind         bool
 	// usesOptionHelpers is set when Go code uses _borkSome, _borkNone,
 	// or _borkOptionGet.
@@ -352,7 +356,7 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 				visit(pred)
 			}
 		}
-		if g.testMode && fn.Decl.GoBody != nil {
+		if (g.testMode && fn.Decl.GoBody != nil) || fn.Decl.GoBind != nil {
 			// Test mode checks what it promises, and the records it
 			// returns (see checkedWrapper).
 			for _, mc := range fn.ResultConstraints {
@@ -369,6 +373,15 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 	}
 	for _, fn := range roots {
 		visit(fn)
+	}
+	// Mirror helpers are generated for declarations, including helpers used
+	// inside unsafe Go bodies, so their field predicates must be available.
+	for _, t := range g.info.TypeOrder {
+		if r, ok := t.(*check.Record); ok && r.GoMirror != nil {
+			for _, pred := range invariantPreds(r, map[check.Type]bool{}) {
+				visit(pred)
+			}
+		}
 	}
 	return emit
 }

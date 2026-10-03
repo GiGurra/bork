@@ -253,6 +253,10 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 			panic(bailout{})
 		}
 		td.GoName = &GoBind{Pos: n.Pos, Name: name}
+		if p.at(LBrace) {
+			td.Kind = RecordType
+			td.Fields = p.fieldDecls()
+		}
 	case p.at(TIdent) && p.tok().Text == "resource" && (p.peekKind() == Semi || p.peekKind() == EOF || p.peekKind() == TIdent):
 		// `resource` is a keyword only here.
 		td.Kind = ResourceType

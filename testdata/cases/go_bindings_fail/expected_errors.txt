@@ -16,7 +16,8 @@ main.bork:11:29: Go package "example.com/nowhere" cannot be loaded: cannot find 
 main.bork:12:50: strings.Cut returns (before string, after string, found bool), which cannot be bound: only one result, a result and an error, or a result and a bool can be; write an unsafe go body
 main.bork:13:28: NotOption is bound to os.LookupEnv(key string) (string, bool), which returns a value and a bool, so its result is an Option, not String
 main.bork:14:1: a binding cannot have type parameters: strings.ToUpper has none
-main.bork:16:24: facts on a binding's result are not supported yet; check them in bork after the call
+main.bork:16:24: Promise is bound to strings.ToUpper(s string) string, whose result string may not fit String, but its result has no GoValueError
+  hint: declare the result as String | GoValueError
 main.bork:17:21: Lossy is bound to strings.Repeat(s string, count int) string, but parameter n is Uint64, which does not convert to Go int
 main.bork:18:12: TooWide is bound to math/bits.Len32(x uint32) (n int), but parameter x is Int, which does not convert to Go uint32
 main.bork:19:16: FloatNarrow is bound to math.Float32bits(f float32) uint32, but parameter x is Float, which does not convert to Go float32

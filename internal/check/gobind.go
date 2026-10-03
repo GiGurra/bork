@@ -213,10 +213,6 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 		c.bindErr(fd.Pos, "a binding cannot have type parameters: %s has none", full)
 		return
 	}
-	if len(fn.ResultConstraints) > 0 {
-		c.bindErr(fd.Result.Pos, "facts on a binding's result are not supported yet; check them in bork after the call")
-		return
-	}
 	b := &GoBinding{Path: path, Name: name, Sig: sig, Receiver: recv, ScopeIndex: -1}
 	ok := true
 	params := sig.Params()
@@ -331,6 +327,9 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 		}
 		b.Fallible = conv.fallible
 	}
+	if len(fn.ResultConstraints) > 0 {
+		b.Fallible = true
+	}
 	needErr := b.Shape == GoErrorOnly || b.Shape == GoValueError
 	want := func() string {
 		parts := []string{"Unit"}
@@ -432,7 +431,21 @@ func goNumber(b *types.Basic) Type {
 }
 
 // fromGo says how a Go value of type g converts to bork type t.
+type goConvPair struct {
+	b Type
+	g types.Type
+}
+
 func (c *checker) fromGo(g types.Type, t Type) convResult {
+	return c.fromGoSeen(g, t, map[goConvPair]bool{})
+}
+func (c *checker) fromGoSeen(g types.Type, t Type, seen map[goConvPair]bool) convResult {
+	pair := goConvPair{t, g}
+	if seen[pair] {
+		return convResult{ok: true, fallible: true}
+	}
+	seen[pair] = true
+	defer delete(seen, pair)
 	no := convResult{}
 	rt := t
 	if IsOption(rt) {
@@ -445,7 +458,7 @@ func (c *checker) fromGo(g types.Type, t Type) convResult {
 		return convResult{ok: types.Identical(g, gt), fallible: isGoNillable(g)}
 	}
 	if IsOption(t) && GoTypeOf(TypeArgs(t)[0]) != nil && isGoNillable(GoTypeOf(TypeArgs(t)[0])) {
-		r := c.fromGo(g, TypeArgs(t)[0])
+		r := c.fromGoSeen(g, TypeArgs(t)[0], seen)
 		r.fallible = false
 		return r
 	}
@@ -475,25 +488,41 @@ func (c *checker) fromGo(g types.Type, t Type) convResult {
 			return convResult{ok: isGoByte(u.Elem())}
 		}
 		if l, ok := t.(*List); ok {
-			return c.fromGo(u.Elem(), l.Elem)
+			return c.fromGoSeen(u.Elem(), l.Elem, seen)
 		}
 	case *types.Array:
 		if t == Bytes {
 			return convResult{ok: isGoByte(u.Elem())}
 		}
 		if l, ok := t.(*List); ok {
-			return c.fromGo(u.Elem(), l.Elem)
+			return c.fromGoSeen(u.Elem(), l.Elem, seen)
 		}
 	case *types.Map:
 		if m, ok := t.(*Map); ok && isKeyType(m.Key) && isGoKeyType(u.Key()) {
-			k, v := c.fromGo(u.Key(), m.Key), c.fromGo(u.Elem(), m.Value)
+			k, v := c.fromGoSeen(u.Key(), m.Key, seen), c.fromGoSeen(u.Elem(), m.Value, seen)
 			return convResult{ok: k.ok && v.ok, fallible: k.fallible || v.fallible}
 		}
+	case *types.Struct:
+		r, ok := t.(*Record)
+		if !ok || r.GoMirror == nil || !types.Identical(r.GoMirror, g) || len(r.GoFields) != len(r.Fields) {
+			return no
+		}
+		out := convResult{ok: true}
+		for i, f := range r.Fields {
+			gf := r.GoFields[i]
+			if gf.Type == nil {
+				return no
+			}
+			v := c.fromGoSeen(gf.Type, f.Type, seen)
+			out.ok = out.ok && v.ok
+			out.fallible = out.fallible || v.fallible || len(f.Constraints) > 0
+		}
+		return out
 	case *types.Pointer:
 		if IsOption(t) {
-			return c.fromGo(u.Elem(), TypeArgs(t)[0])
+			return c.fromGoSeen(u.Elem(), TypeArgs(t)[0], seen)
 		}
-		r := c.fromGo(u.Elem(), t)
+		r := c.fromGoSeen(u.Elem(), t, seen)
 		return convResult{ok: r.ok, fallible: true} // nil
 	}
 	return no
@@ -501,7 +530,14 @@ func (c *checker) fromGo(g types.Type, t Type) convResult {
 
 // toGo reports whether a bork value of type t converts to Go type g.
 // Converting to Go never fails.
-func (c *checker) toGo(t Type, g types.Type) bool {
+func (c *checker) toGo(t Type, g types.Type) bool { return c.toGoSeen(t, g, map[goConvPair]bool{}) }
+func (c *checker) toGoSeen(t Type, g types.Type, seen map[goConvPair]bool) bool {
+	pair := goConvPair{t, g}
+	if seen[pair] {
+		return true
+	}
+	seen[pair] = true
+	defer delete(seen, pair)
 	if gt := GoTypeOf(t); gt != nil {
 		return types.AssignableTo(gt, g)
 	}
@@ -534,17 +570,28 @@ func (c *checker) toGo(t Type, g types.Type) bool {
 			return isGoByte(u.Elem())
 		}
 		if l, ok := t.(*List); ok {
-			return c.toGo(l.Elem, u.Elem())
+			return c.toGoSeen(l.Elem, u.Elem(), seen)
 		}
 	case *types.Map:
 		if m, ok := t.(*Map); ok && isKeyType(m.Key) && isGoKeyType(u.Key()) {
-			return c.toGo(m.Key, u.Key()) && c.toGo(m.Value, u.Elem())
+			return c.toGoSeen(m.Key, u.Key(), seen) && c.toGoSeen(m.Value, u.Elem(), seen)
 		}
+	case *types.Struct:
+		r, ok := t.(*Record)
+		if !ok || r.GoMirror == nil || !types.Identical(r.GoMirror, g) || len(r.GoFields) != len(r.Fields) {
+			return false
+		}
+		for i, f := range r.Fields {
+			if r.GoFields[i].Type == nil || !c.toGoSeen(f.Type, r.GoFields[i].Type, seen) {
+				return false
+			}
+		}
+		return true
 	case *types.Pointer:
 		if IsOption(t) {
-			return c.toGo(TypeArgs(t)[0], u.Elem())
+			return c.toGoSeen(TypeArgs(t)[0], u.Elem(), seen)
 		}
-		return c.toGo(t, u.Elem())
+		return c.toGoSeen(t, u.Elem(), seen)
 	}
 	return false
 }
