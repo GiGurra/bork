@@ -89,4 +89,9 @@ fn connName(net: Conn): String unsafe go {
   return net.name
 }
 
+// A binding has the effects of the Go function it calls.
+fn getenv(key: String): String unsafe go "os.Getenv"
+
+fn escape(s: String): String unsafe go "net/url.PathEscape"
+
 fn main() {}

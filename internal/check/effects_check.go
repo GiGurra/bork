@@ -32,7 +32,7 @@ func CheckEffects(files []*syntax.File, info *Info, diags *diag.List) {
 			case fn == nil:
 			case fn.Body != nil:
 				checkEffects(fn, diags)
-			case fd.GoBody != nil && !std:
+			case fd.IsGo() && !std:
 				checkUnsafeGo(fn, info, diags)
 			}
 		}

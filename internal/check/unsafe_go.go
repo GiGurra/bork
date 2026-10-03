@@ -188,6 +188,18 @@ func goEffectUses(gc *syntax.GoCode, params map[string]bool, funcs func(name str
 	return uses
 }
 
+// goBindUses is what a binding's Go function obviously does.
+func goBindUses(b *syntax.GoBind) []goUse {
+	i := strings.LastIndex(b.Name, ".")
+	if i < 0 {
+		return nil
+	}
+	if e, ok := goEffectOf(b.Name[:i]); ok && e.has(b.Name[i+1:]) {
+		return []goUse{{e.effect, b.Pos, "it calls " + goPackageName(b.Name[:i]) + b.Name[i:] + ", which " + e.what}}
+	}
+	return nil
+}
+
 // checkUnsafeGo checks that fn, implemented in Go, declares what its
 // body obviously does. The function values it gives may do it instead
 // (an Atom's currentFn: () uses state => T), so what their types allow
@@ -211,7 +223,13 @@ func checkUnsafeGo(fn *Func, info *Info, diags *diag.List) {
 	for _, p := range fn.Decl.Params {
 		params[p.Name] = true
 	}
-	for _, u := range goEffectUses(fn.Decl.GoBody, params, funcs) {
+	var uses []goUse
+	if fn.Decl.GoBind != nil {
+		uses = goBindUses(fn.Decl.GoBind)
+	} else {
+		uses = goEffectUses(fn.Decl.GoBody, params, funcs)
+	}
+	for _, u := range uses {
 		if u.effect&^allowed&^missing != 0 {
 			if first == nil {
 				first = &u
@@ -223,7 +241,11 @@ func checkUnsafeGo(fn *Func, info *Info, diags *diag.List) {
 		return
 	}
 	fd := fn.Decl
-	diags.AddCode(first.pos, "effect.unsafe-go", "%s's unsafe go body uses %s (%s), but its signature allows %s; declare it: uses %s", fd.Name, missing, first.text, allowedText(fn.Effects), fn.Effects&^EffOpen|missing)
+	what := "unsafe go body"
+	if fd.GoBind != nil {
+		what = "Go binding"
+	}
+	diags.AddCode(first.pos, "effect.unsafe-go", "%s's %s uses %s (%s), but its signature allows %s; declare it: uses %s", fd.Name, what, missing, first.text, allowedText(fn.Effects), fn.Effects&^EffOpen|missing)
 	diags.Suggest(first.pos, "effect.unsafe-go", first.pos, usesFix(fd, fn.Effects&^EffOpen|missing))
 }
 

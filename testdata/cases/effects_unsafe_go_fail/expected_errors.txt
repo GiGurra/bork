@@ -7,3 +7,4 @@ main.bork:30:3: shout's unsafe go body uses io (it uses fmt.Println, which print
 main.bork:65:10: borrowedTime's unsafe go body uses clock (it uses time.Now, which reads the clock or waits), but its signature allows no effects; declare it: uses clock
 main.bork:69:3: runtimeFmt's unsafe go body uses io (it uses fmt.Println, which prints or scans), but its signature allows no effects; declare it: uses io
 main.bork:76:3: callsLoud's unsafe go body uses io (it calls loud), but its signature allows no effects; declare it: uses io
+main.bork:93:42: getenv's Go binding uses io (it calls os.Getenv, which works with the process, files, or the environment), but its signature allows no effects; declare it: uses io

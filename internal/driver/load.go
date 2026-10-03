@@ -236,7 +236,7 @@ func (l *loader) checkUnsafe(importPath string, files []*syntax.File) {
 	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
-			if fd.GoBody == nil {
+			if !fd.IsGo() {
 				continue
 			}
 			if l.mod.path == "" {
