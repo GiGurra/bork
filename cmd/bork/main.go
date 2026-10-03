@@ -75,6 +75,11 @@ func printDescription(result *describe.Result) {
 		fmt.Println("expression:", result.Expression)
 	}
 	fmt.Println("type:", result.Type)
+	if result.Assembly != nil {
+		fmt.Println(result.Assembly.Tree)
+		fmt.Println("invocation order:", result.Assembly.Order)
+		fmt.Println("effects:", result.Assembly.Effects)
+	}
 	if result.Definition != nil {
 		fmt.Println("defined at:", result.Definition)
 	}

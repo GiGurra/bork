@@ -1,0 +1,10 @@
+pred positive(n: Int) { n > 0 }
+type Good = { number: Int where positive }
+fn number(): Int { 0 }
+fn good(n: Int where positive): Good { Good { number: n } }
+fn main() {
+  scope s {
+    println(assemble[Good](s, good, number))
+    saved = good
+  }
+}

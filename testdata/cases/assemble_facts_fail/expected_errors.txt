@@ -1,0 +1,2 @@
+main.bork:7:27: good requires n to be positive, but number can return 0, and positive(0) is false
+main.bork:8:13: good requires n to be positive, so it cannot be used as a value; use a lambda that checks it: x => if (...) { good(x) } else { ... }

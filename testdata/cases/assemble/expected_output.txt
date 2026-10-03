@@ -1,0 +1,29 @@
+config
+db
+server
+Server { db: Db { config: Config { name: "bork" } }, config: Config { name: "bork" } }
+config
+db
+server
+worker
+App { server: Server { db: Db { config: Config { name: "bork" } }, config: Config { name: "bork" } }, worker: Worker { db: Db { config: Config { name: "bork" } } } }
+[Worker { db: Db { config: Config { name: "one" } } }, Worker { db: Db { config: Config { name: "two" } } }]
+config
+db
+Failed { message: "failed" }
+config
+db
+Failed { message: "failed" }
+recipe a
+recipe b
+config
+db
+worker a
+worker b
+[Worker { db: Db { config: Config { name: "bork" } } }, Worker { db: Db { config: Config { name: "bork" } } }]
+scope ending
+close db
+close db
+close db
+close db
+close db

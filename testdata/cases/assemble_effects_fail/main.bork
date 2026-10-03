@@ -1,0 +1,4 @@
+type Product = {}
+fn product() uses io: Product { println("constructed"); Product {} }
+fn pure(s: Scope): Product { assemble[Product](s, product) }
+fn main() {}

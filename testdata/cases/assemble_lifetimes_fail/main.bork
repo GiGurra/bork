@@ -1,0 +1,8 @@
+import "bork/fs"
+type Path = { value: String }
+fn path(): Path { Path { value: "/nonexistent" } }
+fn opened(p: Path, s: Scope) uses io: fs.File | fs.Error { fs.Open(p.value, s) }
+fn main() {
+  value = scope s { assemble[fs.File](s, path, opened) }
+  println(value)
+}

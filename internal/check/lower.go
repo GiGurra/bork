@@ -115,6 +115,14 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 }
 
 func (l *lowerer) expr(x syntax.Expr) Expr {
+	if call, ok := x.(*syntax.Call); ok {
+		if expansion := l.info.assemblyCalls[call]; expansion != nil {
+			out := l.block(expansion.body)
+			out.Assembly = expansion.description
+			out.expr.token = call.Fun.Position()
+			return out
+		}
+	}
 	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
 	if inst := l.info.funcRefs[x]; inst != nil {
 		at.token = x.Position()

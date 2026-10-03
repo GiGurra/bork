@@ -369,6 +369,9 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 		for _, callee := range fn.Calls {
 			visit(callee)
 		}
+		for _, callee := range goBodyFunctions(fn) {
+			visit(callee)
+		}
 		if fn.Derived != nil && fn.Of.Class.Name == "Decode" {
 			// A derived decoder checks the fields' where clauses.
 			for _, pred := range invariantPreds(fn.Of.Type, map[check.Type]bool{}) {
@@ -403,6 +406,35 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 		}
 	}
 	return emit
+}
+
+// goBodyFunctions finds package helpers mentioned by unsafe Go, using the
+// same bare-name rule as packageAliases. Tests and fact evaluation emit only
+// reachable functions, so Bork call metadata alone is insufficient.
+func goBodyFunctions(fn *check.Func) []*check.Func {
+	if fn.Decl.GoBody == nil || fn.Pkg == nil {
+		return nil
+	}
+	var out []*check.Func
+	var scanner goscanner.Scanner
+	src := []byte(fn.Decl.GoBody.Body)
+	scanner.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0)
+	previous := token.ILLEGAL
+	for {
+		_, tok, text := scanner.Scan()
+		selector := previous == token.PERIOD
+		previous = tok
+		if tok == token.EOF {
+			break
+		}
+		if tok != token.IDENT || selector {
+			continue
+		}
+		if helper := fn.Pkg.Funcs[text]; helper != nil && helper != fn && len(helper.TypeParams) == 0 {
+			out = append(out, helper)
+		}
+	}
+	return out
 }
 
 // goFunc generates a function implemented with `unsafe go { ... }`: the

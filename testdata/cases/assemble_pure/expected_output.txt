@@ -1,0 +1,8 @@
+Pair { first: Label { name: "shared" }, second: Label { name: "shared" } }
+Left { label: Label { name: "shared" } }
+Right { label: Label { name: "shared" } }
+42
+43
+[42, 43]
+Label { name: "injected" }
+Label { name: "shared" }

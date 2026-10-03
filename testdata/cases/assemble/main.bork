@@ -1,0 +1,30 @@
+type Config = { name: String }
+type Db = { config: Config }
+type Server = { db: Db, config: Config }
+type Worker = { db: Db }
+type App = { server: Server, worker: Worker }
+type Failed = { message: String }
+fn config() uses io: Config { println("config"); Config { name: "bork" } }
+fn openDb(c: Config, s: Scope) uses io: Db {
+  println("db")
+  onClose(s, () => println("close db"))
+  Db { config: c }
+}
+fn server(db: Db, c: Config) uses io: Server { println("server"); Server { db: db, config: c } }
+fn worker(db: Db) uses io: Worker { println("worker"); Worker { db: db } }
+fn bad(db: Db): Worker | Failed { Failed { message: "failed" } }
+fn recipe(name: String) uses io: (Db) uses io => Worker {
+  println(s"recipe $name")
+  (value: Db) => { println(s"worker $name"); Worker { db: value } }
+}
+fn main() {
+  scope app {
+    println(assemble[Server](app, server, openDb, config))
+    println(assembleRecord[App](app, worker, server, openDb, config))
+    println(assembleAll[Worker](app, () => Worker { db: Db { config: Config { name: "one" } } }, () => Worker { db: Db { config: Config { name: "two" } } }))
+    println(assemble[Worker](app, bad, openDb, config))
+    println(assembleAll[Worker](app, bad, worker, openDb, config))
+    println(assembleAll[Worker](app, recipe("a"), recipe("b"), openDb, config))
+    println("scope ending")
+  }
+}

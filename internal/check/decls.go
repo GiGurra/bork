@@ -212,6 +212,9 @@ func (c *checker) resolveFields(decls []*syntax.FieldDecl, owner string) []*Fiel
 // resolveType turns a written type into a Type. A nil type means Unit
 // (a function without a declared result).
 func (c *checker) resolveType(t *syntax.TypeExpr) Type {
+	if known := c.info.assemblyTypes[t]; known != nil {
+		return known
+	}
 	out := c.resolveTypeInner(t)
 	if t != nil {
 		c.noteDefaultTypeUse(out, t.Pos)
