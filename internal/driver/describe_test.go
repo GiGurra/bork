@@ -573,3 +573,65 @@ fn use() needs traceId: String {
 		t.Fatalf("got %+v, want needs locale? + traceId", result.Callable)
 	}
 }
+
+func TestDescribeSpecializedConstructors(t *testing.T) {
+	source := `type Duration = go "time.Duration"
+type Handle = resource
+type Box[T] = { values: List[T] }
+type State[T] = sealed { Empty, Value { value: T } }
+fn main() {
+ x = Box[Option[Int]] { values: [.None] }
+ y = State[String].Value { value: "text" }
+ z = State[Int].Empty
+ d = Option[Duration].None
+ h = Option[Handle].None
+ println(x); println(y); println(z); println(d); println(h)
+}
+`
+	for _, tc := range []struct {
+		fragment, typ string
+		defined       bool
+	}{
+		{"Box[Option", "Box[Option[Int]]", true},
+		{"Option[Int]]", "Option[Int]", true},
+		{"Int]]", "Int", false},
+		{"Duration].None", "Duration", true},
+		{"Handle].None", "Handle", true},
+		{"State[String]", "State[String]", true},
+		{"String].Value", "String", false},
+		{"Value { value: \"text\"", "State[String]", true},
+		{"State[Int].Empty", "State[Int]", true},
+		{"Empty\n", "State[Int]", true},
+	} {
+		t.Run(tc.fragment, func(t *testing.T) {
+			r := describeAt(t, source, tc.fragment, "")
+			if r.typ != tc.typ || r.defined != tc.defined {
+				t.Fatalf("want %s (definition %v), got %+v", tc.typ, tc.defined, r)
+			}
+		})
+	}
+}
+
+func TestDescribeSpecializedDefaults(t *testing.T) {
+	source := `pred positive(x: Int) { x > 0 }
+fn take(x: Option[(Int) uses io => Int] = Option[(Int) uses io => Int].None,
+ y: Option[Int] = Option[Int where positive].Some { value: 1 }, z: Option[Seq[Int] uses io] = Option[Seq[Int] uses io].None) uses io { println(x); println(y); println(z) }
+fn main() { take() }
+`
+	path := filepath.Join(t.TempDir(), "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Describe(fmt.Sprintf("%s:4:13", path), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Callable == nil || len(result.Callable.Parameters) != 3 {
+		t.Fatalf("missing callable: %+v", result)
+	}
+	for i, want := range []string{"Option[(Int) uses io => Int].None", "Option[Int where positive].Some { value: 1 }", "Option[Seq[Int] uses io].None"} {
+		if got := result.Callable.Parameters[i].Default; got != want {
+			t.Fatalf("default %d: got %q, want %q", i, got, want)
+		}
+	}
+}

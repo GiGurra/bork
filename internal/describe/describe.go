@@ -213,6 +213,21 @@ func (s *sourceIndex) walk(x check.Expr) {
 	if s.contains(x.TokenPos(), width) || s.foldedContains(x) {
 		s.choose(x, x.Type(), definition(x))
 	}
+	var head *check.ConstructorHead
+	switch v := x.(type) {
+	case *check.RecordLit:
+		head = v.Head
+	case *check.VariantValue:
+		head = v.Head
+	}
+	if head != nil {
+		for _, use := range head.Uses {
+			if s.contains(use.Pos, len(use.Name)) {
+				s.choose(x, use.Type, use.Definition)
+				s.selected.Value = false
+			}
+		}
+	}
 	switch x := x.(type) {
 	case *check.Call:
 		s.callee(x)

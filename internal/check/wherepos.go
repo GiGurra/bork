@@ -195,6 +195,9 @@ func (c *checker) forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where
 					// have no TypeExpr.
 					f(&syntax.TypeExpr{Pos: n.Pos, Name: n.Path[0]}, "in a bare or destructuring pattern")
 				}
+			case *syntax.TypeHead:
+				f(n.Type, "on a constructor's type")
+				return
 			case *syntax.RecordLit:
 				owner := n.Type
 				if sel, ok := owner.(*syntax.Selector); ok {

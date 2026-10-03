@@ -519,8 +519,14 @@ func (f *factChecker) walk(x Expr, e env) {
 			}
 		}
 		f.recordObligations(x, e)
+		for _, con := range x.Constraints {
+			f.oblige(x, con, f.ownParams(), e, "constructor requires "+con.Text(f.from()))
+		}
 		f.nominalObligations(x, x.Variant, e)
 	case *VariantValue:
+		for _, con := range x.Constraints {
+			f.oblige(x, con, f.ownParams(), e, "constructor requires "+con.Text(f.from()))
+		}
 		f.nominalObligations(x, x.Variant, e)
 	case *Copy:
 		f.walk(x.X, e)

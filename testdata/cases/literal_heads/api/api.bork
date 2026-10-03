@@ -1,0 +1,6 @@
+type Box[T] = { value: T }
+type State[T] = sealed { Empty, Value { value: T } }
+type secret[T] = { values: List[T] }
+type Ints = secret[Int]
+type privateConfig[T] = private { value: T }
+fn Make[T](value: T): privateConfig[T] { privateConfig[T] { value: value } }

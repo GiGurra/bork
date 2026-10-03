@@ -281,12 +281,26 @@ type Select struct {
 	Field *Field
 }
 
+// ConstructorHead retains written type uses for source queries.
+type ConstructorHead struct {
+	Start, End diag.Pos
+	Uses       []TypeReference
+}
+type TypeReference struct {
+	Pos        diag.Pos
+	Name       string
+	Type       Type
+	Definition *diag.Pos
+}
+
 // VariantValue is a variant without fields: `Shape.Empty`. Text is the
 // variant as written.
 type VariantValue struct {
 	expr
-	Variant *Variant
-	Text    string
+	Variant     *Variant
+	Text        string
+	Head        *ConstructorHead
+	Constraints []*Constraint
 }
 
 // RecordLit builds a record (Variant nil) or a variant of a sealed
@@ -294,9 +308,11 @@ type VariantValue struct {
 // are in the order written.
 type RecordLit struct {
 	expr
-	Record  *Record
-	Variant *Variant
-	Fields  []*FieldValue
+	Record      *Record
+	Variant     *Variant
+	Fields      []*FieldValue
+	Head        *ConstructorHead
+	Constraints []*Constraint
 }
 
 // FieldValue is a field of a record literal.

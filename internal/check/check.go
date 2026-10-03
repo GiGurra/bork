@@ -277,11 +277,13 @@ type Info struct {
 	withTypes map[*syntax.WithBinding]Type
 	// recordTargets records what each record literal builds: a *Record
 	// or a *Variant.
-	recordTargets map[*syntax.RecordLit]any
-	recordInits   map[*syntax.RecordLit][]*syntax.FieldInit
-	fieldDefaults map[*Field]syntax.Expr
-	typeUses      map[Type]diag.Pos
-	exprOwners    map[syntax.Expr]*Func
+	writtenTypes           map[*syntax.TypeExpr]Type
+	constructorConstraints map[syntax.Expr][]*Constraint
+	recordTargets          map[*syntax.RecordLit]any
+	recordInits            map[*syntax.RecordLit][]*syntax.FieldInit
+	fieldDefaults          map[*Field]syntax.Expr
+	typeUses               map[Type]diag.Pos
+	exprOwners             map[syntax.Expr]*Func
 	// selectorVariants records selectors that name a field-less variant
 	// (`Shape.Empty`); other selectors are field accesses.
 	selectorVariants map[*syntax.Selector]*Variant
@@ -345,36 +347,38 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	c := &checker{
 		diags: diags,
 		info: &Info{
-			GoBindings:          map[*Func]*GoBinding{},
-			assemblyCalls:       map[*syntax.Call]*assemblyExpansion{},
-			assemblyTypes:       map[*syntax.TypeExpr]Type{},
-			assemblyNames:       map[any]string{},
-			Funcs:               map[string]*Func{},
-			FuncOf:              map[*syntax.FuncDecl]*Func{},
-			Named:               map[string]Type{},
-			types:               map[syntax.Expr]Type{},
-			callFuncs:           map[*syntax.Call]*Func{},
-			callBuiltins:        map[*syntax.Call]Builtin{},
-			seqCalls:            map[*syntax.Call]*seqCallInfo{},
-			generateConstraints: map[*syntax.Generate][]*Constraint{},
-			callArgs:            map[*syntax.Call][]syntax.Expr{},
-			callOrder:           map[*syntax.Call][]int{},
-			callTypeArgs:        map[*syntax.Call][]*syntax.TypeExpr{},
-			recordTargets:       map[*syntax.RecordLit]any{},
-			recordInits:         map[*syntax.RecordLit][]*syntax.FieldInit{},
-			fieldDefaults:       map[*Field]syntax.Expr{},
-			typeUses:            map[Type]diag.Pos{},
-			exprOwners:          map[syntax.Expr]*Func{},
-			selectorVariants:    map[*syntax.Selector]*Variant{},
-			ownerScopes:         map[*syntax.Selector]*Func{},
-			contextVariants:     map[*syntax.ContextName]*Variant{},
-			armPats:             map[*syntax.Arm]*Pat{},
-			tries:               map[*syntax.Try]*TryInfo{},
-			unused:              map[any]bool{},
-			consts:              map[syntax.Expr]constant.Value{},
-			bindings:            map[*syntax.Binding]Type{},
-			conversions:         map[*syntax.Call]*Conversion{},
-			defs:                map[*syntax.Ident]any{},
+			GoBindings:             map[*Func]*GoBinding{},
+			assemblyCalls:          map[*syntax.Call]*assemblyExpansion{},
+			assemblyTypes:          map[*syntax.TypeExpr]Type{},
+			assemblyNames:          map[any]string{},
+			Funcs:                  map[string]*Func{},
+			FuncOf:                 map[*syntax.FuncDecl]*Func{},
+			Named:                  map[string]Type{},
+			types:                  map[syntax.Expr]Type{},
+			callFuncs:              map[*syntax.Call]*Func{},
+			callBuiltins:           map[*syntax.Call]Builtin{},
+			seqCalls:               map[*syntax.Call]*seqCallInfo{},
+			generateConstraints:    map[*syntax.Generate][]*Constraint{},
+			callArgs:               map[*syntax.Call][]syntax.Expr{},
+			callOrder:              map[*syntax.Call][]int{},
+			callTypeArgs:           map[*syntax.Call][]*syntax.TypeExpr{},
+			writtenTypes:           map[*syntax.TypeExpr]Type{},
+			constructorConstraints: map[syntax.Expr][]*Constraint{},
+			recordTargets:          map[*syntax.RecordLit]any{},
+			recordInits:            map[*syntax.RecordLit][]*syntax.FieldInit{},
+			fieldDefaults:          map[*Field]syntax.Expr{},
+			typeUses:               map[Type]diag.Pos{},
+			exprOwners:             map[syntax.Expr]*Func{},
+			selectorVariants:       map[*syntax.Selector]*Variant{},
+			ownerScopes:            map[*syntax.Selector]*Func{},
+			contextVariants:        map[*syntax.ContextName]*Variant{},
+			armPats:                map[*syntax.Arm]*Pat{},
+			tries:                  map[*syntax.Try]*TryInfo{},
+			unused:                 map[any]bool{},
+			consts:                 map[syntax.Expr]constant.Value{},
+			bindings:               map[*syntax.Binding]Type{},
+			conversions:            map[*syntax.Call]*Conversion{},
+			defs:                   map[*syntax.Ident]any{},
 
 			bindingConstraints: map[*syntax.Binding][]*Constraint{},
 			patSources:         map[any]*patSource{},
@@ -1144,6 +1148,9 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.record(e, Never)
 	case *syntax.Selector:
 		return c.record(e, c.selector(e, want))
+	case *syntax.TypeHead:
+		c.errorf(e.Position(), "a specialized type needs record braces or a sealed variant; it is not a value")
+		return c.record(e, Invalid)
 	case *syntax.ContextName:
 		return c.record(e, c.contextVariant(e, want))
 	case *syntax.RecordLit:
