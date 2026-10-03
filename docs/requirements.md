@@ -333,8 +333,13 @@ identity, including when substituting parameters into predicates and contracts.
 
 Calls must resolve to the same declaration, generic specialization and class
 dictionaries, with the same typed argument identities and ambient inputs.
-Effectful calls, effectful open callbacks, mutable Go inputs or results, and
-calls through function values receive no reusable call identity. Reading an
+Effectful calls, mutable Go inputs or results, function-valued inputs (including
+pure callbacks with hidden captures), lazy sequences, and unknown generic input
+values receive no reusable call identity. Prelude list length is safe even for
+generic or opaque element types because it only observes the immutable container.
+Calls through function values receive no reusable call identity. Pure projections
+with ambient needs can share guard facts, but are not supported inside function-level
+requirements in this increment. Reading an
 effectful result into a binding still creates a stable immutable value; facts
 about that binding do not establish facts about a fresh call.
 

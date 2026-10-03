@@ -6,3 +6,4 @@ main.bork:21:61: checked requires n to be positive, but that is not proven for t
 main.bork:24:71: floatGuard requires x to be positiveFloat, but that is not proven for this value (give it a name and check it first)
 main.bork:26:26: overflow requires ((toInt8(127) + toInt8(1)) > toInt8(0)), but that is not proven (check it first with if (((toInt8(127) + toInt8(1)) > toInt8(0))) { ... }, or declare a function-level where clause)
 main.bork:31:42: checked requires n to be positive, but that is not proven for this value (give it a name and check it first)
+main.bork:37:53: checked requires n to be positive, but that is not proven for this value (give it a name and check it first)

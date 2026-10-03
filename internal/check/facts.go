@@ -2467,6 +2467,12 @@ func (f *factChecker) key(x Expr) string {
 		parts := []string{fmt.Sprintf("%p", x.Func), requirementInstanceKey(x.Inst)}
 		for _, a := range append(append([]Expr{}, x.Args...), x.Needs...) {
 			k := f.computedArgKey(a)
+			if stableLengthCall(x) {
+				k = fmt.Sprintf("%q:%q", typeKey(a.Type()), f.key(a))
+				if f.key(a) == "" {
+					k = ""
+				}
+			}
 			if k == "" {
 				return ""
 			}
@@ -2488,19 +2494,72 @@ func (f *factChecker) key(x Expr) string {
 
 // Mutable Go values and open callbacks cannot promise repeatable evaluation.
 func stableCall(call *Call) bool {
-	if call.Func.Effects&^EffOpen != 0 || containsOpaque(call.Type(), map[Type]bool{}) {
+	if call.Func.Effects&^EffOpen != 0 || !stableProjectionType(call.Type(), map[Type]bool{}) {
 		return false
 	}
-	for i, a := range call.Args {
-		if containsOpaque(a.Type(), map[Type]bool{}) || i < len(call.Func.Params) && openArgEffects(call.Func.Params[i], a.Type()) != 0 {
+	if stableLengthCall(call) {
+		return true
+	}
+	for i, a := range append(append([]Expr{}, call.Args...), call.Needs...) {
+		if !stableProjectionType(a.Type(), map[Type]bool{}) || i < len(call.Func.Params) && openArgEffects(call.Func.Params[i], a.Type()) != 0 {
 			return false
 		}
 	}
 	return true
 }
 
+// List length only observes the immutable container, never its elements.
+func stableLengthCall(call *Call) bool {
+	if !call.Func.Prelude || call.Func.Decl.Name != "length" || len(call.Args) != 1 || len(call.Needs) != 0 {
+		return false
+	}
+	_, ok := call.Args[0].Type().(*List)
+	return ok
+}
+
+// Unknown generic values may be opaque at instantiation. Function values and
+// lazy sequences can hide mutable captures even when their effects are empty.
+func stableProjectionType(t Type, seen map[Type]bool) bool {
+	if seen[t] {
+		return true
+	}
+	seen[t] = true
+	if GoTypeOf(t) != nil || t == Scope || t == OwnedScope {
+		return false
+	}
+	switch t := t.(type) {
+	case *TypeParam, *FuncType, *Seq, *Resource:
+		return false
+	case *List:
+		return stableProjectionType(t.Elem, seen)
+	case *Map:
+		return stableProjectionType(t.Key, seen) && stableProjectionType(t.Value, seen)
+	case *Record:
+		for _, field := range t.Fields {
+			if !stableProjectionType(field.Type, seen) {
+				return false
+			}
+		}
+	case *Sealed:
+		for _, variant := range t.Variants {
+			for _, field := range variant.Fields {
+				if !stableProjectionType(field.Type, seen) {
+					return false
+				}
+			}
+		}
+	case *Union:
+		for _, member := range t.Members {
+			if !stableProjectionType(member, seen) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (f *factChecker) computedArgKey(x Expr) string {
-	if containsOpaque(x.Type(), map[Type]bool{}) {
+	if !stableProjectionType(x.Type(), map[Type]bool{}) {
 		return ""
 	}
 	if k := f.argOf(x).key; k != "" {

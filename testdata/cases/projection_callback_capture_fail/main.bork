@@ -1,0 +1,18 @@
+type Buffer = go "*bytes.Buffer"
+fn make(): Buffer unsafe go {
+  import "bytes"
+  return _borkOpaque[Buffer](bytes.NewBufferString("positive"))
+}
+fn clear(x: Buffer) uses state unsafe go { _borkGo(x).Reset() }
+fn size(x: Buffer): Int unsafe go { return int64(_borkGo(x).Len()) }
+pred positive(n: Int) { n > 0 }
+fn checked(n: Int where positive): Int { n }
+fn apply(n: Int, f: (Int) uses nothing => Int): Int { f(n) }
+fn bug(x: Buffer) uses state: Int {
+  f = (n: Int) => size(x) + n
+  if (apply(0, f) > 0) { clear(x); checked(apply(0, f)) } else { 0 }
+}
+fn main() { println(bug(make())) }
+fn safeLength(xs: List[Buffer], x: Buffer) uses state: Int {
+  if (xs.length() > 0) { clear(x); checked(xs.length()) } else { 0 }
+}

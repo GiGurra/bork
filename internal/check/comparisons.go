@@ -107,7 +107,7 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		}
 		return &y
 	case *Call:
-		if !stableCall(x) {
+		if !x.Func.Decl.IsPred && !stableCall(x) {
 			return nil
 		}
 		y := *x

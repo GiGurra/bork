@@ -30,3 +30,9 @@ fn openEffects(n: Int) uses io: Int {
   action = noisy
   if (openCall(n, action) > 0) { checked(openCall(n, action)) } else { 0 }
 }
+
+ambient bias: Int
+fn adjusted(n: Int) needs bias: Int { n + bias }
+fn ambientChanged(n: Int) needs bias: Int {
+  if (adjusted(n) > 0) { with (bias: -10) { checked(adjusted(n)) } } else { 0 }
+}
