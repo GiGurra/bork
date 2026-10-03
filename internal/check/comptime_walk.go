@@ -65,6 +65,7 @@ func WalkComptime(x Expr, visit func(Expr) bool) {
 		for _, stmt := range x.Stmts {
 			switch stmt := stmt.(type) {
 			case *Let:
+				walk(stmt.AsyncScope)
 				walk(stmt.Value)
 			case *ExprStmt:
 				walk(stmt.X)

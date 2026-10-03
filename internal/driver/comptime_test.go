@@ -163,6 +163,8 @@ fn main(){println(a())}`, "cyclic comptime"},
 
 func TestComptimeLimits(t *testing.T) {
 	for _, tc := range []struct{ name, source, want string }{
+		{"async owner helper", `fn owner(s:Scope):Scope{s}
+fn main(){println(comptime{scope s{async(owner(s)) x=1;x}})}`, "compile-time evaluation cannot schedule an async initializer"},
 		{"evaluation timeout", `fn spin():Int unsafe go{for{}}
 fn main(){println(comptime{spin()})}`, "evaluation exceeded 10s"},
 		{"proof timeout", `pred never(n:Int) unsafe go{for{}}
