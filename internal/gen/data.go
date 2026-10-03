@@ -177,7 +177,9 @@ func (g *gen) matchStmt(m *check.Match, k sink) []ast.Stmt {
 		final = &ast.BlockStmt{List: unreachable()}
 	}
 	if chain == nil {
-		return append(append(stmts, assign(ast.NewIdent("_"), v)), final.List...)
+		// The arm's names are bound in a block of its own, as in an
+		// if's branch: another match beside it may bind them too.
+		return append(stmts, assign(ast.NewIdent("_"), v), final)
 	}
 	last.Else = final
 	return append(stmts, chain)
