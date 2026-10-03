@@ -1,0 +1,24 @@
+fn Fetch(url: String) uses net: String { url }
+
+fn Saved[A](m: Mock[A], expect: (Mock[A], Int, Int, Int) uses state => Unit) uses state {
+  expect(m, 2, -1, -1)
+}
+
+test "saved helper captures its reference" {
+  calls = mock Fetch(url) { url }
+  Saved(calls, Mock.expect)
+  _ = Fetch("one")
+}
+
+test "task expectation keeps the task call site" {
+  scope s {
+    calls = mock Fetch(url) { url }
+    task = spawn(s, () => { calls.expect(times: 1); 0 })
+    _ = await(task)
+  }
+}
+
+test "waitForWhere keeps its call site" {
+  calls = mock Fetch(url) { url }
+  calls.waitForWhere(c => c.url == "missing", 1, ms: 0)
+}

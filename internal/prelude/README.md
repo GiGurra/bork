@@ -54,3 +54,9 @@ one channel is consumed; channel cancellation/closure reaches its arm mapper,
 while cancellation of the selection scope returns `Cancelled` directly.
 Empty task/race/select lists return `Option.None`. Ready ties are unspecified.
 See [the runnable example](../../examples/task_fanin/main.bork).
+
+Internal helpers can opt into caller locations by calling
+`compilerCallerLocation()`. This yields the hidden caller's `file:line:column`
+String and forwards it to tracked helper calls, assertions, snapshots and dbg.
+It is accepted only in prelude/standard-library function bodies. Ordinary
+function types stay unchanged; a function value captures its reference site.

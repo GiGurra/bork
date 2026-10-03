@@ -1881,8 +1881,26 @@ All of them use `state` (the answer changes as calls happen), and the waits
 `clock`. Calls passed through to the real function by name are recorded by
 the outer mock or not at all. Bad bounds (negative, `times` together with a
 range, `atLeast` above `atMost`, a negative wait) fail the test at the
-`expect` or `waitFor` call. Failures name the mock statement's position (the
-handle's methods are prelude functions, which do not know their caller's).
+`expect` or `waitFor` call. Unmet expectations report the position of each
+`expect` or `expectWhere` call, including expectations checked after tasks finish.
+Wait failures and matcher panics likewise report the helper call rather than
+the mock declaration.
+
+### Caller locations for internal helpers (implemented)
+
+Prelude and standard-library helpers can call `compilerCallerLocation(): String`
+to opt into compiler-supplied `file:line:column` locations. This internal intrinsic
+is rejected in ordinary packages, predicates and class methods. It adds no
+public argument or function-type change: the compiler supplies a hidden String
+at direct calls. An opted-in helper forwards its caller's location when it calls
+another opted-in helper, and its `assert`, `assertEqual`, `assertSnapshot` and
+`dbg` use that location too. Ordinary wrappers keep their own call positions.
+A saved helper function captures the position where it was named; calling that
+value later cannot recover a different call site from its ordinary function type.
+Lambdas inside a helper capture the same location. Native mocks and passthrough
+preserve the hidden argument. The four Mock expectation and wait helpers use
+this mechanism; delayed checks store a location for each expectation. It neither
+walks Go stacks nor depends on a goroutine's current diagnostic context.
 
 ### Hermetic tests
 

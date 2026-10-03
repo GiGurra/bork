@@ -77,6 +77,8 @@ type Func struct {
 	NeedVars []*Var
 	// Prelude is set for the built-in functions of prelude.
 	Prelude bool
+	// TrackCaller adds a hidden source location for internal helper diagnostics.
+	TrackCaller bool
 	// Synthetic is set for a predicate that stands for a function
 	// parameter (see facts.go); it has no body to run.
 	Synthetic bool
@@ -140,6 +142,7 @@ const (
 	BuiltinPanic
 	BuiltinDbg
 	BuiltinTodo
+	BuiltinCallerLocation
 	BuiltinAssert         // assert(cond)
 	BuiltinAssertEqual    // assertEqual(actual, expected)
 	BuiltinAssertSnapshot // assertSnapshot(x)
@@ -147,17 +150,18 @@ const (
 )
 
 var builtins = map[string]Builtin{
-	"println":        BuiltinPrintln,
-	"toString":       BuiltinToString,
-	"panic":          BuiltinPanic,
-	"dbg":            BuiltinDbg,
-	"todo":           BuiltinTodo,
-	"assert":         BuiltinAssert,
-	"assertEqual":    BuiltinAssertEqual,
-	"assertSnapshot": BuiltinAssertSnapshot,
-	"assemble":       BuiltinAssemble,
-	"assembleAll":    BuiltinAssemble,
-	"assembleRecord": BuiltinAssemble,
+	"println":                BuiltinPrintln,
+	"toString":               BuiltinToString,
+	"panic":                  BuiltinPanic,
+	"dbg":                    BuiltinDbg,
+	"todo":                   BuiltinTodo,
+	"compilerCallerLocation": BuiltinCallerLocation,
+	"assert":                 BuiltinAssert,
+	"assertEqual":            BuiltinAssertEqual,
+	"assertSnapshot":         BuiltinAssertSnapshot,
+	"assemble":               BuiltinAssemble,
+	"assembleAll":            BuiltinAssemble,
+	"assembleRecord":         BuiltinAssemble,
 }
 
 // conversions maps each conversion function to its target type.
@@ -1439,6 +1443,23 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 
 func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type) Type {
 	c.rejectNamedArgs(e, "compiler built-ins have no declared parameter names")
+	if b == BuiltinCallerLocation {
+		if len(e.TypeArgs) != 0 {
+			c.errorf(e.Pos, "compilerCallerLocation takes no type arguments")
+		}
+		if len(e.Args) != 0 {
+			c.errorf(e.Pos, "compilerCallerLocation takes no arguments")
+			for _, arg := range e.Args {
+				c.expr(arg)
+			}
+		}
+		if c.fn == nil || c.fn.Decl.IsPred || c.fn.Class != nil || c.fn.Of != nil || c.fn.MockOf != nil || !c.inPrelude && !strings.HasPrefix(c.pkg.Path, "bork/") {
+			c.errorf(e.Pos, "compilerCallerLocation is only available in prelude and standard-library helpers")
+			return Invalid
+		}
+		c.fn.TrackCaller = true
+		return String
+	}
 	if b == BuiltinTodo {
 		if len(e.Args) > 1 {
 			c.errorf(e.Pos, "todo takes 0 or 1 arguments, but %d were given", len(e.Args))

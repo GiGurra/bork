@@ -257,7 +257,7 @@ func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 	args = append(args, needs...)
 	call := &ast.CallExpr{Fun: fun, Args: args}
 	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.instanceResult(inst, call)}}}
-	if inst.Result == check.Unit {
+	if inst.Result == check.Unit || inst.Result == check.Never {
 		body = []ast.Stmt{&ast.ExprStmt{X: call}}
 	}
 	return &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}

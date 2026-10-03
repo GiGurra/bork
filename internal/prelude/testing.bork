@@ -9,8 +9,8 @@ type Mock[A] = {
   countFn: () uses state => Int,
   callsFn: () uses state => List[String],
   argsFn: () uses state => List[A],
-  expectFn: ((A) uses nothing => Bool, Bool, Int, Int, Int) uses state => Unit,
-  waitFn: ((A) uses nothing => Bool, Bool, Int, Int) uses state + clock => Unit,
+  expectFn: ((A) uses nothing => Bool, Bool, Int, Int, Int, String) uses state => Unit,
+  waitFn: ((A) uses nothing => Bool, Bool, Int, Int, String) uses state + clock => Unit,
 }
 
 // count is how many calls the mock answered so far.
@@ -35,22 +35,22 @@ fn (m: Mock[A]) args[A]() uses state: List[A] {
 // `atLeast` and at most `atMost`. With none of them, at least one;
 // `times: 0` means never.
 fn (m: Mock[A]) expect[A](times: Int = -1, atLeast: Int = -1, atMost: Int = -1) uses state {
-  m.expectFn((a) => true, false, times, atLeast, atMost)
+  m.expectFn((a) => true, false, times, atLeast, atMost, compilerCallerLocation())
 }
 
 // expectWhere is expect, counting only the calls whose arguments match.
 fn (m: Mock[A]) expectWhere[A](matches: (A) uses nothing => Bool, times: Int = -1, atLeast: Int = -1, atMost: Int = -1) uses state {
-  m.expectFn(matches, true, times, atLeast, atMost)
+  m.expectFn(matches, true, times, atLeast, atMost, compilerCallerLocation())
 }
 
 // waitFor waits until the mock has answered `calls` calls (from any
 // task), and fails the test if that takes more than `ms` milliseconds.
 fn (m: Mock[A]) waitFor[A](calls: Int, ms: Int = 5000) uses state + clock {
-  m.waitFn((a) => true, false, calls, ms)
+  m.waitFn((a) => true, false, calls, ms, compilerCallerLocation())
 }
 
 // waitForWhere is waitFor, counting only the calls whose arguments
 // match.
 fn (m: Mock[A]) waitForWhere[A](matches: (A) uses nothing => Bool, calls: Int, ms: Int = 5000) uses state + clock {
-  m.waitFn(matches, true, calls, ms)
+  m.waitFn(matches, true, calls, ms, compilerCallerLocation())
 }

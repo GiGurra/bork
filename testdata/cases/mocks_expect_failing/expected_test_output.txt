@@ -1,38 +1,38 @@
 FAIL  too few calls
-      main.bork:12:11: the mock of Fetch expected exactly 2 calls, but answered 1:
+      main.bork:13:3: the mock of Fetch expected exactly 2 calls, but answered 1:
       Fetch("a")
 FAIL  a call to a mock that must not be called
-      main.bork:18:11: the mock of Fetch expected no calls, but answered 1:
+      main.bork:19:3: the mock of Fetch expected no calls, but answered 1:
       Fetch("a")
 FAIL  every unmet expectation is reported
-      main.bork:24:11: the mock of Fetch expected at most 1 call, but answered 3
-      main.bork:24:11: the mock of Fetch expected at least 1 matching call, but answered 0 matching
-      main.bork:24:11: the mock of Fetch expected between 1 and 2 calls, but answered 3:
+      main.bork:25:3: the mock of Fetch expected at most 1 call, but answered 3
+      main.bork:26:3: the mock of Fetch expected at least 1 matching call, but answered 0 matching
+      main.bork:27:3: the mock of Fetch expected between 1 and 2 calls, but answered 3:
       Fetch("a")
       Fetch("b")
       Fetch("b")
 FAIL  an expectation is checked when its block ends
-      main.bork:35:13: the mock of Fetch expected at least 1 call, but answered 0
+      main.bork:36:5: the mock of Fetch expected at least 1 call, but answered 0
 FAIL  waitFor gives up
-      main.bork:42:11: waited 20ms for 2 calls of the mock of Fetch, but it answered 1:
+      main.bork:44:3: waited 20ms for 2 calls of the mock of Fetch, but it answered 1:
       Fetch("a")
 FAIL  times and a range cannot both be given
-      main.bork:48:11: cannot expect (times: 1, atLeast: -1, atMost: 2) of the mock of Fetch: give times, or atLeast and atMost, not both
+      main.bork:49:3: cannot expect (times: 1, atLeast: -1, atMost: 2) of the mock of Fetch: give times, or atLeast and atMost, not both
 FAIL  a test that fails first reports only its own failure
       main.bork:55:3: expected "b", got "a"
 FAIL  the unmet expectations of every mock in a block are reported
-      main.bork:64:11: the mock of Save expected exactly 1 call, but answered 0
-      main.bork:63:13: the mock of Fetch expected exactly 1 call, but answered 0
+      main.bork:66:3: the mock of Save expected exactly 1 call, but answered 0
+      main.bork:65:3: the mock of Fetch expected exactly 1 call, but answered 0
 FAIL  a scoped mock's expectations are not checked when its block fails
       main.bork:73:5: expected "b", got "a"
 FAIL  nor when a task of its scope fails
       main.bork:81:21: expected "b", got "a"
 FAIL  an expectation after the mock ended
-      main.bork:87:9: an expectation on the mock of Fetch came after it ended, so it could never be checked; declare expectations while the mock is in force
+      main.bork:90:3: an expectation on the mock of Fetch came after it ended, so it could never be checked; declare expectations while the mock is in force
 FAIL  a matcher that panics
-      main.bork:94:11: a matcher given to the mock of Fetch panicked: runtime error: integer divide by zero:
+      main.bork:95:3: a matcher given to the mock of Fetch panicked: runtime error: integer divide by zero:
       Fetch("a")
 FAIL  waitFor cannot wait for a negative time
-      main.bork:100:11: cannot wait for 1 calls of the mock of Fetch for -5ms: neither can be negative
+      main.bork:101:3: cannot wait for 1 calls of the mock of Fetch for -5ms: neither can be negative
 0 passed, 13 failed
 exit code 1

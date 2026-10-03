@@ -104,7 +104,7 @@ test "an upstream answering 503 is down" {
 }
 ```
 
-A handle records the calls as typed records (`gets.args()`), declares how many calls must come (`expect`, `expectWhere`, checked when the mock ends), and waits for calls from other tasks (`waitFor`).
+A handle records the calls as typed records (`gets.args()`), declares how many calls must come (`expect`, `expectWhere`, checked when the mock ends), and waits for calls from other tasks (`waitFor`). Expectation and wait failures point at the helper call, including expectations checked when tasks finish.
 
 Production builds are unchanged. See [examples/mocking](examples/mocking/main.bork) and [mocking in tests](docs/requirements.md#mocking-in-tests-design-bork-53lit4).
 
