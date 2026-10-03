@@ -124,6 +124,9 @@ func (g *gen) mockFuncType(fn *check.Func, names []*ast.Ident) *ast.FuncType {
 	for _, n := range fn.Needs {
 		params = append(params, n.Type)
 	}
+	if fn.TrackCaller {
+		params = append(params, check.String)
+	}
 	return g.funcType(&check.FuncType{Params: params, Result: fn.Result}, names)
 }
 
@@ -163,6 +166,10 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 	for _, v := range fn.NeedVars {
 		params = append(params, varIdent(v))
 		args = append(args, varIdent(v))
+	}
+	if fn.TrackCaller {
+		params = append(params, ast.NewIdent("_callerAt"))
+		args = append(args, ast.NewIdent("_callerAt"))
 	}
 	returns := fn.Result != check.Unit && fn.Result != check.Never
 	result := func(call ast.Expr) []ast.Stmt {
@@ -291,6 +298,12 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 	for _, v := range m.Func.NeedVars {
 		names = append(names, varIdent(v))
 	}
+	savedCaller := g.callerAt
+	g.callerAt = nil
+	if m.Target.TrackCaller {
+		names = append(names, ast.NewIdent("_callerAt"))
+		g.callerAt = ast.NewIdent("_callerAt")
+	}
 	savedResult, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = m.Target.Result, nil, nil, nil
 	g.mockBodies = append(g.mockBodies, mockBody{target: m.Target, frame: frame})
@@ -317,6 +330,7 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 		g.captures = g.captures[:len(g.captures)-1]
 		g.mangleTypeParams(m.Target, false)
 	}
+	g.callerAt = savedCaller
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = savedResult, savedScopes, savedOwners, savedMocks
 	var lit ast.Expr = &ast.FuncLit{Type: g.mockFuncType(m.Target, names), Body: &ast.BlockStmt{List: body}}
 	if k := g.genericMocks[m.Func]; k != 0 {
@@ -620,6 +634,7 @@ type _mockExpect struct {
 	match  func(any) bool
 	where  bool
 	lo, hi int64 // hi < 0: no limit
+	at string
 }
 
 // _mockFrames maps a label set (its pointer) to the frame it belongs
@@ -716,15 +731,15 @@ func _mockArgsFn[A any](f *_mockFrame) func() []A {
 	}
 }
 
-func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, int64) {
-	return func(match func(A) bool, where bool, times, atLeast, atMost int64) {
-		e := _mockExpect{match: func(a any) bool { return match(a.(A)) }, where: where, lo: 1, hi: -1}
+func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, int64, string) {
+	return func(match func(A) bool, where bool, times, atLeast, atMost int64, at string) {
+		e := _mockExpect{match: func(a any) bool { return match(a.(A)) }, where: where, lo: 1, hi: -1, at: at}
 		bad := func(why string) {
-			panic(fmt.Sprintf("%s: cannot expect (times: %d, atLeast: %d, atMost: %d) of the mock of %s: %s", f.at, times, atLeast, atMost, f.name, why))
+			panic(fmt.Sprintf("%s: cannot expect (times: %d, atLeast: %d, atMost: %d) of the mock of %s: %s", at, times, atLeast, atMost, f.name, why))
 		}
 		switch {
 		case f.ended.Load() || f.checked.Load():
-			panic(fmt.Sprintf("%s: an expectation on the mock of %s came after it ended, so it could never be checked; declare expectations while the mock is in force", f.at, f.name))
+			panic(fmt.Sprintf("%s: an expectation on the mock of %s came after it ended, so it could never be checked; declare expectations while the mock is in force", at, f.name))
 		case times < -1 || atLeast < -1 || atMost < -1:
 			bad("bounds cannot be negative (-1 means not given)")
 		case times >= 0 && (atLeast >= 0 || atMost >= 0):
@@ -742,11 +757,11 @@ func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, 
 	}
 }
 
-func _mockWaitFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64) {
-	return func(match func(A) bool, where bool, calls, ms int64) {
+func _mockWaitFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, string) {
+	return func(match func(A) bool, where bool, calls, ms int64, at string) {
 		m := func(a any) bool { return match(a.(A)) }
 		if calls < 0 || ms < 0 {
-			panic(fmt.Sprintf("%s: cannot wait for %d calls of the mock of %s for %dms: neither can be negative", f.at, calls, f.name, ms))
+			panic(fmt.Sprintf("%s: cannot wait for %d calls of the mock of %s for %dms: neither can be negative", at, calls, f.name, ms))
 		}
 		ms = min(ms, int64(math.MaxInt64/time.Millisecond))
 		wait := time.Duration(ms) * time.Millisecond
@@ -760,7 +775,7 @@ func _mockWaitFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		for {
-			n, err := f.matchingSafe(m, where)
+			n, err := f.matchingSafe(m, where, at)
 			if err != "" {
 				panic(err)
 			}
@@ -768,7 +783,7 @@ func _mockWaitFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64) {
 				return
 			}
 			if !time.Now().Before(deadline) {
-				panic(fmt.Sprintf("%s: waited %dms for %s of the mock of %s, but it answered %d%s", f.at, ms, _mockCalls(calls, where), f.name, n, f.callList()))
+				panic(fmt.Sprintf("%s: waited %dms for %s of the mock of %s, but it answered %d%s", at, ms, _mockCalls(calls, where), f.name, n, f.callList()))
 			}
 			f.changed.Wait()
 		}
@@ -805,7 +820,7 @@ func (f *_mockFrame) failures() (failed []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, e := range f.expects {
-		n, err := f.matchingSafe(e.match, e.where)
+		n, err := f.matchingSafe(e.match, e.where, e.at)
 		if err != "" {
 			failed = append(failed, err)
 			continue
@@ -833,7 +848,7 @@ func (f *_mockFrame) failures() (failed []string) {
 		if e.where {
 			got += " matching"
 		}
-		failed = append(failed, fmt.Sprintf("%s: the mock of %s expected %s, but answered %s", f.at, f.name, want, got))
+		failed = append(failed, fmt.Sprintf("%s: the mock of %s expected %s, but answered %s", e.at, f.name, want, got))
 	}
 	if len(failed) > 0 && len(f.texts) > 0 {
 		// The calls, once, after the mock's last failure.
@@ -844,10 +859,10 @@ func (f *_mockFrame) failures() (failed []string) {
 
 // matchingSafe is matching, with a matcher's panic as a message. The
 // caller holds f.mu.
-func (f *_mockFrame) matchingSafe(match func(any) bool, where bool) (n int64, err string) {
+func (f *_mockFrame) matchingSafe(match func(any) bool, where bool, at string) (n int64, err string) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Sprintf("%s: a matcher given to the mock of %s panicked: %v", f.at, f.name, r)
+			err = fmt.Sprintf("%s: a matcher given to the mock of %s panicked: %v", at, f.name, r)
 		}
 	}()
 	return f.matching(match, where), ""

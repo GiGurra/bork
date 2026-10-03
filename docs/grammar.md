@@ -215,6 +215,14 @@ Source spans follow the lexer's token ends, independently of printed token text.
 Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. A user module can also declare these manifests beside `bork.mod`; requirements merge with imported std dependencies by Go minimum version selection. `bork deps init/get/download` maintains user manifests with Go module tools. See [std Go dependencies](std-go.md).
 
 
+## Internal helper locations
+
+`compilerCallerLocation()` is an internal zero-argument intrinsic accepted only
+in prelude and standard-library helpers. It opts the enclosing helper into a
+hidden caller location without changing public call or function-type syntax.
+Ordinary packages cannot call it. See the caller-location contract in
+[requirements.md](requirements.md#caller-locations-for-internal-helpers-implemented).
+
 ## Dependency assembly
 
 The prelude compiler intrinsics use ordinary generic-call syntax:

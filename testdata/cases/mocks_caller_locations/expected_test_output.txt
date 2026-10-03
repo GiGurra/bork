@@ -1,0 +1,9 @@
+FAIL  saved helper captures its reference
+      main.bork:9:16: the mock of Fetch expected exactly 2 calls, but answered 1:
+      Fetch("one")
+FAIL  task expectation keeps the task call site
+      main.bork:16:29: the mock of Fetch expected exactly 1 call, but answered 0
+FAIL  waitForWhere keeps its call site
+      main.bork:23:3: waited 0ms for 1 matching call of the mock of Fetch, but it answered 0
+0 passed, 3 failed
+exit code 1

@@ -337,6 +337,7 @@ type gen struct {
 	info     *check.Info
 	tmp      int
 	fnResult check.Type // result type of the function being generated
+	callerAt ast.Expr   // hidden caller location in an internal helper
 	imports  map[string]bool
 	// bindImports holds the Go packages bindings call, by import path,
 	// with the names they are imported as.
@@ -681,6 +682,9 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 			Type:  g.goType(v.Type),
 		})
 	}
+	if fn.TrackCaller {
+		ftype.Params.List = append(ftype.Params.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("_callerAt")}, Type: ast.NewIdent("string")})
+	}
 	if fn.Result != check.Unit && fn.Result != check.Never {
 		ftype.Results = &ast.FieldList{List: []*ast.Field{{Type: g.goType(fn.Result)}}}
 	}
@@ -702,6 +706,12 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	fn := g.info.FuncOf[fd]
 	g.tmp = 0
 	g.fnResult = fn.Result
+	savedCaller := g.callerAt
+	defer func() { g.callerAt = savedCaller }()
+	g.callerAt = nil
+	if fn.TrackCaller {
+		g.callerAt = ast.NewIdent("_callerAt")
+	}
 	decl := g.signature(fd)
 	// An owned scope given to the function is closed if it ends early.
 	// A parameter declared in another closes before it: its fallback is
@@ -770,6 +780,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	case *check.FuncRef:
 		g.genericCall(e.Inst, e.Pos())
 		stmts, needs := g.values(e.Needs)
+		if e.Inst.Func.TrackCaller {
+			needs = append(needs, g.callerLocation(e.Pos()))
+		}
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
 			return stmts, g.nextRef(e.Inst, frame, needs)
 		}
@@ -1088,6 +1101,9 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		// The ambient values it needs follow the arguments.
 		needStmts, needs := g.values(e.Needs)
 		stmts = append(stmts, needStmts...)
+		if inst.Func.TrackCaller {
+			needs = append(needs, g.callerLocation(e.Pos()))
+		}
 		if frame := g.passthrough(inst.Func); frame != nil {
 			return stmts, g.nextCall(inst, frame, append(xs, needs...))
 		}
@@ -1219,6 +1235,8 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent(fn)}, Args: args}
 	}
 	switch e.Builtin {
+	case check.BuiltinCallerLocation:
+		return g.callerLocation(e.Pos())
 	case check.BuiltinPrintln:
 		for i := range args {
 			args[i] = g.str(args[i], e.Args[i].Type())
@@ -1232,8 +1250,10 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		g.imports["os"] = true
 		value := ast.NewIdent("value")
 		t := g.goType(e.Type())
-		label := fmt.Sprintf("%s:%d %s", e.Pos().File, e.Pos().Line, e.DebugText)
-		print := fmtCall("Fprintf", &ast.SelectorExpr{X: ast.NewIdent("os"), Sel: ast.NewIdent("Stderr")}, strLit("%s = %s\n"), strLit(label), g.stringOf(value, e.Type()))
+		location := e.Pos()
+		location.Col = 0
+		label := &ast.BinaryExpr{X: g.callerLocation(location), Op: token.ADD, Y: strLit(" " + e.DebugText)}
+		print := fmtCall("Fprintf", &ast.SelectorExpr{X: ast.NewIdent("os"), Sel: ast.NewIdent("Stderr")}, strLit("%s = %s\n"), label, g.stringOf(value, e.Type()))
 		return &ast.CallExpr{Fun: &ast.FuncLit{
 			Type: &ast.FuncType{
 				Params:  &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{value}, Type: t}}},
@@ -1251,7 +1271,7 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: args}
 	case check.BuiltinAssert:
 		g.usesAssert = true
-		return &ast.CallExpr{Fun: ast.NewIdent("_assert"), Args: []ast.Expr{args[0], at(e.Pos())}}
+		return &ast.CallExpr{Fun: ast.NewIdent("_assert"), Args: []ast.Expr{args[0], g.callerLocation(e.Pos())}}
 	case check.BuiltinAssertEqual:
 		g.usesAssert = true
 		t := e.Args[0].Type()
@@ -1260,7 +1280,7 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		if check.IsNumeric(t) && isConst(expected) {
 			expected = &ast.CallExpr{Fun: g.goType(t), Args: []ast.Expr{expected}}
 		}
-		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, at(e.Pos())}}
+		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, g.callerLocation(e.Pos())}}
 	case check.BuiltinAssertSnapshot:
 		if !g.testMode {
 			msg := e.Pos().String() + ": assertSnapshot works only in tests (bork test)"
@@ -1268,7 +1288,7 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		}
 		g.usesSnaps = true
 		text := g.stringOf(args[0], e.Args[0].Type())
-		return &ast.CallExpr{Fun: ast.NewIdent("_assertSnapshot"), Args: []ast.Expr{text, at(e.Pos())}}
+		return &ast.CallExpr{Fun: ast.NewIdent("_assertSnapshot"), Args: []ast.Expr{text, g.callerLocation(e.Pos())}}
 	}
 	panic(fmt.Sprintf("unhandled builtin %s", e.Name))
 }
