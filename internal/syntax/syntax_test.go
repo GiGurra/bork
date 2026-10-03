@@ -242,3 +242,30 @@ func TestParseGoImportAliases(t *testing.T) {
 		}
 	}
 }
+
+func TestParseAmbientMarkers(t *testing.T) {
+	diags := &diag.List{}
+	f := Parse("t.bork", []byte("logged ambient a: String\npropagated(\"traceparent\") logged ambient b: String\nambient c: Int\n"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	a, b, c := f.Ambients[0], f.Ambients[1], f.Ambients[2]
+	if a.Logged == nil || a.Propagated != nil || b.Logged == nil || b.Propagated == nil || b.Propagated.Header != "traceparent" || c.Logged != nil || c.Propagated != nil {
+		t.Fatalf("markers: %+v %+v %+v", a, b, c)
+	}
+	for src, want := range map[string]string{
+		"logged logged ambient a: String":                   "logged is given twice",
+		`propagated("x") propagated("y") ambient a: String`: "propagated is given twice",
+		"propagated ambient a: String":                      "expected '(' after propagated",
+		"propagated(header) ambient a: String":              "expected string literal (the header that carries the value)",
+		`propagated("x-\$a") ambient a: String`:             "the header name must be a plain string",
+		"logged fn f() {}":                                  "expected ambient after the markers logged and propagated",
+		`propagated("x") logged secret a: String`:           "expected ambient after the markers",
+	} {
+		diags := &diag.List{}
+		Parse("t.bork", []byte(src), diags)
+		if !strings.Contains(diags.Error(), want) {
+			t.Errorf("%s: got %q, want %q", src, diags.Error(), want)
+		}
+	}
+}

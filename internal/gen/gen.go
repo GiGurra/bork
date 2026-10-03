@@ -141,6 +141,8 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	for _, ci := range info.ClassInstances {
 		roots = append(roots, ci.Methods...)
 	}
+	// Incoming propagated values are checked with their facts.
+	roots = append(roots, g.ambientPreds()...)
 	emit := g.reachable(roots)
 	if main != nil {
 		emit[info.Funcs["main"]] = false
@@ -169,6 +171,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 				}
 				if strings.Contains(fd.GoBody.Body, "_borkBytes") {
 					g.usesBytes = true
+				}
+				if strings.Contains(fd.GoBody.Body, "_borkLogged") || strings.Contains(fd.GoBody.Body, "_borkPropagated") || strings.Contains(fd.GoBody.Body, "_borkBindPropagated") {
+					g.usesAmbients = true
 				}
 				if strings.Contains(fd.GoBody.Body, "_borkMap") {
 					g.usesMap = true
@@ -396,8 +401,11 @@ type gen struct {
 	// get dispatchers; openMocks are the mock statements whose blocks
 	// are being generated, mockBodies the mocks' bodies, and mockN
 	// numbers mock statements.
-	mockIDs    map[*check.Func]int
-	openMocks  []openMock
+	mockIDs   map[*check.Func]int
+	openMocks []openMock
+	// outerMocks are the mock statements open around a generate's
+	// producer being generated, which a mock in it passes calls on to.
+	outerMocks []openMock
 	mockBodies []mockBody
 	mockN      int
 	// genericMocks numbers the mocks of generic functions (by their
@@ -410,6 +418,12 @@ type gen struct {
 	typeParamNames map[*check.TypeParam]string
 	mockErrors     diag.List
 	usesMocks      bool
+	// usesAmbients is set when the program publishes or reads logged
+	// or propagated ambient values (ambientRuntime). labelGuard, while
+	// a Go function's body is generated, is set if a with in it
+	// publishes values (see guardLabels).
+	usesAmbients bool
+	labelGuard   *bool
 	// blocks are the blocks being generated, and scopeBodies the scope
 	// blocks, so a mock can tell whether it is directly in a scope's
 	// body.
@@ -733,11 +747,8 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	for i := range fn.Params {
 		drop(i)
 	}
-	if fn.Result == check.Unit {
-		decl.Body = &ast.BlockStmt{List: append(drops, g.blockInto(fn.Body, sink{})...)}
-	} else {
-		decl.Body = &ast.BlockStmt{List: append(drops, g.blockInto(fn.Body, sink{ret: true})...)}
-	}
+	k := sink{ret: fn.Result != check.Unit}
+	decl.Body = &ast.BlockStmt{List: append(drops, g.guardLabels(func() []ast.Stmt { return g.blockInto(fn.Body, k) })...)}
 	return decl
 }
 
@@ -1182,12 +1193,12 @@ func (g *gen) lambda(e *check.Lambda) ast.Expr {
 	saved, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = ft.Result, nil, nil, nil
 	defer func() { g.openScopes, g.blockOwners, g.openMocks = savedScopes, savedOwners, savedMocks }()
-	var body []ast.Stmt
-	if ft.Result == check.Unit {
-		body = g.effect(e.Body)
-	} else {
-		body = g.tailReturn(e.Body)
-	}
+	body := g.guardLabels(func() []ast.Stmt {
+		if ft.Result == check.Unit {
+			return g.effect(e.Body)
+		}
+		return g.tailReturn(e.Body)
+	})
 	g.fnResult = saved
 	return &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}
 }
@@ -1394,6 +1405,9 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 	out := g.stmts(b.Stmts)
 	if g.diverges(b.Stmts) {
 		return out
+	}
+	if len(b.Labels) > 0 {
+		out = append(out, g.ambientPush(b.Labels)...)
 	}
 	if b.Tail == nil {
 		// A block without a value, where a union holding Unit is wanted.

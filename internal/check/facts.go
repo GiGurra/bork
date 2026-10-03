@@ -1887,6 +1887,12 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 				// A property test's parameter, used in a mock.
 				add(in.ParamConstraints[d.Index], f.ownParams())
 			}
+		case VarAmbient:
+			// A needed value has its ambient's facts (an optional
+			// need is an Option, and is not known to have them).
+			if !d.Need.Optional {
+				add(d.Need.Ambient.Constraints, f.ownParams())
+			}
 		case VarLet:
 			add(d.Let.Constraints, f.ownParams())
 			if depth < maxDepth {

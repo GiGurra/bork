@@ -235,7 +235,7 @@ func (g *gen) testFunc(fn *check.Func, goName *ast.Ident) ast.Decl {
 	return &ast.FuncDecl{
 		Name: goName,
 		Type: &ast.FuncType{Params: &ast.FieldList{}},
-		Body: &ast.BlockStmt{List: g.blockInto(fn.Body, sink{})},
+		Body: &ast.BlockStmt{List: g.guardLabels(func() []ast.Stmt { return g.blockInto(fn.Body, sink{}) })},
 	}
 }
 

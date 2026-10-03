@@ -31,6 +31,21 @@ type Ambient struct {
 	Name string
 	Pkg  *Package
 	Type Type
+	// Constraints are the facts of its type (`ambient id: String where
+	// nonEmpty`): a with must prove them, and a function that needs the
+	// value knows them.
+	Constraints []*Constraint
+	// Logged and Header are its markers: with also publishes a marked
+	// value in the goroutine's labels, for log lines (logged) and for
+	// the header Header of outgoing calls (propagated).
+	Logged bool
+	Header string
+}
+
+// Marked reports whether with publishes the ambient's values in the
+// goroutine's labels.
+func (a *Ambient) Marked() bool {
+	return a.Logged || a.Header != ""
 }
 
 // QualifiedName is the ambient's name as code in package from refers to
@@ -105,10 +120,76 @@ func (c *checker) declareAmbient(ad *syntax.AmbientDecl) {
 		c.errorf(ad.Type.Pos, "ambient %s cannot hold %s: ambient values are data, so pass scopes, resources, tasks, atoms, channels and functions as parameters", ad.Name, t)
 		t = Invalid
 	}
+	a := &Ambient{Decl: ad, Name: ad.Name, Pkg: c.pkg, Type: t, Logged: ad.Logged != nil}
+	if ad.Propagated != nil {
+		a.Header = ad.Propagated.Header
+		c.propagatedHeader(a)
+	}
+	if a.Marked() && t != Invalid && !markable(t) {
+		marker := "logged"
+		if ad.Logged == nil {
+			marker = "propagated"
+		}
+		c.errorf(ad.Type.Pos, "%s ambient %s must hold a String, Int, Float or Bool (facts allowed), found %s: logs and headers carry it as text", marker, ad.Name, t)
+	}
 	if c.pkg.ambients == nil {
 		c.pkg.ambients = map[string]*Ambient{}
 	}
-	c.pkg.ambients[ad.Name] = &Ambient{Decl: ad, Name: ad.Name, Pkg: c.pkg, Type: t}
+	c.pkg.ambients[ad.Name] = a
+	c.info.Ambients = append(c.info.Ambients, a)
+}
+
+// markable reports whether values of t can be logged and propagated:
+// String, Int, Float or Bool, which logs and headers carry as text.
+func markable(t Type) bool {
+	return t == String || t == Int || t == Float || t == Bool
+}
+
+// propagatedHeader checks the header a propagated ambient is sent
+// under: an HTTP header name (a token), used by no other declaration
+// of the program (header names ignore case).
+func (c *checker) propagatedHeader(a *Ambient) {
+	pr := a.Decl.Propagated
+	if !httpToken(a.Header) {
+		c.errorf(pr.HeaderPos, "propagated(%q): a header name is letters, digits and !#$%%&'*+-.^_`|~, and not empty", a.Header)
+		a.Header = ""
+		return
+	}
+	key := strings.ToLower(a.Header)
+	if other := c.info.propagatedHeaders[key]; other != nil {
+		c.errorf(pr.HeaderPos, "header %s already carries %s (declared at %s)", a.Header, other.QualifiedName(c.pkg), other.Decl.Pos)
+		a.Header = ""
+		return
+	}
+	if c.info.propagatedHeaders == nil {
+		c.info.propagatedHeaders = map[string]*Ambient{}
+	}
+	c.info.propagatedHeaders[key] = a
+}
+
+// httpToken reports whether s is an HTTP token (RFC 9110), as header
+// names are.
+func httpToken(s string) bool {
+	for _, r := range s {
+		letter := 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z'
+		if !letter && (r < '0' || r > '9') && !strings.ContainsRune("!#$%&'*+-.^_`|~", r) {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// ambientConstraints resolves the facts of the ambient values' types,
+// once the predicates are declared.
+func (c *checker) ambientConstraints(files []*syntax.File) {
+	for _, f := range files {
+		c.inFile(f)
+		for _, ad := range f.Ambients {
+			if a := c.pkg.ambients[ad.Name]; a != nil && a.Decl == ad && a.Type != Invalid {
+				a.Constraints = c.constraintsOf(ad.Type, a.Type, nil)
+			}
+		}
+	}
 }
 
 // ambientNamed is the ambient value a name (traceId, or trace.Id)
@@ -399,6 +480,9 @@ func (c *checker) withExpr(e *syntax.WithExpr, want Type) Type {
 			continue
 		}
 		t := c.exprWant(b.Value, a.Type)
+		if t == Never {
+			c.errorf(b.Value.Position(), "cannot bind %s: the expression never produces a value", b.Name)
+		}
 		if t, tt := c.settle(t, a.Type); t != Invalid && tt != Invalid && !assignable(t, tt) {
 			c.errorf(b.Value.Position(), "%s must be %s, found %s", b.Name, tt, t)
 		}
@@ -411,11 +495,11 @@ func (c *checker) withExpr(e *syntax.WithExpr, want Type) Type {
 	}
 	c.pushScope()
 	defer c.popScope()
-	if c.info.withTypes == nil {
-		c.info.withTypes = map[*syntax.WithBinding]Type{}
+	if c.info.withAmbients == nil {
+		c.info.withAmbients = map[*syntax.WithBinding]*Ambient{}
 	}
 	for _, x := range binds {
-		c.info.withTypes[x.b] = x.a.Type
+		c.info.withAmbients[x.b] = x.a
 		c.scopes[len(c.scopes)-1][ambientKey(x.a)] = &local{typ: x.a.Type, node: x.b, decl: x.b}
 	}
 	return c.record(e, c.block(e.Body, want))

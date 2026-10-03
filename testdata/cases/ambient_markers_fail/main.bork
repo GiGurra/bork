@@ -1,0 +1,22 @@
+import "example.com/markfail/other"
+
+type User = { name: String }
+
+// Logs and headers carry values as text.
+logged ambient user: User
+propagated("x-tags") ambient tags: List[String]
+logged propagated("x-ok") ambient ok: Bool
+// Header names are HTTP tokens.
+propagated("") ambient empty: String
+propagated("x trace") ambient spaced: String
+propagated("traceparent") ambient trace: String
+
+fn show() needs trace: String {
+  trace
+}
+
+fn main() uses io {
+  println(other.Trace)
+  // A with binds values.
+  println(with (trace: panic("none")) { show() })
+}

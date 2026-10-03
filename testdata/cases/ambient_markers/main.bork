@@ -1,0 +1,195 @@
+import "bork/log"
+import "example.com/marked/audit"
+import autil "example.com/marked/a/util"
+import butil "example.com/marked/b/util"
+
+pred nonEmpty(s: String) { s != "" }
+pred small(n: Int) { n < 10 }
+pred unit(f: Float) { f >= 0.0 && f <= 1.0 }
+// A predicate that panics on some input.
+pred calm(s: String) {
+  if (s == "boom") {
+    panic(s"bad ${s}")
+  } else {
+    true
+  }
+}
+
+type TraceParent = String where nonEmpty
+
+// Logged values are added to every log line written while a with binds
+// them; propagated ones are sent under their header by boundary code.
+logged ambient requestId: String
+propagated("traceparent") logged ambient trace: TraceParent
+propagated("x-attempt") ambient attempt: Int where small
+propagated("x-ratio") ambient ratio: Float
+// NaN and the infinities are checked against the facts too.
+propagated("x-share") ambient share: Float where unit
+propagated("x-flag") ambient flag: Bool
+propagated("x-mood") ambient mood: String where calm
+// An unmarked value never leaves through logs or headers.
+ambient secret: String
+
+fn work(label: String) {
+  log.Info(label, { "k": 1 })
+}
+
+// What an outgoing call would send (boundary code, as bork/http's).
+fn headers(): String unsafe go {
+  out := ""
+  for _, h := range _borkPropagated() {
+    out += h.Name + "=" + h.Value + " "
+  }
+  return out
+}
+
+// How a server would bind an incoming request's values around its
+// handler (boundary code, as bork/http's).
+fn serve(traceIn: String, attemptIn: String, handler: () uses io => Unit) uses io unsafe go {
+  restore := _borkBindPropagated(func(name string) (string, bool) {
+    switch name {
+    case "traceparent":
+      return traceIn, traceIn != "-"
+    case "x-attempt":
+      return attemptIn, attemptIn != "-"
+    }
+    return "", false
+  })
+  defer restore()
+  handler()
+}
+
+// Binds one header's incoming value, and prints what would be sent on.
+fn receive(header: String, text: String) uses io unsafe go {
+  import "fmt"
+  restore := _borkBindPropagated(func(name string) (string, bool) {
+    return text, name == header
+  })
+  defer restore()
+  out := ""
+  for _, h := range _borkPropagated() {
+    out += h.Name + "=" + h.Value + " "
+  }
+  fmt.Printf("received %s %q: send: %s\n", header, text, out)
+}
+
+// A getter that logs (as an HTTP adapter warning about a repeated
+// header would) does so without the server's own propagated values.
+fn serveLogging(handler: () uses io => Unit) uses io unsafe go {
+  restore := _borkBindPropagated(func(name string) (string, bool) {
+    work("getting " + name)
+    return "00-in-01", name == "traceparent"
+  })
+  defer restore()
+  handler()
+}
+
+// A with whose block never ends normally.
+fn never(): Int {
+  with (requestId: "never") {
+    panic("never")
+  }
+}
+
+// A generator's return ends only its own withs.
+fn generated(): Seq[Int] {
+  generate[Int] {
+    yield 1
+    if (true) {
+      return
+    }
+    yield 2
+  }
+}
+
+// A with ends on every way out of its block.
+fn early(stop: Bool): String {
+  with (requestId: "early") {
+    if (stop) {
+      return "stopped"
+    }
+    work("not stopped")
+  }
+  "done"
+}
+
+fn main() uses io + state {
+  log.Configure(log.Defaults().copy(timestamps: false, output: log.Output.Stdout))
+  work("unbound")
+  with (requestId: "r1", trace: "00-abc-01", secret: "hidden") {
+    work("bound")
+    println(s"send: ${headers()}")
+    with (requestId: "r2", attempt: 2) {
+      work("nested")
+      println(s"send: ${headers()}")
+    }
+    work("after nested")
+    // Tasks inherit what is bound where they start.
+    scope s {
+      launch(s, () => work("task"))
+    }
+    // An incoming request's values replace the server's own, also
+    // where it carries none (a boundary).
+    serve("00-in-01", "-", () => {
+      work("handler")
+      println(s"send: ${headers()}")
+    })
+    serve("-", "3", () => println(s"send: ${headers()}"))
+    serveLogging(() => work("logging handler"))
+    work("after serve")
+  }
+  println(early(true))
+  work("after return")
+  println(early(false))
+  for (i in [1, 2]) {
+    with (attempt: i) {
+      if (i == 1) {
+        continue
+      }
+      println(s"send: ${headers()}")
+    }
+  }
+  println(s"send: ${headers()}")
+  // Invalid incoming values are not bound, and are logged without
+  // their text.
+  serve("", "12", () => println(s"send: ${headers()}"))
+  serve("t", "x", () => println(s"send: ${headers()}"))
+  // Only plain decimal text is read, and values are sent as bork shows
+  // them.
+  for (text in ["2.50", "3", "-1e3", "NaN", "-Inf", "+1", "1_0", "inf", "0x1p4", "1."]) {
+    receive("x-ratio", text)
+  }
+  for (text in ["0.5", "NaN", "+Inf", "-Inf", "2.0"]) {
+    receive("x-share", text)
+  }
+  for (text in ["true", "false", "1", "TRUE"]) {
+    receive("x-flag", text)
+  }
+  receive("x-attempt", "+4")
+  receive("x-mood", "fine")
+  receive("x-mood", "boom")
+  with (ratio: 3.0, flag: true) {
+    println(s"send: ${headers()}")
+  }
+  with (requestId: "outer") {
+    for (x in generated()) {
+      work(s"item ${x}")
+    }
+    work("after generated")
+    // Two packages log requestId.
+    audit.Run(() => audit.Note())
+    autil.Run(() => butil.Run(() => work("utils")))
+  }
+  if (false) {
+    println(never())
+  }
+  // A with in a loop restores on each iteration.
+  for (i in Seq.range(0, 3)) {
+    with (requestId: s"loop ${i}") {
+      if (i == 1) {
+        work("loop")
+      }
+    }
+  }
+  work("after loop")
+}

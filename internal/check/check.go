@@ -206,6 +206,8 @@ type Info struct {
 
 	// Packages lists the program's packages.
 	Packages []*Package
+	// Ambients lists the program's ambient declarations, in order.
+	Ambients []*Ambient
 	// Classes and ClassInstances list every class and instance.
 	Classes        []*Class
 	ClassInstances []*ClassInstance
@@ -285,8 +287,11 @@ type Info struct {
 	// needArgs records what each call or reference of a function that
 	// needs ambient values passes for them.
 	needArgs map[syntax.Expr][]needSource
-	// withTypes holds the ambient type each with binding binds.
-	withTypes map[*syntax.WithBinding]Type
+	// withAmbients holds the ambient value each with binding binds.
+	withAmbients map[*syntax.WithBinding]*Ambient
+	// propagatedHeaders maps the header names propagated ambients are
+	// sent under (lower case) to their declarations.
+	propagatedHeaders map[string]*Ambient
 	// recordTargets records what each record literal builds: a *Record
 	// or a *Variant.
 	writtenTypes           map[*syntax.TypeExpr]Type
@@ -479,6 +484,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 		}
 	}
 	c.resolveConstraints(files)
+	c.ambientConstraints(files)
 	c.instanceConstraints()
 	c.resolveDerived()
 	c.checkRules(files)

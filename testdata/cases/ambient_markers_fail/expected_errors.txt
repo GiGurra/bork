@@ -1,0 +1,7 @@
+main.bork:6:22: logged ambient user must hold a String, Int, Float or Bool (facts allowed), found User: logs and headers carry it as text
+main.bork:7:36: propagated ambient tags must hold a String, Int, Float or Bool (facts allowed), found List[String]: logs and headers carry it as text
+main.bork:10:12: propagated(""): a header name is letters, digits and !#$%&'*+-.^_`|~, and not empty
+main.bork:11:12: propagated("x trace"): a header name is letters, digits and !#$%&'*+-.^_`|~, and not empty
+main.bork:19:11: main reads other.Trace, but does not bind it: with (other.Trace: ...) { ... }
+main.bork:21:24: cannot bind trace: the expression never produces a value
+other/other.bork:2:12: header TraceParent already carries markfail.trace (declared at main.bork:12:1)

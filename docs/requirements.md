@@ -1711,7 +1711,10 @@ started:
   copies a goroutine's labels to every goroutine it starts, including those
   bork does not start itself. A dispatcher reads the current goroutine's label
   pointer (one load: no labels means no mocks) and looks it up in the table.
-  A frame is marked ended when its block ends, and lookups skip ended frames.
+  A frame is marked ended when its block ends, and lookups skip ended frames;
+  the block's end puts back the very label set it found. A `with` that
+  publishes [logged or propagated](#logged-and-propagated-values) values
+  makes a label set of its own, which the table maps to the frame in force.
   The labels stay valid for profilers. `unsafe go` code that sets its own
   profiler labels (`pprof.Do`) hides the test's mocks from what runs under
   them; it then gets the real functions. On the test's own goroutine that
@@ -2020,8 +2023,8 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
 
 ## Ambient values (design: bork-j68yln)
 
-> **Implemented** (bork-j68yln), apart from the `logged` and `propagated`
-> markers (follow-ups, below). Typed request-scoped values: bork's answer to the
+> **Implemented** (bork-j68yln; the `logged` and `propagated` markers:
+> bork-avr3ns). Typed request-scoped values: bork's answer to the
 > value half of Go's `context.Context`. The other half, cancellation and
 > deadlines, is already [scopes](#resources-and-scopes).
 
@@ -2060,7 +2063,7 @@ fn handle(req: http.Request, s: Scope) uses io + state: http.Response {
 ### Declaring
 
 ```ebnf
-AmbientDecl = "ambient" Ident ":" Type .
+AmbientDecl = { "logged" | "propagated" "(" String ")" } "ambient" Ident ":" Type .
 ```
 
 - **An ambient value is a package-level name with a type.** It has no value of
@@ -2074,8 +2077,12 @@ AmbientDecl = "ambient" Ident ":" Type .
   This also keeps ambient values out of the lifetime check: a binding can be
   captured by tasks that outlive its `with` block (below), which is only safe
   for values that hold no lifetime.
-- **No `where` clauses on the type yet**, as on other declarations the facts
-  check does not cover.
+- **Its type may have facts** (`ambient attempt: Int where positive`, or a
+  constrained alias): a `with` must prove them for the value it binds, as an
+  annotated binding does, and a function that needs the value knows them. An
+  optional need (`attempt?`) is an `Option`, and is not known to have them.
+- **Markers** `logged` and `propagated("header")` publish the value beyond
+  `needs`; see [below](#logged-and-propagated-values).
 - **No defaults in v1.** "Unbound" has one meaning everywhere; a function that
   can do without a value reads it as optional and picks its own fallback
   (`locale.getOr("en")`), so the fallback is visible where it is used.
@@ -2181,6 +2188,61 @@ WithBind = ( Ident | Ident "." Ident ) ":" Expr .
   input the code computes with, and must be the same on every path the checker
   sees.
 
+### Logged and propagated values
+
+```
+logged ambient requestId: String
+propagated("traceparent") logged ambient trace: TraceParent   // String where validTraceParent
+```
+
+- **Markers on the declaration opt a value in.** `logged` adds it to every log
+  line written while a `with` binds it, in every function, not only those that
+  need it. `propagated("traceparent")` lets boundary code send it across
+  process boundaries under that header (or message metadata) name. Values of
+  unmarked declarations never leave through logs or the network implicitly.
+- **A marked value is a `String`, `Int`, `Float` or `Bool`**, facts allowed:
+  logs and headers carry it as text, and an incoming value is read back from
+  its text and checked against its facts. A `String` goes as it is; numbers
+  and `Bool` go as bork shows them (`3.0`, `NaN`, `true`), and only that
+  text is read back (no `+`, `_` or hex; `Bool` only `true` or `false`). Records would need a codec per declaration; none is needed yet.
+- **A header name is an HTTP token, used once per program** (ignoring case):
+  two declarations sent under one header would be confused on the receiving
+  side.
+- **One dynamic mechanism.** `with` also publishes its marked bindings in the
+  goroutine's profiler labels (as
+  [mocks](#propagation-mocks-follow-the-work-not-the-code) are carried), until
+  its block ends on any path (`return`, `?`, `break`, a panic). Goroutines
+  started meanwhile inherit them: tasks, and goroutines of Go code. Unlike
+  needs, this follows the goroutine, not the source: a lambda made inside a
+  `with` and run outside it logs without the value, a task started inside
+  logs with it after the block ended, and the loop body consuming a
+  `generate` whose producer is inside a `with` runs with the producer's
+  values (the producer calls it). That is right for labels of logs and
+  outgoing calls, and is why nothing a function computes may depend on them.
+- **Only effectful standard-library boundary code reads them**, through the
+  helpers in [the Go helpers for standard packages](std-go.md#ambient-values):
+  `bork/log` adds logged values (under the declaration's name, or
+  `audit.requestId` where two packages log one name, or the whole package
+  path where their paths end alike, before a record's own attributes); `net` clients send `_borkPropagated()`, and
+  servers bind an incoming request's values with `_borkBindPropagated`. Bork
+  code reads ambient values only through `needs`.
+- **An incoming request is a boundary.** Binding its values first clears every
+  propagated value the server's goroutine had bound, before reading any, so a
+  request never forwards the server's own trace, and nothing logged while its
+  values are read carries it. A missing value stays unbound; one that is
+  not of its type or lacks its facts (or whose predicate panics) stays
+  unbound and is logged at warning level, without its text. Logged values that are not propagated are not
+  cleared.
+- **Labels never reach `needs`.** A handler's code computes with the bindings
+  captured where it was made (lexically, above). For application code to
+  *need* an incoming value, the handler decodes it from the request with the
+  checked `Decode` boundary and binds it: `with (trace: decoded) { ... }`
+  (bork-gqxe4s).
+- **Cost.** Only a `with` that binds a marked value touches labels, and a Go
+  function holding one defers a single restore for panics, however many
+  times a loop runs the `with`; a program without marked declarations has
+  none of this runtime.
+
 ### Implementation: hidden parameters
 
 The compiler threads each need through the functions that declare it as an
@@ -2215,20 +2277,13 @@ fix).
 - **Effects.** `needs` is independent of `uses`: it adds no effect, and
   `uses nothing` parameters and predicates' purity are unaffected (predicates
   are excluded for facts, above, not for effects).
-- **Logging and propagation (follow-ups): one dynamic mechanism.** Two kinds of
-  code need a value without being able to declare `needs` for it: a log line
-  in a function that does not need the trace id, and `bork/http`'s client,
-  which cannot name a user's ambient declarations. Both are opt-in markers on
-  the declaration: `logged ambient traceId: String` adds the value to every
-  log line written while a `with` binds it, and `propagated` (with the codec
-  that writes it into headers or message metadata, bork-gqxe4s) sends it
-  across process boundaries. Both ride one mechanism: `with` also records
-  marked bindings in the goroutine's labels (as
-  [mocks](#propagation-mocks-follow-the-work-not-the-code) do), inherited by
-  tasks. These labels are read only by effectful standard-library boundary code
-  (logging, and `net` clients and servers), never by pure code, so `needs`
-  remains the only way a value reaches what a function computes. Values of
-  unmarked declarations never leave through logs or the network implicitly.
+- **Logging and propagation: one dynamic mechanism.** Two kinds of code need a
+  value without being able to declare `needs` for it: a log line in a function
+  that does not need the trace id, and `bork/http`'s client, which cannot name
+  a user's ambient declarations. Both are served by the opt-in markers
+  [above](#logged-and-propagated-values), which share goroutine labels that
+  only effectful standard-library boundary code reads, so `needs` remains the
+  only way a value reaches what a function computes.
 - **Needs versus markers: the trade-off.** A value read through `needs` must be
   declared on every function between the `with` and the read, even those that
   only pass it on. That visibility is the point for values that change what
@@ -2244,11 +2299,11 @@ fix).
   of its providers' needs, as it uses the union of their effects. Ambient
   values are never products: they are not resolved by type.
 - **Lifetimes and owned scopes.** None: ambient types hold no lifetime.
-- **Propagation across process boundaries** (bork-gqxe4s) designs the
-  `propagated` marker above: the codecs, which headers or metadata carry the
-  values, and how a server binds them on the receiving side. The approved
-  [HTTP boundary design](design/http-propagation.md) specifies remaining
-  deadline budgets, server policy caps, W3C trace forwarding, and the distinction
+- **Propagation across process boundaries** (bork-gqxe4s) builds on the
+  `propagated` marker: `bork/http` sends and binds the values with the
+  helpers above. The approved [HTTP boundary design](design/http-propagation.md)
+  specifies remaining deadline budgets (carried with scopes, not ambient
+  values), server policy caps, W3C trace forwarding, and the distinction
   between incoming labels and explicit checked bindings for typed `needs`.
   Deadline budgets are implemented before admission and body reads; client
   redirects refresh the effective budget and server requestTimeoutMs caps it.
@@ -2265,11 +2320,17 @@ main.bork:2:1: ambient session cannot hold Scope: ambient values are data, so pa
 main.bork:5:40: save declares needs traceId, but never reads it
 main.bork:31:9: with binds ambient values, and total is not one
 main.bork:33:9: traceId is bound twice in one with
+main.bork:21:24: cannot bind trace: the expression never produces a value
+main.bork:42:22: attempt must be positive, but positive(0) is false
+main.bork:6:22: logged ambient user must hold a String, Int, Float or Bool (facts allowed), found User: logs and headers carry it as text
+main.bork:11:12: propagated("x trace"): a header name is letters, digits and !#$%&'*+-.^_`|~, and not empty
+other/other.bork:2:12: header TraceParent already carries markfail.trace (declared at main.bork:12:1)
 ```
 
 ### Decisions recorded
 
-- Declaration `ambient name: Type`, data types only, no defaults.
+- Declaration `ambient name: Type`, data types only (facts allowed), no
+  defaults.
 - `needs` after `uses`, joined with `+`; `name?` reads an `Option` and never
   fails a caller.
 - `with (name: value, ...) { ... }` as an expression; immutable, nesting
@@ -2279,9 +2340,11 @@ main.bork:33:9: traceId is bound twice in one with
 - Lexical capture: lambdas, function values and tasks keep the bindings in
   force where they are made.
 - Hidden Go parameters, not a carried map.
-- `logged` and `propagated` are opt-in markers on the declaration, sharing one
-  goroutine-label mechanism that only effectful standard-library boundary code
-  reads; trace ids should usually use them rather than `needs`.
+- `logged` and `propagated("header")` are opt-in markers on the declaration,
+  for `String`, `Int`, `Float` and `Bool` values, sharing one goroutine-label
+  mechanism that only effectful standard-library boundary code reads; trace
+  ids should usually use them rather than `needs`. An incoming request is a
+  boundary for propagated values; labels never reach `needs`.
 
 ### Open questions
 

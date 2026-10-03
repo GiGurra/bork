@@ -1,0 +1,71 @@
+level=INFO msg=unbound k=1
+level=INFO msg=bound requestId=r1 trace=00-abc-01 k=1
+send: traceparent=00-abc-01 
+level=INFO msg=nested requestId=r2 trace=00-abc-01 k=1
+send: traceparent=00-abc-01 x-attempt=2 
+level=INFO msg="after nested" requestId=r1 trace=00-abc-01 k=1
+level=INFO msg=task requestId=r1 trace=00-abc-01 k=1
+level=INFO msg=handler requestId=r1 trace=00-in-01 k=1
+send: traceparent=00-in-01 
+send: x-attempt=3 
+level=INFO msg="getting traceparent" requestId=r1 k=1
+level=INFO msg="getting x-attempt" requestId=r1 k=1
+level=INFO msg="getting x-ratio" requestId=r1 k=1
+level=INFO msg="getting x-share" requestId=r1 k=1
+level=INFO msg="getting x-flag" requestId=r1 k=1
+level=INFO msg="getting x-mood" requestId=r1 k=1
+level=INFO msg="logging handler" requestId=r1 trace=00-in-01 k=1
+level=INFO msg="after serve" requestId=r1 trace=00-abc-01 k=1
+stopped
+level=INFO msg="after return" k=1
+level=INFO msg="not stopped" requestId=early k=1
+done
+send: x-attempt=2 
+send: 
+level=WARN msg="ignored an invalid propagated value" header=traceparent ambient=trace error="it does not have the facts of its type"
+level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it does not have the facts of its type"
+send: 
+level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it is not an Int"
+send: traceparent=t 
+received x-ratio "2.50": send: x-ratio=2.5 
+received x-ratio "3": send: x-ratio=3.0 
+received x-ratio "-1e3": send: x-ratio=-1000.0 
+received x-ratio "NaN": send: x-ratio=NaN 
+received x-ratio "-Inf": send: x-ratio=-Inf 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "+1": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "1_0": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "inf": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "0x1p4": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "1.": send: 
+received x-share "0.5": send: x-share=0.5 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "NaN": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "+Inf": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "-Inf": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "2.0": send: 
+received x-flag "true": send: x-flag=true 
+received x-flag "false": send: x-flag=false 
+level=WARN msg="ignored an invalid propagated value" header=x-flag ambient=flag error="it is not a Bool"
+received x-flag "1": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-flag ambient=flag error="it is not a Bool"
+received x-flag "TRUE": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it is not an Int"
+received x-attempt "+4": send: 
+received x-mood "fine": send: x-mood=fine 
+level=WARN msg="ignored an invalid propagated value" header=x-mood ambient=mood error="checking its facts panicked"
+received x-mood "boom": send: 
+send: x-ratio=3.0 x-flag=true 
+level=INFO msg="item 1" requestId=outer k=1
+level=INFO msg="after generated" requestId=outer k=1
+level=INFO msg=audit requestId=outer audit.requestId=audit-1
+level=INFO msg=utils requestId=outer example.com/marked/a/util.requestId=a example.com/marked/b/util.requestId=b k=1
+level=INFO msg=loop requestId="loop 1" k=1
+level=INFO msg="after loop" k=1

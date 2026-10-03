@@ -1,0 +1,13 @@
+import "bork/log"
+
+// Another package logging a value of the same name: its records call
+// it audit.requestId.
+logged ambient requestId: String
+
+fn Run(f: () => Unit) {
+  with (requestId: "audit-1") { f() }
+}
+
+fn Note() {
+  log.Info("audit", {:})
+}

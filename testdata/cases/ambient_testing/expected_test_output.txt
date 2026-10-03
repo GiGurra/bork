@@ -2,5 +2,8 @@ ok    unsafe go with a fact
 ok    binds
 ok    mock sees needs
 ok    real
-4 passed, 0 failed
+ok    mocks and published values
+ok    mock in generate
+ok    tasks see mocks and published values
+7 passed, 0 failed
 exit code 0

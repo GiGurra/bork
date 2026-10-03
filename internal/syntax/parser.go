@@ -79,7 +79,7 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 			if td := p.typeDecl(); td != nil {
 				f.Types = append(f.Types, td)
 			}
-		case p.at(TIdent) && p.tok().Text == "ambient" && p.peekKind() == TIdent:
+		case p.at(TIdent) && (p.tok().Text == "ambient" && p.peekKind() == TIdent || p.atAmbientMarker()):
 			if ad := p.ambientDecl(); ad != nil {
 				f.Ambients = append(f.Ambients, ad)
 			}
@@ -675,15 +675,47 @@ func (p *parser) pred() *PredRef {
 // ambientDecl parses `ambient name: Type`.
 func (p *parser) ambientDecl() (ad *AmbientDecl) {
 	defer p.recoverDecl(func() { ad = nil })
-	pos := p.next().Pos
+	ad = &AmbientDecl{Pos: p.tok().Pos}
+	for p.at(TIdent) && (p.tok().Text == "logged" || p.tok().Text == "propagated") {
+		t := p.next()
+		switch {
+		case t.Text == "logged" && ad.Logged == nil:
+			ad.Logged = &t.Pos
+		case t.Text == "propagated" && ad.Propagated == nil:
+			p.expect(LParen, "after propagated (the header that carries the value: propagated(\"traceparent\"))")
+			h := p.expect(TString, "(the header that carries the value)")
+			header, err := strconv.Unquote(h.Text)
+			if err != nil {
+				p.errorf(h.Pos, "the header name must be a plain string, such as \"traceparent\"")
+				panic(bailout{})
+			}
+			p.expect(RParen, "after the header name")
+			ad.Propagated = &Propagated{Pos: t.Pos, Header: header, HeaderPos: h.Pos}
+		default:
+			p.errorf(t.Pos, "%s is given twice", t.Text)
+			panic(bailout{})
+		}
+	}
+	if !p.at(TIdent) || p.tok().Text != "ambient" {
+		p.errorf(p.tok().Pos, "expected ambient after the markers logged and propagated, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	p.next()
 	name := p.expect(TIdent, "(the ambient value's name)")
 	p.expect(Colon, "after the ambient value's name")
-	ad = &AmbientDecl{Pos: pos, Name: name.Text, Type: p.typeExpr()}
+	ad.Name, ad.Type = name.Text, p.typeExpr()
 	if !p.at(Semi) && !p.at(EOF) {
 		p.errorf(p.tok().Pos, "expected end of line after the ambient declaration, found %s", p.tok().Kind)
 		panic(bailout{})
 	}
 	return ad
+}
+
+// atAmbientMarker reports whether a marked ambient declaration starts
+// here: with `logged` or `propagated` (at the top level, nothing else
+// does).
+func (p *parser) atAmbientMarker() bool {
+	return p.tok().Text == "logged" || p.tok().Text == "propagated"
 }
 
 // needs parses `needs traceId + locale?`, if present: the ambient

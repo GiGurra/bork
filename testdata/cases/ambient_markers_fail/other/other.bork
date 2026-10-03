@@ -1,0 +1,2 @@
+// Header names ignore case, across packages.
+propagated("TraceParent") ambient Trace: String

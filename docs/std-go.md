@@ -111,6 +111,41 @@ cleanup. Cancellation is terminal: attaching an already cancelled resource does
 not revive it. This allows Go APIs such as `database/sql.BeginTx` to retain the
 same context while attachment changes its cancellation source.
 
+## Ambient values
+
+| Helper | Behavior |
+| --- | --- |
+| `_borkLogged() []_borkAmbient` | The `logged` ambient values bound on this goroutine, in declaration order: `_borkAmbient{Name string; Value any}`, Name the declaration's (qualified by its package's last path element where two packages log one name, or by its whole path where those are alike too), Value a `string`, `int64`, `float64` or `bool`. |
+| `_borkPropagated() []_borkHeader` | The `propagated` ambient values bound on this goroutine, in declaration order, as sent: `_borkHeader{Name, Value string}`, the header name and the value's text. |
+| `_borkBindPropagated(get func(name string) (string, bool)) (restore func())` | Binds an incoming request's propagated values on this goroutine, and the goroutines it starts, until `restore` puts back its labels. A boundary: every propagated value bound before is cleared first, before `get` is called, so what `get` and the values' checks log does not carry them. `get` is called once per propagated declaration, in declaration order; the values are bound once all are read. If `get` panics, the labels from before are put back. A value `get` does not give stays unbound; one that is not the plain text of its declaration's type (a `String` as is; `Int` and `Float` decimal, without `+`, `_` or hex, and a Float's `NaN`, `+Inf` and `-Inf`; `Bool` `true` or `false`), or lacks its facts, stays unbound and is logged at warn level through `log/slog`, without its text. Never panics on input. |
+
+A `with` publishes the values of `logged` and `propagated("header")`
+declarations in the goroutine's profiler labels until its block ends; these
+helpers read them (see "Logged and propagated values" in requirements.md). They
+are for effectful boundary code (logging, and network clients and servers):
+nothing a function computes may depend on them, since they follow the goroutine
+rather than the source. `bork/log` adds `_borkLogged()` to every record. A
+client sends each `_borkPropagated()` pair as a header:
+
+```go
+for _, h := range _borkPropagated() {
+  req.Header.Set(h.Name, h.Value)
+}
+```
+
+and a server binds a request's values around its handler:
+
+```go
+restore := _borkBindPropagated(func(name string) (string, bool) {
+  v := req.Header.Values(name)
+  if len(v) == 0 { return "", false }
+  return v[0], true
+})
+defer restore()
+```
+
+In a program without marked declarations the helpers read and bind nothing.
+
 ## Decode schema
 
 Derived `Decode` dictionaries also expose a general record schema. In an
