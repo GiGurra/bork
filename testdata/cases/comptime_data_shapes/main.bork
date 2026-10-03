@@ -1,0 +1,22 @@
+type Box = { value: Int8 | Int }
+
+pred nonEmpty(m: Map[String, Int]) { m.size() > 0 }
+
+fn table(): Map[String, Int] { { "b": 2, "a": 1 }.sorted().inOrder() }
+
+fn boxed(): Box {
+  n: Int8 = 7
+  Box { value: n }
+}
+
+fn main() {
+  m: Map[String, Int] where nonEmpty = comptime { table() }
+  println(m.keys())
+  selected = comptime { m.get("a") }
+  println(selected)
+  b = comptime { boxed() }
+  println(match (b.value) {
+    n: Int8 => s"small:$n"
+    n: Int => s"large:$n"
+  })
+}

@@ -46,7 +46,7 @@ func ComptimeProgram(files []*syntax.File, info *check.Info, node *check.Comptim
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := parser.ParseFile(token.NewFileSet(), "", comptimeRuntime, 0)
+	runtime, err := parser.ParseFile(token.NewFileSet(), "", comptimeRuntime+"\nconst _ctSchemaVersion="+strconv.Itoa(check.ComptimeSchemaVersion), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +123,56 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 			return "", err
 		}
 		body = "if len(value)>1000000-_ctNodes {panic(\"comptime result exceeds node limit\")}; out:=_ctValue{Kind:" + kind + ",Nil:value==nil}; for _,item:=range value {out.Items=append(out.Items," + child + "(item,depth+1))}; return out"
+	case *check.Map:
+		key, err := e.function(t.Key)
+		if err != nil {
+			return "", fmt.Errorf("map key: %w", err)
+		}
+		value, err := e.function(t.Value)
+		if err != nil {
+			return "", fmt.Errorf("map value: %w", err)
+		}
+		var keyType, valueType bytes.Buffer
+		if err := printer.Fprint(&keyType, token.NewFileSet(), e.g.goType(t.Key)); err != nil {
+			return "", err
+		}
+		if err := printer.Fprint(&valueType, token.NewFileSet(), e.g.goType(t.Value)); err != nil {
+			return "", err
+		}
+		body = "if _,ok:=value.impl().(*_mapCore);!ok{panic(\"comptime map result must use insertion order; call inOrder() on sorted maps\")};if value.impl().size()>(1000000-_ctNodes)/2{panic(\"comptime result exceeds node limit\")};out:=_ctValue{Kind:" + kind + "};value.impl().each(func(entry *_mapEntry)bool{out.Items=append(out.Items," + key + "(entry.key.(" + keyType.String() + "),depth+1)," + value + "(entry.val.(" + valueType.String() + "),depth+1));return true});return out"
+	case *check.Sealed:
+		body = "switch value:=value.(type){"
+		for _, variant := range t.Variants {
+			var variantType bytes.Buffer
+			if err := printer.Fprint(&variantType, token.NewFileSet(), e.g.variantType(variant)); err != nil {
+				return "", err
+			}
+			var items []string
+			for _, field := range variant.Fields {
+				child, err := e.function(field.Type)
+				if err != nil {
+					return "", fmt.Errorf("variant %s field %s: %w", variant.Name, field.Name, err)
+				}
+				items = append(items, child+"(value."+name(field.Name).Name+",depth+1)")
+			}
+			tag := strconv.Quote(variant.Name)
+			body += "case " + variantType.String() + ":_=value;_ctReserve(6*len(" + tag + "));return _ctValue{Kind:" + kind + ",Tag:" + tag + ",Items:[]_ctValue{" + strings.Join(items, ",") + "}};"
+		}
+		body += "default:panic(\"invalid comptime sealed value\")}"
+	case *check.Union:
+		body = "switch value:=value.(type){"
+		for index, member := range t.Members {
+			child, err := e.function(member)
+			if err != nil {
+				return "", fmt.Errorf("union member %s: %w", member, err)
+			}
+			var memberType bytes.Buffer
+			if err := printer.Fprint(&memberType, token.NewFileSet(), e.g.goType(member)); err != nil {
+				return "", err
+			}
+			body += "case " + memberType.String() + ":return _ctValue{Kind:" + kind + ",Tag:" + strconv.Quote(strconv.Itoa(index)) + ",Items:[]_ctValue{" + child + "(value,depth+1)}};"
+		}
+		body += "default:panic(\"invalid comptime union value\")}"
 	case *check.Record:
 		if t.GoMirror != nil {
 			return "", fmt.Errorf("go mirror result %s is not supported yet", t)
@@ -153,6 +203,7 @@ const comptimeRuntime = `package main
 type _ctValue struct {
  Kind string
  Text string
+ Tag string
  Items []_ctValue
  Nil bool
 }
@@ -175,7 +226,7 @@ func _ctEmit(value _ctValue){
  file,err:=os.OpenFile(os.Args[1],os.O_WRONLY|os.O_CREATE|os.O_TRUNC,0600)
  if err!=nil {panic(err)}
  defer file.Close()
- if err:=json.NewEncoder(&_ctWriter{file:file,remaining:16<<20}).Encode(struct{Version int;Value _ctValue}{1,value});err!=nil {panic(err)}
+ if err:=json.NewEncoder(&_ctWriter{file:file,remaining:16<<20}).Encode(struct{Version int;Value _ctValue}{_ctSchemaVersion,value});err!=nil {panic(err)}
 }
 `
 

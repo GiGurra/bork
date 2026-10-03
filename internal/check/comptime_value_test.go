@@ -25,7 +25,7 @@ func TestComptimeTransportValidation(t *testing.T) {
 			data, err := json.Marshal(struct {
 				Version int
 				Value   comptimeValue
-			}{1, tc.value})
+			}{ComptimeSchemaVersion, tc.value})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -36,9 +36,9 @@ func TestComptimeTransportValidation(t *testing.T) {
 		})
 	}
 	for _, data := range []string{
-		`{"Version":2,"Value":{"Kind":"Int","Text":"1"}}`,
-		`{"Version":1,"Value":{"Kind":"Int","Text":"1","Unknown":true}}`,
-		`{"Version":1,"Value":{"Kind":"Int","Text":"1"}} {}`,
+		`{"Version":3,"Value":{"Kind":"Int","Text":"1"}}`,
+		`{"Version":2,"Value":{"Kind":"Int","Text":"1","Unknown":true}}`,
+		`{"Version":2,"Value":{"Kind":"Int","Text":"1"}} {}`,
 	} {
 		if _, err := DecodeComptime(&Comptime{expr: expr{typ: Int}}, []byte(data)); err == nil {
 			t.Fatalf("accepted malformed transport %s", data)
@@ -47,14 +47,14 @@ func TestComptimeTransportValidation(t *testing.T) {
 }
 
 func TestComptimeTransportPreservesValues(t *testing.T) {
-	float, err := DecodeComptime(&Comptime{expr: expr{typ: Float}}, []byte(`{"Version":1,"Value":{"Kind":"Float","Text":"8000000000000000"}}`))
+	float, err := DecodeComptime(&Comptime{expr: expr{typ: Float}}, []byte(`{"Version":2,"Value":{"Kind":"Float","Text":"8000000000000000"}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if float.(*FloatBits).Bits != 0x8000000000000000 {
 		t.Fatalf("lost negative zero: %+v", float)
 	}
-	list, err := DecodeComptime(&Comptime{expr: expr{typ: &List{Elem: Int}}}, []byte(`{"Version":1,"Value":{"Kind":"List[Int]","Nil":true}}`))
+	list, err := DecodeComptime(&Comptime{expr: expr{typ: &List{Elem: Int}}}, []byte(`{"Version":2,"Value":{"Kind":"List[Int]","Nil":true}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
