@@ -108,3 +108,20 @@ test "a call record's name does not clash with a function" {
   assertEqual(Fetch("a", 0), "a")
   assertEqual(calls.args().map(c => c.url), ["a"])
 }
+
+test "optional bounds keep presence separate from zero" {
+  calls = mock Fetch(url, n) { url }
+  calls.expect(times: .Some { value: 1 }, atLeast: .None, atMost: .None)
+  calls.expect(times: .None, atMost: 1)
+  calls.expect(atLeast: 0)
+  calls.expectWhere(c => c.url == "missing", times: .None, atMost: 0)
+  calls.expectWhere(c => c.url == "a", times: .Some { value: 1 })
+  calls.expect(times: .None, atLeast: .None, atMost: .None)
+  _ = Fetch("a", 0)
+}
+
+test "an absent lower bound permits zero calls" {
+  calls = mock Fetch(url, n) { url }
+  calls.expect(atMost: 0)
+  calls.expectWhere(c => true, atLeast: .None, atMost: .Some { value: 0 })
+}

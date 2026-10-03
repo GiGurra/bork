@@ -8,5 +8,7 @@ ok    waitFor waits for calls from other tasks
 ok    a mock in a scope is checked after the scope's tasks
 ok    a target that takes an owned scope can still be counted
 ok    a call record's name does not clash with a function
-8 passed, 0 failed
+ok    optional bounds keep presence separate from zero
+ok    an absent lower bound permits zero calls
+10 passed, 0 failed
 exit code 0
