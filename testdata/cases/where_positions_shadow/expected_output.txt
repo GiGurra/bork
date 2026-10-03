@@ -1,0 +1,5 @@
+1
+Box { values: ["d"] }
+Point { x: 0 }
+Shape.At { p: Point { x: 0 } }
+Shape.Dot

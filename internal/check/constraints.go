@@ -167,11 +167,17 @@ func (c *checker) memberConstraints(t *syntax.TypeExpr, typ Type, scope map[stri
 // resolved type is typ, including those of a constrained alias it names.
 // Predicate arguments may name the parameters in scope.
 func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]Type) []*Constraint {
-	if t == nil || typ == Invalid {
+	if t == nil {
 		return nil
 	}
+	if typ == Invalid {
+		c.whereReported(t) // the type is already an error
+		return nil
+	}
+	c.appliedWhere[t] = true
 	var out []*Constraint
-	if t.Union == nil && len(t.Args) == 0 {
+	_, isParam := typ.(*TypeParam)
+	if t.Union == nil && len(t.Args) == 0 && !isParam {
 		if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {
 			out = append(out, c.aliasConstraints(e)...)
 		}
@@ -182,28 +188,72 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 		}
 	}
 	// Constraints inside type arguments apply to the elements.
-	inner := func(arg *syntax.TypeExpr, elem Type, step string) {
-		for _, con := range c.constraintsOf(arg, elem, scope) {
+	inner := func(cons []*Constraint, step string) {
+		for _, con := range cons {
 			cp := *con
 			cp.Path = step + con.Path
 			out = append(out, &cp)
 		}
 	}
 	if tt, ok := typ.(*List); ok && len(t.Args) == 1 {
-		inner(t.Args[0], tt.Elem, ".[]")
+		inner(c.constraintsOf(t.Args[0], tt.Elem, scope), ".[]")
 	}
 	// In a generic type, a type argument's constraints apply to the
 	// fields declared with that parameter: `Option[Int where positive]`
-	// to the Some's value.
+	// to the Some's value. A field that holds the parameter inside
+	// another type could not be checked.
 	if base := genericBase(typ); base != nil && len(t.Args) == len(typeParamsOf(base)) {
 		args := TypeArgs(typ)
 		for i, tp := range typeParamsOf(base) {
+			cons := c.constraintsOf(t.Args[i], args[i], scope)
+			if len(cons) == 0 {
+				continue
+			}
+			if f := fieldHoldingInside(base, tp); f != nil && isPreludeType(base) {
+				c.errorf(t.Args[i].Pos, "facts on the type argument of %s are not supported yet, so they would not be checked", t.Name)
+				continue
+			} else if f != nil {
+				c.errorf(t.Args[i].Pos, "facts on the type argument %s of %s are not supported yet, so they would not be checked: its field %s holds %s inside %s",
+					tp.Name, t.Name, f.Name, tp.Name, f.Type)
+				continue
+			}
 			for _, path := range fieldPathsOf(base, tp) {
-				inner(t.Args[i], args[i], path)
+				inner(cons, path)
 			}
 		}
 	}
 	return out
+}
+
+func isPreludeType(t Type) bool {
+	switch t := t.(type) {
+	case *Record:
+		return t.Prelude
+	case *Sealed:
+		return t.Prelude
+	}
+	return false
+}
+
+// fieldHoldingInside returns a field of the generic type base (in any
+// variant) whose type holds the type parameter tp but is not tp itself,
+// or nil if there is none.
+func fieldHoldingInside(base Type, tp *TypeParam) *Field {
+	var fields []*Field
+	switch b := base.(type) {
+	case *Record:
+		fields = b.Fields
+	case *Sealed:
+		for _, v := range b.Variants {
+			fields = append(fields, v.Fields...)
+		}
+	}
+	for _, f := range fields {
+		if f.Type != Type(tp) && mentions(f.Type, tp) {
+			return f
+		}
+	}
+	return nil
 }
 
 // fieldPathsOf lists the fields of a generic type (in any variant)

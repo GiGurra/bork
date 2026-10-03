@@ -1,0 +1,122 @@
+// Every position where a where clause (or a constrained alias) can be
+// written but is not checked yet is an error, never silently dropped.
+// where_positions_checked_fail has the positions that are checked.
+
+pred positive(x: Int) { x > 0 }
+pred nonEmpty(s: String) { s.byteLength() > 0 }
+
+type PosInt = Int where positive
+type Box[T] = { item: T, items: List[T] }
+type Only[T] = { items: List[T] }
+type Decoded = { values: Map[String, PosInt] } derive (Decode, Encode)
+type Shape = sealed { Square, Dot }
+pred square(s: Shape) {
+  match (s) {
+    Shape.Square => true
+    Shape.Dot => false
+  }
+}
+type SquareOnly = Shape where square
+type Point = { x: Int }
+pred positivePoint(p: Point) { p.x > 0 }
+type PosPoint = Point where positivePoint
+type Circle = sealed { At { x: Int } }
+pred positiveCircle(c: Circle) {
+  match (c) {
+    Circle.At { x } => x > 0
+  }
+}
+type PosCircle = Circle where positiveCircle
+
+// Union members, in an alias, a field, a parameter, and a list.
+type Either = Int where positive | String
+type Fields = { f: Int where positive | String }
+fn member(u: Int where positive | String): Int { 0 }
+fn listOfMembers(xs: List[Int where positive | String]): Int { 0 }
+fn aliasMember(u: PosInt | String): Int { 0 }
+fn nestedMember(u: List[PosInt] | String): Int { 0 }
+
+// Map keys and values, also inside other types and in results.
+fn values(m: Map[String, Int where positive]): Int { 0 }
+fn keys(m: Map[String where nonEmpty, Int]): Int { 0 }
+fn aliasValues(m: Map[String, PosInt]): Int { 0 }
+fn optionalMap(o: Option[Map[String, Int where positive]]): Int { 0 }
+fn boxedValues(m: Map[String, Box[PosInt]]): Int { 0 }
+fn mapResult(): Map[String, Int where positive] { {:} }
+fn defaultMap(m: Map[String, PosInt] = {:}): Int { 0 }
+
+// Type arguments that fields hold inside other types.
+fn box(b: Box[Int where positive]): Int { 0 }
+fn atomic(a: Atom[PosInt]): Int { 0 }
+fn only(o: Only[PosInt]): Int { 0 }
+
+// Function types.
+fn apply(f: (Int where positive) => Int): Int { 0 }
+
+// Rule variables and lambda parameters.
+rule same(x: Int where positive) { positive(x) => positive(x) }
+
+fn lambdas(): Int {
+  f = (x: Int where positive) => x
+  g = (x: PosInt) => x
+  0
+}
+
+// Class and instance methods, also through an alias.
+class Scored[T] {
+  fn score(x: T, bonus: PosInt): Int
+}
+class Named[T] {
+  fn name(x: T): String
+}
+instance namedInt: Named[Int] {
+  fn name(x: Int): String { "int" }
+}
+class Weighed[T] {
+  fn weigh(x: T, n: Int): Int
+}
+instance weighedString: Weighed[String] {
+  fn weigh(x: String, n: PosInt): Int { n }
+}
+instance weighedPositive: Weighed[PosInt] {
+  // Only the class's T parameter assumes the instance's constraints;
+  // its separate Int parameter cannot acquire a stronger requirement.
+  fn weigh(x: PosInt, n: PosInt): Int { n }
+}
+
+fn id[T](x: T): T { x }
+fn listOf[T](n: Int): List[T] { [] }
+fn pick(): PosInt | String { 1 }
+
+fn main() {
+  // Call type arguments: facts on their parts, or kept only inside the
+  // result.
+  println(id[List[Int where positive]]([1]))
+  println(id[Option[PosInt]](Option.Some { value: 1 }))
+  println(listOf[PosInt](1))
+  a = atom[PosInt](1)
+  println([1].map[PosInt]((x: Int) => x))
+  // Type patterns.
+  match (pick()) {
+    p: PosInt => println(p)
+    s: String => println(s)
+  }
+  match (pick()) {
+    PosInt => println("positive")
+    String => println("text")
+  }
+  match (Shape.Dot) {
+    SquareOnly.Dot => println("square")
+    Shape.Square => println("square")
+  }
+  println(PosPoint { x: 0 })
+  println(SquareOnly.Dot)
+  println(PosCircle.At { x: 0 })
+  // Inside a type whose facts are dropped, the reason is the outer one.
+  f = (xs: List[PosInt]) => 0
+}
+
+// Property test parameters, as function parameters.
+test "generated" (m: Map[String, Int where positive], u: Int where positive | String) {
+  assert(true)
+}

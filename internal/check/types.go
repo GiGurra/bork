@@ -198,6 +198,9 @@ func (s *instanceSet) whenResolved(fill func()) {
 }
 
 func (s *instanceSet) markResolved() {
+	if s == nil {
+		return // an instance (an alias names one) has no instances of its own
+	}
 	s.resolved = true
 	for len(s.pending) > 0 {
 		fill := s.pending[0]

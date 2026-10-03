@@ -384,8 +384,14 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 	result := subst(fn.Result, fresh)
 	var argFacts [][]*Constraint
 	if len(typeArgs) > 0 {
+		reported := func() {
+			for _, ta := range typeArgs {
+				c.whereReported(ta)
+			}
+		}
 		if len(typeArgs) != len(fn.TypeParams) {
 			c.errorf(at, "%s takes %d type argument(s), but %d were given", name, len(fn.TypeParams), len(typeArgs))
+			reported()
 			return fail()
 		}
 		for i, ta := range typeArgs {
@@ -394,14 +400,17 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			}
 			t := c.resolveType(ta)
 			if t == Invalid {
+				reported()
 				return fail()
 			}
 			c.bindUnknown(unknowns[i], t)
 			var cons []*Constraint
 			for _, con := range c.constraintsOf(ta, t, c.paramScope()) {
-				if con.Path == "" {
-					cons = append(cons, con)
+				if con.Path != "" {
+					c.errorf(ta.Pos, "facts inside a type argument (on the parts of %s) are not supported yet, so they would not be checked; only facts on the whole type argument are", t)
+					break
 				}
+				cons = append(cons, con)
 			}
 			if len(cons) > 0 {
 				if argFacts == nil {

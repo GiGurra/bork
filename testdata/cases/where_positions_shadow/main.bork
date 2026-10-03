@@ -1,0 +1,24 @@
+pred positive(x: Int) { x > 0 }
+type T = Int where positive
+
+class Size[T] {
+  fn size(x: T): Int
+}
+instance sizeString: Size[String] {
+  fn size(x: String): Int { x.byteLength() }
+}
+
+type Box[T] = { values: List[T] }
+type Point = { x: Int }
+type PlainPoint = Point
+type Shape = sealed { At { p: Point }, Dot }
+type PlainShape = Shape
+
+fn main() {
+  println(size("a"))
+  b: Box[String] = Box { values: ["d"] }
+  println(b)
+  println(PlainPoint { x: 0 })
+  println(PlainShape.At { p: PlainPoint { x: 0 } })
+  println(PlainShape.Dot)
+}

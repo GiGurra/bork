@@ -308,6 +308,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			funcRefs:           map[*syntax.Ident]*Instance{},
 		},
 	}
+	c.appliedWhere = map[*syntax.TypeExpr]bool{}
 	c.declarePackages(files, root)
 	// Pass 1: declare types, then resolve their bodies, so types can
 	// refer to each other regardless of declaration order.
@@ -373,6 +374,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			c.checkTest(td, names)
 		}
 	}
+	c.unappliedWheres(files)
 	for _, f := range files {
 		if f.Prelude {
 			continue
@@ -473,6 +475,10 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
+	// appliedWhere holds the written types whose where clauses
+	// constraints were made from (see unappliedWheres).
+	appliedWhere map[*syntax.TypeExpr]bool
+
 	// have holds the facts known of the value an instance is looked up
 	// for (a field's where clause), which constrained instances need.
 	have []*Constraint

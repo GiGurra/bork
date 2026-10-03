@@ -1,0 +1,40 @@
+// Every position where a where clause is checked: each call or binding
+// below breaks one, and is reported. where_positions_fail has the
+// positions that are not supported yet.
+
+pred positive(x: Int) { x > 0 }
+
+type PosInt = Int where positive
+type MaybeInt = Option[Int]
+type Pair[A, B] = { a: A, b: B }
+type Account = { balance: Int where positive }
+type Shape = sealed { Square { side: Int where positive }, Dot }
+type Point = { x: Int }
+pred positivePoint(p: Point) { p.x > 0 }
+type PosPoint = Point where positivePoint
+
+fn param(n: Int where positive): Int { n }
+fn alias(n: PosInt): Int { n }
+fn elements(xs: List[Int where positive]): Int { 0 }
+fn optional(o: Option[Int where positive]): Int { 0 }
+fn maybe(o: MaybeInt): Int { 0 }
+fn pair(p: Pair[Int where positive, String]): Int { 0 }
+fn result(): Int where positive { 0 }
+fn member(): Int where positive | String { 0 }
+fn listResult(): List[Int where positive] { [0] }
+fn defaultPositive(n: PosInt = 0): Int { n }
+
+fn main() {
+  println(defaultPositive())
+  println(param(0))
+  println(alias(0))
+  println(elements([1, 0]))
+  println(optional(Option.Some { value: 0 }))
+  println(pair(Pair { a: 0, b: "x" }))
+  println(Account { balance: 0 })
+  println(Shape.Square { side: 0 })
+  n: Int where positive = 0
+  println(n)
+  p: PosPoint = Point { x: 0 }
+  println(p)
+}
