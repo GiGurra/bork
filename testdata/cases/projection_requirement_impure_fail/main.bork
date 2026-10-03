@@ -1,0 +1,9 @@
+fn (n: Int) changing() uses random: Int unsafe go {
+  import "math/rand/v2"
+  return n + rand.Int64()
+}
+fn unstable(n: Int) where n.changing() > 0: Int { n }
+fn main() { println(1) }
+
+fn apply(n: Int, f: (Int) => Int): Int { f(n) }
+fn callback(n: Int, f: (Int) => Int) where apply(n, f) > 0: Int { n }

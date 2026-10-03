@@ -1,0 +1,2 @@
+module example.com/projection_callback_capture_fail
+unsafe "example.com/projection_callback_capture_fail"

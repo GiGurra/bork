@@ -184,7 +184,7 @@ func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 		if x.Op == syntax.Not {
 			return constant.UnaryOp(token.NOT, v, 0)
 		}
-		return constant.UnaryOp(token.SUB, v, 0)
+		return conditionArithmetic(constant.UnaryOp(token.SUB, v, 0), x.Type())
 	case *Binary:
 		a, b := evalCondition(x.X, vars), evalCondition(x.Y, vars)
 		if a == nil || b == nil || a.Kind() == constant.Unknown || b.Kind() == constant.Unknown {
@@ -209,10 +209,22 @@ func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 			if op == token.QUO && a.Kind() == constant.Int && b.Kind() == constant.Int {
 				op = token.QUO_ASSIGN
 			}
-			return constant.BinaryOp(a, op, b)
+			return conditionArithmetic(constant.BinaryOp(a, op, b), x.Type())
 		}
 	}
 	return nil
+}
+
+// Do not use unbounded arithmetic to prove a sized runtime computation.
+// Overflowing intermediates remain unknown; structural guard matching still works.
+func conditionArithmetic(v constant.Value, typ Type) constant.Value {
+	if IsInteger(typ) {
+		lo, hi := intRange(typ)
+		if constant.Compare(v, token.LSS, lo) || constant.Compare(v, token.GTR, hi) {
+			return nil
+		}
+	}
+	return conditionConstant(v, typ)
 }
 
 // Floating constants retain their exact source value in the typed tree.

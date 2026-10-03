@@ -2429,9 +2429,8 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 // --- Identifying values ---
 
 // key identifies the value of x, so facts about it can be found again:
-// a parameter, a binding, a field path from one of those, or a constant.
-// Bindings to another value share its key. Values that cannot be
-// identified (calls, arithmetic) have no key.
+// a parameter, binding, field, constant, or pure computed expression.
+// Structural keys describe evaluation, not algebraic equivalence.
 func (f *factChecker) key(x Expr) string {
 	x = debugValue(x)
 	if v := constOf(x); v != nil {
@@ -2461,6 +2460,110 @@ func (f *factChecker) key(x Expr) string {
 		if k := f.key(x.X); k != "" {
 			return k + "." + x.Name
 		}
+	case *Call:
+		if !stableCall(x) {
+			return ""
+		}
+		parts := []string{fmt.Sprintf("%p", x.Func), requirementInstanceKey(x.Inst)}
+		for _, a := range append(append([]Expr{}, x.Args...), x.Needs...) {
+			k := f.computedArgKey(a)
+			if stableLengthCall(x) {
+				k = fmt.Sprintf("%q:%q", typeKey(a.Type()), f.key(a))
+				if f.key(a) == "" {
+					k = ""
+				}
+			}
+			if k == "" {
+				return ""
+			}
+			parts = append(parts, k)
+		}
+		return fmt.Sprintf("call:%q", parts)
+	case *Binary:
+		left, right := f.computedArgKey(x.X), f.computedArgKey(x.Y)
+		if left != "" && right != "" {
+			return fmt.Sprintf("binary:%v:%q:%q:%q", x.Op, typeKey(x.Type()), left, right)
+		}
+	case *Unary:
+		if k := f.computedArgKey(x.X); k != "" {
+			return fmt.Sprintf("unary:%v:%q:%q", x.Op, typeKey(x.Type()), k)
+		}
+	}
+	return ""
+}
+
+// Mutable Go values and open callbacks cannot promise repeatable evaluation.
+func stableCall(call *Call) bool {
+	if call.Func.Effects&^EffOpen != 0 || !stableProjectionType(call.Type(), map[Type]bool{}) {
+		return false
+	}
+	if stableLengthCall(call) {
+		return true
+	}
+	for i, a := range append(append([]Expr{}, call.Args...), call.Needs...) {
+		if !stableProjectionType(a.Type(), map[Type]bool{}) || i < len(call.Func.Params) && openArgEffects(call.Func.Params[i], a.Type()) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// List length only observes the immutable container, never its elements.
+func stableLengthCall(call *Call) bool {
+	if !call.Func.Prelude || call.Func.Decl.Name != "length" || len(call.Args) != 1 || len(call.Needs) != 0 {
+		return false
+	}
+	_, ok := call.Args[0].Type().(*List)
+	return ok
+}
+
+// Unknown generic values may be opaque at instantiation. Function values and
+// lazy sequences can hide mutable captures even when their effects are empty.
+func stableProjectionType(t Type, seen map[Type]bool) bool {
+	if seen[t] {
+		return true
+	}
+	seen[t] = true
+	if GoTypeOf(t) != nil || t == Scope || t == OwnedScope {
+		return false
+	}
+	switch t := t.(type) {
+	case *TypeParam, *FuncType, *Seq, *Resource:
+		return false
+	case *List:
+		return stableProjectionType(t.Elem, seen)
+	case *Map:
+		return stableProjectionType(t.Key, seen) && stableProjectionType(t.Value, seen)
+	case *Record:
+		for _, field := range t.Fields {
+			if !stableProjectionType(field.Type, seen) {
+				return false
+			}
+		}
+	case *Sealed:
+		for _, variant := range t.Variants {
+			for _, field := range variant.Fields {
+				if !stableProjectionType(field.Type, seen) {
+					return false
+				}
+			}
+		}
+	case *Union:
+		for _, member := range t.Members {
+			if !stableProjectionType(member, seen) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (f *factChecker) computedArgKey(x Expr) string {
+	if !stableProjectionType(x.Type(), map[Type]bool{}) {
+		return ""
+	}
+	if k := f.argOf(x).key; k != "" {
+		return fmt.Sprintf("%q:%q", typeKey(x.Type()), k)
 	}
 	return ""
 }
@@ -2469,7 +2572,7 @@ func (f *factChecker) key(x Expr) string {
 func (f *factChecker) aliasKey(x Expr) string {
 	x = debugValue(x)
 	switch x.(type) {
-	case *VarRef, *Select:
+	case *VarRef, *Select, *Call, *Binary, *Unary:
 		return f.key(x)
 	}
 	return ""

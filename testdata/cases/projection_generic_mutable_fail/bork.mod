@@ -1,0 +1,2 @@
+module example.com/projection_generic_mutable_fail
+unsafe "example.com/projection_generic_mutable_fail"

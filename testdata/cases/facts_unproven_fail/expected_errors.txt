@@ -6,7 +6,6 @@ main.bork:39:31: transfer requires amount to be positive, but that is not proven
 main.bork:44:12: transfer requires amount to be positive, but that is not proven for this value (give it a name and check it first)
 main.bork:49:33: promise promises a result that is positive, but that is not proven for this value (give it a name and check it first)
 main.bork:63:12: transfer requires amount to be positive, but that is not proven for amount (check it first with if (positive(amount)) { ... })
-main.bork:68:18: trust needs a value with a name (bind it first: x = ...), or the fact could not be used
 main.bork:77:19: Request requires name to be nonEmpty, but that is not proven for name (check it first with if (nonEmpty(name)) { ... }, or require it: name: String where nonEmpty)
 main.bork:77:31: Request requires port to be between(1, 65535), but that is not proven for port (check it first with if (between(port, 1, 65535)) { ... }, or require it: port: Int where between(1, 65535))
 main.bork:82:20: transfer requires amount to be positive, but positive(0) is false

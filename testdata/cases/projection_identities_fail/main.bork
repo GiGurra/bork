@@ -1,0 +1,38 @@
+pred positive(n: Int) { n > 0 }
+fn checked(n: Int where positive): Int { n }
+fn (n: Int) changing() uses random: Int unsafe go {
+  import "math/rand/v2"
+  return n + rand.Int64()
+}
+fn changed(n: Int) uses random: Int {
+  if (n.changing() > 0) { checked(n.changing()) } else { 0 }
+}
+fn arguments(a: Int, b: Int): Int {
+  if (a + b > 0) { checked(a - b) } else { 0 }
+}
+fn receiver(xs: List[Int], ys: List[Int]): Int {
+  if (xs.length() > 0) { checked(ys.length()) } else { 0 }
+}
+fn branches(xs: List[Int], n: Int): Int {
+  if (xs.length() > 0 || n > 0) { checked(xs.length()) } else { 0 }
+}
+fn main() { println(1) }
+
+fn commuted(a: Int, b: Int): Int { if (a + b > 0) { checked(b + a) } else { 0 } }
+fn floatGuard(x: Float where positiveFloat): Float { x }
+pred positiveFloat(x: Float) { x > 0.0 }
+fn nan(x: Float, y: Float): Float { if (!(x + y <= 0.0)) { floatGuard(x + y) } else { 0.0 } }
+fn overflow(a: Int8, b: Int8) where a + b > 0: Int8 { a }
+fn overflowing(): Int8 { overflow(127, 1) }
+fn openCall(n: Int, callback: (Int) => Int): Int { callback(n) }
+fn noisy(n: Int) uses io: Int { println(n); n }
+fn openEffects(n: Int) uses io: Int {
+  action = noisy
+  if (openCall(n, action) > 0) { checked(openCall(n, action)) } else { 0 }
+}
+
+ambient bias: Int
+fn adjusted(n: Int) needs bias: Int { n + bias }
+fn ambientChanged(n: Int) needs bias: Int {
+  if (adjusted(n) > 0) { with (bias: -10) { checked(adjusted(n)) } } else { 0 }
+}

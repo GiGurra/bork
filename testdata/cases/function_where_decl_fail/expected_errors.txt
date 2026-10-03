@@ -1,5 +1,4 @@
-main.bork:2:36: requirement arguments must be parameters, their fields, or constants
 main.bork:3:59: function-level where requires a pure predicate call
 main.bork:5:38: function-level where requires a pure predicate call
 main.bork:6:35: undefined: unknown
-main.bork:6:35: requirement arguments must be parameters, their fields, or constants
+main.bork:6:35: requirement arguments must be parameters, their fields, constants, or pure computed expressions
