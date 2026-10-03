@@ -255,3 +255,11 @@ x))` runs effectful work in a scope and reports cancellation as a value.
 that pattern; `parMapUntil` stops on a failure value. See the
 [parallel list example](examples/parallel_lists/main.bork) and
 [design](docs/requirements.md#parallel-collections-implemented-bork-pd7rjm).
+
+Compile-time dependency assembly wires ordinary provider functions by their
+signatures: `assemble[Server](app, newConfig, openDb, newServer)`. Shared
+dependencies build once per call, effects and failures stay checked, and resources
+belong to the explicit scope. `assembleAll[T]` collects several providers and
+`assembleRecord[R]` assembles a record's fields. See the
+[SQLite and HTTP service example](examples/assemble/main.bork) and
+[assembly semantics](docs/requirements.md#compile-time-dependency-assembly).

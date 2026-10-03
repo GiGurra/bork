@@ -336,7 +336,7 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 		case *Let:
 			f.walk(s.Value, e)
 			for _, con := range s.Constraints {
-				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Var.Name), con))
+				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Var.displayName()), con))
 			}
 		case *ExprStmt:
 			f.walk(s.X, e)
@@ -2206,7 +2206,7 @@ func (f *factChecker) describe(x Expr) string {
 	}
 	switch x := x.(type) {
 	case *VarRef:
-		return x.Var.Name
+		return x.Var.displayName()
 	case *FuncRef:
 		return x.Name
 	case *VariantValue:

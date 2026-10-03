@@ -1,0 +1,64 @@
+// bork run examples/assemble: a scope-owned database and HTTP service.
+import "bork/http"
+import "bork/sql"
+
+type Config = { database: String, address: String }
+type Database = { connection: sql.Connection }
+type Service = { server: http.Server }
+type Greeting = { message: String } derive (Decode)
+
+fn newConfig(): Config { Config { database: ":memory:", address: "127.0.0.1:0" } }
+
+fn openDb(config: Config, s: Scope) uses io + net: Database | sql.Error {
+  connection = sql.OpenSqlite(config.database, s)?
+  _ = sql.Exec(connection, "CREATE TABLE greetings (message TEXT)", [])?
+  _ = sql.Exec(connection, "INSERT INTO greetings VALUES ('hello from assembled bork')", [])?
+  Database { connection: connection }
+}
+
+fn newService(config: Config, database: Database in s, s: Scope) uses io + net: Service | IoError {
+  // The parameter contract lets the server retain this connection in s.
+  connection = database.connection
+  server = http.Listen(config.address, s, (request: http.Request, requestScope: Scope) => {
+    match (sql.Query[Greeting](connection, "SELECT message FROM greetings", [])) {
+      rows: List[Greeting] => match (rows.get(0)) {
+        Option.Some { value } => http.Text(200, value.message)
+        Option.None => http.Text(404, "no greeting")
+      }
+      _ => http.Text(500, "database unavailable")
+    }
+  })?
+  Service { server: server }
+}
+
+fn demo() uses io + net: Unit | sql.Error | IoError {
+  scope app {
+    // The list is intentionally out of dependency order. Config and Database
+    // each build once; the server stops before its database closes.
+    service = assemble[Service](app, newService, openDb, newConfig)?
+    response = http.Get(s"http://${http.Address(service.server)}/", app)?
+    println(response.body)
+  }
+}
+
+fn main() {
+  match (demo()) {
+    error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
+    error: IoError => eprintln(error.message)
+    _ => {}
+  }
+}
+
+test "a fixture can replace configuration" {
+  scope app {
+    fixture = Config { database: ":memory:", address: "127.0.0.1:0" }
+    assembled = assemble[Service](app, newService, openDb, () => fixture)
+    match (assembled) {
+      service: Service => match (http.Get(s"http://${http.Address(service.server)}/", app)) {
+        response: http.Response => assertEqual(response.body, "hello from assembled bork")
+        _ => assert(false)
+      }
+      _ => assert(false)
+    }
+  }
+}

@@ -1,0 +1,2 @@
+Good { number: 5 }
+Good { number: 6 }

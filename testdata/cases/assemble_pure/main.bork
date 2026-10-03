@@ -1,0 +1,29 @@
+type Label = { name: String }
+type Left = { label: Label }
+type Right = { label: Label }
+type Pair[T] = { first: T, second: T }
+type Failure = {}
+pred positive(n: Int) { n > 0 }
+type Port = Int where positive
+fn label(): Label { Label { name: "shared" } }
+fn left(value: Label): Left { Left { label: value } }
+fn right(value: Label): Right { Right { label: value } }
+fn port(): Port { 42 }
+fn checkedPort(): Port | Failure { 43 }
+fn generic[T](x: T): T { x }
+fn run(s: Scope): Pair[Label] { assembleRecord[Pair[Label]](s, label) }
+fn main() {
+  scope s {
+    println(run(s))
+    f: (Label) uses nothing => Left = left
+    println(assemble[Left](s, f, label))
+    println(assemble[Right](s, (v: Label) => generic(Right { label: v }), label))
+    println(assemble[Port](s, port))
+    println(assemble[Port](s, checkedPort))
+    println(assembleAll[Port](s, port, checkedPort))
+    println(assemble[Label](s, () => Label { name: "injected" }))
+  }
+  // A pure result does not depend on an unused scope capability.
+  answer = scope s { assemble[Label](s, label) }
+  println(answer)
+}

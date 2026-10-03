@@ -1,0 +1,7 @@
+import "example.com/assemble_private/settings"
+fn main() {
+  scope s {
+    println(assemble[settings.Config](s, settings.New, () => 7).value)
+    println(settings.Assemble(s).value)
+  }
+}

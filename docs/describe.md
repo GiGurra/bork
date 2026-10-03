@@ -42,3 +42,14 @@ Methods follow exactly the compiler's visibility and precedence rules: local pac
 This abbreviated example omits method entries. Every description has `schema_version` (currently `1`), the requested `position`, `type`, `methods`, and `facts`. `definition` is omitted when there is no source definition. Folded arithmetic includes `expression`. A method has `name`, `type`, `definition` and optional `requires`; an ambiguous entry instead has `name` and `ambiguity`. `belongs_to` is present for values that belong to scopes. `proof` is present only with `--where`, and contains `where`, `proven`, and a `reason` when the requirement is not proven. `callable` accompanies direct callable selections and visible methods. It has `named_arguments: true`, `parameter_names_are_api: true`, and a `parameters` array of `name`, `type`, optional `default` (source syntax), and optional `receiver: true` (which cannot be named). Function-value selections omit `callable`. Consumers should accept additional fields.
 
 The position adapter reads the typed compiler tree. The CLI, JSON result, and backward proof queries are separate from lookup, so a future language server can use the same queries.
+
+For `assemble`, `assembleAll` and `assembleRecord`, selecting the intrinsic name
+or call's opening parenthesis reports the assembled result and its resolved graph.
+Text includes the full tree, invocation order and effects. JSON adds `assembly`
+with `mode`, `target`, `result`, `effects`, `tree`, `providers`, `roots` and
+`order`. Provider IDs are one-based within that call; dependencies name their
+parameter, requested type, and provider ID, or have `scope: true` for the implicit
+target scope. Roots identify their provider, type and record field name when
+applicable. Repeated edges share a provider ID and one invocation. The provider
+list retains source order, while `order` records construction order. Describe
+still requires a valid graph; broken graphs appear in compilation diagnostics.

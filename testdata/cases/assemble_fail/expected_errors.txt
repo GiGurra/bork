@@ -1,0 +1,142 @@
+main.bork:21:33: missing provider for Db, needed by #1 server parameter d
+assembly assemble[Server]:
+  Server <- #1 server (main.bork:21:33)
+    d: Db ?? missing provider
+    c: Config <- #2 config (main.bork:21:41)
+supplied:
+  #1 server -> Server
+  #2 config -> Config
+main.bork:22:29: missing provider for Server, needed by target
+assembly assemble[Server]:
+  Server ?? missing provider
+supplied:
+  #1 config -> Config (unused)
+main.bork:22:33: unused provider #1 config produces Config
+assembly assemble[Server]:
+  Server ?? missing provider
+supplied:
+  #1 config -> Config (unused)
+main.bork:23:29: ambiguous Config needed by target: #1 config, #2 other
+assembly assemble[Config]:
+  Config ?? ambiguous providers
+    candidate <- #1 config (main.bork:23:33)
+    candidate <- #2 other (main.bork:23:41)
+supplied:
+  #1 config -> Config
+  #2 other -> Config
+main.bork:24:28: dependency cycle: A (#1 a) -> B (#2 b) -> A (#1 a)
+assembly assemble[A]:
+  A <- #1 a (main.bork:24:28)
+    value: B <- #2 b (main.bork:24:31)
+      value: A <- #1 a (main.bork:24:28) [shared or cycle; see above]
+supplied:
+  #1 a -> A
+  #2 b -> B
+main.bork:25:41: unused provider #2 ... produces Int
+assembly assemble[Config]:
+  Config <- #1 config (main.bork:25:33)
+supplied:
+  #1 config -> Config
+  #2 ... -> Int (unused)
+main.bork:26:28: no provider produces collection element Db
+assembly assembleAll[Db]:
+  Db ?? missing provider
+supplied:
+  #1 config -> Config (unused)
+main.bork:26:32: unused provider #1 config produces Config
+assembly assembleAll[Db]:
+  Db ?? missing provider
+supplied:
+  #1 config -> Config (unused)
+main.bork:27:32: assembleRecord requires a record target, found Int
+assembly assembleRecord[Int]:
+supplied:
+  #1 config -> Config (unused)
+main.bork:27:36: unused provider #1 config produces Config
+assembly assembleRecord[Int]:
+supplied:
+  #1 config -> Config (unused)
+main.bork:28:29: missing provider for Config, needed by target
+assembly assemble[Config]:
+  Config ?? missing provider
+supplied:
+  #1 3 -> invalid (unused)
+main.bork:28:33: provider #1 must be a function with a concrete signature
+assembly assemble[Config]:
+  Config ?? missing provider
+supplied:
+  #1 3 -> invalid (unused)
+main.bork:29:29: missing provider for Config, needed by target
+assembly assemble[Config]:
+  Config ?? missing provider
+supplied:
+  #1 id -> invalid (unused)
+main.bork:29:33: provider #1 id is generic; use a monomorphic adapter
+assembly assemble[Config]:
+  Config ?? missing provider
+supplied:
+  #1 id -> invalid (unused)
+main.bork:30:33: provider #1 failure Db is also a graph product; use a distinct failure type
+assembly assemble[Config]:
+  Config <- #1 failed (main.bork:30:33)
+supplied:
+  #1 failed -> Config
+  #2 ... -> Db (unused)
+main.bork:30:41: unused provider #2 ... produces Db
+assembly assemble[Config]:
+  Config <- #1 failed (main.bork:30:33)
+supplied:
+  #1 failed -> Config
+  #2 ... -> Db (unused)
+main.bork:31:28: assemble requires a concrete non-union product type, found Scope
+main.bork:32:30: assembly requires a Scope, found Int
+main.bork:33:29: assemble requires one target type, a Scope, and at least one provider
+main.bork:34:21: assemble requires one target type, a Scope, and at least one provider
+main.bork:35:30: named arguments require a direct call to a declared function or method: assembly takes a positional scope and provider list
+main.bork:36:33: missing provider for Int, needed by #1 defaulted parameter n
+assembly assemble[Config]:
+  Config <- #1 defaulted (main.bork:36:33)
+    n: Int ?? missing provider
+supplied:
+  #1 defaulted -> Config
+main.bork:37:36: ambiguous Config needed by #1 recursive parameter value: #1 recursive, #2 config
+assembly assembleAll[Config]:
+  Config <- #1 recursive (main.bork:37:36)
+    value: Config ?? ambiguous providers
+      candidate <- #1 recursive (main.bork:37:36) [shared or cycle; see above]
+      candidate <- #2 config (main.bork:37:47)
+  Config <- #2 config (main.bork:37:47) [shared or cycle; see above]
+supplied:
+  #1 recursive -> Config
+  #2 config -> Config
+main.bork:37:36: dependency cycle: Config (#1 recursive) -> Config (#1 recursive)
+assembly assembleAll[Config]:
+  Config <- #1 recursive (main.bork:37:36)
+    value: Config ?? ambiguous providers
+      candidate <- #1 recursive (main.bork:37:36) [shared or cycle; see above]
+      candidate <- #2 config (main.bork:37:47)
+  Config <- #2 config (main.bork:37:47) [shared or cycle; see above]
+supplied:
+  #1 recursive -> Config
+  #2 config -> Config
+main.bork:38:40: missing provider for Int, needed by field value
+assembly assembleRecord[WithDefault]:
+  value: Int ?? missing provider
+supplied:
+  #1 config -> Config (unused)
+main.bork:38:44: unused provider #1 config produces Config
+assembly assembleRecord[WithDefault]:
+  value: Int ?? missing provider
+supplied:
+  #1 config -> Config (unused)
+main.bork:39:26: missing provider for Int, needed by target
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 brand -> Brand (unused)
+main.bork:39:30: unused provider #1 brand produces Brand
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 brand -> Brand (unused)
+main.bork:40:16: built-in assemble must be called

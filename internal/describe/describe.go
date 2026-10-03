@@ -13,6 +13,7 @@ import (
 )
 
 type Result struct {
+	Assembly      *check.Assembly           `json:"assembly,omitempty"`
 	SchemaVersion int                       `json:"schema_version"`
 	Position      diag.Pos                  `json:"position"`
 	Type          string                    `json:"type"`
@@ -38,6 +39,7 @@ type Selection struct {
 	Site       diag.Pos
 	Value      bool
 	Callable   *check.CallableDescription
+	Assembly   *check.Assembly
 }
 
 func ParsePosition(text string) (diag.Pos, error) {
@@ -157,6 +159,13 @@ func (s *sourceIndex) selectVar(v *check.Var, site diag.Pos) {
 }
 
 func (s *sourceIndex) walk(x check.Expr) {
+	if block, ok := x.(*check.Block); ok && block.Assembly != nil {
+		if s.contains(block.TokenPos(), len(block.Assembly.Mode)) || s.pos == block.Pos() {
+			s.choose(block, block.Type(), nil)
+			s.selected.Assembly = block.Assembly
+			return
+		}
+	}
 	if x == nil {
 		return
 	}

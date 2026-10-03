@@ -99,7 +99,7 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 	switch s := s.(type) {
 	case *syntax.Binding:
 		let := &Let{Pos: s.Pos, Value: l.expr(s.Value), Declared: s.Type != nil, Constraints: l.info.bindingConstraints[s]}
-		let.Var = &Var{Name: s.Name, Pos: s.Pos, Type: l.info.bindings[s], Kind: VarLet, Let: let, Unused: l.info.unused[s]}
+		let.Var = &Var{Label: l.info.assemblyNames[s], Name: s.Name, Pos: s.Pos, Type: l.info.bindings[s], Kind: VarLet, Let: let, Unused: l.info.unused[s]}
 		l.vars[s] = let.Var
 		return let
 	case *syntax.TrustStmt:
@@ -115,6 +115,14 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 }
 
 func (l *lowerer) expr(x syntax.Expr) Expr {
+	if call, ok := x.(*syntax.Call); ok {
+		if expansion := l.info.assemblyCalls[call]; expansion != nil {
+			out := l.block(expansion.body)
+			out.Assembly = expansion.description
+			out.token = call.Fun.Position()
+			return out
+		}
+	}
 	at := expr{pos: x.Position(), typ: l.info.types[x], token: sourceTokenPos(x)}
 	if inst := l.info.funcRefs[x]; inst != nil {
 		at.token = x.Position()
@@ -332,7 +340,7 @@ func (l *lowerer) patVars(p *Pat, subject Expr) {
 		return
 	}
 	if p.Bind != "" {
-		v := &Var{Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarPattern, Unused: l.info.unused[p.bindNode]}
+		v := &Var{Label: l.info.assemblyNames[p.bindNode], Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarPattern, Unused: l.info.unused[p.bindNode]}
 		if src := l.info.patSources[p.bindNode]; src != nil {
 			v.Source = &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field}
 		}

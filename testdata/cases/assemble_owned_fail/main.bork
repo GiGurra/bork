@@ -1,0 +1,11 @@
+type Conn = resource
+fn connect(s: Scope) uses io: Conn unsafe go { return Conn{owner: s.Own(func() {})} }
+fn read(c: Conn): String unsafe go { return "connection" }
+fn main() {
+  scope app {
+    child = openScope(app)
+    value = assemble[Conn](child.scope, connect)
+    closeScope(child)
+    println(read(value))
+  }
+}

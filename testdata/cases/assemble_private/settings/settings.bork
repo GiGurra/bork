@@ -1,0 +1,3 @@
+type Config = private { value: Int }
+fn New(value: Int): Config { Config { value: value } }
+fn Assemble(s: Scope): Config { assembleRecord[Config](s, () => 8) }

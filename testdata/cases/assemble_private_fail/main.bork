@@ -1,0 +1,7 @@
+import "example.com/assemble_private_fail/settings"
+fn main() {
+  scope s {
+    value = assembleRecord[settings.Config](s, () => 7)
+    println(value.value)
+  }
+}

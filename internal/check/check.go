@@ -130,6 +130,7 @@ const (
 	BuiltinAssert         // assert(cond)
 	BuiltinAssertEqual    // assertEqual(actual, expected)
 	BuiltinAssertSnapshot // assertSnapshot(x)
+	BuiltinAssemble
 )
 
 var builtins = map[string]Builtin{
@@ -141,6 +142,9 @@ var builtins = map[string]Builtin{
 	"assert":         BuiltinAssert,
 	"assertEqual":    BuiltinAssertEqual,
 	"assertSnapshot": BuiltinAssertSnapshot,
+	"assemble":       BuiltinAssemble,
+	"assembleAll":    BuiltinAssemble,
+	"assembleRecord": BuiltinAssemble,
 }
 
 // conversions maps each conversion function to its target type.
@@ -211,8 +215,11 @@ type Info struct {
 	// (`unsafe go "os.Getenv"`).
 	GoBindings map[*Func]*GoBinding
 	// Embeds lists compile-time asset requests in source order.
-	Embeds     []*Embedded
-	embedCalls map[*syntax.Call]*Embedded
+	Embeds        []*Embedded
+	embedCalls    map[*syntax.Call]*Embedded
+	assemblyCalls map[*syntax.Call]*assemblyExpansion
+	assemblyTypes map[*syntax.TypeExpr]Type
+	assemblyNames map[any]string
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -309,6 +316,9 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 		diags: diags,
 		info: &Info{
 			GoBindings:       map[*Func]*GoBinding{},
+			assemblyCalls:    map[*syntax.Call]*assemblyExpansion{},
+			assemblyTypes:    map[*syntax.TypeExpr]Type{},
+			assemblyNames:    map[any]string{},
 			Funcs:            map[string]*Func{},
 			FuncOf:           map[*syntax.FuncDecl]*Func{},
 			Named:            map[string]Type{},
@@ -586,7 +596,8 @@ type checker struct {
 	typeParams map[string]*TypeParam
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
-	lambdaDepth int
+	lambdaDepth    int
+	assemblySerial int
 	// used collects the effects of the function or lambda being
 	// checked: of the calls in its body (see effects.go).
 	used Effects
@@ -1235,6 +1246,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 func (c *checker) call(e *syntax.Call, want Type) Type {
 	if name, ok := e.Fun.(*syntax.ContextName); ok {
 		return c.contextVariantCall(e, name, want)
+	}
+	if id, ok := e.Fun.(*syntax.Ident); ok && assemblyName(id.Name) && c.lookup(id.Name) == nil {
+		return c.assemble(e, id.Name)
 	}
 	if t, ok := c.methodCallOf(e, want); ok {
 		return t
