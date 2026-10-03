@@ -22,7 +22,9 @@ Both `async(s) name = expr` and `async(s) name: T = expr` are supported.
 `async` is contextual only at a local binding head with the complete
 `async(scope-expression) name` shape. Existing functions and values named
 `async` remain usable. The scope expression is an ordinary expression of type
-Scope, evaluated once at declaration, before scheduling the initializer.
+Scope, evaluated once at declaration, before scheduling the initializer. Its
+`return` and `?` retain the enclosing function boundary; only the initializer
+creates a new result boundary.
 Destructuring, `_`, parameters, modifier combinations, fields and package
 bindings are rejected. The binding's name is unavailable in its initializer.
 
@@ -52,8 +54,9 @@ Initializer effects are charged at the declaration, including for unread
 bindings. The scope expression's effects are charged there too. Scheduling
 adds no new `state` effect, matching the existing `spawn` and `launch` API.
 Reads are memo observations of work already charged at creation, rather than
-repeatable pure evaluations of the initializer. Predicate and compile-time
-execution must never schedule an async task or force a runtime async cell.
+repeatable pure evaluations of the initializer. Compile-time predicate and constant
+evaluation must never schedule an async task or force a runtime async cell.
+Ordinary runtime predicates and validators may read the resolved T.
 A known-input pure candidate containing async is not evaluated at compile time;
 existing proof or runtime validation rules apply instead.
 
@@ -109,7 +112,9 @@ docs distinguish proposed syntax from implemented syntax until it ships.
 Immediate-read lazy warnings do not apply to async bindings: even a first read
 can synchronize with other work already started.
 
-Acceptance covers concurrent start before reads, read-once/repeated/concurrent
+Acceptance covers scope-expression evaluation exactly once before scheduling,
+its effects and enclosing-boundary return/?, runtime predicates/validators
+reading async values without compile-time scheduling, concurrent start before reads, read-once/repeated/concurrent
 reads, closure and alias behavior, loop cells, annotation/inference/generics,
 initializer-local return/?, constrained results, effects and ambient captures,
 mock task context, unread work and unread panics at scope exit, repeated panic
@@ -117,4 +122,7 @@ reads, cancellation and scope policies. Negative cases cover a non-Scope owner,
 missing effects, short captures, scalar cell/closure escape, reading after owner
 closure, OwnedScope capture/results, illegal modifiers and control transfer,
 and compile-time scheduling/forcing. Runtime concurrency tests run with the race
-detector, and tooling fixtures prove describe never starts work.
+detector, and tooling fixtures prove describe never starts work. Panic fixtures prove
+that unread failure cancels siblings and is raised/logged at close, a read marks
+the native task reported, logFailures never suppresses a panic on read, and
+task timeouts retain existing orphan behavior.
