@@ -2220,6 +2220,234 @@ implementation requires a decision. Warnings do not change check's exit status.
 Build, run and test continue to accept these markers. We do not introduce a
 release build mode or marker rejection in this change: check surfaces unfinished
 code, and automated consumers can choose to enforce those warning codes.
+### Generators and lazy sequences (bork-br2bwx design)
+
+Introduce `Seq[T]` as a lazy, ordered stream of values and a producer expression:
+
+```bork
+fn greetings(names: List[String]): Seq[String] {
+  generate[String] {
+    for (name in names) {
+      yield s"Hello $name"
+    }
+  }
+}
+
+fn main() {
+  lines = greetings(["Ada", "Linus"]).take(1).toList()
+  println(lines)
+}
+```
+
+This design proposes `generate`, `yield` and `for`; they are not currently
+implemented syntax. The sequence runs synchronously on the consuming goroutine.
+It does not spawn a task, allocate a channel, or start work when created. Each
+traversal starts a fresh invocation of the producer body. Immutable captures
+are retained, not copied from changing local variables. Pure sequences can be
+traversed repeatedly with the same results; an effectful sequence repeats its
+effects, and a captured file cursor may therefore produce different values on
+the next traversal. There is no hidden memoization or consumed-state flag.
+
+The surface follows [q's Generator](https://gigurra.github.io/q/api/generator/)
+and [Go's iter.Seq](https://pkg.go.dev/iter): a producer calls a yield callback,
+and a false result stops production. Bidirectional coroutines, generator-send,
+manual Resume/Close handles and goroutine-backed suspended stacks are deferred.
+Bork already has scoped tasks and channels for concurrent conversations; this
+feature supplies synchronous lazy traversal.
+
+**Producer boundary and immutable iteration.** `generate[T] { ... }` binds
+`yield` in its body and infers the body's latent effects. `yield expr` checks
+expr against T, emits it once, and terminates the current producer if its
+consumer stops. `return` with no value ends that producer. A value return is
+an error. The producer is a function boundary: neither return nor `?` escapes
+the enclosing function that created it. A break/continue in a producer cannot target a loop
+outside its generate boundary. Initially, `?` in this Unit-returning
+body is rejected by the ordinary return-type rules; producers of fallible
+items yield error alternatives explicitly, then return when terminal.
+
+Add `for (name in values) { ... }` for List and Seq, binding a fresh immutable
+name on each iteration. It returns Unit, and its body follows ordinary
+statement/unused-value rules. `break` stops the nearest loop, and `continue`
+skips to its next item. A return from an ordinary consuming loop returns from
+the surrounding function; a return from a loop inside generate ends the
+producer. Existing map/fold pipelines remain the default way to transform
+finite lists. Mutable accumulators and general while loops are not required
+by this change; `Seq.range(start, end)` and `Seq.unfold(seed, step)` cover large
+and unbounded streams without allocating a List. `unfold` takes a pure step
+returning `Option[SeqStep[T, S]]`, where each SeqStep carries a value and next
+immutable state; `None` ends it. Range retains the existing range convention
+and checks its increment for overflow rather than wrapping to an infinite loop.
+
+Yield is legal only in the lexical producer body (including its if/match,
+loop and scope blocks). It is rejected in nested lambdas, declared functions,
+callbacks, spawned tasks, and outside a producer. A nested generate introduces
+its own yield boundary. This restriction keeps the stop signal synchronous
+and prevents a nested callback or goroutine from continuing after the consumer
+has stopped. To forward another sequence, iterate it and yield each value.
+
+**Latent effects are part of the type.** `Seq[T]` means a strictly pure
+producer. `Seq[T] uses io`, `Seq[T] uses io + clock`, and `Seq[T] uses nothing`
+spell the effects that traversing it may perform; `uses nothing` equals the
+unqualified type. The qualifier follows the sequence type application, wherever
+that type occurs (parameters, results, fields, collection elements and unions).
+It is distinct from a function's immediate effect declaration:
+
+```bork
+fn delayedPrint(text: String): Seq[String] uses io {
+  generate[String] {
+    println(text)
+    yield text
+  }
+}
+
+fn consume(items: Seq[String] uses io) uses io: List[String] {
+  items.toList()
+}
+```
+
+Calling delayedPrint only captures text and returns a sequence, so its function
+signature has no immediate effect. Traversing the result uses io. Construction
+expressions and capture expressions are evaluated immediately and their own
+effects still count. Ordinary producer factories may capture only callbacks with fixed, known
+effects. An unresolved open callback cannot be converted to a fixed latent
+qualifier: `fn delayed(f: () => Unit): Seq[Int] { generate[Int] { f(); yield 1 } }`
+is rejected. Require `f: () uses nothing => Unit` for a pure producer, or declare
+its fixed effects and return `Seq[Int] uses io` when it uses io. A wrapper that
+returns `items.map(f)` has the same restriction if f's effects remain open.
+Built-in adapters can infer latent effect unions from concrete callbacks at
+the call site; this does not introduce symbolic effect parameters for ordinary
+functions. Diagnostics suggest the needed callback qualifier and Seq result
+qualifier instead of charging a deferred call as an immediate effect.
+Effects cannot be erased by aliases, generic containers, records, interface
+bindings or function returns. Pure sequences fit an effectful sequence slot;
+sequences with more effects do not fit one with fewer. Union alternatives with
+the same element type join their latent effects into one Seq type; effects are
+not a runtime discriminator. A sequence type pattern must retain or broaden
+the incoming latent qualifier, and cannot filter effectful values into a pure
+slot. The element type follows
+ordinary assignability, with no extra structural or numeric conversion.
+
+`map`, `filter` and other lazy adapters capture callbacks without invoking them.
+Their result stores the union of source and callback latent effects. A call
+that computes a callback still charges that call's immediate effects. Terminal
+consumers and `for` charge the sequence's latent effects, plus consumer callback
+effects, to their surrounding function. The compiler must model these adapter
+signatures explicitly; existing eager list methods charge open callback effects
+at the call site, and cannot be reused unchanged. Do not represent an effectful
+Seq as a pure opaque wrapper or assume the source effect from T. Generic
+functions can carry sequence types with their known effect qualifier as a
+whole type argument; a pure-only Seq parameter cannot accept an inferred
+unknown effect. A later effect-polymorphism surface may generalize adapters,
+but the initial built-in methods infer this union without an `any` effect or
+an unchecked escape hatch.
+
+A sequence is an execution recipe, not a stable factual value: no structural
+Eq/Hash, no derived codec, and default Show prints a descriptor without
+traversing. This includes pure Seq values. Facts about yielded elements are
+supported; predicates cannot consume an effectful sequence. Facts referring to
+a traversal's transient cardinality/content are not inferred or accepted as
+nominal invariants in the initial implementation. A predicate over Seq itself
+is rejected until its termination and stable-observation contract is defined.
+
+**Methods and demand.** Initial methods are `List.toSeq()`, `map`, `filter`,
+`flatMap`, `take`, `drop`, `forEach`, `fold`, `toList`, and `first` (returning
+Option). Static constructors belong to Seq: `Seq.empty[T]()`, `Seq.range(...)`
+and `Seq.unfold(...)`. Callback invocation and item order are deterministic and
+match eager list methods. `flatMap` traverses depth-first until the active inner sequence is exhausted
+or the downstream consumer stops, and combines source and inner latent effects.
+Downstream stop propagates immediately to both inner and outer producers,
+closing both scope stacks; no later outer callback runs. Thus an unbounded inner
+sequence followed by `.take(1)` emits one item and terminates normally. `take(0)`
+starts no producer and invokes no callbacks; `take(n)` with n <= 0 is empty.
+`take(n)` stops immediately after n emitted items without asking the source for
+an extra item. `drop(n)` treats n <= 0 as zero. Integer overflow is checked in
+range/unfold user arithmetic under the normal arithmetic guarantees. `toList`
+consumes to completion and stores only values; consumers of unbounded sequences
+must use take/first or explicit loop termination. There is no background
+prefetching or eager adapter evaluation.
+
+Filter passes on its predicate facts like List.filter; mapping passes only
+facts that the callback promises/proves under the existing rules. Element
+constraints on a Seq type are checked at every yield and preserved through
+adapters that retain the same elements. A built-in range does not claim facts
+about arithmetic results that the facts checker cannot soundly establish.
+`Seq[T | E]` contains both T and E as ordinary elements. No alternative is
+implicitly terminal or guessed to be an error by its name; an API such as
+file.lines may document that it yields one read error and then stops. A
+consumer handles that union per item, or explicitly maps/collects it according
+to its desired error policy. `toList` returns List[T | E], not List[T] | E.
+
+**Scopes, termination and cancellation.** A sequence captures the lifetimes
+of every resource, scope and callback it closes over, just as a closure does.
+Lazy adapters retain those dependencies even if a particular traversal would
+emit zero items. Consuming it after any required scope closes is a compile-time
+error; storing it in a record, returning it or passing it to a task cannot erase
+that dependency. Obtaining a valid element during consumption preserves its
+own lifetime too. A yielded value cannot depend on a scope opened inside the
+producer, because the consumer may store it beyond that scope; strings and
+copied decoded rows are safe, resource handles into producer-local scopes are
+rejected. A resource from an externally captured scope may be yielded, with
+that scope retained on the resulting List/Option or downstream sequence.
+
+Scopes opened inside a producer close on normal exhaustion, consumer stop,
+break, return, `?` in the consumer, cancellation and panic. An early consumer
+return must stop the active producer before leaving the enclosing scope. A
+failed yield callback must never resume production; its inner and outer scopes
+unwind in normal nesting order. Cancellation remains cooperative: calling
+checkpoint/delay on a captured scope retains its ordinary behavior, and a
+producer using them carries the relevant scope/effects. Yield does not silently
+insert cancellation exceptions or stop signals observable as ordinary values.
+Synchronous infinite work that never yields cannot be forcibly cancelled by
+this feature. Interop producers that ignore a stop callback violate the unsafe
+boundary's contract and fail loudly at runtime if they yield again after stop.
+
+**Go representation and interop.** Lower Seq[T] to a compiler-owned wrapper
+around `iter.Seq[Go(T)]`, retaining latent effect and lifetime metadata in the
+checker. Producer code calls yield and immediately returns when false. Adapter
+methods use synchronous wrappers; traversal uses Go range-over-function or an
+equivalent callback with a typed control-flow result. No worker goroutine or
+channel is introduced. The lowering must correctly translate return/`?` from
+a consuming bork function across the Go callback boundary, rather than returning
+only from the callback or losing the enclosing function's result.
+
+Checked unsafe Go bindings can receive/return `iter.Seq[T]` for supported
+bork/Go element mappings. A returned Seq's declared latent effects are a trust
+contract of the binding, distinct from the effects of obtaining it; captured
+resource dependencies follow binding parameter lifetimes conservatively. The
+binding generator wraps/unpacks the iter representation rather than treating it
+as an ordinary function value and dropping its metadata. Iterators must call
+yield synchronously, stop at false, and not retain yield for later invocation.
+Mappings that cannot prove the element representation or lifetime are rejected.
+Initial standard-library adapters should include filesystem directory entries,
+file lines and SQL rows within existing scope ownership. Row buffers must be
+copied/decoded before yielding; no borrowed Go scanner buffer may escape as an
+immutable bork value. APIs must state whether repeat traversal reopens an input
+or continues a captured cursor. Scope-bound operations never silently open a
+resource with a lifetime longer than their declared scope.
+
+**Implementation and acceptance.** First implement Seq types/latent effects,
+producer and loop checking/lowering, lexical yield boundaries and scope
+unwinding; then adapters/facts; then Go iter binding and standard-library
+producers. Keep `bork describe` able to display element type, latent effects
+and known dependencies. Stable diagnostics distinguish invalid yield, result
+and callback types, forbidden fact observation, missing consumer effects,
+effect erasure (including union type patterns) and scope escape. Grammar, formatter, editor syntax, README and
+requirements must be updated alongside each implementation increment.
+
+Tests cover laziness, exact callback counts (including take(0)/take(1)), repeated
+pure/effectful traversal, adapter order, flatMap nesting, explicit error unions,
+nested flatMap followed by take/first/break (including an unbounded inner),
+whole-function return/`?` from consumers, nested producers, rejected nested
+callback/task yields, break/continue across a generate boundary, and no extra
+item after early stop. Effect negatives cover
+pure consumers, alias/record/generic erasure and returned callbacks; lifetime
+negatives cover escaping captures and producer-local resource yields. Runtime
+cases verify resource cleanup on exhaustion/break/return/panic/cancellation,
+retained values after consumption, and foreign iterators honoring stop. Infinite
+unfold plus take verifies bounded demand without accumulating an eager source.
+
+This is a design only. Implementation waits for lead approval and coordination
+with scope ownership, callback effect checking and Go rebinding work.
 
 ## Open questions
 
