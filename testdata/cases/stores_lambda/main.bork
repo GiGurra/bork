@@ -36,6 +36,11 @@ fn ifSome[T](o: Option[T], f: (T) uses state => Unit) uses state {
   }
 }
 
+// What comes out of a channel lives as long as the channel.
+fn drain[T](from: Channel[T], f: (T) uses state => Unit) uses state {
+  received(from).forEach(f)
+}
+
 fn main() uses io + state {
   scope app {
     ch = channel[Conn](app, 8)
@@ -48,6 +53,10 @@ fn main() uses io + state {
     ifSome(Option.Some { value: connect("f", app) }, c => { _ = send(ch, c) })
     store = atom([connect("g", app)])
     conns.forEach(c => { _ = update(store, cs => cs.append(c)) })
+    first = channel[Conn](app, 1)
+    _ = send(first, connect("h", app))
+    closeChannel(first)
+    drain(first, c => { _ = send(ch, c) })
     closeChannel(ch)
     println(received(ch).map(nameOf))
     println(current(store).map(nameOf))

@@ -693,6 +693,9 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 		l.env[p] = lifetime{p}
 		if life, ok := l.lambdaParams[p]; ok {
 			l.env[p] = life
+			if len(life) > 0 && l.carriesLife(p.Type) {
+				l.info.VarLifetimes[p] = l.lifeText(life)
+			}
 		}
 	}
 	var used lifetime
@@ -915,17 +918,20 @@ func (l *lifeChecker) inferParams(fn *Func, x *Lambda, i int, args []lifetime, d
 	if !ok || len(ft.Params) != len(x.Params) {
 		return
 	}
-	own := map[*TypeParam]bool{}
+	// own holds fn's type parameters, and can those of them it cannot
+	// make a value of.
+	own, can := map[*TypeParam]bool{}, map[*TypeParam]bool{}
 	for _, tp := range fn.TypeParams {
-		own[tp] = l.cannotMake(tp)
+		own[tp] = true
+		can[tp] = l.cannotMake(tp)
 	}
-	isOwn := func(tp *TypeParam) bool { _, ok := own[tp]; return ok }
+	isOwn := func(tp *TypeParam) bool { return own[tp] }
 	// The lambda gives values of the type parameters back to fn.
 	if mentionsWhere(ft.Result, isOwn) {
 		return
 	}
 	for _, p := range ft.Params {
-		if mentionsWhere(p, isOwn) && !builtFrom(p, own, map[Type]bool{}) {
+		if mentionsWhere(p, isOwn) && !builtFrom(p, can, map[Type]bool{}) {
 			return
 		}
 	}
@@ -940,7 +946,11 @@ params:
 			if j == i || j >= len(args) || !mentionsWhere(q, mentioned) {
 				continue
 			}
-			if !done[j] {
+			// A function among them could make one from what fn gives
+			// it (a scope of its own, say): only values held as data,
+			// or in a channel or an atom (which keep only values that
+			// outlive them), come out as they went in.
+			if !done[j] || !builtFrom(q, can, map[Type]bool{}) && !storesData(q, can) {
 				continue params
 			}
 			life = life.union(args[j])
@@ -949,10 +959,17 @@ params:
 	}
 }
 
+// storesData reports whether t is a channel or an atom of values built
+// from the type parameters can holds (see builtFrom).
+func storesData(t Type, can map[*TypeParam]bool) bool {
+	r, ok := t.(*Record)
+	return ok && r.Prelude && (r.Name == "Channel" || r.Name == "Atom") && len(r.Args) == 1 && builtFrom(r.Args[0], can, map[Type]bool{})
+}
+
 // builtFrom reports whether a value of type t can only carry a lifetime
-// through values of the type parameters can holds (those a function
-// cannot make): t holds no scope, resource, function or opaque value of
-// its own.
+// through values of the type parameters in can (those a function cannot
+// make): t holds no scope, resource, function or opaque value of its
+// own.
 func builtFrom(t Type, can map[*TypeParam]bool, seen map[Type]bool) bool {
 	if seen[t] {
 		return true

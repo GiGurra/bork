@@ -4,3 +4,5 @@ main.bork:42:57: the lambda may not live as long as the atom keep (it depends on
 main.bork:52:20: c may not live as long as the channel ch (it depends on parameter c), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
 main.bork:72:35: c may not live as long as the channel ch (it depends on parameter c), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
 main.bork:94:46: c may not live as long as the channel ch (it depends on parameter c), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
+main.bork:109:51: c may not live as long as the channel ch (it depends on parameter c), which keeps it; store only values that outlive the channel, or attach a resource to its scope first
+main.bork:123:41: c may not live as long as the channel ch (it depends on parameter c), which keeps it; store only values that outlive the channel, or attach a resource to its scope first

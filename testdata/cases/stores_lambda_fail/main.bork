@@ -94,3 +94,32 @@ fn bounded() uses state {
     made([connect(app)], c => { _ = send(ch, c) })
   }
 }
+
+// An argument that is a function could make a value from what the
+// callee gives it: a scope of its own.
+fn viaMaker[T](mk: (Scope) => T, f: (T) uses state => Unit) uses state {
+  scope s {
+    f(mk(s))
+  }
+}
+
+fn maker() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    viaMaker(s => connect(s), c => { _ = send(ch, c) })
+  }
+}
+
+// Or a resource it made there.
+fn viaConv[T](conv: (Conn) => T, f: (T) uses state => Unit) uses state {
+  scope s {
+    f(conv(connect(s)))
+  }
+}
+
+fn converted() uses state {
+  scope app {
+    ch = channel[Conn](app, 1)
+    viaConv(c => c, c => { _ = send(ch, c) })
+  }
+}

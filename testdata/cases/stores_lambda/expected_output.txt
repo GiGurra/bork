@@ -5,8 +5,10 @@ open d
 open e
 open f
 open g
-["a", "b", "c", "d", "e", "f"]
+open h
+["a", "b", "c", "d", "e", "f", "h"]
 ["g", "a", "b"]
+close h
 close g
 close f
 close e
