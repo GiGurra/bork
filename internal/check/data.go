@@ -290,7 +290,6 @@ func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner st
 		if present[field.Name] {
 			continue
 		}
-		c.ensureFieldDefault(field)
 		if x := c.info.fieldDefaults[field]; x != nil {
 			if isLiteral(x) {
 				x = copyLiteral(x)

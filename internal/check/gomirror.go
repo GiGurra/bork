@@ -28,11 +28,17 @@ func (c *checker) resolveGoMirrors(files []*syntax.File, matchFields bool) {
 			if !ok {
 				continue
 			}
+			if matchFields && r.GoMirror == nil {
+				continue
+			} // diagnosed during preparation
 			if len(r.TypeParams) > 0 {
 				c.bindErr(td.Pos, "a Go mirror cannot have type parameters")
 				continue
 			}
-			gt := c.namedGoType(td.GoName.Name, td.GoName)
+			gt := r.GoMirror
+			if !matchFields {
+				gt = c.namedGoType(td.GoName.Name, td.GoName)
+			}
 			if gt == nil {
 				continue
 			}

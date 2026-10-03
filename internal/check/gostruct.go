@@ -78,6 +78,7 @@ func (c *checker) finishGoStructs() {
 		if !ok || !r.GoGenerated {
 			continue
 		}
+		c.pkg, c.inPrelude = r.Pkg, r.Prelude
 		var fields []*types.Var
 		var tags []string
 		seen := map[string]bool{}
@@ -92,7 +93,7 @@ func (c *checker) finishGoStructs() {
 				if hasTypeParam(f.Type) {
 					why = "; use a concrete record for fields depending on type parameters"
 				}
-				c.errorf(f.Decl.Pos, "cannot derive GoStruct for %s: field %s has type %s, which cannot convert to a Go struct field%s", r.Name, f.Name, f.Type, why)
+				c.errorf(f.Decl.Pos, "cannot derive GoStruct for %s: field %s has type %s, which cannot convert to a Go struct field%s", r.Name, f.Name, TypeText(f.Type, nil), why)
 				r.GoStruct = false
 				gt = types.Typ[types.Invalid]
 			}

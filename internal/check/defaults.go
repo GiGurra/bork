@@ -262,9 +262,9 @@ func (c *checker) ensureFieldDefault(field *Field) {
 	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
 	c.session = nil
 	defer func() {
-		shared, solved := c.sharedDefaults, c.solved
+		shared, solved, mapKeys := c.sharedDefaults, c.solved, c.mapKeyChecks
 		*c = saved
-		c.sharedDefaults, c.solved = shared, solved
+		c.sharedDefaults, c.solved, c.mapKeyChecks = shared, solved, mapKeys
 	}()
 	x := field.Decl.Default
 	if field.Lazy && (!isClosed(x) || closedDefaultUsesSibling(x, field.siblings)) {
