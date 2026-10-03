@@ -1,0 +1,1 @@
+length isEmpty first get head last map flatMap filter fold find any all count forEach take drop reverse concat append sortWith includes distinct join byteLength runeCount contains startsWith endsWith indexOf toUpper toLower trim replaceAll repeat runeAt substring split fields lines
