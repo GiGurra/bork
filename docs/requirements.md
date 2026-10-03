@@ -356,6 +356,28 @@ the sealed declaration applies to every variant, including fieldless ones.
 Generic declarations instantiate predicates against the concrete type.
 Mutable opaque Go values cannot be subjects of facts.
 
+Construction uses a completed but **unvalidated candidate**, whose underlying
+fields have ordinary types but whose own nominal invariants are unavailable.
+The facts pass proves its field and type obligations before publishing the
+candidate as a value carrying those facts. In particular, the constructor's
+own type cannot discharge its goal. Decoders and Go conversions use the same
+phases: convert and fill defaults, validate, then expose a valid value.
+
+Invariant predicates inspect this underlying representation without assuming
+the invariants they establish. The same restriction follows an unchecked
+candidate into predicates or helpers called by the validator: a helper may
+not obtain a nominal precondition merely because its argument has the type
+currently being validated. Such a requirement needs an independent proof.
+The implementation must check this validation call graph, including imported
+helpers, or reject a call whose assumptions cannot be checked. Self-dependent
+and mutually dependent preconditions are rejected with a cycle diagnostic;
+ordinary terminating predicate recursion does not itself establish a fact.
+Validation may use a field's already-checked independent constraints, but must
+not use the target invariant or a relation that depends on it to establish
+itself. Negative cases cover a trivially circular predicate/helper contract,
+mutual dependencies and invalid construction or decoding that would otherwise
+pass by the candidate's nominal type.
+
 Construction proves all field and whole-value invariants. A record `copy`
 rechecks its whole-value clauses against the completed changed record, and
 recursively checks changed nested records; unchanged nested values retain
@@ -365,6 +387,19 @@ a destructured value. A variant fact is known only after narrowing to that
 variant. An alias preserves both these guarantees and construction control.
 Invariants are nominal contracts, not extra requirements that must be
 repeated on every function parameter.
+
+An unchanged source record keeps its own facts during a copy, while the new
+candidate has no whole-value invariant until revalidation. The prover can
+unfold established simple invariants to recover comparison and predicate
+consequences on source fields. Only field identities whose value is unchanged
+survive into the candidate; changing a nested path invalidates facts about
+that path and any whole value containing it. Thus `configured(c)` can supply
+`admin == false || token != ""` for the unchanged admin/token fields in
+`c.copy(hi = hi)`, but cannot itself prove `configured` of the new value.
+A user rule can expose consequences of an opaque predicate; no general
+logical consequence solver is added. Tests include the shown `WithHi`,
+invalid admin/token changes, and nested changes invalidating an enclosing
+invariant as well as the nested type's invariant.
 
 The facts pass uses its existing backward search, comparison facts and rules.
 Simple predicate bodies can inspect the completed record's fields. A match
