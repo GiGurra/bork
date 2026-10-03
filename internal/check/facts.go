@@ -1236,6 +1236,9 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 					ok, pending = f.prove(src.Subject, inner, e, depth+1)
 				} else {
 					ok, pending = f.proveMember(src.Subject, src.Member, inner, e, depth+1)
+					if !ok {
+						ok, pending = f.prove(src.Subject, inner, e, depth+1)
+					}
 				}
 				if cs.take(ok, pending) {
 					return true, nil
@@ -1918,9 +1921,8 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 						add(src.Field.Constraints, f.recordFieldArgs(owner, src.Field))
 					}
 				}
-				if src.Member == nil {
-					out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
-				} else {
+				out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
+				if src.Member != nil {
 					out = append(out, within(f.declaredMember(src.Subject, src.Member), src.Path)...)
 				}
 			}

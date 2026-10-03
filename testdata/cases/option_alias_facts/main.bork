@@ -19,4 +19,14 @@ fn bound(s: String): String {
     _ => "missing"
   }
 }
-fn main() { println(returned("local"), bound("bound"), bound("")) }
+// Guard facts on a locally constructed payload survive widening to a union.
+fn constructed(s: String): Text {
+  if (valid(s)) {
+    result: Option[String] | Missing = Option.Some { value: s }
+    match (result) {
+      Option.Some { value } => value
+      _ => panic("missing")
+    }
+  } else { panic("empty") }
+}
+fn main() { println(returned("local"), bound("bound"), bound(""), constructed("guarded")) }

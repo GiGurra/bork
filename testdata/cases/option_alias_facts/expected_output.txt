@@ -1,1 +1,1 @@
-local bound missing
+local bound missing guarded
