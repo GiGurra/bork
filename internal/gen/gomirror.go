@@ -38,36 +38,16 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 		w.line("var _errs []" + errType)
 		for i, f := range r.Fields {
 			path := "_path + " + strconv.Quote("."+f.Name)
-			before := ""
-			if len(f.Constraints) > 0 {
-				before = w.newTmp()
-				w.line(before + " := len(_errs)")
-			}
 			converted := w.fromGo("v."+strings.Join(r.GoFields[i].Path, "."), r.GoFields[i].Type, f.Type, path)
 			w.line("out." + f.Name + " = " + converted)
-			if before != "" {
-				w.line("if len(_errs)==" + before + " {")
-			}
-			for _, con := range f.Constraints {
-				stmts := g.atPath(ast.NewIdent("out."+f.Name), f.Type, splitPath(con.Path), func(x ast.Expr, t check.Type) []ast.Stmt {
-					cond := g.constraintCond(con, x, t)
-					if cond == nil {
-						return nil
-					}
-					stmt := fmt.Sprintf("if !(%s) { _errs=append(_errs,_bindValueError(%s,%q)) }", g.text(cond), path, "must be "+con.String())
-					parsed, err := parser.ParseFile(token.NewFileSet(), "", "package main\nfunc _(){"+stmt+"}", 0)
-					if err != nil {
-						panic(err)
-					}
-					return parsed.Decls[0].(*ast.FuncDecl).Body.List
-				})
-				for _, stmt := range stmts {
-					w.line(g.text(stmt))
+			if len(f.Constraints) > 0 {
+				saved := w.newTmp()
+				w.line(fmt.Sprintf("%s := append([]%s(nil), _errs...)", saved, errType))
+				for _, con := range f.Constraints {
+					w.factAtPath("out."+f.Name, f.Type, splitPath(con.Path), path, con, saved)
 				}
 			}
-			if before != "" {
-				w.line("}")
-			}
+
 		}
 		w.line("return out, _errs")
 		fmt.Fprintf(&src, "func _fromGo_%s(v %s, _path string, _seen map[any]bool) (%s, []%s) {\n%s}\n", n, gt, n, errType, w.body.String())
@@ -81,6 +61,8 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 }
 
 func (g *gen) mirrorRuntime() string {
+	r := g.goImport("reflect")
+	s := g.goImport("strings")
 	return fmt.Sprintf(`
 func _borkToGo[G any](v interface { _borkGoMirror() G }) G { return v._borkGoMirror() }
 func _borkFromGo[T any](v any) (T, []%s) {
@@ -88,7 +70,20 @@ func _borkFromGo[T any](v any) (T, []%s) {
  errs := any(&out).(interface { _borkSetMirror(any) []%s })._borkSetMirror(v)
  return out, errs
 }
-`, g.typeText(g.info.Named["GoValueError"]), g.typeText(g.info.Named["GoValueError"]))
+type _bindCycleKey struct { typ %[3]s.Type; ptr uintptr; length int }
+func _bindCollectionKey(v any) _bindCycleKey {
+ r := %[3]s.ValueOf(v)
+ length := 0
+ if r.Kind()==%[3]s.Slice { length=r.Len() }
+ return _bindCycleKey{r.Type(),uintptr(r.UnsafePointer()),length}
+}
+func _bindPathValid(errors []%[1]s, path string) bool {
+ for _,e:=range errors {
+  if e.path==path || %[4]s.HasPrefix(e.path,path+".") || %[4]s.HasPrefix(e.path,path+"[") || %[4]s.HasPrefix(path,e.path+".") || %[4]s.HasPrefix(path,e.path+"[") { return false }
+ }
+ return true
+}
+`, g.typeText(g.info.Named["GoValueError"]), g.typeText(g.info.Named["GoValueError"]), r, s)
 }
 
 // A binding verifies the facts its signature promises before publishing a
@@ -170,4 +165,60 @@ func (w *bindWriter) bindingConstraint(con *check.Constraint) *check.Constraint 
 		out.Or = append(out.Or, w.bindingConstraint(alt))
 	}
 	return &out
+}
+
+func (w *bindWriter) beginCollection(x, path string) string {
+	if w.seen == "" || w.collect == "" && !w.b.Fallible {
+		return ""
+	}
+	key := w.newTmp()
+	w.line(key + " := _bindCollectionKey(" + x + ")")
+	w.line("if len(" + x + ")>0 && " + w.seen + "[" + key + "] {")
+	if w.collect != "" {
+		w.line(fmt.Sprintf("%s=append(%s,_bindValueError(%s,%q))", w.collect, w.collect, path, "cyclic Go value"))
+	} else {
+		w.line(fmt.Sprintf("return _bindValueError(%s,%q)", path, "cyclic Go value"))
+	}
+	w.line("} else {")
+	w.line(w.seen + "[" + key + "]=true")
+	return key
+}
+func (w *bindWriter) endCollection(key string) {
+	if key == "" {
+		return
+	}
+	w.line("delete(" + w.seen + ", " + key + ")")
+	w.line("}")
+}
+
+func (w *bindWriter) factAtPath(x string, t check.Type, steps []string, path string, con *check.Constraint, conversionErrors string) {
+	if len(steps) == 0 {
+		cond := w.g.constraintCond(con, ast.NewIdent(x), t)
+		if cond == nil {
+			return
+		}
+		w.line(fmt.Sprintf("if _bindPathValid(%s,%s) && !(%s) { _errs=append(_errs,_bindValueError(%s,%q)) }", conversionErrors, path, w.g.text(cond), path, "must be "+con.String()))
+		return
+	}
+	step, rest := steps[0], steps[1:]
+	switch t := t.(type) {
+	case *check.List:
+		i, e := w.newTmp(), w.newTmp()
+		w.line(fmt.Sprintf("for %s,%s:=range %s {", i, e, x))
+		w.factAtPath(e, t.Elem, rest, fmt.Sprintf("_bindIndex(%s,%s)", path, i), con, conversionErrors)
+		w.line("}")
+	case *check.Record:
+		if f := t.Field(step); f != nil {
+			w.factAtPath(x+"."+step, f.Type, rest, path+" + "+strconv.Quote("."+step), con, conversionErrors)
+		}
+	case *check.Sealed:
+		for _, v := range t.Variants {
+			if f := v.Field(step); f != nil {
+				e, ok := w.newTmp(), w.newTmp()
+				w.line(fmt.Sprintf("if %s,%s:= %s.(%s);%s {", e, ok, x, w.g.text(w.g.variantType(v)), ok))
+				w.factAtPath(e+"."+step, f.Type, rest, path+" + "+strconv.Quote("."+step), con, conversionErrors)
+				w.line("}")
+			}
+		}
+	}
 }

@@ -267,9 +267,15 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 		}
 		v, i, e := w.newTmp(), w.newTmp(), w.newTmp()
 		w.line(fmt.Sprintf("%s := make(%s, len(%s))", v, w.g.typeText(t), x))
+		_, slice := u.(*types.Slice)
+		visit := ""
+		if slice {
+			visit = w.beginCollection(x, path)
+		}
 		w.line(fmt.Sprintf("for %s, %s := range %s {", i, e, x))
 		w.line(fmt.Sprintf("%s[%s] = %s", v, i, w.fromGo(e, gelem, elem, fmt.Sprintf("_bindIndex(%s, %s)", path, i))))
 		w.line("}")
+		w.endCollection(visit)
 		return v
 	case *types.Map:
 		m := t.(*check.Map)
@@ -277,12 +283,14 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 		ks, vs, k, e := w.newTmp(), w.newTmp(), w.newTmp(), w.newTmp()
 		w.line(fmt.Sprintf("%s := make([]%s, 0, len(%s))", ks, w.g.typeText(m.Key), x))
 		w.line(fmt.Sprintf("%s := make([]%s, 0, len(%s))", vs, w.g.typeText(m.Value), x))
+		visit := w.beginCollection(x, path)
 		w.line(fmt.Sprintf("for %s, %s := range %s {", k, e, x))
 		key := w.fromGo(k, u.Key(), m.Key, fmt.Sprintf("_bindKey(%s, %s)", path, k))
 		val := w.fromGo(e, u.Elem(), m.Value, fmt.Sprintf("_bindKey(%s, %s)", path, k))
 		w.line(fmt.Sprintf("%s = append(%s, %s)", ks, ks, key))
 		w.line(fmt.Sprintf("%s = append(%s, %s)", vs, vs, val))
 		w.line("}")
+		w.endCollection(visit)
 		// A Go map has no order, so it becomes an unordered map.
 		return fmt.Sprintf("_mapUnordered(_borkMapOf(%s, %s))", ks, vs)
 	case *types.Struct:

@@ -9,4 +9,6 @@ type Handle = resource go "*example.com/bindtest.Handle"
 type WithResource = go "example.com/bindtest.Payload" { text: List[Handle] }
 fn PassArray(a: Array): Array unsafe go "example.com/bindtest.EchoArray"
 fn BadPayload(s: String): Payload | GoValueError unsafe go "example.com/bindtest.NewPayload"
+type Double = go "example.com/bindtest.MirrorItem" { id: Int, iD: Int }
+type Ambiguous = go "example.com/bindtest.MirrorFold" { hTtp: String }
 fn main() {}

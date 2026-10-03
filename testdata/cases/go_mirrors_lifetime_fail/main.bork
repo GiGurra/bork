@@ -1,0 +1,17 @@
+type Handle = resource go "*example.com/bindtest.Handle"
+type View = go "*example.com/bindtest.View"
+type Node = go "example.com/bindtest.OpaqueNode" { next: Option[Node], view: View }
+fn OpenHandle(s: Scope) uses state: Handle | GoValueError unsafe go "example.com/bindtest.OpenHandle"
+fn Make(h: Handle) uses state: Node | GoValueError unsafe go "example.com/bindtest.MakeOpaqueNode"
+fn Escape() uses state: Option[Node] | GoValueError {
+  scope s {
+    match (OpenHandle(s)) {
+      h: Handle => match (Make(h)) {
+        n: Node => n.next
+        e: GoValueError => e
+      }
+      e: GoValueError => e
+    }
+  }
+}
+fn main() uses io + state { println(Escape()) }

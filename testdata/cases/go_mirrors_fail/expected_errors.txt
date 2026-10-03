@@ -2,7 +2,10 @@ main.bork:1:1: time.Duration is not a Go struct, so it cannot be mirrored
 main.bork:2:1: a Go mirror names a struct, not a pointer to one
 main.bork:3:1: a Go mirror cannot have type parameters
 main.bork:4:35: Missing mirrors net/url.URL, but field hostname has 0 matching exported Go fields
-main.bork:5:67: ID is promoted through a pointer or unexported embedded field, so it cannot be mirrored
+main.bork:5:67: ID is promoted through a pointer embedded field, so it cannot be mirrored
+main.bork:7:52: mirror field value has bork type Int, which cannot convert to or from Go string
 main.bork:9:57: mirror field text contains a resource, but _borkFromGo has no ownership Scope; keep the outer Go object opaque or use an unsafe resource wrapper
 main.bork:10:14: PassArray is bound to example.com/bindtest.EchoArray(v bindtest.MirrorArray) bindtest.MirrorArray, but parameter a is Array, which does not convert to Go bindtest.MirrorArray
 main.bork:11:27: BadPayload is bound to example.com/bindtest.NewPayload(s string) *bindtest.Payload, whose result *bindtest.Payload does not convert to Payload
+main.bork:12:63: mirror fields id and iD both map to Go field ID
+main.bork:13:57: Ambiguous mirrors example.com/bindtest.MirrorFold, but field hTtp has 2 matching exported Go fields
