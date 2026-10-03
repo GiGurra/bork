@@ -5,6 +5,7 @@ import butil "example.com/marked/b/util"
 
 pred nonEmpty(s: String) { s != "" }
 pred small(n: Int) { n < 10 }
+pred unit(f: Float) { f >= 0.0 && f <= 1.0 }
 // A predicate that panics on some input.
 pred calm(s: String) {
   if (s == "boom") {
@@ -22,6 +23,8 @@ logged ambient requestId: String
 propagated("traceparent") logged ambient trace: TraceParent
 propagated("x-attempt") ambient attempt: Int where small
 propagated("x-ratio") ambient ratio: Float
+// NaN and the infinities are checked against the facts too.
+propagated("x-share") ambient share: Float where unit
 propagated("x-flag") ambient flag: Bool
 propagated("x-mood") ambient mood: String where calm
 // An unmarked value never leaves through logs or headers.
@@ -155,6 +158,9 @@ fn main() uses io + state {
   // them.
   for (text in ["2.50", "3", "-1e3", "NaN", "-Inf", "+1", "1_0", "inf", "0x1p4", "1."]) {
     receive("x-ratio", text)
+  }
+  for (text in ["0.5", "NaN", "+Inf", "-Inf", "2.0"]) {
+    receive("x-share", text)
   }
   for (text in ["true", "false", "1", "TRUE"]) {
     receive("x-flag", text)

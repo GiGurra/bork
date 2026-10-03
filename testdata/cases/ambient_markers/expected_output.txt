@@ -11,6 +11,7 @@ send: x-attempt=3
 level=INFO msg="getting traceparent" requestId=r1 k=1
 level=INFO msg="getting x-attempt" requestId=r1 k=1
 level=INFO msg="getting x-ratio" requestId=r1 k=1
+level=INFO msg="getting x-share" requestId=r1 k=1
 level=INFO msg="getting x-flag" requestId=r1 k=1
 level=INFO msg="getting x-mood" requestId=r1 k=1
 level=INFO msg="logging handler" requestId=r1 trace=00-in-01 k=1
@@ -41,6 +42,15 @@ level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=rati
 received x-ratio "0x1p4": send: 
 level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
 received x-ratio "1.": send: 
+received x-share "0.5": send: x-share=0.5 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "NaN": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "+Inf": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "-Inf": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-share ambient=share error="it does not have the facts of its type"
+received x-share "2.0": send: 
 received x-flag "true": send: x-flag=true 
 received x-flag "false": send: x-flag=false 
 level=WARN msg="ignored an invalid propagated value" header=x-flag ambient=flag error="it is not a Bool"

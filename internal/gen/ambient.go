@@ -244,19 +244,20 @@ func (d *_ambientDecl) read(text string) (v any, err error) {
 			return nil, fmt.Errorf("it is not an Int")
 		}
 	case 'f':
-		switch text {
-		case "NaN":
-			return math.NaN(), nil
-		case "+Inf":
-			return math.Inf(1), nil
-		case "-Inf":
-			return math.Inf(-1), nil
-		}
-		if !_ambientNumber(text, true) {
+		// NaN and the infinities still go through the facts below.
+		switch {
+		case text == "NaN":
+			v = math.NaN()
+		case text == "+Inf":
+			v = math.Inf(1)
+		case text == "-Inf":
+			v = math.Inf(-1)
+		case !_ambientNumber(text, true):
 			return nil, fmt.Errorf("it is not a Float")
-		}
-		if v, err = strconv.ParseFloat(text, 64); err != nil {
-			return nil, fmt.Errorf("it is not a Float")
+		default:
+			if v, err = strconv.ParseFloat(text, 64); err != nil {
+				return nil, fmt.Errorf("it is not a Float")
+			}
 		}
 	case 'b':
 		if text != "true" && text != "false" {
