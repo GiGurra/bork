@@ -1105,6 +1105,103 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **Pattern matching is `match (x) { pattern => value, ... }`.**
 - **Changed copies use `copy`, with nested paths:** `u.copy(age = 37, address.city = "Oslo")`. This replaces Scala's nested `copy(address = u.address.copy(city = ...))`.
 
+### Named call arguments (design: bork-e48in4)
+
+Named arguments complement parameter defaults: a small API can expose readable
+options without a separate config record or functional options. This section is
+the implementation contract; examples below describe the proposed syntax.
+
+```bork
+// internal/std/http/http.bork: skip drainTimeoutMs, retaining its default.
+http.Listen(addr, s, handler, maxBodyBytes: 1048576)
+http.ListenTLS(addr, s, routes, keyFile: key, certFile: cert)
+
+// examples/cli/main.bork: label the flags without obscuring the callback.
+cli.Run[Options]("greet", "A proven command-line configuration", (options, s) => {
+  println(s"Hello ${options.name} on port ${options.port}")
+}, flags: [cli.Flag { field: "port", short: "p" }])
+
+// internal/std/sql/sql.bork: required parameters can be named too.
+sql.Query[Row](connection, query: "select name from users where id = ?", params: [id])
+process.Run(s, "tool", directory: "/tmp", arguments: ["--version"])
+```
+
+- **Syntax is `name: expression`.** A label is a single parameter identifier,
+  scoped to the selected declaration; it is not a binding or a field path.
+  `copy(field = value)` retains its existing syntax. Record and map literals
+  inside arguments retain their ordinary braces and colons.
+- **A positional prefix, then named arguments in any order.** Positional
+  arguments fill consecutive parameters from the start. Named arguments fill
+  the matching remaining parameter. Required parameters may be named; every
+  unfilled required parameter is an error. Any unfilled defaulted parameter
+  receives its declared default, including gaps between explicitly supplied
+  parameters. A parameter may be filled exactly once, whether positionally or
+  by name. A positional argument after the first named argument is an error.
+- **Only direct calls expose names.** Unqualified and imported declared
+  functions, declared receiver methods, and declared type-class methods accept
+  labels, including generic and checked Go bindings. Function values, lambdas,
+  function-valued fields, and bound method references accept positional
+  arguments only: parameter names and defaults are not part of function types.
+  Binding `f = http.Listen` does not preserve its parameter names. Names are
+  taken from the selected declaration, never inferred from a function value's
+  implementation. Class calls use the class declaration's parameter names,
+  even if an instance implementation chooses different local names.
+- **The method receiver cannot be named.** `items.take(n: 3)` labels an
+  ordinary method parameter; the receiver remains `items`. A pipeline's input
+  fills the first positional parameter before labels are resolved:
+  `connection |> sql.Query[Row](query: text, params: [])`. Explicitly naming
+  that same parameter is a duplicate. Existing restrictions on pipeline
+  targets remain in force.
+- **Evaluation follows source order.** Evaluate the callee or method receiver,
+  then each supplied argument once, from left to right as written (including
+  a pipeline's input before its target's arguments). Arrange the resulting
+  values in declaration order for the call. Thus `f(b: readB(), a: readA())`
+  reads B before A even though `a` is declared first. Defaults remain closed,
+  pure values; omitted defaults introduce no effects. The typed call keeps
+  both parameter mapping and source evaluation order so generated Go and
+  compile-time evaluation preserve this rule.
+- **Checking uses parameter order and preserves source locations.** Each
+  supplied expression receives the expected type of its resolved parameter,
+  including callback types, constrained types and, in bork-vk07ec, context
+  literals. Generic inference uses that same mapping, with the existing shared
+  inference session and explicit type arguments; labels add no overload
+  resolution or inference rules. Effects and ownership are checked for the
+  supplied expressions as usual. Facts, parameter-dependent facts and function
+  contracts substitute by parameter identity, so changing argument order does
+  not change obligations or promised facts. Diagnostics point at the caller's
+  expression, rather than a reordered or synthesized argument.
+- **Parameter names are public API.** Renaming a callable parameter can break
+  named callers, even if its position and type are unchanged. The receiver
+  name and names in function types are excluded. `bork describe` shows callable
+  parameter names and defaults and identifies direct-call name support;
+  structured descriptions expose this distinction alongside the signature.
+  Existing positional calls remain valid.
+- **Diagnostics explain the mapping.** An unknown label names the declaration
+  and offers a replacement edit only when one close parameter name is
+  unambiguous. Duplicate arguments identify the parameter and earlier value;
+  a safe removal edit includes the redundant argument's delimiter. Missing
+  required arguments list the absent names and types; no edit invents values.
+  Positional-after-named errors recommend moving that argument before the
+  named suffix, with an edit only when doing so preserves its intended mapping
+  and evaluation order. Named calls through function values explain that
+  function types do not carry names and recommend a direct declaration call;
+  removing labels is only safe when their order is already declaration order.
+  Errors and available edits are exposed by `bork check --json`.
+- **Formatting preserves argument order and labels.** `bork fmt` uses one space
+  after the colon and its existing call layout, retaining comments and line
+  breaks. It never sorts labels. Grammar, README, describe documentation and
+  std examples must document the implemented behavior. Migrate readable HTTP,
+  CLI, process and SQL call sites; do not rename exported parameters or invent
+  SQL options solely to exercise the syntax.
+
+Acceptance includes direct/imported functions, required and skipped-default
+parameters, receiver and class methods, generic inference with callbacks and
+facts, pipelines, checked Go bindings, and rejected function-value calls.
+Runtime and compile-time cases must catch evaluation reordering and duplicate
+evaluation. Negative cases cover unknown/duplicate labels (including collisions
+with positional arguments), missing parameters and positional-after-named;
+formatter, describe and structured diagnostics cover the same source forms.
+
 ### Numbers
 
 - **Fixed-width integers, as in Go.** `Int` is a 64-bit integer with Go's wrapping arithmetic.
