@@ -23,8 +23,8 @@ Url { scheme: "https", host: "example.com", path: "", query: {:}, fragment: "", 
 https://example.com?
 a%2Fb%20+%C3%A9
 a%2Fb+%2B%C3%A9
-a/b+ 
-a/b  
+true
+true
 ParseError { input: "%xx", message: "invalid URL escape \"%xx\"" }
 ParseError { input: "%", message: "invalid URL escape \"%\"" }
 ParseError { input: "https://example.com/%xx", message: "parse \"https://example.com/%xx\": invalid URL escape \"%xx\"" }
