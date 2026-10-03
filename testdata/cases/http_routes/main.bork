@@ -21,8 +21,8 @@ fn endpoint(index: Int, request: http.Request, rs: Scope): http.Response {
     _ => http.Text(500, "unexpected")
   }
 }
-// Middleware is an ordinary function returning a handler; open effects flow
-// through its handler parameter and return type.
+// Middleware is an ordinary function returning a handler with the server
+// effect set. Pure and narrower handlers can be passed to it.
 fn tagged(handler: http.Handler): http.Handler {
   (req, rs) => handler(req, rs).copy(headers = { "X-Middleware": ["yes"] })
 }
@@ -34,6 +34,8 @@ fn call(base: String, path: String, s: Scope, method: String = "GET", body: Stri
 }
 fn main() {
   drainTest()
+  forcedDrain(1000)
+  forcedDrain(0)
   scope s with cleanupTimeout(1000) {
     more(s)
     match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /users/{id}", handler: tagged((req, rs) => endpoint(0, req, rs)) }, http.Route { pattern: "GET /search", handler: (req, rs) => endpoint(1, req, rs) }, http.Route { pattern: "POST /form", handler: (req, rs) => endpoint(2, req, rs) }])) {

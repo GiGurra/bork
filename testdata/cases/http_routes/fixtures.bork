@@ -21,6 +21,7 @@ fn fixture(s: Scope) uses io + clock + random: Fixture unsafe go {
   os.WriteFile(filepath.Join(dir, "cert.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert}), 0600)
   os.WriteFile(filepath.Join(dir, "key.pem"), pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0600)
   os.WriteFile(filepath.Join(dir, "asset.txt"), []byte("static asset"), 0600)
+  os.WriteFile(filepath.Join(dir, "a%?#.txt"), []byte("reserved filename"), 0600)
   return Fixture{handle: dir, owner: s.Own(func() { os.RemoveAll(dir) })}
 }
 fn root(f: Fixture): String unsafe go { return f.handle.(string) }
@@ -44,6 +45,7 @@ fn more(s: Scope) uses io + net + clock + random + state {
   files = fixture(s)
   path = root(files)
   println(http.Static(makeRequest("", "").copy(method = "GET", path = "/assets/asset.txt"), path, "/assets").body)
+  println(http.Static(makeRequest("", "").copy(method = "GET", path = "/assets/a%?#.txt"), path, "/assets").body)
   match (http.ListenTLS("127.0.0.1:0", s, [http.Route { pattern: "GET /users/{id}", handler: (req, rs) => endpoint(0, req, rs) }], path + "/cert.pem", path + "/key.pem")) {
     server: http.Server => println(tlsCall(http.Address(server)))
     error: IoError => println("unexpected", error.message)

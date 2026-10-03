@@ -7,8 +7,9 @@ fn Static(request: Request, root: String, prefix: String = "") uses io: Response
   import "net/http/httptest"
   import "sort"
   import "strings"
-  req, err := http.NewRequest(request.method, request.path, strings.NewReader(request.body))
+  req, err := http.NewRequest(request.method, "/", strings.NewReader(request.body))
   if err != nil { return Text(400, err.Error()) }
+  req.URL.Path = request.path
   req.URL.RawQuery = request.query
   _borkMapEach(request.headers, func(name string, values []string) bool {
     for _, value := range values { req.Header.Add(name, value) }
