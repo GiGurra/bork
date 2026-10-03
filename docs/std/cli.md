@@ -101,3 +101,9 @@ Run with `app --config local.json --port 9000`. `settings.json` might contain
 It generates help from field docs and defaults, supports short flags, explicit
 environment bindings, positionals, and repeated list flags, and collects field
 errors before invoking a handler. See [examples/cli](../../examples/cli/main.bork).
+
+The checked-in example also supports a selectable config file:
+
+```sh
+bork run examples/cli -- --config examples/cli/config.json --port 9000
+```
