@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -115,7 +116,12 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	}
 	checkedDefaults := map[*syntax.FieldDecl]bool{}
 	for field := range info.fieldDefaults {
-		if field.Prelude || field.Default == nil || hasTypeParam(field.Type) || importedDefault(field) {
+		if field.Prelude || field.Default == nil || hasTypeParam(field.Type) {
+			continue
+		}
+		// Embedded standard declarations are validated by compiler tests. Keep
+		// ordinary checks independent of Go solely for these shipped defaults.
+		if importedDefault(field) && strings.HasPrefix(field.Pkg.Path, std.Prefix) {
 			continue
 		}
 		if !field.defaultGeneric {
@@ -139,9 +145,11 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	f.evaluate(eval)
 }
 
-// Closed non-generic defaults are proven when their declaring package is
-// checked. Importers rely on that contract. Generic defaults still need proof
-// after specialization, and sibling-dependent constraints remain use-site checks.
+// Closed non-generic defaults are proven once per declaration for every
+// user package in the build graph; shipped standard defaults are tested with
+// their package as root. Imported uses rely on that proof. Generic
+// defaults still need proof after specialization, and sibling-dependent
+// constraints remain use-site checks.
 func importedDefault(field *Field) bool {
 	return field != nil && field.Pkg != nil && !field.Pkg.Root && !field.defaultGeneric
 }

@@ -71,9 +71,9 @@ func TestHTTPTypeCheckWithoutGo(t *testing.T) {
 	}
 }
 
-// Importing a declaration with checked defaults does not evaluate predicates
-// again; checking the declaring package itself still proves those defaults.
-func TestImportedDefaultFactsWithoutGo(t *testing.T) {
+// Each build proves imported user defaults; a preceding root check is not
+// a cross-build proof cache. Use sites within one build share the proof.
+func TestImportedDefaultFactsNeedProofPerBuild(t *testing.T) {
 	root := t.TempDir()
 	api := filepath.Join(root, "api")
 	if err := os.MkdirAll(api, 0o755); err != nil {
@@ -92,9 +92,12 @@ func TestImportedDefaultFactsWithoutGo(t *testing.T) {
 	if _, _, err := Check(api); err != nil {
 		t.Fatalf("declaring package: %v", err)
 	}
-	t.Setenv("PATH", t.TempDir())
 	if _, _, err := Check(root); err != nil {
-		t.Fatalf("imported defaults without Go: %v", err)
+		t.Fatalf("imported default proof: %v", err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	if _, _, err := Check(root); err == nil || !strings.Contains(err.Error(), "cannot run predicates at compile time") {
+		t.Fatalf("imported default proof skipped: %v", err)
 	}
 	if _, _, err := Check(api); err == nil {
 		t.Fatal("declaring package skipped default proof")
