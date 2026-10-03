@@ -321,6 +321,83 @@ method/computed identities (`bork-rgy4as`).
 Arithmetic implications must respect the sized-number overflow rules; no
 built-in `lo < hi => lo + 1 <= hi` shortcut is added here (`bork-ggj8ew`).
 
+### Function-level relational requirements (bork-3ly6p0 design)
+
+A function may require facts relating any of its inputs, without choosing one
+parameter as the subject. Place the clause immediately after the parameter
+list, before `uses` and the result type:
+
+```bork
+pred sameLength[A, B](xs: List[A], ys: List[B]) { xs.length() == ys.length() }
+fn zip[A, B](xs: List[A], ys: List[B]) where sameLength(xs, ys): List[Pair[A, B]] {
+  // The body knows sameLength(xs, ys).
+  ...
+}
+fn interval(lo: Int, hi: Int) where lo <= hi: Range { Range { lo: lo, hi: hi } }
+fn (xs: List[T]) zip[T, U](ys: List[U]) where sameLength(xs, ys): List[Pair[T, U]] { ... }
+fn send(lo: Int, hi: Int) where lo <= hi uses io: Unit { ... }
+```
+
+The position distinguishes an input requirement from an existing result
+constraint: `fn f(x: Int) where positive(x): Int where positive` requires a
+positive input and returns a positive result. Parameter clauses remain valid
+and combine conjunctively with function clauses. The function clause supplies
+all predicate arguments explicitly; it never inserts an implicit subject.
+Qualified predicates and locally inferred generic predicates work as ordinary
+calls do. Arguments name immutable parameters, the receiver, stable field
+projections, or constants. Arbitrary function calls and computed arithmetic
+arguments remain outside this increment.
+
+**Clauses.** A requirement is a pure Bool predicate call or a comparison using
+`==`, `!=`, `<`, `<=`, `>`, or `>=`. Requirements combine with `and` and `or`,
+with parentheses for grouping, as existing type constraints do. Mixing `and`
+and `or` at the same nesting level is rejected: write
+`where (p(x) or q(x)) and r(x)`, not `where p(x) or q(x) and r(x)`. Comparisons
+have their ordinary operand typing and Float/NaN semantics. No new arithmetic,
+transitivity, or method-identity theorem is implied by the syntax. Rules and
+predicate unfolding continue to use the existing proof engine. Constant
+requirements must also hold; an impossible clause cannot make a function body
+an unchecked source of guarantees.
+
+**Calls and bodies.** At a call, substitute actual arguments for parameter
+names and prove every requirement using the caller's facts, guards, constants,
+and rules. Named arguments map by parameter identity; reordered named calls
+and omitted defaults have the same obligations as positional calls after
+completion. Receiver calls, pipes, explicit generic calls, inferred generic
+calls, assembly-provided calls, and native function bindings follow the same
+checking path. Evaluate argument expressions once, preserving existing source
+evaluation order. A failed proof names the callee and the fully substituted
+relation, with the existing guard/declaration guidance. In the body, all
+parameter requirements and function requirements are available from entry;
+OR clauses retain their alternatives rather than publishing both branches.
+An early rejection guard may establish a requirement at a later call exactly
+as it establishes a parameter constraint today.
+
+**Callable boundaries.** Function and method references with input requirements
+continue to be rejected as values; a lambda can perform a guarded direct call.
+The existing function type syntax does not silently erase relational contracts.
+Class method signatures may declare requirements in the same position. Each
+instance method must declare the same contract after receiver/type/parameter
+substitution and parameter renaming; strengthening, weakening, or adding an
+undeclared requirement is rejected conservatively. Class dispatch checks the
+signature contract before invoking the instance. Auto-property generation
+checks the completed argument tuple against all parameter and function
+requirements before invoking the function, and shrinking preserves those
+requirements. This includes native-binding auto-properties. Rejection sampling
+uses the existing bounded generation policy; it does not invent a relational
+solver. Tests and generated native bindings retain the same requirements.
+Predicates and rules do not gain function-level clauses in this increment.
+
+**Verification.** Compiler cases cover passing a declared relation onward,
+predicate guards, comparison guards, early returns, rules, AND/OR branches,
+receiver calls, named/defaulted arguments, generics, native bindings, assembly,
+and class contract matching. Rejection cases cover absent proofs, mismatched
+argument identities, cross-branch OR facts, NaN-invalid implications,
+undeclared names, impure or non-Bool predicates, computed requirement arguments,
+unparenthesized mixed AND/OR clauses, joint generation/shrink violations,
+class contract mismatches, and function-reference erasure. Formatter and query
+output show the clause without confusing it with the result's `where`.
+
 ### Sibling-field record invariants (bork-k3nrwg)
 
 Field predicates can name sibling fields, including fields declared later:

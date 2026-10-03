@@ -27,7 +27,7 @@ UseItem    = Ident | Ident "." ( Ident | "*" ) .
 Instances  = "instances" Ident "{" [ UseItem { Sep UseItem } [ Sep ] ] "}" .
                                              (* instances Json { ItemDecode, ItemEncode, money.Defaults } *)
 ClassDecl  = "class" Ident "[" Ident "]" "{" { MethodSig EOL } "}" .  (* class Show[T] { fn show(x: T): String } *)
-MethodSig  = "fn" Ident "(" [ Params ] ")" [ Uses ] [ ":" Type ] .
+MethodSig  = "fn" Ident "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ ":" Type ] .
 InstanceDecl = "instance" Ident [ TypeParams ] ":" Ident "[" Type "]" "{" { FuncDecl EOL } "}" .
                                              (* instance showBox[T: Show]: Show[Box[T]] { fn show(x: Box[T]): String { ... } } *)
 Import     = "import" [ Ident ] StringLit .  (* import "example.com/shop/money", or import cash "..." *)
@@ -49,7 +49,17 @@ Sealed     = "sealed" "{" [ Variant { Sep Variant } [ Sep ] ] "}" .
 Variant    = Ident [ Fields ] [ Where ] .
 Sep        = "," | newline .                 (* commas or one item per line *)
 
-FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ Uses ] [ ":" Type ] ( Block | GoBody ) .
+FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ ":" Type ] ( Block | GoBody ) .
+(* FunctionWhere is the bork-3ly6p0 design; implementation follows separately. *)
+FunctionWhere = "where" RequirementGroup .
+RequirementGroup = Requirement [ ( "and" Requirement { "and" Requirement } )
+                              | ( "or" Requirement { "or" Requirement } ) ] .
+Requirement = RequirementCall | StableArg CompareOp StableArg
+            | "(" RequirementGroup ")" .
+(* Mixing and/or at the same nesting level requires parentheses. *)
+RequirementCall = ( Ident | QualIdent ) "(" [ StableArg { "," StableArg } ] ")" .
+StableArg  = Ident { "." Ident } | Literal .  (* parameters/receiver, field projections, constants *)
+CompareOp  = "==" | "!=" | "<" | "<=" | ">" | ">=" .
 Uses       = "uses" ( "nothing" | Ident { "+" Ident } ) .  (* uses io + net: the effects io, net, clock, random, state *)
 Receiver   = "(" Ident ":" Type ")" .   (* a method: fn (xs: List[T]) second[T](): Option[T] { ... } *)
 TypeParams = "[" TypeParam { "," TypeParam } "]" .   (* fn map[A, B](...) *)
