@@ -158,6 +158,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	for _, ci := range info.ClassInstances {
 		roots = append(roots, ci.Methods...)
 	}
+	for _, binding := range info.PackageBindings {
+		roots = append(roots, binding.Boundary.Calls...)
+	}
 	// Incoming propagated values are checked with their facts.
 	roots = append(roots, g.ambientPreds()...)
 	emit := g.reachable(roots)
@@ -165,6 +168,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 		emit[info.Funcs["main"]] = false
 	}
 	var funcs []ast.Decl
+	for _, binding := range info.PackageBindings {
+		funcs = append(funcs, g.packageLazy(binding))
+	}
 	var goFuncs []string
 	for _, f := range files {
 		for _, fd := range f.Funcs {

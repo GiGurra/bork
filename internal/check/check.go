@@ -21,7 +21,8 @@ type Package struct {
 	// ("" for the root package and the prelude).
 	GoPrefix string
 	// Funcs holds the package's own functions by name.
-	Funcs map[string]*Func
+	Funcs    map[string]*Func
+	bindings map[string]*PackageBinding
 	// methods holds the package's methods, by receiver type (see
 	// methodKey) and name.
 	methods map[string]map[string]*Func
@@ -57,6 +58,8 @@ func Exported(name string) bool {
 
 // Func is a declared function's signature.
 type Func struct {
+	RuntimePackageReads bool
+
 	Decl *syntax.FuncDecl
 	Pkg  *Package
 	// Class is set for a class's method (which has no body), and Of for
@@ -201,6 +204,8 @@ type TryInfo struct {
 // generation) read it, and the typed tree of each function body
 // (Func.Body), instead of re-deriving types.
 type Info struct {
+	PackageBindings []*PackageBinding
+
 	// GoImportNames resolves unsafe Go imports without mutating source syntax.
 	GoImportNames map[*syntax.GoCode]map[string]string
 
@@ -491,6 +496,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			}
 		}
 	}
+	c.declarePackageBindings(files)
 	c.declareInstances(files)
 	c.declareDerived(files)
 	c.resolveUses(files)
@@ -544,6 +550,9 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.checkBindings(files, c.goTypes)
 	c.resolveProviderBundles()
 	c.checkFunctionRequirements()
+	for _, binding := range c.info.PackageBindings {
+		c.ensurePackageBinding(binding)
+	}
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -590,6 +599,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 					observe("lower")
 				}
 				c.lower(files)
+				c.packageDependencyGraph()
 				if observe != nil {
 					observe("contracts")
 				}
@@ -681,6 +691,8 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
+	packagePath []*PackageBinding
+
 	mapKeyChecks []func()
 
 	// needsFix is the needs clause the function being checked is
@@ -797,7 +809,7 @@ func (c *checker) notFound(name string) string {
 	if isFunc && fn.Class != nil && !Exported(fn.Class.Name) {
 		return fmt.Sprintf("%s is a method of class %s, which package %s does not export", n, fn.Class.Name, pkg.Path)
 	}
-	if (isFunc || isType || pkg.providers[n] != nil) && !Exported(n) {
+	if (isFunc || isType || pkg.providers[n] != nil || pkg.bindings[n] != nil) && !Exported(n) {
 		return fmt.Sprintf("%s is not exported by package %s (only names starting with an upper-case letter are)", n, pkg.Path)
 	}
 	return fmt.Sprintf("package %s has no %s", pkg.Path, n)
@@ -938,6 +950,10 @@ func (c *checker) checkFunc(fn *Func) {
 // nameTaken reports (and diagnoses) an attempt to bind a name that is
 // already visible. bork does not allow shadowing.
 func (c *checker) nameTaken(name string, pos diag.Pos) bool {
+	if c.pkg.bindings[name] != nil {
+		c.errorf(pos, "%s is already the name of a package lazy value (bork does not allow shadowing)", name)
+		return true
+	}
 	for i := len(c.scopes) - 1; i >= 0; i-- {
 		if _, ok := c.scopes[i][name]; ok {
 			c.errorf(pos, "%s is already defined in an enclosing scope (bork does not allow shadowing)", name)
@@ -1281,6 +1297,9 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 		c.info.defs[e] = l.decl
 		return l.typ
 	}
+	if binding := c.packageBindingNamed(e.Name); binding != nil {
+		return c.packageBindingRead(e, binding)
+	}
 	if a := c.ambientNamed(e.Name); a != nil {
 		return c.ambientIdent(e, a)
 	}
@@ -1481,11 +1500,11 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		if ok {
 			_, builtin = builtins[id.Name]
 		}
-		if !ok || c.lookup(id.Name) != nil || builtin {
+		if !ok || c.lookup(id.Name) != nil || c.packageBindingNamed(id.Name) != nil || builtin {
 			c.errorf(e.Pos, "only a declared generic function can be given type arguments")
 		}
 	}
-	if !ok || c.lookup(id.Name) != nil {
+	if !ok || c.lookup(id.Name) != nil || c.packageBindingNamed(id.Name) != nil {
 		return c.callValue(e)
 	}
 	if b, ok := builtins[id.Name]; ok && c.lookup(id.Name) == nil {

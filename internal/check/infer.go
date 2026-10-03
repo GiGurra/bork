@@ -418,6 +418,10 @@ func (c *checker) zonkInfo() {
 	for b, t := range info.bindings {
 		info.bindings[b] = c.zonk(t)
 	}
+	for _, binding := range info.PackageBindings {
+		binding.Type = c.zonk(binding.Type)
+		binding.Boundary.Result = binding.Type
+	}
 	for _, inst := range info.funcRefs {
 		c.zonkInstance(inst)
 	}

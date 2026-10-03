@@ -316,10 +316,12 @@ applies a cooperative deadline. Map heterogeneous channel receive arms with
 `receiveCase`, then call `arms.select(s)` to receive from exactly one. See the
 [task fan-in example](examples/task_fanin/main.bork).
 
-Explicit local lazy bindings keep type T and cache their initializer on first
+Explicit lazy bindings keep type T and cache their initializer on first
 read: `lazy answer = expensiveComputation()`. Effects count at declaration;
-unused bindings do no work. See [the lazy design](docs/design/lazy.md) for
-scopes, cached failures and the planned record-field phase.
+unused bindings do no work. Package bindings allow pure initializers and ordinary
+exported names, sharing one memo cell for the process lifetime. See
+[the lazy design](docs/design/lazy.md) for scopes, cached failures and computed
+record fields.
 
 A [transparent async binding](docs/design/async.md),
 `async(s) answer = expensiveComputation()`, starts work as a task of scope `s`

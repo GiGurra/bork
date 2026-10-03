@@ -1,0 +1,29 @@
+import "example.com/lazypackages/values"
+type Box = { lazy value: Int }
+lazy Shared = Box { value: 42 }
+lazy Forward = Later + values.Twice
+lazy Later = 8
+lazy Add: (Int) => Int = n => n + values.Answer
+lazy Unread: Int = panic("unread root initializer")
+lazy Failed: Int = panic("cached package failure")
+fn make(): Box { Box { value: 42 } }
+fn shared(a: Box, b: Box): Bool unsafe go { return a.value == b.value }
+fn cachedFailure(): Bool unsafe go {
+  force := func() (failure any) {
+    defer func() { failure = recover() }()
+    _ = _lazy_pkg_Failed.get()
+    return nil
+  }
+  first, second := force(), force()
+  return first == "cached package failure" && first == second && _lazy_pkg_Failed.state == 3 && _lazy_pkg_Failed.init == nil
+}
+fn main() {
+  println(Forward); println(Add(1))
+  println(values.Answer); println(values.Twice)
+  println(shared(Shared, Shared)); println(shared(make(), make()))
+  scope s {
+    tasks = [1, 2, 3].map(n => spawn(s, () => Shared.value + n))
+    println(tasks.map(t => await(t)))
+  }
+  println(cachedFailure())
+}

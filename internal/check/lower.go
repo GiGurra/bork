@@ -67,6 +67,10 @@ func (c *checker) lower(files []*syntax.File) {
 	for _, f := range files {
 		l.sources[f.Path] = f
 	}
+	for _, binding := range c.info.PackageBindings {
+		binding.Var = &Var{Name: binding.Decl.Name, GoName: "_lazy_pkg_" + binding.Pkg.GoPrefix + binding.Decl.Name, Pos: binding.Decl.Pos, Type: binding.Type, Kind: VarLet, PackageBinding: binding}
+		l.vars[binding.Decl] = binding.Var
+	}
 	for field := range c.info.fieldDefaults {
 		for i, param := range field.defaultParams {
 			v := &Var{Name: param.Name, Pos: param.Pos, Type: field.siblings[i].Type, Kind: VarDefaultField, Index: i, Sibling: field.siblings[i]}
@@ -80,6 +84,10 @@ func (c *checker) lower(files []*syntax.File) {
 				l.function(fn)
 			}
 		}
+	}
+	for _, binding := range c.info.PackageBindings {
+		binding.Value = l.stmt(binding.Decl).(*Let)
+		binding.Boundary.Body = &Block{expr: expr{pos: binding.Decl.Pos, typ: binding.Type}, Stmts: []Stmt{binding.Value}, Tail: &VarRef{expr: expr{pos: binding.Decl.Pos, typ: binding.Type}, Var: binding.Var}}
 	}
 	for _, cl := range c.info.Classes {
 		for _, fn := range cl.Methods {
@@ -179,6 +187,10 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 		}
 		let := &Let{Pos: s.Pos, Value: l.expr(s.Value), Declared: s.Type != nil, Constraints: l.info.bindingConstraints[s]}
 		let.Var = &Var{Label: l.info.assemblyNames[s], Name: s.Name, Pos: s.Pos, Type: l.info.bindings[s], Kind: VarLet, Let: let, Unused: l.info.unused[s]}
+		if global := l.vars[s]; global != nil && global.PackageBinding != nil {
+			global.Let = let
+			let.Var = global
+		}
 		if s.Lazy || s.AsyncScope != nil {
 			let.Deferred = LazyBinding
 			pos := s.LazyPos

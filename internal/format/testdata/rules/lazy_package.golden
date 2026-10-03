@@ -1,0 +1,5 @@
+// A package initializer is a pure recipe, not eagerly run work.
+lazy Answer: Int = 21
+lazy Twice = { Answer * 2 }
+lazy Unread: Int = panic("unread")
+fn main() { println(Twice) }

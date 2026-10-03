@@ -121,6 +121,9 @@ func (c *checker) checkComptimeTypes() {
 		c.checkComptimeRecipe(reflect.ValueOf(node.Body))
 	}
 	for _, node := range c.info.Comptimes {
+		if len(c.info.PackageBindings) != 0 && packageRuntimeReads(c.info, node.Body) {
+			c.diags.AddCode(node.Pos(), "comptime.capture", "comptime cannot read runtime package lazy values, including through helper calls")
+		}
 		if path := unsupportedComptimeType(node.Type(), map[Type]bool{}); path != "" {
 			c.diags.AddCode(node.Pos(), "comptime.result", "comptime cannot bake result type %s: %s", node.Type(), path)
 		}

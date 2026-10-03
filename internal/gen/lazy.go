@@ -1,5 +1,12 @@
 package gen
 
+import (
+	"go/ast"
+	"go/token"
+
+	"github.com/GiGurra/bork/internal/check"
+)
+
 // A cell publishes a value/panic once, independently of reader synchronization.
 // Recursive reads fail loudly; concurrent readers wait for the same completion.
 const lazyRuntime = `package main
@@ -107,3 +114,10 @@ func _asyncNew[T any](s *_Scope, work func() T) *_lazyCell[T] {
  return _lazyNew(func() T { return task.Await().(T) })
 }
 `
+
+// Process-lifetime cells are always runtime cells, even in an evaluator program.
+func (g *gen) packageLazy(binding *check.PackageBinding) ast.Decl {
+	g.usesLazy = true
+	value := &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_lazyNew"), Index: g.goType(binding.Type)}, Args: []ast.Expr{g.lambda(binding.Value.Initializer)}}
+	return &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{varIdent(binding.Var)}, Values: []ast.Expr{value}}}}
+}

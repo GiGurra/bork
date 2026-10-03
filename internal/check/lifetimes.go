@@ -26,10 +26,9 @@ import (
 //     arguments until that scope closes, so they must live as long as it;
 //   - a value stored in a channel or an atom must live as long as it.
 //
-// bork values are immutable and there is nothing global to store them
-// in; the stores there are, channels and atoms, keep only values that
-// live as long as they do (see call). So these are the only ways for a
-// value to escape its scope.
+// bork values are immutable. Package lazy initializers cannot retain scoped
+// values; channels and atoms keep only values that live as long as they do
+// (see call). These checks cover the ways a value can escape its scope.
 func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 	info.Lifetimes = map[Expr][]string{}
 	info.VarLifetimes = map[*Var][]string{}
@@ -54,6 +53,9 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 				l.function(fn)
 			}
 		}
+	}
+	for _, binding := range info.PackageBindings {
+		l.function(binding.Boundary)
 	}
 	for _, fn := range info.Tests {
 		l.function(fn)

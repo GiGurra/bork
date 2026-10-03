@@ -1,0 +1,6 @@
+pred positive(n: Int) { n > 0 }
+lazy Answer: Int where positive = work()
+lazy Twice = Answer * 2
+lazy hidden = 3
+lazy Unread: Int = panic("unread imported initializer")
+fn work(): Int { 21 }

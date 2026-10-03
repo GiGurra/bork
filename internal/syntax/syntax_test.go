@@ -310,3 +310,17 @@ func TestComptimeContextualBlock(t *testing.T) {
 		t.Fatalf("expected ordinary call, got %T", block.Body.Tail)
 	}
 }
+
+func TestPackageLazyBindings(t *testing.T) {
+	diags := &diag.List{}
+	file := Parse("t.bork", []byte("lazy Count: Int = 1\nlazy doubled = Count*2\nfn lazy(n:Int):Int{n}\nfn main(){lazy local=lazy(doubled)}"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	if len(file.Bindings) != 2 || !file.Bindings[0].Lazy || file.Bindings[0].Name != "Count" || file.Bindings[0].Type == nil || file.Bindings[1].Type != nil {
+		t.Fatalf("unexpected bindings: %+v", file.Bindings)
+	}
+	if len(file.Funcs) != 2 {
+		t.Fatalf("unexpected functions: %+v", file.Funcs)
+	}
+}
