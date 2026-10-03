@@ -1267,7 +1267,11 @@ are supported. Missing stdin is empty. Launch/wait errors are IoError;
 explicit or owner cancellation returns Cancelled. Output is retained in memory.
 A final resource cleanup cancels, kills and reaps the child, including a child
 that was never awaited. Attachment selects the destination cancellation source.
-Kill targets the child process, not its descendant process tree.
+Each subprocess starts a new Unix process group. Cancellation kills that whole
+group, including shell-wrapper descendants. Descendants that leave the group
+or outlive the direct child's normal exit are outside its ownership. Group
+cancellation applies while the direct child is running; other targets kill only
+the direct child.
 Args and Exit alias the prelude helpers. Process operations declare io + state;
 Args/Exit declare io. Pid reads the stored ID without effects.
 

@@ -15,17 +15,35 @@ fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option
   Await(child)
 }
 
-// Start starts a subprocess, killed on scope cancellation. Closing the scope
+// Start starts a subprocess in its own Unix process group, killed on cancellation.
+// Group cancellation applies while the direct child is running; descendants
+// that leave the group or outlive its normal exit are outside its ownership.
+// Other targets kill only the direct child. Closing the scope
 // cancels and reaps it even if Await was never called.
 fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Option[Bytes] = Option.None) uses io + state: Process | IoError | Cancelled unsafe go {
   import "bytes"
   import "context"
   import "errors"
+  import "os"
   import "os/exec"
+  import "reflect"
+  import "syscall"
   import "time"
   handle := _borkNewResourceHandle(nil, s)
   ctx, cancelChild := context.WithCancel(handle.Context())
   cmd := exec.CommandContext(ctx, name, arguments...)
+  // Setpgid exists on Unix; other targets retain direct-child cancellation.
+  attributes := &syscall.SysProcAttr{}
+  if group := reflect.ValueOf(attributes).Elem().FieldByName("Setpgid"); group.IsValid() {
+    group.SetBool(true)
+    cmd.SysProcAttr = attributes
+    cmd.Cancel = func() error {
+      processGroup, err := os.FindProcess(-cmd.Process.Pid)
+      if err != nil { return err }
+      defer processGroup.Release()
+      return processGroup.Kill()
+    }
+  }
   // Bound inherited output pipes after child exit or cancellation.
   cmd.WaitDelay = time.Second
   cmd.Dir = directory

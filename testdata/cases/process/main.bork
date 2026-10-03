@@ -121,6 +121,51 @@ fn inheritedPipes(s: Scope) uses io + state + clock: Unit | IoError | Cancelled 
     _ => false
   })
 }
+fn descendantPid(path: String) uses io: Int unsafe go {
+  import "os"
+  import "strconv"
+  import "strings"
+  data, err := os.ReadFile(path)
+  if err != nil { panic(err) }
+  pid, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+  if err != nil { panic(err) }
+  return pid
+}
+fn descendantGone(pid: Int) uses io + clock: Bool unsafe go {
+  import "os"
+  import "strconv"
+  import "strings"
+  import "syscall"
+  import "time"
+  for i := 0; i < 500; i++ {
+    if syscall.Kill(int(pid), 0) == syscall.ESRCH { return true }
+    // On Linux an orphan can remain a zombie until the host's init reaps it.
+    data, err := os.ReadFile("/proc/" + strconv.FormatInt(pid, 10) + "/stat")
+    if err == nil {
+      _, state, found := strings.Cut(string(data), ") ")
+      if found && strings.HasPrefix(state, "Z ") { return true }
+    }
+    time.Sleep(10*time.Millisecond)
+  }
+  syscall.Kill(int(pid), syscall.SIGKILL)
+  return false
+}
+fn groupCancellation(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
+  path = marker(s)
+  child = process.Start(s, "/bin/sh", ["-c", "sleep 60 & echo $! > \"$1\"; wait", "bork-test", path])?
+  waitReady(path)
+  pid = descendantPid(path)
+  process.Stop(child)
+  _ = process.Await(child)
+  println(descendantGone(pid))
+  path2 = marker(s)
+  pid2 = scope owner {
+    _ = process.Start(owner, "/bin/sh", ["-c", "sleep 60 & echo $! > \"$1\"; wait", "bork-test", path2])?
+    waitReady(path2)
+    descendantPid(path2)
+  }
+  println(descendantGone(pid2))
+}
 fn parentEnv() uses io unsafe go {
   import "os"
   if err := os.Setenv("BORK_PROCESS_TEST", "parent"); err != nil { panic(err) }
@@ -153,6 +198,7 @@ fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
     stopped: Cancelled => true
   })
   inheritedPipes(s)?
+  groupCancellation(s)?
   signalTest(s, false)?
   signalTest(s, true)?
   stopped = process.Start(s, executable(), ["sleep"])?
