@@ -339,7 +339,7 @@ are not accepted in a record declaration.
 
 `copy` checks relations against the resulting record. Changing `lo` rechecks
 the constraint on `hi` even when `hi` is unchanged. Updating both fields
-checks their new values together; nested updates such as `r.copy(range.lo =
+checks their new values together; nested updates such as `r.copy(range.lo:
 newLo)` recheck the nested record's relations. Relations whose subject and
 arguments are untouched remain valid. Selection and destructuring retain the
 relation with projections of the same record substituted for sibling names.

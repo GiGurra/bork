@@ -230,6 +230,29 @@ func (c *checker) checkOpaqueFields() {
 	seen := map[string]bool{}
 	check := func(fields, base []*Field, decls []*syntax.FieldDecl) {
 		for i, f := range fields {
+			var arguments func(*Constraint)
+			arguments = func(con *Constraint) {
+				for _, arg := range con.Args {
+					if !arg.Sibling || arg.Type == nil {
+						continue
+					}
+					typ := c.zonk(arg.Type)
+					if !containsOpaque(typ, map[Type]bool{}) {
+						continue
+					}
+					key := decls[i].Pos.String() + arg.Param + typeKey(typ)
+					if !seen[key] {
+						seen[key] = true
+						c.bindErr(decls[i].Pos, "facts on instantiated field %s cannot refer to sibling %s of type %s, which holds a Go value that can change", f.Name, arg.Param, typ)
+					}
+				}
+				for _, alt := range con.Or {
+					arguments(alt)
+				}
+			}
+			for _, con := range f.Constraints {
+				arguments(con)
+			}
 			if len(base[i].Constraints) == 0 || !containsOpaque(c.zonk(f.Type), map[Type]bool{}) {
 				continue
 			}

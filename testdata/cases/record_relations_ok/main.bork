@@ -13,11 +13,11 @@ fn guarded(lo: Int, hi: Int): Range {
   Range { hi: hi, lo: lo }
 }
 fn increase(r: Range, hi: Int): Range {
-  if (hi >= r.lo) { r.copy(hi = hi) } else { r }
+  if (hi >= r.lo) { r.copy(hi: hi) } else { r }
 }
-fn unchanged(r: Range): Range { r.copy(note = "other") }
-fn both(r: Range, lo: Int, hi: Int where atLeast(lo)): Range { r.copy(hi = hi, lo = lo) }
-fn nested(o: Outer, lo: Int, hi: Int where atLeast(lo)): Outer { o.copy(range.lo = lo, range.hi = hi) }
+fn unchanged(r: Range): Range { r.copy(note: "other") }
+fn both(r: Range, lo: Int, hi: Int where atLeast(lo)): Range { r.copy(hi: hi, lo: lo) }
+fn nested(o: Outer, lo: Int, hi: Int where atLeast(lo)): Outer { o.copy(range.lo: lo, range.hi: hi) }
 fn destructured(o: Outer): Int { match (o) { Outer { range: Range { lo, hi } } => take(lo, hi) } }
 fn names(p: Names): String { match (p) { Names.Pair { a, b } => named(a, b), Names.Empty => "empty" } }
 fn named(a: String, b: String where different(a)): String { b }
@@ -27,7 +27,7 @@ fn main() {
   println(Shadow { positive: 1 })
   r = Range { hi: 4, lo: 2 }
   println(read(r), read(guarded(3, 5)), increase(r, 8).hi, unchanged(r).note)
-  println(Defaults {}, Defaults { lo: 5 }, r.copy(lo = 1).hi, both(r, 7, 9).hi)
+  println(Defaults {}, Defaults { lo: 5 }, r.copy(lo: 1).hi, both(r, 7, 9).hi)
   o = Outer { range: r, note: "outer" }
   println(destructured(o), made(2, 4), viaCall(2, 4), names(Names.Pair { a: "a", b: "b" }))
   println(nested(o, 8, 10).range.hi, Names.Pair { a: "a", b: "b" })

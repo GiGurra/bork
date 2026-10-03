@@ -1,0 +1,5 @@
+type Duration = go "time.Duration"
+pred positiveWith[T](n: Int, ignored: T) { n > 0 }
+type Generic[T] = { tag: T, n: Int where positiveWith(tag) }
+fn make(d: Duration, n: Int): Generic[Duration] { if (n > 0) { Generic { tag: d, n: n } } else { panic("invalid") } }
+fn main() {}
