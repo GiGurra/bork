@@ -1,0 +1,2 @@
+main.bork:3:26: cannot embed "missing.bin": statat missing.bin: no such file or directory
+main.bork:4:26: cannot embed "missing-assets": statat missing-assets: no such file or directory

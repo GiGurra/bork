@@ -1,0 +1,19 @@
+import assets "bork/embed"
+import embed "example.com/embed-tests/helper"
+
+pred assetMatches(content: String) { content == assets.ReadString("assets/hello.txt") }
+fn verified(value: String where assetMatches): Bool { true }
+fn text(): String { assets.ReadString("assets/hello.txt") }
+fn main() {
+  println(verified("hello, embedded\n"))
+  println(embed.Message())
+  println(embed.ReadString("ordinary local function"))
+  println(text())
+  println(assets.ReadBytes("assets/nested/binary.bin"))
+  snapshot = assets.Directory("assets")
+  println(snapshot.Paths())
+  println(snapshot.Read("hello.txt"))
+  println(snapshot.Read("nested/binary.bin"))
+  println(snapshot.Read("missing"))
+  println("assets/hello.txt" |> assets.ReadString)
+}

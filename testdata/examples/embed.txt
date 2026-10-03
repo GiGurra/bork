@@ -1,0 +1,4 @@
+Hello from an embedded template!
+Bytes(53454c45435420313b)
+["greeting.txt", "query.sql"]
+SELECT 1;

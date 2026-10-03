@@ -1,0 +1,5 @@
+import "bork/embed"
+fn main() {
+  println(embed.ReadBytes("missing.bin"))
+  println(embed.Directory("missing-assets"))
+}

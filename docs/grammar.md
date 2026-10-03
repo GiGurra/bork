@@ -331,3 +331,19 @@ fixed-point `Decimal` with explicit output scale and rounding. Their private
 variants prevent forged representations. Decimal equality includes scale:
 `1.0 != 1.00`; use `SameValue` or `Compare` for numeric comparison. No new syntax.
 See [exact arithmetic and money](math.md) and [examples/math](../examples/math/main.bork).
+
+- **Embedded assets:** `bork/embed` provides pure compiler intrinsics
+  `ReadBytes("assets/file.bin"): Bytes`, `ReadString("assets/page.html"): String`
+  and `Directory("assets"): embed.FS`. Paths must be compile-time constant
+  Strings, relative to the calling source package. Missing/unreadable assets,
+  wrong file types, invalid UTF-8 for ReadString, symlinks, absolute/parent paths,
+  backslashes, colons and NULs are compiler errors at the call. Intrinsics cannot
+  be used as function values; wrap a direct constant call in a lambda instead.
+  A directory snapshot recursively includes regular files and dotfiles;
+  `snapshot.Paths()` returns file names in lexical order and `snapshot.Read(name)`
+  returns `Bytes | IoError` without I/O. Empty directories have no file entries.
+  There are no glob patterns and no runtime filesystem reads. Builds stage the
+  captured bytes into the generated Go module and use Go's embed directives;
+  `bork emit` prints source with those directives and a comment listing files
+  that must be staged beside it. Its output alone does not contain asset data.
+  See [examples/embed](../examples/embed/main.bork).

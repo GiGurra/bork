@@ -140,7 +140,7 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		return &Binary{expr: at, Op: x.Op, X: l.expr(x.X), Y: l.expr(x.Y)}
 	case *syntax.Call:
 		if fn := l.info.callFuncs[x]; fn != nil {
-			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x))}
+			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x)), Embedded: l.info.embedCalls[x]}
 			if sel, ok := x.Fun.(*syntax.Selector); ok {
 				args := l.info.args(x)
 				call.ReceiverCall = len(args) > 0 && args[0] == sel.X

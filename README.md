@@ -234,6 +234,10 @@ includes scale (`1.0 != 1.00`); use `SameValue` for numeric equality.** Exact va
 have private representations and JSON string codecs. See [math](docs/math.md)
 and the [invoice example](examples/math/main.bork).
 
+Import `bork/embed` to capture files as Bytes or UTF-8 Strings and directories as
+immutable snapshots at compile time. Missing assets are compiler errors; binaries
+need no source files at runtime. See [examples/embed](examples/embed/main.bork).
+
 ## License
 
 [MIT](LICENSE)

@@ -198,6 +198,9 @@ type Info struct {
 	// GoBindings holds every checked binding to a Go function
 	// (`unsafe go "os.Getenv"`).
 	GoBindings map[*Func]*GoBinding
+	// Embeds lists compile-time asset requests in source order.
+	Embeds     []*Embedded
+	embedCalls map[*syntax.Call]*Embedded
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -435,7 +438,10 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 		c.checkOpaqueFields()
 		c.checkOpaqueGenericUses()
 		if c.diags.Len() == 0 {
-			c.lower(files)
+			c.checkEmbeds()
+			if c.diags.Len() == 0 {
+				c.lower(files)
+			}
 		}
 	}
 	return c.info

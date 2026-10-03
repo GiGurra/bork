@@ -73,6 +73,10 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	captureEmbeds(info, diags)
+	if diags.Len() > 0 {
+		return nil, nil, &DiagError{Diags: diags}
+	}
 	check.CheckEffects(files, info, diags)
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
@@ -102,7 +106,7 @@ func evaluator(path string, files []*syntax.File, info *check.Info) check.Evalua
 		}
 		defer func() { _ = os.RemoveAll(dir) }()
 		exe := filepath.Join(dir, "eval")
-		if err := buildGo(files, goSrc, exe); err != nil {
+		if err := buildGo(files, goSrc, exe, info.Embeds...); err != nil {
 			return nil, err
 		}
 		var stderr strings.Builder
@@ -127,36 +131,36 @@ func evaluator(path string, files []*syntax.File, info *check.Info) check.Evalua
 // Emit compiles the package at path to Go source. A program must have
 // a main function.
 func Emit(path string) ([]byte, error) {
-	_, goSrc, err := emit(path)
+	_, _, goSrc, err := emit(path)
 	return goSrc, err
 }
 
-func emit(path string) ([]*syntax.File, []byte, error) {
+func emit(path string) ([]*syntax.File, *check.Info, []byte, error) {
 	files, info, err := Check(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if _, ok := info.Funcs["main"]; !ok {
 		diags := &diag.List{}
 		diags.AddCode(packagePos(files), "package.no-main", "package has no main function (add `fn main() { ... }`)")
-		return nil, nil, &DiagError{Diags: diags}
+		return nil, nil, nil, &DiagError{Diags: diags}
 	}
 	goSrc, err := gen.Package(files, info)
-	return files, goSrc, err
+	return files, info, goSrc, err
 }
 
 // Build compiles the package at path into an executable at out.
 func Build(path, out string) error {
-	files, goSrc, err := emit(path)
+	files, info, goSrc, err := emit(path)
 	if err != nil {
 		return err
 	}
-	return buildGo(files, goSrc, out)
+	return buildGo(files, goSrc, out, info.Embeds...)
 }
 
 // buildGo builds generated Go source (for the given bork files) into an
 // executable at out.
-func buildGo(files []*syntax.File, goSrc []byte, out string) error {
+func buildGo(files []*syntax.File, goSrc []byte, out string, embeds ...*check.Embedded) error {
 	absOut, err := filepath.Abs(out)
 	if err != nil {
 		return err
@@ -167,6 +171,9 @@ func buildGo(files []*syntax.File, goSrc []byte, out string) error {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), goSrc, 0o644); err != nil {
+		return err
+	}
+	if err := stageEmbeds(dir, embeds); err != nil {
 		return err
 	}
 	pinned, err := writeGoModule(dir, files)
@@ -295,7 +302,7 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "tests")
-	if err := buildGo(files, goSrc, exe); err != nil {
+	if err := buildGo(files, goSrc, exe, info.Embeds...); err != nil {
 		return 1, err
 	}
 	cmd := exec.Command(exe)
