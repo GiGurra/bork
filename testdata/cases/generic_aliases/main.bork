@@ -1,0 +1,51 @@
+// Aliases can be resolved before their generic base's fields are ready.
+type Holder = { item: IBox, result: IResult }
+type IBox = Box[Int]
+type IResult = Result[Int]
+type AnotherBox = IBox
+type Box[T] = { value: T }
+type Result[T] = sealed { Empty, Value { value: T } }
+
+// Resolving these fields visits an alias of the type currently resolving.
+type Node[T] = { value: T, children: List[INode] }
+type INode = Node[Int]
+type Chain[T] = sealed { End, Link { value: T, next: IChain } }
+type IChain = Chain[Int]
+
+fn (b: IBox) doubled(): Int { b.value * 2 }
+fn (b: Box[T]) unwrap[T](): T { b.value }
+fn (r: IResult) valueOrZero(): Int {
+  match (r) {
+    IResult.Empty => 0
+    IResult.Value { value } => value
+  }
+}
+
+class Extract[T] {
+  fn extract(x: T): Int
+}
+instance extractBox: Extract[IBox] {
+  fn extract(x: IBox): Int { x.value }
+}
+instance extractResult: Extract[IResult] {
+  fn extract(x: IResult): Int { x.valueOrZero() }
+}
+
+fn main() {
+  b = IBox { value: 3 }
+  another: AnotherBox = Box { value: 4 }
+  r = IResult.Value { value: 5 }
+  h = Holder { item: b, result: r }
+  println(h.item.value, h.result.valueOrZero(), another.doubled())
+  println(extract(b), extract(r), extract(IResult.Empty))
+  unwrap = IBox.unwrap
+  println(unwrap(b), IBox.doubled(b))
+  node = INode { value: 1, children: [INode { value: 2, children: [] }] }
+  println(node)
+  chain = IChain.Link { value: 6, next: IChain.End }
+  println(chain)
+  match (chain) {
+    IChain.End => println(0)
+    IChain.Link { value, next } => println(value, next)
+  }
+}

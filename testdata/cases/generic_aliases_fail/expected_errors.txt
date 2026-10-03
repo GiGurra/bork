@@ -1,0 +1,4 @@
+main.bork:9:25: field value of Box must be Int, found String
+main.bork:10:34: field value of IResult.Value must be Int, found String
+main.bork:11:36: wrong must be (Box[String]) => String, found (Box[Int]) => Int
+main.bork:13:36: field value of Box must be Int, found String

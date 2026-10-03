@@ -1,0 +1,6 @@
+3 5 8
+3 5 0
+3 6
+Node { value: 1, children: [Node { value: 2, children: [] }] }
+Chain.Link { value: 6, next: Chain.End }
+6 Chain.End
