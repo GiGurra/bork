@@ -78,6 +78,9 @@ func (c *checker) variantRef(pos diag.Pos, owner, name string, ctx Type) *Varian
 		c.errorf(pos, "%s has no variant %s", owner, name)
 		return nil
 	}
+	if !c.visibleVariant(pos, sealed, name) {
+		return nil
+	}
 	if len(sealed.TypeParams) > 0 {
 		generic := owner + "[" + paramNames(sealed.TypeParams) + "]"
 		report := func() {
@@ -96,6 +99,15 @@ func (c *checker) variantRef(pos diag.Pos, owner, name string, ctx Type) *Varian
 		sealed = inst
 	}
 	return sealed.Variant(name)
+}
+
+// visibleVariant applies package visibility to constructors and patterns.
+func (c *checker) visibleVariant(pos diag.Pos, sealed *Sealed, name string) bool {
+	if sealed.Pkg != nil && sealed.Pkg != c.pkg && !Exported(name) {
+		c.errorf(pos, "%s.%s is not exported by package %s (only variants starting with an upper-case letter are)", sealed.Name, name, sealed.Pkg.Path)
+		return false
+	}
+	return true
 }
 
 // isTypeRef reports whether x (an identifier) names a type rather than
@@ -199,6 +211,10 @@ func (c *checker) genericLit(e *syntax.RecordLit, base Type, variant, label stri
 		v := s.Variant(variant)
 		if v == nil {
 			c.errorf(e.Type.Position(), "%s has no variant %s", s.Name, variant)
+			c.skipFieldInits(e)
+			return Invalid
+		}
+		if !c.visibleVariant(e.Type.Position(), s, variant) {
 			c.skipFieldInits(e)
 			return Invalid
 		}

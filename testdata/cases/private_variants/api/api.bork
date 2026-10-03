@@ -1,0 +1,7 @@
+type Secret = sealed { hidden { value: Int }, Empty }
+type Box[T] = sealed { hidden { value: T }, Visible { value: T }, empty }
+fn New(): Secret { Secret.hidden { value: 42 } }
+fn Reveal(secret: Secret): Int { match (secret) { Secret.hidden { value } => value; Secret.Empty => 0 } }
+fn Boxed[T](value: T): Box[T] { Box.hidden { value: value } }
+fn Unbox[T](box: Box[T]): T | None { match (box) { Box.hidden { value } => value; Box.Visible { value } => value; Box.empty => None {} } }
+type None = {}

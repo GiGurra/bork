@@ -1,0 +1,6 @@
+main.bork:3:22: Secret.hidden is not exported by package example.com/private/api (only variants starting with an upper-case letter are)
+main.bork:4:27: Box.hidden is not exported by package example.com/private/api (only variants starting with an upper-case letter are)
+main.bork:5:14: Box.hidden is not exported by package example.com/private/api (only variants starting with an upper-case letter are)
+main.bork:6:32: Box.empty is not exported by package example.com/private/api (only variants starting with an upper-case letter are)
+main.bork:7:23: Secret.hidden is not exported by package example.com/private/api (only variants starting with an upper-case letter are)
+main.bork:8:26: Box.hidden is not exported by package example.com/private/api (only variants starting with an upper-case letter are)

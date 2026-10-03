@@ -1,0 +1,8 @@
+import "example.com/private/api"
+fn main() {
+  println(api.Reveal(api.New()))
+  println(api.Unbox(api.Boxed("hidden")))
+  public: api.Box[Int] = api.Box.Visible { value: 7 }
+  println(api.Unbox(public))
+  println(api.Secret.Empty)
+}

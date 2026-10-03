@@ -1,0 +1,9 @@
+import "example.com/private/api"
+fn main() {
+  first = api.Secret.hidden { value: 1 }
+  generic: api.Box[Int] = api.Box.hidden { value: 2 }
+  inferred = api.Box.hidden { value: "bad" }
+  bare: api.Box[Int] = api.Box.empty
+  match (api.New()) { api.Secret.hidden { value } => println("hidden"); _ => {} }
+  match (api.Boxed(1)) { api.Box.hidden { value } => println("hidden"); _ => {} }
+}
