@@ -65,6 +65,7 @@ type TypeDecl struct {
 	TypeParams []*TypeParam
 	GoName     *GoBind
 	Kind       TypeKind
+	Private    bool           // record construction belongs to its package
 	Fields     []*FieldDecl   // RecordType
 	Variants   []*VariantDecl // SealedType
 	Alias      *TypeExpr      // AliasType

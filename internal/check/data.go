@@ -172,6 +172,10 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 		}
 		switch typ := typ.(type) {
 		case *Record:
+			if !c.recordConstruction(t.Pos, typ, "construct") {
+				c.skipFieldInits(e)
+				return Invalid
+			}
 			if len(typ.TypeParams) > 0 {
 				return c.genericLit(e, typ, "", t.Name, want)
 			}
@@ -357,6 +361,7 @@ func (c *checker) copyExpr(e *syntax.Copy) Type {
 		}
 		return Invalid
 	}
+	c.recordConstruction(e.Pos, rec, "copy")
 	var paths []string
 	for _, u := range e.Updates {
 		target := c.copyTarget(rec, u)
@@ -401,6 +406,7 @@ func (c *checker) copyTarget(rec *Record, u *syntax.CopyUpdate) *Field {
 			c.errorf(u.Pos, "cannot update %s: %s is a %s, not a record", strings.Join(u.Path, "."), strings.Join(u.Path[:i+1], "."), f.Type)
 			return nil
 		}
+		c.recordConstruction(u.Pos, next, "update fields of")
 		cur = next
 	}
 	return nil
@@ -445,4 +451,14 @@ func (c *checker) try(e *syntax.Try) Type {
 		c.errorf(e.Pos, "? needs a union or an Option, found %s", xt)
 	}
 	return Invalid
+}
+
+// Reading and matching a private record stays public; only construction and
+// updates of its representation belong to the declaring package.
+func (c *checker) recordConstruction(pos diag.Pos, rec *Record, operation string) bool {
+	if rec.Decl == nil || !rec.Decl.Private || rec.Pkg == c.pkg {
+		return true
+	}
+	c.diags.AddCode(pos, "construction.private_record", "cannot %s %s: package %s controls its construction; use an exported constructor or update method from that package", operation, rec.Name, rec.Pkg.Path)
+	return false
 }

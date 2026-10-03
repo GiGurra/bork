@@ -973,12 +973,20 @@ func (c *checker) declareDerived(files []*syntax.File) {
 					continue
 				}
 				if IsGoStruct(cl) {
+					if r, ok := e.typ.(*Record); ok && r.Decl != nil && r.Decl.Private && r.Pkg != c.pkg {
+						continue
+					}
 					if r, ok := e.typ.(*Record); !ok || !r.GoStruct {
 						continue
 					}
 				}
-				if sealed := c.foreignPrivateVariants(e.typ, cl, c.pkg, map[Type]bool{}, false); sealed != nil {
-					c.errorf(td.DerivePos, "cannot derive %s for %s: %s has private variants in package %s; use an instance provided by that package", cl.Name, td.Name, sealed.Name, sealed.Pkg.Path)
+				if private := c.foreignPrivateRepresentation(e.typ, cl, c.pkg, map[Type]bool{}, false); private != nil {
+					switch t := private.(type) {
+					case *Sealed:
+						c.errorf(td.DerivePos, "cannot derive %s for %s: %s has private variants in package %s; use an instance provided by that package", cl.Name, td.Name, t.Name, t.Pkg.Path)
+					case *Record:
+						c.errorf(td.DerivePos, "cannot derive %s for %s: package %s controls construction of %s; use an instance provided by that package", cl.Name, td.Name, t.Pkg.Path, t.Name)
+					}
 					continue
 				}
 				c.deriveInstance(td, e.typ, cl, f.Prelude)
@@ -1088,7 +1096,7 @@ func (c *checker) resolveDerived() {
 // including variants nested in records, generic specializations, or containers.
 // An owner-provided field codec is an explicit boundary: the derive delegates
 // instead of inspecting that type's private representation.
-func (c *checker) foreignPrivateVariants(t Type, class *Class, from *Package, seen map[Type]bool, fieldBoundary bool) *Sealed {
+func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Package, seen map[Type]bool, fieldBoundary bool) Type {
 	if t == nil || seen[t] {
 		return nil
 	}
@@ -1100,6 +1108,28 @@ func (c *checker) foreignPrivateVariants(t Type, class *Class, from *Package, se
 			owner = t.Pkg
 		case *Sealed:
 			owner = t.Pkg
+		}
+		// Owner-derived codecs may be declared later in the file traversal.
+		// Their dictionaries are resolved after all derivations are declared.
+		if record, ok := t.(*Record); ok && record.Decl != nil {
+			for _, derived := range record.Decl.Derive {
+				if derived != class.Name {
+					continue
+				}
+				delegates := true
+				for _, arg := range TypeArgs(record) {
+					trial := map[Type]bool{}
+					for typ, value := range seen {
+						trial[typ] = value
+					}
+					if c.foreignPrivateRepresentation(arg, class, from, trial, true) != nil {
+						delegates = false
+					}
+				}
+				if delegates {
+					return nil
+				}
+			}
 		}
 		for _, ci := range c.info.ClassInstances {
 			if owner == nil || ci.Pkg != owner || ci.Class != class {
@@ -1119,7 +1149,7 @@ func (c *checker) foreignPrivateVariants(t Type, class *Class, from *Package, se
 					for t, v := range seen {
 						trial[t] = v
 					}
-					if c.foreignPrivateVariants(args[i], class, from, trial, true) != nil {
+					if c.foreignPrivateRepresentation(args[i], class, from, trial, true) != nil {
 						delegates = false
 					}
 				}
@@ -1145,6 +1175,9 @@ func (c *checker) foreignPrivateVariants(t Type, class *Class, from *Package, se
 			}
 		}
 	case *Record:
+		if t.Decl != nil && t.Decl.Private && t.Pkg != from && (IsGoStruct(class) || class.Name == "Decode") {
+			return t
+		}
 		for _, f := range t.Fields {
 			children = append(children, f.Type)
 		}
@@ -1159,7 +1192,7 @@ func (c *checker) foreignPrivateVariants(t Type, class *Class, from *Package, se
 		children = append(children, t.Result)
 	}
 	for _, child := range children {
-		if sealed := c.foreignPrivateVariants(child, class, from, seen, true); sealed != nil {
+		if sealed := c.foreignPrivateRepresentation(child, class, from, seen, true); sealed != nil {
 			return sealed
 		}
 	}

@@ -33,6 +33,10 @@ func (c *checker) resolveGoStructs(files []*syntax.File) {
 					c.errorf(td.DerivePos, "GoStruct can only be derived for a record")
 					continue
 				}
+				if r.Decl != nil && r.Decl.Private && r.Pkg != c.pkg {
+					c.errorf(td.DerivePos, "cannot derive GoStruct for %s: package %s controls construction of %s; use an instance provided by that package", td.Name, r.Pkg.Path, r.Name)
+					continue
+				}
 				r.GoStruct = true
 				if td.GoName == nil {
 					r.GoGenerated = true

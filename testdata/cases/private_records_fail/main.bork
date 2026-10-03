@@ -1,0 +1,12 @@
+import "example.com/private-records-fail/settings"
+use settings.*
+type Alias = settings.Config
+type Outer = { config: settings.Config, name: String }
+type Defaults = { config: settings.Config = settings.Config {} }
+fn main() {
+  c = settings.New(9000)
+  println(settings.Config { port: 9000 }, Alias { port: 9000 }, settings.Box { value: "bad" })
+  println(c.copy(port: 9001))
+  o = Outer { config: c, name: "outer" }
+  println(o.copy(config.port: 9001))
+}

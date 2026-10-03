@@ -1,0 +1,8 @@
+main.bork:2:32: cannot derive Decode for Foreign: package example.com/private-records-derive-fail/settings controls construction of Config; use an instance provided by that package
+main.bork:3:34: cannot derive GoStruct for ForeignGo: package example.com/private-records-derive-fail/settings controls construction of Config; use an instance provided by that package
+main.bork:4:32: cannot derive Decode for Plain: package example.com/private-records-derive-fail/settings controls construction of Box; use an instance provided by that package
+main.bork:5:43: cannot derive Decode for Wrapped: package example.com/private-records-derive-fail/settings controls construction of Box; use an instance provided by that package
+main.bork:6:61: cannot derive Decode for Container: package example.com/private-records-derive-fail/settings controls construction of Box; use an instance provided by that package
+main.bork:8:43: cannot derive Decode for Nested: package example.com/private-records-derive-fail/settings controls construction of Box; use an instance provided by that package
+main.bork:9:20: cannot derive GoStruct for GoWrapped: field secret has type Secret, which cannot convert to a Go struct field
+main.bork:10:22: cannot derive GoStruct for GoContainer: field secrets has type List[Secret], which cannot convert to a Go struct field

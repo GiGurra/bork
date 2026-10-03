@@ -228,6 +228,10 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 		})
 	}
 	p.expect(Assign, "after the type name")
+	if p.at(TIdent) && p.tok().Text == "private" && p.peekKind() == LBrace {
+		td.Private = true
+		p.next()
+	}
 	switch {
 	case p.at(KwSealed):
 		td.Kind = SealedType
