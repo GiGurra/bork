@@ -1128,8 +1128,14 @@ process.Run(s, "tool", directory: "/tmp", arguments: ["--version"])
 
 - **Syntax is `name: expression`.** A label is a single parameter identifier,
   scoped to the selected declaration; it is not a binding or a field path.
-  `copy(field = value)` retains its existing syntax. Record and map literals
-  inside arguments retain their ordinary braces and colons.
+  `copy` uses that same colon: `config.copy(port: 9000)`, including nested
+  paths such as `config.copy(tls.certFile: cert)`. Its labels still select
+  fields, rather than function parameters. Record and map literals inside
+  arguments retain their ordinary braces and colons. Replace the existing
+  `copy(field = value)` form throughout the corpus; the old form becomes an
+  error with a `bork check --json` edit replacing its `=` with `:`. This
+  pre-1.0 change leaves one syntax for naming records, call arguments and
+  copy updates. Ordinary bindings still use `=`.
 - **A positional prefix, then named arguments in any order.** Positional
   arguments fill consecutive parameters from the start. Named arguments fill
   the matching remaining parameter. Required parameters may be named; every
@@ -1205,9 +1211,12 @@ Acceptance includes direct/imported functions, required and skipped-default
 parameters, receiver and class methods, generic inference with callbacks and
 facts, pipelines, checked Go bindings, and rejected function-value calls.
 Runtime and compile-time cases must catch evaluation reordering and duplicate
-evaluation. Negative cases cover unknown/duplicate labels (including collisions
+evaluation, including blocks requiring setup statements and an earlier supplied
+argument that terminates with `?`, `return` or `panic` before a later argument.
+Negative cases cover unknown/duplicate labels (including collisions
 with positional arguments), missing parameters and positional-after-named;
 formatter, describe and structured diagnostics cover the same source forms.
+Copy cases cover nested paths, rejected `=` syntax and its structured fix.
 
 ### Numbers
 
