@@ -1,8 +1,15 @@
+Problem { code: 1 } 1 Problem { code: 1 } 1
+Option.None Problem { code: 1 } 1
 Problem { code: 1 }
 1
 Problem { code: 1 } 1
 Problem { code: 1 } 1
 Problem { code: 1 } 1
 Problem { code: 1 } 1
+Problem { code: 1 } 1
+Problem { code: 1 } 1
+Problem { code: 1 } 1
+Problem { code: 1 } 1
+Option.None Option.Some { value: 1 }
 Option.None Option.Some { value: 1 }
 Option.None Option.Some { value: 1 }

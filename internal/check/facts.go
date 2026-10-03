@@ -637,7 +637,11 @@ func (f *factChecker) walk(x Expr, e env) {
 func (f *factChecker) tryResults(x *Try, e env) {
 	if x.Option != nil {
 		none := x.NoneOf.Variant("None")
-		f.checkResult(&VariantValue{expr: expr{pos: x.Pos(), typ: x.NoneOf}, Variant: none, Text: "Option.None"}, e)
+		failure := &VariantValue{expr: expr{pos: x.Pos(), typ: x.NoneOf}, Variant: none, Text: "Option.None"}
+		if identical(x.Option, x.NoneOf) {
+			failure.ProofSource = x.X
+		}
+		f.checkResult(failure, e)
 	} else {
 		for _, member := range x.Rest {
 			failure := &Try{expr: expr{pos: x.Pos(), typ: member}, X: x.X, TryInfo: TryInfo{Kept: member}}
@@ -668,6 +672,21 @@ func (f *factChecker) resultPaths(fn *Func) []branch {
 	f.tail(fn.Body, f.entryFacts(fn), f.checkResult)
 	f.fn, f.collect = saveFn, saveCollect
 	f.paths[fn] = paths
+	return paths
+}
+
+// initializerPaths includes the local early returns of a deferred binding.
+func (f *factChecker) initializerPaths(value Expr, typ Type, facts env) []branch {
+	outer, collect := f.fn, f.collect
+	fn := *outer
+	fn.Result, fn.ResultConstraints = typ, nil
+	var paths []branch
+	f.fn, f.collect = &fn, &paths
+	if f.validators != nil {
+		f.validators[&fn] = f.validators[outer]
+	}
+	defer func() { f.fn, f.collect = outer, collect; delete(f.validators, &fn) }()
+	f.tail(value, facts, f.checkResult)
 	return paths
 }
 
@@ -1303,6 +1322,12 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 	case *VarRef:
 		switch d := x.Var; d.Kind {
 		case VarLet:
+			if d.Let.Thunk != nil {
+				if cs.take(f.all(ob, depth, f.initializerPaths(d.Let.Value, d.Type, e)...)) {
+					return true, nil
+				}
+				return cs.result()
+			}
 			if cs.take(f.prove(d.Let.Value, ob, e, depth+1)) {
 				return true, nil
 			}
@@ -1917,6 +1942,12 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 	if depth > maxDepth {
 		return false, nil
 	}
+	if x.Type() == Never || !identical(x.Type(), m) && !isMemberOf(m, x.Type()) {
+		return true, nil // this branch cannot return the member being checked
+	}
+	if identical(x.Type(), m) {
+		return f.prove(x, ob, e, depth+1)
+	}
 	if ob.or != nil {
 		if ok, pending := anyOf(ob, func(alt obligation) (bool, []Query) { return f.proveMember(x, m, alt, e, depth+1) }); ok {
 			return true, pending
@@ -1938,8 +1969,48 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 		return f.derive(x, m, ob, e, depth)
 	case *VarRef:
 		if x.Var.Kind == VarLet {
+			if x.Var.Let.Thunk != nil {
+				var pending []Query
+				for _, path := range f.initializerPaths(x.Var.Let.Value, x.Var.Type, e) {
+					ok, queries := f.proveMember(path.x, m, ob, path.e, depth+1)
+					if !ok {
+						return false, nil
+					}
+					pending = append(pending, queries...)
+				}
+				return true, pending
+			}
 			return f.proveMember(x.Var.Let.Value, m, ob, e, depth+1)
 		}
+	case *Block:
+		if x.Tail != nil {
+			return f.proveMember(x.Tail, m, ob, f.stmts(x.Stmts, e), depth+1)
+		}
+	case *ScopeBlock:
+		return f.proveMember(x.Body, m, ob, e, depth+1)
+	case *If:
+		if x.Else != nil {
+			ok, pending := f.proveMember(x.Then, m, ob, e.with(f.conditionFacts(x.Cond, true)...), depth+1)
+			if !ok {
+				return false, nil
+			}
+			other, queries := f.proveMember(x.Else, m, ob, e.with(f.conditionFacts(x.Cond, false)...), depth+1)
+			return other, append(pending, queries...)
+		}
+	case *Match:
+		var pending []Query
+		for _, arm := range x.Arms {
+			facts := f.patternInvariants(arm.Pat, x.X, e)
+			for _, guard := range arm.Pat.Guards() {
+				facts = facts.with(f.conditionFacts(guard, true)...)
+			}
+			ok, queries := f.proveMember(arm.Body, m, ob, facts, depth+1)
+			if !ok {
+				return false, nil
+			}
+			pending = append(pending, queries...)
+		}
+		return true, pending
 	}
 	return false, nil
 }
@@ -1972,6 +2043,10 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		add(TypeConstraints(x.Type()), noParams)
 	}
 	switch x := x.(type) {
+	case *VariantValue:
+		if x.ProofSource != nil && depth < maxDepth {
+			out = append(out, f.declared(x.ProofSource, e, depth+1)...)
+		}
 	case *SeqCall:
 		if x.Op == "filter" {
 			if ft, ok := x.Args[1].Type().(*FuncType); ok && ft.Effects == 0 {
@@ -2013,7 +2088,7 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 			}
 		case VarLet:
 			add(d.Let.Constraints, f.ownParams())
-			if depth < maxDepth {
+			if d.Let.Thunk == nil && depth < maxDepth {
 				out = append(out, f.declared(d.Let.Value, e, depth+1)...)
 			}
 		case VarPattern, VarLoop:
@@ -2094,7 +2169,7 @@ func (f *factChecker) declaredMember(x Expr, m Type) []known {
 			out = append(out, f.knownOf(con, noParams)...)
 		}
 	case *VarRef:
-		if x.Var.Kind == VarLet {
+		if x.Var.Kind == VarLet && x.Var.Let.Thunk == nil {
 			out = append(out, f.declaredMember(x.Var.Let.Value, m)...)
 		}
 	}

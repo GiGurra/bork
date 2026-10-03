@@ -24,9 +24,36 @@ type Problem = { code: Int }
 pred Approved(x: Problem) { x.code > 0 }
 fn problem(flag: Bool): Int | Problem { if (flag) { Problem { code: 0 } } else { 1 } }
 fn memberFailure(flag: Bool): Int | Problem where Approved { value = problem(flag)?; value }
+fn inlineFailure(flag: Bool): Int | Problem where Approved {
+  value: Int | Problem = if (flag) { Problem { code: 0 } } else { 1 }
+  value?
+}
+pred AcceptStringNone(x: Option[Int] | Option[String]) {
+  match (x) {
+    integers: Option[Int] => match (integers) { Option.Some { value } => true; Option.None => false }
+    text: Option[String] => true
+  }
+}
+fn changedOption(x: Option[String] where AcceptStringNone): Option[Int] where AcceptStringNone {
+  _ = x?
+  Option.Some { value: 1 }
+}
 
 // Unannotated functions must expose implicit failures during body-derived proof.
 fn hidesFailure(flag: Bool): Int | Failed { value = bad(flag)?; 1 }
 fn needsSuccess(x: (Int | Failed) where Success): Int { 1 }
 fn derived(flag: Bool): Int { needsSuccess(hidesFailure(flag)) }
+fn lazyFailure(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { _ = problem(flag)?; 1 }
+  value?
+}
+fn lazyReturn(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { if (flag) { return Problem { code: 0 } }; 1 }
+  value?
+}
+fn approvedSource(): Int | Problem where Approved { 1 }
+fn lazyTailPromise(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { if (flag) { return Problem { code: 0 } }; approvedSource() }
+  value?
+}
 fn main() {}

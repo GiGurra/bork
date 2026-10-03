@@ -9,4 +9,9 @@ main.bork:15:67: optionBlock promises a result that is Present, but Present(Opti
 main.bork:21:77: bothFailures promises a result that is Numeric, but for a value alternatives can return, Numeric(First {  }) is false
 main.bork:21:77: bothFailures promises a result that is Numeric, but for a value alternatives can return, Numeric(Second {  }) is false
 main.bork:26:70: memberFailure promises a result that is Approved, but for a value problem can return, Approved(Problem { code: 0 }) is false
-main.bork:31:44: needsSuccess requires x to be Success, but for a value bad can return, Success(Failed {  }) is false
+main.bork:29:3: inlineFailure promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:38:7: changedOption promises a result that is AcceptStringNone, but AcceptStringNone(Option.None) is false
+main.bork:45:44: needsSuccess requires x to be Success, but for a value bad can return, Success(Failed {  }) is false
+main.bork:48:3: lazyFailure promises a result that is Approved, but for a value problem can return, Approved(Problem { code: 0 }) is false
+main.bork:52:3: lazyReturn promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:57:3: lazyTailPromise promises a result that is Approved, but Approved(Problem { code: 0 }) is false
