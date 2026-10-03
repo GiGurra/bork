@@ -222,5 +222,5 @@ remain captured where the function was made. To use an incoming trace in typed
 application code, extract it with `TraceParentOf` and explicitly bind it with
 `with (trace: value)`. The [service_context example](../../examples/service_context/main.bork)
 shows this checked binding, automatic forwarding through two services, and
-shrinking deadline budgets with a server policy cap. Its explicit validity
-guard works around pending alias-fact preservation through Option (bork-k3k5fi).
+shrinking deadline budgets with a server policy cap. The `Option.Some` payload
+retains the checked `TraceParent` fact, so this binding needs no additional guard.

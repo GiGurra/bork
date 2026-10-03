@@ -42,6 +42,8 @@ Functions can relate their inputs directly: `fn interval(lo: Int, hi: Int) where
 
 Record fields can require facts about siblings: `type Range = { lo: Int, hi: Int where atLeast(lo) }`. Construction and `copy` prove the relation using the completed values; changing `lo` also rechecks the requirement on `hi`.
 
+Matching `Option.Some { value }` preserves fact aliases on the payload, including when an imported function returns `Option[Alias] | Error`. The value can be returned as the alias or bound in `with` without checking its predicate again.
+
 Facts in positions the checker cannot enforce yet, such as Map keys and values or constrained alias names in patterns and constructors, produce a compile error. See the [supported fact positions](docs/grammar.md#semantics-in-brief).
 
 So do scopes:

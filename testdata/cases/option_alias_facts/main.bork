@@ -1,0 +1,22 @@
+pred valid(s: String) { s.byteLength() > 0 }
+type Text = String where valid
+type Missing = {}
+ambient text: Text
+fn readText() needs text: String { text }
+fn source(s: String): Option[Text] | Missing {
+  if (valid(s)) { Option.Some { value: s } } else { Missing {} }
+}
+fn returned(s: String): Text {
+  match (source(s)) {
+    Option.Some { value } => value
+    _ => panic("missing")
+  }
+}
+fn bound(s: String): String {
+  result = source(s)
+  match (result) {
+    Option.Some { value: payload } => with (text: payload) { readText() }
+    _ => "missing"
+  }
+}
+fn main() { println(returned("local"), bound("bound"), bound("")) }

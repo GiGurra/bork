@@ -119,10 +119,9 @@ func (v *Var) displayName() string {
 }
 
 // VarSource is where a value bound by a match pattern comes from: the
-// matched value, Subject. A name bound at the top of an arm's pattern
-// is the subject narrowed to Member (or nil, if the pattern did not
-// narrow it); one bound inside the pattern (`Option.Some { value: v }`)
-// is the part of it at Path (".value"), the field Field.
+// matched value, Subject, narrowed to Member (nil if not narrowed).
+// A name bound inside the pattern (`Option.Some { value: v }`) is
+// the part of that member at Path (".value"), the field Field.
 type VarSource struct {
 	Subject Expr
 	Member  Type

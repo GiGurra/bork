@@ -1,0 +1,22 @@
+pred valid(s: String) { s.byteLength() > 0 }
+type Text = String where valid
+type Missing = { value: Text }
+ambient text: Text
+fn readText() needs text: String { text }
+fn raw(s: String): Option[String] | Missing {
+  Option.Some { value: s }
+}
+// The other union member's field guarantee cannot prove the Option payload.
+fn returned(s: String): Text {
+  match (raw(s)) {
+    Option.Some { value } => value
+    _ => panic("missing")
+  }
+}
+fn bound(s: String): String {
+  match (raw(s)) {
+    Option.Some { value } => with (text: value) { readText() }
+    _ => "missing"
+  }
+}
+fn main() {}

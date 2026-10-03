@@ -116,17 +116,17 @@ type PatField struct {
 func (p *Pat) Narrowed() Type { return newUnion(p.Members) }
 
 // patSources records where each name a pattern binds comes from: the
-// matched subject, the path to it, and (at the top) the union member
-// the pattern narrowed it to.
-func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Field, top bool) {
+// matched subject, the path to it, and the union member the pattern
+// narrowed the subject to. Payload bindings keep that member too.
+func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Field, member Type) {
 	if p == nil {
 		return
 	}
+	if path == "" && p.Kind == PatType {
+		member = p.Narrowed()
+	}
 	if p.Bind != "" {
-		src := &patSource{Subject: subject, Path: path, Field: field}
-		if top && p.Kind == PatType {
-			src.Member = p.Narrowed()
-		}
+		src := &patSource{Subject: subject, Path: path, Field: field, Member: member}
 		c.info.patSources[p.bindNode] = src
 	}
 	var fields []*Field
@@ -139,10 +139,10 @@ func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Fi
 		}
 	}
 	for _, pf := range p.Fields {
-		c.patSources(pf.Pat, subject, path+"."+pf.Name, findField(fields, pf.Name), false)
+		c.patSources(pf.Pat, subject, path+"."+pf.Name, findField(fields, pf.Name), member)
 	}
 	if p.Sub != nil {
-		c.patSources(p.Sub, subject, path, field, false)
+		c.patSources(p.Sub, subject, path, field, member)
 	}
 }
 
@@ -190,7 +190,7 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 			ok = false
 		} else {
 			c.info.armPats[arm] = p
-			c.patSources(p, m.X, "", nil, true)
+			c.patSources(p, m.X, "", nil, nil)
 		}
 		pats[i] = p
 		armWant := want

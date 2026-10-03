@@ -43,6 +43,7 @@ What follows from this:
 - **Immutability is what makes it sound.** A fact about an immutable value can never become false, so facts are only ever added, never invalidated. There is no need to track writes or aliasing.
 - **More facts means a more specific type.** `Int where positive` can be used anywhere an `Int` is expected. Because nothing is mutable, `List[Int where positive]` is also safely usable as a `List[Int]`.
 - **Facts flow through generics.** Passing `x: Int where positive` through `identity[T]` keeps the fact, because `T` is `Int where positive`.
+- **Destructuring retains payload promises.** Matching a sealed member of a union preserves its declared payload facts, including fact aliases inside `Option[T]` returned by another package. The payload can be returned as the alias or bound to a constrained ambient with `with`.
 - **Facts live inside data.** Once `user.age` is known to satisfy `adult`, that is part of `user`'s type for as long as `user` exists.
 - **Branches merge by intersection.** After an `if`/`else`, only the facts that hold on every path remain.
 - **Zero runtime cost.** Facts are erased when compiling to Go. At runtime, `Int where positive` is just an `int`.
