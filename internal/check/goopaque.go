@@ -448,6 +448,29 @@ func (c *checker) checkOpaqueGenericUses() {
 	for e, i := range c.info.funcRefs {
 		uses = append(uses, use{i, e.Position()})
 	}
+	// Class implementations specialize through dictionaries rather than calls.
+	// Include their methods and recursively selected bounds in the same graph.
+	var addDict func(*Dict, diag.Pos, map[*Dict]bool)
+	addDict = func(d *Dict, pos diag.Pos, seen map[*Dict]bool) {
+		if d == nil || seen[d] {
+			return
+		}
+		seen[d] = true
+		if d.Inst != nil {
+			for _, fn := range d.Inst.Methods {
+				uses = append(uses, use{&Instance{Func: fn, TypeArgs: d.TypeArgs}, pos})
+			}
+		}
+		for _, arg := range d.Args {
+			addDict(arg, pos, seen)
+		}
+	}
+	for _, u := range append([]use(nil), uses...) {
+		seen := map[*Dict]bool{}
+		for _, d := range u.inst.Dicts {
+			addDict(d, u.pos, seen)
+		}
+	}
 	sort.Slice(uses, func(i, j int) bool {
 		a, b := uses[i].pos, uses[j].pos
 		if a.File != b.File {

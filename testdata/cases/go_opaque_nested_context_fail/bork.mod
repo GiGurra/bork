@@ -1,0 +1,2 @@
+module example.com/go_opaque_nested_context_fail
+unsafe "example.com/go_opaque_nested_context_fail"
