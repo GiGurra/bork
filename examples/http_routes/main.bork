@@ -32,7 +32,7 @@ fn main() {
         if (args() == ["demo"]) {
           match (http.Get("http://" + http.Address(server) + "/users/42", app)) {
             response: http.Response => println(response.status, response.body)
-            error: IoError => println(error.message)
+            error => println(toString(error))
           }
         } else { println(http.Address(server)); waitForStop(app) }
       }

@@ -17,7 +17,7 @@ type Health = sealed {
 }
 
 // check asks url how it is, and notes when it found it down.
-fn check(url: String, s: Scope) uses net + clock: Health {
+fn check(url: String, s: Scope) uses net + clock + state: Health {
   match (http.Get(url, s, timeoutMs: 2000)) {
     r: http.Response => if (r.status < 500) {
       Health.Up { url: url }
@@ -25,11 +25,14 @@ fn check(url: String, s: Scope) uses net + clock: Health {
       Health.Down { url: url, status: r.status, at: time.Now() }
     }
     e: IoError => Health.Unreachable { url: url, message: e.message }
+    e: http.Overloaded => Health.Down { url: url, status: e.response.status, at: time.Now() }
+    e: http.DeadlineExceeded => Health.Unreachable { url: url, message: e.message }
+    e: Cancelled => Health.Unreachable { url: url, message: e.reason }
   }
 }
 
 // checkAll checks the urls at the same time, one task each.
-fn checkAll(urls: List[String]) uses net + clock: List[Health] {
+fn checkAll(urls: List[String]) uses net + clock + state: List[Health] {
   scope s {
     tasks = urls.map(url => spawn(s, () => check(url, s)))
     tasks.map(t => await(t))
@@ -68,7 +71,7 @@ fn main() {
 test "an upstream answering 503 is down, since the time it was checked" {
   noon = time.Instant { unixNanos: 1_760_000_000_000_000_000 }
   mock time.Now() { noon }
-  gets = mock http.Get(url, s, timeoutMs) { http.Text(503, "") }
+  gets = mock http.Get(url, s, timeoutMs) { http.Overloaded { response: http.Text(503, ""), retryAfter: Option.None } }
   assertEqual(checkAll(["https://a.example"]), [Health.Down { url: "https://a.example", status: 503, at: noon }])
   assertEqual(gets.calls(), ["http.Get(\"https://a.example\", <scope>, 2000)"])
 }

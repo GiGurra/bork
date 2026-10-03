@@ -1,0 +1,37 @@
+Option.Some { value: Duration { nanos: 0 } }
+Option.Some { value: Duration { nanos: 2000000000 } }
+Option.Some { value: Duration { nanos: 2000000000 } }
+Option.Some { value: Duration { nanos: 9223372036000000000 } }
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+Option.Some { value: Duration { nanos: 37000000000 } }
+Option.Some { value: Duration { nanos: 37000000000 } }
+Option.Some { value: Duration { nanos: 37000000000 } }
+Option.Some { value: Duration { nanos: 0 } }
+Option.None
+RFC850 68 in 1994 Option.Some { value: Duration { nanos: 0 } }
+RFC850 69 in 2026 Option.Some { value: Duration { nanos: 1383727777000000000 } }
+RFC850 exactly 50 years Option.Some { value: Duration { nanos: 1577923200000000000 } }
+RFC850 over 50 years Option.Some { value: Duration { nanos: 0 } }
+RFC850 leap-century Option.Some { value: Duration { nanos: 0 } }
+missing Option.None
+empty values Option.None
+repeated Option.None
+mixed names Option.None
+overload 429 busy Option.Some { value: Duration { nanos: 2000000000 } } Option.Some { value: ["one", "two"] }
+overload 503 busy Option.Some { value: Duration { nanos: 0 } } Option.Some { value: ["one", "two"] }
+overload 503 busy Option.None Option.Some { value: ["one", "two"] }
+response 418 busy
+deadline
+deadline
+deadline
+deadline
+transport
+transport
+transport
+cancelled

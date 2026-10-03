@@ -31,7 +31,7 @@ fn newService(config: Config, database: Database in s, s: Scope) uses io + net +
   Service { server: server }
 }
 
-fn demo() uses io + net + clock + state: Unit | sql.Error | IoError {
+fn demo() uses io + net + clock + state: Unit | sql.Error | IoError | http.Overloaded | http.DeadlineExceeded | Cancelled {
   scope app {
     // The list is intentionally out of dependency order. Config and Database
     // each build once; the server stops before its database closes.
@@ -45,6 +45,9 @@ fn main() {
   match (demo()) {
     error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
     error: IoError => eprintln(error.message)
+    error: http.Overloaded => eprintln(s"upstream overloaded: ${error.response.status}")
+    error: http.DeadlineExceeded => eprintln(error.message)
+    error: Cancelled => eprintln(error.reason)
     _ => {}
   }
 }

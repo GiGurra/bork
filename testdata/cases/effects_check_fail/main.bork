@@ -11,6 +11,7 @@ fn fetch(url: String) uses net: String {
   match (scope s { http.Get(url, s) }) {
     r: http.Response => r.body
     e: IoError => e.message
+    _ => "request failed"
   }
 }
 
