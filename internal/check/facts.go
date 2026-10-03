@@ -1240,15 +1240,18 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 			}
 		case VarPattern, VarLoop:
 			if src := d.Source; src != nil {
+				inner := ob
+				inner.path = src.Path + ob.path
 				var ok bool
 				var pending []Query
 				if src.Member == nil {
 					// A part of the matched value.
-					inner := ob
-					inner.path = src.Path + ob.path
 					ok, pending = f.prove(src.Subject, inner, e, depth+1)
 				} else {
-					ok, pending = f.proveMember(src.Subject, src.Member, ob, e, depth+1)
+					ok, pending = f.proveMember(src.Subject, src.Member, inner, e, depth+1)
+					if !ok {
+						ok, pending = f.prove(src.Subject, inner, e, depth+1)
+					}
 				}
 				if cs.take(ok, pending) {
 					return true, nil
@@ -1931,10 +1934,9 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 						add(src.Field.Constraints, f.recordFieldArgs(owner, src.Field))
 					}
 				}
-				if src.Member == nil {
-					out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
-				} else {
-					out = append(out, f.declaredMember(src.Subject, src.Member)...)
+				out = append(out, within(f.declared(src.Subject, e, depth+1), src.Path)...)
+				if src.Member != nil {
+					out = append(out, within(f.declaredMember(src.Subject, src.Member), src.Path)...)
 				}
 			}
 		}
@@ -2448,7 +2450,7 @@ func (f *factChecker) key(x Expr) string {
 			}
 			return fmt.Sprintf("b:%p", d)
 		default:
-			if src := d.Source; src != nil && src.Member == nil {
+			if src := d.Source; src != nil && (src.Member == nil || src.Path != "") {
 				if k := f.aliasKey(src.Subject); k != "" {
 					return k + src.Path
 				}

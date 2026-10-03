@@ -25,14 +25,13 @@ fn main() {
     downstream = server(http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       // Boundary labels forward automatically. Typed needs are bound explicitly.
       match (http.TraceParentOf(request.headers)) {
-        // TODO(bork-k3k5fi): retain alias facts through Option so this guard is unnecessary.
-        Option.Some { value } => if (http.ValidTraceParent(value)) {
+        Option.Some { value } => {
           with (trace: value) {
             http.Text(200, traceText()).copy(headers: {
               "seen-budget": [toString(budget(request.headers))]
             })
           }
-        } else { http.Text(400, "invalid trace") }
+        }
         _ => http.Text(400, "missing trace")
       }
       }, requestTimeoutMs: 1000))

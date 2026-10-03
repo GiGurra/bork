@@ -1,0 +1,17 @@
+import "example.com/optionfacts/api"
+ambient text: api.Text
+fn readText() needs text: String { text }
+fn returned(s: String): api.Text {
+  match (api.Source(s)) {
+    Option.Some { value } => value
+    _ => panic("missing")
+  }
+}
+fn bound(s: String): String {
+  result = api.Source(s)
+  match (result) {
+    Option.Some { value: payload } => with (text: payload) { readText() }
+    _ => "missing"
+  }
+}
+fn main() { println(returned("imported"), bound("bound"), bound("")) }
