@@ -1152,7 +1152,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		if e.Pipe.File != "" && len(e.Args) > 0 {
 			recv := c.expr(e.Args[0])
 			checked = 1
-			if c.pipeMethodError(e, id, recv) {
+			if c.pipeMethodError(e, id, recv, want) {
 				return Invalid
 			}
 		}

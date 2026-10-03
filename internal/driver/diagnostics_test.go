@@ -16,6 +16,8 @@ func TestSuggestedEdits(t *testing.T) {
 		name, source string
 	}{
 		{"pipe method", "fn main() { println([1, 2] |> map(x => x + 1)) }\n"},
+		{"pipe result context", "fn main() { ys: List[List[Int]] = [1] |> map(x => []); println(ys) }\n"},
+		{"pipe flatMap result context", "fn main() { ys: List[String] = [1] |> flatMap(x => []); println(ys) }\n"},
 		{"generic pipe method", "fn main() { println([1, 2] |> map[String](x => toString(x))) }\n"},
 		{"grouped bare target", "fn main() { println([1, 2] |> (length)) }\n"},
 		{"grouped callee", "fn main() { println([1, 2] |> (map)(x => x + 1)) }\n"},
@@ -87,5 +89,22 @@ func TestSuggestedEdits(t *testing.T) {
 				t.Fatalf("suggested edits did not fix the program:\n%s\n%v", fixed, err)
 			}
 		})
+	}
+}
+
+func TestPipeMethodResultContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "main.bork")
+	source := "fn main() { ys: List[List[Int]] = [1] |> map(x => []); println(ys) }\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Check(path)
+	var de *DiagError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected diagnostics, got %v", err)
+	}
+	ds := de.Diags.Sorted()
+	if len(ds) != 1 || ds[0].Code != "call.pipe-method" {
+		t.Fatalf("expected only the pipe diagnostic, got %+v", ds)
 	}
 }

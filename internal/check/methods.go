@@ -257,7 +257,7 @@ func (c *checker) isVariantPath(x syntax.Expr) bool {
 
 // pipeMethodError explains a pipeline targeting a method instead of a free
 // function. The parser keeps the original receiver range before desugaring.
-func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv Type) bool {
+func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv, want Type) bool {
 	fn, _ := c.methodNamed(recv, id.Name)
 	if fn == nil {
 		return false
@@ -302,6 +302,6 @@ func (c *checker) pipeMethodError(e *syntax.Call, id *syntax.Ident, recv Type) b
 			return true
 		}
 	}
-	c.callFunc(e, id.Name, fn, e.Args, recv, typeArgs, nil)
+	c.callFunc(e, id.Name, fn, e.Args, recv, typeArgs, want)
 	return true
 }
