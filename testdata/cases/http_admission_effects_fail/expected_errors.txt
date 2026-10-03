@@ -1,0 +1,2 @@
+main.bork:3:3: listen uses clock + state (it calls http.Listen), but its signature allows only net; declare it: uses net + clock + state
+main.bork:5:64: snapshot uses state (it calls http.AdmissionState), but its signature allows no effects; declare it: uses state

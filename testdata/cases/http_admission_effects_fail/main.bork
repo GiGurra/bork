@@ -1,0 +1,6 @@
+import "bork/http"
+fn listen(s: Scope) uses net: http.Server | IoError {
+  http.Listen("127.0.0.1:0", s, (request, rs) => http.Text(200, "ok"))
+}
+fn snapshot(server: http.Server): Option[http.AdmissionLoad] { http.AdmissionState(server) }
+fn main() {}

@@ -23,6 +23,21 @@ type TimeoutMs = Int where ValidTimeout
 pred ValidBodyLimit(bytes: Int) { bytes >= 0 }
 type BodyLimit = Int where ValidBodyLimit
 
+// Admission bounds application work before request bodies are buffered.
+pred ValidInFlight(limit: Int) { limit > 0 }
+pred ValidQueueLimit(limit: Int) { limit >= 0 }
+pred ValidAdmissionStatus(status: Int) { status == 429 || status == 503 }
+type InFlightLimit = Int where ValidInFlight
+type QueueLimit = Int where ValidQueueLimit
+type AdmissionStatus = Int where ValidAdmissionStatus
+type Admission = {
+  maxInFlight: InFlightLimit,
+  maxQueued: QueueLimit = 0,
+  queueTimeoutMs: TimeoutMs = 0,
+  retryAfterMs: TimeoutMs = 0,
+  status: AdmissionStatus = 503,
+} derive (Decode)
+
 type Request = {
   method: String,
   path: String,
@@ -39,6 +54,7 @@ type Route = { pattern: String, handler: Handler }
 
 // Server is a running server, stopped when its scope closes.
 type Server = resource
+type AdmissionLoad = { inFlight: Int, queued: Int }
 
 // Text is a plain text response.
 fn Text(status: Status, body: String): Response {
@@ -72,23 +88,23 @@ fn HeaderOf(headers: Headers, name: String): Option[String] {
 // returns, and cancelled if the client goes away or s closes: the
 // handler can open resources in it and spawn tasks in it.
 // maxBodyBytes defaults to 16 MiB; oversized requests receive HTTP 413.
-fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses net: Server | IoError unsafe go {
-  return start(addr, s, []Route{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes)
+fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None) uses net + clock + state: Server | IoError unsafe go {
+  return start(addr, s, []Route{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission)
 }
 
 // ListenRoutes serves Go ServeMux patterns with their handlers. A GET
 // pattern also accepts HEAD; wildcards are available in request.params.
 // Invalid or conflicting patterns return IoError before opening a socket.
 // Zero drain timeout inherits cleanupTimeout; with no policy, drain is unbounded.
-fn ListenRoutes(addr: String, s: Scope, routes: List[Route], drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses io + net + clock + random + state: Server | IoError unsafe go {
-  return start(addr, s, routes, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes)
+fn ListenRoutes(addr: String, s: Scope, routes: List[Route], drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None) uses io + net + clock + random + state: Server | IoError unsafe go {
+  return start(addr, s, routes, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission)
 }
 
 // ListenTLS loads a certificate and private key before opening the listener.
-fn ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216) uses io + net + clock + random + state: Server | IoError unsafe go {
+fn ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None) uses io + net + clock + random + state: Server | IoError unsafe go {
   pair := LoadCertificate(certFile, keyFile)
   if failure, failed := pair.(IoError); failed { return failure }
-  return start(addr, s, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes)
+  return start(addr, s, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes, admission)
 }
 
 // Certificate keeps validated immutable PEM bytes in a private variant.
@@ -119,7 +135,7 @@ fn LoadCertificate(certFile: String, keyFile: String) uses io: Certificate | IoE
   return pair
 }
 
-fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs, maxBodyBytes: BodyLimit) uses net: Server | IoError unsafe go {
+fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs, maxBodyBytes: BodyLimit, admission: Option[Admission]) uses net + clock + state: Server | IoError unsafe go {
   import "context"
   import "crypto/tls"
   import "errors"
@@ -128,7 +144,9 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
   import "net"
   import "net/http"
   import "sort"
+  import "strconv"
   import "strings"
+  import "sync"
   import "time"
   policy := _borkScopeCleanupTimeout(s)
   drain := time.Duration(drainTimeoutMs)*time.Millisecond
@@ -172,6 +190,104 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
     return nil
   }
   if err := register(); err != nil { return IoError{path: addr, message: err.Error()} }
+  handler := http.Handler(mux)
+  load := func() Option[AdmissionLoad] { return _borkNone[AdmissionLoad]() }
+  if value, limited := _borkOptionGet(admission); limited {
+    config := value
+    type waiter struct {
+      ready   chan struct{}
+      ctx     context.Context
+      granted bool
+    }
+    var mu sync.Mutex
+    var inFlight int64
+    var queued []*waiter
+    load = func() Option[AdmissionLoad] {
+      mu.Lock()
+      snapshot := AdmissionLoad{inFlight: inFlight, queued: int64(len(queued))}
+      mu.Unlock()
+      return _borkSome(snapshot)
+    }
+    release := func() {
+      mu.Lock()
+      inFlight--
+      for len(queued) > 0 {
+        next := queued[0]
+        queued[0] = nil
+        queued = queued[1:]
+        if next.ctx.Err() != nil {
+          continue
+        }
+        next.granted = true
+        inFlight++
+        close(next.ready)
+        break
+      }
+      mu.Unlock()
+    }
+    acquire := func(ctx context.Context) bool {
+      if ctx.Err() != nil {
+        return false
+      }
+      mu.Lock()
+      if inFlight < config.maxInFlight && len(queued) == 0 {
+        inFlight++
+        mu.Unlock()
+        return true
+      }
+      if config.maxQueued == 0 || config.queueTimeoutMs == 0 || int64(len(queued)) >= config.maxQueued {
+        mu.Unlock()
+        return false
+      }
+      next := &waiter{ready: make(chan struct{}), ctx: ctx}
+      queued = append(queued, next)
+      mu.Unlock()
+      timer := time.NewTimer(time.Duration(config.queueTimeoutMs) * time.Millisecond)
+      defer timer.Stop()
+      select {
+      case <-next.ready:
+        if ctx.Err() == nil {
+          return true
+        }
+      case <-ctx.Done():
+      case <-timer.C:
+      }
+      mu.Lock()
+      granted := next.granted
+      if !granted {
+        for index, item := range queued {
+          if item == next {
+            copy(queued[index:], queued[index+1:])
+            queued[len(queued)-1] = nil
+            queued = queued[:len(queued)-1]
+            break
+          }
+        }
+      }
+      mu.Unlock()
+      if granted {
+        release()
+      }
+      return false
+    }
+    seconds := config.retryAfterMs / 1000
+    if config.retryAfterMs%1000 != 0 {
+      seconds++
+    }
+    handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+      if !acquire(r.Context()) {
+        if r.Context().Err() == nil {
+          // Avoid net/http draining an unfinished request body before sending rejection.
+          w.Header().Set("Connection", "close")
+          w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
+          http.Error(w, "server overloaded", int(config.status))
+        }
+        return
+      }
+      defer release()
+      mux.ServeHTTP(w, r)
+    })
+  }
   ln, err := net.Listen("tcp", addr)
   if err != nil { return IoError{path: addr, message: err.Error()} }
   if pair, secure := _borkOptionGet(certificate); secure {
@@ -180,8 +296,8 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
     if err != nil { panic("http: validated certificate became invalid") }
     ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
   }
-  srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: mux, ReadHeaderTimeout: 10*time.Second}
-  state := struct { addr string; done chan struct{} }{ln.Addr().String(), make(chan struct{})}
+  srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: handler, ReadHeaderTimeout: 10*time.Second}
+  state := struct { addr string; done chan struct{}; load func() Option[AdmissionLoad] }{ln.Addr().String(), make(chan struct{}), load}
   go func() { srv.Serve(ln); close(state.done) }()
   return Server{handle: state, owner: s.Own(func() {
     ctx := context.Background()
@@ -196,7 +312,13 @@ fn Address(server: Server): String unsafe go {
   return server.handle.(struct {
     addr string
     done chan struct{}
+    load func() Option[AdmissionLoad]
   }).addr
+}
+
+// AdmissionState is a consistent counter snapshot, or None when no policy is set.
+fn AdmissionState(server: Server) uses state: Option[AdmissionLoad] unsafe go {
+  return server.handle.(struct { addr string; done chan struct{}; load func() Option[AdmissionLoad] }).load()
 }
 
 // Wait blocks until the server stops.
@@ -204,6 +326,7 @@ fn Wait(server: Server) uses net unsafe go {
   <-server.handle.(struct {
     addr string
     done chan struct{}
+    load func() Option[AdmissionLoad]
   }).done
 }
 

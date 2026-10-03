@@ -1,6 +1,6 @@
 # Backpressure and retry budgets
 
-Design for bork-l0kn5g. The bounded task pool is implemented; HTTP admission,
+Design for bork-l0kn5g. Bounded task pools and HTTP admission are implemented;
 client failure changes and retry budgets remain planned. This note makes
 bounded admission, HTTP shedding, and retry budgets explicit operations with
 checked failure unions. The later deadline/trace propagation work is
@@ -94,8 +94,10 @@ The queue is FIFO and bounded by maxQueued. An idle permit admits directly
 unless existing queued requests must be served first. A full queue rejects at
 once. maxQueued zero means no waiting; queueTimeoutMs zero also means no waiting.
 Queued requests wait in their existing Go request goroutine, never an additional
-worker. A disconnect or server cancellation removes the waiter promptly and
-releases its place. Queue timeout rejects with the configured overload response.
+worker. Request-context cancellation removes the waiter promptly and releases its
+place. Go detects HTTP/1 client disconnects only after consuming a request
+body; an unread-body waiter can remain until queue timeout, server cancellation,
+or permit transfer. Admission never peeks at or drains transport bodies. Queue timeout rejects with the configured overload response.
 If admission races timeout/cancellation, the waiter owns either a permit or a
 removed queue entry, never both; it cannot execute the handler after rejecting.
 
@@ -105,13 +107,17 @@ as whole delta-seconds, rounding positive milliseconds upward; zero gives zero.
 Use division/remainder rounding without an overflowing ms + 999 addition.
 These choices follow [HTTP Retry-After](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3)
 and [HTTP 429](https://www.rfc-editor.org/rfc/rfc6585.html#section-4).
-No request body is buffered on rejection. Let Go's server safely close/drain its
-transport framing; application admission must not perform an unbounded drain.
+No request body is buffered on rejection. HTTP/1 rejections set Connection:
+close so Go does not drain an incomplete body before writing the rejection.
 This bounds application work and buffered bodies, not connection count or every
 Go transport goroutine. Existing header/body limits still apply. Queue waits and
 active requests stop on server shutdown, and existing graceful drain policies
 bound shutdown. A handler panic releases admission during unwinding; no typed
 HTTP response is promised for a panic.
+
+AdmissionState returns an optional consistent snapshot of inFlight and queued.
+Listen charges net + clock + state in addition to the open handler effects;
+routed and TLS listeners retain their full effect bound.
 
 ## Typed client failures
 

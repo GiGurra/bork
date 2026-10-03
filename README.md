@@ -228,7 +228,7 @@ Standard packages may use pinned Go modules. Generated builds use Go's module ca
 
 ## Status
 
-Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today. The [backpressure proposal](docs/design/backpressure.md) describes bounded task pools (implemented), HTTP admission, and shared retry budgets (planned).
+Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today. The [backpressure proposal](docs/design/backpressure.md) describes bounded task pools and HTTP admission (implemented), with client failure types and shared retry budgets planned.
 
 Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 `bytes([toByte(0), toByte(255)])`, and validated `utf8String(data)`.
@@ -245,7 +245,7 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 | [bork/encoding](docs/std/encoding.md) | Hex, base64 and CSV encoding |
 | [bork/env](docs/std/env.md) | Environment variables and derived record configuration |
 | [bork/fs](docs/std/fs.md) | Scoped files, directories and filesystem operations |
-| [bork/http](docs/std/http.md) | Scoped HTTP clients, routes, TLS and server shutdown |
+| [bork/http](docs/std/http.md) | Scoped HTTP clients, routes, TLS, bounded admission and shutdown |
 | [bork/json](docs/std/json.md) | Dynamic JSON, pretty printing and JSON Lines |
 | [bork/log](docs/std/log.md) | Structured logging through Go slog |
 | [bork/math](docs/std/math.md) | Float math, exact integers, rationals and Decimal money |

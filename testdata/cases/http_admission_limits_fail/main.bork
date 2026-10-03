@@ -1,0 +1,9 @@
+import "bork/http"
+fn main() {
+  println(http.Admission { maxInFlight: 0 })
+  println(http.Admission { maxInFlight: 1, maxQueued: -1 })
+  println(http.Admission { maxInFlight: 1, queueTimeoutMs: -1 })
+  println(http.Admission { maxInFlight: 1, queueTimeoutMs: 9223372036855 })
+  println(http.Admission { maxInFlight: 1, retryAfterMs: 9223372036855 })
+  println(http.Admission { maxInFlight: 1, status: 500 })
+}

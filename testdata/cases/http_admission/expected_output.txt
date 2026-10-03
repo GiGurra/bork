@@ -1,0 +1,34 @@
+Admission { maxInFlight: 2, maxQueued: 0, queueTimeoutMs: 0, retryAfterMs: 0, status: 503 }
+invalid decoded capacity true
+/first
+bounded AdmissionLoad { inFlight: 1, queued: 2 }
+503 Option.Some { value: "1" }
+unread body 503
+/second
+/third
+200 200 200 AdmissionLoad { inFlight: 0, queued: 0 }
+queued cancellation true
+after cancellation AdmissionLoad { inFlight: 1, queued: 0 }
+200
+429 Option.Some { value: "0" }
+after timeout AdmissionLoad { inFlight: 1, queued: 0 }
+200
+503 Option.Some { value: "0" }
+no waiting AdmissionLoad { inFlight: 1, queued: 0 }
+independent 200
+503 Option.Some { value: "0" }
+no waiting AdmissionLoad { inFlight: 1, queued: 0 }
+independent 200
+body limit 413
+after body error AdmissionLoad { inFlight: 0, queued: 0 }
+unknown route 404
+accepted 200 AdmissionLoad { inFlight: 0, queued: 0 }
+shutdown completed
+handler panic true
+after panic 200 AdmissionLoad { inFlight: 0, queued: 0 }
+cancel transfer race AdmissionLoad { inFlight: 0, queued: 0 }
+unread disconnect AdmissionLoad { inFlight: 1, queued: 1 }
+503 Option.Some { value: "9223372037" }
+unread bounded timeout AdmissionLoad { inFlight: 1, queued: 0 }
+disabled Option.None
+200
