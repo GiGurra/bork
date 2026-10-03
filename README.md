@@ -322,7 +322,8 @@ and awaits on read while keeping type T. Initializer effects count at declaratio
 unread work is cancelled and joined when the scope ends, as with `spawn`.
 Both lazy and async initializers keep return/? within their own result boundary.
 
-The [comptime design](docs/design/comptime.md) specifies explicit build-time
-computation. `comptime { ... }` syntax and static closure/purity checks are in
-progress. Evaluation currently reports `comptime.not-implemented`; build-time
-data baking, module-file inputs and caching follow in later implementation PRs.
+`comptime { ... }` evaluates a closed, pure block during compilation and bakes
+scalar, list or plain-record results into the program. Its own return boundary
+and preflight checks keep recipe promises separate from runtime guards. Other
+result shapes, module-file inputs and caching remain planned in the
+[comptime design](docs/design/comptime.md).

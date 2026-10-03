@@ -40,7 +40,13 @@ func Package(files []*syntax.File, info *check.Info) ([]byte, error) {
 }
 
 func newGen(info *check.Info) *gen {
-	return &gen{info: info, imports: map[string]bool{}, bindImports: map[string]string{}, usedTypes: map[check.Type]bool{}}
+	g := &gen{info: info, imports: map[string]bool{}, bindImports: map[string]string{}, usedTypes: map[check.Type]bool{}, comptimeReads: map[*check.Var]bool{}}
+	for _, node := range info.Comptimes {
+		for _, capture := range node.Captures {
+			g.comptimeReads[capture] = true
+		}
+	}
+	return g
 }
 
 // EvalProgram generates a program that runs the given predicate calls
@@ -377,6 +383,9 @@ type gen struct {
 	usesLazy         bool
 	usesAsync        bool
 	evalMode         bool
+	comptimeCaptures map[*check.Var]check.Expr
+	// Captures disappear from emitted recipes; retain valid Go bindings for their declarations.
+	comptimeReads    map[*check.Var]bool
 	usesSeq          bool
 	usesSeqFirst     bool
 	usesSeqUnfold    bool
@@ -795,6 +804,25 @@ func borrowedName(v string) *ast.Ident {
 func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	t := e.Type()
 	switch e := e.(type) {
+	case *check.Comptime:
+		if e.Value == nil {
+			if !g.evalMode {
+				panic("unevaluated comptime value reached generation")
+			}
+			// Unrelated instance bodies may be emitted in a probe. They cannot run
+			// an unresolved computation; actual recipe dependencies are prepared first.
+			thunk := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: g.goType(e.Type())}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{&ast.BasicLit{Kind: token.STRING, Value: strconv.Quote("unresolved comptime dependency")}}}}}}}
+			return nil, &ast.CallExpr{Fun: thunk}
+		}
+		return g.value(e.Value)
+	case *check.FloatBits:
+		g.imports["math"] = true
+		name := "Float64frombits"
+		if e.Type() == check.Float32 {
+			name = "Float32frombits"
+		}
+		return nil, &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("math"), Sel: ast.NewIdent(name)}, Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: strconv.FormatUint(e.Bits, 10)}}}
+
 	case *check.Const:
 		switch e.Value.Kind() {
 		case constant.String:
@@ -819,6 +847,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		return nil, g.instance(e.Inst)
 	case *check.VarRef:
+		if value := g.comptimeCaptures[e.Var]; value != nil {
+			return g.value(value)
+		}
 		g.captured(e.Var, false)
 		if e.Var.Let != nil && e.Var.Let.Initializer != nil {
 			return nil, &ast.CallExpr{Fun: &ast.SelectorExpr{X: varIdent(e.Var), Sel: ast.NewIdent("get")}}
@@ -1225,6 +1256,9 @@ func (g *gen) lambda(e *check.Lambda) ast.Expr {
 // listLit lowers a list literal to a slice literal.
 func (g *gen) listLit(e *check.ListLit) ([]ast.Stmt, ast.Expr) {
 	lt := e.Type().(*check.List)
+	if e.Nil {
+		return nil, &ast.CallExpr{Fun: g.goType(lt), Args: []ast.Expr{ast.NewIdent("nil")}}
+	}
 	stmts, xs := g.values(e.Elems)
 	if xs == nil {
 		return stmts, nil
@@ -1480,7 +1514,7 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 				}
 				ctor := &ast.IndexExpr{X: ast.NewIdent(constructor), Index: g.goType(s.Var.Type)}
 				out = append(out, define(varIdent(s.Var), &ast.CallExpr{Fun: ctor, Args: args}))
-				if s.Var.Unused {
+				if s.Var.Unused || g.comptimeReads[s.Var] {
 					out = append(out, assign(ast.NewIdent("_"), varIdent(s.Var)))
 				}
 				continue
@@ -1502,7 +1536,7 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 			} else {
 				out = append(out, define(varIdent(s.Var), g.convert(x, vt, vt)))
 			}
-			if s.Var.Unused {
+			if s.Var.Unused || g.comptimeReads[s.Var] {
 				out = append(out, assign(ast.NewIdent("_"), varIdent(s.Var)))
 			}
 			if bt == check.OwnedScope {

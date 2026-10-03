@@ -63,6 +63,12 @@ type SourceSpan struct {
 	End   diag.Pos `json:"end"`
 }
 
+// FloatBits preserves computed IEEE values, including NaN and negative zero.
+type FloatBits struct {
+	expr
+	Bits uint64
+}
+
 // Interp is an interpolated string: s"Hello $name". Parts holds the
 // text around the expressions, one more than Exprs.
 type Interp struct {
@@ -235,6 +241,7 @@ type Lambda struct {
 // ListLit is a list literal: `[1, 2, 3]`.
 type ListLit struct {
 	expr
+	Nil   bool
 	Elems []Expr
 }
 
@@ -255,7 +262,10 @@ type If struct {
 // Comptime retains a checked recipe until the driver evaluates it.
 type Comptime struct {
 	expr
-	Body *Block
+	Body     *Block
+	Owner    *Func
+	Captures []*Var
+	Value    Expr
 }
 
 // Block is `{ stmts; tail }`. Tail is nil when the block's value is

@@ -314,11 +314,19 @@ type T. Initializer effects count at declaration; unread tasks follow scope
 cancellation, joining and panic policies. Initializer return/? stays inside its
 result boundary. See [the async design](design/async.md).
 
-## Reserved compile-time computation
+## Compile-time computation
 
-The parser recognizes `comptime { ... }` and checks its concrete result type,
-purity and closed captures, but the driver reports `comptime.not-implemented`
-until the evaluator lands. It never runs the recipe at runtime. Blocks have
-their own return/`?` boundary, like lazy initializers. Runtime parameters, calls,
-lazy cells and ambient needs cannot be captured; literals and earlier computed
-bindings can. Evaluation, build-file reads and caching remain planned.
+`comptime { ... }` evaluates a closed pure block during compilation. Blocks have
+an independent return/`?` boundary, like lazy initializers. Runtime parameters,
+calls, lazy cells and ambient needs cannot be captured; literals, composite
+literals and earlier computed bindings can. Types must be concrete, including
+recipe type arguments and capture types.
+
+The current evaluator bakes scalars, lists and plain records with ordered fields.
+Other result shapes report a diagnostic. Internal helper promises and recipe
+preconditions must check before execution, independently of enclosing runtime
+guards; constraints on the resulting value check afterward. Recipes run only for
+native targets, have a ten-second evaluation timeout and a 16 MiB result limit.
+The compiler trusts pure `unsafe go` signatures; this is not process isolation.
+Build-file reads, other data shapes and caching remain planned in the
+[comptime design](design/comptime.md).
