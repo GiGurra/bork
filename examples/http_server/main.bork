@@ -141,11 +141,14 @@ fn serve(addr: String) uses net + clock + state: Unit | IoError {
   }
 }
 
-fn call(s: Scope, base: String, method: String, path: String, body: String = "") uses io + net {
+fn call(s: Scope, base: String, method: String, path: String, body: String = "") uses io + net + clock + state {
   label = if (body == "") { s"$method $path" } else { s"$method $path $body" }
   match (http.Send(method, base + path, {:}, body, s)) {
     resp: http.Response => println(s"$label -> ${resp.status} ${resp.body}")
     e: IoError => println(s"$label -> error: ${e.message}")
+    e: http.Overloaded => println(s"$label -> overloaded: ${e.response.status} ${e.response.body}")
+    e: http.DeadlineExceeded => println(s"$label -> deadline: ${e.message}")
+    e: Cancelled => println(s"$label -> cancelled: ${e.reason}")
   }
 }
 

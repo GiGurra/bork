@@ -1,0 +1,77 @@
+import "bork/http"
+import "bork/time"
+type Remote = resource
+fn remote(s: Scope) uses net + state: Remote unsafe go {
+  import "net/http"
+  import "net/http/httptest"
+  srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if r.URL.Path == "/body" { w.WriteHeader(200); w.(http.Flusher).Flush(); <-r.Context().Done(); return }
+    if r.URL.Path == "/wait" { <-r.Context().Done(); return }
+    w.Header().Add("X-Reply", "one")
+    w.Header().Add("X-Reply", "two")
+    switch r.URL.Path {
+    case "/429": w.Header().Set("Retry-After", "2"); w.WriteHeader(429)
+    case "/503": w.Header().Set("Retry-After", "Sun, 06 Nov 1994 08:49:37 GMT"); w.WriteHeader(503)
+    case "/bad": w.Header().Add("Retry-After", "1"); w.Header().Add("Retry-After", "2"); w.WriteHeader(503)
+    default: w.WriteHeader(418)
+    }
+    w.Write([]byte("busy"))
+  }))
+  return Remote{handle: srv.URL, owner: s.Own(func() { srv.Close() })}
+}
+fn serverURL(server: Remote): String unsafe go { return server.handle.(string) }
+fn show(result: http.Result) uses io {
+  match (result) {
+    response: http.Response => println("response", response.status, response.body)
+    overloaded: http.Overloaded => println("overload", overloaded.response.status, overloaded.response.body, overloaded.retryAfter, overloaded.response.headers.get("X-Reply"))
+    error: http.DeadlineExceeded => println("deadline")
+    error: Cancelled => println("cancelled")
+    error: IoError => println("transport")
+  }
+}
+fn expired(operation: (Scope) => http.Result, byCause: Bool = false) uses clock + state: http.Result unsafe go {
+  import "context"
+  import "time"
+  ctx, stop := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+  defer stop()
+  if byCause {
+    var cancel context.CancelCauseFunc
+    ctx, cancel = context.WithCancelCause(context.Background())
+    cancel(context.DeadlineExceeded)
+  }
+  scope := _borkScopeWith(ctx)
+  defer _borkScopeAbort(scope)
+  return operation(scope)
+}
+fn main() {
+  now = time.Instant { unixNanos: 784111740000000000 }
+  ["0", "2", " 2\t", "9223372036", "9223372037", "18446744073709551616", "-1", "+1", "", "1, 2", "NaN", "Sun, 06 Nov 1994 08:49:37 GMT", "Sunday, 06-Nov-94 08:49:37 GMT", "Sun Nov  6 08:49:37 1994", "Sun, 06 Nov 1994 08:48:37 GMT", "Fri, 31 Dec 9999 23:59:59 GMT"].forEach(text => println(http.RetryAfter({ "Retry-After": [text] }, now)))
+  println("RFC850 68 in 1994", http.RetryAfter({ "Retry-After": ["Sunday, 06-Nov-68 08:49:37 GMT"] }, now))
+  println("RFC850 69 in 2026", http.RetryAfter({ "Retry-After": ["Sunday, 06-Nov-69 08:49:37 GMT"] }, time.Instant { unixNanos: 1767225600000000000 }))
+  println("RFC850 exactly 50 years", http.RetryAfter({ "Retry-After": ["Sunday, 06-Nov-44 08:49:00 GMT"] }, now))
+  println("RFC850 over 50 years", http.RetryAfter({ "Retry-After": ["Sunday, 06-Nov-44 08:49:01 GMT"] }, now))
+  println("RFC850 leap-century", http.RetryAfter({ "Retry-After": ["Tuesday, 29-Feb-00 00:00:00 GMT"] }, time.Instant { unixNanos: 2529619200000000000 }))
+  println("missing", http.RetryAfter({:}, now))
+  println("empty values", http.RetryAfter({ "Retry-After": [] }, now))
+  println("repeated", http.RetryAfter({ "Retry-After": ["1", "1"] }, now))
+  println("mixed names", http.RetryAfter({ "Retry-After": ["1"], "retry-after": ["1"] }, now))
+  scope app {
+    server = remote(app)
+    base = serverURL(server)
+    show(http.Get(s"$base/429", app))
+    show(http.Get(s"$base/503", app))
+    show(http.Get(s"$base/bad", app))
+    show(http.Get(base, app))
+    show(http.Get(s"$base/wait", app, timeoutMs: 10))
+    show(http.Get(s"$base/body", app, timeoutMs: 10))
+    show(expired(s => http.Get("://invalid", s)))
+    show(expired(s => http.Get("://invalid", s), byCause: true))
+    show(http.Get("://invalid", app))
+    show(http.Send("bad method", base, {:}, "", app))
+    show(http.Send("GET", base, { "bad header": ["x"] }, "", app))
+    scope request {
+      cancel(request)
+      show(http.Get(base, request))
+    }
+  }
+}

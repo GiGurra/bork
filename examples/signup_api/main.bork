@@ -83,14 +83,17 @@ fn serve(addr: String) uses io + net + clock + state: Unit | IoError {
   }
 }
 
-fn show(label: String, r: http.Response | IoError) uses io {
+fn show(label: String, r: http.Result) uses io {
   match (r) {
     resp: http.Response => println(s"$label -> ${toString(resp.status)} ${resp.body}")
     e: IoError => println(s"$label -> error: ${e.message}")
+    e: http.Overloaded => println(s"$label -> overloaded: ${e.response.status} ${e.response.body}")
+    e: http.DeadlineExceeded => println(s"$label -> deadline: ${e.message}")
+    e: Cancelled => println(s"$label -> cancelled: ${e.reason}")
   }
 }
 
-fn post(s: Scope, base: String, body: String) uses io + net {
+fn post(s: Scope, base: String, body: String) uses io + net + clock + state {
   show(s"POST /signup $body", http.Post(base + "/signup", "application/json", body, s))
 }
 

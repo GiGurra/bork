@@ -35,15 +35,15 @@ fn started(server: TestServer) uses clock + state unsafe go {
   case <-time.After(5*time.Second): panic("request did not reach server")
   }
 }
-fn cancelledResult(response: http.Response | IoError): Bool {
+fn cancelledResult(response: http.Result): Bool {
   match (response) {
-    error: IoError => error.message.endsWith(": cancelled") || error.message.endsWith(": the scope ended")
+    error: Cancelled => true
     _ => false
   }
 }
-fn timedOut(response: http.Response | IoError): Bool {
+fn timedOut(response: http.Result): Bool {
   match (response) {
-    error: IoError => error.message.contains("deadline exceeded")
+    error: http.DeadlineExceeded => true
     _ => false
   }
 }

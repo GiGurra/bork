@@ -3,8 +3,8 @@ use http.AdmissionDecode
 fn mustServer(value: http.Server | IoError): http.Server {
   match (value) { server: http.Server => server, error: IoError => panic(toString(error)) }
 }
-fn status(value: http.Response | IoError): Int {
-  match (value) { response: http.Response => response.status, error: IoError => panic(toString(error)) }
+fn status(value: http.Result): Int {
+  match (value) { response: http.Response => response.status, overloaded: http.Overloaded => overloaded.response.status, error => panic(toString(error)) }
 }
 fn load(server: http.Server) uses state: http.AdmissionLoad {
   match (http.AdmissionState(server)) {
@@ -27,10 +27,11 @@ fn waitIdle(server: http.Server, attempts: Int = 5000) uses clock + state {
     waitIdle(server, attempts - 1)
   }
 }
-fn showRejected(value: http.Response | IoError) uses io {
+fn showRejected(value: http.Result) uses io {
   match (value) {
     response: http.Response => println(response.status, http.HeaderOf(response.headers, "Retry-After"))
-    error: IoError => panic(toString(error))
+    overloaded: http.Overloaded => println(overloaded.response.status, http.HeaderOf(overloaded.response.headers, "Retry-After"))
+    error => panic(toString(error))
   }
 }
 fn incompleteBody(addr: String) uses io + net + clock: Int unsafe go {
@@ -134,7 +135,7 @@ fn main() {
       queued = spawn(request, () => http.Get(s"$url/cancelled", request))
       waitQueued(server, 1)
       cancel(request)
-      println("queued cancellation", match (await(queued)) { error: IoError => true, _ => false })
+      println("queued cancellation", match (await(queued)) { error: Cancelled => true, _ => false })
       waitQueued(server, 0)
     }
     println("after cancellation", load(server))

@@ -1181,7 +1181,7 @@ failures, and shared retry budgets are proposed in
 [the backpressure design](design/backpressure.md) (bork-l0kn5g). Ordinary
 spawn/launch keep their current signatures; the explicit bounded task pool below
 is implemented. HTTP retries are opt-in, limited by a shared
-budget and remaining deadline. HTTP admission is implemented; client failure types and retry APIs remain planned.
+budget and remaining deadline. HTTP admission and typed client failure results are implemented; retry APIs remain planned.
 
 ### Bounded task pools (implemented, bork-l0kn5g)
 
@@ -1196,8 +1196,9 @@ attachment extends pool ownership without moving existing tasks. Ordinary
 spawn/launch and parallel collections retain their APIs and do not consume an
 implicit pool. See [the package documentation](std/tasks.md). HTTP admission also limits work before body reads and queues waiters in bounded
 FIFO order, rejecting with 429/503 and Retry-After. AdmissionState exposes load.
-See [HTTP documentation](std/http.md#bounded-admission); client failure types
-and retry budgets remain planned in [the backpressure design](design/backpressure.md).
+Clients return Response, Overloaded (retaining the original 429/503 response),
+DeadlineExceeded, Cancelled, or IoError, with safe Retry-After parsing.
+See [HTTP documentation](std/http.md#bounded-admission); retry budgets remain planned in [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes
 
@@ -1414,9 +1415,9 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 |---------|--------|------------------------------|
 | `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `args`, `exit`, the `bork/fs` functions that touch the file system, `process.Args`, `process.Exit`, `log.Configure`, `env.Get`, `env.Require`, `env.All`, `env.Load`, `env.LoadJson` |
 | `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
-| `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep`, HTTP listener admission waits |
+| `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep`, HTTP listener admission waits and client Retry-After dates |
 | `random` | random numbers | none yet (the future random number functions) |
-| `state` | state shared between tasks | `current`, `update`, `swap`, `send`, `receive`, `closeChannel`, `received`, `cancel`, `cancelled`, `checkpoint`, HTTP listener admission and `http.AdmissionState` |
+| `state` | state shared between tasks | `current`, `update`, `swap`, `send`, `receive`, `closeChannel`, `received`, `cancel`, `cancelled`, `checkpoint`, HTTP admission, `http.AdmissionState`, and client cancellation |
 
 - **Some functions have two or more effects:** `delay(s, ms)`, `cancelAfter(s, ms)`, and `time.Sleep` are `clock + state` (they wait, and they observe or cause cancellation); `process.Run`, `Start`, `Await`, and `Stop` are `io + state`; the `bork/sql` functions are `io + net`, since a database may be a local file or a server; and the `bork/net` socket functions are `net + state` (`Listen`, `Wait`, `Bind`, `Resolve`), or `net + state + clock` where they read, write, or dial with a deadline.
 - **Pure means deterministic, with no outside action.** Calling a function that uses nothing twice with the same arguments gives the same result, and has no observable effect beyond allocating memory, logging, and maybe panicking. That is why reading an atom, or checking whether a scope was cancelled, is `state`: the answer can change between two calls. One known exception: an unordered map (`m.unordered()`) lists its entries in an order that differs between runs, and listing it stays pure. Seeding that order per program would close the gap, if it turns out to matter.

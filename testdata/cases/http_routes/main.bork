@@ -26,10 +26,10 @@ fn endpoint(index: Int, request: http.Request, rs: Scope): http.Response {
 fn tagged(handler: http.Handler): http.Handler {
   (req, rs) => handler(req, rs).copy(headers: { "X-Middleware": ["yes"] })
 }
-fn call(base: String, path: String, s: Scope, method: String = "GET", body: String = "") uses net + io {
+fn call(base: String, path: String, s: Scope, method: String = "GET", body: String = "") uses net + io + clock + state {
   match (http.Send(method, base + path, {:}, body, s, 2000)) {
     response: http.Response => println(response.status, response.body)
-    error: IoError => println("unexpected", error.message)
+    error => println("unexpected", toString(error))
   }
 }
 fn main() {

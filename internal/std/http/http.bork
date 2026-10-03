@@ -7,6 +7,8 @@
 // goroutine; bork values are immutable, so handlers share nothing that
 // can change.
 
+import "bork/time"
+
 // ValidStatus holds for the status codes HTTP defines (100 to 599).
 pred ValidStatus(code: Int) { code >= 100 && code <= 599 }
 
@@ -48,6 +50,10 @@ type Request = {
 }
 
 type Response = { status: Status, headers: Headers, body: String }
+// Overloaded retains the complete 429/503 response and a safely parsed hint.
+type Overloaded = { retryAfter: Option[time.Duration], response: Response }
+type DeadlineExceeded = { message: String }
+type Result = Response | Overloaded | DeadlineExceeded | Cancelled | IoError
 
 type Handler = (Request, Scope) uses io + net + clock + random + state => Response
 type Route = { pattern: String, handler: Handler }
@@ -332,19 +338,20 @@ fn Wait(server: Server) uses net unsafe go {
 
 // Get sends a GET request cancelled with s. timeoutMs bounds the entire request,
 // including reading the body; zero uses only the scope's cancellation/deadline.
-fn Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoError {
+fn Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result {
   Send("GET", url, {:}, "", s, timeoutMs)
 }
 
 // Post sends a POST request with the given content type.
-fn Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoError {
+fn Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result {
   Send("POST", url, { "Content-Type": [contentType] }, body, s, timeoutMs)
 }
 
-// Send sends a request and reads its entire response. Transport, cancellation,
-// and timeout failures return IoError; HTTP error statuses remain responses.
-fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net: Response | IoError unsafe go {
+// Send reads the entire response. Overload, deadline and cancellation are typed;
+// other HTTP statuses remain responses and transport failures remain IoError.
+fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result unsafe go {
   import "context"
+  import "errors"
   import "io"
   import "net/http"
   import "sort"
@@ -356,6 +363,20 @@ fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, t
     ctx, stop = context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
     defer stop()
   }
+  failure := func(err error) any {
+    if errors.Is(err, context.DeadlineExceeded) || errors.Is(context.Cause(ctx), context.DeadlineExceeded) { return DeadlineExceeded{message: err.Error()} }
+    if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+      if errors.Is(ctx.Err(), context.DeadlineExceeded) { return DeadlineExceeded{message: ctx.Err().Error()} }
+      cause := context.Cause(ctx)
+      if cause == nil { cause = err }
+      return Cancelled{reason: cause.Error()}
+    }
+    return IoError{path: url, message: err.Error()}
+  }
+  if deadline, ok := ctx.Deadline(); ok && !deadline.After(time.Now()) {
+    return DeadlineExceeded{message: "request deadline exceeded"}
+  }
+  if err := ctx.Err(); err != nil { return failure(err) }
   req, err := http.NewRequestWithContext(ctx, method, url, strings.NewReader(body))
   if err != nil { return IoError{path: url, message: err.Error()} }
   _borkMapEach(headers, func(name string, values []string) bool {
@@ -363,13 +384,67 @@ fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, t
     return true
   })
   resp, err := http.DefaultClient.Do(req)
-  if err != nil { return IoError{path: url, message: err.Error()} }
+  if err != nil { return failure(err) }
   defer resp.Body.Close()
   data, err := io.ReadAll(resp.Body)
-  if err != nil { return IoError{path: url, message: err.Error()} }
+  if err != nil { return failure(err) }
   keys, values := []string{}, [][]string{}
   for name := range resp.Header { keys = append(keys, name) }
   sort.Strings(keys)
   for _, name := range keys { values = append(values, append([]string(nil), resp.Header[name]...)) }
-  return Response{status: int64(resp.StatusCode), headers: _borkMapOf(keys, values), body: string(data)}
+  response := Response{status: int64(resp.StatusCode), headers: _borkMapOf(keys, values), body: string(data)}
+  if resp.StatusCode == 429 || resp.StatusCode == 503 {
+    return Overloaded{retryAfter: readRetryAfter(response.headers), response: response}
+  }
+  return response
 }
+
+// RetryAfter parses exactly one Retry-After field against an explicit clock
+// reading. Invalid, repeated, or unrepresentable hints are None; past dates are zero.
+fn RetryAfter(headers: Headers, now: time.Instant): Option[time.Duration] unsafe go {
+  import "net/http"
+  import "strconv"
+  import "strings"
+  import "time"
+  count := 0
+  text := ""
+  _borkMapEach(headers, func(name string, values []string) bool {
+    if strings.EqualFold(name, "Retry-After") {
+      for _, value := range values { count++; text = value }
+    }
+    return true
+  })
+  if count != 1 { return noRetryDelay() }
+  text = strings.Trim(text, " \t")
+  if text == "" { return noRetryDelay() }
+  decimal := true
+  for _, digit := range text { if digit < '0' || digit > '9' { decimal = false; break } }
+  if decimal {
+    seconds, err := strconv.ParseUint(text, 10, 64)
+    if err != nil || seconds > uint64(9223372036854775807/int64(time.Second)) { return noRetryDelay() }
+    return retryDelay(int64(seconds)*int64(time.Second))
+  }
+  date, err := http.ParseTime(text)
+  if err != nil { return noRetryDelay() }
+  current := time.Unix(0, now.unixNanos)
+  // RFC 9110 resolves RFC850's two-digit year relative to this clock,
+  // not Go's fixed 1969/2068 split. Choose the latest matching year
+  // no more than 50 calendar years ahead of the supplied instant.
+  if old, oldErr := time.Parse(time.RFC850, text); oldErr == nil {
+    cutoff := current.AddDate(50, 0, 0)
+    year := cutoff.Year()/100*100 + old.Year()%100
+    date = time.Date(year, old.Month(), old.Day(), old.Hour(), old.Minute(), old.Second(), 0, time.UTC)
+    if date.After(cutoff) {
+      year -= 100
+      date = time.Date(year, old.Month(), old.Day(), old.Hour(), old.Minute(), old.Second(), 0, time.UTC)
+    }
+    if date.Month() != old.Month() || date.Day() != old.Day() { return noRetryDelay() }
+  }
+  if !date.After(current) { return retryDelay(0) }
+  wait := date.Sub(current)
+  if !current.Add(wait).Equal(date) { return noRetryDelay() }
+  return retryDelay(int64(wait))
+}
+fn retryDelay(nanos: Int): Option[time.Duration] { Option.Some { value: time.Nanoseconds(nanos) } }
+fn noRetryDelay(): Option[time.Duration] { Option.None }
+fn readRetryAfter(headers: Headers) uses clock: Option[time.Duration] { RetryAfter(headers, time.Now()) }

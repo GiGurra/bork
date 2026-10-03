@@ -1,7 +1,7 @@
 # Backpressure and retry budgets
 
-Design for bork-l0kn5g. Bounded task pools and HTTP admission are implemented;
-client failure changes and retry budgets remain planned. This note makes
+Design for bork-l0kn5g. Bounded task pools, HTTP admission, and typed client
+failures are implemented; retry budgets remain planned. This note makes
 bounded admission, HTTP shedding, and retry budgets explicit operations with
 checked failure unions. The later deadline/trace propagation work is
 bork-gqxe4s; request criticality and adaptive concurrency remain follow-ups.
@@ -128,8 +128,8 @@ http.Overloaded { retryAfter: Option[time.Duration], response: http.Response }
 http.DeadlineExceeded { message: String }
 ```
 
-Get/Post/Send return Response | Overloaded | DeadlineExceeded | Cancelled |
-IoError. The shared client implementation classifies completed 429 and 503
+Get/Post/Send return Result, an alias for Response | Overloaded |
+DeadlineExceeded | Cancelled | IoError. The shared client implementation classifies completed 429 and 503
 responses as Overloaded while preserving their complete status, headers and body
 in response. Other HTTP statuses remain Response; transport errors remain
 IoError. Scope cancellation becomes Cancelled. An expired explicit request
@@ -146,6 +146,8 @@ skew. A large valid retry delay is not silently shortened: if the caller cannot
 wait that long, it returns the original Overloaded. Parsing Retry-After adds the
 clock effect to Get/Post/Send; preserve net and add state for cancellation reads.
 Thread these effects through client wrappers and their callers during migration.
+The pure RetryAfter(headers, now: time.Instant) parser accepts an explicit clock
+reading; Send supplies the system reading.
 
 This is a deliberate source migration: exhaustive matches must decide what
 HTTP overload, deadline and cancellation mean. Examples should recover the
