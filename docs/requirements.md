@@ -85,7 +85,7 @@ fn payOutDeclared(amount: Money where positive) = {
 
 In priority order. When two values conflict, the higher one wins.
 
-1. **If it compiles, whole classes of bugs cannot happen.** No null or nil, no unchecked access to optional values, no exceptions, no non-exhaustive matches, no mutable state (v0.1), and no broken contracts.
+1. **If it compiles, whole classes of bugs cannot happen.** No null or nil, no unchecked access to optional values, no exceptions, no non-exhaustive matches, no mutation of ordinary bork values, and no broken contracts outside explicit unsafe boundaries.
 2. **Rigor must be cheap.** Declaring a rule should cost about as much as writing an `if`. Haskell-level guarantees without Haskell-level ceremony. If a guarantee is hard to express, that is a language bug.
 3. **Explicit escape hatches, never silent bypasses.** Whenever a guarantee is weakened, it is visible in the code, greppable, and reviewable.
 4. **Readable at 3am during an incident.** Explicit over clever. One obvious way to do common things. **Clarity over conciseness:** agents will write much of the code, so saving keystrokes matters little, while being easy to read and review matters a lot.
@@ -99,7 +99,7 @@ In priority order. When two values conflict, the higher one wins.
 - **Statically typed.**
 - **No null, no nil.** The concept does not exist in the language.
 - **`Option` is statically checked.** The value inside an `Option` cannot be extracted without first checking that it is present (via `match`, or a guard the compiler understands). There is no `.get()`-style unchecked extraction.
-- **No mutable state in v0.1.** Every value is immutable. This is the foundation of the proof model: a fact proven about a value can never be invalidated later, so proofs are never lost to mutation. Opt-in mutable types may come in a later version.
+- **Ordinary bork values are immutable.** Opaque Go objects can hold shared state, and explicit state capabilities have declared effects. Facts cannot describe opaque values or values containing them. This is the foundation of the proof model: a fact proven about a value can never be invalidated later, so proofs are never lost to mutation. Opt-in mutable types may come in a later version.
 - **Exhaustive matching is enforced.** A `match` that does not cover every case is a compile error. The compiler never inserts an implicit panic for a missing case.
 
 ### Errors and failure
@@ -117,7 +117,7 @@ In priority order. When two values conflict, the higher one wins.
 
 - **Compiles to Go.** Go is purely a compilation target, chosen so bork gets Go's runtime, GC, goroutine scheduler, and cross-platform compilation without building its own backend.
 - **Ordinary bork code does not call Go.** bork has its own standard library. The Go code the compiler generates can freely use Go's standard library under the hood; that is an implementation detail, invisible to bork programs.
-- **`unsafe go` is the explicit boundary.** A function's body can be raw Go: `fn f(x: Int): String unsafe go { import "strconv"; return strconv.FormatInt(x, 10) }`. It is allowed anywhere, in user code as well as in the standard library, which is itself written this way (the built-in prelude). bork trusts the signature: the guarantees (immutability, no null, the declared result) hold outside these bodies, and inside them only as far as the Go code keeps them. The Go code sees bork values as the compiler represents them, which is documented in the prelude. Standard packages use a documented [Go helper API](std-go.md) for maps, options, and scope context/lifecycle operations, with a compilation test covering every helper. Go errors in the body are reported at their bork positions. Importing Go packages as bork modules is not planned for v0.1; instead, bindings call Go functions directly, checked against their Go signatures (`fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"`), and Go types are proposed in [Go interop](#go-interop-proposal).
+- **`unsafe go` is the explicit boundary.** A function's body can be raw Go: `fn f(x: Int): String unsafe go { import "strconv"; return strconv.FormatInt(x, 10) }`. User packages must opt in through `unsafe "<package path>"` in `bork.mod`; the standard library and prelude are exempt. bork trusts the signature: the guarantees (immutability, no null, the declared result) hold outside these bodies, and inside them only as far as the Go code keeps them. The Go code sees bork values as the compiler represents them, which is documented in the prelude. Standard packages use a documented [Go helper API](std-go.md) for maps, options, and scope context/lifecycle operations, with a compilation test covering every helper. Go errors in the body are reported at their bork positions. Importing Go packages as bork modules is not planned for v0.1; instead, bindings call Go functions directly, checked against their Go signatures (`fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"`), and opaque types and mirror records are checked as described in [Go interop](#go-interop).
 - **bork's syntax is independent of Go.** bork has its own grammar and its own hand-written parser. Go is only the language the first compiler is written in, and the first compilation target.
 - **The compiler models bork, not Go.** The compiler's internal model holds the full language and all of its constraints; that is the product. Its Go output is a lowering, not a one-to-one mapping of bork types to Go types. It can drop knowledge once it has been checked (facts are erased entirely), and it can lean on runtime helpers and generated functions where that is simpler. Inspired by TypeScript: the type checker carries the guarantees, and the output just runs. Go is the first target; others may follow.
 
@@ -151,7 +151,7 @@ In priority order. When two values conflict, the higher one wins.
 - **Both structural interfaces and type classes exist**, as different tools for different situations. Structural interfaces describe what a value can do. Type classes attach behaviour to a type, including types you don't own.
 - **No automatic default instances.** The compiler never picks up an instance on its own, not even one declared next to the type or the type class. A library may expose a default set of instances, but it must still be imported explicitly. This is an experiment: we'll try it and see how it feels in practice.
 - **Ambiguous instances are a compile error.** If more than one in-scope instance matches, including several instances for constrained types that a value satisfies, the build fails.
-- **Automatic derivation in v0.1:** `derive (Decode, Encode)` for records and ADTs. Derivation cannot inspect or construct foreign private variants, including variants reachable through fields, containers, and concrete generic specializations. At a field boundary it can delegate to an existing codec provided by the type's owning package, preserving that package's chosen public representation. Structural equality and default text need no derive.
+- **Automatic derivation in v0.1:** `derive (Decode, Encode)` for records and ADTs, and `derive (GoStruct)` for records with a static Go mapping. Derivation cannot inspect or construct foreign private variants, including variants reachable through fields, containers, and concrete generic specializations. At a field boundary it can delegate to an existing codec provided by the type's owning package, preserving that package's chosen public representation. Structural equality and default text need no derive.
 - **Higher-kinded types (`Functor[List]`): room in the syntax, not implemented in v0.1.**
 - **No circular package dependencies**, as in Go. This keeps instance lookup, and compilation in general, bounded and predictable.
 
@@ -642,7 +642,7 @@ close-time task cancellation.
 
 Erlang-style isolation, where a crashing routine is cleaned up and handled by a supervisor without taking the rest of the program down, becomes cheap in bork, because the two hard parts are solved by design:
 
-- **No shared state can be left half-changed.** Nothing is mutable, so a routine that crashes cannot leave corrupt shared data behind. Its values are simply never used again, and the GC reclaims the memory. No memory tracking is needed.
+- **Immutable values cannot be left half-changed.** A routine that crashes cannot corrupt ordinary bork values. Shared opaque Go state remains governed by its Go API. Its values are simply never used again, and the GC reclaims the memory. No memory tracking is needed.
 - **Every resource is owned by a scope on some routine's stack.** When a routine dies, the runtime unwinds its stack and closes every scope on it, running finalizers in reverse order as usual. A resource also attached to a scope in another routine stays open; its count drops by one. No separate resource tracking is needed.
 - **A supervisor sees a child's crash as an ordinary value** (e.g. `Crashed(reason)`), and decides what to do: restart, give up, or escalate. By then, the child's resources are already released. User code still has no `recover`. Only the runtime catches the crash at the routine boundary and turns it into that value.
 
@@ -759,7 +759,7 @@ The prelude's list, `Option`, and map methods have open function parameters; `up
   - `state`: `go` statements, channel sends and receives, `select`, `sync`, `sync/atomic`;
   - and a call of a bork function by name, which uses what that function declares.
 
-  A binding (`fn Getenv(key: String) uses io: String unsafe go "os.Getenv"`, see [Go interop](#go-interop-proposal)) is checked by the same rules, against the Go function it calls, and its package must be allowed in `bork.mod` like any `unsafe go`.
+  A binding (`fn Getenv(key: String) uses io: String unsafe go "os.Getenv"`, see [Go interop](#go-interop)) is checked by the same rules, against the Go function it calls, and its package must be allowed in `bork.mod` like any `unsafe go`.
 
   The Go imports of all bodies share one generated file, so a package name counts even when another body imports it, unless the body declares the name itself (parameters included). A name counts against the function's own declared effects, or against the declared type of a function value it gives (`Atom`'s `currentFn: () uses state => T`). It is an error, not a warning, and applies to user packages; the prelude and the standard library are written by hand to the same rules, and reviewed instead (their runtime plumbing, such as `bork/log` choosing `os.Stdout`, would trip it). It is an honesty check, not a proof: Go code can reach the world in other ways (a `for range` over a channel is not seen), and a local `sync.Mutex` counts as `state`. It catches an `unsafe go` helper that quietly does I/O while its signature says it is pure.
 
@@ -818,11 +818,13 @@ main.bork:17:26: field run of Job must be () uses io => Unit, found () => Unit (
 - **Effect aliases** (`effects Backend = io + net + state`) for long lists on handlers? Not needed while there are five effects.
 - **Test doubles:** with effects in place of capabilities, a test cannot hand a function a fake clock. Today the workaround is a function parameter (`now: () uses clock => Int`). Effect handlers, which let a test say how an effect is answered, would be the principled answer later.
 
-## Go interop (proposal)
+## Go interop
 
-> **Proposal, under review** (bork-e6abw5). Steps 2 and 3 of the plan below (basic bindings and opaque Go types) are implemented; the rest is not yet. If it is accepted, it replaces "importing Go packages as bork modules is not planned" under *Compilation target and Go*, and the matching line under *Explicitly not in v0.1*. It also scopes "no mutable state" (under *Core values*, *Language fundamentals*, and *Explicitly not in v0.1*) to bork values: an opaque Go value (below) is Go state that bork holds but cannot change or see into. It builds on the [effects proposal](#effects-in-signatures) (`uses`, and the `unsafe` opt-in in `bork.mod`) and on the [Go helper API](std-go.md).
-
-Today Go types never cross into bork. An `unsafe go` body sees bork values in their generated form (the table at the top of the prelude), and calling a Go function means writing that glue by hand, unchecked until the Go compiler runs over the generated code. This proposal makes the common cases declarations that the compiler checks against the real Go packages, with `go/types`:
+Checked Go interop is implemented (bork-e6abw5). Bork declares the Go functions
+and types it uses, and the compiler checks their signatures with `go/types`.
+Bindings and raw Go bodies share the package-level `unsafe` opt-in and declared
+effects. Opaque values hold shared Go state; ordinary bork values remain
+immutable, and conversions copy collections and records at the boundary.
 
 ```
 // An opaque Go type: bork can hold it and pass it on, nothing more.
@@ -843,16 +845,16 @@ fn Getenv(key: String) uses io: String unsafe go "os.Getenv"
 fn UserAgent(r: Request): String unsafe go "(*net/http.Request).UserAgent"
 ```
 
-### Decided in this proposal
+### Boundary rules
 
 - **Three declarations, no new keywords.** `type X = go "<Go type>"` names an opaque Go type. `type X = go "<Go type>" { fields }` is a record that mirrors a Go struct. `fn ... unsafe go "<Go function>"` binds a Go function or method; it is an `unsafe go` function whose body is a name instead of code.
-- **Bindings are `unsafe go`.** The ticket sketched `extern fn`. A binding runs Go code that bork does not check, exactly as an `unsafe go` body does, so it is the same boundary with the same word: greppable, allowed only in packages that `bork.mod` lets use `unsafe go`, and declaring its effects with `uses`, which bork trusts.
-- **A binding's effects are checked against a table of Go's standard library**, kept with the compiler, per function rather than per package: `os.Getenv` is `io`, `net.Dial` is `net`, `time.Now` is `clock`, and `net/url.Parse` and `(*net/http.Request).UserAgent` are pure. Binding a listed function without its effects is an error. The table is finer than the name check for `unsafe go` bodies (which flags all of `net/...`), since a binding names exactly one function. Functions not in the table (third-party packages, and methods called through an interface such as `(io.Reader).Read`, whose target is not known) are trusted, like `unsafe go` bodies.
+- **Bindings are `unsafe go`.** A binding runs Go code that bork does not check, exactly as an `unsafe go` body does, so it is the same boundary with the same word: greppable, allowed only in packages that `bork.mod` lets use `unsafe go`, and declaring its effects with `uses`, which bork trusts.
+- **Binding effects use the same heuristics as unsafe Go bodies.** Package and function names charge known effects: `os.Getenv` is `io`, `net.Dial` is `net`, `time.Now` is `clock`, while `net/url.Parse` is pure. A missing required effect is an error. Third-party code and mutation through opaque values still rely on the declared signature; a finer per-function effects table is deferred.
 - **Go types are named by declarations, not inline.** There is no `go.Type["net/http", "Request"]` in signatures. A declaration gives the type a bork name and a place for a doc comment, and signatures stay bork.
 - **Everything is checked against the real Go package**, at `bork check` time, not first by the Go compiler on generated code. Errors are reported at the bork declaration, and show the Go signature.
 - **Bindings are checked more than bodies are.** A binding's wrapper is generated, so everything it converts from Go is checked, facts included: a binding can only break its promise through its effects and through what the Go code does to opaque values.
-- **bork targets 64-bit platforms.** Go's `int` and `uint` are 64 bits wide there, so they are `Int` and `Uint64`. (This is true of every target bork builds for today; this proposal makes it a rule.)
-- **A minimum Go version.** The generated `go.mod` names the oldest Go release bork supports, and the build fails clearly with an older Go. Bindings are checked against that release's standard library, so a binding to a function added later is an error at `bork check`, not a `go build` failure in generated code.
+- **bork targets 64-bit platforms.** Go's `int` and `uint` are 64 bits wide there, so they are `Int` and `Uint64`. Bindings reject Go targets with narrower `int` or `uint`.
+- **Go version selection.** The generated module starts at Go 1.22 and raises that requirement to the highest `go` version in imported dependency manifests. Signature checks use the installed Go toolchain's standard library, rather than a snapshot of an older release. The compiler itself requires the Go version in its own `go.mod`.
 
 ### Syntax
 
@@ -879,7 +881,12 @@ The string after `go` is a Go type or function written with its full import path
 
 Only exported, non-generic package-level functions, methods, and named types can be bound. A field path such as `(*net/http.Request).Header.Get` is not a function and is rejected: write an `unsafe go` body. Bindings take no type parameters, since the Go function has none. Generic Go functions and types are an open question.
 
-A Go package outside Go's standard library must be a declared Go module dependency: of a standard package (bork-8zh4yy), or, later, of the user's module in `bork.mod`.
+A third-party Go package must be declared in `go-deps.mod` and `go-deps.sum`
+beside the user's `bork.mod`, or in an imported standard package's embedded
+manifests. The compiler merges requirements using Go's minimum version
+selection; user requirements can raise a standard package's pinned version.
+Unsupported module directives and conflicting checksums are errors. See
+[the dependency manifest format](std-go.md#user-go-dependencies).
 
 ### Opaque Go types
 
@@ -922,6 +929,7 @@ Bindings and mirror records convert values by their types, at the boundary. A pa
 | `Float32`, `Float` | `float32`, `float64` | copy; `Float32` to `float64` too | copy; exact types only (no float narrowing, no integer to float) |
 | `Bool` | `bool` | copy | copy |
 | `String` | `string` | shared (Go strings are immutable) | shared |
+| `Bytes` | `[]byte` | copied | copied; `nil` is empty; byte arrays also convert from Go |
 | `List[T]` | `[]T'`, `...T'` (variadic) | a new slice, never `nil` (`[]` stays an empty slice) | copied, each element converted; `nil` is `[]` |
 | `List[T]` | `[N]T'` (arrays) | not allowed | copied |
 | `Map[K, V]` | `map[K']V'` | a new map, never `nil` | copied into an unordered map (`m.unordered()`), since a Go map has no order; `nil` is `{:}` |
@@ -933,11 +941,11 @@ Bindings and mirror records convert values by their types, at the boundary. A pa
 
 - **Named Go types convert by their underlying type**, in every row: `time.Duration` as `int64`, `os.FileMode` as `uint32`, `url.Values` (a `map[string][]string`) as a `Map[String, List[String]]`, `net.IP` (a `[]byte`) as a `List[Byte]`. Unless the bork type is an opaque declaration of that named type, which passes it through.
 - **`uintptr`, `complex64`/`complex128`, channels, `unsafe.Pointer`, `any`, and Go functions do not convert.**
-- **Map keys** must be numbers, `String`, or `Bool` (or named Go types of them), so that the key conversion is one to one: two different Go keys never become the same bork key, and the reverse. Records, options, and opaque types cannot be keys at the boundary.
+- **Map keys** must be integers, `String`, or `Bool` (or named Go types of them), so that the key conversion is one to one: two different Go keys never become the same bork key, and the reverse. Records, options, and opaque types cannot be keys at the boundary.
 - **`Scope` converts to `context.Context`** (parameters only): the Go function gets the scope's context (`_borkScopeContext`), so it stops when the scope is cancelled. Most I/O in Go's libraries takes a `ctx`, so this is the usual way a binding gets one.
 
 - **Nothing bork gives Go can be changed under bork.** Lists, maps, structs, and pointers are copied into fresh Go values, so a Go function that writes to its argument writes to its own copy. Strings are shared because neither side can change them. Only opaque values are shared, and those are Go's, never bork's.
-- **Nothing Go gives bork can be changed under bork either.** Lists, maps, and records are copied out of Go values, so a Go library that keeps and later changes a slice it returned does not change a bork `List`. The cost is a copy per boundary crossing, linear in the size of the bork value it makes. Bork values are trees, so a Go value that reaches one part from several places is copied once per place; for a Go graph with much sharing, the tree can be far larger than the Go value (exponentially, in the worst case), so such data should stay opaque. `[]byte` is a `List[Byte]`, copied element by element; `Bytes` (bork-uwhbyt) gets a direct `[]byte` mapping once it exists.
+- **Nothing Go gives bork can be changed under bork either.** Lists, maps, and records are copied out of Go values, so a Go library that keeps and later changes a slice it returned does not change a bork `List`. The cost is a copy per boundary crossing, linear in the size of the bork value it makes. Bork values are trees, so a Go value that reaches one part from several places is copied once per place; for a Go graph with much sharing, the tree can be far larger than the Go value (exponentially, in the worst case), so such data should stay opaque. `[]byte` maps to a `List[Byte]`, copied element by element, or to immutable `Bytes` through a direct copy.
 - **Converting to Go never fails.** A parameter's bork type must convert losslessly: an `Int8` can be passed as a Go `int32`, an `Int` cannot be passed as one (declare the parameter `Int32`, and the caller converts with `toInt32`).
 - **Converting from Go can fail**, when a number does not fit (`int64` to an `Int32` result), a pointer or interface is `nil` where bork has no `Option`, a fact does not hold (a mirror record's `where` clauses, and the binding's own result facts, `: Int where positive`), or a Go value is cyclic (a mirror record that can contain itself, through `Option` or `List`, can meet a cyclic Go value, which a tree cannot hold; the conversion tracks the pointers on its current path to find it). Then the bound function returns the prelude record `GoValueError { path: String, message: String }` (`path` is where in the value it failed: `result.items[2].count`). Whether a conversion can fail is known from the types, so a binding whose result can fail must have `GoValueError` in its result type, and the error says so, with the corrected signature as the hint. A binding whose result cannot fail does not mention it. This is the same rule as `toInt8(x)` returning `Int8 | OutOfRange`: a check bork cannot prove is a value the caller handles.
 
@@ -961,15 +969,15 @@ A binding is checked parameter by parameter, and its result against the Go funct
   - otherwise (a plain `T` result, or `nil` deeper inside a value) is a `GoValueError`, and the result type must have it.
 - **The members after the leftmost are the binding's failures, in any order**: `T' | GoError | GoValueError`. A Go function with an `error` result must have `GoError` in the bork result (bork does not drop errors silently); one without must not.
 - **Other result shapes** (three results, or two that are not `T, error` or `T, bool`) cannot be bound: write an `unsafe go` body that builds a record. (A common Go shape is `T, *Response, error` in API clients; an open question below.)
-- **Function-typed parameters and results** (Go callbacks) cannot be bound yet. They need a bork function wrapped as a Go `func` with conversions on every call, and an answer to which effects such a callback may have. That is the next step after this proposal.
+- **Function-typed parameters and results** (Go callbacks) cannot be bound yet. They need a bork function wrapped as a Go `func` with conversions on every call, and an answer to which effects such a callback may have. Callbacks remain deferred.
 - **Default parameter values and `where` clauses on parameters** work on bindings as on any function: they are bork's, checked before the call. Facts promised on the result are checked by the wrapper, as above.
 - **Compile-time evaluation** treats a binding as it treats an `unsafe go` function.
 
 ### Struct tags, field docs, and defaults
 
-Go libraries that work by reflection (`encoding/json`, sql scanners, boa for `bork/cli`) need Go structs with exported fields, tags, and sometimes descriptions and defaults. Bork records cannot give them that today: their generated structs have unexported, lower-case fields, and their field names are what `unsafe go` code relies on (the prelude's table), so they stay as they are. Instead:
+Go libraries that work by reflection (`encoding/json`, sql scanners, boa for `bork/cli`) need Go structs with exported fields, tags, and sometimes descriptions and defaults. The ordinary bork representation has unexported fields, whose names are used by `unsafe go` code (the prelude's table). A separate Go struct supplies the reflection boundary:
 
-- **`derive (GoStruct)` gives a record a Go struct**, with an exported field per bork field (`httpPort` becomes `HttpPort`), mapped as in the table above (`Option[T]` becomes `*T`), and the conversions both ways, the one from Go checking the record's facts and collecting every error. For a mirror record, the struct is the mirrored Go type; for any other record, the compiler generates it. Fields whose types do not convert (unions, sealed types, and functions) make the derive an error, and so does a mirror record with a Go array field, which converts only from Go. Opaque fields are shared, as in the table. Resources remain unsupported because conversions have no ownership scope. Fields containing unresolved type parameters are rejected; phantom type parameters with concrete fields are allowed. Note that `encoding/json` on the generated struct uses `HttpPort` as the key unless a tag says otherwise, unlike the derived `Encode`.
+- **`derive (GoStruct)` gives a record a Go struct**, with an exported field per bork field (`httpPort` becomes `HttpPort`), mapped as in the table above (`Option[T]` becomes `*T`), and the conversions both ways, the one from Go checking the record's facts and collecting every error. For a mirror record, the struct is the mirrored Go type; for any other record, the compiler generates it. Fields whose types do not convert (unions, sealed types other than `Option`, and functions) make the derive an error, and so does a mirror record with a Go array field, which converts only from Go. Opaque fields are shared, as in the table. Resources remain unsupported because conversions have no ownership scope. Fields containing unresolved type parameters are rejected; phantom type parameters with concrete fields are allowed. Note that `encoding/json` on the generated struct uses `HttpPort` as the key unless a tag says otherwise, unlike the derived `Encode`.
 - **`GoStruct` is a prelude class with no bork methods**: it exists for `[T: GoStruct]` bounds in standard packages, whose `unsafe go` code gets its dictionary, as `bork/env` gets `Decode`'s. Like every derived instance, it is written with `derive` and brought into other packages with `use`. The dictionary, in the [helper API](std-go.md): `New()` (a pointer to a fresh Go struct, with the record's defaults filled in), `FromGo(p)` (`(T, []GoValueError)`), `ToGo(v)`, and the record's field schema (as `bork/env`'s `_borkDecodeFields` has it, plus each field's Go name, doc, default, and tags). `GoStruct` does not require `Decode`: a field schema has a decoder only when an instance is available in the declaring package.
 - **Fields of a generated struct can carry Go struct tags**, written as a `go { ... }` clause after the field's type and default, with bork string values and no Go quoting: `port: Int go { json: "port,omitempty", short: "p" }` becomes `` Port int64 `json:"port,omitempty" short:"p"` ``, in the written order. On a record without `derive (GoStruct)`, or on a mirror record, they are an error.
 - **Fields can have doc comments** (`//` lines directly above the field), given in the schema.
@@ -992,7 +1000,7 @@ type Options = {
 - **The compiler loads the Go packages a program binds**, with `golang.org/x/tools/go/packages` (types from export data, through Go's build cache), in a temporary module with the same `go.mod` and `go.sum` the build will use. So the check sees exactly the Go code the build compiles, and third-party packages resolve as they will in the build (bork-8zh4yy).
 - **The checker does not run Go itself.** It asks an interface for the Go type of a name (`check.GoTypes`), which the driver implements with `go/packages`; tests can give it a fake.
 - **Shipped code currently uses unsafe Go bodies, without literal bindings or Go type declarations.** A guard test enforces this so checking a program without its own bindings does not invoke Go for signature resolution. Checked signature snapshots are deferred until shipped packages use bindings. Building and compile-time predicate evaluation still need Go.
-- **Checking is part of type checking**, after declarations are collected and before bodies, since a binding's signature is its declaration. Errors come out with the rest, with stable diagnostic codes in a `bind.` category (`bind.no-such-func`, `bind.mismatch`, `bind.result-shape`, ...), apart from `go.error`, which is for Go code in `unsafe go` bodies.
+- **Checking is part of type checking**, after declarations are collected and before bodies, since a binding's signature is its declaration. Errors come out with the rest, at the bork declaration, with the Go signature and conversion mismatch described. Generated Go compiler errors retain their bork source positions.
 - **The generated code is a wrapper per binding**: the Go function the compiler writes for it converts the arguments, calls the bound function, and converts the results, exactly as a hand-written `unsafe go` body would. Nothing new reaches the runtime besides the conversion helpers.
 
 ### Diagnostics
@@ -1020,18 +1028,14 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 ```
 
 
-### Implementation plan
+### Codec privacy
 
-1. **This proposal**, as its own PR.
-2. **Bindings of functions over basic types (implemented):** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `Bytes`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library and declared third-party Go packages.
-3. **Opaque Go types (implemented)**: identity, boxing, nil checks, method bindings, assignability, `Scope` as `context.Context`, and resources of Go types.
-4. **Mirror records (implemented)**, conversions both ways with fact checks, and the `_borkToGo`/`_borkFromGo` helpers in [std-go.md](std-go.md).
-5. **Record field defaults and field doc comments (implemented)** (useful without Go: literals and `Decode`).
-6. **`derive (GoStruct)` (implemented)**, `go { ... }` tags, and the schema. This exposes checked conversions and reflection metadata to standard integrations.
-7. **Third-party Go packages (implemented)**, with user `go-deps.mod`/`go-deps.sum` manifests merged with imported std dependencies. A guard test keeps shipped code free of literal bindings until checked signature snapshots exist.
-8. **Docs:** fold this section into the decided parts, and update `grammar.md`, the prelude's table, and the README.
-
-Effects in signatures and bodies have landed (bork-ot9ki9). Bindings declare their effects with `uses`, like `unsafe go` bodies, are checked against the Go function they call by the heuristics of the [`unsafe go` check](#unsafe-go), and need the `bork.mod` gate. A fuller table of the standard library's effects, beyond those heuristics, is still to come.
+Derived codecs cannot structurally inspect another package's private variants.
+This applies transitively through record fields, containers, and concrete generic
+specializations. At a field boundary, a derive can use the field type's existing
+codec from its owning package. A direct alias derive still cannot inspect the
+private variants. This preserves public codecs such as `math.Decimal` while
+keeping private representations such as HTTP certificate keys inaccessible.
 
 ### Open questions
 
@@ -1043,7 +1047,7 @@ Effects in signatures and bodies have landed (bork-ot9ki9). Bindings declare the
 - **Go constants and variables** (`math.MaxInt32`, `os.Args`): bind them as zero-parameter functions?
 - **Full mirrors:** require a mirror converted to Go to list every exported field?
 - **Opaque values and effects:** should every binding that takes an opaque *pointer* type need `uses state`, rather than trusting the declaration? And should opaque values that are not safe for concurrent use be kept out of `spawn`?
-- **User packages with Go module dependencies**, declared in `bork.mod` and gated like `unsafe` (part of bork-8zh4yy, later).
+- **Dependency tooling:** a `bork deps` helper to add or update pinned user manifests (bork-gnyc4e).
 
 ## 4. Errors and results (in progress, to be tried out)
 
@@ -1172,14 +1176,14 @@ Closing the server scope cancels request scopes and stops accepting new connecti
 3. Contract and proof model: bringing proven's ideas into the language (in progress, above)
 4. Errors and results: union return types and `?` (in progress, above)
 5. Concurrency: goroutines, channels, structured concurrency, cancellation through scopes, and the (later) isolation model
-6. Go interop: `unsafe go` function bodies (above); checked bindings to Go types and functions (proposal above)
+6. Go interop: `unsafe go` function bodies (above); checked bindings, opaque types, mirror records, and reflection schemas (implemented above)
 7. Tooling: the `bork` CLI, formatter, tests, and modules (packages are decided, above)
 
 See also [roadmap.md](roadmap.md) for the implementation plan.
 
 ## Explicitly not in v0.1
 
-- Mutable state of any kind
+- Mutable ordinary bork values (opaque Go objects and explicit state capabilities are separate boundaries)
 - Importing Go packages as bork modules (calling Go goes through `unsafe go` bodies and bindings)
 - `recover`
 - Erlang-style routine isolation and supervision

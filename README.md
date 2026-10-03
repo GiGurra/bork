@@ -76,7 +76,7 @@ fn names(users: List[User]) uses io {
 ## Goals
 
 - **Pragmatic high correctness for backend systems.** That is the whole point.
-- **Immutable by default.** Values don't change. In v0.1 there is no mutable state at all; later versions may add explicit opt-in mutable types.
+- **Immutable by default.** Values don't change. Opaque Go values hold shared state behind an explicit boundary; facts and structural equality exclude them.
 - **No null, no exceptions.** Optional values must be checked before use, and failures are values. Panics exist, but can't be caught.
 - **Strict rules, trivially easy.** Declaring what must hold ("amount is positive", "user is non-nil", "list is non-empty") should be as cheap as writing an `if`. The compiler proves it at every call site or fails the build. This builds on ideas from [proven](https://github.com/GiGurra/proven).
 - **Methods for value operations.** `xs.filter(f).map(g)`, `text.trim()`, and `m.put(k, v)` need no imports. Use `|>` for free functions and lambdas when passing a method operation as a value.
