@@ -1,9 +1,7 @@
 import "example.com/private/api"
 type Local = api.Secret
-type LocalBox = api.Box[Int]
 fn main() {
   aliased = Local.hidden { value: 1 }
-  aliasedGeneric = LocalBox.hidden { value: 1 }
   first = api.Secret.hidden { value: 1 }
   generic: api.Box[Int] = api.Box.hidden { value: 2 }
   inferred = api.Box.hidden { value: "bad" }
