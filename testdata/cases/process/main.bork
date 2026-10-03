@@ -116,6 +116,10 @@ fn inheritedPipes(s: Scope) uses io + state + clock: Unit | IoError | Cancelled 
     _ => false
   })
   println(millis() - start2 < 2500)
+  println(match (process.Run(s, "/bin/sh", ["-c", "sleep 3 & exit 7"])) {
+    result: process.Result => result.code == 7
+    _ => false
+  })
 }
 fn parentEnv() uses io unsafe go {
   import "os"

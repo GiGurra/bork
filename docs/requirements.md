@@ -1051,6 +1051,7 @@ cancellation; cleanup runs when those scopes end. Pure work needs an explicit
 checkpoint to observe shutdown. This introduces no new language syntax.
 
 Process capture waits at most one second for inherited output pipes after the
-child exits or is cancelled. If a descendant keeps them open after a normal
-exit, the result is IoError rather than partial output. Cancellation still
-returns Cancelled. This bound keeps pipe capture from blocking cleanup forever.
+child exits or is cancelled. If a descendant keeps them open after a successful
+exit, the result is IoError rather than partial output. Nonzero exits retain
+their exit code as Result and output may be truncated at this bound.
+Cancellation still returns Cancelled. This bound keeps pipe capture from blocking cleanup forever.
