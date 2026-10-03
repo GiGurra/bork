@@ -196,6 +196,7 @@ type Record struct {
 	GoFields     []GoField
 	Name         string
 	Fields       []*Field
+	Constraints  []*Constraint
 	Decl         *syntax.TypeDecl
 	Prelude      bool     // declared in prelude
 	Pkg          *Package // the declaring package
@@ -221,6 +222,7 @@ func (r *Record) Instance(args []Type) *Record {
 	r.insts.byKey[key] = inst
 	r.insts.whenResolved(func() {
 		inst.Fields = substFields(r.Fields, bindParams(r.TypeParams, args))
+		inst.Constraints = substConstraints(r.Constraints, bindParams(r.TypeParams, args))
 	})
 	return inst
 }
@@ -489,11 +491,12 @@ func (r *Record) Field(name string) *Field { return findField(r.Fields, name) }
 // Like records, sealed types can be generic: the prelude's
 // `type Option[T] = sealed { Some { value: T }, None }` is one.
 type Sealed struct {
-	Name     string
-	Variants []*Variant
-	Decl     *syntax.TypeDecl
-	Prelude  bool     // declared in prelude
-	Pkg      *Package // the declaring package
+	Name        string
+	Variants    []*Variant
+	Constraints []*Constraint
+	Decl        *syntax.TypeDecl
+	Prelude     bool     // declared in prelude
+	Pkg         *Package // the declaring package
 
 	TypeParams []*TypeParam
 	Base       *Sealed
@@ -516,8 +519,9 @@ func (s *Sealed) Instance(args []Type) *Sealed {
 	s.insts.byKey[key] = inst
 	s.insts.whenResolved(func() {
 		bound := bindParams(s.TypeParams, args)
+		inst.Constraints = substConstraints(s.Constraints, bound)
 		for _, v := range s.Variants {
-			inst.Variants = append(inst.Variants, &Variant{Name: v.Name, Fields: substFields(v.Fields, bound), Parent: inst, Index: v.Index})
+			inst.Variants = append(inst.Variants, &Variant{Name: v.Name, Fields: substFields(v.Fields, bound), Constraints: substConstraints(v.Constraints, bound), Parent: inst, Index: v.Index})
 		}
 	})
 	return inst
@@ -535,10 +539,11 @@ func (s *Sealed) Variant(name string) *Variant {
 // Variant is one variant of a sealed type. It is not a type of its own:
 // constructing a variant produces a value of the sealed type.
 type Variant struct {
-	Name   string
-	Fields []*Field
-	Parent *Sealed
-	Index  int
+	Name        string
+	Fields      []*Field
+	Constraints []*Constraint
+	Parent      *Sealed
+	Index       int
 }
 
 func (v *Variant) Field(name string) *Field { return findField(v.Fields, name) }

@@ -1,0 +1,6 @@
+Bundle { n: 1 }
+Range { lo: 1, hi: 4, label: "range" }
+Range { lo: 2, hi: 3, label: "range" } BadRange {} Range { lo: 0, hi: 10, label: "custom" }
+Range { lo: 1, hi: 2, label: "changed" }
+Box { value: 7, n: 1 } State.Running { lo: 1, hi: 2 } State.Running { lo: 2, hi: 3 } Option.Some { value: Box { value: "context", n: 1 } }
+Envelope { range: Range { lo: 2, hi: 3, label: "range" }, name: "wrapped" }

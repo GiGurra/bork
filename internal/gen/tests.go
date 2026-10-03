@@ -256,6 +256,9 @@ func invariantPreds(t check.Type, seen map[check.Type]bool) []*check.Func {
 	}
 	seen[t] = true
 	var out []*check.Func
+	for _, con := range check.TypeConstraints(t) {
+		out = append(out, constraintPreds(con)...)
+	}
 	fields := func(fs []*check.Field) {
 		for _, f := range fs {
 			for _, con := range f.Constraints {
@@ -269,6 +272,9 @@ func invariantPreds(t check.Type, seen map[check.Type]bool) []*check.Func {
 		fields(t.Fields)
 	case *check.Sealed:
 		for _, v := range t.Variants {
+			for _, con := range v.Constraints {
+				out = append(out, constraintPreds(con)...)
+			}
 			fields(v.Fields)
 		}
 	case *check.Union:
@@ -277,6 +283,9 @@ func invariantPreds(t check.Type, seen map[check.Type]bool) []*check.Func {
 		}
 	case *check.List:
 		out = append(out, invariantPreds(t.Elem, seen)...)
+	case *check.Map:
+		out = append(out, invariantPreds(t.Key, seen)...)
+		out = append(out, invariantPreds(t.Value, seen)...)
 	}
 	return out
 }
@@ -295,6 +304,9 @@ func constraintPreds(con *check.Constraint) []*check.Func {
 // hasInvariants reports whether values of type t can hold records whose
 // fields have where clauses.
 func (g *gen) hasInvariants(t check.Type, seen map[check.Type]bool) bool {
+	if len(check.TypeConstraints(t)) > 0 {
+		return true
+	}
 	if seen[t] {
 		return false
 	}
@@ -308,6 +320,9 @@ func (g *gen) hasInvariants(t check.Type, seen map[check.Type]bool) bool {
 		}
 	case *check.Sealed:
 		for _, v := range t.Variants {
+			if len(v.Constraints) > 0 {
+				return true
+			}
 			for _, f := range v.Fields {
 				if len(f.Constraints) > 0 || g.hasInvariants(f.Type, seen) {
 					return true
@@ -322,6 +337,8 @@ func (g *gen) hasInvariants(t check.Type, seen map[check.Type]bool) bool {
 		}
 	case *check.List:
 		return g.hasInvariants(t.Elem, seen)
+	case *check.Map:
+		return g.hasInvariants(t.Key, seen) || g.hasInvariants(t.Value, seen)
 	}
 	return false
 }
@@ -350,17 +367,25 @@ func (g *gen) invariantChecks(fn *check.Func, x ast.Expr, t check.Type, seen map
 		}
 		return out
 	}
+	nominal := func(cons []*check.Constraint, x ast.Expr, typ check.Type) []ast.Stmt {
+		var out []ast.Stmt
+		for _, con := range cons {
+			out = append(out, g.invariantCheck(fn, con, x, typ, fmt.Sprintf("%s that is not %s", typ, con))...)
+		}
+		return out
+	}
 	switch t := t.(type) {
 	case *check.Record:
-		return fields(t.Name, x, t.Fields)
+		return append(fields(t.Name, x, t.Fields), nominal(t.Constraints, x, t)...)
 	case *check.Sealed:
-		var out []ast.Stmt
+		out := nominal(t.Constraints, x, t)
 		for _, v := range t.Variants {
-			if !g.hasInvariants(&check.Record{Fields: v.Fields}, map[check.Type]bool{}) {
+			if !g.hasInvariants(&check.Record{Fields: v.Fields, Constraints: v.Constraints}, map[check.Type]bool{}) {
 				continue
 			}
 			val, ok := g.newTmp(), g.newTmp()
 			body := fields(t.Name+"."+v.Name, val, v.Fields)
+			body = append(body, nominal(v.Constraints, val, t)...)
 			out = append(out, &ast.IfStmt{
 				Init: &ast.AssignStmt{Lhs: []ast.Expr{val, ok}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: x, Type: g.variantType(v)}}},
 				Cond: ok,
@@ -388,6 +413,19 @@ func (g *gen) invariantChecks(fn *check.Func, x ast.Expr, t check.Type, seen map
 			Key: ast.NewIdent("_"), Value: el, Tok: token.DEFINE, X: x,
 			Body: &ast.BlockStmt{List: g.invariantChecks(fn, el, t.Elem, seen)},
 		}}
+	case *check.Map:
+		key, value := g.newTmp(), g.newTmp()
+		body := g.invariantChecks(fn, key, t.Key, seen)
+		body = append(body, g.invariantChecks(fn, value, t.Value, seen)...)
+		body = append(body, &ast.ReturnStmt{Results: []ast.Expr{ast.NewIdent("true")}})
+		callback := &ast.FuncLit{Type: &ast.FuncType{
+			Params: &ast.FieldList{List: []*ast.Field{
+				{Names: []*ast.Ident{key}, Type: g.goType(t.Key)},
+				{Names: []*ast.Ident{value}, Type: g.goType(t.Value)},
+			}},
+			Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("bool")}}},
+		}, Body: &ast.BlockStmt{List: body}}
+		return []ast.Stmt{&ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: x, Sel: ast.NewIdent("each")}, Args: []ast.Expr{callback}}}}
 	}
 	return nil
 }

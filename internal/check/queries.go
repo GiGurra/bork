@@ -191,6 +191,7 @@ func DescribeFacts(info *Info, fn *Func, x Expr, site diag.Pos, where string, ev
 		return nil, nil, nil
 	}
 	f := &factChecker{info: info, diags: &diag.List{}, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
+	f.validators = validationContexts(info)
 	var at env
 	found := false
 	f.observe = func(pos diag.Pos, e env) {

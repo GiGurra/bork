@@ -1,0 +1,15 @@
+type Broken = { n: Int } where validBroken
+pred validBroken(r: Broken) { needsValid(r) }
+fn needsValid(r: Broken where validBroken): Bool { true }
+type Signature = { n: Int } where validSignature
+pred validSignature(r: Signature where validSignature) { r.n > 0 }
+type Builds = { n: Int } where validBuilds
+pred validBuilds(r: Builds) { buildHelper(r) }
+fn buildHelper(r: Builds): Bool { copy = Builds { n: r.n }; copy.n > 0 }
+type Callback = { n: Int } where validCallback
+pred validCallback(r: Callback) { invoke(r, c => c.n > 0) }
+fn invoke(r: Callback, test: (Callback) uses nothing => Bool): Bool { test(r) }
+type Mutual = { n: Int } where leftValid
+pred leftValid(m: Mutual) { rightValid(m) }
+pred rightValid(m: Mutual where leftValid) { leftValid(m) }
+fn main() {}

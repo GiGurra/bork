@@ -1,0 +1,10 @@
+ok    generated values satisfy whole invariants
+ok    decoding checks completed values and defaults
+ok    Go conversions check whole invariants
+ok    sealed-wide decoders validate fieldless variants
+ok    generic invariants validate and generate
+ok    schema loaders check completed invariants
+ok    generic phantom invariants validate Go conversion
+ok    invalid fields suppress whole-value checks
+8 passed, 0 failed
+exit code 0

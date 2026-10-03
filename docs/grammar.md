@@ -38,7 +38,7 @@ RuleDecl   = "rule" Ident "(" Params ")" "{" Premises "=>" Conclusions "}" .
 Premises   = Expr { "and" Expr } .  (* predicate calls on the variables, and conditions *)
 Conclusions = Call { "and" Call } .
 
-TypeDecl   = "type" Ident [ TypeParams ] "=" ( [ "private" ] Fields | Sealed | "resource" [ GoName ] | GoName [ Fields ] | Type ) [ Derive ] .
+TypeDecl   = "type" Ident [ TypeParams ] "=" ( ( [ "private" ] Fields | Sealed | GoName Fields ) [ Where ] | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
                                              (* type Pair[A, B] = { ... }; type File = resource: values made by unsafe go *)
 Derive     = "derive" "(" Ident { "," Ident } ")" .  (* derive (Decode, Encode, GoStruct): instances written by the compiler *)
 Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
@@ -46,7 +46,7 @@ Field      = Ident ":" Type [ "=" Expr ] [ GoTags ] . (* defaults are closed val
 GoTags     = "go" "{" [ GoTag { Sep GoTag } [ Sep ] ] "}" .
 GoTag      = Ident ":" String .
 Sealed     = "sealed" "{" [ Variant { Sep Variant } [ Sep ] ] "}" .
-Variant    = Ident [ Fields ] .
+Variant    = Ident [ Fields ] [ Where ] .
 Sep        = "," | newline .                 (* commas or one item per line *)
 
 FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ Uses ] [ ":" Type ] ( Block | GoBody ) .
@@ -61,7 +61,8 @@ GoImport   = "import" StringLit newline .     (* import "strings" *)
 Params     = Param { "," Param } [ "," ] .
 Param      = Ident ":" Type [ "in" Ident ] [ "=" Expr ] .   (* a default: a literal; only on the last parameters. conn: Conn in prev: it belongs to the scope of parameter prev *)
 Type       = Constrained { "|" Constrained } .  (* a union: Int | NotFound *)
-Constrained = TypeAtom [ "where" Clause { "and" Clause } ] .
+Constrained = TypeAtom [ Where ] .
+Where      = "where" Clause { "and" Clause } .
 Clause     = PredRef { "or" PredRef }          (* alone: p or q *)
            | "(" PredRef { "or" PredRef } ")" .  (* with and: (p or q) and r *)
 PredRef    = Ident [ "(" Expr { "," Expr } ")" ] .  (* positive, between(1, 65535), atLeast(lo) *)
@@ -143,6 +144,7 @@ EOL        = newline | ";" .
 - **Bindings** call a Go function directly: `fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"`. The string names the function with its import path (`"net/url.QueryEscape"`). The signature is checked against the Go function's (with go/types), and values convert at the boundary: numbers to any Go integer or float type that holds every value (`Uint8` to `int`), and from Go checked where they may not fit; `String`, `Bool`; `List[T]` from and to slices (and variadic parameters), and from arrays; `Map[K, V]` from and to Go maps with integer, string, or bool keys (a map from Go is unordered); `Bytes` and `[]byte`; and `Option[T]` from and to pointers. Go results: none (`Unit`), a value, an `error` (`Unit | GoError`), a value and an `error` (`T | GoError`), or a value and a `bool` (`Option[T]`). A Go error is the prelude's `GoError { message, goType }`; a value that does not fit its bork type (a number out of range, a nil pointer where bork has no `Option`) is a `GoValueError { path, message }`, which the result must have exactly when that can happen. Lists, maps, records, and value-converting pointers are copied both ways. Opaque Go pointer and interface values are shared. Standard and declared third-party Go packages can be bound, including methods on opaque types; generic functions and callbacks cannot yet be bound; see [Go interop](requirements.md#go-interop). A binding is `unsafe go` too: its package must be listed in `bork.mod`, and it must declare the effects of the Go function it calls, by the rules above (`fn Getenv(key: String) uses io: String unsafe go "os.Getenv"`).
 - **Records** (`type User = { name: String, age: Int }`) are built with their required fields named: `User { name: "Ada", age: 36 }`. Fields are read with `u.name`. A field can declare a closed default (`age: Int = 36`), which a literal or derived decoder uses when that field is missing. An explicit value, including JSON null, is decoded normally. Defaults follow parameter defaults' closed-value rules; empty collections work for generic fields. A record cannot contain itself directly. `derive (GoStruct)` exposes a separate Go struct with exported fields and checked conversions; generated fields can declare ordered tags such as `go { json: "port", short: "p" }`. Mirrors use their existing Go struct and cannot add tags. Fields must have a static Go mapping; phantom generic parameters are allowed.
 - **Private record construction:** `type Config = private { port: Int }` keeps fields readable and destructurable, while only the declaring package can build a literal or use `copy`. Nested updates cannot enter a foreign private record; replacing a whole private-valued field with an existing value is allowed. Foreign decoding and GoStruct derivation must use an instance provided by the owning package. Read-only Encode derivation can use public fields.
+- **Whole-value invariants:** `type Range = { lo: Int, hi: Int } where ordered` requires a pure predicate on the completed value. Every value carries that guarantee; construction, `copy`, decoding, Go conversion, and property generation enforce it. Sealed declarations can constrain every variant, and an individual variant can add a clause on the parent sealed value (`Running { lo: Int, hi: Int } where valid`). That clause becomes available when matching the variant. Clauses use ordinary `and`/`or` and constant arguments. Validators and their declared helpers cannot assume the target type's invariant. A validator must accept candidates without parameter `where` requirements; calls through function values and class methods are conservatively rejected in its validation call graph.
 - **Sibling field facts** use the same `where` syntax: `type Range = { lo: Int, hi: Int where atLeast(lo) }`. Predicate arguments can name any sibling in the record or the same sealed variant, regardless of field order. Construction checks the completed field values, including defaults. Selection and destructuring retain these relations. Derived decoding and Go conversions validate them after converting all fields.
 - **`copy`** makes a changed copy: `u.copy(age: 37, address.city: "Oslo")`. Paths reach into nested records; two updates may not overlap (`address` and `address.city`). Changing a constrained field or a sibling it refers to rechecks the relation on the resulting values, including nested updates.
 - **Sealed types** (`type Shape = sealed { Circle { radius: Int }, Empty }`) list all their variants. Variants are always qualified: `Shape.Circle { radius: 1 }`, `Shape.Empty`. For an exported type, upper-case variants are visible wherever the type is; lower-case variants can only be constructed or matched in their declaring package, including generic variants. Fields keep their existing visibility.

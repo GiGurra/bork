@@ -1,0 +1,5 @@
+main.bork:2:42: needsValid requires r to be validBroken, but that is not proven for r (prove this from the candidate's fields; its type invariant is unavailable during validation)
+main.bork:4:35: invariant predicate validSignature must accept its candidate without where requirements
+main.bork:8:42: a validator of Builds cannot construct that type before its invariant is established
+main.bork:11:71: an invariant validator cannot call an unknown function value; use a declared helper
+main.bork:13:40: rightValid requires m to be leftValid, but that is not proven for m (prove this from the candidate's fields; its type invariant is unavailable during validation)

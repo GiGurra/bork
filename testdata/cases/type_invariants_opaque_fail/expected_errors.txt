@@ -1,0 +1,2 @@
+main.bork:5:14: predicate mutable takes Mutable, which holds a Go value that can change, so its facts could go stale
+main.bork:6:41: facts cannot apply to Mutable, which holds a Go value that can change

@@ -1,0 +1,8 @@
+pred different(b: Rounded) { b.left != b.right }
+type Rounded = { left: Float | Int, right: Float | Int, label: String } where different
+fn rounded(label: String): Rounded { Rounded { left: 9007199254740992.0, right: 9007199254740993.0, label: label } }
+type Small = { n: Uint8 }
+pred same(b: Members) { b.left == b.right }
+type Members = { left: Uint8 | Int, right: Uint8 | Int, label: String } where same
+fn members(label: String): Members { Members { left: Small { n: 1 }.n, right: 1, label: label } }
+fn main() { println(rounded("x"), members("x")) }

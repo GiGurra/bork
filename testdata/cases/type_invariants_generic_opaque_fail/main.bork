@@ -1,0 +1,5 @@
+type Request = go "*net/http.Request"
+pred stable[T](box: Box[T]) { true }
+type Box[T] = { value: T } where stable
+fn inspect(box: Box[Request]) {}
+fn main() {}

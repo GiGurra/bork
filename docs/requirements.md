@@ -354,7 +354,7 @@ values are never passed to a property. The field-only
 schema decoder validates independent constraints; sibling relations require
 the full record decoder. Schema metadata still lists all constraints.
 
-### Construction control (bork-kum0ep design)
+### Construction control (bork-kum0ep)
 
 A declared type can guarantee valid states independently of where a caller
 obtained its value. Required fields, closed defaults, sibling-field facts
@@ -406,6 +406,12 @@ The implementation must check this validation call graph, including imported
 helpers, or reject a call whose assumptions cannot be checked. Self-dependent
 and mutually dependent preconditions are rejected with a cycle diagnostic;
 ordinary terminating predicate recursion does not itself establish a fact.
+The initial implementation conservatively rejects parameter `where`
+requirements on the invariant predicate itself, construction of the target
+type within its validation call graph, and calls through function values or
+class methods whose implementations cannot be checked. Declared helpers are
+checked without the nominal guarantees of every target they help validate;
+their explicit requirements still need independent proofs at the call site.
 Validation may use a field's already-checked independent constraints, but must
 not use the target invariant or a relation that depends on it to establish
 itself. Negative cases cover a trivially circular predicate/helper contract,
