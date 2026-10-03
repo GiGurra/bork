@@ -28,8 +28,8 @@ main.bork:96:25: listOf cannot take a constrained type argument for T: its resul
 main.bork:97:19: atom cannot take a constrained type argument for T: its result holds T inside Atom[T], where the facts would not be kept (only a result of type T itself keeps them)
 main.bork:98:26: map cannot take a constrained type argument for B: its parameter f could give it values that are not checked (only parameters of type B itself are)
 main.bork:100:3: match is not exhaustive: missing Int
-main.bork:105:5: PosInt is a constrained type (where positive), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
-main.bork:109:5: SquareOnly is a constrained type (where square), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
+main.bork:105:5: PosInt is a constrained type (where positive), and constrained types in a bare or destructuring pattern are not supported yet, so the fact would not be checked; use a bound type pattern (value: PosInt), then destructure inside its arm
+main.bork:109:5: SquareOnly is a constrained type (where square), and constrained types in a bare or destructuring pattern are not supported yet, so the fact would not be checked; use a bound type pattern (value: SquareOnly), then destructure inside its arm
 main.bork:112:11: PosPoint is a constrained type (where positivePoint), and constrained types on a constructor's type are not supported yet, so the fact would not be checked
 main.bork:113:11: SquareOnly is a constrained type (where square), and constrained types on a constructor's type are not supported yet, so the fact would not be checked
 main.bork:114:11: PosCircle is a constrained type (where positiveCircle), and constrained types on a constructor's type are not supported yet, so the fact would not be checked
