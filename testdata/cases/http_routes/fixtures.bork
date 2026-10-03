@@ -58,6 +58,7 @@ fn more(s: Scope) uses io + net + clock + random + state {
     }
     error: IoError => println("unexpected", error.message)
   }
+  println(match (http.Multipart(makeRequest(body, "multipart/form-data; boundary=boundary"), 0)) { error: IoError => true; _ => false })
   println(match (http.Multipart(makeRequest("bad", "multipart/form-data"))) { error: IoError => true; _ => false })
   println(match (http.Body[Path](makeRequest("{\"id\":0}", "application/json"))) { error: DecodeError => true; _ => false })
 }

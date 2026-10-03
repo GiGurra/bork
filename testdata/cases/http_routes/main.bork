@@ -38,6 +38,22 @@ fn main() {
   forcedDrain(0)
   scope s with cleanupTimeout(1000) {
     more(s)
+    match (http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, req.body), 0, 3)) {
+      server: http.Server => {
+        base = "http://" + http.Address(server)
+        call(base, "/", s, "POST", "abc")
+        match (http.Post(base, "text/plain", "abcd", s)) { response: http.Response => println(response.status); _ => println("unexpected") }
+      }
+      error: IoError => println("unexpected", error.message)
+    }
+    match (http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, "empty"), 0, 0)) {
+      server: http.Server => {
+        base = "http://" + http.Address(server)
+        call(base, "/", s)
+        match (http.Post(base, "text/plain", "x", s)) { response: http.Response => println(response.status); _ => println("unexpected") }
+      }
+      error: IoError => println("unexpected", error.message)
+    }
     match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /users/{id}", handler: tagged((req, rs) => endpoint(0, req, rs)) }, http.Route { pattern: "GET /search", handler: (req, rs) => endpoint(1, req, rs) }, http.Route { pattern: "POST /form", handler: (req, rs) => endpoint(2, req, rs) }])) {
       server: http.Server => {
         base = "http://" + http.Address(server)
