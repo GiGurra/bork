@@ -160,7 +160,7 @@ func ComptimeRecipe(node *Comptime, info *Info, diags *diag.List, eval Evaluator
 			let.Constraints = constraints
 		}
 	}()
-	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
+	f := &factChecker{preflightDefaults: true, info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
 	f.validators = validationContexts(info)
 	f.validatorRequirements()
 	f.comptimeRequirements(helpers)
@@ -203,7 +203,7 @@ func ComptimeResult(node *Comptime, info *Info, diags *diag.List, eval Evaluator
 // compile-time proof executes them. Their own declared parameter contracts are
 // available, independently of the calling recipe's runtime context.
 func ComptimeProof(functions []*Func, info *Info, diags *diag.List, eval Evaluator) {
-	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
+	f := &factChecker{preflightDefaults: true, info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
 	f.validators = validationContexts(info)
 	f.validatorRequirements()
 	f.comptimeRequirements(functions)
@@ -231,8 +231,13 @@ func ComptimeQuery(q Query, info *Info, diags *diag.List, eval Evaluator) {
 		args = append(args, &Const{expr: expr{pos: q.Pred.Decl.Pos, typ: params[len(args)]}, Value: value})
 	}
 	call := &Call{expr: expr{pos: q.Pred.Decl.Pos, typ: Bool}, Func: q.Pred, Args: args, Inst: &Instance{Func: q.Pred, Params: params, Result: Bool, TypeArgs: q.TypeArgs, Dicts: q.Dicts, ArgFacts: q.ArgFacts}}
-	f := &factChecker{info: info, diags: diags, fn: q.Pred, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
+	f := &factChecker{preflightDefaults: true, info: info, diags: diags, fn: q.Pred, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
 	f.validators = validationContexts(info)
+	f.proofArguments = true
+	for _, arg := range args {
+		f.walk(arg, env{})
+	}
+	f.proofArguments = false
 	f.callObligations(call, env{})
 	f.evaluate(eval)
 }

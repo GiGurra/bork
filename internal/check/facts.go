@@ -156,6 +156,9 @@ func importedDefault(field *Field) bool {
 }
 
 type factChecker struct {
+	// Preflight cannot rely on the later whole-program field-default proof.
+	preflightDefaults bool
+	proofArguments    bool
 	// Deferred initializers check every exit, including implicit ? failures.
 	expandedRecipes     map[Expr]bool
 	initializerResultFn *Func
@@ -585,7 +588,7 @@ func (f *factChecker) walk(x Expr, e env) {
 		f.walk(x.X, e)
 	case *RecordLit:
 		for _, fi := range x.Fields {
-			if !fi.IsDefault || !importedDefault(fi.Field) {
+			if !fi.IsDefault || !importedDefault(fi.Field) || f.preflightDefaults {
 				if fi.Thunk != nil {
 					f.fieldBoundary(fi.Value, fi.Field.Type, e, func(x Expr, e env) {})
 				} else {
@@ -765,7 +768,7 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 	for _, fi := range lit.Fields {
 		if fd := fi.Field; fd != nil {
 			for _, con := range fd.Constraints {
-				if !fi.IsDefault || con.HasSiblingArgs() {
+				if !fi.IsDefault || con.HasSiblingArgs() || f.preflightDefaults {
 					saveUse, saveDecl := f.defaultUse, f.defaultDecl
 					if fi.IsDefault {
 						f.defaultUse, f.defaultDecl = lit.Pos(), fd.Decl.Pos

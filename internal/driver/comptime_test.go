@@ -93,6 +93,36 @@ fn main(){n:Int where positive=comptime{identity(3)};println(n)}`, "3\n"},
 
 func TestComptimeProofBeforeExecution(t *testing.T) {
 	for _, tc := range []struct{ name, source, want string }{
+		{"eager default final proof argument", `pred positive(n:Int){n>0}
+type R={value:Int where positive=0}
+fn must(n:Int where positive):Bool{panic("must not execute")}
+pred p(r:R){must(r.value)}
+fn main(){_=comptime{1};r:R where p=R{};println(r)}`, "positive(0) is false"},
+		{"lazy default final proof argument", `pred positive(n:Int){n>0}
+type R={lazy value:Int where positive=0}
+fn must(n:Int where positive):Bool{panic("must not execute")}
+pred p(r:R){must(r.value)}
+fn main(){_=comptime{1};r:R where p=R{};println(r)}`, "positive(0) is false"},
+		{"eager default precondition", `pred positive(n:Int){n>0}
+type R={value:Int where positive=0}
+fn must(n:Int where positive):Int{panic("must not execute")}
+fn main(){println(comptime{c=R{};must(c.value)})}`, "positive(0) is false"},
+		{"eager default predicate helper", `pred positive(n:Int){n>0}
+type R={value:Int where positive=0}
+fn must(n:Int where positive):Bool{panic("must not execute")}
+pred check(n:Int){c=R{};must(c.value)}
+fn require(n:Int where check):Int{n}
+fn main(){println(comptime{require(1)})}`, "positive(0) is false"},
+		{"lazy default precondition", `pred positive(n:Int){n>0}
+type R={lazy value:Int where positive=0}
+fn must(n:Int where positive):Int{panic("must not execute")}
+fn main(){println(comptime{c=R{};must(c.value)})}`, "positive(0) is false"},
+		{"lazy default predicate helper", `pred positive(n:Int){n>0}
+type R={lazy value:Int where positive=0}
+fn must(n:Int where positive):Bool{panic("must not execute")}
+pred check(n:Int){c=R{};must(c.value)}
+fn require(n:Int where check):Int{n}
+fn main(){println(comptime{require(1)})}`, "positive(0) is false"},
 		{"predicate helper precondition", `pred good(n:Int){n>0}
 fn must(n:Int where good):Bool{panic("must not execute")}
 pred p(n:Int){must(-1)}
@@ -259,5 +289,35 @@ fn main(){println(comptime{readForeign(%q)})}`, foreign)
 	}
 	if bytes.Equal(first, second) || session.Stats().Hits != 0 || session.Stats().Bypasses != 2 {
 		t.Fatalf("foreign file edit reused comptime result: %+v", session.Stats())
+	}
+}
+
+func TestComptimeImportedDefaultPreflight(t *testing.T) {
+	for _, lazy := range []string{"", "lazy "} {
+		t.Run(lazy+"field", func(t *testing.T) {
+			dir := t.TempDir()
+			files := map[string]string{
+				ModFile: "module example.com/review\n",
+				"api/api.bork": `pred positive(n:Int){n>0}
+type Inner={value:Int where positive}
+type Outer={` + lazy + `inner:Inner=Inner{value:0}}
+fn Must(n:Int where positive):Int{panic("must not execute")}`,
+				"main.bork": `import "example.com/review/api"
+fn main(){println(comptime{o=api.Outer{};api.Must(o.inner.value)})}`,
+			}
+			for name, source := range files {
+				path := filepath.Join(dir, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, _, err := Check(dir)
+			if err == nil || !strings.Contains(err.Error(), "positive(0) is false") || strings.Contains(err.Error(), "must not execute") {
+				t.Fatalf("default was not checked before execution: %v", err)
+			}
+		})
 	}
 }
