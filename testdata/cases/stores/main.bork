@@ -30,6 +30,21 @@ fn handOver(prev: OwnedScope, ch: Channel[Conn], app: Scope in ch, n: Int) uses 
   }
 }
 
+// Generic helpers can store what is declared in the channel.
+fn sendAll[T](ch: Channel[T], xs: List[T] in ch) uses state {
+  match (xs) {
+    [x, ...rest] => {
+      _ = send(ch, x)
+      sendAll(ch, rest)
+    }
+    _ => {}
+  }
+}
+
+fn apply[A, B, C](f: (A, B) uses state => C, a: A, b: B) uses state: C {
+  f(a, b)
+}
+
 fn main() uses io + state {
   scope app {
     ch = channel[Conn](app, 3)
@@ -49,6 +64,16 @@ fn main() uses io + state {
       Option.Some { value } => println(s"atom holds ${nameOf(value)}")
       Option.None => println("empty")
     }
+    // A channel of channels of the same scope.
+    chs = channel[Channel[Conn]](app, 1)
+    _ = send(chs, ch)
+    pending = channel[Conn](app, 2)
+    sendAll(pending, [connect("x", app), connect("y", app)])
+    closeChannel(pending)
+    println(received(pending).map(nameOf))
+    // update can be a function value where nothing can escape.
+    counter = atom(1)
+    println(apply(update, counter, n => n + 1))
     println("app ends")
   }
 }

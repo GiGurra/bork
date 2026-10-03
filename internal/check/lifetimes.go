@@ -59,9 +59,18 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 
 // A lifetime is a set of scopes: a value is usable while all of them
 // are open. Each scope is a *ScopeBlock, a *Var of a parameter (the
-// scope of a function's or lambda's caller), or a *child: the scope an
-// owner variable owns (see owners.go). The empty lifetime is forever.
+// scope of a function's or lambda's caller), a *child: the scope an
+// owner variable owns (see owners.go), or forever. The empty lifetime is
+// forever too, but a value that keeps others (an atom started with a
+// value of no scope) says so with forever, which a union with shorter
+// scopes keeps: what is stored in it must still live forever.
 type lifetime []any
+
+// foreverScope is the scope of the whole program, which outlives every
+// other.
+type foreverScope struct{}
+
+var forever = &foreverScope{}
 
 func (a lifetime) union(b lifetime) lifetime {
 	out := a
@@ -136,18 +145,27 @@ func (l *lifeChecker) function(fn *Func) {
 		if i < len(fn.ParamIn) && fn.ParamIn[i] >= 0 {
 			target := l.scopeOfVar(fn.ParamVars[fn.ParamIn[i]])
 			l.env[p] = target
+			if p.Type == OwnedScope {
+				continue
+			}
 			l.inTarget[p] = target
-			// A channel or an atom declared in a scope is only known to
-			// outlive it: what is stored in it must outlive the parameter
-			// itself.
-			if holdsStore(p.Type) {
+			// A value that keeps others (a channel, an atom, a scope, a
+			// function) declared in a scope is only known to outlive it:
+			// what is kept in it must outlive the parameter itself.
+			if keepsValuesHere(p.Type) {
 				l.env[p] = target.union(lifetime{p})
 			}
 		}
 	}
 	for _, p := range fn.ParamVars {
 		if l.carriesLife(p.Type) {
-			l.info.VarLifetimes[p] = l.lifeText(l.env[p])
+			// A parameter declared in another belongs to that one's scope
+			// (its own identity only bounds what may be kept in it).
+			life := l.env[p]
+			if _, ok := l.inTarget[p]; ok {
+				life = l.inTarget[p]
+			}
+			l.info.VarLifetimes[p] = l.lifeText(life)
 		}
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
@@ -267,31 +285,12 @@ func valuePos(x Expr) diag.Pos {
 	return x.Pos()
 }
 
-// shorter returns a scope of lifetime a that may end before lifetime b
-// does, or nil if a value of lifetime a is usable wherever one of
-// lifetime b is (each scope of a outlives some scope of b).
-func (l *lifeChecker) shorter(a, b lifetime) any {
-	for _, x := range a {
-		ok := false
-		for _, y := range b {
-			if l.scopeOutlives(x, y) {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return x
-		}
-	}
-	return nil
-}
-
 // storeShorter returns a scope of lifetime a that may end before a
 // container of lifetime b does, or nil if a value of lifetime a can be
-// kept in it. Unlike shorter, each scope of a must outlive every scope of
-// b: a container whose lifetime was widened by mixing it with shorter
-// values (an if, a record, a generic call) is the same container, and
-// lives as long as before.
+// kept in it (or used wherever it can be). Each scope of a must outlive
+// every scope of b: a container whose lifetime was widened by mixing it
+// with shorter values (an if, a record, a generic call) is the same
+// container, and lives as long as before.
 func (l *lifeChecker) storeShorter(a, b lifetime) any {
 	for _, x := range a {
 		if !l.outlivesAll(x, b) {
@@ -312,7 +311,8 @@ func (l *lifeChecker) funcRef(x *FuncRef) {
 		}
 		keeps := i < len(fn.ParamIn) && fn.ParamIn[i] >= 0
 		if fn.Prelude && i == 1 && (fn.Decl.Name == "send" || fn.Decl.Name == "update" || fn.Decl.Name == "swap") {
-			keeps = true
+			// What they keep is a value of the element type.
+			keeps = len(x.Inst.TypeArgs) == 1 && l.carriesLife(x.Inst.TypeArgs[0])
 		}
 		if keeps {
 			l.errorf(x.Pos(), "%s cannot be used as a function value here: it keeps its argument %s, which a call through a function value does not check; call it in a lambda instead", x.Name, fn.Decl.Params[i].Name)
@@ -330,13 +330,18 @@ func (l *lifeChecker) scopeText(x any) string {
 		return "parameter " + x.Name
 	case *child:
 		return "owned scope " + x.owner.Name
+	case *foreverScope:
+		return "the whole program"
 	}
 	return "?"
 }
 
 func (l *lifeChecker) scopeOutlives(x, y any) bool {
-	if x == y {
+	if x == y || x == forever {
 		return true
+	}
+	if y == forever {
+		return false
 	}
 	if v, ok := x.(*Var); ok {
 		for _, t := range l.inTarget[v] {
@@ -797,6 +802,11 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 		}
 		life = kept
 	}
+	// An atom started with a value of no scope keeps only values of no
+	// scope.
+	if fn != nil && fn.Prelude && fn.Decl.Name == "atom" && len(life) == 0 && l.carriesLife(fn.Result) {
+		return lifetime{forever}
+	}
 	// attach(r, s) gives r as a value of s: it stays open until s closes.
 	if fn != nil && fn.Prelude && fn.Decl.Name == "attach" && len(args) == 2 {
 		return args[1]
@@ -814,11 +824,11 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	// update's or swap's function), and gives it as a value of its own
 	// lifetime: it must live as long.
 	if fn != nil && fn.Prelude && len(args) == 2 && (fn.Decl.Name == "send" || fn.Decl.Name == "update" || fn.Decl.Name == "swap") {
+		what := "channel"
+		if fn.Decl.Name != "send" {
+			what = "atom"
+		}
 		if short := l.storeShorter(args[1], args[0]); short != nil {
-			what := "channel"
-			if fn.Decl.Name != "send" {
-				what = "atom"
-			}
 			hint := "store only values that outlive the " + what + ", or attach a resource to its scope first"
 			if v, ok := short.(*Var); ok && v.Kind == VarParam {
 				if c, ok := xargs[0].(*VarRef); ok && c.Var.Kind == VarParam {
@@ -829,6 +839,17 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 				what += " " + d
 			}
 			l.errorf(xargs[1].Pos(), "%s may not live as long as the %s (it depends on %s), which keeps it; %s", describe(xargs[1]), what, l.scopeText(short), hint)
+		} else if keepsValues(storedType(xargs[0].Type())) && len(args[1]) > 0 {
+			// What comes out is a value of the container's lifetime: one
+			// that keeps values (a channel, an atom, a scope, a function)
+			// would then take values of the container's scopes, while it
+			// lives longer. So it must live exactly as long.
+			for _, y := range args[0] {
+				if !l.outlivesAll(y, args[1]) {
+					l.errorf(xargs[1].Pos(), "%s may live longer than the %s, which keeps it: what comes out would be treated as ending with the %s, and could be given its values; keep only ones of the same lifetime here", describe(xargs[1]), what, what)
+					break
+				}
+			}
 		}
 	}
 	// Go code given a scope may keep its other arguments until the scope
@@ -845,7 +866,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 			if j == i {
 				continue
 			}
-			if short := l.shorter(args[j], args[i]); short != nil {
+			if short := l.storeShorter(args[j], args[i]); short != nil {
 				callee := "the function"
 				if fn != nil {
 					callee = fn.Decl.Name

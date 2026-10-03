@@ -6,7 +6,13 @@ channel gives:
 open kept
 open newer
 atom holds newer
+open x
+open y
+["x", "y"]
+2
 app ends
+close y
+close x
 close newer
 close kept
 close gen1

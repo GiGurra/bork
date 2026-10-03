@@ -154,4 +154,70 @@ fn functionValues(app: Scope) uses state {
   }
 }
 
+// A channel or an atom of what keeps values (channels, atoms, scopes,
+// functions) keeps only ones of its own lifetime: what comes out is
+// treated as ending with it.
+fn nested() uses state {
+  scope outer {
+    ch = channel[Conn](outer, 1)
+    scope app {
+      chs = channel[Channel[Conn]](app, 1)
+      _ = send(chs, ch)
+      getters = channel[() => Channel[Conn]](app, 1)
+      _ = send(getters, () => ch)
+    }
+  }
+}
+
+// Declaring it in the channel only says it outlives the channel, which
+// is not enough, in the helper or at its call.
+fn sendIn(chs: Channel[Channel[Conn]], ch: Channel[Conn] in chs) uses state {
+  _ = send(chs, ch)
+}
+
+fn callsSendIn() uses state {
+  scope outer {
+    ch = channel[Conn](outer, 1)
+    scope app {
+      sendIn(channel[Channel[Conn]](app, 1), ch)
+    }
+  }
+}
+
+// An atom started with a value of no scope keeps only such values, also
+// when it is mixed with shorter ones.
+fn first[A, B](x: A, y: B): A {
+  x
+}
+
+fn emptyAtom() uses state {
+  a: Atom[Option[Conn]] = atom(Option.None)
+  scope app {
+    c = connect(app)
+    _ = update(first(a, c), old => Option.Some { value: c })
+  }
+}
+
+// A scope declared in a value only outlives it: Go code given the scope
+// may keep values until the scope closes.
+fn later(c: Conn, s: Scope in c) uses io {
+  onClose(s, () => use(c))
+}
+
+// So does a scope mixed with a shorter one.
+fn widened() uses io {
+  scope app {
+    scope inner {
+      c = connect(inner)
+      s = if (true) { app } else { inner }
+      onClose(s, () => use(c))
+    }
+  }
+}
+
+// A function declared in a scope may give a channel that outlives it.
+fn stash(s: Scope, getCh: () => Channel[Conn] in s) uses state {
+  _ = send(getCh(), connect(s))
+}
+
 fn main() {}

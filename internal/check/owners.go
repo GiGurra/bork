@@ -88,47 +88,115 @@ func holdsScope(t Type) bool {
 	return t == Invalid || (&lifeChecker{carries: map[Type]bool{}}).carriesLife(t)
 }
 
-// holdsStore reports whether a value of type t holds a Channel or an
-// Atom, which keep what is stored in them.
-func holdsStore(t Type) bool {
-	return holdsStoreSeen(t, map[Type]bool{})
+// keepsValues reports whether a value of type t can keep other values
+// for later, or give a way to: a scope (its finalizers and tasks), a
+// function (which may be or capture one, a channel, or an atom: records
+// of functions), a Go value, or a type parameter (which may be any of
+// them), or anything that holds one. Resources only belong to scopes.
+func keepsValues(t Type) bool {
+	return keepsValuesSeen(t, map[Type]bool{}, true)
 }
 
-func holdsStoreSeen(t Type, seen map[Type]bool) bool {
+// keepsValuesHere is keepsValues for values used in code generic in
+// their type parameters, which cannot keep anything in a value of a
+// type parameter: they know nothing about it.
+func keepsValuesHere(t Type) bool {
+	return keepsValuesSeen(t, map[Type]bool{}, false)
+}
+
+func keepsValuesSeen(t Type, seen map[Type]bool, typeParams bool) bool {
 	if seen[t] {
 		return false
 	}
 	seen[t] = true
 	switch t := t.(type) {
+	case *TypeParam:
+		return typeParams
+	case *Opaque, *FuncType:
+		return true
+	case *Basic:
+		return t == Scope || t == OwnedScope
 	case *Record:
-		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && (b.Name == "Channel" || b.Name == "Atom") {
-			return true
-		}
 		for _, f := range t.Fields {
-			if holdsStoreSeen(f.Type, seen) {
+			if keepsValuesSeen(f.Type, seen, typeParams) {
 				return true
 			}
 		}
 	case *Sealed:
 		for _, v := range t.Variants {
 			for _, f := range v.Fields {
-				if holdsStoreSeen(f.Type, seen) {
+				if keepsValuesSeen(f.Type, seen, typeParams) {
 					return true
 				}
 			}
 		}
 	case *List:
-		return holdsStoreSeen(t.Elem, seen)
+		return keepsValuesSeen(t.Elem, seen, typeParams)
 	case *Map:
-		return holdsStoreSeen(t.Key, seen) || holdsStoreSeen(t.Value, seen)
+		return keepsValuesSeen(t.Key, seen, typeParams) || keepsValuesSeen(t.Value, seen, typeParams)
 	case *Union:
 		for _, m := range t.Members {
-			if holdsStoreSeen(m, seen) {
+			if keepsValuesSeen(m, seen, typeParams) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// keepsKeepers reports whether a value of type t may keep values that
+// keep others: a channel or an atom of them, or what keepsValues cannot
+// see into (a function, a Go value, a type parameter), or anything that
+// holds one.
+func keepsKeepers(t Type) bool {
+	return keepsKeepersSeen(t, map[Type]bool{})
+}
+
+func keepsKeepersSeen(t Type, seen map[Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *Opaque, *FuncType, *TypeParam:
+		return true
+	case *Record:
+		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && (b.Name == "Channel" || b.Name == "Atom") {
+			return keepsValues(storedType(t))
+		}
+		for _, f := range t.Fields {
+			if keepsKeepersSeen(f.Type, seen) {
+				return true
+			}
+		}
+	case *Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if keepsKeepersSeen(f.Type, seen) {
+					return true
+				}
+			}
+		}
+	case *List:
+		return keepsKeepersSeen(t.Elem, seen)
+	case *Map:
+		return keepsKeepersSeen(t.Key, seen) || keepsKeepersSeen(t.Value, seen)
+	case *Union:
+		for _, m := range t.Members {
+			if keepsKeepersSeen(m, seen) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// storedType is the type of what a Channel[T] or an Atom[T] keeps.
+func storedType(t Type) Type {
+	if r, ok := t.(*Record); ok && len(r.Args) == 1 {
+		return r.Args[0]
+	}
+	return Invalid
 }
 
 // containsOwned reports whether values of type t hold an OwnedScope.
@@ -371,6 +439,18 @@ func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved m
 			if short := l.storeShorter(args[j], target); short != nil {
 				l.errorf(xargs[j].Pos(), "%s may not live as long as %s (it depends on %s), but %s declares parameter %s in %s", describe(xargs[j]), describe(xargs[t]), l.scopeText(short), fn.Decl.Name, fn.Decl.Params[j].Name, fn.Decl.Params[t].Name)
 				args[j] = target
+				continue
+			}
+			// The callee may keep a value that keeps others in what it is
+			// declared in, which gives it back with its own lifetime (see
+			// call): it must live exactly as long.
+			if keepsValues(xargs[j].Type()) && keepsKeepers(xargs[t].Type()) && len(args[j]) > 0 {
+				for _, y := range target {
+					if !l.outlivesAll(y, args[j]) {
+						l.errorf(xargs[j].Pos(), "%s may live longer than %s, which %s may keep it in: what comes out would be treated as ending with %s, and could be given its values; give one of the same lifetime", describe(xargs[j]), describe(xargs[t]), fn.Decl.Name, describe(xargs[t]))
+						break
+					}
+				}
 			}
 		}
 	}
