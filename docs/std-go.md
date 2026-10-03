@@ -146,6 +146,7 @@ in collections, and opaque context arguments. The compiler names the responsible
 ownership-only scope that is not passed to Go has no such restriction. An
 `unsafe go` wrapper using `_borkNewResourceHandle` remains the way to make a
 resource whose cancellation follows its latest attachment.
+
 `bork/rand` uses Go's `math/rand/v2` default source for functions declaring
 `uses random`. `Seed(first, second = 0)` creates an opaque immutable PCG
 generator. `IntFrom`, `FloatFrom`, `ShuffleFrom`, and `PickFrom` return a
