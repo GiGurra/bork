@@ -921,6 +921,174 @@ monomorphic adapters for generic providers. `examples/assemble`
 wires config, a database and HTTP server with scope-owned cleanup. Parallel construction, provider bundles,
 assignability matching and cross-call caching are outside this first increment.
 
+### Reusable provider bundles (design: bork-et4bbn)
+
+A provider bundle names an ordered group of providers so application entry points,
+tests and related assembly targets can share the same wiring. It is a compile-time
+declaration, rather than a runtime service registry or an object with cached
+products. Assembly still takes the caller's explicit scope and validates each
+complete graph at the call site.
+
+```bork
+providers ServiceProviders = {
+  config: newConfig,
+  database: openDb,
+  server: newService,
+}
+
+fn start(app: Scope) uses io + net: Service | DbError | IoError {
+  assemble[Service](app, ServiceProviders)
+}
+
+test "configuration fixture" {
+  fixture = Config { database: ":memory:", address: "127.0.0.1:0" }
+  scope app {
+    service = assemble[Service](app, ServiceProviders(config: () => fixture))
+    // Check service through its ordinary result union.
+  }
+}
+```
+
+The declaration form makes the static provider list explicit and retains ordinary
+function declaration contracts. Named entries give replacements a stable name
+without overloading exact product matching: an `assembleAll[Worker]` bundle may
+legitimately have several entries producing Worker. A constructor-like use with
+named arguments fits Bork's named-call syntax and reads as a local specialization
+of the bundle. It never adds a runtime call or invokes a provider.
+
+#### Declaration and name resolution
+
+`providers Name = { entry: function, ... }` is a package-level declaration. The
+word `providers` is contextual at the start of a declaration; it remains usable
+as a function or local binding name elsewhere. Bundle names follow ordinary
+package visibility: uppercase names are exported and lowercase names are private.
+They share the package declaration namespace and cannot shadow another declaration.
+Entry names must be unique; their order is their source declaration order. Empty
+bundles are rejected because they cannot supply a provider.
+
+Each declaration entry is a direct reference to a monomorphic declared function,
+including an imported exported function. Its signature must satisfy the existing
+assembly provider restrictions. Generic functions need a named monomorphic
+adapter. Methods need an ordinary wrapper function. Lambdas, local values,
+function-producing calls and nested bundles are not declaration entries in this
+increment; declare an adapter or supply an override at the assembly call.
+The function body remains checked through the ordinary function checker.
+
+A bundle may expose a private provider of its own package. Exporting the bundle
+exports that wiring capability, just as an exported function can call its private
+helpers. Importers cannot name the private provider independently. Imported
+bundles retain resolved provider identity, facts, `in` contracts and effects;
+expansion must not re-resolve the declaration's unqualified names in the caller's
+package. Record construction visibility still belongs to the assembly call site:
+a public bundle does not authorize foreign `assembleRecord` construction of a
+private record.
+
+Bundles have no Bork value type. They cannot be bound to a variable, passed to an
+ordinary function, returned, stored in a record/list/union, or used as a generic
+argument. A bundle reference or specialization is accepted only in a provider
+argument of `assemble`, `assembleAll` or `assembleRecord`. `Name()` is the same
+bundle with no replacements. Bundle references and calls take no type arguments.
+
+#### Explicit replacement and composition
+
+`Name(entry: replacement, ...)` replaces only the named entries for that
+occurrence. Positional arguments, unknown names and repeated replacement names
+are errors. Every replacement is an ordinary provider expression, including a
+declared function reference, a typed function value, a lambda or a
+function-producing expression. The replacement's exact success product must be
+identical to the original entry's product. Its dependencies, failure union and
+effects can differ; graph, fact, lifetime and effect checking then use the
+replacement's actual contract. No signature widening or hidden adapter is added.
+An aliased product is identical in the same way as existing assembly slots.
+
+A direct declared replacement retains its declaration promises. A saved function
+value or expression has only its function-type contract, as in ordinary assembly.
+A replacement must satisfy all the existing provider restrictions, including
+monomorphic signatures, no union parameters and no OwnedScope products/parameters.
+Providers are never selected or replaced by list order.
+A replacement can make an existing dependency entry unused: replacing
+`openDb(Config)` with `fakeDb()` does not silently remove the Config provider.
+Use a fake adapter taking Config when that dependency should remain part of the
+wiring, or compose smaller bundles at the call site. The graph is always checked
+after replacement.
+
+Bundles and individual providers can be mixed:
+
+```bork
+assemble[Service](app, InfrastructureProviders(database: fakeDb), newService)
+assembleAll[Worker](app, WorkerProviders, extraWorker)
+```
+
+Flatten provider arguments from left to right; each bundle contributes its entries
+in declaration order. A replacement occupies its original entry's position,
+regardless of the order of named arguments. This order determines collection
+roots and the existing deterministic dependency traversal. Products duplicated
+across bundles or individual arguments follow ordinary duplicate-provider rules,
+including the `assembleAll[T]` exception for multiple target-root products;
+using the same bundle twice does not deduplicate it. All flattened entries remain
+subject to unused-provider checks. A bundle is not a discovery pool from which
+assembly silently selects a subset.
+
+This first increment composes bundles at assembly calls. Bundle declarations do
+not include other bundles, so there are no include cycles, nested replacement
+paths or implicit merge semantics. Add a second bundle or a standalone provider
+at the call site when a target needs additional wiring.
+
+#### Evaluation, scopes and test mocks
+
+A declaration does not evaluate or invoke its providers. Every assembly call
+borrows its explicit Scope, evaluates ordinary replacement provider expressions
+once in source argument order, and then invokes the resolved providers in the
+existing graph order. Named replacement expressions evaluate in their written
+order, as in ordinary named calls; this is separate from the bundle entry order
+used for graph traversal and collection roots. Even unused or invalid graphs are checked before code can
+execute. Plain declared provider references require no runtime initialization.
+Captured local values in overrides have their ordinary lifetimes. There is no
+bundle lifetime, owner, hidden child scope or cross-call cache.
+
+Each call constructs fresh products. Shared dependencies within that call run
+once, and failures short circuit construction using the existing success/error
+union rules. Closing the caller's scope releases acquired resources normally.
+Borrowed child scopes and `in` parameter contracts work through ordinary calls.
+
+Native mocks apply to bundled effectful providers through their original
+function declaration dispatch, including when a bundle is exported from another
+package or used in a spawned task. Pure providers are replaced explicitly.
+An override is not a mock: it can change the dependency graph, failures and
+effects. The original bundle and other specializations remain unchanged.
+
+#### Diagnostics, describe and implementation coverage
+
+Bundle declaration errors point at the declaration entry. Misuse and replacement
+errors point at the use or named replacement, with codes under
+`assemble.bundle`. Missing, duplicate, cycle, unused and failure errors retain
+their existing graph codes and full trees. Tree entries identify the provider's
+bundle and entry, such as `ServiceProviders.database`, alongside the resolved
+function name. A missing dependency of a replacement identifies the replacement
+expression and its entry.
+
+`bork describe` at an assembly call reports the flattened graph and actual
+replacement contracts. Each provider includes optional bundle/entry names and
+bundle-entry declaration position; the provider source position points to the
+replacement expression when replaced, otherwise its declaration reference.
+Describe at a bundle name or declaration shows its ordered entries, function
+references, product/dependency types, effects and failures without inventing a
+root graph or construction order. Bundle specializations show which entries
+were replaced. Existing describe JSON consumers can ignore the additive fields.
+The formatter preserves entry order and formats declaration fields and named
+replacements using the existing record/call conventions.
+
+Implementation delivery includes syntax, declaration/import resolution,
+replacement checking, compiler expansion into ordinary calls, formatter,
+diagnostics, text/JSON describe, grammar and README, and an updated
+`examples/assemble` bundle. Goldens cover repeated calls without caching,
+collection order and duplicate target roots across bundles/standalone providers,
+reversed named-argument evaluation order, unused dependencies after replacement,
+shared dependencies, failure propagation, effect/fact/lifetime
+contracts, imported private providers, local fixture replacements, saved function
+values, native mocks, and invalid declaration/use/replacement forms. Bundle
+expansion must not bypass private record construction or OwnedScope restrictions.
+
 ## Resources and scopes
 
 Outside resources (files, sockets, database connections, transactions, locks) are the one place where "facts only grow" is under pressure: the handle value never changes, but closing it changes the world it refers to. bork handles this with scopes, in the style of ZIO, so the open state can never end while a resource is still reachable.
