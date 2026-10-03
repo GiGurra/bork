@@ -1,0 +1,6 @@
+import "bork/embed"
+fn load(path: String): Bytes { embed.ReadBytes(path) }
+fn main() {
+  reader = embed.ReadString
+  println(reader("asset.txt"))
+}

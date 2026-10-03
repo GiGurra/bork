@@ -1,0 +1,9 @@
+main.bork:3:26: cannot embed "../escape": path must be relative to the source package, without parent segments, backslashes, colons or NULs
+main.bork:4:26: cannot embed "/absolute": path must be relative to the source package, without parent segments, backslashes, colons or NULs
+main.bork:5:26: cannot embed "a\\b": path must be relative to the source package, without parent segments, backslashes, colons or NULs
+main.bork:6:26: cannot embed "a:b": path must be relative to the source package, without parent segments, backslashes, colons or NULs
+main.bork:7:26: cannot embed "bad\x00name": path must be relative to the source package, without parent segments, backslashes, colons or NULs
+main.bork:8:26: cannot embed ".": path must be relative to the source package, without parent segments, backslashes, colons or NULs
+main.bork:9:27: cannot embed "invalid.bin": file is not valid UTF-8; use embed.ReadBytes for binary data
+main.bork:10:26: cannot embed "invalid.bin": expected a directory
+main.bork:11:26: cannot embed "assets": expected a regular file

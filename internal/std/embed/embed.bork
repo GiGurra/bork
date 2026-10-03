@@ -1,0 +1,15 @@
+// Package embed captures source-package assets at compile time.
+// The compiler implements these direct calls; paths must be constant Strings.
+fn ReadBytes(path: String): Bytes unsafe go { panic("embed.ReadBytes requires compiler lowering") }
+fn ReadString(path: String): String unsafe go { panic("embed.ReadString requires compiler lowering") }
+fn Directory(path: String): FS unsafe go { panic("embed.Directory requires compiler lowering") }
+
+type FS = { files: Map[String, Bytes] }
+
+fn (snapshot: FS) Read(name: String): Bytes | IoError {
+  match (snapshot.files.get(name)) {
+    Option.Some { value } => value
+    Option.None {} => IoError { path: name, message: "embedded file not found" }
+  }
+}
+fn (snapshot: FS) Paths(): List[String] { snapshot.files.keys() }

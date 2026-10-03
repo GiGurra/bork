@@ -1,0 +1,12 @@
+import "bork/embed"
+fn main() {
+  println(embed.ReadBytes("../escape"))
+  println(embed.ReadBytes("/absolute"))
+  println(embed.ReadBytes("a\\b"))
+  println(embed.ReadBytes("a:b"))
+  println(embed.ReadBytes("bad\u0000name"))
+  println(embed.Directory("."))
+  println(embed.ReadString("invalid.bin"))
+  println(embed.Directory("invalid.bin"))
+  println(embed.ReadBytes("assets"))
+}

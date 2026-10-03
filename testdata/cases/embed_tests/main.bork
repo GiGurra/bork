@@ -1,0 +1,5 @@
+import "bork/embed"
+test "embedded asset" {
+  assert(embed.ReadString("asset.txt") == "test")
+  assert(embed.ReadBytes("asset.txt") == utf8Bytes("test"))
+}

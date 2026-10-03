@@ -147,6 +147,8 @@ type Call struct {
 	Func *Func
 	Inst *Instance
 	Args []Expr
+	// Embedded is set for a compile-time bork/embed call.
+	Embedded *Embedded
 	// ReceiverCall distinguishes x.method(a) from Type.method(x, a).
 	ReceiverCall bool
 	// TypeArgNames holds, per type parameter, an explicit type argument

@@ -1,0 +1,2 @@
+main.bork:2:47: embed.ReadBytes requires a compile-time constant String path
+main.bork:4:12: embed.ReadString must be called directly with a constant path; it cannot be used as a function value

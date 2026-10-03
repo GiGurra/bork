@@ -1324,3 +1324,26 @@ verified, and malformed headers or truncated member data becomes IoError.
 TAR permits omitted trailing zero blocks, following Go's archive reader. Pure APIs return no
 partial data on error; file operations and callbacks may already have produced
 partial output. Stream output never exceeds its configured byte limit.
+
+### Compile-time embedded assets
+
+`bork/embed` embeds regular files as immutable Bytes or validated UTF-8 Strings,
+and directories as immutable `FS` snapshots. ReadBytes/ReadString/Directory are
+pure compiler intrinsics with a compile-time constant String path, resolved
+relative to the source package of the call (including imported packages).
+Only direct calls are allowed; function references and dynamic paths fail at
+checking. There is no new syntax or filesystem effect. Directory snapshots
+include dotfiles recursively, expose lexical `Paths()` and pure `Read(name)`,
+and return IoError for a missing snapshot name. Empty directories are supported;
+only files appear in Paths. Globs and directory metadata are not included.
+
+Missing or unreadable assets, wrong file/directory types, invalid UTF-8 text,
+symlinks and special files produce compile diagnostics at the call. Paths must
+stay within the source package: absolute paths, parent segments, backslashes,
+colons and NULs are rejected. The driver captures each request once during
+checking before evaluating facts. Evaluators, normal builds and test builds
+stage captured bytes in the generated module and use `go:embed`, preserving
+assets even if their source files disappear after capture. Large assets do not
+inflate generated Go source. `bork emit` lists staged file names and their source
+paths in a comment beside the embed directives; consumers must stage the listed
+assets themselves. The emitted source by itself is not a complete build artifact.

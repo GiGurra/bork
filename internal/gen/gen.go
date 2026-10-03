@@ -235,6 +235,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	for i := len(info.Classes) - 1; i >= 0; i-- {
 		decls = append([]ast.Decl{g.classDecl(info.Classes[i])}, decls...)
 	}
+	embedded := g.embedDecls()
 	runtime, runtimeFset, err := g.runtimeDecls()
 	if err != nil {
 		return nil, err
@@ -268,6 +269,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	if err := printDecls(token.NewFileSet(), decls); err != nil {
 		return nil, err
 	}
+	buf.WriteString(embedded)
 	if len(runtime) > 0 {
 		buf.WriteString("\n// bork runtime\n")
 		if err := printDecls(runtimeFset, runtime); err != nil {
@@ -837,6 +839,9 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		return stmts, g.builtinCall(e, xs)
 	case *check.Call:
+		if e.Embedded != nil {
+			return nil, g.embedCall(e)
+		}
 		stmts, xs := g.values(e.Args)
 		if xs == nil {
 			return stmts, nil

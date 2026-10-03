@@ -1,0 +1,12 @@
+import "bork/embed"
+
+fn main() {
+  println(embed.ReadString("assets/greeting.txt"))
+  println(embed.ReadBytes("assets/query.sql"))
+  assets = embed.Directory("assets")
+  println(assets.Paths())
+  match (assets.Read("query.sql")) {
+    data: Bytes => println(utf8String(data))
+    error: IoError => println(error)
+  }
+}

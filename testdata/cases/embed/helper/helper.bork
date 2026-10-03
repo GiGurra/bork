@@ -1,0 +1,3 @@
+import "bork/embed"
+fn Message(): String { embed.ReadString("message.txt") }
+fn ReadString(path: String): String { path }

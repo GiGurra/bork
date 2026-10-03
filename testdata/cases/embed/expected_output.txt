@@ -1,0 +1,12 @@
+true
+from imported package
+ordinary local function
+hello, embedded
+
+Bytes(00ff41)
+[".hidden", "a.txt", "a/z.txt", "hello.txt", "nested/binary.bin"]
+Bytes(68656c6c6f2c20656d6265646465640a)
+Bytes(00ff41)
+IoError { path: "missing", message: "embedded file not found" }
+hello, embedded
+
