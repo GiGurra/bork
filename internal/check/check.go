@@ -379,6 +379,7 @@ func Program(files []*syntax.File, root string, diags *diag.List) *Info {
 	// The later passes read the typed tree, which is built once the
 	// program checks.
 	if c.diags.Len() == 0 {
+		c.zonkInfo()
 		c.lower(files)
 	}
 	return c.info
@@ -494,6 +495,10 @@ type checker struct {
 	// sharedDefaults are the parameter defaults that calls share (see
 	// defaults.go): checked once, where they were declared.
 	sharedDefaults map[syntax.Expr]bool
+	// session is the inference of the calls being checked, and solved
+	// holds the solutions of all unknowns (see infer.go).
+	session *session
+	solved  map[*TypeParam]Type
 }
 
 type local struct {
@@ -736,6 +741,9 @@ func (c *checker) popScope() {
 }
 
 func (c *checker) record(e syntax.Expr, t Type) Type {
+	if c.session != nil {
+		t = c.zonk(t)
+	}
 	c.info.types[e] = t
 	return t
 }
@@ -849,7 +857,7 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		if declared != nil {
 			// A declared type holds even when the value has errors, so
 			// that they do not spread to its uses.
-			if t != Invalid && declared != Invalid && !assignable(t, declared) {
+			if t, declared := c.settle(t, declared); t != Invalid && declared != Invalid && !assignable(t, declared) {
 				c.errorf(s.Value.Position(), "%s must be %s, found %s", s.Name, declared, t)
 			}
 			t = declared
@@ -885,6 +893,11 @@ func (c *checker) expr(e syntax.Expr) Type { return c.exprWant(e, nil) }
 // and values like `Option.None` whose type comes from the context. It
 // does not report mismatches; the caller does.
 func (c *checker) exprWant(e syntax.Expr, want Type) Type {
+	if c.open(want) && !c.needsContext(e) {
+		// A type not fully known yet (see infer.go) guides only what
+		// takes its type from the context; the caller unifies the rest.
+		want = nil
+	}
 	if v := constValue(e); v != nil {
 		return c.constant(e, v, want)
 	}
@@ -918,7 +931,7 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 	case *syntax.Call:
 		return c.record(e, c.call(e, want))
 	case *syntax.Lambda:
-		return c.record(e, c.lambda(e, want, nil))
+		return c.record(e, c.lambda(e, want))
 	case *syntax.ListLit:
 		return c.record(e, c.listLit(e, want))
 	case *syntax.MapLit:
@@ -1024,6 +1037,18 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 	if x == Invalid || y == Invalid {
 		return Invalid
 	}
+	if c.session != nil && (c.open(x) || c.open(y)) {
+		// An operand whose type is not fully known yet (in a lambda
+		// given to a call being inferred) has the other's type, or Bool.
+		switch e.Op {
+		case syntax.AndAnd, syntax.OrOr:
+			c.solve(x, Bool)
+			c.solve(y, Bool)
+		default:
+			c.solve(x, y)
+		}
+		x, y = c.zonk(x), c.zonk(y)
+	}
 	op := opSymbol(e.Op)
 	sameNumbers := IsNumeric(x) && identical(x, y)
 	if e.Op == syntax.Slash || e.Op == syntax.Pct {
@@ -1076,6 +1101,16 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 		if !isValue(x) {
 			c.errorf(e.Pos, "cannot compare values of type %s", x)
 			return Invalid
+		}
+		if c.session != nil && c.open(x) {
+			// Whether it has == is told once the session decides it.
+			pos, t := e.Pos, x
+			c.session.finish = append(c.session.finish, func() {
+				if t := c.zonk(t); !c.open(t) && !comparable(t) {
+					c.errorf(pos, "cannot compare values of type %s with %s (functions, scopes, and resources have no ==)", t, op)
+				}
+			})
+			return Bool
 		}
 		if tp, ok := x.(*TypeParam); ok && !comparable(x) {
 			c.errorf(e.Pos, "cannot compare values of type parameter %s with %s; require it: [%s: Eq]", tp.Name, op, tp.Name)
@@ -1241,7 +1276,23 @@ func (c *checker) branchNeedsContext(x syntax.Expr) bool {
 // otherwise all branches must have the same type.
 func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 	var vals []Type
+	if c.session != nil {
+		// Branches whose types are not fully known yet decide each
+		// other's (see infer.go).
+		var first Type
+		for _, t := range ts {
+			switch {
+			case t == Never || t == Invalid:
+			case first == nil:
+				first = t
+			default:
+				c.solve(first, t)
+			}
+		}
+		want = c.zonk(want)
+	}
 	for _, t := range ts {
+		t = c.zonk(t)
 		if t == Invalid {
 			return Invalid
 		}

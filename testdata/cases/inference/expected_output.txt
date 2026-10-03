@@ -1,0 +1,13 @@
+["b"]
+["a"]
+{"a": [1, 1], "b": [1]}
+Option.Some { value: "aba" }
+Option.Some { value: "b" }
+3
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+Tree.Node { v: 3, l: Tree.Node { v: 2, l: Tree.Node { v: 1, l: Tree.Leaf } } }
+[1, 2, 3]
+["a", "b"]
+["a"]

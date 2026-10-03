@@ -1,0 +1,24 @@
+fn main() {
+  words = ["a", "b"]
+  // Nothing decides what these hold.
+  println(words.fold([], (acc, w) => acc))
+  println(words.fold(Option.None, (b, w) => b))
+  // Once the body decides, the rest must agree.
+  println(words.fold([], (acc, w) => acc.append(1)).concat(["x"]))
+  println(words.fold([], (acc, w) => if (w == "a") { acc.append(1) } else { acc.append(w) }))
+  println(words.fold({:}, (m, w) => m.put(w, 1)).getOr(1, 0))
+  println(words.fold([], (acc, w) => acc.first()))
+  // A call in another one's arguments that nothing decides.
+  println(lst(mk([], [1])))
+  // Methods are found by a type known at that point.
+  println(words.fold([], (acc, w) => if (w == "a") {
+    d = match (acc.last()) {
+      Option.Some { value } => value.toUpper()
+      Option.None => ""
+    }
+    acc
+    } else { [w] }))
+}
+
+fn lst[T](xs: List[T]): Int { 0 }
+fn mk[T, U](xs: List[U], ys: List[U]): List[T] { [] }

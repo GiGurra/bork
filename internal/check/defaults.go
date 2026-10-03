@@ -31,10 +31,11 @@ func (c *checker) ensureDefaults(fn *Func) {
 	c.pkg, c.fn, c.inPrelude = fn.Pkg, nil, fn.Prelude
 	c.scopes = []map[string]*local{{}}
 	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
+	c.session = nil // the defaults' calls are inferred on their own
 	defer func() {
-		shared := c.sharedDefaults
+		shared, solved := c.sharedDefaults, c.solved
 		*c = saved
-		c.sharedDefaults = shared
+		c.sharedDefaults, c.solved = shared, solved
 	}()
 	for i, p := range params {
 		if p.Default == nil {

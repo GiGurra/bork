@@ -70,14 +70,14 @@ func (c *checker) useTypeParams(fn *Func) {
 	}
 }
 
-// inference solves the type parameters of one use of a generic function.
+// inference matches types against type parameters in one pass: those
+// of a generic type in a literal of it, of a predicate for its subject,
+// or of a class instance. (Calls are inferred with unknowns; see
+// infer.go.)
 type inference struct {
 	fn     *Func // nil when solving a generic type's parameters
 	params []*TypeParam
 	bound  map[*TypeParam]Type
-	// foreign, if set, tells type parameters that must not be bound to:
-	// unknowns of another inference.
-	foreign func(*TypeParam) bool
 }
 
 func newInference(fn *Func) *inference {
@@ -114,9 +114,6 @@ func (in *inference) unify(p, a Type) {
 	}
 	switch p := p.(type) {
 	case *TypeParam:
-		if ta, ok := a.(*TypeParam); ok && in.foreign != nil && in.foreign(ta) {
-			return
-		}
 		if in.owns(p) && in.bound[p] == nil {
 			in.bound[p] = a
 		} else if bf, ok := in.bound[p].(*FuncType); ok && in.owns(p) {
@@ -278,48 +275,6 @@ func (in *inference) open(t Type) bool {
 	return false
 }
 
-// fits reports whether a value of type a could be given for a parameter
-// of type p, whatever the open type parameters in p turn out to be.
-func (in *inference) fits(p, a Type) bool {
-	if !in.open(p) {
-		return assignable(a, p)
-	}
-	switch p := p.(type) {
-	case *TypeParam, *Union:
-		return true
-	case *List:
-		a, ok := a.(*List)
-		return ok && in.fits(p.Elem, a.Elem)
-	case *Map:
-		a, ok := a.(*Map)
-		return ok && in.fits(p.Key, a.Key) && in.fits(p.Value, a.Value)
-	case *FuncType:
-		a, ok := a.(*FuncType)
-		if !ok || len(a.Params) != len(p.Params) {
-			return false
-		}
-		for i := range p.Params {
-			if !in.fits(p.Params[i], a.Params[i]) {
-				return false
-			}
-		}
-		return in.fits(p.Result, a.Result)
-	case *Record, *Sealed:
-		base := genericBase(p)
-		if base == nil || base != genericBase(a) {
-			return false
-		}
-		pa, aa := TypeArgs(p), TypeArgs(a)
-		for i := range pa {
-			if !in.fits(pa[i], aa[i]) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
 // unsolved lists the type parameters left unbound.
 func (in *inference) unsolved() []string {
 	var out []string
@@ -360,11 +315,36 @@ func (fn *Func) InstanceFor(subject Type) *Instance {
 // callFunc checks a call of a declared function, named name, with the
 // given arguments and type arguments: for a method call, the receiver
 // comes first, already checked as being of type recv (nil otherwise).
-// Arguments are checked left to right, except that those that need a
-// type from the context (lambdas, `[]`, `Option.None`) come last, once
-// the other arguments have decided what they can.
+// See infer.go for how the type arguments are inferred.
 func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.Expr, recv Type, typeArgs []*syntax.TypeExpr, want Type) Type {
+	outer := c.session == nil
+	if outer {
+		c.session = &session{}
+	}
+	cs := &callState{parent: c.session.cur}
+	c.session.cur = cs
+	t := c.inferCall(e, name, fn, args, recv, typeArgs, want, cs)
+	c.session.cur = cs.parent
+	if !outer {
+		return t
+	}
+	c.closeSession()
+	if cs.failed || c.open(t) {
+		return Invalid
+	}
+	return c.zonk(t)
+}
+
+// inferCall checks a call's arguments (see callFunc), and adds what
+// completes the call once the session closes. It gives the call's
+// type, which may have unknowns.
+func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax.Expr, recv Type, typeArgs []*syntax.TypeExpr, want Type, cs *callState) Type {
 	errorsBefore := c.diags.Len()
+	fail := func() Type {
+		cs.failed = true
+		cs.parent.blame()
+		return Invalid
+	}
 	c.info.callFuncs[e] = fn
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
@@ -389,15 +369,24 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 			c.errorf(at, "%s takes %d argument(s), but %d were given", what, len(fn.Params)-skip, len(args)-skip)
 		}
 	}
-	var in *inference
-	if len(fn.TypeParams) > 0 {
-		in = newInference(fn)
+	// The call's own unknowns, one for each type parameter, and fn's
+	// signature in terms of them.
+	unknowns := make([]*TypeParam, len(fn.TypeParams))
+	fresh := map[*TypeParam]Type{}
+	for i, tp := range fn.TypeParams {
+		unknowns[i] = newUnknown(tp)
+		fresh[tp] = unknowns[i]
 	}
+	params := make([]Type, len(fn.Params))
+	for i, p := range fn.Params {
+		params[i] = subst(p, fresh)
+	}
+	result := subst(fn.Result, fresh)
 	var argFacts [][]*Constraint
 	if len(typeArgs) > 0 {
 		if len(typeArgs) != len(fn.TypeParams) {
 			c.errorf(at, "%s takes %d type argument(s), but %d were given", name, len(fn.TypeParams), len(typeArgs))
-			return Invalid
+			return fail()
 		}
 		for i, ta := range typeArgs {
 			if ta == nil {
@@ -405,9 +394,9 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 			}
 			t := c.resolveType(ta)
 			if t == Invalid {
-				return Invalid
+				return fail()
 			}
-			in.bound[fn.TypeParams[i]] = t
+			c.bindUnknown(unknowns[i], t)
 			var cons []*Constraint
 			for _, con := range c.constraintsOf(ta, t, c.paramScope()) {
 				if con.Path == "" {
@@ -427,100 +416,44 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 		switch {
 		case i == 0 && recv != nil:
 			types[i] = recv
-			if in != nil {
-				in.unify(fn.Params[i], recv)
-			}
+			c.solve(params[i], recv)
 			return
 		case c.sharedDefaults[a]:
 			types[i] = c.info.types[a]
 			return
 		}
-		if i >= len(fn.Params) {
+		if i >= len(params) {
 			types[i] = c.expr(a)
 			return
 		}
-		pw := fn.Params[i]
-		if in != nil {
-			pw = in.subst(pw)
-		}
+		pw := c.zonk(params[i])
 		if l, ok := a.(*syntax.Lambda); ok {
-			types[i] = c.record(l, c.lambda(l, pw, in))
+			types[i] = c.record(l, c.lambda(l, pw))
 		} else {
-			if in.open(pw) && !c.genericFuncRef(a) {
-				pw = nil
-			}
 			types[i] = c.exprWant(a, pw)
 		}
-		if in != nil {
-			in.unify(fn.Params[i], types[i])
-		}
+		c.solve(params[i], types[i])
+	}
+	later := func(a syntax.Expr) bool {
+		_, isLambda := a.(*syntax.Lambda)
+		return isLambda || c.genericFuncRef(a)
 	}
 	for i, a := range args {
-		if !c.needsContext(a) {
+		if !later(a) {
 			check(i, a)
 		}
 	}
-	if in != nil && want != nil {
+	if want != nil {
 		// The context decides what the arguments leave open
-		// (`xs: List[Int] = empty()`), also for the lambdas' results.
-		in.unify(fn.Result, want)
-	}
-	// A lambda's body can decide what `[]` or `{:}` leaves open:
-	// fold(xs, [], (acc, x) => append(acc, x)).
-	if in != nil && c.hasEmptyLiteralArg(args) {
-		for i, a := range args {
-			if l, ok := a.(*syntax.Lambda); ok && i < len(fn.Params) && lambdaParamsOpen(l, in.subst(fn.Params[i]), in) {
-				c.inferFromBody(l, fn.Params[i], in)
-			}
-		}
+		// (`xs: List[Int] = empty()`), also for the lambdas.
+		c.solve(result, want)
 	}
 	for i, a := range args {
-		if c.needsContext(a) {
+		if later(a) {
 			check(i, a)
 		}
 	}
-	inst := &Instance{Func: fn, Params: fn.Params, Result: fn.Result}
-	if in != nil {
-		if missing := in.unsolved(); len(missing) > 0 {
-			// A wrong argument (or number of them) is the better
-			// explanation.
-			reported := c.diags.Len() > errorsBefore
-			for i, t := range types {
-				switch {
-				case t == Invalid:
-					reported = true
-				case i < len(fn.Params) && !in.fits(in.subst(fn.Params[i]), t):
-					c.errorf(args[i].Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, in.subst(fn.Params[i]), t)
-					reported = true
-				}
-			}
-			if !reported {
-				c.errorf(e.Pos, "cannot tell what %s is in this call to %s; give the arguments (or the result) a known type", strings.Join(missing, " and "), name)
-			}
-			return Invalid
-		}
-		inst = in.instance()
-	}
-	for i, ta := range inst.TypeArgs {
-		if mentionsOpen(ta) && c.diags.Len() == errorsBefore {
-			c.diags.AddCode(e.Pos, "effect.open-type-argument", "%s of %s cannot be %s: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result", fn.TypeParams[i].Name, name, innerText(ta, c.pkg))
-			return Invalid
-		}
-		if ta == Unit && c.diags.Len() == errorsBefore {
-			hint := ""
-			if fn.Prelude && fn.Decl.Name == "spawn" {
-				hint = " (to run work that gives no value, use launch)"
-			}
-			c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, name, ta, hint)
-			return Invalid
-		}
-	}
-	if fn.Prelude && fn.Decl.Name == "attach" && c.diags.Len() == errorsBefore {
-		if _, ok := inst.TypeArgs[0].(*Resource); !ok {
-			c.errorf(e.Pos, "attach takes a resource (a value of a resource type, such as File), found %s", inst.TypeArgs[0])
-			return Invalid
-		}
-	}
+	errs := c.diags.Len() - errorsBefore
 	// What is known of the values a type parameter stands for selects
 	// constrained instances: an explicit type argument's constraints, or
 	// those declared for the argument a class method is called on.
@@ -560,23 +493,107 @@ func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.
 			}
 		}
 	}
-	if !c.resolveDictsWith(inst, e.Pos, have) {
-		return Invalid
-	}
-	if argFacts != nil && !c.promisesArgFacts(inst, argFacts, name, e.Pos) {
-		return Invalid
-	}
-	inst.ArgFacts = argFacts
-	if len(typeArgs) > 0 {
-		c.info.callTypeArgs[e] = typeArgs
-	}
-	c.info.instances[e] = inst
-	for i, a := range args {
-		if i < len(inst.Params) && types[i] != Invalid && !fitsParam(types[i], inst.Params[i]) {
-			c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, inst.Params[i], types[i])
+	s := c.session
+	finish := func() {
+		reported := errs > 0 || cs.blamed
+		for i := range types {
+			types[i] = c.zonk(types[i])
+		}
+		// A type argument still unknown is reported here, unless what
+		// it came from is (an empty literal, or a call in the arguments).
+		var missing []string
+		for i, u := range unknowns {
+			if c.unexplained(s, u) {
+				missing = append(missing, fn.TypeParams[i].Name)
+			}
+		}
+		if len(missing) > 0 {
+			// A wrong argument (or number of them) is the better
+			// explanation.
+			for i, t := range types {
+				switch {
+				case t == Invalid:
+					reported = true
+				case i < len(params) && !c.couldFit(params[i], t):
+					c.errorf(args[i].Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, c.zonk(params[i]), t)
+					reported = true
+				}
+			}
+			if !reported {
+				c.errorf(e.Pos, "cannot tell what %s is in this call to %s; give the arguments (or the result) a known type", strings.Join(missing, " and "), name)
+			}
+			for _, u := range unknowns {
+				c.explain(s, u)
+			}
+			fail()
+			return
+		}
+		inst := &Instance{Func: fn, Params: fn.Params, Result: fn.Result}
+		if len(fn.TypeParams) > 0 {
+			inst = &Instance{Func: fn, Result: c.zonk(result)}
+			for _, u := range unknowns {
+				inst.TypeArgs = append(inst.TypeArgs, c.zonk(u))
+			}
+			for _, p := range params {
+				inst.Params = append(inst.Params, c.zonk(p))
+			}
+			for _, ta := range inst.TypeArgs {
+				if c.open(ta) {
+					// What stayed unknown is reported where it came from.
+					fail()
+					return
+				}
+			}
+		}
+		for i, ta := range inst.TypeArgs {
+			if mentionsOpen(ta) && !reported {
+				c.diags.AddCode(e.Pos, "effect.open-type-argument", "%s of %s cannot be %s: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result", fn.TypeParams[i].Name, name, innerText(ta, c.pkg))
+				fail()
+				return
+			}
+			if ta == Unit && !reported {
+				hint := ""
+				if fn.Prelude && fn.Decl.Name == "spawn" {
+					hint = " (to run work that gives no value, use launch)"
+				}
+				c.errorf(e.Pos, "%s of %s cannot be %s: a type argument must be a type of values%s", fn.TypeParams[i].Name, name, ta, hint)
+				fail()
+				return
+			}
+		}
+		if fn.Prelude && fn.Decl.Name == "attach" && !reported {
+			if _, ok := inst.TypeArgs[0].(*Resource); !ok {
+				c.errorf(e.Pos, "attach takes a resource (a value of a resource type, such as File), found %s", inst.TypeArgs[0])
+				fail()
+				return
+			}
+		}
+		if !c.resolveDictsWith(inst, e.Pos, have) {
+			fail()
+			return
+		}
+		if argFacts != nil && !c.promisesArgFacts(inst, argFacts, name, e.Pos) {
+			fail()
+			return
+		}
+		inst.ArgFacts = argFacts
+		if len(typeArgs) > 0 {
+			c.info.callTypeArgs[e] = typeArgs
+		}
+		c.info.instances[e] = inst
+		for i, a := range args {
+			if i < len(inst.Params) && types[i] != Invalid && !c.open(types[i]) && !fitsParam(types[i], inst.Params[i]) {
+				c.errorf(a.Position(), "%s to %s must be %s, found %s", argLabel(fn, i), name, inst.Params[i], types[i])
+			}
 		}
 	}
-	return c.chargeCall(fn, inst.Result, types)
+	c.session.finish = append(c.session.finish, finish)
+	// What the call does is charged where it is (to the lambda it is in).
+	zonked := make([]Type, len(types))
+	for i, t := range types {
+		zonked[i] = c.zonk(t)
+	}
+	return c.chargeCall(fn, c.zonk(result), zonked)
 }
 
 // needsContext reports whether x can only be typed with an expected
@@ -651,8 +668,8 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 			continue
 		}
 		at := c.exprWant(a, ft.Params[i])
-		if !assignable(at, ft.Params[i]) {
-			c.errorf(a.Position(), "argument %d must be %s, found %s", i+1, ft.Params[i], at)
+		if at, pt := c.settle(at, ft.Params[i]); !assignable(at, pt) {
+			c.errorf(a.Position(), "argument %d must be %s, found %s", i+1, pt, at)
 		}
 	}
 	return ft.Result
@@ -666,18 +683,32 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 	}
 	inst := &Instance{Func: fn, Params: fn.Params, Result: fn.Result}
 	if len(fn.TypeParams) > 0 {
-		in := newInference(fn)
-		// The expected type may still mention type parameters of a call
-		// being inferred (map's B in map(xs, show)); those say nothing.
-		in.foreign = func(tp *TypeParam) bool { return !c.inScopeParam(tp) }
-		if want != nil {
-			in.unify(fn.funcType(), want)
+		fresh := map[*TypeParam]Type{}
+		inst = &Instance{Func: fn}
+		for _, tp := range fn.TypeParams {
+			u := newUnknown(tp)
+			fresh[tp] = u
+			inst.TypeArgs = append(inst.TypeArgs, u)
 		}
-		if missing := in.unsolved(); len(missing) > 0 {
+		if want != nil {
+			c.solve(subst(fn.funcType(), fresh), want)
+		}
+		var missing []string
+		for i, ta := range inst.TypeArgs {
+			if c.open(ta) {
+				missing = append(missing, fn.TypeParams[i].Name)
+			}
+			inst.TypeArgs[i] = c.zonk(ta)
+		}
+		if len(missing) > 0 {
 			c.errorf(e.Pos, "cannot tell what %s is for %s here; use it where a function type is expected, or call it in a lambda", strings.Join(missing, " and "), e.Name)
 			return Invalid
 		}
-		inst = in.instance()
+		bound := bindParams(fn.TypeParams, inst.TypeArgs)
+		inst.Result = subst(fn.Result, bound)
+		for _, p := range fn.Params {
+			inst.Params = append(inst.Params, subst(p, bound))
+		}
 	}
 	if !c.resolveDicts(inst, e.Pos) {
 		return Invalid
@@ -686,10 +717,9 @@ func (c *checker) funcValue(e *syntax.Ident, fn *Func, want Type) Type {
 	return closeOpen(&FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects})
 }
 
-// lambda checks a lambda. want is the expected function type, if any;
-// in the middle of inferring a generic call, in tells which of its
-// type parameters are not known yet.
-func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
+// lambda checks a lambda. want is the expected function type, if any,
+// which may have unknowns (see infer.go).
+func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 	wf, _ := want.(*FuncType)
 	quiet := false // the lambda is already reported
 	if wf != nil && len(wf.Params) != len(e.Params) {
@@ -704,24 +734,19 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 		switch {
 		case p.Type != nil:
 			t = c.resolveType(p.Type)
-			if wf != nil && t != Invalid && !in.open(wf.Params[i]) && !identical(t, wf.Params[i]) {
+			if wf != nil && t != Invalid && !c.open(wf.Params[i]) && !identical(t, wf.Params[i]) {
 				c.errorf(p.Type.Pos, "parameter %s must be %s here, found %s", p.Name, wf.Params[i], t)
 			}
-		case wf != nil && !in.open(wf.Params[i]):
+		case wf != nil && !c.unbound(wf.Params[i]):
+			// Unknowns in it are decided later, or else reported
+			// (see closeSession).
 			t = wf.Params[i]
+			if c.open(t) {
+				c.session.params = append(c.session.params, &openParam{lambda: e, param: p, t: t, call: c.session.cur})
+			}
 		default:
 			if !quiet {
-				c.diags.AddCode(p.Pos, "type.lambda-parameter", "cannot tell the type of parameter %s; write it: (%s: Type) => ...", p.Name, p.Name)
-				end := p.Pos
-				end.Col += len(p.Name)
-				edit := diag.TextEdit{Start: end, End: end, Replacement: ": Type"}
-				if e.Pos == p.Pos {
-					edit = diag.TextEdit{Start: p.Pos, End: end, Replacement: "(" + p.Name + ": Type)"}
-				}
-				c.diags.Suggest(p.Pos, "type.lambda-parameter", end, diag.Fix{
-					Message:       "annotate the parameter (replace Type with its intended type)",
-					RequiresInput: true, Edits: []diag.TextEdit{edit},
-				})
+				c.cannotTellParam(e, p)
 			}
 			t = Invalid
 		}
@@ -734,7 +759,7 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 		c.scopes[len(c.scopes)-1][p.Name].node = nil // unused parameters are fine
 	}
 	var rw Type
-	if wf != nil && !in.open(wf.Result) && wf.Result != Unit {
+	if wf != nil && wf.Result != Unit {
 		rw = wf.Result
 	}
 	c.lambdaDepth++
@@ -749,7 +774,7 @@ func (c *checker) lambda(e *syntax.Lambda, want Type, in *inference) Type {
 		ft.Result = Invalid
 	case wf != nil && wf.Result == Unit:
 		ft.Result = Unit // the body's value, if any, is dropped
-	case rw != nil && assignable(bt, rw):
+	case rw != nil && assignable(c.settle(bt, rw)):
 		ft.Result = rw
 	case bt == Never:
 		ft.Result = Unit
@@ -793,54 +818,6 @@ func argLabel(fn *Func, i int) string {
 	return fmt.Sprintf("argument %d", i+1)
 }
 
-// lambdaParamsOpen reports whether some parameter of lambda l, written
-// without a type, would get its type from a type parameter that in has
-// not decided yet.
-func lambdaParamsOpen(l *syntax.Lambda, want Type, in *inference) bool {
-	ft, ok := want.(*FuncType)
-	if !ok || len(ft.Params) != len(l.Params) {
-		return false
-	}
-	for i, p := range l.Params {
-		if p.Type == nil && in.open(ft.Params[i]) {
-			return true
-		}
-	}
-	return false
-}
-
-// inferFromBody decides type parameters from what a lambda's body
-// gives, when only an argument that takes its type from the context
-// would otherwise decide them: in fold(words, {:}, (m, w) =>
-// maps.Put(m, w, 1)), the body gives a Map[String, Int], which is the
-// accumulator's type. The body is checked quietly, with the parameters
-// of undecided types as holes (a type that nothing is known of); if
-// its result is then a type without holes, the lambda's result type
-// is unified with it. The real checks come after.
-func (c *checker) inferFromBody(l *syntax.Lambda, p Type, in *inference) {
-	pt, ok := in.subst(p).(*FuncType)
-	orig, ok2 := p.(*FuncType)
-	if !ok || !ok2 || len(pt.Params) != len(l.Params) {
-		return
-	}
-	hole := &TypeParam{Name: "?", Hole: true}
-	spec := &FuncType{}
-	for _, q := range pt.Params {
-		if in.open(q) {
-			q = hole
-		}
-		spec.Params = append(spec.Params, q)
-	}
-	before := c.diags.Len()
-	t := c.lambda(l, spec, nil)
-	c.diags.Truncate(before)
-	ft, ok := t.(*FuncType)
-	if !ok || ft.Result == nil || !isValue(ft.Result) || mentionsParam(ft.Result, hole) {
-		return
-	}
-	in.unify(orig.Result, ft.Result)
-}
-
 // listLit checks a list literal. Its element type comes from the
 // context, or else from the elements, which must then agree.
 func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
@@ -849,8 +826,17 @@ func (c *checker) listLit(e *syntax.ListLit, want Type) Type {
 		ew = wl.Elem
 	}
 	if len(e.Elems) == 0 {
-		if ew == nil {
+		report := func() {
 			c.diags.AddCode(e.Pos, "type.empty-list", "cannot tell the type of an empty list; give it one, as in xs: List[Int] = []")
+		}
+		switch {
+		case c.open(want):
+			// What it holds is decided later in the call it is given to.
+			t := c.addOrigin(&List{Elem: newUnknown(listElem)}, report)
+			c.solve(want, t)
+			return t
+		case ew == nil:
+			report()
 			return Invalid
 		}
 		return &List{Elem: ew}
@@ -874,8 +860,17 @@ func (c *checker) mapLit(e *syntax.MapLit, want Type) Type {
 		kw, vw = wm.Key, wm.Value
 	}
 	if len(e.Keys) == 0 {
-		if kw == nil {
+		report := func() {
 			c.diags.AddCode(e.Pos, "type.empty-map", "cannot tell the type of an empty map; give it one, as in m: Map[String, Int] = {:}")
+		}
+		switch {
+		case c.open(want):
+			// What it holds is decided later in the call it is given to.
+			t := c.addOrigin(&Map{Key: newUnknown(mapKey), Value: newUnknown(mapValue)}, report)
+			c.solve(want, t)
+			return t
+		case kw == nil:
+			report()
 			return Invalid
 		}
 		return &Map{Key: kw, Value: vw}
@@ -926,7 +921,7 @@ func (c *checker) elems(pos diag.Pos, elems []syntax.Expr, ew Type, what, agree 
 	if ew != nil {
 		ok := true
 		for i, t := range ts {
-			if t != Invalid && !assignable(t, ew) {
+			if t, ew := c.settle(t, ew); t != Invalid && !assignable(t, ew) {
 				c.errorf(elems[i].Position(), "%s must be %s, found %s", what, ew, t)
 				ok = false
 			}
@@ -941,35 +936,41 @@ func (c *checker) elems(pos diag.Pos, elems []syntax.Expr, ew Type, what, agree 
 
 // mentionsParam reports whether t mentions the type parameter tp.
 func mentionsParam(t Type, tp *TypeParam) bool {
+	return mentionsWhere(t, func(p *TypeParam) bool { return p == tp })
+}
+
+// mentionsWhere reports whether t mentions a type parameter for which
+// pred holds.
+func mentionsWhere(t Type, pred func(*TypeParam) bool) bool {
 	switch t := t.(type) {
 	case *TypeParam:
-		return t == tp
+		return pred(t)
 	case *List:
-		return mentionsParam(t.Elem, tp)
+		return mentionsWhere(t.Elem, pred)
 	case *Map:
-		return mentionsParam(t.Key, tp) || mentionsParam(t.Value, tp)
+		return mentionsWhere(t.Key, pred) || mentionsWhere(t.Value, pred)
 	case *FuncType:
 		for _, p := range t.Params {
-			if mentionsParam(p, tp) {
+			if mentionsWhere(p, pred) {
 				return true
 			}
 		}
-		return mentionsParam(t.Result, tp)
+		return mentionsWhere(t.Result, pred)
 	case *Union:
 		for _, m := range t.Members {
-			if mentionsParam(m, tp) {
+			if mentionsWhere(m, pred) {
 				return true
 			}
 		}
 	case *Record:
 		for _, a := range t.Args {
-			if mentionsParam(a, tp) {
+			if mentionsWhere(a, pred) {
 				return true
 			}
 		}
 	case *Sealed:
 		for _, a := range t.Args {
-			if mentionsParam(a, tp) {
+			if mentionsWhere(a, pred) {
 				return true
 			}
 		}

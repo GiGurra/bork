@@ -1,0 +1,11 @@
+main.bork:4:22: cannot tell the type of an empty list; give it one, as in xs: List[Int] = []
+main.bork:4:27: cannot tell the type of parameter acc; write it: (acc: Type) => ...
+main.bork:5:29: cannot tell which Option type Option.None is here; use it where an Option[T] is expected
+main.bork:5:36: cannot tell the type of parameter b; write it: (b: Type) => ...
+main.bork:7:61: list element must be Int, found String
+main.bork:8:88: argument 1 to append must be Int, found String
+main.bork:9:56: argument 1 to getOr must be String, found Int
+main.bork:10:22: cannot tell the type of an empty list; give it one, as in xs: List[Int] = []
+main.bork:10:27: cannot tell the type of parameter acc; write it: (acc: Type) => ...
+main.bork:12:17: cannot tell what T is in this call to mk; give the arguments (or the result) a known type
+main.bork:16:38: cannot tell the type of the value toUpper is called on yet; give it a type where it comes from
