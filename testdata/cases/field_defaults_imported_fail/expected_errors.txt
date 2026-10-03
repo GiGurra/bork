@@ -1,0 +1,2 @@
+api/api.bork:2:45: default of value must be positive, but positive(0) is false
+api/api.bork:3:43: default of value must be positive, but positive(0) is false

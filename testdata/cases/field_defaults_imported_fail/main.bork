@@ -1,0 +1,5 @@
+import "example.com/defaults/api"
+fn main() uses io {
+  println(api.Item {})
+  println(api.Item {})
+}

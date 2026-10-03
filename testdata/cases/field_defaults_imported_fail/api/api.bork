@@ -1,0 +1,3 @@
+pred positive(x: Int) { x > 0 }
+type Unused = { value: Int where positive = 0 }
+type Item = { value: Int where positive = 0 }
