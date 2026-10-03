@@ -1,3 +1,3 @@
 main.bork:5:11: undefined: missing
 main.bork:5:25: undefined: alsoMissing
-main.bork:6:11: cannot put a value of type Unit in a string
+main.bork:6:11: cannot put a value of type Ok in a string

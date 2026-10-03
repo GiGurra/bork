@@ -87,7 +87,7 @@ func TestParseFunction(t *testing.T) {
 }
 
 func TestParseUses(t *testing.T) {
-	src := `fn serve(addr: String, h: (Int) uses io + state => Int | Unit) uses net + state: Unit | IoError {
+	src := `fn serve(addr: String, h: (Int) uses io + state => Int | Ok) uses net + state: Ok | IoError {
 }
 fn update(f: (Int) uses nothing => Int): Int unsafe go { return 0 }
 fn pure(): Int { 1 }`

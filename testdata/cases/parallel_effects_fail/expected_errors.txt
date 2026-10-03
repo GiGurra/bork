@@ -1,4 +1,4 @@
 main.bork:6:25: argument 1 to parMap must be (Int) => Int, found (Int) uses io => Int (it uses io, where a function that uses nothing is expected)
-main.bork:7:21: argument 1 to parForEach must be (Int) => Unit, found (Int) uses io => Unit (it uses io, where a function that uses nothing is expected)
+main.bork:7:21: argument 1 to parForEach must be (Int) => Ok, found (Int) uses io => Ok (it uses io, where a function that uses nothing is expected)
 main.bork:8:28: argument 1 to parFilter must be (Int) => Bool, found (Int) uses io => Bool (it uses io, where a function that uses nothing is expected)
 main.bork:9:29: argument 1 to parFlatMap must be (Int) => List[Int], found (Int) uses io => List[Int] (it uses io, where a function that uses nothing is expected)

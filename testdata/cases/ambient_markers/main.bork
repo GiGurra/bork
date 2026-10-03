@@ -45,7 +45,7 @@ fn headers(): String unsafe go {
 
 // How a server would bind an incoming request's values around its
 // handler (boundary code, as bork/http's).
-fn serve(traceIn: String, attemptIn: String, handler: () uses io => Unit) uses io unsafe go {
+fn serve(traceIn: String, attemptIn: String, handler: () uses io => Ok) uses io unsafe go {
   restore := _borkBindPropagated(func(name string) (string, bool) {
     switch name {
     case "traceparent":
@@ -75,7 +75,7 @@ fn receive(header: String, text: String) uses io unsafe go {
 
 // A getter that logs (as an HTTP adapter warning about a repeated
 // header would) does so without the server's own propagated values.
-fn serveLogging(handler: () uses io => Unit) uses io unsafe go {
+fn serveLogging(handler: () uses io => Ok) uses io unsafe go {
   restore := _borkBindPropagated(func(name string) (string, bool) {
     work("getting " + name)
     return "00-in-01", name == "traceparent"

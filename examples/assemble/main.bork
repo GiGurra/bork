@@ -31,7 +31,7 @@ fn newService(config: Config, database: Database in s, s: Scope) uses io + net +
   Service { server: server }
 }
 
-fn demo() uses io + net + clock + state: Unit | sql.Error | IoError | http.Overloaded | http.DeadlineExceeded | Cancelled {
+fn demo() uses io + net + clock + state: Ok | sql.Error | IoError | http.Overloaded | http.DeadlineExceeded | Cancelled {
   scope app {
     // The list is intentionally out of dependency order. Config and Database
     // each build once; the server stops before its database closes.

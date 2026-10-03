@@ -1,6 +1,6 @@
 main.bork:5:18: ambient session cannot hold Scope: ambient values are data, so pass scopes, resources, tasks, atoms, channels and functions as parameters
-main.bork:6:19: ambient callback cannot hold () => Unit: ambient values are data, so pass scopes, resources, tasks, atoms, channels and functions as parameters
-main.bork:8:23: ambient nothingAtAll must hold values, not Unit
+main.bork:6:19: ambient callback cannot hold () => Ok: ambient values are data, so pass scopes, resources, tasks, atoms, channels and functions as parameters
+main.bork:8:23: ambient nothingAtAll must hold values, not Ok
 main.bork:20:3: bare reads traceId, but its signature does not provide it; declare it: needs traceId, or bind it: with (traceId: ...) { ... }
 main.bork:24:3: calls reads traceId (it calls tag), but its signature does not provide it; declare it: needs traceId, or bind it: with (traceId: ...) { ... }
 main.bork:28:13: refers reads traceId (it calls tag), but its signature does not provide it; declare it: needs traceId, or bind it: with (traceId: ...) { ... }

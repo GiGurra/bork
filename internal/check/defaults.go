@@ -98,7 +98,7 @@ func isClosed(x syntax.Expr) bool {
 	case *syntax.ContextName:
 		return x.Name != ""
 	case *syntax.Ident:
-		return false
+		return x.Name == "Ok"
 	case *syntax.Selector:
 		// A variant without fields (Level.Info), or a qualified one.
 		return isPath(x.X)

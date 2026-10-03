@@ -588,7 +588,7 @@ func (c *checker) checkTest(td *syntax.TestDecl, names map[string]diag.Pos) {
 		c.errorf(td.Pos, "test %q is already declared at %s", td.Name, prev)
 	}
 	names[td.Name] = td.Pos
-	fn := &Func{Decl: &syntax.FuncDecl{Pos: td.Pos, Name: "test", Params: td.Params, Body: td.Body}, Pkg: c.pkg, Result: Unit, Test: td}
+	fn := &Func{Decl: &syntax.FuncDecl{Pos: td.Pos, Name: "test", Params: td.Params, Body: td.Body}, Pkg: c.pkg, Result: Ok, Test: td}
 	// A property test's parameters are generated, with their facts.
 	scope := map[string]Type{}
 	for _, p := range td.Params {
@@ -866,14 +866,14 @@ func (c *checker) checkFunc(fn *Func) {
 		if !fn.Prelude && fn.Decl.Constructor == nil && c.nameTaken(p.Name, p.Pos) {
 			continue
 		}
-		if fn.Params[i] == Unit {
-			c.errorf(p.Type.Pos, "parameter %s cannot have type Unit", p.Name)
+		if fn.Params[i] == Ok {
+			c.errorf(p.Type.Pos, "parameter %s cannot have type Ok", p.Name)
 		}
 		c.scopes[0][p.Name] = &local{typ: fn.Params[i], decl: p}
 	}
 	c.ensureDefaults(fn)
 	c.bindNeeds(fn)
-	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Unit) {
+	if fn.Decl.Name == "main" && (len(fn.Params) != 0 || fn.Result != Ok) {
 		c.errorf(fn.Decl.Pos, "main must take no parameters and return no value")
 	}
 	if fn.Decl.IsGo() {
@@ -882,7 +882,7 @@ func (c *checker) checkFunc(fn *Func) {
 		return
 	}
 	var want Type
-	if fn.Result != Unit {
+	if fn.Result != Ok {
 		want = fn.Result
 	}
 	c.used = 0
@@ -892,19 +892,19 @@ func (c *checker) checkFunc(fn *Func) {
 	if isOpen(fn.Result) && c.used&EffOpen != 0 {
 		c.diags.AddCode(fn.Decl.Pos, "effect.open-result", "%s returns an open function, so it cannot call its open parameters itself (its callers are not charged for them); give them effects, or only return them", fn.Decl.Name)
 	}
-	if fn.Result == Unit && isValue(bodyType) {
+	if fn.Result == Ok && isValue(bodyType) {
 		if fn.Test != nil {
 			c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (a test returns no value)", bodyType)
 		} else {
 			c.errorf(fn.Decl.Body.Tail.Position(), "value of type %s is not used (function %s returns no value)", bodyType, fn.Decl.Name)
 		}
 	}
-	if fn.Result != Unit && !assignable(bodyType, fn.Result) {
+	if fn.Result != Ok && !assignable(bodyType, fn.Result) {
 		pos := fn.Decl.Body.Pos
 		if fn.Decl.Body.Tail != nil {
 			pos = fn.Decl.Body.Tail.Position()
 		}
-		if bodyType == Unit {
+		if bodyType == Ok {
 			c.errorf(pos, "function %s must return a value of type %s, but its body ends without one", fn.Decl.Name, fn.Result)
 		} else {
 			c.errorf(pos, "function %s returns %s, but its body produces %s", fn.Decl.Name, fn.Result, bodyType)
@@ -1013,7 +1013,7 @@ func (c *checker) block(b *syntax.Block, want Type) Type {
 			diverged = true
 		}
 	}
-	t := Unit
+	t := Ok
 	if b.Tail != nil {
 		if !diverged {
 			t = c.exprWant(b.Tail, want)
@@ -1100,8 +1100,8 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			}
 		}
 		switch t {
-		case Unit:
-			c.errorf(s.Value.Position(), "cannot bind %s: the expression produces no value (Unit)", s.Name)
+		case Ok:
+			c.errorf(s.Value.Position(), "cannot bind %s: the expression produces no value (Ok)", s.Name)
 			t = Invalid
 		case Never:
 			c.errorf(s.Value.Position(), "cannot bind %s: the expression never produces a value", s.Name)
@@ -1122,13 +1122,13 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		if s.Name != "_" {
 			c.bind(s.Name, s.Pos, t, s)
 		}
-		return Unit
+		return Ok
 	case *syntax.TrustStmt:
 		c.expr(s.Call)
 		if fn := c.info.callFuncs[s.Call]; fn != nil && !fn.Decl.IsPred {
 			c.errorf(s.Call.Position(), "trust needs a predicate call, but %s is a function", fn.Decl.Name)
 		}
-		return Unit
+		return Ok
 	case *syntax.ExprStmt:
 		t := c.expr(s.X)
 		if isValue(t) {
@@ -1138,7 +1138,7 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 	case *syntax.MockStmt:
 		c.mockStmt(s)
 	}
-	return Unit
+	return Ok
 }
 
 func (c *checker) expr(e syntax.Expr) Type { return c.exprWant(e, nil) }
@@ -1260,6 +1260,9 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if _, ok := builtins[e.Name]; ok {
 		c.errorf(e.Pos, "built-in %s must be called", e.Name)
 		return Invalid
+	}
+	if e.Name == "Ok" {
+		return Ok
 	}
 	if c.isTypeName(e.Name) {
 		c.errorf(e.Pos, "%s is a type, not a value", e.Name)
@@ -1521,7 +1524,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 			for _, a := range e.Args {
 				c.expr(a)
 			}
-			return Unit
+			return Ok
 		}
 		actual := c.expr(e.Args[0])
 		expected := c.exprWant(e.Args[1], actual)
@@ -1532,7 +1535,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 		case !isValue(actual) || !comparable(actual):
 			c.errorf(e.Pos, "cannot compare values of type %s", actual)
 		}
-		return Unit
+		return Ok
 	}
 	if b != BuiltinPrintln && len(e.Args) != 1 {
 		c.errorf(e.Pos, "%s takes 1 argument, but %d were given", fname, len(e.Args))
@@ -1560,7 +1563,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 		if t := c.expr(e.Args[0]); t != Bool && t != Invalid {
 			c.errorf(e.Args[0].Position(), "assert needs a Bool, found %s", t)
 		}
-		return Unit
+		return Ok
 	case BuiltinToString:
 		t := c.expr(e.Args[0])
 		if t != Invalid && !isValue(t) {
@@ -1572,7 +1575,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 		if t != Invalid && !isValue(t) {
 			c.errorf(e.Args[0].Position(), "assertSnapshot needs a value, found %s", t)
 		}
-		return Unit
+		return Ok
 	case BuiltinConvert:
 		return c.conversion(e, fname)
 	case BuiltinPrintln:
@@ -1582,7 +1585,7 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type
 				c.errorf(a.Position(), "println cannot print a value of type %s", t)
 			}
 		}
-		return Unit
+		return Ok
 	}
 	return Invalid
 }
@@ -1604,7 +1607,7 @@ func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 		if isValue(thenT) {
 			c.errorf(e.Then.Pos, "if without else cannot produce a value (found %s); add an else branch or drop the value", thenT)
 		}
-		return Unit
+		return Ok
 	}
 	if (want == nil || c.unbound(want)) && c.branchNeedsContext(e.Else) {
 		want = thenT
@@ -1739,14 +1742,15 @@ func (c *checker) returnExpr(e *syntax.Return) {
 	}
 	want := c.fn.Result
 	if e.Value == nil {
-		if want != Unit {
+		if want != Ok {
 			c.errorf(e.Pos, "function %s must return a value of type %s", c.fn.Decl.Name, want)
 		}
 		return
 	}
-	if want == Unit {
-		c.expr(e.Value)
-		c.errorf(e.Value.Position(), "function %s does not return a value", c.fn.Decl.Name)
+	if want == Ok {
+		if t := c.expr(e.Value); isValue(t) {
+			c.errorf(e.Value.Position(), "function %s does not return a value", c.fn.Decl.Name)
+		}
 		return
 	}
 	t := c.exprWant(e.Value, want)

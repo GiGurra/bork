@@ -11,7 +11,7 @@ fn validName(name: String, directory: Bool): Bool unsafe go {
   return name != "." && fs.ValidPath(name) && !strings.ContainsAny(name, "\\:\x00")
 }
 
-fn validate(entries: List[Member]): Unit | IoError {
+fn validate(entries: List[Member]): Ok | IoError {
   invalid = entries.filter(entry => !validName(entry.name, entry.directory) || (entry.directory && entry.data.length() != 0))
   match (invalid.get(0)) {
     Option.Some { value } => IoError { path: value.name, message: "unsafe archive name or nonempty directory" }
@@ -42,11 +42,11 @@ fn encodeZip(entries: List[Member]): Bytes | IoError unsafe go {
   return _borkBytesFrom([]byte(output.String()))
 }
 
-fn WriteZip(file: fs.File, entries: List[Member]) uses io: Unit | IoError {
+fn WriteZip(file: fs.File, entries: List[Member]) uses io: Ok | IoError {
   validate(entries)?
   writeZip(file, entries)
 }
-fn writeZip(file: fs.File, entries: List[Member]) uses io: Unit | IoError unsafe go {
+fn writeZip(file: fs.File, entries: List[Member]) uses io: Ok | IoError unsafe go {
   import "archive/zip"
   import "strings"
   import "os"
@@ -62,7 +62,7 @@ fn writeZip(file: fs.File, entries: List[Member]) uses io: Unit | IoError unsafe
     if _, err = target.Write(_borkBytesData(entry.data)); err != nil { return IoError{path: entry.name, message: err.Error()} }
   }
   if err := writer.Close(); err != nil { return IoError{path: "zip", message: err.Error()} }
-  return _Unit{}
+  return _borkOk()
 }
 
 fn ReadZip(data: Bytes, maxBytes: Int = 67108864): List[Member] | IoError unsafe go {
@@ -99,7 +99,7 @@ fn ReadZip(data: Bytes, maxBytes: Int = 67108864): List[Member] | IoError unsafe
   return entries
 }
 
-fn ForEachZip(file: fs.File, visit: (Member) => Unit, maxBytes: Int = 67108864) uses io: Unit | IoError unsafe go {
+fn ForEachZip(file: fs.File, visit: (Member) => Ok, maxBytes: Int = 67108864) uses io: Ok | IoError unsafe go {
   import "archive/zip"
   import "os"
   import "fmt"
@@ -130,7 +130,7 @@ fn ForEachZip(file: fs.File, visit: (Member) => Unit, maxBytes: Int = 67108864) 
     entry := Member{name: file.Name, data: _borkBytesFrom(content), directory: directory}
     visit(entry)
   }
-  return _Unit{}
+  return _borkOk()
 }
 
 fn Tar(entries: List[Member]): Bytes | IoError {
@@ -153,11 +153,11 @@ fn encodeTar(entries: List[Member]): Bytes | IoError unsafe go {
   return _borkBytesFrom([]byte(output.String()))
 }
 
-fn WriteTar(file: fs.File, entries: List[Member]) uses io: Unit | IoError {
+fn WriteTar(file: fs.File, entries: List[Member]) uses io: Ok | IoError {
   validate(entries)?
   writeTar(file, entries)
 }
-fn writeTar(file: fs.File, entries: List[Member]) uses io: Unit | IoError unsafe go {
+fn writeTar(file: fs.File, entries: List[Member]) uses io: Ok | IoError unsafe go {
   import "archive/tar"
   import "os"
   output := file.handle.(*os.File)
@@ -170,7 +170,7 @@ fn writeTar(file: fs.File, entries: List[Member]) uses io: Unit | IoError unsafe
     if _, err := writer.Write(_borkBytesData(entry.data)); err != nil { return IoError{path: entry.name, message: err.Error()} }
   }
   if err := writer.Close(); err != nil { return IoError{path: "tar", message: err.Error()} }
-  return _Unit{}
+  return _borkOk()
 }
 
 fn ReadTar(data: Bytes, maxBytes: Int = 67108864): List[Member] | IoError unsafe go {
@@ -198,7 +198,7 @@ fn ReadTar(data: Bytes, maxBytes: Int = 67108864): List[Member] | IoError unsafe
   return entries
 }
 
-fn ForEachTar(file: fs.File, visit: (Member) => Unit, maxBytes: Int = 67108864) uses io: Unit | IoError unsafe go {
+fn ForEachTar(file: fs.File, visit: (Member) => Ok, maxBytes: Int = 67108864) uses io: Ok | IoError unsafe go {
   import "archive/tar"
   import "io"
   import "os"
@@ -219,5 +219,5 @@ fn ForEachTar(file: fs.File, visit: (Member) => Unit, maxBytes: Int = 67108864) 
     entry := Member{name: header.Name, data: _borkBytesFrom(content), directory: directory}
     visit(entry)
   }
-  return _Unit{}
+  return _borkOk()
 }

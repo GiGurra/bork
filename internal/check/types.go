@@ -39,8 +39,8 @@ var (
 	Bool   Type = &Basic{name: "Bool"}
 	String Type = &Basic{name: "String"}
 	Bytes  Type = &Basic{name: "Bytes"}
-	// Unit is the type of expressions that produce no meaningful value.
-	Unit Type = &Basic{name: "Unit"}
+	// Ok is the type of expressions that produce no meaningful value.
+	Ok Type = &Basic{name: "Ok"}
 	// Never is the type of expressions that never finish normally, such
 	// as `return`. It can be used wherever any type is expected.
 	Never Type = &Basic{name: "Never"}
@@ -74,7 +74,8 @@ var basicTypes = map[string]Type{
 	"Bool":       Bool,
 	"String":     String,
 	"Bytes":      Bytes,
-	"Unit":       Unit,
+	"Ok":         Ok,
+	"Unit":       Ok, // Deprecated spelling, retained for one release.
 	"Scope":      Scope,
 	"OwnedScope": OwnedScope,
 
@@ -813,10 +814,10 @@ func assignable(src, dst Type) bool {
 	return containsMember(du, src)
 }
 
-// isValue reports whether t is a type of real values (not Unit, Never,
+// isValue reports whether t is a type of real values (not Ok, Never,
 // or Invalid).
 func isValue(t Type) bool {
-	return t != Unit && t != Never && t != Invalid
+	return t != Ok && t != Never && t != Invalid
 }
 
 // comparable reports whether values of type t can be compared with ==.

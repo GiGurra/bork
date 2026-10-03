@@ -1,6 +1,6 @@
 fn Fetch(url: String) uses net: String { url }
 
-fn Saved[A](m: Mock[A], expect: (Mock[A], Option[Int], Option[Int], Option[Int]) uses state => Unit) uses state {
+fn Saved[A](m: Mock[A], expect: (Mock[A], Option[Int], Option[Int], Option[Int]) uses state => Ok) uses state {
   expect(m, 2, .None, .None)
 }
 

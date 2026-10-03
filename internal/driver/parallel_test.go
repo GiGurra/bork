@@ -58,7 +58,7 @@ func TestParallelTestsOverlap(t *testing.T) {
   }
 }
 
-fn unlabelled(f: () uses io => Unit) uses io + state unsafe go {
+fn unlabelled(f: () uses io => Ok) uses io + state unsafe go {
   import "context"
   import "runtime/pprof"
   done := make(chan any)

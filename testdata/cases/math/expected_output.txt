@@ -162,4 +162,4 @@ true
 DecodeError { path: "", message: "expected a base-10 integer" }
 DecodeError { path: "", message: "expected an exact rational" }
 DecodeError { path: "", message: "expected decimal digits" }
-Unit
+Ok

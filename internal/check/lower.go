@@ -260,6 +260,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	case *syntax.Interp:
 		return &Interp{expr: at, Parts: x.Parts, Exprs: l.exprs(x.Exprs)}
 	case *syntax.Ident:
+		if at.typ == Ok && l.info.defs[x] == nil {
+			return &Block{expr: at}
+		}
 		v := l.vars[l.info.defs[x]]
 		if v == nil {
 			panic(fmt.Sprintf("%s: %s refers to no variable (compiler bug)", x.Pos, x.Name))

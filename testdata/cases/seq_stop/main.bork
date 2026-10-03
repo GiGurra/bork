@@ -20,10 +20,10 @@ fn early(xs: Seq[Int] uses io) uses io: Int {
   for (n in xs) { return n }
   0
 }
-fn failed(xs: Seq[Int] uses io) uses io: Unit | OutOfRange {
+fn failed(xs: Seq[Int] uses io) uses io: Ok | OutOfRange {
   for (n in xs) { println(toInt8(n)?) }
 }
-fn protect(work: () => Unit): Bool unsafe go {
+fn protect(work: () => Ok): Bool unsafe go {
   recovered := false
   func() { defer func() { recovered = recover() != nil }(); work() }()
   return recovered

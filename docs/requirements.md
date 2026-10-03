@@ -113,7 +113,7 @@ In priority order. When two values conflict, the higher one wins.
 
 ### Effects and concurrency
 
-- **Side effects are allowed, and declared.** Reading and writing files, sockets, and so on are ordinary operations, and a function's signature says which kinds it does: `fn save(path: String, text: String) uses io: Unit | IoError`. A function that declares nothing is pure (see [Effects in signatures](#effects-in-signatures)).
+- **Side effects are allowed, and declared.** Reading and writing files, sockets, and so on are ordinary operations, and a function's signature says which kinds it does: `fn save(path: String, text: String) uses io: Ok | IoError`. A function that declares nothing is pure (see [Effects in signatures](#effects-in-signatures)).
 - **No effect or state monads.** No `IO`, `State`, or time monads. Concurrency uses Go's goroutines (virtual threads), so sequential blocking code is the norm. Effects are checked annotations, not wrapper types: code stays in direct style.
 
 ### Compilation target and Go
@@ -375,7 +375,7 @@ fn zip[A, B](xs: List[A], ys: List[B]) where sameLength(xs, ys): List[Pair[A, B]
 }
 fn interval(lo: Int, hi: Int) where lo <= hi: Range { Range { lo: lo, hi: hi } }
 fn (xs: List[T]) zip[T, U](ys: List[U]) where sameLength(xs, ys): List[Pair[T, U]] { ... }
-fn send(lo: Int, hi: Int) where lo <= hi uses io: Unit { ... }
+fn send(lo: Int, hi: Int) where lo <= hi uses io: Ok { ... }
 ```
 
 The position distinguishes an input requirement from an existing result
@@ -1295,15 +1295,15 @@ scope maint {
 - **Structured concurrency (decided, implemented):** goroutines started inside a scope finish before the scope ends, so they can use its resources with no extra attaching. `spawn(s, () => work())` starts a task of scope `s` and gives a `Task[T]`; `await(task)` waits for its result; `launch(s, () => ...)` starts work that gives no value. When a scope ends, however its block ends, it cancels itself, waits for its tasks, and then runs its finalizers. A task that panics panics `await`, or, if no one awaited it, the scope's routine when the scope closes. Lifetimes apply as to any value of a scope: a task cannot be returned from its scope or used after it, and its work may only use what lives as long as the scope. 
 - **Finalizer failures and scope policies (implemented):** every finalizer of a scope runs, even when others fail; what failed (finalizers, and tasks that failed without being awaited) is raised as one panic once the scope has closed (`finalizer 4 failed; and then: finalizer 2 failed`). How a scope ends is configured with policies, values of the prelude's sealed type `ScopePolicy`, given after `with`: `scope s with taskTimeout(100), cleanupTimeout(500), logFailures() { ... }`. By default a scope waits for its tasks and finalizers for as long as it takes, and raises failures. `taskTimeout(ms)` bounds the wait for the tasks to stop after the scope is cancelled, overriding whatever cleanup time a task would take on its own: tasks still running then are *orphaned* (they keep running, and may find the scope's resources closed), while the scope's finalizers still run, on its own routine. `cleanupTimeout(ms)` bounds the wait for each finalizer; one that takes longer is orphaned, and the scope goes on closing. `logFailures()` logs failures at error level (through Go's `log/slog`) instead of raising them; a failing orphaned task is always logged so. Orphaning is logged at warning level.
 - **Attaching (implemented):** a task of an outer scope may outlive the scope a resource was opened in. `shared = attach(conn, app)` keeps `conn` open until `app` closes too: a resource closes when the last scope it is attached to closes (reference counting, per resource). `attach` is allowed only where the resource is provably alive, and gives it as a value of `app`, which a task of `app` can use. Without it, handing the resource to such a task is a lifetime error that suggests `attach`. Resources made in `unsafe go` register how they close with `s.Own(...)`, which is what makes them attachable.
-- **Channels (implemented):** `channel[T](s, capacity)` makes a channel owned by scope `s`, which closes it when it closes (so, like a task, a channel cannot leave its scope). `send(ch, x)` gives `Unit | Cancelled | Closed`, `receive(ch)` gives `T | Cancelled | Closed`, `closeChannel(ch)` closes it (buffered values can still be received), and `received(ch)` collects values until it closes. Operations stop with `Cancelled` when the channel's scope is cancelled; sending to a closed channel gives `Closed` rather than panicking.
+- **Channels (implemented):** `channel[T](s, capacity)` makes a channel owned by scope `s`, which closes it when it closes (so, like a task, a channel cannot leave its scope). `send(ch, x)` gives `Ok | Cancelled | Closed`, `receive(ch)` gives `T | Cancelled | Closed`, `closeChannel(ch)` closes it (buffered values can still be received), and `received(ch)` collects values until it closes. Operations stop with `Cancelled` when the channel's scope is cancelled; sending to a closed channel gives `Closed` rather than panicking.
 - **Channels and atoms keep what is stored (implemented).** A value sent to a channel, or made by the function given to `update` or `swap` of an atom, must outlive the channel or atom, and what comes out (`receive`, `received`, `current`) is a value of the container's lifetime. A channel lives as long as its scope; an atom as long as its first value (so an atom started with a value of `app` can hold values of `app`, while one started with `Option.None` can only hold values that live forever). A resource of a shorter scope can be attached to the container's scope first. A function that stores a parameter declares that it lives as long as the container: `fn put(ch: Channel[Conn], c: Conn in ch)`, or, to store values of a scope parameter, `fn fill(ch: Channel[Conn], s: Scope in ch)`. The other direction, `ch: Channel[Conn] in s`, only says that the channel outlives `s`, so values of `s` cannot be stored in it.
   - **The checks are strict where lifetimes mix.** A stored value must outlive *every* scope the container's lifetime depends on, so a container mixed with shorter values (`if (c) { a } else { b }`, a record holding both, a generic call given both) is checked as the longest of them: it is still the same channel or atom. An atom started with a value of no scope belongs to the whole program, which a mix keeps, so it still takes only values of no scope.
   - **What keeps values is kept only by containers of the same lifetime.** What comes out of a container is treated as ending with it. For a resource that is safe (it is only usable for less long), but a channel, an atom, a scope, or a function that comes out could then be given values of the container's scopes while it really lives longer. So a `Channel[Channel[Conn]]` (or of scopes, or of functions) takes only channels of its own lifetime, and a parameter of such a type declared `in` such a container must be given one of the same lifetime; in the callee, where it is only known to outlive the container, it cannot be stored there.
   - **A scope, a function, a channel or an atom declared `in` another value only outlives it.** Values of the scope `s: Scope in c` live at least as long as `c`, so they can be stored where `c`'s can; but Go code given `s` (`onClose(s, ...)`, a task of `s`) may keep its arguments until `s` closes, which can be later than `c`. Such code is given only values that outlive every scope its scope argument depends on.
   - **No back doors.** The fields of `Channel` and `Atom` are internal to the prelude: they cannot be read, called (`ch.sendFn(x)`), matched, copied, or built elsewhere, so storing always goes through these checks. `send`, `update`, `swap`, and functions with a parameter declared `in` another cannot be used as function values when that parameter's type can belong to a scope (`send` of `Channel[Int]` can), since a call through a function value is not checked; a lambda that calls them is.
   - **A lambda given to a generic function gets its parameters' lifetimes from the other arguments.** A generic function cannot make a value of its type parameters' types, so what it passes its lambda as one comes from its arguments: `conns.forEach(c => { _ = send(ch, c) })` sends values that live as long as `conns`, which it may when `conns` outlives `ch`. This holds for a parameter whose type is built only from the function's type parameters (`T`, `List[T]`, `Option[T]`, records of them; not `Conn` or `Channel[T]`, which the function could make in a scope of its own), which then lives as long as the arguments whose types mention those type parameters. Those arguments must hold the values as data, or in a channel or an atom (`List[T]`, `Map[K, V]`, `Channel[T]`): one holding a function (`(Scope) => T`, `(Conn) => T`) could make a value from what the callee gives it, in a scope of the callee's own. It also needs those arguments to come before the lambda, the lambda's result not to mention them (`fold`'s accumulator may hold what the lambda captured), and the type parameters' bounds to have no method that could make a value of the type: none whose result mentions it, or that takes it inside a function or a channel (`Eq`, `Ord` and `Show` qualify). Code in `unsafe go` bodies is trusted to keep to this, as it is to keep a result to its arguments' lifetime: a generic Go function that keeps a value from one call (a cache, say) and passes it to a later call's lambda is not checked.
-  - **Known limits.** Other lambda parameters (of a function taking `(Conn) => Unit`, of a function value, or when the conditions above do not hold) are not known to outlive anything, so storing them is rejected (store the value directly, or use a helper with `x: Conn in ch`). An atom started empty (`atom(Option.None)`) can only hold values that live forever; start it with a value of the scope instead. `unsafe go` code given a channel or an atom can store anything, as it can keep any argument.
-- **Cancellation through scopes (implemented):** a scope carries what Go's `context.Context` does. `cancel(s)` cancels it, `cancelAfter(s, ms)` sets an observable deadline that only ever shortens (existing children observe later ancestor deadlines too), a task that panics cancels its scope (so its siblings stop), the scope's end cancels it, and a scope nested in another (in the same function) is cancelled with it. Cancellation is cooperative: tasks see it at cancellation points, `delay(s, ms)` and `checkpoint(s)` (both `Unit | Cancelled`, so `checkpoint(s)?` stops a loop), and channel operations. A cancelled scope still waits for its tasks. **The scope does not decide how its tasks stop:** its end is the same signal whether the block finished, returned early, or panicked, and each task chooses what to do with it: stop at once (a worker waiting in `delay` or on a channel), clean up first, or finish its work (code that never checks for cancellation runs to the end). Work the block needs done is awaited before the block ends. In `bork/http`, each request has a scope, cancelled when the client goes away or the server's scope closes. Scope contexts preserve external deadline limits and context values. Nonpositive `cancelAfter` delays cancel immediately; huge positive millisecond values saturate instead of overflowing. Deadline expiry has the Go `context.DeadlineExceeded` cause and error, whose text is "context deadline exceeded".
+  - **Known limits.** Other lambda parameters (of a function taking `(Conn) => Ok`, of a function value, or when the conditions above do not hold) are not known to outlive anything, so storing them is rejected (store the value directly, or use a helper with `x: Conn in ch`). An atom started empty (`atom(Option.None)`) can only hold values that live forever; start it with a value of the scope instead. `unsafe go` code given a channel or an atom can store anything, as it can keep any argument.
+- **Cancellation through scopes (implemented):** a scope carries what Go's `context.Context` does. `cancel(s)` cancels it, `cancelAfter(s, ms)` sets an observable deadline that only ever shortens (existing children observe later ancestor deadlines too), a task that panics cancels its scope (so its siblings stop), the scope's end cancels it, and a scope nested in another (in the same function) is cancelled with it. Cancellation is cooperative: tasks see it at cancellation points, `delay(s, ms)` and `checkpoint(s)` (both `Ok | Cancelled`, so `checkpoint(s)?` stops a loop), and channel operations. A cancelled scope still waits for its tasks. **The scope does not decide how its tasks stop:** its end is the same signal whether the block finished, returned early, or panicked, and each task chooses what to do with it: stop at once (a worker waiting in `delay` or on a channel), clean up first, or finish its work (code that never checks for cancellation runs to the end). Work the block needs done is awaited before the block ends. In `bork/http`, each request has a scope, cancelled when the client goes away or the server's scope closes. Scope contexts preserve external deadline limits and context values. Nonpositive `cancelAfter` delays cancel immediately; huge positive millisecond values saturate instead of overflowing. Deadline expiry has the Go `context.DeadlineExceeded` cause and error, whose text is "context deadline exceeded".
 
 ### Backpressure
 
@@ -1319,7 +1319,7 @@ budget and remaining deadline. HTTP admission and typed client failure results a
 `bork/tasks` adds explicit capacity shared across submitting scopes.
 `tasks.Open(s, maxTasks: n)` creates a scope-owned Pool with a proven positive
 limit. TrySpawn returns `Task[T] | TaskLimitReached | Cancelled`, and TryLaunch
-returns `Unit | TaskLimitReached | Cancelled`; both charge state plus callback
+returns `Ok | TaskLimitReached | Cancelled`; both charge state plus callback
 effects and never wait. Rejected callbacks are not called. A task holds its slot
 until the callback ends or panics, and its explicit scope owns and joins it.
 The compiler checks that pool and captures outlive that task scope. Resource
@@ -1397,7 +1397,7 @@ start and end, restricted so that the right to end a scope cannot be confused
 with an ordinary borrowed `Scope`, nor copied:
 
 ```
-fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io + state: Unit | Failed {
+fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io + state: Ok | Failed {
   next = openScope(app)                    // opens while prev is open
   nextConn = connect(next.scope)?          // b.scope borrows the child's Scope
   handOver(conn, nextConn)?
@@ -1567,12 +1567,12 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 
 ```
 fn describe(u: User): String { ... }                          // pure
-fn save(path: String, text: String) uses io: Unit | IoError { ... }
-fn serve(addr: String) uses net + state: Unit | IoError { ... }
+fn save(path: String, text: String) uses io: Ok | IoError { ... }
+fn serve(addr: String) uses net + state: Ok | IoError { ... }
 fn main() { ... }                                             // may use every effect
 fn now() uses clock: Int unsafe go { ... }
 
-type Job = { name: String, run: () uses io => Unit }         // a function type with effects
+type Job = { name: String, run: () uses io => Ok }         // a function type with effects
 fn handler(store: Atom[Store]): (Request, Scope) uses state => Response { ... }
 ```
 
@@ -1598,13 +1598,13 @@ names.forEach(n => println(n))                              // this call uses io
 
 - **Inside the body, an open parameter can be called freely.** Its effects belong to the caller.
 - **Inside the body, an open parameter's effects are unknown**: one effect variable, `open`, standing for whatever the caller passes. The implementation models it that way. A lambda that calls an open parameter has `open` among its effects, like the parameter itself.
-- **What has `open` among its effects can only flow to another open position:** an open parameter of a call, or the open result of its own signature. `open` fits in no fixed set of effects, so such a value cannot be stored in, or passed as, a function type with fixed effects, pure or not (a `run: () uses io => Unit` field could then hold a function that uses `net`). Nor can it escape through a generic result or an untyped element: `[f]`, `Option.Some { value: f }`, `identity(f)`, `() => f()` in a record field. To store a function, close the parameter: `fn job(name: String, f: () uses io => Unit): Job`.
-- **An open parameter can be returned.** A function type without `uses` in the *result* of the same signature is open too: `fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C` gives a function that uses what `f` and `g` use. A value returned in an open result may use `open` and nothing else, so `fn wrap(f: () => Unit): () => Unit { () => { println("x"); f() } }` is an error: there is no way to write "io plus what f uses". (Write `wrap(f: () uses io => Unit): () uses io => Unit` instead.)
+- **What has `open` among its effects can only flow to another open position:** an open parameter of a call, or the open result of its own signature. `open` fits in no fixed set of effects, so such a value cannot be stored in, or passed as, a function type with fixed effects, pure or not (a `run: () uses io => Ok` field could then hold a function that uses `net`). Nor can it escape through a generic result or an untyped element: `[f]`, `Option.Some { value: f }`, `identity(f)`, `() => f()` in a record field. To store a function, close the parameter: `fn job(name: String, f: () uses io => Ok): Job`.
+- **An open parameter can be returned.** A function type without `uses` in the *result* of the same signature is open too: `fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C` gives a function that uses what `f` and `g` use. A value returned in an open result may use `open` and nothing else, so `fn wrap(f: () => Ok): () => Ok { () => { println("x"); f() } }` is an error: there is no way to write "io plus what f uses". (Write `wrap(f: () uses io => Ok): () uses io => Ok` instead.)
 - **A call is charged the effects of its open arguments, unless the function's result is open.** Then they are carried in the result's type instead: `compose(a, b)` is pure, and the function it gives uses what `a` and `b` use, as a hand-written `handler` closure does. In exchange, a function with an open result may not call its open parameters itself, only return them in its result (or pass them to calls whose results it returns). This keeps the rule a matter of signatures, not of what a body does.
-- **Which positions are open:** a parameter (receivers included) or result whose type is a function type written without `uses`, also through a type alias (`handler: Handler`, with `type Handler = (Request, Scope) => Response`). A direct `List[() => Unit]` parameter also opens its element callback and charges all its callbacks at the call; an explicit `uses nothing` keeps the elements pure. List results, nested lists, and list aliases stay closed. Nothing else: not a union such as `((A) => B) | None`, and not the parameters or results inside a function type (`(A) => (B) => C` has an open result `(B) => C` only at the top). So a middleware type such as `((Request) => Response) => (Request) => Response` takes pure handlers only, and one that wraps effectful handlers names their effects.
+- **Which positions are open:** a parameter (receivers included) or result whose type is a function type written without `uses`, also through a type alias (`handler: Handler`, with `type Handler = (Request, Scope) => Response`). A direct `List[() => Ok]` parameter also opens its element callback and charges all its callbacks at the call; an explicit `uses nothing` keeps the elements pure. List results, nested lists, and list aliases stay closed. Nothing else: not a union such as `((A) => B) | None`, and not the parameters or results inside a function type (`(A) => (B) => C` has an open result `(B) => C` only at the top). So a middleware type such as `((Request) => Response) => (Request) => Response` takes pure handlers only, and one that wraps effectful handlers names their effects.
 - **A function with open parameters used as a value** (`g: (List[Int], (Int) uses nothing => Int) => List[Int] = transform`) has its open positions closed as pure: `g` is `(List[Int], (Int) uses nothing => Int) => List[Int]`, all pure. Calling `transform` directly keeps it open.
 - **Generic inputs may forward open callbacks when their type parameter does not occur in the result.** For example, `fs.map(f => f(x))` can consume an open callback list and return closed values. A generic result containing that parameter still rejects the open type argument, preventing it from escaping.
-- **Generic code needs nothing extra:** if `T` is `() uses io => Int`, the effect is part of `T`, so `identity`, `head`, and `Option[T]` carry it. Since effects are erased in the Go output, a type pattern on a function type (`f: () => Unit`) may only match a union member known statically to have the same effects, as facts are treated.
+- **Generic code needs nothing extra:** if `T` is `() uses io => Int`, the effect is part of `T`, so `identity`, `head`, and `Option[T]` carry it. Since effects are erased in the Go output, a type pattern on a function type (`f: () => Ok`) may only match a union member known statically to have the same effects, as facts are treated.
 - **`uses nothing` makes a parameter strictly pure.** `fn update[T](a: Atom[T], f: (T) uses nothing => T) uses state: T` is how the prelude says "f may run more than once, so it must not do anything".
 - **A fact named after a function argument needs a pure argument.** `xs.filter(keep)` gives `List[T where keep]`, and that fact, "keep holds", only means something if `keep` gives the same answer every time. So an effectful `keep` still filters, but the result is a plain `List[T]`. The facts its body proves with predicates are kept either way (predicates are pure): `xs.filter(x => { println(x); positive(x) })` uses `io` and still gives positive elements. Inside a function whose parameter is open, a fact named after that parameter holds on the same condition: the prelude's method `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep]` promises the conditional fact, and at each call the fact is kept only if that argument is pure.
 
@@ -1677,9 +1677,9 @@ Function values that do not fit are type errors, which say what the value uses a
 
 ```
 main.bork:5:3: function handler returns () => Int, but its body produces () uses state => Int (it uses state, but an open result can only use what the open parameters use; to allow more, write the parameters' and the result's effects)
-main.bork:9:15: field run of Pure must be () => Unit, found () uses io => Unit (it uses io, where a function that uses nothing is expected)
+main.bork:9:15: field run of Pure must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
 main.bork:13:13: argument 2 to update must be (Int) => Int, found (Int) uses io => Int (it uses io, where a function that uses nothing is expected)
-main.bork:17:26: field run of Job must be () uses io => Unit, found () => Unit (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)
+main.bork:17:26: field run of Job must be () uses io => Ok, found () => Ok (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)
 ```
 
 - **The reason chain is one step deep.** It names the direct call (and, for an open parameter, the lambda's call). The callee's own signature says why that callee needs the effect.
@@ -2161,7 +2161,7 @@ ambient traceId: String
 ambient principal: auth.Principal
 ambient locale: String
 
-fn audit(event: Event) uses io needs traceId + principal: Unit | IoError {
+fn audit(event: Event) uses io needs traceId + principal: Ok | IoError {
   fs.Append(auditLog, s"${traceId} ${principal.name} ${event.kind}\n")
 }
 
@@ -2479,6 +2479,25 @@ other/other.bork:2:12: header TraceParent already carries markfail.trace (declar
 - **Unbinding** (`with (principal: none)`) for code that must run as nobody?
   Rare; a fresh function that does not need the value does the same.
 
+## No-value success spelling (bork-btbg6y)
+
+The no-value type and its explicit success expression are both `Ok`:
+`fn save(): Ok | SomeError { Ok }`. Empty blocks and calls returning nothing
+also produce `Ok`. This keeps success and failure unions concise without
+changing the no-value rules: standalone bindings, fields, parameters, and
+generic value arguments cannot have type `Ok`; callbacks may return it.
+`Ok` has no payload and is separate from user-defined variants such as
+`Result.Ok { value }`.
+
+For one release, `Unit` remains a deprecated type alias. Type descriptions,
+diagnostics, and printed success union members use `Ok`. `bork check` reports
+nonfatal `migration.unit` warnings; its JSON form includes precise replacement
+edits. Strings, comments, and unrelated names are not migrated. The old Go
+representation `_Unit` also remains an alias, but new unsafe Go bodies use
+`_borkOk()` to construct a union's success member. Entire `Ok` results still
+map to Go functions without results; error-only Go bindings produce
+`Ok | GoError`.
+
 ## Go interop
 
 Checked Go interop is implemented (bork-e6abw5). Bork declares the Go functions
@@ -2600,7 +2619,7 @@ Bindings and mirror records convert values by their types, at the boundary. A pa
 | `T` (not an `Option`) | `*T'` | a pointer to a fresh copy | a copy; `nil` is a `GoValueError` |
 | a mirror record | its Go struct, or a pointer to it | field by field, as above | field by field; the record's facts are checked |
 | an opaque type | a Go type it is assignable to (parameters), or the same type (results) | shared | shared; `nil` is a `GoValueError` |
-| `Unit` | no result | | |
+| `Ok` | no result | | |
 
 - **Named Go types convert by their underlying type**, in every row: `time.Duration` as `int64`, `os.FileMode` as `uint32`, `url.Values` (a `map[string][]string`) as a `Map[String, List[String]]`, `net.IP` (a `[]byte`) as a `List[Byte]`. Unless the bork type is an opaque declaration of that named type, which passes it through.
 - **`uintptr`, `complex64`/`complex128`, channels, `unsafe.Pointer`, `any`, and Go functions do not convert.**
@@ -2618,9 +2637,9 @@ A binding is checked parameter by parameter, and its result against the Go funct
 
 | Go results | bork result |
 |------------|-------------|
-| none | `Unit` (no result type) |
+| none | `Ok` (no result type) |
 | `T` | `T'` |
-| `error` | `Unit | GoError` |
+| `error` | `Ok | GoError` |
 | `T, error` | `T' | GoError` |
 | `T, bool` | `Option[T']` (the `comma ok` form: `false` is `None`) |
 
@@ -3242,7 +3261,7 @@ Rendering uses the coherent Show machinery, including custom instances and
 generic values. Probing preserves the value's type, proven facts and scope
 lifetime. Like logging, the probe's output is deliberately outside the effect
 system; it may appear in pure functions and predicates. The argument's own
-effects still count. Unit is not a printable value.
+effects still count. Ok is not a printable value.
 
 `todo()` and `todo("message")` are compiler built-ins of type `Never`: they fit
 any expected result type and panic with the source file and line when reached.
@@ -3315,12 +3334,12 @@ expr against T, emits it once, and terminates the current producer if its
 consumer stops. `return` with no value ends that producer. A value return is
 an error. The producer is a function boundary: neither return nor `?` escapes
 the enclosing function that created it. A break/continue in a producer cannot target a loop
-outside its generate boundary. Initially, `?` in this Unit-returning
+outside its generate boundary. Initially, `?` in this Ok-returning
 body is rejected by the ordinary return-type rules; producers of fallible
 items yield error alternatives explicitly, then return when terminal.
 
 Add `for (name in values) { ... }` for List and Seq, binding a fresh immutable
-name on each iteration. It returns Unit, and its body follows ordinary
+name on each iteration. It returns Ok, and its body follows ordinary
 statement/unused-value rules. `break` stops the nearest loop, and `continue`
 skips to its next item. A return from an ordinary consuming loop returns from
 the surrounding function; a return from a loop inside generate ends the
@@ -3364,8 +3383,8 @@ signature has no immediate effect. Traversing the result uses io. Construction
 expressions and capture expressions are evaluated immediately and their own
 effects still count. Ordinary producer factories may capture only callbacks with fixed, known
 effects. An unresolved open callback cannot be converted to a fixed latent
-qualifier: `fn delayed(f: () => Unit): Seq[Int] { generate[Int] { f(); yield 1 } }`
-is rejected. Require `f: () uses nothing => Unit` for a pure producer, or declare
+qualifier: `fn delayed(f: () => Ok): Seq[Int] { generate[Int] { f(); yield 1 } }`
+is rejected. Require `f: () uses nothing => Ok` for a pure producer, or declare
 its fixed effects and return `Seq[Int] uses io` when it uses io. A wrapper that
 returns `items.map(f)` has the same restriction if f's effects remain open.
 Built-in adapters can infer latent effect unions from concrete callbacks at
@@ -3725,7 +3744,7 @@ Effects require `parMapIn(s, f)`, `parFilterIn`, `parFlatMapIn`, or
 `parForEachIn`. The `In` suffix avoids adding method overloading. Their
 callbacks take `(Scope, T)` so cancellation-aware work receives its scope
 explicitly. Calls charge `state` plus the open callback's effects and return
-`List[U] | Cancelled` (or `Unit | Cancelled` for for-each). Cancellation stops
+`List[U] | Cancelled` (or `Ok | Cancelled` for for-each). Cancellation stops
 scheduling more elements, and a call waits for callbacks already started.
 Those callbacks cooperate through `checkpoint`, `delay`, channel operations,
 or scoped standard-library I/O. Partial results are discarded. Side-effect
@@ -3791,8 +3810,8 @@ are joined. Cancellation is cooperative; it does not terminate the callback.
 Nonpositive timeouts cancel before calling work. Oversized millisecond values
 are saturated to Go's maximum duration. A successful operation stops its
 deadline, so its returned resources remain usable; internal child resources
-stay owned until `s` closes. `withTimeoutDo` is the Unit-callback counterpart,
-returning `Unit | Cancelled`, as Unit is not a generic value argument.
+stay owned until `s` closes. `withTimeoutDo` is the Ok-callback counterpart,
+returning `Ok | Cancelled`, as Ok is not a generic value argument.
 
 Typed selection uses `ch.receiveCase(f)` to map each channel's own
 `T | Cancelled | Closed` into a common event type `R`, and

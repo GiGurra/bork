@@ -6,7 +6,7 @@
 
 ## JSON API
 
-`bork/json` adds `Field(value, name)`, `Index(value, index)`, and `At(value, path)` on dynamic Json values. Paths are lists of string keys and integer indices; missing paths give None and JSON null gives Some(Null). `Pretty(value, spaces = 2)` preserves object order and number text; spaces must be 0 through 8. `OpenLines(path, s)` and `CreateLines(path, s)` return scope-owned Reader/Writer resources. `Next(reader)` returns Option[Json], LineError (with a one-based line number), or IoError. `Write[T: Encode](writer, value)` writes one compact value and LF and returns Unit, JsonError, or IoError. Both operations use io.
+`bork/json` adds `Field(value, name)`, `Index(value, index)`, and `At(value, path)` on dynamic Json values. Paths are lists of string keys and integer indices; missing paths give None and JSON null gives Some(Null). `Pretty(value, spaces = 2)` preserves object order and number text; spaces must be 0 through 8. `OpenLines(path, s)` and `CreateLines(path, s)` return scope-owned Reader/Writer resources. `Next(reader)` returns Option[Json], LineError (with a one-based line number), or IoError. `Write[T: Encode](writer, value)` writes one compact value and LF and returns Ok, JsonError, or IoError. Both operations use io.
 
 ## Examples
 

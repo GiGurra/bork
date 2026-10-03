@@ -28,7 +28,7 @@ Each package writes a summary (exported types, signatures with their constraints
 
 - **Golden-file end-to-end tests from day one.** Each case under `testdata/cases/` is a `.bork` program plus either its expected output or its expected diagnostics.
 - **Diagnostics are tested like output.** Friendly, specific error messages are a core value, so their text is part of the expected results.
-- **Unit tests** for the lexer, parser, type checker, and fact resolver.
+- **Ok tests** for the lexer, parser, type checker, and fact resolver.
 
 ## Milestones
 

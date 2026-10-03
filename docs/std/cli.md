@@ -4,7 +4,7 @@
 
 `bork/cli` wraps boa through a reflection shadow struct built from a derived
 Decode schema. `Parse[T]` returns proven options, collected field errors, or help;
-`Run[T]` invokes a `(T, Scope) => Unit` handler only after successful validation.
+`Run[T]` invokes a `(T, Scope) => Ok` handler only after successful validation.
 Docs/defaults drive help, `cli.Flag` maps short/env/positional metadata, and List
 fields take repeated flags. Unknown metadata names include a closest-field hint;
 duplicate short/env/positional mappings are errors before parsing. Environment
@@ -45,8 +45,8 @@ them. Boa treats an empty environment value as absent. Environment loading throu
 `Parse[T: Decode](name, description, args, flags = [], configFiles = [])` returns `T | cli.Error |
 cli.Help`. Arguments exclude the executable name. It captures help text rather
 than printing it. `Run[T: Decode](name, description, handler, flags = [], configFiles = [])` reads
-process arguments, prints help, and invokes `(T, Scope) => Unit` in a fresh scope
-on success. It returns `Unit | cli.Error`; applications choose how to render
+process arguments, prints help, and invokes `(T, Scope) => Ok` in a fresh scope
+on success. It returns `Ok | cli.Error`; applications choose how to render
 errors and exit. Both use `io` for environment access, and Run carries its
 handler's effects. Typed subcommands close callback effects as described below.
 
@@ -120,9 +120,9 @@ Commands with different option records can share a `List[cli.Command]`; the publ
 raw JSON or another command's options.
 
 `Dispatch(name, description, arguments, commands)` accepts explicit arguments
-without the executable name and returns `Unit | cli.Error | cli.Help`.
+without the executable name and returns `Ok | cli.Error | cli.Help`.
 `RunCommands(name, description, commands)` reads process arguments and prints
-help, returning `Unit | cli.Error`. Both use cobra to select one subcommand and
+help, returning `Ok | cli.Error`. Both use cobra to select one subcommand and
 boa to parse its own derived option record, including command-specific flags,
 environment mappings, configFiles, and config-file selectors. A selected handler runs in a fresh
 scope, and cleanup finishes before dispatch returns. Errors and help never run
@@ -131,7 +131,7 @@ produce help; command help includes field docs/defaults and its own flags.
 Unknown commands and invalid flags return errors.
 
 Each handler has the closed type `(T, Scope) uses io + net + clock + random +
-state => Unit`. `Subcommand` itself is pure: it stores the handler without
+state => Ok`. `Subcommand` itself is pure: it stores the handler without
 running it. `Command.execute`, `Dispatch`, and `RunCommands` conservatively
 charge all five effects, even if the selected handler uses fewer. A fixed bound
 is required for storing heterogeneous callbacks and follows the existing

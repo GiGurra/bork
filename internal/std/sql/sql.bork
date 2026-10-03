@@ -44,19 +44,19 @@ fn Begin(connection: Connection, s: Scope) uses io + net: Transaction | Error un
     if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { panic(err) }
   })}
 }
-fn Commit(transaction: Transaction) uses io + net: Unit | Error unsafe go {
+fn Commit(transaction: Transaction) uses io + net: Ok | Error unsafe go {
   import "database/sql"
   _ = transaction.handle.(*_borkResourceHandle).Context()
   if err := transaction.handle.(*_borkResourceHandle).Value.(*sql.Tx).Commit(); err != nil { return Error{operation: "commit", message: err.Error()} }
-  return _Unit{}
+  return _borkOk()
 }
 // Rollback is harmless after a transaction has already committed or rolled back.
-fn Rollback(transaction: Transaction) uses io + net: Unit | Error unsafe go {
+fn Rollback(transaction: Transaction) uses io + net: Ok | Error unsafe go {
   import "database/sql"
   import "errors"
   _ = transaction.handle.(*_borkResourceHandle).Context()
   if err := transaction.handle.(*_borkResourceHandle).Value.(*sql.Tx).Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { return Error{operation: "rollback", message: err.Error()} }
-  return _Unit{}
+  return _borkOk()
 }
 
 // Exec binds params to the driver's placeholders (? for SQLite, $1 for

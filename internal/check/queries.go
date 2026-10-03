@@ -366,7 +366,7 @@ func MockTargetRef(m *Mock) *FuncRef {
 
 func writtenTypeText(t *syntax.TypeExpr) string {
 	if t == nil {
-		return "Unit"
+		return "Ok"
 	}
 	out := writtenTypeAtomText(t)
 	if t.Uses != nil {
@@ -408,7 +408,7 @@ func writtenPredText(ref *syntax.PredRef) string {
 }
 func writtenTypeAtomText(t *syntax.TypeExpr) string {
 	if t == nil {
-		return "Unit"
+		return "Ok"
 	}
 	if t.Union != nil {
 		var parts []string

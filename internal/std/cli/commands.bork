@@ -3,11 +3,11 @@
 type Command = {
   name: String
   description: String
-  execute: (String, List[String], Scope) uses io + net + clock + random + state => Unit | Error | Help
+  execute: (String, List[String], Scope) uses io + net + clock + random + state => Ok | Error | Help
 }
 
 // Subcommand keeps the handler typed; only validated options reach it.
-fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Unit, flags: List[Flag] = [], configFiles: List[String] = []): Command {
+fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = []): Command {
   Command {
     name: name
     description: description
@@ -23,11 +23,11 @@ fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses
 
 // Dispatch accepts explicit arguments without the executable name. A selected
 // handler runs in a fresh scope; help and errors stay values for the caller.
-fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command]) uses io + net + clock + random + state: Unit | Error | Help {
+fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command]) uses io + net + clock + random + state: Ok | Error | Help {
   scope s { dispatch(name, description, arguments, commands, s) }
 }
 
-fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope) uses io + net + clock + random + state: Unit | Error | Help unsafe go {
+fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope) uses io + net + clock + random + state: Ok | Error | Help unsafe go {
   import "bytes"
   import "fmt"
   import "strings"
@@ -95,10 +95,10 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
 
 // RunCommands reads process arguments and prints help. Applications render
 // returned errors and choose an exit code, as with Run.
-fn RunCommands(name: String, description: String, commands: List[Command]) uses io + net + clock + random + state: Unit | Error {
+fn RunCommands(name: String, description: String, commands: List[Command]) uses io + net + clock + random + state: Ok | Error {
   match (Dispatch(name, description, args(), commands)) {
     help: Help => { print(help.text) }
     error: Error => error
-    Unit => {}
+    Ok => {}
   }
 }

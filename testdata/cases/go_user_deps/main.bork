@@ -1,4 +1,4 @@
-fn Valid(text: String): Unit | GoError unsafe go "github.com/google/uuid.Validate"
+fn Valid(text: String): Ok | GoError unsafe go "github.com/google/uuid.Validate"
 fn Parse(text: String): List[Byte] | GoError unsafe go "github.com/google/uuid.Parse"
 fn main() uses io {
   println(Valid("00000000-0000-0000-0000-000000000001"))

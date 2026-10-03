@@ -75,7 +75,7 @@ fn route(req: http.Request, rs: Scope) uses clock + state: http.Response {
   }
 }
 
-fn serve(addr: String) uses io + net + clock + state: Unit | IoError {
+fn serve(addr: String) uses io + net + clock + state: Ok | IoError {
   scope s {
     server = http.Listen(addr, s, route)?
     eprintln(s"listening on ${http.Address(server)}")
@@ -99,7 +99,7 @@ fn post(s: Scope, base: String, body: String) uses io + net + clock + state {
 
 // demo starts the server on a free port and sends it requests; the
 // server stops when the scope closes.
-fn demo() uses io + net + clock + state: Unit | IoError {
+fn demo() uses io + net + clock + state: Ok | IoError {
   scope s {
     server = http.Listen("127.0.0.1:0", s, route)?
     base = "http://" + http.Address(server)

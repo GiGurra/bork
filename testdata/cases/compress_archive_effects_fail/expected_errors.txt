@@ -1,4 +1,4 @@
 main.bork:6:60: gzip uses io (it calls compress.GzipTo), but its signature allows no effects; declare it: uses io
-main.bork:7:41: zip uses io (it calls archive.WriteZip), but its signature allows no effects; declare it: uses io
-main.bork:8:79: zipClock uses clock (it calls archive.ForEachZip, with a lambda that calls println and time.Now), but its signature allows only io; declare it: uses io + clock
-main.bork:9:79: tarClock uses clock (it calls archive.ForEachTar, with a lambda that calls println and time.Now), but its signature allows only io; declare it: uses io + clock
+main.bork:7:39: zip uses io (it calls archive.WriteZip), but its signature allows no effects; declare it: uses io
+main.bork:8:77: zipClock uses clock (it calls archive.ForEachZip, with a lambda that calls println and time.Now), but its signature allows only io; declare it: uses io + clock
+main.bork:9:77: tarClock uses clock (it calls archive.ForEachTar, with a lambda that calls println and time.Now), but its signature allows only io; declare it: uses io + clock

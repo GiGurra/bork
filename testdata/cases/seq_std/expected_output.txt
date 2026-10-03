@@ -5,4 +5,4 @@
 [Row { n: 1 }, Row { n: 2 }]
 [Json.Object { fields: [JsonField { name: "n", value: Json.Number { text: "3" } }] }]
 ["query"]
-Unit
+Ok

@@ -22,7 +22,7 @@ fn main() {
   println(String.missing)
   wrong: (Int) => Int = String.byteLength
   println(wrong(1))
-  printing: (Point) uses nothing => Unit = Point.print
+  printing: (Point) uses nothing => Ok = Point.print
   printing(Point { x: 1 })
   includes: (List[F], F) => Bool = List.includes
   println(includes([], F { f: x => x }))

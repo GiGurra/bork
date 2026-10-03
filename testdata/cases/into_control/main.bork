@@ -2,7 +2,7 @@ type Source = { n: Int }
 type Target = { n: Int, text: String = "default" }
 fn source() uses io: Source { println("source"); Source { n: 1 } }
 fn later() uses io: String { println("later"); "later" }
-fn protect(work: () => Unit): Bool unsafe go {
+fn protect(work: () => Ok): Bool unsafe go {
   recovered := false
   func() { defer func() { recovered = recover() != nil }(); work() }()
   return recovered

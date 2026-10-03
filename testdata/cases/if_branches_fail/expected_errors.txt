@@ -1,4 +1,4 @@
 main.bork:2:7: if-branches have different types: Int and String
 main.bork:3:7: if-condition must be Bool, found Int
-main.bork:4:7: cannot bind y: the expression produces no value (Unit)
+main.bork:4:7: cannot bind y: the expression produces no value (Ok)
 main.bork:4:17: if without else cannot produce a value (found Int); add an else branch or drop the value

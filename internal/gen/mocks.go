@@ -175,7 +175,7 @@ func (g *gen) dispatchers(fn *check.Func) []ast.Decl {
 		params = append(params, ast.NewIdent("_callerAt"))
 		args = append(args, ast.NewIdent("_callerAt"))
 	}
-	returns := fn.Result != check.Unit && fn.Result != check.Never
+	returns := fn.Result != check.Ok && fn.Result != check.Never
 	result := func(call ast.Expr) []ast.Stmt {
 		if returns {
 			return []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{call}}}
@@ -322,7 +322,7 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 		// does (genericMockBody).
 		g.mangleTypeParams(m.Target, true)
 	}
-	body := g.guardLabels(func() []ast.Stmt { return g.blockInto(m.Func.Body, sink{ret: m.Target.Result != check.Unit}) })
+	body := g.guardLabels(func() []ast.Stmt { return g.blockInto(m.Func.Body, sink{ret: m.Target.Result != check.Ok}) })
 	g.mockBodies = g.mockBodies[:len(g.mockBodies)-1]
 	g.yieldName, g.loops = savedYield, savedLoops
 	if capture != nil {
@@ -585,7 +585,7 @@ func (g *gen) nextRef(inst *check.Instance, frame *ast.Ident, needs []ast.Expr) 
 	}
 	call := g.nextCall(inst, frame, append(args, needs...))
 	var body ast.Stmt = &ast.ExprStmt{X: call}
-	if inst.Result != check.Unit && inst.Result != check.Never {
+	if inst.Result != check.Ok && inst.Result != check.Never {
 		body = &ast.ReturnStmt{Results: []ast.Expr{call}}
 	}
 	ft := g.funcType(&check.FuncType{Params: inst.Params, Result: inst.Result}, names)

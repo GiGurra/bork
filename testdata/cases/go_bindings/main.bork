@@ -6,7 +6,7 @@ fn Atoi(s: String): Int | GoError unsafe go "strconv.Atoi"
 fn Fields(s: String): List[String] unsafe go "strings.Fields"
 fn Join(parts: List[String], sep: String): String unsafe go "strings.Join"
 fn LookupEnv(key: String) uses io: Option[String] unsafe go "os.LookupEnv"
-fn Chdir(dir: String) uses io: Unit | GoError unsafe go "os.Chdir"
+fn Chdir(dir: String) uses io: Ok | GoError unsafe go "os.Chdir"
 fn Abs(x: Float): Float unsafe go "math.Abs"
 
 // Numbers: lossless to Go, checked from Go.

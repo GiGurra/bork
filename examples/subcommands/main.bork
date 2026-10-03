@@ -19,6 +19,6 @@ fn main() {
   ]
   match (cli.RunCommands("app", "Typed subcommands", commands)) {
     error: cli.Error => { println(error); exit(2) }
-    Unit => {}
+    Ok => {}
   }
 }

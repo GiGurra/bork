@@ -44,13 +44,13 @@ fn CreateLines(path: String, s: Scope) uses io: Writer | IoError unsafe go {
   if err != nil { return IoError{path: path, message: err.Error()} }
   return Writer{handle: file, owner: s.Own(func() { file.Close() })}
 }
-fn Write[T: Encode](writer: Writer, value: T) uses io: Unit | JsonError | IoError {
+fn Write[T: Encode](writer: Writer, value: T) uses io: Ok | JsonError | IoError {
   encoded = encode[T](value)
   validateNumbers(encoded)?
   parsed = parseJson(renderJson(encoded))?
   writeLine(writer, renderJson(parsed))
 }
-fn writeLine(writer: Writer, text: String) uses io: Unit | IoError unsafe go {
+fn writeLine(writer: Writer, text: String) uses io: Ok | IoError unsafe go {
   import "os"
   import "io"
   file := writer.handle.(*os.File)
@@ -58,5 +58,5 @@ fn writeLine(writer: Writer, text: String) uses io: Unit | IoError unsafe go {
   size, err := file.WriteString(line)
   if err == nil && size != len(line) { err = io.ErrShortWrite }
   if err != nil { return IoError{path: file.Name(), message: err.Error()} }
-  return _Unit{}
+  return _borkOk()
 }

@@ -282,7 +282,7 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 		c.scopes[len(c.scopes)-1][p.Name] = &local{typ: target.Params[i], decl: p}
 	}
 	var want Type
-	if fn.Result != Unit {
+	if fn.Result != Ok {
 		want = fn.Result
 	}
 	bodyType := c.block(s.Body, want)
@@ -291,11 +291,11 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 	c.loops, c.producer = savedLoops, savedProducer
 	name := writtenText(s.Target)
 	switch {
-	case fn.Result == Unit && isValue(bodyType):
+	case fn.Result == Ok && isValue(bodyType):
 		c.errorf(s.Body.Tail.Position(), "value of type %s is not used (%s returns no value)", bodyType, name)
-	case fn.Result != Unit && bodyType == Unit:
+	case fn.Result != Ok && bodyType == Ok:
 		c.errorf(s.Body.Pos, "the mock of %s must give a value of type %s, but its body ends without one", name, fn.Result)
-	case fn.Result != Unit && !assignable(bodyType, fn.Result):
+	case fn.Result != Ok && !assignable(bodyType, fn.Result):
 		pos := s.Body.Pos
 		if s.Body.Tail != nil {
 			pos = s.Body.Tail.Position()

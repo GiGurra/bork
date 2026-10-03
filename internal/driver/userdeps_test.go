@@ -34,7 +34,7 @@ func TestUserGoDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	write("main.bork", "import \"example.com/userdeps/ffi\"\nfn main() uses io { println(ffi.Valid(\"00000000-0000-0000-0000-000000000001\")) }\n")
-	if err := os.WriteFile(filepath.Join(sub, "ffi.bork"), []byte("fn Valid(text: String): Unit | GoError unsafe go \"github.com/google/uuid.Validate\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, "ffi.bork"), []byte("fn Valid(text: String): Ok | GoError unsafe go \"github.com/google/uuid.Validate\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	exe := filepath.Join(t.TempDir(), "program")
@@ -50,7 +50,7 @@ func TestUserGoDependencies(t *testing.T) {
 		t.Fatalf("offline build from module cache: %v", err)
 	}
 	out, err := exec.Command(exe).CombinedOutput()
-	if err != nil || string(out) != "Unit\n" {
+	if err != nil || string(out) != "Ok\n" {
 		t.Fatalf("program: %s %v", out, err)
 	}
 	t.Setenv("GOMODCACHE", t.TempDir())

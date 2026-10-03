@@ -4,7 +4,7 @@ import "bork/log"
 // it audit.requestId.
 logged ambient requestId: String
 
-fn Run(f: () => Unit) {
+fn Run(f: () => Ok) {
   with (requestId: "audit-1") { f() }
 }
 

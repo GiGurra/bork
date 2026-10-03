@@ -33,9 +33,9 @@ pred loud(x: Int) {
   x > 0
 }
 
-fn run(f: () uses io => Unit) uses io { f() }
+fn run(f: () uses io => Ok) uses io { f() }
 
-type Job = { run: () uses io => Unit }
+type Job = { run: () uses io => Ok }
 
 fn callsField(job: Job) { job.run() }
 
@@ -58,7 +58,7 @@ fn pureMain() uses nothing { println("x") }
 
 fn both2(s: String) uses net { println(s) }
 
-fn mainAsValue(): () uses io => Unit { main }
+fn mainAsValue(): () uses io => Ok { main }
 
 fn main() uses io {
   _ = describe(User { name: "Ada", age: 36 })

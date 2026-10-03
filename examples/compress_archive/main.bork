@@ -1,7 +1,7 @@
 import "bork/compress"
 import "bork/archive"
 
-fn exercise() uses io: Unit | IoError {
+fn exercise() uses io: Ok | IoError {
   payload = utf8Bytes("hello, archive")
   compressed = compress.Gzip(payload)?
   println(utf8String(compress.Gunzip(compressed)?))
@@ -14,7 +14,7 @@ fn exercise() uses io: Unit | IoError {
 
 fn main() {
   match (exercise()) {
-    done: Unit => {}
+    done: Ok => {}
     error: IoError => println(error)
   }
 }

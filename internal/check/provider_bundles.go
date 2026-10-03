@@ -43,7 +43,7 @@ func providerProduct(fn *FuncType) Type {
 func validBundleProvider(fn *Func) bool {
 	t := fn.funcType()
 	product := providerProduct(t)
-	if len(fn.TypeParams) > 0 || product == Scope || product == OwnedScope || product == Unit || product == Never || product == Invalid || !isValue(product) || hasTypeParam(t) || hasOpenEffects(t) {
+	if len(fn.TypeParams) > 0 || product == Scope || product == OwnedScope || product == Ok || product == Never || product == Invalid || !isValue(product) || hasTypeParam(t) || hasOpenEffects(t) {
 		return false
 	}
 	for _, p := range t.Params {

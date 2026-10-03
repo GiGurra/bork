@@ -33,12 +33,12 @@ fn main() {
 		name, env          string
 		args, want, absent []string
 	}{
-		{name: "env-defaults", env: "Ada", want: []string{`name: "Ada"`, "port: 8080", "verbose: true", "closed\nUnit"}},
-		{name: "cli-precedence", env: "Env", args: []string{"--name", "CLI", "-p", "443", "--verbose=false"}, want: []string{`name: "CLI"`, "port: 443", "verbose: false", "closed\nUnit"}, absent: []string{`name: "Env"`}},
-		{name: "empty-env", args: []string{"--port", "0"}, want: []string{".name", "is missing", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Unit"}},
-		{name: "help", env: "Ada", args: []string{"--help"}, want: []string{"Example", "Usage:", "--name", "default 8080", "Unit"}, absent: []string{"Options {", "closed"}},
-		{name: "bad-flag", args: []string{"--missing"}, want: []string{"Error {", "unknown flag"}, absent: []string{"closed", "Unit"}},
-		{name: "unexpected-positional", env: "Ada", args: []string{"unexpected"}, want: []string{"Error {"}, absent: []string{"closed", "Unit"}},
+		{name: "env-defaults", env: "Ada", want: []string{`name: "Ada"`, "port: 8080", "verbose: true", "closed\nOk"}},
+		{name: "cli-precedence", env: "Env", args: []string{"--name", "CLI", "-p", "443", "--verbose=false"}, want: []string{`name: "CLI"`, "port: 443", "verbose: false", "closed\nOk"}, absent: []string{`name: "Env"`}},
+		{name: "empty-env", args: []string{"--port", "0"}, want: []string{".name", "is missing", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Ok"}},
+		{name: "help", env: "Ada", args: []string{"--help"}, want: []string{"Example", "Usage:", "--name", "default 8080", "Ok"}, absent: []string{"Options {", "closed"}},
+		{name: "bad-flag", args: []string{"--missing"}, want: []string{"Error {", "unknown flag"}, absent: []string{"closed", "Ok"}},
+		{name: "unexpected-positional", env: "Ada", args: []string{"unexpected"}, want: []string{"Error {"}, absent: []string{"closed", "Ok"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -94,27 +94,27 @@ fn main() {
 		name, base, override, selected, envName, envPort, envFile string
 		args, want, absent                                        []string
 	}{
-		{name: "files-defaults", base: `{"name":"base"}`, override: `{}`, want: []string{`name: "base"`, "port: 8080", "verbose: true", `tags: ["default"]`, "closed\nUnit"}},
+		{name: "files-defaults", base: `{"name":"base"}`, override: `{}`, want: []string{`name: "base"`, "port: 8080", "verbose: true", `tags: ["default"]`, "closed\nOk"}},
 		{name: "file-overlay", base: `{"name":"base","port":80,"verbose":true,"tags":["a","b"]}`, override: `{"name":"overlay","verbose":false,"tags":[],"nested":{"enabled":false}}`, want: []string{`name: "overlay"`, "port: 80", "verbose: false", "tags: []", "enabled: false"}},
 		{name: "env-precedence", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, envName: "env", envPort: "82", want: []string{`name: "env"`, "port: 82"}},
 		{name: "cli-precedence", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, envName: "env", envPort: "82", args: []string{"--port", "83", "cli"}, want: []string{`name: "cli"`, "port: 83"}},
 		{name: "selected-file", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, selected: `{"name":"selected","port":84}`, args: []string{"--config", "selected.json"}, want: []string{`name: "selected"`, "port: 84"}},
 		{name: "selected-env", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected"}`, envFile: "selected.json", want: []string{`name: "selected"`}},
 		{name: "selector-cli-precedence", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected"}`, envFile: "missing.json", args: []string{"--config", "selected.json"}, want: []string{`name: "selected"`}},
-		{name: "final-validation", base: `{"name":"","port":0}`, override: `{}`, want: []string{".name", "must be nonempty", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Unit"}},
-		{name: "overridden-invalid", base: `{"name":"","port":0}`, override: `{}`, args: []string{"--port", "443", "cli"}, want: []string{`name: "cli"`, "port: 443", "closed\nUnit"}},
-		{name: "null-optional", base: `{"name":"base","config":null}`, override: `{}`, want: []string{"config: Option.None", "closed\nUnit"}},
-		{name: "wrong-type", base: `{"name":false,"port":"bad","tags":false}`, override: `{}`, want: []string{".name", ".port", ".tags"}, absent: []string{"closed", "Unit"}},
-		{name: "unknown-key", base: `{"naem":"typo"}`, override: `{}`, want: []string{"unknown CLI config field", "naem"}, absent: []string{"closed", "Unit"}},
-		{name: "bad-json", base: `{`, override: `{}`, want: []string{"Error {", "base.json"}, absent: []string{"closed", "Unit"}},
-		{name: "non-object", base: `[]`, override: `{}`, want: []string{"CLI config must be a JSON object"}, absent: []string{"closed", "Unit"}},
+		{name: "final-validation", base: `{"name":"","port":0}`, override: `{}`, want: []string{".name", "must be nonempty", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Ok"}},
+		{name: "overridden-invalid", base: `{"name":"","port":0}`, override: `{}`, args: []string{"--port", "443", "cli"}, want: []string{`name: "cli"`, "port: 443", "closed\nOk"}},
+		{name: "null-optional", base: `{"name":"base","config":null}`, override: `{}`, want: []string{"config: Option.None", "closed\nOk"}},
+		{name: "wrong-type", base: `{"name":false,"port":"bad","tags":false}`, override: `{}`, want: []string{".name", ".port", ".tags"}, absent: []string{"closed", "Ok"}},
+		{name: "unknown-key", base: `{"naem":"typo"}`, override: `{}`, want: []string{"unknown CLI config field", "naem"}, absent: []string{"closed", "Ok"}},
+		{name: "bad-json", base: `{`, override: `{}`, want: []string{"Error {", "base.json"}, absent: []string{"closed", "Ok"}},
+		{name: "non-object", base: `[]`, override: `{}`, want: []string{"CLI config must be a JSON object"}, absent: []string{"closed", "Ok"}},
 		{name: "positional-precedence", base: `{"name":"base"}`, override: `{}`, envName: "env", args: []string{"positional"}, want: []string{`name: "positional"`}},
 		{name: "selected-below-env", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected","port":84}`, envName: "env", envPort: "85", args: []string{"--config", "selected.json"}, want: []string{`name: "env"`, "port: 85"}},
-		{name: "file-no-recursion", base: `{"name":"base","config":"missing.json"}`, override: `{}`, want: []string{`name: "base"`, `value: "missing.json"`, "closed\nUnit"}},
-		{name: "null-default", base: `{"name":"base","port":null}`, override: `{}`, want: []string{".port", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "nested-unknown", base: `{"name":"base","nested":{"enabled":false,"enabeld":true}}`, override: `{}`, want: []string{"enabled: false", "closed\nUnit"}},
-		{name: "missing-selected", base: `{"name":"base"}`, override: `{}`, args: []string{"--config", "missing.json"}, want: []string{"missing.json", "Error {"}, absent: []string{"closed", "Unit"}},
-		{name: "help-no-read", base: `{`, override: `{}`, args: []string{"--help"}, want: []string{"Usage:", "--config", "Unit"}, absent: []string{"Error {", "closed"}},
+		{name: "file-no-recursion", base: `{"name":"base","config":"missing.json"}`, override: `{}`, want: []string{`name: "base"`, `value: "missing.json"`, "closed\nOk"}},
+		{name: "null-default", base: `{"name":"base","port":null}`, override: `{}`, want: []string{".port", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "nested-unknown", base: `{"name":"base","nested":{"enabled":false,"enabeld":true}}`, override: `{}`, want: []string{"enabled: false", "closed\nOk"}},
+		{name: "missing-selected", base: `{"name":"base"}`, override: `{}`, args: []string{"--config", "missing.json"}, want: []string{"missing.json", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "help-no-read", base: `{`, override: `{}`, args: []string{"--help"}, want: []string{"Usage:", "--config", "Ok"}, absent: []string{"Error {", "closed"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

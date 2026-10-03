@@ -17,11 +17,11 @@ func (c *checker) generate(e *syntax.Generate) Type {
 	outer, loops, producer := c.used, c.loops, c.producer
 	c.used, c.loops = 0, nil
 	c.producer = &producerContext{elem: elem, depth: c.lambdaDepth}
-	body := c.block(e.Body, Unit)
+	body := c.block(e.Body, Ok)
 	effects := c.used
 	c.used, c.loops, c.producer = outer, loops, producer
-	if body != Unit && body != Never && body != Invalid {
-		c.errorf(e.Body.Pos, "a generator body must have type Unit, found %s", body)
+	if body != Ok && body != Never && body != Invalid {
+		c.errorf(e.Body.Pos, "a generator body must have type Ok, found %s", body)
 	}
 	if effects&EffOpen != 0 {
 		c.errorf(e.Pos, "a generator cannot capture an open-effect callback; declare the callback's fixed effects")
@@ -39,7 +39,7 @@ func (c *checker) yieldExpr(e *syntax.Yield) Type {
 	if !assignable(got, c.producer.elem) {
 		c.errorf(e.Pos, "generator yields %s, but this value is %s", c.producer.elem, got)
 	}
-	return Unit
+	return Ok
 }
 
 func (c *checker) forExpr(e *syntax.For) Type {
@@ -60,13 +60,13 @@ func (c *checker) forExpr(e *syntax.For) Type {
 	c.bind(e.Name, e.NamePos, elem, e)
 	c.scopes[len(c.scopes)-1][e.Name].node = nil
 	c.loops = append(c.loops, c.lambdaDepth)
-	body := c.block(e.Body, Unit)
+	body := c.block(e.Body, Ok)
 	c.loops = c.loops[:len(c.loops)-1]
 	c.popScope()
-	if body != Unit && body != Never && body != Invalid {
-		c.errorf(e.Body.Pos, "a loop body must have type Unit, found %s", body)
+	if body != Ok && body != Never && body != Invalid {
+		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}
-	return Unit
+	return Ok
 }
 
 type seqCallInfo struct {
@@ -220,10 +220,10 @@ func (c *checker) seqMethod(e *syntax.Call, sel *syntax.Selector, receiver Type)
 		}
 		result = &Seq{Elem: seq.Elem, Effects: effects}
 	case "forEach":
-		if ft := callback(e.Args[0], []Type{seq.Elem}, Unit); ft != nil && ft.Result != Unit && ft.Result != Never {
-			c.errorf(e.Args[0].Position(), "forEach callback must return Unit")
+		if ft := callback(e.Args[0], []Type{seq.Elem}, Ok); ft != nil && ft.Result != Ok && ft.Result != Never {
+			c.errorf(e.Args[0].Position(), "forEach callback must return Ok")
 		}
-		result = Unit
+		result = Ok
 	case "fold":
 		seed := c.expr(e.Args[0])
 		if ft := callback(e.Args[1], []Type{seed, seq.Elem}, seed); ft != nil && !assignable(ft.Result, seed) {

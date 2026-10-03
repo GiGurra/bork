@@ -78,8 +78,8 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		w.line(call)
 	case check.GoErrorOnly:
 		w.line("if _err := " + call + "; _err != nil { return _bindGoError(_err) }")
-		g.usesUnit = true
-		w.line("return _Unit{}")
+		g.usesOk = true
+		w.line("return _Ok{}")
 	case check.GoValue:
 		w.line("_r := " + call)
 		w.registerResources("_r", b.Sig.Results().At(0).Type(), b.Value, `"result"`)

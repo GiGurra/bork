@@ -7,6 +7,18 @@ types such as `context.Context`. Implementations live in
 `internal/gen/helpers.go`. Runtime fields, methods, and variant names are
 compiler internals; keep dependencies on them inside the helper implementations.
 
+## Success without a value
+
+`_borkOk()` constructs the success member of a union such as `Ok | IoError`.
+Use `return _borkOk()` in an unsafe Go body with that result. A function whose
+entire result is `Ok` maps to a Go function with no result; use a bare `return`
+there. Checked bindings map Go functions with no results to `Ok`, and functions
+returning only `error` to `Ok | GoError`.
+
+The generated union member is an empty struct whose printed spelling is `Ok`.
+The old `_Unit` Go type spelling remains an alias for one release, alongside
+the deprecated bork `Unit` type alias. Prefer the helper for new Go bodies.
+
 ## I/O errors
 
 | Helper | Behavior |

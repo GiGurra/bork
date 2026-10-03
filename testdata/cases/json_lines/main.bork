@@ -17,7 +17,7 @@ fn countLines(reader: json.Reader) uses io: Int {
     _ => -100
   }
 }
-fn exercise(s: Scope) uses io: Unit | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | JsonError {
+fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | JsonError {
   directory = fs.TempDir(s)?
   root = fs.DirectoryPath(directory)
   path = fs.Join([root, "lines.jsonl"])

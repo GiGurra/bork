@@ -231,7 +231,7 @@ func snapshotName(test string, taken map[string]bool) string {
 // testFunc generates a test's body as a function.
 func (g *gen) testFunc(fn *check.Func, goName *ast.Ident) ast.Decl {
 	g.tmp = 0
-	g.fnResult = check.Unit
+	g.fnResult = check.Ok
 	return &ast.FuncDecl{
 		Name: goName,
 		Type: &ast.FuncType{Params: &ast.FieldList{}},

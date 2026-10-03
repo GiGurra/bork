@@ -4,7 +4,7 @@ import "bork/json"
 import "bork/fs"
 
 type Event = { kind: String, count: Int } derive (Encode)
-fn demo(s: Scope) uses io: Unit | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | JsonError {
+fn demo(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | JsonError {
   directory = fs.TempDir(s)?
   path = fs.Join([fs.DirectoryPath(directory), "events.jsonl"])
   scope writing {

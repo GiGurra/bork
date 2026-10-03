@@ -10,7 +10,7 @@ class Size[T] { fn size(x: T): Int }
 instance bufferSize: Size[Buffer] {
   fn size(x: Buffer): Int unsafe go { return int64(_borkGo(x).Len()) }
 }
-fn generic[T: Size](x: T, change: (T) uses state => Unit) uses state: Int {
+fn generic[T: Size](x: T, change: (T) uses state => Ok) uses state: Int {
   if (size(x) > 0) { change(x); checked(size(x)) } else { 0 }
 }
 fn main() { println(generic(make(), clear)) }

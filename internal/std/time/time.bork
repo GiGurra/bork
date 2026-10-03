@@ -69,7 +69,7 @@ fn Between(start: Instant, end: Instant): Duration | OutOfRange unsafe go {
 }
 
 // Sleep stops when the scope is cancelled. Nonpositive durations finish at once.
-fn Sleep(s: Scope, duration: Duration) uses clock + state: Unit | Cancelled unsafe go {
+fn Sleep(s: Scope, duration: Duration) uses clock + state: Ok | Cancelled unsafe go {
   import "time"
   import "context"
   ctx := _borkScopeContext(s)
@@ -78,6 +78,6 @@ fn Sleep(s: Scope, duration: Duration) uses clock + state: Unit | Cancelled unsa
   defer timer.Stop()
   select {
   case <-ctx.Done(): return Cancelled{reason: context.Cause(ctx).Error()}
-  case <-timer.C: return _Unit{}
+  case <-timer.C: return _borkOk()
   }
 }

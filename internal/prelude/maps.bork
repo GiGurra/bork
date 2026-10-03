@@ -91,7 +91,7 @@ fn (m: Map[K, V]) filter[K: Eq, V](test: (K, V) => Bool): Map[K, V] unsafe go {
   return out
 }
 
-fn (m: Map[K, V]) forEach[K: Eq, V](f: (K, V) => Unit) unsafe go {
+fn (m: Map[K, V]) forEach[K: Eq, V](f: (K, V) => Ok) unsafe go {
   m.each(func(k K, v V) bool {
     f(k, v)
     return true

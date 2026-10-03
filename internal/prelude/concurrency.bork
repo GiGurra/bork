@@ -27,7 +27,7 @@ fn await[T](task: Task[T]): T unsafe go {
 
 // launch starts work that gives no result on its own goroutine, as a
 // task of scope s, which waits for it before it closes.
-fn launch(s: Scope, work: () => Unit) unsafe go {
+fn launch(s: Scope, work: () => Ok) unsafe go {
   s.Go(func() any { work(); return nil })
 }
 
@@ -57,20 +57,20 @@ fn cancelAfter(s: Scope, ms: Int) uses clock + state unsafe go {
 
 // checkpoint gives Cancelled if s has been cancelled: a cancellation
 // point for work that does not otherwise wait, as in checkpoint(s)?.
-fn checkpoint(s: Scope) uses state: Unit | Cancelled unsafe go {
+fn checkpoint(s: Scope) uses state: Ok | Cancelled unsafe go {
   if r := s._cancelReason(); r != "" {
     return Cancelled{reason: r}
   }
-  return _Unit{}
+  return _borkOk()
 }
 
 // delay pauses for ms milliseconds, or until s is cancelled.
-fn delay(s: Scope, ms: Int) uses clock + state: Unit | Cancelled unsafe go {
+fn delay(s: Scope, ms: Int) uses clock + state: Ok | Cancelled unsafe go {
   import "time"
   if !s._sleep(time.Duration(ms) * time.Millisecond) {
     return Cancelled{reason: s._cancelReason()}
   }
-  return _Unit{}
+  return _borkOk()
 }
 
 // Closed is what sending to or receiving from a closed channel gives
@@ -138,9 +138,9 @@ fn swap[T](a: Atom[T], f: (T) uses nothing => T) uses state: T {
 // operations stop with Cancelled when that scope is cancelled.
 type Channel[T] = private {
   native: ChannelHandle,
-  sendFn: (T) uses state => Unit | Cancelled | Closed,
+  sendFn: (T) uses state => Ok | Cancelled | Closed,
   receiveFn: () uses state => T | Cancelled | Closed,
-  closeFn: () uses state => Unit,
+  closeFn: () uses state => Ok,
 }
 
 // channel makes a channel in scope s that holds up to capacity values
@@ -166,7 +166,7 @@ fn channel[T](s: Scope, capacity: Int): Channel[T] unsafe go {
       }
       select {
       case c <- x:
-        return _Unit{}
+        return _borkOk()
       case <-closed:
         return Closed{}
       case <-s.ctx.Done():
@@ -193,7 +193,7 @@ fn channel[T](s: Scope, capacity: Int): Channel[T] unsafe go {
 }
 
 // send passes x to the channel, waiting while it is full.
-fn send[T](ch: Channel[T], x: T) uses state: Unit | Cancelled | Closed unsafe go {
+fn send[T](ch: Channel[T], x: T) uses state: Ok | Cancelled | Closed unsafe go {
   return ch.sendFn(x)
 }
 

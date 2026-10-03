@@ -9,8 +9,8 @@ type Mock[A] = {
   countFn: () uses state => Int,
   callsFn: () uses state => List[String],
   argsFn: () uses state => List[A],
-  expectFn: ((A) uses nothing => Bool, Bool, Option[Int], Option[Int], Option[Int], String) uses state => Unit,
-  waitFn: ((A) uses nothing => Bool, Bool, Int, Int, String) uses state + clock => Unit,
+  expectFn: ((A) uses nothing => Bool, Bool, Option[Int], Option[Int], Option[Int], String) uses state => Ok,
+  waitFn: ((A) uses nothing => Bool, Bool, Int, Int, String) uses state + clock => Ok,
 }
 
 // count is how many calls the mock answered so far.

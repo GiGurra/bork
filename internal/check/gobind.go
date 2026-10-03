@@ -315,7 +315,7 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 		}
 	}
 	if b.Shape == GoNoResult || b.Shape == GoErrorOnly {
-		if b.Value != Unit {
+		if b.Value != Ok {
 			c.bindErr(resultPos(fd), "%s is bound to %s, which returns no value, but its result is %s", fd.Name, goText, b.Value)
 			return
 		}
@@ -359,7 +359,7 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 	}
 	needErr := b.Shape == GoErrorOnly || b.Shape == GoValueError
 	want := func() string {
-		parts := []string{"Unit"}
+		parts := []string{"Ok"}
 		if b.Value != nil {
 			parts[0] = TypeText(b.Value, c.pkg)
 		}

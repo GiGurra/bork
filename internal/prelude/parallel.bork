@@ -70,7 +70,7 @@ fn (xs: List[A]) parFlatMapIn[A, B](s: Scope, f: (Scope, A) => List[B], workers:
   return out
 }
 
-fn (xs: List[A]) parForEach[A](f: (A) uses nothing => Unit, workers: Int = 0): Unit unsafe go {
+fn (xs: List[A]) parForEach[A](f: (A) uses nothing => Ok, workers: Int = 0): Ok unsafe go {
   _borkParallel(nil, len(xs), workers, func(i int) bool {
     x := xs[i]
     f(x)
@@ -79,13 +79,13 @@ fn (xs: List[A]) parForEach[A](f: (A) uses nothing => Unit, workers: Int = 0): U
   return
 }
 
-fn (xs: List[A]) parForEachIn[A](s: Scope, f: (Scope, A) => Unit, workers: Int = 0) uses state: Unit | Cancelled unsafe go {
+fn (xs: List[A]) parForEachIn[A](s: Scope, f: (Scope, A) => Ok, workers: Int = 0) uses state: Ok | Cancelled unsafe go {
   if !_borkParallel(s, len(xs), workers, func(i int) bool {
     x := xs[i]
     f(s, x)
     return true
   }) { return Cancelled{reason: s._cancelReason()} }
-  return _Unit{}
+  return _borkOk()
 }
 
 // Stops scheduling when a callback returns E. Specify success B and failure E
