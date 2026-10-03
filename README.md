@@ -155,8 +155,9 @@ For tools and agents, `bork check --json path | jq` emits one diagnostic per lin
 
 `bork fmt [paths...]` defaults to the current directory and prints changed paths.
 It uses two spaces for indentation, normalizes spacing and blank-line runs, and keeps
-existing line breaks and comment text. Strings, interpolations, and raw `unsafe
-go` bodies are preserved verbatim. Directory traversal skips hidden directories,
+existing line breaks and comment text. CRLF line endings become LF, including
+line-comment endings. Bytes inside block comments, strings, interpolations, and
+raw `unsafe go` bodies are preserved verbatim. Directory traversal skips hidden directories,
 `vendor`, and symbolic links. `--check` prints paths needing formatting without
 writing files; it exits 0 when all files are already formatted, and 1 otherwise.
 Lexically invalid files are reported and left untouched; directory formatting

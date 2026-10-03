@@ -27,8 +27,9 @@ type item struct {
 
 // Source formats one file. Existing line breaks are retained, blank-line runs
 // become one blank line, and nested delimiters use two spaces. Comments, literals,
-// interpolations and unsafe Go bodies retain their exact text. Lexically invalid
-// input is rejected; incomplete or ill-typed programs can still be formatted.
+// interpolations and unsafe Go bodies retain their exact text, except CRLF line
+// comment endings become LF. Lexically invalid input is rejected; incomplete
+// or ill-typed programs can still be formatted.
 func Source(path string, src []byte) ([]byte, error) {
 	d := &diag.List{}
 	tokens, comments := syntax.Lex(path, src, d)
@@ -67,12 +68,16 @@ func Source(path string, src []byte) ([]byte, error) {
 		u := t.Kind == syntax.Not || t.Kind == syntax.Minus && !endsExpr(prev)
 		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && items[len(items)-1].kind == syntax.TIdent && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
-		items = append(items, item{loopIn: loopIn, kind: t.Kind, text: text, start: start, end: start + len(text), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev), with: w})
+		items = append(items, item{loopIn: loopIn, kind: t.Kind, text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev), with: w})
 		prev = t.Kind
 	}
 	for _, c := range comments {
 		start := offset(c.Pos)
-		items = append(items, item{text: c.Text, start: start, end: start + len(c.Text), comment: true})
+		text := c.Text
+		if strings.HasPrefix(text, "//") {
+			text = strings.TrimRight(text, "\r")
+		}
+		items = append(items, item{text: text, start: start, end: start + len(c.Text), comment: true})
 	}
 	slices.SortFunc(items, func(a, b item) int { return a.start - b.start })
 	var out strings.Builder

@@ -1,0 +1,3 @@
+# These fixtures exercise CRLF bytes, including preserved token text.
+crlf-line-comments.input -text whitespace=-blank-at-eol
+source-spans.* -text whitespace=cr-at-eol
