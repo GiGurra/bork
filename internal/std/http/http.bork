@@ -94,23 +94,23 @@ fn HeaderOf(headers: Headers, name: String): Option[String] {
 // returns, and cancelled if the client goes away or s closes: the
 // handler can open resources in it and spawn tasks in it.
 // maxBodyBytes defaults to 16 MiB; oversized requests receive HTTP 413.
-fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None) uses net + clock + state: Server | IoError unsafe go {
-  return start(addr, s, []Route{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission)
+fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None, requestTimeoutMs: TimeoutMs = 0) uses net + clock + state: Server | IoError unsafe go {
+  return start(addr, s, []Route{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
 }
 
 // ListenRoutes serves Go ServeMux patterns with their handlers. A GET
 // pattern also accepts HEAD; wildcards are available in request.params.
 // Invalid or conflicting patterns return IoError before opening a socket.
 // Zero drain timeout inherits cleanupTimeout; with no policy, drain is unbounded.
-fn ListenRoutes(addr: String, s: Scope, routes: List[Route], drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None) uses io + net + clock + random + state: Server | IoError unsafe go {
-  return start(addr, s, routes, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission)
+fn ListenRoutes(addr: String, s: Scope, routes: List[Route], drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
+  return start(addr, s, routes, _borkNone[Certificate](), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
 }
 
 // ListenTLS loads a certificate and private key before opening the listener.
-fn ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None) uses io + net + clock + random + state: Server | IoError unsafe go {
+fn ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0, maxBodyBytes: BodyLimit = 16777216, admission: Option[Admission] = Option.None, requestTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
   pair := LoadCertificate(certFile, keyFile)
   if failure, failed := pair.(IoError); failed { return failure }
-  return start(addr, s, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes, admission)
+  return start(addr, s, routes, _borkSome(pair.(Certificate)), drainTimeoutMs, maxBodyBytes, admission, requestTimeoutMs)
 }
 
 // Certificate keeps validated immutable PEM bytes in a private variant.
@@ -141,7 +141,7 @@ fn LoadCertificate(certFile: String, keyFile: String) uses io: Certificate | IoE
   return pair
 }
 
-fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs, maxBodyBytes: BodyLimit, admission: Option[Admission]) uses net + clock + state: Server | IoError unsafe go {
+fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs, maxBodyBytes: BodyLimit, admission: Option[Admission], requestTimeoutMs: TimeoutMs) uses net + clock + state: Server | IoError unsafe go {
   import "context"
   import "crypto/tls"
   import "errors"
@@ -158,13 +158,47 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
   drain := time.Duration(drainTimeoutMs)*time.Millisecond
   if policy > 0 && drain > policy { return IoError{path: addr, message: "drain timeout exceeds scope cleanup timeout"} }
   if drain == 0 { drain = policy }
+  reject := func(w http.ResponseWriter, r *http.Request, status int, message string) {
+    if r.ProtoMajor == 1 { w.Header().Set("Connection", "close") }
+    http.Error(w, message, status)
+  }
+  expired := func(ctx context.Context) bool {
+    deadline, found := ctx.Deadline()
+    return errors.Is(context.Cause(ctx), context.DeadlineExceeded) || (found && !deadline.After(time.Now()))
+  }
   mux := http.NewServeMux()
   register := func() (err error) {
     defer func() { if failure := recover(); failure != nil { err = fmt.Errorf("%v", failure) } }()
     for _, route := range routes {
       pattern := route.pattern
       mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-        body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+        ctx := r.Context()
+        if expired(ctx) { reject(w, r, 504, "request deadline exceeded"); return }
+        if ctx.Err() != nil { return }
+        var finishRead func()
+        if r.Body != http.NoBody {
+          controller := http.NewResponseController(w)
+          deadline, _ := ctx.Deadline()
+          if err := controller.SetReadDeadline(deadline); err != nil {
+            reject(w, r, 500, "request body cancellation is unsupported")
+            return
+          }
+          finished := make(chan struct{})
+          stop := context.AfterFunc(ctx, func() {
+            controller.SetReadDeadline(time.Now())
+            close(finished)
+          })
+          finishRead = func() {
+            if !stop() { <-finished }
+            if !expired(ctx) && ctx.Err() == nil { controller.SetReadDeadline(time.Time{}) }
+          }
+        }
+        body, readErr := func() ([]byte, error) {
+          if finishRead != nil { defer finishRead() }
+          return io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+        }()
+        if expired(ctx) { reject(w, r, 504, "request deadline exceeded"); return }
+        if ctx.Err() != nil { return }
         if readErr != nil {
           var limit *http.MaxBytesError
           if errors.As(readErr, &limit) { http.Error(w, "request body exceeds configured limit", http.StatusRequestEntityTooLarge) } else { http.Error(w, "could not read request body", http.StatusBadRequest) }
@@ -182,6 +216,9 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
           }
         }
         rs := _borkScopeWith(r.Context())
+        // Keep later listener-scope deadline updates visible, independently of
+        // request ownership and the Go context's creation-time deadline.
+        rs.deadlineParent = s
         defer _borkScopeAbort(rs)
         resp := route.handler(Request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, params: _borkMapOf(names, params), headers: _borkMapOf(keys, values), body: string(body)}, rs)
         _borkScopeClose(rs)
@@ -282,6 +319,7 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
     }
     handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
       if !acquire(r.Context()) {
+        if expired(r.Context()) { reject(w, r, 504, "request deadline exceeded"); return }
         if r.Context().Err() == nil {
           // Avoid net/http draining an unfinished request body before sending rejection.
           w.Header().Set("Connection", "close")
@@ -294,6 +332,37 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
       mux.ServeHTTP(w, r)
     })
   }
+  inner := handler
+  handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    now := time.Now()
+    ctx := r.Context()
+    deadline, bounded := ctx.Deadline()
+    shorten := func(duration time.Duration) {
+      candidate := now.Add(duration)
+      if !bounded || candidate.Before(deadline) { deadline, bounded = candidate, true }
+    }
+    if requestTimeoutMs > 0 { shorten(time.Duration(requestTimeoutMs)*time.Millisecond) }
+    if values, found := r.Header[http.CanonicalHeaderKey("Bork-Timeout-Ns")]; found {
+      valid := len(values) == 1 && len(values[0]) > 0 && len(values[0]) <= 19
+      text := ""
+      if valid {
+        text = values[0]
+        for _, character := range text { if character < '0' || character > '9' { valid = false; break } }
+      }
+      nanos, err := strconv.ParseInt(text, 10, 64)
+      if !valid || err != nil { reject(w, r, 400, "invalid Bork-Timeout-Ns"); return }
+      shorten(time.Duration(nanos))
+    }
+    if bounded {
+      if !deadline.After(time.Now()) { reject(w, r, 504, "request deadline exceeded"); return }
+      var stop context.CancelFunc
+      ctx, stop = context.WithDeadline(ctx, deadline)
+      defer stop()
+      r = r.WithContext(ctx)
+    }
+    if ctx.Err() != nil { return }
+    inner.ServeHTTP(w, r)
+  })
   ln, err := net.Listen("tcp", addr)
   if err != nil { return IoError{path: addr, message: err.Error()} }
   if pair, secure := _borkOptionGet(certificate); secure {
@@ -355,13 +424,22 @@ fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, t
   import "io"
   import "net/http"
   import "sort"
+  import "strconv"
   import "strings"
   import "time"
-  ctx := _borkScopeContext(s)
+  scopeContext := _borkScopeContext(s)
+  ctx := scopeContext
   if timeoutMs > 0 {
     var stop context.CancelFunc
     ctx, stop = context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
     defer stop()
+  }
+  deadline := func() (time.Time, bool) {
+    limit, bounded := ctx.Deadline()
+    if inherited, found := scopeContext.Deadline(); found && (!bounded || inherited.Before(limit)) {
+      limit, bounded = inherited, true
+    }
+    return limit, bounded
   }
   failure := func(err error) any {
     if errors.Is(err, context.DeadlineExceeded) || errors.Is(context.Cause(ctx), context.DeadlineExceeded) { return DeadlineExceeded{message: err.Error()} }
@@ -373,7 +451,7 @@ fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, t
     }
     return IoError{path: url, message: err.Error()}
   }
-  if deadline, ok := ctx.Deadline(); ok && !deadline.After(time.Now()) {
+  if limit, ok := deadline(); ok && !limit.After(time.Now()) {
     return DeadlineExceeded{message: "request deadline exceeded"}
   }
   if err := ctx.Err(); err != nil { return failure(err) }
@@ -383,7 +461,26 @@ fn Send(method: String, url: String, headers: Headers, body: String, s: Scope, t
     for _, value := range values { req.Header.Add(name, value) }
     return true
   })
-  resp, err := http.DefaultClient.Do(req)
+  prepare := func(request *http.Request) error {
+    if err := ctx.Err(); err != nil { return err }
+    request.Header.Del("Bork-Timeout-Ns")
+    if limit, found := deadline(); found {
+      remaining := time.Until(limit)
+      if remaining <= 0 { return context.DeadlineExceeded }
+      request.Header.Set("Bork-Timeout-Ns", strconv.FormatInt(int64(remaining), 10))
+    }
+    return nil
+  }
+  if err := prepare(req); err != nil { return failure(err) }
+  client := *http.DefaultClient
+  redirect := client.CheckRedirect
+  client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
+    if redirect != nil {
+      if err := redirect(request, via); err != nil { return err }
+    } else if len(via) >= 10 { return errors.New("stopped after 10 redirects") }
+    return prepare(request)
+  }
+  resp, err := client.Do(req)
   if err != nil { return failure(err) }
   defer resp.Body.Close()
   data, err := io.ReadAll(resp.Body)
