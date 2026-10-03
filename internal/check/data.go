@@ -177,6 +177,9 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 	}
 	switch xt := xt.(type) {
 	case *Record:
+		if c.storeFields(e.Pos, xt) {
+			return Invalid
+		}
 		if f := xt.Field(e.Name); f != nil {
 			return f.Type
 		}
@@ -518,7 +521,7 @@ func (c *checker) try(e *syntax.Try) Type {
 // updates of its representation belong to the declaring package.
 func (c *checker) recordConstruction(pos diag.Pos, rec *Record, operation string) bool {
 	if rec.Decl == nil || !rec.Decl.Private || rec.Pkg == c.pkg {
-		return true
+		return !c.storeFields(pos, rec)
 	}
 	pkg := rec.Pkg.Path
 	if rec.Prelude {

@@ -492,6 +492,9 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 			c.errorf(p.Pos, "%s is not a record, so it has no fields to match", name)
 			return nil
 		}
+		if c.storeFields(p.Pos, rec) {
+			return nil
+		}
 		inner := &Pat{Kind: PatRecord, Type: rec}
 		if !c.fieldPatterns(inner, p.Fields, rec.Fields, name) {
 			return nil

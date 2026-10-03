@@ -196,6 +196,14 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	}
 	if r, ok := xt.(*Record); ok && r.Field(sel.Name) != nil {
 		// A field holding a function.
+		if c.storeFields(sel.Pos, r) {
+			for _, a := range e.Args {
+				if _, isLambda := a.(*syntax.Lambda); !isLambda {
+					c.expr(a)
+				}
+			}
+			return Invalid, true
+		}
 		if len(e.TypeArgs) > 0 {
 			c.errorf(e.Pos, "only a declared generic function can be given type arguments")
 		}

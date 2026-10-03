@@ -1,0 +1,20 @@
+open gen3
+open gen2
+open gen1
+channel gives:
+["gen3", "gen2", "gen1"]
+open kept
+open newer
+atom holds newer
+open x
+open y
+["x", "y"]
+2
+app ends
+close y
+close x
+close newer
+close kept
+close gen1
+close gen2
+close gen3

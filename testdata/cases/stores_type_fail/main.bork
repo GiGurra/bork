@@ -1,0 +1,29 @@
+// The fields are internal.
+fn fields(app: Scope) uses io {
+  ch = channel[Int](app, 1)
+  f = ch.sendFn
+  a = atom(1)
+  match (a) {
+    Atom { currentFn } => println("x")
+  }
+}
+
+// Nor can they be called, copied, or built outside the prelude.
+fn fieldCalls(app: Scope) uses state {
+  ch = channel[Int](app, 1)
+  _ = ch.sendFn(1)
+  a = atom(1)
+  _ = a.updateFn(x => x + 1)
+  _ = ch.copy(closeFn: () => {})
+}
+
+fn literal(ch: Channel[Int]): Channel[Int] {
+  Channel { sendFn: ch.sendFn, receiveFn: ch.receiveFn, closeFn: ch.closeFn }
+}
+
+// in needs a target that can belong to a scope, and no cycles.
+fn plain(xs: List[Int], s: Scope in xs) {}
+
+fn cycle(a: Channel[Int] in b, b: Channel[Int] in a) {}
+
+fn main() {}

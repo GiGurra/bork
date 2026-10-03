@@ -49,10 +49,22 @@ func (c *checker) ownerSignature(fn *Func) {
 			c.errorf(p.InPos, "%s is not a parameter of %s", p.In, fd.Name)
 		case j == i:
 			c.errorf(p.InPos, "parameter %s cannot belong to itself", p.Name)
-		case j < len(fn.Params) && fn.Params[j] != Scope && fn.Params[j] != OwnedScope && fn.Params[j] != Invalid:
-			c.errorf(p.InPos, "parameter %s can only belong to a parameter of type Scope or OwnedScope, and %s has type %s", p.Name, p.In, fn.Params[j])
+		case j < len(fn.Params) && !holdsScope(fn.Params[j]):
+			c.errorf(p.InPos, "parameter %s cannot belong to %s, of type %s, which holds no scope", p.Name, p.In, fn.Params[j])
 		default:
 			fn.ParamIn[i] = j
+		}
+	}
+	// Parameters cannot belong to each other in a cycle.
+	for i := range fn.ParamIn {
+		j := fn.ParamIn[i]
+		for steps := 0; j >= 0 && steps < len(fn.ParamIn); steps++ {
+			if j == i {
+				c.errorf(fd.Params[i].InPos, "parameter %s belongs to itself through other parameters' in clauses", fd.Params[i].Name)
+				fn.ParamIn[i] = -1
+				break
+			}
+			j = fn.ParamIn[j]
 		}
 	}
 	if fn.Result != OwnedScope && containsOwned(fn.Result) {
@@ -68,6 +80,123 @@ func (c *checker) ownerSignature(fn *Func) {
 			c.errorf(fd.Result.Pos, "an unsafe go function cannot return an OwnedScope")
 		}
 	}
+}
+
+// holdsScope reports whether a value of type t may belong to a scope,
+// so that a parameter can be declared in it.
+func holdsScope(t Type) bool {
+	return t == Invalid || (&lifeChecker{carries: map[Type]bool{}}).carriesLife(t)
+}
+
+// keepsValues reports whether a value of type t can keep other values
+// for later, or give a way to: a scope (its finalizers and tasks), a
+// function (which may be or capture one, a channel, or an atom: records
+// of functions), a Go value, or a type parameter (which may be any of
+// them), or anything that holds one. Resources only belong to scopes.
+func keepsValues(t Type) bool {
+	return keepsValuesSeen(t, map[Type]bool{}, true)
+}
+
+// keepsValuesHere is keepsValues for values used in code generic in
+// their type parameters, which cannot keep anything in a value of a
+// type parameter: they know nothing about it.
+func keepsValuesHere(t Type) bool {
+	return keepsValuesSeen(t, map[Type]bool{}, false)
+}
+
+func keepsValuesSeen(t Type, seen map[Type]bool, typeParams bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *TypeParam:
+		return typeParams
+	case *Opaque, *FuncType:
+		return true
+	case *Basic:
+		return t == Scope || t == OwnedScope
+	case *Record:
+		for _, f := range t.Fields {
+			if keepsValuesSeen(f.Type, seen, typeParams) {
+				return true
+			}
+		}
+	case *Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if keepsValuesSeen(f.Type, seen, typeParams) {
+					return true
+				}
+			}
+		}
+	case *List:
+		return keepsValuesSeen(t.Elem, seen, typeParams)
+	case *Map:
+		return keepsValuesSeen(t.Key, seen, typeParams) || keepsValuesSeen(t.Value, seen, typeParams)
+	case *Union:
+		for _, m := range t.Members {
+			if keepsValuesSeen(m, seen, typeParams) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// keepsKeepers reports whether a value of type t may keep values that
+// keep others: a channel or an atom of them, or what keepsValues cannot
+// see into (a function, a Go value, a type parameter), or anything that
+// holds one.
+func keepsKeepers(t Type) bool {
+	return keepsKeepersSeen(t, map[Type]bool{})
+}
+
+func keepsKeepersSeen(t Type, seen map[Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	switch t := t.(type) {
+	case *Opaque, *FuncType, *TypeParam:
+		return true
+	case *Record:
+		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && (b.Name == "Channel" || b.Name == "Atom") {
+			return keepsValues(storedType(t))
+		}
+		for _, f := range t.Fields {
+			if keepsKeepersSeen(f.Type, seen) {
+				return true
+			}
+		}
+	case *Sealed:
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				if keepsKeepersSeen(f.Type, seen) {
+					return true
+				}
+			}
+		}
+	case *List:
+		return keepsKeepersSeen(t.Elem, seen)
+	case *Map:
+		return keepsKeepersSeen(t.Key, seen) || keepsKeepersSeen(t.Value, seen)
+	case *Union:
+		for _, m := range t.Members {
+			if keepsKeepersSeen(m, seen) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// storedType is the type of what a Channel[T] or an Atom[T] keeps.
+func storedType(t Type) Type {
+	if r, ok := t.(*Record); ok && len(r.Args) == 1 {
+		return r.Args[0]
+	}
+	return Invalid
 }
 
 // containsOwned reports whether values of type t hold an OwnedScope.
@@ -307,9 +436,21 @@ func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved m
 				}
 				continue
 			}
-			if short := l.shorter(args[j], target); short != nil {
+			if short := l.storeShorter(args[j], target); short != nil {
 				l.errorf(xargs[j].Pos(), "%s may not live as long as %s (it depends on %s), but %s declares parameter %s in %s", describe(xargs[j]), describe(xargs[t]), l.scopeText(short), fn.Decl.Name, fn.Decl.Params[j].Name, fn.Decl.Params[t].Name)
 				args[j] = target
+				continue
+			}
+			// The callee may keep a value that keeps others in what it is
+			// declared in, which gives it back with its own lifetime (see
+			// call): it must live exactly as long.
+			if keepsValues(xargs[j].Type()) && keepsKeepers(xargs[t].Type()) && len(args[j]) > 0 {
+				for _, y := range target {
+					if !l.outlivesAll(y, args[j]) {
+						l.errorf(xargs[j].Pos(), "%s may live longer than %s, which %s may keep it in: what comes out would be treated as ending with %s, and could be given its values; give one of the same lifetime", describe(xargs[j]), describe(xargs[t]), fn.Decl.Name, describe(xargs[t]))
+						break
+					}
+				}
 			}
 		}
 	}
@@ -437,4 +578,21 @@ func (l *lifeChecker) conditional(x Expr, check func()) {
 			return
 		}
 	}
+}
+
+// storeFields reports (as an error) a use of the fields of a Channel or
+// an Atom outside the prelude: they store values, and the lifetimes
+// check what is stored through send, update and swap only.
+func (c *checker) storeFields(pos diag.Pos, rec *Record) bool {
+	if c.inPrelude {
+		return false
+	}
+	base := genericBaseOrSelf(rec)
+	for _, name := range []string{"Channel", "Atom"} {
+		if base == genericBaseOrSelf(c.preludePkg.TypeNamed(name)) {
+			c.errorf(pos, "the fields of %s are internal; use its functions (send, receive, update, current, ...)", name)
+			return true
+		}
+	}
+	return false
 }
