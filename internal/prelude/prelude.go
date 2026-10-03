@@ -20,15 +20,19 @@ func Parse(diags *diag.List) []*syntax.File {
 	if err != nil {
 		panic(err)
 	}
-	var files []*syntax.File
+	var paths []string
+	var srcs [][]byte
 	for _, name := range names {
 		src, err := sources.ReadFile(name)
 		if err != nil {
 			panic(err)
 		}
-		f := syntax.ParseEmbedded(path.Join("prelude", name), src, diags)
+		paths = append(paths, path.Join("prelude", name))
+		srcs = append(srcs, src)
+	}
+	files := syntax.ParseFiles(paths, srcs, true, diags)
+	for _, f := range files {
 		f.Prelude = true
-		files = append(files, f)
 	}
 	return files
 }
