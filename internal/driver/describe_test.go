@@ -491,3 +491,27 @@ func TestDescribeOwnedScopeLifetimes(t *testing.T) {
 		}
 	}
 }
+
+func TestDescribeContextConstructors(t *testing.T) {
+	source := `type Config = { port: Int }
+type State = sealed { Ready, Value { value: Int } }
+fn main() {
+  config: Config = .{ port: 80 }
+  state: State = .Ready
+  value: State = .Value { value: 1 }
+  option: Option[Int] = .Some { value: 2 }
+  println(config); println(state); println(value); println(option)
+}
+`
+	for _, tc := range []struct{ fragment, typ string }{
+		{".{ port", "Config"}, {".Ready", "State"}, {"Ready\n", "State"},
+		{".Value {", "State"}, {"Value { value: 1", "State"}, {".Some", "Option[Int]"},
+	} {
+		t.Run(tc.fragment, func(t *testing.T) {
+			result := describeAt(t, source, tc.fragment, "")
+			if result.typ != tc.typ || !result.defined {
+				t.Fatalf("unexpected context constructor description: %+v", result)
+			}
+		})
+	}
+}

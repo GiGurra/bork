@@ -930,6 +930,8 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 // (`User`, `Shape.Circle`), so a following '{' starts a record literal.
 func isTypePath(x Expr) bool {
 	switch x := x.(type) {
+	case *ContextName:
+		return true
 	case *Ident:
 		return true
 	case *Selector:
@@ -1054,6 +1056,15 @@ func (p *parser) pattern() Pattern {
 func (p *parser) primary() Expr {
 	t := p.tok()
 	switch t.Kind {
+	case Dot:
+		p.next()
+		x := &ContextName{Pos: t.Pos, End: t.End}
+		if p.at(LBrace) {
+			return p.recordLit(x)
+		}
+		name := p.expect(TIdent, "after '.' (write .Variant or .{ field: value })")
+		x.Name, x.End = name.Text, name.End
+		return x
 	case TInt:
 		p.next()
 		return &IntLit{Pos: t.Pos, Text: t.Text}

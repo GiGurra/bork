@@ -1,0 +1,2 @@
+main.bork:4:28: record uses io (it calls effect), but its signature allows no effects; declare it: uses io
+main.bork:5:39: variant uses io (it calls effect), but its signature allows no effects; declare it: uses io

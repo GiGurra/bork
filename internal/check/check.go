@@ -250,7 +250,8 @@ type Info struct {
 	selectorVariants map[*syntax.Selector]*Variant
 	// ownerScopes holds each `b.scope` of an owned scope b, which is
 	// scopeOf(b).
-	ownerScopes map[*syntax.Selector]*Func
+	ownerScopes     map[*syntax.Selector]*Func
+	contextVariants map[*syntax.ContextName]*Variant
 	// armPats holds the checked pattern of every match arm.
 	armPats map[*syntax.Arm]*Pat
 	// tries describes every `?`.
@@ -324,6 +325,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			exprOwners:       map[syntax.Expr]*Func{},
 			selectorVariants: map[*syntax.Selector]*Variant{},
 			ownerScopes:      map[*syntax.Selector]*Func{},
+			contextVariants:  map[*syntax.ContextName]*Variant{},
 			armPats:          map[*syntax.Arm]*Pat{},
 			tries:            map[*syntax.Try]*TryInfo{},
 			unused:           map[any]bool{},
@@ -1046,6 +1048,8 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.record(e, Never)
 	case *syntax.Selector:
 		return c.record(e, c.selector(e, want))
+	case *syntax.ContextName:
+		return c.record(e, c.contextVariant(e, want))
 	case *syntax.RecordLit:
 		return c.record(e, c.recordLit(e, want))
 	case *syntax.Copy:
@@ -1229,6 +1233,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 }
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
+	if name, ok := e.Fun.(*syntax.ContextName); ok {
+		return c.contextVariantCall(e, name, want)
+	}
 	if t, ok := c.methodCallOf(e, want); ok {
 		return t
 	}
@@ -1365,7 +1372,7 @@ func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 	if cond != Bool && cond != Invalid && cond != Never {
 		c.errorf(e.Cond.Position(), "if-condition must be Bool, found %s", cond)
 	}
-	if e.Else != nil && want == nil && c.branchNeedsContext(e.Then) && !c.branchNeedsContext(e.Else) {
+	if e.Else != nil && (want == nil || c.unbound(want)) && c.branchNeedsContext(e.Then) && !c.branchNeedsContext(e.Else) {
 		// The then-branch's type comes from the else-branch: `[]`.
 		elseT := c.exprWant(e.Else, nil)
 		thenT := c.block(e.Then, elseT)
@@ -1379,7 +1386,7 @@ func (c *checker) ifExpr(e *syntax.If, want Type) Type {
 		}
 		return Unit
 	}
-	if want == nil && c.branchNeedsContext(e.Else) {
+	if (want == nil || c.unbound(want)) && c.branchNeedsContext(e.Else) {
 		want = thenT
 	}
 	elseT := c.exprWant(e.Else, want)

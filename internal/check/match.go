@@ -176,7 +176,7 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 	// context.
 	var order, later []int
 	for i, arm := range m.Arms {
-		if want == nil && c.branchNeedsContext(arm.Body) {
+		if (want == nil || c.unbound(want)) && c.branchNeedsContext(arm.Body) {
 			later = append(later, i)
 		} else {
 			order = append(order, i)
@@ -194,7 +194,7 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 		}
 		pats[i] = p
 		armWant := want
-		if armWant == nil && len(later) > 0 && len(order) > 0 {
+		if (armWant == nil || c.unbound(armWant)) && len(later) > 0 && len(order) > 0 {
 			armWant = armTypes[order[0]]
 		}
 		armTypes[i] = c.exprWant(arm.Body, armWant)

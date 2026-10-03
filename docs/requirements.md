@@ -1996,11 +1996,12 @@ with positional arguments), missing parameters and positional-after-named;
 formatter, describe and structured diagnostics cover the same source forms.
 Copy cases cover nested paths, rejected `=` syntax and its structured fix.
 
-### Context-typed record and variant literals (design: bork-vk07ec)
+### Context-typed record and variant literals (implemented; config showcase: bork-vk07ec)
 
 Named arguments identify an option; context literals let its expected type name
 the value. Keep explicit constructors available wherever they clarify a boundary.
-This section is the proposed implementation contract.
+The compiler implements the syntax and inference rules below; the package-owned
+config showcase follows the construction/invariant work in bork-kum0ep.
 
 ```bork
 // internal/std/log/log.bork: the function result names Config; fields name enums.
@@ -2101,9 +2102,9 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   error. Explicit type arguments work as usual.
 - **Construction guarantees are unchanged.** Reuse explicit record/variant
   checking and the typed tree targets: required fields, defaults, duplicate
-  fields, private variants and field facts apply equally. Preserve sibling/type
-  invariants and package-controlled construction when those features land;
-  their integration is tested before the complete config showcase is reported. `type Config = private { ... }`
+  fields, private variants and field facts apply equally. Sibling-field invariants and package-controlled construction use their shared
+  checks. Preserve whole-value type invariants when that feature lands;
+  its integration is tested before the complete config showcase is reported. `type Config = private { ... }`
   permits literals and copies only in its owning package, including nested copy
   paths that modify its fields; reading fields and replacing a whole field with
   an already valid private value remain allowed. An omitted type name cannot
@@ -2122,7 +2123,9 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   value position that lacks an expected type and suggests a typed binding or an
   explicit constructor. Ambiguous context lists the candidate types and offers
   one explicit-constructor edit per candidate, rather than selecting one for the
-  user. Unknown variants search only visible variants of expected sealed types.
+  user. Generic constructors whose omitted type arguments need an expected
+  specialization mark the edit `requires_input` and name that specialization
+  for a type annotation; explicit literal syntax has no type-argument list. Unknown variants search only visible variants of expected sealed types.
   Offer `.Variant` when that corrected spelling selects a unique candidate;
   otherwise offer separate explicitly qualified constructors for the close
   candidates. Never suggest a spelling that remains ambiguous.

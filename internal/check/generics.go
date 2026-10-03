@@ -464,8 +464,13 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 		_, isLambda := a.(*syntax.Lambda)
 		return isLambda || c.genericFuncRef(a)
 	}
+	var pending []int
 	for i, a := range args {
 		if !later(a) {
+			if i < len(params) && c.contextNeedsType(a, params[i]) {
+				pending = append(pending, i)
+				continue
+			}
 			check(i, a)
 		}
 	}
@@ -476,8 +481,31 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 	}
 	for i, a := range args {
 		if later(a) {
+			if i < len(params) && c.contextNeedsType(a, params[i]) {
+				pending = append(pending, i)
+				continue
+			}
 			check(i, a)
 		}
+	}
+	for len(pending) > 0 {
+		var remaining []int
+		for _, i := range pending {
+			if c.contextNeedsType(args[i], params[i]) {
+				remaining = append(remaining, i)
+			} else {
+				check(i, args[i])
+			}
+		}
+		if len(remaining) == len(pending) {
+			// No argument can supply more nominal context. Checking now
+			// gives the literal's specific missing-context diagnostic.
+			for _, i := range remaining {
+				check(i, args[i])
+			}
+			break
+		}
+		pending = remaining
 	}
 	errs := c.diags.Len() - errorsBefore
 	// What is known of the values a type parameter stands for selects
@@ -624,6 +652,9 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 // without fields of a generic type (Option.None).
 func (c *checker) needsContext(x syntax.Expr) bool {
 	x = debugSyntaxValue(x)
+	if hasContextLiteral(x) {
+		return true
+	}
 	if c.genericFuncRef(x) {
 		return true
 	}
@@ -941,7 +972,7 @@ func (c *checker) elems(pos diag.Pos, elems []syntax.Expr, ew Type, what, agree 
 	// checked last, against the others' type if there is no context.
 	var later []int
 	for i, x := range elems {
-		if ew == nil && c.branchNeedsContext(x) {
+		if (ew == nil || c.unbound(ew)) && c.branchNeedsContext(x) {
 			later = append(later, i)
 			continue
 		}

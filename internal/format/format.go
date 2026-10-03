@@ -18,6 +18,7 @@ type item struct {
 	line       int
 	comment    bool
 	unary      bool
+	contextDot bool
 }
 
 // Source formats one file. Existing line breaks are retained, blank-line runs
@@ -58,7 +59,7 @@ func Source(path string, src []byte) ([]byte, error) {
 		}
 		start := offset(t.Pos)
 		u := t.Kind == syntax.Not || t.Kind == syntax.Minus && !endsExpr(prev)
-		items = append(items, item{kind: t.Kind, text: text, start: start, end: start + len(text), line: t.Pos.Line, unary: u})
+		items = append(items, item{kind: t.Kind, text: text, start: start, end: start + len(text), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev)})
 		prev = t.Kind
 	}
 	for _, c := range comments {
@@ -172,7 +173,9 @@ func space(a, b item) bool {
 		return false
 	}
 	switch b.kind {
-	case syntax.Comma, syntax.Colon, syntax.Dot, syntax.Quest, syntax.Semi, syntax.RParen, syntax.RBrack:
+	case syntax.Dot:
+		return b.contextDot && a.kind != syntax.Dot
+	case syntax.Comma, syntax.Colon, syntax.Quest, syntax.Semi, syntax.RParen, syntax.RBrack:
 		return false
 	case syntax.LParen:
 		if a.kind == syntax.TIdent && a.text == "derive" {

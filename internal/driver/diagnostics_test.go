@@ -50,6 +50,11 @@ func TestSuggestedEdits(t *testing.T) {
 		{"unknown argument", "fn config(port: Int): Int { port }\nfn main() { println(config(prot: 9)) }\n"},
 		{"duplicate argument", "fn config(port: Int): Int { port }\nfn main() { println(config(1, port: 9)) }\n"},
 		{"copy separator", "type Config = { port: Int }\nfn main() { println(Config { port: 1 }.copy(port = 2)) }\n"},
+		{"context nested Some call", "type Config = { value: Int }\nfn main() { x: Option[Config] = .Some(.{ value: 1 }); println(x) }\n"},
+		{"context Some call", "fn main() { x: Option[Int] = .Some(1); println(x) }\n"},
+		{"context generic variant typo", "fn option[T](value: Option[T]): Option[T] { value }\nfn main() { println(option(.Som { value: 1 })) }\n"},
+		{"context variant typo", "type State = sealed { Ready }\nfn main() { x: State = .Reedy; println(x) }\n"},
+		{"context variant defaults", "type State = sealed { Ready { value: Int = 1 } }\nfn main() { x: State = .Ready; println(x) }\n"},
 		{"byte columns", "fn main() {\n\tprintln(\"å\"); xs = []; f = x => x\n}\n"},
 		{"interpolation", "fn main() { println(s\"å ${true & false}\") }\n"},
 		{"annotations", "fn main() {\n xs = []\n m = {:}\n f = x => x\n g = (y) => y\n h = (a, b) => a\n}\n"},
@@ -151,5 +156,109 @@ func TestPipeMethodFieldPrecedence(t *testing.T) {
 				t.Fatalf("expected undefined function without a method fix, got %+v", ds)
 			}
 		})
+	}
+}
+
+// Ambiguity fixes are alternatives: apply each independently, not together.
+func TestContextConstructorAlternatives(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, code string
+		count              int
+		input              bool
+	}{
+		{"records", "type A = { value: Int }\ntype B = { value: Int }\nfn main() { x: A | B = .{ value: 1 }; println(x) }\n", "type.context_ambiguous", 2, false},
+		{"variants", "type A = sealed { Ready }\ntype B = sealed { Ready }\nfn main() { x: A | B = .Ready; println(x) }\n", "type.context_ambiguous", 2, false},
+		{"imported variants", "import chosen \"example.com/context/api\"\ntype Alias = chosen.A\nfn main() { x: Alias | chosen.B = .Reedy; println(x) }\n", "type.context_variant_unknown", 2, false},
+		{"union typo", "type A = sealed { Ready }\ntype B = sealed { Ready }\nfn main() { x: A | B = .Reedy; println(x) }\n", "type.context_variant_unknown", 2, false},
+		{"nested missing context", "type Config = { value: Int }\nfn main() { x = [.{ value: 1 }]; println(x) }\n", "type.context_missing", 1, true},
+		{"specializations", "type Box[T] = { values: List[T] }\nfn main() { x: Box[Int] | Box[String] = .{ values: [] }; println(x) }\n", "type.context_ambiguous", 2, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "main.bork")
+			if err := os.WriteFile(path, []byte(tc.source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.name == "imported variants" {
+				for rel, content := range map[string]string{"bork.mod": "module example.com/context\n", "api/api.bork": "type A = sealed { Ready }\ntype B = sealed { Ready }\n"} {
+					p := filepath.Join(filepath.Dir(path), rel)
+					if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			_, _, err := Check(path)
+			var de *DiagError
+			if !errors.As(err, &de) {
+				t.Fatalf("expected diagnostics, got %v", err)
+			}
+			var fixes []diag.Fix
+			for _, d := range de.Diags.Sorted() {
+				if d.Code == tc.code {
+					fixes = append(fixes, d.Fixes...)
+				}
+			}
+			if len(fixes) != tc.count {
+				t.Fatalf("expected %d alternatives, got %+v", tc.count, fixes)
+			}
+			for _, fix := range fixes {
+				if fix.RequiresInput != tc.input {
+					t.Fatalf("unexpected requires_input: %+v", fix)
+				}
+				fixed := tc.source
+				for _, edit := range fix.Edits {
+					offset := func(pos diag.Pos) int {
+						lines := strings.SplitAfter(tc.source, "\n")
+						n := pos.Col - 1
+						for _, line := range lines[:pos.Line-1] {
+							n += len(line)
+						}
+						return n
+					}
+					replacement := edit.Replacement
+					if tc.name == "nested missing context" {
+						replacement = strings.ReplaceAll(replacement, "Type", "Config")
+					}
+					fixed = fixed[:offset(edit.Start)] + replacement + fixed[offset(edit.End):]
+				}
+				if tc.name == "specializations" {
+					annotation := "Box[Int]"
+					if strings.Contains(fix.Message, "Box[String]") {
+						annotation = "Box[String]"
+					}
+					if !strings.Contains(fix.Message, annotation) {
+						t.Fatalf("fix does not name specialization: %+v", fix)
+					}
+					fixed = strings.ReplaceAll(fixed, "Box[Int] | Box[String]", annotation)
+				}
+				if err := os.WriteFile(path, []byte(fixed), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if _, _, err := Check(path); err != nil {
+					t.Fatalf("alternative did not fix the program:\n%s\n%v", fixed, err)
+				}
+			}
+		})
+	}
+}
+
+func TestDebugContextInference(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "main.bork")
+	source := `type A = { value: Int }
+fn pair[T](first: T, second: T): List[T] { [first, second] }
+fn main() {
+  println(pair(first: dbg(.{ value: 1 }), second: A { value: 2 }))
+  println(pair(second: dbg(.{ value: 2 }), first: A { value: 1 }))
+  xs: List[A] = pair(first: dbg(.{ value: 1 }), second: .{ value: 2 })
+  println(xs)
+}
+`
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Check(path); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -1,0 +1,11 @@
+type State = sealed { Ready, Value { value: Int } }
+type Config = { state: State, debug: Option[String] = .None }
+fn make(): Config { .{ state: .Value { value: 1 }, debug: .Some { value: "trace" } } }
+fn accept(value: Config): Config { value }
+fn main() { x: Config = .{ state: .Ready }; println(make().copy(state: .Value { value: 2 })); println(.{ state: .Ready } |> accept) }
+fn comments(): Config {
+  // The type supplies Config.
+  .{ state: .Value {
+    // Field comments stay with the variant.
+    value: 3 }, debug: .None }
+}

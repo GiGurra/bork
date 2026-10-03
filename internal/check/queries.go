@@ -67,6 +67,8 @@ func defaultText(x syntax.Expr) string {
 		return strings.Trim(x.Op.String(), "'") + defaultText(x.X)
 	case *syntax.Ident:
 		return x.Name
+	case *syntax.ContextName:
+		return "." + x.Name
 	case *syntax.Selector:
 		return defaultText(x.X) + "." + x.Name
 	case *syntax.ListLit:

@@ -409,6 +409,9 @@ func (c *checker) zonkInfo() {
 	for x, v := range info.selectorVariants {
 		info.selectorVariants[x] = c.zonkVariant(v)
 	}
+	for x, v := range info.contextVariants {
+		info.contextVariants[x] = c.zonkVariant(v)
+	}
 	for x, target := range info.recordTargets {
 		switch t := target.(type) {
 		case *Variant:

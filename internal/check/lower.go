@@ -223,6 +223,9 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 			out.Field = rec.Field(x.Name)
 		}
 		return out
+	case *syntax.ContextName:
+		v := l.info.contextVariants[x]
+		return &VariantValue{expr: at, Variant: v, Text: "." + x.Name}
 	case *syntax.RecordLit:
 		out := &RecordLit{expr: at}
 		var fields []*Field

@@ -50,7 +50,7 @@ fn escapesByReturn(path: String) uses io: fs.File | fs.Error {
 fn inRecord(path: String) uses io: Conn | fs.Error {
   scope s {
     f = fs.Open(path, s)?
-    Conn { file: f, name: path }
+    conn: Conn = .{ file: f, name: path }; conn
   }
 }
 

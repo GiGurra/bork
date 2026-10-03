@@ -428,10 +428,17 @@ type Selector struct {
 	Name string
 }
 
+// ContextName omits a constructor's owner: .{ ... } or .Variant.
+// Name is empty for a record, and End is after the dot or variant name.
+type ContextName struct {
+	Pos, End diag.Pos
+	Name     string
+}
+
 // RecordLit is `User { name: "Ada", age: 36 }` or
 // `Shape.Circle { radius: 3 }`.
 type RecordLit struct {
-	Type   Expr // *Ident or *Selector
+	Type   Expr // *Ident, *Selector or *ContextName
 	Fields []*FieldInit
 	End    diag.Pos
 }
@@ -581,17 +588,19 @@ func (*ListLit) exprNode()              {}
 func (e *Lambda) Position() diag.Pos    { return e.Pos }
 func (e *ListLit) Position() diag.Pos   { return e.Pos }
 
-func (*Selector) exprNode()  {}
-func (*RecordLit) exprNode() {}
-func (*Copy) exprNode()      {}
-func (*Match) exprNode()     {}
-func (*Try) exprNode()       {}
+func (*Selector) exprNode()    {}
+func (*ContextName) exprNode() {}
+func (*RecordLit) exprNode()   {}
+func (*Copy) exprNode()        {}
+func (*Match) exprNode()       {}
+func (*Try) exprNode()         {}
 
-func (e *Selector) Position() diag.Pos  { return e.X.Position() }
-func (e *RecordLit) Position() diag.Pos { return e.Type.Position() }
-func (e *Copy) Position() diag.Pos      { return e.X.Position() }
-func (e *Match) Position() diag.Pos     { return e.Pos }
-func (e *Try) Position() diag.Pos       { return e.X.Position() }
+func (e *Selector) Position() diag.Pos    { return e.X.Position() }
+func (e *ContextName) Position() diag.Pos { return e.Pos }
+func (e *RecordLit) Position() diag.Pos   { return e.Type.Position() }
+func (e *Copy) Position() diag.Pos        { return e.X.Position() }
+func (e *Match) Position() diag.Pos       { return e.Pos }
+func (e *Try) Position() diag.Pos         { return e.X.Position() }
 
 func (*IntLit) exprNode()    {}
 func (*FloatLit) exprNode()  {}

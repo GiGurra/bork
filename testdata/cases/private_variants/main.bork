@@ -2,7 +2,7 @@ import "example.com/private/api"
 fn main() {
   println(api.Reveal(api.New()))
   println(api.Unbox(api.Boxed("hidden")))
-  public: api.Box[Int] = api.Box.Visible { value: 7 }
+  public: api.Box[Int] = .Visible { value: 7 }
   println(api.Unbox(public))
   println(match (public) { api.Box.Visible { value } => value; _ => 0 })
   match (api.New()) { whole: api.Secret => println(api.Reveal(whole)) }

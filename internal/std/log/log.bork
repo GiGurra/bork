@@ -33,7 +33,7 @@ type Config = { level: Level, format: Format, output: Output, timestamps: Bool }
 // Defaults is the configuration logs start with: Info and above, as
 // text with timestamps, on stderr.
 fn Defaults(): Config {
-  Config { level: Level.Info, format: Format.Text, output: Output.Stderr, timestamps: true }
+  .{ level: .Info, format: .Text, output: .Stderr, timestamps: true }
 }
 
 // Configure sets how records are written from now on, by the whole
@@ -79,12 +79,12 @@ type Logger = { attrs: Attrs }
 
 // With is a logger that adds attrs to its records.
 fn With(attrs: Attrs): Logger {
-  Logger { attrs: attrs }
+  .{ attrs: attrs }
 }
 
 // Extend is a logger with attrs added to those of logger.
 fn Extend(logger: Logger, attrs: Attrs): Logger {
-  Logger { attrs: merge(logger.attrs, attrs) }
+  .{ attrs: merge(logger.attrs, attrs) }
 }
 
 // Debug, Info, Warn, and Error write a record at their level:

@@ -175,6 +175,8 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 
 func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 	switch t := e.Type.(type) {
+	case *syntax.ContextName:
+		return c.contextRecord(e, t, want)
 	case *syntax.Ident:
 		typ := c.typeNamed(t.Name)
 		if typ == nil {
@@ -222,6 +224,9 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 // generic sealed type (`Option.Some { value: 1 }`). The type arguments
 // come from the expected type, or else from the fields.
 func (c *checker) genericLit(e *syntax.RecordLit, base Type, variant, label string, want Type) Type {
+	if hasContextLiteral(e) {
+		return c.genericContextLit(e, base, variant, label, want)
+	}
 	var fields []*Field
 	if s, ok := base.(*Sealed); ok {
 		v := s.Variant(variant)
