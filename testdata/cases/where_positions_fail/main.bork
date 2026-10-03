@@ -9,6 +9,14 @@ type PosInt = Int where positive
 type Box[T] = { item: T, items: List[T] }
 type Only[T] = { items: List[T] }
 type Decoded = { values: Map[String, PosInt] } derive (Decode, Encode)
+type Shape = sealed { Square, Dot }
+pred square(s: Shape) {
+  match (s) {
+    Shape.Square => true
+    Shape.Dot => false
+  }
+}
+type SquareOnly = Shape where square
 
 // Union members, in an alias, a field, a parameter, and a list.
 type Either = Int where positive | String
@@ -82,6 +90,14 @@ fn main() {
   match (pick()) {
     p: PosInt => println(p)
     s: String => println(s)
+  }
+  match (pick()) {
+    PosInt => println("positive")
+    String => println("text")
+  }
+  match (Shape.Dot) {
+    SquareOnly.Dot => println("square")
+    Shape.Square => println("square")
   }
   // Inside a type whose facts are dropped, the reason is the outer one.
   f = (xs: List[PosInt]) => 0

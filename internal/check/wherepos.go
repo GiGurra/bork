@@ -184,6 +184,12 @@ func forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where string)) {
 					seen[key(reflect.ValueOf(n.Type))] = true
 					f(n.Type, "in a type pattern")
 				}
+			case *syntax.VariantPat:
+				if len(n.Path) == 1 || len(n.Path) == 2 {
+					// Bare type names, record patterns, and variant owners
+					// have no TypeExpr.
+					f(&syntax.TypeExpr{Pos: n.Pos, Name: n.Path[0]}, "in a type pattern")
+				}
 			}
 			for _, p := range params {
 				if p.Type != nil {
