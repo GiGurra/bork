@@ -66,7 +66,9 @@ benchmark, and primes Go builds before timing the Go-build phase. Heap profiles 
 by CPU labels; use phase B/op for allocation comparisons and allocation stacks
 for attribution. Timer transitions add overhead, so phases below a few
 microseconds should not guide optimization. Phase benchmarks reparse each
-iteration because the checker mutates syntax while expanding calls.
+iteration to include parsing and create independent inputs. Parsed source ASTs
+are preserved by checking (`TestCheckLeavesSyntax`); mutable semantic expansion
+state lives in `check.Info`.
 
 CI uploads `phases.txt` and `latency.json` for hello and synthetic1000 on each PR
 and main push, with a manual trigger too. This provides a stored baseline for
@@ -125,7 +127,7 @@ matters far more than small checker changes for cold builds.
 | --- | --- | --- | --- |
 | 1 | Index default-use expressions/calls by owning function before visiting specializations | Remove the measured quadratic scan; largest large-program checker gain | Low: preserve sorted traversal and first-use diagnostics; all goldens unchanged |
 | 2 | Reduce/cache Go standard package-name discovery keyed by toolchain/target | Remove much of fresh-process startup cost, particularly small checks | Medium: aliases and toolchain/environment changes must invalidate correctly; test custom Go names |
-| 3 | Cache immutable embedded prelude/std parse data and eventually checked packages by content | Avoid recurring parsing and allocations, especially daemon/batch use | Medium/high: current syntax is mutated; safe cloning or separation is required; persistent cache needs version/content/target keys |
+| 3 | Cache immutable embedded prelude/std parse data and eventually checked packages by content | Avoid recurring parsing and allocations, especially daemon/batch use | Medium/high: keep mutable semantic state separate from preserved source ASTs; persistent cache needs version/content/target keys |
 | 4 | Generate only reachable helpers/types/dictionaries, format less | Smaller Go files and less printer/Go frontend work | Medium/high: tests, predicates, mocks, derived methods and effects are separate roots; justify any emitted-Go golden changes |
 | 5 | Parallel independent package/function work with deterministic merging | Potential throughput improvement for multi-package programs | High: checker tables and specialization discovery are shared; introduce package boundaries before goroutines; compare diagnostics and race tests |
 | 6 | Change union/option/closure/dictionary representations only after targeted profiles | Possible runtime size/Go-build improvements | High: representation correctness and readability; baseline does not yet justify a particular replacement |
@@ -135,3 +137,29 @@ predicate-heavy or lifetime-heavy workload identifies a real hotspot. Synthetic
 programs exercise compiler scaling rather than runtime performance. Additional
 corpora should cover generic specialization, imported package graphs and heavy
 facts before deciding on parallelism or representation changes.
+
+## Independent source parsing
+
+Source files can be parsed independently before declaration/checking begins.
+`syntax.ParseFiles` uses at most eight workers, bounded by GOMAXPROCS and file
+count, when a package has at least four files totaling 32 KiB. Smaller inputs
+remain sequential to avoid scheduling overhead. The prelude crosses this
+threshold; package import resolution and checking remain sequential. Each file
+gets private diagnostics, joined in the original input order after all workers
+finish. This retains lexer/parser error order as well as file/declaration order.
+
+On the same shared development host with immutable tokens primed, three
+one-second prelude parsing samples had serial times 2.80/2.61/2.04 ms and
+parallel times 1.10/1.07/1.33 ms. Allocation changed from ~1.070 MB/19,034 objects
+to ~1.072 MB/19,069 objects. Hello parse/load phase samples were
+1.29/1.30/1.36 ms, compared with approximately 2.5 ms after token caching. These
+are in-process parsing measurements, not a claim about total fresh CLI speed.
+
+```sh
+go test ./internal/syntax -run '^$' -bench '^BenchmarkParseFiles$' -benchmem -count=5
+go test -race ./internal/syntax -run '^TestParseFiles' -count=1
+```
+
+The [incremental compilation proposal](incremental.md) keeps this boundary
+separate from parallel checking, which first needs immutable package artifacts
+and complete semantic dependency manifests.
