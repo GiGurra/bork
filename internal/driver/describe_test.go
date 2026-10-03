@@ -113,6 +113,9 @@ fn scenario(xs: List[Int], u: User) uses io {
 	for _, method := range result.Methods {
 		if method.Name == "first" {
 			found = method.Type == "() => Int" && len(method.Requires) == 1 && method.Requires[0] == "xs: notEmpty"
+			if method.Definition == nil || method.Definition.File != "prelude/lists.bork" {
+				t.Fatalf("prelude method must point to its embedded topic file: %+v", method.Definition)
+			}
 		}
 	}
 	if !found {

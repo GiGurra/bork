@@ -68,7 +68,7 @@ type Func struct {
 	Result     Type
 	// Effects is what the function declares it may do (`uses io`).
 	Effects Effects
-	// Prelude is set for the built-in functions of prelude.bork.
+	// Prelude is set for the built-in functions of prelude.
 	Prelude bool
 	// Synthetic is set for a predicate that stands for a function
 	// parameter (see facts.go); it has no body to run.

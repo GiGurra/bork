@@ -1,0 +1,223 @@
+// Concurrency is structured: a task runs on its own goroutine, and the
+// scope that started it waits for it before it closes (and before its
+// finalizers run), so a task can use the scope's resources. When the
+// scope ends, it cancels itself first: how a task stops (at once, after
+// cleaning up, or after finishing its work) is up to the task. A task
+// that panics panics await, or, if no one awaited it, the scope's
+// routine when the scope closes.
+
+// Task is a running computation of a T, started with spawn.
+type Task[T] = { wait: () => T }
+
+// spawn starts work on its own goroutine, as a task of scope s.
+fn spawn[T](s: Scope, work: () => T): Task[T] unsafe go {
+  t := s.Go(func() any { return work() })
+  return Task[T]{wait: func() T { return t.Await().(T) }}
+}
+
+// await waits for a task to finish, and gives its result.
+fn await[T](task: Task[T]): T unsafe go {
+  return task.wait()
+}
+
+// launch starts work that gives no result on its own goroutine, as a
+// task of scope s, which waits for it before it closes.
+fn launch(s: Scope, work: () => Unit) unsafe go {
+  s.Go(func() any { work(); return nil })
+}
+
+// Cancelled is what a cancellation-aware operation gives when its scope
+// is cancelled; reason says why ("cancelled", "deadline exceeded", ...).
+type Cancelled = { reason: String }
+
+// cancel cancels the scope s: its tasks see it at their next
+// cancellation point (delay, checkpoint, channels), and so do scopes
+// nested in it. The scope still waits for them before it closes. (A
+// scope is also cancelled when it ends.)
+fn cancel(s: Scope) uses state unsafe go {
+  s.cancel(_errCancelled)
+}
+
+// cancelled reports whether s has been cancelled.
+fn cancelled(s: Scope) uses state: Bool unsafe go {
+  return s.ctx.Err() != nil
+}
+
+// cancelAfter cancels s once ms milliseconds have passed, unless it has
+// closed by then: a deadline.
+fn cancelAfter(s: Scope, ms: Int) uses clock + state unsafe go {
+  import "errors"
+  import "time"
+  t := time.AfterFunc(time.Duration(ms)*time.Millisecond, func() { s.cancel(errors.New("deadline exceeded")) })
+  s.Defer(func() { t.Stop() })
+}
+
+// checkpoint gives Cancelled if s has been cancelled: a cancellation
+// point for work that does not otherwise wait, as in checkpoint(s)?.
+fn checkpoint(s: Scope) uses state: Unit | Cancelled unsafe go {
+  if r := s._cancelReason(); r != "" {
+    return Cancelled{reason: r}
+  }
+  return _Unit{}
+}
+
+// delay pauses for ms milliseconds, or until s is cancelled.
+fn delay(s: Scope, ms: Int) uses clock + state: Unit | Cancelled unsafe go {
+  import "time"
+  if !s._sleep(time.Duration(ms) * time.Millisecond) {
+    return Cancelled{reason: s._cancelReason()}
+  }
+  return _Unit{}
+}
+
+// Closed is what sending to or receiving from a closed channel gives
+// (once its buffered values are received).
+type Closed = {}
+
+// Atom holds a value that tasks share and replace, as Clojure's atom:
+// the value itself never changes, but update swaps in a new one,
+// atomically. With persistent maps and lists it is how a server keeps
+// state between requests:
+//
+//   store = atom({:})
+//   update(store, users => users.put(id, user))
+//
+// update may call f more than once (when another task updated the atom
+// in between), so f should do nothing but compute the new value.
+type Atom[T] = {
+  currentFn: () uses state => T,
+  updateFn: ((T) uses nothing => T) uses state => T,
+  swapFn: ((T) uses nothing => T) uses state => T,
+}
+
+// atom makes an atom holding initial.
+fn atom[T](initial: T): Atom[T] unsafe go {
+  import "sync/atomic"
+  var p atomic.Pointer[T]
+  p.Store(&initial)
+  // change gives the old value and the new one.
+  change := func(f func(T) T) (T, T) {
+    for {
+      old := p.Load()
+      next := f(*old)
+      if p.CompareAndSwap(old, &next) {
+        return *old, next
+      }
+    }
+  }
+  return Atom[T]{
+    currentFn: func() T { return *p.Load() },
+    updateFn: func(f func(T) T) T { _, next := change(f); return next },
+    swapFn: func(f func(T) T) T { old, _ := change(f); return old },
+  }
+}
+
+// current is the value a holds now.
+fn current[T](a: Atom[T]) uses state: T {
+  a.currentFn()
+}
+
+// update replaces a's value x with f(x), atomically, and gives the new
+// value.
+fn update[T](a: Atom[T], f: (T) uses nothing => T) uses state: T {
+  a.updateFn(f)
+}
+
+// swap is update, but gives the value it replaced: what the change was
+// made to, so the caller can tell what it did (`old = swap(store, s =>
+// remove(s, id))`, then whether old had id).
+fn swap[T](a: Atom[T], f: (T) uses nothing => T) uses state: T {
+  a.swapFn(f)
+}
+
+// Channel passes values of type T between tasks. It belongs to the
+// scope it was made in, and closes when that scope closes; its
+// operations stop with Cancelled when that scope is cancelled.
+type Channel[T] = {
+  sendFn: (T) uses state => Unit | Cancelled | Closed,
+  receiveFn: () uses state => T | Cancelled | Closed,
+  closeFn: () uses state => Unit,
+}
+
+// channel makes a channel in scope s that holds up to capacity values
+// that are not received yet (0: a sender waits for a receiver).
+fn channel[T](s: Scope, capacity: Int): Channel[T] unsafe go {
+  import "sync"
+  c := make(chan T, capacity)
+  closed := make(chan struct{})
+  var once sync.Once
+  closeFn := func() { once.Do(func() { close(closed) }) }
+  s.Defer(closeFn)
+  // The Go channel is never closed, so a late send cannot panic.
+  return Channel[T]{
+    sendFn: func(x T) any {
+      select {
+      case <-closed:
+        return Closed{}
+      case <-s.ctx.Done():
+        return Cancelled{reason: s._cancelReason()}
+      default:
+      }
+      select {
+      case c <- x:
+        return _Unit{}
+      case <-closed:
+        return Closed{}
+      case <-s.ctx.Done():
+        return Cancelled{reason: s._cancelReason()}
+      }
+    },
+    receiveFn: func() any {
+      select {
+      case x := <-c:
+        return x
+      case <-closed:
+        select {
+        case x := <-c:
+          return x
+        default:
+          return Closed{}
+        }
+      case <-s.ctx.Done():
+        return Cancelled{reason: s._cancelReason()}
+      }
+    },
+    closeFn: closeFn,
+  }
+}
+
+// send passes x to the channel, waiting while it is full.
+fn send[T](ch: Channel[T], x: T) uses state: Unit | Cancelled | Closed unsafe go {
+  return ch.sendFn(x)
+}
+
+// receive takes the next value from the channel, waiting until there
+// is one.
+fn receive[T](ch: Channel[T]) uses state: T | Cancelled | Closed unsafe go {
+  return ch.receiveFn()
+}
+
+// closeChannel closes the channel: sends give Closed, and receives
+// give the values still buffered, then Closed.
+fn closeChannel[T](ch: Channel[T]) uses state unsafe go {
+  ch.closeFn()
+}
+
+// received receives values until the channel closes (or its scope is
+// cancelled), and gives them in order.
+fn received[T](ch: Channel[T]) uses state: List[T] unsafe go {
+  out := []T{}
+  for {
+    v, ok := ch.receiveFn().(T)
+    if !ok {
+      return out
+    }
+    out = append(out, v)
+  }
+}
+
+// sleep pauses the routine for ms milliseconds.
+fn sleep(ms: Int) uses clock unsafe go {
+  import "time"
+  time.Sleep(time.Duration(ms) * time.Millisecond)
+}

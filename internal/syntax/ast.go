@@ -15,7 +15,7 @@ type File struct {
 	// Classes and Instances; the instances' methods are also in Funcs.
 	Classes   []*ClassDecl
 	Instances []*InstanceDecl
-	// Prelude is set for the compiler's built-in prelude.bork.
+	// Prelude is set for the compiler's built-in prelude.
 	Prelude  bool
 	Types    []*TypeDecl
 	Funcs    []*FuncDecl

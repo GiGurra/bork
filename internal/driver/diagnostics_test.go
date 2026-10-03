@@ -2,6 +2,7 @@ package driver
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,6 +11,22 @@ import (
 
 	"github.com/GiGurra/bork/internal/diag"
 )
+
+func TestNoTestsPosition(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "main.bork")
+	if err := os.WriteFile(path, []byte("fn main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Test(path, io.Discard, TestOptions{})
+	var de *DiagError
+	if !errors.As(err, &de) {
+		t.Fatalf("expected missing-tests diagnostic, got %v", err)
+	}
+	diags := de.Diags.Sorted()
+	if len(diags) != 1 || diags[0].Code != "package.no-tests" || diags[0].Pos != (diag.Pos{File: path, Line: 1, Col: 1}) {
+		t.Fatalf("missing-tests diagnostic must point to the root source: %+v", diags)
+	}
+}
 
 func TestSuggestedEdits(t *testing.T) {
 	cases := []struct {

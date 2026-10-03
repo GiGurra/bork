@@ -1,0 +1,77 @@
+// Scopes and resources. A resource is opened in a scope, and closed
+// when the scope closes: finalizers run in reverse order of
+// registration, when the scope's block ends or panics.
+
+// attach keeps a resource open until scope s closes too: it closes when
+// the last of the scopes it is attached to closes. It gives the
+// resource, as a value of s, to hand to tasks of s (which may outlive
+// the scope the resource was opened in). Handles with a cancellation rebind
+// hook follow s for cancellation after attachment.
+fn attach[R](r: R, s: Scope): R unsafe go {
+  o, _ := any(r).(interface{ _ownerOf() *_Owner })
+  if o == nil || o._ownerOf() == nil {
+    panic("bork: attach: the resource was not opened with an owner (s.Own)")
+  }
+  if !o._ownerOf().attach(s) {
+    panic("bork: attach: the resource is already closed")
+  }
+  if h, ok := any(r).(interface { _borkRebind(*_Scope) }); ok { h._borkRebind(s) }
+  return r
+}
+
+// ScopePolicy configures how a scope ends, chosen with
+// `scope s with taskTimeout(100), cleanupTimeout(500), logFailures() { ... }`.
+// When a scope ends, it cancels itself, waits for its tasks, and then
+// runs its finalizers. By default it waits for each for as long as it
+// takes, and raises failures (finalizers that panicked, and tasks that
+// panicked without being awaited) as one panic once it is closed;
+// every finalizer runs, even when others fail.
+//   - TaskTimeout: wait at most ms milliseconds for the tasks to stop
+//     (with whatever cleanup of their own they do). Tasks still running
+//     then are orphaned: they keep running, the scope's finalizers still
+//     run, and the tasks may find its resources closed.
+//   - CleanupTimeout: wait at most ms milliseconds for each finalizer;
+//     one that takes longer is orphaned, and the scope goes on closing.
+//   - LogFailures: log failures (at error level) instead of raising them.
+// Orphaning is logged at warning level.
+type ScopePolicy = sealed {
+  TaskTimeout { ms: Int },
+  CleanupTimeout { ms: Int },
+  LogFailures,
+}
+
+// taskTimeout is the policy that waits at most ms milliseconds for the
+// scope's tasks to stop when it ends.
+fn taskTimeout(ms: Int): ScopePolicy {
+  ScopePolicy.TaskTimeout { ms: ms }
+}
+
+// cleanupTimeout is the policy that waits at most ms milliseconds for
+// each finalizer.
+fn cleanupTimeout(ms: Int): ScopePolicy {
+  ScopePolicy.CleanupTimeout { ms: ms }
+}
+
+// logFailures is the policy that logs failures at the scope's end
+// instead of raising them.
+fn logFailures(): ScopePolicy {
+  ScopePolicy.LogFailures
+}
+
+// setScopePolicy applies a policy to s (what `with` does).
+fn setScopePolicy(s: Scope, policy: ScopePolicy) unsafe go {
+  import "time"
+  switch p := policy.(type) {
+  case ScopePolicy_TaskTimeout:
+    s.taskTimeout = time.Duration(p.ms) * time.Millisecond
+  case ScopePolicy_CleanupTimeout:
+    s.finalizerTimeout = time.Duration(p.ms) * time.Millisecond
+  case ScopePolicy_LogFailures:
+    s.logFailures = true
+  }
+}
+
+// onClose runs f when the scope s closes.
+fn onClose(s: Scope, f: () => Unit) unsafe go {
+  s.Defer(f)
+}
