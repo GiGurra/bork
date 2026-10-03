@@ -525,9 +525,11 @@ to settle. Before accepting this candidate, settle:
   by the attachment rules above.
 - **Borrowing cannot race close.** Synchronous calls may borrow while the owner
   is open. Child-owned tasks are joined during close before resources finalize,
-  subject to the existing timeout policies. An enclosing task must not retain
+  subject to the existing timeout policies. A task of an enclosing or sibling scope must not retain
   the child's borrowed scope or child-only values: otherwise it could use them
-  concurrently with close. Closing an owner captured by its own task would
+  concurrently with close. For example, `spawn(b.scope, () => use(old))` followed
+  by `a.close()` must fail when `old` belongs only to `a`; attaching `old` to `b`
+  first proves the resource lifetime, but does not transfer a borrowed `a.scope`. Closing an owner captured by its own task would
   deadlock on joining itself and must be rejected.
 - **Parents and cancellation remain explicit.** A parent's cancellation cancels
   its owned children; cancellation alone neither releases resources nor grants
@@ -539,7 +541,7 @@ to settle. Before accepting this candidate, settle:
   capability, not a global allocator. `uses state` alone never authorizes closing
   someone else's scope. An explicit close changes shared cancellation and should
   use `state`. The effects of spawned work and finalizers remain charged at
-  registration, as under [Effects in signatures](#effects-in-signatures-proposal);
+  registration, as under [Effects in signatures](#effects-in-signatures);
   passing an owner across functions must preserve that accounting and cannot
   let pure code register effectful work through an untracked callback.
 
