@@ -1,0 +1,119 @@
+// A generic function's mock is generic too: one body answers every
+// instantiation, and keeps the promises of each.
+
+pred positive(n: Int) { n > 0 }
+
+type Port = Int where positive
+
+type Box[T] = { value: T }
+
+// Load would read a stored value.
+fn Load[T](key: String, fallback: T) uses io: T {
+  panic(s"no store: $key")
+}
+
+// Describe would ask a service to describe a value.
+fn Describe[T: Show](x: T) uses net: String {
+  panic("no network")
+}
+
+fn (b: Box[T]) Save[T](key: String) uses io: Box[T] {
+  panic(s"no disk: $key")
+}
+
+fn port() uses io: Port {
+  Load("port", 8080)
+}
+
+fn main() {
+  println(port())
+}
+
+test "one mock answers every instantiation" {
+  loads = mock Load(key, fallback) { fallback }
+  assertEqual(Load("n", 1), 1)
+  assertEqual(Load("s", "x"), "x")
+  assertEqual(port(), 8080)
+  assertEqual(loads.calls(), ["Load(\"n\", 1)", "Load(\"s\", \"x\")", "Load(\"port\", 8080)"])
+  assertEqual(loads.args().map(c => c.key), ["n", "s", "port"])
+}
+
+test "a generic mock sees the test's values" {
+  prefix = "mocked"
+  mock Describe(x) { s"$prefix ${show(x)}" }
+  assertEqual(Describe(1), "mocked 1")
+  assertEqual(Describe([true]), "mocked [true]")
+}
+
+test "a generic method can be mocked" {
+  saves = mock Box.Save(b, key) { b }
+  assertEqual(Box { value: 3 }.Save("k"), Box { value: 3 })
+  saves.expect(times: 1)
+}
+
+test "a generic mock can call the function it replaces" {
+  mock Load(key, fallback) { fallback }
+  {
+    mock Load(key, fallback) {
+      if (key == "outer") { Load(key, fallback) } else { panic("inner") }
+    }
+    assertEqual(Load("outer", 5), 5)
+  }
+}
+
+type Tag[T] = { id: Int }
+
+fn Fetch[T](t: Tag[T], n: Int) uses io: Int {
+  panic("no network")
+}
+
+fn tag(): Tag[String] {
+  Tag { id: 1 }
+}
+
+test "a call record leaves out what mentions a type parameter" {
+  fetches = mock Fetch(t, n) { t.id + n }
+  assertEqual(Fetch(tag(), 2), 3)
+  assertEqual(fetches.args().map(c => c.n), [2])
+}
+
+fn tracked(name: String, s: Scope) uses io {
+  onClose(s, () => println(s"close $name"))
+}
+
+test "a generic mock can use a scope borrowed from an owned scope" {
+  scope app {
+    b = openScope(app)
+    mock Load(key, fallback) {
+      tracked(key, b.scope)
+      fallback
+    }
+    assertEqual(Load("k", 1), 1)
+    closeScope(b)
+  }
+}
+
+test "a test value named like a type parameter" {
+  T = 5
+  mock Load(key, fallback) {
+    if (T > 9) { panic("no") }
+    fallback
+  }
+  assertEqual(Load("k", "v"), "v")
+}
+
+ambient traceId: String
+
+fn Traced[T](x: T) uses io needs traceId: T {
+  panic("no tracing")
+}
+
+test "a generic mock reads the target's ambient values" {
+  mock Traced(x) {
+    if (traceId == "t1") { x } else { panic("wrong trace") }
+  }
+  with (traceId: "t1") {
+    assertEqual(Traced(1), 1)
+    assertEqual(Traced("x"), "x")
+  }
+}

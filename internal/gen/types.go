@@ -25,6 +25,9 @@ import (
 func (g *gen) goType(t check.Type) ast.Expr {
 	switch t := t.(type) {
 	case *check.TypeParam:
+		if n, ok := g.typeParamNames[t]; ok {
+			return ast.NewIdent(n)
+		}
 		return name(t.Name)
 	case *check.Seq:
 		g.usesSeq = true

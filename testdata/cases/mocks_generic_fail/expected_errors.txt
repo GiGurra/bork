@@ -1,0 +1,3 @@
+main.bork:17:30: the mock of Load must give T, but its body produces Int
+main.bork:21:39: operator + needs two numbers of the same type or two Strings, found T and Int
+main.bork:27:21: break and continue require a loop in the same function or producer

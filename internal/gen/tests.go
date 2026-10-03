@@ -99,6 +99,9 @@ func Tests(files []*syntax.File, info *check.Info, autoProperties bool) ([]byte,
 		}
 	}
 	roots = append(roots, g.propRoots...)
+	if g.mockErrors.Len() > 0 {
+		return nil, &g.mockErrors
+	}
 	main := &ast.FuncDecl{
 		Name: ast.NewIdent("main"),
 		Type: &ast.FuncType{Params: &ast.FieldList{}},

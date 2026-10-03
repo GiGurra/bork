@@ -11,5 +11,6 @@ ok    functions without a result, and recorded arguments
 ok    property tests can mock
 ok    a mock in a scope's body lasts until the scope's tasks are done
 ok    a task that outlives a block gets the mock from outside it
-13 passed, 0 failed
+ok    a mock in a loop body ends with each iteration
+14 passed, 0 failed
 exit code 0

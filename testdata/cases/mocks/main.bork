@@ -174,3 +174,17 @@ test "a task that outlives a block gets the mock from outside it" {
   }
   assertEqual(current(results), ["inner", "outer"])
 }
+
+test "a mock in a loop body ends with each iteration" {
+  for (i in [1, 2, 3]) {
+    calls = mock Fetch(url) { s"loop $i" }
+    calls.expect(times: 1)
+    assertEqual(Fetch("x"), s"loop $i")
+    if (i == 2) { continue }
+    if (i == 3) { break }
+  }
+  {
+    mock Fetch(url) { "after" }
+    assertEqual(Fetch("x"), "after")
+  }
+}
