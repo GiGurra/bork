@@ -632,6 +632,75 @@ foreign structural derive fails. Property generation and shrinking preserve
 both sibling and whole-value invariants. Update grammar, formatter, editor
 grammar, README and config examples with the implementation.
 
+### Generated checked constructors (design: bork-aull6h)
+
+An owning package can export a record's checked construction without repeating
+its fields, defaults and facts:
+
+```bork
+// package settings
+fn New = Config.new
+```
+
+This is a function declaration, with ordinary uppercase export visibility. The
+right side names a record declared in the same package. It does not create an
+implicitly callable `Config.new` member: construction APIs exist only when the
+owner declares them. Public records may use the declaration too. Aliases,
+sealed types, imported records, methods, predicates and class/instance methods
+are rejected. The generated function returns the record and is pure.
+
+**Parameters and defaults.** Every field becomes a parameter with the same
+name, type, facts, documentation and closed default. Parameter order is field
+order; named arguments are recommended since a record's field order is now
+part of this explicitly exported API. Fields without defaults remain required.
+Generated signatures permit defaults before required fields, preserving record
+order; named calls can omit any defaulted field, and positional calls can omit
+only a suffix whose fields all have defaults. Supplied arguments retain the
+usual source evaluation order. Defaults mean what they mean in the owning
+package, including private variants. Adding a required field changes the API;
+adding a defaulted field retains existing named calls.
+
+Generic records produce generic functions with the record's type parameters
+and class bounds. Calls infer them from arguments, or supply them explicitly:
+`fn NewBox = Box.new` supports `NewBox[Int](value: 3)`. Field facts retain
+references to sibling parameters, even when the referenced field is defaulted
+or follows the constrained field in declaration order.
+
+**Whole-value requirements.** The generated signature requires every type-level
+predicate on the completed candidate, after supplying defaults. These are
+function preconditions, proved at the call site with the ordinary facts pass.
+They apply to an unvalidated structural candidate: its nominal record invariant
+cannot prove itself. Simple invariant predicates unfold against field arguments;
+opaque predicates require the existing predicate facts or rules. No predicate
+body is copied into the declaration, and the ordinary literal checks remain the
+source of truth. A caller can therefore prove Configured's body-limit requirement
+with a guard or a parameter fact without repeating that requirement in `New`.
+
+Construction still validates field and whole-value obligations before publishing
+the result. Importers can call the exported function and read its result, while
+foreign literals, copies, aliases and generated-constructor declarations retain
+the same private construction restrictions. A constructor with requirements
+cannot be used as a function value, just like an ordinary constrained function;
+a checked lambda can wrap it. Diagnostics identify the generated function, the
+failed field or invariant and the record declaration rather than suggesting a
+foreign literal. Formatter and description output retain the short declaration
+and expose the generated signature and its obligations, respectively.
+
+This increment supplies all fields and uses compile-time requirements. Selecting
+only some fields, returning a generated validation-error value and direct
+`Config.new(...)` calls are deferred; a handwritten wrapper or the owning
+package's derived decoder handles those APIs today.
+
+**Acceptance.** Cover inferred and explicit generic calls, imported exports,
+field/default/fact reuse, sibling constraints (including forward references),
+whole-value proof by constants and guards, invalid defaults under supplied
+siblings, required fields following defaulted fields, argument evaluation order,
+private/default variant ownership, foreign generation rejection, invalid target
+kinds, declaration name collisions, function-value restrictions, formatting and
+descriptions. Migrate examples/config/settings to `fn New = Config.new`, keeping
+Defaults and ForProduction as focused handwritten APIs. Update grammar and README
+with the implementation.
+
 ### Constrained inputs: examples
 
 Parameters carry their requirements in the signature. One parameter per line, with trailing commas, so the formatter can align columns and diffs stay small.
