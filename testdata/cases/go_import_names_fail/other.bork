@@ -1,0 +1,4 @@
+fn actualSecond(): Int unsafe go {
+  import "example.com/bindtest/secondname"
+  return collision.Value
+}

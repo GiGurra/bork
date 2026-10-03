@@ -495,7 +495,7 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		}
 	}
 	for _, path := range fd.GoBody.Imports {
-		g.imports[path] = true
+		g.goImport(path)
 	}
 	var buf bytes.Buffer
 	sig := g.signature(fd)
@@ -508,7 +508,7 @@ func (g *gen) goFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	if abs, err := filepath.Abs(file); err == nil {
 		file = abs
 	}
-	fmt.Fprintf(&buf, " {%s/*line %s:%d:%d*/%s}\n", g.packageAliases(fd), file, pos.Line, pos.Col+1, fd.GoBody.Body)
+	fmt.Fprintf(&buf, " {%s/*line %s:%d:%d*/%s}\n", g.packageAliases(fd), file, pos.Line, pos.Col+1, g.goBodyAliases(fd))
 	return buf.String(), nil
 }
 

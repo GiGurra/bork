@@ -5,8 +5,10 @@ import (
 	goparser "go/parser"
 	gotoken "go/token"
 	gotypes "go/types"
+	"maps"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -110,7 +112,7 @@ type goUse struct {
 // name counts even if another body imports it. funcs finds the bork
 // functions the body can call by their names; params are the names of
 // the function's parameters, which the body sees as locals.
-func goEffectUses(gc *syntax.GoCode, params map[string]bool, funcs func(name string) *Func) []goUse {
+func goEffectUses(gc *syntax.GoCode, params map[string]bool, funcs func(name string) *Func, imports map[string]string) []goUse {
 	const prefix = "package p\n\nfunc _() {"
 	fset := gotoken.NewFileSet()
 	file, err := goparser.ParseFile(fset, "", prefix+gc.Body+"}\n", 0)
@@ -125,6 +127,9 @@ func goEffectUses(gc *syntax.GoCode, params map[string]bool, funcs func(name str
 	}
 	for _, imp := range gc.Imports {
 		pkgs[goPackageName(imp)] = imp
+	}
+	for name, imp := range imports {
+		pkgs[name] = imp
 	}
 	at := func(p gotoken.Pos) diag.Pos {
 		pos := fset.Position(p)
@@ -227,7 +232,7 @@ func checkUnsafeGo(fn *Func, info *Info, diags *diag.List) {
 	if fn.Decl.GoBind != nil {
 		uses = goBindUses(fn.Decl.GoBind)
 	} else {
-		uses = goEffectUses(fn.Decl.GoBody, params, funcs)
+		uses = goEffectUses(fn.Decl.GoBody, params, funcs, info.GoImportNames[fn.Decl.GoBody])
 	}
 	for _, u := range uses {
 		if u.effect&^allowed&^missing != 0 {
@@ -281,4 +286,86 @@ func effectsWithin(t Type, seen map[Type]bool) Effects {
 		}
 	}
 	return effs
+}
+
+// GoNames optionally supplies declared package names without loading their types.
+// The driver provides it; checker-only tests may omit a Go environment.
+type GoNames interface {
+	Names(paths []string) map[string]string
+}
+
+// Aliases are file-local. Unaliased imports retain their shared namespace;
+// collisions are diagnosed before generating Go.
+func checkGoImports(files []*syntax.File, diags *diag.List, loader GoTypes) map[*syntax.GoCode]map[string]string {
+	resolved := map[*syntax.GoCode]map[string]string{}
+	paths := map[string]bool{}
+	for _, file := range files {
+		for _, fn := range file.Funcs {
+			if fn.GoBody == nil {
+				continue
+			}
+			for _, path := range fn.GoBody.Imports {
+				if fn.GoBody.ImportAliases[path] == "" {
+					paths[path] = true
+				}
+			}
+		}
+	}
+	declared := map[string]string{}
+	if names, ok := loader.(GoNames); ok {
+		declared = names.Names(slices.Sorted(maps.Keys(paths)))
+	}
+	nameOf := func(path string) string {
+		if name := declared[path]; name != "" {
+			return name
+		}
+		return goPackageName(path)
+	}
+	shared := map[string]string{}
+	for _, file := range files {
+		names := map[string]string{}
+		aliases := map[string]string{}
+		for _, fn := range file.Funcs {
+			if fn.GoBody == nil {
+				continue
+			}
+			for _, path := range fn.GoBody.Imports {
+				name := fn.GoBody.ImportAliases[path]
+				explicit := name != ""
+				if !explicit {
+					name = nameOf(path)
+				}
+				previous, exists := names[name]
+				localCollision := exists && previous != path
+				if localCollision {
+					diags.AddCode(fn.GoBody.Pos, "go.import-name", "Go packages %q and %q both use name %s in this file; give them distinct import aliases", previous, path, name)
+				}
+				names[name] = path
+				if explicit {
+					aliases[name] = path
+				} else {
+					if previous, exists := shared[name]; exists && previous != path && !localCollision {
+						diags.AddCode(fn.GoBody.Pos, "go.import-name", "Go packages %q and %q both use name %s in generated Go; give one an explicit import alias", previous, path, name)
+					}
+					shared[name] = path
+				}
+			}
+		}
+		for _, fn := range file.Funcs {
+			if fn.GoBody != nil {
+				resolved[fn.GoBody] = aliases
+			}
+		}
+	}
+	for _, file := range files {
+		for _, fn := range file.Funcs {
+			if fn.GoBody == nil {
+				continue
+			}
+			names := maps.Clone(shared)
+			maps.Copy(names, resolved[fn.GoBody])
+			resolved[fn.GoBody] = names
+		}
+	}
+	return resolved
 }

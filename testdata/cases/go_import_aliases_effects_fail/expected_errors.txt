@@ -1,0 +1,3 @@
+main.bork:3:10: now's unsafe go body uses clock (it uses timer.Now, which reads the clock or waits), but its signature allows no effects; declare it: uses clock
+main.bork:5:36: later's unsafe go body uses clock (it uses timer.Now, which reads the clock or waits), but its signature allows no effects; declare it: uses clock
+main.bork:8:10: random's unsafe go body uses random (it uses draw.Int64, which makes random numbers), but its signature allows no effects; declare it: uses random

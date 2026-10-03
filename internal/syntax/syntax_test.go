@@ -219,3 +219,26 @@ func TestLexInterpolatedString(t *testing.T) {
 		t.Errorf("got: %s\nwant: %s", got, want)
 	}
 }
+
+func TestParseGoImportAliases(t *testing.T) {
+	diags := &diag.List{}
+	f := Parse("t.bork", []byte("fn f(): Int unsafe go {\n import draw \"math/rand/v2\"\n return draw.Int64()\n}\n"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	gc := f.Funcs[0].GoBody
+	if len(gc.Imports) != 1 || gc.ImportAliases["math/rand/v2"] != "draw" || strings.Contains(gc.Body, "import") {
+		t.Fatalf("unexpected imports: %#v", gc)
+	}
+	for _, text := range []string{
+		"import _ \"math\"",
+		"import . \"math\"",
+		"import first \"math\"\n import second \"math\"",
+	} {
+		diags := &diag.List{}
+		Parse("t.bork", []byte("fn f() unsafe go {\n"+text+"\n}\n"), diags)
+		if diags.Len() == 0 {
+			t.Errorf("accepted invalid import: %s", text)
+		}
+	}
+}

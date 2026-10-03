@@ -197,6 +197,9 @@ type TryInfo struct {
 // generation) read it, and the typed tree of each function body
 // (Func.Body), instead of re-deriving types.
 type Info struct {
+	// GoImportNames resolves unsafe Go imports without mutating source syntax.
+	GoImportNames map[*syntax.GoCode]map[string]string
+
 	// Packages lists the program's packages.
 	Packages []*Package
 	// Classes and ClassInstances list every class and instance.
@@ -352,6 +355,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 		diags: diags,
 		info: &Info{
 			GoBindings:             map[*Func]*GoBinding{},
+			GoImportNames:          checkGoImports(files, diags, goTypes),
 			assemblyCalls:          map[*syntax.Call]*assemblyExpansion{},
 			conversionCalls:        map[*syntax.Call]*syntax.Block{},
 			conversionRecords:      map[*syntax.RecordLit]*Record{},
