@@ -238,7 +238,7 @@ and the [invoice example](examples/math/main.bork).
 
 [MIT](LICENSE)
 
-HTTP servers accept method/path routes, middleware functions, typed body/query/path decoding, TLS, static files and forms. Scope cleanup drains active requests, bounded by `cleanupTimeout` or a per-server timeout. See [http_routes](examples/http_routes/main.bork).
+HTTP servers accept method/path routes, middleware functions, typed body/query/path decoding, TLS, static files and forms. Server body limits are configurable (16 MiB by default). Scope cleanup drains active requests, bounded by `cleanupTimeout` or a per-server timeout. See [http_routes](examples/http_routes/main.bork).
 
 Import `bork/compress` for gzip Bytes codecs and streaming transfers between
 `bork/fs.File` handles. `bork/archive` reads and writes ZIP/TAR file and directory

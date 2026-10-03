@@ -59,19 +59,19 @@ fn Form(request: Request): Headers | IoError {
 }
 type Upload = { field: String, filename: String, contentType: String, data: Bytes }
 type MultipartForm = { values: Headers, files: List[Upload] }
-fn Multipart(request: Request): MultipartForm | IoError unsafe go {
+fn Multipart(request: Request, maxBodyBytes: BodyLimit = 16777216): MultipartForm | IoError unsafe go {
   import "io"
   import "mime"
   import "mime/multipart"
   import "sort"
   import "strings"
-  if len(request.body) > 16<<20 { return IoError{path: request.path, message: "multipart body exceeds 16 MiB"} }
+  if int64(len(request.body)) > maxBodyBytes { return IoError{path: request.path, message: "multipart body exceeds configured limit"} }
   header, found := _borkOptionGet(HeaderOf(request.headers, "Content-Type"))
   if !found { return IoError{path: request.path, message: "missing Content-Type"} }
   media, parameters, err := mime.ParseMediaType(header)
   if err != nil || media != "multipart/form-data" || parameters["boundary"] == "" { return IoError{path: request.path, message: "expected multipart/form-data with boundary"} }
   reader := multipart.NewReader(strings.NewReader(request.body), parameters["boundary"])
-  form, err := reader.ReadForm(16<<20)
+  form, err := reader.ReadForm(maxBodyBytes)
   if err != nil { return IoError{path: request.path, message: err.Error()} }
   defer form.RemoveAll()
   keys, values := []string{}, [][]string{}

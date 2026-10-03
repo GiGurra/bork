@@ -10,6 +10,11 @@ Option.Some { value: ["alice"] }
 photo photo.txt 5
 true
 true
+true
+200 abc
+413
+200 empty
+413
 200 42
 422 .id
 200 a b:2:Option.None
