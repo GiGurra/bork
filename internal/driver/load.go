@@ -159,7 +159,12 @@ func (l *loader) loadSources(importPath string, paths []string, srcs [][]byte) e
 	l.stack = append(l.stack, importPath)
 	var files []*syntax.File
 	for i, p := range paths {
-		f := syntax.Parse(p, srcs[i], l.diags)
+		var f *syntax.File
+		if strings.HasPrefix(importPath, std.Prefix) {
+			f = syntax.ParseEmbedded(p, srcs[i], l.diags)
+		} else {
+			f = syntax.Parse(p, srcs[i], l.diags)
+		}
 		f.Package = importPath
 		files = append(files, f)
 	}
