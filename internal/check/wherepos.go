@@ -3,6 +3,7 @@ package check
 import (
 	"reflect"
 	"slices"
+	"sync"
 
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -225,10 +226,8 @@ func (c *checker) forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where
 				walk(v.Elem(), where)
 			}
 		case reflect.Struct:
-			for i := 0; i < v.NumField(); i++ {
-				if v.Type().Field(i).IsExported() {
-					walk(v.Field(i), where)
-				}
+			for _, i := range walkableSyntaxFields(v.Type()) {
+				walk(v.Field(i), where)
 			}
 		case reflect.Slice:
 			for i := 0; i < v.Len(); i++ {
@@ -237,4 +236,27 @@ func (c *checker) forTypeExprs(v reflect.Value, f func(t *syntax.TypeExpr, where
 		}
 	}
 	walk(v, "")
+}
+
+// Syntax struct layouts are immutable. Discover walkable exported fields once,
+// retaining declaration order and omitting scalar kinds the walker ignores.
+var syntaxFields sync.Map // reflect.Type -> []int, in declaration order
+
+func walkableSyntaxFields(typ reflect.Type) []int {
+	if fields, ok := syntaxFields.Load(typ); ok {
+		return fields.([]int)
+	}
+	var fields []int
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		switch field.Type.Kind() {
+		case reflect.Pointer, reflect.Interface, reflect.Struct, reflect.Slice:
+			fields = append(fields, i)
+		}
+	}
+	actual, _ := syntaxFields.LoadOrStore(typ, fields)
+	return actual.([]int)
 }
