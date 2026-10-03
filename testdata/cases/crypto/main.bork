@@ -1,0 +1,47 @@
+import "bork/crypto"
+import "bork/encoding"
+fn legacyHash() uses random: String unsafe go {
+  import "golang.org/x/crypto/bcrypt"
+  hash, err := bcrypt.GenerateFromPassword([]byte("secret"), 4)
+  if err != nil { panic(err) }
+  return string(hash)
+}
+fn exercise() uses io + random: Unit | crypto.Error | ParseError {
+  println(crypto.SHA256Hex(utf8Bytes("abc")))
+  println(crypto.SHA512Hex(utf8Bytes("abc")))
+  key = encoding.ParseHex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b")?
+  data = utf8Bytes("Hi There")
+  signature = crypto.HMAC256(key, data)
+  println(encoding.Hex(signature))
+  println(encoding.Hex(crypto.HMAC512(key, data)))
+  println(crypto.VerifyHMAC256(key, data, signature))
+  println(crypto.VerifyHMAC256(key, utf8Bytes("changed"), signature))
+  println(crypto.Equal(signature, bytes([])))
+  println(crypto.RandomBytes(0))
+  random = crypto.RandomBytes(16)?
+  println(random.length() == 16)
+  token = crypto.Token()?
+  println(token.byteLength() == 43 && !token.contains("=") && !token.contains("+"))
+  hashed = crypto.HashPassword("secret")?
+  println(hashed.startsWith("$argon2id$v=19$m=19456,t=2,p=1$"))
+  println(crypto.VerifyPassword("secret", hashed))
+  println(crypto.VerifyPassword("wrong", hashed))
+  println(crypto.NeedsRehash(hashed))
+  custom = crypto.PasswordParams { memoryKiB: 1024, iterations: 1, parallelism: 1 }
+  weak = crypto.HashPassword("secret", custom)?
+  println(crypto.VerifyPassword("secret", weak))
+  println(crypto.NeedsRehash(weak))
+  println(crypto.NeedsRehash(weak, custom))
+  long = "x".repeat(100)
+  longHash = crypto.HashPassword(long, custom)?
+  println(crypto.VerifyPassword(long, longHash))
+  legacy = legacyHash()
+  println(crypto.VerifyPassword("secret", legacy))
+  println(crypto.VerifyPassword("wrong", legacy))
+  println(crypto.NeedsRehash(legacy))
+  println(match (crypto.VerifyPassword("secret", "bad")) { error: crypto.Error => true; _ => false })
+  oversized = hashed.replaceAll("m=19456", "m=4294967295")
+  println(match (crypto.VerifyPassword("secret", oversized)) { error: crypto.Error => true; _ => false })
+  println(crypto.NeedsRehash("bad"))
+}
+fn main() { println(exercise()) }

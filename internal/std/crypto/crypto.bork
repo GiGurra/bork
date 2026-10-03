@@ -1,0 +1,156 @@
+import "bork/encoding"
+
+type Error = { message: String }
+pred ValidSize(size: Int) { size >= 0 && size <= 16777216 }
+type Size = Int where ValidSize
+pred ValidTokenSize(size: Int) { size >= 16 && size <= 4096 }
+type TokenSize = Int where ValidTokenSize
+
+fn SHA256(data: Bytes): Bytes unsafe go {
+  import "crypto/sha256"
+  sum := sha256.Sum256(_borkBytesData(data))
+  return _borkBytesFrom(sum[:])
+}
+fn SHA512(data: Bytes): Bytes unsafe go {
+  import "crypto/sha512"
+  sum := sha512.Sum512(_borkBytesData(data))
+  return _borkBytesFrom(sum[:])
+}
+fn SHA256Hex(data: Bytes): String { encoding.Hex(SHA256(data)) }
+fn SHA512Hex(data: Bytes): String { encoding.Hex(SHA512(data)) }
+fn HMAC256(key: Bytes, data: Bytes): Bytes unsafe go {
+  import "crypto/hmac"
+  import "crypto/sha256"
+  mac := hmac.New(sha256.New, _borkBytesData(key))
+  mac.Write(_borkBytesData(data))
+  return _borkBytesFrom(mac.Sum(nil))
+}
+fn HMAC512(key: Bytes, data: Bytes): Bytes unsafe go {
+  import "crypto/hmac"
+  import "crypto/sha512"
+  mac := hmac.New(sha512.New, _borkBytesData(key))
+  mac.Write(_borkBytesData(data))
+  return _borkBytesFrom(mac.Sum(nil))
+}
+fn Equal(first: Bytes, second: Bytes): Bool unsafe go {
+  import "crypto/hmac"
+  return hmac.Equal(_borkBytesData(first), _borkBytesData(second))
+}
+fn VerifyHMAC256(key: Bytes, data: Bytes, signature: Bytes): Bool { Equal(HMAC256(key, data), signature) }
+fn VerifyHMAC512(key: Bytes, data: Bytes, signature: Bytes): Bool { Equal(HMAC512(key, data), signature) }
+fn RandomBytes(size: Size) uses random: Bytes | Error unsafe go {
+  import "crypto/rand"
+  import "io"
+  data := make([]byte, int(size))
+  if _, err := io.ReadFull(rand.Reader, data); err != nil { return Error{message: err.Error()} }
+  return _borkBytesFrom(data)
+}
+// Token contains size bytes of entropy, encoded as unpadded URL-safe base64.
+fn Token(size: TokenSize = 32) uses random: String | Error unsafe go {
+  import "crypto/rand"
+  import "encoding/base64"
+  import "io"
+  data := make([]byte, int(size))
+  if _, err := io.ReadFull(rand.Reader, data); err != nil { return Error{message: err.Error()} }
+  return base64.RawURLEncoding.EncodeToString(data)
+}
+
+// Memory is KiB. Bounds also cap work when verifying an untrusted PHC string.
+pred ValidMemory(memory: Int) { memory >= 1024 && memory <= 262144 }
+pred ValidIterations(iterations: Int) { iterations >= 1 && iterations <= 16 }
+pred ValidParallelism(parallelism: Int) { parallelism >= 1 && parallelism <= 16 }
+type PasswordParams = {
+  memoryKiB: Int where ValidMemory,
+  iterations: Int where ValidIterations,
+  parallelism: Int where ValidParallelism,
+} derive (Encode, Decode)
+fn DefaultPasswordParams(): PasswordParams { PasswordParams { memoryKiB: 19456, iterations: 2, parallelism: 1 } }
+
+// HashPassword uses Argon2id, a fresh 16-byte salt and a 32-byte output key.
+fn HashPassword(password: String, parameters: PasswordParams = PasswordParams { memoryKiB: 19456, iterations: 2, parallelism: 1 }) uses random: String | Error unsafe go {
+  import "crypto/rand"
+  import "encoding/base64"
+  import "fmt"
+  import "io"
+  import "golang.org/x/crypto/argon2"
+  salt := make([]byte, 16)
+  if _, err := io.ReadFull(rand.Reader, salt); err != nil { return Error{message: err.Error()} }
+  key := argon2.IDKey([]byte(password), salt, uint32(parameters.iterations), uint32(parameters.memoryKiB), uint8(parameters.parallelism), 32)
+  return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, parameters.memoryKiB, parameters.iterations, parameters.parallelism, base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key))
+}
+
+type passwordHash = { parameters: PasswordParams, salt: Bytes, key: Bytes }
+fn parsePasswordHash(encoded: String): passwordHash | Error unsafe go {
+  import "encoding/base64"
+  import "strconv"
+  import "strings"
+  if len(encoded) > 256 { return Error{message: "password hash is too long"} }
+  parts := strings.Split(encoded, "$")
+  if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" || parts[2] != "v=19" {
+    return Error{message: "expected an Argon2id v=19 PHC string"}
+  }
+  fields := strings.Split(parts[3], ",")
+  if len(fields) != 3 { return Error{message: "expected Argon2id m, t and p parameters"} }
+  parameters := map[string]uint64{}
+  for _, field := range fields {
+    pair := strings.Split(field, "=")
+    if len(pair) != 2 || (pair[0] != "m" && pair[0] != "t" && pair[0] != "p") { return Error{message: "invalid Argon2id parameter"} }
+    if _, duplicate := parameters[pair[0]]; duplicate { return Error{message: "duplicate Argon2id parameter"} }
+    value, err := strconv.ParseUint(pair[1], 10, 32)
+    if err != nil { return Error{message: "invalid Argon2id parameter value"} }
+    parameters[pair[0]] = value
+  }
+  memory, iterations, parallelism := parameters["m"], parameters["t"], parameters["p"]
+  if memory < 1024 || memory > 262144 || iterations < 1 || iterations > 16 || parallelism < 1 || parallelism > 16 {
+    return Error{message: "Argon2id parameters exceed supported work bounds"}
+  }
+  if strings.ContainsAny(parts[4]+parts[5], "\r\n \t") { return Error{message: "invalid Argon2id base64"} }
+  salt, err := base64.RawStdEncoding.Strict().DecodeString(parts[4])
+  if err != nil || len(salt) < 8 || len(salt) > 64 { return Error{message: "invalid Argon2id salt"} }
+  key, err := base64.RawStdEncoding.Strict().DecodeString(parts[5])
+  if err != nil || len(key) < 16 || len(key) > 64 { return Error{message: "invalid Argon2id key"} }
+  return passwordHash{parameters: PasswordParams{memoryKiB: int64(memory), iterations: int64(iterations), parallelism: int64(parallelism)}, salt: _borkBytesFrom(salt), key: _borkBytesFrom(key)}
+}
+
+// Wrong passwords return false; malformed/unsupported hashes return Error.
+// Legacy bcrypt cost is capped at 16. New hashes always use Argon2id.
+fn VerifyPassword(password: String, encoded: String): Bool | Error {
+  if (encoded.startsWith("$2")) { return verifyBcrypt(password, encoded) }
+  parsed = parsePasswordHash(encoded)?
+  verifyArgon2(password, parsed)
+}
+fn verifyArgon2(password: String, parsed: passwordHash): Bool unsafe go {
+  import "crypto/subtle"
+  import "golang.org/x/crypto/argon2"
+  expected := _borkBytesData(parsed.key)
+  p := parsed.parameters
+  actual := argon2.IDKey([]byte(password), _borkBytesData(parsed.salt), uint32(p.iterations), uint32(p.memoryKiB), uint8(p.parallelism), uint32(len(expected)))
+  return subtle.ConstantTimeCompare(actual, expected) == 1
+}
+fn verifyBcrypt(password: String, encoded: String): Bool | Error unsafe go {
+  import "errors"
+  import "strings"
+  import "golang.org/x/crypto/bcrypt"
+  if (len(encoded) != 59 || !strings.HasPrefix(encoded, "$2$")) && (len(encoded) != 60 || (!strings.HasPrefix(encoded, "$2a$") && !strings.HasPrefix(encoded, "$2b$") && !strings.HasPrefix(encoded, "$2y$"))) { return Error{message: "unsupported bcrypt format"} }
+  suffix := encoded[len(encoded)-54:]
+  for i, char := range suffix {
+    if i == 0 { if char != '$' { return Error{message: "invalid bcrypt separator"} }; continue }
+    if !strings.ContainsRune("./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", char) { return Error{message: "invalid bcrypt base64"} }
+  }
+  cost, err := bcrypt.Cost([]byte(encoded))
+  if err != nil { return Error{message: err.Error()} }
+  if cost > 16 { return Error{message: "bcrypt cost exceeds supported work bound"} }
+  if len(password) > 72 { return false }
+  err = bcrypt.CompareHashAndPassword([]byte(encoded), []byte(password))
+  if err == nil { return true }
+  if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) { return false }
+  return Error{message: err.Error()}
+}
+// Rehash is advised when algorithm, params, salt/key lengths differ from target.
+// Call after successful verification. Invalid hashes also return true.
+fn NeedsRehash(encoded: String, parameters: PasswordParams = PasswordParams { memoryKiB: 19456, iterations: 2, parallelism: 1 }): Bool {
+  match (parsePasswordHash(encoded)) {
+    parsed: passwordHash => parsed.parameters != parameters || parsed.salt.length() != 16 || parsed.key.length() != 32
+    error: Error => true
+  }
+}
