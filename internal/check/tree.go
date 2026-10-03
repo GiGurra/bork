@@ -374,6 +374,10 @@ type Stmt interface{ stmtNode() }
 // Let binds a variable: `name = value` or `name: Type = value`. Var's
 // name is "_" for a value that is only computed.
 type Let struct {
+	// Thunk holds a lazy initializer's function boundary; Value retains
+	// its ordinary source type for effects and static proof checking.
+	Thunk *Lambda
+	Lazy  *LazyDescription
 	Pos   diag.Pos
 	Var   *Var
 	Value Expr

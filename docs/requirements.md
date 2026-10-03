@@ -3259,10 +3259,13 @@ Build, run and test continue to accept these markers. We do not introduce a
 release build mode or marker rejection in this change: check surfaces unfinished
 code, and automated consumers can choose to enforce those warning codes.
 
-### Lazy bindings and record fields (proposal: bork-9zpf2t)
+### Lazy bindings and record fields (local bindings implemented: bork-9zpf2t)
 
 `lazy name = expr` defers one initializer until its first read, memoizes its
-result and keeps the static type T. Lazy record fields provide a passable lazy
+result and keeps the static type T. Local bindings are implemented, including
+concurrent readers, cached panics, scoped captures and initializer-local return/?.
+An Option ? needs an annotated lazy result type; union ? and explicit return
+can contribute to an inferred result. Lazy record fields will provide a passable lazy
 value through `type Lazy[T] = { lazy value: T }`. Implement local bindings first,
 fields second and pure package bindings third. The complete design, including
 effects, facts, scopes, copies, derivation and tooling, is in

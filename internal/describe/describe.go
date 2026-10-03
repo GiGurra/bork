@@ -13,6 +13,7 @@ import (
 )
 
 type Result struct {
+	Lazy           *check.LazyDescription           `json:"lazy,omitempty"`
 	ProviderBundle *check.ProviderBundleDescription `json:"provider_bundle,omitempty"`
 	Assembly       *check.Assembly                  `json:"assembly,omitempty"`
 	SchemaVersion  int                              `json:"schema_version"`
@@ -283,7 +284,7 @@ func (s *sourceIndex) walk(x check.Expr) {
 		for _, stmt := range x.Stmts {
 			switch stmt := stmt.(type) {
 			case *check.Let:
-				if !strings.HasPrefix(stmt.Var.Name, "_") && s.contains(stmt.Var.Pos, len(stmt.Var.Name)) {
+				if !strings.HasPrefix(stmt.Var.Name, "_") && (s.contains(stmt.Var.Pos, len(stmt.Var.Name)) || stmt.Thunk != nil && s.contains(stmt.Thunk.Pos(), 4)) {
 					s.selectVar(stmt.Var, stmt.Value.Pos())
 				}
 				s.walk(stmt.Value)

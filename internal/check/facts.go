@@ -398,6 +398,10 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 	for _, s := range list {
 		switch s := s.(type) {
 		case *Let:
+			if s.Thunk != nil {
+				f.lazyBinding(s, e)
+				continue
+			}
 			f.walk(s.Value, e)
 			for _, con := range s.Constraints {
 				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Var.displayName()), con))

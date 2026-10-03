@@ -91,6 +91,9 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List)
 			if td := p.testDecl(); td != nil {
 				f.Tests = append(f.Tests, td)
 			}
+		case p.at(TIdent) && p.tok().Text == "lazy" && p.peekKind() == TIdent:
+			p.errorf(p.tok().Pos, "package lazy bindings are not implemented yet; use a local lazy binding inside a function")
+			p.syncTopLevel()
 		default:
 			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', 'ambient', 'class', 'instance', or 'test'), found %s", p.tok().Kind)
 			p.syncTopLevel()
@@ -330,6 +333,10 @@ func (p *parser) fieldDecls() []*FieldDecl {
 	var fields []*FieldDecl
 	p.expect(LBrace, "to start the fields")
 	p.list(RBrace, "a field", func() {
+		if p.at(TIdent) && p.tok().Text == "lazy" && p.peekKind() == TIdent {
+			p.errorf(p.tok().Pos, "lazy record fields are not implemented yet; local lazy bindings are supported")
+			panic(bailout{})
+		}
 		fname := p.expect(TIdent, "(field name)")
 		p.expect(Colon, "after field name")
 		field := &FieldDecl{Pos: fname.Pos, Name: fname.Text, Type: p.typeExpr(), Doc: p.fieldDoc(fname.Pos)}
@@ -921,6 +928,17 @@ func (p *parser) block() *Block {
 		}
 		var stmt Stmt
 		switch {
+		case p.at(TIdent) && p.tok().Text == "lazy" && (p.peekKind() == TIdent || p.peekKind() == Underscore):
+			pos := p.next().Pos
+			name := p.expect(TIdent, "after lazy (a single binding name)")
+			binding := &Binding{Pos: name.Pos, Name: name.Text, Lazy: true, LazyPos: pos}
+			if p.at(Colon) {
+				p.next()
+				binding.Type = p.typeExpr()
+			}
+			p.expect(Assign, "after the lazy binding's name or type")
+			binding.Value = p.expr()
+			stmt = binding
 		case p.atMock():
 			stmt = p.mockStmt(p.tok().Pos, "")
 		case p.at(TIdent) && p.peekKind() == Assign && p.toks[min(p.i+2, len(p.toks)-1)].Text == "mock" && p.toks[min(p.i+3, len(p.toks)-1)].Kind == TIdent:

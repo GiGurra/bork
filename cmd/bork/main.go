@@ -105,6 +105,13 @@ func printDescription(result *describe.Result) {
 	if len(result.BelongsTo) > 0 {
 		fmt.Println("belongs to:", strings.Join(result.BelongsTo, ", "))
 	}
+	if result.Lazy != nil {
+		fmt.Println("lazy:", result.Lazy.Kind, "(first read forces)")
+		fmt.Println("initializer effects:", result.Lazy.Effects)
+		if len(result.Lazy.Captures) > 0 {
+			fmt.Println("captures:", strings.Join(result.Lazy.Captures, ", "))
+		}
+	}
 	if result.Callable != nil {
 		fmt.Println("named arguments:", callableParameters(result.Callable), "(parameter names are API)")
 		if len(result.Callable.Needs) > 0 {
@@ -340,6 +347,7 @@ func main() {
 						failDiagnostics(err, p.JSON, os.Stdout)
 					}
 					warnings := check.DebugWarnings(info)
+					warnings.Append(check.LazyWarnings(info))
 					if p.JSON {
 						if err := warnings.WriteJSON(os.Stdout); err != nil {
 							fail(err)

@@ -433,6 +433,9 @@ func (g *gen) captured(v *check.Var, borrowed bool) {
 		saved := g.captures
 		g.captures = nil // the test's types, not the body's
 		t = g.goType(v.Type)
+		if v.Let != nil && v.Let.Thunk != nil {
+			t = &ast.StarExpr{X: &ast.IndexExpr{X: ast.NewIdent("_lazyCell"), Index: t}}
+		}
 		g.captures = saved
 	}
 	c.seen[n.Name] = true

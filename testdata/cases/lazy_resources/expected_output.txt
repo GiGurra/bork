@@ -1,0 +1,19 @@
+unused scope
+before resource
+open used
+7
+7
+close used
+open scalar
+close scalar
+7
+open initializer owner
+close initializer owner
+9
+panic initializer
+true
+true
+open panic
+close panic
+true
+true

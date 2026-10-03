@@ -1,0 +1,51 @@
+pred positive(x: Int) { x > 0 }
+type Failed = {}
+ambient label: String
+
+fn work(n: Int) uses io: Int { println(s"force $n"); n }
+fn bad() uses io: Int | Failed { println("failure"); Failed {} }
+fn generic[T](value: T): T { lazy saved = value; saved }
+fn named() needs label: String { label }
+
+fn main() {
+  lazy never = work(99)
+  lazy value = work(7)
+  reader = () => value
+  println("before")
+  println(reader()); println(value)
+  alias = value; println(alias)
+
+  lazy failed = bad()
+  println(failed); println(failed)
+
+  lazy early: Int where positive = {
+    if (true) { return 3 }
+    work(4)
+  }
+  println(early)
+  lazy inferred = { if (true) { return 5 }; 6 }
+  println(inferred)
+  lazy propagate: Int | Failed = { number = bad()?; number + 1 }
+  println(propagate)
+  lazy inferredUnion = { number = bad()?; number + 1 }
+  println(inferredUnion)
+  lazy optional: Option[Int] = { number = Option.Some { value: 8 }?; number + 1 }
+  println(optional)
+
+  with (label: "captured") {
+    lazy name = named()
+    with (label: "reader") { println(name) }
+  }
+
+  lazy lazy = 10
+  println(lazy)
+  println(generic("generic"))
+  scope s {
+    tasks = [1, 2, 3].map(n => spawn(s, () => reader()))
+    println(tasks.map(t => await(t)))
+  }
+  for (n in [1, 2]) {
+    lazy item = work(n)
+    println(item); println(item)
+  }
+}

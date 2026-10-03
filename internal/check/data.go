@@ -408,13 +408,27 @@ func (c *checker) try(e *syntax.Try) Type {
 		c.errorf(e.Pos, "? cannot be used in a generator; yield an explicit error value instead")
 		return Invalid
 	}
-	if c.lambdaDepth > 0 {
+	ctx := c.lazyContext
+	inLazy := ctx != nil && ctx.depth == c.lambdaDepth
+	if c.lambdaDepth > 0 && !inLazy {
 		if xt != Invalid {
 			c.errorf(e.Pos, "? cannot be used in a lambda (it would return from the enclosing function); use match")
 		}
 		return Invalid
 	}
 	result := c.fn.Result
+	if inLazy {
+		result = ctx.want
+		if result == nil {
+			if u, ok := xt.(*Union); ok {
+				ctx.returns = append(ctx.returns, u.Members[1:]...)
+				c.info.tries[e] = &TryInfo{Kept: u.Members[0], Rest: u.Members[1:]}
+				return u.Members[0]
+			}
+			c.errorf(e.Pos, "? on an Option in a lazy initializer needs a result type annotation")
+			return Invalid
+		}
+	}
 	switch t := xt.(type) {
 	case *Union:
 		info := &TryInfo{Kept: t.Members[0], Rest: t.Members[1:]}

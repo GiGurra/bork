@@ -1269,6 +1269,12 @@ func _fmtFloat(f float64, bits int) string {
 // comments print correctly.
 func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
+	if g.usesLazy {
+		src = append(src, lazyRuntime)
+		if g.evalMode {
+			src = append(src, "package main\nfunc init(){ _lazyCompileTime = true }")
+		}
+	}
 	if g.usesLoopCleanup {
 		src = append(src, loopCleanupRuntime)
 		if g.usesSeq {

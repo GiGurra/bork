@@ -48,6 +48,7 @@ func newGen(info *check.Info) *gen {
 // The compiler uses it to evaluate predicates at compile time.
 func EvalProgram(files []*syntax.File, info *check.Info, queries []check.Query) ([]byte, error) {
 	g := newGen(info)
+	g.evalMode = true
 	var roots []*check.Func
 	body := &ast.BlockStmt{}
 	for _, q := range queries {
@@ -370,6 +371,8 @@ type gen struct {
 	usesHash         bool
 	usesUnit         bool
 	usesMap          bool
+	usesLazy         bool
+	evalMode         bool
 	usesSeq          bool
 	usesSeqFirst     bool
 	usesSeqUnfold    bool
@@ -813,6 +816,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		return nil, g.instance(e.Inst)
 	case *check.VarRef:
 		g.captured(e.Var, false)
+		if e.Var.Let != nil && e.Var.Let.Thunk != nil {
+			return nil, &ast.CallExpr{Fun: &ast.SelectorExpr{X: varIdent(e.Var), Sel: ast.NewIdent("get")}}
+		}
 		if e.Type() == check.OwnedScope {
 			// An owner is only used to pass it on, which disarms the
 			// fallback of its variable.
@@ -1273,7 +1279,11 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		t := g.goType(e.Type())
 		location := e.Pos()
 		location.Col = 0
-		label := &ast.BinaryExpr{X: g.callerLocation(location), Op: token.ADD, Y: strLit(" " + e.DebugText)}
+		debugText := e.DebugText
+		if v, ok := e.Args[0].(*check.VarRef); ok && v.Var.Let != nil && v.Var.Let.Thunk != nil {
+			debugText += " (forces lazy)"
+		}
+		label := &ast.BinaryExpr{X: g.callerLocation(location), Op: token.ADD, Y: strLit(" " + debugText)}
 		print := fmtCall("Fprintf", &ast.SelectorExpr{X: ast.NewIdent("os"), Sel: ast.NewIdent("Stderr")}, strLit("%s = %s\n"), label, g.stringOf(value, e.Type()))
 		return &ast.CallExpr{Fun: &ast.FuncLit{
 			Type: &ast.FuncType{
@@ -1441,6 +1451,19 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 	for _, s := range list {
 		switch s := s.(type) {
 		case *check.Let:
+			if s.Thunk != nil {
+				g.usesLazy = true
+				constructor := "_lazyNew"
+				if g.evalMode && s.Lazy != nil && s.Lazy.Effects == "nothing" {
+					constructor = "_lazyConstNew"
+				}
+				ctor := &ast.IndexExpr{X: ast.NewIdent(constructor), Index: g.goType(s.Var.Type)}
+				out = append(out, define(varIdent(s.Var), &ast.CallExpr{Fun: ctor, Args: []ast.Expr{g.lambda(s.Thunk)}}))
+				if s.Var.Unused {
+					out = append(out, assign(ast.NewIdent("_"), varIdent(s.Var)))
+				}
+				continue
+			}
 			stmts, x := g.value(s.Value)
 			out = append(out, stmts...)
 			if x == nil {

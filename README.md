@@ -309,3 +309,8 @@ cancels and joins losing work; `withTimeout(s, ms, child => work(child))`
 applies a cooperative deadline. Map heterogeneous channel receive arms with
 `receiveCase`, then call `arms.select(s)` to receive from exactly one. See the
 [task fan-in example](examples/task_fanin/main.bork).
+
+Explicit local lazy bindings keep type T and cache their initializer on first
+read: `lazy answer = expensiveComputation()`. Effects count at declaration;
+unused bindings do no work. See [the lazy design](docs/design/lazy.md) for
+scopes, cached failures and the planned record-field phase.

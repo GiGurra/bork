@@ -153,3 +153,10 @@ test('specialized constructor heads retain type and variant scopes', () => {
     has(ls, row, word, 'entity.name.type.bork');
   }
 });
+
+test('lazy is contextual at binding heads', () => {
+ const ls = tokenize('lazy value: Int = compute()\nlazy other = value\nfn lazy(x: Int): Int { x }\nprintln(lazy(1))');
+ has(ls, 0, 'lazy', 'keyword.control.bork');
+ has(ls, 1, 'lazy', 'keyword.control.bork');
+ assert.ok(!scopes(ls, 3, 'lazy').includes('keyword.control.bork'));
+});

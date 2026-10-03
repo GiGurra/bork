@@ -63,3 +63,8 @@ reports `type: "provider bundle"` and optional `provider_bundle` metadata:
 `replaced`, plus `needs` for declared providers with ambient requirements. This describes static wiring; it has no value facts or root graph.
 Specializations describe the actual replacement contracts. Ordinary assembly
 selection continues to describe the complete flattened graph.
+
+Local lazy bindings report `lazy.kind: "binding"`, `initializer_effects` and
+known lexical capture names in JSON. Text output states that first read forces.
+Describe does not execute an initializer. A `dbg(value)` on a lazy binding
+observes the value and marks its output `(forces lazy)`.

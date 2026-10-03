@@ -323,6 +323,7 @@ type Info struct {
 	consts map[syntax.Expr]constant.Value
 	// bindings records the type of every binding, and
 	// bindingConstraints the where clauses of typed ones.
+	lazyBindings       map[*syntax.Binding]*LazyDescription
 	bindings           map[*syntax.Binding]Type
 	bindingConstraints map[*syntax.Binding][]*Constraint
 	// conversions describes numeric conversions of non-constant values.
@@ -406,6 +407,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			tries:                  map[*syntax.Try]*TryInfo{},
 			unused:                 map[any]bool{},
 			consts:                 map[syntax.Expr]constant.Value{},
+			lazyBindings:           map[*syntax.Binding]*LazyDescription{},
 			bindings:               map[*syntax.Binding]Type{},
 			conversions:            map[*syntax.Call]*Conversion{},
 			defs:                   map[*syntax.Ident]any{},
@@ -695,6 +697,7 @@ type checker struct {
 	typeParams map[string]*TypeParam
 	// lambdaDepth counts the lambdas being checked around the current
 	// expression.
+	lazyContext      *lazyContext
 	lambdaDepth      int
 	assemblySerial   int
 	producer         *producerContext
@@ -1068,7 +1071,12 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		if s.Type != nil {
 			declared = c.resolveType(s.Type)
 		}
-		t := c.exprWant(s.Value, declared)
+		var t Type
+		if s.Lazy {
+			t = c.lazyInitializer(s, declared)
+		} else {
+			t = c.exprWant(s.Value, declared)
+		}
 		if s.Type == nil {
 			var code, annotation string
 			switch e := s.Value.(type) {
@@ -1235,6 +1243,7 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if l := c.lookup(e.Name); l != nil {
 		l.used = true
+		c.noteLazyCapture(l.decl, e.Name)
 		c.info.defs[e] = l.decl
 		return l.typ
 	}
@@ -1702,6 +1711,18 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 }
 
 func (c *checker) returnExpr(e *syntax.Return) {
+	if ctx := c.lazyContext; ctx != nil && ctx.depth == c.lambdaDepth {
+		if e.Value == nil {
+			c.errorf(e.Pos, "a lazy initializer must return a value")
+			return
+		}
+		t := c.exprWant(e.Value, ctx.want)
+		if ctx.want != nil && !assignable(t, ctx.want) {
+			c.errorf(e.Value.Position(), "lazy initializer must return %s, found %s", ctx.want, t)
+		}
+		ctx.returns = append(ctx.returns, t)
+		return
+	}
 	if c.producer != nil && c.producer.depth == c.lambdaDepth {
 		if e.Value != nil {
 			c.expr(e.Value)
