@@ -120,7 +120,7 @@ func (g *_bindContextGroup) Register(path string, value any, closeFn func()) {
  g.mu.Lock()
  defer g.mu.Unlock()
  var resource *_bindContextResource
- comparable := reflect.TypeOf(value).Comparable()
+ comparable := reflect.ValueOf(value).Comparable()
  if comparable { resource = g.identities[value] }
  if resource == nil {
   resource = &_bindContextResource{group:g,closeFn:closeFn}
@@ -140,7 +140,7 @@ func (g *_bindContextGroup) Own(path string, s *_Scope) *_Owner {
 }
 
 func (r *_bindContextResource) close() {
- r.once.Do(func() { defer r.group.release(); r.closeFn() })
+ r.once.Do(func() { r.group.release(); r.closeFn() })
 }
 
 func (g *_bindContextGroup) release() {
@@ -156,7 +156,6 @@ func (g *_bindContextGroup) release() {
 }
 
 func (g *_bindContextGroup) Finish(success *bool) {
- defer g.release()
  g.mu.Lock()
  if !*success { g.cancel(context.Canceled) }
  resources := map[*_bindContextResource]bool{}
@@ -164,7 +163,17 @@ func (g *_bindContextGroup) Finish(success *bool) {
   if !*success || resource.owner == nil { resources[resource] = true }
  }
  g.mu.Unlock()
- for resource := range resources { resource.close() }
+ // Drop the call reference before closing discarded results. Final Close
+ // may wait for cancellation, so the last member releases before Close runs.
+ g.release()
+ var failure any
+ for resource := range resources {
+  func() {
+   defer func() { if value:=recover(); value!=nil && failure==nil { failure=value } }()
+   resource.close()
+  }()
+ }
+ if failure!=nil { panic(failure) }
 }
 `
 

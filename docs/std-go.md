@@ -175,7 +175,9 @@ Generated context-bound resource bindings pass stable cancellation contexts to G
 scope and all Scope context arguments form a union; `attach` on any result adds
 its destination scope. All resources from that call share cancellation, but
 retain separate close owners. Cancellation waits until every contributing scope
-has ended or cancelled, or until the last returned resource closes. An explicit
+has ended or cancelled, or until the last returned resource releases ownership.
+The final member cancels the group before invoking Close, allowing Close to wait
+for cancellation. An explicit
 opaque context remains a fixed external limit: attach extends ownership but
 cannot outlive that context's cancellation or deadline.
 

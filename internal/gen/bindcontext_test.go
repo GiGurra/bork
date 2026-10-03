@@ -131,4 +131,43 @@ func TestConcurrentAttachment(t *testing.T) {
  success:=false
  g.Finish(&success)
 }
+
+func TestDynamicComparability(t *testing.T) {
+ g:=_bindNewContextGroup(&_Scope{ctx:context.Background()})
+ g.Start()
+ count:=0
+ raw:=struct{Field any}{Field:[]int{1}}
+ g.Register("result",raw,func(){count++})
+ success:=false
+ g.Finish(&success)
+ if count!=1 { t.Fatal("noncomparable value was not closed") }
+}
+
+func TestCloseCanWaitForCancellation(t *testing.T) {
+ for _,owned:=range []bool{false,true} {
+  s:=&_Scope{ctx:context.Background()}
+  g:=_bindNewContextGroup(s)
+  ctx:=g.Context(s)
+  g.Attach(&_Scope{ctx:context.Background()})
+  g.Start()
+  g.Register("result",new(int),func(){<-ctx.Done()})
+  if owned { g.Own("result",s) }
+  done:=make(chan struct{})
+  go func(){ success:=true; g.Finish(&success); if owned { s.close() }; close(done) }()
+  select {
+  case <-done:
+  case <-time.After(time.Second): g.cancel(context.Canceled); t.Fatal("last Close waited forever for cancellation")
+  }
+ }
+}
+
+func TestFailureClosesAllAfterPanic(t *testing.T) {
+ g:=_bindNewContextGroup(&_Scope{ctx:context.Background()})
+ g.Start()
+ count:=0
+ g.Register("first",new(int),func(){count++;panic("close failed")})
+ g.Register("last",new(int),func(){count++;panic("close also failed")})
+ func(){ defer func(){if recover()==nil {t.Error("close panic lost")}}(); success:=false; g.Finish(&success) }()
+ if count!=2 || g.ctx.Err()==nil { t.Fatalf("failure cleanup: %d %v",count,g.ctx.Err()) }
+}
 `
