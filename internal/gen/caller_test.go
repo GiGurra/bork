@@ -138,3 +138,39 @@ func TestCallerLocationRestrictions(t *testing.T) {
 		})
 	}
 }
+
+func TestCallerLocationAutoProperty(t *testing.T) {
+	var diags diag.List
+	files := prelude.Parse(&diags)
+	source := `pred Positive(x: Int) { x > 0 }
+fn Located(x: Int): String {
+  _ = compilerCallerLocation()
+  trust Positive(x)
+  "ok"
+}
+`
+	root := syntax.Parse("std/caller.bork", []byte(source), &diags)
+	root.Package = "bork/caller"
+	files = append(files, root)
+	info := check.Program(files, root.Package, &diags, nil)
+	if diags.Len() > 0 {
+		t.Fatalf("check: %v", diags.Sorted())
+	}
+	generated, err := Tests(files, info, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err = os.WriteFile(path, generated, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "run", path)
+	cmd.Dir = dir
+	out, _ := cmd.CombinedOutput()
+	// This deliberate bad trust must run as a property failure, rather than
+	// fail to compile because the generated call omitted its hidden argument.
+	if !strings.Contains(string(out), "trusted fact does not hold: Positive(x)") || !strings.Contains(string(out), "0 passed, 1 failed") {
+		t.Fatalf("auto property did not run: %s", out)
+	}
+}

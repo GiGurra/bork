@@ -145,6 +145,9 @@ func (g *gen) autoProperty(fn *check.Func, goName *ast.Ident) ast.Decl {
 		for _, p := range fn.Decl.Params {
 			args = append(args, name(p.Name))
 		}
+		if fn.TrackCaller {
+			args = append(args, at(fn.Decl.Pos))
+		}
 		call := &ast.CallExpr{Fun: g.funcName(fn), Args: args}
 		if fn.Result == check.Unit || fn.Result == check.Never {
 			return []ast.Stmt{&ast.ExprStmt{X: call}}
