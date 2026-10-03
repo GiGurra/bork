@@ -1,0 +1,4 @@
+ok    awaitAll joins every task before propagating a panic
+ok    race propagates child panic without cancelling parent
+2 passed, 0 failed
+exit code 0

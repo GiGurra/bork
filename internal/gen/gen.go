@@ -148,6 +148,12 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			}
 			if fd.GoBody != nil {
 				fn := info.FuncOf[fd]
+				if strings.Contains(fd.GoBody.Body, "_borkFanIn") || strings.Contains(fd.GoBody.Body, "_borkReceiveChoice") {
+					g.usesFanIn = true
+					g.usesScopes = true
+					g.goType(info.Named["Cancelled"])
+					g.goType(info.Named["Closed"])
+				}
 				if strings.Contains(fd.GoBody.Body, "_borkParallel") {
 					g.usesParallel = true
 					g.usesScopes = true
@@ -341,6 +347,7 @@ type gen struct {
 	usesProps        bool
 	usesScopes       bool
 	usesParallel     bool
+	usesFanIn        bool
 	usesDerive       bool
 	usesEqual        bool
 	usesHash         bool
@@ -725,7 +732,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
 			return nil, g.nextRef(e.Inst.Func, frame)
 		}
-		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 {
+		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || collapsedUnion(inst) {
 			return nil, g.funcRef(inst)
 		}
 		return nil, g.instance(e.Inst)
@@ -1021,7 +1028,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		stmts = append(stmts, g.takeOwnersLast(e.Args, inst.Params, xs)...)
 		if inst.Func.Class != nil {
 			fun, dicts := g.methodFunc(inst)
-			return stmts, &ast.CallExpr{Fun: fun, Args: append(dicts, xs...)}
+			return stmts, g.instanceResult(inst, &ast.CallExpr{Fun: fun, Args: append(dicts, xs...)})
 		}
 		if frame := g.passthrough(inst.Func); frame != nil {
 			return stmts, g.nextCall(inst.Func, frame, xs)
@@ -1030,7 +1037,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		for _, d := range inst.Dicts {
 			dicts = append(dicts, g.dict(d))
 		}
-		return stmts, &ast.CallExpr{Fun: g.instance(inst), Args: append(dicts, xs...)}
+		return stmts, g.instanceResult(inst, &ast.CallExpr{Fun: g.instance(inst), Args: append(dicts, xs...)})
 	}
 	panic(fmt.Sprintf("unhandled call %T", e))
 }
@@ -1056,6 +1063,21 @@ func (g *gen) takeOwnersLast(args []check.Expr, params []check.Type, xs []ast.Ex
 		xs[i] = tmp
 	}
 	return stmts
+}
+
+// A generic union returns any even when specialization collapses the union
+// to one member. Recover that member's Go type at the call boundary.
+func collapsedUnion(inst *check.Instance) bool {
+	_, declared := inst.Func.Result.(*check.Union)
+	_, specialized := inst.Result.(*check.Union)
+	return declared && !specialized
+}
+
+func (g *gen) instanceResult(inst *check.Instance, call ast.Expr) ast.Expr {
+	if collapsedUnion(inst) {
+		return &ast.TypeAssertExpr{X: call, Type: g.goType(inst.Result)}
+	}
+	return call
 }
 
 // instance is the Go expression for a function, instantiated with its

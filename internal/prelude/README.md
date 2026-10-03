@@ -16,6 +16,7 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [bytes.bork](bytes.bork) | Immutable bytes and UTF-8 conversions |
 | [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, `GoStruct`, and primitive ordering instances |
 | [json.bork](json.bork) | JSON values, parsing, rendering, `Decode`, `Encode`, and their instances |
+| [fanin.bork](fanin.bork) | Ordered task fan-in, races, typed channel selection, and cooperative timeouts |
 | [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and sleep |
 | [scopes.bork](scopes.bork) | Resource attachment, scope policies, and finalizers |
 | [environment.bork](environment.bork) | `IoError`, arguments, exit, and standard error output |
@@ -37,3 +38,19 @@ I/O handles continue following their owner's cancellation.
 Success must be concrete and non-union, distinguishable from concrete failure members in Go;
 use explicit success/failure type arguments where inference is ambiguous.
 For tiny inputs or cheap callbacks, sequential methods usually cost less.
+
+Task lists support `awaitAll()` (ordered), `awaitFirst(s)` (first completion),
+and `awaitAllUntil[Success, Failure](s)` (first observed failure). Existing
+tasks remain in their original scopes; `race(s, [child => work(child)])`
+starts its own child tasks, cancels losers, and joins all before returning.
+`withTimeout(s, milliseconds, child => work(child))` includes spawned tasks
+in its cooperative deadline; use `withTimeoutDo` for a Unit callback.
+A successful timeout stops its timer, keeping returned resources usable until
+the parent closes. Race resources follow the cancelled race scope.
+
+For heterogeneous channels, map each arm to one result type with
+`ch.receiveCase(value => event(value))`, then call `arms.select(s)`. Only
+one channel is consumed; channel cancellation/closure reaches its arm mapper,
+while cancellation of the selection scope returns `Cancelled` directly.
+Empty task/race/select lists return `Option.None`. Ready ties are unspecified.
+See [the runnable example](../../examples/task_fanin/main.bork).

@@ -280,7 +280,7 @@ func (c *checker) unifyUnion(p *Union, a Type) {
 func (c *checker) couldFit(p, a Type) bool {
 	p = c.zonk(p)
 	if !c.open(p) {
-		return assignable(a, p)
+		return fitsParam(a, p)
 	}
 	switch p := p.(type) {
 	case *TypeParam, *Union:

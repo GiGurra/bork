@@ -1,0 +1,19 @@
+fn escapedTimeout() uses clock + state: Channel[Int] | Cancelled {
+  scope s { withTimeout(s, 1000000, child => channel[Int](child, 1)) }
+}
+fn escapedSelection(wait: Scope) uses state: Option[Channel[Int] | Cancelled | Closed] | Cancelled {
+  scope source {
+    values = channel[Channel[Int]](source, 1)
+    sent = send(values, channel[Int](source, 1))
+    arm = values.receiveCase(value => value)
+    [arm].select(wait)
+  }
+}
+fn escapedTaskResult(wait: Scope) uses state: Option[Channel[Int]] | Cancelled {
+  scope source {
+    ch = channel[Int](source, 1)
+    task = spawn(source, () => ch)
+    [task].awaitFirst(wait)
+  }
+}
+fn main() {}

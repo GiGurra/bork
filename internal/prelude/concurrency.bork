@@ -7,12 +7,17 @@
 // routine when the scope closes.
 
 // Task is a running computation of a T, started with spawn.
-type Task[T] = { wait: () => T }
+// Native completion handles are implementation details of tasks and channels.
+type TaskHandle = resource
+type ChannelHandle = resource
+type SelectPayload = resource
+
+type Task[T] = private { wait: () => T, native: TaskHandle }
 
 // spawn starts work on its own goroutine, as a task of scope s.
 fn spawn[T](s: Scope, work: () => T): Task[T] unsafe go {
   t := s.Go(func() any { return work() })
-  return Task[T]{wait: func() T { return t.Await().(T) }}
+  return Task[T]{wait: func() T { return t.Await().(T) }, native: TaskHandle{handle: t, owner: s.Own(func() {})}}
 }
 
 // await waits for a task to finish, and gives its result.
@@ -133,7 +138,8 @@ fn swap[T](a: Atom[T], f: (T) uses nothing => T) uses state: T {
 // Channel passes values of type T between tasks. It belongs to the
 // scope it was made in, and closes when that scope closes; its
 // operations stop with Cancelled when that scope is cancelled.
-type Channel[T] = {
+type Channel[T] = private {
+  native: ChannelHandle,
   sendFn: (T) uses state => Unit | Cancelled | Closed,
   receiveFn: () uses state => T | Cancelled | Closed,
   closeFn: () uses state => Unit,
@@ -143,13 +149,15 @@ type Channel[T] = {
 // that are not received yet (0: a sender waits for a receiver).
 fn channel[T](s: Scope, capacity: Int): Channel[T] unsafe go {
   import "sync"
+  import "reflect"
   c := make(chan T, capacity)
   closed := make(chan struct{})
   var once sync.Once
   closeFn := func() { once.Do(func() { close(closed) }) }
-  s.Defer(closeFn)
+  owner := s.Own(closeFn)
   // The Go channel is never closed, so a late send cannot panic.
   return Channel[T]{
+    native: ChannelHandle{handle: &_borkReceiveChoice{data: reflect.ValueOf(c), closed: closed, ctx: s.ctx}, owner: owner},
     sendFn: func(x T) any {
       select {
       case <-closed:

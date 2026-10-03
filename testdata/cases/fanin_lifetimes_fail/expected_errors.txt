@@ -1,0 +1,3 @@
+main.bork:2:3: function escapedTimeout cannot return this value: it belongs to scope s, which ends on line 2
+main.bork:5:3: function escapedSelection cannot return this value: it belongs to scope source, which ends on line 10
+main.bork:13:3: function escapedTaskResult cannot return this value: it belongs to scope source, which ends on line 17

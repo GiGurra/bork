@@ -1,0 +1,1 @@
+main.bork:2:83: T of identity cannot be List[(Int) uses open => Int]: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result

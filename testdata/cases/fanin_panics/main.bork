@@ -1,0 +1,23 @@
+fn broken(): Int { panic("work failed") }
+fn fails(work: () => Unit): Bool unsafe go {
+  failed := false
+  func() { defer func() { failed = recover() != nil }(); work() }()
+  return failed
+}
+test "awaitAll joins every task before propagating a panic" {
+  scope s {
+    finished = atom(false)
+    tasks = [
+      spawn(s, () => broken()),
+      spawn(s, () => { sleep(20); assertEqual(update(finished, old => true), true); 2 }),
+    ]
+    assertEqual(fails(() => assertEqual(tasks.awaitAll(), [1, 2])), true)
+    assertEqual(current(finished), true)
+  }
+}
+test "race propagates child panic without cancelling parent" {
+  scope s {
+    assertEqual(fails(() => assertEqual(race(s, [child => broken()]), Option.Some { value: 1 })), true)
+    assertEqual(cancelled(s), false)
+  }
+}

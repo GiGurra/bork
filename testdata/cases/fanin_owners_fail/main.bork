@@ -1,0 +1,6 @@
+fn main() {
+  scope s {
+    println(withTimeout(s, 10, child => openScope(child)))
+    println(race(s, [child => openScope(child)]))
+  }
+}

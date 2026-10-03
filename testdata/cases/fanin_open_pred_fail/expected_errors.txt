@@ -1,0 +1,1 @@
+main.bork:4:36: bad passes a lambda that calls f to apply, but f may use any effect its caller passes, and predicates must be pure; declare f's type with uses nothing

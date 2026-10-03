@@ -251,10 +251,11 @@ func (u *effectUses) expr(x Expr) {
 			return // the function it gives carries its arguments' effects
 		}
 		for i, a := range x.Args {
-			if i < len(x.Func.Params) && isOpen(x.Func.Params[i]) {
-				if at, ok := a.Type().(*FuncType); ok && at.Effects != 0 {
-					u.add(at.Effects, a.Pos(), name+", with "+u.describeFunc(a))
-					if at.Effects&EffOpen != 0 {
+			if i < len(x.Func.Params) {
+				effects := openArgEffects(x.Func.Params[i], a.Type())
+				if effects != 0 {
+					u.add(effects, a.Pos(), name+", with "+u.describeFunc(a))
+					if effects&EffOpen != 0 {
 						u.noteOpen(a, "passes %s to "+name)
 					}
 				}
@@ -351,6 +352,13 @@ func (u *effectUses) noteOpen(x Expr, text string) {
 		return
 	}
 	switch x := x.(type) {
+	case *ListLit:
+		for _, element := range x.Elems {
+			u.noteOpen(element, text)
+			if u.open != nil {
+				return
+			}
+		}
 	case *VarRef:
 		u.open = &openUse{x.Pos(), x.Var.Name, fmt.Sprintf(text, x.Var.Name)}
 	case *Lambda:
@@ -378,6 +386,8 @@ func (u *effectUses) noMain(fn *Func, pos diag.Pos) bool {
 func (u *effectUses) describeFunc(x Expr) string {
 	x = debugValue(x)
 	switch x := x.(type) {
+	case *ListLit:
+		return "a list of callbacks"
 	case *VarRef:
 		return x.Var.Name
 	case *FuncRef:

@@ -1,0 +1,25 @@
+fn first(works: List[(Int) => Int]): Int {
+  match (works) { [head, ...tail] => head(1); [] => 0 }
+}
+fn relay(works: List[(Int) => Int]): Int { first(works) }
+fn ioCall() uses io: Int { relay([x => { println("callback"); x }]) }
+fn ioRace(s: Scope) uses io + state: Option[Int] | Cancelled {
+  race(s, [child => { println("racing callback"); 7 }])
+}
+fn clockRace(s: Scope) uses clock + state: Option[Int] | Cancelled {
+  race(s, [child => { sleep(1); 8 }])
+}
+fn pick(callbacks: List[() => Int]): () => Int {
+  () => match (callbacks) { [callback, ...rest] => callback(); [] => 0 }
+}
+fn main() {
+  empty: () uses nothing => Int = pick([])
+  println(empty())
+  println(ioCall())
+  pure: (List[(Int) uses nothing => Int]) => Int = first
+  println(pure([x => x + 2]))
+  scope s {
+    println(ioRace(s))
+    println(clockRace(s))
+  }
+}
