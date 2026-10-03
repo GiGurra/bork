@@ -1,0 +1,58 @@
+pred nonNegative(v: Int) { v >= 0 }
+pred nonNegative8(v: Int8) { v >= 0 }
+type Item = go "example.com/bindtest.MirrorItem" { id: Int, count: Int8 where nonNegative8, name: String }
+type Envelope = go "example.com/bindtest.MirrorEnvelope" { item: Item, items: List[Item], optional: Option[Item] }
+type Node = go "example.com/bindtest.MirrorNode" { value: Int, next: Option[Node] }
+type Embedded = go "example.com/bindtest.MirrorEmbedded" { id: Int, label: String }
+type Array = go "example.com/bindtest.MirrorArray" { values: List[Int] }
+fn Items(): Envelope | GoValueError unsafe go "example.com/bindtest.MirrorItems"
+fn Cyclic(): Node | GoValueError unsafe go "example.com/bindtest.CyclicMirror"
+fn Shared(): List[Node] | GoValueError unsafe go "example.com/bindtest.SharedMirror"
+fn EmbeddedValue(): Embedded unsafe go "example.com/bindtest.EmbeddedMirror"
+fn ArrayValue(): Array unsafe go "example.com/bindtest.ArrayMirror"
+fn Small(s: String): Int where nonNegative | GoError | GoValueError unsafe go "strconv.Atoi"
+fn AllErrors(): List[GoValueError] unsafe go {
+ import "example.com/bindtest"
+ _, errs := _borkFromGo[Envelope](bindtest.MirrorItems())
+ return errs
+}
+pred atMost(value: Int, bound: Int) { value <= bound }
+fn Bounded(value: Int, bound: Int): Int where atMost(bound) | GoValueError unsafe go "example.com/bindtest.MirrorBounded"
+type Hidden = go "example.com/bindtest.MirrorHidden" { promoted: Int }
+type Method = go "example.com/bindtest.MirrorMethod" { title: String }
+fn HiddenValue(): Hidden unsafe go "example.com/bindtest.HiddenMirror"
+fn MethodValue(): Method unsafe go "example.com/bindtest.MethodMirror"
+type SliceNode = go "example.com/bindtest.SliceNode" { children: List[SliceNode] }
+type MapNode = go "example.com/bindtest.MapNode" { children: Map[String, MapNode] }
+type FactList = go "example.com/bindtest.FactList" { values: List[Int8 where nonNegative8] }
+fn SliceCycle(): SliceNode | GoValueError unsafe go "example.com/bindtest.SliceCycle"
+fn SliceSharing(): List[SliceNode] | GoValueError unsafe go "example.com/bindtest.SliceSharing"
+fn MapCycle(): MapNode | GoValueError unsafe go "example.com/bindtest.MapCycle"
+fn MapSharing(): List[MapNode] | GoValueError unsafe go "example.com/bindtest.MapSharing"
+fn ListErrors(negative: Bool): List[GoValueError] unsafe go {
+ import "example.com/bindtest"
+ value := bindtest.BadFactList()
+ if negative { value=bindtest.NegativeFactList() }
+ _, errs := _borkFromGo[FactList](value)
+ return errs
+}
+fn main() uses io {
+  println(HiddenValue())
+  println(MethodValue())
+  println(SliceCycle())
+  println(SliceSharing())
+  println(MapCycle())
+  println(MapSharing())
+  println(ListErrors(false))
+  println(ListErrors(true))
+  println(Items())
+  println(AllErrors())
+  println(Cyclic())
+  println(Shared())
+  println(EmbeddedValue())
+  println(ArrayValue())
+  println(Small("-1"))
+  println(Small("3"))
+  println(Bounded(1, 2))
+  println(Bounded(3, 2))
+}

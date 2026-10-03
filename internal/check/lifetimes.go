@@ -241,10 +241,17 @@ func (l *lifeChecker) scopeOutlives(x, y any) bool {
 // scopes, resources, functions (which may use them), type parameters
 // (which may be them), and anything that can hold one of those.
 func (l *lifeChecker) carriesLife(t Type) bool {
+	return l.carriesLifeSeen(t, map[Type]bool{})
+}
+func (l *lifeChecker) carriesLifeSeen(t Type, seen map[Type]bool) bool {
 	if v, ok := l.carries[t]; ok {
 		return v
 	}
-	l.carries[t] = false // for recursive types
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	defer delete(seen, t)
 	v := false
 	switch t := t.(type) {
 	case *Resource, *Opaque, *FuncType, *TypeParam:
@@ -252,25 +259,29 @@ func (l *lifeChecker) carriesLife(t Type) bool {
 	case *Basic:
 		v = t == Scope
 	case *List:
-		v = l.carriesLife(t.Elem)
+		v = l.carriesLifeSeen(t.Elem, seen)
 	case *Map:
-		v = l.carriesLife(t.Key) || l.carriesLife(t.Value)
+		v = l.carriesLifeSeen(t.Key, seen) || l.carriesLifeSeen(t.Value, seen)
 	case *Union:
 		for _, m := range t.Members {
-			v = v || l.carriesLife(m)
+			v = v || l.carriesLifeSeen(m, seen)
 		}
 	case *Record:
 		for _, f := range t.Fields {
-			v = v || l.carriesLife(f.Type)
+			v = v || l.carriesLifeSeen(f.Type, seen)
 		}
 	case *Sealed:
 		for _, vt := range t.Variants {
 			for _, f := range vt.Fields {
-				v = v || l.carriesLife(f.Type)
+				v = v || l.carriesLifeSeen(f.Type, seen)
 			}
 		}
 	}
-	l.carries[t] = v
+	// A false answer while traversing a cycle is provisional. Only memoize
+	// positive answers, so a later query can reach a resource or opaque field.
+	if v {
+		l.carries[t] = true
+	}
 	return v
 }
 

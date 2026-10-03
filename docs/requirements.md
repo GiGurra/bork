@@ -685,6 +685,7 @@ A Go package outside Go's standard library must be a declared Go module dependen
 - **The Go side is not the bork representation.** The record keeps its own generated struct (with its `String` method, its field names, `int64` for `Int`), and the compiler generates the two conversion functions. In `unsafe go` code, `_borkToGo(v)` gives the Go struct, and `_borkFromGo[T](g)` gives `(T, []GoValueError)`, with every error found (added to the [helper API](std-go.md)).
 - **Directions are checked where they are used.** A mirror whose Go struct has an array field converts only from Go: a binding that would pass one to Go is an error, at that binding.
 - **Generic Go structs** cannot be mirrored yet.
+- **Resource fields are not supported in mirrors yet.** The standalone `_borkFromGo` helper has no ownership scope to register their cleanup. Keep the outer Go object opaque or use an `unsafe go` resource wrapper. This applies to resource fields inside containers and nested records too.
 
 ### The basic mapping
 
@@ -797,9 +798,9 @@ pred.bork:5:13: predicate fresh takes a Request, which is a Go value that can ch
 ### Implementation plan
 
 1. **This proposal**, as its own PR.
-2. **Bindings of functions over basic types (implemented):** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `Bytes`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library Go packages only. Facts on a binding's result are an error for now; checking them moves to step 4, with the mirror records' facts.
+2. **Bindings of functions over basic types (implemented):** the syntax, `check.GoTypes` with `go/packages` in the driver, numbers, `String`, `Bool`, `Bytes`, `List`, `Map`, `Option`, `Unit`, `GoError`, `GoValueError`, and the generated wrappers. Standard-library Go packages only.
 3. **Opaque Go types (implemented)**: identity, boxing, nil checks, method bindings, assignability, `Scope` as `context.Context`, and resources of Go types.
-4. **Mirror records**, conversions both ways with fact checks, and the `_borkToGo`/`_borkFromGo` helpers in [std-go.md](std-go.md).
+4. **Mirror records (implemented)**, conversions both ways with fact checks, and the `_borkToGo`/`_borkFromGo` helpers in [std-go.md](std-go.md).
 5. **Record field defaults and field doc comments** (useful without Go: literals and `Decode`).
 6. **`derive (GoStruct)`**, `go { ... }` tags, and the schema. This is what `bork/cli` (bork-pkk136) builds on; until it lands, `bork/cli` uses a hand-written Go struct.
 7. **Third-party Go packages**, with Go module dependencies (bork-8zh4yy), and the standard library's bindings checked by a test.

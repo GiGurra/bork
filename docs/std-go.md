@@ -187,3 +187,18 @@ It returns true for bcrypt, invalid hashes, parameter differences, or salt/key
 lengths other than 16/32. It compares against the exact application target,
 including when a stored hash uses higher work factors; pass the application's
 chosen parameters consistently to hashing and rehash checks.
+
+Mirror records (`type Url = go "net/url.URL" { host: String }`) keep their own
+bork representation. `_borkToGo(v)` copies the selected fields into the named Go
+struct and leaves omitted fields at zero. `_borkFromGo[T](g)` returns `(T,
+[]GoValueError)`, copying from that Go struct and collecting conversion and fact
+failures with paths beginning at `result`. Use the converted value only when the
+error list is empty. Nested records and collections are copied; opaque fields
+share their Go value. Cyclic pointer paths produce errors, while shared acyclic
+values convert independently.
+
+The helper methods exist only for supported directions: an array field prevents
+conversion to Go, for example. A mirror cannot contain resource fields, because
+this helper has no scope to own them. An `unsafe go` body supplies the mirror's
+exact Go struct type to `_borkFromGo`; checked bindings also support pointers,
+including `Option` for nil.

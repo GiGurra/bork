@@ -32,7 +32,11 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 	// The wrapper names its parameters itself, so any bork name works.
 	sig := g.signature(fd)
 	sig.Name.Name = goName
-	w := &bindWriter{g: g, b: b}
+	w := &bindWriter{g: g, b: b, fn: fn}
+	if hasMirror(b.Value, map[check.Type]bool{}) {
+		w.seen = "_bindSeen"
+		w.line("_bindSeen := map[any]bool{}")
+	}
 	var args []string
 	params := b.Sig.Params()
 	for i := range fd.Params {
@@ -62,7 +66,7 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 		w.line("return _Unit{}")
 	case check.GoValue:
 		w.line("_r := " + call)
-		w.line("return " + w.fromGo("_r", b.Sig.Results().At(0).Type(), b.Value, `"result"`))
+		w.line("return " + w.result(w.fromGo("_r", b.Sig.Results().At(0).Type(), b.Value, `"result"`), b.Value))
 	case check.GoValueError:
 		w.line("_r, _err := " + call)
 		w.line("if _err != nil { return _bindGoError(_err) }")
@@ -71,20 +75,22 @@ func (g *gen) bindFunc(fd *syntax.FuncDecl, goName string) (string, error) {
 			if goNillable(rt) {
 				w.line(`if _r == nil { return _bindGoError(nil) }`)
 			}
-			w.line("return " + w.fromGo("_r", rt, b.Value, `"result"`))
-		} else if p, ok := rt.Underlying().(*types.Pointer); ok && !check.IsOption(b.Value) {
+			w.line("return " + w.result(w.fromGo("_r", rt, b.Value, `"result"`), b.Value))
+		} else if _, ok := rt.Underlying().(*types.Pointer); ok && !check.IsOption(b.Value) {
 			// A nil result without an error is the Go function's bug.
 			w.line(`if _r == nil { return _bindGoError(nil) }`)
-			w.line("return " + w.fromGo("*_r", p.Elem(), b.Value, `"result"`))
+			w.line("return " + w.result(w.fromGo("_r", rt, b.Value, `"result"`), b.Value))
 		} else {
-			w.line("return " + w.fromGo("_r", rt, b.Value, `"result"`))
+			w.line("return " + w.result(w.fromGo("_r", rt, b.Value, `"result"`), b.Value))
 		}
 	case check.GoValueOk:
 		elem := check.TypeArgs(b.Value)[0]
 		g.usesOptionHelpers = true
 		w.line("_r, _ok := " + call)
-		w.line("if !_ok { return _borkNone[" + g.typeText(elem) + "]() }")
-		w.line("return _borkSome(" + w.fromGo("_r", b.Sig.Results().At(0).Type(), elem, `"result"`) + ")")
+		w.line("if !_ok {")
+		w.line("return " + w.result("_borkNone["+g.typeText(elem)+"]()", b.Value))
+		w.line("}")
+		w.line("return " + w.result("_borkSome("+w.fromGo("_r", b.Sig.Results().At(0).Type(), elem, `"result"`)+")", b.Value))
 	}
 	// The Go compiler reports errors in the wrapper (which would be
 	// compiler bugs) at the binding.
@@ -111,10 +117,13 @@ func (g *gen) goImport(path string) string {
 
 // bindWriter writes the body of a binding's wrapper.
 type bindWriter struct {
-	g    *gen
-	b    *check.GoBinding
-	body strings.Builder
-	tmp  int
+	g       *gen
+	b       *check.GoBinding
+	body    strings.Builder
+	tmp     int
+	fn      *check.Func
+	collect string
+	seen    string
 }
 
 func (w *bindWriter) line(s string) { w.body.WriteString("\t" + s + "\n") }
@@ -176,6 +185,9 @@ func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
 		w.line("return true")
 		w.line("})")
 		return v
+	case *types.Struct:
+		r := t.(*check.Record)
+		return "_toGo_" + typeName(r.Name, r.Pkg).Name + "(" + x + ")"
 	case *types.Pointer:
 		v := w.newTmp()
 		if check.IsOption(t) {
@@ -200,8 +212,12 @@ func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
 // that does not fit returns a GoValueError from the wrapper.
 func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) string {
 	fail := func(cond, message string) {
-		w.g.goType(w.b.GoValueError)
-		w.line(fmt.Sprintf("if %s { return _bindValueError(%s, %s) }", cond, path, message))
+		w.g.goType(w.g.info.Named["GoValueError"])
+		if w.collect != "" {
+			w.line(fmt.Sprintf("if %s { %s = append(%s, _bindValueError(%s, %s)) }", cond, w.collect, w.collect, path, message))
+		} else {
+			w.line(fmt.Sprintf("if %s { return _bindValueError(%s, %s) }", cond, path, message))
+		}
 	}
 	if check.GoTypeOf(t) != nil {
 		w.g.usesOpaque = true
@@ -251,9 +267,15 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 		}
 		v, i, e := w.newTmp(), w.newTmp(), w.newTmp()
 		w.line(fmt.Sprintf("%s := make(%s, len(%s))", v, w.g.typeText(t), x))
+		_, slice := u.(*types.Slice)
+		visit := ""
+		if slice {
+			visit = w.beginCollection(x, path)
+		}
 		w.line(fmt.Sprintf("for %s, %s := range %s {", i, e, x))
 		w.line(fmt.Sprintf("%s[%s] = %s", v, i, w.fromGo(e, gelem, elem, fmt.Sprintf("_bindIndex(%s, %s)", path, i))))
 		w.line("}")
+		w.endCollection(visit)
 		return v
 	case *types.Map:
 		m := t.(*check.Map)
@@ -261,27 +283,67 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 		ks, vs, k, e := w.newTmp(), w.newTmp(), w.newTmp(), w.newTmp()
 		w.line(fmt.Sprintf("%s := make([]%s, 0, len(%s))", ks, w.g.typeText(m.Key), x))
 		w.line(fmt.Sprintf("%s := make([]%s, 0, len(%s))", vs, w.g.typeText(m.Value), x))
+		visit := w.beginCollection(x, path)
 		w.line(fmt.Sprintf("for %s, %s := range %s {", k, e, x))
 		key := w.fromGo(k, u.Key(), m.Key, fmt.Sprintf("_bindKey(%s, %s)", path, k))
 		val := w.fromGo(e, u.Elem(), m.Value, fmt.Sprintf("_bindKey(%s, %s)", path, k))
 		w.line(fmt.Sprintf("%s = append(%s, %s)", ks, ks, key))
 		w.line(fmt.Sprintf("%s = append(%s, %s)", vs, vs, val))
 		w.line("}")
+		w.endCollection(visit)
 		// A Go map has no order, so it becomes an unordered map.
 		return fmt.Sprintf("_mapUnordered(_borkMapOf(%s, %s))", ks, vs)
-	case *types.Pointer:
-		if check.IsOption(t) {
-			w.g.usesOptionHelpers = true
-			elem := check.TypeArgs(t)[0]
-			v := w.newTmp()
-			w.line(fmt.Sprintf("%s := _borkNone[%s]()", v, w.g.typeText(elem)))
-			w.line(fmt.Sprintf("if %s != nil {", x))
-			w.line(fmt.Sprintf("%s = _borkSome(%s)", v, w.fromGo("*"+x, u.Elem(), elem, path)))
-			w.line("}")
-			return v
+	case *types.Struct:
+		r := t.(*check.Record)
+		v, errors := w.newTmp(), w.newTmp()
+		trace := w.seen
+		if trace == "" {
+			trace = "map[any]bool{}"
 		}
-		fail(x+" == nil", `"nil"`)
-		return w.fromGo("*"+x, u.Elem(), t, path)
+		w.line(fmt.Sprintf("%s, %s := _fromGo_%s(%s, %s, %s)", v, errors, typeName(r.Name, r.Pkg).Name, x, path, trace))
+		if w.collect != "" {
+			w.line(fmt.Sprintf("%s = append(%s, %s...)", w.collect, w.collect, errors))
+		} else if w.b.Fallible {
+			w.line(fmt.Sprintf("if len(%s)>0 { return %s[0] }", errors, errors))
+		} else {
+			w.line("_ = " + errors)
+		}
+		return v
+	case *types.Pointer:
+		elem := t
+		optional := check.IsOption(t)
+		if optional {
+			elem = check.TypeArgs(t)[0]
+			w.g.usesOptionHelpers = true
+		}
+		v := w.newTmp()
+		if optional {
+			w.line(fmt.Sprintf("%s := _borkNone[%s]()", v, w.g.typeText(elem)))
+		} else {
+			w.line(fmt.Sprintf("var %s %s", v, w.g.typeText(t)))
+		}
+		w.line("if " + x + " == nil {")
+		if !optional {
+			fail("true", `"nil"`)
+		}
+		w.line("} else {")
+		if w.seen != "" {
+			w.line("if " + w.seen + "[" + x + "] {")
+			fail("true", `"cyclic Go value"`)
+			w.line("} else {")
+			w.line(w.seen + "[" + x + "] = true")
+		}
+		converted := w.fromGo("*("+x+")", u.Elem(), elem, path)
+		if optional {
+			converted = "_borkSome(" + converted + ")"
+		}
+		w.line(v + " = " + converted)
+		if w.seen != "" {
+			w.line("delete(" + w.seen + ", " + x + ")")
+			w.line("}")
+		}
+		w.line("}")
+		return v
 	}
 	panic(fmt.Sprintf("binding: no conversion from Go %s to %s", gt, t))
 }

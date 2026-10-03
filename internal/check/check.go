@@ -323,7 +323,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	for _, f := range files {
 		c.inFile(f)
 		for _, td := range f.Types {
-			if td.GoName != nil {
+			if td.GoName != nil && td.Kind != syntax.RecordType {
 				if e := c.pkg.types[td.Name]; e != nil && e.decl == td {
 					c.resolveDecl(e)
 				}
@@ -338,6 +338,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			}
 		}
 	}
+	c.resolveGoMirrors(files)
 	c.checkRecordCycles()
 	c.info.OutOfRange = c.info.Named["OutOfRange"]
 	c.declareClasses(files)
@@ -379,6 +380,12 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	c.instanceConstraints()
 	c.resolveDerived()
 	c.checkRules(files)
+	for _, t := range c.info.TypeOrder {
+		if r, ok := t.(*Record); ok && r.GoMirror != nil {
+			r.GoTo = c.toGo(r, r.GoMirror)
+			r.GoFrom = c.fromGo(r.GoMirror, r).ok
+		}
+	}
 	c.checkBindings(files, c.goTypes)
 	// Pass 3: check bodies.
 	for _, f := range files {
