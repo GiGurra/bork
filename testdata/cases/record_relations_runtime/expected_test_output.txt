@@ -1,6 +1,9 @@
 ok    generated records retain sibling relations
 ok    decoded records retain sibling relations
 ok    nested type arguments retain sibling relations
+ok    generic sibling predicates generate valid records
+ok    valid generic construction
+ok    generic sibling predicates validate decoding and Go conversion
 ok    Go conversions retain sibling relations
-4 passed, 0 failed
+7 passed, 0 failed
 exit code 0

@@ -348,7 +348,9 @@ No arithmetic or implicit transitivity is introduced.
 Derived `Decode` and Go-to-record conversions validate relations after all
 fields have been converted, including defaults. Property generators generate
 referenced fields first where possible, defer cyclic dependencies until all
-fields exist, and preserve constraints while shrinking. The field-only
+fields exist, and preserve constraints while shrinking. Highly restrictive
+cyclic predicates may exhaust generation and report that rejection; invalid
+values are never passed to a property. The field-only
 schema decoder validates independent constraints; sibling relations require
 the full record decoder. Schema metadata still lists all constraints.
 

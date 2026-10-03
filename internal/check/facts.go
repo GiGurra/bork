@@ -39,6 +39,7 @@ type Query struct {
 	// parameter types with them filled in.
 	TypeArgs []Type
 	Params   []Type
+	Dicts    []*Dict
 	Or       []Query
 	And      []Query
 	// Via names the function whose result the constant is, when the
@@ -206,6 +207,7 @@ type argVal struct {
 	value constant.Value
 	text  string
 	expr  Expr
+	typ   Type // used to infer predicates whose other arguments carry type parameters
 }
 
 func sameArgs(a, b []argVal) bool {
@@ -264,6 +266,7 @@ type obligation struct {
 	args []argVal
 	or   []obligation
 	path string
+	pkg  *Package // dictionary scope of the written constraint
 	// requirement says who requires what, for messages:
 	// "transfer requires amount to be positive".
 	requirement string
@@ -805,7 +808,7 @@ func (f *factChecker) settle(x Expr, ob obligation, ok bool, pending []Query) {
 // obligationOf is the obligation to prove con, with the constraint's
 // parameter arguments given by subst.
 func (f *factChecker) obligationOf(con *Constraint, subst func(string) argVal, requirement string) obligation {
-	ob := obligation{requirement: requirement, con: con.Text(f.from()), path: con.Path}
+	ob := obligation{requirement: requirement, con: con.Text(f.from()), path: con.Path, pkg: con.Pkg}
 	if con.Or != nil {
 		for _, alt := range con.Or {
 			a := f.obligationOf(alt, subst, requirement)
@@ -907,6 +910,7 @@ func (f *factChecker) substitute(con *Constraint, subst func(string) argVal) []a
 		} else {
 			args[i] = subst(a.Param)
 		}
+		args[i].typ = a.Type
 	}
 	return args
 }
@@ -1458,11 +1462,27 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 	if len(ob.pred.TypeParams) > 0 {
 		in := newInference(ob.pred)
 		in.unify(ob.pred.Params[0], x.Type())
+		for i, arg := range ob.args {
+			typ := arg.typ
+			if arg.expr != nil {
+				typ = arg.expr.Type()
+			}
+			if typ != nil {
+				in.unify(ob.pred.Params[i+1], typ)
+			}
+		}
 		if len(in.unsolved()) > 0 {
 			return Query{}, false
 		}
 		inst := in.instance()
-		q.TypeArgs, q.Params = inst.TypeArgs, inst.Params
+		scope := ob.pkg
+		if scope == nil {
+			scope = f.from()
+		}
+		if !f.info.PredicateDicts(scope, inst) {
+			return Query{}, false
+		}
+		q.TypeArgs, q.Params, q.Dicts = inst.TypeArgs, inst.Params, inst.Dicts
 	}
 	return q, true
 }

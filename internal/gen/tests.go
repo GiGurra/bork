@@ -504,11 +504,15 @@ func (g *gen) constraintCond(con *check.Constraint, x ast.Expr, t check.Type) as
 		// The function value the caller passed.
 		return &ast.CallExpr{Fun: name(con.PredParam), Args: []ast.Expr{x}}
 	}
-	inst := con.Pred.InstanceFor(t)
-	if inst == nil {
+	inst := con.InstanceFor(t)
+	if inst == nil || !g.info.PredicateDicts(con.Pkg, inst) {
 		return nil
 	}
-	args := []ast.Expr{x}
+	var args []ast.Expr
+	for _, dict := range inst.Dicts {
+		args = append(args, g.dict(dict))
+	}
+	args = append(args, x)
 	for i, a := range con.Args {
 		if a.Const != nil {
 			args = append(args, g.constant(a.Const, inst.Params[i+1]))
