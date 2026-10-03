@@ -12,11 +12,12 @@ FAIL  closeScope raises the failures of the child
       finalizer failed
 close b
 close app
+ok    an early exit closes the block's owned scopes first
 FAIL  a parent raises the failures of the children it closes
       child finalizer failed; and then: parent finalizer failed
 FAIL  a task's failure fails its owned scope's close
       task failed
 closed b
 ok    logFailures logs instead
-1 passed, 5 failed
+2 passed, 5 failed
 exit code 1

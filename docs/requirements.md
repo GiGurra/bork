@@ -1023,18 +1023,24 @@ fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io
   owner still open where its block (or, for a parameter, its function) ends
   normally is an error: the end is explicit. A path that ends early (`?`,
   `return`, a panic) closes the owners still open in the function, as a scope
-  block's end does. In Go, each owner variable defers a fallback that a
-  hand-over disarms.
+  block's end does: those bound inside a scope block close before it, newest
+  first, and the rest as the function ends. In Go, each owner variable defers
+  a fallback that a hand-over disarms; an owner is taken out of its variable
+  only when its call starts, so an argument after it that returns early or
+  panics still leaves it to the fallback.
 - **Close invalidates every dependent value.** The child of an owner is a
   scope in the lifetimes: values made with `b.scope` (resources, tasks,
   channels, records and lists holding them, lambdas using them) belong to it,
   and are "possibly released" once `b` is closed or passed on, including after
-  a branch that did so. A resource attached to another open scope
+  a branch that did so, or once an owner it belongs to is (closing an owner
+  closes its children: their owners must close first). A resource attached to another open scope
   (`attach(r, other)`) keeps that proof. Values of a child never leave the
   function owning it: by the time it returns, the owner is closed or returned
   instead.
 - **Outlives is only the parent chain.** A child is outlived by its parent,
-  and by what outlives the parent: the scopes the owner value belongs to.
+  and by what outlives the parent: a scope that outlives every scope the
+  owner value belongs to (an owner returned by a call belongs to all of its
+  arguments' scopes, so only those that outlive all of them count).
   Function parameters and enclosing scope blocks do not outlive it
   automatically, because an owner can be returned and so outlive them. A task
   of the child can use values of its parent; a value of a sibling or of an
@@ -1045,21 +1051,26 @@ fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io
   belongs to: `conn: Conn in prev`, where `prev` is a parameter of type
   `OwnedScope` (the value belongs to its child) or `Scope` (the value belongs to
   that scope). The caller must give a value that lives at least that long. A
-  call that takes an owner cannot also be given a value of its child, unless
-  that parameter is declared `in` the owner's: the callee could close the
-  owner and go on using the value. `prev: OwnedScope in app` says the child's
-  parent is (at least) `app`, so its tasks may use `app`'s values. For a
+  call that takes an owner (directly, or inside an argument, as `{ b }` or
+  `pass(b)`), or whose arguments close one, cannot also be given a value of
+  its child, unless that parameter is declared `in` the owner's: the callee
+  could close the owner and go on using the value. `prev: OwnedScope in app`
+  says that `app` outlives the child, so its tasks may use `app`'s values:
+  the caller must give an owner whose scope `app` outlives (its child, or a
+  child of it, not a sibling). For a
   `Scope` it also lets a task of `app` use the value without `attach`
   (`pool: Pool in app`).
 - **Cleanup ordering.** Closing a scope cancels it, waits for its own tasks,
-  closes its owned children still open (newest first), and then runs its
+  closes its owned children still open (oldest first), and then runs its
   finalizers (LIFO). Children close after the tasks, because a task may own a
   child of its scope, and before the finalizers, because the children's
-  tasks and resources may use what they release. Children that are still open
-  then are those an early exit left (when the parent block closes before the
-  owner's fallback runs) or that an orphaned task owns. Their failures join the
+  tasks and resources may use what they release. Owners close their children
+  before that, so children still open then are those an orphaned task (left
+  running by `taskTimeout`) owns; this backstop closes them under it, oldest
+  first (a task of a child can own a newer child, which it closes itself once
+  the older child's close cancels and waits for it). Their failures join the
   parent's: task failures, then the children's, then the finalizers', as one
-  panic.
+  panic. A second close of a scope already closing returns at once.
 - **Cancellation.** A child is cancelled with its parent (its context derives
   from the parent's); `cancel(b.scope)` cancels only the child. Cancellation
   alone neither closes a child nor proves it closed. A child opened in a

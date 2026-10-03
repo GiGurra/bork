@@ -165,6 +165,9 @@ func (l *lifeChecker) result(x Expr, life lifetime, what string) {
 // within reports whether the scope or parameter x belongs to the frame
 // f, or to a lambda inside it.
 func (l *lifeChecker) within(x, f any) bool {
+	if c, ok := x.(*child); ok {
+		x = c.owner
+	}
 	for g := l.frame[x]; g != nil; g = l.parent[g] {
 		if g == f {
 			return true
@@ -204,6 +207,10 @@ func (l *lifeChecker) closed(life lifetime) any {
 		case *child:
 			if _, ok := l.gone[s.owner]; ok {
 				return s
+			}
+			// Closing an owner closes its children too.
+			if inner := l.closed(l.env[s.owner]); inner != nil {
+				return inner
 			}
 		}
 	}
@@ -284,12 +291,7 @@ func (l *lifeChecker) scopeOutlives(x, y any) bool {
 	// A child scope is outlived by its parent, and what outlives that:
 	// the scopes its owner belongs to.
 	if c, ok := y.(*child); ok {
-		for _, z := range l.env[c.owner] {
-			if l.scopeOutlives(x, z) {
-				return true
-			}
-		}
-		return false
+		return l.outlivesAll(x, l.env[c.owner])
 	}
 	switch x := x.(type) {
 	case *Var:
@@ -613,6 +615,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	}
 	// moved holds the owner variables the call takes, by argument.
 	moved := map[int]*Var{}
+	goneBefore := copyGone(l.gone)
 	for _, i := range indices {
 		a := xargs[i]
 		if fn != nil && a.Type() == OwnedScope && i < len(fn.Params) && fn.Params[i] == OwnedScope {
@@ -636,8 +639,31 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 		}
 		life = life.union(args[i])
 	}
-	if fn != nil {
-		l.ownerArgs(fn, xargs, args, moved)
+	// The owners its arguments consumed, and those it takes.
+	var consumed []*Var
+	for v := range l.gone {
+		if _, ok := goneBefore[v]; !ok {
+			consumed = append(consumed, v)
+		}
+	}
+	for _, v := range moved {
+		consumed = append(consumed, v)
+	}
+	l.ownerArgs(fn, xargs, args, moved, consumed)
+	// An owner the call returns does not belong to the children it
+	// consumed: its callee could not return one of those.
+	if fn != nil && fn.Result == OwnedScope {
+		var kept lifetime
+	scopes:
+		for _, s := range life {
+			for _, m := range consumed {
+				if l.scopeOutlives(l.childOf(m), s) {
+					continue scopes
+				}
+			}
+			kept = append(kept, s)
+		}
+		life = kept
 	}
 	// attach(r, s) gives r as a value of s: it stays open until s closes.
 	if fn != nil && fn.Prelude && fn.Decl.Name == "attach" && len(args) == 2 {

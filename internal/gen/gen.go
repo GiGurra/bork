@@ -341,8 +341,11 @@ type gen struct {
 	// or _borkOptionGet.
 	usesOptionHelpers bool
 	// openScopes lists the Go variables of the scope blocks around the
-	// code being generated, which are closed before returning.
-	openScopes []*ast.Ident
+	// code being generated, which are closed before returning, and
+	// blockOwners the owner variables bound in the blocks around it, with
+	// how many scope blocks were open where each was bound.
+	openScopes  []*ast.Ident
+	blockOwners []blockOwner
 	// testMode generates checks of trusted facts (see Tests), and
 	// extraFuncs holds functions to emit besides the reachable ones.
 	testMode   bool
@@ -750,9 +753,9 @@ func (g *gen) values(es []check.Expr) ([]ast.Stmt, []ast.Expr) {
 		if len(stmts) > 0 {
 			for j := range xs {
 				if !stable(xs[j]) {
-					t := g.newTmp()
-					out = append(out, define(t, xs[j]))
-					xs[j] = t
+					var save []ast.Stmt
+					save, xs[j] = g.save(xs[j], es[j].Type())
+					out = append(out, save...)
 				}
 			}
 		}
@@ -770,12 +773,30 @@ func (g *gen) values(es []check.Expr) ([]ast.Stmt, []ast.Expr) {
 	return out, xs
 }
 
+// save evaluates x, of type t, into a temporary now, and gives the
+// expression that reads it later. A new owner waiting in one is closed
+// if what runs before its call returns early or panics.
+func (g *gen) save(x ast.Expr, t check.Type) ([]ast.Stmt, ast.Expr) {
+	tmp := g.newTmp()
+	if t != check.OwnedScope {
+		return []ast.Stmt{define(tmp, x)}, tmp
+	}
+	return []ast.Stmt{define(tmp, x), dropOwner(tmp.Name)[2]}, &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: tmp}}}
+}
+
 // stable reports whether evaluating x later gives the same result:
 // literals and identifiers (bork bindings are immutable).
 func stable(x ast.Expr) bool {
-	switch x.(type) {
+	switch x := x.(type) {
 	case *ast.BasicLit, *ast.Ident:
 		return true
+	case *ast.CallExpr:
+		// Taking an owner out of its variable is left for the call, so
+		// that its fallback still closes it if an argument after it
+		// returns early or panics.
+		if f, ok := x.Fun.(*ast.Ident); ok && f.Name == "_takeScope" {
+			return true
+		}
 	}
 	return isConst(x)
 }
@@ -903,9 +924,9 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			for i, param := range e.ArgOrder {
 				x := xs[i]
 				if !stable(x) {
-					t := g.newTmp()
-					stmts = append(stmts, define(t, x))
-					x = t
+					var save []ast.Stmt
+					save, x = g.save(x, e.Args[param].Type())
+					stmts = append(stmts, save...)
 				}
 				ordered[param] = x
 			}
@@ -973,9 +994,9 @@ func (g *gen) lambda(e *check.Lambda) ast.Expr {
 	for i, p := range e.Params {
 		names[i] = name(p.Name)
 	}
-	saved, savedScopes := g.fnResult, g.openScopes
-	g.fnResult, g.openScopes = ft.Result, nil
-	defer func() { g.openScopes = savedScopes }()
+	saved, savedScopes, savedOwners := g.fnResult, g.openScopes, g.blockOwners
+	g.fnResult, g.openScopes, g.blockOwners = ft.Result, nil, nil
+	defer func() { g.openScopes, g.blockOwners = savedScopes, savedOwners }()
 	var body []ast.Stmt
 	if ft.Result == check.Unit {
 		body = g.effect(e.Body)
@@ -1160,6 +1181,8 @@ func (g *gen) unitValue() ast.Expr {
 
 // blockInto lowers a block: its statements, then its tail into k.
 func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
+	mark := len(g.blockOwners)
+	defer func() { g.blockOwners = g.blockOwners[:mark] }()
 	out := g.stmts(b.Stmts)
 	if g.diverges(b.Stmts) {
 		return out
@@ -1205,6 +1228,7 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 			}
 			if bt == check.OwnedScope {
 				out = append(out, dropOwner(s.Var.Name)...)
+				g.blockOwners = append(g.blockOwners, blockOwner{s.Var.Name, len(g.openScopes)})
 			}
 		case *check.ExprStmt:
 			out = append(out, g.effect(s.X)...)
@@ -1291,8 +1315,17 @@ func (g *gen) scopeInto(e *check.ScopeBlock, k sink) []ast.Stmt {
 	return []ast.Stmt{&ast.BlockStmt{List: stmts}}
 }
 
+// blockOwner is an owner variable, bound where scopes scope blocks
+// were open.
+type blockOwner struct {
+	name   string
+	scopes int
+}
+
 // returning returns the given results (none or one) from the function,
-// first closing the scopes around the return.
+// first closing the scopes around the return. The owners bound inside
+// each scope block close before it, as they would at its end (their
+// tasks may use what it releases, or own its children).
 func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
 	if len(g.openScopes) == 0 {
 		return []ast.Stmt{&ast.ReturnStmt{Results: results}}
@@ -1303,8 +1336,19 @@ func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
 		r := g.newTmp()
 		stmts = append(stmts, typedVar(r, g.goType(g.fnResult), results[0]))
 		results = []ast.Expr{r}
+		if g.fnResult == check.OwnedScope {
+			// A returned owner is closed if a scope fails to close.
+			stmts = append(stmts, dropOwner(r.Name)[2])
+			results = []ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: r}}}}
+		}
 	}
 	for i := len(g.openScopes) - 1; i >= 0; i-- {
+		for j := len(g.blockOwners) - 1; j >= 0; j-- {
+			if o := g.blockOwners[j]; o.scopes == i+1 {
+				take := &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(o.name)}}}
+				stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_dropScope"), Args: []ast.Expr{take}}})
+			}
+		}
 		stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: g.openScopes[i], Sel: ast.NewIdent("close")}}})
 	}
 	return append(stmts, &ast.ReturnStmt{Results: results})

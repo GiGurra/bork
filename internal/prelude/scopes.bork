@@ -96,7 +96,7 @@ fn setScopePolicy(s: Scope, policy: ScopePolicy) unsafe go {
 // openScope opens a child scope of parent, owned by the caller, with
 // the given policies. It is cancelled with parent; when parent closes,
 // it closes any children still open (after its tasks, before its
-// finalizers).
+// finalizers, oldest first).
 fn openScope(parent: Scope, policies: List[ScopePolicy] = []): OwnedScope unsafe go {
   import "time"
   s := _openScope(parent)

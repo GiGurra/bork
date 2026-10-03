@@ -252,34 +252,68 @@ func (l *lifeChecker) block(b *Block, tail func(Expr) lifetime) lifetime {
 	return life
 }
 
-// ownerArgs checks the owners a call of fn takes (moved, by argument)
-// and the parameters it declares in another: a value given with its
-// owner must be declared in it, as the callee may close the owner and
-// would then still use the value.
-func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved map[int]*Var) {
-	for j, t := range fn.ParamIn {
-		if t < 0 || j >= len(args) || t >= len(args) {
-			continue
+// ownerArgs checks a call whose arguments' evaluation consumed the
+// owners in gone (closed or passed on: inside an argument, or as one,
+// moved by argument), and the parameters fn (nil for a builtin or a
+// function value) declares in another. No other argument may belong to
+// the child of a consumed owner, as the callee would use it after the
+// child was closed (or while the callee may close it), unless the
+// parameter is declared in that owner's: the callee then checks it. It
+// gives the moved owners, which the call consumes.
+func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved map[int]*Var, gone []*Var) {
+	declaredIn := func(j int, m *Var) bool {
+		if fn == nil || j >= len(fn.ParamIn) || fn.ParamIn[j] < 0 {
+			return false
 		}
-		target := args[t]
-		if m, ok := moved[t]; ok {
-			target = lifetime{l.childOf(m)}
-		}
-		if short := l.shorter(args[j], target); short != nil {
-			l.errorf(xargs[j].Pos(), "%s may not live as long as %s (it depends on %s), but %s declares parameter %s in %s", describe(xargs[j]), describe(xargs[t]), l.scopeText(short), fn.Decl.Name, fn.Decl.Params[j].Name, fn.Decl.Params[t].Name)
-			args[j] = target
+		return moved[fn.ParamIn[j]] == m
+	}
+	if fn != nil {
+		for j, t := range fn.ParamIn {
+			if t < 0 || j >= len(args) || t >= len(args) {
+				continue
+			}
+			target := args[t]
+			if m, ok := moved[t]; ok {
+				target = lifetime{l.childOf(m)}
+			}
+			if fn.Params[j] == OwnedScope {
+				// prev: OwnedScope in app: app outlives prev's child.
+				child := args[j]
+				if m, ok := moved[j]; ok {
+					child = lifetime{l.childOf(m)}
+				}
+				for _, x := range target {
+					if !l.outlivesAll(x, child) {
+						l.errorf(xargs[j].Pos(), "the scope of %s may not live as long as %s (%s may end first), but %s declares parameter %s in %s", describe(xargs[j]), describe(xargs[t]), l.scopeText(x), fn.Decl.Name, fn.Decl.Params[j].Name, fn.Decl.Params[t].Name)
+						break
+					}
+				}
+				continue
+			}
+			if short := l.shorter(args[j], target); short != nil {
+				l.errorf(xargs[j].Pos(), "%s may not live as long as %s (it depends on %s), but %s declares parameter %s in %s", describe(xargs[j]), describe(xargs[t]), l.scopeText(short), fn.Decl.Name, fn.Decl.Params[j].Name, fn.Decl.Params[t].Name)
+				args[j] = target
+			}
 		}
 	}
-	for i, m := range moved {
+	for _, m := range gone {
 		c := l.childOf(m)
 	args:
 		for j := range args {
-			if j == i || j < len(fn.ParamIn) && fn.ParamIn[j] == i {
+			if moved[j] == m || declaredIn(j, m) {
 				continue
 			}
 			for _, e := range args[j] {
 				if l.scopeOutlives(c, e) {
-					l.errorf(xargs[j].Pos(), "%s belongs to owned scope %s, which %s takes and may close while it still uses this; declare its parameter in the owner's (%s: ... in %s)", describe(xargs[j]), m.Name, fn.Decl.Name, paramName(fn, j), paramName(fn, i))
+					callee := "the function"
+					if fn != nil {
+						callee = fn.Decl.Name
+					}
+					if i := movedIndex(moved, m); i >= 0 && fn != nil {
+						l.errorf(xargs[j].Pos(), "%s belongs to owned scope %s, which %s takes and may close while it still uses this; declare its parameter in the owner's (%s: ... in %s)", describe(xargs[j]), m.Name, callee, paramName(fn, j), paramName(fn, i))
+					} else {
+						l.errorf(xargs[j].Pos(), "%s belongs to owned scope %s, which is closed or passed on before %s gets it", describe(xargs[j]), m.Name, callee)
+					}
 					break args
 				}
 			}
@@ -287,11 +321,31 @@ func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved m
 	}
 	for i, m := range moved {
 		how := "passed on"
-		if fn.Prelude && fn.Decl.Name == "closeScope" {
+		if fn != nil && fn.Prelude && fn.Decl.Name == "closeScope" {
 			how = "closed"
 		}
 		l.gone[m] = goneAt{xargs[i].Pos(), how}
 	}
+}
+
+func movedIndex(moved map[int]*Var, m *Var) int {
+	for i, v := range moved {
+		if v == m {
+			return i
+		}
+	}
+	return -1
+}
+
+// outlivesAll reports whether the scope x outlives every scope of life
+// (and life has some).
+func (l *lifeChecker) outlivesAll(x any, life lifetime) bool {
+	for _, y := range life {
+		if !l.scopeOutlives(x, y) {
+			return false
+		}
+	}
+	return len(life) > 0
 }
 
 func paramName(fn *Func, i int) string {

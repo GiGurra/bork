@@ -38,4 +38,22 @@ child task uses base and child
 close child
 close base
 failed
+-- an early exit closes the block's owned scopes first
+open worker
+worker still uses worker
+close worker
+failed
+-- an owner argument stays armed until its call
+open consumed later
+close consumed later
+failed
+-- a task opens and closes its own owned scope
+open task's own
+task uses task's own
+close task's own
+task gave 1
+-- a function can hand an owner back
+open handed back
+task of k uses handed back
+close handed back
 app ends

@@ -186,4 +186,63 @@ fn values(app: Scope) uses state {
 
 type Holder = { owner: OwnedScope }
 
+// Found in review: owners hidden in blocks and calls, `in` on owners,
+// lifetimes from extra arguments, and grandchildren.
+fn takesBoth(c: Conn, b: OwnedScope) uses io + state {
+  closeScope(b)
+  use(c)
+}
+
+fn same(b: OwnedScope): OwnedScope {
+  b
+}
+
+fn hidden(app: Scope) uses io + state {
+  b = openScope(app)
+  c = connect(b.scope)
+  takesBoth(c, { b })
+  d = openScope(app)
+  e = connect(d.scope)
+  takesBoth(e, same(d))
+  f = openScope(app)
+  g = connect(f.scope)
+  takesBoth(g, { closeScope(f); openScope(app) })
+}
+
+fn ownerIn(a: OwnedScope, prev: OwnedScope in a) uses state {
+  closeScope(prev)
+  closeScope(a)
+}
+
+fn siblingIn(app: Scope) uses state {
+  a = openScope(app)
+  b = openScope(app)
+  ownerIn(a, b)
+  c = openScope(app)
+  d = openScope(c.scope)
+  ownerIn(c, d)
+}
+
+fn with(b: OwnedScope, s: Scope): OwnedScope {
+  b
+}
+
+fn extraArgs(app: Scope) uses io + state {
+  a = openScope(app)
+  ra = connect(a.scope)
+  q = with(openScope(app), a.scope)
+  launch(q.scope, () => use(ra))
+  closeScope(a)
+  closeScope(q)
+}
+
+fn grandparent(app: Scope) uses io + state {
+  a = openScope(app)
+  b = openScope(a.scope)
+  c = connect(b.scope)
+  closeScope(a)
+  use(c)
+  closeScope(b)
+}
+
 fn main() {}

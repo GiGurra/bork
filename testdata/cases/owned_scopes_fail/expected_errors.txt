@@ -28,3 +28,11 @@ main.bork:169:19: the lambda may not live as long as scope b.scope (it depends o
 main.bork:180:7: a value of type Holder cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
 main.bork:181:7: a value of type (OwnedScope) uses state => Bool cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
 main.bork:182:7: an owned scope cannot be the value of an if, a match or a scope block: close, pass on or return it in each branch instead
+main.bork:203:13: c belongs to owned scope b, which is closed or passed on before takesBoth gets it
+main.bork:206:13: e belongs to owned scope d, which is closed or passed on before takesBoth gets it
+main.bork:209:13: g belongs to owned scope f, which is closed or passed on before takesBoth gets it
+main.bork:220:14: the scope of b may not live as long as a (owned scope a may end first), but ownerIn declares parameter prev in a
+main.bork:234:19: the lambda may not live as long as scope q.scope (it depends on owned scope a), but launch may keep it until q.scope closes; to give a task of q.scope a resource of a shorter scope, attach it first: r2 = attach(r, q.scope)
+main.bork:236:14: q may be released: it belongs to owned scope a, which was closed at line 235
+main.bork:244:7: c may be released: it belongs to owned scope a, which was closed at line 243
+main.bork:245:14: b may be released: it belongs to owned scope a, which was closed at line 243

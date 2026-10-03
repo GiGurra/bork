@@ -861,8 +861,9 @@ func (s *_Scope) close() {
 	}
 }
 
-// closeChildren closes the owned child scopes still open, newest first,
-// and gives what they failed with.
+// closeChildren closes the owned child scopes still open, oldest first
+// (a task of a child can own a newer child, which it then closes before
+// its scope's close finishes), and gives what they failed with.
 func (s *_Scope) closeChildren() (failures []any) {
 	for {
 		s.mu.Lock()
@@ -870,8 +871,8 @@ func (s *_Scope) closeChildren() (failures []any) {
 			s.mu.Unlock()
 			return failures
 		}
-		c := s.children[len(s.children)-1]
-		s.children = s.children[:len(s.children)-1]
+		c := s.children[0]
+		s.children = s.children[1:]
 		s.mu.Unlock()
 		func() {
 			defer func() {

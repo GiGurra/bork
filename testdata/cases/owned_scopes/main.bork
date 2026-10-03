@@ -123,8 +123,75 @@ fn main() uses io + clock + state {
     closeScope(o)
     println("-- parent closes children first")
     nested(app)
+    println("-- an early exit closes the block's owned scopes first")
+    match (siblingTask()) {
+      f: Failed => println(f.reason)
+      _ => println("unexpected")
+    }
+    println("-- an owner argument stays armed until its call")
+    match (consumeLater(app)) {
+      f: Failed => println(f.reason)
+      _ => println("unexpected")
+    }
+    println("-- a task opens and closes its own owned scope")
+    own = spawn(app, () => {
+      mine = openScope(app)
+      oc = connect("task's own", mine.scope)
+      println(s"task uses ${nameOf(oc)}")
+      closeScope(mine)
+      1
+    })
+    println(s"task gave ${await(own)}")
+    println("-- a function can hand an owner back")
+    k = openScope(app)
+    kc = connect("handed back", k.scope)
+    k2 = withTask(k, () => println(s"task of k uses ${nameOf(kc)}"))
+    closeScope(k2)
     println("app ends")
   }
+}
+
+// siblingTask leaves its scope block while a task of x owns a newer
+// child of app: x closes first, waiting for the task, so the task's
+// child is not closed under it.
+fn siblingTask() uses io + clock + state: Unit | Failed {
+  scope app {
+    x = openScope(app)
+    launch(x.scope, () => worker(app))
+    sleep(20)
+    check(true)?
+    closeScope(x)
+  }
+}
+
+fn worker(app: Scope) uses io + clock + state {
+  b = openScope(app)
+  c = connect("worker", b.scope)
+  sleep(60)
+  println(s"worker still uses ${nameOf(c)}")
+  closeScope(b)
+}
+
+fn consume(b: OwnedScope, n: Int) uses state {
+  closeScope(b)
+}
+
+fn mayFail(fail: Bool): Int | Failed {
+  check(fail)?
+  1
+}
+
+// consumeLater gives b to a call whose next argument fails: b is
+// closed on the way out, not left for app.
+fn consumeLater(app: Scope) uses io + state: Unit | Failed {
+  b = openScope(app)
+  _ = connect("consumed later", b.scope)
+  consume(b, mayFail(true)?)
+}
+
+fn withTask(b: OwnedScope, f: () uses io => Unit in b) uses io: OwnedScope {
+  launch(b.scope, f)
+  b
 }
 
 // nested leaves its scope block early with ?, while a child of the
