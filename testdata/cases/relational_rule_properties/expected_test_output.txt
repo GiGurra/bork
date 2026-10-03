@@ -1,0 +1,10 @@
+ok    rule transitive
+ok    rule symmetric
+ok    rule comparison
+ok    rule composite
+FAIL  rule invalidFloat
+      main.bork:13:1: rule invalidFloat: the premises hold, but reflexive(x) is false
+      for x = NaN
+      case 2, seed 1411627651772452143 (bork test --seed 1411627651772452143)
+4 passed, 1 failed
+exit code 1

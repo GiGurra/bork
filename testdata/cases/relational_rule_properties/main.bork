@@ -1,0 +1,14 @@
+pred atMost(a: Int, b: Int) { a <= b }
+pred different(a: String, b: String) { a != b }
+pred positive(n: Int) { n > 0 }
+pred nonEmpty(xs: List[Int]) { !xs.isEmpty() }
+pred reflexive(x: Float) { x == x }
+rule transitive(a: Int, b: Int, c: Int) {
+  atMost(a, b) and atMost(b, c) => atMost(a, c)
+}
+rule symmetric(a: String, b: String) { different(a, b) => different(b, a) }
+rule comparison(n: Int) { n > 0 => positive(n) }
+rule composite(xs: List[Int]) { nonEmpty(xs) => nonEmpty(xs) }
+// The richer float generator must catch NaN.
+rule invalidFloat(x: Float) { (x <= x || x != x) => reflexive(x) }
+fn main() {}
