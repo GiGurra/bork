@@ -1,0 +1,8 @@
+// bork.mod does not list this package, so it cannot have unsafe go.
+fn shout(s: String): String unsafe go {
+  return s + "!"
+}
+
+fn main() {
+  println(shout("hi"))
+}

@@ -1,0 +1,97 @@
+// An unsafe go body that uses Go with an obvious effect must declare it.
+
+fn env(name: String): String unsafe go {
+  import "os"
+  return os.Getenv(name)
+}
+
+fn dial(addr: String): Bool unsafe go {
+  import "net"
+  _, err := net.Dial("tcp", addr)
+  return err == nil
+}
+
+fn now(): Int unsafe go {
+  import "time"
+  return time.Now().UnixNano()
+}
+
+fn dice(): Int unsafe go {
+  import "math/rand/v2"
+  return int64(rand.IntN(6))
+}
+
+fn background() unsafe go {
+  go func() {}()
+}
+
+fn shout(s: String) unsafe go {
+  import "fmt"
+  fmt.Println(s)
+}
+
+// Already declared: no error.
+fn declared() uses clock + io: Int unsafe go {
+  import "time"
+  import "fmt"
+  fmt.Println("now")
+  return time.Now().UnixNano()
+}
+
+// Pure uses of the same packages: no error.
+fn pureUses(s: String): String unsafe go {
+  import "fmt"
+  import "os"
+  import "time"
+  import "net/url"
+  _ = time.Duration(5) * time.Millisecond
+  _ = os.ErrNotExist
+  u, _ := url.Parse(s)
+  return fmt.Sprintf("%s %v", u.Host, os.IsNotExist(nil))
+}
+
+// A function value it gives may have the effect instead.
+type Counter = { next: () uses state => Int }
+
+fn counter(): Counter unsafe go {
+  import "sync/atomic"
+  var n atomic.Int64
+  return Counter{next: func() int64 { return n.Add(1) }}
+}
+
+// Imports are shared by every body of the generated file, so a package
+// counts without its own import.
+fn borrowedTime(): Int unsafe go {
+  return time.Now().UnixNano()
+}
+
+fn runtimeFmt() unsafe go {
+  fmt.Println("hi")
+}
+
+// Calling a bork function from Go needs its effects too.
+fn loud() uses io { println("loud") }
+
+fn callsLoud() unsafe go {
+  loud()
+}
+
+// A local name shadows a package, and Go's own names are not bork's.
+fn shadowed(): Int unsafe go {
+  time := []int64{1}
+  return int64(len(time)) + time[0]
+}
+
+// A parameter named like a package is the parameter.
+type Conn = { name: String }
+
+fn connName(net: Conn): String unsafe go {
+  return net.name
+}
+
+// A binding has the effects of the Go function it calls.
+fn getenv(key: String): String unsafe go "os.Getenv"
+
+fn escape(s: String): String unsafe go "net/url.PathEscape"
+
+fn main() {}

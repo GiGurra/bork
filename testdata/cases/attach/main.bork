@@ -1,7 +1,7 @@
 // A connection that says when it opens and closes.
 type Conn = resource
 
-fn connect(name: String, s: Scope): Conn unsafe go {
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
   import "fmt"
   fmt.Println("open " + name)
   return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}

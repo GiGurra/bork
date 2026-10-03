@@ -22,9 +22,18 @@ func CheckEffects(files []*syntax.File, info *Info, diags *diag.List) {
 		}
 	}
 	for _, f := range files {
+		// The prelude and the standard library are written to the
+		// unsafe go rules by hand: their runtime plumbing would trip the
+		// check.
+		std := f.Prelude || strings.HasPrefix(f.Package, "bork/")
 		for _, fd := range f.Funcs {
-			if fn := info.FuncOf[fd]; fn != nil && fn.Body != nil {
+			fn := info.FuncOf[fd]
+			switch {
+			case fn == nil:
+			case fn.Body != nil:
 				checkEffects(fn, diags)
+			case fd.IsGo() && !std:
+				checkUnsafeGo(fn, info, diags)
 			}
 		}
 	}

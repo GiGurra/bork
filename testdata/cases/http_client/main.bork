@@ -1,7 +1,7 @@
 import "bork/http"
 
 type TestServer = resource
-fn openServer(s: Scope): TestServer unsafe go {
+fn openServer(s: Scope) uses net + state: TestServer unsafe go {
   import "net/http"
   import "net/http/httptest"
   import "io"
@@ -28,7 +28,7 @@ fn openServer(s: Scope): TestServer unsafe go {
 fn url(server: TestServer): String unsafe go {
   return server.handle.(struct { url string; started chan struct{} }).url
 }
-fn started(server: TestServer) unsafe go {
+fn started(server: TestServer) uses clock + state unsafe go {
   import "time"
   select {
   case <-server.handle.(struct { url string; started chan struct{} }).started:
