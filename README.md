@@ -90,6 +90,11 @@ fn names(users: List[User]) uses io {
 - Maximum efficiency on embedded devices.
 - Being a proof assistant. Guarantees must stay pragmatic.
 
+`bork/cli` wraps boa to parse proven options from a record deriving `Decode`.
+It generates help from field docs and defaults, supports short flags, explicit
+environment bindings, positionals, and repeated list flags, and collects field
+errors before invoking a handler. See [examples/cli](examples/cli/main.bork).
+
 ## Getting started
 
 The compiler is at an early stage, but usable for small programs. Done: the plain language (M0: functions, sized numbers with checked conversions, records with nested `copy`, sealed types, unions, `Option`, `?`, `match`, string interpolation, `unsafe go` bodies), generics, lambdas, `List`, `Map`, methods (`xs.filter(f).map(g)`, references such as `words.map(String.byteLength)`), and `|>`; facts (M1: predicates, `where`, guards, rules, compile-time checks, and test mode); scopes and resources (M2, for one routine); packages; and type classes with JSON decoding (M3, under way: `derive (Decode)` decodes requests into proven values); and standard packages `bork/http`, `bork/log`, `bork/time`, and `bork/env` (see [examples/http_server](examples/http_server/main.bork), a REST API, and [examples/signup_api](examples/signup_api/main.bork), JSON requests with constrained fields). Record and variant fields can declare closed defaults (`port: Int = 8080`), used by literals and derived decoding when a field is absent. Field docs and defaults are available through the derived schema for standard integrations. `derive (GoStruct)` supplies a separate exported Go struct, checked conversions, and ordered field tags (`go { json: "port" }`) for reflection-based libraries. A `Show[T]` instance in a declared type's own package customizes its text consistently, including inside generic code and nested values. List and map keys use structural equality independently of their text. Unordered maps print deterministically (numeric and string keys by value, other keys by their text, with mixed kinds grouped). Third-party Go bindings use pinned `go-deps.mod` and `go-deps.sum` manifests beside `bork.mod`. It compiles bork to Go, so [Go](https://go.dev/dl/) must be installed.

@@ -1169,6 +1169,16 @@ Closing the server scope cancels request scopes and stops accepting new connecti
 - Limited operator overloading (e.g. `+` for money or vector types), or none at all?
 - Other principles to adopt: strong backwards-compatibility promises? No macros?
 
+`bork/cli` wraps boa through a reflection shadow struct built from a derived
+Decode schema. `Parse[T]` returns proven options, collected field errors, or help;
+`Run[T]` invokes a `(T, Scope) => Unit` handler only after successful validation.
+Docs/defaults drive help, `cli.Flag` maps short/env/positional metadata, and List
+fields take repeated flags. Unknown metadata names include a closest-field hint;
+duplicate short/env/positional mappings are errors before parsing. Environment
+loading stays independent. Config-file and subcommand APIs are deferred. See
+[the schema adapter](std-go.md#command-line-schema-adapter) and
+[the example](../examples/cli/main.bork).
+
 ## Topics still to discuss
 
 1. ~~Core values~~ (above)

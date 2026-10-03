@@ -1,0 +1,19 @@
+Options { name: "Ada", httpPort: 8080, verbose: false, retries: Option.None, labels: [] }
+Options { name: "", httpPort: 443, verbose: true, retries: Option.Some { value: 0 }, labels: ["a", "b"] }
+Options { name: "Ada", httpPort: 80, verbose: false, retries: Option.None, labels: [] }
+Error { errors: [DecodeError { path: ".name", message: "is missing" }, DecodeError { path: ".httpPort", message: "must be port" }, DecodeError { path: ".retries", message: "invalid JSON at line 1, column 1: expected a value" }] }
+Box { items: ["one,two", ""], optional: Option.Some { value: ["a", "b"] } }
+Box { items: [1, 2], optional: Option.None }
+Box { items: [[1, 2], []], optional: Option.None }
+Error { errors: [DecodeError { path: ".items[0]", message: "invalid JSON at line 1, column 1: expected a value" }, DecodeError { path: ".items[1]", message: "invalid JSON at line 1, column 1: expected a value" }] }
+Error { errors: [DecodeError { path: "httpPrt", message: "unknown CLI field; closest field is \"httpPort\"" }] }
+Error { errors: [DecodeError { path: "httpPort", message: "short flag duplicates name" }, DecodeError { path: "httpPort", message: "environment variable duplicates name" }, DecodeError { path: "httpPort", message: "positional field duplicates name" }] }
+Error { errors: [DecodeError { path: "name", message: "duplicate CLI field metadata" }] }
+Error { errors: [DecodeError { path: "name", message: "short flag must be one ASCII character" }] }
+Error { errors: [DecodeError { path: "name", message: "short flag must be one ASCII character" }] }
+Error { errors: [DecodeError { path: "name", message: "short flag h is reserved for help" }] }
+Error { errors: [DecodeError { path: "HTTPPort", message: "flag name duplicates httpPort" }] }
+Error { errors: [DecodeError { path: "app", message: "CLI options require a derived record decoder" }] }
+true
+true
+true

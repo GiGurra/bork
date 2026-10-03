@@ -1,0 +1,179 @@
+// Package cli builds command-line interfaces with boa and decodes proven options.
+type Flag = {
+  field: String
+  short: String = ""
+  env: String = ""
+  positional: Bool = false
+}
+type Error = { errors: List[DecodeError] }
+type Help = { text: String }
+
+// Parse accepts arguments without the executable name. Strings are literal;
+// numbers and compound fields use JSON. Lists take repeated flags; string
+// elements are literal, other elements use JSON. Help never runs the handler.
+// Explicit env tags permit environment lookup. All field failures are collected.
+fn Parse[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = []) uses io: T | Error | Help {
+  prepare[T](name, description, args, flags, parseJson, flagName)
+}
+fn prepare[T: Decode](name: String, description: String, args: List[String], flags: List[Flag], parse: (String) => Json | JsonError, makeName: (String) => String) uses io: T | Error | Help unsafe go {
+  import "bytes"
+  import "fmt"
+  import "reflect"
+  import "strconv"
+  import "strings"
+  import "github.com/GiGurra/boa/pkg/boa"
+  import "github.com/spf13/cobra"
+  schema, supported := _borkDecodeFields(_d_T_Decode)
+  if !supported { return Error{errors: []DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
+  metadata := map[string]Flag{}
+  errors := []DecodeError{}
+  names := map[string]string{}
+  for _, field := range schema {
+    long := makeName(field.Name)
+    if previous, duplicate := names[long]; duplicate { errors = append(errors, DecodeError{path: field.Name, message: "flag name duplicates " + previous}) }
+    if long == "help" { errors = append(errors, DecodeError{path: field.Name, message: "flag name is reserved for help"}) }
+    names[long] = field.Name
+  }
+  shorts, envs := map[string]string{}, map[string]string{}
+  positional := ""
+  for _, flag := range flags {
+    found := false
+    for _, field := range schema { if field.Name == flag.field { found = true; break } }
+    if !found {
+      closest, distance := "", int(^uint(0)>>1)
+      for _, field := range schema {
+        // Levenshtein distance keeps typo hints independent of field order.
+        left, right := []rune(flag.field), []rune(field.Name)
+        row := make([]int, len(right)+1)
+        for j := range row { row[j] = j }
+        for i, a := range left {
+          prev := row[0]; row[0] = i+1
+          for j, b := range right { old := row[j+1]; cost := 0; if a != b { cost = 1 }; row[j+1] = min(row[j]+1, row[j+1]+1, prev+cost); prev = old }
+        }
+        d := row[len(right)]
+        if d < distance || d == distance && field.Name < closest { closest, distance = field.Name, d }
+      }
+      message := "unknown CLI field"
+      if closest != "" { message += fmt.Sprintf("; closest field is %q", closest) }
+      errors = append(errors, DecodeError{path: flag.field, message: message}); continue
+    }
+    if _, duplicate := metadata[flag.field]; duplicate { errors = append(errors, DecodeError{path: flag.field, message: "duplicate CLI field metadata"}); continue }
+    if flag.short != "" {
+      if len(flag.short) != 1 || flag.short[0] > 127 { errors = append(errors, DecodeError{path: flag.field, message: "short flag must be one ASCII character"}) }
+      if flag.short == "h" { errors = append(errors, DecodeError{path: flag.field, message: "short flag h is reserved for help"}) }
+      if previous, duplicate := shorts[flag.short]; duplicate { errors = append(errors, DecodeError{path: flag.field, message: "short flag duplicates " + previous}) }
+      shorts[flag.short] = flag.field
+    }
+    if flag.env != "" {
+      if previous, duplicate := envs[flag.env]; duplicate { errors = append(errors, DecodeError{path: flag.field, message: "environment variable duplicates " + previous}) }
+      envs[flag.env] = flag.field
+    }
+    if flag.positional {
+      if positional != "" { errors = append(errors, DecodeError{path: flag.field, message: "positional field duplicates " + positional}) }
+      positional = flag.field
+    }
+    metadata[flag.field] = flag
+  }
+  if len(errors) != 0 { return Error{errors: errors} }
+  fields := make([]reflect.StructField, len(schema))
+  for i, field := range schema {
+    typ := reflect.TypeFor[*string]()
+    if field.Kind == "bool" { typ = reflect.TypeFor[*bool]() }
+    list := strings.HasPrefix(field.Kind, "list:")
+    if list { typ = reflect.TypeFor[*[]string]() }
+    doc := field.Doc
+    if field.HasDefault { doc += fmt.Sprintf(" (default %v)", field.Default()) } else if !field.Optional { doc += " (required)" }
+    tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
+    if list { tag += " collection:\"array\"" }
+    flag := metadata[field.Name]
+    if flag.short != "" { tag += " short:" + strconv.Quote(flag.short) }
+    if flag.env != "" { tag += " env:" + strconv.Quote(flag.env) }
+    if flag.positional { tag += " positional:\"true\"" }
+    // Synthetic exported fields retain the original name as an explicit boa tag.
+    tag += " long:" + strconv.Quote(makeName(field.Name))
+    fields[i] = reflect.StructField{Name: fmt.Sprintf("Field%d", i), Type: typ, Tag: reflect.StructTag(tag)}
+  }
+  shadow := reflect.New(reflect.StructOf(fields))
+  var output bytes.Buffer
+  var result any
+  ran := false
+  command := boa.Cmd{
+    Use: name, Short: description, Params: shadow.Interface(),
+    ParamEnrich: boa.ParamEnricherName,
+    RunFunc: func(cmd *cobra.Command, remaining []string) {
+      ran = true
+      jsonFields := []JsonField{}
+      failures := []DecodeError{}
+      for i, field := range schema {
+        value := shadow.Elem().Field(i)
+        if value.IsNil() {
+          if field.HasDefault { continue }
+          if !field.Optional { failures = append(failures, DecodeError{path: "." + field.Name, message: "is missing"}); continue }
+          jsonFields = append(jsonFields, JsonField{name: field.Name, value: Json_Null{}})
+          continue
+        }
+        var json Json
+        if strings.HasPrefix(field.Kind, "list:") {
+          values := []Json{}
+          invalid := false
+          for j, raw := range value.Elem().Interface().([]string) {
+            if strings.TrimPrefix(field.Kind, "list:") == "string" { values = append(values, Json_String{value: raw}); continue }
+            parsed := parse(raw)
+            if err, bad := parsed.(JsonError); bad { failures = append(failures, DecodeError{path: fmt.Sprintf(".%s[%d]", field.Name, j), message: err.message}); invalid = true; continue }
+            values = append(values, parsed.(Json))
+          }
+          if invalid { continue }
+          json = Json_Array{items: values}
+        } else if field.Kind == "bool" { json = Json_Bool{value: value.Elem().Bool()} } else {
+          raw := value.Elem().String()
+          if field.Kind == "string" { json = Json_String{value: raw} } else {
+            parsed := parse(raw)
+            if err, bad := parsed.(JsonError); bad { failures = append(failures, DecodeError{path: "." + field.Name, message: err.message}); continue }
+            json = parsed.(Json)
+          }
+        }
+        if err, bad := field.Decode(json).(DecodeError); bad { failures = append(failures, err); continue }
+        jsonFields = append(jsonFields, JsonField{name: field.Name, value: json})
+      }
+      if len(failures) != 0 { result = Error{errors: failures}; return }
+      decoded := _d_T_Decode.decode(Json_Object{fields: jsonFields})
+      if err, bad := decoded.(DecodeError); bad { result = Error{errors: []DecodeError{err}} } else { result = decoded }
+    },
+  }
+  cmd, err := command.ToCobraE()
+  if err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
+  cmd.SetArgs(append([]string{}, args...))
+  cmd.SetOut(&output)
+  cmd.SetErr(&output)
+  cmd.SilenceUsage = true
+  cmd.SilenceErrors = true
+  if err := cmd.Execute(); err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
+  if !ran { return Help{text: output.String()} }
+  return result
+}
+
+// Run reads process arguments and invokes the handler in a scope after validation.
+// Help is printed; errors remain values for the application to render and exit.
+fn Run[T: Decode](name: String, description: String, run: (T, Scope) => Unit, flags: List[Flag] = []) uses io: Unit | Error {
+  match (Parse[T](name, description, args(), flags)) {
+    help: Help => { print(help.text) }
+    error: Error => error
+    options: T => { scope s { run(options, s) } }
+  }
+}
+
+fn print(text: String) uses io unsafe go {
+  import "fmt"
+  fmt.Print(text)
+}
+fn flagName(field: String): String unsafe go {
+  import "strings"
+  import "unicode"
+  runes := []rune(field)
+  var name strings.Builder
+  for i, r := range runes {
+    if i > 0 && unicode.IsUpper(r) && (unicode.IsLower(runes[i-1]) || unicode.IsDigit(runes[i-1]) || i+1 < len(runes) && unicode.IsLower(runes[i+1])) { name.WriteByte('-') }
+    name.WriteRune(unicode.ToLower(r))
+  }
+  return name.String()
+}

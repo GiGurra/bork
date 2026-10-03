@@ -351,3 +351,9 @@ See [exact arithmetic and money](math.md) and [examples/math](../examples/math/m
   `bork emit` prints source with those directives and a comment listing files
   that must be staged beside it. Its output alone does not contain asset data.
   See [examples/embed](../examples/embed/main.bork).
+
+`bork/cli` parses a derived `Decode` record through boa. `Parse[T]` accepts
+explicit arguments and returns options, collected errors, or help text; `Run[T]`
+uses process arguments and calls a handler in a scope. Field docs/defaults appear
+in help; `cli.Flag` supplies short/env/positional metadata. Lists use repeated
+flags. See [the schema adapter](std-go.md#command-line-schema-adapter).

@@ -34,6 +34,9 @@ func (g *gen) decodeSchema(ci *check.ClassInstance, record *check.Record) string
 
 // decodeKind uses the actual decoder dictionary for generic field types.
 func (g *gen) decodeKind(typ check.Type) string {
+	if list, ok := typ.(*check.List); ok {
+		return strconv.Quote("list:") + " + " + g.decodeKind(list.Elem)
+	}
 	if check.IsOption(typ) {
 		return g.decodeKind(check.TypeArgs(typ)[0])
 	}
