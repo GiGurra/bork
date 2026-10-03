@@ -781,10 +781,11 @@ Resolve each field as a root, in declaration order; repeated field types share
 one value. A provider of R itself is unused. Fields with defaults still require
 providers. List fields require a list provider without implicit aggregation.
 Field facts and record invariants must hold; construction visibility is checked
-at the call site exactly as for a handwritten literal. A private constructor
-cannot be bypassed. Public records remain publicly constructible; a private
-factory alone does not restrict literals. For a sealed representation with
-private variants, use `assemble[T]` with its public factory.
+at the call site exactly as for a handwritten literal. A `type R = private { ... }`
+record can be assembled by fields only in its declaring package. Importers use
+`assemble[R]` with an exported factory. Public records remain publicly
+constructible; a private factory alone does not restrict literals. For a sealed
+representation with private variants, use `assemble[T]` with its public factory.
 
 ### Diagnostics and describe
 

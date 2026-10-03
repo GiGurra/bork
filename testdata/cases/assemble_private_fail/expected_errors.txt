@@ -1,0 +1,1 @@
+main.bork:4:44: cannot construct Config: package example.com/assemble_private_fail/settings controls its construction; use an exported constructor or update method from that package
