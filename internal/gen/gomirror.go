@@ -64,7 +64,7 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 					if con.HasSiblingArgs() {
 						w.line("if _bindPathValid(" + saved + ", _path) {")
 					}
-					w.factAtPath("out."+name(f.Name).Name, f.Type, splitPath(con.Path), path, fieldConstraint(con, func(n string) string { return "out." + name(n).Name }), saved)
+					w.factAtPath("out."+name(f.Name).Name, f.Type, splitPath(con.Path), path, fieldConstraint(con, func(n string) string { return "out." + name(n).Name }), saved, con)
 					if con.HasSiblingArgs() {
 						w.line("}")
 					}
@@ -136,12 +136,17 @@ func (w *bindWriter) result(x string, t check.Type) string {
 			continue
 		}
 		for _, con := range mc.Constraints {
-			stmts := w.g.atPath(ast.NewIdent(v), t, splitPath(con.Path), func(x ast.Expr, t check.Type) []ast.Stmt {
+			stmts := w.g.atFailurePath(ast.NewIdent(v), t, splitPath(con.Path), stringLit("result"), func(x ast.Expr, t check.Type, base ast.Expr) []ast.Stmt {
 				cond := w.g.constraintCond(w.bindingConstraint(con), x, t)
 				if cond == nil {
 					return nil
 				}
-				src := fmt.Sprintf("package main\nfunc _(){ if !(%s) { return _bindValueError(%q,%q) } }", w.g.text(cond), "result", "must be "+con.String())
+				setup, path, message := w.g.constraintFailure(w.bindingConstraint(con), x, t, base, con)
+				var details strings.Builder
+				for _, stmt := range setup {
+					details.WriteString(w.g.text(stmt) + "\n")
+				}
+				src := fmt.Sprintf("package main\nfunc _(){ if !(%s) { %s return _bindValueError(%s,%s) } }", w.g.text(cond), details.String(), w.g.text(path), w.g.text(message))
 				f, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
 				if err != nil {
 					panic(err)
@@ -230,13 +235,18 @@ func (w *bindWriter) endCollection(key string) {
 	w.line("}")
 }
 
-func (w *bindWriter) factAtPath(x string, t check.Type, steps []string, path string, con *check.Constraint, conversionErrors string) {
+func (w *bindWriter) factAtPath(x string, t check.Type, steps []string, path string, con *check.Constraint, conversionErrors string, written ...*check.Constraint) {
 	if len(steps) == 0 {
 		cond := w.g.constraintCond(con, ast.NewIdent(x), t)
 		if cond == nil {
 			return
 		}
-		w.line(fmt.Sprintf("if _bindPathValid(%s,%s) && !(%s) { _errs=append(_errs,_bindValueError(%s,%q)) }", conversionErrors, path, w.g.text(cond), path, "must be "+con.String()))
+		setup, failurePath, message := w.g.constraintFailure(con, ast.NewIdent(x), t, ast.NewIdent(path), written...)
+		w.line(fmt.Sprintf("if _bindPathValid(%s,%s) && !(%s) {", conversionErrors, path, w.g.text(cond)))
+		for _, stmt := range setup {
+			w.line(w.g.text(stmt))
+		}
+		w.line(fmt.Sprintf("_errs=append(_errs,_bindValueError(%s,%s)) }", w.g.text(failurePath), w.g.text(message)))
 		return
 	}
 	step, rest := steps[0], steps[1:]
@@ -244,18 +254,18 @@ func (w *bindWriter) factAtPath(x string, t check.Type, steps []string, path str
 	case *check.List:
 		i, e := w.newTmp(), w.newTmp()
 		w.line(fmt.Sprintf("for %s,%s:=range %s {", i, e, x))
-		w.factAtPath(e, t.Elem, rest, fmt.Sprintf("_bindIndex(%s,%s)", path, i), con, conversionErrors)
+		w.factAtPath(e, t.Elem, rest, fmt.Sprintf("_bindIndex(%s,%s)", path, i), con, conversionErrors, written...)
 		w.line("}")
 	case *check.Record:
 		if f := t.Field(step); f != nil {
-			w.factAtPath(x+"."+step, f.Type, rest, path+" + "+strconv.Quote("."+step), con, conversionErrors)
+			w.factAtPath(x+"."+step, f.Type, rest, path+" + "+strconv.Quote("."+step), con, conversionErrors, written...)
 		}
 	case *check.Sealed:
 		for _, v := range t.Variants {
 			if f := v.Field(step); f != nil {
 				e, ok := w.newTmp(), w.newTmp()
 				w.line(fmt.Sprintf("if %s,%s:= %s.(%s);%s {", e, ok, x, w.g.text(w.g.variantType(v)), ok))
-				w.factAtPath(e+"."+step, f.Type, rest, path+" + "+strconv.Quote("."+step), con, conversionErrors)
+				w.factAtPath(e+"."+step, f.Type, rest, w.g.text(diagnosticFieldPath(ast.NewIdent(path), t, step)), con, conversionErrors, written...)
 				w.line("}")
 			}
 		}

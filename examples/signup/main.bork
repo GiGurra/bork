@@ -86,5 +86,5 @@ test "decodes and registers a request" {
 
 test "rejects broken where clauses" {
   assertEqual(handle(2, "{\"name\": \"\", \"plan\": \"Free\"}"), "bad   line 2: .name: must be nonEmpty")
-  assertEqual(handle(3, "{\"name\": \"bo\", \"plan\": {\"type\": \"Paid\", \"seats\": 0}}"), "bad   line 3: .plan.seats: must be between(1, 500)")
+  assertEqual(handle(3, "{\"name\": \"bo\", \"plan\": {\"type\": \"Paid\", \"seats\": 0}}"), "bad   line 3: .plan.seats: must satisfy value >= 1 (between(1, 500))")
 }

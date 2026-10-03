@@ -1,0 +1,18 @@
+GoValueError { path: "result.xs[1]", message: "must satisfy value >= low (atLeast(low))" }
+DecodeError { path: ".second", message: "must satisfy value != first (different(first))" }
+DecodeError { path: ".xs[1]", message: "must satisfy value >= low (atLeast(low))" }
+DecodeError { path: ".xs[1]", message: "must satisfy value >= low (atLeast(low))" }
+GoValueError { path: "result.xs[1]", message: "must satisfy value >= low (atLeast(low))" }
+DecodeError { path: ".limit", message: "must satisfy limit >= 1024 (configured)" }
+DecodeError { path: ".low", message: "must satisfy low <= high (configured)" }
+DecodeError { path: ".config.limit", message: "must satisfy limit >= 1024 (configured)" }
+DecodeError { path: ".port", message: "must satisfy value < 65536 (portRange)" }
+DecodeError { path: ".high", message: "must satisfy value >= low (atLeast(low))" }
+DecodeError { path: ".limit", message: "must satisfy limit >= 1024 (boxValid)" }
+DecodeError { path: "", message: "must be hidden" }
+DecodeError { path: "", message: "must be either" }
+GoValueError { path: "result.limit", message: "must satisfy limit >= 1024 (configured)" }
+GoValueError { path: "result.high", message: "must satisfy value >= low (atLeast(low))" }
+GoValueError { path: "result.limit", message: "must satisfy limit >= 1024 (phantomValid)" }
+ConfigError { errors: [DecodeError { path: ".limit", message: "must satisfy limit >= 1024 (configured)" }] }
+Error { errors: [DecodeError { path: ".limit", message: "must satisfy limit >= 1024 (configured)" }] }

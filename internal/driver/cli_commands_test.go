@@ -50,7 +50,7 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 		{name: "serve-env", env: "9090", args: []string{"serve", "--host", "localhost"}, want: []string{"port: 9090", "serve closed"}},
 		{name: "serve-flags", env: "9090", args: []string{"serve", "--host", "localhost", "-p", "443"}, want: []string{"port: 443", "serve closed"}},
 		{name: "echo", args: []string{"echo", "one", "two"}, want: []string{`["one", "two"]`, "echo closed\nUnit"}, absent: []string{"serve closed"}},
-		{name: "validation", args: []string{"serve", "--port", "0"}, want: []string{".host", "is missing", ".port", "must be validPort"}, absent: []string{"closed", "Unit"}},
+		{name: "validation", args: []string{"serve", "--port", "0"}, want: []string{".host", "is missing", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Unit"}},
 		{name: "bad-flag", args: []string{"serve", "--missing"}, want: []string{"unknown flag", "Error {"}, absent: []string{"closed", "Unit"}},
 		{name: "unknown-command", args: []string{"missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},
 		{name: "unknown-help", args: []string{"help", "missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Unit"}},

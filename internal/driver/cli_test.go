@@ -35,7 +35,7 @@ fn main() {
 	}{
 		{name: "env-defaults", env: "Ada", want: []string{`name: "Ada"`, "port: 8080", "verbose: true", "closed\nUnit"}},
 		{name: "cli-precedence", env: "Env", args: []string{"--name", "CLI", "-p", "443", "--verbose=false"}, want: []string{`name: "CLI"`, "port: 443", "verbose: false", "closed\nUnit"}, absent: []string{`name: "Env"`}},
-		{name: "empty-env", args: []string{"--port", "0"}, want: []string{".name", "is missing", ".port", "must be validPort"}, absent: []string{"closed", "Unit"}},
+		{name: "empty-env", args: []string{"--port", "0"}, want: []string{".name", "is missing", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Unit"}},
 		{name: "help", env: "Ada", args: []string{"--help"}, want: []string{"Example", "Usage:", "--name", "default 8080", "Unit"}, absent: []string{"Options {", "closed"}},
 		{name: "bad-flag", args: []string{"--missing"}, want: []string{"Error {", "unknown flag"}, absent: []string{"closed", "Unit"}},
 		{name: "unexpected-positional", env: "Ada", args: []string{"unexpected"}, want: []string{"Error {"}, absent: []string{"closed", "Unit"}},
@@ -101,7 +101,7 @@ fn main() {
 		{name: "selected-file", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, selected: `{"name":"selected","port":84}`, args: []string{"--config", "selected.json"}, want: []string{`name: "selected"`, "port: 84"}},
 		{name: "selected-env", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected"}`, envFile: "selected.json", want: []string{`name: "selected"`}},
 		{name: "selector-cli-precedence", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected"}`, envFile: "missing.json", args: []string{"--config", "selected.json"}, want: []string{`name: "selected"`}},
-		{name: "final-validation", base: `{"name":"","port":0}`, override: `{}`, want: []string{".name", "must be nonempty", ".port", "must be validPort"}, absent: []string{"closed", "Unit"}},
+		{name: "final-validation", base: `{"name":"","port":0}`, override: `{}`, want: []string{".name", "must be nonempty", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Unit"}},
 		{name: "overridden-invalid", base: `{"name":"","port":0}`, override: `{}`, args: []string{"--port", "443", "cli"}, want: []string{`name: "cli"`, "port: 443", "closed\nUnit"}},
 		{name: "null-optional", base: `{"name":"base","config":null}`, override: `{}`, want: []string{"config: Option.None", "closed\nUnit"}},
 		{name: "wrong-type", base: `{"name":false,"port":"bad","tags":false}`, override: `{}`, want: []string{".name", ".port", ".tags"}, absent: []string{"closed", "Unit"}},

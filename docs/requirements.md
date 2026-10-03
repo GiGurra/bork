@@ -3756,3 +3756,21 @@ and receive-case representations have package-controlled construction so
 native completion/selection handles cannot be paired with the wrong types.
 Generic result unions that specialize to one type retain that type at their
 Go call boundary, including references to the specialized function.
+
+### Invariant failure diagnostics (bork-lajucp)
+
+`DecodeError` and `GoValueError` retain their `{path, message}` shape. A failed
+transparent comparison or AND group reports the first failed condition in
+source order, its primary candidate field path, and the invariant's name.
+For example, a configuration budget failure is
+`DecodeError { path: ".bodyLimitBytes", message: "must satisfy bodyLimitBytes >= 1024 (Configured)" }`.
+Relations name every compared field in the message. Field and sibling facts
+use the same diagnostics, with list indices and nested fields in the path.
+Decode, environment/CLI loading, and checked Go conversion share this behavior.
+
+Diagnostic expansion supports comparisons of parameters, field projections,
+and constants, and AND groups of those comparisons. Native/opaque bodies,
+statements, OR groups, and other expressions retain the named-predicate
+fallback. A single scalar unary comparison also retains its existing concise
+predicate message. Validation still runs the original predicate first;
+diagnostics explain a failure without changing which values are accepted.

@@ -2,7 +2,7 @@ GET /health -> 200 ok
 POST /signup {"name": "ann", "plan": "Free"} -> 201 {"name":"ann","seats":1}
 POST /signup {"name": "bob", "age": 40, "plan": {"type": "Paid", "seats": 12}} -> 201 {"name":"bob","seats":12}
 POST /signup {"name": "", "plan": "Free"} -> 422 {"path":".name","message":"must be nonEmpty"}
-POST /signup {"name": "cy", "plan": {"type": "Paid", "seats": 0}} -> 422 {"path":".plan.seats","message":"must be between(1, 500)"}
+POST /signup {"name": "cy", "plan": {"type": "Paid", "seats": 0}} -> 422 {"path":".plan.seats","message":"must satisfy value \u003e= 1 (between(1, 500))"}
 POST /signup {"name": "dee" -> 400 {"path":"","message":"unexpected end of JSON: expected ',' or '}'"}
 GET /signup -> 405 use POST
 GET /nope -> 404 not found

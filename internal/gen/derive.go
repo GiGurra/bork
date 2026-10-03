@@ -127,30 +127,26 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 	}
 	for i, f := range fields {
 		v := fmt.Sprintf("_f%d", i)
-		path := strconv.Quote("." + f.Name)
 		for _, con := range f.Constraints {
-			msg := strconv.Quote("must be " + con.String())
-			stmts := g.atPath(ast.NewIdent(v), f.Type, splitPath(con.Path), func(x ast.Expr, t check.Type) []ast.Stmt {
-				cond := g.constraintCond(fieldConstraint(con, func(n string) string {
+			stmts := g.atFailurePath(ast.NewIdent(v), f.Type, splitPath(con.Path), stringLit("."+f.Name), func(x ast.Expr, t check.Type, path ast.Expr) []ast.Stmt {
+				runtime := fieldConstraint(con, func(n string) string {
 					for j, sibling := range fields {
 						if sibling.Name == n {
 							return fmt.Sprintf("_f%d", j)
 						}
 					}
 					return name(n).Name
-				}), x, t)
+				})
+				cond := g.constraintCond(runtime, x, t)
 				if cond == nil {
 					return nil
 				}
-				return []ast.Stmt{&ast.IfStmt{
-					Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)},
-					Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{
-						&ast.CompositeLit{Type: g.goType(g.info.Named["DecodeError"]), Elts: []ast.Expr{
-							&ast.KeyValueExpr{Key: ast.NewIdent("path"), Value: &ast.BasicLit{Kind: token.STRING, Value: path}},
-							&ast.KeyValueExpr{Key: ast.NewIdent("message"), Value: &ast.BasicLit{Kind: token.STRING, Value: msg}},
-						}},
-					}}}},
-				}}
+				setup, failurePath, message := g.constraintFailure(runtime, x, t, path, con)
+				ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.info.Named["DecodeError"]), Elts: []ast.Expr{
+					&ast.KeyValueExpr{Key: ast.NewIdent("path"), Value: failurePath},
+					&ast.KeyValueExpr{Key: ast.NewIdent("message"), Value: message},
+				}}}}
+				return []ast.Stmt{&ast.IfStmt{Cond: &ast.UnaryExpr{Op: token.NOT, X: paren(cond)}, Body: &ast.BlockStmt{List: append(setup, ret)}}}
 			})
 			for _, s := range stmts {
 				b.WriteString(g.text(s) + "\n")
@@ -162,7 +158,12 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 	for _, inv := range invariants {
 		for _, con := range inv.constraints {
 			if cond := g.constraintCond(con, ast.NewIdent("_out"), inv.typ); cond != nil {
-				fmt.Fprintf(&b, "if !(%s) {\n%s}\n", g.text(cond), g.decodeError(`""`, strconv.Quote("must be "+con.String())))
+				setup, path, message := g.constraintFailure(con, ast.NewIdent("_out"), inv.typ, stringLit(""))
+				fmt.Fprintf(&b, "if !(%s) {\n", g.text(cond))
+				for _, stmt := range setup {
+					b.WriteString(g.text(stmt) + "\n")
+				}
+				b.WriteString(g.decodeError(g.text(path), g.text(message)) + "}\n")
 			}
 		}
 	}

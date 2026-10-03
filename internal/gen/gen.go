@@ -237,12 +237,12 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 		}
 		funcs = append(funcs, g.instanceDecl(ci))
 	}
-	funcs = append(funcs, g.extraFuncs...)
 	if main != nil {
 		funcs = append(funcs, main)
 	}
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)
+	decls = append(decls, g.extraFuncs...)
 	for _, f := range files {
 		for _, td := range f.Types {
 			if td.GoName == nil {
@@ -395,8 +395,9 @@ type gen struct {
 	blockOwners []blockOwner
 	// testMode generates checks of trusted facts (see Tests), and
 	// extraFuncs holds functions to emit besides the reachable ones.
-	testMode   bool
-	extraFuncs []ast.Decl
+	testMode             bool
+	extraFuncs           []ast.Decl
+	invariantDiagnostics map[*check.Func]bool
 	// genFuncs are the functions generating values for property tests,
 	// and propRoots the predicates their facts call.
 	genFuncs  []genFunc
