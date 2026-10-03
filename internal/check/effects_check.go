@@ -325,6 +325,7 @@ func (u *effectUses) expr(x Expr) {
 // noteOpen records a use of the open parameter x refers to, unless one
 // is recorded; text is what the code does with it, with %s for x.
 func (u *effectUses) noteOpen(x Expr, text string) {
+	x = debugValue(x)
 	if u.open != nil {
 		return
 	}
@@ -354,6 +355,7 @@ func (u *effectUses) noMain(fn *Func, pos diag.Pos) bool {
 // describeFunc names a function value in a reason: "f", "run", "a
 // lambda that calls println".
 func (u *effectUses) describeFunc(x Expr) string {
+	x = debugValue(x)
 	switch x := x.(type) {
 	case *VarRef:
 		return x.Var.Name

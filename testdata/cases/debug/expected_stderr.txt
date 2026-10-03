@@ -1,0 +1,11 @@
+main.bork:12 tick() = 7
+main.bork:13 2 = 2
+main.bork:6 x = 2
+main.bork:14 Box { value: 3 } = box(3)
+main.bork:8 x = 3.0
+main.bork:16 [1, 2] = [1, 2]
+main.bork:17 "å" = å
+main.bork:18 3 + 4 = 7
+main.bork:19 positive(2) = true
+main.bork:19 2 = 2
+main.bork:6 x = 2

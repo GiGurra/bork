@@ -13,7 +13,8 @@ import (
 // lowerer builds the typed tree (see tree.go) from the syntax and what
 // the checker recorded about it.
 type lowerer struct {
-	info *Info
+	info    *Info
+	sources map[string]*syntax.File
 	// vars holds the variable each declaring syntax node introduced (a
 	// parameter, binding, pattern, or scope block), for the identifiers
 	// that refer to it.
@@ -22,7 +23,10 @@ type lowerer struct {
 
 // lower builds the typed tree of every function body, test, and rule.
 func (c *checker) lower(files []*syntax.File) {
-	l := &lowerer{info: c.info, vars: map[any]*Var{}}
+	l := &lowerer{info: c.info, vars: map[any]*Var{}, sources: map[string]*syntax.File{}}
+	for _, f := range files {
+		l.sources[f.Path] = f
+	}
 	for _, f := range files {
 		for _, fd := range f.Funcs {
 			if fn := c.info.FuncOf[fd]; fn != nil {
@@ -164,7 +168,14 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 			return call
 		}
 		if b := l.info.callBuiltins[x]; b != BuiltinNone {
-			return &CallBuiltin{expr: at, Builtin: b, Name: x.Fun.(*syntax.Ident).Name, Args: l.exprs(x.Args), Conv: l.info.conversions[x]}
+			call := &CallBuiltin{expr: at, Builtin: b, Name: x.Fun.(*syntax.Ident).Name, Args: l.exprs(x.Args), Conv: l.info.conversions[x]}
+			if b == BuiltinDbg && x.Pipe.File != "" {
+				call.DebugText = sourceText(l.sources[x.PipeStart.File], x.PipeStart, x.PipeEnd)
+			} else if b == BuiltinDbg && len(x.Arguments) == 1 {
+				arg := x.Arguments[0]
+				call.DebugText = sourceText(l.sources[arg.Pos.File], arg.Pos, arg.End)
+			}
+			return call
 		}
 		at.token = x.Pos
 		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args)}

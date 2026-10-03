@@ -23,14 +23,18 @@ func (p Pos) String() string {
 // Diagnostic is a single compiler error, reported in the Go-style
 // file:line:col format so editors can click through.
 type Diagnostic struct {
-	Pos   Pos    `json:"-"`
-	End   Pos    `json:"-"`
-	Msg   string `json:"message"`
-	Code  string `json:"code"`
-	Fixes []Fix  `json:"fixes,omitempty"`
+	Pos      Pos    `json:"-"`
+	End      Pos    `json:"-"`
+	Msg      string `json:"message"`
+	Code     string `json:"code"`
+	Severity string `json:"severity,omitempty"`
+	Fixes    []Fix  `json:"fixes,omitempty"`
 }
 
 func (d Diagnostic) String() string {
+	if d.Severity == "warning" {
+		return fmt.Sprintf("%s: warning: %s", d.Pos, d.Msg)
+	}
 	return fmt.Sprintf("%s: %s", d.Pos, d.Msg)
 }
 
@@ -68,8 +72,9 @@ func (d Diagnostic) MarshalJSON() ([]byte, error) {
 		EndColumn     int    `json:"end_column"`
 		Message       string `json:"message"`
 		Code          string `json:"code"`
+		Severity      string `json:"severity,omitempty"`
 		Fixes         []Fix  `json:"fixes,omitempty"`
-	}{1, d.Pos.File, d.Pos.Line, d.Pos.Col, end.Line, end.Col, d.Msg, code, d.Fixes})
+	}{1, d.Pos.File, d.Pos.Line, d.Pos.Col, end.Line, end.Col, d.Msg, code, d.Severity, d.Fixes})
 }
 
 // List collects diagnostics.
@@ -84,6 +89,11 @@ func (l *List) Add(pos Pos, format string, args ...any) {
 // AddCode reports a diagnostic with a stable code independent of its message.
 func (l *List) AddCode(pos Pos, code, format string, args ...any) {
 	l.items = append(l.items, Diagnostic{Pos: pos, End: pos, Msg: fmt.Sprintf(format, args...), Code: code})
+}
+
+// Warn reports a nonfatal diagnostic.
+func (l *List) Warn(pos Pos, code, message string) {
+	l.items = append(l.items, Diagnostic{Pos: pos, End: pos, Msg: message, Code: code, Severity: "warning"})
 }
 
 // Suggest adds a range and optional fixes to a previously reported diagnostic.

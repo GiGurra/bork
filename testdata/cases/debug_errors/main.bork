@@ -1,0 +1,7 @@
+fn noArg() { dbg() }
+fn twoArgs() { dbg(1, 2) }
+fn noValue() { dbg(println("unit")) }
+fn badMessage() { todo(1) }
+fn twoMessages() { todo("one", "two") }
+fn effectful() { dbg(println("effect")) }
+fn main() {}

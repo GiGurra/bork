@@ -295,6 +295,7 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 	if f.observe != nil && f.collect == nil {
 		f.observe(x.Pos(), e)
 	}
+	x = debugValue(x)
 	switch x := x.(type) {
 	case *Block:
 		e = f.stmts(x.Stmts, e)
@@ -383,7 +384,7 @@ func (f *factChecker) walk(x Expr, e env) {
 	switch x := x.(type) {
 	case *Call:
 		for i, a := range x.Args {
-			if l, ok := a.(*Lambda); ok {
+			if l, ok := debugValue(a).(*Lambda); ok {
 				for k, p := range l.Params {
 					f.lambdaArgs[p] = lambdaArg{call: x, arg: i, param: k}
 				}
@@ -613,6 +614,7 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 // project selects a field, preserving the identity of a value supplied by a
 // literal or copy instead of inventing an identity for the whole expression.
 func (f *factChecker) project(x Expr, name string) Expr {
+	x = debugValue(x)
 	switch v := x.(type) {
 	case *VarRef:
 		if v.Var.Kind == VarLet {
@@ -856,7 +858,7 @@ func (f *factChecker) knownOf(con *Constraint, subst func(string) argVal) []know
 // caller's own predicate parameter, or the facts a lambda's body
 // establishes about its parameter (`x => positive(x) && small(x)`).
 func (f *factChecker) predsOf(arg argVal) []known {
-	switch x := arg.expr.(type) {
+	switch x := debugValue(arg.expr).(type) {
 	case *FuncRef:
 		if x.Inst.Func.Decl.IsPred && len(x.Inst.Func.Params) == 1 {
 			return []known{{pred: x.Inst.Func}}
@@ -981,6 +983,7 @@ type branch struct {
 // not possible; otherwise the proof may still depend on predicates of
 // constants, returned as queries to evaluate at compile time.
 func (f *factChecker) prove(x Expr, ob obligation, e env, depth int) (bool, []Query) {
+	x = debugValue(x)
 	if depth > maxDepth || (ob.pred == nil && ob.or == nil) {
 		return false, nil
 	}
@@ -1490,6 +1493,7 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 // closed reports whether x is made of constants only: a constant, or a
 // list, record, or variant literal of them.
 func (f *factChecker) closed(x Expr) bool {
+	x = debugValue(x)
 	if constOf(x) != nil {
 		return true
 	}
@@ -1516,6 +1520,7 @@ func (f *factChecker) closed(x Expr) bool {
 
 // literalText shows a closed expression as written.
 func (f *factChecker) literalText(x Expr) string {
+	x = debugValue(x)
 	if v := constOf(x); v != nil {
 		return CArg{Const: v}.String()
 	}
@@ -1578,6 +1583,7 @@ func (f *factChecker) all(ob obligation, depth int, bs ...branch) (bool, []Query
 // proveMember proves ob for the values of member type m that x (of a
 // union type) can produce.
 func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth int) (bool, []Query) {
+	x = debugValue(x)
 	if depth > maxDepth {
 		return false, nil
 	}
@@ -1606,6 +1612,7 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 // how it was computed: facts from guards and trust, and the facts that
 // declarations and promises give it.
 func (f *factChecker) declared(x Expr, e env, depth int) []known {
+	x = debugValue(x)
 	var out []known
 	if k := f.key(x); k != "" {
 		for _, ft := range e.facts {
@@ -1693,6 +1700,7 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 // declaredMember lists what a function promises about the member m of
 // the union x produces.
 func (f *factChecker) declaredMember(x Expr, m Type) []known {
+	x = debugValue(x)
 	var out []known
 	switch x := x.(type) {
 	case *Call:
@@ -1755,7 +1763,7 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 		f.fn = saveFn
 		if !ok {
 			// Returning a parameter: prove it for the argument.
-			if ref, isRef := path.x.(*VarRef); isRef && isParamOf(ref.Var, fn) && ref.Var.Index < len(call.Args) {
+			if ref, isRef := debugValue(path.x).(*VarRef); isRef && isParamOf(ref.Var, fn) && ref.Var.Index < len(call.Args) {
 				ok, p = f.prove(call.Args[ref.Var.Index], ob, e, depth+1)
 			}
 		}
@@ -2081,6 +2089,7 @@ func alternatives(fs []fact) [][]fact {
 // conditionFacts lists the facts a condition establishes when it is
 // true (or, with positive false, when it is false).
 func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
+	cond = debugValue(cond)
 	switch c := cond.(type) {
 	case *Unary:
 		if c.Op == syntax.Not {
@@ -2116,7 +2125,7 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 		}
 		return []fact{ft}
 	case *CallValue:
-		if p, ok := c.Fun.(*VarRef); ok && positive && p.Var.Kind == VarParam && len(c.Args) == 1 {
+		if p, ok := debugValue(c.Fun).(*VarRef); ok && positive && p.Var.Kind == VarParam && len(c.Args) == 1 {
 			if ft, ok := p.Var.Type.(*FuncType); ok && ft.Effects == 0 && ft.Result == Bool {
 				if subject := f.key(c.Args[0]); subject != "" {
 					return []fact{{pred: f.paramPred(p.Var), subject: subject}}
@@ -2134,6 +2143,7 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 // Bindings to another value share its key. Values that cannot be
 // identified (calls, arithmetic) have no key.
 func (f *factChecker) key(x Expr) string {
+	x = debugValue(x)
 	if v := constOf(x); v != nil {
 		return constKey(v)
 	}
@@ -2167,6 +2177,7 @@ func (f *factChecker) key(x Expr) string {
 
 // aliasKey is the key of x if binding x just gives a value another name.
 func (f *factChecker) aliasKey(x Expr) string {
+	x = debugValue(x)
 	switch x.(type) {
 	case *VarRef, *Select:
 		return f.key(x)
@@ -2178,6 +2189,7 @@ func constKey(v constant.Value) string { return "c:" + v.ExactString() }
 
 // constOf is the value of x if it is a constant, or nil.
 func constOf(x Expr) constant.Value {
+	x = debugValue(x)
 	if c, ok := x.(*Const); ok {
 		return c.Value
 	}

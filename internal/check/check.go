@@ -121,6 +121,8 @@ const (
 	BuiltinToString
 	BuiltinConvert // toInt8(x), toFloat(x), ...
 	BuiltinPanic
+	BuiltinDbg
+	BuiltinTodo
 	BuiltinAssert         // assert(cond)
 	BuiltinAssertEqual    // assertEqual(actual, expected)
 	BuiltinAssertSnapshot // assertSnapshot(x)
@@ -130,6 +132,8 @@ var builtins = map[string]Builtin{
 	"println":        BuiltinPrintln,
 	"toString":       BuiltinToString,
 	"panic":          BuiltinPanic,
+	"dbg":            BuiltinDbg,
+	"todo":           BuiltinTodo,
 	"assert":         BuiltinAssert,
 	"assertEqual":    BuiltinAssertEqual,
 	"assertSnapshot": BuiltinAssertSnapshot,
@@ -1230,7 +1234,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	}
 	if b, ok := builtins[id.Name]; ok && c.lookup(id.Name) == nil {
 		c.info.callBuiltins[e] = b
-		return c.builtinCall(e, id.Name, b)
+		return c.builtinCall(e, id.Name, b, want)
 	}
 	fn, ok := c.funcNamed(id.Name)
 	if !ok {
@@ -1258,8 +1262,19 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	return c.callFunc(e, id.Name, fn, e.Args, nil, e.TypeArgs, want)
 }
 
-func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
+func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin, want Type) Type {
 	c.rejectNamedArgs(e, "compiler built-ins have no declared parameter names")
+	if b == BuiltinTodo {
+		if len(e.Args) > 1 {
+			c.errorf(e.Pos, "todo takes 0 or 1 arguments, but %d were given", len(e.Args))
+		}
+		for _, a := range e.Args {
+			if t := c.exprWant(a, String); t != String && t != Invalid && t != Never {
+				c.errorf(a.Position(), "todo needs a String message, found %s", t)
+			}
+		}
+		return Never
+	}
 	if b == BuiltinAssertEqual {
 		if len(e.Args) != 2 {
 			c.errorf(e.Pos, "assertEqual takes 2 arguments (actual, expected), but %d were given", len(e.Args))
@@ -1290,6 +1305,12 @@ func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
 		c.used |= EffIO
 	}
 	switch b {
+	case BuiltinDbg:
+		t := c.exprWant(e.Args[0], want)
+		if t != Invalid && t != Never && !isValue(t) {
+			c.errorf(e.Args[0].Position(), "dbg needs a value, found %s", t)
+		}
+		return t
 	case BuiltinPanic:
 		if t := c.exprWant(e.Args[0], String); t != String && t != Invalid {
 			c.errorf(e.Args[0].Position(), "panic needs a String message, found %s", t)

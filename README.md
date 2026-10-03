@@ -75,6 +75,8 @@ fn names(users: List[User]) uses io {
 
 `main` and tests may do anything; everything below them says what it does. See [examples/http_server](examples/http_server/main.bork).
 
+For development, `dbg(expr)` prints the expression and its value to stderr and returns it, including in pure code. `todo()` or `todo("message")` fills an unfinished branch and panics with its location if reached. `bork check` warns about both; `--json` includes a fix to remove each dbg wrapper.
+
 ## Goals
 
 - **Pragmatic high correctness for backend systems.** That is the whole point.

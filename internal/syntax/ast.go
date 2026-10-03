@@ -5,6 +5,8 @@ import "github.com/GiGurra/bork/internal/diag"
 // File is one parsed .bork source file.
 type File struct {
 	Path string
+	// Source retains the original text for compile-time debug probes.
+	Source string
 	// Package is the import path of the file's package (set by the
 	// driver), and Imports what the file imports.
 	Package string
@@ -361,6 +363,7 @@ type Binary struct {
 }
 
 type Call struct {
+	Start  diag.Pos // start of the callee, including grouping parentheses
 	Pos    diag.Pos // position of '('
 	End    diag.Pos // position after the closing ')'
 	Fun    Expr

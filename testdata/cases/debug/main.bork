@@ -1,0 +1,21 @@
+type Box = { value: Int }
+instance boxShow: Show[Box] {
+  fn show(x: Box): String { s"box(${x.value})" }
+}
+pred positive(x: Int) { x > 0 }
+fn keep(x: Int where positive): Int where positive { dbg(x) }
+fn sketch(): String { todo("implement sketch") }
+fn generic[T](x: T): T { dbg(x) }
+fn neverCalled(): Int { todo() }
+fn tick() uses io: Int { println("tick"); 7 }
+fn main() {
+  println(dbg(tick()))
+  println(keep(dbg(2)))
+  println(dbg(Box { value: 3 }))
+  println(generic(3.0))
+  println(dbg([1, 2]))
+  println(dbg("å"))
+  println(2 * dbg(3 + 4))
+  if (dbg(positive(2))) { println(keep(dbg(2))) }
+  println(if (true) { "ok" } else { todo() })
+}

@@ -1,0 +1,6 @@
+import "bork/fs"
+fn read(path: String) uses io: String | fs.Error {
+  file = scope s { dbg(fs.Open(path, s)?) }
+  fs.ReadAllText(file)
+}
+fn main() {}

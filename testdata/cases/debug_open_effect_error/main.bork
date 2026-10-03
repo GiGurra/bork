@@ -1,0 +1,4 @@
+pred apply(x: Int, f: (Int) => Bool) { dbg(f)(x) }
+pred filtered(xs: List[Int], f: (Int) => Bool) { xs.filter(dbg(f)).length() > 0 }
+fn noisy(x: Int) uses io: Bool { println(x); true }
+fn main() { println(apply(1, noisy)) }
