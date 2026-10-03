@@ -1,0 +1,17 @@
+true
+{"name":"one\ntwo","count":2}
+null
+EOF
+EOF
+1
+bad line 2
+bad line 3
+true
+"last"
+EOF
+70000
+EOF
+true
+true
+32
+Unit

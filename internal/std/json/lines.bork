@@ -1,0 +1,61 @@
+// Reader and Writer own open files until their scope closes. Operations stream
+// one line at a time without a scanner token limit and serialize concurrent use.
+type Reader = resource
+type Writer = resource
+type LineError = { path: String, line: Int, message: String }
+
+fn OpenLines(path: String, s: Scope) uses io: Reader | IoError unsafe go {
+  import "os"
+  import "bufio"
+  import "sync"
+  file, err := os.Open(path)
+  if err != nil { return IoError{path: path, message: err.Error()} }
+  line := int64(0)
+  state := struct { reader *bufio.Reader; file *os.File; line *int64; mu *sync.Mutex }{bufio.NewReader(file), file, &line, &sync.Mutex{}}
+  return Reader{handle: state, owner: s.Own(func() { file.Close() })}
+}
+// Next consumes exactly one line, accepts CRLF and a final unterminated line,
+// and returns None at EOF. Blank or malformed lines return LineError; the next
+// call continues with the following line. Other read errors return IoError.
+fn Next(reader: Reader) uses io: Option[Json] | LineError | IoError unsafe go {
+  import "os"
+  import "bufio"
+  import "io"
+  import "strings"
+  import "sync"
+  state := reader.handle.(struct { reader *bufio.Reader; file *os.File; line *int64; mu *sync.Mutex })
+  state.mu.Lock()
+  defer state.mu.Unlock()
+  line, err := state.reader.ReadString('\n')
+  if err != nil && err != io.EOF { return IoError{path: state.file.Name(), message: err.Error()} }
+  if line == "" && err == io.EOF { return _borkNone[Json]() }
+  *state.line++
+  if strings.HasSuffix(line, "\n") { line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r") }
+  parsed := parseJson(line)
+  if failure, failed := parsed.(JsonError); failed { return LineError{path: state.file.Name(), line: *state.line, message: failure.message} }
+  return _borkSome(parsed.(Json))
+}
+
+// CreateLines truncates the destination. Write emits one compact JSON value
+// and newline per call, directly to the file without a deferred flush.
+fn CreateLines(path: String, s: Scope) uses io: Writer | IoError unsafe go {
+  import "os"
+  file, err := os.Create(path)
+  if err != nil { return IoError{path: path, message: err.Error()} }
+  return Writer{handle: file, owner: s.Own(func() { file.Close() })}
+}
+fn Write[T: Encode](writer: Writer, value: T) uses io: Unit | JsonError | IoError {
+  text = encodeJson(value)
+  _ = parseJson(text)?
+  writeLine(writer, text)
+}
+fn writeLine(writer: Writer, text: String) uses io: Unit | IoError unsafe go {
+  import "os"
+  import "io"
+  file := writer.handle.(*os.File)
+  line := text + "\n"
+  size, err := file.WriteString(line)
+  if err == nil && size != len(line) { err = io.ErrShortWrite }
+  if err != nil { return IoError{path: file.Name(), message: err.Error()} }
+  return _Unit{}
+}

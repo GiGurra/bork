@@ -245,3 +245,5 @@ Import `bork/compress` for gzip Bytes codecs and streaming transfers between
 members, with Bytes codecs and file iteration/writing. Readers default to a
 64 MiB cumulative decompression limit and reject unsafe archive names and links;
 errors are `IoError` values. See [examples/compress_archive](examples/compress_archive/main.bork).
+
+`bork/json` queries dynamic JSON values, pretty-prints them, and streams JSON Lines through scope-owned readers and writers. See [json_lines](examples/json_lines/main.bork).
