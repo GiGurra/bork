@@ -393,28 +393,34 @@ func _runTests(tests []_test) {
 	for i := range tests {
 		runs[i] = &_testRun{t: &tests[i], done: make(chan struct{})}
 	}
-	// A test takes a slot until it ends, or, one at a time, until it is
-	// reported, so what it prints comes after the reports before it.
-	slots := make(chan struct{}, n)
-	go func() {
-		for i, r := range runs {
-			if r.t.run == nil {
-				close(r.done)
-				continue
-			}
-			slots <- struct{}{}
-			go func() {
-				if _tests.parallel {
-					defer func() { <-slots }()
+	if _tests.parallel {
+		go func() {
+			slots := make(chan struct{}, n)
+			for i, r := range runs {
+				if r.t.run == nil {
+					close(r.done)
+					continue
 				}
-				r.start(strconv.Itoa(i + 1))
-			}()
-		}
-	}()
+				slots <- struct{}{}
+				go func() {
+					defer func() { <-slots }()
+					r.start(strconv.Itoa(i + 1))
+				}()
+			}
+		}()
+	}
 	failed, skipped := 0, 0
 	for _, r := range runs {
-		<-r.done
 		t := r.t
+		if !_tests.parallel {
+			// One at a time, each test runs on the main goroutine, as
+			// a program's main does, and before the next is reported.
+			if t.run != nil {
+				r.start("")
+			}
+		} else {
+			<-r.done
+		}
 		switch {
 		case t.run == nil:
 			skipped++
@@ -433,9 +439,6 @@ func _runTests(tests []_test) {
 			fmt.Fprintf(out, "      wrote %s\n", path)
 		}
 		r.mu.Unlock()
-		if !_tests.parallel && r.t.run != nil {
-			<-slots
-		}
 	}
 	if skipped > 0 {
 		fmt.Fprintf(out, "%d passed, %d failed, %d skipped\n", len(tests)-failed-skipped, failed, skipped)
@@ -447,23 +450,28 @@ func _runTests(tests []_test) {
 	}
 }
 
-// start runs the test on this goroutine, as the test labelled key.
+// start runs the test on this goroutine, as the test labelled key ("",
+// one at a time).
 func (r *_testRun) start(key string) {
 	defer close(r.done)
-	if !_tests.parallel {
-		key = ""
-	} else {
+	if _tests.parallel {
 		pprof.SetGoroutineLabels(pprof.WithLabels(context.Background(), pprof.Labels("bork.test", key)))
 	}
 	_tests.Lock()
 	_tests.running[key] = r
 	_tests.Unlock()
+	finished := false
 	defer func() {
 		_tests.Lock()
 		delete(_tests.running, key)
 		_tests.Unlock()
+		if !finished {
+			// Only runtime.Goexit leaves a test this way.
+			r.msg, r.skip = "the test's goroutine exited (runtime.Goexit) before the test ended", false
+		}
 	}()
 	r.msg, r.skip = _runTest(r.t.run)
+	finished = true
 }
 
 // _indent indents a failure message's lines after the first.
