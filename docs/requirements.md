@@ -597,6 +597,211 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 - **Inline predicates:** only named predicates (`positive`), or also inline expressions (`where it > 0`)? Inline expressions require the compiler to recognise equivalent expressions.
 - **Exported return types:** do callers see only the facts a signature declares, or also facts the compiler derives from the body? A proposal: exported functions expose only the declared facts (the signature is the contract), and private functions may expose derived ones.
 
+## Compile-time dependency assembly (proposal)
+
+> **Design proposal, not implemented** (bork-25nywe). Resolve ordinary provider
+> functions at compile time, then invoke them at runtime without a container.
+
+Inspired by [q.Assemble](https://gigurra.github.io/q/api/assemble/), assembly
+uses explicit provider signatures for wiring and Bork's ordinary scopes,
+failure unions, facts and effects for its guarantees. An expression fits local
+initialization and test fixtures without duplicating signatures in a declaration
+language. q's lifetime terminators, cleanup discovery and scope cache are not
+needed for this model.
+
+### Syntax and providers
+
+Three prelude compiler intrinsics take one explicit target type, a live scope,
+and a positional list of providers:
+
+```bork
+assemble[Server](app, newConfig, openDb, newServer)
+assembleAll[Plugin](app, newConfig, authPlugin, logPlugin)
+assembleRecord[Application](app, newConfig, openDb, newServer, newWorker)
+```
+
+The intrinsics cannot be used as function values. Providers are ordinary
+functions with concrete signatures: direct declared-function references, typed
+function values, and lambdas with explicitly typed parameters. Methods use
+lambda adapters; assembly does not add bound method reference syntax. Unspecialized generic
+functions are rejected; write a monomorphic adapter (it can call the generic
+function with explicit type arguments).
+An unresolved open effect signature is rejected. A function value always means
+an invoked provider. Inject existing values, including callbacks, with a
+zero-argument provider (`() => config`), avoiding value/function ambiguity.
+Scope and provider expressions evaluate once, left to right, before invocation.
+Named arguments remain available inside providers and adapters; the intrinsic's
+heterogeneous provider list is positional.
+
+```bork
+type Config = { database: String }
+type Database = { connection: sql.Connection }
+type Server = { db: Database }
+fn newConfig(): Config { Config { database: ":memory:" } }
+fn openDb(config: Config, s: Scope) uses io + net: Database | sql.Error {
+  Database { connection: sql.OpenSqlite(config.database, s)? }
+}
+fn newServer(db: Database): Server { Server { db: db } }
+fn boot(s: Scope) uses io + net: Server | sql.Error {
+  assemble[Server](s, newServer, openDb, newConfig)
+}
+```
+
+Every `Scope` parameter receives the target scope, in any position. Scope is
+an input capability, not a product slot. `OwnedScope` inputs and outputs are
+rejected: assembly borrows scopes without transferring closing rights. A helper
+requiring two distinct scopes uses an adapter that captures one. All other
+parameters resolve through providers, including parameters with defaults;
+missing dependencies never silently select a default.
+
+### Graph resolution and order
+
+The product is the result type, or the leftmost member of a result union;
+remaining members are failures, following `?`. Union-valued products are outside
+this increment: if specialization preserves a union as a success member, reject
+that provider rather than flattening successful alternatives into failures. Use
+a wrapper record or sealed type as the product. `Option[T]` is a product, with
+no automatic unwrapping. Slot matching uses exact Bork type identity, including
+package identity and generic arguments, after separating facts. Distinct named
+records, sealed types and resources are distinct slots. Transparent aliases,
+including constrained aliases, are not brands: use wrapper records for primary
+and replica databases. There is no numeric widening, structural record matching,
+union-member injection, or class instance search. Facts are checked after
+selection and never disambiguate competing providers.
+
+`assemble[T]` requires exactly one provider of T and recursively resolves its
+parameters. Missing slots, duplicate products, cycles, invalid signatures and
+unused providers fail compilation. Duplicates are rejected throughout the
+supplied set, even when otherwise unreachable. Every provider must be reachable
+from a root; there is no unused exemption for configuration.
+
+Each provider runs once per call and shared dependencies reuse that result.
+Construction is sequential and deterministic: visit roots in their specified
+order, dependencies in parameter order, then invoke the provider. This depth
+first order defines effects and acquisition order. Provider-list order otherwise
+does not constrain execution. The first failure stops the expression; remaining
+providers do not run. Panics propagate normally. Separate assembly calls build
+separate values, even in the same scope. To share across calls, bind a value and
+supply `() => existing`; there is no scope-wide type cache.
+
+### Failures, effects and facts
+
+The expression returns `T | E1 | E2 | ...`, deduplicating failures in invocation
+order; without failures it returns T. Collection assembly substitutes `List[T]`
+for T, record assembly substitutes its record target. An ordinary `match` handles
+failures; `?` propagates them from a function declaring that union. Failure
+values are preserved, without a universal assembly error. Reject a failure type
+identical to any graph product or the final success type: flattening would
+confuse failure with success. Use a distinct failure type or adapter. Repeated
+failure types from different providers are allowed.
+
+Effects are the union of invoked provider effects and evaluation effects of the
+scope/provider expressions. Evaluating a function reference does not invoke its
+effects. There is no additional assembly effect; a pure graph remains pure.
+An unused provider is an error rather than an effect silently discarded.
+
+Direct declared-function providers retain their declaration contracts and lower
+to direct calls, rather than losing facts through a function-value conversion.
+Providers supplied through function values have only the guarantees expressed
+by that value's type; they cannot smuggle in stronger declaration facts.
+Generated calls obey ordinary parameter/result facts and scope relations.
+Promised product facts flow downstream. Unmet requirements fail at the assembly
+site with the responsible provider and parameter. Facts about captured values
+and parameter relations are checked against resolved arguments, beyond erased
+type compatibility. Assembly adds no implicit `trust`. Providers remain
+responsible for their result promises and private construction boundaries.
+
+### Resources and scopes
+
+Acquisition providers take the target Scope and use ordinary resource APIs.
+Those APIs register cleanup once. Assembly neither detects close methods nor
+adds finalizers or attaches borrowed resources. Ordinary LIFO cleanup closes
+later acquisitions before earlier dependencies. Cancellation, joins, cleanup
+failures and policies remain the scope's semantics.
+
+Products retain the lifetimes of dependencies, captures and scope-dependent
+acquisitions, following ordinary call checks. An unrelated pure product does
+not acquire a scope lifetime just from the intrinsic's leading argument.
+Injected existing values retain their own ownership. Short-lived captures cannot
+be retained in a longer-lived resource, just as in a handwritten call.
+
+On partial failure, acquired resources stay owned by the supplied scope and
+close when it ends, as with consecutive handwritten acquisitions. Assembly is
+not transactional rollback. Use a dedicated lexical scope for prompt cleanup,
+or assemble into an owned child's borrowed scope and close that child on
+failure. No child is created or closed implicitly. Scope escapes, expired scope
+inputs and use after an owned child closes fail ordinary lifetime checks.
+
+### Collections and records
+
+`assembleAll[T]` collects every exact T provider in provider-list order, with
+at least one required. Each root and shared dependency runs once. Multiple T
+providers are permitted only as collection roots; a dependency parameter of T
+is still ambiguous, including a root's own parameter. Duplicate non-target
+products remain errors. A `List[T]` provider supplies one list slot and is not
+flattened. To consume the collection in another graph, assemble it explicitly
+and inject `() => plugins`.
+
+`assembleRecord[R]` requires a concrete record and synthesizes its literal.
+Resolve each field as a root, in declaration order; repeated field types share
+one value. A provider of R itself is unused. Fields with defaults still require
+providers. List fields require a list provider without implicit aggregation.
+Field facts and record invariants must hold; construction visibility is checked
+at the call site exactly as for a handwritten literal. A private constructor
+cannot be bypassed. Public records remain publicly constructible; a private
+factory alone does not restrict literals. For a sealed representation with
+private variants, use `assemble[T]` with its public factory.
+
+### Diagnostics and describe
+
+Report independent graph problems together in stable source order, with source
+positions and codes `assemble.missing`, `assemble.duplicate`, `assemble.cycle`,
+`assemble.unused`, `assemble.provider`, `assemble.failure`, and
+`assemble.target`. Facts/effects/lifetimes retain ordinary codes with provider
+context. No invalid graph executes.
+
+Include the full rooted dependency tree: types, parameter/field names, provider
+labels and positions, and implicit scope inputs. Mark missing slots, ambiguous
+candidates, exact cycle paths, and shared nodes referencing their first
+occurrence. Append every supplied provider, including invalid and unused ones.
+Do not mark ambiguous candidates unused just because selection failed.
+
+```text
+Server <- #3 newServer
+  db: Database <- #2 openDb
+    config: Config ?? missing provider
+    s: Scope <- target app
+supplied: #1 unrelated -> String (unused), #2 openDb -> Database,
+          #3 newServer -> Server
+```
+
+`bork describe` at an assembly expression shows mode, target, result union,
+effects, tree, invocation order and provider list. Structured describe exposes
+the same information with per-call provider IDs, explicit edges, scope inputs
+and root field names. This is a compiler artifact, not runtime tracing.
+
+### Test overrides and delivery
+
+Tests replace an entry explicitly:
+`assemble[Server](s, newConfig, fakeDb, newServer)`. Listing both real and fake
+providers is a duplicate error; list order never overrides. A zero-argument
+lambda injects a fixture. Native test mocks apply to generated ordinary provider
+calls using the same test-local dispatch and inherited task context. A mock
+preserves the declared contract; choosing a distinct fake can change effects
+and failure types. Assembly intrinsics are not mockable, and have no separate
+override registry.
+
+Implement checker resolution, ordinary facts/effects/lifetimes, Go generation,
+formatting, describe and structured diagnostics. Goldens cover ordering and
+sharing, graph errors with full trees, failure short circuiting, success/failure
+cleanup, lifetime escapes, effect/fact violations, generic and constrained
+products, collection/record roots and test replacements. Include constrained
+direct providers versus saved function values, promised downstream facts, and
+rejection of union-valued specialized products. `examples/assemble`
+wires config, a database and HTTP server with scope-owned cleanup. Update grammar
+and README when implementation lands. Parallel construction, provider bundles,
+assignability matching and cross-call caching are outside this first increment.
+
 ## Resources and scopes
 
 Outside resources (files, sockets, database connections, transactions, locks) are the one place where "facts only grow" is under pressure: the handle value never changes, but closing it changes the world it refers to. bork handles this with scopes, in the style of ZIO, so the open state can never end while a resource is still reachable.
