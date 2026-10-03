@@ -227,7 +227,7 @@ r: SignUp | JsonError | DecodeError = decodeJson(line)   // DecodeError { path: 
 - **Predicates are declared with `pred`:** `pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }`. A predicate is an ordinary function returning `Bool` (callable in code), whose first parameter is the value it is about.
 - **`T where p and q(args)`** constrains parameters, results (also single members of a union result: `Int where positive | NotPositive`), record fields, constrained aliases (`type Port = Int where between(1, 65535)`), and typed bindings. Predicate arguments are constants or parameter names (`hi: Int where atLeast(lo)`).
 - **Fact sources:** a predicate call in an `if` condition (in the branch it guards), guards that end in `return` or `panic` (for the code after them), `&&` and `||` (for their right side), `!`, a function's own requirements, a callee's promised result (also through `?` and `match` on a validated union, where the fact holds only for the promising member), field declarations, typed bindings, successful bound type-pattern predicates, and `trust p(x)`.
-- **Facts are found by identity.** A fact about `x` also holds for `y = x`, and for field paths like `u.age`. A computed value (`a - 1`) has no facts unless something promises them.
+- **Facts are found by identity.** A fact about `x` also holds for `y = x`, and for field paths like `u.age`. Repeated pure calls and computed expressions share facts when their resolved operation, runtime types, and input identities match. This is structural identity, not an arithmetic theorem.
 - **Promised results are verified** against every path of the body.
 - **Requirements on constants are decided by running the predicate at compile time**, using the program's own code (including `unsafe go`): `transfer(0)` fails the build with "positive(0) is false". This works for any predicate, and for literals made of constants too: `xs: List[Int] = []; xs.first()` fails with "notEmpty([]) is false", `greet(User { name: "bob", age: 12 })` with "adult(User { name: "bob", age: 12 }) is false".
 - **Generic predicates:** `pred notEmpty[T](xs: List[T]) { !xs.isEmpty() }` applies to every list. The prelude has it, with `fn (xs: List[T] where notEmpty) first[T](): T`, which needs no `Option`; `prepend`, `append`, and `split` promise `notEmpty` results.
@@ -313,16 +313,36 @@ comparisons, negated guards, early returns, conjunction/disjunction, missing
 proofs, and cycles. Keep diagnostics naming the callee and relation arguments,
 with the existing guard/declaration suggestion.
 
-This first increment supports stable parameter, binding, and field identities;
-computed arithmetic and pure method results are not given new identities.
-Function-level `where sameLength(xs, ys)` or `where lo <= hi`, comparison
-conclusions and
-method projections such as `index < xs.length()` need separate syntax and
-identity work. They remain follow-ups, not promises of this implementation: function-level
-clauses (`bork-3ly6p0`) and pure
-method/computed identities (`bork-rgy4as`).
+Stable parameter, binding, and field identities are extended to pure methods
+and computed expressions by the projection identity implementation below.
+Function-level `where sameLength(xs, ys)` or `where lo <= hi` and
+method projections such as `index < xs.length()` are supported by function-level
+clauses (`bork-3ly6p0`) and pure method/computed identities (`bork-rgy4as`).
 Arithmetic implications must respect the sized-number overflow rules; no
 built-in `lo < hi => lo + 1 <= hi` shortcut is added here (`bork-ggj8ew`).
+
+### Pure projection identities (bork-rgy4as)
+
+Facts established about `xs.length()`, `p.total()`, or `a + b` also apply to
+another evaluation of the same pure expression. A binding of such a value
+shares its identity, so `size = xs.length()` and a guard `index < size` can
+satisfy a helper requiring `index < xs.length()`. Receiver aliases work too.
+`trust positive(a + 1)` can likewise name a reusable computed value.
+Nested fields, unary expressions and arithmetic preserve this structural
+identity, including when substituting parameters into predicates and contracts.
+
+Calls must resolve to the same declaration, generic specialization and class
+dictionaries, with the same typed argument identities and ambient inputs.
+Effectful calls, effectful open callbacks, mutable Go inputs or results, and
+calls through function values receive no reusable call identity. Reading an
+effectful result into a binding still creates a stable immutable value; facts
+about that binding do not establish facts about a fresh call.
+
+There is no commutativity, reassociation, method-body equality, or overflow
+inference: a guard about `a + b` does not prove a fact about `b + a` or `a - b`.
+Sized arithmetic constant evaluation declines overflowing intermediate results,
+and Float arithmetic rounds to its runtime precision. Float guards retain NaN
+polarity. Branch facts keep their existing scope and OR alternatives.
 
 ### Function-level relational requirements (bork-3ly6p0)
 
@@ -348,8 +368,8 @@ and combine conjunctively with function clauses. The function clause supplies
 all predicate arguments explicitly; it never inserts an implicit subject.
 Qualified predicates and locally inferred generic predicates work as ordinary
 calls do. Arguments name immutable parameters, the receiver, stable field
-projections, or constants. Arbitrary function calls and computed arithmetic
-arguments remain outside this increment.
+projections, constants, or pure computed expressions, including declared
+function and method calls. Calls through function values remain unsupported.
 
 **Clauses.** A requirement is a pure Bool predicate call or a comparison using
 `==`, `!=`, `<`, `<=`, `>`, or `>=`. Requirements combine with `and` and `or`,

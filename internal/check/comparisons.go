@@ -86,9 +86,6 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		}
 		return x
 	case *Unary:
-		if x.Op != syntax.Not {
-			return nil
-		}
 		y := *x
 		y.X = substituteExpr(x.X, bound)
 		if y.X == nil {
@@ -96,9 +93,6 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		}
 		return &y
 	case *Binary:
-		if _, comparison := compareOps[x.Op]; !comparison && x.Op != syntax.AndAnd && x.Op != syntax.OrOr {
-			return nil
-		}
 		y := *x
 		y.X, y.Y = substituteExpr(x.X, bound), substituteExpr(x.Y, bound)
 		if y.X == nil || y.Y == nil {
@@ -113,7 +107,7 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		}
 		return &y
 	case *Call:
-		if !x.Func.Decl.IsPred {
+		if !stableCall(x) {
 			return nil
 		}
 		y := *x
@@ -121,6 +115,13 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		for i, a := range x.Args {
 			y.Args[i] = substituteExpr(a, bound)
 			if y.Args[i] == nil {
+				return nil
+			}
+		}
+		y.Needs = make([]Expr, len(x.Needs))
+		for i, a := range x.Needs {
+			y.Needs[i] = substituteExpr(a, bound)
+			if y.Needs[i] == nil {
 				return nil
 			}
 		}
@@ -179,6 +180,9 @@ func (f *factChecker) unfold(v argVal, ob obligation, e env, depth int) (bool, [
 	bound := map[*Var]argVal{ob.pred.ParamVars[0]: v}
 	for i, a := range ob.args {
 		bound[ob.pred.ParamVars[i+1]] = a
+	}
+	if ob.inst == nil {
+		ob.inst = f.projectionPredicateInstance(ob.pred, v.expr, ob.args, ob.pkg)
 	}
 	body := substituteExpr(ob.pred.Body, bound)
 	if ob.inst != nil {
@@ -308,6 +312,9 @@ func (f *factChecker) comparisonKnown(want *comparison, facts []fact, depth int)
 			continue
 		}
 		f.active[goal] = true
+		if ft.inst == nil {
+			ft.inst = f.projectionPredicateInstance(ft.pred, ft.value.expr, ft.args, nil)
+		}
 		body := substituteExpr(ft.pred.Body, bound)
 		if ft.inst != nil {
 			body = substituteRequirementTypes(body, bindParams(ft.pred.TypeParams, ft.inst.TypeArgs), ft.inst.Dicts)
@@ -319,4 +326,23 @@ func (f *factChecker) comparisonKnown(want *comparison, facts []fact, depth int)
 		}
 	}
 	return false
+}
+
+// Parameter constraints do not carry a call instantiation. Recover it before
+// unfolding so generic method projections use the caller's actual types.
+func (f *factChecker) projectionPredicateInstance(pred *Func, subject Expr, args []argVal, pkg *Package) *Instance {
+	if len(pred.TypeParams) == 0 || subject == nil {
+		return nil
+	}
+	inst := inferredPredicate(pred, subject, args)
+	if inst == nil {
+		return nil
+	}
+	if pkg == nil {
+		pkg = f.from()
+	}
+	if !f.info.PredicateDicts(pkg, inst) {
+		return nil
+	}
+	return inst
 }

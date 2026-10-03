@@ -1,0 +1,2 @@
+module example.com/projection_requirement_impure_fail
+unsafe "example.com/projection_requirement_impure_fail"

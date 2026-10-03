@@ -13,7 +13,7 @@ Think Go's tooling simplicity, with the functional style of Scala and Haskell, a
 bork compiles to Go and keeps Go's runtime, but adds things Go can't give you:
 
 - **Immutability.** Values never change, so whatever is known about them stays true.
-- **Facts.** What you check about a value becomes part of its type, and the compiler proves every function's requirements at every call site.
+- **Facts.** What you check about a value becomes part of its type, and the compiler proves every function's requirements at every call site. Facts also survive repeated pure projections such as `xs.length()` and `p.total()`.
 - **Scopes.** Outside resources (files, connections, transactions, leases) belong to scopes, and using one requires proof that a scope managing it is still open.
 - **Effects in signatures.** A function's signature says whether it does I/O, calls the network, reads the clock, or touches shared state (`uses io + net`), and one that says nothing is pure. Code can't do what its signature doesn't allow, which makes signatures something a reviewer can rely on.
 - **Typed ambient values.** Request-scoped values such as a trace id or the signed-in principal are declared with a type (`ambient principal: Principal`), read by functions that say so (`needs principal`), and bound for a block with `with (principal: p) { ... }`. The compiler checks that every caller provides them, so the dependency shows in signatures instead of hiding in an untyped context. A trace id that only labels logs and outgoing calls is marked instead (`logged propagated("traceparent") ambient trace: String`): every log line written while it is bound carries it, and network code sends it on, with no signature in between.

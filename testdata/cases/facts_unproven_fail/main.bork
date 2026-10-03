@@ -63,7 +63,7 @@ fn unvalidated(raw: Int): Int | NotPositive {
   transfer(amount)
 }
 
-// trust needs a named value.
+// A pure computed value now has a reusable identity for trust.
 fn trustComputed(a: Int): Int {
   trust positive(a + 1)
   a

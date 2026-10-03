@@ -1,0 +1,2 @@
+main.bork:5:27: requirement arguments must be parameters, their fields, constants, or pure computed expressions
+main.bork:9:53: function requirements require pure callback arguments

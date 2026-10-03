@@ -1,0 +1,46 @@
+pred positive(n: Int) { n > 0 }
+pred below(n: Int, limit: Int) { n < limit }
+fn checked(n: Int where positive): Int { n }
+fn index(xs: List[Int], n: Int) where n < xs.length(): Int { n }
+fn guarded(xs: List[Int], n: Int): Int {
+  alias = xs
+  size = xs.length()
+  if (n < size) { index(alias, n) } else { 0 }
+}
+fn arithmetic(a: Int, b: Int): Int {
+  total = a + b
+  if (total > 0) { checked(a + b) } else { 0 }
+}
+fn projected(xs: List[Int]): Int {
+  if (xs.length() > 0) { checked(xs.length()) } else { 0 }
+}
+fn pass(xs: List[Int], n: Int) where n < xs.length(): Int { index(xs, n) }
+fn negated(a: Int): Int { if (-a > 0) { checked(-a) } else { 0 } }
+type Price = { amount: Int, count: Int }
+fn (p: Price) total(): Int { p.amount * p.count }
+fn price(p: Price): Int { if (p.total() > 0) { checked(p.total()) } else { 0 } }
+fn computed(a: Int, b: Int) where a + b > 0: Int { checked(a + b) }
+fn main() {
+  println(guarded([1, 2], 1), arithmetic(1, 2), projected([1]))
+  println(guardedPass([1], 0), negated(-2), price(Price { amount: 3, count: 4 }))
+  println(computed(1, 2), genericGuard(["a"], 0))
+}
+
+fn guardedPass(xs: List[Int], n: Int): Int { if (n < xs.length()) { pass(xs, n) } else { 0 } }
+
+pred inside[T](n: Int, xs: List[T]) { n < xs.length() }
+fn genericIndex[T](xs: List[T], n: Int where inside(xs)): Int { n }
+fn genericGuard[T](xs: List[T], n: Int): Int {
+  if (n < xs.length()) { genericIndex(xs, n) } else { 0 }
+}
+fn genericForward[T](xs: List[T], n: Int) where n < xs.length(): Int { genericIndex(xs, n) }
+fn saved(n: Int) uses random: Int {
+  value = n.changing()
+  if (value > 0) { checked(value) } else { 0 }
+}
+fn (n: Int) changing() uses random: Int unsafe go {
+  import "math/rand/v2"
+  return n + rand.Int64()
+}
+
+fn trustedProjection(a: Int): Int { trust positive(a + 1); checked(a + 1) }

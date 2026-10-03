@@ -75,8 +75,26 @@ func (c *checker) requirementArg(x syntax.Expr) {
 	case *syntax.Selector:
 		c.requirementArg(x.X)
 		return
+	case *syntax.Binary:
+		c.requirementArg(x.X)
+		c.requirementArg(x.Y)
+		return
+	case *syntax.Unary:
+		c.requirementArg(x.X)
+		return
+	case *syntax.Call:
+		fn := c.info.callFuncs[x]
+		if fn != nil && fn.Effects == 0 {
+			for i, a := range c.info.args(x) {
+				if i < len(fn.Params) && openArgEffects(fn.Params[i], c.info.types[a]) != 0 {
+					c.errorf(a.Position(), "function requirements require pure callback arguments")
+				}
+				c.requirementArg(a)
+			}
+			return
+		}
 	}
-	c.errorf(x.Position(), "requirement arguments must be parameters, their fields, or constants")
+	c.errorf(x.Position(), "requirement arguments must be parameters, their fields, constants, or pure computed expressions")
 }
 
 // Equality is intentionally structural after parameter renaming. Signature
@@ -91,6 +109,8 @@ func requirementKey(x Expr, types map[*TypeParam]Type) string {
 		return fmt.Sprintf("p%d", x.Var.Index)
 	case *Select:
 		return requirementKey(x.X, types) + "." + x.Name
+	case *Unary:
+		return fmt.Sprintf("(%s %s)", x.Op, requirementKey(x.X, types))
 	case *Binary:
 		return fmt.Sprintf("(%s %s %s)", requirementKey(x.X, types), x.Op, requirementKey(x.Y, types))
 	case *Call:
@@ -177,6 +197,8 @@ func requirementText(x Expr, from *Package) string {
 		return x.Var.displayName()
 	case *Select:
 		return requirementText(x.X, from) + "." + x.Name
+	case *Unary:
+		return "(" + strings.Trim(x.Op.String(), "'") + requirementText(x.X, from) + ")"
 	case *Binary:
 		op := strings.Trim(x.Op.String(), "'")
 		if x.Op == syntax.AndAnd {
@@ -247,6 +269,7 @@ func substituteRequirementTypes(x Expr, bound map[*TypeParam]Type, available []*
 	switch x := debugValue(x).(type) {
 	case *Call:
 		y := *x
+		y.typ = subst(x.Type(), bound)
 		y.Args = make([]Expr, len(x.Args))
 		for i, a := range x.Args {
 			y.Args[i] = substituteRequirementTypes(a, bound, available)
@@ -269,8 +292,14 @@ func substituteRequirementTypes(x Expr, bound map[*TypeParam]Type, available []*
 			y.Inst = &inst
 		}
 		return &y
+	case *Unary:
+		y := *x
+		y.X = substituteRequirementTypes(x.X, bound, available)
+		y.typ = subst(x.Type(), bound)
+		return &y
 	case *Binary:
 		y := *x
+		y.typ = subst(x.Type(), bound)
 		y.X = substituteRequirementTypes(x.X, bound, available)
 		y.Y = substituteRequirementTypes(x.Y, bound, available)
 		return &y
