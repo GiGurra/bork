@@ -96,14 +96,37 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	for _, fn := range info.Tests {
 		f.function(fn)
 	}
+	checkedDefaults := map[*syntax.FieldDecl]bool{}
+	for field := range info.fieldDefaults {
+		if field.Prelude || field.Default == nil || hasTypeParam(field.Type) {
+			continue
+		}
+		if !field.defaultGeneric {
+			if checkedDefaults[field.Decl] {
+				continue
+			}
+			checkedDefaults[field.Decl] = true
+		}
+		f.fn = &Func{Pkg: field.Pkg}
+		f.defaultUse = field.defaultUse
+		f.defaultDecl = field.Decl.Pos
+		f.walk(field.Default, env{})
+		for _, con := range field.Constraints {
+			f.oblige(field.Default, con, noParams, env{}, "default of "+field.Name+" must be "+con.String())
+		}
+	}
+	f.defaultUse = diag.Pos{}
+	f.defaultDecl = diag.Pos{}
 	f.evaluate(eval)
 }
 
 type factChecker struct {
-	info    *Info
-	diags   *diag.List
-	fn      *Func
-	pending []pendingQuery
+	info        *Info
+	diags       *diag.List
+	fn          *Func
+	defaultUse  diag.Pos
+	defaultDecl diag.Pos
+	pending     []pendingQuery
 	// collect, when set, receives result values instead of checking
 	// them, and obligations are not checked (see resultPaths).
 	collect *[]branch
@@ -552,7 +575,7 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 		label = qualify(t.Parent.Name, t.Parent.Pkg, f.from()) + "." + t.Name
 	}
 	for _, fi := range lit.Fields {
-		if fd := fi.Field; fd != nil {
+		if fd := fi.Field; fd != nil && !fi.IsDefault {
 			for _, con := range fd.Constraints {
 				f.oblige(fi.Value, con, noParams, e, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
 			}
@@ -626,12 +649,17 @@ func (f *factChecker) oblige(x Expr, con *Constraint, subst func(string) argVal,
 }
 
 func (f *factChecker) settle(x Expr, ob obligation, ok bool, pending []Query) {
+	pos := x.Pos()
+	if f.defaultUse.File != "" {
+		pos = f.defaultUse
+		ob.requirement += fmt.Sprintf(" (default declared at %s)", f.defaultDecl)
+	}
 	if !ok {
-		f.diags.AddCode(x.Pos(), "facts.error", "%s, but that is not proven for %s%s", ob.requirement, f.describe(x), f.hint(x, ob))
+		f.diags.AddCode(pos, "facts.error", "%s, but that is not proven for %s%s", ob.requirement, f.describe(x), f.hint(x, ob))
 		return
 	}
 	for _, q := range pending {
-		f.pending = append(f.pending, pendingQuery{query: q, pos: x.Pos(), ob: ob, from: f.from()})
+		f.pending = append(f.pending, pendingQuery{query: q, pos: pos, ob: ob, from: f.from()})
 	}
 }
 
@@ -1960,7 +1988,7 @@ func (f *factChecker) evaluate(eval Evaluator) {
 	var queries []Query
 	index := map[string]int{}
 	for _, p := range f.pending {
-		k := p.query.String()
+		k := queryKey(p.query)
 		if _, ok := index[k]; !ok {
 			index[k] = len(queries)
 			queries = append(queries, p.query)
@@ -1975,7 +2003,7 @@ func (f *factChecker) evaluate(eval Evaluator) {
 		return
 	}
 	for _, p := range f.pending {
-		if !results[index[p.query.String()]] {
+		if !results[index[queryKey(p.query)]] {
 			if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil {
 				f.diags.AddCode(p.pos, "facts.error", "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: p.query.Args[0]}, p.query.Text(p.from))
 				continue
@@ -1987,4 +2015,21 @@ func (f *factChecker) evaluate(eval Evaluator) {
 			f.diags.AddCode(p.pos, "facts.error", "%s, but %s is false", p.ob.requirement, p.query.Text(p.from))
 		}
 	}
+}
+
+func queryKey(q Query) string {
+	if q.And != nil || q.Or != nil {
+		parts := q.And
+		prefix := "and"
+		if q.Or != nil {
+			parts = q.Or
+			prefix = "or"
+		}
+		var keys []string
+		for _, p := range parts {
+			keys = append(keys, queryKey(p))
+		}
+		return prefix + strings.Join(keys, ";")
+	}
+	return q.String() + "[" + argsKey(q.TypeArgs) + "]"
 }

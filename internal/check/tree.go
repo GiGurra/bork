@@ -251,9 +251,10 @@ type RecordLit struct {
 
 // FieldValue is a field of a record literal.
 type FieldValue struct {
-	Name  string
-	Field *Field
-	Value Expr
+	IsDefault bool
+	Name      string
+	Field     *Field
+	Value     Expr
 }
 
 // Copy is `x.copy(a = 1, b.c = 2)`.

@@ -33,6 +33,9 @@ func (c *checker) lower(files []*syntax.File) {
 	for _, fn := range c.info.Tests {
 		l.function(fn)
 	}
+	for field, x := range c.info.fieldDefaults {
+		field.Default = l.expr(x)
+	}
 	for _, r := range c.info.Rules {
 		l.rule(r)
 	}
@@ -206,8 +209,16 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		case *Variant:
 			out.Variant, fields = t, t.Fields
 		}
+		inits := l.info.recordInits[x]
+		if inits == nil {
+			inits = x.Fields
+		}
+		given := map[string]bool{}
 		for _, fi := range x.Fields {
-			out.Fields = append(out.Fields, &FieldValue{Name: fi.Name, Field: findField(fields, fi.Name), Value: l.expr(fi.Value)})
+			given[fi.Name] = true
+		}
+		for _, fi := range inits {
+			out.Fields = append(out.Fields, &FieldValue{IsDefault: !given[fi.Name], Name: fi.Name, Field: findField(fields, fi.Name), Value: l.expr(fi.Value)})
 		}
 		return out
 	case *syntax.Copy:

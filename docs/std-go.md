@@ -66,8 +66,11 @@ order and have these stable members:
 - `Name`: the bork field name.
 - `Type`: the underlying bork type's display name (aliases are resolved).
 - `Constraints`: the field's declared fact requirements, as text.
+- `Doc`: consecutive `//` comment lines directly above the field, without markers.
+- `HasDefault`: whether the field declares a closed default value.
+- `Default`: a `func() any` producing that value, or nil when absent.
 - `Kind`: `string`, `number`, `bool`, or `json`; Option uses its element's kind.
-- `Optional`: whether the field is an Option and may be absent.
+- `Optional`: whether the field is an Option. `HasDefault` independently permits an absent field.
 - `Decode`: a `func(Json) any` that returns the field's decoded value or a
   `DecodeError`, checking its facts just as the derived record decoder does.
 

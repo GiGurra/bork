@@ -1,0 +1,9 @@
+import "example.com/defaults/api"
+use api.ItemDecode
+use api.BoxDecode
+fn main() uses io {
+  println(api.Item {})
+  println(decodeJson[api.Item]("{}"))
+  println(api.Box { value: 1 })
+  println(decodeJson[api.Box[String]]("{\"value\":\"generic\"}"))
+}

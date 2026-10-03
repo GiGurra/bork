@@ -75,9 +75,11 @@ type TypeDecl struct {
 }
 
 type FieldDecl struct {
-	Pos  diag.Pos
-	Name string
-	Type *TypeExpr
+	Default Expr
+	Doc     string
+	Pos     diag.Pos
+	Name    string
+	Type    *TypeExpr
 }
 
 type VariantDecl struct {

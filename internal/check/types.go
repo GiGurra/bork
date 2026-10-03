@@ -6,6 +6,7 @@ import (
 	"go/types"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -163,8 +164,16 @@ type GoField struct {
 }
 
 type Field struct {
-	Name string
-	Type Type
+	Decl           *syntax.FieldDecl
+	Pkg            *Package
+	Prelude        bool
+	Doc            string
+	Default        Expr
+	defaultGeneric bool
+	defaultState   int
+	defaultUse     diag.Pos
+	Name           string
+	Type           Type
 	// Constraints is the field's where clause.
 	Constraints []*Constraint
 }
@@ -387,7 +396,11 @@ func bindParams(params []*TypeParam, args []Type) map[*TypeParam]Type {
 func substFields(fields []*Field, bound map[*TypeParam]Type) []*Field {
 	out := make([]*Field, len(fields))
 	for i, f := range fields {
-		out[i] = &Field{Name: f.Name, Type: subst(f.Type, bound), Constraints: f.Constraints}
+		cp := *f
+		cp.Type = subst(f.Type, bound)
+		cp.Default = nil
+		cp.defaultState = 0
+		out[i] = &cp
 	}
 	return out
 }

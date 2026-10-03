@@ -1,0 +1,8 @@
+main.bork:3:30: the default of number must be Int, found String
+main.bork:4:29: a field's default must be a closed value: a literal, or a record or variant of them
+main.bork:7:32: the default of value must be T, found Int
+main.bork:8:52: field number of Missing must be Int, found String
+main.bork:9:48: field default children refers recursively to itself
+main.bork:9:49: Recursive is missing field(s): children
+main.bork:10:13: Missing is missing field(s): number
+main.bork:10:13: value of type Missing is not used (function main returns no value)

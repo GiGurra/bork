@@ -99,7 +99,9 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 		path := strconv.Quote("." + f.Name)
 		fmt.Fprintf(&b, "var %s %s\n{\n", v, g.typeText(f.Type))
 		fmt.Fprintf(&b, "_v, _present := _jsonField(_obj, %q)\n", f.Name)
-		if !check.IsOption(f.Type) {
+		if f.Default != nil {
+			fmt.Fprintf(&b, "if !_present { %s = %s } else {\n", v, g.fieldDefault(f))
+		} else if !check.IsOption(f.Type) {
 			b.WriteString("if !_present {\n" + g.decodeError(path, `"is missing"`) + "}\n")
 		} else {
 			b.WriteString("_ = _present\n")
@@ -131,6 +133,9 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 			for _, s := range stmts {
 				b.WriteString(g.text(s) + "\n")
 			}
+		}
+		if f.Default != nil {
+			b.WriteString("}\n")
 		}
 		b.WriteString("}\n")
 		inits = append(inits, fmt.Sprintf("%s: %s", name(f.Name).Name, v))

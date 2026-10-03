@@ -224,6 +224,10 @@ type Info struct {
 	// recordTargets records what each record literal builds: a *Record
 	// or a *Variant.
 	recordTargets map[*syntax.RecordLit]any
+	recordInits   map[*syntax.RecordLit][]*syntax.FieldInit
+	fieldDefaults map[*Field]syntax.Expr
+	typeUses      map[Type]diag.Pos
+	exprOwners    map[syntax.Expr]*Func
 	// selectorVariants records selectors that name a field-less variant
 	// (`Shape.Empty`); other selectors are field accesses.
 	selectorVariants map[*syntax.Selector]*Variant
@@ -293,6 +297,10 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			callArgs:         map[*syntax.Call][]syntax.Expr{},
 			callTypeArgs:     map[*syntax.Call][]*syntax.TypeExpr{},
 			recordTargets:    map[*syntax.RecordLit]any{},
+			recordInits:      map[*syntax.RecordLit][]*syntax.FieldInit{},
+			fieldDefaults:    map[*Field]syntax.Expr{},
+			typeUses:         map[Type]diag.Pos{},
+			exprOwners:       map[syntax.Expr]*Func{},
 			selectorVariants: map[*syntax.Selector]*Variant{},
 			armPats:          map[*syntax.Arm]*Pat{},
 			tries:            map[*syntax.Try]*TryInfo{},
@@ -386,6 +394,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			r.GoFrom = c.fromGo(r.GoMirror, r).ok
 		}
 	}
+	c.ensureAllFieldDefaults()
 	c.checkBindings(files, c.goTypes)
 	// Pass 3: check bodies.
 	for _, f := range files {
@@ -405,6 +414,8 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			c.checkTest(td, names)
 		}
 	}
+	c.materializeDefaultUses()
+	c.ensureAllFieldDefaults()
 	c.unappliedWheres(files)
 	for _, f := range files {
 		if f.Prelude {
@@ -796,6 +807,8 @@ func (c *checker) record(e syntax.Expr, t Type) Type {
 		t = c.zonk(t)
 	}
 	c.info.types[e] = t
+	c.info.exprOwners[e] = c.fn
+	c.noteDefaultTypeUse(t, e.Position())
 	return t
 }
 

@@ -1,0 +1,4 @@
+pred positive(x: Int) { x > 0 }
+type Bad = { number: Int where positive = 0 }
+type Outer = { bad: Bad = Bad { number: 0 } }
+fn main() {}

@@ -1,0 +1,8 @@
+pred nonempty[T](xs: List[T]) { xs.length() > 0 }
+type Box[T] = { xs: List[T] where nonempty = [] } derive (Decode)
+fn Schema[T: Decode]() unsafe go {
+ fields, ok := _borkDecodeFields(_d_T_Decode)
+ if ok { for _, f := range fields { if f.HasDefault { _ = f.Default() } } }
+}
+fn Wrapper[T: Decode](value: T) { Schema[Box[T]]() }
+fn main() { Wrapper(1) }

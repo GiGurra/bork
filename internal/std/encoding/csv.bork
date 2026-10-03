@@ -85,7 +85,7 @@ fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bo
     }
   }
   for _, field := range schema {
-    if _, found := headers[field.Name]; !found && !field.Optional {
+    if _, found := headers[field.Name]; !found && !field.Optional && !field.HasDefault {
       failures = append(failures, CsvError{row: 1, column: field.Name, message: "required column is missing"})
     }
   }
@@ -109,7 +109,7 @@ fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bo
           continue
         }
         json = parsed.(Json)
-      }
+      } else if field.HasDefault { continue }
       if failure, failed := field.Decode(json).(DecodeError); failed {
         failures = append(failures, CsvError{row: number, column: field.Name + strings.TrimPrefix(failure.path, "." + field.Name), message: failure.message})
         bad = true

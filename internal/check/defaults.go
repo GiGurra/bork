@@ -241,3 +241,82 @@ func copyLiteral(x syntax.Expr) syntax.Expr {
 	}
 	return x
 }
+
+// Fields follow the same closed-value rules as parameter defaults. Each
+// specialization checks its own literals so generic defaults retain their type.
+func (c *checker) ensureFieldDefault(field *Field) {
+	if field.Decl == nil || field.Decl.Default == nil || field.defaultState == 2 {
+		return
+	}
+	if field.defaultState == 1 {
+		c.errorf(field.Decl.Default.Position(), "field default %s refers recursively to itself", field.Name)
+		return
+	}
+	field.defaultState = 1
+	defer func() { field.defaultState = 2 }()
+	saved := *c
+	c.pkg, c.fn, c.inPrelude = field.Pkg, nil, field.Prelude
+	c.scopes = []map[string]*local{{}}
+	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
+	c.session = nil
+	defer func() {
+		shared, solved := c.sharedDefaults, c.solved
+		*c = saved
+		c.sharedDefaults, c.solved = shared, solved
+	}()
+	x := field.Decl.Default
+	switch {
+	case isLiteral(x):
+		x = copyLiteral(x)
+	case !isClosed(x):
+		c.errorf(x.Position(), "a field's default must be a closed value: a literal, or a record or variant of them")
+		return
+	case hasTypeParam(field.Type):
+		c.errorf(x.Position(), "the default of %s can only be a literal, since its type depends on a type parameter", field.Name)
+		return
+	default:
+		if c.sharedDefaults == nil {
+			c.sharedDefaults = map[syntax.Expr]bool{}
+		}
+		c.sharedDefaults[x] = true
+	}
+	if t := c.exprWant(x, field.Type); t != Invalid && !assignable(t, field.Type) {
+		c.errorf(field.Decl.Default.Position(), "the default of %s must be %s, found %s", field.Name, field.Type, t)
+	}
+	c.info.fieldDefaults[field] = x
+}
+
+func (c *checker) ensureAllFieldDefaults() {
+	for _, t := range c.info.TypeOrder {
+		switch t := t.(type) {
+		case *Record:
+			for _, f := range t.Fields {
+				c.ensureFieldDefault(f)
+			}
+			for _, inst := range t.insts.byKey {
+				for _, f := range inst.(*Record).Fields {
+					if f.defaultGeneric {
+						f.defaultUse = c.info.typeUses[inst]
+					}
+					c.ensureFieldDefault(f)
+				}
+			}
+		case *Sealed:
+			for _, v := range t.Variants {
+				for _, f := range v.Fields {
+					c.ensureFieldDefault(f)
+				}
+			}
+			for _, inst := range t.insts.byKey {
+				for _, v := range inst.(*Sealed).Variants {
+					for _, f := range v.Fields {
+						if f.defaultGeneric {
+							f.defaultUse = c.info.typeUses[inst]
+						}
+						c.ensureFieldDefault(f)
+					}
+				}
+			}
+		}
+	}
+}

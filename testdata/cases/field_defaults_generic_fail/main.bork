@@ -1,0 +1,8 @@
+pred nonempty[T](xs: List[T]) { xs.length() > 0 }
+type Box[T] = { value: T, xs: List[T] where nonempty = [] } derive (Decode, Encode)
+fn Hidden[T: Show](value: T) uses io { println(Box { value: value }) }
+fn Wrapper[T: Show](value: T) uses io { Hidden(value) }
+fn main() uses io {
+  Wrapper(1)
+  println(decodeJson[Box[String]]("{\"value\":\"decoded\"}"))
+}
