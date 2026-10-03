@@ -113,7 +113,7 @@ EOL        = newline | ";" .
 
 ## Semantics in brief
 
-- **Everything is an expression.** A block's value is its last expression. A block that ends with a statement has type `Unit`.
+- **Everything is an expression.** A block's value is its last expression. An empty block or a block that ends with a statement has type `Unit`; in a function returning a union containing `Unit`, it returns that member, including in an `if` branch or `match` arm.
 - **`if` with `else`** produces a value; both branches must have the same type. **`if` without `else`** is only run for its effect.
 - **`return`** has type `Never`, which fits wherever any type is expected, so `x = if (c) { return 0 } else { 1 }` works. Code after a `return` is a compile error.
 - **Bindings are immutable**, and names cannot be shadowed, except prelude functions: a local or package function can use their names. Methods have a separate namespace, so a free `fn find` and `xs.find(test)` can coexist.
