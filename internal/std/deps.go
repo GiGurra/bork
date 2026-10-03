@@ -56,7 +56,7 @@ func goModuleFiles(sources fs.FS, importPaths []string, user ...GoDependencyMani
 func mergeGoModuleFiles(manifests []GoDependencyManifest) ([]byte, []byte, error) {
 	requirements := map[string]string{}
 	checksums := map[string]string{}
-	goVersion := "1.22"
+	goVersion := "1.23"
 	for _, input := range manifests {
 		importPath := input.Name
 		data := input.Mod

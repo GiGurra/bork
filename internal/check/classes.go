@@ -1182,6 +1182,8 @@ func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Packa
 		for _, f := range t.Fields {
 			children = append(children, f.Type)
 		}
+	case *Seq:
+		children = append(children, t.Elem)
 	case *List:
 		children = append(children, t.Elem)
 	case *Map:

@@ -46,3 +46,5 @@ There are no new language constructs.
   prelude `File`, `openFile`, `createFile`, `readAll`, and `write` have moved
   to this package. I/O functions declare `uses io`; ForEachLine accepts an
   open callback and also charges its effects. See [the filesystem example](../../examples/fs/main.bork).
+
+`Lines(path): Seq[String | Error] uses io` opens a fresh file on traversal, strips LF/CRLF, retains an unterminated final line, and supports unbounded line lengths. `Entries(path): Seq[DirEntry | Error] uses io` visits directory entries in filesystem order, one at a time. Both close on exhaustion or stop; errors are final elements. Use `ReadDir` when sorted materialized entries are needed.

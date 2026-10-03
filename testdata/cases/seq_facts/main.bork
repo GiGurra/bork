@@ -1,0 +1,24 @@
+pred positive(n: Int) { n > 0 }
+fn need(n: Int where positive) uses io { println(n) }
+fn values(): Seq[Int where positive] {
+  generate[Int where positive] { yield 1; yield 2 }
+}
+fn checked(n: Int where positive) uses io: Int { println(n); n }
+fn identity[T](value: T): T { value }
+fn promised(n: Int): Int where positive { 1 }
+fn widened(): Seq[Int] uses io | String { Seq.range(0, 2) }
+fn main() {
+  println(values().map(n => checked(n)).toList())
+  println(values().map(identity).toList())
+  for (n in values()) { need(n) }
+  filtered: List[Int where positive] = [-1, 0, 1].toSeq().filter(positive).toList()
+  println(filtered.map(n => checked(n)))
+  promisedValues: List[Int where positive] = Seq.range(0, 2).map(promised).toList()
+  println(promisedValues)
+  println(widened())
+  xs: List[Int where positive] = values().take(1).toList()
+  for (n in xs) { need(n) }
+  println(Seq.unfold(0, state => if (state < 3) {
+    Option.Some { value: SeqStep { value: state, state: state + 1 } }
+    } else { Option.None }).toList())
+}

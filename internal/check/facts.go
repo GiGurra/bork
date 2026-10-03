@@ -156,7 +156,9 @@ type factChecker struct {
 	// declared functions, which call and parameter they belong to.
 	lambdaArgs map[*Var]lambdaArg
 	// observe captures the proof context for queries keyed by source position.
-	observe func(diag.Pos, env)
+	observe    func(diag.Pos, env)
+	producer   *Generate
+	yieldCheck func(*Yield, env)
 }
 
 // lambdaArg places a lambda's parameter: the lambda is argument arg of
@@ -441,6 +443,29 @@ func (f *factChecker) walk(x Expr, e env) {
 				}
 			}
 		}
+	case *SeqCall:
+		for _, a := range x.Args {
+			f.walk(a, e)
+		}
+	case *Generate:
+		saved, check := f.producer, f.yieldCheck
+		f.producer, f.yieldCheck = x, nil
+		f.walk(x.Body, e)
+		f.producer, f.yieldCheck = saved, check
+	case *Yield:
+		f.walk(x.Value, e)
+		if f.producer != nil {
+			for _, con := range f.producer.Constraints {
+				f.oblige(x.Value, con, f.ownParams(), e, "yielded value must be "+con.String())
+			}
+		}
+		if f.yieldCheck != nil {
+			f.yieldCheck(x, e)
+		}
+	case *For:
+		f.walk(x.Items, e)
+		f.walk(x.Body, e)
+	case *LoopControl:
 	case *Lambda:
 		// Facts known here still hold inside: values never change.
 		f.walk(x.Body, e)
@@ -1076,6 +1101,44 @@ func (f *factChecker) prove(x Expr, ob obligation, e env, depth int) (bool, []Qu
 func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool, []Query) {
 	var cs candidates
 	switch x := x.(type) {
+	case *Generate:
+		if rest, ok := cutStep(ob.path, ".[]"); ok {
+			inner := ob
+			inner.path = rest
+			savedP, savedCheck := f.producer, f.yieldCheck
+			f.producer = x
+			valid := true
+			var pending []Query
+			f.yieldCheck = func(y *Yield, e env) {
+				ok, qs := f.prove(y.Value, inner, e, depth+1)
+				valid = valid && ok
+				pending = append(pending, qs...)
+			}
+			f.walk(x.Body, e)
+			f.producer, f.yieldCheck = savedP, savedCheck
+			if valid {
+				return true, pending
+			}
+		}
+	case *SeqCall:
+		if len(x.Args) > 0 {
+			switch x.Op {
+			case "map":
+				if rest, ok := cutStep(ob.path, ".[]"); ok {
+					if callback, ok := x.Args[1].(*Lambda); ok {
+						inner := ob
+						inner.path = rest
+						if cs.take(f.prove(callback.Body, inner, e, depth+1)) {
+							return true, nil
+						}
+					}
+				}
+			case "fromList", "take", "drop", "filter", "toList":
+				if cs.take(f.prove(x.Args[0], ob, e, depth+1)) {
+					return true, nil
+				}
+			}
+		}
 	case *VarRef:
 		switch d := x.Var; d.Kind {
 		case VarLet:
@@ -1083,12 +1146,19 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 				return true, nil
 			}
 		case VarLambdaParam:
+			if d.Source != nil {
+				inner := ob
+				inner.path = d.Source.Path + ob.path
+				if cs.take(f.prove(d.Source.Subject, inner, e, depth+1)) {
+					return true, nil
+				}
+			}
 			if la, ok := f.lambdaArgs[d]; ok {
 				if cs.take(f.lambdaParam(la, ob, e, depth)) {
 					return true, nil
 				}
 			}
-		case VarPattern:
+		case VarPattern, VarLoop:
 			if src := d.Source; src != nil {
 				var ok bool
 				var pending []Query
@@ -1347,6 +1417,8 @@ func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
 		if t == tp {
 			return []string{path}, true
 		}
+	case *Seq:
+		return typeParamPaths(t.Elem, tp, path+".[]")
 	case *List:
 		return typeParamPaths(t.Elem, tp, path+".[]")
 	case *Map:
@@ -1386,6 +1458,8 @@ func mentions(t Type, tp *TypeParam) bool {
 	switch t := t.(type) {
 	case *TypeParam:
 		return t == tp
+	case *Seq:
+		return mentions(t.Elem, tp)
 	case *List:
 		return mentions(t.Elem, tp)
 	case *Map:
@@ -1685,6 +1759,30 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		add(TypeConstraints(x.Type()), noParams)
 	}
 	switch x := x.(type) {
+	case *SeqCall:
+		if x.Op == "filter" {
+			if ft, ok := x.Args[1].Type().(*FuncType); ok && ft.Effects == 0 {
+				for _, k := range f.predsOf(f.argOf(x.Args[1])) {
+					k.path = ".[]" + k.path
+					out = append(out, k)
+				}
+			}
+		}
+		if x.Op == "map" {
+			if ref, ok := debugValue(x.Args[1]).(*FuncRef); ok {
+				fn := ref.Inst.Func
+				for _, mc := range fn.ResultConstraints {
+					if identical(mc.Type, fn.Result) {
+						for _, con := range mc.Constraints {
+							for _, k := range f.knownOf(con, func(param string) argVal { return argVal{text: fmt.Sprintf("seq-element:%p:%s", x, param)} }) {
+								k.path = ".[]" + k.path
+								out = append(out, k)
+							}
+						}
+					}
+				}
+			}
+		}
 	case *VarRef:
 		switch d := x.Var; d.Kind {
 		case VarParam:
@@ -1699,7 +1797,7 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 			if depth < maxDepth {
 				out = append(out, f.declared(d.Let.Value, e, depth+1)...)
 			}
-		case VarPattern:
+		case VarPattern, VarLoop:
 			if src := d.Source; src != nil && depth < maxDepth {
 				if src.Field != nil {
 					owner := src.Subject

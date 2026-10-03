@@ -167,6 +167,9 @@ func (w *bindWriter) goType(t types.Type) string {
 // to Go never fails (the checker allows only lossless conversions), and
 // always copies, so Go code cannot change a bork value.
 func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
+	if seq, ok := t.(*check.Seq); ok {
+		return w.seqToGo(x, seq, gt)
+	}
 	if check.GoTypeOf(t) != nil {
 		w.g.usesOpaque = true
 		if w.group != "" && isBindContext(gt) {
@@ -254,6 +257,9 @@ func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
 // code for where the value is (`"result"`), for GoValueError. A value
 // that does not fit returns a GoValueError from the wrapper.
 func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) string {
+	if seq, ok := t.(*check.Seq); ok {
+		return w.seqFromGo(x, gt, seq, path)
+	}
 	fail := func(cond, message string) {
 		w.g.goType(w.g.info.Named["GoValueError"])
 		if w.collect != "" {
@@ -479,4 +485,31 @@ func (w *bindWriter) opaqueValue(x string, t check.Type, path string) string {
 		return fmt.Sprintf("%s{handle: %s, owner: _a%d.Own(func() { %s.Close() })}", w.g.typeText(t), v, w.b.ScopeIndex, v)
 	}
 	return w.g.typeText(t) + "{value: " + x + "}"
+}
+
+func (w *bindWriter) seqToGo(x string, t *check.Seq, gt types.Type) string {
+	w.g.usesSeq = true
+	elem := types.Unalias(gt).(*types.Named).TypeArgs().At(0)
+	v, y, e := w.newTmp(), w.newTmp(), w.newTmp()
+	w.line(fmt.Sprintf("%s := %s(func(%s func(%s)bool){", v, w.goType(gt), y, w.goType(elem)))
+	w.line(fmt.Sprintf("_seqRun(%s,func(%s %s)bool{", x, e, w.g.typeText(t.Elem)))
+	converted := w.toGo(e, t.Elem, elem)
+	w.line(fmt.Sprintf("return %s(%s)", y, converted))
+	w.line("})")
+	w.line("})")
+	return v
+}
+
+func (w *bindWriter) seqFromGo(x string, gt types.Type, t *check.Seq, path string) string {
+	w.g.usesSeq = true
+	elem := types.Unalias(gt).(*types.Named).TypeArgs().At(0)
+	v, y, e := w.newTmp(), w.newTmp(), w.newTmp()
+	w.line(fmt.Sprintf("%s := %s{run:func(%s func(%s)bool){", v, w.g.typeText(t), y, w.g.typeText(t.Elem)))
+	w.line(fmt.Sprintf("if %s == nil {return}", x))
+	w.line(fmt.Sprintf("%s(func(%s %s)bool{", x, e, w.goType(elem)))
+	converted := w.fromGo(e, elem, t.Elem, path)
+	w.line(fmt.Sprintf("return %s(%s)", y, converted))
+	w.line("})")
+	w.line("}}")
+	return v
 }

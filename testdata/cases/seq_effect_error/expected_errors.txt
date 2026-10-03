@@ -1,0 +1,2 @@
+main.bork:3:24: function erase returns Seq[Int], but its body produces Seq[Int] uses io
+main.bork:4:41: a generator cannot capture an open-effect callback; declare the callback's fixed effects

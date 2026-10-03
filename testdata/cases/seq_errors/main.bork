@@ -1,0 +1,10 @@
+fn outsideYield() { yield 1 }
+fn outsideBreak() { break }
+fn outsideContinue() { continue }
+fn wrongType() { _ = generate[Int] { yield "bad" } }
+fn wrongReturn() { _ = generate[Int] { return 1 } }
+fn crossingLambda() { _ = generate[Int] { f = () => { yield 1 }; f() } }
+fn wrongTry() { _ = generate[Int] { _ = toInt8(1000)? } }
+fn wrongSource() { for (n in 1) { println(n) } }
+fn crossLoop() { for (n in [1]) { _ = generate[Int] { break }; println(n) } }
+fn main() { outsideYield(); outsideBreak(); outsideContinue(); wrongType(); wrongReturn(); crossingLambda(); wrongTry(); wrongSource(); crossLoop() }

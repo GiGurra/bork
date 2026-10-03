@@ -416,6 +416,11 @@ func (c *checker) patternLogical(x, y syntax.Expr, op syntax.Kind) syntax.Expr {
 // typePattern is the pattern matching the values of type t within a
 // value of type st: everything, if t is st, or some members of a union.
 func (c *checker) typePattern(t, st Type, pos diag.Pos) *Pat {
+	if target, ok := t.(*Seq); ok {
+		if source, ok := st.(*Seq); ok && assignable(source, target) {
+			return &Pat{Kind: PatWild, Type: st}
+		}
+	}
 	if identical(t, st) {
 		return &Pat{Kind: PatWild, Type: st}
 	}
@@ -428,7 +433,16 @@ func (c *checker) typePattern(t, st Type, pos diag.Pos) *Pat {
 	if tu, ok := t.(*Union); ok {
 		members = tu.Members
 	}
-	for _, m := range members {
+	for i, m := range members {
+		if target, ok := m.(*Seq); ok {
+			for _, source := range u.Members {
+				if source, ok := source.(*Seq); ok && assignable(source, target) {
+					members[i] = source
+					break
+				}
+			}
+			m = members[i]
+		}
 		if !containsMember(u, m) {
 			c.errorf(pos, "%s is not one of the types in %s", m, st)
 			return nil

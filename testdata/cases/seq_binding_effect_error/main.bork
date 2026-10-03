@@ -1,0 +1,3 @@
+fn Values(): Seq[String] | GoError unsafe go "example.com/bindtest.StringValues"
+fn Collect(values: Seq[String]): List[String] unsafe go "example.com/bindtest.CollectStrings"
+fn main() {}

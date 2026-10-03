@@ -7,7 +7,7 @@
 - **Source files** are UTF-8, with the `.bork` extension. A directory of `.bork` files is one package. Diagnostic and `bork describe` positions use one-based lines and byte columns (see [JSON diagnostics](diagnostics.md) and [compiler code queries](describe.md)).
 - **Comments:** `// to end of line` and `/* block */`. They are kept by the lexer and formatter; consecutive `//` lines directly above a field also become its doc comment.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, and `in` are keywords only where they start a declaration, a scope block (or its policy), a resource type, a derive list, a list of effects, or the scope a parameter belongs to, and can otherwise be used as names. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, and `in` are keywords only where they start a declaration, a scope block (or its policy), a resource type, a derive list, a list of effects, or the scope a parameter belongs to, and can otherwise be used as names. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -15,7 +15,7 @@
 - **Interpolated strings:** `s"Hello, $name! Next year: ${age + 1}"`. `$name` inserts a name and `${...}` any expression (which may contain string literals). `$$` is a dollar sign. Plain strings never interpolate.
 - **String literals:** double-quoted, with Go's escape sequences (`\n`, `\t`, `\"`, `\\`, ...).
 - **`unsafe go { ... }`:** after `unsafe go`, everything up to the matching `}` is raw Go, not bork tokens (braces inside Go strings, runes, and comments do not count).
-- **Statement endings:** a newline ends a statement when the line's last token is an identifier, a literal, `true`/`false`, `return`, `_`, `)`, `]`, `}`, or `?`, as in Go. A `;` can also separate statements on one line. Newlines inside parentheses are ignored, so argument and parameter lists can span lines. A line starting with `|>` continues the previous one.
+- **Statement endings:** a newline ends a statement when the line's last token is an identifier, a literal, `true`/`false`, `return`, `break`, `continue`, `_`, `)`, `]`, `}`, or `?`, as in Go. A `;` can also separate statements on one line. Newlines inside parentheses are ignored, so argument and parameter lists can span lines. A line starting with `|>` continues the previous one.
 
 ## Syntax
 
@@ -76,8 +76,8 @@ Where      = "where" Clause { "and" Clause } .
 Clause     = PredRef { "or" PredRef }          (* alone: p or q *)
            | "(" PredRef { "or" PredRef } ")" .  (* with and: (p or q) and r *)
 PredRef    = Ident [ "(" Expr { "," Expr } ")" ] .  (* positive, between(1, 65535), atLeast(lo) *)
-TypeAtom   = Ident [ "[" Type { "," Type } "]" ] | "(" Type ")" | FuncType .
-FuncType   = "(" [ Type { "," Type } ] ")" [ Uses ] "=>" Type .  (* (Int, String) => Bool, (String) uses io => Unit *)
+TypeAtom   = Ident [ "[" Type { "," Type } "]" ] [ Uses ] | "(" Type ")" | FuncType .
+FuncType   = "(" [ Type { "," Type } ] ")" [ Uses ] "=>" Type .  (* (Int, String) => Bool, (String) uses io => Unit; TypeAtom Uses applies only to Seq *)
 
 Block      = "{" { Stmt EOL } [ Expr ] "}" .
 Stmt       = Binding | Trust | Mock | Expr .
@@ -107,10 +107,14 @@ Argument   = [ Ident ":" ] Expr .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | "true" | "false" | Ident
            | "." [ Ident ]
-           | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr .
+           | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl .
 (* A bare leading "." must be followed by RecordLit: .{ field: value }.
    .Variant and .Variant { field: value } need an expected sealed type;
    .{ field: value } needs an expected record type. Patterns stay explicit. *)
+Generate   = "generate" "[" Type "]" Block .
+Yield      = "yield" Expr .
+For        = "for" "(" Ident "in" Expr ")" Block .
+LoopControl = "break" | "continue" .
 ScopeExpr  = "scope" Ident [ "with" Expr { "," Expr } ] Block .  (* scope s { f = fs.Open(path, s)? ... }; scope s with taskTimeout(100), cleanupTimeout(500) { ... } *)
 Lambda     = ( Ident | "(" [ LParam { "," LParam } ] ")" ) "=>" Expr .  (* x => x + 1 *)
 LParam     = Ident [ ":" Type ] .

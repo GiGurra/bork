@@ -2180,7 +2180,7 @@ fn UserAgent(r: Request): String unsafe go "(*net/http.Request).UserAgent"
 - **Everything is checked against the real Go package**, at `bork check` time, not first by the Go compiler on generated code. Errors are reported at the bork declaration, and show the Go signature.
 - **Bindings are checked more than bodies are.** A binding's wrapper is generated, so everything it converts from Go is checked, facts included: a binding can only break its promise through its effects and through what the Go code does to opaque values.
 - **bork targets 64-bit platforms.** Go's `int` and `uint` are 64 bits wide there, so they are `Int` and `Uint64`. Bindings reject Go targets with narrower `int` or `uint`.
-- **Go version selection.** The generated module starts at Go 1.22 and raises that requirement to the highest `go` version in imported dependency manifests. Signature checks use the installed Go toolchain's standard library, rather than a snapshot of an older release. The compiler itself requires the Go version in its own `go.mod`.
+- **Go version selection.** The generated module starts at Go 1.23 and raises that requirement to the highest `go` version in imported dependency manifests. Signature checks use the installed Go toolchain's standard library, rather than a snapshot of an older release. The compiler itself requires the Go version in its own `go.mod`.
 
 ### Syntax
 
@@ -2848,9 +2848,10 @@ implementation requires a decision. Warnings do not change check's exit status.
 Build, run and test continue to accept these markers. We do not introduce a
 release build mode or marker rejection in this change: check surfaces unfinished
 code, and automated consumers can choose to enforce those warning codes.
-### Generators and lazy sequences (bork-br2bwx design)
 
-Introduce `Seq[T]` as a lazy, ordered stream of values and a producer expression:
+### Generators and lazy sequences (implemented)
+
+`Seq[T]` is a lazy, ordered stream of values, constructed with a producer expression:
 
 ```bork
 fn greetings(names: List[String]): Seq[String] {
@@ -2867,8 +2868,7 @@ fn main() {
 }
 ```
 
-This design proposes `generate`, `yield` and `for`; they are not currently
-implemented syntax. The sequence runs synchronously on the consuming goroutine.
+`generate`, `yield`, `for`, `break` and `continue` are implemented syntax. The sequence runs synchronously on the consuming goroutine.
 It does not spawn a task, allocate a channel, or start work when created. Each
 traversal starts a fresh invocation of the producer body. Immutable captures
 are retained, not copied from changing local variables. Pure sequences can be
@@ -3046,8 +3046,8 @@ binding generator wraps/unpacks the iter representation rather than treating it
 as an ordinary function value and dropping its metadata. Iterators must call
 yield synchronously, stop at false, and not retain yield for later invocation.
 Mappings that cannot prove the element representation or lifetime are rejected.
-Initial standard-library adapters should include filesystem directory entries,
-file lines and SQL rows within existing scope ownership. Row buffers must be
+Standard-library producers include `fs.Lines(path)`, `fs.Entries(path)`,
+`sql.Rows[T](connection, query, params)` and `sql.RowsJson(connection, query, params)`. Each traversal reopens the file/directory or executes a fresh query. Directory entries follow filesystem order; file lines have no scanner token-size limit and strip LF/CRLF. SQL sequences retain the connection/transaction lifetime. Errors are explicit final elements. Row buffers must be
 copied/decoded before yielding; no borrowed Go scanner buffer may escape as an
 immutable bork value. APIs must state whether repeat traversal reopens an input
 or continues a captured cursor. Scope-bound operations never silently open a
@@ -3074,8 +3074,15 @@ cases verify resource cleanup on exhaustion/break/return/panic/cancellation,
 retained values after consumption, and foreign iterators honoring stop. Infinite
 unfold plus take verifies bounded demand without accumulating an eager source.
 
-This is a design only. Implementation waits for lead approval and coordination
-with scope ownership, callback effect checking and Go rebinding work.
+The compiler provides these constructors and adapters with inferred callback types;
+`Seq.empty[T]()` requires an element type, and unfold also accepts explicit `[T, S]`.
+The initial checked Go bridge requires infallible element conversions: a fallible
+Go-to-bork element mapping is rejected rather than introducing a hidden traversal
+error. Direct checked binding Seq types require an explicit latent qualifier,
+including `uses nothing`. A nil Go iterator maps to an empty sequence. Loops may
+borrow an outside owned scope but cannot consume its owner repeatedly. Cleanup
+inside loops retains only active scopes and owners, avoiding one deferred cleanup
+per produced item. Generated modules require Go 1.23 for range-over-function.
 ### Record conversion (bork-2zn4s1 design)
 
 A compiler-provided record method converts a source into a named target record:

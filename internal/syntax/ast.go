@@ -217,6 +217,8 @@ type Param struct {
 // TypeExpr is a written type: a name with optional type arguments
 // (`Option[Int]`), or a union of types (`User | NotFound`).
 type TypeExpr struct {
+	Uses *Uses // latent effects on Seq[T]
+
 	Pos   diag.Pos
 	Name  string
 	Args  []*TypeExpr
@@ -333,6 +335,36 @@ type Expr interface {
 	exprNode()
 	Position() diag.Pos
 }
+
+type Generate struct {
+	Pos  diag.Pos
+	Elem *TypeExpr
+	Body *Block
+}
+type Yield struct {
+	Pos   diag.Pos
+	Value Expr
+}
+type For struct {
+	Pos     diag.Pos
+	Name    string
+	NamePos diag.Pos
+	Items   Expr
+	Body    *Block
+}
+type LoopControl struct {
+	Pos      diag.Pos
+	Continue bool
+}
+
+func (*Generate) exprNode()               {}
+func (*Yield) exprNode()                  {}
+func (*For) exprNode()                    {}
+func (*LoopControl) exprNode()            {}
+func (e *Generate) Position() diag.Pos    { return e.Pos }
+func (e *Yield) Position() diag.Pos       { return e.Pos }
+func (e *For) Position() diag.Pos         { return e.Pos }
+func (e *LoopControl) Position() diag.Pos { return e.Pos }
 
 type IntLit struct {
 	Pos  diag.Pos

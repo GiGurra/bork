@@ -116,12 +116,20 @@ func (in *inference) unify(p, a Type) {
 	case *TypeParam:
 		if in.owns(p) && in.bound[p] == nil {
 			in.bound[p] = a
+		} else if previous, ok := in.bound[p].(*Seq); ok && in.owns(p) {
+			if next, ok := a.(*Seq); ok && identical(previous.Elem, next.Elem) {
+				in.bound[p] = &Seq{Elem: previous.Elem, Effects: previous.Effects | next.Effects}
+			}
 		} else if bf, ok := in.bound[p].(*FuncType); ok && in.owns(p) {
 			// Functions that differ only in their effects: T is one
 			// that may use what either uses.
 			if af, ok := a.(*FuncType); ok && sameSignature(bf, af) {
 				in.bound[p] = &FuncType{Params: bf.Params, Result: bf.Result, Effects: bf.Effects | af.Effects}
 			}
+		}
+	case *Seq:
+		if a, ok := a.(*Seq); ok {
+			in.unify(p.Elem, a.Elem)
 		}
 	case *List:
 		if a, ok := a.(*List); ok {
@@ -211,6 +219,8 @@ func subst(t Type, bound map[*TypeParam]Type) Type {
 		if b := bound[t]; b != nil {
 			return b
 		}
+	case *Seq:
+		return &Seq{Elem: subst(t.Elem, bound), Effects: t.Effects}
 	case *List:
 		return &List{Elem: subst(t.Elem, bound)}
 	case *Map:
@@ -248,6 +258,8 @@ func (in *inference) open(t Type) bool {
 	switch t := t.(type) {
 	case *TypeParam:
 		return in.owns(t) && in.bound[t] == nil
+	case *Seq:
+		return in.open(t.Elem)
 	case *List:
 		return in.open(t.Elem)
 	case *Map:
@@ -1035,6 +1047,8 @@ func mentionsWhere(t Type, pred func(*TypeParam) bool) bool {
 	switch t := t.(type) {
 	case *TypeParam:
 		return pred(t)
+	case *Seq:
+		return mentionsWhere(t.Elem, pred)
 	case *List:
 		return mentionsWhere(t.Elem, pred)
 	case *Map:

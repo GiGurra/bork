@@ -1,0 +1,1 @@
+main.bork:2:16: predicates on a Seq are not supported; constrain its element type instead

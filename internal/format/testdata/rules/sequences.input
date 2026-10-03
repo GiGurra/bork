@@ -1,0 +1,2 @@
+fn values():Seq[Int] uses io{generate[Int]{for(n in[1,2]){yield n;continue}}}
+fn main(){for(n in values()){println(n);break}}

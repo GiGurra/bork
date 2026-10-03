@@ -36,6 +36,11 @@ const (
 	KwTrust
 	KwRule
 	KwOr
+	KwGenerate
+	KwYield
+	KwFor
+	KwBreak
+	KwContinue
 
 	// Delimiters
 	LParen
@@ -73,6 +78,7 @@ const (
 )
 
 var kindNames = map[Kind]string{
+	KwGenerate: "'generate'", KwYield: "'yield'", KwFor: "'for'", KwBreak: "'break'", KwContinue: "'continue'",
 	EOF: "end of file", Illegal: "illegal token", Semi: "newline or ';'",
 	TIdent: "identifier", TInt: "integer literal", TFloat: "float literal", TRune: "rune literal", TGoCode: "Go code", TString: "string literal", TInterp: "interpolated string",
 	KwFn: "'fn'", KwIf: "'if'", KwElse: "'else'", KwReturn: "'return'", KwTrue: "'true'", KwFalse: "'false'",
@@ -91,6 +97,7 @@ func (k Kind) String() string {
 }
 
 var keywords = map[string]Kind{
+	"generate": KwGenerate, "yield": KwYield, "for": KwFor, "break": KwBreak, "continue": KwContinue,
 	"fn":     KwFn,
 	"if":     KwIf,
 	"else":   KwElse,

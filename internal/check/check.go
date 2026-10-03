@@ -239,8 +239,10 @@ type Info struct {
 	types map[syntax.Expr]Type
 	// callFuncs and callBuiltins record which function each call
 	// targets.
-	callFuncs    map[*syntax.Call]*Func
-	callBuiltins map[*syntax.Call]Builtin
+	callFuncs           map[*syntax.Call]*Func
+	callBuiltins        map[*syntax.Call]Builtin
+	seqCalls            map[*syntax.Call]*seqCallInfo
+	generateConstraints map[*syntax.Generate][]*Constraint
 	// callArgs holds the arguments of every call of a declared function
 	// in parameter order, including a method's receiver and the defaults
 	// of unfilled parameters. The call's syntax is left as written.
@@ -326,34 +328,36 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 	c := &checker{
 		diags: diags,
 		info: &Info{
-			GoBindings:       map[*Func]*GoBinding{},
-			assemblyCalls:    map[*syntax.Call]*assemblyExpansion{},
-			assemblyTypes:    map[*syntax.TypeExpr]Type{},
-			assemblyNames:    map[any]string{},
-			Funcs:            map[string]*Func{},
-			FuncOf:           map[*syntax.FuncDecl]*Func{},
-			Named:            map[string]Type{},
-			types:            map[syntax.Expr]Type{},
-			callFuncs:        map[*syntax.Call]*Func{},
-			callBuiltins:     map[*syntax.Call]Builtin{},
-			callArgs:         map[*syntax.Call][]syntax.Expr{},
-			callOrder:        map[*syntax.Call][]int{},
-			callTypeArgs:     map[*syntax.Call][]*syntax.TypeExpr{},
-			recordTargets:    map[*syntax.RecordLit]any{},
-			recordInits:      map[*syntax.RecordLit][]*syntax.FieldInit{},
-			fieldDefaults:    map[*Field]syntax.Expr{},
-			typeUses:         map[Type]diag.Pos{},
-			exprOwners:       map[syntax.Expr]*Func{},
-			selectorVariants: map[*syntax.Selector]*Variant{},
-			ownerScopes:      map[*syntax.Selector]*Func{},
-			contextVariants:  map[*syntax.ContextName]*Variant{},
-			armPats:          map[*syntax.Arm]*Pat{},
-			tries:            map[*syntax.Try]*TryInfo{},
-			unused:           map[any]bool{},
-			consts:           map[syntax.Expr]constant.Value{},
-			bindings:         map[*syntax.Binding]Type{},
-			conversions:      map[*syntax.Call]*Conversion{},
-			defs:             map[*syntax.Ident]any{},
+			GoBindings:          map[*Func]*GoBinding{},
+			assemblyCalls:       map[*syntax.Call]*assemblyExpansion{},
+			assemblyTypes:       map[*syntax.TypeExpr]Type{},
+			assemblyNames:       map[any]string{},
+			Funcs:               map[string]*Func{},
+			FuncOf:              map[*syntax.FuncDecl]*Func{},
+			Named:               map[string]Type{},
+			types:               map[syntax.Expr]Type{},
+			callFuncs:           map[*syntax.Call]*Func{},
+			callBuiltins:        map[*syntax.Call]Builtin{},
+			seqCalls:            map[*syntax.Call]*seqCallInfo{},
+			generateConstraints: map[*syntax.Generate][]*Constraint{},
+			callArgs:            map[*syntax.Call][]syntax.Expr{},
+			callOrder:           map[*syntax.Call][]int{},
+			callTypeArgs:        map[*syntax.Call][]*syntax.TypeExpr{},
+			recordTargets:       map[*syntax.RecordLit]any{},
+			recordInits:         map[*syntax.RecordLit][]*syntax.FieldInit{},
+			fieldDefaults:       map[*Field]syntax.Expr{},
+			typeUses:            map[Type]diag.Pos{},
+			exprOwners:          map[syntax.Expr]*Func{},
+			selectorVariants:    map[*syntax.Selector]*Variant{},
+			ownerScopes:         map[*syntax.Selector]*Func{},
+			contextVariants:     map[*syntax.ContextName]*Variant{},
+			armPats:             map[*syntax.Arm]*Pat{},
+			tries:               map[*syntax.Try]*TryInfo{},
+			unused:              map[any]bool{},
+			consts:              map[syntax.Expr]constant.Value{},
+			bindings:            map[*syntax.Binding]Type{},
+			conversions:         map[*syntax.Call]*Conversion{},
+			defs:                map[*syntax.Ident]any{},
 
 			bindingConstraints: map[*syntax.Binding][]*Constraint{},
 			patSources:         map[any]*patSource{},
@@ -610,6 +614,8 @@ type checker struct {
 	// expression.
 	lambdaDepth    int
 	assemblySerial int
+	producer       *producerContext
+	loops          []int
 	// used collects the effects of the function or lambda being
 	// checked: of the calls in its body (see effects.go).
 	used Effects
@@ -1033,6 +1039,17 @@ func (c *checker) exprWant(e syntax.Expr, want Type) Type {
 		return c.constant(e, v, want)
 	}
 	switch e := e.(type) {
+	case *syntax.Generate:
+		return c.record(e, c.generate(e))
+	case *syntax.Yield:
+		return c.record(e, c.yieldExpr(e))
+	case *syntax.For:
+		return c.record(e, c.forExpr(e))
+	case *syntax.LoopControl:
+		if len(c.loops) == 0 || c.loops[len(c.loops)-1] != c.lambdaDepth {
+			c.errorf(e.Pos, "break and continue require a loop in the same function or producer")
+		}
+		return c.record(e, Never)
 	case *syntax.IntLit:
 		c.errorf(e.Pos, "invalid integer literal %s", e.Text)
 		return c.record(e, Invalid)
@@ -1268,6 +1285,9 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	}
 	if id, ok := e.Fun.(*syntax.Ident); ok && assemblyName(id.Name) && c.lookup(id.Name) == nil {
 		return c.assemble(e, id.Name)
+	}
+	if t, ok := c.seqStatic(e); ok {
+		return t
 	}
 	if t, ok := c.methodCallOf(e, want); ok {
 		return t
@@ -1521,6 +1541,13 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 }
 
 func (c *checker) returnExpr(e *syntax.Return) {
+	if c.producer != nil && c.producer.depth == c.lambdaDepth {
+		if e.Value != nil {
+			c.expr(e.Value)
+			c.errorf(e.Pos, "a generator can only use bare return; yield a value instead")
+		}
+		return
+	}
 	if c.lambdaDepth > 0 {
 		c.errorf(e.Pos, "return cannot be used in a lambda; a lambda's value is its body's value")
 		if e.Value != nil {

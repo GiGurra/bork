@@ -198,6 +198,31 @@ func (c *checker) checkBinding(fn *Func, pkg *types.Package, path, name string) 
 			return
 		}
 	}
+	var checkSeqEffects func(*syntax.TypeExpr)
+	checkSeqEffects = func(t *syntax.TypeExpr) {
+		if t == nil {
+			return
+		}
+		if t.Name == "Seq" && t.Uses == nil {
+			c.bindErr(t.Pos, "a checked Go iterator binding must declare the Seq latent effects explicitly, including uses nothing")
+		}
+		for _, child := range t.Args {
+			checkSeqEffects(child)
+		}
+		for _, child := range t.Union {
+			checkSeqEffects(child)
+		}
+		if t.Func != nil {
+			for _, child := range t.Func.Params {
+				checkSeqEffects(child)
+			}
+			checkSeqEffects(t.Func.Result)
+		}
+	}
+	for _, p := range fd.Params {
+		checkSeqEffects(p.Type)
+	}
+	checkSeqEffects(fd.Result)
 	sig := obj.Type().(*types.Signature)
 	if recv != nil {
 		ps := []*types.Var{types.NewVar(0, nil, "receiver", recv)}
@@ -454,6 +479,13 @@ func (c *checker) fromGoSeen(g types.Type, t Type, seen map[goConvPair]bool) con
 	seen[pair] = true
 	defer delete(seen, pair)
 	no := convResult{}
+	if seq, ok := t.(*Seq); ok {
+		if elem := goSeqElem(g); elem != nil {
+			inner := c.fromGoSeen(elem, seq.Elem, seen)
+			return convResult{ok: inner.ok && !inner.fallible}
+		}
+		return no
+	}
 	rt := t
 	if IsOption(rt) {
 		rt = TypeArgs(rt)[0]
@@ -545,6 +577,10 @@ func (c *checker) toGoSeen(t Type, g types.Type, seen map[goConvPair]bool) bool 
 	}
 	seen[pair] = true
 	defer delete(seen, pair)
+	if seq, ok := t.(*Seq); ok {
+		elem := goSeqElem(g)
+		return elem != nil && c.toGoSeen(seq.Elem, elem, seen)
+	}
 	if gt := GoTypeOf(t); gt != nil {
 		return types.AssignableTo(gt, g)
 	}
@@ -668,4 +704,13 @@ func canWrapBindingContexts(t Type, gt types.Type, seen map[goConvPair]bool) boo
 		return true
 	}
 	return false
+}
+
+// goSeqElem recognizes the explicit one-value iterator bridge.
+func goSeqElem(t types.Type) types.Type {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != "iter" || named.Obj().Name() != "Seq" || named.TypeArgs().Len() != 1 {
+		return nil
+	}
+	return named.TypeArgs().At(0)
 }

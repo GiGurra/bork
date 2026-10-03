@@ -263,6 +263,8 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 
 [MIT](LICENSE)
 
+Sequences keep ordered work lazy: `generate[Int] { for (n in Seq.range(0, 10)) { yield n * n } }.take(3).toList()` produces `[0, 1, 4]`. Constructing a `Seq[T]` runs no producer code; each traversal invokes it again. `List.toSeq()`, `map`, `filter`, `flatMap`, `take` and `drop` defer work until `for`, `forEach`, `fold`, `first` or `toList` consumes it. `Seq.unfold(seed, step)` uses a pure step returning `Option[SeqStep[T, S]]`. `Seq[T] uses io` carries effects that consumption must declare. Consumers can `break`, `continue`, `return` or use `?`; stopping closes active producer scopes. `fs.Lines`, `fs.Entries`, `sql.Rows[T]` and `sql.RowsJson` reopen their input on each traversal and yield errors as explicit elements.
+
 Lists also support ordered, bounded parallel work: `xs.parMap(x => x * x,
 workers: 4)` accepts pure callbacks. `xs.parMapIn(s, (child, x) => work(child,
 x))` runs effectful work in a scope and reports cancellation as a value.

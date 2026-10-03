@@ -162,6 +162,8 @@ func containsOpaque(t Type, seen map[Type]bool) bool {
 		return true
 	}
 	switch t := t.(type) {
+	case *Seq:
+		return containsOpaque(t.Elem, seen)
 	case *List:
 		return containsOpaque(t.Elem, seen)
 	case *Map:

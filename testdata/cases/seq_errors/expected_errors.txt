@@ -1,0 +1,10 @@
+main.bork:1:21: yield requires a generator body and cannot cross a lambda boundary
+main.bork:2:21: break and continue require a loop in the same function or producer
+main.bork:3:24: break and continue require a loop in the same function or producer
+main.bork:4:38: generator yields Int, but this value is String
+main.bork:5:40: a generator can only use bare return; yield a value instead
+main.bork:6:55: yield requires a generator body and cannot cross a lambda boundary
+main.bork:7:48: 1000 does not fit in Int8 (-128 to 127)
+main.bork:7:53: ? cannot be used in a generator; yield an explicit error value instead
+main.bork:8:30: for requires a List or Seq, found Int
+main.bork:9:55: break and continue require a loop in the same function or producer

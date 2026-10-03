@@ -1,0 +1,10 @@
+fn Fields(text: String): Seq[String] uses nothing unsafe go "strings.FieldsSeq"
+fn Lines(text: String): Seq[String] uses nothing unsafe go "strings.Lines"
+fn ByteFields(data: Bytes): Seq[Bytes] uses nothing unsafe go "bytes.FieldsSeq"
+fn Collect(values: Seq[String] uses nothing): List[String] unsafe go "example.com/bindtest.CollectStrings"
+fn main() {
+  println(Collect(Fields("forward backward")))
+  println(ByteFields(utf8Bytes("a bb ccc")).map(value => value.length()).toList())
+  println(Fields("a b c").take(2).toList())
+  println(Lines("one\ntwo\n").map(text => text.trim()).toList())
+}

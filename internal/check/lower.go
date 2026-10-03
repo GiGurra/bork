@@ -18,7 +18,8 @@ type lowerer struct {
 	// vars holds the variable each declaring syntax node introduced (a
 	// parameter, binding, pattern, or scope block), for the identifiers
 	// that refer to it.
-	vars map[any]*Var
+	vars      map[any]*Var
+	yieldElem Type
 }
 
 // lower builds the typed tree of every function body, test, and rule.
@@ -147,6 +148,28 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 		return &Const{expr: at, Value: v, SourceSpan: span}
 	}
 	switch x := x.(type) {
+	case *syntax.Generate:
+		saved := l.yieldElem
+		l.yieldElem = at.typ.(*Seq).Elem
+		body := l.block(x.Body)
+		l.yieldElem = saved
+		return &Generate{expr: at, Body: body, Constraints: l.info.generateConstraints[x]}
+	case *syntax.Yield:
+		return &Yield{expr: at, Value: l.expr(x.Value), Elem: l.yieldElem}
+	case *syntax.For:
+		items := l.expr(x.Items)
+		var elem Type
+		switch t := items.Type().(type) {
+		case *List:
+			elem = t.Elem
+		case *Seq:
+			elem = t.Elem
+		}
+		v := &Var{Name: x.Name, Pos: x.NamePos, Type: elem, Kind: VarLoop, Source: &VarSource{Subject: items, Path: ".[]"}}
+		l.vars[x] = v
+		return &For{expr: at, Var: v, Items: items, Body: l.block(x.Body)}
+	case *syntax.LoopControl:
+		return &LoopControl{expr: at, Continue: x.Continue}
 	case *syntax.Interp:
 		return &Interp{expr: at, Parts: x.Parts, Exprs: l.exprs(x.Exprs)}
 	case *syntax.Ident:
@@ -160,6 +183,23 @@ func (l *lowerer) expr(x syntax.Expr) Expr {
 	case *syntax.Binary:
 		return &Binary{expr: at, Op: x.Op, X: l.expr(x.X), Y: l.expr(x.Y)}
 	case *syntax.Call:
+		if call := l.info.seqCalls[x]; call != nil {
+			args := l.exprs(call.args)
+			if len(args) > 1 {
+				index := 1
+				param := 0
+				if call.op == "fold" {
+					index = 2
+					param = 1
+				}
+				if index < len(args) {
+					if callback, ok := args[index].(*Lambda); ok && param < len(callback.Params) {
+						callback.Params[param].Source = &VarSource{Subject: args[0], Path: ".[]"}
+					}
+				}
+			}
+			return &SeqCall{expr: at, Op: call.op, Args: args, Effects: call.effects}
+		}
 		if fn := l.info.callFuncs[x]; fn != nil {
 			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x)), ArgOrder: l.info.callOrder[x], Embedded: l.info.embedCalls[x]}
 			if sel, ok := x.Fun.(*syntax.Selector); ok {

@@ -1,0 +1,33 @@
+returned owner closed
+true
+after failed owner return
+return consumer closed
+captured producer closed
+captured finalizer
+enclosing closed
+1
+1000
+panic consumer closed
+inner closed
+producer closed
+true
+[]
+inner closed
+producer closed
+[1000]
+1000
+consumer closed
+inner closed
+producer closed
+inner closed
+producer closed
+1000
+inner closed
+producer closed
+OutOfRange { value: "1000", target: "Int8" }
+1000
+inner closed
+producer closed
+true
+outer 0
+[0]

@@ -65,7 +65,7 @@ func (lx *lexer) endsStatement() bool {
 		return false
 	}
 	switch lx.toks[len(lx.toks)-1].Kind {
-	case TIdent, TInt, TFloat, TRune, TString, TInterp, TGoCode, KwTrue, KwFalse, KwReturn, RParen, RBrace, RBrack, Quest, Underscore:
+	case TIdent, TInt, TFloat, TRune, TString, TInterp, TGoCode, KwTrue, KwFalse, KwReturn, KwBreak, KwContinue, RParen, RBrace, RBrack, Quest, Underscore:
 		return true
 	}
 	return false

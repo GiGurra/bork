@@ -1,0 +1,4 @@
+pred positive(n: Int) { n > 0 }
+fn wrong(): Seq[Int where positive] { generate[Int] { yield 0 } }
+fn wrongYield(): Seq[Int] { generate[Int where positive] { yield 0 } }
+fn main() { _ = wrong(); _ = wrongYield() }

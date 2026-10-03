@@ -26,6 +26,9 @@ func (g *gen) goType(t check.Type) ast.Expr {
 	switch t := t.(type) {
 	case *check.TypeParam:
 		return name(t.Name)
+	case *check.Seq:
+		g.usesSeq = true
+		return &ast.IndexExpr{X: ast.NewIdent("_Seq"), Index: g.goType(t.Elem)}
 	case *check.List:
 		return &ast.ArrayType{Elt: g.goType(t.Elem)}
 	case *check.Map:
@@ -1175,6 +1178,45 @@ func _fmtFloat(f float64, bits int) string {
 // comments print correctly.
 func (g *gen) runtimeDecls() ([]ast.Decl, *token.FileSet, error) {
 	var src []string
+	if g.usesLoopCleanup {
+		src = append(src, loopCleanupRuntime)
+		if g.usesSeq {
+			src = append(src, seqLoopRuntime)
+		}
+	}
+	if g.usesSeq {
+		src = append(src, seqRuntime)
+	}
+	if g.usesSeqUnfold {
+		src = append(src, `package main
+
+func _sequnfold[T, S any](seed S, step func(S) Option[SeqStep[T, S]]) _Seq[T] {
+	return _Seq[T]{func(yield func(T) bool) {
+		state := seed
+		for {
+			next, ok := step(state).(Option_Some[SeqStep[T, S]])
+			if !ok {
+				return
+			}
+			if !yield(next.value.value) {
+				return
+			}
+			state = next.value.state
+		}
+	}}
+}
+`)
+	}
+	if g.usesSeqFirst {
+		src = append(src, `package main
+
+func _seqfirst[T any](source _Seq[T]) Option[T] {
+	var result Option[T] = Option_None[T]{}
+	_seqRun(source, func(x T) bool { result = Option_Some[T]{value: x}; return false })
+	return result
+}
+`)
+	}
 	if g.usesDecodeSchema || g.usesGoStruct {
 		src = append(src, decodeSchemaHelpers)
 	}
