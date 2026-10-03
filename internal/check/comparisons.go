@@ -60,6 +60,7 @@ func oppositeComparison(op syntax.Kind) syntax.Kind {
 // substituteExpr copies just the simple expressions supported by predicate
 // unfolding. It never changes the shared typed tree.
 func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
+	x = debugValue(x)
 	switch x := x.(type) {
 	case *Const:
 		return x
@@ -147,6 +148,7 @@ func (f *factChecker) unfold(v argVal, ob obligation, e env, depth int) (bool, [
 // proveCondition recognizes simple predicate bodies and instantiated rule
 // conditions using the same branch facts that prove ordinary obligations.
 func (f *factChecker) proveCondition(x Expr, positive bool, e env, depth int) (bool, []Query) {
+	x = debugValue(x)
 	if depth > maxDepth || x == nil {
 		return false, nil
 	}

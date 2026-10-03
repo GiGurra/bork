@@ -295,6 +295,7 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 	if f.observe != nil && f.collect == nil {
 		f.observe(x.Pos(), e)
 	}
+	x = debugValue(x)
 	switch x := x.(type) {
 	case *Block:
 		e = f.stmts(x.Stmts, e)
@@ -613,6 +614,7 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 // project selects a field, preserving the identity of a value supplied by a
 // literal or copy instead of inventing an identity for the whole expression.
 func (f *factChecker) project(x Expr, name string) Expr {
+	x = debugValue(x)
 	switch v := x.(type) {
 	case *VarRef:
 		if v.Var.Kind == VarLet {

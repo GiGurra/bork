@@ -1,4 +1,4 @@
-pred positive(x: Int) { x > 0 }
+pred positive(x: Int) { dbg(x > 0) }
 type Err = { value: Int }
 fn valid(x: Int): Int where positive | Err {
   if (positive(x)) { x } else { Err { value: x } }
@@ -13,6 +13,10 @@ fn keep(x: Int, p: (Int) uses nothing => Bool): Int where p {
 fn mapValid(xs: List[Int where positive]): List[Int] {
   xs.map(dbg(x => transfer(x)))
 }
+fn guarded(x: Int): Int { if (x > 0) { transfer(x) } else { 0 } }
+fn branch(x: Int): Int where positive | Err {
+  dbg(if (x > 0) { x } else { Err { value: x } })
+}
 fn main() {
   match (dbg(valid(1))) {
     x: Int => println(transfer(x))
@@ -23,4 +27,9 @@ fn main() {
   println(transfer(keep(1, positive)))
   println(mapValid([1, 2]))
   println(throughId(3))
+  println(guarded(4))
+  match (branch(5)) {
+    x: Int => println(transfer(x))
+    Err { value } => println(value)
+  }
 }
