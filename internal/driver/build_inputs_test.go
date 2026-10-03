@@ -1,10 +1,13 @@
 package driver
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestComptimeBuildInputs(t *testing.T) {
@@ -305,5 +308,42 @@ fn main(){println(comptime{build.ReadString("missing")})}`), 0o644); err != nil 
 	}
 	if _, _, err := Check(dir); err != nil {
 		t.Fatalf("fresh attempt did not recover: %v", err)
+	}
+}
+
+func TestWatchMissingBuildInputRecovers(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(`import "bork/build"
+pred ready(s:String){s=="ready"}
+fn require(s:String where ready):Int{42}
+fn main(){println(comptime{require(build.ReadString("missing"))})}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var count int
+	err := Watch(ctx, path, WatchOptions{Interval: 10 * time.Millisecond}, func(result WatchResult) error {
+		count++
+		if result.SchemaVersion != 1 || result.RequestID != uint64(count) {
+			t.Fatalf("unexpected watch result: %+v", result)
+		}
+		if count == 1 {
+			if result.Status != "error" || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "build.input" {
+				t.Fatalf("missing build input did not publish its diagnostic: %+v", result)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "missing"), []byte("ready"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if result.Status != "ok" || len(result.Diagnostics) != 0 {
+				t.Fatalf("new build input did not recover: %+v", result)
+			}
+			cancel()
+		}
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) || count != 2 {
+		t.Fatalf("watch publications=%d, error=%v", count, err)
 	}
 }
