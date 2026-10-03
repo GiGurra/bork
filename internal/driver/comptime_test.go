@@ -58,6 +58,9 @@ fn main(){println(comptime{recipe(1)})}`, "1\n"},
 		{"fresh pure lazy cell", `fn main(){println(comptime{lazy n=21;n*2})}`, "42\n"},
 		{"unordered lookup", `fn main(){println(comptime{{"x":1}.unordered().getOr("x",0)})}`, "1\n"},
 		{"sorted traversal", `fn main(){println(comptime{{"b":2,"a":1}.sorted().keys()})}`, "[\"a\", \"b\"]\n"},
+		{"keyword record field", `type R={var:Int}
+fn make():R{R{var:42}}
+fn main(){r=comptime{make()};println(r.var)}`, "42\n"},
 		{"success value", `fn main(){comptime{Ok}}`, ""},
 		{"nested computation", `fn main(){println(comptime{n=comptime{21};n*2})}`, "42\n"},
 		{"ordinary helper promise", `pred positive(n:Int){n>0}

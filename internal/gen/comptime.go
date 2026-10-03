@@ -78,8 +78,8 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 	if name := e.names[t]; name != "" {
 		return name, nil
 	}
-	name := fmt.Sprintf("_ctEncode%d", len(e.names))
-	e.names[t] = name
+	encoderName := fmt.Sprintf("_ctEncode%d", len(e.names))
+	e.names[t] = encoderName
 	var typ bytes.Buffer
 	if err := printer.Fprint(&typ, token.NewFileSet(), e.g.goType(t)); err != nil {
 		return "", err
@@ -133,19 +133,19 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("field %s: %w", field.Name, err)
 			}
-			items = append(items, child+"(value."+field.Name+",depth+1)")
+			items = append(items, child+"(value."+name(field.Name).Name+",depth+1)")
 		}
 		body = "return _ctValue{Kind:" + kind + ",Items:[]_ctValue{" + strings.Join(items, ",") + "}}"
 	default:
 		return "", fmt.Errorf("comptime literal evaluator does not support %s yet", t)
 	}
-	source := "package main\nfunc " + name + "(value " + typ.String() + ", depth int) _ctValue {_ctCheck(depth," + kind + ");" + body + "}"
+	source := "package main\nfunc " + encoderName + "(value " + typ.String() + ", depth int) _ctValue {_ctCheck(depth," + kind + ");" + body + "}"
 	parsed, err := parser.ParseFile(token.NewFileSet(), "", source, 0)
 	if err != nil {
 		return "", err
 	}
 	e.g.extraFuncs = append(e.g.extraFuncs, parsed.Decls...)
-	return name, nil
+	return encoderName, nil
 }
 
 const comptimeRuntime = `package main
