@@ -170,6 +170,16 @@ type GoField struct {
 
 type Field struct {
 	Lazy           bool
+	Computed       bool
+	Dependencies   []*Field
+	DefaultVars    []*Var
+	DefaultCalls   []*Func
+	siblings       []*Field
+	defaultParams  []*syntax.Param
+	defaultSyntax  syntax.Expr
+	defaultBase    *Field
+	defaultBound   map[*TypeParam]Type
+	defaultTypes   map[string]*TypeParam
 	GoTags         []syntax.GoTag
 	Decl           *syntax.FieldDecl
 	Pkg            *Package
@@ -177,6 +187,7 @@ type Field struct {
 	Doc            string
 	Default        Expr
 	defaultGeneric bool
+	cycleChecked   bool
 	defaultState   int
 	defaultUse     diag.Pos
 	Name           string
@@ -420,8 +431,19 @@ func substFields(fields []*Field, bound map[*TypeParam]Type) []*Field {
 		cp.Type = subst(f.Type, bound)
 		cp.Constraints = substConstraints(f.Constraints, bound)
 		cp.Default = nil
+		cp.defaultBase = f
+		cp.defaultBound = bound
+		cp.defaultSyntax = nil
+		cp.defaultParams = nil
+		cp.DefaultVars = nil
+		cp.DefaultCalls = nil
+		cp.Dependencies = nil
+		cp.cycleChecked = false
 		cp.defaultState = 0
 		out[i] = &cp
+	}
+	for _, field := range out {
+		field.siblings = out
 	}
 	return out
 }
@@ -852,19 +874,14 @@ func comparableIn(t Type, seen map[Type]bool) bool {
 		return false
 	case *Record:
 		for _, f := range t.Fields {
-			if !comparableIn(f.Type, seen) {
+			if !f.Computed && !comparableIn(f.Type, seen) {
 				return false
 			}
 		}
 	case *Sealed:
-		for _, a := range t.Args {
-			if !comparableIn(a, seen) {
-				return false
-			}
-		}
 		for _, v := range t.Variants {
 			for _, f := range v.Fields {
-				if !comparableIn(f.Type, seen) {
+				if !f.Computed && !comparableIn(f.Type, seen) {
 					return false
 				}
 			}
@@ -877,6 +894,44 @@ func comparableIn(t Type, seen map[Type]bool) bool {
 		}
 	}
 	return true
+}
+
+// unresolvedLazyFields identifies equality decisions that depend on default
+// classification, which is not available while signatures are resolved.
+func unresolvedLazyFields(t Type, seen map[Type]bool) bool {
+	if seen[t] {
+		return false
+	}
+	seen[t] = true
+	fieldsPending := func(fields []*Field) bool {
+		for _, field := range fields {
+			if field.Lazy && field.Decl != nil && field.Decl.Default != nil && field.defaultState != 2 || unresolvedLazyFields(field.Type, seen) {
+				return true
+			}
+		}
+		return false
+	}
+	switch t := t.(type) {
+	case *Record:
+		return fieldsPending(t.Fields)
+	case *Sealed:
+		for _, variant := range t.Variants {
+			if fieldsPending(variant.Fields) {
+				return true
+			}
+		}
+	case *List:
+		return unresolvedLazyFields(t.Elem, seen)
+	case *Map:
+		return unresolvedLazyFields(t.Key, seen) || unresolvedLazyFields(t.Value, seen)
+	case *Union:
+		for _, member := range t.Members {
+			if unresolvedLazyFields(member, seen) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // IsOption reports whether t is an Option[T] (the prelude's).

@@ -37,6 +37,9 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 	if r.GoTo {
 		w.line("var out " + gt)
 		for i, f := range r.Fields {
+			if f.Computed {
+				continue
+			}
 			w.line("out." + strings.Join(r.GoFields[i].Path, ".") + " = " + w.toGo(g.text(g.fieldRead(ast.NewIdent("v"), f)), f.Type, r.GoFields[i].Type))
 		}
 		w.line("return out")
@@ -50,6 +53,9 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 		w.line("var out " + bt)
 		w.line("var _errs []" + errType)
 		for i, f := range r.Fields {
+			if f.Computed {
+				continue
+			}
 			path := "_path + " + strconv.Quote("."+f.Name)
 			converted := w.fromGo("v."+strings.Join(r.GoFields[i].Path, "."), r.GoFields[i].Type, f.Type, path)
 			convertedExpr, err := parser.ParseExpr(converted)
@@ -59,23 +65,46 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 			w.line("out." + name(f.Name).Name + " = " + g.text(g.fieldResolved(convertedExpr, f)))
 
 		}
-		for _, f := range r.Fields {
-			path := "_path + " + strconv.Quote("."+f.Name)
-			if len(f.Constraints) > 0 {
-				saved := w.newTmp()
-				w.line(fmt.Sprintf("%s := append([]%s(nil), _errs...)", saved, errType))
+		phases := 1
+		if hasComputedFields(r.Fields) {
+			phases = 2
+		}
+		for phase := 0; phase < phases; phase++ {
+			if phase == 1 {
+				for _, stmt := range g.computedCells(ast.NewIdent("out"), r.Fields, r) {
+					w.line(g.text(stmt))
+				}
+				w.line("if _bindPathValid(_errs, _path) {")
+			}
+			for _, f := range r.Fields {
+				path := "_path + " + strconv.Quote("."+f.Name)
+				var eligible []*check.Constraint
 				for _, con := range f.Constraints {
-					if con.HasSiblingArgs() {
-						w.line("if _bindPathValid(" + saved + ", _path) {")
-					}
-					w.factAtPath(g.text(g.fieldRead(ast.NewIdent("out"), f)), f.Type, splitPath(con.Path), path, fieldConstraint(con, func(n string) string { return g.text(g.fieldRead(ast.NewIdent("out"), r.Field(n))) }), saved, con)
-					if con.HasSiblingArgs() {
-						w.line("}")
+					early := !f.Computed && !con.HasSiblingArgs()
+					if phases == 1 || (phase == 0) == early {
+						eligible = append(eligible, con)
 					}
 				}
-			}
+				if len(eligible) > 0 {
+					saved := w.newTmp()
+					w.line(fmt.Sprintf("%s := append([]%s(nil), _errs...)", saved, errType))
+					for _, con := range eligible {
+						if con.HasSiblingArgs() {
+							w.line("if _bindPathValid(" + saved + ", _path) {")
+						}
+						w.factAtPath(g.text(g.fieldRead(ast.NewIdent("out"), f)), f.Type, splitPath(con.Path), path, fieldConstraint(con, func(n string) string { return g.text(g.fieldRead(ast.NewIdent("out"), r.Field(n))) }), saved, con)
+						if con.HasSiblingArgs() {
+							w.line("}")
+						}
+					}
+				}
 
+			}
+			if phase == 1 {
+				w.line("}")
+			}
 		}
+
 		if len(r.Constraints) > 0 {
 			saved := w.newTmp()
 			w.line(fmt.Sprintf("%s := append([]%s(nil), _errs...)", saved, errType))

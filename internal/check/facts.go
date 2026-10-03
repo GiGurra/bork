@@ -117,6 +117,13 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	}
 	checkedDefaults := map[*syntax.FieldDecl]bool{}
 	for field := range info.fieldDefaults {
+		if field.Computed {
+			// Calls must be valid for every independent value admitted by the
+			// declaration, including values constructed by Decode/Go boundaries.
+			f.fn = &Func{Pkg: field.Pkg, Decl: &syntax.FuncDecl{Name: "computed " + field.Name}}
+			f.fieldBoundary(field.Default, field.Type, env{}, func(Expr, env) {})
+			continue // Result constraints need the completed construction's values.
+		}
 		if field.Prelude || field.Default == nil || hasTypeParam(field.Type) {
 			continue
 		}
@@ -846,7 +853,7 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 	for _, fi := range lit.Fields {
 		if fd := fi.Field; fd != nil {
 			for _, con := range fd.Constraints {
-				if !fi.IsDefault || con.HasSiblingArgs() || f.preflightDefaults {
+				if !fi.IsDefault || fd.Computed || con.HasSiblingArgs() || f.preflightDefaults {
 					saveUse, saveDecl := f.defaultUse, f.defaultDecl
 					if fi.IsDefault {
 						f.defaultUse, f.defaultDecl = lit.Pos(), fd.Decl.Pos
@@ -1816,6 +1823,17 @@ func (f *factChecker) factOf(subject string, k known) fact {
 // literalQuery is ob on x, if x and ob's arguments are made of constants
 // only, so the predicate can be run at compile time.
 func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
+	// A completed candidate is fresh data, not an existing runtime cell.
+	// Reify only roots whose independent inputs are wholly known. The query
+	// still checks this exact return path, rather than the recipe's tail.
+	x = transformComputedDefault(nil, x, func(ref *VarRef) Expr {
+		if ref.Var.Unvalidated {
+			if literal, ok := ref.Var.Let.Value.(*RecordLit); ok && f.closed(literal) {
+				return literal
+			}
+		}
+		return nil
+	})
 	if ob.pred == nil || ob.pred.Synthetic || !f.closed(x) {
 		return Query{}, false
 	}
@@ -1914,7 +1932,20 @@ func (f *factChecker) closed(x Expr) bool {
 		return true
 	case *RecordLit:
 		for _, fi := range x.Fields {
-			if !f.closed(fi.Value) {
+			if !fi.Field.Computed && !f.closed(fi.Value) {
+				return false
+			}
+		}
+		return true
+	case *Select:
+		return f.closed(x.X)
+	case *Unary:
+		return f.closed(x.X)
+	case *Binary:
+		return f.closed(x.X) && f.closed(x.Y)
+	case *Interp:
+		for _, part := range x.Exprs {
+			if !f.closed(part) {
 				return false
 			}
 		}
@@ -2170,6 +2201,18 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 // how it was computed: facts from guards and trust, and the facts that
 // declarations and promises give it.
 func (f *factChecker) declared(x Expr, e env, depth int) []known {
+	if ref, ok := x.(*VarRef); ok && ref.Var.Kind == VarDefaultField && ref.Var.Sibling.Computed {
+		return nil
+	}
+	if ref, ok := x.(*VarRef); ok && ref.Var.Unvalidated {
+		return nil
+	}
+	if selected, ok := x.(*Select); ok && unvalidatedDefaultRoot(selected.X) {
+		if depth < maxDepth {
+			return f.declared(f.project(selected.X, selected.Name), e, depth+1)
+		}
+		return nil
+	}
 	x = debugValue(x)
 	var out []known
 	if k := f.key(x); k != "" {
@@ -2224,6 +2267,14 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		}
 	case *VarRef:
 		switch d := x.Var; d.Kind {
+		case VarDefaultField:
+			if !d.Sibling.Computed {
+				for _, con := range d.Sibling.Constraints {
+					if !con.HasSiblingArgs() {
+						add([]*Constraint{con}, noParams)
+					}
+				}
+			}
 		case VarParam:
 			if f.ownsParam(d) {
 				add(f.fn.ParamConstraints[d.Index], f.ownParams())
@@ -2300,6 +2351,15 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 // declaredMember lists what a function promises about the member m of
 // the union x produces.
 func (f *factChecker) declaredMember(x Expr, m Type) []known {
+	if ref, ok := x.(*VarRef); ok && ref.Var.Kind == VarDefaultField && ref.Var.Sibling.Computed {
+		return nil
+	}
+	if unvalidatedDefaultRoot(x) {
+		if selected, ok := x.(*Select); ok {
+			return f.declaredMember(f.project(selected.X, selected.Name), m)
+		}
+		return nil
+	}
 	x = debugValue(x)
 	var out []known
 	if !f.validates(m) {

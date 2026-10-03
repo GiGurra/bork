@@ -69,6 +69,10 @@ func (c *checker) resolveGoStructs(files []*syntax.File) {
 			}
 		}
 	}
+}
+
+// Field shapes follow computed-default classification.
+func (c *checker) finishGoStructs() {
 	for _, t := range c.info.TypeOrder {
 		r, ok := t.(*Record)
 		if !ok || !r.GoGenerated {
@@ -78,6 +82,10 @@ func (c *checker) resolveGoStructs(files []*syntax.File) {
 		var tags []string
 		seen := map[string]bool{}
 		for _, f := range r.Fields {
+			if f.Computed {
+				r.GoFields = append(r.GoFields, GoField{})
+				continue
+			}
 			gt := c.generatedGoType(f.Type)
 			if gt == nil || containsResource(f.Type, map[Type]bool{}) {
 				why := ""
@@ -188,6 +196,10 @@ func (c *checker) resolveGoStructDecoders(ci *ClassInstance) {
 		c.typeParams[p.Name] = p
 	}
 	for _, f := range r.Fields {
+		if f.Computed {
+			ci.GoFieldDecoders = append(ci.GoFieldDecoders, nil)
+			continue
+		}
 		saved := c.diags
 		c.diags = &diag.List{}
 		c.have = nil

@@ -228,6 +228,9 @@ func (w *bindWriter) toGo(x string, t check.Type, gt types.Type) string {
 			v := w.newTmp()
 			w.line("var " + v + " " + w.goType(gt))
 			for i, field := range r.Fields {
+				if field.Computed {
+					continue
+				}
 				converted := w.toGo(w.g.fieldReadText(x, field), field.Type, r.GoFields[i].Type)
 				w.line(v + "." + strings.Join(r.GoFields[i].Path, ".") + " = " + converted)
 			}

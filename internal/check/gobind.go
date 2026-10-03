@@ -548,6 +548,9 @@ func (c *checker) fromGoSeen(g types.Type, t Type, seen map[goConvPair]bool) con
 		}
 		out := convResult{ok: true}
 		for i, f := range r.Fields {
+			if f.Computed {
+				continue
+			}
 			gf := r.GoFields[i]
 			if gf.Type == nil {
 				return no
@@ -625,6 +628,9 @@ func (c *checker) toGoSeen(t Type, g types.Type, seen map[goConvPair]bool) bool 
 			return false
 		}
 		for i, f := range r.Fields {
+			if f.Computed {
+				continue
+			}
 			if r.GoFields[i].Type == nil || !c.toGoSeen(f.Type, r.GoFields[i].Type, seen) {
 				return false
 			}
@@ -697,6 +703,9 @@ func canWrapBindingContexts(t Type, gt types.Type, seen map[goConvPair]bool) boo
 			return false
 		}
 		for i, field := range r.Fields {
+			if field.Computed {
+				continue
+			}
 			if !canWrapBindingContexts(field.Type, r.GoFields[i].Type, seen) {
 				return false
 			}

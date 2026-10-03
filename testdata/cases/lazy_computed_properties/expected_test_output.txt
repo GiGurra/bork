@@ -1,0 +1,5 @@
+ok    computed fields are reconstructed
+ok    computed variants are reconstructed
+ok    computed generics are reconstructed
+3 passed, 0 failed
+exit code 0

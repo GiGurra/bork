@@ -235,6 +235,9 @@ func ungeneratable(t check.Type, seen map[check.Type]bool) check.Type {
 	seen[t] = true
 	fields := func(fs []*check.Field) check.Type {
 		for _, f := range fs {
+			if f.Computed {
+				continue
+			}
 			if bad := ungeneratable(f.Type, seen); bad != nil {
 				return bad
 			}
@@ -415,6 +418,9 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 	c := ast.NewIdent(choicesVar)
 	ret := func(x ast.Expr) []ast.Stmt { return []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{x}}} }
 	fields := func(typ ast.Expr, owner string, fs []*check.Field, nominal []*check.Constraint) ast.Expr {
+		if len(independentFields(fs)) != len(fs) {
+			return g.genComputedRecord(t, typ, owner, fs, nominal, deeper, within)
+		}
 		lit := &ast.CompositeLit{Type: typ}
 		params := make([]*syntax.Param, len(fs))
 		constraints := make([][]*check.Constraint, len(fs))
@@ -568,7 +574,7 @@ func variantRecurses(v *check.Variant, t *check.Sealed) bool {
 		switch x := x.(type) {
 		case *check.Record:
 			for _, f := range x.Fields {
-				if contains(f.Type) {
+				if !f.Computed && contains(f.Type) {
 					return true
 				}
 			}
@@ -577,7 +583,7 @@ func variantRecurses(v *check.Variant, t *check.Sealed) bool {
 			for _, xv := range x.Variants {
 				recurses := false
 				for _, f := range xv.Fields {
-					recurses = recurses || contains(f.Type)
+					recurses = recurses || (!f.Computed && contains(f.Type))
 				}
 				if !recurses {
 					return false
@@ -594,7 +600,7 @@ func variantRecurses(v *check.Variant, t *check.Sealed) bool {
 		return false
 	}
 	for _, f := range v.Fields {
-		if contains(f.Type) {
+		if !f.Computed && contains(f.Type) {
 			return true
 		}
 	}
@@ -1091,3 +1097,50 @@ func _simpler(a, b []uint64) bool {
 	return false
 }
 `
+
+func (g *gen) genComputedRecord(ownerType check.Type, typ ast.Expr, owner string, fields []*check.Field, nominal []*check.Constraint, depth ast.Expr, within func(string) []*check.Constraint) ast.Expr {
+	lit := &ast.CompositeLit{Type: typ}
+	var body []ast.Stmt
+	for _, field := range fields {
+		if field.Computed {
+			continue
+		}
+		var simple []*check.Constraint
+		for _, constraint := range append(append([]*check.Constraint{}, field.Constraints...), within(field.Name)...) {
+			if !constraint.HasSiblingArgs() {
+				simple = append(simple, constraint)
+			}
+		}
+		value := g.newTmp()
+		body = append(body, define(value, g.genValue(field.Type, simple, depth, owner+"."+field.Name)))
+		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: g.fieldResolved(value, field)})
+	}
+	value := g.newTmp()
+	body = append(body, define(value, lit))
+	body = append(body, g.computedCells(value, fields, ownerType)...)
+	for _, field := range fields {
+		for _, constraint := range append(append([]*check.Constraint{}, field.Constraints...), within(field.Name)...) {
+			bound := fieldConstraint(constraint, func(sibling string) string {
+				for _, candidate := range fields {
+					if candidate.Name == sibling {
+						return g.fieldReadText(value.Name, candidate)
+					}
+				}
+				return sibling
+			})
+			body = append(body, g.atPath(g.fieldRead(value, field), field.Type, splitPath(constraint.Path), func(x ast.Expr, t check.Type) []ast.Stmt {
+				if cond := g.propCond(bound, x, t); cond != nil {
+					return []ast.Stmt{rejectUnless(cond, owner+"."+field.Name+" where "+constraint.String())}
+				}
+				return nil
+			})...)
+		}
+	}
+	for _, constraint := range nominal {
+		if cond := g.propCond(constraint, value, ownerType); cond != nil {
+			body = append(body, rejectUnless(cond, owner+" where "+constraint.String()))
+		}
+	}
+	body = append(body, &ast.ReturnStmt{Results: []ast.Expr{value}})
+	return &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: typ}}}}, Body: &ast.BlockStmt{List: body}}}
+}

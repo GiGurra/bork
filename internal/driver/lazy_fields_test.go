@@ -10,7 +10,7 @@ import (
 
 func TestLazyFieldChecks(t *testing.T) {
 	for _, tc := range []struct{ name, source, want string }{
-		{"computed phase", "type C={first:Int,lazy doubled:Int=first*2}\nfn main(){}", "computed lazy field defaults are not implemented"},
+		{"computed default", "type C={first:Int,lazy doubled:Int=first*2}\nfn main(){}", ""},
 		{"positive generic argument", "pred positive(x:Int){x>0}\ntype Lazy[T]={lazy value:T}\nfn one(x:Int):Int where positive{1}\nfn f(flag:Bool):Lazy[Int]{Lazy[Int where positive]{value:one({if(flag){return 2};0})}}", ""},
 		{"inferred return", "type Lazy[T]={lazy value:T}\nfn main(){x=Lazy{value:{if(true){return 1};2}};println(x.value)}", ""},
 		{"inferred return only", "type Lazy[T]={lazy value:T}\nfn main(){x=Lazy{value:{return 1}};println(x.value)}", ""},

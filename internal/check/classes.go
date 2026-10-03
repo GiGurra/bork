@@ -1061,6 +1061,10 @@ func (c *checker) resolveDerived() {
 		for i, fields := range groups {
 			var row []*Dict
 			for _, f := range fields {
+				if f.Computed {
+					row = append(row, nil)
+					continue
+				}
 				// The field's where clause selects constrained instances.
 				c.have = nil
 				for _, con := range f.Constraints {

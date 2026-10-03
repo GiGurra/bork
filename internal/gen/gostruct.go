@@ -53,6 +53,9 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 	}
 	w.line("out := new(" + gt + ")")
 	for i, f := range r.Fields {
+		if f.Computed {
+			continue
+		}
 		if f.Default != nil {
 			w.line("out." + strings.Join(r.GoFields[i].Path, ".") + " = " + w.toGo(g.fieldDefault(f), f.Type, r.GoFields[i].Type))
 		}
@@ -74,6 +77,9 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 	var fields strings.Builder
 	fields.WriteString("func() []_borkGoStructField { return []_borkGoStructField{\n")
 	for i, f := range r.Fields {
+		if f.Computed {
+			continue
+		}
 		var cons, tags []string
 		for _, con := range f.Constraints {
 			cons = append(cons, strconv.Quote(con.String()))

@@ -1,0 +1,41 @@
+type Person = {
+  first: String
+  last: String
+  lazy full: String = s"${first} ${last}"
+  lazy greeting: String = s"Hi ${full}"
+}
+type Outer = { person: Person, lazy label: String = person.full }
+type Box[T] = { item: T, lazy repeated: T = item }
+type Choice = sealed { Item { n: Int, lazy doubled: Int = n * 2 }, Empty }
+type Held = { n: Int, tag: String, lazy doubled: Int = n * 2, lazy more: Int = doubled + 1 }
+type Danger = { n: Int, lazy value: Int = if (n == 0) { panic("computed field was forced") } else { n } }
+fn shared(a: Held, b: Held): Bool unsafe go { return a.doubled == b.doubled && a.more == b.more }
+type Callback = { n: Int, lazy call: () => Int = () => n }
+fn main() {
+  p = Person { first: "Ada", last: "Lovelace" }
+  q = p.copy(first: "Grace")
+  println(p.full); println(q.full); println(q.greeting)
+  c = Outer { person: p }
+  d = c.copy(person.last: "Hopper")
+  println(c.label); println(d.label); println(d.person.greeting)
+  box = Box[Int] { item: 3 }
+  changed = box.copy(item: 4)
+  println(box.repeated); println(changed.repeated)
+  choice: Choice = .Item { n: 7 }
+  println(match (choice) { Choice.Item { doubled: x } => x, Choice.Empty => 0 })
+  held = Held { n: 7, tag: "old" }
+  unrelated = held.copy(tag: "new")
+  equalReplacement = held.copy(n: 7)
+  println(shared(held, unrelated)); println(shared(held, equalReplacement))
+  danger = Danger { n: 0 }
+  other = Danger { n: 0 }
+  println(danger); println(danger == other)
+  lookup = { danger: "present" }
+  println(lookup.get(other))
+  cb = Callback { n: 4 }
+  cb2 = Callback { n: 4 }
+  println(cb == cb2)
+  table = { cb: "callback" }
+  println(table.get(cb2))
+  println(cb.copy(n: 5).call())
+}

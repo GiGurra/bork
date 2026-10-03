@@ -1,0 +1,17 @@
+Ada Lovelace
+Grace Lovelace
+Hi Grace Lovelace
+Ada Lovelace
+Ada Hopper
+Hi Ada Hopper
+3
+4
+14
+true
+false
+Danger { n: 0 }
+true
+Option.Some { value: "present" }
+true
+Option.Some { value: "callback" }
+5
