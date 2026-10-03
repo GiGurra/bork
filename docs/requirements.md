@@ -2522,8 +2522,9 @@ and recursive conversions are not evaluated. This is an intentional difference
 from ordinary function argument evaluation, made explicit by the conversion's
 union result. Automatic recursive mapping is infallible in this initial design: it performs
 no callbacks, defaults are closed values, and only explicit overrides lift
-errors. Per-element fallible mapping must be written explicitly with `.map`
-and supplied as a complete field override. Only successfully evaluated
+errors. Per-element fallible mapping must be written as explicit user code returning
+`List[B] | E` and supplied as a complete field override; `.map` alone would
+produce `List[B | E]`, not lift element failures into the outer result. Only successfully evaluated
 overrides enter the final candidate. An explicit
 `?`, `return` or panic inside any expression retains its existing enclosing
 function semantics. Diagnostics and `bork describe` show the inferred result
