@@ -121,6 +121,9 @@ func (l *List) WriteJSON(w io.Writer) error {
 
 func (l *List) Len() int { return len(l.items) }
 
+// Append joins diagnostics collected by an independent compiler task.
+func (l *List) Append(other *List) { l.items = append(l.items, other.items...) }
+
 // Truncate drops the diagnostics added after the first n.
 func (l *List) Truncate(n int) { l.items = l.items[:n] }
 

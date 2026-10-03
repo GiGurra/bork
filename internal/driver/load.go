@@ -157,16 +157,9 @@ func (l *loader) loadPackage(importPath string, paths []string) error {
 func (l *loader) loadSources(importPath string, paths []string, srcs [][]byte) error {
 	l.state[importPath] = 1
 	l.stack = append(l.stack, importPath)
-	var files []*syntax.File
-	for i, p := range paths {
-		var f *syntax.File
-		if strings.HasPrefix(importPath, std.Prefix) {
-			f = syntax.ParseEmbedded(p, srcs[i], l.diags)
-		} else {
-			f = syntax.Parse(p, srcs[i], l.diags)
-		}
+	files := syntax.ParseFiles(paths, srcs, strings.HasPrefix(importPath, std.Prefix), l.diags)
+	for _, f := range files {
 		f.Package = importPath
-		files = append(files, f)
 	}
 	l.files = append(l.files, files...)
 	if !strings.HasPrefix(importPath, std.Prefix) {
