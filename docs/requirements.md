@@ -929,6 +929,11 @@ value or expression has only its function-type contract, as in ordinary assembly
 A replacement must satisfy all the existing provider restrictions, including
 monomorphic signatures, no union parameters and no OwnedScope products/parameters.
 Providers are never selected or replaced by list order.
+A replacement can make an existing dependency entry unused: replacing
+`openDb(Config)` with `fakeDb()` does not silently remove the Config provider.
+Use a fake adapter taking Config when that dependency should remain part of the
+wiring, or compose smaller bundles at the call site. The graph is always checked
+after replacement.
 
 Bundles and individual providers can be mixed:
 
@@ -941,7 +946,8 @@ Flatten provider arguments from left to right; each bundle contributes its entri
 in declaration order. A replacement occupies its original entry's position,
 regardless of the order of named arguments. This order determines collection
 roots and the existing deterministic dependency traversal. Products duplicated
-across bundles or individual arguments are ordinary duplicate-provider errors;
+across bundles or individual arguments follow ordinary duplicate-provider rules,
+including the `assembleAll[T]` exception for multiple target-root products;
 using the same bundle twice does not deduplicate it. All flattened entries remain
 subject to unused-provider checks. A bundle is not a discovery pool from which
 assembly silently selects a subset.
@@ -955,8 +961,10 @@ at the call site when a target needs additional wiring.
 
 A declaration does not evaluate or invoke its providers. Every assembly call
 borrows its explicit Scope, evaluates ordinary replacement provider expressions
-once in flattened entry order, and then invokes the resolved providers in the
-existing graph order. Even unused or invalid graphs are checked before code can
+once in source argument order, and then invokes the resolved providers in the
+existing graph order. Named replacement expressions evaluate in their written
+order, as in ordinary named calls; this is separate from the bundle entry order
+used for graph traversal and collection roots. Even unused or invalid graphs are checked before code can
 execute. Plain declared provider references require no runtime initialization.
 Captured local values in overrides have their ordinary lifetimes. There is no
 bundle lifetime, owner, hidden child scope or cross-call cache.
@@ -997,7 +1005,9 @@ Implementation delivery includes syntax, declaration/import resolution,
 replacement checking, compiler expansion into ordinary calls, formatter,
 diagnostics, text/JSON describe, grammar and README, and an updated
 `examples/assemble` bundle. Goldens cover repeated calls without caching,
-collection order, shared dependencies, failure propagation, effect/fact/lifetime
+collection order and duplicate target roots across bundles/standalone providers,
+reversed named-argument evaluation order, unused dependencies after replacement,
+shared dependencies, failure propagation, effect/fact/lifetime
 contracts, imported private providers, local fixture replacements, saved function
 values, native mocks, and invalid declaration/use/replacement forms. Bundle
 expansion must not bypass private record construction or OwnedScope restrictions.
