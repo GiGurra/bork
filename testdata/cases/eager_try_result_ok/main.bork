@@ -1,0 +1,40 @@
+type Problem = { code: Int }
+pred Approved(x: Problem) { x.code > 0 }
+fn source(flag: Bool, failure: Problem where Approved): Int | Problem where Approved {
+  if (flag) { failure } else { 1 }
+}
+fn forwarded(flag: Bool, failure: Problem where Approved): Int | Problem where Approved {
+  value = source(flag, failure)?
+  value
+}
+
+pred Allowed(x: Int | Problem) { match (x) { value: Int => value > 0; failure: Problem => Approved(failure) } }
+fn whole(flag: Bool): (Int | Problem) where Allowed {
+  value = source(flag, Problem { code: 1 })?
+  value
+}
+fn parameter(value: (Int | Problem) where Allowed): (Int | Problem) where Allowed { value? }
+fn guarded(value: Int | Problem): (Int | Problem) where Allowed {
+  if (Allowed(value)) { value? } else { 1 }
+}
+fn subset(flag: Bool): (Int | Problem | String) where Permitted { whole(flag) }
+pred Permitted(x: Int | Problem | String) { match (x) { value: Int => true; failure: Problem => true; text: String => false } }
+pred AnyOption(x: Option[Int]) { match (x) { Option.Some { value: value } => true; Option.None => true } }
+fn optionSource(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some { value: 1 } } }
+fn optionForward(flag: Bool): Option[Int] where AnyOption { value = optionSource(flag)?; Option.Some { value: value } }
+
+pred Positive(x: Int) { x > 0 }
+fn somePositive(flag: Bool): Option[Int where Positive] {
+  value = optionSource(flag)?
+  if (Positive(value)) { Option.Some { value: value } } else { Option.None }
+}
+fn main() {
+  println(forwarded(true, Problem { code: 1 }))
+  println(forwarded(false, Problem { code: 1 }))
+  println(whole(true), whole(false))
+  println(parameter(Problem { code: 1 }), parameter(1))
+  println(guarded(Problem { code: 1 }), guarded(1))
+  println(subset(true), subset(false))
+  println(optionForward(true), optionForward(false))
+  println(somePositive(true), somePositive(false))
+}

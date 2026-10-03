@@ -1,0 +1,32 @@
+type Failed = {}
+pred Success(x: Int | Failed) { x != Failed {} }
+fn bad(flag: Bool): Int | Failed { if (flag) { Failed {} } else { 1 } }
+fn make(flag: Bool): (Int | Failed) where Success { value = bad(flag)?; 1 }
+fn identity(n: Int): Int { n }
+fn argument(flag: Bool): (Int | Failed) where Success { identity(bad(flag)?) }
+fn block(flag: Bool): (Int | Failed) where Success { value = { bad(flag)? }; value }
+fn returned(flag: Bool): (Int | Failed) where Success { return bad(flag)? }
+fn explicitFailure(): (Int | Failed) where Success { Failed {} }
+
+pred Present(x: Option[Int]) { match (x) { Option.Some { value: value } => true; Option.None => false } }
+fn optional(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some { value: 1 } } }
+fn optionMake(flag: Bool): Option[Int] where Present { value = optional(flag)?; Option.Some { value: value } }
+fn optionArgument(flag: Bool): Option[Int] where Present { Option.Some { value: identity(optional(flag)?) } }
+fn optionBlock(flag: Bool): Option[Int] where Present { value = { optional(flag)? }; Option.Some { value: value } }
+
+type First = {}
+type Second = {}
+pred Numeric(x: Int | First | Second) { match (x) { value: Int => true; first: First => false; second: Second => false } }
+fn alternatives(flag: Bool): Int | First | Second { if (flag) { First {} } else { Second {} } }
+fn bothFailures(flag: Bool): (Int | First | Second) where Numeric { value = alternatives(flag)?; 1 }
+
+type Problem = { code: Int }
+pred Approved(x: Problem) { x.code > 0 }
+fn problem(flag: Bool): Int | Problem { if (flag) { Problem { code: 0 } } else { 1 } }
+fn memberFailure(flag: Bool): Int | Problem where Approved { value = problem(flag)?; value }
+
+// Unannotated functions must expose implicit failures during body-derived proof.
+fn hidesFailure(flag: Bool): Int | Failed { value = bad(flag)?; 1 }
+fn needsSuccess(x: (Int | Failed) where Success): Int { 1 }
+fn derived(flag: Bool): Int { needsSuccess(hidesFailure(flag)) }
+fn main() {}

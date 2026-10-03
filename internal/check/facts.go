@@ -623,7 +623,7 @@ func (f *factChecker) walk(x Expr, e env) {
 		}
 	case *Try:
 		f.walk(x.X, e)
-		if f.initializerResultFn != nil && f.fn == f.initializerResultFn {
+		if f.fn != nil {
 			f.tryResults(x, e)
 		}
 	case *Interp:
@@ -952,7 +952,7 @@ func (f *factChecker) checkResult(x Expr, e env) {
 	for _, mc := range f.fn.ResultConstraints {
 		var member Type
 		switch {
-		case identical(t, mc.Type):
+		case assignable(t, mc.Type):
 		case isMemberOf(mc.Type, t):
 			member = mc.Type
 		default:
@@ -1766,7 +1766,6 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 	}
 
 	q := Query{Pred: ob.pred, Params: ob.pred.Params}
-	// Widening to a union must preserve the literal's concrete runtime type.
 	if v := constOf(x); v != nil && identical(x.Type(), ob.pred.Params[0]) {
 		q.Args = []constant.Value{v}
 	} else {
