@@ -83,7 +83,7 @@ fn main() {
   println(connect("", 70000))
   bad: Port = 0
   req = Request { name: "x", port: 80 }
-  println(req.copy(port = -1), bad)
+  println(req.copy(port: -1), bad)
   println(payOut(1), afterIf(1), wrongBranch(1), either(1), otherValue(1, 2), computed(1), promise(1))
   println(unvalidated(1), useRequest("a", 1), trustComputed(1))
 }

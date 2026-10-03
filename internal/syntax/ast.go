@@ -365,6 +365,9 @@ type Call struct {
 	Fun    Expr
 	FunEnd diag.Pos // position after the callee, before type arguments
 	Args   []Expr
+	// Arguments retains labels and source ranges, parallel to Args. A
+	// synthesized pipeline input has no label.
+	Arguments []Argument
 	// TypeArgs are explicit type arguments: `empty[Int]()`.
 	TypeArgs []*TypeExpr
 	// Pipe retains the source of a desugared pipeline for diagnostics.
@@ -373,6 +376,16 @@ type Call struct {
 	PipeTargetEnd      diag.Pos // end of the original pipeline target
 	PipeWrap           bool     // receiver needs parentheses before a selector
 	PipeBare           bool     // target was written without call parentheses
+}
+
+// Argument describes a call argument as written; Name is empty for a
+// positional argument. End is after its expression, NameEnd after its label.
+type Argument struct {
+	Name              string
+	Pos, NameEnd, End diag.Pos
+	// RemovalStart includes the preceding comma, when no comment would
+	// be removed with it. Zero for the first argument or commented spans.
+	RemovalStart diag.Pos
 }
 
 // If is `if (cond) { ... } else { ... }`. Else is nil, a *Block, or an
@@ -421,7 +434,7 @@ type FieldInit struct {
 	Value Expr
 }
 
-// Copy is `x.copy(age = 37, address.city = "Oslo")`: a new record equal
+// Copy is `x.copy(age: 37, address.city: "Oslo")`: a new record equal
 // to x except for the given (possibly nested) fields.
 type Copy struct {
 	Pos     diag.Pos // position of 'copy'

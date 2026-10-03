@@ -37,7 +37,7 @@ fn Defaults(): Config {
 }
 
 // Configure sets how records are written from now on, by the whole
-// program: log.Configure(log.Defaults().copy(level = log.Level.Debug)).
+// program: log.Configure(log.Defaults().copy(level : log.Level.Debug)).
 fn Configure(config: Config) uses io {
   json = match (config.format) {
     Format.Json => true

@@ -17,7 +17,7 @@ fn findUser(id: Int): User | NotFound | DbError {
 // ? keeps the User and returns NotFound or DbError to the caller.
 fn moveUser(id: Int, city: String): User | NotFound | DbError {
   user = findUser(id)?
-  user.copy(address.city = city)
+  user.copy(address.city: city)
 }
 
 fn describe(id: Int): String {

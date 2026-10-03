@@ -38,10 +38,10 @@ fn FlagInt(name: String, value: Int, usage: String) uses io: Option[Int] unsafe 
 fn (s: String) escaped(): String unsafe go "net/url.PathEscape"
 
 fn main() {
-  println(QueryEscape("a b&c"))
+  println(QueryEscape(s: "a b&c"))
   println(Atoi("42"))
   println(Atoi("x"))
-  println(Join(Fields("  a  b c "), ","))
+  println(Join(sep: ",", parts: Fields("  a  b c ")))
   println(LookupEnv("BORK_SURELY_UNSET"))
   println(Chdir("/nonexistent-dir"))
   println(Abs(-1.5))

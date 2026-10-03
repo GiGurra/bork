@@ -124,7 +124,7 @@ fn main() {
   // Facts live on fields too.
   req = Request { name: "api", port: 8080 }
   println(connect(req.name, req.port))
-  moved = req.copy(port = 9090)
+  moved = req.copy(port: 9090)
   println(connect(moved.name, moved.port))
   println(transfer(normalize(-3)), visit(User { name: "Ada", age: 36 }), visit(User { name: "Tim", age: 9 }))
 }

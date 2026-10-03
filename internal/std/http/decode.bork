@@ -52,7 +52,7 @@ fn fieldsJson[T: Decode](values: Headers): Json | DecodeError unsafe go {
 // Form parses an application/x-www-form-urlencoded body, independently of
 // query parameters. Multipart files are copied into immutable Bytes.
 fn Form(request: Request): Headers | IoError {
-  Query(request.copy(query = request.body))
+  Query(request.copy(query: request.body))
 }
 type Upload = { field: String, filename: String, contentType: String, data: Bytes }
 type MultipartForm = { values: Headers, files: List[Upload] }

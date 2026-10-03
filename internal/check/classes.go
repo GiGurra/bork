@@ -127,7 +127,12 @@ func (c *checker) declareClassMethods() {
 			fn := &Func{Decl: md, Pkg: c.pkg, Prelude: cl.Prelude, Class: cl, TypeParams: []*TypeParam{cl.Param}}
 			fn.Effects = c.effectsOf(md.Uses)
 			fn.Result = c.resolveType(md.Result)
+			names := map[string]diag.Pos{}
 			for _, p := range md.Params {
+				if prev, exists := names[p.Name]; exists {
+					c.errorf(p.Pos, "parameter %s is already declared at %s", p.Name, prev)
+				}
+				names[p.Name] = p.Pos
 				fn.Params = append(fn.Params, c.resolveType(p.Type))
 			}
 			c.openSignature(fn)

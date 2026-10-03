@@ -423,3 +423,36 @@ func TestDescribeMethodReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestDescribeNamedArguments(t *testing.T) {
+	source := `fn config(host: String, port: Int = 8080): String { host }
+fn scenario() { _ = config(port: 9000, host: "local") }
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Describe(path+":2:21", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	callable := result.Callable
+	if callable == nil || !callable.NamedArguments || !callable.ParameterNamesAreAPI || len(callable.Parameters) != 2 || callable.Parameters[0].Name != "host" || callable.Parameters[1].Default != "8080" {
+		t.Fatalf("missing callable API: %+v", callable)
+	}
+	label, err := Describe(path+":2:28", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if label.Type != "Int" || label.Definition == nil || label.Definition.Line != 1 || label.Definition.Col != 25 {
+		t.Fatalf("label must select the declared parameter: %+v", label)
+	}
+	value, err := Describe(path+":2:34", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Type != "Int" || value.Callable != nil {
+		t.Fatalf("unexpected argument description: %+v", value)
+	}
+}

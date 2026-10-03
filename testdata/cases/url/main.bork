@@ -12,7 +12,7 @@ fn exercise() uses io: Unit | ParseError {
   println(parsed.fragment)
   println(parsed.user)
   println(parsed.String())
-  println(parsed.copy(path = "/new path", fragment = "new fragment").String())
+  println(parsed.copy(path: "/new path", fragment: "new fragment").String())
   println(url.Url { scheme: "https", host: "example.com", path: "/hello world", query: { "q": ["a+b", "é"], "flag": [""] }, fragment: "a b" }.String())
   println(url.ParseQuery("b=2&a=1&a=3&flag"))
   println({ "z": ["2", "1"], "a": ["hello world"], "empty": [] }.EncodeQuery())

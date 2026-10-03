@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/boa/pkg/boa"
+	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/describe"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/driver"
@@ -77,11 +78,17 @@ func printDescription(result *describe.Result) {
 	if result.Definition != nil {
 		fmt.Println("defined at:", result.Definition)
 	}
+	if result.Callable != nil {
+		fmt.Println("named arguments:", callableParameters(result.Callable), "(parameter names are API)")
+	}
 	for _, method := range result.Methods {
 		if method.Ambiguity != "" {
 			fmt.Println("method:", method.Ambiguity)
 		} else {
 			fmt.Printf("method: %s: %s (%s)", method.Name, method.Type, method.Definition)
+			if method.Callable != nil {
+				fmt.Printf(" named arguments (%s)", callableParameters(method.Callable))
+			}
 			if len(method.Requires) > 0 {
 				fmt.Printf(" requires %s", strings.Join(method.Requires, "; "))
 			}
@@ -102,6 +109,21 @@ func printDescription(result *describe.Result) {
 			fmt.Printf("not proven: %s\n%s\n", result.Proof.Where, result.Proof.Reason)
 		}
 	}
+}
+
+func callableParameters(callable *check.CallableDescription) string {
+	var parts []string
+	for _, p := range callable.Parameters {
+		if p.Receiver {
+			continue
+		}
+		text := p.Name + ": " + p.Type
+		if p.Default != "" {
+			text += " = " + p.Default
+		}
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // completeBorkPaths completes .bork files and directories for the

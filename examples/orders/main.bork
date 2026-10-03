@@ -95,7 +95,7 @@ fn main() {
 
   // Changing an order means building a new one.
   first = price(Order { id: "B-1", item: Item { name: "tea", unitPrice: 300, quantity: 1 }, discount: Discount.None, coupon: Option.None })
-  bigger = price(first.order.copy(item.quantity = 5, discount = Discount.Percent { percent: 20 }))
+  bigger = price(first.order.copy(item.quantity: 5, discount: Discount.Percent { percent: 20 }))
   println(receipt(first))
   println(receipt(bigger))
 }

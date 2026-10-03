@@ -1105,13 +1105,13 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **Records have named fields:** `type User = { name: String, age: Int }`, built as `User { name: "Ada", age: 36 }`. There are no positional constructors.
 - **Sealed variants are always qualified:** `Shape.Circle { radius: 1 }`, `Shape.Empty`, also in patterns. Unqualified variants may come later, through imports.
 - **Pattern matching is `match (x) { pattern => value, ... }`.**
-- **Changed copies use `copy`, with nested paths:** `u.copy(age = 37, address.city = "Oslo")`. This replaces Scala's nested `copy(address = u.address.copy(city = ...))`.
+- **Changed copies use `copy`, with nested paths:** `u.copy(age: 37, address.city: "Oslo")`. Paths reach nested records directly.
 
-### Named call arguments (design: bork-e48in4)
+### Named call arguments (implemented: bork-e48in4)
 
 Named arguments complement parameter defaults: a small API can expose readable
 options without a separate config record or functional options. This section is
-the implementation contract; examples below describe the proposed syntax.
+the implementation contract; examples below use the implemented syntax.
 
 ```bork
 // internal/std/http/http.bork: skip drainTimeoutMs, retaining its default.

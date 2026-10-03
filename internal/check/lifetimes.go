@@ -362,7 +362,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 	case *Lambda:
 		return l.lambda(x)
 	case *Call:
-		return l.call(x.Func, true, x.Args)
+		return l.call(x.Func, true, x.Args, x.ArgOrder)
 	case *CallBuiltin:
 		return l.call(nil, true, x.Args)
 	case *CallValue:
@@ -476,10 +476,18 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 // call checks the arguments of a call, and returns the lifetime of its
 // result. The callee is fn, a builtin (direct, with fn nil), or a
 // function value (neither).
-func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr) lifetime {
+func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) lifetime {
 	var life lifetime
 	args := make([]lifetime, len(xargs))
-	for i, a := range xargs {
+	indices := make([]int, len(xargs))
+	for i := range indices {
+		indices[i] = i
+	}
+	if len(order) > 0 && order[0] != nil {
+		indices = order[0]
+	}
+	for _, i := range indices {
+		a := xargs[i]
 		args[i] = l.use(a, l.expr(a))
 		life = life.union(args[i])
 	}

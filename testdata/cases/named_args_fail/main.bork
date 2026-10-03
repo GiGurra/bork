@@ -1,0 +1,21 @@
+fn options(host: String, port: Int = 8080): String { host }
+fn (n: Int) plus(value: Int): Int { n + value }
+type Holder = { f: (Int) => Int }
+fn main() {
+  println(options("x", prot: 9))
+  println(options("x", host: "y"))
+  println(options(host: "x", host: "y"))
+  println(options(port: 9))
+  println(options(host: "x", 9))
+  g: (Int) => Int = n => n + 1
+  println(g(n: 1))
+  h = Int.plus
+  println(h(n: 1, value: 2))
+  record = Holder { f: n => n }
+  println(record.f(n: 1))
+  f = options
+  println(f(host: "x", port: 9))
+  println(Int.plus(n: 1, value: 2))
+  println(toString(value: 1))
+  println("x" |> options(host: "y"))
+}

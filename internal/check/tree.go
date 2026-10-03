@@ -147,6 +147,10 @@ type Call struct {
 	Func *Func
 	Inst *Instance
 	Args []Expr
+	// ArgOrder lists parameter indices in source evaluation order; nil
+	// means declaration order. Args remains in declaration order for facts.
+	ArgOrder []int
+	Labels   []ArgumentLabel
 	// Embedded is set for a compile-time bork/embed call.
 	Embedded *Embedded
 	// ReceiverCall distinguishes x.method(a) from Type.method(x, a).
@@ -154,6 +158,26 @@ type Call struct {
 	// TypeArgNames holds, per type parameter, an explicit type argument
 	// that is a plain name, as written (Port, not Int); "" for others.
 	TypeArgNames []string
+}
+
+// ArgumentLabel identifies the parameter selected by a source argument label.
+type ArgumentLabel struct {
+	Name  string
+	Pos   diag.Pos
+	Param int
+}
+
+// EvaluationArgs gives arguments in source evaluation order. Args itself
+// maps parameter identities for contracts and generic specialization.
+func (c *Call) EvaluationArgs() []Expr {
+	if c.ArgOrder == nil {
+		return c.Args
+	}
+	out := make([]Expr, len(c.ArgOrder))
+	for i, param := range c.ArgOrder {
+		out[i] = c.Args[param]
+	}
+	return out
 }
 
 // CallBuiltin is a call of a function the compiler provides.
@@ -259,7 +283,7 @@ type FieldValue struct {
 	Value     Expr
 }
 
-// Copy is `x.copy(a = 1, b.c = 2)`.
+// Copy is `x.copy(a: 1, b.c: 2)`.
 type Copy struct {
 	expr
 	X       Expr

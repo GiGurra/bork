@@ -13,14 +13,15 @@ import (
 )
 
 type Result struct {
-	SchemaVersion int                       `json:"schema_version"`
-	Position      diag.Pos                  `json:"position"`
-	Type          string                    `json:"type"`
-	Expression    string                    `json:"expression,omitempty"`
-	Definition    *diag.Pos                 `json:"definition,omitempty"`
-	Methods       []check.MethodDescription `json:"methods"`
-	Facts         []check.KnownFact         `json:"facts"`
-	Proof         *check.Proof              `json:"proof,omitempty"`
+	SchemaVersion int                        `json:"schema_version"`
+	Position      diag.Pos                   `json:"position"`
+	Type          string                     `json:"type"`
+	Expression    string                     `json:"expression,omitempty"`
+	Definition    *diag.Pos                  `json:"definition,omitempty"`
+	Methods       []check.MethodDescription  `json:"methods"`
+	Facts         []check.KnownFact          `json:"facts"`
+	Proof         *check.Proof               `json:"proof,omitempty"`
+	Callable      *check.CallableDescription `json:"callable,omitempty"`
 }
 
 // Selection is a source value and the position at which to query its facts.
@@ -33,6 +34,7 @@ type Selection struct {
 	Definition *diag.Pos
 	Site       diag.Pos
 	Value      bool
+	Callable   *check.CallableDescription
 }
 
 func ParsePosition(text string) (diag.Pos, error) {
@@ -188,6 +190,12 @@ func (s *sourceIndex) walk(x check.Expr) {
 	switch x := x.(type) {
 	case *check.Call:
 		s.callee(x)
+		for _, label := range x.Labels {
+			if s.contains(label.Pos, len(label.Name)) {
+				pos := x.Func.Decl.Params[label.Param].Pos
+				s.choose(x.Args[label.Param], x.Inst.Params[label.Param], &pos)
+			}
+		}
 		for _, a := range x.Args {
 			s.walk(a)
 		}
@@ -437,6 +445,7 @@ func (s *sourceIndex) callee(call *check.Call) {
 	pos := call.Func.Decl.Pos
 	s.choose(call, &check.FuncType{Params: params, Result: call.Inst.Result, Effects: call.Func.Effects}, &pos)
 	s.selected.Value = false
+	s.selected.Callable = check.DescribeCallable(call.Func, params, s.fn.Pkg, call.ReceiverCall)
 }
 
 func (s *sourceIndex) pattern(p *check.Pat, site diag.Pos) {

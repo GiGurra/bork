@@ -62,7 +62,7 @@ fn Rollback(transaction: Transaction) uses io + net: Unit | Error unsafe go {
 // Exec binds params to the driver's placeholders (? for SQLite, $1 for
 // Postgres), uses the owner's cancellation context, and returns the changed row count and optional generated ID.
 fn Exec(connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: Result | Error {
-  match (run(connection, query, params, false)) {
+  match (run(connection, query, params, read: false)) {
     outcome.Changed { result } => result
     outcome.Rows { values } => panic("sql: unexpected query result")
     error: Error => error
@@ -82,7 +82,7 @@ fn Query[T: Decode](connection: Connection | Transaction, query: String, params:
 // Postgres NUMERIC values remain strings; JSON/JSONB driver bytes remain arrays.
 // Cast columns or decode QueryJson explicitly when another mapping is needed.
 fn QueryJson(connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: Json | Error {
-  match (run(connection, query, params, true)) {
+  match (run(connection, query, params, read: true)) {
     outcome.Rows { values } => Json.Array { items: values }
     outcome.Changed { result } => panic("sql: unexpected exec result")
     error: Error => error

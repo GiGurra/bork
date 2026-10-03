@@ -384,7 +384,7 @@ func (f *factChecker) walk(x Expr, e env) {
 				}
 			}
 		}
-		for _, a := range x.Args {
+		for _, a := range x.EvaluationArgs() {
 			f.walk(a, e)
 		}
 		f.callObligations(x, e)

@@ -1,5 +1,5 @@
 main.bork:6:14: User has no field nickname
 main.bork:7:14: cannot update name.first: name is a String, not a record
-main.bork:8:50: updates of address and address.city overlap
-main.bork:9:21: name must be String, found Int
+main.bork:8:49: updates of address and address.city overlap
+main.bork:9:20: name must be String, found Int
 main.bork:10:9: copy needs a record, found Int

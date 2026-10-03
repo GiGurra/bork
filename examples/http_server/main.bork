@@ -78,7 +78,7 @@ fn show(store: Atom[Store], id: Int) uses state: http.Response {
 
 fn finish(store: Atom[Store], id: Int) uses state: http.Response {
   _ = update(store, st => match (st.todos.get(id)) {
-    Option.Some { value: todo } => st.copy(todos = st.todos.put(id, todo.copy(done = true)))
+    Option.Some { value: todo } => st.copy(todos: st.todos.put(id, todo.copy(done: true)))
     Option.None => st
   })
   show(store, id)
@@ -87,7 +87,7 @@ fn finish(store: Atom[Store], id: Int) uses state: http.Response {
 fn remove(store: Atom[Store], id: Int) uses state: http.Response {
   // swap gives the state the removal was made to: whether it had the
   // todo decides the answer, even if another request removed it too.
-  old = swap(store, st => st.copy(todos = st.todos.remove(id)))
+  old = swap(store, st => st.copy(todos: st.todos.remove(id)))
   if (old.todos.has(id)) {
     log.Info("removed", { "id": id })
     http.Text(204, "")
@@ -135,7 +135,7 @@ fn handler(store: Atom[Store]): (http.Request, Scope) uses state => http.Respons
 
 fn serve(addr: String) uses net + state: Unit | IoError {
   scope s {
-    server = http.Listen(addr, s, handler(atom(emptyStore())))?
+    server = http.Listen(addr, s, handler: handler(atom(emptyStore())))?
     log.Info("listening", { "address": http.Address(server) })
     http.Wait(server)
   }
@@ -152,9 +152,9 @@ fn call(s: Scope, base: String, method: String, path: String, body: String = "")
 // demo starts the server on a free port and sends it requests; the
 // server stops when the scope closes. Logs go to stdout, as plain text.
 fn demo() uses io + net + state: Unit | IoError {
-  log.Configure(log.Defaults().copy(output = log.Output.Stdout, timestamps = false))
+  log.Configure(log.Defaults().copy(output: log.Output.Stdout, timestamps: false))
   scope s {
-    server = http.Listen("127.0.0.1:0", s, handler(atom(emptyStore())))?
+    server = http.Listen("127.0.0.1:0", s, handler: handler(atom(emptyStore())))?
     base = "http://" + http.Address(server)
     call(s, base, "POST", "/todos", "{\"title\": \"buy milk\"}")
     call(s, base, "POST", "/todos", "{\"title\": \"write docs\"}")

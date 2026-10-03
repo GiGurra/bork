@@ -1,0 +1,2 @@
+type Config = { port: Int }
+fn main() { println(Config { port: 1 }.copy(port = 2)) }

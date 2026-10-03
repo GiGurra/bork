@@ -1,0 +1,63 @@
+import "bork/url"
+use ints
+
+pred positive(x: Int) { x > 0 }
+pred bounded(x: Int, limit: Int) { x <= limit }
+fn config(host: String, secure: Bool = false, port: Int = 8080): String {
+  s"$host $secure $port"
+}
+fn checked(limit: Int, value: Int where positive and bounded(limit)): Int { value }
+fn pair[T](first: T, second: T): List[T] { [first, second] }
+fn apply[T](value: T, transform: (T) => T): T { transform(value) }
+fn mark(label: String, value: Int) uses io: Int { println(label); value }
+fn total(first: Int, second: Int, third: Int = 3): Int { first + second + third }
+fn filled[T](first: List[T] = [], second: List[T] = []): List[T] { first.concat(second) }
+fn (value: Int) mix(first: Int, second: Int): Int { value + first + second }
+fn (value: Int) plus(other: Int = 10): Int { value + other }
+class Combine[T] { fn combine(left: T, right: T): T }
+instance ints: Combine[Int] { fn combine(a: Int, b: Int): Int { a + b } }
+
+pred namedPositive(x: Int) { total(second: 0, first: x) > 0 }
+fn proven(n: Int where namedPositive): Int { n }
+
+fn maybe(value: Int): Int | String { if (value > 0) { value } else { "stop" } }
+fn early() uses io: Int | String {
+  total(second: maybe(0)?, first: mark("unreachable try", 1))
+}
+fn returned() uses io: Int {
+  total(second: { println("return"); return 42 }, first: mark("unreachable return", 1))
+}
+
+fn catches(f: () => Int): Bool unsafe go {
+  failed := false
+  func() {
+    defer func() { failed = recover() != nil }()
+    _ = f()
+  }()
+  return failed
+}
+
+fn main() {
+  println(config("local", port: 9000))
+  println(config(port: 443, host: "example", secure: true))
+  println("pipe" |> config(port: 9001))
+  println([1, 2].map(f: x => x + 1))
+  println(List.take([1, 2, 3], n: 2))
+  println(pair(second: 2, first: 1))
+  println(apply(transform: x => x + 1, value: 5))
+  println(proven(n: 1))
+  println(apply(value: 5, transform: x => { println("callback"); x + 1 }))
+  println(checked(value: 5, limit: 10))
+  println(filled(second: [1, 2]))
+  println(mark("receiver", 1).mix(second: mark("method B", 2), first: mark("method A", 3)))
+  println(mark("pipe input", 1) |> total(third: mark("pipe C", 3), second: mark("pipe B", 2)))
+  println(5.plus(other: 4))
+  println(Int.plus(5, other: 4))
+  println(combine(right: 3, left: 2))
+  println(url.EncodeQuery(query: { "a": ["b c"] }))
+  println(total(second: mark("B", 2), first: mark("A", 1)))
+  println(total(second: mark("block B", 2), first: { println("block A"); 1 }))
+  println(early())
+  println(returned())
+  println(catches(() => total(second: panic("boom"), first: mark("unreachable panic", 1))))
+}

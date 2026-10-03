@@ -212,10 +212,12 @@ type Info struct {
 	callFuncs    map[*syntax.Call]*Func
 	callBuiltins map[*syntax.Call]Builtin
 	// callArgs holds the arguments of every call of a declared function
-	// as the function takes them: a method call's receiver first, then
-	// the arguments written, then the defaults of those left out. The
-	// call's syntax is left as written.
+	// in parameter order, including a method's receiver and the defaults
+	// of unfilled parameters. The call's syntax is left as written.
 	callArgs map[*syntax.Call][]syntax.Expr
+	// callOrder maps source evaluation order to parameter indices for
+	// calls with labels, including receiver and inserted defaults.
+	callOrder map[*syntax.Call][]int
 	// callTypeArgs holds a call's explicit type arguments as written, one
 	// per type parameter (nil for those a method's receiver decides).
 	callTypeArgs map[*syntax.Call][]*syntax.TypeExpr
@@ -298,6 +300,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			callFuncs:        map[*syntax.Call]*Func{},
 			callBuiltins:     map[*syntax.Call]Builtin{},
 			callArgs:         map[*syntax.Call][]syntax.Expr{},
+			callOrder:        map[*syntax.Call][]int{},
 			callTypeArgs:     map[*syntax.Call][]*syntax.TypeExpr{},
 			recordTargets:    map[*syntax.RecordLit]any{},
 			recordInits:      map[*syntax.RecordLit][]*syntax.FieldInit{},
@@ -1255,6 +1258,7 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 }
 
 func (c *checker) builtinCall(e *syntax.Call, fname string, b Builtin) Type {
+	c.rejectNamedArgs(e, "compiler built-ins have no declared parameter names")
 	if b == BuiltinAssertEqual {
 		if len(e.Args) != 2 {
 			c.errorf(e.Pos, "assertEqual takes 2 arguments (actual, expected), but %d were given", len(e.Args))

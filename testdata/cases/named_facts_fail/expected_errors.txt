@@ -1,0 +1,2 @@
+main.bork:5:26: checked requires value to be positive, but positive(0) is false
+main.bork:6:26: checked requires value to be below(limit), but below(10, 5) is false
