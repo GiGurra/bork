@@ -386,19 +386,37 @@ func _borkPropagated() []_borkHeader {
 // _borkBindPropagated binds the propagated values of an incoming
 // request or message on this goroutine (and the goroutines it starts),
 // until the returned restore: a boundary, so values bound before it are
-// not inherited. get gives the value under a header name, if present.
-// A value that is not of its declaration's type, or lacks its facts, is
-// not bound, and is logged at warn level (without its text).
+// not inherited. It first clears them, so what get and the values'
+// checks log does not carry them either, then reads the values. get
+// gives the value under a header name, if present. A value that is not
+// of its declaration's type, or lacks its facts, is not bound, and is
+// logged at warn level (without its text).
 func _borkBindPropagated(get func(name string) (string, bool)) (restore func()) {
 	prev := _labels()
-	var kv []string
+	var clear []string
+	for _, d := range _ambientDecls {
+		if d.header != "" {
+			clear = append(clear, d.key, "")
+		}
+	}
+	if len(clear) == 0 {
+		return func() {}
+	}
+	_labelsSet(clear...)
+	ok := false
+	defer func() {
+		// get panicked: the caller has no restore yet.
+		if !ok {
+			_setLabels(prev)
+		}
+	}()
+	var bind []string
 	for _, d := range _ambientDecls {
 		if d.header == "" {
 			continue
 		}
-		kv = append(kv, d.key, "")
-		text, ok := get(d.header)
-		if !ok {
+		text, found := get(d.header)
+		if !found {
 			continue
 		}
 		v, err := d.read(text)
@@ -406,11 +424,12 @@ func _borkBindPropagated(get func(name string) (string, bool)) (restore func()) 
 			slog.Warn("ignored an invalid propagated value", "header", d.header, "ambient", d.name, "error", err.Error())
 			continue
 		}
-		kv[len(kv)-1] = "=" + _ambientText(v)
+		bind = append(bind, d.key, "="+_ambientText(v))
 	}
-	if len(kv) > 0 {
-		_labelsSet(kv...)
+	if len(bind) > 0 {
+		_labelsSet(bind...)
 	}
+	ok = true
 	return func() { _setLabels(prev) }
 }
 `

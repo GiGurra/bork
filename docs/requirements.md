@@ -2227,8 +2227,9 @@ propagated("traceparent") logged ambient trace: TraceParent   // String where va
   servers bind an incoming request's values with `_borkBindPropagated`. Bork
   code reads ambient values only through `needs`.
 - **An incoming request is a boundary.** Binding its values first clears every
-  propagated value the server's goroutine had bound, so a request never
-  forwards the server's own trace. A missing value stays unbound; one that is
+  propagated value the server's goroutine had bound, before reading any, so a
+  request never forwards the server's own trace, and nothing logged while its
+  values are read carries it. A missing value stays unbound; one that is
   not of its type or lacks its facts (or whose predicate panics) stays
   unbound and is logged at warning level, without its text. Logged values that are not propagated are not
   cleared.

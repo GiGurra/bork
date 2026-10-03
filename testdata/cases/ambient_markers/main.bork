@@ -70,6 +70,17 @@ fn receive(header: String, text: String) uses io unsafe go {
   fmt.Printf("received %s %q: send: %s\n", header, text, out)
 }
 
+// A getter that logs (as an HTTP adapter warning about a repeated
+// header would) does so without the server's own propagated values.
+fn serveLogging(handler: () uses io => Unit) uses io unsafe go {
+  restore := _borkBindPropagated(func(name string) (string, bool) {
+    work("getting " + name)
+    return "00-in-01", name == "traceparent"
+  })
+  defer restore()
+  handler()
+}
+
 // A with whose block never ends normally.
 fn never(): Int {
   with (requestId: "never") {
@@ -121,6 +132,7 @@ fn main() uses io + state {
       println(s"send: ${headers()}")
     })
     serve("-", "3", () => println(s"send: ${headers()}"))
+    serveLogging(() => work("logging handler"))
     work("after serve")
   }
   println(early(true))
