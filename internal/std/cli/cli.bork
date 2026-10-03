@@ -79,7 +79,9 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], fla
     if flag.configFile {
       if configField != "" { errors = append(errors, DecodeError{path: flag.field, message: "config-file field duplicates " + configField}) }
       for _, field := range schema {
-        if field.Name == flag.field && field.Kind != "string" { errors = append(errors, DecodeError{path: flag.field, message: "config-file field must be String or Option[String]"}) }
+        if field.Name != flag.field { continue }
+        supported := field.Kind == "string" && (!field.Optional || field.Type == "Option[String]")
+        if !supported { errors = append(errors, DecodeError{path: flag.field, message: "config-file field must be String or Option[String]"}) }
       }
       configField = flag.field
     }

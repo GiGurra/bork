@@ -80,7 +80,7 @@ fn main() {
  println(cli.Run[Options]("app", "Example", (options, s) => {
    onClose(s, () => { println("closed") })
    println(options)
- }, [cli.Flag { field: "name", env: "BORK_CLI_CONFIG_NAME" }, cli.Flag { field: "port", env: "BORK_CLI_CONFIG_PORT" }, cli.Flag { field: "config", configFile: true, env: "BORK_CLI_CONFIG_FILE" }], ["base.json", "override.json"]))
+ }, [cli.Flag { field: "name", env: "BORK_CLI_CONFIG_NAME", positional: true }, cli.Flag { field: "port", env: "BORK_CLI_CONFIG_PORT" }, cli.Flag { field: "config", configFile: true, env: "BORK_CLI_CONFIG_FILE" }], ["base.json", "override.json"]))
 }
 `
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {
@@ -97,17 +97,22 @@ fn main() {
 		{name: "files-defaults", base: `{"name":"base"}`, override: `{}`, want: []string{`name: "base"`, "port: 8080", "verbose: true", `tags: ["default"]`, "closed\nUnit"}},
 		{name: "file-overlay", base: `{"name":"base","port":80,"verbose":true,"tags":["a","b"]}`, override: `{"name":"overlay","verbose":false,"tags":[],"nested":{"enabled":false}}`, want: []string{`name: "overlay"`, "port: 80", "verbose: false", "tags: []", "enabled: false"}},
 		{name: "env-precedence", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, envName: "env", envPort: "82", want: []string{`name: "env"`, "port: 82"}},
-		{name: "cli-precedence", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, envName: "env", envPort: "82", args: []string{"--name", "cli", "--port", "83"}, want: []string{`name: "cli"`, "port: 83"}},
+		{name: "cli-precedence", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, envName: "env", envPort: "82", args: []string{"--port", "83", "cli"}, want: []string{`name: "cli"`, "port: 83"}},
 		{name: "selected-file", base: `{"name":"base","port":80}`, override: `{"name":"overlay","port":81}`, selected: `{"name":"selected","port":84}`, args: []string{"--config", "selected.json"}, want: []string{`name: "selected"`, "port: 84"}},
 		{name: "selected-env", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected"}`, envFile: "selected.json", want: []string{`name: "selected"`}},
 		{name: "selector-cli-precedence", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected"}`, envFile: "missing.json", args: []string{"--config", "selected.json"}, want: []string{`name: "selected"`}},
 		{name: "final-validation", base: `{"name":"","port":0}`, override: `{}`, want: []string{".name", "must be nonempty", ".port", "must be validPort"}, absent: []string{"closed", "Unit"}},
-		{name: "overridden-invalid", base: `{"name":"","port":0}`, override: `{}`, args: []string{"--name", "cli", "--port", "443"}, want: []string{`name: "cli"`, "port: 443", "closed\nUnit"}},
+		{name: "overridden-invalid", base: `{"name":"","port":0}`, override: `{}`, args: []string{"--port", "443", "cli"}, want: []string{`name: "cli"`, "port: 443", "closed\nUnit"}},
 		{name: "null-optional", base: `{"name":"base","config":null}`, override: `{}`, want: []string{"config: Option.None", "closed\nUnit"}},
 		{name: "wrong-type", base: `{"name":false,"port":"bad","tags":false}`, override: `{}`, want: []string{".name", ".port", ".tags"}, absent: []string{"closed", "Unit"}},
 		{name: "unknown-key", base: `{"naem":"typo"}`, override: `{}`, want: []string{"unknown CLI config field", "naem"}, absent: []string{"closed", "Unit"}},
 		{name: "bad-json", base: `{`, override: `{}`, want: []string{"Error {", "base.json"}, absent: []string{"closed", "Unit"}},
 		{name: "non-object", base: `[]`, override: `{}`, want: []string{"CLI config must be a JSON object"}, absent: []string{"closed", "Unit"}},
+		{name: "positional-precedence", base: `{"name":"base"}`, override: `{}`, envName: "env", args: []string{"positional"}, want: []string{`name: "positional"`}},
+		{name: "selected-below-env", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected","port":84}`, envName: "env", envPort: "85", args: []string{"--config", "selected.json"}, want: []string{`name: "env"`, "port: 85"}},
+		{name: "file-no-recursion", base: `{"name":"base","config":"missing.json"}`, override: `{}`, want: []string{`name: "base"`, `value: "missing.json"`, "closed\nUnit"}},
+		{name: "null-default", base: `{"name":"base","port":null}`, override: `{}`, want: []string{".port", "Error {"}, absent: []string{"closed", "Unit"}},
+		{name: "nested-unknown", base: `{"name":"base","nested":{"enabled":false,"enabeld":true}}`, override: `{}`, want: []string{"enabled: false", "closed\nUnit"}},
 		{name: "missing-selected", base: `{"name":"base"}`, override: `{}`, args: []string{"--config", "missing.json"}, want: []string{"missing.json", "Error {"}, absent: []string{"closed", "Unit"}},
 		{name: "help-no-read", base: `{`, override: `{}`, args: []string{"--help"}, want: []string{"Usage:", "--config", "Unit"}, absent: []string{"Error {", "closed"}},
 	}
@@ -143,12 +148,17 @@ fn main() {
 func TestCLIConfigSelectors(t *testing.T) {
 	root := t.TempDir()
 	source := `import "bork/cli"
+pred selected(value: Option[String]) { match (value) { Option.Some { value: _ } => true, Option.None => false } }
+type Constrained = { config: Option[String] where selected, name: String } derive (Decode)
 type Defaults = { config: String = "chosen.json", name: String } derive (Decode)
 type OptionalDefaults = { config: Option[String] = Option.Some { value: "chosen.json" }, name: String } derive (Decode)
 type Bad = { config: Int = 0, other: String = "" } derive (Decode)
+type NestedOption = { config: Option[Option[String]] = Option.Some { value: Option.Some { value: "chosen.json" } }, name: String = "" } derive (Decode)
 fn main() uses io {
+ println(cli.Parse[Constrained]("app", "", ["--config", "chosen.json"], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[Defaults]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[OptionalDefaults]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
+ println(cli.Parse[NestedOption]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[Bad]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[Bad]("app", "", [], [cli.Flag { field: "config", configFile: true }, cli.Flag { field: "other", configFile: true }]))
 }
@@ -169,7 +179,10 @@ fn main() uses io {
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	for _, want := range []string{`Defaults { config: "chosen.json", name: "selected" }`, `OptionalDefaults { config: Option.Some`, "config-file field must be String or Option[String]", "config-file field duplicates config"} {
+	if strings.Count(string(out), "config-file field must be String or Option[String]") != 3 {
+		t.Fatalf("selector type validation: %s", out)
+	}
+	for _, want := range []string{`Constrained { config: Option.Some`, `Defaults { config: "chosen.json", name: "selected" }`, `OptionalDefaults { config: Option.Some`, "config-file field must be String or Option[String]", "config-file field duplicates config"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}

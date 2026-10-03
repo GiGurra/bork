@@ -56,14 +56,17 @@ handler's effects. Subcommands remain follow-up work.
 names (`httpPort`, not `http-port`). Files overlay from left to right; a later
 field replaces an earlier field completely, including lists and nested records.
 Missing fields keep earlier values. Empty file paths are skipped. JSON must be
-an object; unknown keys, malformed JSON, and unreadable files return `cli.Error`.
+an object; unknown top-level keys, malformed JSON, and unreadable files return
+`cli.Error`. Nested records follow their derived decoder's usual rules, which
+ignore unknown nested keys.
 
 Mark one String or Option[String] field with `cli.Flag { field: "config",
 configFile: true }` to expose `--config <path>` (with ordinary short/env metadata
 if desired). Its path comes from flags, its mapped environment variable, or its
 declared default. A nonempty selected path overlays `configFiles`; values inside
 files do not select additional files. Two selector fields or a selector with
-another field type are metadata errors. An empty selector path loads no extra
+another field type are metadata errors. Optional selector fields must declare
+`Option[String]` concretely in the record schema. An empty selector path loads no extra
 file.
 
 Precedence, highest first: explicit CLI flags/positionals, mapped environment
