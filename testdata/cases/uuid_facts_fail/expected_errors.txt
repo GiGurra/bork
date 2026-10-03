@@ -1,0 +1,2 @@
+main.bork:3:28: uuid.Uuid requires value to be uuid.Canonical, but uuid.Canonical("bad") is false
+main.bork:4:37: uuid.Uuid requires value to be uuid.Canonical, but uuid.Canonical("F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6") is false

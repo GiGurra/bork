@@ -1073,3 +1073,15 @@ owner's cancellation, with attachment rebinding the cancellation source. Pure
 host/port helpers parse and join addresses; scope-aware Resolve returns sorted
 IP strings. Timeouts and buffer sizes have checked facts; there is no new syntax.
 TLS can be added later alongside HTTP.
+
+### UUID values
+
+`bork/uuid` exposes immutable, canonical lowercase UUIDs, random v4 and
+chronologically ordered v7 generation, parsing, formatting, nil and version
+inspection. Parse normalizes backend-supported text forms; a field fact prevents
+constructing an invalid or noncanonical Uuid. Uuids compare structurally and
+work as map keys. The Codecs instance bundle encodes/decodes JSON strings and
+validates nested values, including environment configuration. V4 declares
+random, V7 random + clock; entropy failures return IoError and parsing returns
+ParseError. google/uuid v1.6.0 is pinned behind this API for Go 1.26/offline
+compatibility; switch to the Go standard UUID backend when the minimum is 1.27.

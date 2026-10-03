@@ -1,0 +1,47 @@
+import "bork/uuid"
+import "bork/env"
+use uuid.Codecs
+
+type Settings = { id: uuid.Uuid } derive (Encode, Decode)
+fn fixed(): uuid.Uuid | ParseError { uuid.Parse("F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6") }
+fn setup() uses io unsafe go {
+  import "os"
+  os.Setenv("BORK_UUID_ID", "\"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"")
+}
+fn entropyFailures(v4: () uses random => uuid.Uuid | IoError, v7: () uses random + clock => uuid.Uuid | IoError) uses state + random + clock: List[Bool] unsafe go {
+  import "github.com/google/uuid"
+  import "strings"
+  uuid.SetRand(strings.NewReader(""))
+  defer uuid.SetRand(nil)
+  first, ok4 := v4().(IoError)
+  second, ok7 := v7().(IoError)
+  return []bool{ok4 && first.path == "uuid", ok7 && second.path == "uuid"}
+}
+fn exercise() uses io + random + clock + state: Unit | ParseError | IoError {
+  id = fixed()?
+  println(id)
+  println(toString(id))
+  println(uuid.Format(id))
+  println(uuid.Version(id))
+  println(uuid.Parse("{f81d4fae-7dec-11d0-a765-00a0c91e6bf6}") == id)
+  println(uuid.Parse("urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6") == id)
+  println(uuid.Parse("f81d4fae7dec11d0a76500a0c91e6bf6") == id)
+  println(match (uuid.Parse("bad")) { error: ParseError => true; _ => false })
+  println(encodeJson(id))
+  println(decodeJson[uuid.Uuid]("\"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\"") == id)
+  println(decodeJson[uuid.Uuid]("42"))
+  println(decodeJson[Settings]("{\"id\":\"bad\"}"))
+  println({ id: "value" }.get(id))
+  println(uuid.Nil())
+  first = uuid.V4()?
+  second = uuid.V4()?
+  println(uuid.Version(first) == 4)
+  println(first != second)
+  later = uuid.V7()?
+  println(uuid.Version(later) == 7)
+  println(decodeJson[uuid.Uuid](encodeJson(later)) == later)
+  println(entropyFailures(uuid.V4, uuid.V7))
+  setup()
+  println(env.Load[Settings]("BORK_UUID_"))
+}
+fn main() { println(exercise()) }
