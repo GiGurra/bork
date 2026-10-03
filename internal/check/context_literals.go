@@ -267,6 +267,7 @@ func (c *checker) contextVariantCall(e *syntax.Call, name *syntax.ContextName, w
 // contextNeedsType identifies context-bearing expressions whose expected
 // constructor is not known yet, so other call arguments are checked first.
 func (c *checker) contextNeedsType(x syntax.Expr, want Type) bool {
+	x = debugSyntaxValue(x)
 	want = c.zonk(want)
 	switch x := x.(type) {
 	case *syntax.ContextName:

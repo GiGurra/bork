@@ -242,3 +242,22 @@ func TestContextConstructorAlternatives(t *testing.T) {
 		})
 	}
 }
+
+func TestDebugContextInference(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "main.bork")
+	source := `type A = { value: Int }
+fn pair[T](first: T, second: T): List[T] { [first, second] }
+fn main() {
+  println(pair(first: dbg(.{ value: 1 }), second: A { value: 2 }))
+  println(pair(second: dbg(.{ value: 2 }), first: A { value: 1 }))
+  xs: List[A] = pair(first: dbg(.{ value: 1 }), second: .{ value: 2 })
+  println(xs)
+}
+`
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Check(path); err != nil {
+		t.Fatal(err)
+	}
+}
