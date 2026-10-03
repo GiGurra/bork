@@ -1,0 +1,2 @@
+main.bork:4:23: tasks.Open requires maxTasks to be tasks.ValidLimit, but tasks.ValidLimit(0) is false
+main.bork:5:23: tasks.Open requires maxTasks to be tasks.ValidLimit, but tasks.ValidLimit(-1) is false

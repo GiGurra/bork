@@ -227,7 +227,7 @@ Standard packages may use pinned Go modules. Generated builds use Go's module ca
 
 ## Status
 
-Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today. The [backpressure proposal](docs/design/backpressure.md) describes explicit bounded task pools, HTTP admission, and shared retry budgets; these APIs are not implemented yet.
+Early design and a first compiler. See [docs/requirements.md](docs/requirements.md) for what has been decided, [docs/roadmap.md](docs/roadmap.md) for the plan, and [docs/grammar.md](docs/grammar.md) for the syntax the compiler accepts today. The [backpressure proposal](docs/design/backpressure.md) describes bounded task pools (implemented), HTTP admission, and shared retry budgets (planned).
 
 Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 `bytes([toByte(0), toByte(255)])`, and validated `utf8String(data)`.
@@ -253,6 +253,7 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 | [bork/rand](docs/std/rand.md) | Random draws and immutable seeded generators |
 | [bork/regex](docs/std/regex.md) | Compiled RE2 patterns, captures and String facts |
 | [bork/sql](docs/std/sql.md) | Scoped SQLite/Postgres connections and transactions |
+| [bork/tasks](docs/std/tasks.md) | Shared bounded task pools with typed nonblocking admission |
 | [bork/time](docs/std/time.md) | Instants, durations and injectable clocks |
 | [bork/url](docs/std/url.md) | Immutable URLs, repeated query parameters and escaping |
 | [bork/uuid](docs/std/uuid.md) | Canonical UUIDs, generation and JSON string codecs |

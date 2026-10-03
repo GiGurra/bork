@@ -924,12 +924,26 @@ scope maint {
 
 ### Backpressure (proposal)
 
-Bounded task pools, HTTP admission before body buffering, typed overload/deadline
+HTTP admission before body buffering, typed overload/deadline
 failures, and shared retry budgets are proposed in
 [the backpressure design](design/backpressure.md) (bork-l0kn5g). Ordinary
-spawn/launch keep their current signatures; callers explicitly select a bounded
-pool and handle admission failures. HTTP retries are opt-in, limited by a shared
-budget and remaining deadline. This proposal is not implemented yet.
+spawn/launch keep their current signatures; the explicit bounded task pool below
+is implemented. HTTP retries are opt-in, limited by a shared
+budget and remaining deadline. HTTP admission and retry APIs are not implemented yet.
+
+### Bounded task pools (implemented, bork-l0kn5g)
+
+`bork/tasks` adds explicit capacity shared across submitting scopes.
+`tasks.Open(s, maxTasks: n)` creates a scope-owned Pool with a proven positive
+limit. TrySpawn returns `Task[T] | TaskLimitReached | Cancelled`, and TryLaunch
+returns `Unit | TaskLimitReached | Cancelled`; both charge state plus callback
+effects and never wait. Rejected callbacks are not called. A task holds its slot
+until the callback ends or panics, and its explicit scope owns and joins it.
+The compiler checks that pool and captures outlive that task scope. Resource
+attachment extends pool ownership without moving existing tasks. Ordinary
+spawn/launch and parallel collections retain their APIs and do not consume an
+implicit pool. See [the package documentation](std/tasks.md). HTTP admission
+and retry budgets remain planned in [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes
 

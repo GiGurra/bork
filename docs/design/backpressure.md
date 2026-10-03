@@ -1,6 +1,7 @@
 # Backpressure and retry budgets
 
-Proposal for bork-l0kn5g. These APIs are not implemented yet. This note makes
+Design for bork-l0kn5g. The bounded task pool is implemented; HTTP admission,
+client failure changes and retry budgets remain planned. This note makes
 bounded admission, HTTP shedding, and retry budgets explicit operations with
 checked failure unions. The later deadline/trace propagation work is
 bork-gqxe4s; request criticality and adaptive concurrency remain follow-ups.

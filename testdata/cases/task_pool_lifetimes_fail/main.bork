@@ -1,0 +1,16 @@
+import "bork/tasks"
+fn main() {
+  scope app {
+    scope request {
+      pool = tasks.Open(request, 1)
+      _ = tasks.TrySpawn(pool, app, () => 1)
+    }
+  }
+  scope app {
+    pool = tasks.Open(app, 1)
+    scope request {
+      local = channel[Int](request, 0)
+      _ = tasks.TrySpawn(pool, app, () => receive(local))
+    }
+  }
+}

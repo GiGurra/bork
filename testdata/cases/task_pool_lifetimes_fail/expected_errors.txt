@@ -1,0 +1,2 @@
+main.bork:6:26: pool may not live as long as scope app (it depends on scope request), but TrySpawn may keep it until app closes
+main.bork:13:37: the lambda may not live as long as scope app (it depends on scope request), but TrySpawn may keep it until app closes

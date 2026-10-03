@@ -1,0 +1,78 @@
+import "bork/tasks"
+
+fn mustTask[T](result: Task[T] | tasks.TaskLimitReached | Cancelled): Task[T] {
+  match (result) {
+    task: Task[T] => task
+    error: tasks.TaskLimitReached | Cancelled => panic(toString(error))
+  }
+}
+fn main() {
+  launched = atom(false)
+  scope app {
+    pool = tasks.Open(app, maxTasks: 1)
+    gate = channel[Bool](app, 0)
+    calls = atom(0)
+    first = mustTask(tasks.TrySpawn(pool, app, () => {
+      _ = receive(gate)
+      42
+    }))
+    println(tasks.TrySpawn(pool, app, () => update(calls, n => n + 1)))
+    println(tasks.TryLaunch(pool, app, () => { _ = update(calls, n => n + 1) }))
+    println("rejected callbacks", current(calls))
+    scope cancelledRequest {
+      cancel(cancelledRequest)
+      println(tasks.TrySpawn(pool, cancelledRequest, () => 1))
+    }
+    _ = send(gate, true)
+    println("joined", await(first))
+    second = mustTask(tasks.TrySpawn(pool, app, () => toString(tasks.TryLaunch(pool, app, () => {}))))
+    println("nested submission", await(second))
+    match (tasks.TryLaunch(pool, app, () => { _ = update(launched, old => true) })) {
+      e: tasks.TaskLimitReached | Cancelled => panic(toString(e))
+      _ => {}
+    }
+    // Joining this ordinary task does not consume pool capacity.
+    println(await(spawn(app, () => "ordinary spawn unchanged")))
+  }
+  println("launch joined", current(launched))
+  scope app {
+    pool = scope setup { attach(tasks.Open(setup, 1), app) }
+    scope request {
+      println("attached pool", await(mustTask(tasks.TrySpawn(pool, request, () => 7))))
+    }
+    scope failed with logFailures() {
+      _ = tasks.TryLaunch(pool, failed, () => panic("task failed"))
+    }
+    scope afterFailure {
+      println("slot after panic", await(mustTask(tasks.TrySpawn(pool, afterFailure, () => 9))))
+    }
+  }
+  scope app {
+    pool = tasks.Open(app, 3)
+    gate = channel[Bool](app, 0)
+    submitters = range(0, 20).map(i => spawn(app, () => {
+      match (tasks.TrySpawn(pool, app, () => { _ = receive(gate); i })) {
+        task: Task[Int] => true
+        error: tasks.TaskLimitReached => false
+        error: Cancelled => panic(toString(error))
+      }
+    }))
+    admitted = submitters.map(await).count(x => x)
+    println("concurrent capacity", admitted)
+    range(0, admitted).forEach(i => { _ = send(gate, true) })
+  }
+
+  scope app {
+    pool = tasks.Open(app, 1)
+    gate = channel[Bool](app, 0)
+    scope request {
+      task = mustTask(tasks.TrySpawn(pool, request, () => { _ = receive(gate); 11 }))
+      cancel(request)
+      println("cancelled task holds slot", tasks.TryLaunch(pool, app, () => {}))
+      _ = send(gate, true)
+      println("uncooperative task joined", await(task))
+    }
+    println("slot after cancellation", await(mustTask(tasks.TrySpawn(pool, app, () => 12))))
+  }
+
+}

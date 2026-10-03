@@ -1,0 +1,14 @@
+TaskLimitReached { limit: 1 }
+TaskLimitReached { limit: 1 }
+rejected callbacks 0
+Cancelled { reason: "cancelled" }
+joined 42
+nested submission TaskLimitReached { limit: 1 }
+ordinary spawn unchanged
+launch joined true
+attached pool 7
+slot after panic 9
+concurrent capacity 3
+cancelled task holds slot TaskLimitReached { limit: 1 }
+uncooperative task joined 11
+slot after cancellation 12
