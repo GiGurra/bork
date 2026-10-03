@@ -48,7 +48,7 @@ fn more(s: Scope) uses io + net + clock + random + state {
   println(match (http.ParseCertificate(utf8Bytes("invalid"), utf8Bytes("invalid"))) { error: IoError => true; _ => false })
   println(http.Static(makeRequest("", "").copy(method: "GET", path: "/assets/asset.txt"), path, "/assets").body)
   println(http.Static(makeRequest("", "").copy(method: "GET", path: "/assets/a%?#.txt"), path, "/assets").body)
-  match (http.ListenTLS("127.0.0.1:0", s, [http.Route { pattern: "GET /users/{id}", handler: (req, rs) => endpoint(0, req, rs) }], path + "/cert.pem", path + "/key.pem")) {
+  match (http.ListenTLS("127.0.0.1:0", s, [http.Route { pattern: "GET /users/{id}", handler: (req, rs) => endpoint(0, req, rs) }], path + "/cert.pem", path + "/key.pem", admission: Option.Some { value: http.Admission { maxInFlight: 1 } })) {
     server: http.Server => println(tlsCall(http.Address(server)))
     error: IoError => println("unexpected", error.message)
   }

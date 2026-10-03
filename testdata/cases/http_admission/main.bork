@@ -1,0 +1,237 @@
+import "bork/http"
+use http.AdmissionDecode
+fn mustServer(value: http.Server | IoError): http.Server {
+  match (value) { server: http.Server => server, error: IoError => panic(toString(error)) }
+}
+fn status(value: http.Response | IoError): Int {
+  match (value) { response: http.Response => response.status, error: IoError => panic(toString(error)) }
+}
+fn load(server: http.Server) uses state: http.AdmissionLoad {
+  match (http.AdmissionState(server)) {
+    Option.Some { value: snapshot } => snapshot
+    Option.None => panic("admission disabled")
+  }
+}
+fn waitQueued(server: http.Server, count: Int, attempts: Int = 5000) uses clock + state {
+  if (load(server).queued == count) {} else {
+    if (attempts == 0) { panic("queue count did not settle") }
+    sleep(1)
+    waitQueued(server, count, attempts - 1)
+  }
+}
+fn waitIdle(server: http.Server, attempts: Int = 5000) uses clock + state {
+  snapshot = load(server)
+  if (snapshot.inFlight == 0 && snapshot.queued == 0) {} else {
+    if (attempts == 0) { panic("admission permits did not settle") }
+    sleep(1)
+    waitIdle(server, attempts - 1)
+  }
+}
+fn showRejected(value: http.Response | IoError) uses io {
+  match (value) {
+    response: http.Response => println(response.status, http.HeaderOf(response.headers, "Retry-After"))
+    error: IoError => panic(toString(error))
+  }
+}
+fn incompleteBody(addr: String) uses io + net + clock: Int unsafe go {
+  import "bufio"
+  import "fmt"
+  import "net"
+  import "net/http"
+  import "time"
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  defer conn.Close()
+  conn.SetDeadline(time.Now().Add(time.Second))
+  fmt.Fprintf(conn, "POST /blocked HTTP/1.1\r\nHost: %s\r\nContent-Length: 10\r\n\r\n", addr)
+  response, err := http.ReadResponse(bufio.NewReader(conn), nil)
+  if err != nil { panic(err) }
+  defer response.Body.Close()
+  return int64(response.StatusCode)
+}
+type UnreadConnection = resource
+fn openUnread(addr: String, s: Scope) uses io + net + clock: UnreadConnection unsafe go {
+  import "fmt"
+  import "net"
+  import "time"
+  conn, err := net.DialTimeout("tcp", addr, time.Second)
+  if err != nil { panic(err) }
+  conn.SetWriteDeadline(time.Now().Add(time.Second))
+  if _, err := fmt.Fprintf(conn, "POST /unread HTTP/1.1\r\nHost: %s\r\nContent-Length: 10\r\n\r\n", addr); err != nil { conn.Close(); panic(err) }
+  return UnreadConnection{handle: conn, owner: s.Own(func() { conn.Close() })}
+}
+fn immediate(policy: http.Admission) uses io + net + clock + state {
+  scope app {
+    entered = channel[Bool](app, 1)
+    permits = channel[Bool](app, 0)
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      _ = send(entered, true)
+      _ = receive(permits)
+      http.Text(200, "ok")
+      }, admission: Option.Some { value: policy }))
+    url = s"http://${http.Address(server)}"
+    active = spawn(app, () => http.Get(url, app))
+    _ = receive(entered)
+    showRejected(http.Get(url, app))
+    println("no waiting", load(server))
+    other = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => http.Text(200, "independent"), admission: Option.Some { value: policy }))
+    println("independent", status(http.Get(s"http://${http.Address(other)}", app)))
+    _ = send(permits, true)
+    _ = await(active)
+  }
+}
+fn raceTransfer(server: http.Server in app, entered: Channel[Bool] in app, permits: Channel[Bool] in app, app: Scope, remaining: Int) uses net + clock + state {
+  if (remaining == 0) { return }
+  url = s"http://${http.Address(server)}"
+  active = spawn(app, () => http.Get(s"$url/held", app))
+  _ = receive(entered)
+  scope request {
+    queued = spawn(request, () => http.Get(url, request))
+    waitQueued(server, 1)
+    release = spawn(app, () => send(permits, true))
+    cancel(request)
+    _ = await(queued)
+    _ = await(release)
+  }
+  _ = await(active)
+  waitIdle(server)
+  if (status(http.Get(url, app)) != 200) { panic("admission did not recover") }
+  raceTransfer(server, entered, permits, app, remaining - 1)
+}
+fn main() {
+  println(decodeJson[http.Admission]("{\"maxInFlight\":2}"))
+  println("invalid decoded capacity", match (decodeJson[http.Admission]("{\"maxInFlight\":0}")) { error: DecodeError => true, _ => false })
+
+  scope app {
+    entered = channel[String](app, 10)
+    permits = channel[Bool](app, 0)
+    handler: http.Handler = (request, s) => {
+      _ = send(entered, request.path)
+      _ = receive(permits)
+      http.Text(200, request.path)
+    }
+    policy = http.Admission { maxInFlight: 1, maxQueued: 2, queueTimeoutMs: 5000, retryAfterMs: 1 }
+    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some { value: policy }))
+    url = s"http://${http.Address(server)}"
+    first = spawn(app, () => http.Get(s"$url/first", app))
+    println(receive(entered))
+    second = spawn(app, () => http.Get(s"$url/second", app))
+    waitQueued(server, 1)
+    third = spawn(app, () => http.Get(s"$url/third", app))
+    waitQueued(server, 2)
+    println("bounded", load(server))
+    showRejected(http.Get(s"$url/rejected", app))
+    println("unread body", incompleteBody(http.Address(server)))
+    _ = send(permits, true)
+    println(receive(entered))
+    _ = send(permits, true)
+    println(receive(entered))
+    _ = send(permits, true)
+    println(status(await(first)), status(await(second)), status(await(third)), load(server))
+    active = spawn(app, () => http.Get(s"$url/active", app))
+    _ = receive(entered)
+    scope request {
+      queued = spawn(request, () => http.Get(s"$url/cancelled", request))
+      waitQueued(server, 1)
+      cancel(request)
+      println("queued cancellation", match (await(queued)) { error: IoError => true, _ => false })
+      waitQueued(server, 0)
+    }
+    println("after cancellation", load(server))
+    _ = send(permits, true)
+    println(status(await(active)))
+  }
+  scope app {
+    entered = channel[Bool](app, 1)
+    permits = channel[Bool](app, 0)
+    handler: http.Handler = (request, s) => { _ = send(entered, true); _ = receive(permits); http.Text(200, "ok") }
+    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some {
+      value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5, status: 429 }
+    }))
+    url = s"http://${http.Address(server)}"
+    active = spawn(app, () => http.Get(url, app))
+    _ = receive(entered)
+    showRejected(http.Get(url, app))
+    println("after timeout", load(server))
+    _ = send(permits, true)
+    println(status(await(active)))
+  }
+  immediate(http.Admission { maxInFlight: 1, maxQueued: 0, queueTimeoutMs: 5000 })
+  immediate(http.Admission { maxInFlight: 1, maxQueued: 10, queueTimeoutMs: 0 })
+  scope app {
+    server = mustServer(http.ListenRoutes("127.0.0.1:0", app, [http.Route {
+      pattern: "POST /body", handler: (request, s) => http.Text(200, request.body),
+      }], maxBodyBytes: 3, admission: Option.Some { value: http.Admission { maxInFlight: 1 } }))
+    url = s"http://${http.Address(server)}"
+    println("body limit", status(http.Send("POST", s"$url/body", {:}, "long", app)))
+    println("after body error", load(server))
+    println("unknown route", status(http.Get(s"$url/missing", app)))
+    println("accepted", status(http.Send("POST", s"$url/body", {:}, "ok", app)), load(server))
+  }
+  scope app {
+    entered = channel[Bool](app, 1)
+    owner = openScope(app)
+    server = mustServer(http.Listen("127.0.0.1:0", owner.scope, (request, s) => {
+      _ = send(entered, true)
+      _ = delay(s, 5000)
+      http.Text(200, "stopped")
+      }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 } }))
+    url = s"http://${http.Address(server)}"
+    active = spawn(app, () => http.Get(url, app))
+    _ = receive(entered)
+    queued = spawn(app, () => http.Get(url, app))
+    waitQueued(server, 1)
+    closeScope(owner)
+    _ = await(active)
+    _ = await(queued)
+    println("shutdown completed")
+  }
+  scope app {
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      if (request.path == "/panic") { panic("handler panic") }
+      http.Text(200, "ok")
+      }, admission: Option.Some { value: http.Admission { maxInFlight: 1 } }))
+    url = s"http://${http.Address(server)}"
+    println("handler panic", match (http.Get(s"$url/panic", app)) { error: IoError => true, _ => false })
+    println("after panic", status(http.Get(url, app)), load(server))
+  }
+  scope app {
+    entered = channel[Bool](app, 1)
+    permits = channel[Bool](app, 0)
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      if (request.path == "/held") { _ = send(entered, true); _ = receive(permits) }
+      http.Text(200, "ok")
+      }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 } }))
+    raceTransfer(server, entered, permits, app, 30)
+    println("cancel transfer race", load(server))
+  }
+  scope app {
+    entered = channel[Bool](app, 1)
+    permits = channel[Bool](app, 0)
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
+      _ = send(entered, true)
+      _ = receive(permits)
+      http.Text(200, "ok")
+      }, admission: Option.Some { value: http.Admission {
+        maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000, retryAfterMs: 9223372036854,
+    } }))
+    url = s"http://${http.Address(server)}"
+    active = spawn(app, () => http.Get(url, app))
+    _ = receive(entered)
+    rawOwner = openScope(app)
+    _ = openUnread(http.Address(server), rawOwner.scope)
+    waitQueued(server, 1)
+    closeScope(rawOwner)
+    println("unread disconnect", load(server))
+    showRejected(http.Get(url, app))
+    waitQueued(server, 0)
+    println("unread bounded timeout", load(server))
+    _ = send(permits, true)
+    _ = await(active)
+  }
+  scope app {
+    server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => http.Text(200, "ok")))
+    println("disabled", http.AdmissionState(server))
+    println(status(http.Get(s"http://${http.Address(server)}", app)))
+  }
+}

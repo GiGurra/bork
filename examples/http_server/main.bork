@@ -133,7 +133,7 @@ fn handler(store: Atom[Store]): (http.Request, Scope) uses state => http.Respons
   }
 }
 
-fn serve(addr: String) uses net + state: Unit | IoError {
+fn serve(addr: String) uses net + clock + state: Unit | IoError {
   scope s {
     server = http.Listen(addr, s, handler: handler(atom(emptyStore())))?
     log.Info("listening", { "address": http.Address(server) })
@@ -151,7 +151,7 @@ fn call(s: Scope, base: String, method: String, path: String, body: String = "")
 
 // demo starts the server on a free port and sends it requests; the
 // server stops when the scope closes. Logs go to stdout, as plain text.
-fn demo() uses io + net + state: Unit | IoError {
+fn demo() uses io + net + clock + state: Unit | IoError {
   log.Configure(log.Defaults().copy(output: .Stdout, timestamps: false))
   scope s {
     server = http.Listen("127.0.0.1:0", s, handler: handler(atom(emptyStore())))?

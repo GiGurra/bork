@@ -1174,14 +1174,14 @@ scope maint {
 - **Channels (implemented):** `channel[T](s, capacity)` makes a channel owned by scope `s`, which closes it when it closes (so, like a task, a channel cannot leave its scope). `send(ch, x)` gives `Unit | Cancelled | Closed`, `receive(ch)` gives `T | Cancelled | Closed`, `closeChannel(ch)` closes it (buffered values can still be received), and `received(ch)` collects values until it closes. Operations stop with `Cancelled` when the channel's scope is cancelled; sending to a closed channel gives `Closed` rather than panicking.
 - **Cancellation through scopes (implemented):** a scope carries what Go's `context.Context` does. `cancel(s)` cancels it, `cancelAfter(s, ms)` sets a deadline, a task that panics cancels its scope (so its siblings stop), the scope's end cancels it, and a scope nested in another (in the same function) is cancelled with it. Cancellation is cooperative: tasks see it at cancellation points, `delay(s, ms)` and `checkpoint(s)` (both `Unit | Cancelled`, so `checkpoint(s)?` stops a loop), and channel operations. A cancelled scope still waits for its tasks. **The scope does not decide how its tasks stop:** its end is the same signal whether the block finished, returned early, or panicked, and each task chooses what to do with it: stop at once (a worker waiting in `delay` or on a channel), clean up first, or finish its work (code that never checks for cancellation runs to the end). Work the block needs done is awaited before the block ends. In `bork/http`, each request has a scope, cancelled when the client goes away or the server's scope closes.
 
-### Backpressure (proposal)
+### Backpressure
 
 HTTP admission before body buffering, typed overload/deadline
 failures, and shared retry budgets are proposed in
 [the backpressure design](design/backpressure.md) (bork-l0kn5g). Ordinary
 spawn/launch keep their current signatures; the explicit bounded task pool below
 is implemented. HTTP retries are opt-in, limited by a shared
-budget and remaining deadline. HTTP admission and retry APIs are not implemented yet.
+budget and remaining deadline. HTTP admission is implemented; client failure types and retry APIs remain planned.
 
 ### Bounded task pools (implemented, bork-l0kn5g)
 
@@ -1194,7 +1194,9 @@ until the callback ends or panics, and its explicit scope owns and joins it.
 The compiler checks that pool and captures outlive that task scope. Resource
 attachment extends pool ownership without moving existing tasks. Ordinary
 spawn/launch and parallel collections retain their APIs and do not consume an
-implicit pool. See [the package documentation](std/tasks.md). HTTP admission
+implicit pool. See [the package documentation](std/tasks.md). HTTP admission also limits work before body reads and queues waiters in bounded
+FIFO order, rejecting with 429/503 and Retry-After. AdmissionState exposes load.
+See [HTTP documentation](std/http.md#bounded-admission); client failure types
 and retry budgets remain planned in [the backpressure design](design/backpressure.md).
 
 ### Partially overlapping scopes: owned child scopes
@@ -1412,9 +1414,9 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, and `state`.
 |---------|--------|------------------------------|
 | `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `args`, `exit`, the `bork/fs` functions that touch the file system, `process.Args`, `process.Exit`, `log.Configure`, `env.Get`, `env.Require`, `env.All`, `env.Load`, `env.LoadJson` |
 | `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
-| `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep` |
+| `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep`, HTTP listener admission waits |
 | `random` | random numbers | none yet (the future random number functions) |
-| `state` | state shared between tasks | `current`, `update`, `swap`, `send`, `receive`, `closeChannel`, `received`, `cancel`, `cancelled`, `checkpoint` |
+| `state` | state shared between tasks | `current`, `update`, `swap`, `send`, `receive`, `closeChannel`, `received`, `cancel`, `cancelled`, `checkpoint`, HTTP listener admission and `http.AdmissionState` |
 
 - **Some functions have two or more effects:** `delay(s, ms)`, `cancelAfter(s, ms)`, and `time.Sleep` are `clock + state` (they wait, and they observe or cause cancellation); `process.Run`, `Start`, `Await`, and `Stop` are `io + state`; the `bork/sql` functions are `io + net`, since a database may be a local file or a server; and the `bork/net` socket functions are `net + state` (`Listen`, `Wait`, `Bind`, `Resolve`), or `net + state + clock` where they read, write, or dial with a deadline.
 - **Pure means deterministic, with no outside action.** Calling a function that uses nothing twice with the same arguments gives the same result, and has no observable effect beyond allocating memory, logging, and maybe panicking. That is why reading an atom, or checking whether a scope was cancelled, is `state`: the answer can change between two calls. One known exception: an unordered map (`m.unordered()`) lists its entries in an order that differs between runs, and listing it stays pure. Seeding that order per program would close the gap, if it turns out to matter.
@@ -1502,7 +1504,7 @@ The prelude's list, `Option`, and map methods have open function parameters; `up
 
 - **`spawn`, `launch`, `onClose`, and `http.Listen` take open functions,** so a call is charged with the effects of the work it starts, even though the work runs on another goroutine or later. "This function can cause X" is the question a reviewer asks, and structured concurrency means the work belongs to a scope the caller holds.
 - **Scope operations that observe or change cancellation are `state`:** `cancel`, `cancelled`, `checkpoint`, and with `clock`, `delay` and `cancelAfter`. Opening a scope, its policies, and `attach` are pure.
-- **A request handler's type shows what it does:** `http.Listen` takes `handler: (Request, Scope) => Response`, which is open, so `Listen(addr, s, handler(store))` uses `net` plus whatever the handler uses.
+- **A request handler's type shows what it does:** `http.Listen` takes `handler: (Request, Scope) => Response`, which is open, so `Listen(addr, s, handler(store))` uses `net + clock + state` plus whatever the handler uses.
 
 ### `main` and tests
 
@@ -1525,7 +1527,7 @@ Each error names the effect and the call that needs it. Where the fix is a signa
 
 ```
 main.bork:14:3: describe uses io (it calls println), but its signature allows no effects; declare it: uses io
-main.bork:30:5: serve uses state (it calls http.Listen, with a lambda that calls update), but its signature allows only net; declare it: uses net + state
+main.bork:30:5: serve uses clock + state (it calls http.Listen, with a lambda that calls update), but its signature allows only net; declare it: uses net + clock + state
 main.bork:41:7: process uses io (it calls map, with a lambda that calls println), but its signature allows no effects; declare it: uses io
 main.bork:5:50: save declares net, but never uses it
 main.bork:8:3: isOpenNow uses clock (it calls now), but predicates must be pure, or their facts could go stale
