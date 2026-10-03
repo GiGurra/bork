@@ -1034,7 +1034,7 @@ func (g *gen) tailReturn(e check.Expr) []ast.Stmt {
 	case *check.Block:
 		if len(e.Stmts) == 0 {
 			if e.Tail == nil {
-				return nil
+				return g.blockInto(e, ret)
 			}
 			return g.tailReturn(e.Tail)
 		}

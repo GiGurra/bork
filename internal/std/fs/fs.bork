@@ -24,10 +24,8 @@ fn classify(failure: fileFailure): Error {
 fn result[T](raw: T | fileFailure): T | Error {
   match (raw) { failure: fileFailure => classify(failure), value: T => value }
 }
-fn resultUnit(raw: Unit | fileFailure): Unit | Error { unitResult(raw, classify) }
-fn unitResult(raw: Unit | fileFailure, makeError: (fileFailure) => Error): Unit | Error unsafe go {
-  if failure, failed := raw.(fileFailure); failed { return makeError(failure) }
-  return _Unit{}
+fn resultUnit(raw: Unit | fileFailure): Unit | Error {
+  match (raw) { failure: fileFailure => classify(failure), done: Unit => {} }
 }
 
 // Read gives a whole file as immutable binary data.

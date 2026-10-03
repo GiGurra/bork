@@ -1,0 +1,15 @@
+true
+false
+true
+true
+false
+true
+false
+true
+false
+true
+closed
+true
+closed
+false
+true
