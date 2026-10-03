@@ -70,6 +70,7 @@ type compiledProgram struct {
 	info   *check.Info
 	inputs *sourceSnapshot
 	module *goModuleInputs
+	assets *embedSnapshot
 }
 
 func checkObserved(path string, observe func(string)) ([]*syntax.File, *check.Info, error) {
@@ -92,7 +93,7 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "embeds")
-	captureEmbeds(info, diags)
+	assets := captureEmbedsSnapshot(info, diags, loaded.Inputs)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
@@ -111,7 +112,7 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
-	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module}, nil
+	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module, assets: assets}, nil
 }
 
 // evaluator runs predicates on constants at compile time, by building

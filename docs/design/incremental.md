@@ -367,7 +367,7 @@ boundaries still need explicit capture and invalidation:
 | Read / context | Existing consumers and required follow-up |
 | --- | --- |
 | User Go manifests/checksums | Captured alongside sources; one frozen merged module is shared by metadata loading, predicate builds and final staging. Test staging hooks receive private copies. |
-| Embedded assets | `captureEmbeds` freezes data in `Info`, but file kinds, symlink checks and recursive directory membership need recorded input dependencies and replay during snapshot verification. |
+| Embedded assets | A private asset snapshot freezes bytes, component kinds, symlink checks and recursive membership (including empty directories and failed reads), with independent replay and content validation. |
 | Effective Go environment/toolchain | `goPackages`, package drivers and `buildGo` read process/saved configuration and run subprocesses. Capture effective configuration, resolved tool identity and target; inventory or bypass mutable external metadata. |
 | Compile-time evaluator | `Facts` invokes generated predicate programs. Track arguments, implementation/input closure and execution context; untracked reads/effects prevent reuse of any success depending on evaluation. |
 | Graph and mode | Whole-graph source content covers semantic bodies, facts/rules and candidate-set changes initially. Root selection, source locations, tests/mocks and entry/evaluator mode must remain explicit context. |
@@ -393,3 +393,20 @@ and additional `describe` proofs. Staging receives copies so test hooks cannot
 mutate a request's module. Independent helper calls used by compiler tests retain
 one-shot captures. Effective Go configuration, external module contents and
 execution effects remain separate inputs to capture before Session reuse.
+
+### Phase 1: asset input inventory
+
+Asset capture records each request's resolved source-package directory, intrinsic
+kind and relative path. It freezes observed component kinds, recursive membership
+(including empty directories), file bytes and failures. Invalid UTF-8 bytes remain
+in the inventory even when `ReadString` rejects them. Capture preserves the
+existing `os.Root` containment and symlink rejection; validation repeats those
+checks and compares actual contents rather than sizes or mtimes.
+
+All requests are captured and validated before publishing their files to `Info`.
+One retry handles edits during capture; continuous edits produce diagnostics.
+Replay and staging get independent bytes and caller-owned staging paths. The
+private compiled-program context retains the asset inventory alongside the
+source/manifest inventory. This adds no checked-result reuse: effective Go
+configuration, external metadata/toolchain inputs and evaluator execution remain
+required boundaries before Session artifacts can be published or reused.
