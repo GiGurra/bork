@@ -456,3 +456,28 @@ execution; this is not a Session hit or proof that external effects are tracked.
 The first Session PR must route its reused artifacts through the same comparison
 and extend the fixtures to edit/invalidation sequences. Unknown metadata or
 evaluator inputs must still force fresh compilation.
+
+## Phase 1: conservative complete-result Session
+
+`driver.Session` exposes checking with owned warning diagnostics and emission
+with owned Go bytes. It serializes requests and retains at most one successful
+result; a miss clears the previous entry. Parsed ASTs and `check.Info` are never
+retained or returned. Failed requests always compile again. Existing one-shot
+APIs retain their mutable graph behavior and do not use this result cache.
+
+A hit requires the same request path/mode and freshly captured Go configuration
+namespace, unchanged source/manifests and assets by content, and identical fresh
+builtin package-name metadata. The name loader bypasses its global name cache
+and verifies standard-source provenance on hit validation. This validates the
+exact name map observed by the checker without claiming a whole-SDK digest.
+Go type/export metadata, custom drivers, unavailable/external package-name
+origins and any compile-time evaluator invocation bypass result reuse. Windows
+drive-relative/rooted filesystem operands also bypass until their drive context
+is captured. Input changes during compilation prevent storing the result.
+
+`TestSessionMatchesClean` extends the CI comparison to actual hits and owned
+warnings. Other tests cover concurrent requests, equal-size/mtime source/SDK/asset
+changes, directory membership, invalid unused defaults, failed-to-valid repair,
+configuration/mode changes and evaluator/export-data bypasses. This is an
+in-memory complete-graph boundary; package interfaces, disk artifacts and runtime
+results remain separate work.

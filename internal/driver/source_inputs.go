@@ -64,11 +64,12 @@ type sourceRead struct {
 // copies so it cannot mutate recorded bytes or membership. Missing module files
 // and failed lookups are records too, not just successful source reads.
 type sourceSnapshot struct {
-	mu     sync.Mutex
-	disk   sourceReader
-	cwd    string
-	cwdErr error
-	reads  map[sourceReadKey]sourceRead
+	mu           sync.Mutex
+	disk         sourceReader
+	cwd          string
+	cwdErr       error
+	driveContext bool
+	reads        map[sourceReadKey]sourceRead
 }
 
 func newSourceSnapshot() *sourceSnapshot {
@@ -82,6 +83,7 @@ func (s *sourceSnapshot) absolute(name string) (string, error) {
 		return filepath.Clean(name), nil
 	}
 	if windowsSourceOperand(name) {
+		s.markDriveContext()
 		return filepath.Abs(name)
 	}
 	if s.cwdErr != nil {
@@ -101,17 +103,29 @@ func (s *sourceSnapshot) readPath(name string) (string, error) {
 		return "", s.cwdErr
 	}
 	if windowsSourceOperand(name) {
+		s.markDriveContext()
 		return filepath.Abs(name) // resolve drive-relative/rooted Windows operands
 	}
 	return s.cwd + string(filepath.Separator) + name, nil
 }
 
 // Windows rooted/drive-relative paths use the OS drive context, rather than
-// simple concatenation with cwd. No Session reuse is enabled here; a future
-// replayable compilation context must capture that drive context too.
+// simple concatenation with cwd. Sessions conservatively bypass snapshots that
+// resolve these operands until the drive context itself can be captured.
 func windowsSourceOperand(name string) bool {
 	return filepath.VolumeName(name) != "" || runtime.GOOS == "windows" && len(name) != 0 && (name[0] == '/' || name[0] == '\\')
 }
+func (s *sourceSnapshot) markDriveContext() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.driveContext = true
+}
+func (s *sourceSnapshot) usesDriveContext() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.driveContext
+}
+
 func (s *sourceSnapshot) read(kind, name string) (sourceRead, error) {
 	absolute, err := s.readPath(name)
 	if err != nil {

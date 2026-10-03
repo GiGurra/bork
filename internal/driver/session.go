@@ -1,0 +1,178 @@
+package driver
+
+import (
+	"maps"
+	"slices"
+	"sync"
+
+	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/gen"
+)
+
+type goNameInput struct {
+	paths    []string
+	names    map[string]string
+	standard bool
+}
+type goUsage struct {
+	names            []goNameInput
+	types, evaluator bool
+}
+
+// Session reuses the last successful complete-program result. It owns no parsed
+// or checked graph. Requests are serialized and all returned data is independent.
+// Go type/export metadata, custom drivers and compile-time evaluation bypass
+// reuse until their dependencies can be validated.
+type Session struct {
+	mu    sync.Mutex
+	last  *sessionArtifact
+	stats SessionStats
+}
+
+// SessionStats counts requests and explains the most recent hit or miss.
+type SessionStats struct {
+	Hits, Misses, Bypasses uint64
+	Reason                 string
+}
+
+type sessionArtifact struct {
+	path     string
+	emit     bool
+	inputs   *sourceSnapshot
+	module   *goModuleInputs
+	assets   *embedSnapshot
+	context  *goContext
+	names    []goNameInput
+	goSrc    []byte
+	warnings []diag.Diagnostic
+}
+
+func NewSession() *Session { return &Session{} }
+
+// Check returns owned warning diagnostics. Errors retain the one-shot compiler's
+// diagnostic behavior; unsuccessful results are compiled again on each request.
+func (s *Session) Check(path string) ([]diag.Diagnostic, error) {
+	_, warnings, err := s.compile(path, false)
+	return warnings, err
+}
+
+// Emit returns an owned copy of generated Go source. It never reuses program
+// execution, predicate results, Go binaries, or a mutable checker graph.
+func (s *Session) Emit(path string) ([]byte, error) {
+	src, _, err := s.compile(path, true)
+	return src, err
+}
+
+func (s *Session) Stats() SessionStats {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stats
+}
+
+func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	context := captureGoContext()
+	if reason := s.hitMissReason(path, emit, context); reason == "" {
+		s.stats.Hits++
+		s.stats.Reason = "unchanged validated inputs"
+		return slices.Clone(s.last.goSrc), cloneSessionDiagnostics(s.last.warnings), nil
+	} else {
+		s.stats.Misses++
+		s.stats.Reason = reason
+		s.last = nil
+	}
+	loaded, module, err := loadCompilationInputs(path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	usage := &goUsage{}
+	program, err := checkLoadedProgramTracked(loaded, module, context, captureEmbedsSnapshot, usage, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	warnings := check.DebugWarnings(program.info)
+	warnings.Append(check.LazyWarnings(program.info))
+	warningData := warnings.Sorted()
+	var src []byte
+	if emit {
+		src, err = gen.Package(program.files, program.info)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if reason := sessionBypassReason(context, usage); reason != "" {
+		s.stats.Bypasses++
+		s.stats.Reason = reason
+	} else if program.inputs.usesDriveContext() {
+		s.stats.Bypasses++
+		s.stats.Reason = "uncaptured Windows drive context"
+	} else if !program.inputs.current() || !program.assets.current() {
+		s.stats.Bypasses++
+		s.stats.Reason = "inputs changed during compilation"
+	} else {
+		s.last = &sessionArtifact{path: path, emit: emit, inputs: program.inputs, module: program.module, assets: program.assets, context: context, names: usage.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData)}
+	}
+	return src, warningData, nil
+}
+
+func sessionBypassReason(context *goContext, usage *goUsage) string {
+	switch {
+	case context.err != nil || context.driverErr != nil:
+		return "Go configuration unavailable"
+	case context.driver != "off":
+		return "custom Go package driver"
+	case usage.types:
+		return "Go type metadata"
+	case usage.evaluator:
+		return "compile-time evaluator"
+	}
+	for _, input := range usage.names {
+		if !input.standard {
+			return "external or unavailable Go package names"
+		}
+	}
+	return ""
+}
+
+func (s *Session) hitMissReason(path string, emit bool, context *goContext) string {
+	artifact := s.last
+	switch {
+	case artifact == nil:
+		return "no previous result"
+	case artifact.path != path || artifact.emit != emit:
+		return "request path or mode changed"
+	case context.err != nil || context.driverErr != nil || context.namespace != artifact.context.namespace:
+		return "Go configuration changed"
+	case !artifact.inputs.current():
+		return "source or manifest inputs changed"
+	case !artifact.assets.current():
+		return "asset inputs changed"
+	}
+	// The checker observes package names only through this map. Recompute it
+	// through the builtin driver on each hit attempt, with name reuse disabled;
+	// SDK/tool changes and failures must produce the same observed metadata.
+	for _, input := range artifact.names {
+		usage := &goUsage{}
+		names := (goPackages{module: artifact.module, context: context, usage: usage}).Names(input.paths)
+		if !maps.Equal(names, input.names) || len(usage.names) != 1 || !usage.names[0].standard {
+			return "Go package names changed"
+		}
+	}
+	if !artifact.inputs.current() || !artifact.assets.current() {
+		return "inputs changed during validation"
+	}
+	return ""
+}
+
+func cloneSessionDiagnostics(items []diag.Diagnostic) []diag.Diagnostic {
+	out := slices.Clone(items)
+	for i := range out {
+		out[i].Fixes = slices.Clone(out[i].Fixes)
+		for j := range out[i].Fixes {
+			out[i].Fixes[j].Edits = slices.Clone(out[i].Fixes[j].Edits)
+		}
+	}
+	return out
+}

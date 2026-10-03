@@ -223,3 +223,36 @@ validation. Keep fresh-process CLI measurements separate; Session speed does not
 by itself remove their regression. If Session reuse is deferred beyond phase 1,
 revisit this cost before closing that phase and measure a cheaper sound capture
 strategy rather than treating the regression as resolved.
+
+## Initial Session measurements
+
+The conservative Session refreshes configuration and builtin package-name
+metadata before a hit. Three five-iteration samples on the shared host gave:
+
+| Workload | First Session request ms | Unchanged Session request ms | First/unchanged allocation MB |
+| --- | ---: | ---: | ---: |
+| hello check | 47.5–49.0 | 38.2–41.6 | 3.2–3.7 / 0.32–0.34 |
+| hello emit | 51.8–53.0 | 38.6–39.0 | 5.9 / 0.36–0.37 |
+| synthetic1000 check | 74.2–75.9 | 38.8–39.3 | 30.2–30.6 / 0.46–0.47 |
+| synthetic1000 emit | 100.2–103.0 | 38.5–39.5 | 43.1 / 0.70 |
+
+Every unchanged sample reported one hit per request. These are in-process
+measurements with configuration refresh and content/name validation included;
+they do not recover fresh-process CLI latency. Existing repeated one-shot hello
+check measured 21.7–27.4 ms and emit 30.9–31.8 ms, benefiting from its existing
+standard-name cache. The conservative Session is therefore slower on this small
+workload despite avoiding checker work. Larger graphs benefit and allocate much
+less; the synthetic one-shot samples on the shared host were too noisy for a
+precise comparison beyond the first/unchanged Session table.
+
+Before wiring watch, profile and remove unnecessary hit-path metadata work while
+preserving invalidation. Validate known standard-name inputs cheaply under a
+sound toolchain/provenance boundary; SDK source edits must not be hidden by equal
+sizes/mtimes or unchanged directory mtimes. Keep full metadata reload as the
+fallback for unknown inputs. Profile fresh one-shot configuration capture
+separately and report both before/after tables; a Session benchmark improvement
+does not settle the CLI regression tracked above.
+
+```sh
+go test ./internal/driver -run '^$' -bench '^BenchmarkSession/' -benchmem -benchtime=5x -count=3
+```
