@@ -247,7 +247,8 @@ type Info struct {
 	// (`unsafe go "os.Getenv"`).
 	GoBindings map[*Func]*GoBinding
 	// Comptimes lists explicit build-time computations in lowering order.
-	Comptimes []*Comptime
+	Comptimes      []*Comptime
+	comptimeSyntax []*syntax.Comptime
 	// Embeds lists compile-time asset requests in source order.
 	Embeds             []*Embedded
 	embedCalls         map[*syntax.Call]*Embedded

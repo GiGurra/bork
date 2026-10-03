@@ -27,11 +27,7 @@ func (c *checker) comptimeInitializer(node *syntax.Comptime, want Type) Type {
 	effects := c.used
 	c.used = savedEffects
 	c.comptimeContext = ctx.parent
-	c.forTypeExprs(reflect.ValueOf(node.Body), func(typ *syntax.TypeExpr, _ string) {
-		if resolved := c.info.writtenTypes[typ]; resolved != nil && hasTypeParam(resolved) {
-			c.diags.AddCode(typ.Pos, "comptime.type", "comptime requires concrete types, found %s", resolved)
-		}
-	})
+	c.info.comptimeSyntax = append(c.info.comptimeSyntax, node)
 	if effects != 0 {
 		c.diags.AddCode(node.Pos, "comptime.effects", "comptime requires pure code, found uses %s", effects)
 	}
@@ -97,6 +93,9 @@ func (c *checker) closedComptimeSyntax(x syntax.Expr, seen map[any]bool) bool {
 }
 
 func (c *checker) checkComptimeTypes() {
+	for _, node := range c.info.comptimeSyntax {
+		c.checkComptimeRecipe(reflect.ValueOf(node.Body))
+	}
 	for _, node := range c.info.Comptimes {
 		if path := unsupportedComptimeType(node.Type(), map[Type]bool{}); path != "" {
 			c.diags.AddCode(node.Pos(), "comptime.result", "comptime cannot bake result type %s: %s", node.Type(), path)
@@ -105,13 +104,16 @@ func (c *checker) checkComptimeTypes() {
 }
 
 func unsupportedComptimeType(t Type, seen map[Type]bool) string {
+	if hasTypeParam(t) {
+		return "unresolved generic " + t.String()
+	}
 	if seen[t] {
 		return ""
 	}
 	seen[t] = true
 	switch t := t.(type) {
 	case *Basic:
-		if t == Bool || t == String || t == Unit || IsNumeric(t) {
+		if t == Bool || t == String || t == Ok || IsNumeric(t) {
 			return ""
 		}
 	case *List:
@@ -146,4 +148,47 @@ func unsupportedComptimeType(t Type, seen map[Type]bool) string {
 		return ""
 	}
 	return "unsupported " + t.String()
+}
+
+// Inspect inferred, zonked expression/instance types as well as written types.
+// A phantom type parameter need not appear in the result's fields or syntax.
+func (c *checker) checkComptimeRecipe(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return
+		}
+		if typ, ok := v.Interface().(*syntax.TypeExpr); ok {
+			if resolved := c.info.writtenTypes[typ]; resolved != nil && hasTypeParam(resolved) {
+				c.diags.AddCode(typ.Pos, "comptime.type", "comptime requires concrete types, found %s", resolved)
+			}
+		}
+		if node, ok := v.Interface().(syntax.Expr); ok {
+			if typ := c.info.types[node]; typ != nil && hasTypeParam(typ) {
+				c.diags.AddCode(node.Position(), "comptime.type", "comptime requires concrete types, found %s", typ)
+			}
+			if call, ok := node.(*syntax.Call); ok {
+				if instance := c.info.instances[call]; instance != nil {
+					for _, typ := range instance.TypeArgs {
+						if hasTypeParam(typ) {
+							c.diags.AddCode(call.Position(), "comptime.type", "comptime requires concrete types, found type argument %s", typ)
+						}
+					}
+				}
+			}
+		}
+		c.checkComptimeRecipe(v.Elem())
+	case reflect.Interface:
+		if !v.IsNil() {
+			c.checkComptimeRecipe(v.Elem())
+		}
+	case reflect.Struct:
+		for _, i := range walkableSyntaxFields(v.Type()) {
+			c.checkComptimeRecipe(v.Field(i))
+		}
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			c.checkComptimeRecipe(v.Index(i))
+		}
+	}
 }

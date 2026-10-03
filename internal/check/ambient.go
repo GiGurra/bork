@@ -424,6 +424,9 @@ func (c *checker) unprovided(names []string, callee string) string {
 // provideNeeds finds what a call (or a reference) of fn at e passes for
 // each of fn's needs, and records it.
 func (c *checker) provideNeeds(e syntax.Expr, fn *Func, callee string) {
+	if c.comptimeContext != nil && len(fn.Needs) != 0 {
+		c.diags.AddCode(e.Position(), "comptime.capture", "comptime cannot capture %s with ambient needs", callee)
+	}
 	if len(fn.Needs) == 0 {
 		return
 	}
