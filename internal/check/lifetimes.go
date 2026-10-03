@@ -338,6 +338,9 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		var life lifetime
 		for _, arm := range x.Arms {
 			l.bindPattern(arm.Pat, subject)
+			for _, guard := range arm.Pat.Guards() {
+				l.use(guard, l.expr(guard))
+			}
 			life = life.union(l.expr(arm.Body))
 		}
 		return life

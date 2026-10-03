@@ -1,0 +1,9 @@
+main.bork:3:27: match is not exhaustive: missing Int
+main.bork:4:56: unreachable match arm: every value it matches is handled by an earlier arm
+main.bork:5:50: nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate
+main.bork:6:45: PosInt is a constrained type (where positive), and constrained types in a type pattern are not supported yet, so the fact would not be checked; match the base type and then guard with the predicate
+main.bork:7:83: predicate parameter keep in a type pattern must declare uses nothing
+main.bork:8:52: unknown predicate missingPredicate
+main.bork:9:56: positive applies to Int, not String
+main.bork:13:51: nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate
+main.bork:14:51: nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate

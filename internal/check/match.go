@@ -59,6 +59,51 @@ type Pat struct {
 	// exactly len(Elems) elements.
 	Elems []*Pat
 	Rest  *Pat
+	// Guard is the runtime predicate condition, evaluated after the
+	// structural tests succeed. guard is its syntax before lowering.
+	Guard Expr
+	guard syntax.Expr
+}
+
+// HasGuard reports whether any part of the pattern tests a predicate.
+func (p *Pat) HasGuard() bool {
+	if p == nil {
+		return false
+	}
+	if p.Guard != nil || p.guard != nil {
+		return true
+	}
+	for _, f := range p.Fields {
+		if f.Pat.HasGuard() {
+			return true
+		}
+	}
+	for _, e := range p.Elems {
+		if e.HasGuard() {
+			return true
+		}
+	}
+	return p.Sub.HasGuard() || p.Rest.HasGuard()
+}
+
+// Guards lists the predicate conditions in the order they are tested.
+func (p *Pat) Guards() []Expr {
+	if p == nil {
+		return nil
+	}
+	var out []Expr
+	for _, f := range p.Fields {
+		out = append(out, f.Pat.Guards()...)
+	}
+	out = append(out, p.Sub.Guards()...)
+	for _, e := range p.Elems {
+		out = append(out, e.Guards()...)
+	}
+	out = append(out, p.Rest.Guards()...)
+	if p.Guard != nil {
+		out = append(out, p.Guard)
+	}
+	return out
 }
 
 // PatField is one field of a destructuring pattern.
@@ -165,10 +210,12 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 		if !useful(valid, p) {
 			c.errorf(m.Arms[i].Pattern.Position(), "unreachable match arm: every value it matches is handled by an earlier arm")
 		}
-		valid = append(valid, p)
+		if !p.HasGuard() {
+			valid = append(valid, p)
+		}
 	}
 	if ok {
-		if missing := missingCases(pats, st); len(missing) > 0 {
+		if missing := missingCases(valid, st); len(missing) > 0 {
 			c.errorf(m.Pos, "match is not exhaustive: missing %s", strings.Join(missing, ", "))
 		}
 	}
@@ -209,6 +256,37 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 			return nil
 		}
 		c.bindPat(pat, p.Name, p.Pos, p)
+		if c.nestedPatternFacts(p.Type) {
+			c.whereReported(p.Type)
+			c.errorf(p.Type.Pos, "nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate")
+			return nil
+		}
+		before := c.diags.Len()
+		cons := c.constraintsOf(p.Type, pat.BindType, c.paramScope())
+		valid := c.diags.Len() == before
+		for _, con := range cons {
+			if con.Path != "" {
+				c.errorf(con.Pos, "nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate")
+				valid = false
+				continue
+			}
+			guard := c.patternGuard(con, p)
+			if guard != nil {
+				if pat.guard == nil {
+					pat.guard = guard
+				} else {
+					pat.guard = c.patternLogical(pat.guard, guard, syntax.AndAnd)
+				}
+			} else {
+				valid = false
+			}
+		}
+		// Guards run in their own binding scope in generated Go. Whether
+		// the arm's separate binding is used depends on its body alone.
+		c.lookup(p.Name).used = false
+		if !valid {
+			return nil
+		}
 		return pat
 
 	case *syntax.VariantPat:
@@ -254,6 +332,85 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		return pat
 	}
 	return nil
+}
+
+// nestedPatternFacts checks the written arguments too: a phantom generic
+// argument has no field path, so constraintsOf cannot identify it later.
+func (c *checker) nestedPatternFacts(t *syntax.TypeExpr) bool {
+	seen := map[*syntax.TypeDecl]bool{}
+	var nested func(*syntax.TypeExpr) bool
+	nested = func(t *syntax.TypeExpr) bool {
+		for _, m := range t.Union {
+			if nested(m) {
+				return true
+			}
+		}
+		for _, a := range t.Args {
+			if c.hasFacts(a) {
+				return true
+			}
+		}
+		if t.Union == nil && t.Func == nil && len(t.Args) == 0 && c.typeParams[t.Name] == nil {
+			if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType && !seen[e.decl] {
+				seen[e.decl] = true
+				savedPkg, savedParams := c.pkg, c.typeParams
+				c.pkg, c.typeParams = e.pkg, nil
+				bad := nested(e.decl.Alias)
+				c.pkg, c.typeParams = savedPkg, savedParams
+				return bad
+			}
+		}
+		return false
+	}
+	return nested(t)
+}
+
+// patternGuard checks a real predicate call, so its generic arguments,
+// dependencies and parameter requirements follow the normal call rules.
+func (c *checker) patternGuard(con *Constraint, p *syntax.TypePat) syntax.Expr {
+	if con.Or != nil {
+		var out syntax.Expr
+		for _, alt := range con.Or {
+			x := c.patternGuard(alt, p)
+			if x == nil {
+				return nil
+			}
+			if out == nil {
+				out = x
+			} else {
+				out = c.patternLogical(out, x, syntax.OrOr)
+			}
+		}
+		return out
+	}
+	args := []syntax.Expr{&syntax.Ident{Pos: p.Pos, Name: p.Name}}
+	for _, a := range con.Args {
+		args = append(args, a.source)
+	}
+	call := &syntax.Call{Pos: p.Pos, Args: args}
+	if con.PredParam != "" {
+		ft := c.paramScope()[con.PredParam].(*FuncType)
+		if ft.Effects != 0 {
+			c.errorf(con.Pos, "predicate parameter %s in a type pattern must declare uses nothing", con.PredParam)
+			return nil
+		}
+		call.Fun = &syntax.Ident{Pos: con.Pos, Name: con.PredParam}
+		if c.expr(call) == Invalid {
+			return nil
+		}
+	} else {
+		call.Fun = &syntax.Ident{Pos: con.Pos, Name: con.Pred.Decl.Name}
+		if c.record(call, c.callFunc(call, con.Pred.QualifiedName(c.pkg), con.Pred, args, nil, nil, Bool)) == Invalid {
+			return nil
+		}
+	}
+	return call
+}
+
+func (c *checker) patternLogical(x, y syntax.Expr, op syntax.Kind) syntax.Expr {
+	out := &syntax.Binary{Pos: x.Position(), Op: op, X: x, Y: y}
+	c.record(out, Bool)
+	return out
 }
 
 // typePattern is the pattern matching the values of type t within a

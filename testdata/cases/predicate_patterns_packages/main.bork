@@ -1,0 +1,13 @@
+import "example.com/patterns/api"
+fn result(x: api.Result[Int]): Int {
+  match (x) {
+    r: api.GoodResult => match (r) { api.Result.Fail => 0; api.Result.Ok { value } => value }
+    _ => -1
+  }
+}
+fn main() {
+  println(match (0.4) { v: api.AnotherAbove => v; _ => 0.0 })
+  println(match (0.3) { v: api.Above => v; _ => 0.0 })
+  println(match (2) { n: Int where api.Positive => n; _ => 0 })
+  println(result(api.Result.Ok { value: 6 }), result(api.Result.Ok { value: -6 }), result(api.Result.Fail))
+}

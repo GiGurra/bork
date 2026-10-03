@@ -310,6 +310,9 @@ func (l *lowerer) patVars(p *Pat, subject Expr) {
 	}
 	l.patVars(p.Rest, subject)
 	l.patVars(p.Sub, subject)
+	if p.guard != nil {
+		p.Guard = l.expr(p.guard)
+	}
 }
 
 // bindPos is where the pattern node that binds a name names it.

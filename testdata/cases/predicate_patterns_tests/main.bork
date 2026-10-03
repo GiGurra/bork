@@ -1,0 +1,8 @@
+pred explode(n: Int) { panic(s"guard panic $n") }
+pred positive(n: Int) { n > 0 }
+fn text(x: Int | String): Bool {
+  match (x) { n: Int where explode => false; n: Int => false; s: String => true }
+}
+test "type mismatch skips predicate" { assert(text("safe")) }
+test "false predicate falls through" { assertEqual(match (-1) { n: Int where positive => 1; _ => 2 }, 2) }
+test "predicate panic propagates" { _ = match (1) { n: Int where explode => n; _ => 0 } }

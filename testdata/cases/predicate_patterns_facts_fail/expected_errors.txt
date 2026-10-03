@@ -1,0 +1,3 @@
+main.bork:4:51: small requires n to be positive, but that is not proven for v (check it first with if (positive(v)) { ... })
+main.bork:5:95: requiresPositive requires n to be positive, but that is not proven for v (check it first with if (positive(v)) { ... })
+main.bork:6:94: requiresPositive requires n to be positive, but that is not proven for n (check it first with if (positive(n)) { ... }, or require it: n: Int where positive)

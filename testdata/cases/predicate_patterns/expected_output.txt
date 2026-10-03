@@ -1,0 +1,14 @@
+positive 4 zero other -2 text hello
+true false 1 2
+true false 2
+subject
+20
+nonnegative
+30
+ok
+1
+3
+7
+0
+8
+0

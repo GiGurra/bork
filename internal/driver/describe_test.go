@@ -72,6 +72,26 @@ fn scenario(xs: List[Int], n: Int) uses io {
 	}
 }
 
+func TestDescribeBoundPatternFacts(t *testing.T) {
+	source := `pred positive(n: Int) { n > 0 }
+fn identity(n: Int): Int { n }
+fn scenario(n: Int): Int {
+  match (n) {
+    value: Int where positive => identity(value) // guarded
+    value: Int => identity(value) // fallback
+  }
+}
+`
+	guarded := describeAt(t, source, "value) // guarded", "positive")
+	if !guarded.proven || guarded.facts == 0 {
+		t.Fatalf("missing successful pattern facts: %+v", guarded)
+	}
+	fallback := describeAt(t, source, "value) // fallback", "positive")
+	if fallback.proven || fallback.facts != 0 {
+		t.Fatalf("guard facts leaked into fallback: %+v", fallback)
+	}
+}
+
 func TestDescribeMethodsAndDefinitions(t *testing.T) {
 	source := `type User = { age: Int }
 fn (u: User) ageText(): String { toString(u.age) }

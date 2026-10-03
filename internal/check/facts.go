@@ -284,7 +284,7 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 	case *Match:
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
-			f.tail(arm.Body, e, result)
+			f.tail(arm.Body, f.walkPatternGuards(arm.Pat, e), result)
 		}
 	default:
 		f.walk(x, e)
@@ -440,7 +440,7 @@ func (f *factChecker) walk(x Expr, e env) {
 	case *Match:
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
-			f.walk(arm.Body, e)
+			f.walk(arm.Body, f.walkPatternGuards(arm.Pat, e))
 		}
 	case *Try:
 		f.walk(x.X, e)
@@ -449,6 +449,16 @@ func (f *factChecker) walk(x Expr, e env) {
 			f.walk(ix, e)
 		}
 	}
+}
+
+// walkPatternGuards checks each predicate before making its successful
+// facts available to the next guard and the arm body.
+func (f *factChecker) walkPatternGuards(p *Pat, e env) env {
+	for _, guard := range p.Guards() {
+		f.walk(guard, e)
+		e = e.with(f.conditionFacts(guard, true)...)
+	}
+	return e
 }
 
 // resultPaths lists the values a function can return, each with the
@@ -945,7 +955,11 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 	case *Match:
 		var bs []branch
 		for _, arm := range x.Arms {
-			bs = append(bs, branch{arm.Body, e})
+			armEnv := e
+			for _, guard := range arm.Pat.Guards() {
+				armEnv = armEnv.with(f.conditionFacts(guard, true)...)
+			}
+			bs = append(bs, branch{arm.Body, armEnv})
 		}
 		if cs.take(f.all(ob, depth, bs...)) {
 			return true, nil
@@ -1789,6 +1803,14 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 			ft.args = append(ft.args, f.argOf(a))
 		}
 		return []fact{ft}
+	case *CallValue:
+		if p, ok := c.Fun.(*VarRef); ok && positive && p.Var.Kind == VarParam && len(c.Args) == 1 {
+			if ft, ok := p.Var.Type.(*FuncType); ok && ft.Effects == 0 && ft.Result == Bool {
+				if subject := f.key(c.Args[0]); subject != "" {
+					return []fact{{pred: f.paramPred(p.Var), subject: subject}}
+				}
+			}
+		}
 	}
 	return nil
 }
