@@ -1,0 +1,2 @@
+main.bork:5:60: gzip uses io (it calls compress.GzipTo), but its signature allows no effects; declare it: uses io
+main.bork:6:41: zip uses io (it calls archive.WriteZip), but its signature allows no effects; declare it: uses io

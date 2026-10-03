@@ -1,0 +1,20 @@
+import "bork/compress"
+import "bork/archive"
+
+fn exercise() uses io: Unit | IoError {
+  payload = utf8Bytes("hello, archive")
+  compressed = compress.Gzip(payload)?
+  println(utf8String(compress.Gunzip(compressed)?))
+  members = [archive.Member { name: "hello.txt", data: payload, directory: false }]
+  zipped = archive.Zip(members)?
+  tarred = archive.Tar(members)?
+  println((archive.ReadZip(zipped)?).map(member => member.name))
+  println((archive.ReadTar(tarred)?).map(member => utf8String(member.data)))
+}
+
+fn main() {
+  match (exercise()) {
+    done: Unit => {}
+    error: IoError => println(error)
+  }
+}

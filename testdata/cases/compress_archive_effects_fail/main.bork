@@ -1,0 +1,7 @@
+import "bork/compress"
+import "bork/archive"
+import "bork/fs"
+
+fn gzip(source: fs.File, target: fs.File): Int | IoError { compress.GzipTo(source, target) }
+fn zip(file: fs.File): Unit | IoError { archive.WriteZip(file, []) }
+fn main() {}

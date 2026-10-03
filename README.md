@@ -233,3 +233,9 @@ state. See [examples/rand](examples/rand/main.bork).
 [MIT](LICENSE)
 
 HTTP servers accept method/path routes, middleware functions, typed body/query/path decoding, TLS, static files and forms. Scope cleanup drains active requests, bounded by `cleanupTimeout` or a per-server timeout. See [http_routes](examples/http_routes/main.bork).
+
+Import `bork/compress` for gzip Bytes codecs and streaming transfers between
+`bork/fs.File` handles. `bork/archive` reads and writes ZIP/TAR file and directory
+members, with Bytes codecs and file iteration/writing. Readers default to a
+64 MiB cumulative decompression limit and reject unsafe archive names and links;
+errors are `IoError` values. See [examples/compress_archive](examples/compress_archive/main.bork).

@@ -1,0 +1,223 @@
+// Package archive reads and writes portable regular-file/directory archives.
+// Entries are data, never extracted automatically. Links and special files fail.
+import "bork/fs"
+
+type Member = { name: String, data: Bytes, directory: Bool }
+
+fn validName(name: String, directory: Bool): Bool unsafe go {
+  import "io/fs"
+  import "strings"
+  if directory { name = strings.TrimSuffix(name, "/") }
+  return name != "." && fs.ValidPath(name) && !strings.ContainsAny(name, "\\:")
+}
+
+fn validate(entries: List[Member]): Unit | IoError {
+  invalid = entries.filter(entry => !validName(entry.name, entry.directory) || (entry.directory && entry.data.length() != 0))
+  match (invalid.get(0)) {
+    Option.Some { value } => IoError { path: value.name, message: "unsafe archive name or nonempty directory" }
+    Option.None {} => {}
+  }
+}
+
+fn Zip(entries: List[Member]): Bytes | IoError {
+  validate(entries)?
+  encodeZip(entries)
+}
+fn encodeZip(entries: List[Member]): Bytes | IoError unsafe go {
+  import "archive/zip"
+  import "strings"
+  import "os"
+  var output strings.Builder
+  writer := zip.NewWriter(&output)
+  defer writer.Close()
+  for _, entry := range entries {
+    header := &zip.FileHeader{Name: entry.name, Method: zip.Deflate}
+    header.SetMode(0644)
+    if entry.directory { header.Name = strings.TrimSuffix(entry.name, "/") + "/"; header.SetMode(os.ModeDir | 0755); header.Method = zip.Store }
+    target, err := writer.CreateHeader(header)
+    if err != nil { return IoError{path: entry.name, message: err.Error()} }
+    if _, err = target.Write(_borkBytesData(entry.data)); err != nil { return IoError{path: entry.name, message: err.Error()} }
+  }
+  if err := writer.Close(); err != nil { return IoError{path: "zip", message: err.Error()} }
+  return _borkBytesFrom([]byte(output.String()))
+}
+
+fn WriteZip(file: fs.File, entries: List[Member]) uses io: Unit | IoError {
+  validate(entries)?
+  writeZip(file, entries)
+}
+fn writeZip(file: fs.File, entries: List[Member]) uses io: Unit | IoError unsafe go {
+  import "archive/zip"
+  import "strings"
+  import "os"
+  output := file.handle.(*os.File)
+  writer := zip.NewWriter(output)
+  defer writer.Close()
+  for _, entry := range entries {
+    header := &zip.FileHeader{Name: entry.name, Method: zip.Deflate}
+    header.SetMode(0644)
+    if entry.directory { header.Name = strings.TrimSuffix(entry.name, "/") + "/"; header.SetMode(os.ModeDir | 0755); header.Method = zip.Store }
+    target, err := writer.CreateHeader(header)
+    if err != nil { return IoError{path: entry.name, message: err.Error()} }
+    if _, err = target.Write(_borkBytesData(entry.data)); err != nil { return IoError{path: entry.name, message: err.Error()} }
+  }
+  if err := writer.Close(); err != nil { return IoError{path: "zip", message: err.Error()} }
+  return _Unit{}
+}
+
+fn ReadZip(data: Bytes, maxBytes: Int = 67108864): List[Member] | IoError unsafe go {
+  import "archive/zip"
+  import "os"
+  import "fmt"
+  import "io"
+  import "strings"
+  input := strings.NewReader(string(_borkBytesData(data)))
+  entries := []Member{}
+  if maxBytes < 0 { return IoError{path: "zip", message: "maxBytes must be nonnegative"} }
+  remaining := maxBytes
+  reader, err := zip.NewReader(input, input.Size())
+  if err != nil { return IoError{path: "zip", message: err.Error()} }
+  for _, file := range reader.File {
+    directory := file.FileInfo().IsDir()
+    if !validName(file.Name, directory) || (!directory && !file.Mode().IsRegular()) || (directory && file.Mode().Type() != os.ModeDir) { return IoError{path: file.Name, message: "unsafe archive name or unsupported entry type"} }
+    if file.UncompressedSize64 > uint64(remaining) || (directory && file.UncompressedSize64 != 0) { return IoError{path: file.Name, message: "archive data exceeds maxBytes or nonempty directory"} }
+    source, err := file.Open()
+    if err != nil { return IoError{path: file.Name, message: err.Error()} }
+    content, err := io.ReadAll(io.LimitReader(source, remaining))
+    if err == nil {
+      var probe [1]byte
+      n, end := source.Read(probe[:])
+      if n != 0 { err = fmt.Errorf("archive data exceeds maxBytes") } else if end != io.EOF { if end == nil { end = io.ErrNoProgress }; err = end }
+    }
+    closeErr := source.Close()
+    if err == nil { err = closeErr }
+    if err != nil { return IoError{path: file.Name, message: err.Error()} }
+    remaining -= int64(len(content))
+    entry := Member{name: file.Name, data: _borkBytesFrom(content), directory: directory}
+    entries = append(entries, entry)
+  }
+  return entries
+}
+
+fn ForEachZip(file: fs.File, visit: (Member) => Unit, maxBytes: Int = 67108864) uses io: Unit | IoError unsafe go {
+  import "archive/zip"
+  import "os"
+  import "fmt"
+  import "io"
+  input := file.handle.(*os.File)
+  if maxBytes < 0 { return IoError{path: "zip", message: "maxBytes must be nonnegative"} }
+  remaining := maxBytes
+  info, err := input.Stat()
+  if err != nil { return IoError{path: input.Name(), message: err.Error()} }
+  reader, err := zip.NewReader(input, info.Size())
+  if err != nil { return IoError{path: "zip", message: err.Error()} }
+  for _, file := range reader.File {
+    directory := file.FileInfo().IsDir()
+    if !validName(file.Name, directory) || (!directory && !file.Mode().IsRegular()) || (directory && file.Mode().Type() != os.ModeDir) { return IoError{path: file.Name, message: "unsafe archive name or unsupported entry type"} }
+    if file.UncompressedSize64 > uint64(remaining) || (directory && file.UncompressedSize64 != 0) { return IoError{path: file.Name, message: "archive data exceeds maxBytes or nonempty directory"} }
+    source, err := file.Open()
+    if err != nil { return IoError{path: file.Name, message: err.Error()} }
+    content, err := io.ReadAll(io.LimitReader(source, remaining))
+    if err == nil {
+      var probe [1]byte
+      n, end := source.Read(probe[:])
+      if n != 0 { err = fmt.Errorf("archive data exceeds maxBytes") } else if end != io.EOF { if end == nil { end = io.ErrNoProgress }; err = end }
+    }
+    closeErr := source.Close()
+    if err == nil { err = closeErr }
+    if err != nil { return IoError{path: file.Name, message: err.Error()} }
+    remaining -= int64(len(content))
+    entry := Member{name: file.Name, data: _borkBytesFrom(content), directory: directory}
+    visit(entry)
+  }
+  return _Unit{}
+}
+
+fn Tar(entries: List[Member]): Bytes | IoError {
+  validate(entries)?
+  encodeTar(entries)
+}
+fn encodeTar(entries: List[Member]): Bytes | IoError unsafe go {
+  import "archive/tar"
+  import "strings"
+  var output strings.Builder
+  writer := tar.NewWriter(&output)
+  defer writer.Close()
+  for _, entry := range entries {
+    header := &tar.Header{Name: entry.name, Mode: 0644, Size: int64(len(entry.data)), Typeflag: tar.TypeReg}
+    if entry.directory { header.Typeflag = tar.TypeDir; header.Mode = 0755 }
+    if err := writer.WriteHeader(header); err != nil { return IoError{path: entry.name, message: err.Error()} }
+    if _, err := writer.Write(_borkBytesData(entry.data)); err != nil { return IoError{path: entry.name, message: err.Error()} }
+  }
+  if err := writer.Close(); err != nil { return IoError{path: "tar", message: err.Error()} }
+  return _borkBytesFrom([]byte(output.String()))
+}
+
+fn WriteTar(file: fs.File, entries: List[Member]) uses io: Unit | IoError {
+  validate(entries)?
+  writeTar(file, entries)
+}
+fn writeTar(file: fs.File, entries: List[Member]) uses io: Unit | IoError unsafe go {
+  import "archive/tar"
+  import "os"
+  output := file.handle.(*os.File)
+  writer := tar.NewWriter(output)
+  defer writer.Close()
+  for _, entry := range entries {
+    header := &tar.Header{Name: entry.name, Mode: 0644, Size: int64(len(entry.data)), Typeflag: tar.TypeReg}
+    if entry.directory { header.Typeflag = tar.TypeDir; header.Mode = 0755 }
+    if err := writer.WriteHeader(header); err != nil { return IoError{path: entry.name, message: err.Error()} }
+    if _, err := writer.Write(_borkBytesData(entry.data)); err != nil { return IoError{path: entry.name, message: err.Error()} }
+  }
+  if err := writer.Close(); err != nil { return IoError{path: "tar", message: err.Error()} }
+  return _Unit{}
+}
+
+fn ReadTar(data: Bytes, maxBytes: Int = 67108864): List[Member] | IoError unsafe go {
+  import "archive/tar"
+  import "io"
+  import "strings"
+  input := strings.NewReader(string(_borkBytesData(data)))
+  entries := []Member{}
+  if maxBytes < 0 { return IoError{path: "tar", message: "maxBytes must be nonnegative"} }
+  remaining := maxBytes
+  reader := tar.NewReader(input)
+  for {
+    header, err := reader.Next()
+    if err == io.EOF { break }
+    if err != nil { return IoError{path: "tar", message: err.Error()} }
+    directory := header.Typeflag == tar.TypeDir
+    if !validName(header.Name, directory) || (!directory && header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA) { return IoError{path: header.Name, message: "unsafe archive name or unsupported entry type"} }
+    if header.Size > remaining || (directory && header.Size != 0) { return IoError{path: header.Name, message: "archive data exceeds maxBytes or nonempty directory"} }
+    content, err := io.ReadAll(reader)
+    if err != nil { return IoError{path: header.Name, message: err.Error()} }
+    remaining -= int64(len(content))
+    entry := Member{name: header.Name, data: _borkBytesFrom(content), directory: directory}
+    entries = append(entries, entry)
+  }
+  return entries
+}
+
+fn ForEachTar(file: fs.File, visit: (Member) => Unit, maxBytes: Int = 67108864) uses io: Unit | IoError unsafe go {
+  import "archive/tar"
+  import "io"
+  import "os"
+  input := file.handle.(*os.File)
+  if maxBytes < 0 { return IoError{path: "tar", message: "maxBytes must be nonnegative"} }
+  remaining := maxBytes
+  reader := tar.NewReader(input)
+  for {
+    header, err := reader.Next()
+    if err == io.EOF { break }
+    if err != nil { return IoError{path: "tar", message: err.Error()} }
+    directory := header.Typeflag == tar.TypeDir
+    if !validName(header.Name, directory) || (!directory && header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA) { return IoError{path: header.Name, message: "unsafe archive name or unsupported entry type"} }
+    if header.Size > remaining || (directory && header.Size != 0) { return IoError{path: header.Name, message: "archive data exceeds maxBytes or nonempty directory"} }
+    content, err := io.ReadAll(reader)
+    if err != nil { return IoError{path: header.Name, message: err.Error()} }
+    remaining -= int64(len(content))
+    entry := Member{name: header.Name, data: _borkBytesFrom(content), directory: directory}
+    visit(entry)
+  }
+  return _Unit{}
+}

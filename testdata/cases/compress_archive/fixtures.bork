@@ -1,0 +1,45 @@
+// Fixtures bypass the public writer's safety checks to test hostile inputs.
+fn rawZip(name: String, symlink: Bool): Bytes unsafe go {
+  import "archive/zip"
+  import "strings"
+  import "io/fs"
+  var out strings.Builder
+  writer := zip.NewWriter(&out)
+  header := &zip.FileHeader{Name: name, Method: zip.Deflate}
+  header.SetMode(0644)
+  if symlink { header.SetMode(fs.ModeSymlink | 0777) }
+  target, _ := writer.CreateHeader(header)
+  target.Write([]byte("payload"))
+  writer.Close()
+  return _borkBytesFrom([]byte(out.String()))
+}
+fn rawTar(name: String, symlink: Bool): Bytes unsafe go {
+  import "archive/tar"
+  import "strings"
+  var out strings.Builder
+  writer := tar.NewWriter(&out)
+  header := &tar.Header{Name: name, Mode: 0644, Size: 7, Typeflag: tar.TypeReg}
+  if symlink { header.Typeflag = tar.TypeSymlink; header.Linkname = "../escape"; header.Size = 0 }
+  writer.WriteHeader(header)
+  if !symlink { writer.Write([]byte("payload")) }
+  writer.Close()
+  return _borkBytesFrom([]byte(out.String()))
+}
+fn corruptGzip(data: Bytes): Bytes unsafe go {
+  raw := _borkBytesData(data)
+  raw[len(raw)-8] ^= 1
+  return _borkBytesFrom(raw)
+}
+fn corruptZip(data: Bytes): Bytes unsafe go {
+  raw := _borkBytesData(data)
+  for i := 0; i+20 < len(raw); i++ {
+    if string(raw[i:i+4]) == "PK\x01\x02" { raw[i+16] ^= 1; break }
+  }
+  return _borkBytesFrom(raw)
+}
+fn concat(a: Bytes, b: Bytes): Bytes unsafe go {
+  return _borkBytesFrom(append(_borkBytesData(a), _borkBytesData(b)...))
+}
+fn truncateTar(data: Bytes): Bytes unsafe go {
+  return _borkBytesFrom(_borkBytesData(data)[:514])
+}

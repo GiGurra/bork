@@ -302,3 +302,25 @@ including nested records and environment config. `env.Load` UUID cells therefore
 use JSON string syntax; `env.LoadJson` works with ordinary JSON UUID strings.
 The backend is pinned google/uuid v1.6.0 to retain Go 1.26 support; it does not
 leak into bork values. See [the UUID example](../examples/uuid/main.bork).
+
+- **Compression and archives:** `bork/compress` provides `Gzip(Bytes)` and
+  `Gunzip(Bytes, maxBytes = 67108864)` returning `Bytes | IoError`.
+  `GzipTo(source: fs.File, target: fs.File)` and `GunzipTo(source, target,
+  maxBytes = 67108864)` stream between scoped files and return `Int | IoError`
+  (uncompressed byte count). `bork/archive` represents files and directories as
+  `Member { name: String, data: Bytes, directory: Bool }`; directories have empty
+  data. `Zip(members)` / `Tar(members)` return `Bytes | IoError`, and
+  `ReadZip(bytes, maxBytes = 67108864)` / `ReadTar(...)` return
+  `List[Member] | IoError`. `WriteZip(file, members)` / `WriteTar(...)` write
+  directly to an `fs.File`; `ForEachZip(file, visit, maxBytes = 67108864)` /
+  `ForEachTar(...)` visit one member at a time, buffering its data. File APIs
+  declare `uses io` and charge callback effects. Callers retain file ownership.
+  TAR and gzip consume the current file offset; ZIP iteration uses random access
+  over the whole file. Writers use the current output offset; ZIP files should
+  start empty at offset zero. Archives contain portable relative paths;
+  traversal, absolute paths, backslashes, colons, links and special files are
+  errors. No API extracts entries onto disk. Limits are nonnegative, cumulative
+  uncompressed data bytes across members (including concatenated gzip members).
+  Checksum and malformed input failures return IoError. File writes and callbacks
+  may have already happened when a later error is returned. See
+  [examples/compress_archive](../examples/compress_archive/main.bork).
