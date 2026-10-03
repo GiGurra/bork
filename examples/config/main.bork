@@ -1,0 +1,44 @@
+// Run with: bork run examples/config
+// No server is started and certificate names are data; the output is deterministic.
+import "example.com/config/settings"
+use settings.ConfigEncode
+use settings.ConfigDecode
+
+type Deployment = { name: String, config: settings.Config }
+
+// The Config type carries this fact; callers need no extra guard.
+fn configuredHost(config: settings.Config where settings.Configured): String {
+  config.host
+}
+
+fn main() {
+  local = settings.Defaults(host: "localhost")
+  staging = settings.New(host: "staging.example", port: 8443,
+    connectTimeoutMs: 250, readTimeoutMs: 3000,
+    tls: .Files { cert: "staging.pem", key: "staging.key" },
+    debug: .Some { value: "requests" })
+  production = settings.ForProduction(config: staging, host: "production.example",
+    cert: "production.pem", key: "production.key")
+
+  println(local)
+  println(staging)
+  println(production)
+  println(configuredHost(production))
+  println(encodeJson(production))
+  // Decoding completes defaults and checks the same field/type invariants.
+  println(decodeJson[settings.Config]("{\"host\":\"decoded.example\",\"connectTimeoutMs\":100,\"readTimeoutMs\":500,\"bodyLimitBytes\":4096}"))
+  println(decodeJson[settings.Config]("{\"host\":\"invalid.example\",\"bodyLimitBytes\":512}"))
+
+  deployment: Deployment = .{ name: "staging", config: staging }
+  // Replacing the whole private-valued field with a valid Config is allowed.
+  promoted = deployment.copy(name: "production", config: production)
+  println(promoted)
+
+  // These fail at compile time:
+  // println(settings.New(host: "localhost", port: 0))
+  // println(settings.New(host: "localhost", connectTimeoutMs: 5000, readTimeoutMs: 1000))
+  // println(settings.New(host: "localhost", bodyLimitBytes: 512))
+  // bad: settings.Config = .{ host: "outside its owning package" }
+  // println(production.copy(port: 9000))
+  // println(deployment.copy(config.port: 9000))
+}

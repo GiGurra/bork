@@ -1,0 +1,47 @@
+// Package settings owns construction and updates of validated configurations.
+pred NonEmpty(value: String) { value.byteLength() > 0 }
+pred ValidPort(value: Int) { value > 0 && value < 65536 }
+pred Positive(value: Int) { value > 0 }
+pred AtLeast(value: Int, minimum: Int) { value >= minimum }
+
+type TlsMode = sealed {
+  Disabled,
+  Files { cert: String where NonEmpty, key: String where NonEmpty },
+} derive (Decode, Encode)
+
+// Clients can read Config's fields, encode it, and pass it around. Only this
+// package can build or copy it. Defaults complete the value before validation.
+type Config = private {
+  host: String where NonEmpty
+  port: Int where ValidPort = 8080
+  connectTimeoutMs: Int where Positive = 1000
+  readTimeoutMs: Int where AtLeast(connectTimeoutMs) = 5000
+  bodyLimitBytes: Int where Positive = 1048576
+  tls: TlsMode = .Disabled
+  debug: Option[String] = .None
+} where Configured derive (Decode, Encode)
+
+// A type-level predicate is true for every valid Config, including decoded
+// values. The budget requirement goes beyond the individual positive fields.
+pred Configured(config: Config) {
+  config.connectTimeoutMs <= config.readTimeoutMs && config.bodyLimitBytes >= 1024
+}
+
+// A shorthand record literal fills and validates the declared field defaults.
+fn Defaults(host: String where NonEmpty): Config { .{ host: host } }
+
+fn New(host: String where NonEmpty, port: Int where ValidPort = 8080,
+  connectTimeoutMs: Int where Positive = 1000,
+  readTimeoutMs: Int where AtLeast(connectTimeoutMs) = 5000,
+  bodyLimitBytes: Int where Positive and AtLeast(1024) = 1048576,
+  tls: TlsMode = .Disabled, debug: Option[String] = .None): Config {
+  .{ host: host, port: port, connectTimeoutMs: connectTimeoutMs,
+    readTimeoutMs: readTimeoutMs, bodyLimitBytes: bodyLimitBytes,
+    tls: tls, debug: debug }
+}
+
+// Copy is checked in the owning package, with all untouched fields retained.
+fn ForProduction(config: Config, host: String where NonEmpty,
+  cert: String where NonEmpty, key: String where NonEmpty): Config {
+  config.copy(host: host, tls: .Files { cert: cert, key: key })
+}
