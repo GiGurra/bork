@@ -25,9 +25,11 @@ fn exercise(s: Scope) uses io: Unit | IoError | fs.NotFound | fs.PermissionDenie
     writer = json.CreateLines(path, writing)?
     json.Write(writer, Item { name: "one\ntwo", count: 2 })?
     json.Write(writer, Json.Null)?
+    json.Write(writer, Json.Number { text: " 3\n " })?
     println(match (json.Write(writer, Json.Number { text: "1\n2" })) { error: JsonError => true; _ => false })
   }
   reader = json.OpenLines(path, s)?
+  println(nextText(reader))
   println(nextText(reader))
   println(nextText(reader))
   println(nextText(reader))

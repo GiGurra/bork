@@ -46,8 +46,8 @@ fn CreateLines(path: String, s: Scope) uses io: Writer | IoError unsafe go {
 }
 fn Write[T: Encode](writer: Writer, value: T) uses io: Unit | JsonError | IoError {
   text = encodeJson(value)
-  _ = parseJson(text)?
-  writeLine(writer, text)
+  parsed = parseJson(text)?
+  writeLine(writer, renderJson(parsed))
 }
 fn writeLine(writer: Writer, text: String) uses io: Unit | IoError unsafe go {
   import "os"

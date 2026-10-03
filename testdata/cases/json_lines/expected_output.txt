@@ -1,6 +1,7 @@
 true
 {"name":"one\ntwo","count":2}
 null
+3
 EOF
 EOF
 1
