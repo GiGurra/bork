@@ -92,9 +92,18 @@ func TestDepsHelper(t *testing.T) {
 	if !bytes.Equal(initial, read("go-deps.mod")) {
 		t.Fatal("init overwrote manifest")
 	}
+	// Replacements preserve file permissions and do not require truncating the
+	// original manifest (which can be read-only in a writable directory).
+	if err := os.Chmod(filepath.Join(root, "go-deps.mod"), 0o444); err != nil {
+		t.Fatal(err)
+	}
 	for _, version := range []string{"v1.0.0", "v1.1.0"} {
 		if err := Deps(sub, "get", []string{"example.com/direct@" + version}); err != nil {
 			t.Fatal(err)
+		}
+		st, err := os.Stat(filepath.Join(root, "go-deps.mod"))
+		if err != nil || st.Mode().Perm() != 0o444 {
+			t.Fatalf("manifest permissions changed: %v", err)
 		}
 		manifest := read("go-deps.mod")
 		parsed, err := modfile.Parse("go-deps.mod", manifest, nil)

@@ -128,8 +128,45 @@ func Deps(path, action string, packages []string) error {
 	if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: mod.root, Mod: data, Sum: sums}); err != nil {
 		return fmt.Errorf("go dependencies: %w", err)
 	}
-	if err := os.WriteFile(sumPath, sums, 0o644); err != nil {
+	modTemp, err := stageGoManifest(modPath, data)
+	if err != nil {
 		return err
 	}
-	return os.WriteFile(modPath, data, 0o644)
+	defer func() { _ = os.Remove(modTemp) }()
+	sumTemp, err := stageGoManifest(sumPath, sums)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(sumTemp) }()
+	// Publish checksums first: if a later rename fails, added hashes are
+	// harmless with the old manifest. Each file is replaced without truncation.
+	if err := os.Rename(sumTemp, sumPath); err != nil {
+		return err
+	}
+	return os.Rename(modTemp, modPath)
+}
+
+func stageGoManifest(path string, data []byte) (string, error) {
+	mode := os.FileMode(0o644)
+	if st, err := os.Stat(path); err == nil {
+		mode = st.Mode().Perm()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".bork-deps-*")
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	if _, err = f.Write(data); err == nil {
+		err = f.Chmod(mode)
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(name)
+		return "", err
+	}
+	return name, nil
 }
