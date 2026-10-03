@@ -65,4 +65,4 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Compare clean compilation with captured-input replay
-        run: go test -race ./internal/driver -run '^(TestCompilationReplayMatchesClean|TestSessionMatchesClean)$' -count=1
+        run: go test -race ./internal/driver -run '^(TestCompilationReplayMatchesClean|TestSessionMatchesClean|TestWatch)' -count=1

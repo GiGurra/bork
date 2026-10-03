@@ -207,6 +207,7 @@ func TestSessionMatchesClean(t *testing.T) {
 			output := replayOutput(t, clean, nil)
 			cleanWarnings := check.DebugWarnings(clean.info)
 			cleanWarnings.Append(check.LazyWarnings(clean.info))
+			cleanWarnings.Append(check.MigrationWarnings(clean.info))
 			if !reflect.DeepEqual(artifact.warnings, cleanWarnings.Sorted()) {
 				t.Fatal("cached warnings differ from clean captured-input compilation")
 			}

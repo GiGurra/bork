@@ -26,9 +26,11 @@ type goUsage struct {
 // Go type/export metadata, custom drivers and compile-time evaluation bypass
 // reuse until their dependencies can be validated.
 type Session struct {
-	mu    sync.Mutex
-	last  *sessionArtifact
-	stats SessionStats
+	mu      sync.Mutex
+	last    *sessionArtifact
+	stats   SessionStats
+	watch   bool
+	attempt *watchAttempt
 }
 
 // SessionStats counts requests and explains the most recent hit or miss.
@@ -77,6 +79,8 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 	var previous *goContext
 	if s.last != nil {
 		previous = s.last.context
+	} else if s.watch && s.attempt != nil {
+		previous = s.attempt.context
 	}
 	context := captureSessionGoContext(previous)
 	if reason := s.hitMissReason(path, emit, context); reason == "" {
@@ -88,17 +92,42 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 		s.stats.Reason = reason
 		s.last = nil
 	}
-	loaded, module, err := loadCompilationInputs(path, nil)
+	var loaded *loadedSources
+	var module *goModuleInputs
+	var err error
+	if s.watch {
+		s.attempt = newWatchAttempt(context)
+		loaded, module, err = loadCompilationInputsFrom(path, nil, func() *sourceSnapshot {
+			inputs := newSourceSnapshot()
+			s.attempt.inputs = inputs
+			return inputs
+		})
+	} else {
+		loaded, module, err = loadCompilationInputs(path, nil)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 	usage := &goUsage{}
-	program, err := checkLoadedProgramTracked(loaded, module, context, captureEmbedsSnapshot, usage, nil)
+	captureAssets := captureEmbedsSnapshot
+	if s.watch {
+		defer func() { s.attempt.names = slices.Clone(usage.names) }()
+		captureAssets = func(info *check.Info, diags *diag.List, sources *sourceSnapshot) *embedSnapshot {
+			assets := captureEmbedsFrom(info, diags, sources, func(sources *sourceSnapshot) *embedSnapshot {
+				assets := newEmbedSnapshot(sources)
+				s.attempt.assets = assets
+				return assets
+			})
+			return assets
+		}
+	}
+	program, err := checkLoadedProgramTracked(loaded, module, context, captureAssets, usage, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 	warnings := check.DebugWarnings(program.info)
 	warnings.Append(check.LazyWarnings(program.info))
+	warnings.Append(check.MigrationWarnings(program.info))
 	warningData := warnings.Sorted()
 	var src []byte
 	if emit {
