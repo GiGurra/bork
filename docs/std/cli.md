@@ -89,7 +89,7 @@ type Options = {
 fn main() {
   result = cli.Run[Options]("app", "Example", (options, s) => {
     println(options.port)
-  }, [cli.Flag { field: "config", configFile: true }], ["settings.json"])
+  }, flags: [cli.Flag { field: "config", configFile: true }], configFiles: ["settings.json"])
   println(result)
 }
 ```
