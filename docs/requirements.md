@@ -2817,6 +2817,81 @@ construction, source order/lifetimes, formatting/comments, descriptions, and
 independent ambiguity-fix rechecks. Existing generic calls and pattern behavior
 must remain compatible.
 
+### Expected-type Option promotion (design: bork-5nxmcc)
+
+A known optional value position accepts its ordinary value directly. The compiler
+builds `Some { value: ... }`, so config overrides can read
+`settings.New(host: "localhost", debug: "requests")`. Explicit `.Some { value: x }`
+and `.None` remain valid and useful when the wrapper supplies inference context.
+
+- **Promotion needs a known target.** The expected type must be exactly the
+  prelude's `Option[T]`, with no unsolved inference variables in `T`. A concrete
+  alias naming it counts. A union containing Option does not trigger promotion:
+  an existing compatible union member keeps its ordinary meaning; otherwise
+  write the wrapper explicitly. No global change to type assignability,
+  conversions, overload lookup, or generic constraint solving is introduced.
+- **The value must be an ordinary non-optional value.** After checking with the
+  applicable expectation described below, its type must be assignable to `T` and have a
+  known outer shape other than Option. A source union is eligible only when
+  every member has a known non-optional outer shape; a member that is Option or
+  an unresolved/rigid bare parameter prevents promotion. An expression already
+  producing an Option keeps its type. `Option[Option[Int]]` therefore requires explicit outer `.Some`
+  when given an `Option[Int]`; promotion never silently adds another optional
+  layer. A bare rigid type parameter is excluded because it could be an Option
+  in a specialization. A known outer shape such as `List[T]` is safe even with a
+  rigid parameter inside it. `Never` keeps ordinary control-flow behavior.
+- **Normal expected positions participate.** Named and positional function/method
+  arguments, typed bindings, results/returns and block tails, record/variant
+  fields, copy updates, typed list/map elements, callback results, and if/match
+  branches use the rule. Untyped bindings, a match scrutinee, and a copy receiver
+  gain no expectation merely from later use. A generic call cannot infer `T`
+  just by deciding to wrap its raw argument; once existing inference independently
+  establishes a closed target, the normal delayed argument check can promote.
+  Delay ordinary raw arguments too, not only contextual literals: both argument
+  orders of `choose[T](value: Option[T], witness: T)` can use a raw value after
+  the witness or independently known call result establishes T.
+- **Preserve constructor and literal context.** A shorthand record in
+  `Option[Config]` can use Config as its context, then become Some. Numeric
+  literals, empty containers and lambdas use `T`'s normal literal typing rules.
+  Direct `.Some`/`.None` and explicit Option constructors retain the outer
+  optional context; they are not checked as constructors of `T`. Calls with a
+  declared optional result, or a bare generic result parameter that could be
+  optional, retain the outer Option expectation for existing result inference.
+  Calls with a definitely non-optional declared result head use payload context.
+  Transparent expressions such as `dbg(...)`, blocks and branches forward the
+  applicable expectation to their value expressions. Thus `none[T](): Option[T]`
+  still infers correctly in `x: Option[Int] = none()` and `dbg(none())`.
+  Classify context from existing syntax/declaration types and check once; do not
+  retry checking after diagnostics or choose constructors from field shape.
+- **Facts and construction remain obligations.** `Option[Int where positive]`
+  still requires the promoted value to prove positive. Generic field argument
+  facts, sibling predicates, type-level invariants, private construction,
+  defaults, effects and lifetimes use the same checks as explicit Some. Do not
+  assume a payload predicate because the target asks for it. A guarded or already
+  validated payload carries its proven facts into the wrapper. Predicates on the
+  completed Option value are checked after construction as usual.
+- **Evaluate exactly once.** Promotion adds a wrapper around the checked value;
+  source order stays unchanged, including named arguments and copy fields.
+  Each branch or callback returning a payload uses its declared expected type;
+  branches already returning an Option retain their wrapper. Closed defaults
+  keep existing admissibility and declaration/specialization validation rules.
+- **Tooling shows the resulting type.** Formatting preserves the written value
+  and does not insert or remove wrappers. Describe reports the promoted Option
+  type at the promoted expression, with facts/lifetimes projected consistently;
+  names inside its payload keep their normal definition links. Existing explicit
+  Some remains valid code, so this ticket adds no simplification warning or
+  automatic wrapper-removal fix. Such edits can be a future refactoring feature.
+
+Acceptance covers every expected position, config's scalar debug override,
+explicit wrappers, nested Option rejection, known aliases and union exclusions,
+generic inference in both argument orders and from result context, generic
+optional-return calls, `identity(1)` versus argument-free generic results,
+mixed payload/None branches and transparent nesting, rigid parameters and
+source-union exclusions, shorthand payloads, literal/container/lambda context, source-order effects and exactly-once evaluation, payload facts
+and private construction, sibling/whole invariants, defaults, lifetimes,
+formatting, and source queries. Rejected promotion suggests explicit Some when
+it would make the intended optional layer or inference context clear.
+
 ### Numbers
 
 - **Fixed-width integers, as in Go.** `Int` is a 64-bit integer with Go's wrapping arithmetic.
