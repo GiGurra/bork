@@ -1939,7 +1939,10 @@ not carry the parameters' facts.
   arguments with their types: `m.args().map(c => c.amount)`.
 - `m.expect(times: n)`, `m.expect(atLeast: a, atMost: b)` (either bound
   alone), and `m.expect()` (at least once) declare how many calls the mock
-  must answer; `times: 0` means never, and -1 means a bound is not given. `m.expectWhere(c => c.url == "a",
+  must answer; `times: 0` means never. The bounds are `Option[Int]` with
+  `.None` defaults; a supplied nonnegative integer promotes to Some, and
+  explicit `.Some { value: n }` also works. Every supplied negative integer,
+  including -1, fails the test. `m.expectWhere(c => c.url == "a",
   times: 1)` counts only the calls whose record matches; the matcher is pure
   (`(A) uses nothing => Bool`), so it can run when the check does. They are
   declared up front, as rewire's `expect` is, and checked when the mock ends:

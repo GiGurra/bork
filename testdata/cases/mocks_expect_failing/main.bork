@@ -100,3 +100,33 @@ test "waitFor cannot wait for a negative time" {
   calls = mock Fetch(url) { url }
   calls.waitFor(1, ms: -5)
 }
+
+test "times minus one is a supplied negative bound" {
+  calls = mock Fetch(url) { url }
+  calls.expect(times: -1)
+}
+
+test "atLeast minus one is a supplied negative bound" {
+  calls = mock Fetch(url) { url }
+  calls.expect(atLeast: -1)
+}
+
+test "atMost minus one is a supplied negative bound" {
+  calls = mock Fetch(url) { url }
+  calls.expect(atMost: -1)
+}
+
+test "an explicit negative Some is rejected by expectWhere" {
+  calls = mock Fetch(url) { url }
+  calls.expectWhere(c => true, times: .Some { value: -1 })
+}
+
+test "zero times and a range are both supplied" {
+  calls = mock Fetch(url) { url }
+  calls.expect(times: 0, atLeast: 0)
+}
+
+test "lower bound cannot exceed upper bound" {
+  calls = mock Fetch(url) { url }
+  calls.expect(atLeast: 2, atMost: 1)
+}

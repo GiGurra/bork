@@ -737,25 +737,37 @@ func _mockArgsFn[A any](f *_mockFrame) func() []A {
 	}
 }
 
-func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, int64, int64, int64, string) {
-	return func(match func(A) bool, where bool, times, atLeast, atMost int64, at string) {
+func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, Option[int64], Option[int64], Option[int64], string) {
+	return func(match func(A) bool, where bool, times, atLeast, atMost Option[int64], at string) {
+		bound := func(option Option[int64]) (int64, bool) {
+			some, given := option.(Option_Some[int64])
+			return some.value, given
+		}
+		t, hasTimes := bound(times)
+		lo, hasLo := bound(atLeast)
+		hi, hasHi := bound(atMost)
+		text := func(value int64, given bool) string {
+			if !given { return ".None" }
+			return strconv.FormatInt(value, 10)
+		}
 		e := _mockExpect{match: func(a any) bool { return match(a.(A)) }, where: where, lo: 1, hi: -1, at: at}
 		bad := func(why string) {
-			panic(fmt.Sprintf("%s: cannot expect (times: %d, atLeast: %d, atMost: %d) of the mock of %s: %s", at, times, atLeast, atMost, f.name, why))
+			panic(fmt.Sprintf("%s: cannot expect (times: %s, atLeast: %s, atMost: %s) of the mock of %s: %s", at, text(t, hasTimes), text(lo, hasLo), text(hi, hasHi), f.name, why))
 		}
 		switch {
 		case f.ended.Load() || f.checked.Load():
 			panic(fmt.Sprintf("%s: an expectation on the mock of %s came after it ended, so it could never be checked; declare expectations while the mock is in force", at, f.name))
-		case times < -1 || atLeast < -1 || atMost < -1:
-			bad("bounds cannot be negative (-1 means not given)")
-		case times >= 0 && (atLeast >= 0 || atMost >= 0):
+		case hasTimes && t < 0 || hasLo && lo < 0 || hasHi && hi < 0:
+			bad("bounds cannot be negative")
+		case hasTimes && (hasLo || hasHi):
 			bad("give times, or atLeast and atMost, not both")
-		case atLeast >= 0 && atMost >= 0 && atLeast > atMost:
+		case hasLo && hasHi && lo > hi:
 			bad("atLeast is more than atMost")
-		case times >= 0:
-			e.lo, e.hi = times, times
-		case atLeast >= 0 || atMost >= 0:
-			e.lo, e.hi = max(atLeast, 0), atMost
+		case hasTimes:
+			e.lo, e.hi = t, t
+		case hasLo || hasHi:
+			e.lo = lo
+			if hasHi { e.hi = hi }
 		}
 		f.mu.Lock()
 		f.expects = append(f.expects, e)

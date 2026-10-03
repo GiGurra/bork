@@ -1,7 +1,7 @@
 fn Fetch(url: String) uses net: String { url }
 
-fn Saved[A](m: Mock[A], expect: (Mock[A], Int, Int, Int) uses state => Unit) uses state {
-  expect(m, 2, -1, -1)
+fn Saved[A](m: Mock[A], expect: (Mock[A], Option[Int], Option[Int], Option[Int]) uses state => Unit) uses state {
+  expect(m, 2, .None, .None)
 }
 
 test "saved helper captures its reference" {

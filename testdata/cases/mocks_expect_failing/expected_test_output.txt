@@ -17,7 +17,7 @@ FAIL  waitFor gives up
       main.bork:44:3: waited 20ms for 2 calls of the mock of Fetch, but it answered 1:
       Fetch("a")
 FAIL  times and a range cannot both be given
-      main.bork:49:3: cannot expect (times: 1, atLeast: -1, atMost: 2) of the mock of Fetch: give times, or atLeast and atMost, not both
+      main.bork:49:3: cannot expect (times: 1, atLeast: .None, atMost: 2) of the mock of Fetch: give times, or atLeast and atMost, not both
 FAIL  a test that fails first reports only its own failure
       main.bork:55:3: expected "b", got "a"
 FAIL  the unmet expectations of every mock in a block are reported
@@ -34,5 +34,17 @@ FAIL  a matcher that panics
       Fetch("a")
 FAIL  waitFor cannot wait for a negative time
       main.bork:101:3: cannot wait for 1 calls of the mock of Fetch for -5ms: neither can be negative
-0 passed, 13 failed
+FAIL  times minus one is a supplied negative bound
+      main.bork:106:3: cannot expect (times: -1, atLeast: .None, atMost: .None) of the mock of Fetch: bounds cannot be negative
+FAIL  atLeast minus one is a supplied negative bound
+      main.bork:111:3: cannot expect (times: .None, atLeast: -1, atMost: .None) of the mock of Fetch: bounds cannot be negative
+FAIL  atMost minus one is a supplied negative bound
+      main.bork:116:3: cannot expect (times: .None, atLeast: .None, atMost: -1) of the mock of Fetch: bounds cannot be negative
+FAIL  an explicit negative Some is rejected by expectWhere
+      main.bork:121:3: cannot expect (times: -1, atLeast: .None, atMost: .None) of the mock of Fetch: bounds cannot be negative
+FAIL  zero times and a range are both supplied
+      main.bork:126:3: cannot expect (times: 0, atLeast: 0, atMost: .None) of the mock of Fetch: give times, or atLeast and atMost, not both
+FAIL  lower bound cannot exceed upper bound
+      main.bork:131:3: cannot expect (times: .None, atLeast: 2, atMost: 1) of the mock of Fetch: atLeast is more than atMost
+0 passed, 19 failed
 exit code 1

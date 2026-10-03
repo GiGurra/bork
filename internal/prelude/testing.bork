@@ -9,7 +9,7 @@ type Mock[A] = {
   countFn: () uses state => Int,
   callsFn: () uses state => List[String],
   argsFn: () uses state => List[A],
-  expectFn: ((A) uses nothing => Bool, Bool, Int, Int, Int, String) uses state => Unit,
+  expectFn: ((A) uses nothing => Bool, Bool, Option[Int], Option[Int], Option[Int], String) uses state => Unit,
   waitFn: ((A) uses nothing => Bool, Bool, Int, Int, String) uses state + clock => Unit,
 }
 
@@ -33,13 +33,14 @@ fn (m: Mock[A]) args[A]() uses state: List[A] {
 // expect declares how many calls the mock must answer, checked when it
 // ends (at the end of its block): exactly `times`, or at least
 // `atLeast` and at most `atMost`. With none of them, at least one;
-// `times: 0` means never.
-fn (m: Mock[A]) expect[A](times: Int = -1, atLeast: Int = -1, atMost: Int = -1) uses state {
+// `times: 0` means never. Omitted bounds are .None; supplied bounds
+// must be nonnegative.
+fn (m: Mock[A]) expect[A](times: Option[Int] = .None, atLeast: Option[Int] = .None, atMost: Option[Int] = .None) uses state {
   m.expectFn((a) => true, false, times, atLeast, atMost, compilerCallerLocation())
 }
 
 // expectWhere is expect, counting only the calls whose arguments match.
-fn (m: Mock[A]) expectWhere[A](matches: (A) uses nothing => Bool, times: Int = -1, atLeast: Int = -1, atMost: Int = -1) uses state {
+fn (m: Mock[A]) expectWhere[A](matches: (A) uses nothing => Bool, times: Option[Int] = .None, atLeast: Option[Int] = .None, atMost: Option[Int] = .None) uses state {
   m.expectFn(matches, true, times, atLeast, atMost, compilerCallerLocation())
 }
 
