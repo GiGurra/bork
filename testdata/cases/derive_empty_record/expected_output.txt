@@ -1,0 +1,12 @@
+Empty {}
+Empty {}
+DecodeError { path: "", message: "expected an object, found null" }
+DecodeError { path: "", message: "expected an object, found an array" }
+DecodeError { path: "", message: "expected an object, found a number" }
+DecodeError { path: "", message: "expected an object, found a string" }
+DecodeError { path: "", message: "expected an object, found a boolean" }
+{}
+Empty {}
+Box { empty: Empty {} }
+DecodeError { path: ".empty", message: "expected an object, found null" }
+EmptyGeneric {}
