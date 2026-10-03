@@ -1,0 +1,18 @@
+type Empty = {} derive (Decode, Encode)
+type Box = { empty: Empty } derive (Decode, Encode)
+type EmptyGeneric[T] = {} derive (Decode, Encode)
+
+fn main() {
+  println(decodeJson[Empty]("{}"))
+  println(decodeJson[Empty]("{\"extra\": 1}"))
+  println(decodeJson[Empty]("null"))
+  println(decodeJson[Empty]("[]"))
+  println(decodeJson[Empty]("1"))
+  println(decodeJson[Empty]("\"text\""))
+  println(decodeJson[Empty]("true"))
+  println(encodeJson(Empty {}))
+  println(decodeJson[Empty](encodeJson(Empty {})))
+  println(decodeJson[Box]("{\"empty\": {}}"))
+  println(decodeJson[Box]("{\"empty\": null}"))
+  println(decodeJson[EmptyGeneric[Int]]("{}"))
+}

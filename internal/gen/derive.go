@@ -64,6 +64,9 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 	fmt.Fprintf(&b, "_obj, _isObj := json.(%s)\n", jsonVariant("Object"))
 	switch t := fn.Of.Type.(type) {
 	case *check.Record:
+		if len(t.Fields) == 0 {
+			b.WriteString("_ = _obj\n")
+		}
 		b.WriteString("if !_isObj {\n" + g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
 		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t)))
 	case *check.Sealed:
