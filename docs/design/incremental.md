@@ -113,7 +113,7 @@ source-language access. The summary must retain current visibility rules.
 | Facts and predicates | Parameter/result/field constraints, requirements, exported promises and predicate identities; any body-derived result facts or validation behavior read by the proof engine. |
 | Rules | The complete rule set actually visible to the proof engine, including premises, conditions, conclusions and referenced predicate/type IDs. Current `Info.Rules` is program-wide; begin with a whole-visible-set digest rather than inventing narrower package visibility. |
 | Classes and instances | Class methods, associated contracts, derived instances, instance candidates, explicit uses/bundles, coherence and resolution inputs. Absence of a matching candidate is also a dependency. |
-| Defaults | Names/availability, parameter ordering and checked default contracts. Closed non-generic field defaults are checked when their declaring package is the root (#148); current imported-package checking skips that proof. Record explicit contextual proof status, never infer it from imported success. Generic defaults and sibling-dependent constraints retain specialization/use-site obligations. |
+| Defaults | Names/availability, parameter ordering and checked default contracts. Closed non-generic field defaults are checked when their declaring package is the root (#148); current imported-package checking skips that proof, a soundness gap tracked by bork-5yn71y. Require that fix before treating imported success as a proved artifact. Generic defaults and sibling-dependent constraints retain specialization/use-site obligations. |
 | Lifetimes | Resource/scoped ownership identity, parameter/result lifetime relations, constraints on capture/escape and borrow/consumption behavior that callers rely on. If a relation is currently derived from a body, hash that relation or retain the body dependency. |
 | Go interop | Binding signatures, opaque/mirror type metadata, conversion contracts and hidden ABI details actually used by consumers, with external Go inputs in the manifest. |
 
@@ -146,18 +146,15 @@ if reads/effects cannot be tracked; this includes no-edit in-memory session hits
 language-level pure is insufficient if unsafe Go can access unrecorded inputs.
 No successful cached proof may bypass a predicate failure under changed inputs.
 
-The current clean driver does not independently check every dependency as a
-root. `Facts` skips closed non-generic defaults in non-root packages, and only
-root tests are checked. An imported package with an invalid closed default can
-therefore be accepted when imported and rejected when checked directly. This
-proposal preserves that context rather than silently tightening semantics.
-An imported artifact must mark such defaults as unproven; it is not a valid
-root-check hit. Changing this behavior requires a separately reviewed clean
-compiler change and regression coverage before incremental reuse follows it.
-Until the validation contexts are separated, key artifacts by root/imported
-role and do not export a universal successful-default-proof claim. Applying
-root checks to every dependency is not a semantics-preserving implementation
-of this design.
+There is a prerequisite soundness fix (bork-5yn71y): the current clean driver
+skips closed non-generic defaults in non-root packages. Imported user packages
+must prove their own defaults once per build, even when no caller uses the
+field. Fix that in the clean compiler first and test invalid imported defaults;
+then cached package artifacts can carry successful declaring-package proofs.
+Until that fix is present, imported success cannot certify these defaults and
+is not eligible for a universally proved artifact. Generic and sibling-dependent
+use-site obligations remain separate. Root tests are still context-specific;
+proving defaults does not mean running every dependency's tests.
 
 Defaults used in generated callers also need implementation dependencies even
 when their proof contract is unchanged. Their private helper dependencies remain
@@ -309,8 +306,8 @@ Use edit sequences, not just two identical builds. At minimum cover:
 - Effects, ambient needs/order, provider bundles and higher-order contracts.
 - Fact promises, predicate/helper bodies and arguments, rules/conditions,
   newly added candidate instances and removed/failed lookup targets.
-- Root/imported default-proof status (including imported-invalid/root-invalid
-  sequences), private default helpers, generic defaults,
+- Declaring-package defaults in imported user packages (including unused invalid
+  defaults), private default helpers, generic defaults,
   sibling constraints and cross-package generic specialization/dictionaries.
 - Root tests/mocks, rule testing, prelude overrides and evaluator entry roots.
 - Added/deleted files/packages, import resolution, unsafe authorization,
@@ -336,8 +333,8 @@ complete-graph hit; skipping unchanged package bodies requires the checker
 boundary refactor. Per-package Go output is a measured backend experiment.
 
 Review should confirm the exported proof/ownership/default contracts and the
-body-dependency fallback, then decide whether watch or disk reuse ships first
-once package artifacts exist. No universal body-only-edit guarantee applies to
+body-dependency fallback, then ship watch before a daemon once package artifacts exist. Disk reuse
+requires the versioned artifact boundary and validation manifest. No universal body-only-edit guarantee applies to
 predicates, generic/default implementations or body-derived proofs. Daemon
 transport, editor-buffer protocol and cross-package specialization placement
 remain follow-up designs with conservative fallback in the meantime.
