@@ -1,0 +1,10 @@
+type Record = { value: Int }
+type Alias = Record
+type Choice = sealed { Empty }
+fn FromAlias = Alias.new
+fn FromChoice = Choice.new
+fn FromInt = Int.new
+fn FromMissing = Missing.new
+fn Existing(value: Int): Int { value }
+fn Existing = Record.new
+fn main() {}

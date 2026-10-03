@@ -1,0 +1,5 @@
+main.bork:4:16: generated constructor FromAlias requires a declared record, found Alias
+main.bork:5:17: generated constructor FromChoice requires a declared record, found Choice
+main.bork:6:14: generated constructor FromInt requires a declared record, found Int
+main.bork:7:18: generated constructor FromMissing requires a declared record, found Missing
+main.bork:9:1: function Existing is already declared at main.bork:8:1

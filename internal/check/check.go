@@ -464,7 +464,18 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 		c.inFile(f)
 		for _, fd := range f.Funcs {
 			if fd.Instance == nil {
-				c.declareFunc(fd, f.Prelude)
+				decl := fd
+				if fd.Constructor != nil {
+					decl = c.expandConstructor(fd)
+					if decl == nil {
+						continue
+					}
+				}
+				c.declareFunc(decl, f.Prelude)
+				if fn := c.info.FuncOf[decl]; decl != fd && fn != nil {
+					c.info.FuncOf[fd] = fn
+					delete(c.info.FuncOf, decl)
+				}
 			}
 		}
 	}
@@ -830,7 +841,9 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
 	c.ownerSignature(fn)
-	c.openSignature(fn)
+	if fd.Constructor == nil {
+		c.openSignature(fn)
+	}
 	c.typeParams = nil
 	c.pkg.Funcs[fd.Name] = fn
 	c.info.FuncOf[fd] = fn
@@ -847,7 +860,7 @@ func (c *checker) checkFunc(fn *Func) {
 	c.scopes = []map[string]*local{{}}
 	for i, p := range fn.Decl.Params {
 		// The prelude's parameter names do not depend on user code.
-		if !fn.Prelude && c.nameTaken(p.Name, p.Pos) {
+		if !fn.Prelude && fn.Decl.Constructor == nil && c.nameTaken(p.Name, p.Pos) {
 			continue
 		}
 		if fn.Params[i] == Unit {

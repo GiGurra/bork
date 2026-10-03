@@ -34,6 +34,7 @@ type CallableDescription struct {
 }
 
 type ParameterDescription struct {
+	Doc      string `json:"doc,omitempty"`
 	Name     string `json:"name"`
 	Type     string `json:"type"`
 	Receiver bool   `json:"receiver,omitempty"`
@@ -45,12 +46,24 @@ func DescribeCallable(fn *Func, params []Type, from *Package, bound bool) *Calla
 	if fn.Requires != nil {
 		out.Requires = []string{requirementText(fn.Requires, from)}
 	}
+	if constructorInvariant(fn) {
+		for _, con := range TypeConstraints(fn.Result) {
+			out.Requires = append(out.Requires, "completed "+TypeText(fn.Result, from)+" requires "+con.Text(from))
+		}
+	}
 	skip := 0
 	if bound {
 		skip = 1
 	}
 	for i, p := range fn.Decl.Params[skip:] {
 		out.Parameters = append(out.Parameters, ParameterDescription{Name: p.Name, Type: TypeText(params[i], from), Receiver: fn.Decl.IsMethod && !bound && i == 0, Default: defaultText(p.Default)})
+		if fn.Decl.Constructor != nil {
+			record := fn.Result.(*Record)
+			out.Parameters[len(out.Parameters)-1].Doc = record.Fields[i].Doc
+			for _, con := range fn.ParamConstraints[i] {
+				out.Requires = append(out.Requires, p.Name+" requires "+con.Text(from))
+			}
+		}
 	}
 	for _, n := range fn.Needs {
 		name := n.Ambient.QualifiedName(from)

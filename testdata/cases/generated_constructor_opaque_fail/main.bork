@@ -1,0 +1,3 @@
+import "example.com/ctors/settings"
+fn unproven(n: Int where settings.Positive): settings.Config { settings.New(budget: n) }
+fn main() {}

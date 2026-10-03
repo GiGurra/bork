@@ -341,6 +341,11 @@ type pendingQuery struct {
 }
 
 func (f *factChecker) function(fn *Func) {
+	// Generated bodies only assemble their inputs. Their complete construction
+	// contract is checked on each call, including defaulted arguments.
+	if fn.Decl.Constructor != nil {
+		return
+	}
 	f.fn = fn
 	f.tail(fn.Body, f.entryFacts(fn), f.checkResult)
 	f.fn = nil
@@ -481,7 +486,7 @@ func (f *factChecker) walk(x Expr, e env) {
 		// A function with requirements cannot be a value: calls through
 		// the value could not be checked.
 		if f.collect == nil {
-			if x.Inst.Func.Requires != nil {
+			if x.Inst.Func.Requires != nil || constructorInvariant(x.Inst.Func) {
 				f.diags.AddCode(x.Pos(), "facts.error", "%s has function-level where requirements, so it cannot be used as a value; use a lambda that checks them", x.Name)
 			}
 			for i, cons := range x.Inst.Func.ParamConstraints {
@@ -645,13 +650,21 @@ func pathPhrase(path, name string) string {
 func (f *factChecker) callObligations(call *Call, e env) {
 	fn, args := call.Func, call.Args
 	f.callRequirements(call, e)
+	f.constructorObligations(call, e)
 	for i, cons := range fn.ParamConstraints {
 		if i >= len(args) {
 			break
 		}
 		for _, con := range cons {
 			req := fmt.Sprintf("%s requires %s to be %s", fn.QualifiedName(f.from()), pathPhrase(con.Path, fn.Decl.Params[i].Name), con.Text(f.from()))
+			saveUse, saveDecl := f.defaultUse, f.defaultDecl
+			if fn.Decl.Constructor != nil {
+				if defaultValue := fn.Decl.Params[i].Default; defaultValue != nil && args[i].Pos() == defaultValue.Position() {
+					f.defaultUse, f.defaultDecl = call.Pos(), fn.Result.(*Record).Fields[i].Decl.Pos
+				}
+			}
 			f.oblige(args[i], con, f.callArgs(call), e, req)
+			f.defaultUse, f.defaultDecl = saveUse, saveDecl
 		}
 	}
 	// With a constrained type argument (f[Port](x)), arguments of that

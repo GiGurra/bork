@@ -1,0 +1,12 @@
+Config { host: "default", hi: 10, lo: 0, limit: 2048 }
+Config { host: "guarded", hi: 8, lo: 3, limit: 4096 }
+Box { value: "inferred", items: [] } Box { value: 3, items: [] }
+Named { T: 3 }
+Empty {}
+Mixed { optional: 9, required: "function value" }
+GenericRange { tag: "range", lo: 2, hi: 3 }
+Mixed { optional: 7, required: "named" } Mixed { optional: 8, required: "positional" }
+lo
+hi
+Ordered { hi: 9, lo: 2 }
+Shadow { positive: 3 }
