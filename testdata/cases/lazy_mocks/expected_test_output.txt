@@ -1,0 +1,4 @@
+ok    first forcing goroutine determines cached mocked result
+ok    an escaping cell does not carry mocks
+2 passed, 0 failed
+exit code 0

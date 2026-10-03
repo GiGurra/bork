@@ -1,0 +1,48 @@
+fn acquire(s: Scope, text: String) uses io: Int {
+  println(s"open $text")
+  onClose(s: s, f: () => println(s"close $text"))
+  7
+}
+fn protect(work: () => Unit): Bool unsafe go {
+ recovered := false
+ func(){ defer func(){ recovered = recover() != nil }(); work() }()
+ return recovered
+}
+fn fail() uses io: Int { println("panic initializer"); panic("failure") }
+fn escapedValue() uses io: Int {
+  scope inner {
+    lazy value = acquire(inner, "scalar")
+    value
+  }
+}
+fn owning(parent: Scope) uses io + state: Int {
+  lazy value = {
+    owner = openScope(parent)
+    _ = acquire(owner.scope, "initializer owner")
+    closeScope(owner)
+    9
+  }
+  value
+}
+fn main() {
+  scope s {
+    lazy unused = acquire(s, "unused")
+    println("unused scope")
+  }
+  scope s {
+    lazy value = acquire(s, "used")
+    println("before resource")
+    println(value); println(value)
+  }
+  println(escapedValue())
+  scope s { println(owning(s)) }
+  lazy failed: Int = fail()
+  println(protect(() => { _ = failed }))
+  println(protect(() => { _ = failed }))
+  lazy panicScopes: Int = scope inner {
+    _ = acquire(inner, "panic")
+    panic("failed")
+  }
+  println(protect(() => { _ = panicScopes }))
+  println(protect(() => { _ = panicScopes }))
+}

@@ -10,7 +10,8 @@ The inspiration is [q's lazy values](https://gigurra.github.io/q/api/lazy/),
 including once-only evaluation, concurrent readers and cached failures. Bork
 uses transparent binding/field reads instead of a wrapper accessor, immutable
 captures instead of mutable Go closure capture, and checked scope lifetimes.
-This document specifies the complete feature before implementation. Local
+This document specifies the complete feature. Local bindings are implemented;
+fields and package bindings remain proposed follow-on phases. Local
 bindings ship first, record fields second, package bindings third. Until a
 phase ships, its syntax receives a deliberate unsupported-feature diagnostic.
 
@@ -48,7 +49,9 @@ implementation detail, not a predicate or an input to program behavior.
 
 The initializer is a function boundary returning T. A block initializer can
 use `return` and `?` under that result type; neither returns from the enclosing
-function. `break`, `continue` and `yield` cannot cross this boundary. Scopes and
+function. An Option `?` needs an explicit result annotation because its failure
+returns a specialized None; ordinary union `?` can infer its failure alternatives.
+`break`, `continue` and `yield` cannot cross this boundary. Scopes and
 owners created inside it obey ordinary unwinding. Returning a handle belonging
 to an initializer-local scope is rejected, as with an ordinary function.
 
@@ -80,7 +83,9 @@ effectful expression a repeatable pure computation. Compiler predicate/constant
 evaluation must never force a runtime cell, even through a pure accessor,
 comparison, Show instance or whole-value validator. A compile-time proof may
 reason about a checked initializer statically, or evaluate a wholly known pure
-candidate with no runtime cells; otherwise use existing boundary validation or
+candidate with no runtime cells. Fresh pure cells created inside that known-input
+compile-time candidate preserve demand and caching; they are distinct from
+cells created by the running program. Otherwise use existing boundary validation or
 report an unproved obligation. No optimizer may hoist or eagerly force a runtime
 cell based only on the accessor's pure signature.
 

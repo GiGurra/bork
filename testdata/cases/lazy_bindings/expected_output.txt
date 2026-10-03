@@ -1,0 +1,25 @@
+before
+force 7
+7
+7
+7
+failure
+Failed {}
+Failed {}
+3
+5
+failure
+Failed {}
+failure
+Failed {}
+Option.Some { value: 9 }
+captured
+10
+generic
+[7, 7, 7]
+force 1
+1
+1
+force 2
+2
+2

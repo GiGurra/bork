@@ -1,0 +1,5 @@
+fn main() {
+  lazy value: Int = expensive()
+  lazy other = { if (true) { return 1 }; value }
+  println(value)
+}
