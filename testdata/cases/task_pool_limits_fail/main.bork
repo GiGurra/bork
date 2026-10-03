@@ -1,0 +1,7 @@
+import "bork/tasks"
+fn main() {
+  scope s {
+    _ = tasks.Open(s, 0)
+    _ = tasks.Open(s, -1)
+  }
+}

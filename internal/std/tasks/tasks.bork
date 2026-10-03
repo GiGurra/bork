@@ -1,0 +1,60 @@
+// Package tasks shares an explicit task capacity across scopes. Ordinary
+// spawn/launch remain unlimited; select a Pool to get typed admission failures.
+pred ValidLimit(limit: Int) { limit > 0 }
+type Limit = Int where ValidLimit
+type TaskLimitReached = { limit: Int }
+type Pool = resource
+type permit = () uses state => Unit
+
+// Open creates a shared pool. A task keeps its slot until its callback ends,
+// including when cancellation is ignored. Closing the pool rejects new work.
+fn Open(s: Scope, maxTasks: Limit) uses state: Pool unsafe go {
+  import "sync"
+  state := &struct { mu sync.Mutex; active int64; limit int64; closed bool }{limit:maxTasks}
+  return Pool{handle:state,owner:s.Own(func(){state.mu.Lock();state.closed=true;state.mu.Unlock()})}
+}
+
+fn reserve(pool: Pool) uses state: permit | TaskLimitReached | Cancelled unsafe go {
+  import "sync"
+  state := pool.handle.(*struct { mu sync.Mutex; active int64; limit int64; closed bool })
+  state.mu.Lock()
+  if state.closed { state.mu.Unlock(); return Cancelled{reason:"task pool closed"} }
+  if state.active>=state.limit { state.mu.Unlock(); return TaskLimitReached{limit:state.limit} }
+  state.active++
+  state.mu.Unlock()
+  return func(){state.mu.Lock();state.active--;state.mu.Unlock()}
+}
+
+// TrySpawn never waits for capacity. The explicit scope owns the task; pool
+// and callback captures must live as long as that scope. Failure runs no work.
+fn TrySpawn[T](pool: Pool, s: Scope, work: () => T) uses state: Task[T] | TaskLimitReached | Cancelled unsafe go {
+  if s.ctx.Err()!=nil { return Cancelled{reason:s._cancelReason()} }
+  admission:=reserve(pool)
+  release,ok:=admission.(func())
+  if !ok { return admission }
+  wait,started:=_borkTryScopeTask(s,func()any{defer release();return work()})
+  if !started {
+    release()
+    reason:=s._cancelReason()
+    if reason=="" { reason="scope closed" }
+    return Cancelled{reason:reason}
+  }
+  return Task[T]{wait:func()T{return wait().(T)}}
+}
+
+// TryLaunch admits a task without returning its result. Scope cleanup waits
+// for admitted work and reports panics just as ordinary launch does.
+fn TryLaunch(pool: Pool, s: Scope, work: () => Unit) uses state: Unit | TaskLimitReached | Cancelled unsafe go {
+  if s.ctx.Err()!=nil { return Cancelled{reason:s._cancelReason()} }
+  admission:=reserve(pool)
+  release,ok:=admission.(func())
+  if !ok { return admission }
+  _,started:=_borkTryScopeTask(s,func()any{defer release();work();return nil})
+  if !started {
+    release()
+    reason:=s._cancelReason()
+    if reason=="" { reason="scope closed" }
+    return Cancelled{reason:reason}
+  }
+  return _Unit{}
+}

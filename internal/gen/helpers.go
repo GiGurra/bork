@@ -20,6 +20,13 @@ func _borkScopeContext(s *_Scope) context.Context { return s.ctx }
 func _borkScopeWith(ctx context.Context) *_Scope { return _scopeWith(ctx) }
 func _borkScopeClose(s *_Scope) { s.close() }
 func _borkScopeAbort(s *_Scope) { s.abort() }
+// TryTask admits work atomically with scope closing; its waiter preserves task
+// panic reporting. Rejected work is never called or registered.
+func _borkTryScopeTask(s *_Scope, work func() any) (func() any, bool) {
+ task:=s.tryGo(work)
+ if task==nil { return nil,false }
+ return task.Await,true
+}
 
 // A stable cancellation context whose source follows resource attachment.
 // Value is immutable after construction. Close must run with final release.

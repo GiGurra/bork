@@ -754,11 +754,19 @@ func (s *_Scope) Defer(f func()) {
 // Go runs work on a goroutine the scope waits for before it closes. A
 // task that panics cancels the scope, so its siblings stop too.
 func (s *_Scope) Go(work func() any) *_task {
+ return s.startTask(work, false)
+}
+
+// tryGo registers work only while the scope is open and uncancelled.
+func (s *_Scope) tryGo(work func() any) *_task { return s.startTask(work,true) }
+
+func (s *_Scope) startTask(work func() any, reject bool) *_task {
 	t := &_task{done: make(chan struct{})}
 	s.mu.Lock()
+ if reject && (s.closed || s.ctx.Err()!=nil) { s.mu.Unlock();return nil }
 	s.tasks = append(s.tasks, t)
-	s.mu.Unlock()
 	s.running.Add(1)
+	s.mu.Unlock()
 	go func() {
 		defer s.running.Done()
 		defer close(t.done)
