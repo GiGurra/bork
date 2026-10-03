@@ -1,5 +1,4 @@
 {
-  "revision": "b12e509b96b3aa3f750528a3856aea572b7d012d",
   "go_version": "go version go1.27.1 linux/amd64",
   "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
   "cpu_count": 16,
@@ -15,9 +14,9 @@
         161659488
       ],
       "median_ns": 159147907,
-      "go_bytes": 49378,
-      "binary_bytes": 2416923,
-      "source_bytes": 613
+      "source_bytes": 613,
+      "main_go_bytes": 49378,
+      "main_binary_bytes": 2416923
     },
     {
       "program": "hello",
@@ -30,9 +29,9 @@
         391990553
       ],
       "median_ns": 384810033,
-      "go_bytes": 49378,
-      "binary_bytes": 2416923,
-      "source_bytes": 613
+      "source_bytes": 613,
+      "main_go_bytes": 49378,
+      "main_binary_bytes": 2416923
     },
     {
       "program": "hello",
@@ -45,9 +44,9 @@
         381396994
       ],
       "median_ns": 380685145,
-      "go_bytes": 49378,
-      "binary_bytes": 2416923,
-      "source_bytes": 613
+      "source_bytes": 613,
+      "main_go_bytes": 49378,
+      "main_binary_bytes": 2416923
     },
     {
       "program": "calculator",
@@ -60,9 +59,9 @@
         159835750
       ],
       "median_ns": 160680127,
-      "go_bytes": 63464,
-      "binary_bytes": 2536248,
-      "source_bytes": 5065
+      "source_bytes": 5065,
+      "main_go_bytes": 63464,
+      "main_binary_bytes": 2536248
     },
     {
       "program": "calculator",
@@ -75,9 +74,9 @@
         415664053
       ],
       "median_ns": 448340689,
-      "go_bytes": 63464,
-      "binary_bytes": 2536248,
-      "source_bytes": 5065
+      "source_bytes": 5065,
+      "main_go_bytes": 63464,
+      "main_binary_bytes": 2536248
     },
     {
       "program": "calculator",
@@ -90,9 +89,9 @@
         412601166
       ],
       "median_ns": 412601166,
-      "go_bytes": 63464,
-      "binary_bytes": 2536248,
-      "source_bytes": 5065
+      "source_bytes": 5065,
+      "main_go_bytes": 63464,
+      "main_binary_bytes": 2536248
     },
     {
       "program": "signup_api",
@@ -105,9 +104,9 @@
         526844099
       ],
       "median_ns": 523306096,
-      "go_bytes": 158424,
-      "binary_bytes": 11922498,
-      "source_bytes": 4970
+      "source_bytes": 4970,
+      "main_go_bytes": 158424,
+      "main_binary_bytes": 11922498
     },
     {
       "program": "signup_api",
@@ -120,9 +119,9 @@
         1283669821
       ],
       "median_ns": 1265213791,
-      "go_bytes": 158424,
-      "binary_bytes": 11922498,
-      "source_bytes": 4970
+      "source_bytes": 4970,
+      "main_go_bytes": 158424,
+      "main_binary_bytes": 11922498
     },
     {
       "program": "signup_api",
@@ -135,9 +134,9 @@
         1245483294
       ],
       "median_ns": 1258985750,
-      "go_bytes": 158424,
-      "binary_bytes": 11922498,
-      "source_bytes": 4970
+      "source_bytes": 4970,
+      "main_go_bytes": 158424,
+      "main_binary_bytes": 11922498
     },
     {
       "program": "signup_api",
@@ -150,9 +149,9 @@
         1065092019
       ],
       "median_ns": 942677313,
-      "go_bytes": 158424,
-      "binary_bytes": 11922498,
-      "source_bytes": 4970
+      "source_bytes": 4970,
+      "main_go_bytes": 158424,
+      "main_binary_bytes": 11922498
     },
     {
       "program": "synthetic100",
@@ -165,9 +164,9 @@
         163169424
       ],
       "median_ns": 162761418,
-      "go_bytes": 62541,
-      "binary_bytes": 2240324,
-      "source_bytes": 6533
+      "source_bytes": 6533,
+      "main_go_bytes": 62541,
+      "main_binary_bytes": 2240324
     },
     {
       "program": "synthetic100",
@@ -180,9 +179,9 @@
         388134159
       ],
       "median_ns": 400335235,
-      "go_bytes": 62541,
-      "binary_bytes": 2240324,
-      "source_bytes": 6533
+      "source_bytes": 6533,
+      "main_go_bytes": 62541,
+      "main_binary_bytes": 2240324
     },
     {
       "program": "synthetic100",
@@ -195,9 +194,9 @@
         400668254
       ],
       "median_ns": 404240965,
-      "go_bytes": 62541,
-      "binary_bytes": 2240324,
-      "source_bytes": 6533
+      "source_bytes": 6533,
+      "main_go_bytes": 62541,
+      "main_binary_bytes": 2240324
     },
     {
       "program": "synthetic100",
@@ -210,9 +209,9 @@
         415142345
       ],
       "median_ns": 410076861,
-      "go_bytes": 62541,
-      "binary_bytes": 2240324,
-      "source_bytes": 6533
+      "source_bytes": 6533,
+      "main_go_bytes": 62541,
+      "main_binary_bytes": 2240324
     },
     {
       "program": "synthetic1000",
@@ -225,9 +224,9 @@
         493827389
       ],
       "median_ns": 442897389,
-      "go_bytes": 190551,
-      "binary_bytes": 2240340,
-      "source_bytes": 68634
+      "source_bytes": 68634,
+      "main_go_bytes": 190551,
+      "main_binary_bytes": 2240340
     },
     {
       "program": "synthetic1000",
@@ -240,9 +239,9 @@
         953457727
       ],
       "median_ns": 935779845,
-      "go_bytes": 190551,
-      "binary_bytes": 2240340,
-      "source_bytes": 68634
+      "source_bytes": 68634,
+      "main_go_bytes": 190551,
+      "main_binary_bytes": 2240340
     },
     {
       "program": "synthetic1000",
@@ -255,9 +254,9 @@
         884621729
       ],
       "median_ns": 894478479,
-      "go_bytes": 190551,
-      "binary_bytes": 2240340,
-      "source_bytes": 68634
+      "source_bytes": 68634,
+      "main_go_bytes": 190551,
+      "main_binary_bytes": 2240340
     },
     {
       "program": "synthetic1000",
@@ -270,9 +269,13 @@
         879478082
       ],
       "median_ns": 775191747,
-      "go_bytes": 190551,
-      "binary_bytes": 2240340,
-      "source_bytes": 68634
+      "source_bytes": 68634,
+      "main_go_bytes": 190551,
+      "main_binary_bytes": 2240340
     }
-  ]
+  ],
+  "corpus_revision": "b12e509b96b3aa3f750528a3856aea572b7d012d",
+  "checkout_dirty": true,
+  "compiler_sha256": "5957cd34cdc377c137b885259bc565568096685ecf24e0e42ad7d1a4f7f045ea",
+  "compiler_build_info": "/tmp/bork-perf: go1.27.1\n\tpath\tgithub.com/GiGurra/bork/cmd/bork\n\tmod\tgithub.com/GiGurra/bork\tv0.0.0-20261003142611-b12e509b96b3+dirty\t\n\tdep\tgithub.com/GiGurra/boa\tv1.0.31\th1:OhP/G/Zb7cI7l6rDL5BxUxk50drirbYH/nviEqArpfw=\n\tdep\tgithub.com/spf13/cobra\tv1.10.2\th1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=\n\tdep\tgithub.com/spf13/pflag\tv1.0.10\th1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=\n\tdep\tgolang.org/x/mod\tv0.38.0\th1:MECBjubtXD7yj4HrhIUcywNaGeNVUdfVnxmPajOk4yk=\n\tdep\tgolang.org/x/sync\tv0.22.0\th1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=\n\tdep\tgolang.org/x/tools\tv0.48.0\th1:3+hClM1aLL5mjMKm5ovokw9epgRXPuu2tILgismM6RE=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\tDefaultGODEBUG=tracebacklabels=0,x509sslcertoverrideplatform=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tCGO_CFLAGS=\n\tbuild\tCGO_CPPFLAGS=\n\tbuild\tCGO_CXXFLAGS=\n\tbuild\tCGO_LDFLAGS=\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=linux\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=b12e509b96b3aa3f750528a3856aea572b7d012d\n\tbuild\tvcs.time=2026-10-03T14:26:11Z\n\tbuild\tvcs.modified=true\n"
 }

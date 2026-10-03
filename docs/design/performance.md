@@ -1,7 +1,7 @@
 # Compiler performance (bork-e3r166)
 
 Phase 1 establishes measurements before changing compiler behavior. The baseline
-is main `b12e509`, Go 1.26, Linux amd64, AMD Ryzen 7 5700G, October 3, 2026.
+is main `b12e509`, Go 1.27.1, Linux amd64, AMD Ryzen 7 5700G, October 3, 2026.
 These measurements came from a shared development host; latency is illustrative,
 not a regression threshold. Repeat comparisons on the same quiet machine.
 
@@ -24,8 +24,10 @@ The CLI harness covers every example and generated 100/1,000-function programs.
 It measures `check`, `build`, `run`, and `test` where tests exist. Each sample
 starts a new compiler process; run uses the example's working directory and
 `args.txt`, and accepts intentional exits recorded in its golden output. The
-JSON records raw samples, medians, revision, Go version, host information, source
-size, generated Go bytes and binary bytes. Examples execute their normal effects.
+JSON records raw samples, medians, corpus revision/dirty state, compiler binary
+SHA-256/build metadata, Go version, host information, source size, generated
+main Go bytes and main binary bytes. Sizes describe the normal main program,
+including on test rows; they do not measure the separate generated test runner. Examples execute their normal effects.
 Build/run/test samples include the compiler, Go toolchain and, for run/test,
 program execution. Compiler construction and initial cache priming are excluded.
 
@@ -59,7 +61,8 @@ embed capture, effects, lifetimes, facts, Go generation/formatting, and Go build
 Facts includes any subprocess compilation/evaluation of constant predicates.
 The Go-build phase includes source/module staging and `go build`; its B/op and
 pprof data cover the parent bork process, **not** Go compiler/linker subprocess
-allocations or CPU. Heap profiles include untimed setup and cannot be filtered
+allocations or CPU. The phase harness explicitly primes process-local metadata before every phase
+benchmark, and primes Go builds before timing the Go-build phase. Heap profiles include untimed setup and cannot be filtered
 by CPU labels; use phase B/op for allocation comparisons and allocation stacks
 for attribution. Timer transitions add overhead, so phases below a few
 microseconds should not guide optimization. Phase benchmarks reparse each

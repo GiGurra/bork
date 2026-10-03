@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Measure fresh-process bork latency and output sizes; emit JSON to stdout."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -66,7 +67,7 @@ def main():
             _, source = run([compiler, "emit", str(path)], path, env, args.timeout)
             binary = temp / "program"
             run([compiler, "build", str(path), "-o", str(binary)], path, env, args.timeout)
-            sizes = {"go_bytes": len(source), "binary_bytes": binary.stat().st_size,
+            sizes = {"main_go_bytes": len(source), "main_binary_bytes": binary.stat().st_size,
                      "source_bytes": sum(p.stat().st_size for p in path.glob("*.bork"))}
             run_args = (path / "args.txt").read_text().split() if (path / "args.txt").exists() else []
             commands = {
@@ -97,7 +98,10 @@ def main():
                     rows.append({"program": name, "operation": operation, "cache": cache,
                                  "expected_exit": expected_exit, "samples_ns": samples, "median_ns": statistics.median(samples), **sizes})
                     print(f"{name}/{operation}/{cache}: {statistics.median(samples)/1e6:.1f} ms", file=sys.stderr)
-    print(json.dumps({"revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
+    print(json.dumps({"compiler_sha256": hashlib.sha256(Path(compiler).read_bytes()).hexdigest(),
+                      "compiler_build_info": subprocess.check_output(["go", "version", "-m", compiler], text=True),
+                      "checkout_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root)),
+                      "corpus_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
                       "go_version": subprocess.check_output(["go", "version"], text=True).strip(),
                       "platform": platform.platform(), "cpu_count": os.cpu_count(),
                       "results": rows}, indent=2))

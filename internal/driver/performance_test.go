@@ -76,6 +76,17 @@ func BenchmarkCompilerPhases(b *testing.B) {
 			for _, target := range []string{"parse", "module", "check", "lower", "contracts", "embeds", "effects", "lifetimes", "facts", "generate", "go_build"} {
 				b.Run(target, func(b *testing.B) {
 					out := filepath.Join(b.TempDir(), "program")
+					// Prime process-local metadata and the Go cache independently of
+					// which phase filters or benchmark order the caller selects.
+					files, info, src, err := emitObserved(item.path, nil)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if target == "go_build" {
+						if err := buildGo(files, src, out, info.Embeds...); err != nil {
+							b.Fatal(err)
+						}
+					}
 					b.ReportAllocs()
 					b.ResetTimer()
 					b.StopTimer()
