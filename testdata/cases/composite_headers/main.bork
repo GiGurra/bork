@@ -1,0 +1,37 @@
+// Literals written where Go statements have headers: Go reads `P{` there
+// as the start of the block, so the generated Go puts them in parentheses.
+
+type P = { x: Int }
+
+type S = sealed {
+  A { n: Int }
+  B
+}
+
+fn main() uses io {
+  for (x in generate[Int] {
+    yield 1
+    yield 2
+  }) {
+    println(x)
+  }
+  for (p in [P { x: 3 }]) {
+    println(p.x)
+  }
+  if (P { x: 1 } == P { x: 1 }) {
+    println("equal")
+  }
+  if (P { x: 1 }.x == 2) {
+    println("two")
+  } else if (P { x: 1 }.x == 1) {
+    println("one")
+  }
+  match (S.A { n: 4 }) {
+    S.A { n } => println(n)
+    S.B => println("b")
+  }
+  match (P { x: 5 }.x) {
+    5 => println("five")
+    _ => println("other")
+  }
+}
