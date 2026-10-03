@@ -9,3 +9,5 @@ main.bork:27:33: need requires n to be positive, but that is not proven for n (c
 main.bork:33:42: needSum requires n to be positiveSum(127), but that is not proven for n (check it first with if (positiveSum(n, 127)) { ... }, or require it: n: Int8 where positiveSum(127))
 main.bork:36:56: needRounded requires n to be rounded(1.67772e+07), but that is not proven for n (check it first with if (rounded(n, 1.67772e+07)) { ... }, or require it: n: Float32 where rounded(1.67772e+07))
 main.bork:39:50: needNegated requires n to be negated(-128), but that is not proven for n (check it first with if (negated(n, -128)) { ... }, or require it: n: Int8 where negated(-128))
+main.bork:42:52: needLiteral32 requires n to be roundedLiteral32(1.67772e+07), but that is not proven for n (check it first with if (roundedLiteral32(n, 1.67772e+07)) { ... }, or require it: n: Int where roundedLiteral32(1.67772e+07))
+main.bork:45:52: needLiteral64 requires n to be roundedLiteral64(9.0072e+15), but that is not proven for n (check it first with if (roundedLiteral64(n, 9.0072e+15)) { ... }, or require it: n: Int where roundedLiteral64(9.0072e+15))

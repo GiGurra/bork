@@ -35,6 +35,9 @@ fn takeFloat(n: Float where floatNegative): Float { n }
 fn floatGuard(n: Float): Float {
   if (!(n > 0.0)) { takeFloat(n) } else { 0.0 }
 }
+pred roundedEqual(n: Int, bound: Float32) { bound == 16777216.0 }
+fn takeRounded(n: Int where roundedEqual(16777217.0)): Int { n }
+fn roundedConstant(n: Int): Int { takeRounded(n) }
 fn main() {
   println(guards(5), guards(-1), guards(101), alternatives(-4), negativeAnd(101), names("a", "b"), fields(Box { value: 10 }))
 }

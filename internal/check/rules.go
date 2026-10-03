@@ -171,9 +171,9 @@ func (c *checker) conditionOnly(x syntax.Expr, vars map[string]bool) bool {
 func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 	switch x := x.(type) {
 	case *Const:
-		return x.Value
+		return conditionConstant(x.Value, x.Type())
 	case *VarRef:
-		return vars[x.Var.Name]
+		return conditionConstant(vars[x.Var.Name], x.Type())
 	case *Unary:
 		v := evalCondition(x.X, vars)
 		if v == nil {
@@ -208,6 +208,29 @@ func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 		}
 	}
 	return nil
+}
+
+// Floating constants retain their exact source value in the typed tree.
+// Comparisons must use the precision of the runtime value instead.
+func conditionConstant(v constant.Value, typ Type) constant.Value {
+	if v == nil || v.Kind() == constant.Unknown {
+		return nil
+	}
+	if !IsFloat(typ) {
+		return v
+	}
+	var rounded constant.Value
+	if typ == Float32 {
+		n, _ := constant.Float32Val(v)
+		rounded = constant.MakeFloat64(float64(n))
+	} else {
+		n, _ := constant.Float64Val(v)
+		rounded = constant.MakeFloat64(n)
+	}
+	if rounded.Kind() == constant.Unknown {
+		return nil
+	}
+	return rounded
 }
 
 var compareOps = map[syntax.Kind]token.Token{
