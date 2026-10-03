@@ -12,7 +12,7 @@ fn Missing(): Int unsafe go "example.com/nowhere.F"
 fn Cut(s: String, sep: String): String unsafe go "strings.Cut"
 fn NotOption(key: String): String unsafe go "os.LookupEnv"
 fn Typed[T](s: String): String unsafe go "strings.ToUpper"
-pred short(s: String) { byteLength(s) < 10 }
+pred short(s: String) { s.byteLength() < 10 }
 fn Promise(s: String): String where short unsafe go "strings.ToUpper"
 fn Lossy(s: String, n: Uint64): String unsafe go "strings.Repeat"
 fn TooWide(x: Int): Int unsafe go "math/bits.Len32"

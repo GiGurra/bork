@@ -41,7 +41,7 @@ fn main() {
   println(Big())
   println(Pair())
   println(Digest())
-  println(NilSlice(), length(NilSlice()))
+  println(NilSlice(), NilSlice().length())
   println(NilMap())
   println(NilResult())
   println(Failing())

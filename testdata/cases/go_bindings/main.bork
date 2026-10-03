@@ -48,7 +48,7 @@ fn main() {
   println(Repeat("ab", 3))
   println(OnesCount(255))
   println(RuneCount("héllo"))
-  println(RuneCount(repeat("x", 200)))
+  println(RuneCount("x".repeat(200)))
   println(FromBits(1065353216))
   println(Index("hello", "l"))
   println(Index("hello", "z"))
@@ -60,7 +60,7 @@ fn main() {
   match (DecodeHex("cafe")) {
     data: Bytes => {
       println(EncodeHex(data))
-      println(length(Sha256(data)))
+      println(Sha256(data).length())
     }
     e: GoError => println(e)
   }
