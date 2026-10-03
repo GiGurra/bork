@@ -831,7 +831,7 @@ import "bork/http"
 import "bork/time"
 
 test "a slow upstream is reported" {
-  noon = time.Instant { unixNanos: 1_760_000_000_000_000_000 / 1000 }
+  noon = time.Instant { unixNanos: 1_760_000_000_000_000_000 }
   mock time.Now() { noon }
   calls = mock http.Get(url, s, timeoutMs) { http.Text(503, "") }
 
