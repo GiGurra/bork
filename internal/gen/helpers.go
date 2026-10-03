@@ -116,3 +116,22 @@ func (b _Bytes) String() string { return "Bytes(" + hex.EncodeToString(b) + ")" 
 func _borkBytesFrom(data []byte) _Bytes { return append(_Bytes{}, data...) }
 func _borkBytesData(data _Bytes) []byte { return append([]byte{}, data...) }
 `
+
+// ioFailureHelpers classifies Go I/O errors without leaking Go error values.
+const ioFailureHelpers = `package main
+import "errors"
+import "os"
+
+func _borkIoFailure(err error) (kind, message string) {
+ if err == nil { return "", "" }
+ message = err.Error()
+ var pathError *os.PathError
+ if errors.As(err, &pathError) { message = pathError.Err.Error() }
+ switch {
+ case errors.Is(err, os.ErrNotExist): return "notFound", message
+ case errors.Is(err, os.ErrPermission): return "permissionDenied", message
+ case errors.Is(err, os.ErrExist): return "exists", message
+ default: return "io", message
+ }
+}
+`

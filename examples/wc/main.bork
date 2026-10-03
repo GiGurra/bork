@@ -1,3 +1,5 @@
+import "bork/fs"
+
 // wc counts the lines, words, and bytes in files, like Unix wc:
 //
 //   bork run examples/wc -- notes.txt todo.txt
@@ -9,15 +11,15 @@
 type Counts = { lines: Int, words: Int, bytes: Int }
 
 // FileCount is what counting one file gave.
-type FileCount = { path: String, result: Counts | IoError }
+type FileCount = { path: String, result: Counts | fs.Error }
 
 fn countText(text: String): Counts {
   Counts { lines: length(lines(text)), words: length(fields(text)), bytes: byteLength(text) }
 }
 
-fn countFile(path: String): Counts | IoError {
+fn countFile(path: String) uses io: Counts | fs.Error {
   scope s {
-    countText(readAll(openFile(path, s)?)?)
+    countText(fs.ReadAllText(fs.Open(path, s)?)?)
   }
 }
 
@@ -33,14 +35,17 @@ fn row(c: Counts, name: String): String {
   s"${padLeft(toString(c.lines), 6)} ${padLeft(toString(c.words), 6)} ${padLeft(toString(c.bytes), 7)} $name"
 }
 
-fn report(counts: List[FileCount]): Bool {
+fn report(counts: List[FileCount]) uses io: Bool {
   forEach(counts, fc => match (fc.result) {
     c: Counts => println(row(c, fc.path))
-    e: IoError => eprintln(s"wc: ${e.path}: ${e.message}")
+    e: fs.Error => {
+      detail = fs.ErrorInfo(e)
+      eprintln(s"wc: ${detail.path}: ${detail.message}")
+    }
   })
   found = flatMap(counts, fc => match (fc.result) {
     c: Counts => [c]
-    e: IoError => []
+    e: fs.Error => []
   })
   if (length(found) > 1) {
     println(row(fold(found, Counts { lines: 0, words: 0, bytes: 0 }, add), "total"))

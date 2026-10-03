@@ -9,6 +9,7 @@ compiler internals; keep dependencies on them inside the helper implementations.
 
 | Helper | Behavior |
 | --- | --- |
+| `_borkIoFailure(err error) (kind, message string)` | Classifies not-found, permission, exists, or other I/O errors; unwraps os.PathError messages. Nil returns empty strings. |
 | `_borkBytesFrom(data []byte) Bytes` | Copies Go bytes into immutable bork Bytes; nil becomes empty. |
 | `_borkBytesData(data Bytes) []byte` | Copies Bytes into a Go slice the caller may mutate. |
 | `_borkSome[T](value T) Option[T]` | Constructs the prelude's present option. Go infers `T` from the argument. |
@@ -124,3 +125,8 @@ scope context values or deadline metadata. Call `Close` in the resource's final
 cleanup. Cancellation is terminal: attaching an already cancelled resource does
 not revive it. This allows Go APIs such as `database/sql.BeginTx` to retain the
 same context while attachment changes its cancellation source.
+
+`_borkIoFailure` returns kind `notFound`, `permissionDenied`, `exists`, or `io`
+for a non-nil Go error. It preserves `errors.Is` classification through wrapped
+errors. Standard packages translate these strings into their public union
+errors, supplying the path appropriate to the operation.

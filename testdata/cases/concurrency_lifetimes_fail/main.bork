@@ -1,3 +1,5 @@
+import "bork/fs"
+
 fn leak(): Task[Int] {
   scope s {
     spawn(s, () => 1)
@@ -9,11 +11,11 @@ fn late(): Int {
   await(t)
 }
 
-fn inner(path: String): Int {
+fn inner(path: String) uses io: Int {
   scope outer {
     scope s {
-      f = openFile(path, s)
-      t = spawn(outer, () => match (f) { x: File => 1, e: IoError => 0 })
+      f = fs.Open(path, s)
+      t = spawn(outer, () => match (f) { x: fs.File => 1, e: fs.Error => 0 })
       0
     }
   }

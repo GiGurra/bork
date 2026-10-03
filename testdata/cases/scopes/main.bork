@@ -1,12 +1,14 @@
+import "bork/fs"
+
 // Scopes: resources are opened in a scope, and closed (finalizers run,
 // last first) when the scope's block ends, also by return or `?`.
 
-fn tracked(name: String, s: Scope) {
+fn tracked(name: String, s: Scope) uses io {
   println(s"open $name")
   onClose(s, () => println(s"close $name"))
 }
 
-fn early(flag: Bool): String {
+fn early(flag: Bool) uses io: String {
   scope s {
     tracked("early", s)
     if (flag) {
@@ -16,21 +18,21 @@ fn early(flag: Bool): String {
   }
 }
 
-fn copyText(from: String, to: String): Int | IoError {
+fn copyText(from: String, to: String) uses io: Int | fs.Error {
   scope s {
-    text = readAll(openFile(from, s)?)?
-    write(createFile(to, s)?, text)
+    text = fs.ReadAllText(fs.Open(from, s)?)?
+    fs.WriteText(fs.Create(to, s)?, text)
   }
 }
 
 // A function given a scope can open resources in it for its caller.
-fn openBoth(a: String, b: String, s: Scope): Int | IoError {
-  first = openFile(a, s)?
-  second = openFile(b, s)?
+fn openBoth(a: String, b: String, s: Scope) uses io: Int | fs.Error {
+  first = fs.Open(a, s)?
+  second = fs.Open(b, s)?
   length([first, second])
 }
 
-fn countdown(n: Int) {
+fn countdown(n: Int) uses io {
   if (n > 0) {
     scope s {
       tracked(s"level $n", s)

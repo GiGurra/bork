@@ -1,0 +1,22 @@
+import "bork/fs"
+
+fn demo(s: Scope) uses io: Unit | fs.Error {
+  directory = fs.TempDir(s)?
+  root = fs.DirectoryPath(directory)
+  path = fs.Join([root, "hello.txt"])
+  fs.Write(path, utf8Bytes("hello\nworld"))?
+  file = fs.Open(path, s)?
+  fs.ForEachLine(file, line => println(line))?
+  println((fs.Stat(path)?).size)
+  println(map(fs.ReadDir(root)?, entry => entry.name))
+  println(fs.Base(path))
+  // The directory and all its contents disappear when s closes.
+}
+
+fn main() {
+  result = scope s { demo(s) }
+  match (result) {
+    done: Unit => println("done")
+    error: fs.Error => println(fs.ErrorInfo(error))
+  }
+}

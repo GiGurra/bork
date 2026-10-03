@@ -140,6 +140,9 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			}
 			if fd.GoBody != nil {
 				fn := info.FuncOf[fd]
+				if strings.Contains(fd.GoBody.Body, "_borkIoFailure") {
+					g.usesIoFailure = true
+				}
 				if strings.Contains(fd.GoBody.Body, "_borkBytes") {
 					g.usesBytes = true
 				}
@@ -265,6 +268,7 @@ type gen struct {
 	usesMap          bool
 	usesDecodeSchema bool
 	usesBytes        bool
+	usesIoFailure    bool
 	// openScopes lists the Go variables of the scope blocks around the
 	// code being generated, which are closed before returning.
 	openScopes []*ast.Ident
