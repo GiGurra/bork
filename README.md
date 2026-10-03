@@ -67,7 +67,7 @@ fn describe(u: User): String {
 }
 
 fn names(users: List[User]) uses io {
-  forEach(users, u => println(u.name))   // forEach takes any function: the call uses what its lambda does
+  users.forEach(u => println(u.name))   // forEach takes any function: the call uses what its lambda does
 }
 ```
 
