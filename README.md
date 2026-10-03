@@ -38,6 +38,8 @@ transfer(0)              // error: transfer requires amount to be positive, but 
 
 Predicates are ordinary bork functions; on constants, the compiler runs them at build time. See [examples/payments](examples/payments/main.bork).
 
+Functions can relate their inputs directly: `fn interval(lo: Int, hi: Int) where lo <= hi: Range { ... }`, or `where sameLength(xs, ys)` using an ordinary predicate. The clause precedes `uses` and the result type; callers prove it and function bodies can rely on it.
+
 Record fields can require facts about siblings: `type Range = { lo: Int, hi: Int where atLeast(lo) }`. Construction and `copy` prove the relation using the completed values; changing `lo` also rechecks the requirement on `hi`.
 
 Facts in positions the checker cannot enforce yet, such as Map keys and values or constrained alias names in patterns and constructors, produce a compile error. See the [supported fact positions](docs/grammar.md#semantics-in-brief).

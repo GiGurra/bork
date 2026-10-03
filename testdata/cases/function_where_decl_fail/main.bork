@@ -1,0 +1,7 @@
+pred positive(n: Int) { n > 0 }
+fn computed(a: Int) where positive(a + 1): Int { a }
+fn callback(a: Int, p: (Int) uses nothing => Bool) where p(a): Int { a }
+fn nonPredicate(a: Int): Bool { a > 0 }
+fn regular(a: Int) where nonPredicate(a): Int { a }
+fn missing(a: Int) where positive(unknown): Int { a }
+fn main() {}

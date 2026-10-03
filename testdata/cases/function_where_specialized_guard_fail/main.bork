@@ -1,0 +1,8 @@
+pred stringType[T](value: T) unsafe go {
+ var zero T
+ _, ok := any(zero).(string)
+ return ok
+}
+fn requiresUnion(value: String | Int) where stringType(value): Bool { true }
+fn bad(value: String): Bool { if (stringType(value)) { requiresUnion(value) } else { false } }
+fn main() { println(bad("a")) }

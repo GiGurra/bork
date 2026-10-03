@@ -1,0 +1,21 @@
+type Small = { n: Uint8 }
+fn same(a: Uint8 | Int, b: Uint8 | Int) where a == b: Int { 1 }
+fn bad(a: Uint8 | Int): Int { if (a == 1) { same(a, Small { n: 1 }.n) } else { 0 } }
+fn main() { println(same(Small { n: 1 }.n, 1)) }
+
+pred samePredicate[T: Eq](a: T, b: T) { a == b }
+fn genericSame(a: Uint8 | Int, b: Uint8 | Int) where samePredicate(a, b): Bool { a == b }
+fn badGeneric(): Bool { genericSame(Small { n: 1 }.n, 1) }
+
+fn differentFloat(a: Float | Int, b: Float | Int) where a != b: Bool { a != b }
+fn rounded(): Bool { differentFloat(9007199254740992.0, 9007199254740993.0) }
+
+fn differentMember(a: Uint8 | Int): Bool { if (samePredicate(a, 1)) { genericSame(a, Small { n: 1 }.n) } else { false } }
+
+pred sameUnion(a: Uint8 | Int, b: Uint8 | Int) { a == b }
+fn unionSame(a: Uint8 | Int, b: Uint8 | Int) where sameUnion(a, b): Bool { a == b }
+fn badPlain(): Bool { unionSame(Small { n: 1 }.n, 1) }
+
+pred anything(a: Uint8 | Int) { true }
+rule repeated(a: Uint8 | Int) { anything(a) => sameUnion(a, a) }
+fn badRule(): Bool { unionSame(Small { n: 1 }.n, 1) }

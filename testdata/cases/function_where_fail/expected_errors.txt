@@ -1,0 +1,8 @@
+main.bork:2:37: ordered requires (lo <= hi), but that is not proven (check it first with if ((lo <= hi)) { ... }, or declare a function-level where clause)
+main.bork:3:53: ordered requires (hi <= lo), but that is not proven (check it first with if ((hi <= lo)) { ... }, or declare a function-level where clause)
+main.bork:4:61: ordered requires (lo <= hi), but that is not proven (check it first with if ((lo <= hi)) { ... }, or declare a function-level where clause)
+main.bork:5:21: ordered requires (2 <= 1), but that is not proven (check it first with if ((2 <= 1)) { ... }, or declare a function-level where clause)
+main.bork:5:41: ordered has function-level where requirements, so it cannot be used as a value; use a lambda that checks them
+main.bork:9:61: paired requires sameLength(xs, ys), but that is not proven (check it first with if (sameLength(xs, ys)) { ... }, or declare a function-level where clause)
+main.bork:10:26: paired requires sameLength(this value, this value), but sameLength([1], ["a", "b"]) is false
+main.bork:12:62: floatOrdered requires (lo <= hi), but that is not proven (check it first with if ((lo <= hi)) { ... }, or declare a function-level where clause)

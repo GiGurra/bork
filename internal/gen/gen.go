@@ -84,6 +84,11 @@ func (g *gen) query(q check.Query, roots *[]*check.Func, setup *[]ast.Stmt) ast.
 	}
 	*roots = append(*roots, q.Pred)
 	var args []ast.Expr
+	for i, v := range q.Values {
+		stmts, x := g.value(v)
+		*setup = append(*setup, stmts...)
+		args = append(args, g.convert(x, v.Type(), q.Params[i]))
+	}
 	if q.Subject != nil {
 		stmts, x := g.value(q.Subject)
 		*setup = append(*setup, stmts...)

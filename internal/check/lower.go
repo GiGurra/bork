@@ -74,11 +74,25 @@ func (c *checker) lower(files []*syntax.File) {
 			}
 		}
 	}
+	for _, cl := range c.info.Classes {
+		for _, fn := range cl.Methods {
+			l.function(fn)
+		}
+	}
 	for _, fn := range c.info.Tests {
 		l.function(fn)
 	}
 	for field, x := range c.info.fieldDefaults {
 		field.Default = l.expr(x)
+	}
+	for _, fn := range c.info.mocks {
+		if fn.MockOf.Requires != nil {
+			bound := map[*Var]argVal{}
+			for i, p := range fn.MockOf.ParamVars {
+				bound[p] = argVal{expr: &VarRef{expr: expr{pos: fn.ParamVars[i].Pos, typ: fn.ParamVars[i].Type}, Var: fn.ParamVars[i]}}
+			}
+			fn.Requires = substituteExpr(fn.MockOf.Requires, bound)
+		}
 	}
 	for _, r := range c.info.Rules {
 		l.rule(r)
@@ -96,6 +110,9 @@ func (l *lowerer) function(fn *Func) {
 		v := &Var{Name: n.Decl.Name, GoName: needVarName(fn, n), Pos: n.Decl.Pos, Type: n.Type, Kind: VarAmbient, Index: i}
 		l.vars[n.Decl] = v
 		fn.NeedVars = append(fn.NeedVars, v)
+	}
+	if fn.Decl.Requires != nil {
+		fn.Requires = l.expr(fn.Decl.Requires)
 	}
 	if fn.Decl.Body != nil {
 		fn.Body = l.block(fn.Decl.Body)

@@ -1,0 +1,3 @@
+pred positive(n: Int) { n > 0 }
+fn mixed(a: Int, b: Int) where positive(a) or positive(b) and a <= b: Int { a }
+fn main() {}

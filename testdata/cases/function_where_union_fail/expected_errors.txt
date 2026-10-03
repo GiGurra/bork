@@ -1,0 +1,7 @@
+main.bork:3:45: same requires (a == toUint8(1)), but that is not proven (check it first with if ((a == toUint8(1))) { ... }, or declare a function-level where clause)
+main.bork:4:21: same requires (toUint8(1) == 1), but that is not proven (check it first with if ((toUint8(1) == 1)) { ... }, or declare a function-level where clause)
+main.bork:8:25: genericSame requires samePredicate(toUint8(1), 1), but samePredicate(toUint8(1), 1) is false
+main.bork:11:22: differentFloat requires (9.0072e+15 != 9.0072e+15), but that is not proven (check it first with if ((9.0072e+15 != 9.0072e+15)) { ... }, or declare a function-level where clause)
+main.bork:13:71: genericSame requires samePredicate(a, toUint8(1)), but that is not proven (check it first with if (samePredicate(a, toUint8(1))) { ... }, or declare a function-level where clause)
+main.bork:17:23: unionSame requires sameUnion(toUint8(1), 1), but sameUnion(toUint8(1), 1) is false
+main.bork:21:22: unionSame requires sameUnion(toUint8(1), 1), but sameUnion(toUint8(1), 1) is false

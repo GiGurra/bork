@@ -29,7 +29,10 @@ import (
 // does, with And if all of them do; Pred is then nil.
 type Query struct {
 	Pred *Func
-	Args []constant.Value // the constrained value first
+	// Values retain each closed argument's type for instantiated predicate calls.
+	Values     []Expr
+	ValueTexts []string
+	Args       []constant.Value // the constrained value first
 	// Subject, when set, is the constrained value as an expression of
 	// constants (a list or record literal), shown as SubjectText; Args
 	// then holds only the other arguments.
@@ -68,6 +71,9 @@ func (q Query) Text(from *Package) string {
 		return join(q.And, " and ")
 	}
 	var args []string
+	if q.Values != nil {
+		args = append(args, q.ValueTexts...)
+	}
 	if q.Subject != nil {
 		args = append(args, q.SubjectText)
 	}
@@ -86,6 +92,14 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
 	f.validators = validationContexts(info)
 	f.validatorRequirements()
+	for _, fn := range info.FuncOf {
+		if fn.Requires != nil {
+			f.fn = fn
+			f.walk(fn.Requires, env{})
+			f.constantRequirements(fn.Requires)
+		}
+	}
+	f.fn = nil
 	for _, file := range files {
 		if file.Prelude {
 			continue
@@ -174,6 +188,7 @@ type lambdaArg struct {
 // facts that hold together; at least one alternative holds.
 type fact struct {
 	pred       *Func
+	inst       *Instance
 	subject    string
 	args       []argVal
 	or         [][]fact
@@ -197,7 +212,11 @@ func factKey(ft fact) string {
 	if c := ft.comparison; c != nil {
 		return fmt.Sprintf("%s %v %s %t", c.left.key, c.op, c.right.key, c.positive)
 	}
-	out := ft.pred.Decl.Name + "(" + ft.subject
+	out := ft.pred.Decl.Name
+	if ft.inst != nil {
+		out += "[" + argsKey(ft.inst.TypeArgs) + "]"
+	}
+	out += "(" + ft.subject
 	for _, a := range ft.args {
 		out += ", " + a.key
 	}
@@ -232,6 +251,18 @@ func sameArgs(a, b []argVal) bool {
 		if a[i].key == "" || a[i].key != b[i].key {
 			return false
 		}
+		if a[i].value != nil && b[i].value != nil {
+			at, bt := a[i].typ, b[i].typ
+			if a[i].expr != nil {
+				at = a[i].expr.Type()
+			}
+			if b[i].expr != nil {
+				bt = b[i].expr.Type()
+			}
+			if at != nil && bt != nil && !identical(at, bt) {
+				return false
+			}
+		}
 	}
 	return true
 }
@@ -240,6 +271,8 @@ func sameArgs(a, b []argVal) bool {
 // A known fact with alternatives has a nil pred and them in or. A fact
 // about part of the value (its elements) has the path to it.
 type known struct {
+	pkg  *Package
+	inst *Instance
 	pred *Func
 	args []argVal
 	or   []known
@@ -247,6 +280,9 @@ type known struct {
 }
 
 func (k known) proves(ob obligation) bool {
+	if ob.inst != nil && len(ob.pred.TypeParams) > 0 && (k.inst == nil || requirementInstanceKey(k.inst) != requirementInstanceKey(ob.inst)) {
+		return false
+	}
 	return k.pred != nil && k.pred == ob.pred && k.path == ob.path && sameArgs(k.args, ob.args)
 }
 
@@ -276,6 +312,7 @@ func within(ks []known, path string) []known {
 // predicate parameter given a complicated lambda) has a nil pred and no
 // alternatives, and cannot be proven.
 type obligation struct {
+	inst *Instance
 	pred *Func
 	args []argVal
 	or   []obligation
@@ -297,7 +334,7 @@ type pendingQuery struct {
 
 func (f *factChecker) function(fn *Func) {
 	f.fn = fn
-	f.tail(fn.Body, env{}, f.checkResult)
+	f.tail(fn.Body, f.entryFacts(fn), f.checkResult)
 	f.fn = nil
 }
 
@@ -368,7 +405,7 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 			// the test knows of the values it uses.
 			outer := f.fn
 			f.fn = s.Func
-			f.tail(s.Func.Body, e, f.checkResult)
+			f.tail(s.Func.Body, e.with(f.entryFacts(s.Func).facts...), f.checkResult)
 			f.fn = outer
 		case *Trust:
 			f.walk(s.Call, e)
@@ -436,6 +473,9 @@ func (f *factChecker) walk(x Expr, e env) {
 		// A function with requirements cannot be a value: calls through
 		// the value could not be checked.
 		if f.collect == nil {
+			if x.Inst.Func.Requires != nil {
+				f.diags.AddCode(x.Pos(), "facts.error", "%s has function-level where requirements, so it cannot be used as a value; use a lambda that checks them", x.Name)
+			}
 			for i, cons := range x.Inst.Func.ParamConstraints {
 				if len(cons) > 0 {
 					f.diags.AddCode(x.Pos(), "facts.error", "%s requires %s to be %s, so it cannot be used as a value; use a lambda that checks it: x => if (...) { %s(x) } else { ... }", x.Name, x.Inst.Func.Decl.Params[i].Name, cons[0], x.Name)
@@ -567,7 +607,7 @@ func (f *factChecker) resultPaths(fn *Func) []branch {
 	var paths []branch
 	saveFn, saveCollect := f.fn, f.collect
 	f.fn, f.collect = fn, &paths
-	f.tail(fn.Body, env{}, f.checkResult)
+	f.tail(fn.Body, f.entryFacts(fn), f.checkResult)
 	f.fn, f.collect = saveFn, saveCollect
 	f.paths[fn] = paths
 	return paths
@@ -596,6 +636,7 @@ func pathPhrase(path, name string) string {
 
 func (f *factChecker) callObligations(call *Call, e env) {
 	fn, args := call.Func, call.Args
+	f.callRequirements(call, e)
 	for i, cons := range fn.ParamConstraints {
 		if i >= len(args) {
 			break
@@ -922,7 +963,7 @@ func (f *factChecker) knownOf(con *Constraint, subst func(string) argVal) []know
 		}
 		return ks
 	}
-	return []known{{pred: con.Pred, args: f.substitute(con, subst), path: con.Path}}
+	return []known{{pkg: con.Pkg, pred: con.Pred, args: f.substitute(con, subst), path: con.Path}}
 }
 
 // predsOf is what a predicate parameter's argument says about a value
@@ -956,7 +997,7 @@ func (f *factChecker) predsOf(arg argVal) []known {
 		var out []known
 		for _, ft := range f.conditionFacts(x.Body, true) {
 			if ft.pred != nil && ft.subject == subject {
-				out = append(out, known{pred: ft.pred, args: ft.args})
+				out = append(out, known{inst: ft.inst, pred: ft.pred, args: ft.args})
 			}
 		}
 		return out
@@ -1095,6 +1136,18 @@ func (f *factChecker) prove(x Expr, ob obligation, e env, depth int) (bool, []Qu
 	}
 	// Known from a guard, a declaration, or a promise.
 	for _, k := range f.declared(x, e, depth) {
+		if ob.inst != nil && k.inst == nil && k.pred == ob.pred {
+			k.inst = inferredPredicate(k.pred, x, k.args)
+			if k.inst != nil {
+				scope := k.pkg
+				if scope == nil {
+					scope = f.from()
+				}
+				if !f.info.PredicateDicts(scope, k.inst) {
+					k.inst = nil
+				}
+			}
+		}
 		if k.proves(ob) {
 			return true, nil
 		}
@@ -1567,7 +1620,7 @@ func (f *factChecker) split(x Expr, ob obligation, e env, depth int) (bool, []Qu
 // factOf is the fact that k is known about the value with key subject.
 func (f *factChecker) factOf(subject string, k known) fact {
 	if k.or == nil {
-		return fact{pred: k.pred, subject: subject, args: k.args}
+		return fact{inst: k.inst, pred: k.pred, subject: subject, args: k.args}
 	}
 	ft := fact{}
 	for _, alt := range k.or {
@@ -1582,6 +1635,31 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 	if ob.pred == nil || ob.pred.Synthetic || !f.closed(x) {
 		return Query{}, false
 	}
+	if ob.inst != nil {
+		for _, t := range ob.inst.TypeArgs {
+			if hasTypeParam(t) {
+				return Query{}, false
+			}
+		}
+		values := []Expr{x}
+		texts := []string{f.literalText(x)}
+		if constOf(x) != nil {
+			texts[0] = requirementText(x, f.from())
+		}
+		for _, a := range ob.args {
+			if a.expr == nil || !f.closed(a.expr) {
+				return Query{}, false
+			}
+			values = append(values, a.expr)
+			text := f.literalText(a.expr)
+			if constOf(a.expr) != nil {
+				text = requirementText(a.expr, f.from())
+			}
+			texts = append(texts, text)
+		}
+		return Query{Pred: ob.pred, Values: values, ValueTexts: texts, Params: ob.inst.Params, TypeArgs: ob.inst.TypeArgs, Dicts: ob.inst.Dicts}, true
+	}
+
 	q := Query{Pred: ob.pred, Params: ob.pred.Params}
 	if v := constOf(x); v != nil {
 		q.Args = []constant.Value{v}
@@ -1608,6 +1686,14 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 		}
 		if len(in.unsolved()) > 0 {
 			return Query{}, false
+		}
+		if !assignable(x.Type(), in.subst(ob.pred.Params[0])) {
+			return Query{}, false
+		}
+		for i, a := range ob.args {
+			if a.expr != nil && !assignable(a.expr.Type(), in.subst(ob.pred.Params[i+1])) {
+				return Query{}, false
+			}
 		}
 		inst := in.instance()
 		scope := ob.pkg
@@ -1752,7 +1838,10 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 				continue
 			}
 			if rest, ok := strings.CutPrefix(ft.subject, k); ok && (rest == "" || rest[0] == '.') {
-				out = append(out, known{pred: ft.pred, args: ft.args, path: rest})
+				if constOf(x) != nil && ft.value.expr != nil && constOf(ft.value.expr) != nil && !identical(x.Type(), ft.value.expr.Type()) {
+					continue
+				}
+				out = append(out, known{inst: ft.inst, pred: ft.pred, args: ft.args, path: rest})
 			}
 		}
 	}
@@ -2008,13 +2097,13 @@ func (f *factChecker) byRules(v argVal, ob obligation, e env, depth int) (bool, 
 	var cs candidates
 	for _, r := range f.info.Rules {
 		for _, c := range r.Conclusions {
-			if c.Pred != ob.pred || len(c.Args) != len(ob.args)+1 {
+			if c.Pred != ob.pred || len(c.Args) != len(ob.args)+1 || ob.inst != nil && len(ob.pred.TypeParams) > 0 && requirementInstanceKey(c.Inst) != requirementInstanceKey(ob.inst) {
 				continue
 			}
 			bound := map[string]argVal{c.Args[0].Var: v}
-			ok := true
+			ok := ob.inst == nil || ruleValueFits(r, c.Args[0], v, ob.path)
 			for i, a := range c.Args[1:] {
-				ok = ok && bindArg(bound, a, ob.args[i])
+				ok = ok && (ob.inst == nil || ruleValueFits(r, a, ob.args[i], "")) && bindArg(bound, a, ob.args[i])
 			}
 			if !ok {
 				continue
@@ -2043,7 +2132,7 @@ func bindArg(bound map[string]argVal, a RuleArg, v argVal) bool {
 		return v.key == constKey(a.Const)
 	}
 	if prev, ok := bound[a.Var]; ok {
-		return prev.key != "" && prev.key == v.key
+		return sameArgs([]argVal{prev}, []argVal{v})
 	}
 	bound[a.Var] = v
 	return true
@@ -2085,7 +2174,7 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 		complete := true
 		for j, a := range p.Args {
 			if a.Const != nil {
-				args[j] = constArg(a.Const)
+				args[j] = ruleConstant(a)
 			} else {
 				v, ok := bound[a.Var]
 				args[j] = v
@@ -2094,7 +2183,7 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 		}
 		rest := append(append([]*RuleAtom{}, remaining[:i]...), remaining[i+1:]...)
 		if complete {
-			ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:], path: path}, e, depth+1)
+			ok, pending := f.proveArg(args[0], obligation{inst: p.Inst, pred: p.Pred, args: args[1:], path: path}, e, depth+1)
 			if !ok {
 				return cs.result()
 			}
@@ -2141,12 +2230,12 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 			}
 			for _, k := range f.declared(v.expr, e, depth+1) {
 				if k.path == path && k.pred != nil {
-					candidates = append(candidates, fact{pred: k.pred, subject: v.key, args: k.args, value: v})
+					candidates = append(candidates, fact{inst: k.inst, pred: k.pred, subject: v.key, args: k.args, value: v})
 				}
 			}
 		}
 		for _, ft := range candidates {
-			if ft.pred != p.Pred || len(ft.args)+1 != len(p.Args) {
+			if ft.pred != p.Pred || len(ft.args)+1 != len(p.Args) || len(p.Pred.TypeParams) > 0 && requirementInstanceKey(ft.inst) != requirementInstanceKey(p.Inst) {
 				continue
 			}
 			next := map[string]argVal{}
@@ -2158,9 +2247,9 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 				subject = subjects[ft.subject]
 				subject.key = ft.subject
 			}
-			matches := bindArg(next, p.Args[0], subject)
+			matches := ruleValueFits(r, p.Args[0], subject, path) && bindArg(next, p.Args[0], subject)
 			for j, a := range p.Args[1:] {
-				matches = matches && bindArg(next, a, ft.args[j])
+				matches = matches && ruleValueFits(r, a, ft.args[j], "") && bindArg(next, a, ft.args[j])
 			}
 			if matches {
 				if cs.take(f.rulePremises(r, rest, next, path, e, depth+1)) {
@@ -2175,12 +2264,12 @@ func (f *factChecker) rulePremises(r *Rule, remaining []*RuleAtom, bound map[str
 				args := make([]argVal, len(p.Args))
 				for j, a := range p.Args {
 					if a.Const != nil {
-						args[j] = constArg(a.Const)
+						args[j] = ruleConstant(a)
 					} else {
 						args[j] = next[a.Var]
 					}
 				}
-				ok, pending := f.proveArg(args[0], obligation{pred: p.Pred, args: args[1:]}, e, depth+1)
+				ok, pending := f.proveArg(args[0], obligation{inst: p.Inst, pred: p.Pred, args: args[1:]}, e, depth+1)
 				if !ok {
 					return false, nil
 				}
@@ -2241,7 +2330,7 @@ func (f *factChecker) proveArg(v argVal, ob obligation, e env, depth int) (bool,
 	}
 	if v.key != "" {
 		for _, ft := range e.facts {
-			if ft.subject == v.key+ob.path && (known{pred: ft.pred, args: ft.args}).proves(obligation{pred: ob.pred, args: ob.args}) {
+			if ft.subject == v.key+ob.path && (known{inst: ft.inst, pred: ft.pred, args: ft.args}).proves(obligation{inst: ob.inst, pred: ob.pred, args: ob.args}) {
 				return true, nil
 			}
 		}
@@ -2291,7 +2380,7 @@ func (f *factChecker) conditionFacts(cond Expr, positive bool) []fact {
 		if subject == "" {
 			return nil
 		}
-		ft := fact{pred: fn, subject: subject, value: f.argOf(args[0])}
+		ft := fact{inst: c.Inst, pred: fn, subject: subject, value: f.argOf(args[0])}
 		for _, a := range args[1:] {
 			ft.args = append(ft.args, f.argOf(a))
 		}
@@ -2503,8 +2592,16 @@ func (f *factChecker) evaluate(eval Evaluator) {
 	}
 	for _, p := range f.pending {
 		if !results[index[queryKey(p.query)]] {
-			if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil {
-				f.diags.AddCode(p.pos, "facts.error", "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: p.query.Args[0]}, p.query.Text(p.from))
+			var returned constant.Value
+			if len(p.query.Args) > 0 {
+				returned = p.query.Args[0]
+			} else if len(p.query.Values) > 0 {
+				if v, ok := p.query.Values[0].(*Const); ok {
+					returned = v.Value
+				}
+			}
+			if p.query.Via != "" && p.query.Pred != nil && p.query.Subject == nil && returned != nil {
+				f.diags.AddCode(p.pos, "facts.error", "%s, but %s can return %s, and %s is false", p.ob.requirement, p.query.Via, CArg{Const: returned}, p.query.Text(p.from))
 				continue
 			}
 			if p.query.Via != "" {
@@ -2530,5 +2627,46 @@ func queryKey(q Query) string {
 		}
 		return prefix + strings.Join(keys, ";")
 	}
-	return q.String() + "[" + argsKey(q.TypeArgs) + "]"
+	key := q.String() + "[" + argsKey(q.TypeArgs) + "]"
+	// Expression-valued arguments can contain distinct union members with the
+	// same printed value. Keep their typed tree identities rather than merging
+	// them by display text (including member types nested inside records/lists).
+	for _, d := range q.Dicts {
+		key += "|dict:" + requirementDictionaryKey(d, nil)
+	}
+	for _, v := range q.Values {
+		key += fmt.Sprintf("|%p:%s", v, typeKey(v.Type()))
+	}
+	return key
+}
+
+func ruleConstant(a RuleArg) argVal {
+	v := constArg(a.Const)
+	if a.ConstType != nil {
+		v.expr = &Const{expr: expr{typ: a.ConstType}, Value: a.Const}
+		v.typ = a.ConstType
+	}
+	return v
+}
+
+func ruleValueFits(r *Rule, a RuleArg, v argVal, path string) bool {
+	if path != "" {
+		return true
+	} // Legacy element paths retain their existing checks.
+	typ := v.typ
+	if v.expr != nil {
+		typ = v.expr.Type()
+	}
+	if typ == nil {
+		return true
+	}
+	if a.Const != nil {
+		return a.ConstType == nil || identical(a.ConstType, typ)
+	}
+	for i, p := range r.Decl.Params {
+		if p.Name == a.Var {
+			return assignable(typ, r.VarTypes[i])
+		}
+	}
+	return false
 }

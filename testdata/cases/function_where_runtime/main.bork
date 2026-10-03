@@ -1,0 +1,16 @@
+pred positive(n: Int) { n > 0 }
+fn checked(lo: Int, hi: Int) where lo <= hi: Int where positive unsafe go {
+ if lo > hi { panic("invalid generated tuple") }
+ return 1
+}
+fn ordered(lo: Int, hi: Int) where lo <= hi: Int { lo }
+fn send(lo: Int, hi: Int) where lo <= hi uses io: Int unsafe go { return lo }
+test "mock retains relational input assumptions" {
+  mock send(a, b) { ordered(a, b) }
+  assertEqual(send(1, 2), 1)
+  assertEqual(Compare("a", "b"), -1)
+}
+fn main() { println(checked(1, 2)) }
+
+pred nonPositive(n: Int) { n <= 0 }
+fn Compare(a: String, b: String) where a <= b: Int where nonPositive | GoValueError unsafe go "strings.Compare"

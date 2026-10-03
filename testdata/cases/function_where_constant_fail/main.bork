@@ -1,0 +1,4 @@
+pred positive(n: Int) { n > 0 }
+fn impossible(n: Int) where 2 <= 1: Int { n }
+fn closed(n: Int) where positive(-1): Int { n }
+fn main() {}

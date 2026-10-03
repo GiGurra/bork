@@ -1,0 +1,13 @@
+fn orderedBody(a: Int, b: Int): Bool { a <= b }
+pred ordered(a: Int, b: Int) { orderedBody(a, b) }
+rule ordering(a: Int, b: Int) { a <= b => ordered(a, b) }
+fn requireOrder(a: Int, b: Int) where ordered(a, b): Int { a }
+fn guarded(a: Int, b: Int): Int { if (a <= b) { requireOrder(a, b) } else { 0 } }
+
+fn equalLengths[A, B](xs: List[A], ys: List[B]): Bool { xs.length() == ys.length() }
+pred sameLength[A, B](xs: List[A], ys: List[B]) { equalLengths(xs, ys) }
+pred nonEmpty(xs: List[Int]) { xs.length() > 0 }
+rule selfLength(xs: List[Int]) { nonEmpty(xs) => sameLength(xs, xs) }
+fn paired[A, B](xs: List[A], ys: List[B]) where sameLength(xs, ys): Int { xs.length() }
+fn fromRule(xs: List[Int] where nonEmpty): Int { paired(xs, xs) }
+fn main() { println(guarded(1, 2), fromRule([1, 2])) }

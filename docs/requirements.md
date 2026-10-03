@@ -321,7 +321,7 @@ method/computed identities (`bork-rgy4as`).
 Arithmetic implications must respect the sized-number overflow rules; no
 built-in `lo < hi => lo + 1 <= hi` shortcut is added here (`bork-ggj8ew`).
 
-### Function-level relational requirements (bork-3ly6p0 design)
+### Function-level relational requirements (bork-3ly6p0)
 
 A function may require facts relating any of its inputs, without choosing one
 parameter as the subject. Place the clause immediately after the parameter
@@ -375,12 +375,18 @@ as it establishes a parameter constraint today.
 
 **Callable boundaries.** Function and method references with input requirements
 continue to be rejected as values; a lambda can perform a guarded direct call.
+Predicate calls in a clause must satisfy their own parameter requirements
+before the clause is assumed; preceding AND clauses can establish those facts.
 The existing function type syntax does not silently erase relational contracts.
 Class method signatures may declare requirements in the same position. Each
 instance method must declare the same contract after receiver/type/parameter
 substitution and parameter renaming; strengthening, weakening, or adding an
 undeclared requirement is rejected conservatively. Class dispatch checks the
-signature contract before invoking the instance. Auto-property generation
+signature contract before invoking the instance. Generic predicate checks
+preserve type arguments and dictionaries: concrete instances keep their
+lexical scope, and bound dictionaries follow the enclosing call. Compile-time
+checks retain the runtime types of union members, including inside literals.
+Auto-property generation
 checks the completed argument tuple against all parameter and function
 requirements before invoking the function, and shrinking preserves those
 requirements. This includes native-binding auto-properties. Rejection sampling

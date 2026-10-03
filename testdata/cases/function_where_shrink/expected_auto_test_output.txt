@@ -1,0 +1,7 @@
+ok    ordinary
+FAIL  property broken
+      main.bork:2:1: broken promised a result that is positive, but returned 0
+      for lo = -1, hi = 0 (shrunk from lo = -7496134415792128445, hi = 9223372036854775807)
+      case 1, seed 1920057930783994862 (bork test --seed 1920057930783994862)
+1 passed, 1 failed
+exit code 1

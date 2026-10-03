@@ -22,6 +22,22 @@ func TestAutoProperties(t *testing.T) {
 	compare(t, filepath.Join(dir, "expected_auto_test_output.txt"), fmt.Sprintf("%sexit code %d\n", got, code))
 }
 
+// Joint requirements must filter every generated and shrunk argument tuple.
+func TestFunctionWhereAutoProperties(t *testing.T) {
+	for _, fixture := range []string{"function_where_runtime", "function_where_shrink"} {
+		t.Run(fixture, func(t *testing.T) {
+			dir := filepath.Join("..", "..", "testdata", "cases", fixture)
+			var out strings.Builder
+			code, err := Test(dir, &out, TestOptions{AutoProperties: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := strings.ReplaceAll(out.String(), dir+string(filepath.Separator), "")
+			compare(t, filepath.Join(dir, "expected_auto_test_output.txt"), fmt.Sprintf("%sexit code %d\n", got, code))
+		})
+	}
+}
+
 var seedLine = regexp.MustCompile(`case \d+, seed (-?\d+)`)
 
 // TestPropertySeed checks that a failure's seed reproduces it, and that

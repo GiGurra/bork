@@ -1,0 +1,3 @@
+import "example.com/function-where-lexical-fail/contracts"
+instance allowed: contracts.Permit[Int] { fn permit(n: Int): Bool { true } }
+fn main() { println(contracts.Need(1)) }

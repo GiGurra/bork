@@ -1,0 +1,2 @@
+main.bork:2:29: impossible has an impossible function-level requirement: (2 <= 1)
+main.bork:3:25: closed requires positive(-1), but positive(-1) is false
