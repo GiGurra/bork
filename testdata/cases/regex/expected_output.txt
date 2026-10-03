@@ -1,0 +1,20 @@
+(?P<word>[a-z]+)([0-9]+)?
+true
+Option.None
+[Match { value: "abc123", start: 3, end: 9, groups: [Option.Some { value: "abc" }, Option.Some { value: "123" }], named: {"word": Option.Some { value: "abc" }} }, Match { value: "xyz", start: 10, end: 13, groups: [Option.Some { value: "xyz" }, Option.None], named: {"word": Option.Some { value: "xyz" }} }]
+[Match { value: "abc", start: 0, end: 3, groups: [Option.Some { value: "abc" }, Option.None], named: {"word": Option.Some { value: "abc" }} }]
+[]
+abc! xyz!
+$word $word
+["a", "b", "c"]
+["a", "b,c"]
+[]
+Option.Some { value: Match { value: "", start: 0, end: 0, groups: [Option.None, Option.Some { value: "" }], named: {"absent": Option.None, "empty": Option.Some { value: "" }} } }
+Option.Some { value: Match { value: "ab", start: 0, end: 2, groups: [Option.Some { value: "a" }, Option.Some { value: "b" }], named: {"same": Option.Some { value: "b" }} } }
+ba
+[Match { value: "", start: 0, end: 0, groups: [], named: {:} }, Match { value: "", start: 2, end: 2, groups: [], named: {:} }, Match { value: "", start: 3, end: 3, groups: [], named: {:} }]
+true
+true
+regex.Compile([a-z]+)
+ParseError { input: "[", message: "invalid pattern" }
+abc

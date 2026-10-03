@@ -1,0 +1,91 @@
+// Package regex compiles Go's RE2 regular expressions into immutable values.
+pred ValidPattern(pattern: String) { validPattern(pattern) }
+pred Matches(text: String, re: Regex) { re.Matches(text) }
+
+// Private closures share one compiled expression without exposing mutable Go state.
+type Regex = sealed {
+  regex {
+    pattern: String,
+    matches: (String) uses nothing => Bool,
+    findAll: (String, Int) uses nothing => List[Match],
+    replace: (String, String, Bool) uses nothing => String,
+    split: (String, Int) uses nothing => List[String],
+  }
+}
+
+// Offsets are UTF-8 byte offsets; groups exclude the whole match.
+// Unmatched groups are None, and a matched empty group is Some("").
+type Match = {
+  value: String,
+  start: Int,
+  end: Int,
+  groups: List[Option[String]],
+  named: Map[String, Option[String]],
+}
+
+fn validPattern(pattern: String): Bool unsafe go {
+  import "regexp"
+  _, err := regexp.Compile(pattern)
+  return err == nil
+}
+
+// Compile requires a proven pattern; literals are checked at compile time.
+// Parse accepts dynamic patterns and reports syntax errors as ParseError.
+fn Compile(pattern: String where ValidPattern): Regex unsafe go {
+  return build(pattern).(Regex)
+}
+fn Parse(pattern: String): Regex | ParseError unsafe go {
+  return build(pattern)
+}
+fn build(pattern: String): Regex | ParseError unsafe go {
+  import "regexp"
+  re, err := regexp.Compile(pattern)
+  if err != nil { return ParseError{input: pattern, message: err.Error()} }
+  return Regex_regex{
+    pattern: pattern,
+    matches: re.MatchString,
+    findAll: func(text string, limit int64) []Match {
+      result := []Match{}
+      for _, indices := range re.FindAllStringSubmatchIndex(text, int(limit)) {
+        groups := []Option[string]{}
+        names := []string{}
+        named := []Option[string]{}
+        for group := 1; group < len(indices)/2; group++ {
+          value := _borkNone[string]()
+          if indices[2*group] >= 0 { value = _borkSome(text[indices[2*group]:indices[2*group+1]]) }
+          groups = append(groups, value)
+          if name := re.SubexpNames()[group]; name != "" {
+            names, named = append(names, name), append(named, value)
+          }
+        }
+        result = append(result, Match{value: text[indices[0]:indices[1]], start: int64(indices[0]), end: int64(indices[1]), groups: groups, named: _borkMapOf(names, named)})
+      }
+      return result
+    },
+    replace: func(text, replacement string, literal bool) string {
+      if literal { return re.ReplaceAllLiteralString(text, replacement) }
+      return re.ReplaceAllString(text, replacement)
+    },
+    split: func(text string, limit int64) []string { return re.Split(text, int(limit)) },
+  }
+}
+
+fn (re: Regex) Pattern(): String unsafe go { return re.(Regex_regex).pattern }
+// Matches searches anywhere in text; use ^ and $ to match the whole string.
+fn (re: Regex) Matches(text: String): Bool unsafe go { return re.(Regex_regex).matches(text) }
+fn (re: Regex) Find(text: String): Option[Match] unsafe go {
+  matches := re.(Regex_regex).findAll(text, 1)
+  if len(matches) == 0 { return _borkNone[Match]() }
+  return _borkSome(matches[0])
+}
+// Negative limits mean all matches; zero means none.
+fn (re: Regex) FindAll(text: String, limit: Int = -1): List[Match] unsafe go { return re.(Regex_regex).findAll(text, limit) }
+// Replace expands $name and ${name}; ReplaceLiteral treats replacement literally.
+fn (re: Regex) Replace(text: String, replacement: String): String unsafe go { return re.(Regex_regex).replace(text, replacement, false) }
+fn (re: Regex) ReplaceLiteral(text: String, replacement: String): String unsafe go { return re.(Regex_regex).replace(text, replacement, true) }
+// Negative limits return all substrings; zero returns an empty list.
+fn (re: Regex) Split(text: String, limit: Int = -1): List[String] unsafe go { return re.(Regex_regex).split(text, limit) }
+
+instance ShowRegex: Show[Regex] {
+  fn show(re: Regex): String { "regex.Compile(" + re.Pattern() + ")" }
+}
