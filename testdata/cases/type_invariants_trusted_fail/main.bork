@@ -1,0 +1,7 @@
+pred ordered(r: Range) { r.lo <= r.hi }
+type Range = { lo: Int, hi: Int } where ordered
+fn broken(): Range unsafe go { return Range{lo:9, hi:2} }
+fn brokenMap(): Map[String, Range] unsafe go { return _mapOf([]string{"x"}, []Range{{lo:9,hi:2}}) }
+test "trusted result keeps whole invariant" { println(broken()) }
+test "trusted map result keeps nested invariant" { println(brokenMap()) }
+fn main() {}

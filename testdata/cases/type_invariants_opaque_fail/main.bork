@@ -1,0 +1,7 @@
+type Request = go "*net/http.Request"
+pred stable[T](box: Box[T]) { true }
+type Box[T] = { value: T } where stable
+fn inspect(box: Box[Request]) {}
+pred mutable(box: Mutable) { true }
+type Mutable = { value: Request } where mutable
+fn main() {}

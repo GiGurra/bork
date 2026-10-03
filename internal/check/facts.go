@@ -84,6 +84,8 @@ type Evaluator func(queries []Query) ([]bool, error)
 // Facts checks the where clauses of a type-checked package.
 func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 	f := &factChecker{info: info, diags: diags, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}}
+	f.validators = validationContexts(info)
+	f.validatorRequirements()
 	for _, file := range files {
 		if file.Prelude {
 			continue
@@ -124,12 +126,15 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 }
 
 type factChecker struct {
-	info        *Info
-	diags       *diag.List
-	fn          *Func
-	defaultUse  diag.Pos
-	defaultDecl diag.Pos
-	pending     []pendingQuery
+	validatorInvalid bool
+	validators       map[*Func]map[Type]bool
+	candidate        Expr
+	info             *Info
+	diags            *diag.List
+	fn               *Func
+	defaultUse       diag.Pos
+	defaultDecl      diag.Pos
+	pending          []pendingQuery
 	// collect, when set, receives result values instead of checking
 	// them, and obligations are not checked (see resultPaths).
 	collect *[]branch
@@ -318,7 +323,7 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 	case *Match:
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
-			f.tail(arm.Body, f.walkPatternGuards(arm.Pat, e), result)
+			f.tail(arm.Body, f.walkPatternGuards(arm.Pat, f.patternInvariants(arm.Pat, x.X, e)), result)
 		}
 	default:
 		f.walk(x, e)
@@ -390,6 +395,10 @@ func (f *factChecker) walk(x Expr, e env) {
 	}
 	switch x := x.(type) {
 	case *Call:
+		if len(f.validators[f.fn]) > 0 && x.Func.Class != nil {
+			f.diags.AddCode(x.Pos(), "facts.invariant_call", "an invariant validator cannot call a class method with an unknown implementation; use a declared helper")
+			f.validatorInvalid = true
+		}
 		for i, a := range x.Args {
 			if l, ok := debugValue(a).(*Lambda); ok {
 				for k, p := range l.Params {
@@ -406,6 +415,10 @@ func (f *factChecker) walk(x Expr, e env) {
 			f.walk(a, e)
 		}
 	case *CallValue:
+		if len(f.validators[f.fn]) > 0 {
+			f.diags.AddCode(x.Pos(), "facts.invariant_call", "an invariant validator cannot call an unknown function value; use a declared helper")
+			f.validatorInvalid = true
+		}
 		f.walk(x.Fun, e)
 		for _, a := range x.Args {
 			f.walk(a, e)
@@ -472,6 +485,9 @@ func (f *factChecker) walk(x Expr, e env) {
 			f.walk(fi.Value, e)
 		}
 		f.recordObligations(x, e)
+		f.nominalObligations(x, x.Variant, e)
+	case *VariantValue:
+		f.nominalObligations(x, x.Variant, e)
 	case *Copy:
 		f.walk(x.X, e)
 		for _, u := range x.Updates {
@@ -481,7 +497,7 @@ func (f *factChecker) walk(x Expr, e env) {
 	case *Match:
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
-			f.walk(arm.Body, f.walkPatternGuards(arm.Pat, e))
+			f.walk(arm.Body, f.walkPatternGuards(arm.Pat, f.patternInvariants(arm.Pat, x.X, e)))
 		}
 	case *Try:
 		f.walk(x.X, e)
@@ -623,6 +639,11 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 func (f *factChecker) project(x Expr, name string) Expr {
 	x = debugValue(x)
 	switch v := x.(type) {
+	case *Select:
+		value := f.project(v.X, v.Name)
+		if selected, ok := value.(*Select); !ok || selected.X != v.X || selected.Name != v.Name {
+			return f.project(value, name)
+		}
 	case *VarRef:
 		if v.Var.Kind == VarLet {
 			value := f.project(v.Var.Let.Value, name)
@@ -746,6 +767,7 @@ func (f *factChecker) copyObligations(cp *Copy, e env) {
 			}
 		}
 	}
+	f.nominalObligations(cp, nil, e)
 }
 
 // checkResult checks a value the current function returns against the
@@ -1650,6 +1672,9 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 			out = append(out, f.knownOf(con, subst)...)
 		}
 	}
+	if x != f.candidate && !f.validates(x.Type()) {
+		add(TypeConstraints(x.Type()), noParams)
+	}
 	switch x := x.(type) {
 	case *VarRef:
 		switch d := x.Var; d.Kind {
@@ -1726,6 +1751,11 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 func (f *factChecker) declaredMember(x Expr, m Type) []known {
 	x = debugValue(x)
 	var out []known
+	if !f.validates(m) {
+		for _, con := range TypeConstraints(m) {
+			out = append(out, f.knownOf(con, noParams)...)
+		}
+	}
 	switch x := x.(type) {
 	case *Call:
 		for _, mc := range x.Func.ResultConstraints {
@@ -2250,6 +2280,12 @@ func (f *factChecker) describe(x Expr) string {
 
 // hint suggests how to establish a missing fact.
 func (f *factChecker) hint(x Expr, ob obligation) string {
+	if x == f.candidate {
+		return " (check the field values before construction, or use a checked constructor)"
+	}
+	if f.validates(x.Type()) {
+		return " (prove this from the candidate's fields; its type invariant is unavailable during validation)"
+	}
 	name := f.describe(x)
 	if ob.pred == nil && ob.or == nil {
 		return ""
@@ -2332,7 +2368,7 @@ func (f *factChecker) from() *Package {
 // --- Compile-time evaluation ---
 
 func (f *factChecker) evaluate(eval Evaluator) {
-	if len(f.pending) == 0 {
+	if len(f.pending) == 0 || f.validatorInvalid {
 		return
 	}
 	var queries []Query

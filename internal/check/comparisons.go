@@ -119,6 +119,45 @@ func substituteExpr(x Expr, bound map[*Var]argVal) Expr {
 		if len(x.Stmts) == 0 && x.Tail != nil {
 			return substituteExpr(x.Tail, bound)
 		}
+	case *Match:
+		subject := substituteExpr(x.X, bound)
+		if subject == nil {
+			return nil
+		}
+		var variant *Variant
+		switch value := subject.(type) {
+		case *RecordLit:
+			variant = value.Variant
+		case *VariantValue:
+			variant = value.Variant
+		default:
+			return nil
+		}
+		for _, arm := range x.Arms {
+			p := arm.Pat
+			if p.Kind == PatVariant && (variant == nil || p.Variant.Index != variant.Index || genericBaseOrSelf(p.Variant.Parent) != genericBaseOrSelf(variant.Parent)) {
+				continue
+			}
+			if p.HasGuard() || (p.Kind != PatWild && p.Kind != PatVariant && p.Kind != PatRecord) {
+				return nil
+			}
+			next := map[*Var]argVal{}
+			for v, a := range bound {
+				next[v] = a
+			}
+			if p.Var != nil {
+				next[p.Var] = argVal{expr: subject}
+			}
+			for _, field := range p.Fields {
+				if field.Pat.Kind != PatWild {
+					return nil
+				}
+				if field.Pat.Var != nil {
+					next[field.Pat.Var] = argVal{expr: &Select{expr: expr{pos: subject.Pos(), typ: field.Pat.Type}, X: subject, Name: field.Name}}
+				}
+			}
+			return substituteExpr(arm.Body, next)
+		}
 	}
 	return nil
 }
@@ -182,6 +221,12 @@ func (f *factChecker) proveCondition(x Expr, positive bool, e env, depth int) (b
 		want := f.comparison(x, positive)
 		if want == nil {
 			return false, nil
+		}
+		// Fold only comparisons of the same concrete integer/string/bool
+		// type. Floats need typed rounding, and unions retain member identity.
+		typ := x.X.Type()
+		if want.left.value != nil && want.right.value != nil && identical(typ, x.Y.Type()) && (IsInteger(typ) || typ == String || typ == Bool) {
+			return constant.Compare(want.left.value, compareOps[want.op], want.right.value) == want.positive, nil
 		}
 		facts := append([]fact{}, e.facts...)
 		values := []argVal{want.left, want.right}

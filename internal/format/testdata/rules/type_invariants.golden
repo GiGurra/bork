@@ -1,0 +1,3 @@
+type Range = private { lo: Int, hi: Int } where ordered derive (Decode, GoStruct)
+type State = sealed { Idle, Running { lo: Int, hi: Int } where valid } where ready
+pred ordered(r: Range) { r.lo <= r.hi }

@@ -71,6 +71,7 @@ type TypeDecl struct {
 	Fields     []*FieldDecl   // RecordType
 	Variants   []*VariantDecl // SealedType
 	Alias      *TypeExpr      // AliasType
+	Where      []*PredRef     // whole-value invariants on records and sealed types
 	// Derive lists the classes to derive instances of:
 	// `type User = { ... } derive (Decode, Encode)`.
 	Derive    []string
@@ -96,6 +97,7 @@ type VariantDecl struct {
 	Pos    diag.Pos
 	Name   string
 	Fields []*FieldDecl
+	Where  []*PredRef
 }
 
 // FuncDecl is `fn name(params): Result { body }`. Result is nil when

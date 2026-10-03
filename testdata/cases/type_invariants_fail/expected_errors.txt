@@ -1,0 +1,9 @@
+main.bork:3:35: Range requires its completed value to be ordered, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:4:39: Range requires its completed value to be ordered, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:7:45: Range requires its completed value to be ordered, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:7:45: Envelope requires its completed value to be envelopeValid, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:10:42: Range requires its completed value to be ordered, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:11:22: Gate requires its completed value to be accepted, but accepted(Gate.Rejected) is false
+main.bork:12:32: Gate requires its completed value to be accepted, but accepted(Gate.Rejected) is false
+main.bork:12:47: Range requires its completed value to be ordered, but ordered(Range { lo: 5, hi: 2 }) is false
+main.bork:18:58: Bundle requires its completed value to be supplied, but supply can return -1, and positive(-1) is false

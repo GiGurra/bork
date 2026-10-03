@@ -1,0 +1,2 @@
+main.bork:3:38: Rounded requires its completed value to be different, but that is not proven for this value (check the field values before construction, or use a checked constructor)
+main.bork:7:38: Members requires its completed value to be same, but that is not proven for this value (check the field values before construction, or use a checked constructor)

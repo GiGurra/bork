@@ -1,0 +1,6 @@
+FAIL  trusted result keeps whole invariant
+      main.bork:3:1: broken returned a Range that is not ordered: Range { lo: 9, hi: 2 }
+FAIL  trusted map result keeps nested invariant
+      main.bork:4:1: brokenMap returned a Range that is not ordered: Range { lo: 9, hi: 2 }
+0 passed, 2 failed
+exit code 1

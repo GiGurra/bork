@@ -68,7 +68,7 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 			b.WriteString("_ = _obj\n")
 		}
 		b.WriteString("if !_isObj {\n" + g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
-		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t)))
+		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t), decodeInvariant{t, t.Constraints}))
 	case *check.Sealed:
 		b.WriteString("var _tag string\n")
 		fmt.Fprintf(&b, "if _s, _isStr := json.(%s); _isStr {\n_tag = _s.value\n} else if _isObj {\n", jsonVariant("String"))
@@ -80,7 +80,8 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 		b.WriteString("switch _tag {\n")
 		for i, v := range t.Variants {
 			fmt.Fprintf(&b, "case %q:\n", v.Name)
-			b.WriteString(g.decodeFields(v.Fields, fn.Derived.FieldDicts[i], g.text(g.variantType(v))))
+			cons := append(append([]*check.Constraint{}, t.Constraints...), v.Constraints...)
+			b.WriteString(g.decodeFields(v.Fields, fn.Derived.FieldDicts[i], g.text(g.variantType(v)), decodeInvariant{t, cons}))
 		}
 		b.WriteString("}\n")
 		g.imports["strconv"] = true
@@ -91,7 +92,12 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 
 // decodeFields decodes the fields of a record (or variant) from _obj,
 // and returns the value built from them.
-func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType string) string {
+type decodeInvariant struct {
+	typ         check.Type
+	constraints []*check.Constraint
+}
+
+func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType string, invariants ...decodeInvariant) string {
 	var b strings.Builder
 	var inits []string
 	for i, f := range fields {
@@ -152,7 +158,15 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 		}
 	}
 
-	fmt.Fprintf(&b, "return %s{%s}\n", goType, strings.Join(inits, ", "))
+	fmt.Fprintf(&b, "_out := %s{%s}\n", goType, strings.Join(inits, ", "))
+	for _, inv := range invariants {
+		for _, con := range inv.constraints {
+			if cond := g.constraintCond(con, ast.NewIdent("_out"), inv.typ); cond != nil {
+				fmt.Fprintf(&b, "if !(%s) {\n%s}\n", g.text(cond), g.decodeError(`""`, strconv.Quote("must be "+con.String())))
+			}
+		}
+	}
+	b.WriteString("return _out\n")
 	return b.String()
 }
 

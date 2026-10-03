@@ -243,6 +243,7 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 			if p.at(LBrace) {
 				v.Fields = p.fieldDecls()
 			}
+			v.Where = p.whereClause()
 			td.Variants = append(td.Variants, v)
 		})
 	case p.at(LBrace):
@@ -279,6 +280,9 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 	default:
 		td.Kind = AliasType
 		td.Alias = p.typeExpr()
+	}
+	if td.Kind == RecordType || td.Kind == SealedType {
+		td.Where = p.whereClause()
 	}
 	if p.at(TIdent) && p.tok().Text == "derive" && p.peekKind() == LParen {
 		td.DerivePos = p.next().Pos
@@ -569,9 +573,15 @@ func (p *parser) typeExpr() *TypeExpr {
 // constrainedType parses `T`, or `T where p and q(args)`.
 func (p *parser) constrainedType() *TypeExpr {
 	t := p.typeAtom()
+	t.Where = p.whereClause()
+	return t
+}
+
+func (p *parser) whereClause() []*PredRef {
 	if !p.at(KwWhere) {
-		return t
+		return nil
 	}
+	var clauses []*PredRef
 	p.next()
 	for {
 		var clause *PredRef
@@ -582,13 +592,13 @@ func (p *parser) constrainedType() *TypeExpr {
 		} else {
 			clause = p.predOr()
 			// `p or q and r` could mean two things; ask for parentheses.
-			if len(clause.Or) > 0 && (len(t.Where) > 0 || p.at(KwAnd)) {
+			if len(clause.Or) > 0 && (len(clauses) > 0 || p.at(KwAnd)) {
 				p.errorf(clause.Pos, "mixing and with or needs parentheses: write (p or q) and r")
 			}
 		}
-		t.Where = append(t.Where, clause)
+		clauses = append(clauses, clause)
 		if !p.at(KwAnd) {
-			return t
+			return clauses
 		}
 		p.next()
 	}

@@ -95,10 +95,13 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 		case *Record:
 			c.pkg, c.inPrelude = t.Pkg, t.Prelude
 			c.fieldConstraints(t.Fields, t.Decl.Fields)
+			t.Constraints = c.typeConstraints(t.Decl.Where, t)
 		case *Sealed:
 			c.pkg, c.inPrelude = t.Pkg, t.Prelude
+			t.Constraints = c.typeConstraints(t.Decl.Where, t)
 			for _, v := range t.Variants {
 				c.fieldConstraints(v.Fields, t.Decl.Variants[v.Index].Fields)
+				v.Constraints = c.typeConstraints(t.Decl.Variants[v.Index].Where, t)
 			}
 		}
 	}
@@ -110,6 +113,7 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			for _, t := range base.insts.byKey {
 				inst := t.(*Record)
 				bound := bindParams(base.TypeParams, inst.Args)
+				inst.Constraints = substConstraints(base.Constraints, bound)
 				for i, field := range inst.Fields {
 					field.Constraints = substConstraints(base.Fields[i].Constraints, bound)
 				}
@@ -118,7 +122,9 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			for _, t := range base.insts.byKey {
 				inst := t.(*Sealed)
 				bound := bindParams(base.TypeParams, inst.Args)
+				inst.Constraints = substConstraints(base.Constraints, bound)
 				for i, variant := range inst.Variants {
+					variant.Constraints = substConstraints(base.Variants[i].Constraints, bound)
 					for j, field := range variant.Fields {
 						field.Constraints = substConstraints(base.Variants[i].Fields[j].Constraints, bound)
 					}
@@ -157,6 +163,31 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			c.inPrelude = false
 		}
 	}
+}
+
+func (c *checker) typeConstraints(refs []*syntax.PredRef, typ Type) []*Constraint {
+	var out []*Constraint
+	for _, ref := range refs {
+		if containsOpaque(typ, map[Type]bool{}) {
+			c.bindErr(ref.Pos, "facts cannot apply to %s, which holds a Go value that can change", typ)
+			continue
+		}
+		if con := c.constraint(ref, typ, nil); con != nil {
+			out = append(out, con)
+		}
+	}
+	return out
+}
+
+// TypeConstraints are the guarantees carried by every valid value of typ.
+func TypeConstraints(typ Type) []*Constraint {
+	switch typ := typ.(type) {
+	case *Record:
+		return typ.Constraints
+	case *Sealed:
+		return typ.Constraints
+	}
+	return nil
 }
 
 func (c *checker) fieldConstraints(fields []*Field, decls []*syntax.FieldDecl) {

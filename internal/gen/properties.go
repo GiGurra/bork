@@ -265,6 +265,7 @@ func ungeneratable(t check.Type, seen map[check.Type]bool) check.Type {
 // messages.
 func (g *gen) genValue(t check.Type, cons []*check.Constraint, depth ast.Expr, what string) ast.Expr {
 	var top, nested []*check.Constraint
+	top = append(top, check.TypeConstraints(t)...)
 	for _, con := range cons {
 		if con.Path == "" {
 			top = append(top, con)
@@ -398,7 +399,7 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 	}
 	c := ast.NewIdent(choicesVar)
 	ret := func(x ast.Expr) []ast.Stmt { return []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{x}}} }
-	fields := func(typ ast.Expr, owner string, fs []*check.Field) ast.Expr {
+	fields := func(typ ast.Expr, owner string, fs []*check.Field, nominal []*check.Constraint) ast.Expr {
 		lit := &ast.CompositeLit{Type: typ}
 		params := make([]*syntax.Param, len(fs))
 		constraints := make([][]*check.Constraint, len(fs))
@@ -434,7 +435,14 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: ast.NewIdent(values[field.Name])})
 		}
 		body = append(body, deferred...)
-		body = append(body, ret(lit)...)
+		value := g.newTmp()
+		body = append(body, define(value, lit))
+		for _, con := range nominal {
+			if cond := g.propCond(con, value, t); cond != nil {
+				body = append(body, rejectUnless(cond, owner+" where "+con.String()))
+			}
+		}
+		body = append(body, ret(value)...)
 		return &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: typ}}}}, Body: &ast.BlockStmt{List: body}}}
 	}
 
@@ -461,7 +469,7 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 			}}},
 		}
 	case *check.Record:
-		return ret(fields(g.goType(t), t.Name, t.Fields))
+		return ret(fields(g.goType(t), t.Name, t.Fields, nil))
 	case *check.Sealed:
 		// Variants that do not contain the type again come first: they
 		// are the simplest, and the only ones taken below maxGenDepth.
@@ -479,7 +487,7 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 		}
 		var cases []ast.Stmt
 		for i, v := range order {
-			cc := &ast.CaseClause{Body: ret(fields(g.variantType(v), t.Name+"."+v.Name, v.Fields))}
+			cc := &ast.CaseClause{Body: ret(fields(g.variantType(v), t.Name+"."+v.Name, v.Fields, v.Constraints))}
 			if i < len(order)-1 {
 				cc.List = []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(i)}}
 			}

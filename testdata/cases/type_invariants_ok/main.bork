@@ -1,0 +1,42 @@
+pred positive(n: Int) { n > 0 }
+pred ordered(r: Range) { r.lo <= r.hi }
+type Range = { lo: Int = 0, hi: Int = 10, label: String = "range" } where ordered
+fn identity(r: Range): Range where ordered { r }
+fn unchanged(r: Range, label: String): Range { r.copy(label: label) }
+fn New(lo: Int, hi: Int): Range | BadRange {
+  if (lo <= hi) { Range { lo: lo, hi: hi } } else { BadRange {} }
+}
+type BadRange = {}
+pred boxValid[T](b: Box[T]) { b.n > 0 }
+type Box[T] = { value: T, n: Int } where boxValid
+type IntBox = Box[Int]
+fn BoxNew[T](value: T, n: Int where positive): Box[T] { Box { value: value, n: n } }
+pred envelopeValid(e: Envelope) { e.range.lo <= e.range.hi }
+type Envelope = { range: Range, name: String } where envelopeValid
+fn update(e: Envelope, lo: Int): Envelope | BadRange {
+  if (lo <= e.range.hi) { e.copy(range.lo: lo) } else { BadRange {} }
+}
+pred stateValid(s: State) { match (s) { State.Idle => true, State.Running { lo, hi } => lo <= hi } }
+type State = sealed { Idle, Running { lo: Int, hi: Int } where stateValid }
+fn StateNew(lo: Int, hi: Int): State {
+  if (lo <= hi) { .Running { lo: lo, hi: hi } } else { .Idle }
+}
+fn requiresState(s: State where stateValid): State { s }
+fn narrowed(s: State): State {
+  match (s) { State.Running { lo, hi } => requiresState(s), State.Idle => State.Idle }
+}
+fn Defaults(label: String): Range { .{ label: label } }
+fn ContextBox[T](value: T, n: Int where positive): Option[Box[T]] { .Some { value: .{ value: value, n: n } } }
+pred supplied(b: Bundle) { positive(b.n) }
+type Bundle = { n: Int } where supplied
+fn supply(): Int where positive { 1 }
+fn main() {
+  scope s { println(assembleRecord[Bundle](s, supply)) }
+  println(identity(Range { lo: 1, hi: 4 }))
+  println(New(2, 3), New(3, 2), Defaults("custom"))
+  println(unchanged(Range { lo: 1, hi: 2 }, "changed"))
+  box: IntBox = BoxNew(7, 1)
+  println(box, StateNew(1, 2), narrowed(StateNew(2, 3)), ContextBox("context", 1))
+  e = Envelope { range: Range { lo: 1, hi: 3 }, name: "wrapped" }
+  println(update(e, 2))
+}

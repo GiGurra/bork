@@ -1,0 +1,18 @@
+pred ordered(r: Range) { r.lo <= r.hi }
+type Range = { lo: Int, hi: Int } where ordered
+fn bad(lo: Int, hi: Int): Range { Range { lo: lo, hi: hi } }
+fn change(r: Range, lo: Int): Range { r.copy(lo: lo) }
+pred envelopeValid(e: Envelope) { e.range.lo <= e.range.hi }
+type Envelope = { range: Range } where envelopeValid
+fn nested(e: Envelope, lo: Int): Envelope { e.copy(range.lo: lo) }
+pred accepted(s: Gate) { match (s) { Gate.Accepted => true, Gate.Rejected => false } }
+type Gate = sealed { Accepted, Rejected } where accepted
+fn badContext(lo: Int, hi: Int): Range { .{ lo: lo, hi: hi } }
+fn badGate(): Gate { .Rejected }
+fn main() { println(bad(0, 1), Gate.Rejected, Range { lo: 5, hi: 2 }) }
+
+pred positive(n: Int) { n > 0 }
+pred supplied(b: Bundle) { positive(b.n) }
+type Bundle = { n: Int } where supplied
+fn supply(): Int { -1 }
+fn badAssembly(s: Scope): Bundle { assembleRecord[Bundle](s, supply) }

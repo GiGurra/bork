@@ -268,11 +268,21 @@ func (c *checker) checkOpaqueFields() {
 		case *Record:
 			for _, key := range sortedInstanceKeys(t.insts) {
 				i := t.insts.byKey[key].(*Record)
+				if len(i.Constraints) > 0 && containsOpaque(i, map[Type]bool{}) {
+					c.bindErr(t.Decl.Pos, "facts cannot apply to instantiated type %s, which holds a Go value that can change", i)
+				}
 				check(i.Fields, t.Fields, t.Decl.Fields)
 			}
 		case *Sealed:
 			for _, key := range sortedInstanceKeys(t.insts) {
 				i := t.insts.byKey[key].(*Sealed)
+				constrained := len(i.Constraints) > 0
+				for _, v := range i.Variants {
+					constrained = constrained || len(v.Constraints) > 0
+				}
+				if constrained && containsOpaque(i, map[Type]bool{}) {
+					c.bindErr(t.Decl.Pos, "facts cannot apply to instantiated type %s, which holds a Go value that can change", i)
+				}
 				for j, v := range i.Variants {
 					check(v.Fields, t.Variants[j].Fields, t.Decl.Variants[v.Index].Fields)
 				}

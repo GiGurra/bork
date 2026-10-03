@@ -72,6 +72,13 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 			}
 
 		}
+		if len(r.Constraints) > 0 {
+			saved := w.newTmp()
+			w.line(fmt.Sprintf("%s := append([]%s(nil), _errs...)", saved, errType))
+			for _, con := range r.Constraints {
+				w.factAtPath("out", r, nil, "_path", con, saved)
+			}
+		}
 		w.line("return out, _errs")
 		fmt.Fprintf(&src, "func _fromGo_%s%s(v %s, _path string, _seen map[any]bool) (%s, []%s) {\n%s}\n", n, tp, gt, bt, errType, w.body.String())
 		fmt.Fprintf(&src, "func (out *%s) _borkSetMirror(v any) []%s { var errs []%s; *out, errs = _fromGo_%s%s(v.(%s), \"result\", map[any]bool{}); return errs }\n", bt, errType, errType, n, ta, gt)
