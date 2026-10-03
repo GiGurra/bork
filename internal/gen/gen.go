@@ -547,7 +547,8 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 
 // value lowers an expression whose result is needed. It returns the
 // statements to run first and the Go expression holding the result.
-// The expression is nil when e never produces a value (type Never).
+// The expression is nil when e never produces a value, including when
+// one of its subexpressions diverges. Unit has a concrete value.
 func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	t := e.Type()
 	switch e := e.(type) {
@@ -599,10 +600,16 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			}
 			return stmts, nil
 		}
+		if t == check.Unit {
+			return append(stmts, &ast.ExprStmt{X: call}), g.unitValue()
+		}
 		return stmts, call
 	case *check.If, *check.Match:
-		if t == check.Never || t == check.Unit {
+		if t == check.Never {
 			return g.effect(e), nil
+		}
+		if t == check.Unit {
+			return g.effect(e), g.unitValue()
 		}
 		res := g.newTmp()
 		stmts := []ast.Stmt{varDecl(res, g.goType(t))}
@@ -611,14 +618,20 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if len(e.Stmts) == 0 && e.Tail != nil {
 			return g.value(e.Tail)
 		}
-		if t == check.Never || t == check.Unit {
+		if t == check.Never {
 			return g.effect(e), nil
+		}
+		if t == check.Unit {
+			return g.effect(e), g.unitValue()
 		}
 		res := g.newTmp()
 		return []ast.Stmt{varDecl(res, g.goType(t)), &ast.BlockStmt{List: g.blockInto(e, sink{res: res, resType: t})}}, res
 	case *check.ScopeBlock:
-		if t == check.Never || t == check.Unit {
+		if t == check.Never {
 			return g.effect(e), nil
+		}
+		if t == check.Unit {
+			return g.effect(e), g.unitValue()
 		}
 		res := g.newTmp()
 		return append([]ast.Stmt{varDecl(res, g.goType(t))}, g.scopeInto(e, sink{res: res, resType: t})...), res
@@ -656,11 +669,16 @@ func (g *gen) values(es []check.Expr) ([]ast.Stmt, []ast.Expr) {
 					xs[j] = t
 				}
 			}
-			out = append(out, stmts...)
 		}
 		if x == nil {
-			return out, nil
+			// Earlier arguments still run, but the call cannot consume
+			// their values. Keep saved temporaries used in the Go output.
+			for _, prior := range xs {
+				out = append(out, assign(ast.NewIdent("_"), prior))
+			}
+			return append(out, stmts...), nil
 		}
+		out = append(out, stmts...)
 		xs = append(xs, x)
 	}
 	return out, xs
@@ -1093,14 +1111,16 @@ func (g *gen) scopeInto(e *check.ScopeBlock, k sink) []ast.Stmt {
 		parent = g.openScopes[n-1]
 	}
 	// The cleanup policy is computed before the scope opens.
-	var stmts, policy []ast.Stmt
-	for _, p := range e.Policies {
-		pstmts, px := g.value(p)
-		stmts = append(stmts, pstmts...)
-		if px != nil {
-			fn := g.info.Funcs["setScopePolicy"]
-			policy = append(policy, &ast.ExprStmt{X: &ast.CallExpr{Fun: g.funcName(fn), Args: []ast.Expr{s, px}}})
-		}
+	stmts, policies := g.values(e.Policies)
+	if policies == nil {
+		return stmts
+	}
+	var policy []ast.Stmt
+	for _, px := range policies {
+		value := g.newTmp()
+		stmts = append(stmts, define(value, px))
+		fn := g.info.Funcs["setScopePolicy"]
+		policy = append(policy, &ast.ExprStmt{X: &ast.CallExpr{Fun: g.funcName(fn), Args: []ast.Expr{s, value}}})
 	}
 	stmts = append(stmts,
 		define(s, &ast.CallExpr{Fun: ast.NewIdent("_newScope"), Args: []ast.Expr{parent, &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(e.Var.Name)}}}),
@@ -1161,10 +1181,11 @@ func (g *gen) ifChain(e *check.If, k sink) []ast.Stmt {
 		s.Else = &ast.BlockStmt{List: g.blockInto(els, k)}
 	case *check.If:
 		rest := g.ifChain(els, k)
+		s.Else = &ast.BlockStmt{List: rest}
 		if len(rest) == 1 {
-			s.Else = rest[0].(*ast.IfStmt)
-		} else {
-			s.Else = &ast.BlockStmt{List: rest}
+			if chained, ok := rest[0].(*ast.IfStmt); ok {
+				s.Else = chained
+			}
 		}
 	}
 	return append(stmts, s)
