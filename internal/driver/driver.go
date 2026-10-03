@@ -60,6 +60,11 @@ func Sources(path string) ([]string, error) {
 // Check parses and type-checks the package at path, and the packages
 // it imports. The files start with the prelude, then the package's own.
 func Check(path string) ([]*syntax.File, *check.Info, error) {
+	return checkObserved(path, nil)
+}
+
+func checkObserved(path string, observe func(string)) ([]*syntax.File, *check.Info, error) {
+	phase(observe, "parse")
 	files, root, diags, err := load(path)
 	if err != nil {
 		return nil, nil, err
@@ -68,25 +73,31 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 		// Report syntax and import errors before attempting to type-check.
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	phase(observe, "module")
 	if _, _, err := programGoModule(files); err != nil {
 		return nil, nil, err
 	}
-	info := check.Program(files, root, diags, goPackages{files: files})
+	phase(observe, "check")
+	info := check.ProgramObserved(files, root, diags, goPackages{files: files}, observe)
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	phase(observe, "embeds")
 	captureEmbeds(info, diags)
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	phase(observe, "effects")
 	check.CheckEffects(files, info, diags)
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	phase(observe, "lifetimes")
 	check.Lifetimes(files, info, diags)
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
 	}
+	phase(observe, "facts")
 	check.Facts(files, info, diags, evaluator(path, files, info))
 	if diags.Len() > 0 {
 		return nil, nil, &DiagError{Diags: diags}
@@ -138,7 +149,11 @@ func Emit(path string) ([]byte, error) {
 }
 
 func emit(path string) ([]*syntax.File, *check.Info, []byte, error) {
-	files, info, err := Check(path)
+	return emitObserved(path, nil)
+}
+
+func emitObserved(path string, observe func(string)) ([]*syntax.File, *check.Info, []byte, error) {
+	files, info, err := checkObserved(path, observe)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -147,6 +162,7 @@ func emit(path string) ([]*syntax.File, *check.Info, []byte, error) {
 		diags.AddCode(packagePos(files), "package.no-main", "package has no main function (add `fn main() { ... }`)")
 		return nil, nil, nil, &DiagError{Diags: diags}
 	}
+	phase(observe, "generate")
 	goSrc, err := gen.Package(files, info)
 	return files, info, goSrc, err
 }
@@ -397,4 +413,11 @@ func unsafeGoErrors(paths []string, buildDir, output string) *diag.List {
 		return nil
 	}
 	return diags
+}
+
+// phase keeps observation out of the normal compiler path.
+func phase(observe func(string), name string) {
+	if observe != nil {
+		observe(name)
+	}
 }

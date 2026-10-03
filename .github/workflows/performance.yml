@@ -1,0 +1,32 @@
+name: Compiler performance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Compiler phases and allocations
+        run: go test ./internal/driver -run '^$' -bench '^BenchmarkCompilerPhases/(hello|synthetic1000)/' -benchtime=3x -count=3 | tee phases.txt
+      - name: CLI latency and sizes
+        run: |
+          go build -o /tmp/bork ./cmd/bork
+          python3 scripts/benchmark.py --bork /tmp/bork --program hello --program synthetic1000 --samples 3 > latency.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compiler-performance
+          path: |
+            phases.txt
+            latency.json
