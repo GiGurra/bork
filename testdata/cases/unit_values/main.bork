@@ -1,9 +1,10 @@
 type Error = { message: String }
-type Box = { value: Ok | Error }
+type Box = { value: Ok | Error = Ok }
 
 fn done() uses io { println("done") }
 fn explicitDone(): Ok { return Ok }
 fn explicitEffect() uses io: Ok { return println("explicit effect") }
+fn defaultSuccess(value: Ok | Error = Ok): Ok | Error { value }
 fn consume(label: String, x: Ok | Error) uses io {
   match (x) {
     unit: Ok => println(label)
@@ -42,6 +43,8 @@ fn policyReturn() uses io: String {
 fn main() {
   explicitDone()
   consume("explicit returned effect", explicitEffect())
+  consume("default argument", defaultSuccess())
+  consume("default field", Box {}.value)
   consume("explicit", Ok)
   consume("explicit lambda", (() => Ok)())
   consume("explicit block", { Ok })

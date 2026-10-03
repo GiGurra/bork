@@ -1,5 +1,7 @@
 explicit effect
 explicit returned effect
+default argument
+default field
 explicit
 explicit lambda
 explicit block
