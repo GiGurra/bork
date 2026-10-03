@@ -234,3 +234,35 @@ func TestDescribeCLI(t *testing.T) {
 		}
 	})
 }
+
+func TestDepsCLI(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "bork")
+	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "bork.mod"), []byte("module example.com/app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(wantOK bool, args ...string) {
+		t.Helper()
+		cmd := exec.Command(exe, append([]string{"deps"}, args...)...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if (err == nil) != wantOK {
+			t.Fatalf("deps %v: %v\n%s", args, err, out)
+		}
+	}
+	run(true, "init", "--path", dir)
+	for _, name := range []string{"go-deps.mod", "go-deps.sum"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(false, "init")
+	run(true, "download")
+	run(false, "download", "unexpected")
+	run(false, "get")
+	run(false, "get", "toolchain@latest")
+	run(false, "get", "--", "-u")
+}

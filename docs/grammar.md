@@ -170,7 +170,7 @@ EOL        = newline | ";" .
   `slice(from, to)` (exclusive end, `Bytes | OutOfRange`), and `concat(other)`.
   Equality compares contents; empty sequences are equal. Bytes prints as
   `Bytes(00ff)`, lower-case hex, including in records, lists, and maps.
-Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. A user module can also declare these manifests beside `bork.mod`; requirements merge with imported std dependencies by Go minimum version selection. See [std Go dependencies](std-go.md).
+Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. A user module can also declare these manifests beside `bork.mod`; requirements merge with imported std dependencies by Go minimum version selection. `bork deps init/get/download` maintains user manifests with Go module tools. See [std Go dependencies](std-go.md).
 
 
 ## Standard packages
