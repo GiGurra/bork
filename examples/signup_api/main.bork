@@ -132,7 +132,7 @@ fn main() {
 
 fn get(path: String) uses clock + state: http.Response {
   scope rs {
-    route(http.Request { method: "GET", path: path, query: "", headers: {:}, body: "" }, rs)
+    route(http.Request { method: "GET", path: path, query: "", params: {:}, headers: {:}, body: "" }, rs)
   }
 }
 

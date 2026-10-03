@@ -12,8 +12,10 @@ package gen
 const scopeHelpers = `package main
 import "context"
 import "sync"
+import "time"
 
 // Stable scope helpers for unsafe go bodies.
+func _borkScopeCleanupTimeout(s *_Scope) time.Duration { return s.finalizerTimeout }
 func _borkScopeContext(s *_Scope) context.Context { return s.ctx }
 func _borkScopeWith(ctx context.Context) *_Scope { return _scopeWith(ctx) }
 func _borkScopeClose(s *_Scope) { s.close() }

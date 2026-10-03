@@ -25,7 +25,7 @@ fn openServer(s: Scope) uses net + state: TestServer unsafe go {
   state := struct { url string; started chan struct{} }{srv.URL, started}
   return TestServer{handle: state, owner: s.Own(func() { srv.Close() })}
 }
-fn url(server: TestServer): String unsafe go {
+fn serverURL(server: TestServer): String unsafe go {
   return server.handle.(struct { url string; started chan struct{} }).url
 }
 fn started(server: TestServer) uses clock + state unsafe go {
@@ -58,7 +58,7 @@ fn dynamicTimeout(): Int unsafe go { return 20 }
 fn main() {
   scope app {
     remote = openServer(app)
-    base = url(remote)
+    base = serverURL(remote)
     match (http.Send("POST", base, { "x-many": ["a", "b"] }, "payload", app, 2000)) {
       response: http.Response => {
         println(response.status, response.body)

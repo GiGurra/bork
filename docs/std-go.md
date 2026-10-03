@@ -19,6 +19,7 @@ compiler internals; keep dependencies on them inside the helper implementations.
 | `_borkMapPut[K,V](m, key K, value V)` | Returns a new map, preserving the original and its ordering policy. |
 | `_borkMapLen[K,V](m) int` | Returns the number of entries, including zero for an empty map. |
 | `_borkMapEach[K,V](m, visit func(K,V) bool)` | Visits entries in the map's order; stops when visit returns false. |
+| `_borkScopeCleanupTimeout(s) time.Duration` | Returns the scope cleanup timeout; zero means unbounded. |
 | `_borkScopeContext(s) context.Context` | Returns the scope's cancellation context. |
 | `_borkScopeWith(ctx context.Context)` | Opens a scope cancelled with ctx; the caller must close it. |
 | `_borkScopeClose(s)` | Cancels the scope, waits for tasks, runs finalizers; may panic for a task or finalizer failure. Repeated closure does nothing. |

@@ -1,0 +1,21 @@
+true
+static asset
+7
+Option.Some { value: ["alice"] }
+photo photo.txt 5
+true
+true
+200 42
+422 .id
+200 a b:2:Option.None
+422 .count
+422 .name
+400 bad query
+200 Option.Some { value: ["a", "b"] }
+404
+405
+200 0
+true
+true
+true
+true
