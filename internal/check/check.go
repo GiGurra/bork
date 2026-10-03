@@ -327,6 +327,8 @@ type Info struct {
 	// bindings records the type of every binding, and
 	// bindingConstraints the where clauses of typed ones.
 	lazyBindings       map[*syntax.Binding]*LazyDescription
+	lazyFields         map[syntax.Expr]*LazyDescription
+	fieldRecipes       map[Expr]*LazyDescription
 	bindings           map[*syntax.Binding]Type
 	bindingConstraints map[*syntax.Binding][]*Constraint
 	// conversions describes numeric conversions of non-constant values.
@@ -411,6 +413,8 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			unused:                 map[any]bool{},
 			consts:                 map[syntax.Expr]constant.Value{},
 			lazyBindings:           map[*syntax.Binding]*LazyDescription{},
+			lazyFields:             map[syntax.Expr]*LazyDescription{},
+			fieldRecipes:           map[Expr]*LazyDescription{},
 			bindings:               map[*syntax.Binding]Type{},
 			conversions:            map[*syntax.Call]*Conversion{},
 			defs:                   map[*syntax.Ident]any{},
@@ -1737,8 +1741,12 @@ func (c *checker) returnExpr(e *syntax.Return) {
 			return
 		}
 		t := c.exprWant(e.Value, ctx.want)
-		if ctx.want != nil && !assignable(t, ctx.want) {
-			c.errorf(e.Value.Position(), "%s must return %s, found %s", ctx.name, ctx.want, t)
+		if ctx.want != nil {
+			t, ctx.want = c.settle(t, ctx.want)
+			if !assignable(t, ctx.want) {
+				c.errorf(e.Value.Position(), "%s must return %s, found %s", ctx.name, ctx.want, t)
+			}
+
 		}
 		ctx.returns = append(ctx.returns, t)
 		return

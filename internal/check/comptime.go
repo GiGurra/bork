@@ -81,6 +81,20 @@ func (c *checker) closedComptimeSyntax(x syntax.Expr, seen map[any]bool) bool {
 		}
 		return true
 	case *syntax.RecordLit:
+		// A closed recipe still creates runtime memo storage. Capturing that
+		// record would carry its cells into the compile-time computation.
+		var fields []*Field
+		switch target := c.info.recordTargets[x].(type) {
+		case *Record:
+			fields = target.Fields
+		case *Variant:
+			fields = target.Fields
+		}
+		for _, field := range fields {
+			if field.Lazy {
+				return false
+			}
+		}
 		// Include inserted defaults, not only fields written at the capture site.
 		for _, field := range c.info.recordInits[x] {
 			if !c.closedComptimeSyntax(field.Value, seen) {
@@ -125,6 +139,9 @@ func unsupportedComptimeType(t Type, seen map[Type]bool) string {
 		return unsupportedComptimeType(t.Value, seen)
 	case *Record:
 		for _, field := range t.Fields {
+			if field.Lazy {
+				return "field " + field.Name + ": lazy cell"
+			}
 			if path := unsupportedComptimeType(field.Type, seen); path != "" {
 				return "field " + field.Name + ": " + path
 			}
@@ -133,6 +150,9 @@ func unsupportedComptimeType(t Type, seen map[Type]bool) string {
 	case *Sealed:
 		for _, variant := range t.Variants {
 			for _, field := range variant.Fields {
+				if field.Lazy {
+					return "variant " + variant.Name + " field " + field.Name + ": lazy cell"
+				}
 				if path := unsupportedComptimeType(field.Type, seen); path != "" {
 					return "variant " + variant.Name + " field " + field.Name + ": " + path
 				}

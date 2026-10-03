@@ -271,7 +271,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 func (g *gen) structDecl(n *ast.Ident, params []*check.TypeParam, fields []*check.Field) ast.Decl {
 	st := &ast.StructType{Fields: &ast.FieldList{}}
 	for _, f := range fields {
-		st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{name(f.Name)}, Type: g.goType(f.Type)})
+		st.Fields.List = append(st.Fields.List, &ast.Field{Names: []*ast.Ident{name(f.Name)}, Type: g.fieldStorageType(f)})
 	}
 	return &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{Name: ast.NewIdent(n.Name), TypeParams: typeParamList(params), Type: st}}}
 }
@@ -294,7 +294,7 @@ func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, i
 			if i == 0 {
 				prefix = label + " { " + f.Name + ": "
 			}
-			show := g.showValue(&ast.SelectorExpr{X: ast.NewIdent("v"), Sel: name(f.Name)}, f.Type)
+			show := g.showValue(g.fieldRead(ast.NewIdent("v"), f), f.Type)
 			part := &ast.BinaryExpr{X: strLit(prefix), Op: token.ADD, Y: show}
 			if result == nil {
 				result = part
@@ -1441,7 +1441,7 @@ func needsDeepEqual(t check.Type, seen map[check.Type]bool) bool {
 	}
 	fields := func(fs []*check.Field) bool {
 		for _, f := range fs {
-			if needsDeepEqual(f.Type, seen) {
+			if f.Lazy || needsDeepEqual(f.Type, seen) {
 				return true
 			}
 		}

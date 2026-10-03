@@ -1,0 +1,5 @@
+ok    generated lazy record fields
+ok    generated generic lazy fields
+ok    generated lazy variant fields
+3 passed, 0 failed
+exit code 0

@@ -447,7 +447,7 @@ func (g *gen) genBody(t check.Type, nested []*check.Constraint, depth ast.Expr, 
 			defined[field.Name] = true
 		}
 		for _, field := range fs {
-			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: ast.NewIdent(values[field.Name])})
+			lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: g.fieldResolved(ast.NewIdent(values[field.Name]), field)})
 		}
 		body = append(body, deferred...)
 		value := g.newTmp()

@@ -1,0 +1,4 @@
+ok    shared fields force once in the reader context
+ok    a stored field does not carry mocks
+2 passed, 0 failed
+exit code 0

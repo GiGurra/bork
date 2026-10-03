@@ -412,12 +412,12 @@ func (l *lifeChecker) carriesLifeSeen(t Type, seen map[Type]bool) bool {
 		}
 	case *Record:
 		for _, f := range t.Fields {
-			v = v || l.carriesLifeSeen(f.Type, seen)
+			v = v || f.Lazy || l.carriesLifeSeen(f.Type, seen)
 		}
 	case *Sealed:
 		for _, vt := range t.Variants {
 			for _, f := range vt.Fields {
-				v = v || l.carriesLifeSeen(f.Type, seen)
+				v = v || f.Lazy || l.carriesLifeSeen(f.Type, seen)
 			}
 		}
 	}
@@ -587,17 +587,29 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		}
 		return life.union(args)
 	case *Select:
-		return l.use(x.X, l.expr(x.X))
+		life := l.use(x.X, l.expr(x.X))
+		if !l.carriesLife(x.Type()) {
+			return nil
+		}
+		return life
 	case *RecordLit:
 		var life lifetime
 		for _, f := range x.Fields {
-			life = life.union(l.expr(f.Value))
+			if f.Thunk != nil {
+				life = life.union(l.lambda(f.Thunk))
+			} else {
+				life = life.union(l.expr(f.Value))
+			}
 		}
 		return life
 	case *Copy:
 		life := l.expr(x.X)
 		for _, u := range x.Updates {
-			life = life.union(l.expr(u.Value))
+			if u.Thunk != nil {
+				life = life.union(l.lambda(u.Thunk))
+			} else {
+				life = life.union(l.expr(u.Value))
+			}
 		}
 		return life
 	case *ListLit:

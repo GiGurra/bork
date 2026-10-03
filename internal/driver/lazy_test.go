@@ -26,7 +26,7 @@ func TestLazyBindingChecks(t *testing.T) {
 		{"forward reference", "fn main(){lazy x=y;lazy y=x;println(y)}", "undefined: y"},
 		{"drop", "fn main(){lazy _=1}", "single binding name"},
 		{"destructure", "fn main(){lazy (x,y)=(1,2)}", "expected"},
-		{"field phase", "type C={lazy value:Int}\nfn main(){}", "lazy record fields are not implemented"},
+		{"independent field", "type C={lazy value:Int}\nfn main(){}", ""},
 		{"package phase", "lazy x=1\nfn main(){}", "package lazy bindings are not implemented"},
 		{"cross loop", "fn main(){for(n in [1]){lazy x:Int={break;1};println(x)}}", "require a loop in the same function"},
 		{"cross yield", "fn main(){x=generate[Int]{lazy y:Int={yield 1;2};yield y};println(x.toList())}", "yield requires a generator"},

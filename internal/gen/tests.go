@@ -448,11 +448,18 @@ func (g *gen) invariantChecks(fn *check.Func, x ast.Expr, t check.Type, seen map
 	fields := func(owner string, x ast.Expr, fs []*check.Field) []ast.Stmt {
 		var out []ast.Stmt
 		for _, f := range fs {
-			v := &ast.SelectorExpr{X: x, Sel: name(f.Name)}
+			v := g.fieldRead(x, f)
 			for _, con := range f.Constraints {
 				what := fmt.Sprintf("%s whose %s is not %s", owner, f.Name, con)
 				out = append(out, g.atPath(v, f.Type, splitPath(con.Path), func(y ast.Expr, yt check.Type) []ast.Stmt {
-					return g.invariantCheck(fn, fieldConstraint(con, func(n string) string { return g.text(&ast.SelectorExpr{X: x, Sel: name(n)}) }), y, yt, what)
+					return g.invariantCheck(fn, fieldConstraint(con, func(n string) string {
+						for _, sibling := range fs {
+							if sibling.Name == n {
+								return g.text(g.fieldRead(x, sibling))
+							}
+						}
+						panic("missing sibling")
+					}), y, yt, what)
 				})...)
 			}
 			out = append(out, g.invariantChecks(fn, v, f.Type, seen)...)
@@ -569,7 +576,7 @@ func (g *gen) atPath(x ast.Expr, t check.Type, steps []string, leaf func(ast.Exp
 		}}
 	case *check.Record:
 		if f := t.Field(step); f != nil {
-			return g.atPath(&ast.SelectorExpr{X: x, Sel: name(step)}, f.Type, rest, leaf)
+			return g.atPath(g.fieldRead(x, f), f.Type, rest, leaf)
 		}
 	case *check.Sealed:
 		var out []ast.Stmt
@@ -582,7 +589,7 @@ func (g *gen) atPath(x ast.Expr, t check.Type, steps []string, leaf func(ast.Exp
 			out = append(out, &ast.IfStmt{
 				Init: &ast.AssignStmt{Lhs: []ast.Expr{val, ok}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: x, Type: g.variantType(v)}}},
 				Cond: ok,
-				Body: &ast.BlockStmt{List: g.atPath(&ast.SelectorExpr{X: val, Sel: name(step)}, f.Type, rest, leaf)},
+				Body: &ast.BlockStmt{List: g.atPath(g.fieldRead(val, f), f.Type, rest, leaf)},
 			})
 		}
 		return out

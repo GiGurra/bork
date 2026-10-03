@@ -37,7 +37,7 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 	if r.GoTo {
 		w.line("var out " + gt)
 		for i, f := range r.Fields {
-			w.line("out." + strings.Join(r.GoFields[i].Path, ".") + " = " + w.toGo("v."+name(f.Name).Name, f.Type, r.GoFields[i].Type))
+			w.line("out." + strings.Join(r.GoFields[i].Path, ".") + " = " + w.toGo(g.text(g.fieldRead(ast.NewIdent("v"), f)), f.Type, r.GoFields[i].Type))
 		}
 		w.line("return out")
 		fmt.Fprintf(&src, "func _toGo_%s%s(v %s) %s {\n%s}\nfunc (v %s) _borkGoMirror() %s { return _toGo_%s(v) }\n", n, tp, bt, gt, w.body.String(), bt, gt, n)
@@ -52,7 +52,11 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 		for i, f := range r.Fields {
 			path := "_path + " + strconv.Quote("."+f.Name)
 			converted := w.fromGo("v."+strings.Join(r.GoFields[i].Path, "."), r.GoFields[i].Type, f.Type, path)
-			w.line("out." + name(f.Name).Name + " = " + converted)
+			convertedExpr, err := parser.ParseExpr(converted)
+			if err != nil {
+				panic(err)
+			}
+			w.line("out." + name(f.Name).Name + " = " + g.text(g.fieldResolved(convertedExpr, f)))
 
 		}
 		for _, f := range r.Fields {
@@ -64,7 +68,7 @@ func (g *gen) mirrorDecl(r *check.Record) []ast.Decl {
 					if con.HasSiblingArgs() {
 						w.line("if _bindPathValid(" + saved + ", _path) {")
 					}
-					w.factAtPath("out."+name(f.Name).Name, f.Type, splitPath(con.Path), path, fieldConstraint(con, func(n string) string { return "out." + name(n).Name }), saved, con)
+					w.factAtPath(g.text(g.fieldRead(ast.NewIdent("out"), f)), f.Type, splitPath(con.Path), path, fieldConstraint(con, func(n string) string { return g.text(g.fieldRead(ast.NewIdent("out"), r.Field(n))) }), saved, con)
 					if con.HasSiblingArgs() {
 						w.line("}")
 					}

@@ -1,0 +1,10 @@
+encode
+{"lo":2,"hi":6}
+Config { lo: 2, hi: 6 }
+{"lo":1,"hi":8}
+{"lo":3,"hi":4}
+error .lo: must be positive
+error .lo: must satisfy lo <= hi (ordered)
+{"type":"Item","value":3}
+Config { lo: 1, hi: 8 }
+[Config { lo: 3, hi: 5 }]

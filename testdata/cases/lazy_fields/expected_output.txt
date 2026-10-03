@@ -1,0 +1,28 @@
+before
+force 7
+7
+7
+7
+copy
+force 9
+9
+7
+4
+8
+force 10
+nested
+2
+force 11
+11
+10
+pattern
+force 12
+12
+true
+captured
+equal
+force 20
+force 20
+true
+Lazy { value: 20 }
+Option.Some { value: "present" }

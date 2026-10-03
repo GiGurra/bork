@@ -430,7 +430,14 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			given[fi.Name] = true
 		}
 		for _, fi := range inits {
-			out.Fields = append(out.Fields, &FieldValue{IsDefault: !given[fi.Name], Name: fi.Name, Field: findField(fields, fi.Name), Value: l.expr(fi.Value)})
+			field := findField(fields, fi.Name)
+			value := &FieldValue{IsDefault: !given[fi.Name], Name: fi.Name, Field: field, Value: l.expr(fi.Value)}
+			if field != nil && field.Lazy {
+				value.Thunk = &Lambda{expr: expr{pos: fi.Value.Position(), typ: &FuncType{Result: field.Type}}, Body: value.Value}
+				value.Lazy = l.info.lazyFields[fi.Value]
+				l.info.fieldRecipes[value.Value] = value.Lazy
+			}
+			out.Fields = append(out.Fields, value)
 		}
 		return out
 	case *syntax.Copy:
@@ -448,6 +455,11 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 					break
 				}
 				cur, _ = fu.Field.Type.(*Record)
+			}
+			if fu.Field != nil && fu.Field.Lazy {
+				fu.Thunk = &Lambda{expr: expr{pos: u.Value.Position(), typ: &FuncType{Result: fu.Field.Type}}, Body: fu.Value}
+				fu.Lazy = l.info.lazyFields[u.Value]
+				l.info.fieldRecipes[fu.Value] = fu.Lazy
 			}
 			out.Updates = append(out.Updates, fu)
 		}

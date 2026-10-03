@@ -1,0 +1,44 @@
+type Lazy[T] = { lazy value: T }
+type Pair = { first: Int, lazy second: Int = 8 }
+type Outer = { lazy pair: Pair }
+type Choice = sealed { Item { lazy value: Int }, Empty }
+ambient label: String
+fn named() needs label: String { label }
+fn work(n: Int) uses io: Int { println(s"force $n"); n }
+fn read[T](value: Lazy[T]): T { value.value }
+fn main() {
+  unused = Lazy[Int] { value: work(99) }
+  saved = Lazy[Int] { value: work(7) }
+  alias = saved
+  println("before")
+  println(read(saved)); println(alias.value)
+  shared = saved.copy()
+  println(shared.value)
+  fresh = saved.copy(value: work(9))
+  println("copy")
+  println(fresh.value); println(saved.value)
+  early = Lazy[Int] { value: { if (true) { return 4 }; 5 } }
+  println(early.value)
+  pair: Pair = .{ first: 1 }
+  println(pair.second)
+  outer = Outer { pair: Pair { first: work(10), second: work(11) } }
+  patched = outer.copy(pair.first: 2)
+  println("nested")
+  println(patched.pair.first); println(patched.pair.second)
+  println(outer.pair.first)
+  choice: Choice = .Item { value: work(12) }
+  println("pattern")
+  println(match (choice) { Choice.Item { value: x } => x, Choice.Empty => 0 })
+  println(match (saved) { Lazy { value: 7 } => true, _ => false })
+  with (label: "captured") {
+    held = Lazy[String] { value: named() }
+    with (label: "reader") { println(held.value) }
+  }
+  left = Lazy[Int] { value: work(20) }
+  right = Lazy[Int] { value: work(20) }
+  println("equal")
+  println(left == right)
+  println(left)
+  lookup = { left: "present" }
+  println(lookup.get(right))
+}

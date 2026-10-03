@@ -123,7 +123,7 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 			b.WriteString("}\n")
 		}
 		b.WriteString("}\n")
-		inits = append(inits, fmt.Sprintf("%s: %s", name(f.Name).Name, v))
+		inits = append(inits, fmt.Sprintf("%s: %s", name(f.Name).Name, g.text(g.fieldResolved(ast.NewIdent(v), f))))
 	}
 	for i, f := range fields {
 		v := fmt.Sprintf("_f%d", i)
@@ -183,7 +183,7 @@ func (g *gen) deriveEncode(fn *check.Func) string {
 		}
 		for i, f := range fs {
 			fun, ds := g.dictMethod(dicts[i], "encode")
-			call := g.text(&ast.CallExpr{Fun: fun, Args: append(ds, &ast.SelectorExpr{X: ast.NewIdent(x), Sel: name(f.Name)})})
+			call := g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent(x), f))})
 			parts = append(parts, fmt.Sprintf("{name: %q, value: %s}", f.Name, call))
 		}
 		return fmt.Sprintf("return %s{fields: []%s{%s}}\n", obj, field, strings.Join(parts, ", "))

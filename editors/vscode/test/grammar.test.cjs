@@ -168,3 +168,9 @@ test('async is contextual at binding heads', () => {
  assert.ok(!scopes(ls, 2, 'async').includes('keyword.control.bork'));
  assert.ok(!scopes(ls, 3, 'async').includes('keyword.control.bork'));
 });
+
+test('lazy is contextual at independent field heads', () => {
+ const ls = tokenize('type Lazy[T] = { lazy value: T }\ntype Named = { lazy: Int }');
+ has(ls, 0, 'lazy', 'keyword.control.bork');
+ assert.ok(!scopes(ls, 1, 'lazy').includes('keyword.control.bork'));
+});

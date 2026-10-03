@@ -77,7 +77,7 @@ func Describe(position, where string) (*describe.Result, error) {
 		return &describe.Result{SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
 	}
 	var async *check.AsyncDescription
-	var lazy *check.LazyDescription
+	lazy := info.LazyFieldDescription(selected.Expr)
 	if v, ok := selected.Expr.(*check.VarRef); ok && v.Var.Let != nil {
 		lazy = v.Var.Let.Lazy
 		async = v.Var.Let.Async
