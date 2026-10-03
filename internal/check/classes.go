@@ -684,6 +684,7 @@ func producesParam(class *Class) bool {
 // declaredFacts lists the constraints declared for the value of x: a
 // parameter's or a binding's where clause, or a record field's.
 func (c *checker) declaredFacts(x syntax.Expr) []*Constraint {
+	x = debugSyntaxValue(x)
 	var cons []*Constraint
 	switch x := x.(type) {
 	case *syntax.Ident:
