@@ -359,6 +359,10 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 		pname := p.expect(TIdent, "(parameter name)")
 		p.expect(Colon, "after parameter name")
 		param := &Param{Pos: pname.Pos, Name: pname.Text, Type: p.typeExpr()}
+		if p.at(TIdent) && p.tok().Text == "in" {
+			param.InPos = p.next().Pos
+			param.In = p.expect(TIdent, "(the parameter whose scope it belongs to)").Text
+		}
 		if p.at(Assign) {
 			p.next()
 			param.Default = p.expr()

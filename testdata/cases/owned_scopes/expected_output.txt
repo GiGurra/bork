@@ -1,0 +1,62 @@
+-- hand over hand
+open first
+open gen3
+hand over first -> gen3
+close first
+open gen2
+hand over gen3 -> gen2
+close gen3
+open gen1
+hand over gen2 -> gen1
+close gen2
+close gen1
+rolled out
+-- early exit
+open step
+close step
+failed
+open step
+stepped with step
+close step
+stepped
+-- tasks and attach
+open old
+a closed; old stays open for b
+task of b uses old
+close old
+-- cancellation
+q cancelled: true, p cancelled: false
+opened in a cancelled parent: true
+worker stopped: the scope ended
+child task: cancelled
+-- returned owner
+a task of the returned scope
+-- parent closes children first
+open base
+open child
+child task uses base and child
+close child
+close base
+failed
+-- an early exit closes the block's owned scopes first
+open worker
+worker still uses worker
+close worker
+failed
+-- an owner argument stays armed until its call
+open consumed later
+close consumed later
+failed
+open from a block
+close from a block
+failed
+-- a task opens and closes its own owned scope
+open task's own
+task uses task's own
+close task's own
+task gave 1
+-- a function can hand an owner back
+open handed back
+task of k uses handed back
+close handed back
+app ends

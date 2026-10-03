@@ -1,0 +1,236 @@
+// A connection that says when it opens and closes.
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  import "fmt"
+  fmt.Println("open " + name)
+  return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}
+}
+
+fn nameOf(c: Conn): String unsafe go {
+  return c.handle.(string)
+}
+
+type Failed = { reason: String }
+
+// handOver copies what old has to next, while both are open.
+fn handOver(old: Conn, next: Conn) uses io {
+  println(s"hand over ${nameOf(old)} -> ${nameOf(next)}")
+}
+
+// roll keeps one connection open, and replaces it n times: each
+// successor opens before its predecessor closes, so at most two are
+// open at a time, and each old one is released at once.
+fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io + state: Unit | Failed {
+  if (n == 0) {
+    closeScope(prev)
+    return Failed { reason: "rolled out" }
+  }
+  next = openScope(app)
+  nextConn = connect(s"gen$n", next.scope)
+  handOver(conn, nextConn)
+  closeScope(prev)
+  roll(next, nextConn, app, n - 1)
+}
+
+// stepOrFail ends early with ? when fail is set: its owned scope is
+// closed on the way out.
+fn stepOrFail(app: Scope, fail: Bool) uses io + state: Unit | Failed {
+  b = openScope(app)
+  c = connect("step", b.scope)
+  check(fail)?
+  println(s"stepped with ${nameOf(c)}")
+  closeScope(b)
+}
+
+fn check(fail: Bool): Unit | Failed {
+  if (fail) {
+    return Failed { reason: "failed" }
+  }
+}
+
+// opened returns a new owned scope to its caller, with a task started.
+fn opened(app: Scope) uses io: OwnedScope {
+  b = openScope(app)
+  launch(b.scope, () => println("a task of the returned scope"))
+  b
+}
+
+fn main() uses io + clock + state {
+  scope app {
+    println("-- hand over hand")
+    first = openScope(app)
+    c = connect("first", first.scope)
+    match (roll(first, c, app, 3)) {
+      f: Failed => println(f.reason)
+      _ => println("unexpected")
+    }
+    println("-- early exit")
+    match (stepOrFail(app, true)) {
+      f: Failed => println(f.reason)
+      _ => println("stepped")
+    }
+    match (stepOrFail(app, false)) {
+      f: Failed => println(f.reason)
+      _ => println("stepped")
+    }
+    println("-- tasks and attach")
+    a = openScope(app)
+    old = connect("old", a.scope)
+    b = openScope(app)
+    // A task of b can use old once it is attached to b too.
+    shared = attach(old, b.scope)
+    launch(b.scope, () => {
+      sleep(20)
+      println(s"task of b uses ${nameOf(shared)}")
+    })
+    closeScope(a)
+    println("a closed; old stays open for b")
+    closeScope(b)
+    println("-- cancellation")
+    p = openScope(app)
+    q = openScope(p.scope)
+    cancel(q.scope)
+    println(s"q cancelled: ${cancelled(q.scope)}, p cancelled: ${cancelled(p.scope)}")
+    cancel(p.scope)
+    closeScope(q)
+    r = openScope(p.scope)
+    println(s"opened in a cancelled parent: ${cancelled(r.scope)}")
+    closeScope(r)
+    closeScope(p)
+    // closeScope cancels the child's tasks before it waits for them.
+    w = openScope(app)
+    launch(w.scope, () => {
+      match (delay(w.scope, 60000)) {
+        stop: Cancelled => println(s"worker stopped: ${stop.reason}")
+        _ => println("worker slept")
+      }
+    })
+    closeScope(w)
+    // So does cancelling its parent.
+    v = openScope(app)
+    u = openScope(v.scope)
+    t = spawn(u.scope, () => delay(u.scope, 60000))
+    cancel(v.scope)
+    match (await(t)) {
+      stop: Cancelled => println(s"child task: ${stop.reason}")
+      _ => println("child task slept")
+    }
+    closeScope(u)
+    closeScope(v)
+    println("-- returned owner")
+    o = opened(app)
+    closeScope(o)
+    println("-- parent closes children first")
+    nested(app)
+    println("-- an early exit closes the block's owned scopes first")
+    match (siblingTask()) {
+      f: Failed => println(f.reason)
+      _ => println("unexpected")
+    }
+    println("-- an owner argument stays armed until its call")
+    match (consumeLater(app)) {
+      f: Failed => println(f.reason)
+      _ => println("unexpected")
+    }
+    match (consumeBlock(app)) {
+      f: Failed => println(f.reason)
+      _ => println("unexpected")
+    }
+    // A block can give the owner it opened.
+    bound = {
+      inner = openScope(app)
+      inner
+    }
+    closeScope(bound)
+    println("-- a task opens and closes its own owned scope")
+    own = spawn(app, () => {
+      mine = openScope(app)
+      oc = connect("task's own", mine.scope)
+      println(s"task uses ${nameOf(oc)}")
+      closeScope(mine)
+      1
+    })
+    println(s"task gave ${await(own)}")
+    println("-- a function can hand an owner back")
+    k = openScope(app)
+    kc = connect("handed back", k.scope)
+    k2 = withTask(k, () => println(s"task of k uses ${nameOf(kc)}"))
+    closeScope(k2)
+    println("app ends")
+  }
+}
+
+// siblingTask leaves its scope block while a task of x owns a newer
+// child of app: x closes first, waiting for the task, so the task's
+// child is not closed under it.
+fn siblingTask() uses io + clock + state: Unit | Failed {
+  scope app {
+    x = openScope(app)
+    launch(x.scope, () => worker(app))
+    sleep(20)
+    check(true)?
+    closeScope(x)
+  }
+}
+
+fn worker(app: Scope) uses io + clock + state {
+  b = openScope(app)
+  c = connect("worker", b.scope)
+  sleep(60)
+  println(s"worker still uses ${nameOf(c)}")
+  closeScope(b)
+}
+
+fn consume(b: OwnedScope, n: Int) uses state {
+  closeScope(b)
+}
+
+fn mayFail(fail: Bool): Int | Failed {
+  check(fail)?
+  1
+}
+
+// consumeLater gives b to a call whose next argument fails: b is
+// closed on the way out, not left for app.
+fn consumeLater(app: Scope) uses io + state: Unit | Failed {
+  b = openScope(app)
+  _ = connect("consumed later", b.scope)
+  consume(b, mayFail(true)?)
+}
+
+// consumeBlock gives a call an owner made by a block, and then fails
+// in a later argument: the owner is closed on the way out.
+fn consumeBlock(app: Scope) uses io + state: Unit | Failed {
+  consume({
+    b = openScope(app)
+    _ = connect("from a block", b.scope)
+    b
+    }, mayFail(true)?)
+}
+
+fn withTask(b: OwnedScope, f: () uses io => Unit in b) uses io: OwnedScope {
+  launch(b.scope, f)
+  b
+}
+
+// nested leaves its scope block early with ?, while a child of the
+// block is still open: the block closes the child before its own
+// resources.
+fn nested(app: Scope) uses io + state {
+  match (nestedStep()) {
+    f: Failed => println(f.reason)
+    _ => println("unexpected")
+  }
+}
+
+fn nestedStep() uses io + state: Unit | Failed {
+  scope s {
+    base = connect("base", s)
+    child = openScope(s)
+    c = connect("child", child.scope)
+    launch(child.scope, () => println(s"child task uses ${nameOf(base)} and ${nameOf(c)}"))
+    check(true)?
+    closeScope(child)
+  }
+}

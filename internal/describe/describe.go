@@ -13,15 +13,18 @@ import (
 )
 
 type Result struct {
-	SchemaVersion int                        `json:"schema_version"`
-	Position      diag.Pos                   `json:"position"`
-	Type          string                     `json:"type"`
-	Expression    string                     `json:"expression,omitempty"`
-	Definition    *diag.Pos                  `json:"definition,omitempty"`
-	Methods       []check.MethodDescription  `json:"methods"`
-	Facts         []check.KnownFact          `json:"facts"`
-	Proof         *check.Proof               `json:"proof,omitempty"`
-	Callable      *check.CallableDescription `json:"callable,omitempty"`
+	SchemaVersion int                       `json:"schema_version"`
+	Position      diag.Pos                  `json:"position"`
+	Type          string                    `json:"type"`
+	Expression    string                    `json:"expression,omitempty"`
+	Definition    *diag.Pos                 `json:"definition,omitempty"`
+	Methods       []check.MethodDescription `json:"methods"`
+	Facts         []check.KnownFact         `json:"facts"`
+	// BelongsTo lists the scopes the value belongs to: it is usable
+	// while all of them are open.
+	BelongsTo []string                   `json:"belongs_to,omitempty"`
+	Proof     *check.Proof               `json:"proof,omitempty"`
+	Callable  *check.CallableDescription `json:"callable,omitempty"`
 }
 
 // Selection is a source value and the position at which to query its facts.

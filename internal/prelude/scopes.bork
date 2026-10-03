@@ -71,6 +71,61 @@ fn setScopePolicy(s: Scope, policy: ScopePolicy) unsafe go {
   }
 }
 
+// OwnedScope is the right to end a child scope early: an explicit start
+// (openScope) and end (closeScope), so that scope lifetimes can overlap
+// without nesting, as when a connection is handed over to the next one
+// before the old one is released. An owner is passed on, never copied:
+// it is closed, given to a parameter of type OwnedScope, or returned,
+// exactly once on every path, and the compiler rejects any use of the
+// child's values after that. If its function ends early (by ?, return
+// or a panic), the child is closed then. b.scope borrows the child's
+// Scope, to open resources and start tasks in.
+//
+//   a = openScope(app)
+//   old = connect(a.scope)?
+//   b = openScope(app)
+//   next = connect(b.scope)?
+//   handOver(old, next)?
+//   closeScope(a)                // old is released, b stays open
+//
+// A parameter can say which scope its value belongs to, so that a
+// resource can be passed on with its owner:
+//
+//   fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope)
+
+// openScope opens a child scope of parent, owned by the caller, with
+// the given policies. It is cancelled with parent; when parent closes,
+// it closes any children still open (after its tasks, before its
+// finalizers, oldest first).
+fn openScope(parent: Scope, policies: List[ScopePolicy] = []): OwnedScope unsafe go {
+  import "time"
+  s := _openScope(parent)
+  for _, policy := range policies {
+    switch p := policy.(type) {
+    case ScopePolicy_TaskTimeout:
+      s.taskTimeout = time.Duration(p.ms) * time.Millisecond
+    case ScopePolicy_CleanupTimeout:
+      s.finalizerTimeout = time.Duration(p.ms) * time.Millisecond
+    case ScopePolicy_LogFailures:
+      s.logFailures = true
+    }
+  }
+  return s
+}
+
+// closeScope ends the child scope owner, as the end of a scope block
+// does: it cancels it, waits for its tasks, closes its own children,
+// and runs its finalizers, raising their failures as one panic.
+fn closeScope(owner: OwnedScope) uses state unsafe go {
+  owner.close()
+}
+
+// scopeOf borrows the Scope of an owned child scope: b.scope is
+// scopeOf(b).
+fn scopeOf(owner: OwnedScope): Scope unsafe go {
+  return owner
+}
+
 // onClose runs f when the scope s closes.
 fn onClose(s: Scope, f: () => Unit) unsafe go {
   s.Defer(f)

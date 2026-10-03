@@ -51,6 +51,7 @@ func (c *checker) declareMethod(fd *syntax.FuncDecl, prelude bool) {
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
+	c.ownerSignature(fn)
 	c.openSignature(fn)
 	c.typeParams = nil
 	recv := fn.Params[0]

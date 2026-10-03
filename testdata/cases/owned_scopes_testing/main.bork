@@ -1,0 +1,97 @@
+fn tracked(name: String, s: Scope) uses io {
+  onClose(s, () => println(s"close $name"))
+}
+
+fn failing(app: Scope) uses io: Int {
+  b = openScope(app)
+  tracked("child of failing", b.scope)
+  panic("boom")
+}
+
+test "a panic closes the owned scopes of the function" {
+  scope app {
+    tracked("app", app)
+    assertEqual(failing(app), 0)
+  }
+}
+
+fn handOn(b: OwnedScope) uses io {
+  tracked("handed on", b.scope)
+  panic("boom after the hand-over")
+}
+
+test "the receiver of an owned scope closes it when it panics" {
+  scope app {
+    b = openScope(app)
+    tracked("b", b.scope)
+    handOn(b)
+  }
+}
+
+test "closeScope raises the failures of the child" {
+  scope app {
+    b = openScope(app)
+    tracked("first", b.scope)
+    onClose(b.scope, () => panic("finalizer failed"))
+    tracked("last", b.scope)
+    closeScope(b)
+    println("not reached")
+  }
+}
+
+type Stop = {}
+
+fn stop(): Unit | Stop {
+  Stop {}
+}
+
+// leaves leaves its scope block early with ?, while an owned scope
+// bound in the block is still open: it closes before the block does.
+fn leaves() uses io + state: Unit | Stop {
+  scope app {
+    tracked("app", app)
+    b = openScope(app)
+    tracked("b", b.scope)
+    stop()?
+    closeScope(b)
+  }
+}
+
+test "an early exit closes the block's owned scopes first" {
+  _ = leaves()
+}
+
+// holds is a task that owns a child of app and outlives app's task
+// timeout: app closes the child under it.
+fn holds(app: Scope) uses clock + state {
+  b = openScope(app)
+  onClose(b.scope, () => panic("child finalizer failed"))
+  sleep(300)
+  closeScope(b)
+}
+
+test "a parent raises the failures of the children it closes" {
+  scope app with taskTimeout(50) {
+    onClose(app, () => panic("parent finalizer failed"))
+    launch(app, () => holds(app))
+  }
+}
+
+test "a task's failure fails its owned scope's close" {
+  scope app {
+    b = openScope(app)
+    launch(b.scope, () => panic("task failed"))
+    closeScope(b)
+  }
+}
+
+test "logFailures logs instead" {
+  scope app {
+    b = openScope(app, [logFailures()])
+    onClose(b.scope, () => panic("logged"))
+    closeScope(b)
+    println("closed b")
+  }
+}
+
+fn main() {}

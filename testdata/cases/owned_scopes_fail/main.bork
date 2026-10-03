@@ -1,0 +1,273 @@
+type Conn = resource
+
+fn connect(s: Scope): Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
+
+fn use(c: Conn) uses io {
+  println(toString(c))
+}
+
+// Use after close, and closing twice.
+fn afterClose(app: Scope) uses io + state {
+  b = openScope(app)
+  c = connect(b.scope)
+  t = spawn(b.scope, () => 1)
+  closeScope(b)
+  use(c)
+  println(toString(await(t)))
+  closeScope(b)
+}
+
+// Closed on only one path, and never closed.
+fn somePaths(app: Scope, x: Bool) uses state {
+  b = openScope(app)
+  if (x) {
+    closeScope(b)
+  }
+  c = openScope(app)
+}
+
+fn guards(app: Scope, x: Bool) uses state: Bool {
+  b = openScope(app)
+  ok = x && takes(b)
+  ok
+}
+
+fn takes(b: OwnedScope) uses state: Bool {
+  closeScope(b)
+  true
+}
+
+// A branch that ends early need not close it.
+fn earlyBranch(app: Scope, x: Bool) uses state: Int {
+  b = openScope(app)
+  if (x) {
+    return 1
+  }
+  closeScope(b)
+  2
+}
+
+// No copies: lambdas, rebinding, lists, dropping.
+fn copies(app: Scope) uses io + state {
+  b = openScope(app)
+  f = () => closeScope(b)
+  c = b
+  xs = [b]
+  _ = openScope(app)
+  println(b)
+  closeScope(b)
+}
+
+// A lambda can borrow b.scope, but not run once b is closed.
+fn borrowsInLambda(app: Scope) uses io + state {
+  b = openScope(app)
+  g = () => connect(b.scope)
+  use(g())
+  closeScope(b)
+  use(g())
+}
+
+// A task of b cannot use what belongs to a sibling a, unless attached.
+fn siblings(app: Scope) uses io + state {
+  a = openScope(app)
+  old = connect(a.scope)
+  b = openScope(app)
+  launch(b.scope, () => use(old))
+  shared = attach(old, b.scope)
+  launch(b.scope, () => use(shared))
+  closeScope(a)
+  closeScope(b)
+}
+
+// Nor can a task of an enclosing scope use the child's values.
+fn enclosing(app: Scope) uses io + state {
+  b = openScope(app)
+  c = connect(b.scope)
+  launch(app, () => use(c))
+  s = b.scope
+  launch(app, () => println(toString(s)))
+  closeScope(b)
+}
+
+// Passing a value with its owner needs `in`.
+fn withOwner(b: OwnedScope, c: Conn) uses io + state {
+  closeScope(b)
+  use(c)
+}
+
+fn withOwnerIn(b: OwnedScope, c: Conn in b) uses io + state {
+  closeScope(b)
+  use(c)
+}
+
+fn passes(app: Scope) uses io + state {
+  b = openScope(app)
+  withOwner(b, connect(b.scope))
+  d = openScope(app)
+  e = openScope(app)
+  withOwnerIn(d, connect(e.scope))
+  closeScope(e)
+  withOwnerIn(openScope(app), connect(app))
+}
+
+// A value of a child cannot leave the function that owns it.
+fn returnsChildValue(app: Scope) uses state: Conn {
+  b = openScope(app)
+  c = connect(b.scope)
+  closeScope(b)
+  c
+}
+
+fn returnsLive(b: OwnedScope): Conn {
+  connect(b.scope)
+}
+
+// Nor can an owner leave its parent's scope block.
+fn leavesParent(): OwnedScope {
+  scope s {
+    b = openScope(s)
+    return b
+  }
+}
+
+// A child's children must close first.
+fn grandchild(app: Scope) uses state {
+  b = openScope(app)
+  c = openScope(b.scope)
+  closeScope(b)
+  closeScope(c)
+}
+
+// A borrowed scope can be passed in its owner.
+fn borrowIn(b: OwnedScope, s: Scope in b) uses io + state {
+  c = connect(s)
+  closeScope(b)
+  use(c)
+}
+
+fn lendsScope(app: Scope) uses io + state {
+  b = openScope(app)
+  borrowIn(b, b.scope)
+  d = openScope(app)
+  borrowIn(d, app)
+  e = openScope(app)
+  f = openScope(app)
+  borrowIn(e, f.scope)
+  closeScope(f)
+}
+
+// What a function returns that also took an owner may belong to it.
+fn keeps(b: OwnedScope, c: Conn in b) uses state: Conn {
+  closeScope(b)
+  c
+}
+
+// Owner parameters do not outlive other parameters' scopes.
+fn ownerParam(b: OwnedScope, app: Scope, pool: Conn) uses io + state {
+  launch(b.scope, () => use(pool))
+  closeScope(b)
+}
+
+fn ownerParamIn(b: OwnedScope in app, app: Scope, pool: Conn in app) uses io + state {
+  launch(b.scope, () => use(pool))
+  closeScope(b)
+}
+
+fn values(app: Scope) uses state {
+  b = openScope(app)
+  h = Holder { owner: b }
+  f = takes
+  x = if (true) { openScope(app) } else { openScope(app) }
+  closeScope(x)
+  closeScope(b)
+}
+
+type Holder = { owner: OwnedScope }
+
+// Found in review: owners hidden in blocks and calls, `in` on owners,
+// lifetimes from extra arguments, and grandchildren.
+fn takesBoth(c: Conn, b: OwnedScope) uses io + state {
+  closeScope(b)
+  use(c)
+}
+
+fn same(b: OwnedScope): OwnedScope {
+  b
+}
+
+fn hidden(app: Scope) uses io + state {
+  b = openScope(app)
+  c = connect(b.scope)
+  takesBoth(c, { b })
+  d = openScope(app)
+  e = connect(d.scope)
+  takesBoth(e, same(d))
+  f = openScope(app)
+  g = connect(f.scope)
+  takesBoth(g, { closeScope(f); openScope(app) })
+}
+
+fn ownerIn(a: OwnedScope, prev: OwnedScope in a) uses state {
+  closeScope(prev)
+  closeScope(a)
+}
+
+fn siblingIn(app: Scope) uses state {
+  a = openScope(app)
+  b = openScope(app)
+  ownerIn(a, b)
+  c = openScope(app)
+  d = openScope(c.scope)
+  ownerIn(c, d)
+}
+
+fn with(b: OwnedScope, s: Scope): OwnedScope {
+  b
+}
+
+fn extraArgs(app: Scope) uses io + state {
+  a = openScope(app)
+  ra = connect(a.scope)
+  q = with(openScope(app), a.scope)
+  launch(q.scope, () => use(ra))
+  closeScope(a)
+  closeScope(q)
+}
+
+fn grandparent(app: Scope) uses io + state {
+  a = openScope(app)
+  b = openScope(a.scope)
+  c = connect(b.scope)
+  closeScope(a)
+  use(c)
+  closeScope(b)
+}
+
+fn main() {}
+
+// Found in the second review: a function value run after an argument
+// closed its owner, and a new owner given where an existing child is
+// declared.
+fn closer(b: OwnedScope) uses state: Int {
+  closeScope(b)
+  1
+}
+
+fn functionValue(app: Scope) uses io + state {
+  b = openScope(app)
+  c = connect(b.scope)
+  g = (n: Int) => use(c)
+  g(closer(b))
+}
+
+fn inNew(prev: OwnedScope in a, a: OwnedScope) uses state {
+  closeScope(prev)
+  closeScope(a)
+}
+
+fn newOwnerIn(app: Scope) uses state {
+  prev = openScope(app)
+  inNew(prev, openScope(app))
+}

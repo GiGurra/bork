@@ -141,6 +141,18 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 		return v.Parent
 	}
 	xt := c.expr(e.X)
+	if xt == OwnedScope {
+		if e.Name != "scope" {
+			c.errorf(e.Pos, "an OwnedScope has no field %s; b.scope borrows its Scope", e.Name)
+			return Invalid
+		}
+		fn := c.preludePkg.Funcs["scopeOf"]
+		c.info.ownerScopes[e] = fn
+		if c.fn != nil {
+			c.fn.Calls = append(c.fn.Calls, fn)
+		}
+		return Scope
+	}
 	switch xt := xt.(type) {
 	case *Record:
 		if f := xt.Field(e.Name); f != nil {

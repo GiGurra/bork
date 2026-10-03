@@ -456,3 +456,38 @@ fn scenario() { _ = config(port: 9000, host: "local") }
 		t.Fatalf("unexpected argument description: %+v", value)
 	}
 }
+
+func TestDescribeOwnedScopeLifetimes(t *testing.T) {
+	source := `fn roll(prev: OwnedScope in app, task: Task[Int] in prev, app: Scope) uses state {
+  next = openScope(app)
+  fresh = spawn(next.scope, () => 1)
+  closeScope(prev)
+  closeScope(next)
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		fragment, typ, belongs string
+	}{
+		{"task: Task", "Task[Int]", "owned scope prev"},
+		{"prev: OwnedScope", "OwnedScope", "parameter app"},
+		{"fresh =", "Task[Int]", "owned scope next"},
+		{"scope, ()", "Scope", "owned scope next"},
+	}
+	for _, c := range cases {
+		offset := strings.Index(source, c.fragment)
+		line := strings.Count(source[:offset], "\n") + 1
+		column := offset - strings.LastIndex(source[:offset], "\n")
+		result, err := Describe(fmt.Sprintf("%s:%d:%d", path, line, column), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Type != c.typ || strings.Join(result.BelongsTo, ", ") != c.belongs {
+			t.Errorf("%q: got %s belonging to %v, want %s belonging to %s", c.fragment, result.Type, result.BelongsTo, c.typ, c.belongs)
+		}
+	}
+}

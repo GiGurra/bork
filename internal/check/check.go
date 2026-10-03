@@ -81,6 +81,10 @@ type Func struct {
 	// tree of the body (nil for a function implemented in Go).
 	ParamVars []*Var
 	Body      *Block
+	// ParamIn holds, per parameter, the index of the parameter (a Scope
+	// or an OwnedScope) it is declared to belong to (`conn: Conn in
+	// prev`), or -1.
+	ParamIn []int
 	// ParamConstraints holds each parameter's where clause, and
 	// ResultConstraints what the result promises (per union member).
 	// defaultsChecked is set once the parameters' defaults are checked.
@@ -197,6 +201,10 @@ type Info struct {
 	// Tests holds the root package's tests, each checked as a function
 	// without parameters.
 	Tests []*Func
+	// Lifetimes holds the scopes each expression's value belongs to, and
+	// VarLifetimes each variable's (see lifetimes.go), for queries.
+	Lifetimes    map[Expr][]string
+	VarLifetimes map[*Var][]string
 	// Rules holds the inference rules of every package.
 	Rules []*Rule
 	// GoBindings holds every checked binding to a Go function
@@ -240,6 +248,9 @@ type Info struct {
 	// selectorVariants records selectors that name a field-less variant
 	// (`Shape.Empty`); other selectors are field accesses.
 	selectorVariants map[*syntax.Selector]*Variant
+	// ownerScopes holds each `b.scope` of an owned scope b, which is
+	// scopeOf(b).
+	ownerScopes map[*syntax.Selector]*Func
 	// armPats holds the checked pattern of every match arm.
 	armPats map[*syntax.Arm]*Pat
 	// tries describes every `?`.
@@ -312,6 +323,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 			typeUses:         map[Type]diag.Pos{},
 			exprOwners:       map[syntax.Expr]*Func{},
 			selectorVariants: map[*syntax.Selector]*Variant{},
+			ownerScopes:      map[*syntax.Selector]*Func{},
 			armPats:          map[*syntax.Arm]*Pat{},
 			tries:            map[*syntax.Try]*TryInfo{},
 			unused:           map[any]bool{},
@@ -701,6 +713,7 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	for _, p := range fd.Params {
 		fn.Params = append(fn.Params, c.resolveType(p.Type))
 	}
+	c.ownerSignature(fn)
 	c.openSignature(fn)
 	c.typeParams = nil
 	c.pkg.Funcs[fd.Name] = fn

@@ -60,6 +60,18 @@ fn broken(path: String) uses io: String | fs.Error {
 
 See [examples/wc](examples/wc/main.bork), a small `wc`.
 
+When lifetimes overlap without nesting, as when a connection hands over to the next one before it is released, an owned child scope has an explicit start and end. The compiler checks that it is closed (or passed on) exactly once on every path, and that nothing of it is used after:
+
+```
+fn roll(prev: OwnedScope in app, conn: Conn in prev, app: Scope, n: Int) uses io + state {
+  next = openScope(app)                  // opens while prev is still open
+  nextConn = connect(next.scope)
+  handOver(conn, nextConn)
+  closeScope(prev)                       // conn is released here; using it now is an error
+  if (n > 1) { roll(next, nextConn, app, n - 1) } else { closeScope(next) }
+}
+```
+
 And effects:
 
 ```

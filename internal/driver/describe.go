@@ -72,5 +72,15 @@ func Describe(position, where string) (*describe.Result, error) {
 	if methods == nil {
 		methods = []check.MethodDescription{}
 	}
-	return &describe.Result{SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable}, nil
+	return &describe.Result{SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected)}, nil
+}
+
+// belongsTo names the scopes the selected value belongs to.
+func belongsTo(info *check.Info, selected *describe.Selection) []string {
+	if v, ok := selected.Expr.(*check.VarRef); ok && selected.Definition != nil && *selected.Definition == v.Var.Pos {
+		if life := info.VarLifetimes[v.Var]; life != nil {
+			return life
+		}
+	}
+	return info.Lifetimes[selected.Expr]
 }
