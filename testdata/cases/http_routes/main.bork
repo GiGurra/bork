@@ -1,0 +1,62 @@
+import "bork/http"
+
+pred positive(n: Int) { n > 0 }
+type Path = { id: Int where positive } derive (Decode)
+type Search = { name: String, count: Int where positive, optional: Option[String] } derive (Decode)
+fn endpoint(index: Int, request: http.Request, rs: Scope): http.Response {
+  match (index) {
+    0 => match (http.PathAs[Path](request)) {
+      path: Path => http.Text(200, toString(path.id))
+      error: DecodeError => http.Text(422, error.path)
+    }
+    1 => match (http.QueryAs[Search](request)) {
+      value: Search => http.Text(200, value.name + ":" + toString(value.count) + ":" + toString(value.optional))
+      error: DecodeError => http.Text(422, error.path)
+      error: IoError => http.Text(400, "bad query")
+    }
+    2 => match (http.Form(request)) {
+      value: http.Headers => http.Text(200, toString(value.get("name")))
+      error: IoError => http.Text(400, "bad form")
+    }
+    _ => http.Text(500, "unexpected")
+  }
+}
+// Middleware is an ordinary function returning a handler with the server
+// effect set. Pure and narrower handlers can be passed to it.
+fn tagged(handler: http.Handler): http.Handler {
+  (req, rs) => handler(req, rs).copy(headers = { "X-Middleware": ["yes"] })
+}
+fn call(base: String, path: String, s: Scope, method: String = "GET", body: String = "") uses net + io {
+  match (http.Send(method, base + path, {:}, body, s, 2000)) {
+    response: http.Response => println(response.status, response.body)
+    error: IoError => println("unexpected", error.message)
+  }
+}
+fn main() {
+  drainTest()
+  forcedDrain(1000)
+  forcedDrain(0)
+  scope s with cleanupTimeout(1000) {
+    more(s)
+    match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /users/{id}", handler: tagged((req, rs) => endpoint(0, req, rs)) }, http.Route { pattern: "GET /search", handler: (req, rs) => endpoint(1, req, rs) }, http.Route { pattern: "POST /form", handler: (req, rs) => endpoint(2, req, rs) }])) {
+      server: http.Server => {
+        base = "http://" + http.Address(server)
+        call(base, "/users/42", s)
+        call(base, "/users/0", s)
+        call(base, "/search?name=a%20b&count=2", s)
+        call(base, "/search?name=a&count=0", s)
+        call(base, "/search?name=a&name=b&count=2", s)
+        call(base, "/search?name=a&count=2&bad=%ZZ", s)
+        call(base, "/form", s, "POST", "name=a&name=b")
+        match (http.Get(base + "/missing", s)) { response: http.Response => println(response.status); _ => println("unexpected") }
+        match (http.Post(base + "/users/1", "", "", s)) { response: http.Response => println(response.status); _ => println("unexpected") }
+        match (http.Send("HEAD", base + "/users/1", {:}, "", s)) { response: http.Response => println(response.status, response.body.byteLength()); _ => println("unexpected") }
+      }
+      error: IoError => println("unexpected", error.message)
+    }
+    println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }, http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }])) { error: IoError => true; _ => false })
+    println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /{", handler: (req, rs) => endpoint(0, req, rs) }])) { error: IoError => true; _ => false })
+    println(match (http.Listen("127.0.0.1:0", s, (request, rs) => http.Text(200, "ok"), 1001)) { error: IoError => true; _ => false })
+    println(match (http.ListenTLS("127.0.0.1:0", s, [http.Route { pattern: "/", handler: (req, rs) => endpoint(0, req, rs) }], "missing-cert", "missing-key")) { error: IoError => true; _ => false })
+  }
+}

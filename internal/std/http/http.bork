@@ -23,11 +23,15 @@ type Request = {
   method: String,
   path: String,
   query: String,
+  params: Map[String, String],
   headers: Headers,
   body: String,
 }
 
 type Response = { status: Status, headers: Headers, body: String }
+
+type Handler = (Request, Scope) uses io + net + clock + random + state => Response
+type Route = { pattern: String, handler: Handler }
 
 // Server is a running server, stopped when its scope closes.
 type Server = resource
@@ -63,51 +67,95 @@ fn HeaderOf(headers: Headers, name: String): Option[String] {
 // Each request gets a scope of its own, closed when the handler
 // returns, and cancelled if the client goes away or s closes: the
 // handler can open resources in it and spawn tasks in it.
-fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response) uses net: Server | IoError unsafe go {
+fn Listen(addr: String, s: Scope, handler: (Request, Scope) => Response, drainTimeoutMs: TimeoutMs = 0) uses net: Server | IoError unsafe go {
+  return start(addr, s, []Route{{pattern: "/", handler: handler}}, _borkNone[Certificate](), drainTimeoutMs)
+}
+
+// ListenRoutes serves Go ServeMux patterns with their handlers. A GET
+// pattern also accepts HEAD; wildcards are available in request.params.
+// Invalid or conflicting patterns return IoError before opening a socket.
+// Zero drain timeout inherits cleanupTimeout; with no policy, drain is unbounded.
+fn ListenRoutes(addr: String, s: Scope, routes: List[Route], drainTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
+  return start(addr, s, routes, _borkNone[Certificate](), drainTimeoutMs)
+}
+
+// ListenTLS loads a certificate and private key before opening the listener.
+fn ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String, drainTimeoutMs: TimeoutMs = 0) uses io + net + clock + random + state: Server | IoError unsafe go {
+  pair := loadCertificate(certFile, keyFile)
+  if failure, failed := pair.(IoError); failed { return failure }
+  return start(addr, s, routes, _borkSome(pair.(Certificate)), drainTimeoutMs)
+}
+
+// The certificate is opaque and immutable after construction.
+type Certificate = go "crypto/tls.Certificate"
+fn loadCertificate(certFile: String, keyFile: String) uses io: Certificate | IoError unsafe go {
+  import "crypto/tls"
+  cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+  if err != nil { return IoError{path: certFile, message: err.Error()} }
+  return _borkOpaque[Certificate](cert)
+}
+
+fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certificate], drainTimeoutMs: TimeoutMs) uses net: Server | IoError unsafe go {
   import "context"
+  import "crypto/tls"
+  import "fmt"
   import "io"
   import "net"
   import "net/http"
   import "sort"
-  ln, err := net.Listen("tcp", addr)
-  if err != nil {
-    return IoError{path: addr, message: err.Error()}
+  import "strings"
+  import "time"
+  policy := _borkScopeCleanupTimeout(s)
+  drain := time.Duration(drainTimeoutMs)*time.Millisecond
+  if policy > 0 && drain > policy { return IoError{path: addr, message: "drain timeout exceeds scope cleanup timeout"} }
+  if drain == 0 { drain = policy }
+  mux := http.NewServeMux()
+  register := func() (err error) {
+    defer func() { if failure := recover(); failure != nil { err = fmt.Errorf("%v", failure) } }()
+    for _, route := range routes {
+      pattern := route.pattern
+      mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+        body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<20))
+        if readErr != nil { http.Error(w, "could not read request body (limit 16 MiB)", http.StatusBadRequest); return }
+        keys, values := []string{}, [][]string{}
+        for name := range r.Header { keys = append(keys, name) }
+        sort.Strings(keys)
+        for _, name := range keys { values = append(values, append([]string(nil), r.Header[name]...)) }
+        names, params := []string{}, []string{}
+        for _, part := range strings.Split(pattern, "/") {
+          if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") && part != "{$}" {
+            name := strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}"), "...")
+            names = append(names, name); params = append(params, r.PathValue(name))
+          }
+        }
+        rs := _borkScopeWith(r.Context())
+        defer _borkScopeAbort(rs)
+        resp := route.handler(Request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, params: _borkMapOf(names, params), headers: _borkMapOf(keys, values), body: string(body)}, rs)
+        _borkScopeClose(rs)
+        _borkMapEach(resp.headers, func(name string, values []string) bool {
+          for _, value := range values { w.Header().Add(name, value) }
+          return true
+        })
+        w.WriteHeader(int(resp.status))
+        io.WriteString(w, resp.body)
+      })
+    }
+    return nil
   }
-  srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    body, readErr := io.ReadAll(r.Body)
-    if readErr != nil { http.Error(w, "could not read request body", http.StatusBadRequest); return }
-    keys, values := []string{}, [][]string{}
-    names := make([]string, 0, len(r.Header))
-    for name := range r.Header {
-      names = append(names, name)
-    }
-    sort.Strings(names)
-    for _, name := range names {
-      keys = append(keys, name)
-      values = append(values, append([]string(nil), r.Header[name]...))
-    }
-    headers := _borkMapOf(keys, values)
-    rs := _borkScopeWith(r.Context())
-    defer _borkScopeAbort(rs)
-    resp := handler(Request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, headers: headers, body: string(body)}, rs)
-    _borkScopeClose(rs)
-    _borkMapEach(resp.headers, func(name string, values []string) bool {
-      for _, value := range values { w.Header().Add(name, value) }
-      return true
-    })
-    w.WriteHeader(int(resp.status))
-    io.WriteString(w, resp.body)
-  })}
-  state := struct {
-    addr string
-    done chan struct{}
-  }{ln.Addr().String(), make(chan struct{})}
-  go func() {
-    srv.Serve(ln)
-    close(state.done)
-  }()
+  if err := register(); err != nil { return IoError{path: addr, message: err.Error()} }
+  ln, err := net.Listen("tcp", addr)
+  if err != nil { return IoError{path: addr, message: err.Error()} }
+  if pair, secure := _borkOptionGet(certificate); secure {
+    cert := _borkGo(pair)
+    ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+  }
+  srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: mux, ReadHeaderTimeout: 10*time.Second}
+  state := struct { addr string; done chan struct{} }{ln.Addr().String(), make(chan struct{})}
+  go func() { srv.Serve(ln); close(state.done) }()
   return Server{handle: state, owner: s.Own(func() {
-    srv.Close()
+    ctx := context.Background()
+    if drain > 0 { var stop context.CancelFunc; ctx, stop = context.WithTimeout(ctx, drain); defer stop() }
+    if err := srv.Shutdown(ctx); err != nil { srv.Close() }
     <-state.done
   })}
 }

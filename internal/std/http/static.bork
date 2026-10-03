@@ -1,0 +1,29 @@
+// Static serves files below root after stripping prefix. Mount it on a
+// matching subtree route (for example GET /assets/). It preserves Go's file
+// server redirects, ranges, conditional requests and directory listings.
+fn Static(request: Request, root: String, prefix: String = "") uses io: Response unsafe go {
+  import "io"
+  import "net/http"
+  import "net/http/httptest"
+  import "sort"
+  import "strings"
+  req, err := http.NewRequest(request.method, "/", strings.NewReader(request.body))
+  if err != nil { return Text(400, err.Error()) }
+  req.URL.Path = request.path
+  req.URL.RawQuery = request.query
+  _borkMapEach(request.headers, func(name string, values []string) bool {
+    for _, value := range values { req.Header.Add(name, value) }
+    return true
+  })
+  recorder := httptest.NewRecorder()
+  http.StripPrefix(prefix, http.FileServer(http.Dir(root))).ServeHTTP(recorder, req)
+  result := recorder.Result()
+  defer result.Body.Close()
+  data, err := io.ReadAll(result.Body)
+  if err != nil { return Text(500, err.Error()) }
+  keys, values := []string{}, [][]string{}
+  for key := range result.Header { keys = append(keys, key) }
+  sort.Strings(keys)
+  for _, key := range keys { values = append(values, append([]string(nil), result.Header[key]...)) }
+  return Response{status: int64(result.StatusCode), headers: _borkMapOf(keys, values), body: string(data)}
+}

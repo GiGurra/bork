@@ -1,0 +1,96 @@
+// Body decodes JSON into a proven value, including derived field constraints.
+fn Body[T: Decode](request: Request): T | JsonError | DecodeError {
+  decodeJson[T](request.body)
+}
+
+// Query parses URL query values and preserves repeated keys.
+fn Query(request: Request): Headers | IoError unsafe go {
+  import "net/url"
+  import "sort"
+  query, err := url.ParseQuery(request.query)
+  if err != nil { return IoError{path: request.path, message: err.Error()} }
+  keys, values := []string{}, [][]string{}
+  for key := range query { keys = append(keys, key) }
+  sort.Strings(keys)
+  for _, key := range keys { values = append(values, append([]string(nil), query[key]...)) }
+  return _borkMapOf(keys, values)
+}
+
+// QueryAs and PathAs decode derived records. Strings are literal; other fields
+// use JSON syntax. Missing Option fields become None. Repeated query fields
+// are rejected rather than silently selecting an untrusted value.
+fn QueryAs[T: Decode](request: Request): T | IoError | DecodeError {
+  values = Query(request)?
+  fieldsAs[T](values)
+}
+fn PathAs[T: Decode](request: Request): T | DecodeError {
+  fieldsAs[T](request.params.mapValues(value => [value]))
+}
+fn fieldsAs[T: Decode](values: Headers): T | DecodeError {
+  json = fieldsJson[T](values)?
+  decode[T](json)
+}
+fn fieldsJson[T: Decode](values: Headers): Json | DecodeError unsafe go {
+  schema, supported := _borkDecodeFields(_d_T_Decode)
+  if !supported { return DecodeError{path: "", message: "expected a derived record decoder"} }
+  fields := []JsonField{}
+  for _, field := range schema {
+    raw, found := _borkMapGet(values, field.Name)
+    if !found {
+      if !field.Optional { return DecodeError{path: "."+field.Name, message: "is missing"} }
+      continue
+    }
+    if len(raw) != 1 { return DecodeError{path: "."+field.Name, message: "expected exactly one value"} }
+    var value Json = Json_String{value: raw[0]}
+    if field.Kind != "string" {
+      parsed := parseJson(raw[0])
+      if failure, failed := parsed.(JsonError); failed { return DecodeError{path: "."+field.Name, message: failure.message} }
+      value = parsed.(Json)
+    }
+    fields = append(fields, JsonField{name: field.Name, value: value})
+  }
+  return Json_Object{fields: fields}
+}
+
+// Form parses an application/x-www-form-urlencoded body, independently of
+// query parameters. Multipart files are copied into immutable Bytes.
+fn Form(request: Request): Headers | IoError {
+  Query(request.copy(query = request.body))
+}
+type Upload = { field: String, filename: String, contentType: String, data: Bytes }
+type MultipartForm = { values: Headers, files: List[Upload] }
+fn Multipart(request: Request): MultipartForm | IoError unsafe go {
+  import "io"
+  import "mime"
+  import "mime/multipart"
+  import "sort"
+  import "strings"
+  if len(request.body) > 16<<20 { return IoError{path: request.path, message: "multipart body exceeds 16 MiB"} }
+  header, found := _borkOptionGet(HeaderOf(request.headers, "Content-Type"))
+  if !found { return IoError{path: request.path, message: "missing Content-Type"} }
+  media, parameters, err := mime.ParseMediaType(header)
+  if err != nil || media != "multipart/form-data" || parameters["boundary"] == "" { return IoError{path: request.path, message: "expected multipart/form-data with boundary"} }
+  reader := multipart.NewReader(strings.NewReader(request.body), parameters["boundary"])
+  form, err := reader.ReadForm(16<<20)
+  if err != nil { return IoError{path: request.path, message: err.Error()} }
+  defer form.RemoveAll()
+  keys, values := []string{}, [][]string{}
+  for key := range form.Value { keys = append(keys, key) }
+  sort.Strings(keys)
+  for _, key := range keys { values = append(values, append([]string(nil), form.Value[key]...)) }
+  names := []string{}
+  for name := range form.File { names = append(names, name) }
+  sort.Strings(names)
+  files := []Upload{}
+  for _, name := range names {
+    for _, header := range form.File[name] {
+      file, err := header.Open()
+      if err != nil { return IoError{path: request.path, message: err.Error()} }
+      data, err := io.ReadAll(file)
+      file.Close()
+      if err != nil { return IoError{path: request.path, message: err.Error()} }
+      files = append(files, Upload{field: name, filename: header.Filename, contentType: header.Header.Get("Content-Type"), data: _borkBytesFrom(data)})
+    }
+  }
+  return MultipartForm{values: _borkMapOf(keys, values), files: files}
+}

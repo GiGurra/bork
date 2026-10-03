@@ -231,3 +231,5 @@ state. See [examples/rand](examples/rand/main.bork).
 ## License
 
 [MIT](LICENSE)
+
+HTTP servers accept method/path routes, middleware functions, typed body/query/path decoding, TLS, static files and forms. Scope cleanup drains active requests, bounded by `cleanupTimeout` or a per-server timeout. See [http_routes](examples/http_routes/main.bork).

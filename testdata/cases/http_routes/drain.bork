@@ -1,0 +1,70 @@
+import "bork/http"
+
+type Signal = resource
+fn openSignal(s: Scope): Signal unsafe go {
+  return Signal{handle: make(chan struct{}, 1), owner: s.Own(func() {})}
+}
+fn mark(sig: Signal) uses state unsafe go { sig.handle.(chan struct{}) <- struct{}{} }
+fn waitMark(sig: Signal) uses state + clock unsafe go {
+  import "time"
+  select { case <-sig.handle.(chan struct{}): case <-time.After(5*time.Second): panic("handler did not start") }
+}
+fn drainTest() uses io + net + clock + state {
+  scope app {
+    started = openSignal(app)
+    finished = atom(false)
+    scope serverScope with cleanupTimeout(1000) {
+      match (http.Listen("127.0.0.1:0", serverScope, (req, rs) => {
+        mark(started)
+        sleep(50)
+        _ = update(finished, old => true)
+        http.Text(200, "drained")
+      })) {
+        server: http.Server => {
+          address = "http://" + http.Address(server)
+          launch(app, () => { _ = http.Get(address, app, 2000) })
+          waitMark(started)
+        }
+        error: IoError => println("unexpected", error.message)
+      }
+    }
+    println(current(finished))
+  }
+}
+
+// Check a shorter explicit timeout, both with and without a scope bound.
+fn forcedDrain(policy: Int) uses io + net + clock + state {
+  scope app {
+    started = openSignal(app)
+    gate = openSignal(app)
+    completed = openSignal(app)
+    clientDone = openSignal(app)
+    finished = atom(false)
+    failed = atom(false)
+    scope serverScope with cleanupTimeout(policy) {
+      match (http.Listen("127.0.0.1:0", serverScope, (req, rs) => {
+        mark(started)
+        waitMark(gate)
+        _ = update(finished, old => true)
+        mark(completed)
+        http.Text(200, "too late")
+        }, 10)) {
+        server: http.Server => {
+          address = "http://" + http.Address(server)
+          launch(app, () => {
+            failure = match (http.Get(address, app, 2000)) { error: IoError => true; _ => false }
+            _ = update(failed, old => failure)
+            mark(clientDone)
+          })
+          waitMark(started)
+        }
+        error: IoError => println("unexpected", error.message)
+      }
+    }
+    println(current(finished))
+    mark(gate)
+    waitMark(completed)
+    waitMark(clientDone)
+    println(current(finished), current(failed))
+  }
+}

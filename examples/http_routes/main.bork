@@ -1,0 +1,42 @@
+// bork run examples/http_routes
+// curl 'localhost:8080/users/42'
+import "bork/http"
+
+pred positive(n: Int) { n > 0 }
+type UserPath = { id: Int where positive } derive (Decode)
+fn user(req: http.Request, rs: Scope): http.Response {
+  match (http.PathAs[UserPath](req)) {
+    path: UserPath => http.Text(200, s"user ${path.id}")
+    error: DecodeError => http.Text(422, error.path + ": " + error.message)
+  }
+}
+fn logged(handler: http.Handler): http.Handler {
+  (req, rs) => {
+    println(req.method, req.path)
+    handler(req, rs)
+  }
+}
+fn waitForStop(s: Scope) uses clock + state {
+  match (delay(s, 1000)) {
+    e: Cancelled => {}
+    _ => waitForStop(s)
+  }
+}
+fn main() {
+  scope app with cleanupTimeout(5000) {
+    match (http.ListenRoutes(if (args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
+      http.Route { pattern: "GET /users/{id}", handler: logged(user) },
+      http.Route { pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },
+    ])) {
+      server: http.Server => {
+        if (args() == ["demo"]) {
+          match (http.Get("http://" + http.Address(server) + "/users/42", app)) {
+            response: http.Response => println(response.status, response.body)
+            error: IoError => println(error.message)
+          }
+        } else { println(http.Address(server)); waitForStop(app) }
+      }
+      error: IoError => println(error.message)
+    }
+  }
+}
