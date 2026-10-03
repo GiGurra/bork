@@ -133,3 +133,9 @@ test('effect signatures and function types', () => {
   has(ls, 0, '+', 'keyword.operator.bork');
   has(ls, 2, '=>', 'keyword.operator.bork');
 });
+
+test('private record construction is highlighted as a contextual keyword', () => {
+  const ls = tokenize('type Config = private { port: Int }');
+  has(ls, 0, 'Config', 'entity.name.type.bork');
+  has(ls, 0, 'private', 'keyword.control.bork');
+});

@@ -1,0 +1,16 @@
+import "example.com/private-records/settings"
+use settings.*
+type Alias = settings.Config
+type Outer = { config: settings.Config, name: String }
+type ExportBox = settings.Box[Int] derive (Encode)
+type Envelope = { config: settings.Config } derive (Decode, Encode)
+fn read(c: settings.Config): Int { match (c) { settings.Config { port } => port } }
+fn main() {
+  println(encodeJson(settings.MakeBox(7)))
+  c = settings.New(9000)
+  println(c.port, read(c), c.WithPort(9001).port, settings.MakeBox("value").value)
+  o = Outer { config: c, name: "outer" }
+  println(o.copy(config: settings.New(8000)).config.port, o.copy(name: "renamed").name)
+  println(decodeJson[Envelope]("{\"config\":{\"port\":42}}"))
+  println(decodeJson[settings.Config]("{\"port\":0}"))
+}

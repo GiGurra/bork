@@ -1,0 +1,9 @@
+import "example.com/private-records-derive-fail/settings"
+type Foreign = settings.Config derive (Decode)
+type ForeignGo = settings.Config derive (GoStruct)
+type Plain = settings.Box[Int] derive (Decode)
+type Wrapped = { box: settings.Box[Int] } derive (Decode)
+type Container = { boxes: List[Option[settings.Box[Int]]] } derive (Decode)
+type LocalBox[T] = { value: T } derive (Decode)
+type Nested = LocalBox[settings.Box[Int]] derive (Decode)
+fn main() {}
