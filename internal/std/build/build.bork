@@ -1,0 +1,4 @@
+// Package build supplies frozen module-relative inputs to comptime blocks.
+// Calls must be direct and paths must be constant Strings.
+fn ReadString(path: String) uses build: String unsafe go { panic("build.ReadString requires compiler lowering") }
+fn ReadBytes(path: String) uses build: List[Byte] unsafe go { panic("build.ReadBytes requires compiler lowering") }

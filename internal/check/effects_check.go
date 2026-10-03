@@ -128,6 +128,9 @@ func checkEffects(fn *Func, diags *diag.List) {
 		}
 	}
 	fd := fn.Decl
+	if (fn.Test != nil || fd.Name == "main") && (u.used|fn.Effects)&EffBuild != 0 {
+		diags.AddCode(u.first(EffBuild, fd.Pos), "build.runtime", "build effects may run only inside comptime blocks")
+	}
 	if fn.Test != nil || fd.Name == "main" && fd.Uses == nil {
 		return // may use every effect
 	}

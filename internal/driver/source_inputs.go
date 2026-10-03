@@ -70,6 +70,9 @@ type sourceSnapshot struct {
 	cwdErr       error
 	driveContext bool
 	reads        map[sourceReadKey]sourceRead
+	// rooted keeps build-file observations separate from loader reads while
+	// making them part of the loaded input bundle's validation inventory.
+	rooted *buildSnapshot
 }
 
 func newSourceSnapshot() *sourceSnapshot {
@@ -198,6 +201,9 @@ func (s *sourceSnapshot) dependencies() []sourceDependency {
 	for key, value := range s.reads {
 		out = append(out, sourceDependency{key.kind, key.path, sourceReadDigest(value)})
 	}
+	if s.rooted != nil {
+		out = append(out, s.rooted.dependencies()...)
+	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Kind != out[j].Kind {
 			return out[i].Kind < out[j].Kind
@@ -254,7 +260,7 @@ func (s *sourceSnapshot) current() bool {
 			return false
 		}
 	}
-	return true
+	return s.rooted == nil || s.rooted.current()
 }
 func errorText(err error) string {
 	if err != nil {

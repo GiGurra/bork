@@ -182,7 +182,8 @@ type Call struct {
 	ArgOrder []int
 	Labels   []ArgumentLabel
 	// Embedded is set for a compile-time bork/embed call.
-	Embedded *Embedded
+	Embedded  *Embedded
+	BuildRead *BuildRead
 	// ReceiverCall distinguishes x.method(a) from Type.method(x, a).
 	ReceiverCall bool
 	// TypeArgNames holds, per type parameter, an explicit type argument

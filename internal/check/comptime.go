@@ -34,7 +34,7 @@ func (c *checker) comptimeInitializer(node *syntax.Comptime, want Type) Type {
 		c.info.comptimeCaptureDecls = map[*syntax.Comptime][]any{}
 	}
 	c.info.comptimeCaptureDecls[node] = ctx.captures
-	if effects != 0 {
+	if effects&^EffBuild != 0 {
 		c.diags.AddCode(node.Pos, "comptime.effects", "comptime requires pure code, found uses %s", effects)
 	}
 	return t

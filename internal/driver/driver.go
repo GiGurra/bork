@@ -121,6 +121,21 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
+	if len(info.BuildReads) > 0 {
+		phase(observe, "build-inputs")
+		// Keep the initial build-input slice conservative even for unreachable
+		// read helpers; no evaluated values or enclosing results are reused.
+		if usage != nil {
+			usage.evaluator = true
+		}
+		inputs := captureBuildInputs(info, diags, loaded.Inputs)
+		if diags.Len() > 0 {
+			return nil, &DiagError{Diags: diags}
+		}
+		loaded.Inputs.mu.Lock()
+		loaded.Inputs.rooted = inputs
+		loaded.Inputs.mu.Unlock()
+	}
 	eval := evaluatorWithContext(files, info, module, context)
 	if len(info.Comptimes) > 0 {
 		phase(observe, "comptime")
