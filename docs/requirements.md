@@ -921,7 +921,7 @@ monomorphic adapters for generic providers. `examples/assemble`
 wires config, a database and HTTP server with scope-owned cleanup. Parallel construction, provider bundles,
 assignability matching and cross-call caching are outside this first increment.
 
-### Reusable provider bundles (design: bork-et4bbn)
+### Reusable provider bundles (implemented: bork-et4bbn)
 
 A provider bundle names an ordered group of providers so application entry points,
 tests and related assembly targets can share the same wiring. It is a compile-time
@@ -1078,8 +1078,8 @@ were replaced. Existing describe JSON consumers can ignore the additive fields.
 The formatter preserves entry order and formats declaration fields and named
 replacements using the existing record/call conventions.
 
-Implementation delivery includes syntax, declaration/import resolution,
-replacement checking, compiler expansion into ordinary calls, formatter,
+Implemented: syntax, declaration/import resolution,
+replacement checking, compiler expansion into ordinary calls, formatting,
 diagnostics, text/JSON describe, grammar and README, and an updated
 `examples/assemble` bundle. Goldens cover repeated calls without caching,
 collection order and duplicate target roots across bundles/standalone providers,

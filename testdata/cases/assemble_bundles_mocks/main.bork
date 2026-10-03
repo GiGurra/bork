@@ -1,3 +1,4 @@
+import "bork/time"
 type Config = { name: String }
 type Database = { name: String }
 type Failure = { message: String }
@@ -20,4 +21,10 @@ test "bundle providers retain native mock dispatch" {
 test "a bundled mock can fail through the result union" {
   mock database(c, s) { Failure { message: "fake failure" } }
   scope app { assertEqual(assemble[Database](app, Wiring), Failure { message: "fake failure" }) }
+}
+
+providers Clock = { now: time.Now }
+test "an imported bundled provider retains native mock dispatch" {
+  mock time.Now() { time.Instant { unixNanos: 42 } }
+  scope app { assertEqual(assemble[time.Instant](app, Clock).unixNanos, 42) }
 }

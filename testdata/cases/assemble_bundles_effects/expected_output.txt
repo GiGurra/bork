@@ -1,0 +1,4 @@
+real provider
+Label { name: "real" }
+Label { name: "pure" }
+Failure { reason: "offline" }

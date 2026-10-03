@@ -8,3 +8,6 @@ Worker { name: "fake real" }
 evaluate db
 evaluate cfg
 Worker { name: "db cfg" }
+evaluate before failure
+evaluate failure
+EvaluationFailure { name: "failure" }

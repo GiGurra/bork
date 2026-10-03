@@ -11,6 +11,14 @@ fn databaseRecipe(label: String) uses io: (wiring.Config) => wiring.Database {
   println(s"evaluate $label")
   (c: wiring.Config) => wiring.Database { name: s"$label ${c.name}" }
 }
+type EvaluationFailure = { name: String }
+fn failedRecipe(label: String) uses io: (() => wiring.Config) | EvaluationFailure {
+  println(s"evaluate $label")
+  EvaluationFailure { name: label }
+}
+fn evaluate(s: Scope) uses io: wiring.Worker | EvaluationFailure {
+  assemble[wiring.Worker](s, wiring.Wiring(database: databaseRecipe("before failure"), config: failedRecipe("failure")?))
+}
 fn main() {
   scope app {
     println(assemble[wiring.Secret](app, wiring.Secrets).value)
@@ -23,5 +31,6 @@ fn main() {
     println(assemble[wiring.Worker](app, wiring.Wiring(database: provider)))
     println(assembleAll[wiring.Worker](app, wiring.Infrastructure, wiring.Workers, wiring.Extra, extra))
     println(assemble[wiring.Worker](app, wiring.Wiring(database: databaseRecipe("db"), config: recipe("cfg"))))
+    println(evaluate(app))
   }
 }
