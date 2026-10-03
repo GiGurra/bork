@@ -1220,6 +1220,162 @@ with positional arguments), missing parameters and positional-after-named;
 formatter, describe and structured diagnostics cover the same source forms.
 Copy cases cover nested paths, rejected `=` syntax and its structured fix.
 
+### Context-typed record and variant literals (design: bork-vk07ec)
+
+Named arguments identify an option; context literals let its expected type name
+the value. Keep explicit constructors available wherever they clarify a boundary.
+This section is the proposed implementation contract.
+
+```bork
+// internal/std/log/log.bork: the function result names Config; fields name enums.
+fn Defaults(): Config {
+  .{ level: .Info, format: .Text, output: .Stderr, timestamps: true }
+}
+
+// examples/http_server/main.bork: a concrete response type supplies the record.
+fn notFound(id: Int): http.Response {
+  .{ status: 404, headers: {:}, body: s"no todo $id" }
+}
+
+// examples/cli/main.bork: named flags have expected type List[cli.Flag].
+cli.Run[Options]("greet", "A proven command-line configuration", (options, s) => {
+  println(s"Hello ${options.name} on port ${options.port}")
+}, flags: [.{ field: "port", short: "p" }])
+
+// Config API in the new examples/config; TLS fields have type TlsMode.
+start(config: .{ host: "localhost", tls: .Files { cert: "server.pem", key: "server.key" } })
+staging: Config = .{ host: "staging", tls: .Disabled }
+production = staging.copy(host: "production", tls: .Files { cert: cert, key: key })
+```
+
+The alternatives on the same logging API are
+`Config { level: Level.Info, format: Format.Text, output: Output.Stderr, timestamps: true }`,
+`.{ level: .Info, format: .Text, output: .Stderr, timestamps: true }`, and
+`{ level: Info, format: Text, output: Stderr, timestamps: true }`.
+The explicit form is already supported and remains useful for inferred bindings.
+Bare braces would conflict with existing map and block syntax, and bare variant
+names would collide with ordinary values and functions (`log.Info` is a function
+as well as a variant name). A leading dot distinguishes omitted constructor names
+without changing name lookup. Choose `.{ ... }`, `.Variant`, and
+`.Variant { ... }`.
+
+- **Syntax preserves named record construction.** `.{ field: expression }`
+  constructs a record; `.Variant` constructs a fieldless sealed variant, and
+  `.Variant { field: expression }` constructs a variant with fields. Fields
+  retain defaults, ordering and diagnostics of explicit literals.
+  Option uses `.Some { value: x }` and `.None`; `.Some(x)` is rejected with a
+  suggested rewrite to the named field form. It does not introduce positional
+  constructors for arbitrary variants. Context shorthand applies to expressions
+  only; patterns retain their explicit types and qualified variants. `.Empty {}`
+  is allowed for a fieldless variant. Bare `.WithDefaults` is rejected when the
+  variant has fields, even when every field has a default; write `.WithDefaults {}`.
+  These rules match explicit variant construction.
+- **Expected types come from actual value positions.** Function and method
+  parameters (including named arguments), typed bindings, function returns and
+  block tails, record/variant fields, typed list elements, map keys/values,
+  callback results, `if`/`match` branches and `copy` updates provide their normal
+  expected type. Nested literals use their enclosing field or element type.
+  A typed default expression may use the shorthand; its type is the declared
+  field or parameter type. Defaults remain closed values checked at declaration
+  or generic specialization as usual. Shorthand inherits existing default
+  admissibility: a generic parameter default may still only be a literal,
+  so `value: Option[T] = .None` remains rejected just like `Option.None`.
+  Generic record field defaults retain their existing specialization rules.
+  A match scrutinee and a copy receiver
+  have no expected type merely because they are matched or copied.
+- **Select a unique nominal constructor.** `.{ ... }` requires one expected
+  record type; `.Variant` requires one expected sealed type containing that
+  variant. Aliases use their resolved type, preserving declared constraints.
+  In an expected union, count nominal candidates: record members for `.{ ... }`,
+  and sealed members declaring the written variant for `.Variant`. Exactly one
+  candidate is usable; zero or several is an error. A single expected sealed
+  type still supplies context for an unknown-variant diagnostic and typo fix.
+  Delay selection when an unresolved union member could change the candidates:
+  `A | T` is not uniquely record-shaped until `T` is solved. Late resolution
+  to another record or a sealed type with the same variant must report ambiguity.
+  Do not choose a record by matching its fields, choose a sealed type by searching imports, or silently
+  prefer one union member. Several specializations of the same generic type
+  are several candidates. Check variant visibility after selection, so private
+  variants remain private. A record shorthand cannot name a sealed variant;
+  write `.Variant { ... }` instead.
+- **No expected nominal type means an error.** `config = .{ port: 8080 }`,
+  `println(.Disabled)` and an untyped list made entirely of context literals
+  cannot infer their constructor.
+  Use `config: Config = .{ port: 8080 }` or `Config { port: 8080 }` instead.
+  Branches may acquire context from another explicit, typed branch using the
+  existing branch inference rules; a set of shorthand-only branches requires
+  outside context. Containers may acquire element context from explicit sibling
+  elements using the existing collection inference rules; no field-shape search
+  or global constructor search is added. Context dependence propagates through
+  nested containers: `[[.{ port: 1 }], [Config { port: 2 }]]` and
+  `pair([.{ port: 1 }], [Config { port: 2 }])` work in either order. A pipeline
+  target's first parameter supplies context to its input (`.{ host: "local" }
+  |> start`); selecting a method on an untyped shorthand receiver supplies no
+  context because method lookup requires the receiver's type first.
+- **Shared generic inference may supply context later.** For
+  `fn pair[T](first: T, second: T): List[T]`,
+  `pair(first: .{ port: 9000 }, second: Config { port: 8080 })` gets `Config`
+  from `second`, independent of the supplied argument order. A known nominal
+  head with unresolved type arguments still gives field context:
+  `Box[T]` and `Option[T]` let ordinary field values constrain `T`. A bare
+  unsolved `T` must be solved by other arguments, callbacks or expected results
+  before a shorthand can select its constructor. Integrate this with the shared
+  inference session; do not eagerly reject an argument just because its type
+  is solved later. Unresolved generic parameters at session close remain an
+  error. Explicit type arguments work as usual.
+- **Construction guarantees are unchanged.** Reuse explicit record/variant
+  checking and the typed tree targets: required fields, defaults, duplicate
+  fields, private variants and field facts apply equally. Preserve sibling/type
+  invariants and package-controlled construction when those features land;
+  their integration is tested before the complete config showcase is reported. `type Config = private { ... }`
+  permits literals and copies only in its owning package, including nested copy
+  paths that modify its fields; reading fields and replacing a whole field with
+  an already valid private value remain allowed. An omitted type name cannot
+  bypass its declaring package's construction boundary. Facts and defaults
+  retain source positions and declaration provenance. Effects, ownership and
+  source evaluation order follow ordinary construction; named calls retain the
+  source-order rules from bork-e48in4.
+- **Tooling reports the resolved meaning.** `bork fmt` prints `.{ field: value }`,
+  `.Variant`, and `.Variant { field: value }`, retaining comments, field order
+  and line breaks. `bork describe` at the leading dot or variant name reports
+  the resolved nominal type and constructor definition; its fields and facts
+  behave as for explicit construction. Constructor omissions remain visible
+  in the source, while the typed tree and generated Go contain resolved targets.
+  Grammar, README and examples document all three forms.
+- **Structured errors offer explicit spelling.** Missing context identifies the
+  value position that lacks an expected type and suggests a typed binding or an
+  explicit constructor. Ambiguous context lists the candidate types and offers
+  one explicit-constructor edit per candidate, rather than selecting one for the
+  user. Unknown variants search only visible variants of expected sealed types.
+  Offer `.Variant` when that corrected spelling selects a unique candidate;
+  otherwise offer separate explicitly qualified constructors for the close
+  candidates. Never suggest a spelling that remains ambiguous.
+  Wrong record/variant kind, private variants, required fields and failed facts
+  use ordinary construction diagnostics. An edit requiring a type name marks
+  `requires_input`; edits with a known candidate use its visible qualified name.
+  `bork check --json` exposes these ranges and fixes. Apply-and-recheck tests
+  cover useful edits, including nested contexts and imported types.
+
+Add `examples/config` as a complete config story: required host, default port and
+timeouts, colon-style `copy`, `TlsMode = sealed { Disabled, Files { cert: String, key: String } }`
+for partially overlapping options, validated port/body-limit fields, named
+arguments and nested context literals. Include a package-owned config type with
+type-level/sibling invariants and a public validated factory when bork-kum0ep is
+available; demonstrate that clients use the factory instead of constructing a
+private config directly. The example should run deterministically without network
+or local certificate dependencies, print the resolved configs, and include a
+short commented invalid construction showing the compiler guarantee. Migrate
+existing std and example constructors where the expected type is clear, retaining
+explicit names at boundaries that supply inference context.
+
+Acceptance covers every expected-type position, recursive nesting, aliases,
+unique and ambiguous union candidates, shared generic inference (including
+callbacks and result context), field defaults/facts and constructor visibility.
+Include rejected no-context/all-shorthand containers, unknown/fieldless variants,
+unsupported positional Option constructors and inaccessible private variants;
+test record/variant effects, lifetime checks, formatter, resolved descriptions,
+structured fixes and the config example's output.
+
 ### Numbers
 
 - **Fixed-width integers, as in Go.** `Int` is a 64-bit integer with Go's wrapping arithmetic.
