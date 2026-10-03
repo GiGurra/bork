@@ -175,3 +175,52 @@ budget, then let the accepted work finish. It reports four successes, two
 overloads, ten total attempts, and a peak of two handlers. The example uses a
 fixed refill clock and zero local delay to show exact bounds without a throughput
 benchmark.
+
+## Trace context and marked values
+
+`Send` forwards ambient declarations explicitly marked `propagated("header")`.
+Bound marked values replace matching manual headers, case insensitively;
+unmarked values never cross this boundary automatically. The server clears
+inherited propagated labels before decoding each request and restores them
+when it finishes. Missing, repeated singleton, or invalid values stay unbound.
+Warnings identify the header and error, without including raw input. Logging
+adds no effect to `Listen`.
+
+```bork
+import "bork/http"
+use http.TraceCodecs
+propagated("traceparent") logged ambient trace: http.TraceParent
+propagated("tracestate") ambient vendor: http.TraceState
+```
+
+`TraceParent` and `TraceState` are checked String aliases. `TraceParentOf(headers)`
+returns `Option[TraceParent] | DecodeError`: missing is None; repeated or invalid
+is an error. `TraceStateOf(headers)` returns `Option[TraceState] | DecodeError`,
+combining repeated fields in order. It returns None without a valid parent;
+invalid state leaves a valid parent usable. Headers with multiple case variants
+of the tracestate key are ambiguous in an unordered Map and return DecodeError;
+incoming HTTP headers already have one canonical key. `use http.TraceCodecs`
+provides ordinary `Decode` instances for both aliases.
+
+Validation follows [W3C Trace Context](https://www.w3.org/TR/trace-context/).
+Version 00 requires its exact lowercase hexadecimal format and nonzero ids.
+Version ff is rejected; future versions check the known prefix and extension
+boundary while preserving unknown fields. Unknown flag bits are accepted.
+Tracestate limits are 32 members, 256 bytes per key/value, and 512 bytes overall,
+with the standard tenant/system key limits and no duplicate keys. Empty state
+and whitespace-only members are accepted. Forwarding preserves valid values;
+it does not create spans, ids, sampling decisions, or vendor entries.
+
+Selected outgoing W3C fields are validated after marked values replace manual
+ones. An invalid/repeated parent removes both parent and state; invalid state
+removes only state. A marked state may accompany a valid manual parent. State
+alone is dropped. Redirects retain Go's header forwarding rules and revalidate
+selected trace fields; marked fields are not reintroduced on redirects.
+
+Request labels supply logs and downstream forwarding. A handler's typed `needs`
+remain captured where the function was made. To use an incoming trace in typed
+application code, extract it with `TraceParentOf` and explicitly bind it with
+`with (trace: value)`. The [service_context example](../../examples/service_context/main.bork)
+shows this checked binding, automatic forwarding through two services, and
+shrinking deadline budgets with a server policy cap. Its explicit validity
+guard works around pending alias-fact preservation through Option (bork-k3k5fi).

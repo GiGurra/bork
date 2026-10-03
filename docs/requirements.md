@@ -2307,6 +2307,10 @@ fix).
   between incoming labels and explicit checked bindings for typed `needs`.
   Deadline budgets are implemented before admission and body reads; client
   redirects refresh the effective budget and server requestTimeoutMs caps it.
+  Marked values and checked W3C TraceParent/TraceState are forwarded with
+  request label isolation; typed needs still require explicit checked binding.
+  The [two-service example](../examples/service_context/main.bork) demonstrates
+  both trace continuity and shrinking budgets.
 - **describe** shows a function's needs beside its effects, in text and JSON
   (`needs: [traceId, locale?]`), and `ambient` declarations with their types.
 

@@ -1,0 +1,16 @@
+import "bork/http"
+use http.TraceCodecs
+fn main() {
+  root = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  println(http.TraceParentOf({ "TraceParent": [root] }))
+  println(http.TraceStateOf({ "traceparent": [root], "Tracestate": ["vendor=first", "tenant@system=two"] }))
+  println(http.TraceParentOf({:}))
+  println(http.TraceParentOf({ "traceparent": ["bad"] }))
+  println(http.TraceParentOf({ "traceparent": [root, root] }))
+  println(http.TraceStateOf({ "tracestate": ["vendor=first"] }))
+  println(http.TraceStateOf({ "traceparent": [root], "tracestate": ["vendor=one,vendor=two"] }))
+  println(decode[http.TraceParent](Json.String { value: root }))
+  println(decode[http.TraceParent](Json.String { value: "bad" }))
+  println(decode[http.TraceState](Json.String { value: "" }))
+  println(http.ValidTraceState(" , \t, vendor=value, "))
+}

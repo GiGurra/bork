@@ -1,0 +1,11 @@
+Option.Some { value: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }
+Option.Some { value: "vendor=first,tenant@system=two" }
+Option.None
+DecodeError { path: "", message: "invalid traceparent" }
+DecodeError { path: "", message: "expected exactly one traceparent value" }
+Option.None
+DecodeError { path: "", message: "invalid tracestate" }
+00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+DecodeError { path: "", message: "invalid traceparent" }
+
+true

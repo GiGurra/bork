@@ -1,8 +1,8 @@
 # HTTP deadline and ambient propagation
 
-Approved design for bork-gqxe4s. Deadline-budget propagation is implemented;
-Ambient/trace forwarding follows the bork-avr3ns marker helpers. Typed ambient
-values and the scope deadline bridge are already implemented.
+Implemented design for bork-gqxe4s. Deadline budgets and ambient/trace forwarding
+use scope deadlines and the bork-avr3ns marker helpers. See
+[service_context](../../examples/service_context/main.bork) for the two-service example.
 
 ## Deadline budget
 
@@ -127,7 +127,10 @@ fields combine in received order as the standard requires. Tracestate is only
 bound/forwarded when traceparent is valid; invalid state does not invalidate the
 parent. TraceStateOf applies the same parent check, returning None without a
 valid parent. Empty state and empty/whitespace list members follow W3C acceptance
-rules; malformed nonempty members, duplicate keys and size-limit violations
+rules; the overall limit is 512 bytes. Multiple case variants of a tracestate
+Map key are rejected as ambiguous because Map keys have no arrival order;
+canonical incoming HTTP headers preserve the order of their value list.
+Malformed nonempty members, duplicate keys and size-limit violations
 are invalid. The HTTP adapter supplies this combined representation to the marker
 boundary and suppresses state without a valid parent. Outgoing selection first overlays marked fields on manual fields, then
 validates the selected traceparent and combined tracestate. An invalid or

@@ -1,0 +1,144 @@
+import "bork/http"
+import "bork/log"
+use http.TraceCodecs
+propagated("traceparent") logged ambient trace: http.TraceParent
+propagated("tracestate") ambient vendor: http.TraceState
+pred small(n: Int) { n >= 0 && n < 10 }
+propagated("x-attempt") ambient attempt: Int where small
+ambient principal: String
+
+fn root(last: String): http.TraceParent {
+  match (http.TraceParentOf({ "traceparent": ["00-4bf92f3577b34da6a3ce929d0e0e473" + last + "-00f067aa0ba902b7-01"] })) {
+    Option.Some { value } => if (http.ValidTraceParent(value)) { value } else { panic("invalid decoded parent") }
+    error => panic(toString(error))
+  }
+}
+fn captured() needs trace: String { trace }
+fn mustServer(result: http.Server | IoError): http.Server {
+  match (result) { value: http.Server => value, error => panic(toString(error)) }
+}
+fn response(result: http.Result): String {
+  match (result) { value: http.Response => value.body, error => panic(toString(error)) }
+}
+fn showHeaders(headers: http.Headers): String {
+  toString([http.HeaderOf(headers, "traceparent"), http.HeaderOf(headers, "tracestate"), http.HeaderOf(headers, "x-attempt"), http.HeaderOf(headers, "principal")])
+}
+fn raw(url: String, headers: http.Headers) uses net: String unsafe go {
+  import "io"
+  import "net/http"
+  import "time"
+  request, err := http.NewRequest("GET", url, nil)
+  if err != nil { panic(err) }
+  _borkMapEach(headers, func(name string, values []string) bool {
+    for _, value := range values { request.Header.Add(name, value) }
+    return true
+  })
+  reply, err := (&http.Client{Timeout: 5*time.Second}).Do(request)
+  if err != nil { panic(err) }
+  defer reply.Body.Close()
+  body, err := io.ReadAll(reply.Body)
+  if err != nil || reply.StatusCode != 200 { panic("raw request failed") }
+  return string(body)
+}
+fn concurrent(url: String) uses net + state unsafe go {
+  import "fmt"
+  import "io"
+  import "net/http"
+  import "sync"
+  import "time"
+  var group sync.WaitGroup
+  failures := make(chan string, 32)
+  for index := 1; index <= 32; index++ {
+    group.Add(1)
+    go func(index int) {
+      defer group.Done()
+      parent := fmt.Sprintf("00-%032x-%016x-01", index, index)
+      request, _ := http.NewRequest("GET", url, nil)
+      request.Header.Set("traceparent", parent)
+      reply, err := (&http.Client{Timeout: 5*time.Second}).Do(request)
+      if err != nil { failures <- err.Error(); return }
+      body, err := io.ReadAll(reply.Body)
+      reply.Body.Close()
+      expected := "lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=" + parent + " forwarded=[Option.Some { value: \"" + parent + "\" }, Option.None, Option.None, Option.None]"
+      if err != nil || string(body) != expected { failures <- "request labels crossed: " + string(body) }
+    }(index)
+  }
+  group.Wait()
+  close(failures)
+  for failure := range failures { panic(failure) }
+}
+fn invoke(url: String, s: Scope) uses net + clock + state: String { response(http.Get(url, s)) }
+fn wireChecks(run: (String, Scope) uses net + clock + state => String, s: Scope) uses io + net + clock + state: Bool unsafe go {
+  import "fmt"
+  import "net/http"
+  import "net/http/httptest"
+  wanted := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01/vendor=first/3"
+  echo := func(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprintf(w, "%s/%s/%s", r.Header.Get("traceparent"), r.Header.Get("tracestate"), r.Header.Get("x-attempt"))
+  }
+  plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if r.URL.Path == "/redirect" { w.Header().Set("Location", "/end"); w.WriteHeader(307); return }
+    echo(w, r)
+  }))
+  defer plain.Close()
+  if run(plain.URL+"/redirect", s) != wanted { panic("redirect trace continuity failed") }
+  original := http.DefaultClient
+  defer func() { http.DefaultClient = original }()
+  http.DefaultClient = &http.Client{CheckRedirect: func(request *http.Request, via []*http.Request) error {
+    request.Header.Del("traceparent")
+    request.Header.Del("tracestate")
+    request.Header.Del("x-attempt")
+    return nil
+  }}
+  if run(plain.URL+"/redirect", s) != "//" { panic("redirect reintroduced selected headers") }
+  secure := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    if r.ProtoMajor != 2 { panic("HTTP/2 was not negotiated") }
+    echo(w, r)
+  }))
+  secure.EnableHTTP2 = true
+  secure.StartTLS()
+  defer secure.Close()
+  http.DefaultClient = secure.Client()
+  if run(secure.URL, s) != wanted { panic("HTTP/2 trace continuity failed") }
+  return true
+}
+fn main() {
+  log.Configure(log.Defaults().copy(level: log.Level.Warn, timestamps: false))
+  scope app {
+    with (trace: root("7")) {
+      downstream = mustServer(http.Listen("127.0.0.1:0", app, handler: (request, s) => http.Text(200, showHeaders(request.headers))))
+      target = "http://" + http.Address(downstream)
+      middle = mustServer(http.Listen("127.0.0.1:0", app, handler: (request, s) => {
+        lexical = captured()
+        checked = match (http.TraceParentOf(request.headers)) {
+          Option.Some { value } => if (http.ValidTraceParent(value)) { with (trace: value) { captured() } } else { panic("invalid decoded parent") }
+          _ => "none"
+        }
+        forwarded = response(http.Get(target, s))
+        http.Text(200, s"lexical=${lexical} checked=${checked} forwarded=${forwarded}")
+      }))
+      url = "http://" + http.Address(middle)
+      with (trace: root("6"), vendor: "vendor=first", attempt: 3, principal: "private") {
+        println("wire", wireChecks(invoke, app))
+        println("marked", response(http.Send("GET", url, { "TraceParent": ["bad"], "x-attempt": ["9"] }, "", app)))
+      }
+      println("missing", raw(url, {:}))
+      println("invalid", raw(url, { "traceparent": ["bad"], "tracestate": ["vendor=secret"], "x-attempt": ["11"] }))
+      println("repeated", raw(url, { "traceparent": [root("6"), root("6")], "x-attempt": ["1", "2"] }))
+      println("combined", raw(url, { "traceparent": [root("6")], "tracestate": ["one=value", "two=value"], "x-attempt": ["2"] }))
+      println("bad state", raw(url, { "traceparent": [root("6")], "tracestate": ["one=value,one=other"] }))
+      concurrent(url)
+      println("isolated true")
+      println("lexical binding", captured())
+    }
+    // Outgoing manually supplied W3C fields are validated too.
+    echo = mustServer(http.Listen("127.0.0.1:0", app, handler: (request, s) => http.Text(200, showHeaders(request.headers))))
+    echoUrl = "http://" + http.Address(echo)
+    println("manual", response(http.Send("GET", echoUrl, { "traceparent": [root("6")], "tracestate": ["vendor=value"] }, "", app)))
+    println("manual invalid", response(http.Send("GET", echoUrl, { "traceparent": ["bad"], "tracestate": ["vendor=value"] }, "", app)))
+    with (vendor: "vendor=bound") {
+      println("state only", response(http.Get(echoUrl, app)))
+      println("state manual parent", response(http.Send("GET", echoUrl, { "traceparent": [root("6")] }, "", app)))
+    }
+  }
+}
