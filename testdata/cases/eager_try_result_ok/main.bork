@@ -1,0 +1,131 @@
+type Problem = { code: Int }
+pred Approved(x: Problem) { x.code > 0 }
+fn source(flag: Bool, failure: Problem where Approved): Int | Problem where Approved {
+  if (flag) { failure } else { 1 }
+}
+fn forwarded(flag: Bool, failure: Problem where Approved): Int | Problem where Approved {
+  value = source(flag, failure)?
+  value
+}
+fn inlineIf(flag: Bool): Int | Problem where Approved {
+  value: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }
+  value?
+}
+fn inlineMatch(flag: Bool): Int | Problem where Approved {
+  value: Int | Problem = match (flag) { true => Problem { code: 1 }; false => 1 }
+  value?
+}
+fn inlineBlock(flag: Bool): Int | Problem where Approved {
+  ({ source(flag, Problem { code: 1 }) })?
+}
+fn inlineScope(flag: Bool): Int | Problem where Approved {
+  (scope s { source(flag, Problem { code: 1 }) })?
+}
+
+pred Allowed(x: Int | Problem) { match (x) { value: Int => value > 0; failure: Problem => Approved(failure) } }
+fn whole(flag: Bool): (Int | Problem) where Allowed {
+  value = source(flag, Problem { code: 1 })?
+  value
+}
+fn parameter(value: (Int | Problem) where Allowed): (Int | Problem) where Allowed { value? }
+fn guarded(value: Int | Problem): (Int | Problem) where Allowed {
+  if (Allowed(value)) { value? } else { 1 }
+}
+fn subset(flag: Bool): (Int | Problem | String) where Permitted { whole(flag) }
+pred Permitted(x: Int | Problem | String) { match (x) { value: Int => true; failure: Problem => true; text: String => false } }
+pred AnyOption(x: Option[Int]) { match (x) { Option.Some { value: value } => true; Option.None => true } }
+fn optionSource(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some { value: 1 } } }
+fn optionForward(flag: Bool): Option[Int] where AnyOption { value = optionSource(flag)?; Option.Some { value: value } }
+pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some { value } => true; Option.None => flag } }
+fn optionParameter(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
+  value = x?
+  Option.Some { value: value }
+}
+
+pred Positive(x: Int) { x > 0 }
+fn somePositive(flag: Bool): Option[Int where Positive] {
+  value = optionSource(flag)?
+  if (Positive(value)) { Option.Some { value: value } } else { Option.None }
+}
+fn lazyForward(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { _ = source(flag, Problem { code: 1 })?; 1 }
+  value?
+}
+fn lazyReturn(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { if (flag) { return Problem { code: 1 } }; 1 }
+  value?
+}
+fn lazyOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
+  lazy value: Option[Int] where ConditionalOption(flag) = { n = x?; Option.Some { value: n } }
+  value
+}
+fn lazyInline(flag: Bool): Int | Problem where Approved {
+  lazy value: (Int | Problem) where Allowed = { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; operand? }
+  value?
+}
+pred AnyExit(x: Int | Ok) { match (x) { n: Int => n > 0; unit: Ok => true } }
+fn emptyExit(): (Int | Ok) where AnyExit {}
+fn bareExit(): (Int | Ok) where AnyExit { return Ok }
+fn conditionalExit(flag: Bool): (Int | Ok) where AnyExit { if (flag) { return 1 } }
+fn emptyForward(): (Int | Ok) where AnyExit { _ = emptyExit()?; 1 }
+fn lazyEmpty(): (Int | Ok) where AnyExit { lazy value: Int | Ok = { _ = emptyExit()?; 1 }; value? }
+fn bareUnit(): Ok where AnyExit { return }
+pred NumericExit(x: Int | Ok) { match (x) { n: Int => true; unit: Ok => false } }
+fn alwaysExit(): (Int | Ok) where NumericExit { if (true) { return 1 } }
+fn neverExit(): (Int | Ok) where NumericExit { if (panic("stop")) { return 1 } }
+fn neverSource(): Int | Ok { if (panic("stop")) { return 1 } }
+fn derivedNever(): (Int | Ok) where NumericExit { _ = neverSource()?; 1 }
+fn neverStatement(): (Int | Ok) where NumericExit { if (panic("stop")) { return 1 }; _ = 1 }
+fn alwaysStatement(): (Int | Ok) where NumericExit { if (true) { return 1 }; _ = 1 }
+fn neverStatementSource(): Int | Ok { if (panic("stop")) { return 1 }; _ = 1 }
+fn derivedNeverStatement(): (Int | Ok) where NumericExit { _ = neverStatementSource()?; 1 }
+fn genericInline[T](value: T, flag: Bool): Int | T | Problem where Approved {
+  operand: Int | T | Problem = if (flag) { Problem { code: 1 } } else { 1 }
+  operand?
+}
+type Box[T] = { value: T }
+fn genericBox[T](value: Box[T], flag: Bool): Int | Box[T] | Problem where Approved {
+  operand: Int | Box[T] | Problem = if (flag) { value } else { 1 }
+  operand?
+}
+fn genericSource[T](value: T, flag: Bool): Int | T | Problem { if (flag) { value } else { 1 } }
+fn genericInt(flag: Bool): Int | Problem where Approved { _ = genericSource(1, flag)?; 1 }
+fn genericBoxSource[T](value: Box[T], flag: Bool): Int | Box[T] | Problem where Approved { _ = genericSource(value, flag)?; 1 }
+fn needsSubset(x: (Int | Problem) where Allowed): Int { 1 }
+fn subsetMember(flag: Bool): Int {
+  value: Int | Problem | String = if (flag) { Problem { code: 1 } } else { "text" }
+  match (value) { picked: Int | Problem => needsSubset(picked); text: String => 1 }
+}
+fn genericBoxReturn[T](value: Box[T]): Int | Box[T] | Problem where Approved { value }
+type Pair[A, B] = { a: A; b: B }
+pred StringPair(x: Pair[String, String]) { x.b == "ok" }
+fn genericPair[T](value: Pair[T, Int]): Int | Pair[T, Int] | Pair[String, String] where StringPair { value }
+fn genericAliasSource[T](value: T, flag: Bool): Int | T | Problem { local = value; alias = local; if (flag) { alias } else { 1 } }
+fn genericAlias(flag: Bool): Int | Problem where Approved { _ = genericAliasSource(Problem { code: 1 }, flag)?; 1 }
+fn genericCaptured(flag: Bool, value: Problem where Approved): Int | Problem where Approved { _ = genericAliasSource(value, flag)?; 1 }
+fn main() {
+  println(genericAlias(true), genericAlias(false), genericCaptured(true, Problem { code: 1 }))
+  println(genericPair(Pair { a: 1; b: 0 }))
+  println(genericBoxReturn(Box { value: Problem { code: 0 } }))
+  println(genericBox(Box { value: Problem { code: 0 } }, true), genericBoxSource(Box { value: Problem { code: 0 } }, true))
+  println(genericInt(true), genericInt(false), subsetMember(true), subsetMember(false))
+  println(genericInline(Problem { code: 0 }, true), genericInline(Problem { code: 0 }, false))
+  println(alwaysExit(), alwaysStatement())
+  bareUnit()
+  println(emptyExit(), bareExit(), conditionalExit(true), conditionalExit(false), emptyForward(), lazyEmpty())
+  println(lazyForward(true), lazyForward(false), lazyReturn(true), lazyReturn(false))
+  println(lazyOption(true, Option.None), lazyInline(true), lazyInline(false))
+  println(forwarded(true, Problem { code: 1 }))
+  println(forwarded(false, Problem { code: 1 }))
+  println(inlineIf(true), inlineIf(false))
+  println(inlineMatch(true), inlineMatch(false))
+  println(inlineBlock(true), inlineBlock(false))
+  println(inlineScope(true), inlineScope(false))
+  println(whole(true), whole(false))
+  println(parameter(Problem { code: 1 }), parameter(1))
+  println(guarded(Problem { code: 1 }), guarded(1))
+  println(subset(true), subset(false))
+  println(optionForward(true), optionForward(false))
+  println(optionParameter(true, Option.None), optionParameter(false, Option.Some { value: 1 }))
+  println(somePositive(true), somePositive(false))
+}

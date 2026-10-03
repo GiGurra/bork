@@ -1,0 +1,85 @@
+type Failed = {}
+pred Success(x: Int | Failed) { x != Failed {} }
+fn bad(flag: Bool): Int | Failed { if (flag) { Failed {} } else { 1 } }
+fn make(flag: Bool): (Int | Failed) where Success { value = bad(flag)?; 1 }
+fn identity(n: Int): Int { n }
+fn argument(flag: Bool): (Int | Failed) where Success { identity(bad(flag)?) }
+fn block(flag: Bool): (Int | Failed) where Success { value = { bad(flag)? }; value }
+fn returned(flag: Bool): (Int | Failed) where Success { return bad(flag)? }
+fn explicitFailure(): (Int | Failed) where Success { Failed {} }
+
+pred Present(x: Option[Int]) { match (x) { Option.Some { value: value } => true; Option.None => false } }
+fn optional(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some { value: 1 } } }
+fn optionMake(flag: Bool): Option[Int] where Present { value = optional(flag)?; Option.Some { value: value } }
+fn optionArgument(flag: Bool): Option[Int] where Present { Option.Some { value: identity(optional(flag)?) } }
+fn optionBlock(flag: Bool): Option[Int] where Present { value = { optional(flag)? }; Option.Some { value: value } }
+
+type First = {}
+type Second = {}
+pred Numeric(x: Int | First | Second) { match (x) { value: Int => true; first: First => false; second: Second => false } }
+fn alternatives(flag: Bool): Int | First | Second { if (flag) { First {} } else { Second {} } }
+fn bothFailures(flag: Bool): (Int | First | Second) where Numeric { value = alternatives(flag)?; 1 }
+
+type Problem = { code: Int }
+pred Approved(x: Problem) { x.code > 0 }
+fn problem(flag: Bool): Int | Problem { if (flag) { Problem { code: 0 } } else { 1 } }
+fn memberFailure(flag: Bool): Int | Problem where Approved { value = problem(flag)?; value }
+fn inlineFailure(flag: Bool): Int | Problem where Approved {
+  value: Int | Problem = if (flag) { Problem { code: 0 } } else { 1 }
+  value?
+}
+pred AcceptStringNone(x: Option[Int] | Option[String]) {
+  match (x) {
+    integers: Option[Int] => match (integers) { Option.Some { value } => true; Option.None => false }
+    text: Option[String] => true
+  }
+}
+fn changedOption(x: Option[String] where AcceptStringNone): Option[Int] where AcceptStringNone {
+  _ = x?
+  Option.Some { value: 1 }
+}
+
+// Unannotated functions must expose implicit failures during body-derived proof.
+fn hidesFailure(flag: Bool): Int | Failed { value = bad(flag)?; 1 }
+fn needsSuccess(x: (Int | Failed) where Success): Int { 1 }
+fn derived(flag: Bool): Int { needsSuccess(hidesFailure(flag)) }
+fn lazyFailure(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { _ = problem(flag)?; 1 }
+  value?
+}
+fn lazyReturn(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { if (flag) { return Problem { code: 0 } }; 1 }
+  value?
+}
+fn approvedSource(): Int | Problem where Approved { 1 }
+fn lazyTailPromise(flag: Bool): Int | Problem where Approved {
+  lazy value: Int | Problem = { if (flag) { return Problem { code: 0 } }; approvedSource() }
+  value?
+}
+pred NumericOk(x: Int | Ok) { match (x) { n: Int => true; unit: Ok => false } }
+fn empty(): Int | Ok {}
+fn bareReturn(): Int | Ok { return Ok }
+fn noElse(flag: Bool): Int | Ok { if (flag) { return 1 } }
+fn emptyFailure(): (Int | Ok) where NumericOk { _ = empty()?; 1 }
+fn bareFailure(): (Int | Ok) where NumericOk { _ = bareReturn()?; 1 }
+fn noElseFailure(flag: Bool): (Int | Ok) where NumericOk { _ = noElse(flag)?; 1 }
+fn lazyEmptyFailure(): (Int | Ok) where NumericOk { lazy value: Int | Ok = { _ = empty()?; 1 }; value? }
+pred RejectOk(x: Int | Ok) { false }
+fn bareUnit(): Ok where RejectOk { return }
+fn genericFailure[T](value: T, flag: Bool): Int | T | Problem where Approved {
+  operand: Int | T | Problem = if (flag) { value } else { 1 }
+  operand?
+}
+fn genericSource[T](value: T, flag: Bool): Int | T | Problem { if (flag) { value } else { 1 } }
+fn genericDerivedFailure[T](value: T, flag: Bool): Int | T | Problem where Approved { _ = genericSource(value, flag)?; 1 }
+pred SubsetAllowed(x: Int | Problem) { match (x) { n: Int => true; p: Problem => Approved(p) } }
+fn needsSubset(x: (Int | Problem) where SubsetAllowed): Int { 1 }
+fn subsetFailure(flag: Bool): Int {
+  value: Int | Problem | String = if (flag) { Problem { code: 0 } } else { "text" }
+  match (value) { picked: Int | Problem => needsSubset(picked); text: String => 1 }
+}
+fn genericReturnFailure[T](value: T): Int | T | Problem where Approved { value }
+fn main() {}
+
+fn genericAliasSource[T](value: T, flag: Bool): Int | T | Problem { local = value; alias = local; if (flag) { alias } else { 1 } }
+fn genericAliasFailure(flag: Bool): Int | Problem where Approved { _ = genericAliasSource(Problem { code: 0 }, flag)?; 1 }

@@ -321,6 +321,8 @@ type TypeReference struct {
 // variant as written.
 type VariantValue struct {
 	expr
+	// ProofSource retains facts when a proof-only value narrows its source.
+	ProofSource Expr
 	Variant     *Variant
 	Text        string
 	Head        *ConstructorHead

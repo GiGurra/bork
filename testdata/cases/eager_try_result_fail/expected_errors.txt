@@ -1,0 +1,29 @@
+main.bork:4:61: make promises a result that is Success, but for a value bad can return, Success(Failed {  }) is false
+main.bork:6:66: argument promises a result that is Success, but for a value bad can return, Success(Failed {  }) is false
+main.bork:7:64: block promises a result that is Success, but for a value bad can return, Success(Failed {  }) is false
+main.bork:8:64: returned promises a result that is Success, but for a value bad can return, Success(Failed {  }) is false
+main.bork:9:54: explicitFailure promises a result that is Success, but Success(Failed {  }) is false
+main.bork:13:64: optionMake promises a result that is Present, but Present(Option.None) is false
+main.bork:14:90: optionArgument promises a result that is Present, but Present(Option.None) is false
+main.bork:15:67: optionBlock promises a result that is Present, but Present(Option.None) is false
+main.bork:21:77: bothFailures promises a result that is Numeric, but for a value alternatives can return, Numeric(First {  }) is false
+main.bork:21:77: bothFailures promises a result that is Numeric, but for a value alternatives can return, Numeric(Second {  }) is false
+main.bork:26:70: memberFailure promises a result that is Approved, but for a value problem can return, Approved(Problem { code: 0 }) is false
+main.bork:29:3: inlineFailure promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:38:7: changedOption promises a result that is AcceptStringNone, but AcceptStringNone(Option.None) is false
+main.bork:45:44: needsSuccess requires x to be Success, but for a value bad can return, Success(Failed {  }) is false
+main.bork:48:3: lazyFailure promises a result that is Approved, but for a value problem can return, Approved(Problem { code: 0 }) is false
+main.bork:52:3: lazyReturn promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:57:3: lazyTailPromise promises a result that is Approved, but Approved(Problem { code: 0 }) is false
+main.bork:63:53: emptyFailure promises a result that is NumericOk, but for a value empty can return, NumericOk(Ok) is false
+main.bork:64:52: bareFailure promises a result that is NumericOk, but for a value bareReturn can return, NumericOk(Ok) is false
+main.bork:65:64: noElseFailure promises a result that is NumericOk, but for a value noElse can return, NumericOk(Ok) is false
+main.bork:66:97: lazyEmptyFailure promises a result that is NumericOk, but for a value empty can return, NumericOk(Ok) is false
+main.bork:68:36: bareUnit promises a result that is RejectOk, but RejectOk(Ok) is false
+main.bork:71:3: genericFailure promises a result that is Approved, but that is not proven for this value (give it a name and check it first)
+main.bork:71:3: genericFailure promises a result that is Approved, but that is not proven for this value (give it a name and check it first)
+main.bork:74:91: genericDerivedFailure promises a result that is Approved, but that is not proven for this value (give it a name and check it first)
+main.bork:74:91: genericDerivedFailure promises a result that is Approved, but that is not proven for this value (give it a name and check it first)
+main.bork:79:56: needsSubset requires x to be SubsetAllowed, but SubsetAllowed(Problem { code: 0 }) is false
+main.bork:81:74: genericReturnFailure promises a result that is Approved, but that is not proven for value (check it first with if (Approved(value)) { ... }, or require it: value: T where Approved)
+main.bork:85:72: genericAliasFailure promises a result that is Approved, but for a value genericAliasSource can return, Approved(Problem { code: 0 }) is false

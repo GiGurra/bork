@@ -1,0 +1,25 @@
+type Problem = { code: Int }
+pred Approved(x: Problem) { x.code > 0 }
+fn bad(flag: Bool): Int | Problem { if (flag) { Problem { code: 0 } } else { 1 } }
+fn approvedSource(): Int | Problem where Approved { 1 }
+fn asyncFailure(flag: Bool): Int | Problem where Approved {
+  scope s { async(s) value: Int | Problem = { _ = bad(flag)?; 1 }; value? }
+}
+fn asyncReturn(flag: Bool): Int | Problem where Approved {
+  scope s { async(s) value: Int | Problem = { if (flag) { return Problem { code: 0 } }; 1 }; value? }
+}
+fn asyncTailPromise(flag: Bool): Int | Problem where Approved {
+  scope s { async(s) value: Int | Problem = { if (flag) { return Problem { code: 0 } }; approvedSource() }; value? }
+}
+pred NumericExit(x: Int | Ok) { match (x) { n: Int => true; unit: Ok => false } }
+fn emptyExit(): Int | Ok {}
+fn asyncEmpty(): (Int | Ok) where NumericExit {
+  scope s { async(s) value: Int | Ok = { _ = emptyExit()?; 1 }; value? }
+}
+fn genericFailure[T](value: T, flag: Bool): Int | T | Problem where Approved {
+  scope s {
+    async(s) saved: Int | T | Problem = { operand: Int | T | Problem = if (flag) { value } else { 1 }; operand? }
+    saved?
+  }
+}
+fn main() {}

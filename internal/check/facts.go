@@ -373,6 +373,8 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		e = f.stmts(x.Stmts, e)
 		if x.Tail != nil {
 			f.tail(x.Tail, e, result)
+		} else if completes(x) {
+			result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e)
 		}
 	case *ScopeBlock:
 		for _, p := range x.Policies {
@@ -380,12 +382,17 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		}
 		f.tail(x.Body, e, result)
 	case *If:
-		if x.Else == nil {
-			f.walk(x, e)
+		f.walk(x.Cond, e)
+		if !completes(x.Cond) {
 			return
 		}
-		f.walk(x.Cond, e)
 		f.tail(x.Then, e.with(f.conditionFacts(x.Cond, true)...), result)
+		if x.Else == nil {
+			if v := constOf(x.Cond); v == nil || v.Kind() != constant.Bool || !constant.BoolVal(v) {
+				result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e.with(f.conditionFacts(x.Cond, false)...))
+			}
+			return
+		}
 		f.tail(x.Else, e.with(f.conditionFacts(x.Cond, false)...), result)
 	case *Match:
 		f.walk(x.X, e)
@@ -398,6 +405,64 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 			result(x, e)
 		}
 	}
+}
+
+// completes reports whether control may reach an expression's normal end.
+// Some conditionals retain type Ok even when their condition or chosen arm
+// cannot finish, so Type alone cannot identify an implicit Ok result.
+func completes(x Expr) bool {
+	x = debugValue(x)
+	if x.Type() == Never {
+		return false
+	}
+	switch x := x.(type) {
+	case *Block:
+		for _, stmt := range x.Stmts {
+			switch s := stmt.(type) {
+			case *ExprStmt:
+				if !completes(s.X) {
+					return false
+				}
+			case *Let:
+				if s.AsyncScope != nil && !completes(s.AsyncScope) {
+					return false
+				}
+				if s.Initializer == nil && !completes(s.Value) {
+					return false
+				}
+			}
+		}
+		return x.Tail == nil || completes(x.Tail)
+	case *ScopeBlock:
+		for _, p := range x.Policies {
+			if !completes(p) {
+				return false
+			}
+		}
+		return completes(x.Body)
+	case *If:
+		if !completes(x.Cond) {
+			return false
+		}
+		if v := constOf(x.Cond); v != nil && v.Kind() == constant.Bool {
+			if constant.BoolVal(v) {
+				return completes(x.Then)
+			}
+			return x.Else == nil || completes(x.Else)
+		}
+		return completes(x.Then) || x.Else == nil || completes(x.Else)
+	case *Match:
+		if !completes(x.X) {
+			return false
+		}
+		for _, arm := range x.Arms {
+			if completes(arm.Body) {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // stmts walks a block's statements and returns the facts known after
@@ -583,6 +648,8 @@ func (f *factChecker) walk(x Expr, e env) {
 	case *Return:
 		if x.Value != nil {
 			f.tail(x.Value, e, f.checkResult)
+		} else {
+			f.checkResult(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e)
 		}
 	case *Select:
 		f.walk(x.X, e)
@@ -623,7 +690,7 @@ func (f *factChecker) walk(x Expr, e env) {
 		}
 	case *Try:
 		f.walk(x.X, e)
-		if f.initializerResultFn != nil && f.fn == f.initializerResultFn {
+		if f.fn != nil {
 			f.tryResults(x, e)
 		}
 	case *Interp:
@@ -637,7 +704,11 @@ func (f *factChecker) walk(x Expr, e env) {
 func (f *factChecker) tryResults(x *Try, e env) {
 	if x.Option != nil {
 		none := x.NoneOf.Variant("None")
-		f.checkResult(&VariantValue{expr: expr{pos: x.Pos(), typ: x.NoneOf}, Variant: none, Text: "Option.None"}, e)
+		failure := &VariantValue{expr: expr{pos: x.Pos(), typ: x.NoneOf}, Variant: none, Text: "Option.None"}
+		if identical(x.Option, x.NoneOf) {
+			failure.ProofSource = x.X
+		}
+		f.checkResult(failure, e)
 	} else {
 		for _, member := range x.Rest {
 			failure := &Try{expr: expr{pos: x.Pos(), typ: member}, X: x.X, TryInfo: TryInfo{Kept: member}}
@@ -668,6 +739,13 @@ func (f *factChecker) resultPaths(fn *Func) []branch {
 	f.tail(fn.Body, f.entryFacts(fn), f.checkResult)
 	f.fn, f.collect = saveFn, saveCollect
 	f.paths[fn] = paths
+	return paths
+}
+
+// initializerPaths includes the local early returns of a deferred binding.
+func (f *factChecker) initializerPaths(value Expr, typ Type, facts env) []branch {
+	var paths []branch
+	f.fieldBoundary(value, typ, facts, func(x Expr, e env) { paths = append(paths, branch{x: x, e: e}) })
 	return paths
 }
 
@@ -952,8 +1030,8 @@ func (f *factChecker) checkResult(x Expr, e env) {
 	for _, mc := range f.fn.ResultConstraints {
 		var member Type
 		switch {
-		case identical(t, mc.Type):
-		case isMemberOf(mc.Type, t):
+		case assignable(t, mc.Type):
+		case typesOverlap(mc.Type, t):
 			member = mc.Type
 		default:
 			continue // a different member of the result's union
@@ -977,11 +1055,6 @@ func (f *factChecker) checkResult(x Expr, e env) {
 			f.settle(x, ob, ok, pending)
 		}
 	}
-}
-
-func isMemberOf(m, t Type) bool {
-	u, ok := t.(*Union)
-	return ok && containsMember(u, m)
 }
 
 // oblige requires con of the value x, with the constraint's parameter
@@ -1303,6 +1376,12 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 	case *VarRef:
 		switch d := x.Var; d.Kind {
 		case VarLet:
+			if d.Let.Initializer != nil {
+				if cs.take(f.all(ob, depth, f.initializerPaths(d.Let.Value, d.Type, e)...)) {
+					return true, nil
+				}
+				return cs.result()
+			}
 			if cs.take(f.prove(d.Let.Value, ob, e, depth+1)) {
 				return true, nil
 			}
@@ -1824,6 +1903,8 @@ func (f *factChecker) closed(x Expr) bool {
 	switch x := x.(type) {
 	case *FloatBits:
 		return true
+	case *Block:
+		return x.Type() == Ok && len(x.Stmts) == 0 && x.Tail == nil
 	case *ListLit:
 		for _, el := range x.Elems {
 			if !f.closed(el) {
@@ -1853,6 +1934,10 @@ func (f *factChecker) literalText(x Expr) string {
 	switch x := x.(type) {
 	case *FloatBits:
 		return fmt.Sprintf("%s(bits=0x%x)", x.Type(), x.Bits)
+	case *Block:
+		if x.Type() == Ok && len(x.Stmts) == 0 && x.Tail == nil {
+			return "Ok"
+		}
 	case *ListLit:
 		if x.Nil {
 			return "nil"
@@ -1911,12 +1996,107 @@ func (f *factChecker) all(ob obligation, depth int, bs ...branch) (bool, []Query
 	return true, pending
 }
 
+// allMembers proves ob for every result path returning member m.
+func (f *factChecker) allMembers(m Type, ob obligation, depth int, paths ...branch) (bool, []Query) {
+	var pending []Query
+	for _, path := range paths {
+		ok, queries := f.proveMember(path.x, m, ob, path.e, depth+1)
+		if !ok {
+			return false, nil
+		}
+		pending = append(pending, queries...)
+	}
+	return true, pending
+}
+
+// typesOverlap conservatively asks whether two types can share a union member,
+// including after their type parameters have been instantiated.
+func typesOverlap(a, b Type) bool {
+	if a == Never || b == Never {
+		return false
+	}
+	if _, ok := a.(*TypeParam); ok {
+		return true
+	}
+	if _, ok := b.(*TypeParam); ok {
+		return true
+	}
+	if u, ok := a.(*Union); ok {
+		for _, m := range u.Members {
+			if typesOverlap(m, b) {
+				return true
+			}
+		}
+		return false
+	}
+	if _, ok := b.(*Union); ok {
+		return typesOverlap(b, a)
+	}
+	if assignable(a, b) || assignable(b, a) {
+		return true
+	}
+	switch a := a.(type) {
+	case *Record, *Sealed:
+		if genericBaseOrSelf(a) != genericBaseOrSelf(b) {
+			return false
+		}
+		args, other := TypeArgs(a), TypeArgs(b)
+		if len(args) != len(other) {
+			return false
+		}
+		for i, arg := range args {
+			if !typesOverlap(arg, other[i]) {
+				return false
+			}
+		}
+		return true
+	case *List:
+		other, ok := b.(*List)
+		return ok && typesOverlap(a.Elem, other.Elem)
+	case *Seq:
+		other, ok := b.(*Seq)
+		return ok && typesOverlap(a.Elem, other.Elem)
+	case *Map:
+		other, ok := b.(*Map)
+		return ok && typesOverlap(a.Key, other.Key) && typesOverlap(a.Value, other.Value)
+	case *FuncType:
+		other, ok := b.(*FuncType)
+		if !ok || len(a.Params) != len(other.Params) || !typesOverlap(a.Result, other.Result) {
+			return false
+		}
+		for i, param := range a.Params {
+			if !typesOverlap(param, other.Params[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // proveMember proves ob for the values of member type m that x (of a
 // union type) can produce.
 func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth int) (bool, []Query) {
 	x = debugValue(x)
 	if depth > maxDepth {
 		return false, nil
+	}
+	if f.info.fieldRecipes[x] != nil && !f.expandedRecipes[x] {
+		if f.expandedRecipes == nil {
+			f.expandedRecipes = map[Expr]bool{}
+		}
+		f.expandedRecipes[x] = true
+		defer delete(f.expandedRecipes, x)
+		return f.allMembers(m, ob, depth, f.initializerPaths(x, x.Type(), e)...)
+	}
+	if x.Type() == Never {
+		return true, nil
+	}
+	if !typesOverlap(x.Type(), m) {
+		return true, nil // no instantiation can produce this member
+	}
+	if assignable(x.Type(), m) {
+		return f.prove(x, ob, e, depth+1)
 	}
 	if ob.or != nil {
 		if ok, pending := anyOf(ob, func(alt obligation) (bool, []Query) { return f.proveMember(x, m, alt, e, depth+1) }); ok {
@@ -1935,12 +2115,53 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 		}
 	}
 	switch x := x.(type) {
+	case *Try:
+		if x.Option == nil {
+			return f.proveMember(x.X, m, ob, e, depth+1)
+		}
 	case *Call:
 		return f.derive(x, m, ob, e, depth)
 	case *VarRef:
 		if x.Var.Kind == VarLet {
+			if x.Var.Let.Initializer != nil {
+				return f.allMembers(m, ob, depth, f.initializerPaths(x.Var.Let.Value, x.Var.Type, e)...)
+			}
 			return f.proveMember(x.Var.Let.Value, m, ob, e, depth+1)
 		}
+	case *Select:
+		value := f.project(x.X, x.Name)
+		if selected, ok := value.(*Select); !ok || selected.X != x.X || selected.Name != x.Name {
+			return f.proveMember(value, m, ob, e, depth+1)
+		}
+	case *Block:
+		if x.Tail != nil {
+			return f.proveMember(x.Tail, m, ob, f.stmts(x.Stmts, e), depth+1)
+		}
+	case *ScopeBlock:
+		return f.proveMember(x.Body, m, ob, e, depth+1)
+	case *If:
+		if x.Else != nil {
+			ok, pending := f.proveMember(x.Then, m, ob, e.with(f.conditionFacts(x.Cond, true)...), depth+1)
+			if !ok {
+				return false, nil
+			}
+			other, queries := f.proveMember(x.Else, m, ob, e.with(f.conditionFacts(x.Cond, false)...), depth+1)
+			return other, append(pending, queries...)
+		}
+	case *Match:
+		var pending []Query
+		for _, arm := range x.Arms {
+			facts := f.patternInvariants(arm.Pat, x.X, e)
+			for _, guard := range arm.Pat.Guards() {
+				facts = facts.with(f.conditionFacts(guard, true)...)
+			}
+			ok, queries := f.proveMember(arm.Body, m, ob, facts, depth+1)
+			if !ok {
+				return false, nil
+			}
+			pending = append(pending, queries...)
+		}
+		return true, pending
 	}
 	return false, nil
 }
@@ -1973,6 +2194,10 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		add(TypeConstraints(x.Type()), noParams)
 	}
 	switch x := x.(type) {
+	case *VariantValue:
+		if x.ProofSource != nil && depth < maxDepth {
+			out = append(out, f.declared(x.ProofSource, e, depth+1)...)
+		}
 	case *SeqCall:
 		if x.Op == "filter" {
 			if ft, ok := x.Args[1].Type().(*FuncType); ok && ft.Effects == 0 {
@@ -2014,7 +2239,7 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 			}
 		case VarLet:
 			add(d.Let.Constraints, f.ownParams())
-			if depth < maxDepth {
+			if d.Let.Initializer == nil && depth < maxDepth {
 				out = append(out, f.declared(d.Let.Value, e, depth+1)...)
 			}
 		case VarPattern, VarLoop:
@@ -2095,7 +2320,7 @@ func (f *factChecker) declaredMember(x Expr, m Type) []known {
 			out = append(out, f.knownOf(con, noParams)...)
 		}
 	case *VarRef:
-		if x.Var.Kind == VarLet {
+		if x.Var.Kind == VarLet && x.Var.Let.Initializer == nil {
 			out = append(out, f.declaredMember(x.Var.Let.Value, m)...)
 		}
 	}
@@ -2133,7 +2358,12 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 	var pending []Query
 	for _, path := range f.resultPaths(fn) {
 		t := path.x.Type()
-		if member != nil && !identical(t, member) && !isMemberOf(member, t) {
+		param := returnedParam(path.x, fn)
+		parameter := param != nil && param.Index < len(call.Args)
+		if parameter {
+			t = call.Args[param.Index].Type()
+		}
+		if member != nil && !typesOverlap(t, member) {
 			continue
 		}
 		saveFn := f.fn
@@ -2148,8 +2378,13 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 		f.fn = saveFn
 		if !ok {
 			// Returning a parameter: prove it for the argument.
-			if ref, isRef := debugValue(path.x).(*VarRef); isRef && isParamOf(ref.Var, fn) && ref.Var.Index < len(call.Args) {
-				ok, p = f.prove(call.Args[ref.Var.Index], ob, e, depth+1)
+			if parameter {
+				value := call.Args[param.Index]
+				if member != nil {
+					ok, p = f.proveMember(value, member, ob, e, depth+1)
+				} else {
+					ok, p = f.prove(value, ob, e, depth+1)
+				}
 			}
 		}
 		if !ok {
@@ -2163,6 +2398,26 @@ func (f *factChecker) derive(call *Call, member Type, ob obligation, e env, dept
 		}
 	}
 	return true, pending
+}
+
+// returnedParam follows eager aliases of a returned parameter. Deferred
+// initializers can return other values before their tail and must keep their
+// own result boundary.
+func returnedParam(x Expr, fn *Func) *Var {
+	for depth := 0; depth < maxDepth; depth++ {
+		ref, ok := debugValue(x).(*VarRef)
+		if !ok {
+			return nil
+		}
+		if isParamOf(ref.Var, fn) {
+			return ref.Var
+		}
+		if ref.Var.Kind != VarLet || ref.Var.Let.Initializer != nil {
+			return nil
+		}
+		x = ref.Var.Let.Value
+	}
+	return nil
 }
 
 // isParamOf reports whether v is a parameter of fn.
