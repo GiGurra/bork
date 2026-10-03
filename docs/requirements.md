@@ -2348,8 +2348,11 @@ is rejected until its termination and stable-observation contract is defined.
 `flatMap`, `take`, `drop`, `forEach`, `fold`, `toList`, and `first` (returning
 Option). Static constructors belong to Seq: `Seq.empty[T]()`, `Seq.range(...)`
 and `Seq.unfold(...)`. Callback invocation and item order are deterministic and
-match eager list methods. `flatMap` traverses each inner sequence fully before
-moving to the next outer item and combines their latent effects. `take(0)`
+match eager list methods. `flatMap` traverses depth-first until the active inner sequence is exhausted
+or the downstream consumer stops, and combines source and inner latent effects.
+Downstream stop propagates immediately to both inner and outer producers,
+closing both scope stacks; no later outer callback runs. Thus an unbounded inner
+sequence followed by `.take(1)` emits one item and terminates normally. `take(0)`
 starts no producer and invokes no callbacks; `take(n)` with n <= 0 is empty.
 `take(n)` stops immediately after n emitted items without asking the source for
 an extra item. `drop(n)` treats n <= 0 as zero. Integer overflow is checked in
@@ -2428,6 +2431,7 @@ requirements must be updated alongside each implementation increment.
 
 Tests cover laziness, exact callback counts (including take(0)/take(1)), repeated
 pure/effectful traversal, adapter order, flatMap nesting, explicit error unions,
+nested flatMap followed by take/first/break (including an unbounded inner),
 whole-function return/`?` from consumers, nested producers, rejected nested
 callback/task yields, and no extra item after early stop. Effect negatives cover
 pure consumers, alias/record/generic erasure and returned callbacks; lifetime
