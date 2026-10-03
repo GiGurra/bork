@@ -204,3 +204,22 @@ The initial ranked list has these boundaries now:
 [#179](https://github.com/GiGurra/bork/pull/179) fixes the imported-user-default
 proof gap discovered during design review. Cache artifacts may rely on those
 proofs only after the clean compiler performs them for every user package.
+
+## Incremental snapshot latency follow-up
+
+[#194](https://github.com/GiGurra/bork/pull/194) captures effective Go settings
+and hashes the selected launcher once per compilation request. On October 3,
+2026, three-sample fresh-process hello medians on the shared host changed from
+29.4 to 48.8 ms for check, 240.6 to 251.9 ms for build, and 246.6 to 253.7 ms for
+run, compared with main `2bc0dc6`; generated Go stayed at 34,107 bytes. These
+numbers record an accepted correctness cost, not a speed improvement or a CI
+threshold.
+
+Track recovery under bork-h5rkt4: when Session reuse lands, report both first
+request and repeated unchanged-request latency, including input validation and
+configuration refresh, against this one-shot baseline on the same quiet host.
+Repeated requests must recover the added snapshot cost without skipping input
+validation. Keep fresh-process CLI measurements separate; Session speed does not
+by itself remove their regression. If Session reuse is deferred beyond phase 1,
+revisit this cost before closing that phase and measure a cheaper sound capture
+strategy rather than treating the regression as resolved.

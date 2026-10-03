@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -66,11 +67,12 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 }
 
 type compiledProgram struct {
-	files  []*syntax.File
-	info   *check.Info
-	inputs *sourceSnapshot
-	module *goModuleInputs
-	assets *embedSnapshot
+	files   []*syntax.File
+	info    *check.Info
+	inputs  *sourceSnapshot
+	module  *goModuleInputs
+	assets  *embedSnapshot
+	context *goContext
 }
 
 func checkObserved(path string, observe func(string)) ([]*syntax.File, *check.Info, error) {
@@ -87,8 +89,9 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 		return nil, err
 	}
 	files, root, diags := loaded.Files, loaded.Root, loaded.Diags
+	context := captureGoContext()
 	phase(observe, "check")
-	info := check.ProgramObserved(files, root, diags, goPackages{files: files, module: module}, observe)
+	info := check.ProgramObserved(files, root, diags, goPackages{files: files, module: module, context: context}, observe)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
@@ -108,11 +111,11 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "facts")
-	check.Facts(files, info, diags, evaluatorWithModule(files, info, module))
+	check.Facts(files, info, diags, evaluatorWithContext(files, info, module, context))
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
-	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module, assets: assets}, nil
+	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module, assets: assets, context: context}, nil
 }
 
 // evaluator runs predicates on constants at compile time, by building
@@ -128,6 +131,10 @@ func evaluator(path string, files []*syntax.File, info *check.Info) check.Evalua
 }
 
 func evaluatorWithModule(files []*syntax.File, info *check.Info, module *goModuleInputs) check.Evaluator {
+	return evaluatorWithContext(files, info, module, captureGoContext())
+}
+
+func evaluatorWithContext(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext) check.Evaluator {
 	return func(queries []check.Query) ([]bool, error) {
 		goSrc, err := gen.EvalProgram(files, info, queries)
 		if err != nil {
@@ -139,11 +146,12 @@ func evaluatorWithModule(files []*syntax.File, info *check.Info, module *goModul
 		}
 		defer func() { _ = os.RemoveAll(dir) }()
 		exe := filepath.Join(dir, "eval")
-		if err := buildGoWithModule(files, goSrc, exe, module, info.Embeds...); err != nil {
+		if err := buildGoWithContext(files, goSrc, exe, module, context, info.Embeds...); err != nil {
 			return nil, err
 		}
 		var stderr strings.Builder
 		cmd := exec.Command(exe)
+		cmd.Env = slices.Clone(context.processEnv)
 		cmd.Stderr = &stderr
 		out, err := cmd.Output()
 		if err != nil {
@@ -202,7 +210,7 @@ func Build(path, out string) error {
 	if err != nil {
 		return err
 	}
-	return buildGoWithModule(program.files, goSrc, out, program.module, program.info.Embeds...)
+	return buildGoWithContext(program.files, goSrc, out, program.module, program.context, program.info.Embeds...)
 }
 
 // buildGo builds generated Go source (for the given bork files) into an
@@ -216,6 +224,13 @@ func buildGo(files []*syntax.File, goSrc []byte, out string, embeds ...*check.Em
 }
 
 func buildGoWithModule(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, embeds ...*check.Embedded) error {
+	return buildGoWithContext(files, goSrc, out, module, captureGoContext(), embeds...)
+}
+
+func buildGoWithContext(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, context *goContext, embeds ...*check.Embedded) error {
+	if context.err != nil {
+		return fmt.Errorf("determining Go build configuration (is Go installed?): %w", context.err)
+	}
 	absOut, err := filepath.Abs(out)
 	if err != nil {
 		return err
@@ -235,9 +250,9 @@ func buildGoWithModule(files []*syntax.File, goSrc []byte, out string, module *g
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("go", "build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
+	cmd := context.command("build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -353,7 +368,7 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "tests")
-	if err := buildGoWithModule(files, goSrc, exe, program.module, info.Embeds...); err != nil {
+	if err := buildGoWithContext(files, goSrc, exe, program.module, program.context, info.Embeds...); err != nil {
 		return 1, err
 	}
 	cmd := exec.Command(exe)
