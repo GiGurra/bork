@@ -9,6 +9,9 @@ test "decoded records retain sibling relations" {
   match (bad) { Range => assert(false), e: DecodeError => assertEqual(e.path, ".hi"), JsonError => assert(false) }
   match (decodeJson[Defaults]("{\"lo\":20}")) { Defaults => assert(false), e: DecodeError => assertEqual(e.path, ".hi"), JsonError => assert(false) }
 }
+type Box[T] = { value: T }
+type Nested = { lo: Int, box: Box[Int where atLeast(lo)] }
+test "nested type arguments retain sibling relations" (r: Nested) { assert(r.box.value >= r.lo) }
 fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
   import "encoding/json"
   value := _d_T_GoStruct.New()

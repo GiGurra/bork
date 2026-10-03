@@ -526,6 +526,7 @@ func fieldConstraint(con *check.Constraint, value func(string) string) *check.Co
 	for i, a := range cp.Args {
 		if a.Sibling {
 			cp.Args[i].Param = value(a.Param)
+			cp.Args[i].Sibling = false
 		}
 	}
 	cp.Or = nil

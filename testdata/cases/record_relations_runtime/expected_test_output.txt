@@ -1,5 +1,6 @@
 ok    generated records retain sibling relations
 ok    decoded records retain sibling relations
+ok    nested type arguments retain sibling relations
 ok    Go conversions retain sibling relations
-3 passed, 0 failed
+4 passed, 0 failed
 exit code 0
