@@ -1,0 +1,10 @@
+main.bork:8:36: cannot derive Encode for Serialized: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:9:32: cannot derive Decode for Forged: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:10:56: cannot derive Encode for WrappedEncode: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:11:56: cannot derive Decode for WrappedDecode: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:13:40: cannot derive Encode for BoxEncode: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:14:40: cannot derive Decode for BoxDecode: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:15:67: cannot derive Decode for Container: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:15:67: cannot derive Encode for Container: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:16:50: cannot derive Encode for WrappedBox: Certificate has private variants in package bork/http; use an instance provided by that package
+main.bork:16:50: cannot derive Decode for WrappedBox: Certificate has private variants in package bork/http; use an instance provided by that package

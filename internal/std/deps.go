@@ -13,37 +13,60 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-// GoModuleFiles combines the pinned module declarations for imported standard
-// packages. Packages without go-deps.mod have no third-party Go dependencies.
-func GoModuleFiles(importPaths []string) (mod, sum []byte, err error) {
-	return goModuleFiles(files, importPaths)
+// GoDependencyManifest is a pinned module manifest and its checksums.
+// Name identifies its source in diagnostics.
+type GoDependencyManifest struct {
+	Name     string
+	Mod, Sum []byte
 }
 
-func goModuleFiles(sources fs.FS, importPaths []string) ([]byte, []byte, error) {
-	requirements := map[string]string{}
-	checksums := map[string]string{}
+// GoModuleFiles combines the pinned module declarations for imported standard
+// packages and optional user manifests. Packages without go-deps.mod have no
+// third-party Go dependencies. Go minimum version selection chooses the highest
+// required version for each module path.
+func GoModuleFiles(importPaths []string, user ...GoDependencyManifest) (mod, sum []byte, err error) {
+	return goModuleFiles(files, importPaths, user...)
+}
+
+func goModuleFiles(sources fs.FS, importPaths []string, user ...GoDependencyManifest) ([]byte, []byte, error) {
+	manifests := append([]GoDependencyManifest(nil), user...)
 	seen := map[string]bool{}
-	goVersion := "1.22"
 	for _, importPath := range importPaths {
 		dir, standard := strings.CutPrefix(importPath, Prefix)
 		if !standard || seen[dir] {
 			continue
 		}
 		seen[dir] = true
-		manifestPath := path.Join(dir, "go-deps.mod")
-		data, err := fs.ReadFile(sources, manifestPath)
+		data, err := fs.ReadFile(sources, path.Join(dir, "go-deps.mod"))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return nil, nil, err
 		}
+		sum, err := fs.ReadFile(sources, path.Join(dir, "go-deps.sum"))
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: read pinned Go checksums: %w", importPath, err)
+		}
+		manifests = append(manifests, GoDependencyManifest{Name: importPath, Mod: data, Sum: sum})
+	}
+	return mergeGoModuleFiles(manifests)
+}
+
+func mergeGoModuleFiles(manifests []GoDependencyManifest) ([]byte, []byte, error) {
+	requirements := map[string]string{}
+	checksums := map[string]string{}
+	goVersion := "1.22"
+	for _, input := range manifests {
+		importPath := input.Name
+		data := input.Mod
+		manifestPath := input.Name + "/go-deps.mod"
 		manifest, err := modfile.Parse(manifestPath, data, nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", importPath, err)
 		}
 		if len(manifest.Replace) != 0 || len(manifest.Exclude) != 0 || len(manifest.Retract) != 0 || manifest.Toolchain != nil || len(manifest.Godebug) != 0 || len(manifest.Tool) != 0 || len(manifest.Ignore) != 0 {
-			return nil, nil, fmt.Errorf("%s: std Go dependencies support only module, go, and pinned require declarations", importPath)
+			return nil, nil, fmt.Errorf("%s: Go dependencies support only module, go, and pinned require declarations", importPath)
 		}
 		if manifest.Go != nil && semver.Compare("v"+manifest.Go.Version, "v"+goVersion) > 0 {
 			goVersion = manifest.Go.Version
@@ -60,10 +83,7 @@ func goModuleFiles(sources fs.FS, importPaths []string) ([]byte, []byte, error) 
 				requirements[dep.Path] = dep.Version
 			}
 		}
-		data, err = fs.ReadFile(sources, path.Join(dir, "go-deps.sum"))
-		if err != nil {
-			return nil, nil, fmt.Errorf("%s: read pinned Go checksums: %w", importPath, err)
-		}
+		data = input.Sum
 		for _, line := range strings.Split(string(data), "\n") {
 			fields := strings.Fields(line)
 			if len(fields) == 0 {

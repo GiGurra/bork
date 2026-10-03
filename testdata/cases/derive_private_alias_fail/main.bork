@@ -1,0 +1,17 @@
+import "bork/http"
+instance bytesEncode: Encode[Bytes] {
+  fn encode(value: Bytes): Json { Json.String { value: "secret" } }
+}
+instance bytesDecode: Decode[Bytes] {
+  fn decode(json: Json): Bytes | DecodeError { utf8Bytes("invalid-secret") }
+}
+type Serialized = http.Certificate derive (Encode)
+type Forged = http.Certificate derive (Decode)
+type WrappedEncode = { certificate: http.Certificate } derive (Encode)
+type WrappedDecode = { certificate: http.Certificate } derive (Decode)
+type Box[T] = { value: T } derive (Encode, Decode)
+type BoxEncode = Box[http.Certificate] derive (Encode)
+type BoxDecode = Box[http.Certificate] derive (Decode)
+type Container = { certificates: List[Option[http.Certificate]] } derive (Decode, Encode)
+type WrappedBox = { box: Box[http.Certificate] } derive (Encode, Decode)
+fn main() {}

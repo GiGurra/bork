@@ -244,3 +244,54 @@ A generic unsafe Go body with `[T: GoStruct]` receives `_d_T_GoStruct`:
 `GoStruct` does not require deriving `Decode`. Its instances are created by
 `derive` and imported with `use`, like other derived instances. `_borkToGo` and
 `_borkFromGo[T]` also work for these generated records as they do for mirrors.
+
+
+### User Go dependencies
+
+A user module can declare third-party Go dependencies in `go-deps.mod` and
+`go-deps.sum` beside its `bork.mod`. Every package in that bork module uses them
+for binding checks, compile-time predicate evaluation, and generated builds.
+The package still needs its `unsafe "<package path>"` entry for unsafe Go bodies
+and bindings.
+
+`go-deps.mod` uses native Go syntax, supporting `module`, `go`, and canonical
+pinned `require` declarations. Its module name is descriptive; generated
+programs use `borkprogram`. Include the indirect requirements needed by the Go
+module graph, as in a complete Go module manifest. `go-deps.sum` must contain
+module and `go.mod` hashes for every selected requirement. For example:
+
+```go
+module example.com/app
+
+go 1.26
+
+require github.com/google/uuid v1.6.0
+```
+
+The compiler merges these with imported standard packages' manifests and
+checksums. Go's minimum version selection chooses the higher version of each
+module path. User requirements can therefore raise a standard package's pinned
+version; compatibility with that newer version is the program's responsibility.
+Different hashes for the same module/version are rejected. `replace`, `exclude`,
+`retract`, `toolchain`, and other directives are not supported in these manifests.
+
+Go resolves transitive requirements using its normal module graph. Builds and
+binding checks use `-mod=readonly`; the compiler does not edit the source
+manifests. Populate the manifests and checksums using Go's module tools and keep
+them under version control. Warm Go module caches support `GOPROXY=off`; an empty
+offline cache fails with the missing module reported. Dependencies are not
+vendored. A future `bork deps` helper can make adding or updating manifests easier.
+
+
+Structurally deriving through foreign private variants is rejected, including
+variants reachable through records, containers, and concrete generic
+specializations. At a field boundary, derivation may delegate to an existing
+codec provided by the field type's owning package, as with `math.Decimal`.
+Re-deriving an alias of that private sealed type still cannot inspect its variants.
+
+HTTP's `Certificate` stores validated PEM certificate and key bytes in a private
+variant, so its declaration needs no Go signature resolution. `LoadCertificate`
+reads and validates files; `ParseCertificate` validates supplied Bytes. Both
+return `Certificate | IoError`. Its Show instance prints only `http.Certificate`.
+`ListenTLS` reconstructs the Go certificate from immutable bytes when opening the
+listener; certificate or key file changes after loading cannot alter the value.

@@ -972,6 +972,10 @@ func (c *checker) declareDerived(files []*syntax.File) {
 						continue
 					}
 				}
+				if sealed := c.foreignPrivateVariants(e.typ, cl, c.pkg, map[Type]bool{}, false); sealed != nil {
+					c.errorf(td.DerivePos, "cannot derive %s for %s: %s has private variants in package %s; use an instance provided by that package", cl.Name, td.Name, sealed.Name, sealed.Pkg.Path)
+					continue
+				}
 				c.deriveInstance(td, e.typ, cl, f.Prelude)
 			}
 		}
@@ -1073,4 +1077,86 @@ func (c *checker) resolveDerived() {
 	}
 	c.typeParams = nil
 	c.inPrelude = false
+}
+
+// Derivation must not expose or construct another package's private variants,
+// including variants nested in records, generic specializations, or containers.
+// An owner-provided field codec is an explicit boundary: the derive delegates
+// instead of inspecting that type's private representation.
+func (c *checker) foreignPrivateVariants(t Type, class *Class, from *Package, seen map[Type]bool, fieldBoundary bool) *Sealed {
+	if t == nil || seen[t] {
+		return nil
+	}
+	seen[t] = true
+	if fieldBoundary {
+		var owner *Package
+		switch t := t.(type) {
+		case *Record:
+			owner = t.Pkg
+		case *Sealed:
+			owner = t.Pkg
+		}
+		for _, ci := range c.info.ClassInstances {
+			if owner == nil || ci.Pkg != owner || ci.Class != class {
+				continue
+			}
+			args, ok := matchHead(ci, t)
+			if !ok {
+				continue
+			}
+			delegates := true
+			for i, tp := range ci.TypeParams {
+				for _, bound := range tp.Bounds {
+					if bound != class {
+						continue
+					}
+					trial := map[Type]bool{}
+					for t, v := range seen {
+						trial[t] = v
+					}
+					if c.foreignPrivateVariants(args[i], class, from, trial, true) != nil {
+						delegates = false
+					}
+				}
+			}
+			if delegates {
+				return nil
+			}
+		}
+	}
+	var children []Type
+	switch t := t.(type) {
+	case *Sealed:
+		if t.Pkg != from {
+			for _, v := range t.Variants {
+				if !Exported(v.Name) {
+					return t
+				}
+			}
+		}
+		for _, v := range t.Variants {
+			for _, f := range v.Fields {
+				children = append(children, f.Type)
+			}
+		}
+	case *Record:
+		for _, f := range t.Fields {
+			children = append(children, f.Type)
+		}
+	case *List:
+		children = append(children, t.Elem)
+	case *Map:
+		children = append(children, t.Key, t.Value)
+	case *Union:
+		children = append(children, t.Members...)
+	case *FuncType:
+		children = append(children, t.Params...)
+		children = append(children, t.Result)
+	}
+	for _, child := range children {
+		if sealed := c.foreignPrivateVariants(child, class, from, seen, true); sealed != nil {
+			return sealed
+		}
+	}
+	return nil
 }

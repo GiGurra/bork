@@ -64,3 +64,25 @@ func TestGoModuleDeclarationErrors(t *testing.T) {
 		t.Fatalf("expected missing go.sum, got %v", err)
 	}
 }
+
+func TestUserAndStandardGoDependencies(t *testing.T) {
+	sources := manifest("v1.0.0")
+	user := GoDependencyManifest{Name: "user", Mod: []byte("module example.com/app\ngo 1.26\nrequire example.com/lib v1.2.0\n"), Sum: []byte("example.com/lib v1.2.0 h1:user\nexample.com/lib v1.2.0/go.mod h1:usermod\n")}
+	mod, sum, err := goModuleFiles(sources, []string{"bork/one"}, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mod), "example.com/lib v1.2.0") || !strings.Contains(string(mod), "go 1.26") || !strings.Contains(string(sum), "v1.0.0 h1:zip") || !strings.Contains(string(sum), "v1.2.0 h1:user") {
+		t.Fatalf("merge: %s %s", mod, sum)
+	}
+	user.Mod = []byte("module example.com/app\nrequire example.com/lib v0.9.0\n")
+	user.Sum = []byte("example.com/lib v0.9.0 h1:lower\nexample.com/lib v0.9.0/go.mod h1:lowermod\n")
+	mod, _, err = goModuleFiles(sources, []string{"bork/one"}, user)
+	if err != nil || !strings.Contains(string(mod), "example.com/lib v1.0.0") {
+		t.Fatalf("lower user version: %s %v", mod, err)
+	}
+	user.Sum = []byte("example.com/lib v1.0.0 h1:conflict\n")
+	if _, _, err := goModuleFiles(sources, []string{"bork/one"}, user); err == nil || !strings.Contains(err.Error(), "conflicting") {
+		t.Fatalf("checksum conflict: %v", err)
+	}
+}
