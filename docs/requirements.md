@@ -589,7 +589,7 @@ main.bork:8:3: isOpenNow uses clock (it calls now), but predicates must be pure,
 main.bork:17:24: f may use whatever effects its caller passes, so it cannot be stored in field run, which allows only io
   hint: give f the field's effects: fn job(name: String, f: () uses io => Unit): Job
 
-main.bork:5:1: save declares net, but never uses it
+main.bork:5:50: save declares net, but never uses it
 
 main.bork:3:1: now calls time.Now in its unsafe go body, which reads the clock, but declares no effects
   hint: declare it: fn now() uses clock: Int unsafe go { ... }

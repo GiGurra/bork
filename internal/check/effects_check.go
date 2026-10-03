@@ -37,13 +37,6 @@ type effectReason struct {
 	text string
 }
 
-// reasonNames are the effects reasons are kept for: every effect, and
-// EffOpen (a call of an open parameter).
-var reasonNames = append(effectNames[:len(effectNames):len(effectNames)], struct {
-	eff  Effects
-	name string
-}{EffOpen, "open"})
-
 // effectUses collects the effects code uses, with the first reason for
 // each.
 type effectUses struct {
@@ -53,10 +46,19 @@ type effectUses struct {
 	// mainRefs are calls of main and uses of it as a value, which are
 	// not allowed: main may use every effect.
 	mainRefs []diag.Pos
+	// open is the first call of an open parameter, or the first time one
+	// is passed to a function that may call it: name is the parameter,
+	// text says what the code does with it.
+	open *openUse
+}
+
+type openUse struct {
+	pos        diag.Pos
+	name, text string
 }
 
 func (u *effectUses) add(effs Effects, pos diag.Pos, text string) {
-	for _, n := range reasonNames {
+	for _, n := range effectNames {
 		if effs&n.eff != 0 && u.used&n.eff == 0 {
 			if u.reasons == nil {
 				u.reasons = map[Effects]effectReason{}
@@ -109,11 +111,13 @@ func checkEffects(fn *Func, diags *diag.List) {
 	if fd.IsPred {
 		if r, ok := u.reasons[EffIO]; ok && r.text == "assertSnapshot" {
 			diags.AddCode(r.pos, "effect.pred", "assertSnapshot can only be used in tests (and the functions they call), not in a predicate")
-		} else if used != 0 {
+			used &^= EffIO
+		}
+		if used != 0 {
 			diags.AddCode(u.first(used, fd.Pos), "effect.pred", "%s uses %s (%s), but predicates must be pure, or their facts could go stale", fd.Name, used, u.why(used))
 		}
-		if r, ok := u.reasons[EffOpen]; ok {
-			diags.AddCode(r.pos, "effect.pred", "%s calls %s, which may use any effect its caller passes, but predicates must be pure; declare the parameter's type with uses nothing", fd.Name, r.text)
+		if o := u.open; o != nil {
+			diags.AddCode(o.pos, "effect.pred", "%s %s, but %s may use any effect its caller passes, and predicates must be pure; declare %s's type with uses nothing", fd.Name, o.text, o.name, o.name)
 		}
 		return
 	}
@@ -220,6 +224,9 @@ func (u *effectUses) expr(x Expr) {
 			if i < len(x.Func.Params) && isOpen(x.Func.Params[i]) {
 				if at, ok := a.Type().(*FuncType); ok && at.Effects != 0 {
 					u.add(at.Effects, a.Pos(), name+", with "+u.describeFunc(a))
+					if at.Effects&EffOpen != 0 {
+						u.noteOpen(a, "passes %s to "+name)
+					}
 				}
 			}
 		}
@@ -237,6 +244,9 @@ func (u *effectUses) expr(x Expr) {
 		}
 		if ft, ok := x.Fun.Type().(*FuncType); ok {
 			u.add(ft.Effects, x.Pos(), u.describeFunc(x.Fun))
+			if ft.Effects&EffOpen != 0 {
+				u.noteOpen(x.Fun, "calls %s")
+			}
 		}
 	case *FuncRef:
 		_ = u.noMain(x.Inst.Func, x.Pos())
@@ -297,6 +307,25 @@ func (u *effectUses) expr(x Expr) {
 		u.expr(x.X)
 	default:
 		panic(fmt.Sprintf("effects: unexpected %T", x))
+	}
+}
+
+// noteOpen records a use of the open parameter x refers to, unless one
+// is recorded; text is what the code does with it, with %s for x.
+func (u *effectUses) noteOpen(x Expr, text string) {
+	if u.open != nil {
+		return
+	}
+	switch x := x.(type) {
+	case *VarRef:
+		u.open = &openUse{x.Pos(), x.Var.Name, fmt.Sprintf(text, x.Var.Name)}
+	case *Lambda:
+		// The lambda's own use of the parameter says which one.
+		inner := &effectUses{from: u.from}
+		inner.expr(x.Body)
+		if inner.open != nil {
+			u.open = &openUse{x.Pos(), inner.open.name, fmt.Sprintf(text, "a lambda that "+inner.open.text)}
+		}
 	}
 }
 

@@ -70,3 +70,12 @@ fn main() uses io {
 test "tests cannot call main" {
   main()
 }
+
+pred snap(x: Int) {
+  assertSnapshot(x)
+  fetch("http://example.com") != ""
+}
+
+pred allOk(xs: List[Int], f: (Int) => Bool) { all(xs, f) }
+
+pred allOk2(xs: List[Int], f: (Int) => Bool) { all(xs, x => f(x)) }
