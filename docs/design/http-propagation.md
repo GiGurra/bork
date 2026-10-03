@@ -8,7 +8,8 @@ are already implemented.
 
 HTTP uses a Bork-specific `Bork-Timeout-Ns` header: one unsigned decimal count of
 remaining nanoseconds, in 0..9223372036854775807. Zero means exhausted. This is
-not a gRPC timeout header. Nanoseconds avoid rounding a small positive budget
+a bork-to-bork protocol, not a gRPC timeout header. A grpc-timeout bridge can
+be added separately later. Nanoseconds avoid rounding a small positive budget
 upwards or losing sub-millisecond budgets. The limit fits Go's duration without
 multiplication or saturation. Missing means no caller-supplied limit; malformed,
 negative, oversized, comma-joined, or repeated values receive 400 before the
@@ -94,11 +95,11 @@ never replace those arguments. Application code needing an incoming value calls
 an ordinary checked decoder, then explicitly binds it with `with`. The compiler
 does not gain a typed boundary callback or ambientHeader builtin for this task.
 
-Because invalid incoming values may warn, Listen/start gain io in their declared
-effect bound, and non-main callers migrate. Send keeps net + clock + state;
-forwarding labels adds no random or io effect. ListenRoutes/TLS already expose
-the full handler effect bound. The std boundary reads generated labels; pure
-application code cannot observe them.
+Invalid incoming values warn through bork/log without adding an effect: logging
+is deliberately untracked. Listen/start retain their existing effects, and Send
+keeps net + clock + state; forwarding labels adds no random or io effect. The
+std boundary reads generated labels; pure application code cannot inspect those
+labels to change its computed result.
 
 ## W3C trace context
 
