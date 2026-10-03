@@ -25,6 +25,7 @@ fn Needed() needs Prefix: String { s"$Prefix:${compilerCallerLocation()}" }
 fn Generic[A](value: A): String { _ = value; compilerCallerLocation() }
 fn Snapshot(value: String) uses io { _ = compilerCallerLocation(); assertSnapshot(value) }
 fn Later(): () => String { _ = compilerCallerLocation(); () => Location() }
+fn Crash(): Never { _ = compilerCallerLocation(); panic("fail") }
 `
 	cases := []struct {
 		name, source, want string
@@ -44,6 +45,9 @@ fn main() {
   println(later())
 }
 `, "user.bork:3:11\nuser.bork:4:11\nuser.bork:6:11\nstd/caller.bork:3:22\nuser.bork:8:11 value = 42\n42\nuser.bork:9:11\nprefix:user.bork:10:43\nuser.bork:11:11\n", false},
+		{"saved Never helper", `import helper "bork/caller"
+fn main() { saved = helper.Crash; saved() }
+`, "panic: fail", false},
 		{"assertion", `import helper "bork/caller"
 fn main() { helper.Equal(1, 2) }
 `, "panic: user.bork:2:13: expected 2, got 1", false},
@@ -55,6 +59,9 @@ test "located mock" {
   assertEqual(saved(), "user.bork:5:11")
 }
 `, "real\nreal\nok    located mock\n1 passed, 0 failed\n", true},
+		{"snapshot in production", `import helper "bork/caller"
+fn main() { helper.Snapshot("value") }
+`, "panic: user.bork:2:13: assertSnapshot works only in tests (bork test)", false},
 		{"snapshot", `import helper "bork/caller"
 test "located snapshot" { helper.Snapshot("value") }
 `, "user.bork:2:27: no snapshot", true},

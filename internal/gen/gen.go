@@ -1283,8 +1283,8 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, g.callerLocation(e.Pos())}}
 	case check.BuiltinAssertSnapshot:
 		if !g.testMode {
-			msg := e.Pos().String() + ": assertSnapshot works only in tests (bork test)"
-			return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{strLit(msg)}}
+			msg := &ast.BinaryExpr{X: g.callerLocation(e.Pos()), Op: token.ADD, Y: strLit(": assertSnapshot works only in tests (bork test)")}
+			return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{msg}}
 		}
 		g.usesSnaps = true
 		text := g.stringOf(args[0], e.Args[0].Type())
