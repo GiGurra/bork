@@ -824,8 +824,8 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 
 - **Predicates on compile-time-known values are evaluated during compilation.** `connect("db", 5432)` is accepted because `between(1, 65535)(5432)` is computed at build time. `connect("db", 0)` fails the build. Unlike proven, this works for *any* predicate, not just a built-in set.
 - **Constants and named constrained values.** `defaultPort: Port = 8080` is checked once, when compiled.
-- **Explicit compile-time computation** of lookup tables, constants, and derived data, marked at the call site (as q does), with the result baked into the binary.
-- **Compile-time code should only read files inside the module.** This is a convention, not enforced in v0.1 (see purity below).
+- **Explicit compile-time computation (proposed):** `comptime { ... }` computes a closed typed value and bakes it into the binary. The [comptime design](design/comptime.md) specifies purity, module-file build inputs, dependent computations, fact checking, limits and incremental cache keys. This syntax is not implemented yet.
+- **Explicit build inputs (proposed):** `bork/build` supplies captured module-relative files only within computations allowed to use the proposed `build` effect. Runtime effects and file escapes are rejected. Existing predicate evaluation still trusts pure `unsafe go` signatures (see purity below).
 
 ### Facts, purity, and the outside world
 
