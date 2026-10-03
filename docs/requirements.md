@@ -2307,8 +2307,16 @@ fn consume(items: Seq[String] uses io) uses io: List[String] {
 Calling delayedPrint only captures text and returns a sequence, so its function
 signature has no immediate effect. Traversing the result uses io. Construction
 expressions and capture expressions are evaluated immediately and their own
-effects still count. A producer's dependencies on open function parameters
-must be resolved into its latent effects, rather than lost when it is returned.
+effects still count. Ordinary producer factories may capture only callbacks with fixed, known
+effects. An unresolved open callback cannot be converted to a fixed latent
+qualifier: `fn delayed(f: () => Unit): Seq[Int] { generate[Int] { f(); yield 1 } }`
+is rejected. Require `f: () uses nothing => Unit` for a pure producer, or declare
+its fixed effects and return `Seq[Int] uses io` when it uses io. A wrapper that
+returns `items.map(f)` has the same restriction if f's effects remain open.
+Built-in adapters can infer latent effect unions from concrete callbacks at
+the call site; this does not introduce symbolic effect parameters for ordinary
+functions. Diagnostics suggest the needed callback qualifier and Seq result
+qualifier instead of charging a deferred call as an immediate effect.
 Effects cannot be erased by aliases, generic containers, records, interface
 bindings or function returns. Pure sequences fit an effectful sequence slot;
 sequences with more effects do not fit one with fewer. The element type follows
