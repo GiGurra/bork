@@ -40,16 +40,38 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     path := fmt.Sprintf("commands[%d].name", i)
     invalid := command.name == "" || strings.HasPrefix(command.name, "-") || strings.IndexFunc(command.name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) >= 0
     if invalid { failures = append(failures, DecodeError{path: path, message: "subcommand name must contain only letters, digits, hyphens, or underscores and not start with a hyphen"}) }
-    if command.name == "help" { failures = append(failures, DecodeError{path: path, message: "subcommand name help is reserved"}) }
+    if command.name == "help" || command.name == "__complete" || command.name == "__completeNoDesc" { failures = append(failures, DecodeError{path: path, message: "subcommand name " + command.name + " is reserved"}) }
     if seen[command.name] { failures = append(failures, DecodeError{path: path, message: "duplicate subcommand name " + command.name}) }
     seen[command.name] = true
   }
   if len(failures) != 0 { return Error{errors: failures} }
+  // Cobra's built-in help swallows unknown-topic errors, and its hidden
+  // completion endpoints are installed even when visible completion is off.
+  // Keep routing limited to registered commands and supported help forms.
+  for _, argument := range arguments {
+    if strings.HasPrefix(argument, "-") { continue }
+    if argument == "__complete" || argument == "__completeNoDesc" { return Error{errors: []DecodeError{{path: name, message: "unknown command " + argument}}} }
+    break
+  }
   var output bytes.Buffer
   var result any
   ran := false
   root := &cobra.Command{Use: name, Short: description, SilenceUsage: true, SilenceErrors: true}
   root.CompletionOptions.DisableDefaultCmd = true
+  root.SetHelpCommand(&cobra.Command{
+    Use: "help [command]", Short: "Help about any command",
+    Args: func(_ *cobra.Command, args []string) error {
+      if len(args) > 1 { return fmt.Errorf("help accepts at most one command name") }
+      return nil
+    },
+    RunE: func(_ *cobra.Command, args []string) error {
+      if len(args) == 0 { return root.Help() }
+      for _, child := range root.Commands() {
+        if child.Name() == args[0] && seen[args[0]] { return child.Help() }
+      }
+      return fmt.Errorf("unknown command %q", args[0])
+    },
+  })
   for _, command := range commands {
     child := &cobra.Command{
       Use: command.name, Short: command.description, DisableFlagParsing: true,

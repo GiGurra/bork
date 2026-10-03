@@ -140,7 +140,8 @@ effect propagation is needed.
 The initial API supports one level of subcommands with command-specific options;
 root/persistent flags and nested groups are not exposed. Command names contain
 letters, digits, hyphens, or underscores, cannot start with a hyphen, must be
-unique, and cannot be `help`.
+unique, and cannot be `help`, `__complete`, or `__completeNoDesc`. Hidden
+Cobra completion endpoints are not exposed; unknown help targets return errors.
 
 See [examples/subcommands](../../examples/subcommands/main.bork):
 
