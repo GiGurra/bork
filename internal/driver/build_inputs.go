@@ -219,8 +219,10 @@ func captureBuildInputs(info *check.Info, diags *diag.List, sources *sourceSnaps
 	if existing != nil {
 		return replayBuildInputs(existing, info, diags, sources)
 	}
+	var attempted *buildSnapshot
 	for range 2 {
 		inputs := &buildSnapshot{reads: map[buildReadKey]buildRead{}}
+		attempted = inputs
 		keys := make([]buildReadKey, len(info.BuildReads))
 		failures := make([]error, len(keys))
 		total := 0
@@ -273,5 +275,5 @@ func captureBuildInputs(info *check.Info, diags *diag.List, sources *sourceSnaps
 	for _, request := range info.BuildReads {
 		diags.AddCode(request.Pos, "build.input", "build inputs changed while loading; retry the command")
 	}
-	return nil
+	return attempted
 }

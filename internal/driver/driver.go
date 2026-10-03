@@ -129,12 +129,14 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 			usage.evaluator = true
 		}
 		inputs := captureBuildInputs(info, diags, loaded.Inputs)
-		if diags.Len() > 0 {
-			return nil, &DiagError{Diags: diags}
-		}
+		// Failed reads are Watch triggers too: appearance, replacement or a
+		// permission/content change must invalidate the attempted inventory.
 		loaded.Inputs.mu.Lock()
 		loaded.Inputs.rooted = inputs
 		loaded.Inputs.mu.Unlock()
+		if diags.Len() > 0 {
+			return nil, &DiagError{Diags: diags}
+		}
 	}
 	eval := evaluatorWithContext(files, info, module, context)
 	if len(info.Comptimes) > 0 {

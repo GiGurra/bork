@@ -279,3 +279,31 @@ func TestBuildReadComponentReplacement(t *testing.T) {
 		t.Fatal("component replacement with unchanged file identity was ignored")
 	}
 }
+
+func TestFailedBuildReadAttemptRetainsTrigger(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(`import "bork/build"
+fn main(){println(comptime{build.ReadString("missing")})}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, module, err := loadCompilationInputs(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = checkLoadedProgramTracked(loaded, module, captureGoContext(), captureEmbedsSnapshot, &goUsage{}, nil)
+	if err == nil || !strings.Contains(err.Error(), "cannot read build input") {
+		t.Fatalf("missing read accepted: %v", err)
+	}
+	if loaded.Inputs.rooted == nil || len(loaded.Inputs.rooted.dependencies()) != 1 || !loaded.Inputs.current() {
+		t.Fatal("stable failed read was not retained as an attempted input")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "missing"), []byte("now present"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Inputs.current() {
+		t.Fatal("new file did not invalidate failed attempt")
+	}
+	if _, _, err := Check(dir); err != nil {
+		t.Fatalf("fresh attempt did not recover: %v", err)
+	}
+}
