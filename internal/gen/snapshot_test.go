@@ -35,6 +35,7 @@ func TestSnapshotDiff(t *testing.T) {
 	files := map[string]string{
 		"go.mod":       "module snaprt\n\ngo 1.26\n",
 		"test.go":      testRuntime,
+		"labels.go":    labelRuntime,
 		"snapshot.go":  snapshotRuntime,
 		"snap_test.go": snapshotRuntimeTest,
 	}

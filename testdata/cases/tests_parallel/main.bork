@@ -1,0 +1,51 @@
+// Tests report in the order they are declared, each with its own
+// mocks, snapshots and failures, whether they run one at a time or
+// several at once (bork test --parallel N, see TestParallelTests).
+// The pauses make later tests finish first when run in parallel.
+
+// Fetch would call the network.
+fn Fetch(url: String) uses net: String {
+  s"real $url"
+}
+
+fn pause(ms: Int) uses clock unsafe go {
+  import "time"
+  time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
+fn main() {
+  println(Fetch("x"))
+}
+
+test "a slow test's mock and snapshots are its own" {
+  calls = mock Fetch(url) { s"slow $url" }
+  pause(150)
+  scope s {
+    t = spawn(s, () => {
+      assertSnapshot(Fetch("from a task"))
+      Fetch("a")
+    })
+    assertEqual(await(t), "slow a")
+  }
+  assertSnapshot(Fetch("b"))
+  assertEqual(calls.count(), 3)
+}
+
+test "a fast test's mock and snapshots are its own" {
+  calls = mock Fetch(url) { s"fast $url" }
+  pause(10)
+  assertSnapshot(Fetch("a"))
+  assertSnapshot(Fetch("b"))
+  assertEqual(calls.count(), 2)
+}
+
+test "a failure is reported as the failing test's" {
+  mock Fetch(url) { s"failing $url" }
+  pause(60)
+  assertEqual(Fetch("x"), "slow x")
+}
+
+test "a test without mocks calls the real function" {
+  pause(30)
+  assertEqual(Fetch("x"), "real x")
+}

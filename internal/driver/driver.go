@@ -266,6 +266,9 @@ type TestOptions struct {
 	// one from its name. Cases, if not 0, is how many cases each runs.
 	Seed  int64
 	Cases int
+	// Parallel, if more than 1, is how many tests run at a time. Each
+	// runs on goroutines of its own, and the report keeps their order.
+	Parallel int
 }
 
 // SnapshotDir is where the tests of the package at path keep their
@@ -316,7 +319,11 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	if opts.Cases != 0 {
 		cases = strconv.Itoa(opts.Cases)
 	}
-	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update, "BORK_SEED="+seed, "BORK_CASES="+cases)
+	parallel := ""
+	if opts.Parallel > 1 {
+		parallel = strconv.Itoa(opts.Parallel)
+	}
+	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update, "BORK_SEED="+seed, "BORK_CASES="+cases, "BORK_PARALLEL="+parallel)
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {

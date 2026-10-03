@@ -910,7 +910,7 @@ func (c *_choices) string(pool []string) string {
 // values (cases of them, or by default 100 or $BORK_CASES), from a seed
 // that is the test's name hashed, or $BORK_SEED. A failing case is
 // shrunk, and reported with the seed that reproduces it. What the cases
-// print is not shown. An automatic property whose parameters cannot be
+// print is not shown (when tests run one at a time). An automatic property whose parameters cannot be
 // generated is skipped rather than failed.
 func _property(name string, cases int, auto bool, prop func(*_choices)) {
 	fixed := cases != 0
@@ -926,7 +926,9 @@ func _property(name string, cases int, auto bool, prop func(*_choices)) {
 		h.Write([]byte(name))
 		seed = int64(h.Sum64() >> 1)
 	}
-	if null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
+	// Run one at a time, its cases' output is not shown. (Tests running
+	// in parallel share os.Stdout, so it is left alone.)
+	if null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil && !_tests.parallel {
 		stdout := os.Stdout
 		os.Stdout = null
 		defer func() {

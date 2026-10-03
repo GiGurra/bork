@@ -238,6 +238,7 @@ r: SignUp | JsonError | DecodeError = decodeJson(line)   // DecodeError { path: 
 - **Test mode checks what is trusted.** `bork test` runs the tests with runtime checks of `trust` statements and of what `unsafe go` functions promise (through list elements, Option values, and fields), so trusted facts that drift from the truth are caught by tests: "validate promised a result that is positive, but returned 0".
 - **Property tests come from facts.** `where` clauses already say which inputs are valid, so `test "transfer scales" (amount: Int where positive) { ... }` runs on generated values that meet them (list elements' and record fields' facts too), shrinks a failing case to a simpler one with the same facts, and prints the seed that reproduces it. `bork test --auto-properties` property-tests the functions whose promises are trusted rather than proven (`unsafe go`, `trust`): their promises hold, and they don't panic, for generated arguments. It is opt-in until effects mark functions pure, which will then be tested by default.
 - **Snapshot tests** are cheap regression tests: `assertSnapshot(render(invoice))` compares the value's text with a file in the package's `snapshots` directory, and a failure shows a line diff. `bork test --update` writes the snapshots that are missing or different, as the compiler's own golden tests do with `-update`, so the change is reviewed in version control.
+- **Tests can run in parallel** (bork-gadfaf). `bork test --parallel N` runs up to N tests at a time, each on goroutines of its own, and reports them in the order they are declared, with the same report as one at a time. Each test keeps its own mocks, snapshot numbering, written snapshots and failures: its goroutine carries a `bork.test` profiler label, which the Go runtime copies to every goroutine it starts (tasks, servers, Go code's goroutines), the carrier mocks use. Tests must not share outside state, such as files, ports, environment variables and the working directory, and their printed output interleaves. Property tests do not hide their cases' output in parallel, since `os.Stdout` is shared. `assertSnapshot` on a goroutine that has no test's label (Go code replaced the labels, or the Go runtime started it) fails, saying so. A goroutine Go code starts lazily in one test and reuses in another (a Go worker pool) keeps the first test's label, so its snapshots count as that test's, or fail once that test has ended. A crash that ends the program (a panic on a goroutine Go code started, a fatal error) loses the reports of tests that finished but are not yet reported in order. A test that calls `runtime.Goexit` fails. The default is one test at a time, on the main goroutine, as before.
 - **Diagnostics** name the requirer, the parameter or field, and the predicate, and suggest a guard or a declaration. A failing constant from inside a helper says where it came from: "sometimes can return 0, and positive(0) is false".
 
 ### Relational facts through rules (bork-uooboq design)
@@ -1420,9 +1421,8 @@ started:
   or captured by a function value does not take the sender's mocks along. Work
   runs with the mocks of the goroutine it runs on: a worker task receiving jobs
   from a channel uses the mocks in force where the worker was started.
-- **So tests do not see each other's mocks.** Tests run one at a time today;
-  running them in parallel is a [follow-up](#follow-ups), and the mocks are
-  already per goroutine for it. A server one test starts answers with that
+- **So tests do not see each other's mocks,** also when they run in parallel
+  (`bork test --parallel N`). A server one test starts answers with that
   test's mocks, whoever sends the request.
 - **Outside any test, nothing is mocked.** A goroutine started before the tests
   ran (by a Go package's `init`, or a pool a library created earlier) has no
@@ -1432,9 +1432,9 @@ started:
   own carry no labels either: `time.AfterFunc` callbacks, finalizers, and cgo
   callbacks run the real functions. This is the documented fallback: a mock
   can only be seen by work that started under it, while it is in force.
-  (Once tests run in parallel, a goroutine a Go library starts lazily during
-  one test and then reuses for another, such as a worker pool, would carry
-  the first test's mocks while that test runs. Pools in bork code are tasks of
+  (When tests run in parallel, a goroutine a Go library starts lazily during
+  one test and then reuses for another, such as a worker pool, carries
+  the first test's mocks (and label) while that test runs. Pools in bork code are tasks of
   a scope, which cannot outlive their test.)
 - **Implementation.** The runtime keeps mocks as a chain of frames, one per
   `mock` statement, each pointing to the frame that was in force when it was
@@ -1635,9 +1635,6 @@ main_test.bork:9:3: fetch is already mocked in this block (at 5:3); mock it agai
 
 ### Follow-ups
 
-- Parallel tests (bork-gadfaf): `bork test --parallel N`. Mocks are per goroutine already;
-  snapshot numbering and failure attribution (`_tests.current` in the test
-  runtime) still need per-test state, through the same carrier.
 - Generic functions and methods (bork-7gpl00): one generic mock for every instantiation.
 - Typed call records and expectations (bork-pvmyos): (`Times`, `Never`, argument matchers,
   waiting for asynchronous calls).
