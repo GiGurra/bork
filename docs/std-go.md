@@ -7,28 +7,36 @@ types such as `context.Context`. Implementations live in
 `internal/gen/helpers.go`. Runtime fields, methods, and variant names are
 compiler internals; keep dependencies on them inside the helper implementations.
 
+## I/O errors
+
 | Helper | Behavior |
 | --- | --- |
 | `_borkIoFailure(err error) (kind, message string)` | Classifies not-found, permission, exists, or other I/O errors; unwraps os.PathError messages. Nil returns empty strings. |
+
+`_borkIoFailure` returns kind `notFound`, `permissionDenied`, `exists`, or `io`
+for a non-nil Go error. It preserves `errors.Is` classification through wrapped
+errors. Standard packages translate these strings into their public union
+errors, supplying the path appropriate to the operation.
+
+## Bytes
+
+| Helper | Behavior |
+| --- | --- |
 | `_borkBytesFrom(data []byte) Bytes` | Copies Go bytes into immutable bork Bytes; nil becomes empty. |
 | `_borkBytesData(data Bytes) []byte` | Copies Bytes into a Go slice the caller may mutate. |
+
+`Bytes` is represented by a distinct named Go slice type, not `[]byte` or
+`List[Byte]`. Use `_borkBytesFrom` for returned data and `_borkBytesData` for
+Go APIs; both copy so later Go mutation cannot change an existing bork value.
+Functions whose signatures or Go bodies use Bytes helpers include the runtime
+automatically. Bytes has no writable fields or elements in bork.
+
+## Options
+
+| Helper | Behavior |
+| --- | --- |
 | `_borkSome[T](value T) Option[T]` | Constructs the prelude's present option. Go infers `T` from the argument. |
 | `_borkNone[T]() Option[T]` | Constructs the prelude's absent option. Supply `T` explicitly. |
-| `_borkMapOf[K,V](keys []K, values []V)` | Builds a persistent map in insertion order. Duplicate keys keep the last value and first position. Panics when slice lengths differ. |
-| `_borkMapGet[K,V](m, key K) (V, bool)` | Looks up a key; returns the zero value and false when absent. |
-| `_borkMapPut[K,V](m, key K, value V)` | Returns a new map, preserving the original and its ordering policy. |
-| `_borkMapLen[K,V](m) int` | Returns the number of entries, including zero for an empty map. |
-| `_borkMapEach[K,V](m, visit func(K,V) bool)` | Visits entries in the map's order; stops when visit returns false. |
-| `_borkScopeCleanupTimeout(s) time.Duration` | Returns the scope cleanup timeout; zero means unbounded. |
-| `_borkScopeContext(s) context.Context` | Returns the scope's cancellation context. |
-| `_borkScopeWith(ctx context.Context)` | Opens a scope cancelled with ctx; the caller must close it. |
-| `_borkScopeClose(s)` | Cancels the scope, waits for tasks, runs finalizers; may panic for a task or finalizer failure. Repeated closure does nothing. |
-| `_borkScopeAbort(s)` | Deferred cleanup: closes an unclosed scope even when its body panics; closure failures may themselves panic. |
-
-Map arguments/results use the compiler's map representation, inferred from
-bork signatures or other helpers. Map keys must obey bork's `Eq` requirement;
-helpers do not validate facts or the immutability of Go values. Slices and
-values passed into these helpers must never subsequently be mutated.
 
 For example, a package can return an option without spelling a generated
 variant name:
@@ -41,6 +49,31 @@ fn Lookup(name: String): Option[String] unsafe go {
   return _borkSome(value)
 }
 ```
+
+## Maps
+
+| Helper | Behavior |
+| --- | --- |
+| `_borkMapOf[K,V](keys []K, values []V)` | Builds a persistent map in insertion order. Duplicate keys keep the last value and first position. Panics when slice lengths differ. |
+| `_borkMapGet[K,V](m, key K) (V, bool)` | Looks up a key; returns the zero value and false when absent. |
+| `_borkMapPut[K,V](m, key K, value V)` | Returns a new map, preserving the original and its ordering policy. |
+| `_borkMapLen[K,V](m) int` | Returns the number of entries, including zero for an empty map. |
+| `_borkMapEach[K,V](m, visit func(K,V) bool)` | Visits entries in the map's order; stops when visit returns false. |
+
+Map arguments/results use the compiler's map representation, inferred from
+bork signatures or other helpers. Map keys must obey bork's `Eq` requirement;
+helpers do not validate facts or the immutability of Go values. Slices and
+values passed into these helpers must never subsequently be mutated.
+
+## Scope lifecycle
+
+| Helper | Behavior |
+| --- | --- |
+| `_borkScopeCleanupTimeout(s) time.Duration` | Returns the scope cleanup timeout; zero means unbounded. |
+| `_borkScopeContext(s) context.Context` | Returns the scope's cancellation context. |
+| `_borkScopeWith(ctx context.Context)` | Opens a scope cancelled with ctx; the caller must close it. |
+| `_borkScopeClose(s)` | Cancels the scope, waits for tasks, runs finalizers; may panic for a task or finalizer failure. Repeated closure does nothing. |
+| `_borkScopeAbort(s)` | Deferred cleanup: closes an unclosed scope even when its body panics; closure failures may themselves panic. |
 
 To bridge a Go operation's context into a scope:
 
@@ -56,6 +89,23 @@ Resources still use their generated record's `handle` and `owner` fields and
 prelude's documented Go representation. The helper API isolates maps, options,
 and scope context/lifecycle operations. `testdata/cases/go_helpers` compiles an
 imported package using every helper and checks persistence and scope cleanup.
+
+Resource handles may implement `_borkRebind(*_Scope)`. The generated resource
+forwards this optional method to its handle, and `attach(resource, s)` calls it
+after retaining ownership in `s`. Cancellation should then follow the destination
+scope, even after the opening scope ends. The latest attachment selects the
+cancellation source; final cleanup still waits for every retained owner.
+
+`_borkNewResourceHandle(value any, s)` returns a `*_borkResourceHandle` with
+`Value`, `Context() context.Context`, and `Close()`. `Value` must be initialized
+before publishing the resource and never mutated afterwards. Its stable context
+carries cancellation from the current owner, supports rebinding, and carries no
+scope context values or deadline metadata. Call `Close` in the resource's final
+cleanup. Cancellation is terminal: attaching an already cancelled resource does
+not revive it. This allows Go APIs such as `database/sql.BeginTx` to retain the
+same context while attachment changes its cancellation source.
+
+## Decode schema
 
 Derived `Decode` dictionaries also expose a general record schema. In an
 `unsafe go` function with `T: Decode`, `_d_T_Decode` is the dictionary parameter;
@@ -80,11 +130,7 @@ bork. Call the regular `Decode` method to construct a complete proven record.
 `bork/env` consumes this schema; it is also available to other std integrations.
 `_borkOptionGet(option)` returns `(value, present)` without variant-name coupling.
 
-`Bytes` is represented by a distinct named Go slice type, not `[]byte` or
-`List[Byte]`. Use `_borkBytesFrom` for returned data and `_borkBytesData` for
-Go APIs; both copy so later Go mutation cannot change an existing bork value.
-Functions whose signatures or Go bodies use Bytes helpers include the runtime
-automatically. Bytes has no writable fields or elements in bork.
+## Standard Go dependencies
 
 A standard package that imports third-party Go libraries declares their pinned
 module requirements in `internal/std/<package>/go-deps.mod` and corresponding
@@ -115,25 +161,7 @@ cached modules. No checksum database access is needed when shipped hashes cover
 the build. The pinned SQLite and Postgres manifests are tested both online and
 from an offline warm cache. See the [Go module reference](https://go.dev/ref/mod).
 
-Resource handles may implement `_borkRebind(*_Scope)`. The generated resource
-forwards this optional method to its handle, and `attach(resource, s)` calls it
-after retaining ownership in `s`. Cancellation should then follow the destination
-scope, even after the opening scope ends. The latest attachment selects the
-cancellation source; final cleanup still waits for every retained owner.
-
-`_borkNewResourceHandle(value any, s)` returns a `*_borkResourceHandle` with
-`Value`, `Context() context.Context`, and `Close()`. `Value` must be initialized
-before publishing the resource and never mutated afterwards. Its stable context
-carries cancellation from the current owner, supports rebinding, and carries no
-scope context values or deadline metadata. Call `Close` in the resource's final
-cleanup. Cancellation is terminal: attaching an already cancelled resource does
-not revive it. This allows Go APIs such as `database/sql.BeginTx` to retain the
-same context while attachment changes its cancellation source.
-
-`_borkIoFailure` returns kind `notFound`, `permissionDenied`, `exists`, or `io`
-for a non-nil Go error. It preserves `errors.Is` classification through wrapped
-errors. Standard packages translate these strings into their public union
-errors, supplying the path appropriate to the operation.
+## Opaque Go values
 
 Opaque Go declarations (`type Request = go "*net/http.Request"`) use a generated
 box. `_borkGo(value)` returns its statically typed Go value; `_borkOpaque[T](value)`
@@ -151,46 +179,7 @@ ownership-only scope that is not passed to Go has no such restriction. An
 `unsafe go` wrapper using `_borkNewResourceHandle` remains the way to make a
 resource whose cancellation follows its latest attachment.
 
-`bork/rand` uses Go's `math/rand/v2` default source for functions declaring
-`uses random`. `Seed(first, second = 0)` creates an opaque immutable PCG
-generator. `IntFrom`, `FloatFrom`, `ShuffleFrom`, and `PickFrom` return a
-`Draw[T]` with `value` and `next`; the corresponding generator methods do the
-same. Reusing the input replays a draw; using `next` advances it. Seeded draws
-are pure and require no effects. Do not rely on identical bounded draws across
-32-bit and 64-bit platforms or future runtime versions.
-
-Integer ranges include `lo` and exclude `hi`, require `hi > lo`, and support
-ranges spanning the signed Int boundary. Floats lie in `[0, 1)`. Shuffle copies
-its input. Pick returns None for an empty list, preserving the generator state.
-This package is for simulations and sampling; use `bork/crypto` for secrets.
-
-`bork/crypto` provides SHA256/SHA512 (Bytes and hex forms), HMAC256/HMAC512,
-constant-time `Equal` for equal-length byte strings, and HMAC verification.
-`RandomBytes` accepts 0 through 16 MiB; `Token(size = 32)` accepts 16 through
-4096 bytes of entropy and returns unpadded URL-safe base64. Both use the system
-cryptographic random source and return Error on entropy failure.
-
-`HashPassword` uses Argon2id with a fresh 16-byte salt and 32-byte key, encoded
-as an Argon2id v19 PHC string. Defaults are 19456 KiB (19 MiB), two iterations
-and one lane, following the [OWASP password storage recommendation](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
-`PasswordParams` is a checked record: memoryKiB 1024–262144, iterations 1–16,
-parallelism 1–16. These bounds also limit work when verifying untrusted hashes.
-Overrides below the defaults are supported for testing or an explicit app
-policy; defaults are recommended for password storage. Argon2id has no bcrypt
-72-byte password limit. The package pins golang.org/x/crypto v0.37.0.
-
-`VerifyPassword` returns false for a wrong password and Error for a malformed,
-unsupported or out-of-bounds hash. It also accepts legacy bcrypt 2/2a/2b/2y
-hashes with cost at most 16; passwords longer than 72 bytes return false for
-these legacy hashes. Argon2id salt/key lengths of 8–64 and 16–64 bytes are
-accepted for imports. Padded base64, whitespace, unknown/duplicate parameters
-and Argon2 versions other than v19 are rejected.
-
-Call `NeedsRehash(hash, parameters = default)` after successful verification.
-It returns true for bcrypt, invalid hashes, parameter differences, or salt/key
-lengths other than 16/32. It compares against the exact application target,
-including when a stored hash uses higher work factors; pass the application's
-chosen parameters consistently to hashing and rehash checks.
+## Mirror conversion helpers
 
 Mirror records (`type Url = go "net/url.URL" { host: String }`) keep their own
 bork representation. `_borkToGo(v)` copies the selected fields into the named Go
@@ -207,8 +196,7 @@ this helper has no scope to own them. An `unsafe go` body supplies the mirror's
 exact Go struct type to `_borkFromGo`; checked bindings also support pointers,
 including `Option` for nil.
 
-
-### Generated Go structs
+## Generated Go structs
 
 `derive (GoStruct)` creates a separate Go struct with exported fields, leaving
 bork's record representation intact. Fields map recursively using the binding
@@ -245,8 +233,7 @@ A generic unsafe Go body with `[T: GoStruct]` receives `_d_T_GoStruct`:
 `derive` and imported with `use`, like other derived instances. `_borkToGo` and
 `_borkFromGo[T]` also work for these generated records as they do for mirrors.
 
-
-### User Go dependencies
+## User Go dependencies
 
 A user module can declare third-party Go dependencies in `go-deps.mod` and
 `go-deps.sum` beside its `bork.mod`. Every package in that bork module uses them
@@ -282,45 +269,10 @@ them under version control. Warm Go module caches support `GOPROXY=off`; an empt
 offline cache fails with the missing module reported. Dependencies are not
 vendored. A future `bork deps` helper can make adding or updating manifests easier.
 
+## Codec privacy
 
 Structurally deriving through foreign private variants is rejected, including
 variants reachable through records, containers, and concrete generic
 specializations. At a field boundary, derivation may delegate to an existing
 codec provided by the field type's owning package, as with `math.Decimal`.
 Re-deriving an alias of that private sealed type still cannot inspect its variants.
-
-HTTP's `Certificate` stores validated PEM certificate and key bytes in a private
-variant, so its declaration needs no Go signature resolution. `LoadCertificate`
-reads and validates files; `ParseCertificate` validates supplied Bytes. Both
-return `Certificate | IoError`. Its Show instance prints only `http.Certificate`.
-`ListenTLS` reconstructs the Go certificate from immutable bytes when opening the
-listener; certificate or key file changes after loading cannot alter the value.
-
-### Command-line schema adapter
-
-`bork/cli` wraps boa with a `reflect.StructOf` shadow struct built from the
-derived Decode field schema. It requires `Decode`, without a GoStruct bound.
-Docs and defaults appear in generated help. Optional shadow pointers track
-which fields were omitted, so defaults and Option values follow the same rules
-as regular decoding. After parsing, the adapter validates each supplied field,
-collects missing, JSON conversion, and fact errors across fields, then decodes the complete record. Boa flag syntax errors (including invalid booleans) stop parsing and return one error before field validation.
-Only that proven record can reach the handler.
-
-`cli.Flag { field, short, env, positional }` maps boa metadata to a bork field.
-The adapter validates these names and rejects duplicate field metadata, short
-flags, environment names, or positional fields. Short flags must be single ASCII characters; `-h` and `--help` are reserved. Field names that produce the same kebab-case flag are rejected. Unknown fields include a closest
-name hint. There is at most one positional field; a List can collect its values.
-Flag names use kebab case (`httpPort` becomes `--http-port`). Strings are literal,
-booleans support `--verbose` and `--verbose=false`, and numbers use JSON syntax.
-Lists take repeated flags (`--tag a --tag b`); string elements are literal and
-other elements use JSON. Nested lists use a JSON array for each occurrence.
-Explicit `env` mappings use boa's environment parsing, and CLI values override
-them. Boa treats an empty environment value as absent. Environment loading through `bork/env` remains independent.
-
-`Parse[T: Decode](name, description, args, flags = [])` returns `T | cli.Error |
-cli.Help`. Arguments exclude the executable name. It captures help text rather
-than printing it. `Run[T: Decode](name, description, handler, flags = [])` reads
-process arguments, prints help, and invokes `(T, Scope) => Unit` in a fresh scope
-on success. It returns `Unit | cli.Error`; applications choose how to render
-errors and exit. Both use `io` for environment access, and Run carries its
-handler's effects. Config-file and subcommand APIs remain follow-up work.
