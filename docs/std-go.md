@@ -115,9 +115,9 @@ same context while attachment changes its cancellation source.
 
 | Helper | Behavior |
 | --- | --- |
-| `_borkLogged() []_borkAmbient` | The `logged` ambient values bound on this goroutine, in declaration order: `_borkAmbient{Name string; Value any}`, Value a `string`, `int64`, `float64` or `bool`. |
+| `_borkLogged() []_borkAmbient` | The `logged` ambient values bound on this goroutine, in declaration order: `_borkAmbient{Name string; Value any}`, Name the declaration's (qualified by its package's last path element where two packages log one name), Value a `string`, `int64`, `float64` or `bool`. |
 | `_borkPropagated() []_borkHeader` | The `propagated` ambient values bound on this goroutine, in declaration order, as sent: `_borkHeader{Name, Value string}`, the header name and the value's text. |
-| `_borkBindPropagated(get func(name string) (string, bool)) (restore func())` | Binds an incoming request's propagated values on this goroutine, and the goroutines it starts, until `restore` puts back its labels. A boundary: every propagated value bound before is cleared first. A value `get` does not give stays unbound; one that is not of its declaration's type, or lacks its facts, stays unbound and is logged at warn level through `log/slog`, without its text. Never panics on input. |
+| `_borkBindPropagated(get func(name string) (string, bool)) (restore func())` | Binds an incoming request's propagated values on this goroutine, and the goroutines it starts, until `restore` puts back its labels. A boundary: every propagated value bound before is cleared first. `get` is called once per propagated declaration, in declaration order. A value `get` does not give stays unbound; one that is not the plain text of its declaration's type (a `String` as is; `Int` and `Float` decimal, without `+`, `_`, hex, `inf` or `nan`; `Bool` `true` or `false`), or lacks its facts, stays unbound and is logged at warn level through `log/slog`, without its text. Never panics on input. |
 
 A `with` publishes the values of `logged` and `propagated("header")`
 declarations in the goroutine's profiler labels until its block ends; these

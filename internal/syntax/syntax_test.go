@@ -258,6 +258,7 @@ func TestParseAmbientMarkers(t *testing.T) {
 		`propagated("x") propagated("y") ambient a: String`: "propagated is given twice",
 		"propagated ambient a: String":                      "expected '(' after propagated",
 		"propagated(header) ambient a: String":              "expected string literal (the header that carries the value)",
+		`propagated("x-\$a") ambient a: String`:             "the header name must be a plain string",
 		"logged fn f() {}":                                  "expected ambient after the markers logged and propagated",
 		`propagated("x") logged secret a: String`:           "expected ambient after the markers",
 	} {

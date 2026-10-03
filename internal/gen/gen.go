@@ -416,8 +416,11 @@ type gen struct {
 	mockErrors     diag.List
 	usesMocks      bool
 	// usesAmbients is set when the program publishes or reads logged
-	// or propagated ambient values (ambientRuntime).
+	// or propagated ambient values (ambientRuntime). labelGuard, while
+	// a Go function's body is generated, is set if a with in it
+	// publishes values (see guardLabels).
 	usesAmbients bool
+	labelGuard   *bool
 	// blocks are the blocks being generated, and scopeBodies the scope
 	// blocks, so a mock can tell whether it is directly in a scope's
 	// body.
@@ -741,11 +744,8 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	for i := range fn.Params {
 		drop(i)
 	}
-	if fn.Result == check.Unit {
-		decl.Body = &ast.BlockStmt{List: append(drops, g.blockInto(fn.Body, sink{})...)}
-	} else {
-		decl.Body = &ast.BlockStmt{List: append(drops, g.blockInto(fn.Body, sink{ret: true})...)}
-	}
+	k := sink{ret: fn.Result != check.Unit}
+	decl.Body = &ast.BlockStmt{List: append(drops, g.guardLabels(func() []ast.Stmt { return g.blockInto(fn.Body, k) })...)}
 	return decl
 }
 
@@ -1190,12 +1190,12 @@ func (g *gen) lambda(e *check.Lambda) ast.Expr {
 	saved, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
 	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = ft.Result, nil, nil, nil
 	defer func() { g.openScopes, g.blockOwners, g.openMocks = savedScopes, savedOwners, savedMocks }()
-	var body []ast.Stmt
-	if ft.Result == check.Unit {
-		body = g.effect(e.Body)
-	} else {
-		body = g.tailReturn(e.Body)
-	}
+	body := g.guardLabels(func() []ast.Stmt {
+		if ft.Result == check.Unit {
+			return g.effect(e.Body)
+		}
+		return g.tailReturn(e.Body)
+	})
 	g.fnResult = saved
 	return &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}
 }

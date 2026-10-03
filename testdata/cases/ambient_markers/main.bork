@@ -1,7 +1,16 @@
 import "bork/log"
+import "example.com/marked/audit"
 
 pred nonEmpty(s: String) { s != "" }
 pred small(n: Int) { n < 10 }
+// A predicate that panics on some input.
+pred calm(s: String) {
+  if (s == "boom") {
+    panic(s"bad ${s}")
+  } else {
+    true
+  }
+}
 
 type TraceParent = String where nonEmpty
 
@@ -10,6 +19,9 @@ type TraceParent = String where nonEmpty
 logged ambient requestId: String
 propagated("traceparent") logged ambient trace: TraceParent
 propagated("x-attempt") ambient attempt: Int where small
+propagated("x-ratio") ambient ratio: Float
+propagated("x-flag") ambient flag: Bool
+propagated("x-mood") ambient mood: String where calm
 // An unmarked value never leaves through logs or headers.
 ambient secret: String
 
@@ -40,6 +52,31 @@ fn serve(traceIn: String, attemptIn: String, handler: () uses io => Unit) uses i
   })
   defer restore()
   handler()
+}
+
+// Binds one header's incoming value, and prints what would be sent on.
+fn receive(header: String, text: String) uses io unsafe go {
+  import "fmt"
+  restore := _borkBindPropagated(func(name string) (string, bool) {
+    return text, name == header
+  })
+  defer restore()
+  out := ""
+  for _, h := range _borkPropagated() {
+    out += h.Name + "=" + h.Value + " "
+  }
+  fmt.Printf("received %s %q: send: %s\n", header, text, out)
+}
+
+// A generator's return ends only its own withs.
+fn generated(): Seq[Int] {
+  generate[Int] {
+    yield 1
+    if (true) {
+      return
+    }
+    yield 2
+  }
 }
 
 // A with ends on every way out of its block.
@@ -93,4 +130,35 @@ fn main() uses io + state {
   // their text.
   serve("", "12", () => println(s"send: ${headers()}"))
   serve("t", "x", () => println(s"send: ${headers()}"))
+  // Only plain decimal text is read, and values are sent as bork shows
+  // them.
+  for (text in ["2.50", "3", "-1e3", "+1", "1_0", "inf", "0x1p4", "1."]) {
+    receive("x-ratio", text)
+  }
+  for (text in ["true", "false", "1", "TRUE"]) {
+    receive("x-flag", text)
+  }
+  receive("x-attempt", "+4")
+  receive("x-mood", "fine")
+  receive("x-mood", "boom")
+  with (ratio: 3.0, flag: true) {
+    println(s"send: ${headers()}")
+  }
+  with (requestId: "outer") {
+    for (x in generated()) {
+      work(s"item ${x}")
+    }
+    work("after generated")
+    // Two packages log requestId.
+    audit.Run(() => audit.Note())
+  }
+  // A with in a loop restores on each iteration.
+  for (i in Seq.range(0, 3)) {
+    with (requestId: s"loop ${i}") {
+      if (i == 1) {
+        work("loop")
+      }
+    }
+  }
+  work("after loop")
 }

@@ -20,3 +20,33 @@ level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=at
 send: 
 level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it is not an Int"
 send: traceparent=t 
+received x-ratio "2.50": send: x-ratio=2.5 
+received x-ratio "3": send: x-ratio=3.0 
+received x-ratio "-1e3": send: x-ratio=-1000.0 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "+1": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "1_0": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "inf": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "0x1p4": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-ratio ambient=ratio error="it is not a Float"
+received x-ratio "1.": send: 
+received x-flag "true": send: x-flag=true 
+received x-flag "false": send: x-flag=false 
+level=WARN msg="ignored an invalid propagated value" header=x-flag ambient=flag error="it is not a Bool"
+received x-flag "1": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-flag ambient=flag error="it is not a Bool"
+received x-flag "TRUE": send: 
+level=WARN msg="ignored an invalid propagated value" header=x-attempt ambient=attempt error="it is not an Int"
+received x-attempt "+4": send: 
+received x-mood "fine": send: x-mood=fine 
+level=WARN msg="ignored an invalid propagated value" header=x-mood ambient=mood error="checking its facts panicked"
+received x-mood "boom": send: 
+send: x-ratio=3.0 x-flag=true 
+level=INFO msg="item 1" requestId=outer k=1
+level=INFO msg="after generated" requestId=outer k=1
+level=INFO msg=audit requestId=outer audit.requestId=audit-1
+level=INFO msg=loop requestId="loop 1" k=1
+level=INFO msg="after loop" k=1

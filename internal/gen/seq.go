@@ -26,13 +26,15 @@ type loopFrame struct {
 func (g *gen) generateSeq(e *check.Generate) ast.Expr {
 	t := e.Type().(*check.Seq)
 	seqType := g.goType(t)
-	savedResult, savedScopes, savedOwners := g.fnResult, g.openScopes, g.blockOwners
+	// The producer is a function of its own: a return in it ends
+	// only what it opened.
+	savedResult, savedScopes, savedOwners, savedMocks := g.fnResult, g.openScopes, g.blockOwners, g.openMocks
 	savedYield, savedLoops := g.yieldName, g.loops
-	g.fnResult, g.openScopes, g.blockOwners = check.Unit, nil, nil
+	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = check.Unit, nil, nil, nil
 	g.yieldName, g.loops = g.newTmp(), nil
 	yield := g.yieldName
-	body := g.effect(e.Body)
-	g.fnResult, g.openScopes, g.blockOwners = savedResult, savedScopes, savedOwners
+	body := g.guardLabels(func() []ast.Stmt { return g.effect(e.Body) })
+	g.fnResult, g.openScopes, g.blockOwners, g.openMocks = savedResult, savedScopes, savedOwners, savedMocks
 	g.yieldName, g.loops = savedYield, savedLoops
 	cb := &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Type: g.goType(t.Elem)}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("bool")}}}}
 	producer := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{yield}, Type: cb}}}}, Body: &ast.BlockStmt{List: body}}

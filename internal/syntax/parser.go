@@ -684,7 +684,11 @@ func (p *parser) ambientDecl() (ad *AmbientDecl) {
 		case t.Text == "propagated" && ad.Propagated == nil:
 			p.expect(LParen, "after propagated (the header that carries the value: propagated(\"traceparent\"))")
 			h := p.expect(TString, "(the header that carries the value)")
-			header, _ := strconv.Unquote(h.Text)
+			header, err := strconv.Unquote(h.Text)
+			if err != nil {
+				p.errorf(h.Pos, "the header name must be a plain string, such as \"traceparent\"")
+				panic(bailout{})
+			}
 			p.expect(RParen, "after the header name")
 			ad.Propagated = &Propagated{Pos: t.Pos, Header: header, HeaderPos: h.Pos}
 		default:

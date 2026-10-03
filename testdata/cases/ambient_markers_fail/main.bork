@@ -11,6 +11,12 @@ propagated("") ambient empty: String
 propagated("x trace") ambient spaced: String
 propagated("traceparent") ambient trace: String
 
+fn show() needs trace: String {
+  trace
+}
+
 fn main() uses io {
   println(other.Trace)
+  // A with binds values.
+  println(with (trace: panic("none")) { show() })
 }

@@ -2202,8 +2202,10 @@ propagated("traceparent") logged ambient trace: TraceParent   // String where va
   unmarked declarations never leave through logs or the network implicitly.
 - **A marked value is a `String`, `Int`, `Float` or `Bool`**, facts allowed:
   logs and headers carry it as text, and an incoming value is read back from
-  its text and checked against its facts. Records would need a codec per
-  declaration; none is needed yet.
+  its text and checked against its facts. A `String` goes as it is; numbers
+  and `Bool` go as bork shows them (`3.0`, `true`), and only that plain text
+  is read back (no `+`, `_`, hex, `inf` or `nan`; `Bool` only `true` or
+  `false`). Records would need a codec per declaration; none is needed yet.
 - **A header name is an HTTP token, used once per program** (ignoring case):
   two declarations sent under one header would be confused on the receiving
   side.
@@ -2213,28 +2215,33 @@ propagated("traceparent") logged ambient trace: TraceParent   // String where va
   its block ends on any path (`return`, `?`, `break`, a panic). Goroutines
   started meanwhile inherit them: tasks, and goroutines of Go code. Unlike
   needs, this follows the goroutine, not the source: a lambda made inside a
-  `with` and run outside it logs without the value, and a task started inside
-  logs with it after the block ended. That is right for labels of logs and
+  `with` and run outside it logs without the value, a task started inside
+  logs with it after the block ended, and the loop body consuming a
+  `generate` whose producer is inside a `with` runs with the producer's
+  values (the producer calls it). That is right for labels of logs and
   outgoing calls, and is why nothing a function computes may depend on them.
 - **Only effectful standard-library boundary code reads them**, through the
   helpers in [the Go helpers for standard packages](std-go.md#ambient-values):
-  `bork/log` adds logged values (under the declaration's name, before a
-  record's own attributes); `net` clients send `_borkPropagated()`, and
+  `bork/log` adds logged values (under the declaration's name, or
+  `audit.requestId` where two packages log one name, before a record's own
+  attributes); `net` clients send `_borkPropagated()`, and
   servers bind an incoming request's values with `_borkBindPropagated`. Bork
   code reads ambient values only through `needs`.
 - **An incoming request is a boundary.** Binding its values first clears every
   propagated value the server's goroutine had bound, so a request never
   forwards the server's own trace. A missing value stays unbound; one that is
-  not of its type or lacks its facts stays unbound and is logged at warning
-  level, without its text. Logged values that are not propagated are not
+  not of its type or lacks its facts (or whose predicate panics) stays
+  unbound and is logged at warning level, without its text. Logged values that are not propagated are not
   cleared.
 - **Labels never reach `needs`.** A handler's code computes with the bindings
   captured where it was made (lexically, above). For application code to
   *need* an incoming value, the handler decodes it from the request with the
   checked `Decode` boundary and binds it: `with (trace: decoded) { ... }`
   (bork-gqxe4s).
-- **Cost.** Only a `with` that binds a marked value touches labels; a program
-  without marked declarations has none of this runtime.
+- **Cost.** Only a `with` that binds a marked value touches labels, and a Go
+  function holding one defers a single restore for panics, however many
+  times a loop runs the `with`; a program without marked declarations has
+  none of this runtime.
 
 ### Implementation: hidden parameters
 
@@ -2313,6 +2320,7 @@ main.bork:2:1: ambient session cannot hold Scope: ambient values are data, so pa
 main.bork:5:40: save declares needs traceId, but never reads it
 main.bork:31:9: with binds ambient values, and total is not one
 main.bork:33:9: traceId is bound twice in one with
+main.bork:21:24: cannot bind trace: the expression never produces a value
 main.bork:42:22: attempt must be positive, but positive(0) is false
 main.bork:6:22: logged ambient user must hold a String, Int, Float or Bool (facts allowed), found User: logs and headers carry it as text
 main.bork:11:12: propagated("x trace"): a header name is letters, digits and !#$%&'*+-.^_`|~, and not empty

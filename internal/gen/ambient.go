@@ -3,6 +3,7 @@ package gen
 import (
 	"go/ast"
 	"go/token"
+	"path"
 	"strconv"
 
 	"github.com/GiGurra/bork/internal/check"
@@ -60,16 +61,49 @@ func (g *gen) ambientPush(labels []*check.Var) []ast.Stmt {
 	g.mockN++
 	frame := ast.NewIdent("_af" + strconv.Itoa(g.mockN))
 	g.openMocks = append(g.openMocks, openMock{frame: frame, depth: len(g.openScopes), ambient: true})
-	return []ast.Stmt{
-		define(frame, &ast.CallExpr{Fun: ast.NewIdent("_ambientPush"), Args: args}),
-		&ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: frame, Sel: ast.NewIdent("restore")}}},
+	push := define(frame, &ast.CallExpr{Fun: ast.NewIdent("_ambientPush"), Args: args})
+	if g.labelGuard != nil {
+		*g.labelGuard = true
+		return []ast.Stmt{push}
 	}
+	return []ast.Stmt{push, &ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: frame, Sel: ast.NewIdent("restore")}}}}
+}
+
+// guardLabels generates a Go function's body, and, if a with in it
+// publishes values, first defers putting back the labels the function
+// started with. A with's block restores them on every normal way out
+// (see openMock); the guard covers panics. One guard per function, not
+// a deferred restore per with: a with in a loop would keep a deferred
+// call for every iteration until the function returns.
+func (g *gen) guardLabels(body func() []ast.Stmt) []ast.Stmt {
+	saved := g.labelGuard
+	used := false
+	g.labelGuard = &used
+	out := body()
+	g.labelGuard = saved
+	if !used {
+		return out
+	}
+	guard := &ast.DeferStmt{Call: &ast.CallExpr{Fun: ast.NewIdent("_setLabels"), Args: []ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_labels")}}}}
+	return append([]ast.Stmt{guard}, out...)
 }
 
 // ambientDecls is the Go source of _ambientDecls.
 func (g *gen) ambientDecls() string {
 	src := "package main\n\nvar _ambientDecls = []*_ambientDecl{\n"
+	// A logged value is logged under its name, or, where two
+	// packages log the same name, under its package's and its name.
+	logged := map[string]int{}
 	for _, a := range g.ambientMarked() {
+		if a.Logged {
+			logged[a.Name]++
+		}
+	}
+	for _, a := range g.ambientMarked() {
+		logName := a.Name
+		if logged[a.Name] > 1 && !a.Pkg.Root {
+			logName = path.Base(a.Pkg.Path) + "." + a.Name
+		}
 		kind := map[check.Type]string{check.String: "s", check.Int: "i", check.Float: "f", check.Bool: "b"}[a.Type]
 		valid := "nil"
 		if a.Header != "" && len(a.Constraints) > 0 {
@@ -91,7 +125,7 @@ func (g *gen) ambientDecls() string {
 			}
 		}
 		src += "\t{key: " + strconv.Quote("bork.ambient."+a.Pkg.Path+"."+a.Name) +
-			", name: " + strconv.Quote(a.Name) +
+			", name: " + strconv.Quote(logName) +
 			", logged: " + strconv.FormatBool(a.Logged) +
 			", header: " + strconv.Quote(a.Header) +
 			", kind: '" + kind + "'" +
@@ -108,14 +142,16 @@ const ambientRuntime = `package main
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
+	"strings"
 	"unsafe"
 )
 
 // _ambientDecl is a logged or propagated ambient declaration.
 type _ambientDecl struct {
 	key    string // its label
-	name   string // as declared
+	name   string // what logs call it
 	logged bool
 	header string // the header a propagated value is sent under, or ""
 	kind   byte   // its type: 's' String, 'i' Int, 'f' Float, 'b' Bool
@@ -151,8 +187,8 @@ func (f *_ambientFrame) restore() {
 	}
 }
 
-// _ambientText is the text a value is published as. (A label's value
-// is "=" and the text, as a label cannot be empty.)
+// _ambientText is the text a value is published as, as bork shows it.
+// (A label's value is "=" and the text, as a label cannot be empty.)
 func _ambientText(v any) string {
 	switch v := v.(type) {
 	case string:
@@ -160,7 +196,14 @@ func _ambientText(v any) string {
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case float64:
-		return strconv.FormatFloat(v, 'g', -1, 64)
+		if a := math.Abs(v); math.IsInf(v, 0) || math.IsNaN(v) || (a != 0 && (a < 1e-6 || a >= 1e21)) {
+			return strconv.FormatFloat(v, 'g', -1, 64)
+		}
+		s := strconv.FormatFloat(v, 'f', -1, 64)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
+		return s
 	case bool:
 		return strconv.FormatBool(v)
 	}
@@ -170,29 +213,39 @@ func _ambientText(v any) string {
 // read is the value text stands for, or an error if it stands for
 // none: a value of the declaration's type, with its facts.
 func (d *_ambientDecl) read(text string) (v any, err error) {
-	// The errors never quote the text, which came from outside.
+	// Only plain decimal text is read (no "+", "_", hex, inf or nan,
+	// and Bool only true or false). The errors never quote the text,
+	// which came from outside.
 	switch d.kind {
 	case 's':
 		v = text
 	case 'i':
+		if !_ambientNumber(text, false) {
+			return nil, fmt.Errorf("it is not an Int")
+		}
 		if v, err = strconv.ParseInt(text, 10, 64); err != nil {
 			return nil, fmt.Errorf("it is not an Int")
 		}
 	case 'f':
+		if !_ambientNumber(text, true) {
+			return nil, fmt.Errorf("it is not a Float")
+		}
 		if v, err = strconv.ParseFloat(text, 64); err != nil {
 			return nil, fmt.Errorf("it is not a Float")
 		}
 	case 'b':
-		if v, err = strconv.ParseBool(text); err != nil {
+		if text != "true" && text != "false" {
 			return nil, fmt.Errorf("it is not a Bool")
 		}
+		v = text == "true"
 	}
 	if d.valid != nil {
 		ok := false
 		func() {
 			defer func() {
-				if r := recover(); r != nil {
-					err = fmt.Errorf("checking its facts panicked: %v", r)
+				if recover() != nil {
+					// The panic's text may hold the value.
+					err = fmt.Errorf("checking its facts panicked")
 				}
 			}()
 			ok = d.valid(v)
@@ -205,6 +258,42 @@ func (d *_ambientDecl) read(text string) (v any, err error) {
 		}
 	}
 	return v, nil
+}
+
+// _ambientNumber reports whether text is a plain decimal number: an
+// optional "-", digits, and for a Float an optional fraction and
+// exponent.
+func _ambientNumber(text string, float bool) bool {
+	i := 0
+	digits := func() bool {
+		start := i
+		for i < len(text) && '0' <= text[i] && text[i] <= '9' {
+			i++
+		}
+		return i > start
+	}
+	if i < len(text) && text[i] == '-' {
+		i++
+	}
+	if !digits() {
+		return false
+	}
+	if float && i < len(text) && text[i] == '.' {
+		i++
+		if !digits() {
+			return false
+		}
+	}
+	if float && i < len(text) && (text[i] == 'e' || text[i] == 'E') {
+		i++
+		if i < len(text) && (text[i] == '+' || text[i] == '-') {
+			i++
+		}
+		if !digits() {
+			return false
+		}
+	}
+	return i == len(text)
 }
 
 // _ambientLabel is the text published for d on this goroutine.

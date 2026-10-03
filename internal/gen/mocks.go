@@ -322,12 +322,7 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 		// does (genericMockBody).
 		g.mangleTypeParams(m.Target, true)
 	}
-	var body []ast.Stmt
-	if m.Target.Result == check.Unit {
-		body = g.blockInto(m.Func.Body, sink{})
-	} else {
-		body = g.blockInto(m.Func.Body, sink{ret: true})
-	}
+	body := g.guardLabels(func() []ast.Stmt { return g.blockInto(m.Func.Body, sink{ret: m.Target.Result != check.Unit}) })
 	g.mockBodies = g.mockBodies[:len(g.mockBodies)-1]
 	g.yieldName, g.loops = savedYield, savedLoops
 	if capture != nil {

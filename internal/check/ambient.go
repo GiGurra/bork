@@ -480,6 +480,9 @@ func (c *checker) withExpr(e *syntax.WithExpr, want Type) Type {
 			continue
 		}
 		t := c.exprWant(b.Value, a.Type)
+		if t == Never {
+			c.errorf(b.Value.Position(), "cannot bind %s: the expression never produces a value", b.Name)
+		}
 		if t, tt := c.settle(t, a.Type); t != Invalid && tt != Invalid && !assignable(t, tt) {
 			c.errorf(b.Value.Position(), "%s must be %s, found %s", b.Name, tt, t)
 		}
