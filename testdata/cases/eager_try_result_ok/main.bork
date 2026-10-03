@@ -75,8 +75,12 @@ fn alwaysExit(): (Int | Ok) where NumericExit { if (true) { return 1 } }
 fn neverExit(): (Int | Ok) where NumericExit { if (panic("stop")) { return 1 } }
 fn neverSource(): Int | Ok { if (panic("stop")) { return 1 } }
 fn derivedNever(): (Int | Ok) where NumericExit { _ = neverSource()?; 1 }
+fn neverStatement(): (Int | Ok) where NumericExit { if (panic("stop")) { return 1 }; _ = 1 }
+fn alwaysStatement(): (Int | Ok) where NumericExit { if (true) { return 1 }; _ = 1 }
+fn neverStatementSource(): Int | Ok { if (panic("stop")) { return 1 }; _ = 1 }
+fn derivedNeverStatement(): (Int | Ok) where NumericExit { _ = neverStatementSource()?; 1 }
 fn main() {
-  println(alwaysExit())
+  println(alwaysExit(), alwaysStatement())
   bareUnit()
   println(emptyExit(), bareExit(), conditionalExit(true), conditionalExit(false), emptyForward(), lazyEmpty())
   println(lazyForward(true), lazyForward(false), lazyReturn(true), lazyReturn(false))

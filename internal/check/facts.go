@@ -373,7 +373,7 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		e = f.stmts(x.Stmts, e)
 		if x.Tail != nil {
 			f.tail(x.Tail, e, result)
-		} else if x.Type() != Never {
+		} else if completes(x) {
 			result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e)
 		}
 	case *ScopeBlock:
@@ -383,7 +383,7 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		f.tail(x.Body, e, result)
 	case *If:
 		f.walk(x.Cond, e)
-		if x.Cond.Type() == Never {
+		if !completes(x.Cond) {
 			return
 		}
 		f.tail(x.Then, e.with(f.conditionFacts(x.Cond, true)...), result)
@@ -405,6 +405,61 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 			result(x, e)
 		}
 	}
+}
+
+// completes reports whether control can reach an expression's normal end.
+// Some conditionals retain type Ok even when their condition or chosen arm
+// cannot finish, so Type alone cannot identify an implicit Ok result.
+func completes(x Expr) bool {
+	x = debugValue(x)
+	if x.Type() == Never {
+		return false
+	}
+	switch x := x.(type) {
+	case *Block:
+		for _, stmt := range x.Stmts {
+			switch s := stmt.(type) {
+			case *ExprStmt:
+				if !completes(s.X) {
+					return false
+				}
+			case *Let:
+				if s.Thunk == nil && !completes(s.Value) {
+					return false
+				}
+			}
+		}
+		return x.Tail == nil || completes(x.Tail)
+	case *ScopeBlock:
+		for _, p := range x.Policies {
+			if !completes(p) {
+				return false
+			}
+		}
+		return completes(x.Body)
+	case *If:
+		if !completes(x.Cond) {
+			return false
+		}
+		if v := constOf(x.Cond); v != nil && v.Kind() == constant.Bool {
+			if constant.BoolVal(v) {
+				return completes(x.Then)
+			}
+			return x.Else == nil || completes(x.Else)
+		}
+		return completes(x.Then) || x.Else == nil || completes(x.Else)
+	case *Match:
+		if !completes(x.X) {
+			return false
+		}
+		for _, arm := range x.Arms {
+			if completes(arm.Body) {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // stmts walks a block's statements and returns the facts known after
