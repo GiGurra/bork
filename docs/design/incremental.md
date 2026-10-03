@@ -437,3 +437,22 @@ The namespace includes effective configuration, resolved driver choice and Go
 launcher bytes. This is not a full compilation-result key: complete toolchain
 contents, mutable external package/driver inputs and evaluator effects remain
 untracked. No Session result reuse is enabled by this step.
+
+## Phase 1: clean comparison baseline
+
+`TestCompilationReplayMatchesClean` compiles deterministic fixtures through the
+normal semantic pipeline, then reparses their frozen source capture into a
+separate AST and rebuilds semantic state. The second run reconstructs manifests
+from frozen reads and installs owned copies of captured assets. It compares main
+and test Go, dependency manifests/sums, staged asset paths/names/bytes, rendered
+errors and ordered diagnostic JSON. It also checks that replay discovers no
+additional source or asset dependencies. One fixture deletes its source and
+assets between runs: replay retains the captured output while a new request sees
+the deletion. CI exposes this as the Captured-input parity check.
+
+This establishes the byte-comparison baseline before introducing result reuse.
+Both runs still execute semantic checking, Go metadata loading and predicate
+execution; this is not a Session hit or proof that external effects are tracked.
+The first Session PR must route its reused artifacts through the same comparison
+and extend the fixtures to edit/invalidation sequences. Unknown metadata or
+evaluator inputs must still force fresh compilation.

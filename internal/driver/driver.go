@@ -88,15 +88,20 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 	if err != nil {
 		return nil, err
 	}
+	return checkLoadedProgramObserved(loaded, module, captureGoContext(), captureEmbedsSnapshot, observe)
+}
+
+// Rebuild semantic state from independently parsed captured inputs. Callers own
+// the parsed files; immutable source/module/context snapshots may be shared.
+func checkLoadedProgramObserved(loaded *loadedSources, module *goModuleInputs, context *goContext, captureAssets func(*check.Info, *diag.List, *sourceSnapshot) *embedSnapshot, observe func(string)) (*compiledProgram, error) {
 	files, root, diags := loaded.Files, loaded.Root, loaded.Diags
-	context := captureGoContext()
 	phase(observe, "check")
 	info := check.ProgramObserved(files, root, diags, goPackages{files: files, module: module, context: context}, observe)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
 	phase(observe, "embeds")
-	assets := captureEmbedsSnapshot(info, diags, loaded.Inputs)
+	assets := captureAssets(info, diags, loaded.Inputs)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
