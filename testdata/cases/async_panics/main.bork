@@ -1,0 +1,17 @@
+fn protect(work: () => Unit): Bool unsafe go {
+ recovered := false
+ func(){ defer func(){ recovered = recover() != nil }(); work() }()
+ return recovered
+}
+fn main() {
+  scope s {
+    async(s) failed: Int = panic("read failure")
+    println(protect(() => { _ = failed }))
+    println(protect(() => { _ = failed }))
+  }
+  println(protect(() => { scope s { async(s) unread: Int = panic("unread failure") } }))
+  scope s with logFailures() {
+    async(s) failed: Int = panic("logging policy still raises on read")
+    println(protect(() => { _ = failed }))
+  }
+}

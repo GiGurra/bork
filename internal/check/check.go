@@ -1078,7 +1078,11 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		}
 		var t Type
 		if s.AsyncScope != nil {
-			if scope := c.expr(s.AsyncScope); scope != Scope && scope != Invalid && scope != Never {
+			scope := c.expr(s.AsyncScope)
+			if scope == Never {
+				return Never
+			}
+			if scope != Scope && scope != Invalid {
 				c.errorf(s.AsyncScope.Position(), "async requires a Scope, found %s", scope)
 			}
 		}

@@ -653,6 +653,7 @@ func (l *lifeChecker) stmt(s Stmt) {
 				owner = l.use(s.AsyncScope, l.expr(s.AsyncScope))
 			}
 			life := l.lambda(s.Initializer)
+			payload := life
 			if s.Deferred == AsyncBinding {
 				if short := l.storeShorter(life, owner); short != nil {
 					l.errorf(s.Pos, "async initializer may not live as long as scope %s (it depends on %s); attach shorter resources to the task scope first", scopeName(s.AsyncScope), l.scopeText(short))
@@ -662,7 +663,7 @@ func (l *lifeChecker) stmt(s Stmt) {
 			l.deferredCaptures[s.Var] = life
 			l.info.VarLifetimes[s.Var] = l.lifeText(life)
 			if l.carriesLife(s.Var.Type) {
-				l.env[s.Var] = life
+				l.env[s.Var] = payload
 			}
 			return
 		}

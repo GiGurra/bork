@@ -1,8 +1,10 @@
 package driver
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,6 +33,10 @@ func TestAsyncBindingChecks(t *testing.T) {
 		{"forced closure escape", "fn make():()=>Int{scope s{async(s) x=1;_ = x;()=>x}}", "cannot return this value"},
 		{"scalar value escape", "fn make():Int{scope s{async(s) x=1;x}}", ""},
 		{"keyword function", "fn async(x:Int):Int{x}\nfn main(){scope s{async(s) x=async(1);println(x)}}", ""},
+		{"owner unconditional return", "fn f():Int{scope s{async(return 7) x=1}}", ""},
+		{"resolved channel escape", "fn main(){scope outer{ch=channel[Int](outer,1);copy=scope inner{async(inner) value=ch;value};_ = send(copy,7);println(receive(copy))}}", ""},
+		{"resolved channel cell escape", "fn make(s:Scope):()=>Channel[Int]{ch=channel[Int](s,1);scope inner{async(inner) value=ch;()=>value}}", "cannot return this value"},
+		{"released channel cell", "fn main(){scope s{ch=channel[Int](s,1);owner=openScope(s);async(owner.scope) value=ch;closeScope(owner);println(receive(value))}}", "may be released"},
 		{"owner early return", "fn f():Int{scope s{async({if(true){return 7};s}) x=1;x}}", ""},
 		{"owner early try", "type Failed={}\nfn choice(s:Scope):Scope|Failed{s}\nfn f():Int|Failed{scope s{async(choice(s)?) x=1;x}}", ""},
 	} {
@@ -67,4 +73,33 @@ func TestDescribeAsyncNeverStarts(t *testing.T) {
 			t.Fatalf("%+v", result)
 		}
 	}
+}
+
+// Exercise generated scope, initializer and memo code together under -race.
+func TestAsyncBindingRace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds and runs a Go race executable")
+	}
+	path := filepath.Join("..", "..", "testdata", "cases", "async_bindings")
+	files, _, source, err := emit(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), source, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeGoModule(dir, files); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "run", "-race", "-mod=readonly", ".")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("generated async bindings: %v\n%s\n%s", err, out, stderr.String())
+	}
+	compare(t, filepath.Join(path, "expected_output.txt"), string(out))
 }

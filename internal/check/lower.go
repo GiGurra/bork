@@ -164,6 +164,9 @@ func (l *lowerer) block(b *syntax.Block) *Block {
 func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 	switch s := s.(type) {
 	case *syntax.Binding:
+		if s.AsyncScope != nil && l.info.types[s.AsyncScope] == Never {
+			return &ExprStmt{X: l.expr(s.AsyncScope)}
+		}
 		let := &Let{Pos: s.Pos, Value: l.expr(s.Value), Declared: s.Type != nil, Constraints: l.info.bindingConstraints[s]}
 		let.Var = &Var{Label: l.info.assemblyNames[s], Name: s.Name, Pos: s.Pos, Type: l.info.bindings[s], Kind: VarLet, Let: let, Unused: l.info.unused[s]}
 		if s.Lazy || s.AsyncScope != nil {

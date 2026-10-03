@@ -9,6 +9,7 @@ fn owner(s: Scope) uses io: Scope { println("owner evaluated"); s }
 fn earlyOwner(): Int { scope s { async({ if (true) { return 9 }; s }) value = 99; value } }
 fn failedScope(s: Scope): Scope | Failed { Failed {} }
 fn earlyTry(): Int | Failed { scope s { async(failedScope(s)?) value = 99; value } }
+fn unconditionalOwner(): Int { scope s { async(return 12) value = 99 } }
 fn main() {
   scope s {
     ready = channel[Int](s, 2)
@@ -19,6 +20,8 @@ fn main() {
     println("both started")
     _ = send(release, 1); _ = send(release, 2)
     reader = () => first
+    tasks = [1, 2, 3].map(n => spawn(s, () => reader()))
+    println(tasks.map(t => await(t)))
     println(reader()); println(first); println(second)
     alias = first; println(alias)
     async(s) failed = bad()
@@ -44,5 +47,11 @@ fn main() {
     async(s) checked: Int where positive = 7
     println(positive(checked))
   }
-  println(earlyOwner()); println(earlyTry())
+  println(earlyOwner()); println(earlyTry()); println(unconditionalOwner())
+  scope outer {
+    ch = channel[Int](outer, 1)
+    copy = scope inner { async(inner) value = ch; value }
+    _ = send(copy, 7)
+    println(receive(copy))
+  }
 }
