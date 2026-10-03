@@ -6,6 +6,11 @@ fn fake(): Database { Database { name: "fake" } }
 fn number(): Int { 1 }
 providers Wiring = { config: config, database: database }
 providers Configs = { config: config }
+type A = {}
+type B = {}
+fn a(dependency: B): A { A {} }
+fn b(dependency: A): B { B {} }
+providers Cycle = { a: a, b: b }
 fn main() {
   scope app {
     println(assemble[Database](app, Wiring(database: fake)))
@@ -18,5 +23,6 @@ fn main() {
     value = Wiring
     println(value)
     Wiring()
+    println(assemble[A](app, Cycle))
   }
 }

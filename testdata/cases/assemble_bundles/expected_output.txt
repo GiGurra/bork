@@ -2,6 +2,10 @@
 Worker { name: "real" }
 Worker { name: "real" }
 App { database: Database { name: "fake real" }, worker: Worker { name: "fake real" } }
+Worker { name: "real" }
+Worker { name: "fake real" }
+Good { value: 7 }
+[Worker { name: "extra" }, Worker { name: "second" }, Worker { name: "extra" }, Worker { name: "second" }]
 Worker { name: "fixture" }
 Worker { name: "fake real" }
 [Worker { name: "real" }, Worker { name: "extra" }, Worker { name: "standalone" }]

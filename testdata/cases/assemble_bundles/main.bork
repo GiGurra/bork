@@ -19,12 +19,19 @@ fn failedRecipe(label: String) uses io: (() => wiring.Config) | EvaluationFailur
 fn evaluate(s: Scope) uses io: wiring.Worker | EvaluationFailure {
   assemble[wiring.Worker](s, wiring.Wiring(database: databaseRecipe("before failure"), config: failedRecipe("failure")?))
 }
+pred positive(n: Int) { n < 0 }
+type DbAlias = wiring.Database
+fn alias(c: wiring.Config): DbAlias { fake(c) }
 fn main() {
   scope app {
     println(assemble[wiring.Secret](app, wiring.Secrets).value)
     println(assemble[wiring.Worker](app, wiring.Wiring))
     println(assemble[wiring.Worker](app, wiring.Wiring()))
     println(assembleRecord[wiring.App](app, wiring.Wiring(database: fake)))
+    println(assemble[wiring.Worker](app, wiring.Wiring))
+    println(assemble[wiring.Worker](app, wiring.Wiring(database: alias)))
+    println(assemble[wiring.Good](app, wiring.Facts))
+    println(assembleAll[wiring.Worker](app, wiring.RepeatedWorkers, wiring.RepeatedWorkers))
     fixture = wiring.Config { name: "fixture" }
     println(assemble[wiring.Worker](app, wiring.Wiring(config: () => fixture)))
     provider = fake

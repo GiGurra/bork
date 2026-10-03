@@ -1,19 +1,11 @@
-type Conn = resource
-type App = { first: Conn, second: Conn }
-fn connect(s: Scope) uses io: Conn unsafe go {
-  import "fmt"
-  fmt.Println("open")
-  return Conn{handle: "connection", owner: s.Own(func() { fmt.Println("close") })}
-}
-fn application(conn: Conn in s, s: Scope): App { App { first: conn, second: conn } }
-providers Wiring = { connection: connect, application: application }
+import "example.com/assemble-bundles-scopes/wiring"
 fn main() {
   scope root {
     child = openScope(root)
-    first = assemble[App](child.scope, Wiring)
+    first = assemble[wiring.App](child.scope, wiring.Wiring)
     println(first)
     closeScope(child)
-    second = assemble[App](root, Wiring)
+    second = assemble[wiring.App](root, wiring.Wiring)
     println(second)
   }
 }

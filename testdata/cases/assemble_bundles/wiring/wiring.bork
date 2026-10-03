@@ -15,3 +15,11 @@ type Secret = private { value: Int }
 fn secret(): Secret { Secret { value: 7 } }
 providers Secrets = { secret: secret }
 providers privateWiring = { config: config }
+
+pred positive(n: Int) { n > 0 }
+type Good = { value: Int where positive }
+fn number(): Int where positive { 7 }
+fn good(value: Int where positive): Good { Good { value: value } }
+providers Facts = { number: number, good: good }
+fn secondExtra(): Worker { Worker { name: "second" } }
+providers RepeatedWorkers = { first: extra, second: secondExtra }
