@@ -1,0 +1,46 @@
+// A match whose only arm always matches binds its names for that arm
+// alone, so matches beside it can bind the same names.
+
+type Box = { value: Int }
+type Pair = { left: Box, right: Box }
+
+fn sum(p: Pair): Int {
+  match (p) {
+    Pair { left: Box { value }, right } => value + right.value
+  }
+}
+
+fn twice(b: Box): Int {
+  a = match (b) {
+    Box { value } => value
+  }
+  c = match (Box { value: a * 2 }) {
+    Box { value } => value
+  }
+  match (c) {
+    value => value + 1
+  }
+}
+
+fn main() uses io {
+  a = match (Box { value: 1 }) {
+    Box { value } => value
+  }
+  b = match (Box { value: 2 }) {
+    Box { value } => value
+  }
+  println(a + b)
+  match (Box { value: 3 }) {
+    Box { value } => println(value)
+  }
+  match (Box { value: 4 }) {
+    Box { value } => println(value)
+  }
+  for (i in [5, 6]) {
+    match (Box { value: i }) {
+      Box { value } => println(value)
+    }
+  }
+  println(sum(Pair { left: Box { value: 7 }, right: Box { value: 8 } }))
+  println(twice(Box { value: 9 }))
+}
