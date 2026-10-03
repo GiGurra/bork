@@ -181,4 +181,34 @@ func TestOwnershipMapKeys(t *testing.T) {
  b:=_bindResourceKey(_bindResourceKey("result","a"),"b][c")
  if a==b { t.Fatal("nested string keys collided") }
 }
+
+// Independent Close cannot await shared cancellation while a sibling remains
+// owned. Authors must close independently, or bound scope cleanup by policy.
+func TestOwnedSiblingsShareCancellationUntilTheirSourcesEnd(t *testing.T) {
+ root,cancelRoot:=context.WithCancel(context.Background())
+ defer cancelRoot()
+ extra,cancelExtra:=context.WithCancel(context.Background())
+ defer cancelExtra()
+ s:=&_Scope{ctx:root}
+ g:=_bindNewContextGroup(s)
+ ctx:=g.Context(s)
+ g.Context(&_Scope{ctx:extra})
+ g.Start()
+ entered:=make(chan struct{},2)
+ for _,path:=range []string{"first","last"} {
+  g.Register(path,new(int),func(){entered<-struct{}{};<-ctx.Done()})
+  g.Own(path,s)
+ }
+ success:=true
+ g.Finish(&success)
+ cancelRoot()
+ done:=make(chan struct{})
+ go func(){s.close();close(done)}()
+ select {case <-entered:case <-time.After(time.Second):t.Fatal("Close never started")}
+ if ctx.Err()!=nil { t.Fatal("earlier Close cancelled a retained sibling") }
+ select {case <-done:t.Fatal("Close unexpectedly finished while shared context remained live");default:}
+ // Ending the remaining contributing source lets sequential finalizers finish.
+ cancelExtra()
+ select {case <-done:case <-time.After(time.Second):t.Fatal("scope cleanup did not finish after cancellation")}
+}
 `

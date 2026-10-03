@@ -176,8 +176,12 @@ scope and all Scope context arguments form a union; `attach` on any result adds
 its destination scope. All resources from that call share cancellation, but
 retain separate close owners. Cancellation waits until every contributing scope
 has ended or cancelled, or until the last returned resource releases ownership.
-The final member cancels the group before invoking Close, allowing Close to wait
-for cancellation. An explicit
+The final member cancels the group before invoking Close, allowing that Close to
+wait for cancellation. Binding authors must ensure a member's Close does not
+wait for the group's cancellation while another sibling is still owned. Shared
+cancellation cannot end early without cancelling the retained sibling; such a
+Close can block scope cleanup. `cleanupTimeout(ms)` is the escape hatch for a
+misbehaving binding: it bounds each finalizer and lets remaining finalizers run. An explicit
 opaque context remains a fixed external limit: attach extends ownership but
 cannot outlive that context's cancellation or deadline.
 
