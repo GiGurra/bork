@@ -95,6 +95,28 @@ fn attached(s: Scope) uses io + state: process.Process | IoError | Cancelled {
     attach(proc, s)
   }
 }
+fn millis() uses clock: Int unsafe go {
+  import "time"
+  return time.Now().UnixMilli()
+}
+fn inheritedPipes(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
+  path = marker(s)
+  child = process.Start(s, "/bin/sh", ["-c", "sleep 3 & echo ready > \"$1\"; wait", "bork-test", path])?
+  waitReady(path)
+  start = millis()
+  process.Stop(child)
+  println(match (process.Await(child)) {
+    stopped: Cancelled => true
+    _ => false
+  })
+  println(millis() - start < 2500)
+  start2 = millis()
+  println(match (process.Run(s, "/bin/sh", ["-c", "sleep 3 & exit 0"])) {
+    error: IoError => error.path == "/bin/sh"
+    _ => false
+  })
+  println(millis() - start2 < 2500)
+}
 fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
   output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: utf8Bytes("input") })?
   println(output.code)
@@ -121,6 +143,7 @@ fn exercise(s: Scope) uses io + state + clock: Unit | IoError | Cancelled {
     error: IoError => false
     stopped: Cancelled => true
   })
+  inheritedPipes(s)?
   signalTest(s, false)?
   signalTest(s, true)?
   stopped = process.Start(s, executable(), ["sleep"])?

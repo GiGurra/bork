@@ -1049,3 +1049,8 @@ The scope runtime registers SIGINT/SIGTERM for the program lifetime, cancelling
 root scopes and their nested scopes. Scope-aware waits and checkpoints observe
 cancellation; cleanup runs when those scopes end. Pure work needs an explicit
 checkpoint to observe shutdown. This introduces no new language syntax.
+
+Process capture waits at most one second for inherited output pipes after the
+child exits or is cancelled. If a descendant keeps them open after a normal
+exit, the result is IoError rather than partial output. Cancellation still
+returns Cancelled. This bound keeps pipe capture from blocking cleanup forever.

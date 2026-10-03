@@ -20,9 +20,12 @@ fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Opti
   import "context"
   import "errors"
   import "os/exec"
+  import "time"
   handle := _borkNewResourceHandle(nil, s)
   ctx, cancelChild := context.WithCancel(handle.Context())
   cmd := exec.CommandContext(ctx, name, arguments...)
+  // Bound inherited output pipes after child exit or cancellation.
+  cmd.WaitDelay = time.Second
   cmd.Dir = directory
   if values, present := _borkOptionGet(environment); present { cmd.Env = append([]string{}, values...) }
   if data, present := _borkOptionGet(stdin); present { cmd.Stdin = bytes.NewReader(_borkBytesData(data)) }

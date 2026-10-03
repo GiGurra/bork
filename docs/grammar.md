@@ -245,3 +245,8 @@ Code that does not reach a cancellation point continues running. Signals are
 registered for the program's lifetime when scope runtime is used. Stopping a
 subprocess kills that process; it does not manage its descendant process tree.
 See [the process example](../examples/process/main.bork).
+
+Process capture waits at most one second for inherited output pipes after the
+child exits or is cancelled. If a descendant keeps them open after a normal
+exit, the result is IoError rather than partial output. Cancellation still
+returns Cancelled. This bound keeps pipe capture from blocking cleanup forever.
