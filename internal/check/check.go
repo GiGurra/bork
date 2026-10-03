@@ -361,6 +361,12 @@ type patSource struct {
 // goTypes loads the Go packages that bindings name; it may be nil for a
 // program without bindings.
 func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes) *Info {
+	return ProgramObserved(files, root, diags, goTypes, nil)
+}
+
+// ProgramObserved is Program with optional phase notifications for benchmarks.
+// observe is called before lowering and contract checks; checking starts in the caller.
+func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes, observe func(string)) *Info {
 	c := &checker{
 		diags: diags,
 		info: &Info{
@@ -546,7 +552,13 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 		if c.diags.Len() == 0 {
 			c.checkEmbeds()
 			if c.diags.Len() == 0 {
+				if observe != nil {
+					observe("lower")
+				}
 				c.lower(files)
+				if observe != nil {
+					observe("contracts")
+				}
 				c.checkRequirementContracts()
 			}
 		}

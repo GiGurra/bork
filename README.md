@@ -267,6 +267,11 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 | [bork/url](docs/std/url.md) | Immutable URLs, repeated query parameters and escaping |
 | [bork/uuid](docs/std/uuid.md) | Canonical UUIDs, generation and JSON string codecs |
 
+## Compiler performance
+
+See the [benchmark harness and profiling report](docs/design/performance.md) for
+compiler phase timings, CLI latency, generated code sizes and CI artifacts.
+
 ## License
 
 [MIT](LICENSE)
