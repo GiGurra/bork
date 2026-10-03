@@ -314,3 +314,29 @@ before the disk-cache step, separating Go metadata/proof subprocess latency from
 the compiler's own checking/generation work. These examples can load Go types
 and run proofs; the conservative complete-result Session does not claim hits
 for them.
+
+## Launcher validation after monotonic observation
+
+Launcher metadata can skip hashing after more than two seconds of monotonic
+observation of a matching tuple and matching bytes. This avoids comparing local
+wall time with filesystem/server timestamps. Platforms without inode/change-time
+evidence and FAT/exFAT keep hashing. Timestamp granularity must be at most two
+seconds; persistent entries must establish new observations in each process.
+
+Three five-request samples on main including #201/#206, after local tests
+finished, gave these medians (milliseconds). `unchanged_stable` waits a real two
+seconds before timing; `unchanged` starts immediately and includes warm-up hashing.
+
+| Workload | First | Immediate unchanged | Established unchanged (min–max) |
+| --- | ---: | ---: | ---: |
+| hello check | 101.51 | 29.28 | 9.29 (9.07–9.91) |
+| hello emit | 110.54 | 29.98 | 9.53 (9.04–9.81) |
+| synthetic1000 check | 131.03 | 30.21 | 8.81 (8.69–8.82) |
+| synthetic1000 emit | 151.78 | 29.10 | 8.75 (8.65–9.26) |
+
+Every unchanged sample reports one hit/request. Established configuration
+validation is 0.31 ms (0.30–0.33), source/assets 0.05 ms (0.05–0.07), and names
+8.13 ms (8.10–8.38). Hello-check hit allocations are 0.53 MB; synthetic emit
+0.91 MB. Earlier #206 hits were about 19 ms. The new stable path saves launcher
+hashing, while startup/warm-up adds descriptor and repeated hashing work.
+Ordinary one-shot APIs are unchanged; the #194 CLI issue remains separate.

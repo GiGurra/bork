@@ -22,6 +22,7 @@ type goContextValidation struct {
 	cache, tmp                 string
 	compilers                  map[string]string
 	toolDigest, selfDigest     [sha256.Size]byte
+	toolEvidence               *goToolEvidence
 	self                       string
 	launcher, resolvedLauncher string
 	selfFile                   os.FileInfo
@@ -34,9 +35,7 @@ func captureSessionGoContext(previous *goContext) *goContext {
 	if previous != nil && previous.validation != nil && resolved.err == nil && resolved.driverErr == nil &&
 		slices.Equal(resolved.processEnv, previous.processEnv) && resolved.tool == previous.tool &&
 		resolved.driver == previous.driver && resolved.self == previous.self && previous.validation.current() {
-		if digest, err := goToolDigest(resolved.tool); err == nil && digest == previous.toolDigest {
-			return previous
-		}
+		return previous
 	}
 	// Capture before querying Go, so edits during configuration discovery cannot
 	// certify a result obtained from earlier settings.
@@ -153,7 +152,7 @@ func captureGoContextValidation(ctx *goContext) *goContextValidation {
 	if !validation.recordDirectory(validation.cache) || !validation.recordDirectory(validation.tmp) || !validation.recordDirectory(os.TempDir()) {
 		return nil
 	}
-	validation.toolDigest, err = goToolDigest(ctx.tool)
+	validation.toolDigest, validation.toolEvidence, err = captureGoToolEvidence(ctx.tool)
 	if err != nil {
 		return nil
 	}
@@ -247,6 +246,9 @@ func (v *goContextValidation) accepts(ctx *goContext) bool {
 }
 
 func (v *goContextValidation) current() bool {
+	if !v.toolCurrent() {
+		return false
+	}
 	if launcher, err := filepath.EvalSymlinks(v.launcher); err != nil || launcher != v.resolvedLauncher {
 		return false
 	}
