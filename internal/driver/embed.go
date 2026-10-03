@@ -28,22 +28,26 @@ func captureEmbedsFrom(info *check.Info, diags *diag.List, sources *sourceSnapsh
 		if !inputs.current() {
 			continue
 		}
-		for i, request := range info.Embeds {
-			if err := failures[i]; err != nil {
-				diags.AddCode(request.Pos, "embed.asset", "cannot embed %q: %v", request.Path, err)
-				continue
-			}
-			for j := range captured[i] {
-				captured[i][j].StagePath = fmt.Sprintf("_bork_embed/e%df%d.bin", i, j)
-			}
-			request.Files = captured[i]
-		}
+		installCapturedEmbeds(info, diags, captured, failures)
 		return inputs
 	}
 	for _, request := range info.Embeds {
 		diags.AddCode(request.Pos, "embed.asset", "embedded asset inputs changed while loading; retry the command")
 	}
 	return nil
+}
+
+func installCapturedEmbeds(info *check.Info, diags *diag.List, captured [][]check.EmbeddedFile, failures []error) {
+	for i, request := range info.Embeds {
+		if err := failures[i]; err != nil {
+			diags.AddCode(request.Pos, "embed.asset", "cannot embed %q: %v", request.Path, err)
+			continue
+		}
+		for j := range captured[i] {
+			captured[i][j].StagePath = fmt.Sprintf("_bork_embed/e%df%d.bin", i, j)
+		}
+		request.Files = captured[i]
+	}
 }
 
 func captureEmbed(request *check.Embedded) ([]check.EmbeddedFile, error) {
