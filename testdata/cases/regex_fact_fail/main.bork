@@ -1,0 +1,6 @@
+import "bork/regex"
+fn accepted(re: regex.Regex, text: String where regex.Matches(re)): String { text }
+fn main() {
+  re = regex.Compile("^ok$")
+  println(accepted(re, "bad"))
+}

@@ -1,0 +1,3 @@
+main.bork:3:25: regex.Compile requires pattern to be regex.ValidPattern, but regex.ValidPattern("[") is false
+main.bork:4:25: regex.Compile requires pattern to be regex.ValidPattern, but regex.ValidPattern("(a)\\1") is false
+main.bork:5:25: regex.Compile requires pattern to be regex.ValidPattern, but regex.ValidPattern("(?=a)") is false

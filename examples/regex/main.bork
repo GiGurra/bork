@@ -1,0 +1,12 @@
+import "bork/regex"
+
+fn email(re: regex.Regex, value: String where regex.Matches(re)): String { value }
+fn main() {
+  re = regex.Compile("^[^@ ]+@[^@ ]+\\.[^@ ]+$")
+  value = "hello@example.com"
+  if (regex.Matches(value, re)) { println(email(re, value)) }
+  words = regex.Compile("(?P<word>[a-z]+)")
+  println(words.Find("123 hello"))
+  println(words.Replace("hello world", "${word}!"))
+  println(regex.Parse("["))
+}

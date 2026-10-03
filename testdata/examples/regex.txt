@@ -1,0 +1,4 @@
+hello@example.com
+Option.Some { value: Match { value: "hello", start: 4, end: 9, groups: [Option.Some { value: "hello" }], named: {"word": Option.Some { value: "hello" }} } }
+hello! world!
+ParseError { input: "[", message: "error parsing regexp: missing closing ]: `[`" }

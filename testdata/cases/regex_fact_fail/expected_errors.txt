@@ -1,0 +1,1 @@
+main.bork:5:24: accepted requires text to be regex.Matches(re), but that is not proven for "bad" (check it first with if (regex.Matches("bad", re)) { ... })

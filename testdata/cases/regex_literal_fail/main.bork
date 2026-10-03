@@ -1,0 +1,6 @@
+import "bork/regex"
+fn main() {
+  println(regex.Compile("["))
+  println(regex.Compile("(a)\\1"))
+  println(regex.Compile("(?=a)"))
+}
