@@ -1,3 +1,4 @@
+import "bork/json"
 import "bork/sql"
 
 pred named(value: String) { value.byteLength() > 0 }
@@ -17,7 +18,7 @@ fn count(db: sql.Connection) uses io + net: Int | sql.Error | DecodeError {
 fn showError(result: Json | sql.Error) uses io {
   match (result) {
     error: sql.Error => println(error.operation)
-    value: Json => println(renderJson(value))
+    value: Json => println(json.Render(value))
   }
 }
 fn rollbackPanic(db: sql.Connection) uses io + net: Ok | sql.Error {

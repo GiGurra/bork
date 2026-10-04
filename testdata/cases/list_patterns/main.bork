@@ -1,3 +1,4 @@
+import "bork/process"
 fn describe(xs: List[Int]): String {
   match (xs) {
     [] => "empty"
@@ -31,7 +32,7 @@ fn main() {
   println(describe([1, 2, 3]))
   println(sum([1, 2, 3, 4]))
   println(firstSome([Option.None, Option.Some { value: 5 }]))
-  match (args()) {
+  match (process.Args()) {
     [] => println("no args")
     [...all] => println(all)
   }

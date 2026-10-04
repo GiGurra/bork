@@ -31,7 +31,7 @@ fn Next(reader: Reader) uses io: Option[Json] | LineError | IoError unsafe go {
   if line == "" && err == io.EOF { return _borkNone[Json]() }
   *state.line++
   if strings.HasSuffix(line, "\n") { line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r") }
-  parsed := parseJson(line)
+  parsed := Parse(line)
   if failure, failed := parsed.(JsonError); failed { return LineError{path: state.file.Name(), line: *state.line, message: failure.message} }
   return _borkSome(parsed.(Json))
 }
@@ -47,8 +47,8 @@ fn CreateLines(path: String, s: Scope) uses io: Writer | IoError unsafe go {
 fn Write[T: Encode](writer: Writer, value: T) uses io: Ok | JsonError | IoError {
   encoded = encode[T](value)
   validateNumbers(encoded)?
-  parsed = parseJson(renderJson(encoded))?
-  writeLine(writer, renderJson(parsed))
+  parsed = Parse(Render(encoded))?
+  writeLine(writer, Render(parsed))
 }
 fn writeLine(writer: Writer, text: String) uses io: Ok | IoError unsafe go {
   import "os"

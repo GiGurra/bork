@@ -1,3 +1,4 @@
+import "bork/process"
 // Command stores a callback with a fixed effect bound, allowing heterogeneous
 // option records in one list. Subcommand captures each typed decoder/handler.
 type Command = {
@@ -96,7 +97,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
 // RunCommands reads process arguments and prints help. Applications render
 // returned errors and choose an exit code, as with Run.
 fn RunCommands(name: String, description: String, commands: List[Command]) uses io + net + clock + random + state: Ok | Error {
-  match (Dispatch(name, description, args(), commands)) {
+  match (Dispatch(name, description, process.Args(), commands)) {
     help: Help => { print(help.text) }
     error: Error => error
     Ok => {}

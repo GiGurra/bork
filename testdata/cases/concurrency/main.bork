@@ -1,21 +1,22 @@
-fn slow(n: Int, ms: Int) uses clock: Int {
-  sleep(ms)
+import "bork/time"
+fn slow(s: Scope, n: Int, ms: Int) uses clock + state: Int {
+  _ = time.Sleep(s, time.Nanoseconds((ms) * 1000000))
   n * n
 }
 
 fn main() {
   total = scope s {
-    a = spawn(s, () => slow(3, 30))
-    b = spawn(s, () => slow(4, 10))
+    a = spawn(s, () => slow(s, 3, 30))
+    b = spawn(s, () => slow(s, 4, 10))
     launch(s, () => {
-      sleep(5)
+      _ = time.Sleep(s, time.Nanoseconds((5) * 1000000))
       println("launched task ran")
     })
     await(a) + await(b)
   }
   println(total)
   squares = scope s {
-    tasks = range(1, 6).map(n => spawn(s, () => slow(n, 10 - n)))
+    tasks = range(1, 6).map(n => spawn(s, () => slow(s, n, 10 - n)))
     tasks.map(t => await(t))
   }
   println(squares)
@@ -23,8 +24,8 @@ fn main() {
 
 test "tasks run concurrently, and await gives their results" {
   r = scope s {
-    a = spawn(s, () => slow(2, 5))
-    b = spawn(s, () => slow(3, 5))
+    a = spawn(s, () => slow(s, 2, 5))
+    b = spawn(s, () => slow(s, 3, 5))
     await(a) * await(b)
   }
   assertEqual(r, 36)

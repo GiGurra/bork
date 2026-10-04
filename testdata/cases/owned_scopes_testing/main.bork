@@ -66,7 +66,7 @@ test "an early exit closes the block's owned scopes first" {
 fn holds(app: Scope) uses clock + state {
   b = openScope(app)
   onClose(b.scope, () => panic("child finalizer failed"))
-  sleep(300)
+  stubborn(300)
   closeScope(b)
 }
 
@@ -95,3 +95,9 @@ test "logFailures logs instead" {
 }
 
 fn main() {}
+
+// Deliberately ignores cancellation to exercise the parent task timeout.
+fn stubborn(ms: Int) uses clock unsafe go {
+  import "time"
+  time.Sleep(time.Duration(ms) * time.Millisecond)
+}

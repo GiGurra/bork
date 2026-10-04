@@ -67,7 +67,7 @@ fn Text(status: Status, body: String): Response {
   .{ status: status, headers: { "Content-Type": ["text/plain; charset=utf-8"] }, body: body }
 }
 
-// JsonReply is a response with a JSON body (already rendered, as encodeJson
+// JsonReply is a response with a JSON body (already rendered, as codecs.Encode
 // gives it).
 fn JsonReply(status: Status, body: String): Response {
   .{ status: status, headers: { "Content-Type": ["application/json"] }, body: body }
