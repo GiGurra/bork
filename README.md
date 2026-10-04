@@ -40,7 +40,7 @@ bork run hello.bork      # compile and run
 bork build hello.bork    # compile to an executable
 ```
 
-The [tour](docs/tour.md) continues from here. For a single file with top-level statements, use `bork script hello.bork`; see [scripts](docs/language/scripts.md).
+The [tour](docs/tour.md) continues from here. Read the [documentation online](https://gigurra.github.io/bork/). For a single file with top-level statements, use `bork script hello.bork`; see [scripts](docs/language/scripts.md).
 
 On Linux and macOS, checks and builds automatically cache unchanged compiler results and pure predicate answers. See [the compile cache](docs/cli.md#the-compile-cache).
 

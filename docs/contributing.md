@@ -23,6 +23,20 @@ The documentation is tested too, in `internal/driver/docs_snippets_test.go`:
 - `TestDocSnippets` compiles the bork code blocks of the README and the reader pages. A block marked `bork` must compile and be formatted. One marked `bork fails` must not compile, and a `text` block right after it quotes the compiler's message, which is checked as well. One marked `bork fragment` is not checked.
 - `TestDocLinks` checks the relative links, and the headings they point at, in every Markdown page under `docs/` and `examples/`.
 
+## Building the documentation site
+
+The [MkDocs](https://www.mkdocs.org/) site builds the existing Markdown pages and derives navigation from `docs/README.md`. Standard-package navigation follows `docs/std/README.md`. Search runs in the browser. The build rewrites links outside `docs/` to GitHub source URLs; `BORK_DOCS_REVISION` selects the revision (the deployed build uses its commit SHA). Source pages keep their repository-relative links, and `TestDocSnippets` and `TestDocLinks` remain the checks for examples and links.
+
+```sh
+python3 -m venv .venv-docs
+.venv-docs/bin/pip install -r scripts/docs-requirements.txt
+.venv-docs/bin/mkdocs serve
+.venv-docs/bin/mkdocs build --strict
+python3 -m unittest discover -s scripts -p 'test_docs_site.py'
+```
+
+`serve` previews the site at `http://127.0.0.1:8000/bork/`; `build` writes `site/`. Neither changes the Markdown sources. The Documentation workflow validates pull requests and publishes main through GitHub Pages. A repository administrator must select **Settings → Pages → Build and deployment → Source: GitHub Actions** once. The workflow needs no publishing token or extra secret; its deploy job uses GitHub's Pages permissions. See [GitHub's custom workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
 ## Design notes
 
 | Note | Subject |
