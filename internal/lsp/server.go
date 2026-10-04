@@ -22,9 +22,10 @@ type document struct {
 	version int
 }
 type packageState struct {
-	session  *driver.Session
-	analysis *driver.EditorAnalysis
-	stale    bool
+	session     *driver.Session
+	analysis    *driver.EditorAnalysis
+	stale       bool
+	diagnostics []diag.Diagnostic
 }
 type server struct {
 	out                   io.Writer
@@ -185,7 +186,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			"referencesProvider": true, "renameProvider": map[string]any{"prepareProvider": true},
 			"documentSymbolProvider": true, "completionProvider": map[string]any{"triggerCharacters": []string{"."}},
 			"codeLensProvider":   map[string]any{"resolveProvider": false},
-			"codeActionProvider": map[string]any{"codeActionKinds": []string{"quickfix"}},
+			"codeActionProvider": map[string]any{"codeActionKinds": []string{"quickfix", "source.organizeImports"}},
 		}, "serverInfo": map[string]any{"name": "bork", "version": s.version}}, nil, false
 	}
 	if !s.initialized {
@@ -312,6 +313,7 @@ func (s *server) check() error {
 				}
 			}
 		}
+		pkg.diagnostics = ds
 		for _, d := range ds {
 			path, err := filepath.Abs(d.Pos.File)
 			if err != nil || d.Pos.File == "" {

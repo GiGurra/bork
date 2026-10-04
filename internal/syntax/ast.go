@@ -53,7 +53,8 @@ type ProviderEntry struct {
 // or pattern name) "money.add".
 type Import struct {
 	Pos  diag.Pos
-	Name string // what the file calls the package
+	End  diag.Pos // after the quoted import path
+	Name string   // what the file calls the package
 	Path string
 }
 
