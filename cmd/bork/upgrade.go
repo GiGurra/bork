@@ -92,6 +92,9 @@ func upgradeCommand() *cobra.Command {
 				return fmt.Errorf("upgrade cannot replace %s: %w", target, err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "bork %s -> %s (%s)\n", version(), newVersion, target)
+			if err == nil {
+				offerEditorRefresh(cmd.Context(), cmd.OutOrStdout(), target)
+			}
 			return err
 		},
 	}

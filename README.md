@@ -193,8 +193,9 @@ The library also checks the literal while compiling. Writing `'$name'` in quotes
 
 The [VS Code extension](editors/vscode/README.md) combines syntax highlighting
 with `bork lsp`: diagnostics for unsaved edits, types and facts on hover,
-navigation, completion, formatting and compiler fixes. Other LSP clients can
-launch `bork lsp` over stdio.
+navigation, completion, formatting and compiler fixes. Install it with
+`bork editor install vscode` (use `--editor cursor` or `--editor codium` for
+those editors). See [editor setup](docs/editors.md) for other LSP clients.
 
 ## Learn more
 

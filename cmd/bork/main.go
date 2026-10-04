@@ -501,7 +501,7 @@ func main() {
 			},
 		),
 	}
-	command.SubCmds = append(command.SubCmds, envCommand(), upgradeCommand())
+	command.SubCmds = append(command.SubCmds, envCommand(), upgradeCommand(), editorCommand())
 	root := command.ToCobra()
 	if path, enabled := earlyToolchainTarget(root, os.Args[1:]); enabled {
 		if err := selectToolchain(root, path); err != nil {
