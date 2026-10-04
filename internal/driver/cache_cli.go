@@ -193,10 +193,14 @@ func freshCachedCompileWithBuild(path string, emit bool, build func(*compiledPro
 }
 
 func testCacheProbe(status string) {
+	testCacheProbeAt("BORK_TEST_DISK_CACHE_PROBE", status)
+}
+
+func testCacheProbeAt(setting, status string) {
 	if cacheTestGate != "enabled" {
 		return
 	}
-	path := os.Getenv("BORK_TEST_DISK_CACHE_PROBE")
+	path := os.Getenv(setting)
 	if path == "" {
 		return
 	}

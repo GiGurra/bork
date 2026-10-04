@@ -31,6 +31,8 @@ bork build hello.bork    # compile to an executable
 
 The [tour](docs/tour.md) continues from here. For a single file with top-level statements, use `bork script hello.bork`; see [scripts](docs/language/scripts.md).
 
+On Linux and macOS, checks and builds automatically cache unchanged compiler results and pure predicate answers. See [the compile cache](docs/cli.md#the-compile-cache).
+
 Package values such as `MaxRetries = 3` are immutable and pure, computed once on first read, or baked as data when read by `comptime`. See [bindings and package values](docs/language/basics.md).
 
 Method chains can span lines with a leading dot, such as `.map(...)`; see [methods](docs/language/basics.md#methods).

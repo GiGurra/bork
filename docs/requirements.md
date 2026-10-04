@@ -3245,7 +3245,10 @@ compiler results, staging and locks, including `bork clean`. Cache namespace and
 locking layouts remain unchanged; root relocation is operational rather than a
 semantic compiler input. `BORK_CACHE=off` disables compiler result reuse and
 persistent staging, including when saved in the configuration. Go's cache is
-independent. Result reuse currently remains gated for integration tests.
+independent. Linux/macOS CLI commands also retain bounded results of audited
+closed predicate batches in their staging entries. Reuse still performs current
+Facts checking and preserves diagnostics; explicit comptime values execute afresh.
+Stale, corrupt or unavailable entries always fall back to fresh evaluation.
 
 `bork install [path]` defaults to `.` and builds into `BORKBIN`, whose default is
 Go's effective `GOBIN`, else the first effective `GOPATH` entry plus `/bin`

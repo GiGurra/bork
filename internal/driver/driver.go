@@ -238,6 +238,13 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 				memo = proofs.memo
 			}
 		}
+		var persistent *persistentProof
+		if timeout == 0 && closed && predicateMemoSupport(goSrc) && usage != nil && usage.deferInputs && usage.proofs == nil {
+			persistent = preparePersistentProof(context)
+			if persistent != nil {
+				memo = newPredicateMemo()
+			}
+		}
 		var key [32]byte
 		var reusable bool
 		var stagedDir string
@@ -247,7 +254,7 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		if memo != nil && timeout > 0 {
 			audited = check.AuditExecutionQueries(info, queries).Decline == ""
 		}
-		eligible := memo != nil && (timeout > 0 || (closed && proofs != nil)) && context.err == nil && audited && predicateMemoSupport(goSrc)
+		eligible := memo != nil && (timeout > 0 || (closed && (proofs != nil || persistent != nil))) && context.err == nil && audited && predicateMemoSupport(goSrc)
 		if proofs != nil && !eligible {
 			proofs.declines++
 		}
@@ -262,8 +269,16 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 				}
 			}()
 			key, reusable = predicateMemoKey(stagedDir, context, timeout, info.Embeds)
-			if reusable && proofs != nil {
+			if reusable && (proofs != nil || persistent != nil) {
 				reusable = sessionProofStage(stagedDir, context)
+			}
+			if persistent != nil && (!reusable || !persistent.bind(stagedDir)) {
+				persistent = nil
+			}
+			if persistent != nil {
+				if result, ok := persistent.read(key, len(queries)); ok {
+					return result, nil
+				}
 			}
 			if reusable {
 				if result, ok := memo.get(key); ok {
@@ -294,8 +309,10 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 			if err == nil {
 				err = buildStagedGoObserved(files, absExe, stagedDir, pinned, context, observation)
 			}
-			release()
-			release = nil
+			if persistent == nil {
+				release()
+				release = nil
+			}
 		} else {
 			err = buildGoWithModeObserved(files, goSrc, exe, module, context, "predicate", observation, info.Embeds...)
 		}
@@ -337,6 +354,11 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		}
 		if reusable && wellFormed {
 			memo.put(key, results)
+			if persistent != nil {
+				if current, ok := predicateMemoKey(stagedDir, context, timeout, info.Embeds); ok && current == key {
+					persistent.write(key, results)
+				}
+			}
 		}
 		return results, nil
 	}

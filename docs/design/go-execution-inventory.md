@@ -3,8 +3,10 @@
 Status: request-owned accounting is integrated for comptime and predicate calls,
 including invocation-local and Session predicate memo hits. Every attempt still
 declines an execution receipt. Narrow [Session proof batches](proof-evaluator.md)
-reuse owned booleans under a validated native Go installation contract; persisted
-and enclosing evaluated-value reuse remain deferred. The complete-program
+reuse owned booleans under a validated native Go installation contract.
+[Persistent CLI proof batches](proof-evaluator.md#persistent-cli-proof-batches-bork-44yvg8)
+use that same narrow contract and existing stage lifecycle. Explicit comptime
+values and enclosing evaluated-value certification remain deferred. The complete-program
 compile-time evaluator bypass is unchanged.
 
 The driver uses the shared `captureInstalledSDK` / `installedSDKIdentity.current`
@@ -66,3 +68,10 @@ The identity/tracker primitives and static audit remain fail-closed foundations;
 qualify any execution. Further work should first show enough eligible real calls
 and net savings to justify this boundary, rather than restoring an unused SDK
 content collector.
+
+The post-#289 eligibility/cost checkpoint is recorded in
+[proof-evaluator.md](proof-evaluator.md#evaluation-checkpoint): config and HTTP
+have one fully eligible closed batch each, with 102–106 ms net saved per
+unchanged-proof edit. Changed-proof misses add about 8 ms. This justifies narrow
+boolean persistence; the broader comptime/enclosing certification checklist above
+remains deferred.
