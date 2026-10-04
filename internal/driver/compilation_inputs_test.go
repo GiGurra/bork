@@ -110,19 +110,18 @@ func TestCompilationInventoriesAbsentManifest(t *testing.T) {
 }
 
 func TestFrozenGoModuleStaging(t *testing.T) {
+	t.Parallel()
 	inputs, err := captureGoModule(nil, diskSources{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	original := bytes.Clone(inputs.mod)
-	saved := goModuleHook
-	t.Cleanup(func() { goModuleHook = saved })
-	goModuleHook = func(mod []byte) []byte { mod[0] = '!'; return mod }
+	hook := func(mod []byte) []byte { mod[0] = '!'; return mod }
 	var tasks sync.WaitGroup
 	for range 8 {
 		dir := t.TempDir()
 		tasks.Go(func() {
-			if _, err := inputs.write(dir); err != nil {
+			if _, err := inputs.write(dir, hook); err != nil {
 				t.Error(err)
 				return
 			}

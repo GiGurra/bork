@@ -185,18 +185,15 @@ func TestGoContextFreezesImplicitDriverChoice(t *testing.T) {
 }
 
 func TestGoContextExternalNamesRemainFresh(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/contextnames\ngo 1.23\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	saved := goModuleHook
-	t.Cleanup(func() { goModuleHook = saved })
-	goModuleHook = func(mod []byte) []byte {
+	hook := func(mod []byte) []byte {
 		return fmt.Appendf(mod, "\nrequire example.com/contextnames v0.0.0\nreplace example.com/contextnames => %s\n", root)
 	}
-	t.Setenv("GO111MODULE", "on")
-	t.Setenv("GOPACKAGESDRIVER", "off")
-	ctx := captureGoContext()
+	ctx := captureGoContextWithOptions(goContextOptions{settings: []string{"GO111MODULE=on", "GOPACKAGESDRIVER=off"}, moduleHook: hook})
 	if ctx.err != nil {
 		t.Fatal(ctx.err)
 	}

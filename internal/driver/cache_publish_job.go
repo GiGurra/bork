@@ -143,7 +143,7 @@ func (job *cachePublishJob) candidate() (*sessionArtifact, error) {
 	if resolved.err != nil || resolved.driverErr != nil || resolved.tool != job.Go.Tool || resolved.driver != job.Go.Driver || resolved.self != job.Go.Self || !slices.Equal(resolved.processEnv, job.Go.ProcessEnv) {
 		return nil, errUnsupportedGoReceipt
 	}
-	ctx := &goContext{processEnv: slices.Clone(job.Go.ProcessEnv), env: slices.Clone(job.Go.ProcessEnv), values: maps.Clone(job.Go.Values), tool: job.Go.Tool, driver: job.Go.Driver, self: job.Go.Self, toolDigest: job.Go.ToolDigest}
+	ctx := &goContext{moduleHook: goModuleHook, processEnv: slices.Clone(job.Go.ProcessEnv), env: slices.Clone(job.Go.ProcessEnv), values: maps.Clone(job.Go.Values), tool: job.Go.Tool, driver: job.Go.Driver, self: job.Go.Self, toolDigest: job.Go.ToolDigest}
 	ctx.pinSettings()
 	if ctx.namespace != job.Go.Namespace || !supportedCacheMissSettings(ctx) {
 		return nil, errUnsupportedGoReceipt

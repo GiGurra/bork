@@ -413,7 +413,7 @@ func BenchmarkGoStaging(b *testing.B) {
 						if err := stageEmbeds(dir, program.info.Embeds); err != nil {
 							b.Fatal(err)
 						}
-						if _, err := program.module.write(dir); err != nil {
+						if _, err := program.module.write(dir, program.context.moduleHook); err != nil {
 							b.Fatal(err)
 						}
 						args := []string{"build", "-mod=readonly", "-buildvcs=false", "-o", out, "."}

@@ -19,6 +19,8 @@ import (
 // work retain their existing behavior. This is not a complete reuse key for
 // external package metadata, toolchain contents or evaluator effects.
 type goContext struct {
+	// The module transform is captured once; all metadata and build stages use it.
+	moduleHook goModuleHookFunc
 	// Tests can shorten comptime deadlines; a nonzero limit changes execution
 	// policy and must be included in any future evaluator reuse identity.
 	evalLimit  time.Duration
@@ -36,12 +38,28 @@ type goContext struct {
 	validation *goContextValidation
 }
 
+// goContextOptions owns per-call Go settings. Overrides affect Go subprocesses;
+// launcher discovery still uses the caller's PATH. Defaults are assigned once
+// before compilation starts, and a captured context never rereads the hook.
+type goContextOptions struct {
+	settings   []string
+	moduleHook goModuleHookFunc
+}
+
 func captureGoContext() *goContext {
-	return loadGoContext(resolveGoContext())
+	return captureGoContextWithOptions(goContextOptions{moduleHook: goModuleHook})
+}
+
+func captureGoContextWithOptions(options goContextOptions) *goContext {
+	return loadGoContext(resolveGoContextWithOptions(options))
 }
 
 func resolveGoContext() *goContext {
-	ctx := &goContext{processEnv: slices.Clone(os.Environ())}
+	return resolveGoContextWithOptions(goContextOptions{moduleHook: goModuleHook})
+}
+
+func resolveGoContextWithOptions(options goContextOptions) *goContext {
+	ctx := &goContext{processEnv: append(slices.Clone(os.Environ()), options.settings...), moduleHook: options.moduleHook}
 	ctx.env = slices.Clone(ctx.processEnv)
 	ctx.self, _ = os.Executable()
 	ctx.driver = ctx.processValue("GOPACKAGESDRIVER")

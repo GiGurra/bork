@@ -24,14 +24,22 @@ type goStageMetadata struct {
 }
 
 func stageGoStable(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata) (string, bool, func(), error) {
-	return stageGoStableAt(base, key, source, module, embeds, metadata, time.Now())
+	return stageGoStableWithHook(base, key, source, module, embeds, metadata, goModuleHook)
+}
+
+func stageGoStableWithHook(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, hook goModuleHookFunc) (string, bool, func(), error) {
+	return stageGoStableAtWithHook(base, key, source, module, embeds, metadata, time.Now(), hook)
 }
 
 func stageGoStableAt(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, now time.Time) (string, bool, func(), error) {
+	return stageGoStableAtWithHook(base, key, source, module, embeds, metadata, now, goModuleHook)
+}
+
+func stageGoStableAtWithHook(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, now time.Time, hook goModuleHookFunc) (string, bool, func(), error) {
 	if _, ok := cacheHexDigest(key); !ok || metadata.Schema != goStageSchema || !validReceiptPath(metadata.Program) || !filepath.IsAbs(metadata.Program) || metadata.Mode == "" {
 		return "", false, nil, errInvalidCacheArtifact
 	}
-	files, pinned, err := goStageFiles(source, module, embeds)
+	files, pinned, err := goStageFiles(source, module, embeds, hook)
 	if err != nil {
 		return "", false, nil, err
 	}
@@ -145,7 +153,7 @@ func stageGoStableAt(base, key string, source []byte, module *goModuleInputs, em
 	return filepath.Join(base, tree), pinned, release, nil
 }
 
-func goStageFiles(source []byte, module *goModuleInputs, embeds []*check.Embedded) (map[string][]byte, bool, error) {
+func goStageFiles(source []byte, module *goModuleInputs, embeds []*check.Embedded, hook goModuleHookFunc) (map[string][]byte, bool, error) {
 	files := map[string][]byte{"main.go": source}
 	for _, request := range embeds {
 		for _, file := range request.Files {
@@ -160,8 +168,8 @@ func goStageFiles(source []byte, module *goModuleInputs, embeds []*check.Embedde
 		}
 	}
 	mod := module.mod
-	if goModuleHook != nil {
-		mod = goModuleHook(slices.Clone(mod))
+	if hook != nil {
+		mod = hook(slices.Clone(mod))
 	}
 	files["go.mod"] = mod
 	if len(module.sum) > 0 {

@@ -271,15 +271,14 @@ func TestPredicateMemoCompilationScope(t *testing.T) {
 }
 
 func TestPredicateMemoModuleHook(t *testing.T) {
-	// This root and its descendants must stay sequential: the module hook is
-	// process-global. Its effects must remain observable even on a memo hit.
+	t.Parallel()
+	// The owned module hook must remain observable even on a memo hit.
 	program := predicateMemoProgram(t, "pred p(n:Int){n>0}")
 	actual := program.context.tool
 	count := predicateMemoGoCounter(t, program.context, "exec '"+strings.ReplaceAll(actual, "'", "'\\''")+"' \"$@\"")
-	original := goModuleHook
-	t.Cleanup(func() { goModuleHook = original })
+	original := program.context.moduleHook
 	calls, state := 0, "one"
-	goModuleHook = func(mod []byte) []byte {
+	program.context.moduleHook = func(mod []byte) []byte {
 		calls++
 		if original != nil {
 			mod = original(mod)

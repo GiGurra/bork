@@ -82,18 +82,14 @@ func TestExecutionObservedPredicateMemo(t *testing.T) {
 	}
 }
 
+var observedNativeGoSettings = []string{"GOPACKAGESDRIVER=off", "GOTOOLCHAIN=local", "GOENV=off", "GOWORK=off", "GOFLAGS=", "GOEXPERIMENT=", "GOAMD64=v1", "GOCACHEPROG=", "GO_EXTLINK_ENABLED=0", "GOFIPS140=off", "GO111MODULE=on", "CGO_ENABLED=0"}
+
 func TestExecutionObservedComptime(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("installed SDK identity requires supported Linux launcher")
 	}
-	savedHook := goModuleHook
-	goModuleHook = nil
-	t.Cleanup(func() { goModuleHook = savedHook })
-	for _, setting := range []string{"GOPACKAGESDRIVER=off", "GOTOOLCHAIN=local", "GOENV=off", "GOWORK=off", "GOFLAGS=", "GOEXPERIMENT=", "GOAMD64=v1", "GOCACHEPROG=", "GO_EXTLINK_ENABLED=0", "GOFIPS140=off", "GO111MODULE=on", "CGO_ENABLED=0"} {
-		name, value, _ := strings.Cut(setting, "=")
-		t.Setenv(name, value)
-	}
-	ctx := captureGoContext()
+	ctx := captureGoContextWithOptions(goContextOptions{settings: observedNativeGoSettings})
 	if ctx.err != nil || !supportedGoVersion(ctx.values["GOVERSION"]) {
 		t.Skip("requires supported native Go launcher")
 	}
@@ -111,8 +107,7 @@ func TestExecutionObservedComptime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := ctx
 			if tc.name == "CGO enabled" {
-				t.Setenv("CGO_ENABLED", "1")
-				ctx = captureGoContext()
+				ctx = captureGoContextWithOptions(goContextOptions{settings: append(slices.Clone(observedNativeGoSettings), "CGO_ENABLED=1")})
 			}
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, ModFile), []byte("module example.com/observed\nunsafe \"example.com/observed\"\n"), 0600); err != nil {

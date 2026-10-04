@@ -55,7 +55,7 @@ func (gp goPackages) Load(paths []string) (map[string]*types.Package, map[string
 		return fail(err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if _, err := gp.writeModule(dir); err != nil {
+	if _, err := gp.writeModule(dir, ctx.moduleHook); err != nil {
 		return fail(err)
 	}
 	env, err := ctx.driverEnv(dir)
@@ -144,7 +144,7 @@ func (gp goPackages) Names(paths []string) map[string]string {
 		return names
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if _, err := gp.writeModule(dir); err != nil {
+	if _, err := gp.writeModule(dir, ctx.moduleHook); err != nil {
 		return names
 	}
 	env, err := ctx.driverEnv(dir)
@@ -177,11 +177,16 @@ func (gp goPackages) goContext() *goContext {
 	return captureGoContext()
 }
 
-func (gp goPackages) writeModule(dir string) (bool, error) {
-	if gp.module != nil {
-		return gp.module.write(dir)
+func (gp goPackages) writeModule(dir string, hook goModuleHookFunc) (bool, error) {
+	module := gp.module
+	if module == nil {
+		var err error
+		module, err = captureGoModule(gp.files, diskSources{})
+		if err != nil {
+			return false, err
+		}
 	}
-	return writeGoModule(dir, gp.files)
+	return module.write(dir, hook)
 }
 
 // The external-driver wire schema omits Module, including for our builtin
