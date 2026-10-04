@@ -51,7 +51,7 @@ func envCommand() *cobra.Command {
 				if name == "GOTOOLCHAIN" || name == "GOVERSION" || name == "GOROOT" {
 					if goValues == nil {
 						var err error
-						goValues, _, err = gotoolchain.Query("go", "", os.Environ())
+						goValues, _, _, err = gotoolchain.Query("go", "", os.Environ())
 						if err != nil {
 							return err
 						}

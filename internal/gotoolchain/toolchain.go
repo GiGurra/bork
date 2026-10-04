@@ -53,7 +53,7 @@ func Setting(current, setting string) (string, error) {
 
 // Query returns effective settings for the toolchain that will run Bork's Go
 // subprocesses. It honors process and saved GOENV settings via Go itself.
-func Query(tool, dir string, env []string) (map[string]string, []string, error) {
+func Query(tool, dir string, env []string) (map[string]string, []string, string, error) {
 	query := func(settings []string) (map[string]string, error) {
 		cmd := exec.Command(tool, "env", "-json")
 		cmd.Dir, cmd.Env = dir, settings
@@ -76,13 +76,13 @@ func Query(tool, dir string, env []string) (map[string]string, []string, error) 
 		originalDir := dir
 		neutral, err := os.MkdirTemp("", "bork-go-env-")
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		defer func() { _ = os.RemoveAll(neutral) }()
 		dir = neutral
 		bundled, err := query(append(append([]string(nil), env...), "GOTOOLCHAIN=local", "GO111MODULE=off", "GOWORK=off"))
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		policy := envValue(env, "GOTOOLCHAIN")
 		if policy == "" && bundled["GOENV"] != "off" {
@@ -101,20 +101,23 @@ func Query(tool, dir string, env []string) (map[string]string, []string, error) 
 		if version.Compare(base, Minimum) < 0 {
 			setting, err := Setting(base, policy)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, "", err
 			}
 			base, _, _ = strings.Cut(setting, "+")
 		}
 		if base != bundled["GOVERSION"] {
 			candidate, err := exec.LookPath(base)
 			if err != nil {
+				if policy == "path" || strings.HasSuffix(policy, "+path") {
+					return nil, nil, "", fmt.Errorf("offline Go SDK %s is not on PATH (GOTOOLCHAIN=%s): %w", base, policy, err)
+				}
 				name := "go"
 				if runtime.GOOS == "windows" {
 					name += ".exe"
 				}
 				candidate = filepath.Join(bundled["GOMODCACHE"], "golang.org", "toolchain@v0.0.1-"+base+"."+bundled["GOHOSTOS"]+"-"+bundled["GOHOSTARCH"], "bin", name)
 				if _, err := os.Stat(candidate); err != nil {
-					return nil, nil, fmt.Errorf("offline Go SDK %s is not cached; run a build with GOTOOLCHAIN=auto while online: %w", base, err)
+					return nil, nil, "", fmt.Errorf("offline Go SDK %s is not cached; run a build with GOTOOLCHAIN=auto while online: %w", base, err)
 				}
 			}
 			tool = candidate
@@ -125,23 +128,23 @@ func Query(tool, dir string, env []string) (map[string]string, []string, error) 
 	}
 	values, err := query(env)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	setting, err := Setting(values["GOVERSION"], values["GOTOOLCHAIN"])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if setting != values["GOTOOLCHAIN"] {
 		env = append(append([]string(nil), env...), "GOTOOLCHAIN="+setting)
 		values, err = query(env)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		if version.Compare(values["GOVERSION"], Minimum) < 0 {
-			return nil, nil, fmt.Errorf("go toolchain switching selected %s; bork requires %s", values["GOVERSION"], Minimum)
+			return nil, nil, "", fmt.Errorf("go toolchain switching selected %s; bork requires %s", values["GOVERSION"], Minimum)
 		}
 	}
-	return values, env, nil
+	return values, env, SelectedTool(tool, values), nil
 }
 
 func envValue(env []string, key string) string {

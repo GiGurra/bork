@@ -66,6 +66,25 @@ fn main() uses io { println(trimmed()) }
 	if _, err := dependencyGoWithSettings(root, []string{"GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local"}, "env", "GOVERSION"); err != nil {
 		t.Fatal(err)
 	}
+	if runtime.GOOS != "windows" {
+		wrapperDir := t.TempDir()
+		wrapper := "#!/bin/sh\nexec '" + strings.ReplaceAll(launcher, "'", "'\"'\"'") + "' \"$@\"\n"
+		if err := os.WriteFile(filepath.Join(wrapperDir, "go"), []byte(wrapper), 0755); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+		cached := captureCachedGoContext(nil, nil)
+		if cached.err != nil {
+			t.Fatal(cached.err)
+		}
+		if cached.tool != wantTool {
+			t.Fatalf("offline wrapper retained old launcher: %s", cached.tool)
+		}
+		out, err := cached.command("env", "GOVERSION").Output()
+		if err != nil || strings.TrimSpace(string(out)) != cached.values["GOVERSION"] {
+			t.Fatalf("queried/executed SDK mismatch: %q %v", out, err)
+		}
+	}
 	t.Setenv("GOTOOLCHAIN", "local")
 	local := captureGoContext()
 	if local.err == nil || !strings.Contains(local.err.Error(), "GOTOOLCHAIN=local") {

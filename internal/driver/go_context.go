@@ -104,7 +104,7 @@ func loadGoContext(ctx *goContext) *goContext {
 	if ctx.err != nil {
 		return ctx
 	}
-	values, env, err := gotoolchain.Query(ctx.tool, "", ctx.processEnv)
+	values, env, tool, err := gotoolchain.Query(ctx.tool, "", ctx.processEnv)
 	if err != nil {
 		ctx.err = err
 		return ctx
@@ -113,7 +113,7 @@ func loadGoContext(ctx *goContext) *goContext {
 	ctx.env = slices.Clone(env)
 	// A real Go launcher may have switched to another installed SDK. Hash and
 	// invoke that SDK's executable so cache identity reflects the selected Go.
-	ctx.tool = gotoolchain.SelectedTool(ctx.tool, values)
+	ctx.tool = tool
 	// Wrappers retain their behavior, but compilation identity also includes
 	// the selected SDK executable rather than only the wrapper's bytes.
 	name := "go"

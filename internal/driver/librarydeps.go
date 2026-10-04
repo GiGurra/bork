@@ -51,11 +51,10 @@ func dependencyGoWithSettings(dir string, settings []string, args ...string) ([]
 		}
 		env = append(env, setting)
 	}
-	values, env, err := gotoolchain.Query("go", dir, env)
+	_, env, tool, err := gotoolchain.Query("go", dir, env)
 	if err != nil {
 		return nil, err
 	}
-	tool := gotoolchain.SelectedTool("go", values)
 	if local {
 		env = append(env, "GOTOOLCHAIN=local")
 	}

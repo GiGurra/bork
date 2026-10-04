@@ -47,11 +47,11 @@ fi
 	if err := os.WriteFile(tool, []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}
-	values, env, err := Query(tool, "", []string{"GOTOOLCHAIN=auto"})
+	values, env, _, err := Query(tool, "", []string{"GOTOOLCHAIN=auto"})
 	if err != nil || values["GOROOT"] != "/downloaded/sdk" || values["GOVERSION"] != Minimum || env[len(env)-1] != "GOTOOLCHAIN=go1.26.0+auto" {
 		t.Fatalf("values %v env %v err %v", values, env, err)
 	}
-	_, _, err = Query(tool, "", []string{"GOTOOLCHAIN=auto", "SWITCH_FAIL=yes"})
+	_, _, _, err = Query(tool, "", []string{"GOTOOLCHAIN=auto", "SWITCH_FAIL=yes"})
 	if err == nil || !strings.Contains(err.Error(), "proxy offline") || !strings.Contains(err.Error(), "network access") {
 		t.Fatalf("download failure: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestQueryOfflineCachedSDK(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := []string{"GOPROXY=off", "GOSUMDB=off"}
-	_, _, err := Query(tool, "", env)
+	_, _, _, err := Query(tool, "", env)
 	if err == nil || !strings.Contains(err.Error(), "offline Go SDK go1.26.0 is not cached") {
 		t.Fatalf("cold offline: %v", err)
 	}
@@ -86,11 +86,15 @@ func TestQueryOfflineCachedSDK(t *testing.T) {
 	if err := os.WriteFile(sdk, []byte("#!/bin/sh\necho '{\"GOVERSION\":\"go1.26.0\",\"GOTOOLCHAIN\":\"local\"}'\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	values, gotEnv, err := Query(tool, "", env)
-	if err != nil || values["GOVERSION"] != Minimum || envValue(gotEnv, "GOTOOLCHAIN") != "local" {
+	values, gotEnv, selected, err := Query(tool, "", env)
+	if err != nil || values["GOVERSION"] != Minimum || selected != sdk || envValue(gotEnv, "GOTOOLCHAIN") != "local" {
 		t.Fatalf("cached SDK: %v env %v error %v", values, gotEnv, err)
 	}
-	_, _, err = Query(tool, "", append(env, "GOTOOLCHAIN=local"))
+	_, _, _, err = Query(tool, "", append(env, "GOTOOLCHAIN=path"))
+	if err == nil || !strings.Contains(err.Error(), "is not on PATH") {
+		t.Fatalf("path policy accepted module cache SDK: %v", err)
+	}
+	_, _, _, err = Query(tool, "", append(env, "GOTOOLCHAIN=local"))
 	if err == nil || !strings.Contains(err.Error(), "GOTOOLCHAIN=local") {
 		t.Fatalf("explicit local bypassed: %v", err)
 	}

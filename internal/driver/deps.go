@@ -140,12 +140,12 @@ func DepsWithOutput(path, action string, packages []string, out io.Writer) error
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	_, goEnv, err := gotoolchain.Query("go", dir, append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS="))
+	_, goEnv, goTool, err := gotoolchain.Query("go", dir, append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS="))
 	if err != nil {
 		return err
 	}
 	run := func(args ...string) error {
-		cmd := exec.Command("go", args...)
+		cmd := exec.Command(goTool, args...)
 		cmd.Dir = dir
 		cmd.Env = goEnv
 		if out, err := cmd.CombinedOutput(); err != nil {
