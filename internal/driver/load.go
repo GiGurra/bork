@@ -10,6 +10,7 @@ import (
 	"github.com/GiGurra/bork/internal/prelude"
 	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
+	gomodule "golang.org/x/mod/module"
 )
 
 // ModFile is the file at a module's root that names the module, and
@@ -24,7 +25,8 @@ type module struct {
 	root string // the directory holding bork.mod
 	path string // the module path; "" without a bork.mod
 	// unsafe holds the packages allowed to contain unsafe go.
-	unsafe map[string]bool
+	unsafe       map[string]bool
+	requirements []gomodule.Version
 }
 
 // findModule finds the module of the package in dir: the nearest
@@ -55,6 +57,7 @@ func findModuleFrom(dir string, reader sourceReader) (module, error) {
 
 func parseModFile(text string) (module, error) {
 	var mod module
+	required := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
 		if i := strings.Index(line, "//"); i >= 0 {
 			line = line[:i]
@@ -81,8 +84,21 @@ func parseModFile(text string) (module, error) {
 				mod.unsafe = map[string]bool{}
 			}
 			mod.unsafe[path] = true
+		case len(fields) == 3 && fields[0] == "require":
+			dep := gomodule.Version{Path: fields[1], Version: fields[2]}
+			if err := gomodule.Check(dep.Path, dep.Version); err != nil {
+				return module{}, fmt.Errorf("invalid requirement: %w", err)
+			}
+			if gomodule.CanonicalVersion(dep.Version) != dep.Version {
+				return module{}, fmt.Errorf("require %s needs a canonical pinned version", dep.Path)
+			}
+			if required[dep.Path] {
+				return module{}, fmt.Errorf("require %s is declared more than once", dep.Path)
+			}
+			required[dep.Path] = true
+			mod.requirements = append(mod.requirements, dep)
 		default:
-			return module{}, fmt.Errorf("expected `unsafe \"<package path>\"`, found %q", line)
+			return module{}, fmt.Errorf("expected `unsafe \"<package path>\"` or `require <module> <version>`, found %q", line)
 		}
 	}
 	if mod.path == "" {

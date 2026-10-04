@@ -175,6 +175,7 @@ launch `bork lsp` over stdio.
 
 - [Documentation](docs/README.md): the tour, a page for each part of the language, and the command-line reference.
 - [Standard packages](docs/std/README.md): files, HTTP, JSON, SQL, time, and more.
+- [Dependency tooling](docs/cli.md#deps): pin Go libraries in `bork.mod` with `bork deps`; commit `bork.sum` and generated `go.mod`.
 - [Examples](docs/examples.md): runnable programs, from `wc` to an HTTP service.
 - [Contributing and design notes](docs/contributing.md): the grammar, requirements, and design documents.
 

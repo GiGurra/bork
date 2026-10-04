@@ -82,31 +82,31 @@ func TestDepsHelper(t *testing.T) {
 	if err := Deps(sub, "init", nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(read("go-deps.sum")) != 0 {
+	if len(read("bork.sum")) != 0 {
 		t.Fatal("initial checksums should be empty")
 	}
-	initial := read("go-deps.mod")
+	initial := read("go.mod")
 	if err := Deps(root, "init", nil); err == nil {
 		t.Fatal("init must refuse overwrite")
 	}
-	if !bytes.Equal(initial, read("go-deps.mod")) {
+	if !bytes.Equal(initial, read("go.mod")) {
 		t.Fatal("init overwrote manifest")
 	}
 	// Replacements preserve file permissions and do not require truncating the
 	// original manifest (which can be read-only in a writable directory).
-	if err := os.Chmod(filepath.Join(root, "go-deps.mod"), 0o444); err != nil {
+	if err := os.Chmod(filepath.Join(root, "go.mod"), 0o444); err != nil {
 		t.Fatal(err)
 	}
 	for _, version := range []string{"v1.0.0", "v1.1.0"} {
 		if err := Deps(sub, "get", []string{"example.com/direct@" + version}); err != nil {
 			t.Fatal(err)
 		}
-		st, err := os.Stat(filepath.Join(root, "go-deps.mod"))
+		st, err := os.Stat(filepath.Join(root, "go.mod"))
 		if err != nil || st.Mode().Perm() != 0o444 {
 			t.Fatalf("manifest permissions changed: %v", err)
 		}
-		manifest := read("go-deps.mod")
-		parsed, err := modfile.Parse("go-deps.mod", manifest, nil)
+		manifest := read("go.mod")
+		parsed, err := modfile.Parse("go.mod", manifest, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,33 +114,34 @@ func TestDepsHelper(t *testing.T) {
 		for _, dep := range parsed.Require {
 			switch dep.Mod.Path {
 			case "example.com/direct":
-				found[dep.Mod.Path] = dep.Mod.Version == version && dep.Indirect
+				found[dep.Mod.Path] = dep.Mod.Version == version
 			case "example.com/indirect":
-				found[dep.Mod.Path] = dep.Mod.Version == "v1.0.0" && dep.Indirect
+				found[dep.Mod.Path] = dep.Mod.Version == "v1.0.0"
 			}
 		}
 		if !found["example.com/direct"] || !found["example.com/indirect"] {
 			t.Fatalf("requirements: %s", manifest)
 		}
-		if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: root, Mod: manifest, Sum: read("go-deps.sum")}); err != nil {
+		if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: root, Mod: manifest, Sum: read("bork.sum")}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	beforeMod, beforeSum := read("go-deps.mod"), read("go-deps.sum")
+	beforeMod, beforeSum := read("go.mod"), read("bork.sum")
+	beforeBork := read(ModFile)
 	if err := Deps(root, "get", []string{"example.com/missing@v1.0.0"}); err == nil {
 		t.Fatal("missing dependency should fail")
 	}
-	if !bytes.Equal(beforeMod, read("go-deps.mod")) || !bytes.Equal(beforeSum, read("go-deps.sum")) {
+	if !bytes.Equal(beforeMod, read("go.mod")) || !bytes.Equal(beforeSum, read("bork.sum")) || !bytes.Equal(beforeBork, read(ModFile)) {
 		t.Fatal("failed get modified manifests")
 	}
-	if err := os.Remove(filepath.Join(root, "go-deps.sum")); err != nil {
+	if err := os.Remove(filepath.Join(root, "bork.sum")); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GOPROXY", "off")
 	if err := Deps(sub, "download", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: root, Mod: read("go-deps.mod"), Sum: read("go-deps.sum")}); err != nil {
+	if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: root, Mod: read("go.mod"), Sum: read("bork.sum")}); err != nil {
 		t.Fatal(err)
 	}
 	// Both check and build consume exactly the helper's pinned module graph.
@@ -153,10 +154,55 @@ func TestDepsHelper(t *testing.T) {
 	if err := Build(root, filepath.Join(t.TempDir(), "app")); err != nil {
 		t.Fatal(err)
 	}
+	// A manual Go update must not become the bork project's source of truth.
+	if err := os.Chmod(filepath.Join(root, "go.mod"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	write(filepath.Join(root, "go.mod"), bytes.ReplaceAll(read("go.mod"), []byte("v1.1.0"), []byte("v1.0.0")))
+	if _, _, err := Check(root); err == nil || !strings.Contains(err.Error(), "run bork deps download") {
+		t.Fatalf("manifest drift: %v", err)
+	}
+	if err := Deps(root, "download", nil); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeBork, read(ModFile)) || !bytes.Equal(beforeMod, read("go.mod")) {
+		t.Fatal("repair did not preserve authoritative requirements")
+	}
+	// Existing manifests remain usable, and explicit migration preserves their
+	// requirements, checksums, comments, and unsafe grants without a go.sum.
+	legacy := t.TempDir()
+	write(filepath.Join(legacy, ModFile), []byte("// library\nmodule example.com/legacy\nunsafe \"example.com/legacy\"\n"))
+	write(filepath.Join(legacy, "go-deps.mod"), []byte("module descriptive\ngo 1.22\nrequire example.com/direct v1.1.0\n"))
+	write(filepath.Join(legacy, "go-deps.sum"), read("bork.sum"))
+	if err := Deps(legacy, "download", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(legacy, "bork.sum")); !os.IsNotExist(err) {
+		t.Fatal("legacy download silently migrated manifests")
+	}
+	if err := Deps(legacy, "migrate", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"go-deps.mod", "go-deps.sum", "go.sum"} {
+		if _, err := os.Stat(filepath.Join(legacy, name)); !os.IsNotExist(err) {
+			t.Fatalf("unexpected %s after migration: %v", name, err)
+		}
+	}
+	legacyMod, err := findModule(legacy)
+	if err != nil || len(legacyMod.requirements) == 0 || !legacyMod.unsafe["example.com/legacy"] {
+		t.Fatalf("migration lost metadata: %+v, %v", legacyMod, err)
+	}
+	deps, err := moduleDependencies(legacyMod, diskSources{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := std.GoModuleFiles(nil, deps...); err != nil {
+		t.Fatal(err)
+	}
 	if err := Deps(root, "get", []string{"example.com/direct@none"}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(read("go-deps.mod")), "example.com/direct") {
+	if strings.Contains(string(read("go.mod")), "example.com/direct") {
 		t.Fatal("dependency not removed")
 	}
 }
@@ -170,7 +216,7 @@ func TestDepsHelperErrors(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ModFile), []byte("module example.com/app\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for _, action := range []string{"download", "get", "unknown"} {
+	for _, action := range []string{"get", "unknown"} {
 		if err := Deps(root, action, nil); err == nil {
 			t.Fatalf("%s should fail", action)
 		}

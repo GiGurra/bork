@@ -97,7 +97,7 @@ bork deps init
 bork deps get github.com/google/uuid@v1.6.0
 ```
 
-This writes `go-deps.mod` and `go-deps.sum` next to `bork.mod`. Commit them. See [the deps command](../cli.md#deps).
+This records `require` lines in `bork.mod`, checksums in `bork.sum`, and a generated `go.mod`. Commit all three. If generated requirements drift (for example after a manual `go get`), run `bork deps download` to restore them from `bork.mod`. See [the deps command](../cli.md#deps).
 
 ## More
 
