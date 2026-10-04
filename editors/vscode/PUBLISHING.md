@@ -4,6 +4,8 @@ The extension ID is `gigurra.bork` in both registries. Its `package.json` versio
 
 ## One-time human setup
 
+Every automatic compiler GitHub Release attaches the packaged VSIX and includes its SHA-256 in `checksums.txt`. This sharing path needs neither registry token nor Marketplace account. The extension keeps its independent `package.json` version; compiler patch tags do not rewrite it. The setup below applies only to optional registry publishing.
+
 The repository maintainer must create or obtain control of these accounts and credentials before the first release:
 
 1. **Marketplace publisher `gigurra`.** Sign in to [publisher management](https://marketplace.visualstudio.com/manage/publishers/) with your Microsoft account and create that publisher ID (or use the existing one if you own it). Its display name can be GiGurra.

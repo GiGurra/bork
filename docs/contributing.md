@@ -60,6 +60,16 @@ npm run test:browser
 
 The Documentation workflow builds these assets and runs the browser smoke tests before publishing. The [playground design](design/playground.md) describes its scope and the local-compiler fallback for unsupported operations.
 
+## Compiler releases
+
+The Release workflow waits for successful CI on a main commit, builds Linux/macOS/Windows archives for amd64 and arm64 plus the VS Code VSIX, then creates the next stable patch tag and GitHub Release with SHA-256 checksums. Existing stable tags determine the version; without any, the first release is `v0.0.1`. Tags outside the `vX.Y.Z` format, including `vscode-v...`, do not affect compiler numbering. Manual stable version tags must also point to a main commit with successful CI. A rerun reuses the commit's existing tag and updates its assets.
+
+Main CI and releases use [GitHub's concurrency queues](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency) to retain pending merges and serialize publication. Patch numbers are reserved by main's first-parent commit order starting with the introduction of release automation. If newer merge B finishes CI before A, B receives the later patch number and A can still publish its earlier number afterward; it does not become the latest release or downgrade the tap. Failed CI leaves a reserved gap until that commit passes and is released. Existing stable tags on an ancestor supply the version baseline, including a manually tagged minor release. No tag is pushed until all archives and the extension package are ready.
+
+After publication, the workflow creates or updates `Formula/bork.rb` in `GiGurra/homebrew-tap` using the source tarball checksum. It checks out the tap with the `HOMEBREW_TAP_DEPLOY_KEY` write deploy key and skips tap updates cleanly when that secret is absent. The formula follows [Homebrew's Go build helpers](https://docs.brew.sh/Formula-Cookbook) and keeps Go as a runtime dependency. To retry a tap update without another release, dispatch the workflow with `homebrew_only=true`; it syncs the latest published release.
+
+The packaged extension remains thin: it launches the installed compiler's `bork lsp`. Its independent extension version and registry publication guide are in [the VS Code directory](../editors/vscode/PUBLISHING.md).
+
 ## Design notes
 
 | Note | Subject |

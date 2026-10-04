@@ -12,6 +12,7 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  queue: ${{ github.ref == 'refs/heads/main' && 'max' || 'single' }}
 
 jobs:
   grammar:
@@ -35,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: python3 -m unittest discover -s scripts -p 'test_ci.py'
+      - run: python3 -m unittest discover -s scripts -p 'test_release.py'
       - id: matrix
         run: |
           groups="$(python3 scripts/ci.py matrix)"
