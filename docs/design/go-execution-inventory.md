@@ -20,8 +20,9 @@ commands, module staging, subprocess execution, result decoding and current Fact
 retain their ordinary behavior. Installed identity is configuration evidence,
 not proof of the SDK actually selected by an automatic toolchain launcher or of
 all compiler-consumed inputs. No AST or execution result is retained by these
-observations. Deferred result-cache misses skip observation and static auditing;
-empty phases allocate no tracker.
+observations. Deferred result-cache misses skip execution observation and the former comptime
+selection audit; the existing predicate memo still requires its static eligibility
+audit. Empty phases allocate no tracker.
 
 ## Measurement and deferred certification
 
