@@ -241,32 +241,47 @@ func TestPredicateMemoDeclinesAndFailures(t *testing.T) {
 
 func TestPredicateMemoCompilationScope(t *testing.T) {
 	t.Parallel()
-	ctx := captureGoContext()
-	if ctx.err != nil {
-		t.Fatal(ctx.err)
-	}
-	actual := ctx.tool
-	count := predicateMemoGoCounter(t, ctx, "exec '"+strings.ReplaceAll(actual, "'", "'\\''")+"' \"$@\"")
-	for n := 1; n <= 2; n++ {
-		loaded, module, err := loadCompilationInputs("../../examples/comptime", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		usage := &goUsage{}
-		if _, err := checkLoadedProgramTracked(loaded, module, ctx, captureEmbedsSnapshot, usage, nil); err != nil {
-			t.Fatal(err)
-		}
-		if usage.executions.Invocations != 10 || usage.executions.MemoHits != 4 || len(usage.execution.invocations) != 10 {
-			t.Fatalf("logical accounting: %+v", usage.executions)
-		}
-		if _, eligible := usage.execution.receipts(); eligible {
-			t.Fatal("memo allowed enclosing reuse")
-		}
-		// Four value evaluators still run freshly. Two identical proof programs
-		// each run once across recipe checks, result checks and final Facts.
-		if got := count(); got != 6*n || !usage.evaluator {
-			t.Fatalf("compilation %d: %d builds, evaluator usage=%v; want %d and true", n, got, usage.evaluator, 6*n)
-		}
+	for _, tc := range []struct {
+		name        string
+		standalone  bool
+		invocations uint64
+		builds      int
+	}{
+		{"standalone", true, 10, 6},
+		{"batched", false, 7, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := captureGoContext()
+			if ctx.err != nil {
+				t.Fatal(ctx.err)
+			}
+			ctx.comptimeStandalone = tc.standalone
+			actual := ctx.tool
+			count := predicateMemoGoCounter(t, ctx, "exec '"+strings.ReplaceAll(actual, "'", "'\\''")+"' \"$@\"")
+			for n := 1; n <= 2; n++ {
+				loaded, module, err := loadCompilationInputs("../../examples/comptime", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				usage := &goUsage{}
+				if _, err := checkLoadedProgramTracked(loaded, module, ctx, captureEmbedsSnapshot, usage, nil); err != nil {
+					t.Fatal(err)
+				}
+				if usage.executions.Invocations != tc.invocations || usage.executions.MemoHits != 4 || uint64(len(usage.execution.invocations)) != tc.invocations {
+					t.Fatalf("logical accounting: %+v", usage.executions)
+				}
+				if _, eligible := usage.execution.receipts(); eligible {
+					t.Fatal("memo allowed enclosing reuse")
+				}
+				// Value evaluation runs freshly (four standalone builds or one batch).
+				// Two distinct proof programs each run once across recipe checks,
+				// result checks and final Facts, without leaking to the next compilation.
+				if got := count(); got != tc.builds*n || !usage.evaluator {
+					t.Fatalf("compilation %d: %d builds, evaluator usage=%v; want %d and true", n, got, usage.evaluator, tc.builds*n)
+				}
+			}
+		})
 	}
 }
 
