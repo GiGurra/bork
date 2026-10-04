@@ -231,3 +231,13 @@ publication. Automatic persistent use remains disabled until accounting, evictio
 and cleanup land. Tests opt into an explicit completion pipe and optional barrier;
 they wait for publication or process exit without sleep-based polling. These pipes
 are never inherited by Go subprocesses.
+
+The first lifecycle slice applies a 256 MiB/1,024-entry policy to result artifacts
+across all compiler namespaces. Publication inventories recognized artifacts under
+MUTATION, removes abandoned result temporaries, and evicts oldest inactive entries
+using nonblocking result-slot acquisition. Both the old generation and the entire
+new temporary must fit during replacement. Busy entries or a scan beyond 4,096
+directory records cause publication to skip rather than overshoot. A validated hit
+updates its last-use hint with nonblocking SLOT/MUTATION acquisition. Hints affect
+only eviction, never receipt validity. Staging-v2 accounting, deleted-target cleanup
+and explicit clean commands remain prerequisites before automatic use.

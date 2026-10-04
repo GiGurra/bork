@@ -8,3 +8,5 @@ func openCacheFile(_ *os.Root, _ string, _ int, _ os.FileMode) (*os.File, error)
 	return nil, errInvalidCacheArtifact
 }
 func lockCacheFile(_ *os.File) error { return errInvalidCacheArtifact }
+
+func tryLockCacheFile(_ *os.File) error { return errInvalidCacheArtifact }

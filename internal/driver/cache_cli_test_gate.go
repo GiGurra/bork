@@ -94,6 +94,7 @@ func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error
 			result, err := body.validateWithContext(request, body.Namespace, restore)
 			<-state.done
 			if err == nil && state.err == nil && state.namespace == body.Namespace {
+				(cacheStore{root: state.root, namespace: body.Namespace}).touch(body.Key)
 				testCacheProbe("hit")
 				return result.goSource, result.warnings, nil
 			}

@@ -17,6 +17,7 @@ import (
 type cacheStore struct {
 	root      string
 	namespace [sha256.Size]byte
+	policy    *cacheLimits
 }
 
 func (s cacheStore) directory() string {
@@ -85,6 +86,9 @@ func (s cacheStore) write(body *cacheArtifactBody) error {
 		return err
 	}
 	defer func() { _ = mutation.Close() }()
+	if err := s.reserveResult(root, body.Key, int64(len(encoded))); err != nil {
+		return err
+	}
 	directory := s.directory()
 	if err := root.MkdirAll(directory, 0700); err != nil {
 		return err
