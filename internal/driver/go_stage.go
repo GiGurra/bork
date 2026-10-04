@@ -24,7 +24,7 @@ func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, contex
 	if base, err := cacheRootDir(); err == nil && !cacheDisabled() {
 		if root, err := goStageProgramRoot(files); err == nil {
 			key := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%x", root, mode, context.namespace)))
-			if dir, pinned, release, err := stageGoStable(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: 2, Program: root, Mode: mode, Namespace: context.namespace}); err == nil {
+			if dir, pinned, release, err := stageGoStable(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: goStageSchema, Program: root, Mode: mode, Namespace: context.namespace}); err == nil {
 				return dir, pinned, release, nil
 			}
 		}
@@ -68,8 +68,8 @@ func writeGoStage(dir string, source []byte, module *goModuleInputs, embeds []*c
 	return module.write(dir)
 }
 
-// The mapping is part of staging schema v2 and remains stable across clients.
+// The mapping is part of staging schema v3 and remains stable across clients.
 func goStageLockPath(base, key string) string {
 	slot := sha256.Sum256([]byte(key))
-	return filepath.Join(base, "locks", "stage-v2", fmt.Sprintf("%02x.lock", slot[0]))
+	return filepath.Join(base, "locks", "stage-v3", fmt.Sprintf("%02x.lock", slot[0]))
 }

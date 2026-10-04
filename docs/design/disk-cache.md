@@ -123,6 +123,20 @@ or global scan belongs to lookup, hit validation, use marking or publication.
 Older layouts remain recognizable by explicit cleanup; new publishers use only
 new layouts and matching permanent lock mappings.
 
+Fresh-CLI lookup uses an untrusted locator at
+`indexes/v1/<key-prefix>/<request-key>.json`, containing only a bounded compiler
+namespace digest. It selects one direct artifact path; the compiler namespace
+and complete semantic receipt still authorize reuse. Alternating compiler
+versions may replace the locator and cause correct misses and republication.
+Locator publication is best effort: its failure never fails artifact publication
+or compilation. Locators use the same hourly marking and daily age rule as
+results; an orphan or missing locator merely causes a miss.
+
+The first implementation slice provides these layouts and removes admission
+scans from result and staging publication. Hourly marking and bounded daily trim
+follow separately; automatic complete-result caching stays disabled until those
+slices and the acceptance matrix pass.
+
 Mark successful result hits and stage use with approximate last-use mtimes,
 writing at most once per hour. Publications naturally mark new entries used.
 Stages keep a separate use marker so replacing their tree does not defeat the

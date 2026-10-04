@@ -26,7 +26,7 @@ func TestCacheStoreRoundtripAndMisses(t *testing.T) {
 	if restored == nil || !bytes.Equal(restored.GoSource, body.GoSource) {
 		t.Fatal("stored result differs")
 	}
-	path := filepath.Join(store.root, store.directory(), cacheArtifactFilename(body.Key))
+	path := filepath.Join(store.root, store.path(body.Key))
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +145,7 @@ func TestCacheStoreDeclinesSymlinkEscape(t *testing.T) {
 	if err := store.write(body); err != nil {
 		t.Fatal(err)
 	}
-	artifact := filepath.Join(root, store.directory(), cacheArtifactFilename(body.Key))
+	artifact := filepath.Join(root, store.path(body.Key))
 	if err := os.Rename(artifact, artifact+".target"); err != nil {
 		t.Fatal(err)
 	}

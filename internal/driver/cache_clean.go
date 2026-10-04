@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -40,7 +41,10 @@ func Clean(ctx context.Context, all bool) (CacheCleanReport, error) {
 	return cleanCache(ctx, directory, namespace, all)
 }
 
-type cacheCleanEntry struct{ path, slot, layer string }
+type cacheCleanEntry struct {
+	path, slot, layer string
+	namespace, key    [sha256.Size]byte
+}
 
 func cleanCache(ctx context.Context, directory string, namespace [sha256.Size]byte, all bool) (CacheCleanReport, error) {
 	var report CacheCleanReport
@@ -75,7 +79,7 @@ func cleanCache(ctx context.Context, directory string, namespace [sha256.Size]by
 	if err != nil {
 		return report, err
 	}
-	selected, err := selectCleanEntries(root, namespace, all)
+	selected, err := selectCleanEntries(ctx, root, namespace, all)
 	_ = mutation.Close()
 	if err != nil {
 		return report, err
@@ -118,6 +122,7 @@ func cleanCache(ctx context.Context, directory string, namespace [sha256.Size]by
 			report.Results++
 		case "stage":
 			report.Stages++
+		case "index":
 		default:
 			report.Temporaries++
 		}
@@ -155,76 +160,161 @@ func (s cacheStore) lockWithContext(ctx context.Context, root *os.Root, name str
 		}
 	}
 }
-func selectCleanEntries(root *os.Root, namespace [sha256.Size]byte, all bool) ([]cacheCleanEntry, error) {
-	if err := validateStageDirectory(root, filepath.Join("results", "v1")); err != nil {
+
+// Explicit cleanup may enumerate; ordinary lookup/publication never does.
+func cleanDirectoryEntries(ctx context.Context, root *os.Root, path string) ([]os.DirEntry, error) {
+	if err := validateStageDirectory(root, path); err != nil {
 		return nil, err
 	}
-	namespaces, err := cacheDirectoryEntries(root, filepath.Join("results", "v1"), cacheInventoryLimit)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	file, err := root.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
 		return nil, err
 	}
-	var entries []cacheCleanEntry
-	remaining := cacheInventoryLimit - len(namespaces)
-	for _, candidate := range namespaces {
-		digest, ok := cacheHexDigest(candidate.Name())
-		if !ok || !candidate.IsDir() || !all && (digest != namespace || namespace == ([sha256.Size]byte{})) {
-			continue
-		}
-		dir := filepath.Join("results", "v1", candidate.Name())
-		if err := validateStageDirectory(root, dir); err != nil {
+	defer func() { _ = file.Close() }()
+	var result []os.DirEntry
+	for {
+		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		files, err := cacheDirectoryEntries(root, dir, remaining)
+		batch, err := file.ReadDir(256)
+		result = append(result, batch...)
+		if err == io.EOF {
+			return result, nil
+		}
 		if err != nil {
 			return nil, err
 		}
-		remaining -= len(files)
-		for _, file := range files {
-			path := filepath.Join(dir, file.Name())
-			if strings.HasPrefix(file.Name(), ".tmp-") {
-				entries = append(entries, cacheCleanEntry{path: path, layer: "temporary"})
+	}
+}
+func cacheShard(name string) bool {
+	return len(name) == 2 && strings.IndexFunc(name, func(r rune) bool { return !strings.ContainsRune("0123456789abcdef", r) }) < 0
+}
+func selectCleanEntries(ctx context.Context, root *os.Root, namespace [sha256.Size]byte, all bool) ([]cacheCleanEntry, error) {
+	var entries []cacheCleanEntry
+	addResults := func(dir string, digest [sha256.Size]byte, legacy bool) error {
+		dirs := []string{dir}
+		if !legacy {
+			dirs = nil
+			shards, err := cleanDirectoryEntries(ctx, root, dir)
+			if err != nil {
+				return err
+			}
+			for _, shard := range shards {
+				if cacheShard(shard.Name()) && shard.IsDir() {
+					dirs = append(dirs, filepath.Join(dir, shard.Name()))
+				}
+			}
+		}
+		for _, directory := range dirs {
+			files, err := cleanDirectoryEntries(ctx, root, directory)
+			if err != nil {
+				return err
+			}
+			for _, file := range files {
+				path := filepath.Join(directory, file.Name())
+				if strings.HasPrefix(file.Name(), ".tmp-") {
+					entries = append(entries, cacheCleanEntry{path: path, layer: "temporary"})
+					continue
+				}
+				key, ok := cacheHexDigest(strings.TrimSuffix(file.Name(), ".json"))
+				if !ok || !strings.HasSuffix(file.Name(), ".json") || !legacy && file.Name()[:2] != filepath.Base(directory) {
+					continue
+				}
+				slot := (cacheStore{namespace: digest}).lockName(key)
+				if legacy {
+					slot = legacyResultLockName(digest, key)
+				}
+				entries = append(entries, cacheCleanEntry{path: path, slot: slot, layer: "results"})
+			}
+		}
+		return nil
+	}
+	// New result layout fans out both compiler namespaces and request keys.
+	prefixes, err := cleanDirectoryEntries(ctx, root, filepath.Join("results", "v2"))
+	if err != nil {
+		return nil, err
+	}
+	for _, prefix := range prefixes {
+		if !cacheShard(prefix.Name()) || !prefix.IsDir() {
+			continue
+		}
+		dir := filepath.Join("results", "v2", prefix.Name())
+		candidates, err := cleanDirectoryEntries(ctx, root, dir)
+		if err != nil {
+			return nil, err
+		}
+		for _, candidate := range candidates {
+			digest, ok := cacheHexDigest(candidate.Name())
+			if !ok || !candidate.IsDir() || candidate.Name()[:2] != prefix.Name() || !all && (namespace == ([sha256.Size]byte{}) || digest != namespace) {
 				continue
 			}
-			key, ok := cacheHexDigest(strings.TrimSuffix(file.Name(), ".json"))
-			if !ok || !strings.HasSuffix(file.Name(), ".json") {
-				continue
+			if err := addResults(filepath.Join(dir, candidate.Name()), digest, false); err != nil {
+				return nil, err
 			}
-			entries = append(entries, cacheCleanEntry{path: path, slot: (cacheStore{namespace: digest}).lockName(key), layer: "results"})
 		}
 	}
-	versions := []string{"v2"}
 	if all {
-		versions = append(versions, "v1")
+		candidates, err := cleanDirectoryEntries(ctx, root, filepath.Join("results", "v1"))
+		if err != nil {
+			return nil, err
+		}
+		for _, candidate := range candidates {
+			digest, ok := cacheHexDigest(candidate.Name())
+			if ok && candidate.IsDir() {
+				if err := addResults(filepath.Join("results", "v1", candidate.Name()), digest, true); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	versions := []string{"v3"}
+	if all {
+		versions = append(versions, "v2", "v1")
 	}
 	for _, version := range versions {
-		dir := filepath.Join("stage", version)
-		if err := validateStageDirectory(root, dir); err != nil {
-			return nil, err
-		}
-		stages, err := cacheDirectoryEntries(root, dir, cacheInventoryLimit)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
+		base := filepath.Join("stage", version)
+		candidates, err := cleanDirectoryEntries(ctx, root, base)
 		if err != nil {
 			return nil, err
 		}
-		for _, stage := range stages {
-			if _, ok := cacheHexDigest(stage.Name()); !ok {
-				continue
+		dirs := []string{base}
+		if version == "v3" {
+			dirs = nil
+			for _, candidate := range candidates {
+				if cacheShard(candidate.Name()) && candidate.IsDir() {
+					dirs = append(dirs, filepath.Join(base, candidate.Name()))
+				}
 			}
-			slot := strings.TrimPrefix(goStageLockPath(root.Name(), stage.Name()), root.Name()+string(filepath.Separator))
-			if version == "v1" {
+		}
+		for _, dir := range dirs {
+			stages := candidates
+			if version == "v3" {
+				stages, err = cleanDirectoryEntries(ctx, root, dir)
+				if err != nil {
+					return nil, err
+				}
+			}
+			for _, stage := range stages {
+				if _, ok := cacheHexDigest(stage.Name()); !ok || version == "v3" && stage.Name()[:2] != filepath.Base(dir) {
+					continue
+				}
 				hash := sha256.Sum256([]byte(stage.Name()))
-				slot = filepath.Join("stage", "v1", "locks", fmt.Sprintf("%02x.lock", hash[0]))
+				slot := filepath.Join("locks", "stage-v3", fmt.Sprintf("%02x.lock", hash[0]))
+				if version == "v2" {
+					slot = filepath.Join("locks", "stage-v2", fmt.Sprintf("%02x.lock", hash[0]))
+				}
+				if version == "v1" {
+					slot = filepath.Join("stage", "v1", "locks", fmt.Sprintf("%02x.lock", hash[0]))
+				}
+				entries = append(entries, cacheCleanEntry{path: filepath.Join(dir, stage.Name()), slot: slot, layer: "stage"})
 			}
-			entries = append(entries, cacheCleanEntry{path: filepath.Join(dir, stage.Name()), slot: slot, layer: "stage"})
 		}
 	}
-	if err := validateStageDirectory(root, filepath.Join("jobs", "v1")); err != nil {
-		return nil, err
-	}
-	jobs, err := cacheDirectoryEntries(root, filepath.Join("jobs", "v1"), cacheInventoryLimit)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	jobs, err := cleanDirectoryEntries(ctx, root, filepath.Join("jobs", "v1"))
+	if err != nil {
 		return nil, err
 	}
 	for _, job := range jobs {
@@ -232,7 +322,61 @@ func selectCleanEntries(root *os.Root, namespace [sha256.Size]byte, all bool) ([
 			entries = append(entries, cacheCleanEntry{path: filepath.Join("jobs", "v1", job.Name()), layer: "temporary"})
 		}
 	}
+	shards, err := cleanDirectoryEntries(ctx, root, filepath.Join("indexes", "v1"))
+	if err != nil {
+		return nil, err
+	}
+	for _, shard := range shards {
+		if !cacheShard(shard.Name()) || !shard.IsDir() {
+			continue
+		}
+		dir := filepath.Join("indexes", "v1", shard.Name())
+		indexes, err := cleanDirectoryEntries(ctx, root, dir)
+		if err != nil {
+			return nil, err
+		}
+		for _, index := range indexes {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if len(index.Name()) > 74 && index.Name()[:2] == shard.Name() && strings.HasPrefix(index.Name()[64:], ".json.tmp-") {
+				if _, ok := cacheHexDigest(index.Name()[:64]); ok {
+					path := filepath.Join(dir, index.Name())
+					if !all {
+						digest, err := readCacheNamespace(root, path)
+						if err != nil || namespace == ([sha256.Size]byte{}) || digest != namespace {
+							continue
+						}
+					}
+					entries = append(entries, cacheCleanEntry{path: path, layer: "temporary"})
+					continue
+				}
+			}
+
+			name := strings.TrimSuffix(index.Name(), ".json")
+			key, ok := cacheHexDigest(name)
+			if !ok || !strings.HasSuffix(index.Name(), ".json") || name[:2] != shard.Name() {
+				continue
+			}
+			selected := cacheCleanEntry{path: filepath.Join(dir, index.Name()), layer: "index", key: key}
+			if !all {
+				digest, err := readCacheIndex(root, key)
+				if err != nil || namespace == ([sha256.Size]byte{}) || digest != namespace {
+					continue
+				}
+				selected.namespace = namespace
+			}
+			entries = append(entries, selected)
+		}
+	}
+
 	return entries, nil
+}
+func legacyResultLockName(namespace, key [sha256.Size]byte) string {
+	digest := sha256.New()
+	_, _ = digest.Write(namespace[:])
+	_, _ = digest.Write(key[:])
+	return filepath.Join("locks", "results-v1", fmt.Sprintf("%02x.lock", digest.Sum(nil)[0]))
 }
 func removeCleanEntry(ctx context.Context, root *os.Root, entry cacheCleanEntry) (int64, error) {
 	if err := validateStageDirectory(root, filepath.Dir(entry.path)); err != nil {
@@ -241,6 +385,13 @@ func removeCleanEntry(ctx context.Context, root *os.Root, entry cacheCleanEntry)
 	if _, err := root.Lstat(entry.path); err != nil {
 		return 0, err
 	}
+	if entry.layer == "index" && entry.namespace != ([sha256.Size]byte{}) {
+		actual, err := readCacheIndex(root, entry.key)
+		if err != nil || actual != entry.namespace {
+			return 0, os.ErrNotExist
+		}
+	}
+
 	bytes, err := cacheRemovalBytes(ctx, root, entry.path)
 	if err != nil {
 		return 0, err
@@ -257,7 +408,6 @@ func removeCleanEntry(ctx context.Context, root *os.Root, entry cacheCleanEntry)
 	return bytes, nil
 }
 func cacheRemovalBytes(ctx context.Context, root *os.Root, path string) (int64, error) {
-	remaining := goStageInventoryLimit
 	pending := []string{path}
 	var bytes int64
 	for len(pending) > 0 {
@@ -266,10 +416,6 @@ func cacheRemovalBytes(ctx context.Context, root *os.Root, path string) (int64, 
 		}
 		path := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
-		remaining--
-		if remaining < 0 {
-			return 0, errCacheArtifactBudget
-		}
 		info, err := root.Lstat(path)
 		if err != nil {
 			return 0, err
@@ -278,7 +424,7 @@ func cacheRemovalBytes(ctx context.Context, root *os.Root, path string) (int64, 
 			bytes += info.Size()
 			continue
 		}
-		names, err := cacheDirectoryEntries(root, path, remaining-len(pending))
+		names, err := cleanDirectoryEntries(ctx, root, path)
 		if err != nil {
 			return 0, err
 		}

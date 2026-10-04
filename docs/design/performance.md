@@ -672,7 +672,7 @@ per-build path. Measure lookup, hits and publication at 1, 1,000, 10,000 and
 cache. Measure bounded daily trim separately. Replacing the same key alone does
 not establish this bar.
 
-The current full-inventory implementation fails that requirement. On Linux,
+The superseded full-inventory implementation failed that requirement. On Linux,
 Go 1.27.1, Ryzen 7 5700G, five warm samples of three iterations produced the
 following medians and ranges in milliseconds:
 
@@ -692,6 +692,8 @@ Checking, generation and Go subprocesses are excluded from the measured loop.
 Result timing covers admission only; staging timing includes locks, complete
 publication and release. The two rows measure different amounts of work.
 
+Historical reproduction at the lifecycle-design PR #249:
+
 ```sh
 go test ./internal/driver -run '^$' -bench '^(BenchmarkGoStageAccounting|BenchmarkCacheResultAccounting)$' -benchtime=3x -count=5
 ```
@@ -706,3 +708,27 @@ marking and bounded off-path daily trim replace total-byte/count accounting.
 The measurements above preserve the superseded policy baseline; the new layout
 and maintenance implementation must establish the larger-population acceptance
 matrix before auto-on. See [disk-cache lifecycle](disk-cache.md#age-based-lifecycle-and-direct-lookup).
+
+
+The first sharded-layout slice removes admission scans and inventories from the
+per-build path. Three samples of twenty primed-entry publications on the same
+host give these medians (min–max), in milliseconds:
+
+| Program | 1 entry | 128 entries | 512 entries | 1024 entries |
+| --- | ---: | ---: | ---: | ---: |
+| config | 0.932 (0.926–2.815) | 0.923 (0.921–0.926) | 2.719 (0.932–2.801) | 2.800 (2.783–2.869) |
+| http_server | 0.965 (0.953–2.811) | 0.965 (0.951–0.992) | 2.753 (0.955–2.790) | 2.839 (0.998–2.873) |
+
+Payloads are 84,756 and 178,290 emitted Go bytes respectively. Private roots,
+priming and synthetic surrounding trees follow the baseline staging setup above;
+checking, generation and Go subprocesses remain outside the timed loop. Fixed
+sample spikes remain visible, so these samples establish removal of the previous
+hundreds-of-milliseconds scan growth, not the final flat-cost acceptance claim.
+Result publication is covered by direct-path/no-eviction and alternating-compiler
+locator regressions here; its timing matrix follows with daily trim. The larger
+1/1k/10k/100k matrix must cover lookup, hits and new-key publication as well as
+replacement before automatic complete-result caching is enabled.
+
+```sh
+go test ./internal/driver -run '^$' -bench '^BenchmarkGoStagePublication$' -benchtime=20x -count=3
+```

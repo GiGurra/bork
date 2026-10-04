@@ -11,19 +11,27 @@ import (
 )
 
 // cacheStore currently has no production callers. Its explicit root is used by
-// tests only; automatic reads/writes wait for eviction and clean support.
+// tests only; automatic reads/writes wait for age-based trim and acceptance checks.
 // The root is the shared bork cache directory, so staging can coordinate on
 // mutation.lock while keeping its own fixed slot pool.
 type cacheStore struct {
 	root      string
 	namespace [sha256.Size]byte
-	policy    *cacheLimits
 }
 
 func (s cacheStore) directory() string {
-	return filepath.Join("results", "v1", hex.EncodeToString(s.namespace[:]))
+	namespace := hex.EncodeToString(s.namespace[:])
+	return filepath.Join("results", "v2", namespace[:2], namespace)
 }
 func cacheArtifactFilename(key [sha256.Size]byte) string { return hex.EncodeToString(key[:]) + ".json" }
+func (s cacheStore) path(key [sha256.Size]byte) string {
+	name := cacheArtifactFilename(key)
+	return filepath.Join(s.directory(), name[:2], name)
+}
+func cacheIndexPath(key [sha256.Size]byte) string {
+	name := cacheArtifactFilename(key)
+	return filepath.Join("indexes", "v1", name[:2], name)
+}
 
 // read only decodes complete artifacts. It does not certify input receipts or
 // refresh last-use timestamps before the caller has validated those receipts.
@@ -38,7 +46,7 @@ func (s cacheStore) read(request cacheArtifactRequest) *cacheArtifactBody {
 		return nil
 	}
 	defer func() { _ = root.Close() }()
-	file, err := openCacheFile(root, filepath.Join(s.directory(), cacheArtifactFilename(key)), os.O_RDONLY, 0)
+	file, err := openCacheFile(root, s.path(key), os.O_RDONLY, 0)
 	if err != nil {
 		return nil
 	}
@@ -73,7 +81,7 @@ func (s cacheStore) write(body *cacheArtifactBody) error {
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	if err := root.MkdirAll(filepath.Join("locks", "results-v1"), 0700); err != nil {
+	if err := ensureStageDirectory(root, filepath.Join("locks", "results-v2"), 0700); err != nil {
 		return err
 	}
 	slot, err := s.lock(root, s.lockName(body.Key))
@@ -86,11 +94,8 @@ func (s cacheStore) write(body *cacheArtifactBody) error {
 		return err
 	}
 	defer func() { _ = mutation.Close() }()
-	if err := s.reserveResult(root, body.Key, int64(len(encoded))); err != nil {
-		return err
-	}
-	directory := s.directory()
-	if err := root.MkdirAll(directory, 0700); err != nil {
+	directory := filepath.Dir(s.path(body.Key))
+	if err := ensureStageDirectory(root, directory, 0700); err != nil {
 		return err
 	}
 	temporary := filepath.Join(directory, ".tmp-"+rand.Text())
@@ -107,7 +112,12 @@ func (s cacheStore) write(body *cacheArtifactBody) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	return root.Rename(temporary, filepath.Join(directory, cacheArtifactFilename(body.Key)))
+	if err := root.Rename(temporary, s.path(body.Key)); err != nil {
+		return err
+	}
+	// A locator failure leaves a valid artifact; compilation/publication succeed.
+	_ = s.writeIndex(root, body.Key)
+	return nil
 }
 
 func (s cacheStore) lockName(key [sha256.Size]byte) string {
@@ -117,7 +127,7 @@ func (s cacheStore) lockName(key [sha256.Size]byte) string {
 	copy(input[:sha256.Size], s.namespace[:])
 	copy(input[sha256.Size:], key[:])
 	slot := sha256.Sum256(input[:])
-	return filepath.Join("locks", "results-v1", fmt.Sprintf("%02x.lock", slot[0]))
+	return filepath.Join("locks", "results-v2", fmt.Sprintf("%02x.lock", slot[0]))
 }
 func (s cacheStore) lock(root *os.Root, name string) (*os.File, error) {
 	file, err := openCacheFile(root, name, os.O_CREATE|os.O_RDWR, 0600)
@@ -138,11 +148,11 @@ func (s cacheStore) lock(root *os.Root, name string) (*os.File, error) {
 	return file, nil
 }
 
-// findCacheArtifact locates an untrusted candidate without hashing the running
-// compiler first. The caller must certify its actual namespace before serving.
-// Namespace enumeration is bounded; excessive or malformed cache trees miss.
+// findCacheArtifact uses a direct untrusted namespace locator before compiler
+// hashing. Namespace and complete receipt certification still authorize every hit.
 func findCacheArtifact(directory string, request cacheArtifactRequest) *cacheArtifactBody {
-	if _, err := request.key(); err != nil {
+	key, err := request.key()
+	if err != nil {
 		return nil
 	}
 	root, err := os.OpenRoot(directory)
@@ -150,32 +160,62 @@ func findCacheArtifact(directory string, request cacheArtifactRequest) *cacheArt
 		return nil
 	}
 	defer func() { _ = root.Close() }()
-	namespaces, err := root.Open(filepath.Join("results", "v1"))
+	namespace, err := readCacheIndex(root, key)
 	if err != nil {
 		return nil
 	}
-	entries, readErr := namespaces.ReadDir(1025)
-	_ = namespaces.Close()
-	if readErr != nil && readErr != io.EOF || len(entries) > 1024 {
+	body := (cacheStore{root: directory, namespace: namespace}).read(request)
+	if body == nil {
 		return nil
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		bytes, err := hex.DecodeString(entry.Name())
-		if err != nil || len(bytes) != sha256.Size {
-			continue
-		}
-		var namespace [sha256.Size]byte
-		copy(namespace[:], bytes)
-		store := cacheStore{root: directory, namespace: namespace}
-		if body := store.read(request); body != nil {
-			inputs, err := body.Source.snapshot()
-			if err == nil && inputs.current() {
-				return body
-			}
-		}
+	inputs, err := body.Source.snapshot()
+	if err != nil || !inputs.current() {
+		return nil
 	}
-	return nil
+	return body
+}
+
+func readCacheIndex(root *os.Root, key [sha256.Size]byte) ([sha256.Size]byte, error) {
+	return readCacheNamespace(root, cacheIndexPath(key))
+}
+func readCacheNamespace(root *os.Root, path string) ([sha256.Size]byte, error) {
+	var namespace [sha256.Size]byte
+	file, err := openCacheFile(root, path, os.O_RDONLY, 0)
+	if err != nil {
+		return namespace, err
+	}
+	defer func() { _ = file.Close() }()
+	// Exactly one lowercase SHA-256 namespace, not a filesystem path.
+	data, err := io.ReadAll(io.LimitReader(file, 65))
+	if err != nil || len(data) != 64 {
+		return namespace, errInvalidCacheArtifact
+	}
+
+	namespace, ok := cacheHexDigest(string(data))
+	if !ok {
+		return namespace, errInvalidCacheArtifact
+	}
+	return namespace, nil
+}
+
+func (s cacheStore) writeIndex(root *os.Root, key [sha256.Size]byte) error {
+	path := cacheIndexPath(key)
+	if err := ensureStageDirectory(root, filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	pending := path + ".tmp-" + rand.Text()
+	file, err := openCacheFile(root, pending, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Remove(pending) }()
+	_, writeErr := file.Write([]byte(hex.EncodeToString(s.namespace[:])))
+	closeErr := file.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return root.Rename(pending, path)
 }

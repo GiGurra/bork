@@ -31,7 +31,7 @@ func TestCacheCleanCLI(t *testing.T) {
 	root = filepath.Join(root, "bork")
 	key := strings.Repeat("a", 64)
 	namespace := strings.Repeat("b", 64)
-	current := filepath.Join(root, "stage", "v2", key, "tree")
+	current := filepath.Join(root, "stage", "v3", key[:2], key, "tree")
 	legacy := filepath.Join(root, "stage", "v1", key, "tree")
 	artifact := filepath.Join(root, "results", "v1", namespace, key+".json")
 	unknown := filepath.Join(root, "user-note.txt")
