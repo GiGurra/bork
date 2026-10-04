@@ -405,7 +405,7 @@ func (a *executionAuditor) typ(typ Type, depth int) {
 	a.types[typ] = true
 	switch typ := typ.(type) {
 	case *Basic:
-		if typ != Bool && typ != String && typ != Ok && typ != Never && !IsNumeric(typ) {
+		if typ != Bool && typ != String && typ != Rune && typ != Ok && typ != Never && !IsNumeric(typ) {
 			a.reject("runtime or unknown basic type")
 		}
 	case *List:

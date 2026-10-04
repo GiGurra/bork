@@ -13,6 +13,6 @@ fn main() {
   println(s"costs $$$price, or $$${price * 2} for two")
   println(s"plain", s"", s"tab\there \"quoted\" å")
   r: Int | String = 7
-  println(s"union: $r, option: ${Option.Some { value: 2.0 }}, rune: ${runeToString('x')}")
+  println(s"union: $r, option: ${Option.Some { value: 2.0 }}, rune: ${toString('x')}")
   println("not interpolated: $u ${u}")
 }

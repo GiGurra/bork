@@ -1406,7 +1406,7 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		t := e.Args[0].Type()
 		actual := g.typed(args[0], t)
 		expected := g.convert(args[1], e.Args[1].Type(), t)
-		if check.IsNumeric(t) && isConst(expected) {
+		if (check.IsNumeric(t) || t == check.Rune) && isConst(expected) {
 			expected = &ast.CallExpr{Fun: g.goType(t), Args: []ast.Expr{expected}}
 		}
 		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_assertEqual"), Index: g.goType(t)}, Args: []ast.Expr{actual, expected, g.callerLocation(e.Pos())}}
@@ -1583,7 +1583,7 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 				out = append(out, assign(ast.NewIdent("_"), x))
 				continue
 			}
-			if s.Declared || (check.IsNumeric(vt) && isConst(x)) {
+			if s.Declared || ((check.IsNumeric(vt) || vt == check.Rune) && isConst(x)) {
 				// A declared type is kept, and an untyped Go constant would
 				// get Go's default type (int, float64).
 				out = append(out, typedVar(varIdent(s.Var), g.goType(bt), g.convert(x, vt, bt)))
@@ -1966,10 +1966,10 @@ func varDecl(id *ast.Ident, typ ast.Expr) ast.Stmt {
 	}}}
 }
 
-// typed gives a number constant x its Go type explicitly, for contexts
+// typed gives a number or rune constant x its Go type explicitly, for contexts
 // where Go would otherwise pick a default type.
 func (g *gen) typed(x ast.Expr, t check.Type) ast.Expr {
-	if check.IsNumeric(t) && isConst(x) {
+	if (check.IsNumeric(t) || t == check.Rune) && isConst(x) {
 		return &ast.CallExpr{Fun: g.goType(t), Args: []ast.Expr{x}}
 	}
 	return x
@@ -2022,7 +2022,7 @@ func needsStr(t check.Type) bool {
 	case *check.Seq, *check.Union, *check.List, *check.Map, *check.FuncType, *check.TypeParam, *check.Record, *check.Sealed:
 		return true
 	}
-	return check.IsFloat(t)
+	return check.IsFloat(t) || t == check.Rune
 }
 
 // stringOf renders x, of type t, as toString does.

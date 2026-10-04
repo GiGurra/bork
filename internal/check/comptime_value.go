@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/constant"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/GiGurra/bork/internal/diag"
 )
@@ -76,6 +77,12 @@ func decodeComptimeValue(v comptimeValue, t Type, pos diag.Pos, depth int, budge
 				return nil, fmt.Errorf("Float32 bits out of range")
 			}
 			return &FloatBits{expr: at, Bits: bits}, nil
+		case t == Rune:
+			n, err := strconv.ParseInt(v.Text, 10, 32)
+			if err != nil || !utf8.ValidRune(rune(n)) {
+				return nil, fmt.Errorf("invalid Unicode scalar %q", v.Text)
+			}
+			value = constant.MakeInt64(n)
 		case IsNumeric(t):
 			if numKindOf(t) == unsignedInt {
 				n, err := strconv.ParseUint(v.Text, 10, t.bits)

@@ -1,31 +1,36 @@
-// Runes (Unicode code points). These count and index runes, not bytes.
+// Runes are Unicode scalar values, distinct from numeric Int32.
+// Numeric code points are explicit; invalid scalars produce None.
+fn (r: Rune) code(): Int32 unsafe go {
+  return int32(r)
+}
 
-// runeToString gives the character; Rune currently aliases numeric Int32.
-fn runeToString(r: Rune): String unsafe go {
-  return string(r)
+fn (n: Int32) rune(): Option[Rune] unsafe go {
+  import "unicode/utf8"
+  if utf8.ValidRune(rune(n)) { return Option_Some[_Rune]{value: _Rune(n)} }
+  return Option_None[_Rune]{}
 }
 
 fn (r: Rune) isDigit(): Bool unsafe go {
   import "unicode"
-  return unicode.IsDigit(r)
+  return unicode.IsDigit(rune(r))
 }
 
 fn (r: Rune) isLetter(): Bool unsafe go {
   import "unicode"
-  return unicode.IsLetter(r)
+  return unicode.IsLetter(rune(r))
 }
 
 fn (r: Rune) isSpace(): Bool unsafe go {
   import "unicode"
-  return unicode.IsSpace(r)
+  return unicode.IsSpace(rune(r))
 }
 
 fn (r: Rune) isUpper(): Bool unsafe go {
   import "unicode"
-  return unicode.IsUpper(r)
+  return unicode.IsUpper(rune(r))
 }
 
 fn (r: Rune) isLower(): Bool unsafe go {
   import "unicode"
-  return unicode.IsLower(r)
+  return unicode.IsLower(rune(r))
 }

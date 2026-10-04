@@ -1,0 +1,62 @@
+import "bork/json"
+import "example.com/rune_values/values"
+
+type Box[T] = { value: T }
+type Glyph = { character: Rune } derive (Encode, Decode, GoStruct)
+
+fn render[T](value: T): String { toString(value) }
+fn renderBound[T: Show](value: T): String { show(value) }
+fn Upper(r: Rune): Rune | GoValueError unsafe go "unicode.ToUpper"
+fn Next(r: Rune): Int32 unsafe go "unicode.ToUpper"
+
+fn Identity(n: Int32): Rune | GoValueError unsafe go "example.com/bindtest.RuneIdentity"
+fn Runes(rs: List[Rune]): List[Rune] | GoValueError unsafe go "example.com/bindtest.RuneSlice"
+fn RuneMap(rs: Map[Rune, Rune]): Map[Rune, Rune] | GoValueError unsafe go "example.com/bindtest.RuneMap"
+fn InvalidRunes(): List[Rune] | GoValueError unsafe go "example.com/bindtest.InvalidRuneSlice"
+fn Round[T: GoStruct](value: T): T | GoValueError unsafe go {
+  out, errors := _d_T_GoStruct.FromGo(_d_T_GoStruct.ToGo(value))
+  if len(errors)>0 { return errors[0] }
+  return out
+}
+fn Read[T: GoStruct](text: String): T | GoValueError unsafe go {
+  import "encoding/json"
+  value := _d_T_GoStruct.New()
+  if err := json.Unmarshal([]byte(text), value); err != nil { return GoValueError{path:"json",message:err.Error()} }
+  out, errors := _d_T_GoStruct.FromGo(value)
+  if len(errors)>0 { return errors[0] }
+  return out
+}
+
+fn main() {
+  r = '界'
+  println('\xff', '\u00e5', '\U0001f600')
+  point: Int32 = 97
+  println(r, r.code(), point, point.rune(), render(r), renderBound(r))
+  println([r, 'a'], Box[Rune] { value: r }, Option.Some { value: r })
+  both: Rune | Int32 = r
+  println(both, Box[Rune | Int32] { value: both })
+  println(['z', 'a', '界'].sorted())
+  zero: Int32 = 0
+  negative: Int32 = -1
+  before: Int32 = 55295
+  surrogate: Int32 = 55296
+  lastSurrogate: Int32 = 57343
+  after: Int32 = 57344
+  max: Int32 = 1114111
+  over: Int32 = 1114112
+  println(zero.rune().isSome(), negative.rune(), before.rune().isSome(), surrogate.rune(), lastSurrogate.rune(), after.rune().isSome(), max.rune().isSome(), over.rune())
+  println(json.Encode(r), json.Encode(Glyph { character: 'å' }))
+  println(json.Decode[Rune]("\"界\""), json.Decode[Glyph]("{\"character\":\"å\"}"))
+  println(json.Decode[Rune]("\"\""), json.Decode[Rune]("\"ab\""), json.Decode[Rune]("97"))
+  println(Upper('å'), Next('å'))
+  println(Identity(point), Identity(surrogate), Identity(negative), Identity(over))
+  println(Runes(['a', '界']), InvalidRunes())
+  match (RuneMap({ 'a': '界' })) {
+    m: Map[Rune, Rune] => println(m.get('a'))
+    e: GoValueError => println(e)
+  }
+  println(Round(Glyph { character: 'å' }), Read[Glyph]("{\"Character\":97}"), Read[Glyph]("{\"Character\":55296}"))
+  println(values.Letter(), values.Letters())
+  println(comptime { '界' }, comptime { Box[Rune] { value: 'å' } })
+  println(comptime { ['a', '界'] }, comptime { x: Rune | Int32 = '界'; x })
+}

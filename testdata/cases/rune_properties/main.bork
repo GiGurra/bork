@@ -1,0 +1,11 @@
+fn main() {}
+
+test "generated runes are valid scalars" (r: Rune) {
+  n = r.code()
+  assert(n >= 0 && n <= 1114111 && (n < 55296 || n > 57343))
+  assert(n.rune() == Option.Some { value: r })
+}
+
+test "generated rune collections retain characters" (rs: List[Rune]) {
+  assert(rs.all((r) => toString(r).runeCount() == 1))
+}

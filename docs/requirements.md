@@ -3215,7 +3215,7 @@ it would make the intended optional layer or inference context clear.
 ### Numbers
 
 - **Fixed-width integers, as in Go.** `Int` is a 64-bit integer with Go's wrapping arithmetic.
-- **Go's sized numbers, with Go-like names:** `Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Float32`, `Float64`. `Int` is the same type as `Int64`, `Float` the same as `Float64`, `Byte` the same as `Uint8`, and `Rune` the same as `Int32`. Each sized integer wraps on overflow.
+- **Go's sized numbers, with Go-like names:** `Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Float32`, `Float64`. `Int` is the same type as `Int64`, `Float` the same as `Float64`, `Byte` the same as `Uint8`, and `Rune` is a distinct Unicode scalar type backed by Go int32. Each sized integer wraps on overflow.
 - **Numbers never mix implicitly.** `Int + Int8` is a compile error. Literals and arithmetic on literals are exact compile-time constants that take their type from where they are used (`x: Int8 = 100`); a constant that does not fit is a compile error. Unlike Go, a constant is computed as its type computes, so `x: Float = 1 / 3` is `0.333...`, not `0`.
 - **Conversions are explicit free functions:** `toInt8(x)`, `toFloat(x)`, and so on. A conversion that always fits (widening, or any integer to a float) returns the plain type. One that may not fit (narrowing, signed to unsigned, float to integer) returns `Target | OutOfRange`, so `?` or `match` must handle it. A constant is converted at compile time. Later, facts can let a value proven to be in range convert directly.
 - **Floats print as floats:** `3.0`, `1000000.0`, `0.25`, with an exponent only for very large or small values (`1e+21`). The digits are the shortest that read back as the same value.
@@ -3893,3 +3893,18 @@ statements, OR groups, and other expressions retain the named-predicate
 fallback. A single scalar unary comparison also retains its existing concise
 predicate message. Validation still runs the original predicate first;
 diagnostics explain a failure without changing which values are accepted.
+
+### Distinct Rune values
+
+Rune literals have type `Rune`, never a contextual number type. Rune has Eq,
+Show (the character), and Ord (code-point order); arithmetic requires `r.code()`.
+`Int32.rune()` returns `Option[Rune]` and rejects negative code points,
+U+D800–U+DFFF, and code points above U+10FFFF. `runeToString` is removed;
+migrate to `toString(r)` or string interpolation. JSON Encode/Decode use a
+string containing exactly one Unicode scalar, including in derived records.
+The generated shared runtime defines Rune once as a named type backed by Go
+int32. Go bindings convert scalar Rune arguments to int32 and validate int32
+results (invalid scalars return GoValueError). Collection bindings copy and
+convert elements at the Go interop boundary; these are O(n) conversions, as
+with other collection bindings. Inline unsafe Go uses `rune(r)`/`int32(r)`
+when calling Go and `_Rune(n)` when explicitly constructing a trusted Rune.

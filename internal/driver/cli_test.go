@@ -14,7 +14,7 @@ func TestCLIRun(t *testing.T) {
 	source := `import "bork/cli"
 pred validPort(n: Int) { n > 0 && n < 65536 }
 pred nonempty(s: String) { s.byteLength() > 0 }
-type Options = { name: String where nonempty, port: Int where validPort = 8080, verbose: Bool = true } derive (Decode)
+type Options = { name: String where nonempty, port: Int where validPort = 8080, verbose: Bool = true, character: Rune = 'å' } derive (Decode)
 fn main() {
  result = cli.Run[Options]("app", "Example", (options, s) => {
    onClose(s, () => { println("closed") })
@@ -37,7 +37,9 @@ fn main() {
 		{name: "env-defaults", env: "Ada", want: []string{`name: "Ada"`, "port: 8080", "verbose: true", "closed\nOk"}},
 		{name: "cli-precedence", env: "Env", args: []string{"--name", "CLI", "-p", "443", "--verbose=false"}, want: []string{`name: "CLI"`, "port: 443", "verbose: false", "closed\nOk"}, absent: []string{`name: "Env"`}},
 		{name: "empty-env", args: []string{"--port", "0"}, want: []string{".name", "is missing", ".port", "must satisfy value > 0 (validPort)"}, absent: []string{"closed", "Ok"}},
-		{name: "help", env: "Ada", args: []string{"--help"}, want: []string{"Example", "Usage:", "--name", "default 8080", "Ok"}, absent: []string{"Options {", "closed"}},
+		{name: "help", env: "Ada", args: []string{"--help"}, want: []string{"Example", "Usage:", "--name", "default 8080", "default å", "Ok"}, absent: []string{"Options {", "closed"}},
+		{name: "rune", env: "Ada", args: []string{"--character", "界"}, want: []string{"character: 界", "closed\nOk"}},
+		{name: "invalid-rune", env: "Ada", args: []string{"--character", "ab"}, want: []string{"expected one Unicode scalar"}, absent: []string{"closed", "Ok"}},
 		{name: "bad-flag", args: []string{"--missing"}, want: []string{"Error {", "unknown flag"}, absent: []string{"closed", "Ok"}},
 		{name: "unexpected-positional", env: "Ada", args: []string{"unexpected"}, want: []string{"Error {"}, absent: []string{"closed", "Ok"}},
 	}
@@ -158,8 +160,12 @@ type Constrained = { config: Option[String] where selected, name: String } deriv
 type Defaults = { config: String = "chosen.json", name: String } derive (Decode)
 type OptionalDefaults = { config: Option[String] = Option.Some { value: "chosen.json" }, name: String } derive (Decode)
 type Bad = { config: Int = 0, other: String = "" } derive (Decode)
+type RuneSelector = { config: Rune = 'a' } derive (Decode)
+type OptionalRuneSelector = { config: Option[Rune] = Option.Some { value: 'a' } } derive (Decode)
 type NestedOption = { config: Option[Option[String]] = Option.Some { value: Option.Some { value: "chosen.json" } }, name: String = "" } derive (Decode)
 fn main() uses io {
+ println(cli.Parse[RuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
+ println(cli.Parse[OptionalRuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[Constrained]("app", "", ["--config", "chosen.json"], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[Defaults]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[OptionalDefaults]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
@@ -184,7 +190,7 @@ fn main() uses io {
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	if strings.Count(string(out), "config-file field must be String or Option[String]") != 3 {
+	if strings.Count(string(out), "config-file field must be String or Option[String]") != 5 {
 		t.Fatalf("selector type validation: %s", out)
 	}
 	for _, want := range []string{`Constrained { config: Option.Some`, `Defaults { config: "chosen.json", name: "selected" }`, `OptionalDefaults { config: Option.Some`, "config-file field must be String or Option[String]", "config-file field duplicates config"} {
