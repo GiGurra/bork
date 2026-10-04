@@ -41,10 +41,12 @@ The language knows only this call protocol:
 ```bork
 SQL"a $x b ${y()} c"
 // Equivalent call structure:
-SQL(["a ", " b ", " c"]).Interpolate(x).Interpolate(y()).Finish()
+SQL(/* compiler-created StaticParts: ["a ", " b ", " c"] */)
+  .Interpolate(x).Interpolate(y()).Finish()
 ```
 
-The prefix receives a `List[String]` of decoded literal parts, with exactly one
+The prefix receives a prelude `StaticParts` capability containing decoded literal
+parts, with exactly one
 more element than the number of holes. The returned value has an exported
 `Interpolate` method for each hole and an exported zero-argument `Finish` method.
 The builder tracks which literal follows each hole. Hole values retain their
@@ -57,7 +59,7 @@ For example, a library can use bork's existing generic/class machinery:
 ```bork
 class Encodable[T] { fn encodePart(value: T): String }
 type Builder = { parts: List[String], values: List[String] }
-fn Html(parts: List[String]): Builder { Builder { parts: parts, values: [] } }
+fn Html(parts: StaticParts): Builder { Builder { parts: parts.values, values: [] } }
 fn (builder: Builder) Interpolate[T: Encodable](value: T): Builder {
   Builder { parts: builder.parts, values: builder.values.append(encodePart(value)) }
 }
@@ -113,20 +115,29 @@ There is no raw hole escape hatch in the first version. Runtime SQL text remains
 possible through the existing explicit string/parameter API; that legacy API is
 outside the safe Statement construction guarantee. Statement internals are
 private, and there is no public constructor taking arbitrary SQL text.
-The protocol's literal List is ordinary runtime data for arbitrary library
-prefixes, so the SQL prefix factory must remain a documented trusted-text
-entry point: manually calling `sql.SQL(untrustedParts)` can supply raw SQL.
-The guarantee is for prefixed literals and their composition, not an assertion
-that every public library function can prove its String inputs came from syntax.
-Preventing the latter would require a compiler-created literal-parts capability;
-that stronger origin guarantee is deferred and must not be implied by the docs.
+`StaticParts` is a private prelude record with read-only `values: List[String]`.
+Only the compiler creates it at prefixed literal sites; there is no public
+constructor from String or List[String], including an empty/default constructor.
+Reading its segments does not confer permission to reconstruct it. The existing
+private-construction checks also cover copy, nested update, decoding, derivation,
+and into conversions. The compiler marks only its generated construction as
+trusted; source record literals never receive that exemption. Unsafe Go remains
+an explicitly authorized escape from the language's guarantees. A library may
+provide an explicit, greppable `sql.Unsafe(text)` to opt into runtime raw SQL;
+the initial implementation does not need that escape hatch because legacy APIs
+remain available. The SQL factory accepts StaticParts, so an agent cannot
+accidentally call it with a list of untrusted runtime strings.
 
 ## SQL boundaries, dialects, and execution
 
 Statement builds a structured representation; executing or explicitly rendering
 it can fail with sql.Error. Reject holes inside single/double-quoted text,
-SQLite backtick/bracket identifiers, line/block comments, and Postgres dollar
-quotes. Reject a hole embedded within an unquoted token, rather than silently
+SQLite backtick/bracket identifiers, line/block comments (including nested
+Postgres block comments), and Postgres dollar quotes and E-prefixed escape
+strings. Postgres plain quoted strings containing backslashes are rejected
+conservatively, so session standard_conforming_strings cannot change the
+scanner's boundary interpretation. E-prefixed strings use explicit backslash
+escape rules. SQLite plain strings do not treat backslashes as escapes. Reject a hole embedded within an unquoted token, rather than silently
 turning `prefix$value` into a new token. This includes literal text on either
 side, consecutive holes, and nested fragments. Flatten fragments before these
 checks so composition cannot hide a broken lexical boundary. Quoted identifier
@@ -152,6 +163,8 @@ Expose `statement.Exec(connectionOrTx)`, `statement.Query[T: Decode](connectionO
 `statement.QueryJson(connectionOrTx)`, and the streaming `statement.Rows[T: Decode]`
 and `statement.RowsJson`. These methods use existing execution/decoding/context
 logic after rendering, and preserve the existing failure unions and effects.
+Rows/RowsJson render on traversal, yield rendering Error as the first element
+and stop without executing a query; each traversal remains fresh.
 Provide `statement.Render(dialect)` returning a public rendered query/params
 record or Error for testing and inspection. Rendering is pure; execution and
 stream traversal retain their current effects and scope ownership.
@@ -175,7 +188,7 @@ including nested interpolation expressions, just as for s"...". Update editor
 string-prefix recognition for qualified/custom prefixes while keeping ordinary
 names and string tokens distinct. Do not infer SQL syntax highlighting from
 arbitrary user names as a language rule. Update grammar, requirements, README,
-and SQL API docs when implementation lands, describing the origin limitation
+and SQL API docs when implementation lands, describing the compiler-created literal capability
 and the difference between String rendering and typed literal construction.
 
 ## Prior art and decisions
@@ -218,6 +231,9 @@ SQL tests cover scalar/Bytes/Null bindings, hostile String and Identifier values
 identifier dots/quotes, nested fragments and parameter ordering, SQLite execution,
 Postgres rendering and numbering, transaction dialect retention, repeated render,
 legacy compatibility, and every quote/comment/placeholder boundary above.
+Negative capability tests cover direct literals, defaults, generated constructors,
+copy/into, decode/GoStruct derivation, aliases, and generic reconstruction;
+reading StaticParts.values must not make reconstruction possible.
 Check malformed compositions, dollar quotes, comment delimiters split across
 fragments, and both sides of holes. No live Postgres service is needed to verify
 rendering; existing driver behavior remains covered by the library checks.
