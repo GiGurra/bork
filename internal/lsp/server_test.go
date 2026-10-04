@@ -356,3 +356,32 @@ func TestStdioDocumentLifecycle(t *testing.T) {
 		t.Fatalf("document versions/diagnostics: %+v", counts)
 	}
 }
+
+func TestInitializeCompilerVersion(t *testing.T) {
+	var in, out bytes.Buffer
+	if err := writeMessage(&in, map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ServeWithVersion(&in, &out, "v0.4.2"); err != nil {
+		t.Fatal(err)
+	}
+	_, body, ok := bytes.Cut(out.Bytes(), []byte("\r\n\r\n"))
+	if !ok {
+		t.Fatalf("missing LSP header: %s", &out)
+	}
+	var response struct {
+		Result struct {
+			ServerInfo struct {
+				Name    string `json:"name"`
+				Version string `json:"version"`
+			} `json:"serverInfo"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatal(err)
+	}
+	result := response.Result
+	if result.ServerInfo.Name != "bork" || result.ServerInfo.Version != "v0.4.2" {
+		t.Fatalf("server info: %+v", result.ServerInfo)
+	}
+}

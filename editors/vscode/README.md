@@ -14,7 +14,7 @@ bork new hello
 code hello
 ```
 
-VS Code 1.82 or later is required. The extension does not bundle a compiler. Set `bork.serverPath` if bork is not on the editor's PATH; restart the extension after changing it. For SSH, containers, and other remote workspaces, install the compiler and Go on the remote host.
+VS Code 1.82 or later is required. The extension does not bundle a compiler. Set `bork.serverPath` if bork is not on the editor's PATH; run **bork: Restart Language Server** after changing it. For SSH, containers, and other remote workspaces, install the compiler and Go on the remote host.
 
 ## Features
 
@@ -22,7 +22,13 @@ The extension highlights `.bork` files, including embedded Go, and launches
 `bork lsp` for diagnostics, types and proven facts on hover, go-to-definition,
 references, conservative completion, document symbols, formatting and suggested
 compiler fixes. Install a current `bork` binary on PATH or set `bork.serverPath`
-to its absolute path. Restart the extension after changing that setting.
+to its absolute path. Run **bork: Restart Language Server** after changing that setting.
+
+Bork files format on save by default and use two-space indentation, matching
+`bork fmt`. Override these defaults in your `[bork]` editor settings. The status
+bar shows the running compiler version and language-server state when a bork file
+is active. Click it to restart the server or show its output; both actions are
+also available in the Command Palette. Restart reads the current `bork.serverPath`.
 
 Unsaved files participate in package checking, including imported files and new
 siblings. Changes are checked after a 150 ms pause; open/save checks run

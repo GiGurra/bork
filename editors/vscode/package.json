@@ -47,10 +47,33 @@
           "type": "string",
           "default": "bork",
           "scope": "machine",
-          "description": "Path to the bork binary. Restart the extension after changing this setting."
+          "description": "Path to the bork binary. Run bork: Restart Language Server after changing this setting."
         }
       }
-    }
+    },
+    "configurationDefaults": {
+      "[bork]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "gigurra.bork",
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.detectIndentation": false
+      }
+    },
+    "commands": [
+      {
+        "command": "bork.serverStatus",
+        "title": "bork: Language Server Status"
+      },
+      {
+        "command": "bork.restartServer",
+        "title": "bork: Restart Language Server"
+      },
+      {
+        "command": "bork.showOutput",
+        "title": "bork: Show Language Server Output"
+      }
+    ]
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
