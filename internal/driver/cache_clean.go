@@ -171,7 +171,13 @@ func (s cacheStore) lockWithContext(ctx context.Context, root *os.Root, name str
 }
 
 // Explicit cleanup may enumerate; ordinary lookup/publication never does.
+const cleanDirectoryBatchSize = 256
+
 func cleanDirectoryEntries(ctx context.Context, root *os.Root, path string) ([]os.DirEntry, error) {
+	return cleanDirectoryEntriesWithBatch(ctx, root, path, cleanDirectoryBatchSize)
+}
+
+func cleanDirectoryEntriesWithBatch(ctx context.Context, root *os.Root, path string, batchSize int) ([]os.DirEntry, error) {
 	if err := validateStageDirectory(root, path); err != nil {
 		return nil, err
 	}
@@ -188,7 +194,7 @@ func cleanDirectoryEntries(ctx context.Context, root *os.Root, path string) ([]o
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		batch, err := file.ReadDir(256)
+		batch, err := file.ReadDir(batchSize)
 		result = append(result, batch...)
 		if err == io.EOF {
 			return result, nil
@@ -437,6 +443,10 @@ func removeCleanEntry(ctx context.Context, root *os.Root, entry cacheCleanEntry)
 	return bytes, nil
 }
 func cacheRemovalBytes(ctx context.Context, root *os.Root, path string) (int64, error) {
+	return cacheRemovalBytesWithBatch(ctx, root, path, cleanDirectoryBatchSize)
+}
+
+func cacheRemovalBytesWithBatch(ctx context.Context, root *os.Root, path string, batchSize int) (int64, error) {
 	pending := []string{path}
 	var bytes int64
 	for len(pending) > 0 {
@@ -453,7 +463,7 @@ func cacheRemovalBytes(ctx context.Context, root *os.Root, path string) (int64, 
 			bytes += info.Size()
 			continue
 		}
-		names, err := cleanDirectoryEntries(ctx, root, path)
+		names, err := cleanDirectoryEntriesWithBatch(ctx, root, path, batchSize)
 		if err != nil {
 			return 0, err
 		}

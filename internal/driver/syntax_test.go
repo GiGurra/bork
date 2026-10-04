@@ -14,6 +14,7 @@ import (
 // leave the syntax tree as written: what they work out is recorded in
 // check.Info.
 func TestCheckLeavesSyntax(t *testing.T) {
+	t.Parallel()
 	var dirs []string
 	for _, root := range []string{filepath.Join("..", "..", "testdata", "cases"), filepath.Join("..", "..", "examples")} {
 		entries, err := os.ReadDir(root)

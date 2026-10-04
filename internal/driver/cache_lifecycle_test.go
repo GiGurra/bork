@@ -192,6 +192,7 @@ func TestCacheResultHourlyUse(t *testing.T) {
 }
 
 func TestCacheUseDeclinesAliases(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	outside := filepath.Join(base, "outside")
 	start := time.Unix(1700000000, 0)

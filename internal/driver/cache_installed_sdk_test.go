@@ -8,6 +8,7 @@ import (
 )
 
 func TestCacheInstalledSDKReplacementInvalidates(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	tool := filepath.Join(root, "go")
 	versionFile := filepath.Join(root, "VERSION")

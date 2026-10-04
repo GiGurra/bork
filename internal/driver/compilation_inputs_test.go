@@ -15,6 +15,7 @@ import (
 )
 
 func TestCompilationFreezesGoManifests(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	for _, name := range []string{ModFile, "main.bork", "go-deps.mod", "go-deps.sum"} {
 		data, err := os.ReadFile(filepath.Join("../../testdata/cases/go_user_deps", name))
@@ -80,6 +81,7 @@ func TestCompilationFreezesGoManifests(t *testing.T) {
 }
 
 func TestCompilationInventoriesAbsentManifest(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	for name, contents := range map[string]string{ModFile: "module example.com/absent\n", "main.bork": "fn main() {}\n"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o644); err != nil {
@@ -137,6 +139,7 @@ func TestFrozenGoModuleStaging(t *testing.T) {
 }
 
 func TestCompilationReportsSyntaxBeforeManifest(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	for name, data := range map[string]string{ModFile: "module example.com/errors\n", "main.bork": "invalid @\n", "go-deps.mod": "replace invalid => ../invalid\n"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(data), 0o644); err != nil {
@@ -174,6 +177,7 @@ func (s *manifestEditingSources) readFile(path string) ([]byte, error) {
 }
 
 func TestCompilationRetriesCombinedCapture(t *testing.T) {
+	t.Parallel()
 	for _, sourceEdit := range []bool{false, true} {
 		for _, continuous := range []bool{false, true} {
 			name := fmt.Sprintf("source=%t/continuous=%t", sourceEdit, continuous)

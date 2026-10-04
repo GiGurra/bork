@@ -26,6 +26,7 @@ func testExecutionReceipt(candidate *executionCandidate, result string) *executi
 }
 
 func TestExecutionIdentityOwnershipAndBoundaries(t *testing.T) {
+	t.Parallel()
 	descriptor, program := []byte("ab"), []byte("c")
 	data := executionIdentityData{Descriptor: descriptor, Program: program, Output: executionOutputIdentity{Site: "site", Type: "Int", Codec: 2, Policy: 1}}
 	candidate, err := newExecutionCandidate(data)
@@ -83,6 +84,7 @@ func TestExecutionIdentityOwnershipAndBoundaries(t *testing.T) {
 }
 
 func TestExecutionCandidatePriorReservesMetadataBudget(t *testing.T) {
+	t.Parallel()
 	data := executionIdentityData{Output: executionOutputIdentity{Site: "site", Type: "Int", Codec: 2, Policy: 1}}
 	base, err := newExecutionCandidate(data)
 	if err != nil {
@@ -113,6 +115,7 @@ func TestExecutionCandidatePriorReservesMetadataBudget(t *testing.T) {
 }
 
 func TestExecutionReceiptBoundsMutatedMetadataBeforeHashing(t *testing.T) {
+	t.Parallel()
 	candidate := testExecutionIdentity(t, "query")
 	for _, field := range []string{"site", "type", "combined"} {
 		t.Run(field, func(t *testing.T) {
@@ -142,6 +145,7 @@ func TestExecutionReceiptBoundsMutatedMetadataBeforeHashing(t *testing.T) {
 }
 
 func TestExecutionPriorResultBindingAndOrder(t *testing.T) {
+	t.Parallel()
 	candidate := testExecutionIdentity(t, "prior")
 	receipt := testExecutionReceipt(candidate, "42")
 	prior, err := receipt.prior(candidate.output.Site, candidate.output.Type, 2, 1, receipt.valueKey)
@@ -183,6 +187,7 @@ func TestExecutionPriorResultBindingAndOrder(t *testing.T) {
 }
 
 func TestExecutionFoundationDeclinesUncertifiedClosure(t *testing.T) {
+	t.Parallel()
 	candidate := testExecutionIdentity(t, "recipe")
 	receipt := testExecutionReceipt(candidate, "42")
 	if !receipt.validIdentity() {

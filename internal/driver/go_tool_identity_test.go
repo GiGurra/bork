@@ -9,6 +9,7 @@ import (
 )
 
 func TestGoToolIdentityInvalidatesChanges(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"rewrite", "replace", "chmod", "remove"} {
 		t.Run(change, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "go")
@@ -64,6 +65,7 @@ func TestGoToolIdentityInvalidatesChanges(t *testing.T) {
 }
 
 func TestGoToolDigestFallbackDetectsEqualMtimeEdit(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "go")
 	if err := os.WriteFile(path, []byte("first"), 0o755); err != nil {
 		t.Fatal(err)
@@ -95,6 +97,7 @@ func TestGoToolDigestFallbackDetectsEqualMtimeEdit(t *testing.T) {
 }
 
 func TestGoToolIdentityFollowsSymlinkTarget(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink privileges vary on Windows")
 	}
@@ -132,6 +135,7 @@ func TestGoToolIdentityFollowsSymlinkTarget(t *testing.T) {
 }
 
 func TestGoToolIdentityRehashesRacyMetadataMatch(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "go")
 	if err := os.WriteFile(path, []byte("first"), 0o755); err != nil {
 		t.Fatal(err)
@@ -161,6 +165,7 @@ func TestGoToolIdentityRehashesRacyMetadataMatch(t *testing.T) {
 }
 
 func TestGoToolIdentityStableObservation(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "go")
 	if err := os.WriteFile(path, []byte("first"), 0o755); err != nil {
 		t.Fatal(err)

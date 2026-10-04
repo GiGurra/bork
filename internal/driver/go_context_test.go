@@ -95,6 +95,7 @@ fn main() {}
 }
 
 func TestGoContextMetadataEnvironmentIsolation(t *testing.T) {
+	t.Parallel()
 	ctx := captureGoContext()
 	if ctx.err != nil {
 		t.Fatal(ctx.err)

@@ -17,6 +17,7 @@ func embedRequest(root, kind, path string) *check.Embedded {
 	return &check.Embedded{Pos: diag.Pos{File: filepath.Join(root, "main.bork")}, Kind: kind, Path: path}
 }
 func TestEmbedInputsFrozenBytes(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "asset")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
@@ -54,6 +55,7 @@ func TestEmbedInputsFrozenBytes(t *testing.T) {
 }
 
 func TestEmbedInputsDirectoryMembership(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	assets := filepath.Join(root, "assets")
 	if err := os.MkdirAll(filepath.Join(assets, "empty"), 0o755); err != nil {
@@ -97,6 +99,7 @@ func TestEmbedInputsDirectoryMembership(t *testing.T) {
 }
 
 func TestEmbedInputsNegativeAndSymlinkReads(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	request := embedRequest(root, "ReadString", "missing")
 	inputs := newEmbedSnapshot(newSourceSnapshot())
@@ -131,6 +134,7 @@ func TestEmbedInputsNegativeAndSymlinkReads(t *testing.T) {
 }
 
 func TestEmbedInputsConcurrentReplay(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "asset"), []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
@@ -155,6 +159,7 @@ func TestEmbedInputsConcurrentReplay(t *testing.T) {
 }
 
 func TestEmbedInputsRetryDuringCapture(t *testing.T) {
+	t.Parallel()
 	for _, continuous := range []bool{false, true} {
 		name := "once"
 		if continuous {
@@ -219,6 +224,7 @@ func TestEmbedInputsPreserveErrorPaths(t *testing.T) {
 }
 
 func TestEmbedInputsInventoryInvalidUTF8(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "invalid")
 	if err := os.WriteFile(path, []byte{0xff}, 0o644); err != nil {
@@ -238,6 +244,7 @@ func TestEmbedInputsInventoryInvalidUTF8(t *testing.T) {
 }
 
 func TestCompilationRetainsAssetInventory(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "asset"), []byte("old"), 0o644); err != nil {
 		t.Fatal(err)

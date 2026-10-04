@@ -51,6 +51,7 @@ func trimStage(t *testing.T, base string, index int, when time.Time, files int) 
 	return entry
 }
 func TestCacheTrimShardProgressAndDailyGate(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -90,6 +91,7 @@ func TestCacheTrimShardProgressAndDailyGate(t *testing.T) {
 	}
 }
 func TestCacheTrimBusyEntryAndLockAlias(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -124,6 +126,9 @@ func TestCacheTrimBusyEntryAndLockAlias(t *testing.T) {
 		t.Fatal("alias bypassed busy entry", err)
 	}
 }
+
+// Sequential: direct detach assertions require immediate nonblocking lock
+// reacquisition after publication, independent of concurrent process launches.
 func TestCacheTrimDetachedEntryRepublicationAndTrashRecovery(t *testing.T) {
 	requireStageLock(t)
 	base := t.TempDir()
@@ -180,6 +185,7 @@ func TestCacheTrimResultNamespacesAndLocators(t *testing.T) {
 	}
 }
 func TestCacheTrimMissingMarkerAndInvalidProgress(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	now := time.Unix(1700000000, 0)
@@ -217,6 +223,9 @@ func TestCacheTrimMissingMarkerAndInvalidProgress(t *testing.T) {
 		t.Fatal("unmarked stale entry retained", err)
 	}
 }
+
+// Sequential: this fixture expects immediate nonblocking lock reacquisition
+// after close, which can overlap descriptor inheritance during parallel launches.
 func TestCacheTrimCancellationAndCleanTrash(t *testing.T) {
 	requireStageLock(t)
 	base := t.TempDir()

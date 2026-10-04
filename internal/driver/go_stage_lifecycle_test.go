@@ -18,6 +18,7 @@ func stageMetadataForTest(t *testing.T) goStageMetadata {
 	return goStageMetadata{Schema: goStageSchema, Program: t.TempDir(), Mode: "build"}
 }
 func TestGoStagePublicationDoesNotScanOrEvict(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	metadata := stageMetadataForTest(t)
@@ -53,6 +54,7 @@ func TestGoStagePublicationDoesNotScanOrEvict(t *testing.T) {
 	}
 }
 func TestGoStageFixedPendingAndMetadata(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	metadata := stageMetadataForTest(t)
@@ -109,6 +111,7 @@ func TestGoStageFixedPendingAndMetadata(t *testing.T) {
 	}
 }
 func TestGoStageDeclinesContainedEntryAlias(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	metadata := stageMetadataForTest(t)
@@ -134,6 +137,7 @@ func TestGoStageDeclinesContainedEntryAlias(t *testing.T) {
 }
 
 func TestGoStageHourlyUseSurvivesReplacement(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	key := stageLifecycleKey(1)

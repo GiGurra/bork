@@ -162,6 +162,7 @@ func BenchmarkCompilerTest(b *testing.B) {
 
 // Observation must preserve emitted bytes and the order of compiler passes.
 func TestObservedEmission(t *testing.T) {
+	t.Parallel()
 	path := "../../examples/hello"
 	want, err := Emit(path)
 	if err != nil {

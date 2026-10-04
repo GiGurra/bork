@@ -196,6 +196,7 @@ func TestFixtureOutputFailureAndFallback(t *testing.T) {
 }
 
 func TestFixtureOutputRejectsAliases(t *testing.T) {
+	t.Parallel()
 	base := filepath.Join(t.TempDir(), "outputs")
 	outside := filepath.Join(t.TempDir(), "outside")
 	if err := os.WriteFile(outside, []byte("untouched"), 0700); err != nil {

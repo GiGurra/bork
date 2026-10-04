@@ -60,6 +60,7 @@ func TestUserGoDependencies(t *testing.T) {
 }
 
 func TestUserGoManifestErrors(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, ModFile), []byte("module example.com/deps\n"), 0o644); err != nil {
 		t.Fatal(err)
