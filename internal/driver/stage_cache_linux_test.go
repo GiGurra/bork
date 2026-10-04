@@ -24,18 +24,7 @@ func testStageCacheDir(base, home string) func() (string, error) {
 		if os.Getenv("XDG_CACHE_HOME") != "" || os.Getenv("HOME") != home {
 			return os.UserCacheDir()
 		}
-		if err := os.Mkdir(base, 0o700); err != nil && !os.IsExist(err) {
-			return "", err
-		}
-		info, err := os.Lstat(base)
-		if err != nil {
-			return "", err
-		}
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !ok || stat.Uid != uint32(os.Getuid()) {
-			return "", fmt.Errorf("test staging root is not a private owned directory: %s", base)
-		}
-		return base, nil
+		return privateTestCacheDir(base)
 	}
 }
 
@@ -99,4 +88,19 @@ func TestDriverStageCacheRejectsUnsafeRoot(t *testing.T) {
 	if _, err := testStageCacheDir(target, os.Getenv("HOME"))(); err == nil {
 		t.Fatal("accepted public staging root")
 	}
+}
+
+func privateTestCacheDir(base string) (string, error) {
+	if err := os.Mkdir(base, 0o700); err != nil && !os.IsExist(err) {
+		return "", err
+	}
+	info, err := os.Lstat(base)
+	if err != nil {
+		return "", err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !ok || stat.Uid != uint32(os.Getuid()) {
+		return "", fmt.Errorf("test staging root is not a private owned directory: %s", base)
+	}
+	return base, nil
 }
