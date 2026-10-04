@@ -328,8 +328,8 @@ multi-package output without moving unchanged packages after every edit.
 Linux and macOS use kernel file locks. Other platforms and any unavailable
 cache/lock/publication use the existing temporary-directory build. Staging
 lives under `os.UserCacheDir()/bork/stage/v1`. Each entry retains its current
-source tree; abandoned replacements are removed on its next request. Lock
-files remain separate and are never removed while processes may use them.
+source tree; abandoned replacements are removed on its next request. A fixed pool of 256 hashed lock slots remains outside entries and is never
+removed while processes may use it; collisions only serialize unrelated builds.
 Eviction/`bork clean` belong to the subsequent persistent-cache slice.
 
 Seven alternating one-request runs compared forced temporary fallback with

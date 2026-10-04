@@ -68,9 +68,14 @@ func stageGoStable(base, key string, source []byte, module *goModuleInputs, embe
 	if err := os.MkdirAll(base, 0o700); err != nil {
 		return "", false, nil, err
 	}
-	// Lock files stay outside replacement trees and are never unlinked. Deleting
-	// a lock file can let two processes lock different inodes for the same entry.
-	lock, err := lockGoStage(filepath.Join(base, key+".lock"))
+	// Keep a bounded lock pool outside replacement trees. Never unlink these
+	// files while clients may use them: separate inodes would split a logical
+	// lock. Hash collisions conservatively serialize otherwise unrelated builds.
+	locks := filepath.Join(base, "locks")
+	if err := os.MkdirAll(locks, 0o700); err != nil {
+		return "", false, nil, err
+	}
+	lock, err := lockGoStage(goStageLockPath(base, key))
 	if err != nil {
 		return "", false, nil, err
 	}
@@ -128,4 +133,10 @@ func stageGoStable(base, key string, source []byte, module *goModuleInputs, embe
 	_ = os.RemoveAll(previous)
 	success = true
 	return tree, pinned, release, nil
+}
+
+// The mapping is part of staging schema v1 and must remain stable across clients.
+func goStageLockPath(base, key string) string {
+	slot := sha256.Sum256([]byte(key))
+	return filepath.Join(base, "locks", fmt.Sprintf("%02x.lock", slot[0]))
 }

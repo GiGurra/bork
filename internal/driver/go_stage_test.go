@@ -131,7 +131,7 @@ func TestStableGoStageConcurrentProcesses(t *testing.T) {
 	}
 	count := 0
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() && entry.Name() != "locks" {
 			count++
 		}
 	}
@@ -158,5 +158,21 @@ func TestGoStageProcessHelper(t *testing.T) {
 	got, err := exec.Command(args[1]).CombinedOutput()
 	if err != nil || string(got) != args[2]+"\n" {
 		t.Fatalf("another request replaced staged inputs: %q (%v)", got, err)
+	}
+}
+
+func TestGoStageLockPoolBounded(t *testing.T) {
+	// Cache eviction must not leave an unbounded permanent lock per program.
+	base := t.TempDir()
+	slots := map[string]bool{}
+	for index := range 4096 {
+		path := goStageLockPath(base, fmt.Sprint(index))
+		if filepath.Dir(path) != filepath.Join(base, "locks") {
+			t.Fatal("lock lives inside an evicted tree")
+		}
+		slots[path] = true
+	}
+	if len(slots) != 256 {
+		t.Fatalf("lock pool has %d slots, want 256", len(slots))
 	}
 }
