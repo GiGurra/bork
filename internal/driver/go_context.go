@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 // goContext freezes process/effective Go settings for one compilation. Missing
@@ -18,6 +19,9 @@ import (
 // work retain their existing behavior. This is not a complete reuse key for
 // external package metadata, toolchain contents or evaluator effects.
 type goContext struct {
+	// Tests can shorten comptime deadlines; a nonzero limit changes execution
+	// policy and must be included in any future evaluator reuse identity.
+	evalLimit  time.Duration
 	processEnv []string
 	env        []string
 	tool       string

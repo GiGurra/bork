@@ -20,6 +20,13 @@ import (
 
 const comptimeTimeout = 10 * time.Second
 
+func (ctx *goContext) comptimeLimit() time.Duration {
+	if ctx.evalLimit > 0 {
+		return ctx.evalLimit
+	}
+	return comptimeTimeout
+}
+
 func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List, module *goModuleInputs, goctx *goContext, usage *goUsage) check.Evaluator {
 	if goctx.err != nil {
 		diags.AddCode(info.Comptimes[0].Pos(), "comptime.toolchain", "cannot resolve Go: %v", goctx.err)
@@ -62,7 +69,7 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		if diags.Len() > 0 {
 			return
 		}
-		eval := evaluatorWithTimeout(files, info, module, goctx, comptimeTimeout)
+		eval := evaluatorWithTimeout(files, info, module, goctx, goctx.comptimeLimit())
 		// Proof predicates can have their own computed dependencies too.
 		var prove check.Evaluator
 		prove = func(queries []check.Query) ([]bool, error) {
@@ -179,7 +186,7 @@ func runComptime(files []*syntax.File, source []byte, module *goModuleInputs, go
 		return nil, err
 	}
 	result := filepath.Join(dir, "result.json")
-	deadline, cancel := context.WithTimeout(context.Background(), comptimeTimeout)
+	deadline, cancel := context.WithTimeout(context.Background(), goctx.comptimeLimit())
 	defer cancel()
 	cmd := exec.CommandContext(deadline, exe, result)
 	cmd.WaitDelay = time.Second
@@ -191,7 +198,7 @@ func runComptime(files []*syntax.File, source []byte, module *goModuleInputs, go
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		if deadline.Err() != nil {
-			return nil, fmt.Errorf("evaluation exceeded %s", comptimeTimeout)
+			return nil, fmt.Errorf("evaluation exceeded %s", goctx.comptimeLimit())
 		}
 		message := strings.TrimSpace(stderr.String())
 		if message == "" {
