@@ -37,6 +37,15 @@ fn Choice(value: model.Choice): Int {
 		t.Fatal(diags.Error())
 	}
 	index := BuildSourceIndex(files, info)
+	foundRaw := false
+	for _, symbol := range index.Symbols() {
+		if symbol.Name == "Take" {
+			foundRaw = symbol.Declaration == model.Funcs[len(model.Funcs)-1].Pos && symbol.Definition.Col == 4
+		}
+	}
+	if !foundRaw {
+		t.Fatal("raw declaration position was not retained")
+	}
 	find := func(file *syntax.File, fragment string) *SourceReference {
 		t.Helper()
 		offset := strings.Index(file.Source, fragment)

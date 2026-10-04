@@ -62,6 +62,7 @@ func (a *EditorAnalysis) References(def diag.Pos) []check.SourceReference {
 func (a *EditorAnalysis) Symbols() []check.Symbol {
 	symbols := a.sourceIndex().Symbols()
 	for i := range symbols {
+		symbols[i].Declaration = a.absoluteSourcePosition(symbols[i].Declaration)
 		symbols[i].Definition = a.absoluteSourcePosition(symbols[i].Definition)
 		symbols[i].End = a.absoluteSourcePosition(symbols[i].End)
 	}

@@ -134,6 +134,39 @@ func TestRenameSpacedVariantPatterns(t *testing.T) {
 	}
 }
 
+func TestRenameUnusedProviderBundleReference(t *testing.T) {
+	src := "fn logFailures(): ScopePolicy { ScopePolicy.TaskTimeout { ms: 1 } }\nproviders Policies = { policy: logFailures }\n"
+	s, path := newTestServer(t, src)
+	result, err := s.feature("textDocument/rename", path, documentParams{Position: position{0, 4}, NewName: "ownPolicy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes := result.(map[string]any)["changes"].(map[string][]textEdit)
+	if edits := changes[fileURI(path)]; len(edits) != 2 {
+		t.Fatalf("unused provider reference silently rebound: %+v", edits)
+	}
+}
+
+func TestRenameMockTargetAndHandle(t *testing.T) {
+	src := "fn answer() uses io: Int { println(42); 42 }\ntest \"mock\" { h = mock answer() { 1 }; assertEqual(h.count(), 0) }\n"
+	s, path := newTestServer(t, src)
+	for _, tc := range []struct {
+		p    position
+		name string
+	}{{position{0, 4}, "response"}, {position{1, 14}, "handle"}} {
+		result, err := s.feature("textDocument/rename", path, documentParams{Position: tc.p, NewName: tc.name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result == nil {
+			t.Fatal("missing mock identity")
+		}
+		if edits := result.(map[string]any)["changes"].(map[string][]textEdit)[fileURI(path)]; len(edits) != 2 {
+			t.Fatalf("mock reference omitted: %+v", edits)
+		}
+	}
+}
+
 func TestRenameRejectsCapture(t *testing.T) {
 	s, path := newTestServer(t, "fn one(x: Int): Int { x }\nfn two(y: Int): Int { one(y) }\n")
 	if _, err := s.feature("textDocument/rename", path, documentParams{Position: position{0, 4}, NewName: "y"}); err == nil {

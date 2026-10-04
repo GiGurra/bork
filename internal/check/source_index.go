@@ -13,7 +13,7 @@ import (
 // so independently checked import graphs agree on the same source identity.
 type Symbol struct {
 	Name, Kind, Package, Container string
-	Definition, End                diag.Pos
+	Declaration, Definition, End   diag.Pos
 	Exported                       bool
 }
 
@@ -108,6 +108,18 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 			pos = ambient
 		}
 		b.referenceNamed(ident.Pos, ident.Name, pos)
+	}
+	// Unused bundles and mocks still contain source references. They need not
+	// produce lowered calls, so consume their resolved declarations directly.
+	for _, bundle := range info.ProviderBundles {
+		for _, entry := range bundle.Entries {
+			if entry.Func != nil {
+				b.function(entry.Decl.Provider, entry.Func)
+			}
+		}
+	}
+	for statement, fn := range info.mocks {
+		b.function(statement.Target, fn.MockOf)
 	}
 	for expr, instance := range info.funcRefs {
 		b.function(expr, instance.Func)
@@ -254,6 +266,8 @@ func sourceNodePosition(node any) diag.Pos {
 		return n.Pos
 	case *syntax.ListPat:
 		return n.RestPos
+	case *syntax.MockStmt:
+		return n.Pos
 	case *syntax.For:
 		return n.NamePos
 	}
@@ -306,7 +320,7 @@ func (b *sourceIndexBuilder) declaration(file *syntax.File, pos diag.Pos, name, 
 	}
 	end := start
 	end.Col += len(name)
-	symbol := Symbol{name, kind, file.Package, container, start, end, Exported(name)}
+	symbol := Symbol{Name: name, Kind: kind, Package: file.Package, Container: container, Declaration: pos, Definition: start, End: end, Exported: Exported(name)}
 	if previous, ok := b.definitions[pos]; !ok || previous.Kind == "parameter" {
 		b.definitions[pos] = symbol
 	}
@@ -325,7 +339,7 @@ func (b *sourceIndexBuilder) reference(pos, rawDef diag.Pos, prefix, suffix stri
 	if pos.Col-1 >= len(line) {
 		return
 	}
-	// Qualified identifiers can begin at a package name. Choose the final
+	// Qualified identifiers can begin at a package name. Choose the first
 	// matching name in the contiguous qualified source spelling.
 	start := pos
 	found := false
@@ -428,6 +442,8 @@ func (b *sourceIndexBuilder) declarations(file *syntax.File, info *Info) {
 		case *syntax.TypeParam:
 			add(n.Pos, n.Name, "typeParameter", "")
 		case *syntax.ScopeExpr:
+			add(n.Pos, n.Name, "variable", "")
+		case *syntax.MockStmt:
 			add(n.Pos, n.Name, "variable", "")
 		case *syntax.For:
 			add(n.NamePos, n.Name, "variable", "")
