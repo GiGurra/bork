@@ -23,19 +23,20 @@ type goContext struct {
 	moduleHook goModuleHookFunc
 	// Tests can shorten comptime deadlines; a nonzero limit changes execution
 	// policy and must be included in any future evaluator reuse identity.
-	evalLimit  time.Duration
-	processEnv []string
-	env        []string
-	tool       string
-	driver     string
-	self       string
-	values     map[string]string
-	err        error
-	driverErr  error
-	namesCache bool
-	namespace  [sha256.Size]byte
-	toolDigest [sha256.Size]byte
-	validation *goContextValidation
+	evalLimit    time.Duration
+	processEnv   []string
+	env          []string
+	tool         string
+	driver       string
+	self         string
+	values       map[string]string
+	err          error
+	driverErr    error
+	namesCache   bool
+	namespace    [sha256.Size]byte
+	toolDigest   [sha256.Size]byte
+	toolEvidence *goToolEvidence
+	validation   *goContextValidation
 }
 
 // goContextOptions owns per-call Go settings. Overrides affect Go subprocesses;
@@ -109,7 +110,7 @@ func loadGoContext(ctx *goContext) *goContext {
 	}
 	// Include launcher bytes, not just its path/version. A full toolchain/input
 	// inventory is still required before compilation-result reuse.
-	ctx.toolDigest, err = goToolDigest(ctx.tool)
+	ctx.toolDigest, ctx.toolEvidence, err = captureGoToolEvidence(ctx.tool)
 	if err != nil {
 		ctx.err = err
 		return ctx

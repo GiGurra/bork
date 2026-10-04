@@ -2,7 +2,7 @@
 
 Ordinary fact checking used to compile unrelated user types, derived instances,
 foreign aliases and field helpers into every native predicate evaluator. The
-first incremental-checking slice trims that program, while executing each selection afresh unless the separate Session cache below
+first incremental-checking slice trims that program, while executing each selection afresh unless the separate Session or CLI proof cache below
 qualifies. The trim applies to fresh CLI requests and Session/editor requests.
 
 `gen.ClosedProofProgram` requires the existing typed `AuditExecutionQueries`
@@ -146,5 +146,85 @@ when profiles on larger real package graphs show unchanged-package Bork checking
 dominating edit latency after cheaper discovery/proof reuse, and a small edit can
 avoid substantial checking work. Any implementation must first demonstrate a
 net win and clean-versus-incremental parity for public types, predicates/defaults,
-bodies, imported dependencies and test/mock overlays. CLI disk proof reuse remains
-separate deferred work, tracked as bork-44yvg8.
+bodies, imported dependencies and test/mock overlays. The separate CLI disk proof
+reuse follow-up, bork-44yvg8, is implemented below.
+
+## Persistent CLI proof batches (bork-44yvg8)
+
+Linux/macOS CLI `check`, `emit`, `build` and `run` automatically retain one
+successful closed boolean batch beside each stable predicate staging tree. The
+sidecar uses the existing stage slot and disappears with that entry on `clean`
+or five-day trim. It is bounded to 64 KiB of booleans and a 512 KiB checksummed
+encoding. It contains owned booleans, an actual compiler-image namespace, the
+Session staged-input key and the installed-SDK identity. It stores no executable,
+checked graph, contextual Facts or explicit comptime value.
+
+The existing closed-query and generated-support audits run on every request.
+Lookup stages the current program and binds exact ordered arguments/helper bytes,
+module/assets, path, build/process environment and evaluator policy. Native
+configuration validation and the actual staged module reject wrappers, unsupported
+settings, cross-target execution and generated toolchain switching. The SDK
+contract is the existing immutable-installation policy: launcher/VERSION identity
+changes invalidate; in-place SDK edits are unsupported, as for Go's object cache.
+The startup launcher hash retains file evidence so validating this same native
+installation does not hash it again. Compiler-image hashing overlaps a fresh
+build on misses; hits still require that content namespace before serving.
+
+The stage slot stays held through native execution and atomic sidecar publication.
+Recheck the staged key, installed identity and configuration after execution.
+Malformed output, failures and uncertain identities never publish. Missing,
+corrupt, oversized, symlinked or stale sidecars execute afresh; publication failure
+cannot change the fresh result. False booleans qualify, while current Facts always
+reconstructs diagnostics at today's source locations. Evaluated programs still
+bypass the enclosing complete-result cache. Session and bounded-comptime owners
+remain separate.
+
+### Evaluation checkpoint
+
+Go 1.27.1/Linux, `GOMAXPROCS=2`, `CGO_ENABLED=0`, warm SDK objects. Fresh CLI
+processes used private source copies and cache roots. Five samples followed two
+warmups; each unchanged-proof sample appended a distinct one-line comment.
+The before arm is main after #289 and includes stable Go staging, not an
+uncached temporary-stage approximation. Compiler-phase profiles came from the
+existing test-only CLI timing seam; ordinary builds expose no profiling setting.
+
+| Fixture/request | Fresh median (min–max) | Proof reuse median (min–max) | Net saving |
+| --- | ---: | ---: | ---: |
+| config check | 172.25 (171.11–173.47) ms | 69.73 (68.35–70.35) ms | 102.52 ms |
+| config build | 245.53 (243.26–247.29) ms | 140.28 (138.12–140.55) ms | 105.25 ms |
+| http_server check | 192.75 (188.55–194.51) ms | 87.58 (86.28–109.21) ms | 105.17 ms |
+| http_server build | 312.57 (303.86–366.91) ms | 206.77 (206.06–209.91) ms | 105.80 ms |
+
+Each fixture has one eligible batch (config: 15 booleans; HTTP: 9), so 100% of
+its native proof evaluations qualify. Fresh facts cost 116–119 ms; reused facts,
+including generation, staging, configuration validation and compiler-image hashing,
+cost 11–14 ms. The first prototype instead spent 54–56 ms on hits: three repeated
+launcher hashes cost about 30 ms. Using the already supported installed-SDK
+identity removed those repetitions; retaining startup hash evidence removed a
+fourth. No SDK content walk or broader intrinsic audit was introduced.
+
+Separate fresh-process miss samples used independent directories for each arm,
+alternating their order and changing the config host or HTTP status literal to a
+previously uncompiled value on every iteration. Every reuse-arm attempt published
+rather than hit. Medians (min–max), again five samples after two warmups:
+
+| Fixture/check | Today's fresh | Persistent proof miss | Added miss time |
+| --- | ---: | ---: | ---: |
+| config | 242.95 (241.32–249.89) ms | 250.53 (248.55–253.19) ms | 7.58 ms |
+| http_server | 204.38 (191.15–205.21) ms | 213.01 (204.02–213.43) ms | 8.63 ms |
+
+Miss publication adds a bounded atomic sidecar write; total miss overhead includes
+native configuration checks, rehashing staged bytes and compiler-image work.
+The initial miss prototype added roughly 25 ms. The final path shares the startup
+launcher evidence and overlaps image hashing with fresh Go evaluation, reducing
+that overhead without weakening identity validation. These figures characterize
+this machine and edit pattern; they are not a promise of every edit's latency.
+
+For the broader eligibility checkpoint, fresh checks/builds of `examples/comptime`
+were 1108/1181 ms, with 1006/1017 ms in comptime plus about 44 ms in final Facts.
+Its untrimmed build-read/JSON/generic evaluations do not qualify under the existing
+closed-proof contract. `signup` and `orders` invoked no evaluators (checks 59/54 ms,
+builds 134/110 ms). Persisting explicit values would need substantially more
+certification and reconstruction machinery; it remains deferred. The narrow proof
+cache is justified by saving more than 100 ms and over half of check time on the
+two ordinary backend fixtures, without adding flags or language concepts.

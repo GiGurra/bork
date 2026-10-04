@@ -1,7 +1,9 @@
 # Cached compiler evaluations
 
-Status: persisted execution receipts and explicit comptime-value reuse remain
-deferred. [Session predicate reuse](proof-evaluator.md) is implemented as a
+Status: enclosing execution receipts and explicit comptime-value reuse remain
+deferred. [Closed CLI proof batches](proof-evaluator.md#persistent-cli-proof-batches-bork-44yvg8)
+now persist bounded booleans under the existing native installed-SDK contract;
+they do not certify an enclosing artifact. [Session predicate reuse](proof-evaluator.md) is implemented as a
 narrower, nonpersistent owner of successful closed boolean batches. It requires
 the supported native Go installation contract; wrappers and switched generated
 toolchains execute afresh. Existing enclosing Session/result-cache evaluation

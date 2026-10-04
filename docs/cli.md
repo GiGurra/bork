@@ -123,12 +123,12 @@ Saved settings live in `bork/env.json` under the user configuration directory (`
 
 On Linux and macOS, `check`, `emit`, `build`, and `run` reuse earlier compiler results from `BORKCACHE` when nothing they depend on has changed. There is nothing to set up. A build still runs the Go compiler, which has its own cache, and `run` still runs the program each time.
 
-Some programs are compiled afresh every time for now: those that use `comptime`, typed literals that are checked at compile time such as `sql.SQL`, embedded files, facts proven by running predicates at compile time, or their own Go bindings and Go dependencies. On other platforms the cache is not used.
+Some programs are compiled afresh every time for now: those that use `comptime`, typed literals that are checked at compile time such as `sql.SQL`, embedded files, facts proven by running predicates at compile time, or their own Go bindings and Go dependencies. Pure predicates with unchanged constant arguments can reuse their earlier answers while the rest of the program is checked again. Changed arguments or helpers are evaluated afresh. On other platforms the cache is not used.
 
 The cache looks after itself. Entries that have not been used for five days are removed in the background. If the cache cannot be read or written, compilation carries on without it.
 
 ```sh
-bork clean          # remove this compiler version's cached results and staged Go sources
+bork clean          # remove this compiler version's cached results, predicate answers and staged Go sources
 bork clean --all    # also remove what other compiler versions left behind
 ```
 

@@ -3,8 +3,10 @@
 Status: implementation plan for the next bork-h5rkt4 slices. Builds remain
 correct with an absent, full, unavailable or corrupt cache. This extends the
 [complete-graph Session](incremental.md) and the stable Go staging work in
-[PR #213](https://github.com/GiGurra/bork/pull/213); it does not serialize checker
-pointers, reuse execution results or introduce package interfaces.
+[PR #213](https://github.com/GiGurra/bork/pull/213); complete-result artifacts do not serialize checker
+pointers or introduce package interfaces. A separate bounded closed-proof sidecar
+now reuses boolean evaluations through the existing staging lifecycle; see
+[proof-evaluator.md](proof-evaluator.md#persistent-cli-proof-batches-bork-44yvg8).
 
 ## Stored results and eligibility
 
@@ -23,8 +25,9 @@ rooted build-read inventories and incomplete/error receipts force fresh work.
 Pure Bork graphs with provable defaults remain eligible; imported user packages'
 default obligations are part of their checked graph outcome, not discarded.
 
-Runtime execution remains fresh for `run`, `test` and every evaluator. In
-particular, changing an external file read by unsafe Go must still cause the
+Runtime execution remains fresh for `run`, `test`, explicit comptime values and
+unsupported predicate evaluations. Closed proof batches use the separate narrow
+sidecar described above. In particular, changing an external file read by unsafe Go must still cause the
 existing evaluator bypass even when Go itself reuses object compilation.
 Persistent checked-result artifacts and mutable Go staging are separate layers.
 
@@ -387,7 +390,9 @@ existing pipelines. Build hits reconstruct only owned source-location records,
 using the original root-source identity for staging; they still invoke Go with
 validated module and context data. Build misses pass their fresh checked graph
 directly to generation and Go work once. Run executes the resulting program on
-every invocation. No native executable or evaluation result is retained here.
+every invocation. Complete-result artifacts retain no native executable or evaluation result.
+Closed CLI proof batches now have a separate bounded sidecar in their stable
+staging entries; their evaluation bypass of the enclosing cache remains.
 
 Eligible misses always use bounded detached publication on Linux and macOS. Failed
 admission, an unwritable root, or unavailable image/process facilities skip

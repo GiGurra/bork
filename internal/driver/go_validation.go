@@ -60,6 +60,12 @@ func supportedGoVersion(version string) bool {
 }
 
 func captureGoContextValidation(ctx *goContext) *goContextValidation {
+	return captureGoContextValidationWithSDK(ctx, nil)
+}
+
+// A freshly hashed launcher can use its unchanged file evidence under the
+// immutable installed-SDK contract, avoiding a second hash in a CLI request.
+func captureGoContextValidationWithSDK(ctx *goContext, sdk *installedSDKIdentity) *goContextValidation {
 	if ctx.err != nil || ctx.driverErr != nil || ctx.driver != "off" || runtime.GOOS == "windows" {
 		return nil
 	}
@@ -157,9 +163,24 @@ func captureGoContextValidation(ctx *goContext) *goContextValidation {
 	if !validation.recordDirectory(validation.cache) || !validation.recordDirectory(validation.tmp) || !validation.recordDirectory(os.TempDir()) {
 		return nil
 	}
-	validation.toolDigest, validation.toolEvidence, err = captureGoToolEvidence(ctx.tool)
-	if err != nil {
-		return nil
+	if sdk != nil {
+		if ctx.toolEvidence == nil || ctx.toolEvidence.identity == nil || !sdk.current(ctx.tool, ctx.values["GOROOT"], ctx.values["GOVERSION"]) {
+			return nil
+		}
+		file, err := os.Stat(ctx.tool)
+		if err != nil {
+			return nil
+		}
+		identity := platformGoToolIdentity(ctx.tool, file)
+		if identity == nil || *identity != *ctx.toolEvidence.identity {
+			return nil
+		}
+		validation.toolDigest, validation.installedSDK = ctx.toolDigest, sdk
+	} else {
+		validation.toolDigest, validation.toolEvidence, err = captureGoToolEvidence(ctx.tool)
+		if err != nil {
+			return nil
+		}
 	}
 	// Kernel mapped-image identity and the immutable installed-compiler policy
 	// avoid rehashing a large self bridge on each validation.
