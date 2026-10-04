@@ -187,7 +187,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			"referencesProvider": true, "renameProvider": map[string]any{"prepareProvider": true},
 			"documentSymbolProvider": true, "completionProvider": map[string]any{"triggerCharacters": []string{"."}},
 			"codeLensProvider":   map[string]any{"resolveProvider": false},
-			"codeActionProvider": map[string]any{"codeActionKinds": []string{"quickfix", "source.organizeImports"}},
+			"codeActionProvider": map[string]any{"codeActionKinds": []string{"quickfix", "source.organizeImports", "refactor.extract"}},
 		}, "serverInfo": map[string]any{"name": "bork", "version": s.version}}, nil, false
 	}
 	if !s.initialized {
