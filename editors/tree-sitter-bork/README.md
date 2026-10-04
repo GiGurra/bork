@@ -4,7 +4,8 @@ The shared bork highlighting grammar for Neovim, Helix, Zed and Emacs.
 It lives in the bork repository; consumers should use the
 `editors/tree-sitter-bork` subdirectory. Generated C sources are committed,
 so installing the parser requires a C compiler but no JavaScript runtime.
-The parser uses tree-sitter ABI 15 (tree-sitter 0.25 or later).
+The parser uses tree-sitter ABI 14 for compatibility with older
+tree-sitter-enabled editor builds, including Emacs 29.
 
 The grammar covers declarations, records, sealed variants, unions, contracts,
 effects, scopes, lambdas, patterns, scripts, leading-dot chains, compile-time
