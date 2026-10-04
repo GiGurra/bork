@@ -148,20 +148,17 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		if diags.Len() > 0 {
 			return
 		}
-		source, err := gen.ComptimeProgram(files, info, node)
-		if err != nil {
-			diags.AddCode(node.Pos(), "comptime.result", "cannot bake computation: %v", err)
-			return
-		}
-		if usage != nil {
-			usage.evaluator = true
-		}
 		var value []byte
-		if usage == nil {
-			value, err = runComptime(files, source, module, goctx, info.Embeds...)
+		var err error
+		if native, ok := prepareNativeInterpolation(files, info, node, goctx); ok {
+			value, err = runNativeInterpolation(native, goctx, usage)
 		} else {
-			audit := check.AuditComptimeExecution(info, node)
-			value, err = runComptimeObserved(files, source, module, goctx, usage, audit, info.Embeds...)
+			source, generationError := gen.ComptimeProgram(files, info, node)
+			if generationError != nil {
+				diags.AddCode(node.Pos(), "comptime.result", "cannot bake computation: %v", generationError)
+				return
+			}
+			value, err = runComptimeObserved(files, source, module, goctx, usage, check.AuditComptimeExecution(info, node), info.Embeds...)
 		}
 		if err != nil {
 			diags.AddCode(node.Pos(), "comptime.evaluate", "comptime failed: %v", err)

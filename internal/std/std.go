@@ -40,3 +40,18 @@ func Sources(importPath string) (paths []string, srcs [][]byte, ok bool) {
 	}
 	return paths, srcs, len(paths) > 0
 }
+
+// Packages lists embedded package paths for compiler-owned code generation.
+func Packages() []string {
+	entries, err := fs.ReadDir(files, ".")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			out = append(out, Prefix+entry.Name())
+		}
+	}
+	return out
+}
