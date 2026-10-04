@@ -77,7 +77,7 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		if diags.Len() > 0 {
 			return
 		}
-		eval := evaluatorWithTimeoutMemo(files, info, module, goctx, goctx.comptimeLimit(), memo)
+		eval := evaluatorWithTimeoutObserved(files, info, module, goctx, goctx.comptimeLimit(), memo, usage)
 		// Proof predicates can have their own computed dependencies too.
 		var prove check.Evaluator
 		prove = func(queries []check.Query) ([]bool, error) {
@@ -176,11 +176,15 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 				diags.AddCode(node.Pos(), "comptime.result", "cannot bake computation: %v", generationError)
 				return
 			}
-			if usage == nil {
+			if usage != nil {
+				usage.evaluator = true
+			}
+			if usage == nil || usage.deferInputs {
 				value, err = runComptime(files, source, module, fallbackCtx, info.Embeds...)
 			} else {
-				value, err = runComptimeObserved(files, source, module, fallbackCtx, usage, check.AuditComptimeExecution(info, node), info.Embeds...)
+				value, err = runComptimeObserved(files, source, module, fallbackCtx, usage, check.ExecutionAudit{}, info.Embeds...)
 			}
+
 		}
 		if err != nil {
 			diags.AddCode(node.Pos(), "comptime.evaluate", "comptime failed: %v", err)
@@ -209,28 +213,19 @@ func runComptime(files []*syntax.File, source []byte, module *goModuleInputs, go
 	return runComptimeObserved(files, source, module, goctx, nil, check.ExecutionAudit{}, embeds...)
 }
 
-func runComptimeObserved(files []*syntax.File, source []byte, module *goModuleInputs, goctx *goContext, usage *goUsage, audit check.ExecutionAudit, embeds ...*check.Embedded) ([]byte, error) {
-	if usage != nil {
-		usage.evaluator = true
-		if usage.execution == nil {
-			usage.execution = &executionTracker{}
-		}
-		// Bind a logical attempt before execution. Go-only observations cannot
-		// prepare a complete candidate; all outcomes therefore remain declines.
-		token := usage.execution.begin(nil)
-		defer usage.execution.decline(token, executionClosureUnavailable)
-	}
+func runComptimeObserved(files []*syntax.File, source []byte, module *goModuleInputs, goctx *goContext, usage *goUsage, _ check.ExecutionAudit, embeds ...*check.Embedded) ([]byte, error) {
+	observation := beginExecutionObservation(usage, goctx, "comptime", goctx.comptimeLimit())
+	defer observation.finish()
 	dir, err := os.MkdirTemp("", "bork-comptime-*")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "eval")
-	finish, err := buildObservedComptime(files, source, exe, module, goctx, usage, audit, embeds)
+	err = buildGoWithModeObserved(files, source, exe, module, goctx, "comptime", observation, embeds...)
 	if err != nil {
 		return nil, err
 	}
-	defer finish()
 	result := filepath.Join(dir, "result.json")
 	deadline, cancel := context.WithTimeout(context.Background(), goctx.comptimeLimit())
 	defer cancel()
@@ -242,6 +237,7 @@ func runComptimeObserved(files []*syntax.File, source []byte, module *goModuleIn
 	cmd.Stdout = io.Discard
 	stderr := &boundedOutput{limit: 64 << 10}
 	cmd.Stderr = stderr
+	observation.command(cmd, false)
 	if err := cmd.Run(); err != nil {
 		if deadline.Err() != nil {
 			return nil, fmt.Errorf("evaluation exceeded %s", goctx.comptimeLimit())

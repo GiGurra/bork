@@ -1,91 +1,65 @@
-# Native Go execution inventory
+# Execution observation and installed SDK identity
 
-Status: private collector with tracked comptime execution integration. No result
-hits, evaluator-marker removal or candidate/receipt certification. This implements
-only the Go-input portion of evaluation-cache.md and execution-api.md.
+Status: request-owned accounting is integrated for comptime and predicate calls,
+including invocation-local predicate memo hits. Every attempt still declines an
+execution receipt. Session and disk evaluated-value reuse remain deferred; the
+compile-time evaluator bypass is unchanged.
 
-The first supported envelope is Go 1.26/1.27 on native Linux amd64 at the baseline
-v1 CPU level, standard-library dependencies, no cgo/foreign objects, no custom
-package driver, workspace, overlays, module hooks, Go experiments or external
-cache/linker helpers. Other modes decline conservatively. A generated package
-contains exactly main.go with frozen go.mod/go.sum. Expansion to more platforms
-and generated support inputs requires explicit policy and test coverage.
-
-```go
-type goExecutionStage struct {
-    Root, Mode string // actual staging directory, predicate or comptime
-    Output string // exact absolute executable path; empty for discovery only
-    Program []byte
-    Module *goModuleInputs
-}
-func captureGoExecution(ctx *goContext, stage goExecutionStage) (*goExecutionInventory, executionDecline)
-func (inventory *goExecutionInventory) current() bool
-func (inventory *goExecutionInventory) identity() [sha256.Size]byte
-```
-
-The owned inventory contains schema, staged root and mode, exact effective
-launcher/argv/environment, generated/module content witnesses, selected SDK root,
-tool directory/version, canonical ordered go-list package descriptors, tool/file
-content digests and directory membership/resolution evidence. No AST/checker,
-callbacks, os.FileInfo or caller-owned mutable byte slices survive capture. A seal
-rejects accidental mutation of these owned fields before validation. This seal is
-an internal ownership check, not an authentication or persistence format.
-
-The build envelope pins toolchain selection local, cgo off, internal linking,
-Go environment/workspace off, module reads readonly and proxy/sumdb offline.
-Capture and execution use the same envelope. BuildArgs binds the actual executable
-output argument, which must be outside the frozen stage. Staging layout is opaque
-to the collector.
-
-Tracked comptime recipes first pass the static selection audit. Requests whose
-captured context already disables cgo then attempt this supported capture against
-their published stage. A successful capture builds with its owned launcher, argv
-and environment, executes the fresh binary under the existing comptime deadline,
-and validates the inventory afterward while holding the stage lock. Unsupported
-or declined captures build with the existing command and effective published
-module bytes. One-shot callers keep their existing execution path. Predicate
-execution integration remains separate.
-
-Request-owned counters and the last Go inventory identity describe collection
-and endpoint validation; no inventory or semantic graph is retained in a Session
-artifact. The execution tracker records each recipe attempt before execution and
-declines it on every outcome. A validated Go inventory does not qualify a result:
-the remaining execution closure, policies and Facts are still mandatory. Empty
-phases do not allocate a tracker or collect SDK inputs. Unsupported selections
-decline before discovery wherever their captured context/static audit suffices.
-
-Capture inventories launcher and SDK tools, VERSION/go.env, assembler include
-support, all package-level files, selected embedded files and assembly include
-closure. Assembly search records positive header contents and the membership
-needed to detect newly appearing higher-priority files. The compiler-generated
-go_asm.h is derived from pinned compiler bytes and selected source; other unknown
-or unresolved includes decline. Headers such as runtime/cgo/abi_amd64.h are inputs
-even when cgo is disabled. Foreign objects and external cache/linker execution
-remain unsupported. Nonblocking Unix opens prevent regular inputs replaced by
-FIFOs from hanging validation.
-
-Discovery uses bounded go list -deps JSON under the pinned envelope. Capture then
-validates contents/membership, repeats dependency discovery and compares the full
-selected package/file/search descriptors, and validates contents/membership again.
-This catches persistent edits adding an import between the first discovery and
-content capture. Validation has no mtime-only shortcut and follows the design's
-accidental-staleness endpoint assumption, excluding adversarial change-and-restore.
-The native helper current method validates only this filesystem/tool selection
-inventory; executionReceipt.current and prepareExecution remain ineligible.
-
-Limits are versioned: at most 4,096 packages, 100,000 files/directories, 16,384
-entries in a directory, 512 MiB aggregate hashed content, 8 MiB environment metadata and 8 MiB path/membership
-metadata and 16 MiB subprocess output. Assembly parsing has an 8 MiB per-file and
-16 MiB aggregate and 1,000,000-token bound. Subprocess discovery has a 30-second deadline and bounded
-stderr. Data is rejected before retaining over-budget payloads. Initial content
-capture, repeated validation and go-list rediscovery are real costs to measure,
-not a reason to substitute stats or existing Go-name metadata receipts.
-
-Remaining integration must bind the checked source/module snapshot, exact ordered
-query/comptime selections and prior values, compiler/intrinsic namespace, generated
-support/import initialization, native/value/effective-limit policy and decoded
-results, plus actual build invocation binding for predicate executions.
-All-invocation certification and current Facts
-remain mandatory before Session or disk result eligibility can change.
-
+The driver uses the shared `captureInstalledSDK` / `installedSDKIdentity.current`
+implementation. It records owned root/version, resolved launcher and launcher /
+VERSION device, inode, size, mode and modification-time evidence under the shared
+immutable installed-SDK policy. No package discovery or SDK content/membership
+walk runs during observation. The former Go content collector has been removed.
 In-place GOROOT edits are unsupported, same as go build; run go clean -cache.
+
+Counters record logical calls, installed identity capture/validation and local
+memo hits. Separate bounded hashes observe actual build and evaluator argv,
+environment and working directory; mode and effective deadline are recorded too.
+A memo hit clears command witnesses rather than inheriting a prior build. The
+commands, module staging, subprocess execution, result decoding and current Facts
+retain their ordinary behavior. Installed identity is configuration evidence,
+not proof of the SDK actually selected by an automatic toolchain launcher or of
+all compiler-consumed inputs. No AST or execution result is retained by these
+observations. Deferred result-cache misses skip observation and static auditing;
+empty phases allocate no tracker.
+
+## Measurement and deferred certification
+
+On Go 1.27.1, one fresh check of each of 39 examples produced 23 predicate and
+7 comptime executions. The local proof memo eliminates four repeated predicate
+calls. The conservative static/generated-support boundary admitted 6 of the
+remaining 19 predicate calls and none of the 7 comptime calls: 6/26 executions,
+with about 2.09 seconds of gross potential savings across all examples. The
+content collector cost about 0.91 seconds to capture and 0.51 seconds to validate
+one SDK inventory; validating six hits alone exceeded the possible savings.
+These measurements justify deferring cross-request certification and value reuse.
+They are an eligibility/cost probe, not a claim of cache hits or a performance
+prediction for other machines or programs.
+
+The remaining work described in [evaluation-cache.md](evaluation-cache.md) and
+[execution-api.md](execution-api.md) requires all of the following before hits:
+
+- Bind actual ordered query/comptime selections, canonical closed arguments,
+  resolved type/dictionary/provider/default dependencies and ordered prior
+  site/type/value identities to the current checked source/module graph.
+- Audit the complete emitted support/import-initialization closure and pin resolved
+  intrinsic contracts to actual compiler bytes/schema/embedded standard library.
+  Unknown unsafe, foreign and build-effect inputs must decline.
+- Bind frozen generated/module/assets, actual selected toolchain and effective
+  build and evaluator process argv/environment, native target, execution mode,
+  output/value codec and effective resource policies. Shared installed-SDK identity
+  follows the supported immutable-installation policy; observations alone do not
+  satisfy this execution boundary.
+- Perform dependency/cycle preflight before lookup, bounded owned canonical
+  decoding/reconstruction after lookup, and current contextual/result/field Facts
+  before certification. Malformed persisted data is a miss, not a compiler error.
+- Certify every logical invocation, including local memo hits and native validator
+  attempts/fallbacks, separately from final enclosing Facts. Only then may the
+  evaluator bypass change. Persistence must use the shared typed receipt/store
+  layer and its ownership, budgets and lifecycle.
+
+The identity/tracker primitives and static audit remain fail-closed foundations;
+`prepareExecution`, candidate/receipt current checks and certification do not
+qualify any execution. Further work should first show enough eligible real calls
+and net savings to justify this boundary, rather than restoring an unused SDK
+content collector.

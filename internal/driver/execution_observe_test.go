@@ -2,7 +2,10 @@ package driver
 
 import (
 	"bytes"
+	"github.com/GiGurra/bork/internal/check"
+	"go/constant"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -13,26 +16,75 @@ import (
 	"github.com/GiGurra/bork/internal/gen"
 )
 
-func TestExecutionObservationInvalidEndpointReleasesStage(t *testing.T) {
-	observations := executionObservations{Invocations: 1, Captured: 1}
-	cleaned := false
-	// An invalid seal must fail before spawning Go or trusting any path/input.
-	inventory := &goExecutionInventory{Version: goExecutionInventoryVersion}
-	inventory.seal = inventory.identity()
-	inventory.Invocation.Mode = "changed after capture"
-	observations.finish(inventory, func() { cleaned = true })
-	if !cleaned || observations.Validated != 0 || observations.Declined != 1 || observations.LastDecline == "" {
-		t.Fatalf("invalid endpoint lost decline or cleanup: %+v, cleanup=%t", observations, cleaned)
+func TestExecutionObservationCommandAndDecline(t *testing.T) {
+	t.Parallel()
+	usage := &goUsage{}
+	observation := beginExecutionObservation(usage, nil, "predicate", time.Second)
+	cmd := exec.Command("/go", "build", "-o", "/first", ".")
+	cmd.Dir, cmd.Env = "/stage", []string{"A=one", "A=two"}
+	observation.command(cmd, true)
+	first := usage.executions.LastBuild
+	cmd.Args[3] = "/second"
+	observation.command(cmd, true)
+	if first == usage.executions.LastBuild {
+		t.Fatal("output argv missing")
 	}
-	observations.decline(executionDecline(strings.Repeat("x", 513)))
-	if len(observations.LastDecline) > 512 {
-		t.Fatal("accounting retained unbounded diagnostics")
+	first = usage.executions.LastBuild
+	slices.Reverse(cmd.Env)
+	observation.command(cmd, true)
+	if first == usage.executions.LastBuild {
+		t.Fatal("ordered effective environment missing")
+	}
+	observation.command(cmd, false)
+	if usage.executions.LastProcess != usage.executions.LastBuild {
+		t.Fatal("process descriptor missing")
+	}
+	observation.finish()
+	if _, eligible := usage.execution.receipts(); eligible {
+		t.Fatal("observations certified reuse")
+	}
+	usage.executions.decline(executionDecline(strings.Repeat("x", 513)))
+	if len(usage.executions.LastDecline) > 512 {
+		t.Fatal("unbounded diagnostic")
+	}
+	cmd.Env = []string{strings.Repeat("x", executionIdentityMaxBytes+1)}
+	observation.command(cmd, true)
+	if usage.executions.LastDecline != "command observation exceeds budget" {
+		t.Fatal("unbounded command retained")
+	}
+	deferred := &goUsage{deferInputs: true}
+	if beginExecutionObservation(deferred, nil, "predicate", 0) != nil || !deferred.evaluator || deferred.execution != nil || deferred.executions != (executionObservations{}) {
+		t.Fatal("deferred bypass collected observation")
+	}
+}
+
+func TestExecutionObservedPredicateMemo(t *testing.T) {
+	t.Parallel()
+	program := predicateMemoProgram(t, "pred p(n:Int){n>0}")
+	query := check.Query{Pred: program.info.Funcs["p"], Args: []constant.Value{constant.MakeInt64(1)}}
+	query.Params = query.Pred.Params
+	usage := &goUsage{}
+	eval := evaluatorWithTimeoutObserved(program.files, program.info, program.module, program.context, time.Minute, newPredicateMemo(), usage)
+	for range 2 {
+		results, err := eval([]check.Query{query})
+		if err != nil || !slices.Equal(results, []bool{true}) {
+			t.Fatalf("predicate: %v, %v", results, err)
+		}
+	}
+	if !usage.evaluator || usage.executions.Invocations != 2 || usage.executions.MemoHits != 1 || len(usage.execution.invocations) != 2 {
+		t.Fatalf("memo lost logical accounting: %+v", usage.executions)
+	}
+	if usage.executions.LastBuild != ([32]byte{}) || usage.executions.LastProcess != ([32]byte{}) {
+		t.Fatal("memo hit inherited command evidence")
+	}
+	if _, eligible := usage.execution.receipts(); eligible {
+		t.Fatal("memo qualified enclosing reuse")
 	}
 }
 
 func TestExecutionObservedComptime(t *testing.T) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		t.Skip("initial Go inventory supports Linux amd64")
+		t.Skip("installed SDK identity requires supported Linux launcher")
 	}
 	savedHook := goModuleHook
 	goModuleHook = nil
@@ -45,28 +97,16 @@ func TestExecutionObservedComptime(t *testing.T) {
 	if ctx.err != nil || !supportedGoVersion(ctx.values["GOVERSION"]) {
 		t.Skip("requires supported native Go launcher")
 	}
-	stageRoot := t.TempDir()
-	output := filepath.Join(t.TempDir(), "eval")
-	stage := goExecutionStage{Root: stageRoot, Mode: "comptime", Output: output, Program: []byte("package main"), Module: &goModuleInputs{mod: []byte("module example.com/observed")}}
-	invocation, err := goExecutionEnvelope(ctx, stage)
-	if err != nil || !slices.Equal(invocation.BuildArgs, []string{"build", "-mod=readonly", "-buildvcs=false", "-ldflags=-linkmode=internal", "-o", output, "."}) {
-		t.Fatalf("actual output argv not bound: %+v, %v", invocation, err)
-	}
-	for _, invalid := range []string{"relative-output", filepath.Join(stageRoot, "eval"), string([]byte{'/', 0xff})} {
-		stage.Output = invalid
-		if _, err := goExecutionEnvelope(ctx, stage); err == nil {
-			t.Fatalf("invalid output qualified: %q", invalid)
-		}
-	}
 	for _, tc := range []struct {
 		name, source string
 		captured     bool
 	}{
 		{"pure", `fn main(){println(comptime{21*2})}`, true},
-		{"foreign unsafe", "fn value():Int unsafe go{return 42}\nfn main(){println(comptime{value()})}", false},
-		{"CGO enabled", `fn main(){println(comptime{42})}`, false},
+		{"foreign unsafe", "fn value():Int unsafe go{return 42}\nfn main(){println(comptime{value()})}", true},
+		{"CGO enabled", `fn main(){println(comptime{42})}`, true},
 		{"timeout releases stage", "fn spin():Int{spin()}\nfn main(){println(comptime{spin()})}", true},
 		{"empty", `fn main(){println(42)}`, false},
+		{"deferred", `fn main(){println(comptime{42})}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := ctx
@@ -96,7 +136,7 @@ func TestExecutionObservedComptime(t *testing.T) {
 				}
 				return source
 			}
-			usage := &goUsage{}
+			usage := &goUsage{deferInputs: tc.name == "deferred"}
 			if tc.name == "timeout releases stage" {
 				limited := *ctx
 				limited.evalLimit = 150 * time.Millisecond
@@ -127,6 +167,12 @@ func TestExecutionObservedComptime(t *testing.T) {
 				t.Fatal("tracked execution changed generated output")
 			}
 			counts := usage.executions
+			if tc.name == "deferred" {
+				if !usage.evaluator || counts != (executionObservations{}) || usage.execution != nil {
+					t.Fatal("deferred comptime captured inventory")
+				}
+				return
+			}
 			if tc.name == "empty" {
 				if usage.evaluator || counts != (executionObservations{}) || usage.execution != nil {
 					t.Fatal("empty phase collected execution inputs")
@@ -140,14 +186,14 @@ func TestExecutionObservedComptime(t *testing.T) {
 				t.Fatal("actual invocation was not accounted for")
 			}
 			if _, eligible := usage.execution.receipts(); eligible {
-				t.Fatal("Go-only observation certified an execution receipt")
+				t.Fatal("SDK observation certified an execution receipt")
 			}
 			if tc.captured {
-				if counts.Captured != 1 || counts.Validated != 1 || counts.Declined != 0 || counts.LastGoIdentity == ([32]byte{}) {
-					t.Fatalf("real execution inventory incomplete: %+v", counts)
+				if counts.Captured != 1 || counts.Validated != 1 || counts.Declined != 0 || counts.LastSDK.Version != 1 || counts.LastBuild == ([32]byte{}) || counts.LastProcess == ([32]byte{}) {
+					t.Fatalf("installed SDK/command observation incomplete: %+v", counts)
 				}
 			} else if counts.Captured != 0 || counts.Validated != 0 || counts.Declined != 1 || counts.LastDecline == "" {
-				t.Fatalf("unsafe selection collected execution closure: %+v", counts)
+				t.Fatalf("SDK identity unavailable: %+v", counts)
 			}
 		})
 	}

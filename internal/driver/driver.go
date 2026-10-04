@@ -156,7 +156,7 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 			return nil, &DiagError{Diags: diags}
 		}
 	}
-	eval := evaluatorWithContext(files, info, module, context)
+	eval := evaluatorWithTimeoutObserved(files, info, module, context, 0, nil, usage)
 	if len(info.Comptimes) > 0 {
 		phase(observe, "comptime")
 		eval = evaluateComptimes(files, info, diags, module, context, usage)
@@ -208,7 +208,13 @@ func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModu
 }
 
 func evaluatorWithTimeoutMemo(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext, timeout time.Duration, memo *predicateMemo) check.Evaluator {
+	return evaluatorWithTimeoutObserved(files, info, module, context, timeout, memo, nil)
+}
+
+func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext, timeout time.Duration, memo *predicateMemo, usage *goUsage) check.Evaluator {
 	return func(queries []check.Query) ([]bool, error) {
+		observation := beginExecutionObservation(usage, context, "predicate", timeout)
+		defer observation.finish()
 		var goSrc []byte
 		var err error
 		if timeout > 0 {
@@ -237,6 +243,7 @@ func evaluatorWithTimeoutMemo(files []*syntax.File, info *check.Info, module *go
 			key, reusable = predicateMemoKey(stagedDir, context, timeout, info.Embeds)
 			if reusable {
 				if result, ok := memo.get(key); ok {
+					observation.memoHit()
 					return result, nil
 				}
 			}
@@ -251,12 +258,12 @@ func evaluatorWithTimeoutMemo(files []*syntax.File, info *check.Info, module *go
 			var absExe string
 			absExe, err = filepath.Abs(exe)
 			if err == nil {
-				err = buildStagedGo(files, absExe, stagedDir, pinned, context)
+				err = buildStagedGoObserved(files, absExe, stagedDir, pinned, context, observation)
 			}
 			release()
 			release = nil
 		} else {
-			err = buildGoWithMode(files, goSrc, exe, module, context, "predicate", info.Embeds...)
+			err = buildGoWithModeObserved(files, goSrc, exe, module, context, "predicate", observation, info.Embeds...)
 		}
 		if err != nil {
 			return nil, err
@@ -275,6 +282,7 @@ func evaluatorWithTimeoutMemo(files []*syntax.File, info *check.Info, module *go
 		cmd.Stderr = stderr
 		stdout := &boundedOutput{limit: max(64<<10, len(queries)*6)}
 		cmd.Stdout = stdout
+		observation.command(cmd, false)
 		err = cmd.Run()
 		out := stdout.data
 		if deadline.Err() != nil {
@@ -374,6 +382,10 @@ func buildGoWithContext(files []*syntax.File, goSrc []byte, out string, module *
 }
 
 func buildGoWithMode(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, context *goContext, mode string, embeds ...*check.Embedded) error {
+	return buildGoWithModeObserved(files, goSrc, out, module, context, mode, nil, embeds...)
+}
+
+func buildGoWithModeObserved(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, context *goContext, mode string, observation *executionObservation, embeds ...*check.Embedded) error {
 	if context.err != nil {
 		return fmt.Errorf("determining Go build configuration (is Go installed?): %w", context.err)
 	}
@@ -386,15 +398,16 @@ func buildGoWithMode(files []*syntax.File, goSrc []byte, out string, module *goM
 		return err
 	}
 	defer cleanup()
-	return buildStagedGo(files, absOut, dir, pinned, context)
+	return buildStagedGoObserved(files, absOut, dir, pinned, context, observation)
 }
 
 // buildStagedGo builds an already-published stage. Its caller owns the stage
 // lock and cleanup, including any observation of the effective staged bytes.
-func buildStagedGo(files []*syntax.File, absOut, dir string, pinned bool, context *goContext) error {
+func buildStagedGoObserved(files []*syntax.File, absOut, dir string, pinned bool, context *goContext, observation *executionObservation) error {
 	cmd := context.command("build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
+	observation.command(cmd, true)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		var exitErr *exec.ExitError
