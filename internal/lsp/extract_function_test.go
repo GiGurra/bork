@@ -177,6 +177,12 @@ func TestExtractFunctionProtocol(t *testing.T) {
 
 func TestExtractFunctionRejectsUnsupportedSelections(t *testing.T) {
 	for _, source := range []string{
+		`fn value() uses io: Int { println("real"); 1 }
+ test "example" { mock value() { [|value() + 1|] }; assertEqual(value(), 2) }
+ fn main() {}`,
+		`fn main() uses state + io { scope s { async(s) x: Int = panic("unused"); println([|if (false) { x } else { 1 }|]) } }`,
+		`fn main() uses state + io { scope outer { cancel(outer); [|scope inner { println(cancelled(inner)) }|] } }`,
+		`fn main() uses io { lazy x: Int = panic("unused"); println([|if (false) { x } else { 1 }|]) }`,
 		"fn sum(x: Int): Int { [|x +|] 1 }\nfn main() {}\n",
 		"fn sum(x: Int): Int { [|local = x + 1|]; local }\nfn main() {}\n",
 		"fn sum(x: Int): Int { [|missing + x|] }\nfn main() {}\n",

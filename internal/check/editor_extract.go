@@ -41,6 +41,9 @@ func EditorExtractExpression(info *Info, file *syntax.File, start, end diag.Pos)
 	if fn == nil || fn.Body == nil {
 		return nil, fmt.Errorf("select an expression in a function or test body")
 	}
+	if fn.MockOf != nil {
+		return nil, fmt.Errorf("mock bodies have a contextual target binding")
+	}
 	var value Expr
 	anchor := sourceTokenPos(selected)
 	WalkComptime(fn.Body, func(x Expr) bool {
@@ -58,7 +61,7 @@ func EditorExtractExpression(info *Info, file *syntax.File, start, end diag.Pos)
 		switch x.(type) {
 		case *Lambda, *Comptime:
 			return false
-		case *Return, *Try, *LoopControl:
+		case *Return, *Try, *LoopControl, *ScopeBlock:
 			transfersControl = true
 		}
 		return !transfersControl
@@ -103,6 +106,9 @@ func EditorExtractExpression(info *Info, file *syntax.File, start, end diag.Pos)
 		}
 		if inside(pos) {
 			continue
+		}
+		if binding, ok := decl.(*syntax.Binding); ok && (binding.Lazy || binding.AsyncScope != nil) {
+			return nil, fmt.Errorf("passing a deferred capture would change evaluation order")
 		}
 		if i, ok := seen[decl]; ok {
 			if compareEditorPosition(id.Pos, out.Parameters[i].Site) < 0 {
