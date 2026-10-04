@@ -33,6 +33,8 @@ The [tour](docs/tour.md) continues from here. For a single file with top-level s
 
 Package values such as `MaxRetries = 3` are immutable and pure, computed once on first read. See [bindings and package values](docs/language/basics.md).
 
+Method chains can span lines with a leading dot, such as `.map(...)`; see [methods](docs/language/basics.md#methods).
+
 ## A taste of the language
 
 ### Records, unions, and exhaustive matching

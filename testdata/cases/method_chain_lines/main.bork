@@ -1,0 +1,15 @@
+fn main() {
+  names = ["tim", "ada"]
+    .sorted()
+    .map(n => n.toUpper())
+  println(names)
+  text = " padded "
+  // keep source comments between links
+    .trim()
+    .toUpper()
+  println(text)
+  old = ["tim", "ada"].
+    sorted().
+    map(n => n.toUpper())
+  println(old)
+}

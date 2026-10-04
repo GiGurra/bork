@@ -19,6 +19,7 @@ type item struct {
 	comment    bool
 	unary      bool
 	contextDot bool
+	chain      bool
 	loopIn     bool
 	// with is set for the word with where it may start a with block
 	// (not after a '.'), which is spaced from its '('.
@@ -68,7 +69,8 @@ func Source(path string, src []byte) ([]byte, error) {
 		u := t.Kind == syntax.Not || t.Kind == syntax.Minus && !endsExpr(prev)
 		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && items[len(items)-1].kind == syntax.TIdent && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
-		items = append(items, item{loopIn: loopIn, kind: t.Kind, text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev), with: w})
+		chain := t.Kind == syntax.Dot && endsExpr(prev) || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot
+		items = append(items, item{chain: chain, loopIn: loopIn, kind: t.Kind, text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev), with: w})
 		prev = t.Kind
 	}
 	for _, c := range comments {
@@ -105,7 +107,7 @@ func Source(path string, src []byte) ([]byte, error) {
 				}
 			}
 			indent := levels(delimiterLines[:remaining])
-			if !it.comment && it.kind == syntax.PipeGt {
+			if !it.comment && (it.kind == syntax.PipeGt || it.chain) {
 				indent++
 			}
 			out.WriteString(strings.Repeat("  ", max(0, indent)))

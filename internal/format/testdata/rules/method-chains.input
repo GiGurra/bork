@@ -1,0 +1,13 @@
+fn main(){
+names=["tim","ada"]
+.sorted()
+// uppercase names
+.map(n=>n.toUpper())
+println(names)
+old=["tim","ada"].
+sorted().
+map(n=>n.toUpper())
+println(old)
+x:Option[Int]=.Some{value:1}
+println(x)
+}

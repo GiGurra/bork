@@ -78,17 +78,17 @@ func (lx *lexer) endsStatement() bool {
 }
 
 func (lx *lexer) newline(pos diag.Pos) {
-	if lx.endsStatement() && !lx.pipeAhead() {
+	if lx.endsStatement() && !lx.continuationAhead() {
 		lx.emit(Semi, "\n", pos)
 	}
 }
 
-// pipeAhead reports whether the next line (skipping blank and comment
-// lines) starts with `|>`, which continues the expression:
+// continuationAhead recognizes leading pipes and selectors across whitespace
+// and comments. A selector needs an existing receiver, not a return/break head.
 //
 //	users
 //	  |> filter(u => u.age >= 18)
-func (lx *lexer) pipeAhead() bool {
+func (lx *lexer) continuationAhead() bool {
 	i := lx.off
 	for i < len(lx.src) {
 		switch c := lx.src[i]; {
@@ -98,8 +98,27 @@ func (lx *lexer) pipeAhead() bool {
 			for i < len(lx.src) && lx.src[i] != '\n' {
 				i++
 			}
+		case c == '/' && i+1 < len(lx.src) && lx.src[i+1] == '*':
+			i += 2
+			for i+1 < len(lx.src) && (lx.src[i] != '*' || lx.src[i+1] != '/') {
+				i++
+			}
+			if i+1 >= len(lx.src) {
+				return false
+			}
+			i += 2
 		default:
-			return c == '|' && i+1 < len(lx.src) && lx.src[i+1] == '>'
+			if c == '|' && i+1 < len(lx.src) && lx.src[i+1] == '>' {
+				return true
+			}
+			if c != '.' || i+1 >= len(lx.src) || !isLetter(lx.src[i+1]) || len(lx.toks) == 0 {
+				return false
+			}
+			switch lx.toks[len(lx.toks)-1].Kind {
+			case KwReturn, KwBreak, KwContinue, Underscore:
+				return false
+			}
+			return true
 		}
 	}
 	return false
