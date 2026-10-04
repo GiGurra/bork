@@ -155,11 +155,6 @@ func ComptimeRecipe(node *Comptime, info *Info, diags *diag.List, eval Evaluator
 			clear(let.Value)
 		}
 	}
-	clear(node.Body)
-	for _, helper := range helpers {
-		clear(helper.Requires)
-		clear(helper.Body)
-	}
 	defer func() {
 		for let, constraints := range saved {
 			let.Constraints = constraints
