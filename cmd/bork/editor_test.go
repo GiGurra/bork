@@ -126,8 +126,8 @@ func TestEditorCLIAndRefreshOffer(t *testing.T) {
 		t.Fatalf("explicit editor: %s %v", path, err)
 	}
 	var output bytes.Buffer
-	offerEditorRefresh(context.Background(), &output)
-	if !strings.Contains(output.String(), "--editor cursor") || !strings.Contains(output.String(), "--editor codium") {
+	offerEditorRefresh(context.Background(), &output, "/new install/bork")
+	if !strings.Contains(output.String(), "'/new install/bork' editor install vscode") || !strings.Contains(output.String(), "--editor cursor") || !strings.Contains(output.String(), "--editor codium") {
 		t.Fatalf("offer: %s", output.String())
 	}
 	cmd := editorCommand()

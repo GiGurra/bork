@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -183,7 +184,11 @@ func downloadVSIX(ctx context.Context, client *http.Client, api, current string)
 }
 
 // Offer an explicit refresh after upgrading; querying installed extensions is local.
-func offerEditorRefresh(ctx context.Context, out io.Writer) {
+func offerEditorRefresh(ctx context.Context, out io.Writer, compiler string) {
+	command := "\"" + compiler + "\""
+	if runtime.GOOS != "windows" {
+		command = "'" + strings.ReplaceAll(compiler, "'", "'\"'\"'") + "'"
+	}
 	for _, name := range editorCLIs {
 		cli, err := exec.LookPath(name)
 		if err != nil {
@@ -197,7 +202,7 @@ func offerEditorRefresh(ctx context.Context, out io.Writer) {
 		}
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.EqualFold(strings.TrimSpace(line), extensionID) {
-				_, _ = fmt.Fprintf(out, "Refresh the installed Bork extension: bork editor install vscode --editor %s\n", name)
+				_, _ = fmt.Fprintf(out, "Refresh the installed Bork extension: %s editor install vscode --editor %s\n", command, name)
 				break
 			}
 		}
