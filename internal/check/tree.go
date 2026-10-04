@@ -94,6 +94,8 @@ const (
 // Var is a variable: a parameter, a binding, a name bound by a pattern,
 // or a scope.
 type Var struct {
+	PackageBinding *PackageBinding
+
 	Sibling     *Field
 	Unvalidated bool
 	// Label describes a compiler-generated variable in diagnostics.

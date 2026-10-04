@@ -169,6 +169,8 @@ type GoField struct {
 }
 
 type Field struct {
+	RuntimePackageReads bool
+
 	Lazy           bool
 	Computed       bool
 	Dependencies   []*Field

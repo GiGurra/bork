@@ -80,6 +80,17 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 		if file.Path != pos.File {
 			continue
 		}
+		for _, binding := range info.PackageBindings {
+			if binding.Decl.Pos.File != pos.File {
+				continue
+			}
+			index.fn = binding.Boundary
+			if index.contains(binding.Var.Pos, len(binding.Var.Name)) || index.contains(binding.Decl.LazyPos, len("lazy")) {
+				index.selectVar(binding.Var, binding.Value.Value.Pos())
+			} else {
+				index.walk(binding.Value.Value)
+			}
+		}
 		for _, fd := range file.Funcs {
 			fn := info.FuncOf[fd]
 			if fn == nil {

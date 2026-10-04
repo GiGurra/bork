@@ -66,6 +66,8 @@ selection continues to describe the complete flattened graph.
 
 Local lazy bindings report `lazy.kind: "binding"`, `initializer_effects` and
 known lexical capture names in JSON. Text output states that first read forces.
+Package lazy declarations and their reads report `lazy.kind: "package binding"`,
+pure initializer effects and dependency names, including reads through helpers.
 Describe does not execute an initializer. A `dbg(value)` on a lazy binding
 observes the value and marks its output `(forces lazy)`.
 

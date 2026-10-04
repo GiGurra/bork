@@ -94,15 +94,34 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List)
 		case p.atAsyncBinding():
 			p.errorf(p.tok().Pos, "package async bindings are not supported; use an async local binding inside a function")
 			p.syncTopLevel()
-		case p.at(TIdent) && p.tok().Text == "lazy" && p.peekKind() == TIdent:
-			p.errorf(p.tok().Pos, "package lazy bindings are not implemented yet; use a local lazy binding inside a function")
-			p.syncTopLevel()
+		case p.at(TIdent) && p.tok().Text == "lazy" && (p.peekKind() == TIdent || p.peekKind() == Underscore):
+			if binding := p.packageLazyBinding(); binding != nil {
+				f.Bindings = append(f.Bindings, binding)
+			}
 		default:
 			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', 'ambient', 'class', 'instance', or 'test'), found %s", p.tok().Kind)
 			p.syncTopLevel()
 		}
 	}
 	return f
+}
+
+func (p *parser) packageLazyBinding() (binding *Binding) {
+	defer p.recoverDecl(func() { binding = nil })
+	return p.lazyBinding()
+}
+
+func (p *parser) lazyBinding() *Binding {
+	pos := p.next().Pos
+	name := p.expect(TIdent, "after lazy (a single binding name)")
+	binding := &Binding{Pos: name.Pos, Name: name.Text, Lazy: true, LazyPos: pos}
+	if p.at(Colon) {
+		p.next()
+		binding.Type = p.typeExpr()
+	}
+	p.expect(Assign, "after the lazy binding's name or type")
+	binding.Value = p.expr()
+	return binding
 }
 
 // bailout aborts parsing of the current declaration after an error.
@@ -948,16 +967,7 @@ func (p *parser) block() *Block {
 			binding.Value = p.expr()
 			stmt = binding
 		case p.at(TIdent) && p.tok().Text == "lazy" && (p.peekKind() == TIdent || p.peekKind() == Underscore):
-			pos := p.next().Pos
-			name := p.expect(TIdent, "after lazy (a single binding name)")
-			binding := &Binding{Pos: name.Pos, Name: name.Text, Lazy: true, LazyPos: pos}
-			if p.at(Colon) {
-				p.next()
-				binding.Type = p.typeExpr()
-			}
-			p.expect(Assign, "after the lazy binding's name or type")
-			binding.Value = p.expr()
-			stmt = binding
+			stmt = p.lazyBinding()
 		case p.atMock():
 			stmt = p.mockStmt(p.tok().Pos, "")
 		case p.at(TIdent) && p.peekKind() == Assign && p.toks[min(p.i+2, len(p.toks)-1)].Text == "mock" && p.toks[min(p.i+3, len(p.toks)-1)].Kind == TIdent:

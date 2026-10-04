@@ -11,9 +11,7 @@ including once-only evaluation, concurrent readers and cached failures. Bork
 uses transparent binding/field reads instead of a wrapper accessor, immutable
 captures instead of mutable Go closure capture, and checked scope lifetimes.
 This document specifies the complete feature. Local bindings, independent record
-fields and computed sibling defaults are implemented. Pure package bindings
-remain a proposed follow-on phase. Until a
-phase ships, its syntax receives a deliberate unsupported-feature diagnostic.
+fields, computed sibling defaults and pure package bindings are implemented.
 
 ## Bindings and demand
 
@@ -237,7 +235,10 @@ entirely inside the initializer still follow ordinary affine rules.
 ## Package bindings, tooling and implementation
 
 Package `lazy Name: T = expr` is a runtime memo with ordinary export visibility;
-package reads never become implicit compile-time execution. The first phase for
+package reads never become implicit compile-time execution. Names may refer to later
+package declarations, and exported names can be read through an import. Direct
+and helper-induced dependency cycles receive a diagnostic with the declaration
+chain, including implicit rendering and decoder validation calls. The first phase for
 package bindings permits only pure, closed initializers with no scope-dependent
 captures or ambient needs. Dependencies on other pure package bindings are
 allowed and cycle-checked across imports. Effectful global initializers require

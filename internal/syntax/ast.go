@@ -23,6 +23,8 @@ type File struct {
 	Types    []*TypeDecl
 	Ambients []*AmbientDecl
 	Funcs    []*FuncDecl
+	// Bindings contains package lazy values; ordinary bindings remain local.
+	Bindings []*Binding
 	Tests    []*TestDecl
 	Comments []Comment
 }

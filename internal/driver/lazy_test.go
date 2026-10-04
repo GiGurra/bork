@@ -27,7 +27,7 @@ func TestLazyBindingChecks(t *testing.T) {
 		{"drop", "fn main(){lazy _=1}", "single binding name"},
 		{"destructure", "fn main(){lazy (x,y)=(1,2)}", "expected"},
 		{"independent field", "type C={lazy value:Int}\nfn main(){}", ""},
-		{"package phase", "lazy x=1\nfn main(){}", "package lazy bindings are not implemented"},
+		{"package binding", "lazy x=1\nfn main(){}", ""},
 		{"cross loop", "fn main(){for(n in [1]){lazy x:Int={break;1};println(x)}}", "require a loop in the same function"},
 		{"cross yield", "fn main(){x=generate[Int]{lazy y:Int={yield 1;2};yield y};println(x.toList())}", "yield requires a generator"},
 		{"nested lambda return", "fn main(){lazy x:()=>Int=()=>{return 1};println(x())}", "return cannot be used in a lambda"},

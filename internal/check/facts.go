@@ -112,6 +112,9 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 			}
 		}
 	}
+	for _, binding := range info.PackageBindings {
+		f.function(binding.Boundary)
+	}
 	for _, fn := range info.Tests {
 		f.function(fn)
 	}
@@ -1823,6 +1826,12 @@ func (f *factChecker) factOf(subject string, k known) fact {
 // literalQuery is ob on x, if x and ob's arguments are made of constants
 // only, so the predicate can be run at compile time.
 func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
+	if ob.pred != nil && ob.pred.RuntimePackageReads || packageInstanceRuntimeReads(f.info, ob.inst) {
+		return Query{}, false
+	}
+	if len(f.info.PackageBindings) != 0 && packageRuntimeReads(f.info, x) {
+		return Query{}, false
+	}
 	// A completed candidate is fresh data, not an existing runtime cell.
 	// Reify only roots whose independent inputs are wholly known. The query
 	// still checks this exact return path, rather than the recipe's tail.
@@ -1903,7 +1912,7 @@ func (f *factChecker) literalQuery(ob obligation, x Expr) (Query, bool) {
 		if scope == nil {
 			scope = f.from()
 		}
-		if !f.info.PredicateDicts(scope, inst) {
+		if !f.info.PredicateDicts(scope, inst) || packageInstanceRuntimeReads(f.info, inst) {
 			return Query{}, false
 		}
 		q.TypeArgs, q.Params, q.Dicts, q.ArgFacts = inst.TypeArgs, inst.Params, inst.Dicts, inst.ArgFacts
@@ -1941,6 +1950,9 @@ func (f *factChecker) closed(x Expr) bool {
 		return true
 	case *RecordLit:
 		for _, fi := range x.Fields {
+			if fi.Field.Computed && fi.Field.RuntimePackageReads {
+				return false
+			}
 			if !fi.Field.Computed && !f.closed(fi.Value) {
 				return false
 			}
@@ -2017,7 +2029,7 @@ func (f *factChecker) literalText(x Expr) string {
 
 // constQuery is ob on the constant v, if all its arguments are constants.
 func constQuery(ob obligation, v constant.Value) (Query, bool) {
-	if ob.pred == nil || ob.pred.Synthetic || len(ob.pred.TypeParams) > 0 {
+	if ob.pred == nil || ob.pred.Synthetic || ob.pred.RuntimePackageReads || len(ob.pred.TypeParams) > 0 {
 		return Query{}, false // cannot be run on its own
 	}
 	q := Query{Pred: ob.pred, Args: []constant.Value{v}, Params: ob.pred.Params}

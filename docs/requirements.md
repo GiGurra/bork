@@ -3280,7 +3280,7 @@ Build, run and test continue to accept these markers. We do not introduce a
 release build mode or marker rejection in this change: check surfaces unfinished
 code, and automated consumers can choose to enforce those warning codes.
 
-### Lazy bindings and record fields (bindings and fields implemented: bork-9zpf2t)
+### Lazy bindings and record fields (implemented: bork-9zpf2t)
 
 `lazy name = expr` defers one initializer until its first read, memoizes its
 result and keeps the static type T. Local bindings are implemented, including
@@ -3290,7 +3290,10 @@ can contribute to an inferred result. Lazy record fields provide a passable lazy
 value through `type Lazy[T] = { lazy value: T }`. Pure sibling-dependent defaults
 are computed fields: construction creates their cells, copies invalidate affected
 dependencies, and structural equality, Show, encoding and writable schemas omit
-them. Pure package bindings remain a follow-on phase. The complete design, including
+them. Pure package `lazy Name = expr` bindings use process-lifetime memo cells,
+ordinary export visibility and forward references. Initializers cannot retain
+scopes or require ambient values. Direct and helper-induced dependency cycles
+are rejected; compiler evaluation never forces package cells. The complete design, including
 effects, facts, scopes, copies, derivation and tooling, is in
 [lazy bindings and record fields](design/lazy.md). Transparent async local bindings
 (bork-mais5u, implemented) share access machinery under the
