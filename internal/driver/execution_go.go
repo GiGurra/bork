@@ -30,8 +30,11 @@ type goExecutionInvocation struct {
 }
 type goExecutionStage struct {
 	Root, Mode string
-	Program    []byte
-	Module     *goModuleInputs
+	// Output binds a real execution to its exact build argv. Empty is permitted
+	// only for discovery-only callers, whose inventory cannot describe a build.
+	Output  string
+	Program []byte
+	Module  *goModuleInputs
 }
 type goExecutionPackage struct {
 	ImportPath, Name, Dir, Root                                                          string
@@ -103,6 +106,17 @@ func goExecutionEnvelope(ctx *goContext, stage goExecutionStage) (goExecutionInv
 	}
 	env := append(slices.Clone(ctx.env), "GOENV=off", "GOWORK=off", "GOFLAGS=", "GOTOOLCHAIN=local", "CGO_ENABLED=0", "GOPROXY=off", "GOSUMDB=off", "GOCACHEPROG=", "GO_EXTLINK_ENABLED=0")
 	out = goExecutionInvocation{Tool: ctx.tool, Root: stageRoot, Mode: stage.Mode, Env: env, BuildArgs: []string{"build", "-mod=readonly", "-buildvcs=false", "-ldflags=-linkmode=internal", "."}}
+	if stage.Output != "" {
+		if !filepath.IsAbs(stage.Output) || !utf8.ValidString(stage.Output) || len(stage.Output) > goExecutionMetadataLimit-metadata {
+			return goExecutionInvocation{}, errors.New("invalid Go execution output path")
+		}
+		// The output lives outside the stage so building it cannot change the
+		// directory membership captured for generated/module inputs.
+		if withinGoExecutionRoot(filepath.Clean(stage.Output), stageRoot) {
+			return goExecutionInvocation{}, errors.New("go execution output overlaps frozen stage")
+		}
+		out.BuildArgs = []string{"build", "-mod=readonly", "-buildvcs=false", "-ldflags=-linkmode=internal", "-o", stage.Output, "."}
+	}
 	return out, nil
 }
 func goExecutionOutput(inv goExecutionInvocation, args ...string) ([]byte, error) {

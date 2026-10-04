@@ -1,7 +1,7 @@
 # Native Go execution inventory
 
-Status: private collector foundation. No execution integration, result hits,
-evaluator-marker removal or candidate/receipt certification. This implements
+Status: private collector with tracked comptime execution integration. No result
+hits, evaluator-marker removal or candidate/receipt certification. This implements
 only the Go-input portion of evaluation-cache.md and execution-api.md.
 
 The first supported envelope is Go 1.26/1.27 on native Linux amd64 at the baseline
@@ -14,6 +14,7 @@ and generated support inputs requires explicit policy and test coverage.
 ```go
 type goExecutionStage struct {
     Root, Mode string // actual staging directory, predicate or comptime
+    Output string // exact absolute executable path; empty for discovery only
     Program []byte
     Module *goModuleInputs
 }
@@ -32,11 +33,26 @@ an internal ownership check, not an authentication or persistence format.
 
 The build envelope pins toolchain selection local, cgo off, internal linking,
 Go environment/workspace off, module reads readonly and proxy/sumdb offline.
-Capture and future execution must use the same envelope. BuildArgs currently
-records the fixed supported template; integration must bind the actual executable
-output argument and reject differing hooks/flags rather than certify a command
-which merely resembles that template. Staging layout is opaque to the collector.
-This inventory neither authorizes a build nor changes today's evaluator commands.
+Capture and execution use the same envelope. BuildArgs binds the actual executable
+output argument, which must be outside the frozen stage. Staging layout is opaque
+to the collector.
+
+Tracked comptime recipes first pass the static selection audit. Requests whose
+captured context already disables cgo then attempt this supported capture against
+their published stage. A successful capture builds with its owned launcher, argv
+and environment, executes the fresh binary under the existing comptime deadline,
+and validates the inventory afterward while holding the stage lock. Unsupported
+or declined captures build with the existing command and effective published
+module bytes. One-shot callers keep their existing execution path. Predicate
+execution integration remains separate.
+
+Request-owned counters and the last Go inventory identity describe collection
+and endpoint validation; no inventory or semantic graph is retained in a Session
+artifact. The execution tracker records each recipe attempt before execution and
+declines it on every outcome. A validated Go inventory does not qualify a result:
+the remaining execution closure, policies and Facts are still mandatory. Empty
+phases do not allocate a tracker or collect SDK inputs. Unsupported selections
+decline before discovery wherever their captured context/static audit suffices.
 
 Capture inventories launcher and SDK tools, VERSION/go.env, assembler include
 support, all package-level files, selected embedded files and assembly include
@@ -67,8 +83,9 @@ not a reason to substitute stats or existing Go-name metadata receipts.
 
 Remaining integration must bind the checked source/module snapshot, exact ordered
 query/comptime selections and prior values, compiler/intrinsic namespace, generated
-support/import initialization, native/value/effective-limit policy, actual build
-invocation and decoded results. All-invocation certification and current Facts
+support/import initialization, native/value/effective-limit policy and decoded
+results, plus actual build invocation binding for predicate executions.
+All-invocation certification and current Facts
 remain mandatory before Session or disk result eligibility can change.
 
 In-place GOROOT edits are unsupported, same as go build; run go clean -cache.
