@@ -25,7 +25,19 @@ func (s *server) renameFeature(method, path string, p documentParams, pkg *packa
 	for path, doc := range s.docs {
 		overlays[path] = doc.text
 	}
-	workspace, err := driver.AnalyzeWorkspace(path, s.workspaceRoots, overlays)
+	if s.renameSessions == nil {
+		s.renameSessions = map[string]*driver.Session{}
+	}
+	// Seed the open package's current session; Analyze still validates inputs
+	// before reuse. Verification always uses the separate proposed-source cache.
+	requestPath := analysisPath(path, s.source(path))
+	if s.renameSessions[requestPath] == nil && !pkg.stale {
+		s.renameSessions[requestPath] = pkg.session
+	}
+	if s.renameVerificationSessions == nil {
+		s.renameVerificationSessions = map[string]*driver.Session{}
+	}
+	workspace, err := driver.AnalyzeWorkspaceWithSessions(path, s.workspaceRoots, overlays, s.renameSessions)
 	if err != nil {
 		return nil, err
 	}
@@ -51,13 +63,13 @@ func (s *server) renameFeature(method, path string, p documentParams, pkg *packa
 	}
 	if method == "textDocument/prepareRename" {
 		// A no-op still checks writable identity and opaque Go restrictions.
-		if _, err := workspace.Rename(ref.Definition, ref.Name); err != nil {
+		if _, err := workspace.RenameWithSessions(ref.Definition, ref.Name, s.renameVerificationSessions); err != nil {
 			return nil, err
 		}
 		source := sources[path]
 		return map[string]any{"range": sourceRange{lspPosition(source, ref.Start), lspPosition(source, ref.End)}, "placeholder": ref.Name}, nil
 	}
-	edits, err := workspace.Rename(ref.Definition, p.NewName)
+	edits, err := workspace.RenameWithSessions(ref.Definition, p.NewName, s.renameVerificationSessions)
 	if err != nil {
 		return nil, err
 	}

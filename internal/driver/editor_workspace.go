@@ -135,13 +135,30 @@ func WorkspacePackages(path string, roots []string, overlays map[string]string) 
 // AnalyzeWorkspace checks closed importers as well as open buffers. An invalid
 // local package prevents edits: returning a partial reference set is unsafe.
 func AnalyzeWorkspace(path string, roots []string, overlays map[string]string) (*EditorWorkspace, error) {
+	return AnalyzeWorkspaceWithSessions(path, roots, overlays, nil)
+}
+
+// AnalyzeWorkspaceWithSessions retains checked snapshots for repeated workspace
+// queries while Session validation still checks overlays, disk inputs and tools.
+func AnalyzeWorkspaceWithSessions(path string, roots []string, overlays map[string]string, sessions map[string]*Session) (*EditorWorkspace, error) {
 	paths, err := WorkspacePackages(path, roots, overlays)
 	if err != nil {
 		return nil, err
 	}
+	return analyzeWorkspacePackages(paths, overlays, sessions)
+}
+
+func analyzeWorkspacePackages(paths []string, overlays map[string]string, sessions map[string]*Session) (*EditorWorkspace, error) {
 	w := &EditorWorkspace{paths: paths, overlays: maps.Clone(overlays)}
 	for _, path := range paths {
-		analysis, err := NewSession().Analyze(path, overlays)
+		session := sessions[path]
+		if session == nil {
+			session = NewSession()
+			if sessions != nil {
+				sessions[path] = session
+			}
+		}
+		analysis, err := session.Analyze(path, overlays)
 		if err != nil {
 			return nil, fmt.Errorf("workspace package %s does not check: %w", path, err)
 		}
@@ -153,6 +170,12 @@ func AnalyzeWorkspace(path string, roots []string, overlays map[string]string) (
 // Rename constructs and checks edits without writing files. Rechecking every
 // package also verifies that references still bind to the renamed declaration.
 func (w *EditorWorkspace) Rename(def diag.Pos, name string) ([]diag.TextEdit, error) {
+	return w.RenameWithSessions(def, name, nil)
+}
+
+// RenameWithSessions keeps verification caches separate from current-source
+// snapshots. Sessions still validate every dependency, buffer and Go input.
+func (w *EditorWorkspace) RenameWithSessions(def diag.Pos, name string, sessions map[string]*Session) ([]diag.TextEdit, error) {
 	cache := modcache.Root()
 	tokens, _ := syntax.Lex("", []byte(name), &diag.List{})
 	if len(tokens) < 2 || tokens[0].Kind != syntax.TIdent || tokens[0].Text != name {
@@ -260,7 +283,14 @@ func (w *EditorWorkspace) Rename(def diag.Pos, name string) ([]diag.TextEdit, er
 		}
 	}
 	for _, path := range w.paths {
-		after, err := NewSession().Analyze(path, overlays)
+		session := sessions[path]
+		if session == nil {
+			session = NewSession()
+			if sessions != nil {
+				sessions[path] = session
+			}
+		}
+		after, err := session.Analyze(path, overlays)
 		if err != nil {
 			return nil, fmt.Errorf("proposed rename does not check: %w", err)
 		}

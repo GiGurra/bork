@@ -280,22 +280,7 @@ func (b *sourceIndexBuilder) declaration(file *syntax.File, pos diag.Pos, name, 
 	start := pos
 	depth := 0
 	found := false
-	// Source nodes inside interpolation holes are absent from the outer lexer.
-	// Their identifier positions are still exact checker metadata.
-	if pos.Line > 0 && pos.Line <= len(source.lines) && pos.Col > 0 {
-		line := source.lines[pos.Line-1]
-		if pos.Col-1 < len(line) {
-			fragment, _ := syntax.Lex(pos.File, []byte(line[pos.Col-1:]), &diag.List{})
-			found = len(fragment) > 0 && fragment[0].Kind == syntax.TIdent && fragment[0].Text == name
-		}
-	}
-	for _, token := range source.tokens {
-		if found {
-			break
-		}
-		if sourcePositionCompare(token.Pos, pos) < 0 {
-			continue
-		}
+	for _, token := range source.tokensAt(pos) {
 		switch token.Kind {
 		case syntax.LParen, syntax.LBrack:
 			depth++
@@ -331,23 +316,18 @@ func (b *sourceIndexBuilder) reference(pos, rawDef diag.Pos, prefix, suffix stri
 	if file == nil || pos.Line < 1 || pos.Line > len(file.lines) || pos.Col < 1 {
 		return
 	}
-	line := file.lines[pos.Line-1]
-	if pos.Col-1 >= len(line) {
-		return
-	}
-	// Qualified identifiers can begin at a package name. Choose the first
-	// matching name in the contiguous qualified source spelling.
+	// Source nodes identify exact tokens; qualified names arrive through
+	// referenceNamed. The fallback also exposes interpolation-hole tokens.
 	start := pos
 	found := false
-	fragment := line[pos.Col-1:]
-	tokens, _ := syntax.Lex(pos.File, []byte(fragment), &diag.List{})
+	tokens := file.tokensAt(pos)
 	for i := 0; i < len(tokens); i += 2 {
 		token := tokens[i]
 		if token.Kind != syntax.TIdent {
 			break
 		}
 		if token.Text == symbol.Name {
-			start.Col = pos.Col + token.Pos.Col - 1
+			start = token.Pos
 			found = true
 			break
 		}
@@ -557,17 +537,7 @@ func (b *sourceIndexBuilder) pathPositions(start diag.Pos, names []string) []dia
 	if file == nil || start.Line < 1 || start.Line > len(file.lines) || start.Col < 1 {
 		return nil
 	}
-	offset := 0
-	for i := 0; i < start.Line-1; i++ {
-		offset += len(file.lines[i]) + 1
-	}
-	offset += start.Col - 1
-	if offset >= len(file.file.Source) {
-		return nil
-	}
-	// Lex from the checked node itself: outer interpolation tokens hide their
-	// holes, and qualified names/copy paths can span whitespace and newlines.
-	tokens, _ := syntax.Lex(start.File, []byte(file.file.Source[offset:]), &diag.List{})
+	tokens := file.tokensAt(start)
 	var positions []diag.Pos
 	for _, token := range tokens {
 		if token.Kind == syntax.Dot {
@@ -579,12 +549,7 @@ func (b *sourceIndexBuilder) pathPositions(start diag.Pos, names []string) []dia
 		if len(positions) == len(names) || token.Kind != syntax.TIdent || token.Text != names[len(positions)] {
 			break
 		}
-		pos := token.Pos
-		pos.Line += start.Line - 1
-		if token.Pos.Line == 1 {
-			pos.Col += start.Col - 1
-		}
-		positions = append(positions, pos)
+		positions = append(positions, token.Pos)
 	}
 	return positions
 }
@@ -605,4 +570,49 @@ func (b *sourceIndexBuilder) contextVariant(expr *syntax.ContextName, variant *V
 	if len(positions) == 1 {
 		b.reference(positions[0], variant.Parent.Decl.Variants[variant.Index].Pos, "", "")
 	}
+}
+
+// Most nodes share the outer token stream. Only interpolation holes need
+// separate lexing, bounded by their enclosing token rather than the file tail.
+func (file *sourceIndexFile) tokensAt(pos diag.Pos) []syntax.Token {
+	index, exact := slices.BinarySearchFunc(file.tokens, pos, func(token syntax.Token, pos diag.Pos) int { return sourcePositionCompare(token.Pos, pos) })
+	if exact {
+		return file.tokens[index:]
+	}
+	offset := file.offset(pos)
+	if offset < 0 {
+		return nil
+	}
+	end := len(file.file.Source)
+	if index > 0 {
+		token := file.tokens[index-1]
+		if token.Kind == syntax.TInterp && sourcePositionCompare(pos, token.End) < 0 {
+			end = file.offset(token.End)
+		}
+	}
+	if end < offset {
+		return nil
+	}
+	tokens, _ := syntax.Lex(pos.File, []byte(file.file.Source[offset:end]), &diag.List{})
+	for i := range tokens {
+		if tokens[i].Pos.Line == 1 {
+			tokens[i].Pos.Col += pos.Col - 1
+		}
+		if tokens[i].End.Line == 1 {
+			tokens[i].End.Col += pos.Col - 1
+		}
+		tokens[i].Pos.Line += pos.Line - 1
+		tokens[i].End.Line += pos.Line - 1
+	}
+	return tokens
+}
+func (file *sourceIndexFile) offset(pos diag.Pos) int {
+	if pos.Line < 1 || pos.Line > len(file.lines) || pos.Col < 1 || pos.Col > len(file.lines[pos.Line-1])+1 {
+		return -1
+	}
+	offset := pos.Col - 1
+	for i := 0; i < pos.Line-1; i++ {
+		offset += len(file.lines[i]) + 1
+	}
+	return offset
 }

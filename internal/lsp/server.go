@@ -28,17 +28,19 @@ type packageState struct {
 	diagnostics []diag.Diagnostic
 }
 type server struct {
-	out                   io.Writer
-	version               string
-	docs                  map[string]document
-	packages              map[string]*packageState
-	diagnostics           map[string][]diag.Diagnostic
-	initialized, shutdown bool
-	snippets              bool
-	inlaySettings         inlayHintSettings
-	inlayRefreshSupport   bool
-	inlayRefreshID        uint64
-	workspaceRoots        []string
+	out                        io.Writer
+	version                    string
+	docs                       map[string]document
+	packages                   map[string]*packageState
+	diagnostics                map[string][]diag.Diagnostic
+	initialized, shutdown      bool
+	snippets                   bool
+	inlaySettings              inlayHintSettings
+	inlayRefreshSupport        bool
+	inlayRefreshID             uint64
+	workspaceRoots             []string
+	renameSessions             map[string]*driver.Session
+	renameVerificationSessions map[string]*driver.Session
 }
 type documentParams struct {
 	TextDocument struct {

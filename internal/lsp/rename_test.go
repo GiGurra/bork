@@ -92,6 +92,7 @@ fn Choice(input: model.Choice): Int {
 }
 
 func TestRenameInterpolationAndSameSpelledField(t *testing.T) {
+	s, path := newTestServer(t, "fn main() {}\n")
 	for _, tc := range []struct {
 		src   string
 		pos   position
@@ -102,7 +103,7 @@ func TestRenameInterpolationAndSameSpelledField(t *testing.T) {
 		{"type Item = { item: Int }\nfn Use(item: Item): Int { item.item }\n", position{1, 28}, "input", 2},
 		{"type Item = { item: Int }\nfn Use(item: Item): Int { item.item }\n", position{0, 15}, "value", 2},
 	} {
-		s, path := newTestServer(t, tc.src)
+		replaceRenameSource(t, s, path, tc.src)
 		result, err := s.feature("textDocument/rename", path, documentParams{Position: tc.pos, NewName: tc.name})
 		if err != nil {
 			t.Fatal(err)
@@ -118,9 +119,10 @@ func TestRenameInterpolationAndSameSpelledField(t *testing.T) {
 }
 
 func TestRenameSpacedVariantPatterns(t *testing.T) {
+	s, path := newTestServer(t, "fn main() {}\n")
 	for _, qualification := range []string{"Choice . Some", "Choice.\n Some"} {
 		src := "type Choice = sealed { Some { value: Int }, Empty }\nfn Use(x: Choice): Int { match (x) { " + qualification + " { value } => value, Choice.Empty => 0 } }\n"
-		s, path := newTestServer(t, src)
+		replaceRenameSource(t, s, path, src)
 		result, err := s.feature("textDocument/rename", path, documentParams{Position: position{0, 24}, NewName: "Present"})
 		if err != nil {
 			t.Fatal(err)
@@ -135,13 +137,14 @@ func TestRenameSpacedVariantPatterns(t *testing.T) {
 }
 
 func TestRenameMultilineContextVariants(t *testing.T) {
+	s, path := newTestServer(t, "fn main() {}\n")
 	for _, tail := range []string{"Some", "Some { value: 1 }"} {
 		fields := ""
 		if strings.Contains(tail, "{") {
 			fields = " { value: Int }"
 		}
 		src := "type Choice = sealed { Some" + fields + ", Empty }\nfn Use(): Choice { .\n " + tail + " }\n"
-		s, path := newTestServer(t, src)
+		replaceRenameSource(t, s, path, src)
 		result, err := s.feature("textDocument/rename", path, documentParams{Position: position{0, 24}, NewName: "Present"})
 		if err != nil {
 			t.Fatal(err)
@@ -255,5 +258,16 @@ func BenchmarkWorkspaceRenameHTTPServer(b *testing.B) {
 		if _, err := workspace.Rename(*def, "initialStore"); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func replaceRenameSource(t *testing.T, s *server, path, source string) {
+	t.Helper()
+	s.docs[path] = document{source, s.docs[path].version + 1}
+	if err := s.check(); err != nil {
+		t.Fatal(err)
+	}
+	if pkg := s.state(path); pkg == nil || pkg.analysis == nil || pkg.stale {
+		t.Fatalf("changed fixture did not check: %s", s.out)
 	}
 }
