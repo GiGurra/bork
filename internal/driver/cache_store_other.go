@@ -10,3 +10,5 @@ func openCacheFile(_ *os.Root, _ string, _ int, _ os.FileMode) (*os.File, error)
 func lockCacheFile(_ *os.File) error { return errInvalidCacheArtifact }
 
 func tryLockCacheFile(_ *os.File) error { return errInvalidCacheArtifact }
+
+func cacheLockBusy(_ error) bool { return false }

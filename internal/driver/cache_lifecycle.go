@@ -41,6 +41,7 @@ type cacheResultEntry struct {
 	namespace, key [sha256.Size]byte
 	bytes          int64
 	used           time.Time
+	absent         bool
 }
 
 // resultInventory runs under MUTATION. It counts recognizable artifacts even
@@ -67,6 +68,10 @@ func resultInventory(root *os.Root) ([]cacheResultEntry, error) {
 			return nil, err
 		}
 		remaining -= len(names)
+		if len(names) == 0 {
+			_ = root.Remove(dir)
+			continue
+		}
 		for _, name := range names {
 			path := filepath.Join(dir, name.Name())
 			if strings.HasPrefix(name.Name(), ".tmp-") {
@@ -92,10 +97,22 @@ func resultInventory(root *os.Root) ([]cacheResultEntry, error) {
 			if !info.Mode().IsRegular() {
 				return nil, errInvalidCacheArtifact
 			}
-			entries = append(entries, cacheResultEntry{path: path, namespace: digest, key: key, bytes: info.Size(), used: info.ModTime()})
+			entry := cacheResultEntry{path: path, namespace: digest, key: key, bytes: info.Size(), used: info.ModTime()}
+			if target := cacheResultTarget(root, entry); target != "" {
+				if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
+					entry.absent = true
+				}
+			}
+			entries = append(entries, entry)
 		}
 	}
 	slices.SortFunc(entries, func(a, b cacheResultEntry) int {
+		if a.absent != b.absent {
+			if a.absent {
+				return -1
+			}
+			return 1
+		}
 		if a.used.Before(b.used) {
 			return -1
 		}
@@ -156,7 +173,7 @@ func (s cacheStore) reserveResult(root *os.Root, key [sha256.Size]byte, bytes in
 		}
 	}
 	for _, entry := range entries {
-		if used+bytes <= limits.resultBytes && count+added <= limits.entries {
+		if !entry.absent && used+bytes <= limits.resultBytes && count+added <= limits.entries {
 			return nil
 		}
 		if entry.namespace == s.namespace && entry.key == key {
