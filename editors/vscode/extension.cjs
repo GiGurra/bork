@@ -57,7 +57,8 @@ async function activate(context) {
       transport: TransportKind.stdio,
     }, {
       documentSelector: [{ scheme: 'file', language: 'bork' }],
-      synchronize: { fileEvents: watchers },
+      synchronize: { fileEvents: watchers, configurationSection: "bork" },
+      initializationOptions: { inlayHints: vscode.workspace.getConfiguration("bork").get("inlayHints") },
       outputChannel: output,
     });
     client = next;

@@ -38,7 +38,7 @@ function loadExtension(startError) {
     StatusBarAlignment: { Left: 1 },
     commands: { registerCommand(name, fn) { calls.commands[name] = fn; return { dispose() {} }; } },
     workspace: {
-      getConfiguration: () => ({ get: () => calls.serverPath }),
+      getConfiguration: () => ({ get: key => key === "inlayHints" ? { types: true, parameters: false, facts: false } : calls.serverPath }),
       createFileSystemWatcher: pattern => {
         calls.watchers.push(pattern);
         return { dispose() {} };
@@ -70,6 +70,8 @@ test('client launches configured binary over stdio and disposes on deactivation'
   assert.equal(calls.server.args.join(' '), 'lsp');
   assert.equal(calls.server.transport, 0);
   assert.equal(calls.options.documentSelector[0].language, 'bork');
+  assert.equal(calls.options.synchronize.configurationSection, 'bork');
+  assert.equal(calls.options.initializationOptions.inlayHints.types, true);
   assert.equal(calls.watchers.includes('**/bork.mod'), true);
   assert.equal(calls.watchers.includes('**/bork.sum'), true);
   assert.equal(calls.watchers.includes('**/go-deps.mod'), true);

@@ -252,25 +252,7 @@ func DescribeFacts(info *Info, fn *Func, x Expr, site diag.Pos, where string, ev
 		}
 		return nil, nil, nil
 	}
-	var facts []KnownFact
-	seen := map[KnownFact]bool{}
-	for _, k := range f.declared(x, at, 0) {
-		text := knownText(k, fn.Pkg)
-		if text == "" {
-			continue
-		}
-		fact := KnownFact{Constraint: text, Path: k.path}
-		if !seen[fact] {
-			facts = append(facts, fact)
-			seen[fact] = true
-		}
-	}
-	sort.Slice(facts, func(i, j int) bool {
-		if facts[i].Path != facts[j].Path {
-			return facts[i].Path < facts[j].Path
-		}
-		return facts[i].Constraint < facts[j].Constraint
-	})
+	facts := describedFacts(f, x, at, fn.Pkg)
 	if where == "" {
 		return facts, nil, nil
 	}
@@ -326,6 +308,29 @@ func DescribeFacts(info *Info, fn *Func, x Expr, site diag.Pos, where string, ev
 		}
 	}
 	return facts, proof, nil
+}
+
+func describedFacts(f *factChecker, x Expr, at env, from *Package) []KnownFact {
+	var facts []KnownFact
+	seen := map[KnownFact]bool{}
+	for _, k := range f.declared(x, at, 0) {
+		text := knownText(k, from)
+		if text == "" {
+			continue
+		}
+		fact := KnownFact{Constraint: text, Path: k.path}
+		if !seen[fact] {
+			facts = append(facts, fact)
+			seen[fact] = true
+		}
+	}
+	sort.Slice(facts, func(i, j int) bool {
+		if facts[i].Path != facts[j].Path {
+			return facts[i].Path < facts[j].Path
+		}
+		return facts[i].Constraint < facts[j].Constraint
+	})
+	return facts
 }
 
 func knownText(k known, from *Package) string {

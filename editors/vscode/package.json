@@ -54,6 +54,21 @@
           "default": "",
           "scope": "machine",
           "description": "Optional debugger executable override. Leave empty to use the debugger installed by bork."
+        },
+        "bork.inlayHints.types": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inferred binding types."
+        },
+        "bork.inlayHints.parameters": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show parameter names for positional arguments to declared functions and methods."
+        },
+        "bork.inlayHints.facts": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show compiler-proven facts on bindings."
         }
       }
     },

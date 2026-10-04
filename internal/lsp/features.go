@@ -28,6 +28,8 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		return s.semanticTokens(path, src, nil)
 	case "textDocument/semanticTokens/range":
 		return s.semanticTokens(path, src, &p.Range)
+	case "textDocument/inlayHint":
+		return s.inlayHints(path, p)
 	case "textDocument/codeLens":
 		return codeLenses(path, src), nil
 	case "bork/tests":

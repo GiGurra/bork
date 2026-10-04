@@ -15,6 +15,8 @@ type message struct {
 	ID      json.RawMessage `json:"id,omitempty"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   json.RawMessage `json:"error,omitempty"`
 }
 type rpcError struct {
 	Code    int    `json:"code"`
