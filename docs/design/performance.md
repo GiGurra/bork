@@ -661,3 +661,48 @@ the config maximum records that variation. HTTP's median adds about 10 ms, which
 should be revisited if accounting grows with a fuller cache. Cache-full, busy and
 unsupported cases still build through temporary staging. These are ordinary CLI
 emission measurements, separate from first-request Session inventory seeding.
+
+### Cache population and accounting cost
+
+Automatic disk caching must keep ordinary per-build overhead flat as more
+programs populate the cache. The age-based policy supersedes size/count admission
+and ledger/low-water proposals: no global listing or eviction is allowed on the
+per-build path. Measure lookup, hits and publication at 1, 1,000, 10,000 and
+100,000 entries for both layers, including new-key publication into a populated
+cache. Measure bounded daily trim separately. Replacing the same key alone does
+not establish this bar.
+
+The current full-inventory implementation fails that requirement. On Linux,
+Go 1.27.1, Ryzen 7 5700G, five warm samples of three iterations produced the
+following medians and ranges in milliseconds:
+
+| Measured work | 1 entry | 128 entries | 512 entries | 1024 entries |
+| --- | ---: | ---: | ---: | ---: |
+| Result admission | 0.168 (0.160–0.194) | 13.432 (13.235–14.119) | 54.027 (53.665–54.786) | 108.610 (107.987–110.040) |
+| Config staging publication | 1.065 (1.051–10.089) | 31.454 (31.137–32.066) | 124.372 (123.134–127.996) | 242.887 (241.358–249.794) |
+| HTTP staging publication | 1.172 (1.072–10.163) | 32.204 (31.827–32.539) | 123.034 (121.294–125.206) | 244.695 (243.358–247.724) |
+
+These isolated benchmarks use private temporary cache roots. Entry counts
+include the measured entry. Result fixtures have valid request headers and
+small recognizable envelopes, but omit receipts and payloads: admission reads
+only the bounded request prefix. Staging uses actual emitted config/HTTP bytes
+for the measured target; other entries have a small Go main, module and metadata
+pointing at the same existing program root. The target is primed before timing.
+Checking, generation and Go subprocesses are excluded from the measured loop.
+Result timing covers admission only; staging timing includes locks, complete
+publication and release. The two rows measure different amounts of work.
+
+```sh
+go test ./internal/driver -run '^$' -bench '^(BenchmarkGoStageAccounting|BenchmarkCacheResultAccounting)$' -benchtime=3x -count=5
+```
+
+A preliminary 128-entry staging CPU profile with four-node synthetic trees
+(before adding their module files) attributed 1.96 s to `stageInventory` out of
+2.02 s in `stageGoStable`. Filesystem traversal/path resolution dominated;
+staging does not fsync. Whole-process CPU profiles include untimed setup.
+
+The design now removes these scans from the build path entirely. Hourly use
+marking and bounded off-path daily trim replace total-byte/count accounting.
+The measurements above preserve the superseded policy baseline; the new layout
+and maintenance implementation must establish the larger-population acceptance
+matrix before auto-on. See [disk-cache lifecycle](disk-cache.md#age-based-lifecycle-and-direct-lookup).
