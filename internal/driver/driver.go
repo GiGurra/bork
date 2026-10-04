@@ -344,6 +344,12 @@ func buildGoWithMode(files []*syntax.File, goSrc []byte, out string, module *goM
 		return err
 	}
 	defer cleanup()
+	return buildStagedGo(files, absOut, dir, pinned, context)
+}
+
+// buildStagedGo builds an already-published stage. Its caller owns the stage
+// lock and cleanup, including any observation of the effective staged bytes.
+func buildStagedGo(files []*syntax.File, absOut, dir string, pinned bool, context *goContext) error {
 	cmd := context.command("build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
