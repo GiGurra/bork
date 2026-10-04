@@ -41,7 +41,10 @@ test('client launches configured binary over stdio and stops on deactivation', a
   assert.equal(calls.server.transport, 0);
   assert.equal(calls.options.documentSelector[0].language, 'bork');
   assert.equal(calls.watchers.includes('**/bork.mod'), true);
-  assert.equal(context.subscriptions.length, 5);
+  assert.equal(calls.watchers.includes('**/bork.sum'), true);
+  assert.equal(calls.watchers.includes('**/go-deps.mod'), true);
+  assert.equal(calls.watchers.includes('**/go-deps.sum'), true);
+  assert.equal(context.subscriptions.length, calls.watchers.length + 1);
   await extension.deactivate();
   assert.equal(calls.stopped, true);
 });

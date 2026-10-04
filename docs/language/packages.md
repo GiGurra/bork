@@ -259,7 +259,7 @@ See the [assemble example](../../examples/assemble/main.bork).
 
 Previous: [Typed interpolation](interpolators.md) · Next: [Calling Go](go-interop.md) · [All pages](../README.md#the-language)
 
-The [library/consumer example](../../testdata/libraries/README.md) includes a
+The [library/consumer example](https://github.com/GiGurra/bork/tree/main/testdata/libraries) includes a
 library test, committed manifests and checksums, and an offline proxy test.
 Library authors can bind to Go helper packages in their own repository while
 checking or testing before publication. Bork stages a local replacement only in

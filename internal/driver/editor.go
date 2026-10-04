@@ -30,7 +30,7 @@ func (s *Session) Analyze(path string, overlays map[string]string) (*EditorAnaly
 	defer s.mu.Unlock()
 	defer func() { phase(s.observe, "") }()
 	phase(s.observe, "configuration")
-	context := captureSessionGoContextWithSettings(s.editorContext, append(slices.Clone(s.goSettings), "GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local"))
+	context := captureSessionGoContextWithSettings(s.editorContext, append(slices.Clone(s.goSettings), "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local"))
 	s.editorContext = context
 	phase(s.observe, "validate")
 	if a := s.editor; a != nil && s.editorPath == path && maps.Equal(a.overlays, overlays) &&

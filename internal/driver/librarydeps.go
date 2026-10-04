@@ -84,7 +84,7 @@ func resolveLibraryGraph(dir string, reader sourceReader, pinned []byte, readonl
 		}
 		var settings []string
 		if dependenciesLocalOnly(reader) {
-			settings = []string{"GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local"}
+			settings = []string{"GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local"}
 		}
 		out, err := dependencyGoWithSettings(dir, settings, "mod", "download", "-json", "all")
 		if err != nil {

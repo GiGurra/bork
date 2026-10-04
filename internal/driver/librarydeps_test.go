@@ -475,6 +475,8 @@ func TestLibraryEditorUsesCachedSources(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("GOPROXY", server.URL)
+	t.Setenv("GOPRIVATE", "example.com")
+	t.Setenv("GONOPROXY", "example.com")
 	session := NewSession()
 	analysis, err := session.Analyze(root, nil)
 	if err != nil {
@@ -493,7 +495,7 @@ func TestLibraryEditorUsesCachedSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("GOMODCACHE", t.TempDir())
-	if _, err := session.Analyze(root, nil); err == nil || !strings.Contains(err.Error(), "run bork deps download") {
+	if _, err := session.Analyze(root, nil); err == nil || !strings.Contains(err.Error(), "run bork deps download") || !strings.Contains(err.Error(), "GOPROXY=off") {
 		t.Fatalf("missing dependency cache: %v", err)
 	}
 	if requests.Load() != 0 {

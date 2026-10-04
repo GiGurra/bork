@@ -191,14 +191,10 @@ launch `bork lsp` over stdio.
 - [Documentation](docs/README.md): the tour, a page for each part of the language, and the command-line reference.
 - [Standard packages](docs/std/README.md): files, HTTP, JSON, SQL, time, and more.
 - [Dependency tooling](docs/cli.md#deps): pin Go and bork libraries in `bork.mod` with `bork deps`; commit `bork.sum` and generated `go.mod`.
+- [Library and consumer example](testdata/libraries/README.md): publish, pin and upgrade a Bork library, with an offline proxy test. Scripts accept Bork libraries through `bork:require`; editor navigation keeps cached sources read-only.
 - [Examples](docs/examples.md): runnable programs, from `wc` to an HTTP service.
 - [Contributing and design notes](docs/contributing.md): the grammar, requirements, and design documents.
 
 ## License
 
 [MIT](LICENSE)
-
-A [library and consumer example](testdata/libraries/README.md) shows publishing,
-pinning and upgrading a Bork library, with an offline proxy test. Scripts accept
-Bork libraries in their existing `bork:require` headers; editor navigation uses
-cached dependency sources and keeps them read-only.
