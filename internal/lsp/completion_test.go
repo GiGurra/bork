@@ -164,20 +164,27 @@ func TestCompletionImportedPackageAndScope(t *testing.T) {
 	}
 }
 
-func TestCompletionStdioProtocol(t *testing.T) {
+type protocolCompletionItem struct {
+	Label               string     `json:"label"`
+	Detail              string     `json:"detail"`
+	TextEdit            textEdit   `json:"textEdit"`
+	AdditionalTextEdits []textEdit `json:"additionalTextEdits"`
+	InsertTextFormat    int        `json:"insertTextFormat"`
+}
+
+func protocolCompletion(t *testing.T, src, current string, p position) []protocolCompletionItem {
+	t.Helper()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.bork")
-	src := "type User = { name: String }\nfn main() uses io {\n  user = User { name: \"Ada\" }\n  println(user.name)\n}\n"
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	current := strings.Replace(src, "println(user.name)", "user.na", 1)
 	var in, out bytes.Buffer
 	for _, m := range []map[string]any{
-		{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}},
+		{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{"capabilities": map[string]any{"textDocument": map[string]any{"completion": map[string]any{"completionItem": map[string]any{"snippetSupport": true}}}}}},
 		{"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": map[string]any{"textDocument": map[string]any{"uri": fileURI(file), "version": 1, "text": src}}},
 		{"jsonrpc": "2.0", "method": "textDocument/didChange", "params": map[string]any{"textDocument": map[string]any{"uri": fileURI(file), "version": 2}, "contentChanges": []any{map[string]any{"text": current}}}},
-		{"jsonrpc": "2.0", "id": 2, "method": "textDocument/completion", "params": map[string]any{"textDocument": map[string]any{"uri": fileURI(file)}, "position": position{3, 9}}},
+		{"jsonrpc": "2.0", "id": 2, "method": "textDocument/completion", "params": map[string]any{"textDocument": map[string]any{"uri": fileURI(file)}, "position": p}},
 		{"jsonrpc": "2.0", "id": 3, "method": "shutdown"},
 		{"jsonrpc": "2.0", "method": "exit"},
 	} {
@@ -209,12 +216,8 @@ func TestCompletionStdioProtocol(t *testing.T) {
 			t.Fatal(err)
 		}
 		var response struct {
-			ID     int `json:"id"`
-			Result []struct {
-				Label    string   `json:"label"`
-				Detail   string   `json:"detail"`
-				TextEdit textEdit `json:"textEdit"`
-			} `json:"result"`
+			ID     int                      `json:"id"`
+			Result []protocolCompletionItem `json:"result"`
 		}
 		var envelope struct {
 			ID int `json:"id"`
@@ -228,17 +231,57 @@ func TestCompletionStdioProtocol(t *testing.T) {
 		if err := json.Unmarshal(body, &response); err != nil {
 			t.Fatal(err)
 		}
-		for _, item := range response.Result {
-			if item.Label == "name" {
-				if !strings.Contains(item.Detail, "Stale") || item.TextEdit.NewText != "name" {
-					t.Fatalf("completion: %+v", item)
-				}
-				return
-			}
-		}
-		t.Fatalf("missing field completion: %s", body)
+		return response.Result
 	}
 	t.Fatal("missing completion response")
+	return nil
+}
+
+func TestCompletionStdioProtocol(t *testing.T) {
+	src := "type User = { name: String }\nfn main() uses io {\n  user = User { name: \"Ada\" }\n  println(user.name)\n}\n"
+	current := strings.Replace(src, "println(user.name)", "user.na", 1)
+	for _, item := range protocolCompletion(t, src, current, position{3, 9}) {
+		if item.Label == "name" {
+			if !strings.Contains(item.Detail, "Stale") || item.TextEdit.NewText != "name" {
+				t.Fatalf("completion: %+v", item)
+			}
+			return
+		}
+	}
+	t.Fatal("missing field completion")
+}
+
+func TestCompletionProtocolFeatures(t *testing.T) {
+	for _, tc := range []struct {
+		name, src, current, label, text string
+		imported                        bool
+	}{
+		{name: "local", src: "fn main() uses io { value = 42; println(value) }\n", current: "fn main() uses io { value = 42; println(va|) }\n", label: "value", text: "value"},
+		{name: "argument", src: "fn greet(name: String): String { name }\nfn main() uses io { println(greet(\"Ada\")) }\n", current: "fn greet(name: String): String { name }\nfn main() uses io { println(greet(na|)) }\n", label: "name", text: "name: "},
+		{name: "literal", src: "type User = { name: String }\nfn main() { user = User { name: \"Ada\" } }\n", current: "type User = { name: String }\nfn main() { user = User { na| } }\n", label: "name", text: "name: "},
+		{name: "pattern", src: "type User = { name: String }\nfn read(user: User): String { match (user) { User { name } => name } }\nfn main() {}\n", current: "type User = { name: String }\nfn read(user: User): String { match (user) { User { na| } => name } }\nfn main() {}\n", label: "name", text: "name"},
+		{name: "match", src: "type Choice = sealed { First, Second }\nfn read(c: Choice): Int { match (c) { Choice.First => 1, Choice.Second => 2 } }\nfn main() {}\n", current: "type Choice = sealed { First, Second }\nfn read(c: Choice): Int { match (c) { Ch| } }\nfn main() {}\n", label: "Choice.First", text: "Choice.First => "},
+		{name: "snippet", src: "fn main() {}\n", current: "fn main() {}\nfn|", label: "fn snippet"},
+		{name: "autoimport", src: "fn main() uses io { println(42) }\n", current: "fn main() uses io { println(Enc|) }\n", label: "Encode", text: "json.Encode", imported: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			offset := strings.IndexByte(tc.current, '|')
+			current := strings.Replace(tc.current, "|", "", 1)
+			items := protocolCompletion(t, tc.src, current, lspPosition(current, offsetPos(current, offset)))
+			for _, item := range items {
+				if item.Label == tc.label && (tc.text == "" || item.TextEdit.NewText == tc.text) {
+					if tc.imported && len(item.AdditionalTextEdits) == 0 {
+						t.Fatal("missing import edit")
+					}
+					if tc.name == "snippet" && item.InsertTextFormat != 2 {
+						t.Fatal("missing snippet format")
+					}
+					return
+				}
+			}
+			t.Fatalf("missing %s: %+v", tc.label, items)
+		})
+	}
 }
 
 func BenchmarkCompletionHTTPServer(b *testing.B) {
@@ -264,5 +307,46 @@ func BenchmarkCompletionHTTPServer(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.completion(pkg, file, current, p)
+	}
+}
+
+func TestCompletionAllBinderScopes(t *testing.T) {
+	for _, tc := range []struct{ name, src, token string }{
+		{"loop", "fn main() uses io { for (value in [1]) { println(value) } }\n", "value)"},
+		{"pattern", "type User = { name: String }\nfn read(user: User): String { match (user) { User { name } => name } }\nfn main() {}\n", "name } }"},
+		{"test", "test \"local\" { value = 42; assert(value == 42) }\nfn main() {}\n", "value =="},
+		{"lambda", "fn main() uses io { result = [1].map((value: Int) => value + 1); println(result) }\n", "value +"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, path := newTestServer(t, tc.src)
+			name := strings.Fields(tc.token)[0]
+			if tc.name == "loop" {
+				name = "value"
+			}
+			marked := strings.Replace(tc.src, tc.token, name+"|"+strings.TrimPrefix(tc.token, name), 1)
+			if completionItem(completeAt(t, s, path, marked), name) == nil {
+				t.Fatalf("missing %s in %s", name, tc.name)
+			}
+		})
+	}
+}
+func TestCompletionVisibilityAndCompoundMatch(t *testing.T) {
+	src := "import \"bork/json\"\nfn main() uses io { println(json.Encode(42)) }\n"
+	s, path := newTestServer(t, src)
+	items := completeAt(t, s, path, strings.Replace(src, "42", "In|t", 1))
+	if item := completionItem(items, "Indent"); item != nil && item["textEdit"].(textEdit).NewText == "Indent" {
+		t.Fatal("offered imported type without qualifier")
+	}
+	src = "import \"bork/http\"\nfn read(cert: http.Certificate) { match (cert) { _ => {} } }\nfn main() {}\n"
+	s, path = newTestServer(t, src)
+	items = completeAt(t, s, path, strings.Replace(src, "_ => {}", "|_ => {}", 1))
+	if completionItem(items, "http.Certificate.certificate") != nil {
+		t.Fatal("offered inaccessible private variant")
+	}
+	src = "type Choice = sealed { First, Second }\nfn make(): Choice { Choice.First }\nfn read(): Int { match (make()) { Choice.First => 1, Choice.Second => 2 } }\nfn main() uses io { println(read()) }\n"
+	s, path = newTestServer(t, src)
+	items = completeAt(t, s, path, strings.Replace(src, "Choice.First => 1", "Ch|oice.First => 1", 1))
+	if completionItem(items, "Choice.First") == nil || completionItem(items, "Choice.Second") == nil {
+		t.Fatalf("compound match: %+v", items)
 	}
 }

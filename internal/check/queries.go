@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -452,7 +453,7 @@ func writtenTypeAtomText(t *syntax.TypeExpr) string {
 // EditorType resolves written type syntax with the compiler's normal package,
 // alias and generic rules. Invalid or inaccessible types return Invalid.
 func EditorType(info *Info, from *Package, typ *syntax.TypeExpr) Type {
-	c := queryChecker(info, from)
+	c := editorTypeQueryChecker(info, from)
 	t := c.resolveType(typ)
 	if c.diags.Len() != 0 {
 		return Invalid
@@ -473,7 +474,7 @@ func EditorCallable(info *Info, from *Package, name string) *CallableDescription
 // specialized constructor. It returns declaration fields for an unresolved
 // generic head and substituted fields for an explicitly specialized one.
 func EditorVariantFields(info *Info, from *Package, owner *syntax.TypeExpr, name string) []*Field {
-	c := queryChecker(info, from)
+	c := editorTypeQueryChecker(info, from)
 	var typ Type
 	if len(owner.Args) == 0 {
 		typ = c.typeNamed(owner.Name)
@@ -489,4 +490,40 @@ func EditorVariantFields(info *Info, from *Package, owner *syntax.TypeExpr, name
 		return nil
 	}
 	return variant.Fields
+}
+
+// EditorVisibleTypes includes only names available without a package qualifier.
+func EditorVisibleTypes(info *Info, from *Package) map[string]Type {
+	c := queryChecker(info, from)
+	out := maps.Clone(basicTypes)
+	for _, pkg := range []*Package{c.preludePkg, from} {
+		if pkg == nil {
+			continue
+		}
+		for name, entry := range pkg.types {
+			out[name] = c.resolveDecl(entry)
+		}
+	}
+	return out
+}
+
+// EditorVisibleVariants applies the compiler's constructor/pattern visibility.
+func EditorVisibleVariants(info *Info, from *Package, sealed *Sealed) []*Variant {
+	c := queryChecker(info, from)
+	var out []*Variant
+	for _, v := range sealed.Variants {
+		if c.visibleVariant(diag.Pos{}, sealed, v.Name) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func editorTypeQueryChecker(info *Info, from *Package) *checker {
+	copy := *info
+	copy.writtenTypes = maps.Clone(info.writtenTypes)
+	copy.typeUses = maps.Clone(info.typeUses)
+	c := queryChecker(&copy, from)
+	c.appliedWhere = map[*syntax.TypeExpr]bool{}
+	return c
 }

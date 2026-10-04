@@ -64,7 +64,7 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 						depth--
 						if depth == 0 {
 							if i > 0 && prior[i-1].Kind == syntax.KwMatch && i+1 < open-1 && editorLabelPosition(prior[open+1:]) {
-								for _, c := range a.EditorMatchArms(a.editorSnapshotPosition(file, src, prior[i+1].Pos)) {
+								for _, c := range a.EditorMatchArms(a.editorSnapshotPosition(file, src, prior[i-1].Pos)) {
 									add(c)
 								}
 								return out, true

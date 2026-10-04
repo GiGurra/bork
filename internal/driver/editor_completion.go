@@ -44,7 +44,18 @@ func (a *EditorAnalysis) EditorSymbols(pos diag.Pos) []EditorCompletion {
 	var out []EditorCompletion
 	seen := map[string]bool{}
 	add := func(name, detail, kind string, rank int, typ check.Type) {
-		if name == "" || name == "_" || seen[name] {
+		if name == "" || name == "_" {
+			return
+		}
+		if seen[name] {
+			if rank == 0 {
+				for i, c := range out {
+					if c.Name == name {
+						out[i] = EditorCompletion{Name: name, Detail: detail, Kind: kind, Rank: rank, typeOf: typ}
+						break
+					}
+				}
+			}
 			return
 		}
 		seen[name] = true
@@ -52,21 +63,98 @@ func (a *EditorAnalysis) EditorSymbols(pos diag.Pos) []EditorCompletion {
 	}
 	before := func(p diag.Pos) bool { return p.Line < pos.Line || p.Line == pos.Line && p.Col <= pos.Col }
 	inside := func(body *check.Block) bool { return body != nil && before(body.Pos()) && !before(body.End) }
-	for _, fn := range a.program.info.FuncOf {
+	tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
+	ends := map[diag.Pos]diag.Pos{}
+	for _, t := range tokens {
+		ends[t.Pos] = t.End
+	}
+	exprEnd := func(x check.Expr) diag.Pos {
+		end := x.Pos()
+		check.WalkComptime(x, func(child check.Expr) bool {
+			at := child.TokenPos()
+			if block, ok := child.(*check.Block); ok {
+				at = block.End
+			}
+			if at.File != file.Path {
+				return false
+			}
+			if tokenEnd, ok := ends[at]; ok {
+				at = tokenEnd
+			}
+			if at.Line > end.Line || at.Line == end.Line && at.Col > end.Col {
+				end = at
+			}
+			return true
+		})
+		return end
+	}
+	insideExpr := func(x check.Expr) bool {
+		if x == nil || !before(x.Pos()) {
+			return false
+		}
+		if block, ok := x.(*check.Block); ok {
+			return inside(block)
+		}
+		end := exprEnd(x)
+		return pos.Line < end.Line || pos.Line == end.Line && pos.Col <= end.Col
+	}
+	addVar := func(v *check.Var) {
+		if v != nil {
+			add(v.Name, check.TypeText(v.Type, from), "variable", 0, v.Type)
+		}
+	}
+	var addPattern func(*check.Pat)
+	addPattern = func(p *check.Pat) {
+		if p == nil {
+			return
+		}
+		addVar(p.Var)
+		addPattern(p.Sub)
+		addPattern(p.Rest)
+		for _, field := range p.Fields {
+			addPattern(field.Pat)
+		}
+		for _, elem := range p.Elems {
+			addPattern(elem)
+		}
+	}
+	for _, fn := range a.editorFunctions() {
 		if fn.Decl.Pos.File != file.Path || !inside(fn.Body) {
 			continue
 		}
 		for _, v := range fn.ParamVars {
-			add(v.Name, check.TypeText(v.Type, from), "variable", 0, v.Type)
+			addVar(v)
 		}
 		check.WalkComptime(fn.Body, func(x check.Expr) bool {
-			if block, ok := x.(*check.Block); ok {
-				if !inside(block) {
+			switch x := x.(type) {
+			case *check.Block:
+				if !inside(x) {
 					return false
 				}
-				for _, stmt := range block.Stmts {
-					if let, ok := stmt.(*check.Let); ok && before(let.Pos) {
-						add(let.Var.Name, check.TypeText(let.Var.Type, from), "variable", 0, let.Var.Type)
+				for _, stmt := range x.Stmts {
+					if let, ok := stmt.(*check.Let); ok && before(exprEnd(let.Value)) && !insideExpr(let.Value) {
+						addVar(let.Var)
+					}
+				}
+			case *check.For:
+				if inside(x.Body) {
+					addVar(x.Var)
+				}
+			case *check.ScopeBlock:
+				if inside(x.Body) {
+					addVar(x.Var)
+				}
+			case *check.Lambda:
+				if !insideExpr(x.Body) {
+					return false
+				}
+				for _, param := range x.Params {
+					addVar(param)
+				}
+			case *check.Match:
+				for _, arm := range x.Arms {
+					if insideExpr(arm.Body) || insideExpr(arm.Pat.Guard) {
+						addPattern(arm.Pat)
 					}
 				}
 			}
@@ -78,7 +166,7 @@ func (a *EditorAnalysis) EditorSymbols(pos diag.Pos) []EditorCompletion {
 			add(fn.Decl.Name, check.TypeText(&check.FuncType{Params: fn.Params, Result: fn.Result, Effects: fn.Effects}, from), "function", 1, nil)
 		}
 	}
-	for name, typ := range a.program.info.Named {
+	for name, typ := range check.EditorVisibleTypes(a.program.info, from) {
 		add(name, check.TypeText(typ, from), "type", 1, typ)
 	}
 	for _, b := range a.program.info.PackageBindings {
@@ -170,8 +258,20 @@ func (a *EditorAnalysis) EditorMatchArms(pos diag.Pos) []EditorCompletion {
 		return nil
 	}
 	pos.File = file.Path
-	selected, err := describe.Lookup(a.program.files, a.program.info, pos, []byte(file.Source))
-	if err != nil {
+	var typ check.Type
+	for _, fn := range a.editorFunctions() {
+		if fn.Decl.Pos.File != file.Path {
+			continue
+		}
+		check.WalkComptime(fn.Body, func(x check.Expr) bool {
+			if m, ok := x.(*check.Match); ok && m.Pos() == pos {
+				typ = m.X.Type()
+				return false
+			}
+			return true
+		})
+	}
+	if typ == nil {
 		return nil
 	}
 	var out []EditorCompletion
@@ -180,7 +280,7 @@ func (a *EditorAnalysis) EditorMatchArms(pos diag.Pos) []EditorCompletion {
 		switch t := typ.(type) {
 		case *check.Sealed:
 			owner := strings.Split(check.TypeText(t, from), "[")[0]
-			for _, v := range t.Variants {
+			for _, v := range check.EditorVisibleVariants(a.program.info, from, t) {
 				name := owner + "." + v.Name
 				text := name
 				if len(v.Fields) > 0 {
@@ -201,7 +301,7 @@ func (a *EditorAnalysis) EditorMatchArms(pos diag.Pos) []EditorCompletion {
 			out = append(out, EditorCompletion{Name: name, Text: fmt.Sprintf("value: %s => ", name), Detail: "match arm", Kind: "type"})
 		}
 	}
-	add(selected.Type)
+	add(typ)
 	return out
 }
 
@@ -303,4 +403,12 @@ func (a *EditorAnalysis) editorSnapshotPosition(path, current string, pos diag.P
 	line := strings.Count(old[:offset], "\n") + 1
 	start := strings.LastIndexByte(old[:offset], '\n') + 1
 	return diag.Pos{File: path, Line: line, Col: offset - start + 1}
+}
+
+func (a *EditorAnalysis) editorFunctions() []*check.Func {
+	out := append([]*check.Func{}, a.program.info.Tests...)
+	for _, fn := range a.program.info.FuncOf {
+		out = append(out, fn)
+	}
+	return out
 }
