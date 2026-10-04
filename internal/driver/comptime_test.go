@@ -9,9 +9,11 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestComptimePanic(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
 	// Panics are build failures, never silently deferred to runtime.
@@ -25,6 +27,7 @@ func TestComptimePanic(t *testing.T) {
 }
 
 func TestComptimeLiteralEvaluation(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"table facts and dependencies", `pred nonEmpty(xs:List[Int]){xs.length()>0}
 fn table():List[Int]{range(1,5).map(n=>n*n)}
@@ -72,6 +75,7 @@ fn identity(n:Int where positive):Int where positive{n}
 fn main(){n:Int where positive=comptime{identity(3)};println(n)}`, "3\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			path := filepath.Join(dir, "main.bork")
 			if err := os.WriteFile(filepath.Join(dir, ModFile), []byte("module example.com/comptime\nunsafe \"example.com/comptime\"\n"), 0o644); err != nil {
@@ -96,6 +100,7 @@ fn main(){n:Int where positive=comptime{identity(3)};println(n)}`, "3\n"},
 }
 
 func TestComptimeProofBeforeExecution(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"eager default final proof argument", `pred positive(n:Int){n>0}
 type R={value:Int where positive=0}
@@ -177,6 +182,7 @@ fn b():Int{a()}
 fn main(){println(a())}`, "cyclic comptime"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, ModFile), []byte("module example.com/comptime\nunsafe \"example.com/comptime\"\n"), 0o644); err != nil {
 				t.Fatal(err)
@@ -196,26 +202,39 @@ fn main(){println(a())}`, "cyclic comptime"},
 }
 
 func TestComptimeLimits(t *testing.T) {
+	t.Parallel()
+	if got := (&goContext{}).comptimeLimit(); got != 10*time.Second {
+		t.Fatalf("production timeout = %s, want 10s", got)
+	}
 	for _, tc := range []struct{ name, source, want string }{
 		{"async owner helper", `fn owner(s:Scope):Scope{s}
 fn main(){println(comptime{scope s{async(owner(s)) x=1;x}})}`, "compile-time evaluation cannot schedule an async initializer"},
 		{"evaluation timeout", `fn spin():Int unsafe go{for{}}
-fn main(){println(comptime{spin()})}`, "evaluation exceeded 10s"},
+fn main(){println(comptime{spin()})}`, "evaluation exceeded 150ms"},
 		{"proof timeout", `pred never(n:Int) unsafe go{for{}}
 fn must(n:Int where never):Int{n}
-fn main(){println(comptime{must(1)})}`, "predicate evaluation exceeded 10s"},
+fn main(){println(comptime{must(1)})}`, "predicate evaluation exceeded 150ms"},
 		{"result size", `fn huge():String unsafe go{import "strings"
 return strings.Repeat("x",17<<20)}
 fn main(){println(comptime{huge()})}`, "result exceeds 16 MiB"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			for name, source := range map[string]string{ModFile: "module example.com/comptime\nunsafe \"example.com/comptime\"\n", "main.bork": tc.source} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}
-			_, _, err := Check(dir)
+			loaded, module, err := loadCompilationInputs(dir, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			context := captureGoContext()
+			if tc.name == "evaluation timeout" || tc.name == "proof timeout" {
+				context.evalLimit = 150 * time.Millisecond
+			}
+			_, err = checkLoadedProgramObserved(loaded, module, context, captureEmbedsSnapshot, nil)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want %q, got %v", tc.want, err)
 			}
@@ -267,6 +286,7 @@ func TestComptimeRequiresNativeTarget(t *testing.T) {
 }
 
 func TestComptimeRejectsUnorderedTraversal(t *testing.T) {
+	t.Parallel()
 	for _, source := range []string{
 		`fn main(){println(comptime{{"a":1}.unordered().keys()})}`,
 		`fn fail(n:Int):Int{panic(s"value $n")}
@@ -324,8 +344,10 @@ fn main(){println(comptime{readForeign(%q)})}`, foreign)
 }
 
 func TestComptimeImportedDefaultPreflight(t *testing.T) {
+	t.Parallel()
 	for _, lazy := range []string{"", "lazy "} {
 		t.Run(lazy+"field", func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			files := map[string]string{
 				ModFile: "module example.com/review\n",

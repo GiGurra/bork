@@ -18,6 +18,7 @@ import (
 // and semantic graphs must produce identical output for the same input capture.
 // External Go metadata and evaluator effects still execute on both paths.
 func TestCompilationReplayMatchesClean(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		fail bool
@@ -33,6 +34,7 @@ func TestCompilationReplayMatchesClean(t *testing.T) {
 	for _, fixture := range cases {
 		name := fixture.name
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join("../../testdata/cases", name)
 			if name == "embed" || name == "comptime_build_inputs" {
 				copy := t.TempDir()

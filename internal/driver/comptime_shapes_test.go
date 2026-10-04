@@ -9,6 +9,7 @@ import (
 )
 
 func TestComptimeDataShapes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"map order and facts", `pred nonEmpty(m:Map[String,Int]){m.size()>0}
 fn main(){m:Map[String,Int] where nonEmpty=comptime{{"b":2,"a":1}};println(m.keys());println(m.values());println(comptime{m.size()})}`, "[\"b\", \"a\"]\n[2, 1]\n2\n"},
@@ -34,6 +35,7 @@ fn main(){b=comptime{make()};println(match(b.value){n:Int8=>s"small:$n";n:Int=>s
 fn main(){println(comptime{choose()})}`, "Option.Some { value: 9 }\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
@@ -54,6 +56,7 @@ fn main(){println(comptime{choose()})}`, "Option.Some { value: 9 }\n"},
 }
 
 func TestComptimeRejectsBehavioralMapOutputs(t *testing.T) {
+	t.Parallel()
 	for _, source := range []string{
 		`fn main(){println(comptime{{"a":1}.sorted()})}`,
 		`fn main(){println(comptime{{"a":1}.unordered()})}`,
@@ -72,6 +75,7 @@ fn main(){println(comptime{Box{value:{"a":1}.sorted()}})}`,
 }
 
 func TestComptimeDataShapeValidation(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"cyclic foreign data", `type Node={kids:List[Node]}
 fn cycle():Node unsafe go{kids:=make([]Node,1);root:=Node{kids:kids};kids[0]=root;return root}
@@ -82,6 +86,7 @@ fn bad():Value unsafe go{return Value_N{n:-1}}
 fn main(){println(comptime{bad()})}`, "valid(Value.N { n: -1 }) is false"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			for name, data := range map[string]string{ModFile: "module example.com/comptime\nunsafe \"example.com/comptime\"\n", "main.bork": tc.source} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
