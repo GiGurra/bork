@@ -5,6 +5,7 @@ These documents are for people working on the compiler and the standard library.
 ## References
 
 - [Grammar](grammar.md): the syntax the compiler accepts, in EBNF, with the semantic rules in brief.
+- [Changing the syntax](syntax-changes.md): every component to update when the syntax or grammar changes.
 - [Requirements](requirements.md): the full specification of every feature, including the decisions behind it.
 - [Roadmap](roadmap.md): the milestones and the compiler pipeline.
 - [Go helpers for standard packages](std-go.md): the Go API that `unsafe go` code in the standard library uses, and how Go dependencies are pinned.
