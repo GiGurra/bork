@@ -1,5 +1,6 @@
 (comment) @comment
 (shebang) @comment
+[(bare_return) (bare_break) (bare_continue)] @keyword
 (identifier) @variable
 (number) @number
 (rune) @character
@@ -7,7 +8,7 @@
 (interpolated_string) @string
 (escape_sequence) @string.escape
 (interpolation) @embedded
-(boolean) @boolean
+["true" "false"] @boolean
 (type (qualified_name (identifier) @type))
 (type_declaration name: (identifier) @type.definition)
 (variant name: (identifier) @type.enum.variant)
@@ -22,7 +23,7 @@
 (call_expression function: (qualified_name (identifier) @function.call))
 (interpolated_string prefix: (qualified_name (identifier) @function.call))
 ["fn" "pred" "type" "sealed" "unsafe" "where" "and" "or" "trust" "rule"
- "generate" "yield" "for" "break" "continue" "if" "else" "return"
+ "generate" "yield" "for" "break" "continue" "if" "else" "return" "match"
  "import" "use" "class" "instance" "instances" "providers" "test" "private"
  "derive" "uses" "needs" "ambient" "logged" "propagated" "lazy" "async"
  "scope" "with" "in" "resource" "go" "comptime" "mock"] @keyword

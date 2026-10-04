@@ -15,8 +15,9 @@ fn (xs: List[Int]) head() where xs.length() > 0 uses nothing: Int { xs.first() }
         (identifier))
       (where_clause
         (requirement
-          (qualified_name
-            (identifier))
+          (requirement
+            (qualified_name
+              (identifier)))
           (number)
           (number)))))
   (type_declaration
@@ -59,9 +60,10 @@ fn (xs: List[Int]) head() where xs.length() > 0 uses nothing: Int { xs.first() }
     (where_clause
       (requirement
         (requirement
-          (qualified_name
-            (identifier)
-            (identifier)))
+          (requirement
+            (qualified_name
+              (identifier)
+              (identifier))))
         (requirement
           (number))))
     (uses_clause
@@ -128,6 +130,8 @@ Script, chains, scopes and patterns
 import "bork/sql"
 scope app with taskTimeout(100) {
   rows = sql.SQL"SELECT 1"
+    // The chain continues across comments.
+    /* Including block comments. */
     .Query[Int](db)?
   match (rows) {
     [first, ...rest] => println(first, rest)
@@ -158,6 +162,8 @@ scope app with taskTimeout(100) {
                   (qualified_name
                     (identifier)
                     (identifier)))
+                (comment)
+                (comment)
                 (identifier))
               (type_arguments
                 (type
@@ -220,3 +226,156 @@ fn main() {
           (identifier)
           (qualified_name
             (identifier)))))))
+
+==================
+Contextual names and computed contracts
+==================
+fn checked(xs: List[List[Int]]) where xs.first().length() > 0: Int { 1 }
+fn alsoChecked(x: Int) where [x].length() > 0: Int { x }
+fn main() {
+  scope = 1
+  with = 2
+  comptime = 3
+  mock = 4
+  async = 5
+  println(scope, with, comptime, mock, async)
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier))
+              (type_arguments
+                (type
+                  (qualified_name
+                    (identifier)))))))))
+    (where_clause
+      (requirement
+        (requirement
+          (requirement
+            (requirement
+              (requirement
+                (qualified_name
+                  (identifier)
+                  (identifier))))
+            (identifier)))
+        (requirement
+          (number))))
+    (type
+      (qualified_name
+        (identifier)))
+    (block
+      (number)))
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))
+    (where_clause
+      (requirement
+        (requirement
+          (requirement
+            (requirement
+              (list_literal
+                (qualified_name
+                  (identifier))))
+            (identifier)))
+        (requirement
+          (number))))
+    (type
+      (qualified_name
+        (identifier)))
+    (block
+      (qualified_name
+        (identifier))))
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (number))
+      (binding
+        (identifier)
+        (number))
+      (binding
+        (identifier)
+        (number))
+      (binding
+        (identifier)
+        (number))
+      (binding
+        (identifier)
+        (number))
+      (call_expression
+        (qualified_name
+          (identifier))
+        (argument
+          (qualified_name
+            (identifier)))
+        (argument
+          (qualified_name
+            (identifier)))
+        (argument
+          (qualified_name
+            (identifier)))
+        (argument
+          (qualified_name
+            (identifier)))
+        (argument
+          (qualified_name
+            (identifier)))))))
+
+==================
+Bare control statements end before leading dots
+==================
+fn main() {
+  return // A following dot starts a new expression.
+  .Foo
+  break
+  .Bar
+  continue
+  .Baz
+  value = User {}
+  . { value: 1 }
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (bare_return)
+      (comment)
+      (selector_expression
+        (identifier))
+      (bare_break)
+      (selector_expression
+        (identifier))
+      (bare_continue)
+      (selector_expression
+        (identifier))
+      (binding
+        (identifier)
+        (record_expression
+          (qualified_name
+            (identifier))
+          (record_literal)))
+      (record_expression
+        (record_literal
+          (identifier)
+          (number))))))

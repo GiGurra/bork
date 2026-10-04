@@ -23,12 +23,54 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
     }
     if (newline) {
       lexer->mark_end(lexer);
-      bool continuation = lexer->lookahead == '|';
-      if (lexer->lookahead == '.') {
-        lexer->advance(lexer, false); continuation = lexer->lookahead != '{';
+      // Look through comments without including them in the newline token.
+      // This keeps comments in the tree and joins comment-separated chains.
+      while (lexer->lookahead == '/') {
+        lexer->advance(lexer, false);
+        if (lexer->lookahead == '/') {
+          while (!lexer->eof(lexer) && lexer->lookahead != '\n') lexer->advance(lexer, false);
+        } else if (lexer->lookahead == '*') {
+          lexer->advance(lexer, false);
+          int previous = 0;
+          while (!lexer->eof(lexer)) {
+            int c = lexer->lookahead;
+            lexer->advance(lexer, false);
+            if (previous == '*' && c == '/') break;
+            previous = c;
+          }
+        } else break;
+        while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') lexer->advance(lexer, false);
+      }
+      bool continuation = false;
+      if (lexer->lookahead == '|') {
+        lexer->advance(lexer, false); continuation = lexer->lookahead == '>';
+      } else if (lexer->lookahead == '.') {
+        lexer->advance(lexer, false);
+        int c = lexer->lookahead;
+        continuation = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80;
       }
       if (!continuation) { lexer->result_symbol = 1; return true; }
     }
+  }
+  if (valid[3] || valid[4] || valid[5]) {
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') lexer->advance(lexer, true);
+  }
+  const char *control[] = {"return", "break", "continue"};
+  for (unsigned i = 0; i < 3; i++) {
+    if (!valid[i + 3] || lexer->lookahead != control[i][0]) continue;
+    const char *word = control[i];
+    while (*word && lexer->lookahead == *word) { lexer->advance(lexer, false); word++; }
+    if (*word) return false;
+    lexer->mark_end(lexer);
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, false);
+    if (lexer->lookahead == '/') {
+      lexer->advance(lexer, false);
+      if (lexer->lookahead != '/') return false;
+      while (!lexer->eof(lexer) && lexer->lookahead != '\n') lexer->advance(lexer, false);
+    }
+    if (lexer->lookahead != '\n' && !lexer->eof(lexer)) return false;
+    lexer->result_symbol = i + 3;
+    return true;
   }
   if (!valid[0] || lexer->lookahead == '}' || lexer->eof(lexer)) return false;
   unsigned depth = 0;

@@ -10,6 +10,7 @@ const keywords = [...keywordMap.matchAll(/"([a-z]+)"\s*:/g)].map(match => match[
 const grammars = [
   'editors/vscode/syntaxes/bork.tmLanguage.json',
   'editors/tree-sitter-bork/grammar.js',
+  'editors/tree-sitter-bork/queries/highlights.scm',
 ];
 for (const grammar of grammars) {
   const source = fs.readFileSync(path.join(root, grammar), 'utf8');
