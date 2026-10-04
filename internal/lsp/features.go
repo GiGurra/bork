@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/driver"
 	borkformat "github.com/GiGurra/bork/internal/format"
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -117,8 +118,10 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		if p.NewName == tokenAt(def.File, sources[def.File], *def).Text {
 			return map[string]any{"changes": map[string][]textEdit{}}, nil
 		}
-		for _, ref := range refs {
-			file, _ := filePath(ref.URI)
+		for file := range sources {
+			if filepath.Dir(file) != filepath.Dir(def.File) {
+				continue
+			}
 			tokens, _ := syntax.Lex(file, []byte(s.source(file)), &diag.List{})
 			for _, token := range tokens {
 				if token.Kind == syntax.TIdent && token.Text == p.NewName {
@@ -129,6 +132,9 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		changes := map[string][]textEdit{}
 		for _, ref := range refs {
 			changes[ref.URI] = append(changes[ref.URI], textEdit{ref.Range, p.NewName})
+		}
+		if err := s.validateRename(changes); err != nil {
+			return nil, err
 		}
 		return map[string]any{"changes": changes}, nil
 	}
@@ -152,7 +158,11 @@ func tokenLocation(pos diag.Pos, src string) location {
 	return location{fileURI(pos.File), sourceRange{start, end}}
 }
 func validIdentifier(name string) bool {
-	tokens, _ := syntax.Lex("", []byte(name), &diag.List{})
+	diags := &diag.List{}
+	tokens, _ := syntax.Lex("", []byte(name), diags)
+	if diags.Len() != 0 {
+		return false
+	}
 	if len(tokens) < 2 || tokens[0].Kind != syntax.TIdent || tokens[0].Text != name {
 		return false
 	}
@@ -350,3 +360,46 @@ func editorTokens(path, src string) []syntax.Token {
 	return out
 }
 func identifierStart(b byte) bool { return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b == '_' }
+
+// Recheck proposed edits in memory before returning them. This catches syntax
+// references outside the query index (for example named where predicates).
+func (s *server) validateRename(changes map[string][]textEdit) error {
+	overlays := map[string]string{}
+	for path, doc := range s.docs {
+		overlays[path] = doc.text
+	}
+	dirs := map[string]bool{}
+	for uri, edits := range changes {
+		path, err := filePath(uri)
+		if err != nil {
+			return err
+		}
+		text := s.source(path)
+		edits = slices.Clone(edits)
+		slices.SortFunc(edits, func(a, b textEdit) int {
+			if a.Range.Start.Line != b.Range.Start.Line {
+				return b.Range.Start.Line - a.Range.Start.Line
+			}
+			return b.Range.Start.Character - a.Range.Start.Character
+		})
+		for _, edit := range edits {
+			start, err := byteOffset(text, edit.Range.Start)
+			if err != nil {
+				return err
+			}
+			end, err := byteOffset(text, edit.Range.End)
+			if err != nil || end < start {
+				return fmt.Errorf("invalid rename range")
+			}
+			text = text[:start] + edit.NewText + text[end:]
+		}
+		overlays[path] = text
+		dirs[filepath.Dir(path)] = true
+	}
+	for dir := range dirs {
+		if _, err := driver.NewSession().Analyze(dir, overlays); err != nil {
+			return fmt.Errorf("proposed rename does not check; some references may be unsupported: %w", err)
+		}
+	}
+	return nil
+}

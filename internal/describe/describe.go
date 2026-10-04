@@ -106,6 +106,9 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 					index.selectVar(v, site)
 				}
 			}
+			if fn.Requires != nil {
+				index.walk(fn.Requires)
+			}
 			if fn.Body != nil && index.inside(fn.Body) {
 				index.walk(fn.Body)
 			}

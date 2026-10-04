@@ -3,7 +3,9 @@ package driver
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/GiGurra/bork/internal/diag"
 )
@@ -78,5 +80,60 @@ func TestEditorImportedOverlay(t *testing.T) {
 	}
 	if _, err := session.Analyze(dir, map[string]string{lib: "fn Answer(): Int { false }\n"}); err == nil {
 		t.Fatal("broken import ignored")
+	}
+}
+
+func BenchmarkEditorPhases(b *testing.B) {
+	for _, name := range []string{"hello", "http_server"} {
+		b.Run(name, func(b *testing.B) {
+			dir, err := filepath.Abs(filepath.Join("..", "..", "examples", name))
+			if err != nil {
+				b.Fatal(err)
+			}
+			path := filepath.Join(dir, "main.bork")
+			src, err := os.ReadFile(path)
+			if err != nil {
+				b.Fatal(err)
+			}
+			session := NewSession()
+			if _, err := session.Analyze(dir, map[string]string{path: string(src)}); err != nil {
+				b.Fatal(err)
+			}
+			times := map[string]time.Duration{}
+			previous := ""
+			since := time.Now()
+			session.observe = func(next string) {
+				now := time.Now()
+				if previous != "" {
+					times[previous] += now.Sub(since)
+				}
+				previous, since = next, now
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				text := string(src) + strings.Repeat("\n", (i+1)%2)
+				if _, err := session.Analyze(dir, map[string]string{path: text}); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StopTimer()
+			for phase, duration := range times {
+				b.ReportMetric(float64(duration.Microseconds())/float64(b.N), phase+"-us/op")
+			}
+		})
+	}
+}
+
+func TestEditorMethodDeclarationIdentity(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	source := "type Item = { n: Int }\nfn (value: Item) value(): Int { value.n }\nfn main() uses io { println(Item { n: 1 }.value()) }\n"
+	a, err := NewSession().Analyze(dir, map[string]string{path: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := a.Definition(diag.Pos{File: path, Line: 3, Col: 43})
+	if err != nil || def == nil || def.Line != 2 || def.Col != 18 {
+		t.Fatalf("method identity selected receiver: %+v %v", def, err)
 	}
 }

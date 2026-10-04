@@ -14,7 +14,9 @@ a buffer is broken. Formatting uses the current text regardless of type errors.
 
 References search the compiler graphs for open packages and their imports.
 Rename currently supports local variables and package-private functions, requires
-successful current checks, and refuses names already present in affected files.
+successful current checks, and refuses names already present in affected packages. Proposed edits are
+checked in memory; unsupported references, such as some named where predicates,
+can cause rename to be rejected.
 It does not rename exported names, types or fields. Completion offers package
 functions/types/values and visible methods after a dot. Standard-library and
 prelude definitions use virtual compiler paths and are not opened as disk files.

@@ -273,6 +273,11 @@ func (s *server) check() error {
 			if err != nil || d.Pos.File == "" {
 				continue
 			}
+			if _, ok := overlays[path]; !ok {
+				if _, err := os.Stat(path); err != nil {
+					continue
+				}
+			}
 			if !slices.ContainsFunc(next[path], func(old diag.Diagnostic) bool { return old.Pos == d.Pos && old.Code == d.Code && old.Msg == d.Msg }) {
 				next[path] = append(next[path], d)
 			}

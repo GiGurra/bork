@@ -57,3 +57,21 @@ References include interpolation holes and distinguish same-spelled locals.
 The VSIX packaging smoke test verifies runtime client dependencies are included;
 client tests exercise startup/cleanup with a mocked extension host. An actual
 interactive VS Code editing session has not been exercised in this environment.
+
+The phase profile exposed repeated Go-context discovery. Analyze now passes its
+previous context through Session's existing content-validated capture path;
+changes to Go configuration/toolchain inputs still invalidate it. With one
+priming check and five subsequent edits, configuration averages ~10 ms rather
+than ~40 ms. Final warm phase measurements: hello ~64 ms (check 52 ms,
+configuration 10 ms, parse 1.3 ms); http_server ~299 ms (facts/prover 167 ms,
+check 117 ms, configuration 10 ms, parse 3.5 ms, lifetimes 1.2 ms). Timing varies
+on the shared host. No comptime or Go type-loading phase was observed for these
+examples. Incr has the phase benchmark for package-level incremental work.
+
+Cold review found four rename defects: sibling collisions, a method name
+matching its receiver, reserved underscore identifiers, and missing signature
+requirement references. Fixes include sibling-wide collision checks, nesting-aware
+declaration positions, lexer-diagnostic validation and typed requirement lookup.
+Rename also checks proposed edits in an isolated overlay Session before returning
+them, rejecting unsupported named-predicate references rather than offering a
+partial edit. No proposed edits are written to disk.

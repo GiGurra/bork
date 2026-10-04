@@ -28,13 +28,17 @@ type EditorAnalysis struct {
 func (s *Session) Analyze(path string, overlays map[string]string) (*EditorAnalysis, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	context := captureSessionGoContextWithSettings(nil, s.goSettings)
+	defer func() { phase(s.observe, "") }()
+	phase(s.observe, "configuration")
+	context := captureSessionGoContextWithSettings(s.editorContext, s.goSettings)
+	s.editorContext = context
+	phase(s.observe, "validate")
 	if a := s.editor; a != nil && s.editorPath == path && maps.Equal(a.overlays, overlays) &&
 		context.namespace == a.program.context.namespace && sessionBypassReason(context, a.usage) == "" &&
 		a.program.inputs.current() && a.program.assets.current() && editorNamesCurrent(a, context) {
 		return a, nil
 	}
-	loaded, module, err := loadCompilationInputsFrom(path, nil, func() *sourceSnapshot {
+	loaded, module, err := loadCompilationInputsFrom(path, s.observe, func() *sourceSnapshot {
 		snapshot := newSourceSnapshot()
 		snapshot.disk = overlaySources{files: maps.Clone(overlays)}
 		return snapshot
@@ -43,7 +47,7 @@ func (s *Session) Analyze(path string, overlays map[string]string) (*EditorAnaly
 		return nil, err
 	}
 	usage := &goUsage{}
-	program, err := checkLoadedProgramTracked(loaded, module, context, captureEmbedsSnapshot, usage, nil)
+	program, err := checkLoadedProgramTracked(loaded, module, context, captureEmbedsSnapshot, usage, s.observe)
 	if err != nil {
 		return nil, err
 	}
@@ -195,11 +199,18 @@ func (a *EditorAnalysis) Definition(pos diag.Pos) (*diag.Pos, error) {
 
 func editorDeclarationName(file *syntax.File, start diag.Pos, name string) diag.Pos {
 	tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
+	depth := 0
 	for _, token := range tokens {
 		if token.Pos.Line < start.Line || token.Pos.Line == start.Line && token.Pos.Col < start.Col {
 			continue
 		}
-		if token.Kind == syntax.TIdent && token.Text == name {
+		switch token.Kind {
+		case syntax.LParen, syntax.LBrack:
+			depth++
+		case syntax.RParen, syntax.RBrack:
+			depth--
+		}
+		if token.Kind == syntax.TIdent && token.Text == name && depth == 0 {
 			return token.Pos
 		}
 	}

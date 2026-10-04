@@ -241,3 +241,45 @@ func TestRenameRejectsIncompleteAndCollidingEdits(t *testing.T) {
 		}
 	}
 }
+
+func TestRenameRejectsSiblingCollision(t *testing.T) {
+	s, path := newTestServer(t, "fn answer(): Int { 42 }\nfn main() uses io { println(answer()) }\n")
+	sibling := filepath.Join(filepath.Dir(path), "other.bork")
+	if err := os.WriteFile(sibling, []byte("fn result(): Int { 1 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.check(); err != nil {
+		t.Fatal(err)
+	}
+	p := documentParams{Position: position{1, 28}, NewName: "result"}
+	if _, err := s.feature("textDocument/rename", path, p); err == nil {
+		t.Fatal("rename colliding with sibling declaration accepted")
+	}
+}
+
+func TestRenameIncludesSignatureRequirements(t *testing.T) {
+	src := "fn slice(from: Int, to: Int) where from <= to: Int { to - from }\nfn main() {}\n"
+	s, path := newTestServer(t, src)
+	p := documentParams{Position: position{0, 58}, NewName: "start"}
+	result, err := s.feature("textDocument/rename", path, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes := result.(map[string]any)["changes"].(map[string][]textEdit)
+	if len(changes[fileURI(path)]) != 3 {
+		t.Fatalf("signature reference omitted: %+v", changes)
+	}
+	p.NewName = "_renamed"
+	if _, err := s.feature("textDocument/rename", path, p); err == nil {
+		t.Fatal("reserved identifier accepted")
+	}
+}
+
+func TestRenameRejectsUnindexedWherePredicate(t *testing.T) {
+	src := "pred positive(n: Int) { n > 0 }\nfn identity(n: Int where positive): Int where positive { n }\nfn main() {}\n"
+	s, path := newTestServer(t, src)
+	p := documentParams{Position: position{0, 6}, NewName: "aboveZero"}
+	if _, err := s.feature("textDocument/rename", path, p); err == nil {
+		t.Fatal("partial predicate rename accepted")
+	}
+}

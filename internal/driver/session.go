@@ -32,14 +32,15 @@ type goUsage struct {
 // Go type/export metadata, custom drivers and compile-time evaluation bypass
 // reuse until their dependencies can be validated.
 type Session struct {
-	editor     *EditorAnalysis
-	editorPath string
-	mu         sync.Mutex
-	last       *sessionArtifact
-	stats      SessionStats
-	watch      bool
-	attempt    *watchAttempt
-	observe    func(string)
+	editor        *EditorAnalysis
+	editorPath    string
+	editorContext *goContext
+	mu            sync.Mutex
+	last          *sessionArtifact
+	stats         SessionStats
+	watch         bool
+	attempt       *watchAttempt
+	observe       func(string)
 	// Private fixture settings are assigned before the Session's first request.
 	// Production sessions use the current process environment on every request.
 	goSettings []string
