@@ -1,8 +1,13 @@
 # Explicit compile-time computation (bork-pvx43y)
 
-Status: proposal for review. This document does not add accepted syntax or a
-build-input API. Implementation follows in separate PRs. User-defined derive,
-structural constraints and source/declaration generation are outside this ticket.
+Status: implemented syntax, checking, evaluation, value baking and module-file
+inputs (PRs #200, #204, #205 and #207). `comptime { ... }` and
+`bork/build.ReadString` / `ReadBytes` are accepted APIs. Native-target checks and
+the initial execution/input/result limits are enforced. Limit hardening and
+Session value reuse remain planned; disk value reuse will use the shared
+incremental cache layer. The cache contract below describes those remaining
+requirements, not enabled reuse. User-defined derive, structural constraints
+and source/declaration generation are outside this ticket.
 
 ## Contract and syntax
 
