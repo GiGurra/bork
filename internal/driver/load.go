@@ -314,21 +314,40 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 			return nil
 		}
 		dir = filepath.Join(l.mod.root, filepath.FromSlash(rel))
-	} else {
-		if l.graph == nil {
-			graph, err := compileLibraryGraph(l.files, l.sourceReader())
-			if err != nil {
-				return err
-			}
-			l.graph = graph
-		}
-		var err error
-		owner, dir, err = l.graph.packageDirectory(imp.Path, l.sourceReader())
+	}
+	localExists := false
+	if local {
+		_, err := sourceFiles(dir, l.sourceReader())
+		localExists = err == nil
+	}
+	// A selected nested module can share the consumer's path prefix.
+	// Resolve potential dependency providers before choosing the local package.
+	needsGraph := !localExists || len(l.mod.requirements) != 0
+	if localExists && !needsGraph {
+		_, err := l.sourceReader().readFile(filepath.Join(l.mod.root, "go-deps.mod"))
+		needsGraph = err == nil
+	}
+	if l.graph == nil && needsGraph {
+		graph, err := compileLibraryGraph(l.files, l.sourceReader())
 		if err != nil {
+			return err
+		}
+		l.graph = graph
+	}
+	if l.graph != nil {
+		dependencyOwner, dependencyDir, err := l.graph.packageDirectory(imp.Path, l.sourceReader())
+		if err == nil {
+			if localExists {
+				l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: package is provided by both %s and %s", imp.Path, owner.path, dependencyOwner.path)
+				return nil
+			}
+			owner, dir = dependencyOwner, dependencyDir
+		} else if !localExists || dependencyDir != "" {
 			l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: %v", imp.Path, err)
 			return nil
 		}
 	}
+
 	if l.owners == nil {
 		l.owners = map[string]module{}
 	}

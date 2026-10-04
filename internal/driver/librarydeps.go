@@ -332,7 +332,7 @@ func (graph *libraryGraph) packageDirectory(importPath string, reader sourceRead
 			continue
 		}
 		if dir != "" {
-			return module{}, "", fmt.Errorf("package is provided by both %s and %s", owner.path, mod.path)
+			return owner, dir, fmt.Errorf("package is provided by both %s and %s", owner.path, mod.path)
 		}
 		owner, dir = mod.module, candidate
 	}

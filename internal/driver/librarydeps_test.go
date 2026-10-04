@@ -373,3 +373,22 @@ func TestLibraryPublicationStandardDependencies(t *testing.T) {
 		t.Fatalf("rejected publication changed requirements: %+v, %v", mod, err)
 	}
 }
+
+func TestLibraryNestedConsumerModule(t *testing.T) {
+	proxy := newLibraryProxy(t)
+	proxy.publish("example.com/outer/sub", "v1.0.0", "module example.com/outer/sub\n", map[string]string{"api/api.bork": "fn Value(): Int { 7 }\n"})
+	root := t.TempDir()
+	writeFixtureFile(t, root, ModFile, "module example.com/outer\n")
+	writeFixtureFile(t, root, "main.bork", "import \"example.com/outer/sub/api\"\nfn main() uses io { println(api.Value()) }\n")
+	if err := Deps(root, "get", []string{"example.com/outer/sub@v1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOPROXY", "off")
+	if _, _, err := Check(root); err != nil {
+		t.Fatal(err)
+	}
+	writeFixtureFile(t, root, "sub/api/api.bork", "fn Value(): Int { 8 }\n")
+	if _, _, err := Check(root); err == nil || !strings.Contains(err.Error(), "provided by both") {
+		t.Fatalf("local/library ambiguity: %v", err)
+	}
+}
