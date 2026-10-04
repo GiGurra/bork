@@ -6,7 +6,7 @@
 
 ## SQL API
 
-`bork/sql` adds scope-owned `Connection` and `Transaction` resources. Open with `OpenSqlite(dataSource, s)` or `OpenPostgres(dataSource, s)`, start a transaction with `Begin(connection, s)`, and `Commit(tx)` before that scope closes; otherwise it rolls back. `Exec(connectionOrTx, query, params)` and `Query[T: Decode](connectionOrTx, query, params)` bind `String | Int | Float | Bool | Bytes | sql.Null` values, using the owner's cancellation context; attachment switches that context's cancellation source to the destination scope. Column aliases map to record fields; SQL NULL decodes as Option.None, binary columns as JSON byte-integer arrays, and timestamps as RFC3339 strings. Queries return the first result set; duplicate column names are errors. See [examples/sql](../../examples/sql/main.bork).
+`bork/sql` adds scope-owned `Connection` and `Transaction` resources. Open with `OpenSqlite(dataSource, s)` or `OpenPostgres(dataSource, s)`, start a transaction with `Begin(connection, s)`, and `Commit(tx)` before that scope closes; otherwise it rolls back. `statement.Exec(connectionOrTx)` and `statement.Query[T: Decode](connectionOrTx)` bind `String | Int | Float | Bool | Bytes | sql.Null` values, using the owner's cancellation context; attachment switches that context's cancellation source to the destination scope. Column aliases map to record fields; SQL NULL decodes as Option.None, binary columns as JSON byte-integer arrays, and timestamps as RFC3339 strings. Queries return the first result set; duplicate column names are errors. See [examples/sql](../../examples/sql/main.bork).
 
 ## Typed SQL literals
 
@@ -39,9 +39,8 @@ result = query.QueryJson(connection)?
 The prefix factory accepts compiler-created `StaticParts`, whose immutable
 `values` may be read but whose private representation cannot be constructed or
 updated by user code. Passing a runtime String list to sql.SQL is a compile error.
-There is no raw-text hole or Unsafe constructor. Existing explicit query/parameter
-functions remain available for manually assembled SQL; those callers control and
-must trust their query text. Explicit unsafe Go remains outside these guarantees.
+There is no raw-text hole. The explicit raw query APIs require `sql.Unsafe(text)`;
+plain Strings cannot reach those APIs. Explicit unsafe Go remains outside these guarantees.
 
 Statement methods `Exec`, `Query[T: Decode]`, and `QueryJson` take a Connection or
 Transaction and preserve the existing results, errors, effects, cancellation,
@@ -70,8 +69,32 @@ still come from the driver.
 The syntax, eager evaluation, typed builder protocol, and capability guarantees
 are described in [the grammar](../grammar.md) and [design](../design/interpolators.md).
 
+## Explicit raw SQL
+
+Prefer typed SQL literals for application queries. Code that must execute SQL
+assembled as a runtime String opts in with `sql.Unsafe(text): sql.UnsafeQuery`:
+
+```bork
+raw = sql.Unsafe(queryText)
+rows = sql.Query[User](connection, raw, params)?
+```
+
+All five raw APIs require UnsafeQuery as their query argument:
+`Exec`, `Query[T]`, `QueryJson`, `Rows[T]`, and `RowsJson`. Passing a String is a
+compile error, including through a function reference. UnsafeQuery has private
+construction; `sql.Unsafe` is the explicit, greppable conversion from String.
+It does not validate, escape, or sanitize the query text. Callers must trust all
+of its bytes. Separately supplied `List[sql.Value]` parameters remain bound by
+the driver, using `?` for SQLite and `$1`, `$2`, ... for Postgres.
+
+This changes the former raw String APIs: migrate safe query literals to
+Statement methods, or wrap intentionally raw text in `sql.Unsafe` and keep the
+parameter list. Cancellation, lifetime ownership, result/error types, and lazy
+stream timing are unchanged. Typed Statement methods render checked structured
+text before calling the shared execution implementation.
+
 ## Examples
 
 `bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](../../examples/sql/main.bork).
 
-`Rows[T: Decode](connection, query, params): Seq[T | Error | DecodeError] uses io + net` decodes one row at a time. `RowsJson` yields `Json | Error`. Construction performs no query; each traversal executes it afresh using the connection or transaction context. Stopping closes active rows. Returned values copy driver buffers, and the sequence retains the connection/transaction lifetime. Handle errors per element.
+`Rows[T: Decode](connection, unsafeQuery, params): Seq[T | Error | DecodeError] uses io + net` decodes one row at a time. `RowsJson` yields `Json | Error`. Construction performs no query; each traversal executes it afresh using the connection or transaction context. Stopping closes active rows. Returned values copy driver buffers, and the sequence retains the connection/transaction lifetime. Handle errors per element.

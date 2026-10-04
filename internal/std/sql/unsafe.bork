@@ -1,0 +1,5 @@
+// Unsafe marks SQL text assembled outside compiler-created typed literals.
+// It does not validate or escape text. Callers must trust every byte of the query;
+// values passed separately as parameters are still bound by the driver.
+type UnsafeQuery = private { text: String }
+fn Unsafe(query: String): UnsafeQuery { UnsafeQuery { text: query } }
