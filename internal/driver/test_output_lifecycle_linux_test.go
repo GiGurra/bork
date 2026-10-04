@@ -13,14 +13,15 @@ import (
 
 func TestFixtureOutputLifecycle(t *testing.T) {
 	// Environment changes must remain sequential, including this parent.
-	cache := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", cache)
-	source := t.TempDir()
-	path := filepath.Join(source, "main.bork")
 	native := captureGoContext()
 	if native.err != nil {
 		t.Fatal(native.err)
 	}
+	t.Setenv("GOCACHE", native.values["GOCACHE"])
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	source := t.TempDir()
+	path := filepath.Join(source, "main.bork")
 	var retained string
 	for _, tc := range []struct{ name, source, prepare string }{
 		{"first build", "fn main(){println(1)}", ""},
@@ -135,6 +136,12 @@ func TestFixtureOutputLifecycle(t *testing.T) {
 }
 
 func TestFixtureOutputFailureAndFallback(t *testing.T) {
+	// XDG controls the output pool, while Go must keep its ordinary build cache.
+	native := captureGoContext()
+	if native.err != nil {
+		t.Fatal(native.err)
+	}
+	t.Setenv("GOCACHE", native.values["GOCACHE"])
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	source := t.TempDir()
