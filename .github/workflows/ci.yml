@@ -34,6 +34,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Go
+        id: go-cache
         uses: ./.github/actions/setup-go
         with:
           cache-name: test
@@ -52,6 +53,11 @@ jobs:
         run: |
           go install ./cmd/bork
           for d in examples/*/; do bork check "$d"; done
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.cache-paths }}
+          key: ${{ steps.go-cache.outputs.cache-key }}
   race:
     name: Race (${{ matrix.group }})
     runs-on: ubuntu-latest
@@ -62,22 +68,34 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-go
+        id: go-cache
         with:
           cache-name: race-${{ matrix.group }}
       - name: Run race group
         env:
           GOTOOLCHAIN: local
         run: python3 scripts/race.py '${{ matrix.group }}'
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.cache-paths }}
+          key: ${{ steps.go-cache.outputs.cache-key }}
   replay:
     name: Captured-input parity
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-go
+        id: go-cache
         with:
           cache-name: replay
       - name: Compare clean compilation with captured-input replay
         run: go test -race ./internal/driver -run '^(TestCompilationReplayMatchesClean|TestSessionMatchesClean|TestWatch)' -count=1
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.cache-paths }}
+          key: ${{ steps.go-cache.outputs.cache-key }}
   ci-ok:
     name: CI ok
     if: always()

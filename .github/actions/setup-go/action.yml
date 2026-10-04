@@ -4,6 +4,18 @@ inputs:
   cache-name:
     description: Cache writer name, distinct for each parallel job or shard.
     required: true
+outputs:
+  cache-key:
+    description: Primary cache key for a successful main run to save.
+    value: ${{ steps.cache.outputs.cache-primary-key }}
+  cache-hit:
+    description: Whether this commit's exact cache was restored.
+    value: ${{ steps.cache.outputs.cache-hit }}
+  cache-paths:
+    description: Go module and build cache directories.
+    value: |
+      ${{ steps.paths.outputs.modules }}
+      ${{ steps.paths.outputs.build }}
 runs:
   using: composite
   steps:
@@ -19,10 +31,11 @@ runs:
       run: |
         echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
         echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-    # A commit-specific key saves newly compiled packages even when go.sum
-    # hasn't changed. Each shard writes independently; restores can borrow
-    # another shard's content-addressed cache when its own is unavailable.
-    - uses: actions/cache@v4
+    # Restore everywhere, but callers save only successful main runs after
+    # their tests/builds. PR snapshots would evict the warm main caches.
+    # A commit-specific key retains new builds even when go.sum is unchanged.
+    - uses: actions/cache/restore@v4
+      id: cache
       with:
         path: |
           ${{ steps.paths.outputs.modules }}
