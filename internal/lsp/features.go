@@ -9,11 +9,17 @@ import (
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/driver"
 	borkformat "github.com/GiGurra/bork/internal/format"
+	"github.com/GiGurra/bork/internal/modcache"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
 func (s *server) feature(method, path string, p documentParams) (any, error) {
 	src := s.source(path)
+	if method == "textDocument/formatting" || method == "textDocument/codeAction" || method == "textDocument/rename" || method == "textDocument/prepareRename" {
+		if modcache.Contains(modcache.Root(), path) {
+			return nil, fmt.Errorf("dependency sources are read-only; edit the original repository and publish a new version")
+		}
+	}
 	switch method {
 	case "textDocument/formatting":
 		formatted, err := borkformat.Source(path, []byte(src))
@@ -84,6 +90,9 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 			return nil, nil
 		}
 		if method != "textDocument/references" {
+			if modcache.Contains(modcache.Root(), def.File) {
+				return nil, fmt.Errorf("dependency sources are read-only")
+			}
 			declaration, err := pkg.analysis.Definition(*def)
 			tok := tokenAt(def.File, sources[def.File], *def)
 			if err != nil || declaration == nil || *declaration != *def || tok == nil || tok.Kind != syntax.TIdent {
@@ -379,6 +388,9 @@ func (s *server) validateRename(changes map[string][]textEdit) error {
 		path, err := filePath(uri)
 		if err != nil {
 			return err
+		}
+		if modcache.Contains(modcache.Root(), path) {
+			return fmt.Errorf("dependency sources are read-only")
 		}
 		text := s.source(path)
 		edits = slices.Clone(edits)

@@ -10,6 +10,8 @@ import (
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
+	"golang.org/x/mod/modfile"
+	gomodule "golang.org/x/mod/module"
 )
 
 // User manifests live beside bork.mod, so every package in a module sees the
@@ -81,6 +83,10 @@ func captureGoModule(files []*syntax.File, reader sourceReader) (*goModuleInputs
 		}
 		mod, sum = graph.mod, graph.sum
 	}
+	mod, err = addLocalGoModule(mod, files, reader)
+	if err != nil {
+		return nil, err
+	}
 	return &goModuleInputs{slices.Clone(mod), slices.Clone(sum)}, nil
 }
 
@@ -98,4 +104,52 @@ func (inputs *goModuleInputs) write(dir string, hook goModuleHookFunc) (bool, er
 		}
 	}
 	return len(inputs.sum) != 0, nil
+}
+
+// Generated compilation modules can bind to helpers in the author's own
+// repository without publishing that repository first. This temporary replace
+// never enters either committed manifest.
+func addLocalGoModule(data []byte, files []*syntax.File, reader sourceReader) ([]byte, error) {
+	for _, file := range files {
+		if file.Prelude || strings.HasPrefix(file.Package, std.Prefix) {
+			continue
+		}
+		owner, err := findModuleFrom(filepath.Dir(file.Path), reader)
+		if err != nil {
+			return nil, err
+		}
+		if owner.path == "" {
+			return data, nil
+		}
+		marker, err := reader.readFile(filepath.Join(owner.root, "go.mod"))
+		if os.IsNotExist(err) {
+			return data, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !strings.HasPrefix(string(marker), generatedModuleHeader) {
+			return data, nil
+		}
+		manifest, err := modfile.Parse("compiler module", data, nil)
+		if err != nil {
+			return nil, err
+		}
+		_, major, ok := gomodule.SplitPathVersion(owner.path)
+		if !ok {
+			return nil, fmt.Errorf("invalid module path %s", owner.path)
+		}
+		version := "v0.0.0"
+		if major != "" {
+			version = strings.TrimLeft(major, "/.") + ".0.0"
+		}
+		if err := manifest.AddRequire(owner.path, version); err != nil {
+			return nil, err
+		}
+		if err := manifest.AddReplace(owner.path, "", owner.root, ""); err != nil {
+			return nil, err
+		}
+		return manifest.Format()
+	}
+	return data, nil
 }

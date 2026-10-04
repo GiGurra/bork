@@ -197,3 +197,8 @@ launch `bork lsp` over stdio.
 ## License
 
 [MIT](LICENSE)
+
+A [library and consumer example](testdata/libraries/README.md) shows publishing,
+pinning and upgrading a Bork library, with an offline proxy test. Scripts accept
+Bork libraries in their existing `bork:require` headers; editor navigation uses
+cached dependency sources and keeps them read-only.

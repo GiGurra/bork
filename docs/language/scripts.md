@@ -48,9 +48,9 @@ bork build hello.bork -o hello
 bork test hello.bork
 ```
 
-## Inline Go dependencies
+## Inline dependencies
 
-A standalone script can declare pinned Go dependencies and allow its own unsafe Go bindings in header comments before imports or declarations:
+A standalone script can declare pinned Go or Bork dependencies and allow its own unsafe Go bindings in header comments before imports or declarations:
 
 ```bork
 #!/usr/bin/env -S bork script
@@ -61,7 +61,18 @@ fn valid(text: String): Ok | GoError unsafe go "github.com/google/uuid.Validate"
 println(valid("00000000-0000-0000-0000-000000000001"))
 ```
 
-Each `bork:require` names a Go module and a canonical pinned version, including pseudo-versions. Version queries such as `latest` are rejected. The first compile resolves the module graph through Go and records its manifest and verified checksums in the compiler cache. Later compiles reuse those files. `bork clean --all` removes resolved script dependency graphs too; ordinary namespace cleaning preserves them. Go's usual minimum version selection applies to transitive requirements. The script stays self-contained; no manifest or checksum file is written beside it. The first resolution may need network access, while later runs can use Go's populated module cache.
+Each `bork:require` names a Go module, including a published Bork library, and a canonical pinned version, including pseudo-versions. Version queries such as `latest` are rejected. The first compile resolves the module graph through Go and records its manifest and verified checksums in the compiler cache. Later compiles reuse those files. `bork clean --all` removes resolved script dependency graphs too; ordinary namespace cleaning preserves them. Go's usual minimum version selection applies to transitive requirements. The script stays self-contained; no manifest or checksum file is written beside it. The first resolution may need network access, while later runs can use Go's populated module cache.
+
+Bork libraries use ordinary module-path imports, with an alias when the final path component is not a Bork identifier:
+
+```bork fragment
+#!/usr/bin/env -S bork script
+// bork:require example.com/my-library v1.0.0
+import lib "example.com/my-library"
+println(lib.Value())
+```
+
+The resolver pins the complete graph before loading library sources. Downloaded libraries use their own unsafe grants; `bork:unsafe` authorizes only the root script. Editor checks use an already resolved script graph and diagnose missing downloads; run the script once to populate it. Projects provide committed checksum pins when portability and reproducibility matter.
 
 `bork:unsafe` allows unsafe Go only in this script. It does not grant effects: a helper doing I/O must still declare `uses io`.
 

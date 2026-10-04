@@ -3956,3 +3956,13 @@ Standalone script header comments `// bork:require <Go module> <canonical pinned
 ### Method-chain continuation (bork-e6seng)
 
 Method and field selectors can continue an expression on a following line with a leading dot, across whitespace and comments. Trailing-dot continuations remain accepted. The formatter indents continuation lines one level and distinguishes contextual variant dots from receiver selectors (bork-e6seng).
+
+Standalone script requirements also resolve Bork libraries, including the
+complete transitive graph, into the script resolution cache. Editor checks use
+cached dependencies and diagnose missing downloads without implicit module
+installation. Formatting and editor edit requests reject shared module-cache
+sources, while navigation and hover retain their original positions. Library
+authors can test their own local Go helper packages through a temporary compiler
+replacement that never enters committed manifests. Cache cleaning preserves
+shared Go module downloads. A committed library/consumer fixture is verified and
+built offline with a local file proxy.

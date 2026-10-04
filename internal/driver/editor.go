@@ -30,7 +30,7 @@ func (s *Session) Analyze(path string, overlays map[string]string) (*EditorAnaly
 	defer s.mu.Unlock()
 	defer func() { phase(s.observe, "") }()
 	phase(s.observe, "configuration")
-	context := captureSessionGoContextWithSettings(s.editorContext, s.goSettings)
+	context := captureSessionGoContextWithSettings(s.editorContext, append(slices.Clone(s.goSettings), "GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local"))
 	s.editorContext = context
 	phase(s.observe, "validate")
 	if a := s.editor; a != nil && s.editorPath == path && maps.Equal(a.overlays, overlays) &&
@@ -40,6 +40,7 @@ func (s *Session) Analyze(path string, overlays map[string]string) (*EditorAnaly
 	}
 	loaded, module, err := loadCompilationInputsFrom(path, s.observe, func() *sourceSnapshot {
 		snapshot := newSourceSnapshot()
+		snapshot.localDependencies = true
 		snapshot.disk = overlaySources{files: maps.Clone(overlays)}
 		return snapshot
 	})

@@ -35,10 +35,16 @@ type libraryGraph struct {
 	mod, sum  []byte
 }
 
-func dependencyGo(dir string, args ...string) ([]byte, error) {
+func dependenciesLocalOnly(reader sourceReader) bool {
+	snapshot, ok := reader.(*sourceSnapshot)
+	return ok && snapshot.localDependencies
+}
+
+func dependencyGoWithSettings(dir string, settings []string, args ...string) ([]byte, error) {
 	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS=")
+	cmd.Env = append(cmd.Env, settings...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -76,8 +82,15 @@ func resolveLibraryGraph(dir string, reader sourceReader, pinned []byte, readonl
 			sums, err := os.ReadFile(filepath.Join(dir, "go.sum"))
 			return &libraryGraph{libraries: map[string]libraryModule{}, mod: initial, sum: sums}, err
 		}
-		out, err := dependencyGo(dir, "mod", "download", "-json", "all")
+		var settings []string
+		if dependenciesLocalOnly(reader) {
+			settings = []string{"GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local"}
+		}
+		out, err := dependencyGoWithSettings(dir, settings, "mod", "download", "-json", "all")
 		if err != nil {
+			if dependenciesLocalOnly(reader) {
+				return nil, fmt.Errorf("dependencies are not cached; run bork deps download: %w", err)
+			}
 			return nil, err
 		}
 		data, err := os.ReadFile(filepath.Join(dir, "go.mod"))

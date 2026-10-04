@@ -404,3 +404,7 @@ Environment variables override saved values in `os.UserConfigDir()/bork/env.json
 which override defaults. Directory settings require absolute paths; empty values
 fall through. See [the compiler settings reference](cli.md#settings)
 for defaults and installation behavior.
+
+Script `bork:require` headers use the same Go module paths and canonical versions
+for both Go and Bork libraries. A module-root import may use an explicit valid
+Bork alias when its final path component contains punctuation.
