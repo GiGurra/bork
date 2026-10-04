@@ -12,7 +12,7 @@ import (
 func TestEditorTypeQueriesPreserveSourceIndexes(t *testing.T) {
 	d := &diag.List{}
 	files := prelude.Parse(d)
-	file := syntax.Parse("main.bork", []byte("type Box[T] = { value: T }\nfn main() {}\n"), d)
+	file := syntax.Parse("main.bork", []byte("pred positive(n: Int) { n > 0 }\ntype Box[T] = { value: T }\nfn main() {}\n"), d)
 	file.Package = "example.com/app"
 	files = append(files, file)
 	info := Program(files, file.Package, d, nil)
@@ -27,13 +27,14 @@ func TestEditorTypeQueriesPreserveSourceIndexes(t *testing.T) {
 	}
 	written := maps.Clone(info.writtenTypes)
 	uses := maps.Clone(info.typeUses)
+	predicates := maps.Clone(info.predicateRefs)
 	for i := 0; i < 20; i++ {
-		query := syntax.Parse("query.bork", []byte("type Query = Box[Int]\n"), d).Types[0].Alias
+		query := syntax.Parse("query.bork", []byte("type Query = Box[Int where positive]\n"), d).Types[0].Alias
 		if typ := EditorType(info, from, query); typ == Invalid {
 			t.Fatal("valid type query failed")
 		}
 	}
-	if !maps.Equal(written, info.writtenTypes) || !maps.Equal(uses, info.typeUses) {
+	if !maps.Equal(written, info.writtenTypes) || !maps.Equal(uses, info.typeUses) || !maps.Equal(predicates, info.predicateRefs) {
 		t.Fatal("editor query changed source indexes")
 	}
 }

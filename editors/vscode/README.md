@@ -72,6 +72,27 @@ Language-server activation requires a trusted workspace because checking may
 execute compile-time code or Go tools. Highlighting remains lexical and works
 without a compiler. Files in virtual workspaces are not supported by the client.
 
+## Semantic highlighting
+
+The language server supplies full-document and range semantic tokens using the
+compiler's checked identities. Functions, methods, types, variants, predicates,
+effects, parameters, package values and Go bindings receive distinct
+classifications. Local bindings, parameters and record fields carry `readonly`;
+this describes the binding, including bindings to stateful resources. Package
+values also carry `static`. The `predicate`, `effect` and `goBinding` modifiers
+allow themes to style these bork concepts separately.
+
+Semantic highlighting is enabled by default for bork. Override
+`editor.semanticHighlighting.enabled` in `[bork]` settings to disable it.
+Themes choose the actual colors; use **Developer: Inspect Editor Tokens and
+Scopes** to inspect a token's classification. The extension contributes scope
+mappings, and all classification comes from `bork lsp`.
+
+After a broken edit, the server classifies current keywords, comments, numbers,
+strings and operators with the compiler lexer. It does not apply old symbol
+positions to changed text. Local highlighting grammars continue to highlight
+identifiers, interpolation and embedded Go until checking succeeds again.
+
 ## Lint warnings
 
 Unused bindings, parameters and private declarations, proved predicate checks,

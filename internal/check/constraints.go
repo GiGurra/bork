@@ -399,6 +399,17 @@ func (c *checker) constraint(ref *syntax.PredRef, subject Type, scope map[string
 }
 
 func (c *checker) constraintAtom(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {
+	result := c.checkedConstraintAtom(ref, subject, scope)
+	if result != nil && c.recordPredicateRefs {
+		if c.info.predicateRefs == nil {
+			c.info.predicateRefs = map[diag.Pos]*Constraint{}
+		}
+		c.info.predicateRefs[ref.Pos] = result
+	}
+	return result
+}
+
+func (c *checker) checkedConstraintAtom(ref *syntax.PredRef, subject Type, scope map[string]Type) *Constraint {
 	if containsOpaque(subject, map[Type]bool{}) {
 		c.bindErr(ref.Pos, "facts cannot apply to %s, which holds a Go value that can change", subject)
 		return nil
