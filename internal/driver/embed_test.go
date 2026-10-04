@@ -12,6 +12,7 @@ import (
 )
 
 func TestEmbedSnapshot(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	data := bytes.Repeat([]byte{0, 255, 65}, 1<<20)
 	write := func(name string, data []byte) {
@@ -55,6 +56,7 @@ fn main() { println(embed.ReadBytes("large.bin").length()) }
 }
 
 func TestEmbedSymlinks(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	outside := t.TempDir()
 	if err := os.WriteFile(filepath.Join(outside, "asset"), []byte("secret"), 0o644); err != nil {
@@ -97,6 +99,7 @@ fn main() { println(` + call + `) }
 }
 
 func TestEmbedEmptyDirectory(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "empty"), 0o755); err != nil {
 		t.Fatal(err)

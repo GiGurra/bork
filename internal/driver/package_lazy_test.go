@@ -9,6 +9,7 @@ import (
 )
 
 func TestPackageLazyChecks(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"inferred", "lazy Answer=21\nfn main(){println(Answer)}", ""},
 		{"forward", "lazy Twice=Answer*2\nlazy Answer:Int=21\nfn main(){println(Twice)}", ""},
@@ -57,6 +58,7 @@ func TestPackageLazyChecks(t *testing.T) {
 		{"computed helper cycle", "lazy Value:Int=read()\ntype C={n:Int,lazy value:Int=n+Value}\nfn read():Int{C{n:0}.value}\nfn main(){}", "dependency cycle"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
@@ -76,12 +78,14 @@ func TestPackageLazyChecks(t *testing.T) {
 }
 
 func TestPackageLazyImports(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ source, want string }{
 		{"import \"example.com/package-lazy/values\"\nlazy Local=values.Value\nfn main(){println(Local)}", ""},
 		{"import \"example.com/package-lazy/values\"\nfn main(){println(values.hidden)}", "not exported"},
 		{"import \"example.com/package-lazy/values\"\nfn main(){println(comptime{values.Value})}", "comptime cannot read runtime package lazy"},
 	} {
 		t.Run(tc.source, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.Mkdir(filepath.Join(dir, "values"), 0o755); err != nil {
 				t.Fatal(err)
@@ -111,6 +115,7 @@ func TestPackageLazyImports(t *testing.T) {
 }
 
 func TestDescribePackageLazyNeverForces(t *testing.T) {
+	t.Parallel()
 	source := "lazy Unread:Int=panic(\"must not force\")\nlazy Answer=21\nlazy Twice=Answer*2\nfn main(){println(Unread)}"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")

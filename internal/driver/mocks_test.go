@@ -13,6 +13,7 @@ import (
 // functions builds as if they did not: no dispatchers, frames, handles
 // or call records.
 func TestMocksLeaveProgramsAlone(t *testing.T) {
+	t.Parallel()
 	for _, c := range []string{"mocks", "mocks_expect", "mocks_generic"} {
 		src, err := Emit(filepath.Join("..", "..", "testdata", "cases", c))
 		if err != nil {
@@ -31,6 +32,7 @@ func TestMocksLeaveProgramsAlone(t *testing.T) {
 // reported, directly or through another function, rather than failing
 // the Go build.
 func TestGenericMockRecursion(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := `fn Describe[T: Show](x: T) uses net: String {
   s"real ${show(x)}"
