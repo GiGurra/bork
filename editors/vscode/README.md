@@ -67,12 +67,19 @@ the current buffer. Other LSP clients can pass the same `inlayHints` options in
 `initializationOptions` or send `workspace/didChangeConfiguration` with
 `settings.bork.inlayHints`.
 
-References search the compiler graphs for open packages and their imports.
-Rename currently supports local variables and package-private functions, requires
-successful current checks, and refuses names already present in affected packages. Proposed edits are
-checked in memory; unsupported references, such as some named where predicates,
-can cause rename to be rejected.
-It does not rename exported names, types or fields. Completion ranks visible locals before package symbols, keywords, and imports.
+References and rename use compiler declaration identities across local workspace
+packages, including importers whose files are closed. Rename supports local
+variables, parameters, functions (including exports), types, record fields,
+variants, predicates and package values. It preserves destructuring shorthand
+bindings and includes signatures, facts and interpolation holes. Proposed edits
+are checked in memory and must preserve every indexed binding.
+All local packages must check successfully; library and standard-library sources
+are read-only. Rename refuses affected packages with raw Go bodies, whose
+references are opaque, and currently excludes classes, instances and ambient
+values. Hidden directories, vendor trees and nested modules are excluded unless
+provided as explicit workspace roots.
+
+Completion ranks visible locals before package symbols, keywords, and imports.
 It offers checked fields and methods after a dot, exported names after a package
 qualifier, record fields in literals and destructuring patterns, named arguments,
 and match-arm patterns. Clients supporting LSP snippets also receive `fn`,

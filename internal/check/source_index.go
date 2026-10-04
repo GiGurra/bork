@@ -492,11 +492,7 @@ func (b *sourceIndexBuilder) pattern(raw syntax.Pattern, pat *Pat) {
 		if target.Variant != nil {
 			v := target.Variant
 			fields = v.Fields
-			pos := raw.Pos
-			if len(raw.Path) > 1 {
-				pos.Col += len(raw.Path[0]) + 1
-			}
-			b.reference(pos, v.Parent.Decl.Variants[v.Index].Pos, "", "")
+			b.referenceNamed(raw.Pos, strings.Join(raw.Path, "."), v.Parent.Decl.Variants[v.Index].Pos)
 		} else if record, ok := target.Type.(*Record); ok {
 			fields = record.Fields
 		}

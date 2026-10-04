@@ -105,70 +105,8 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		}
 		return tokenLocation(*def, sources[def.File]), nil
 	case "textDocument/references", "textDocument/rename", "textDocument/prepareRename":
-		if pkg.stale && method != "textDocument/references" {
-			return nil, fmt.Errorf("rename requires a successful check of current buffers")
-		}
-		def, err := pkg.analysis.Definition(pos)
-		if err != nil || def == nil {
-			return nil, nil
-		}
-		if method != "textDocument/references" {
-			if modcache.Contains(modcache.Root(), def.File) {
-				return nil, fmt.Errorf("dependency sources are read-only")
-			}
-			declaration, err := pkg.analysis.Definition(*def)
-			tok := tokenAt(def.File, sources[def.File], *def)
-			if err != nil || declaration == nil || *declaration != *def || tok == nil || tok.Kind != syntax.TIdent {
-				return nil, fmt.Errorf("rename currently supports local variables and package-private functions")
-			}
-			for _, text := range sources {
-				tokens, _ := syntax.Lex("", []byte(text), &diag.List{})
-				for _, token := range tokens {
-					if token.Kind == syntax.TGoCode {
-						return nil, fmt.Errorf("rename cannot verify references inside unsafe Go bodies")
-					}
-				}
-			}
-			if len(tok.Text) > 0 && tok.Text[0] >= 'A' && tok.Text[0] <= 'Z' {
-				return nil, fmt.Errorf("exported names need a workspace-wide reference index before rename")
-			}
-		}
-		if method == "textDocument/prepareRename" {
-			tok := tokenAt(path, snapshot, pos)
-			if tok == nil || tok.Kind != syntax.TIdent {
-				return nil, nil
-			}
-			return map[string]any{"range": sourceRange{lspPosition(snapshot, tok.Pos), lspPosition(snapshot, tok.End)}, "placeholder": tok.Text}, nil
-		}
-		refs := s.references(*def, p.Context.IncludeDeclaration || method == "textDocument/rename")
-		if method == "textDocument/references" {
-			return refs, nil
-		}
-		if !validIdentifier(p.NewName) {
-			return nil, fmt.Errorf("new name must be an identifier, not a keyword")
-		}
-		if p.NewName == tokenAt(def.File, sources[def.File], *def).Text {
-			return map[string]any{"changes": map[string][]textEdit{}}, nil
-		}
-		for file := range sources {
-			if filepath.Dir(file) != filepath.Dir(def.File) {
-				continue
-			}
-			tokens, _ := syntax.Lex(file, []byte(s.source(file)), &diag.List{})
-			for _, token := range tokens {
-				if token.Kind == syntax.TIdent && token.Text == p.NewName {
-					return nil, fmt.Errorf("new name already occurs in an affected file")
-				}
-			}
-		}
-		changes := map[string][]textEdit{}
-		for _, ref := range refs {
-			changes[ref.URI] = append(changes[ref.URI], textEdit{ref.Range, p.NewName})
-		}
-		if err := s.validateWorkspaceEdit(changes); err != nil {
-			return nil, err
-		}
-		return map[string]any{"changes": changes}, nil
+		return s.renameFeature(method, path, p, pkg, pos)
+
 	}
 	return nil, fmt.Errorf("unsupported method %s", method)
 }
@@ -205,41 +143,7 @@ func validIdentifier(name string) bool {
 	}
 	return true
 }
-func (s *server) references(def diag.Pos, includeDeclaration bool) []location {
-	out := []location{}
-	seen := map[location]bool{}
-	for _, dir := range sortedKeys(s.packages) {
-		pkg := s.packages[dir]
-		// Workspace edits never combine a stale package with current source text.
-		if pkg.analysis == nil || pkg.stale {
-			continue
-		}
-		sources := pkg.analysis.Sources()
-		for _, path := range sortedKeys(sources) {
-			src := sources[path]
-			tokens := editorTokens(path, src)
-			name := ""
-			if target := tokenAt(def.File, sources[def.File], def); target != nil {
-				name = target.Text
-			}
-			for _, token := range tokens {
-				if token.Kind != syntax.TIdent || token.Text != name {
-					continue
-				}
-				identity, err := pkg.analysis.Definition(token.Pos)
-				if err != nil || identity == nil || *identity != def || !includeDeclaration && token.Pos == def {
-					continue
-				}
-				loc := location{fileURI(path), sourceRange{lspPosition(src, token.Pos), lspPosition(src, token.End)}}
-				if !seen[loc] {
-					out = append(out, loc)
-					seen[loc] = true
-				}
-			}
-		}
-	}
-	return out
-}
+
 func symbols(path, src string) []any {
 	diags := &diag.List{}
 	files := syntax.ParseFiles([]string{path}, [][]byte{[]byte(src)}, false, diags)

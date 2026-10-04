@@ -57,6 +57,7 @@ func (w *EditorWorkspace) References(def diag.Pos) []check.SourceReference {
 // are excluded unless supplied as explicit workspace roots.
 func WorkspacePackages(path string, roots []string, overlays map[string]string) ([]string, error) {
 	reader := overlaySources{files: overlays}
+	cache := modcache.Root()
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -82,15 +83,15 @@ func WorkspacePackages(path string, roots []string, overlays map[string]string) 
 	visited := map[string]bool{}
 	var walk func(string, bool) error
 	walk = func(dir string, root bool) error {
-		if visited[dir] || modcache.Contains(modcache.Root(), dir) {
+		if visited[dir] || modcache.Contains(cache, dir) {
 			return nil
 		}
-		visited[dir] = true
 		if !root {
 			if _, err := reader.readFile(filepath.Join(dir, ModFile)); err == nil {
 				return nil
 			}
 		}
+		visited[dir] = true
 		entries, err := reader.directory(dir)
 		if err != nil {
 			return err
@@ -152,6 +153,7 @@ func AnalyzeWorkspace(path string, roots []string, overlays map[string]string) (
 // Rename constructs and checks edits without writing files. Rechecking every
 // package also verifies that references still bind to the renamed declaration.
 func (w *EditorWorkspace) Rename(def diag.Pos, name string) ([]diag.TextEdit, error) {
+	cache := modcache.Root()
 	tokens, _ := syntax.Lex("", []byte(name), &diag.List{})
 	if len(tokens) < 2 || tokens[0].Kind != syntax.TIdent || tokens[0].Text != name {
 		return nil, fmt.Errorf("new name must be an identifier, not a keyword")
@@ -161,7 +163,7 @@ func (w *EditorWorkspace) Rename(def diag.Pos, name string) ([]diag.TextEdit, er
 		return nil, fmt.Errorf("no checked source references")
 	}
 	sources := w.Sources()
-	if _, ok := sources[def.File]; !ok || modcache.Contains(modcache.Root(), def.File) {
+	if _, ok := sources[def.File]; !ok || modcache.Contains(cache, def.File) {
 		return nil, fmt.Errorf("dependency and standard library sources are read-only")
 	}
 	supported := false
@@ -182,7 +184,7 @@ func (w *EditorWorkspace) Rename(def diag.Pos, name string) ([]diag.TextEdit, er
 	edits := []diag.TextEdit{}
 	changed := map[string]bool{}
 	for _, ref := range refs {
-		if modcache.Contains(modcache.Root(), ref.Start.File) {
+		if modcache.Contains(cache, ref.Start.File) {
 			return nil, fmt.Errorf("dependency sources are read-only")
 		}
 		if _, ok := sources[ref.Start.File]; !ok {
@@ -202,7 +204,7 @@ func (w *EditorWorkspace) Rename(def diag.Pos, name string) ([]diag.TextEdit, er
 			continue
 		}
 		for path, text := range a.Sources() {
-			if modcache.Contains(modcache.Root(), path) {
+			if modcache.Contains(cache, path) {
 				continue
 			}
 			tokens, _ := syntax.Lex(path, []byte(text), &diag.List{})

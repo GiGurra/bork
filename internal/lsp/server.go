@@ -38,6 +38,7 @@ type server struct {
 	inlaySettings         inlayHintSettings
 	inlayRefreshSupport   bool
 	inlayRefreshID        uint64
+	workspaceRoots        []string
 }
 type documentParams struct {
 	TextDocument struct {
@@ -172,6 +173,11 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			InitializationOptions struct {
 				InlayHints inlayHintSettings `json:"inlayHints"`
 			} `json:"initializationOptions"`
+			RootURI          string `json:"rootUri"`
+			RootPath         string `json:"rootPath"`
+			WorkspaceFolders []struct {
+				URI string `json:"uri"`
+			} `json:"workspaceFolders"`
 			Capabilities struct {
 				Workspace struct {
 					InlayHint struct {
@@ -190,6 +196,20 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 		if len(m.Params) > 0 {
 			if err := json.Unmarshal(m.Params, &init); err != nil {
 				return nil, &rpcError{-32602, "invalid initialize parameters"}, false
+			}
+		}
+		for _, folder := range init.WorkspaceFolders {
+			if path, err := filePath(folder.URI); err == nil {
+				s.workspaceRoots = append(s.workspaceRoots, path)
+			}
+		}
+		if len(s.workspaceRoots) == 0 {
+			if init.RootURI != "" {
+				if path, err := filePath(init.RootURI); err == nil {
+					s.workspaceRoots = append(s.workspaceRoots, path)
+				}
+			} else if init.RootPath != "" {
+				s.workspaceRoots = append(s.workspaceRoots, init.RootPath)
 			}
 		}
 		s.snippets = init.Capabilities.TextDocument.Completion.CompletionItem.SnippetSupport

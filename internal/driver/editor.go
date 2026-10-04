@@ -11,7 +11,6 @@ import (
 	"github.com/GiGurra/bork/internal/describe"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/std"
-	"github.com/GiGurra/bork/internal/syntax"
 )
 
 // EditorAnalysis is a successful checked snapshot. Its compiler graph remains
@@ -161,24 +160,4 @@ func (a *EditorAnalysis) Definition(pos diag.Pos) (*diag.Pos, error) {
 		return nil, nil
 	}
 	return &reference.Definition, nil
-}
-
-func editorDeclarationName(file *syntax.File, start diag.Pos, name string) diag.Pos {
-	tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
-	depth := 0
-	for _, token := range tokens {
-		if token.Pos.Line < start.Line || token.Pos.Line == start.Line && token.Pos.Col < start.Col {
-			continue
-		}
-		switch token.Kind {
-		case syntax.LParen, syntax.LBrack:
-			depth++
-		case syntax.RParen, syntax.RBrack:
-			depth--
-		}
-		if token.Kind == syntax.TIdent && token.Text == name && depth == 0 {
-			return token.Pos
-		}
-	}
-	return start
 }
