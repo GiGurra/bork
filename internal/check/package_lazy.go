@@ -6,7 +6,7 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// PackageBinding is a transparent, process-lifetime lazy value.
+// PackageBinding is a transparent immutable value, memoized on first read.
 type PackageBinding struct {
 	Decl         *syntax.Binding
 	Pkg          *Package
@@ -26,7 +26,7 @@ func (c *checker) declarePackageBindings(files []*syntax.File) {
 		c.inFile(file)
 		for _, declaration := range file.Bindings {
 			if previous := c.pkg.bindings[declaration.Name]; previous != nil {
-				c.errorf(declaration.Pos, "package lazy value %s is already declared at %s", declaration.Name, previous.Decl.Pos)
+				c.errorf(declaration.Pos, "package value %s is already declared at %s", declaration.Name, previous.Decl.Pos)
 				continue
 			}
 			if c.nameTaken(declaration.Name, declaration.Pos) {
@@ -66,7 +66,7 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 			names = append(names, qualify(member.Decl.Name, member.Pkg, nil))
 		}
 		names = append(names, binding.Decl.Name)
-		c.errorf(binding.Decl.Pos, "package lazy dependency cycle: %s", strings.Join(names, " -> "))
+		c.errorf(binding.Decl.Pos, "package value dependency cycle: %s", strings.Join(names, " -> "))
 		return Invalid
 	}
 	binding.state = 1
@@ -79,7 +79,7 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 	c.session = nil
 	c.initializerContext, c.comptimeContext = nil, nil
 	c.used = 0
-	boundary := &Func{Pkg: binding.Pkg, Decl: &syntax.FuncDecl{Pos: binding.Decl.Pos, Name: "package lazy " + binding.Decl.Name, Body: &syntax.Block{Pos: binding.Decl.Pos}}}
+	boundary := &Func{Pkg: binding.Pkg, Decl: &syntax.FuncDecl{Pos: binding.Decl.Pos, Name: "package value " + binding.Decl.Name, Body: &syntax.Block{Pos: binding.Decl.Pos}}}
 	binding.Boundary = boundary
 	c.fn = boundary
 	defer func() {
@@ -91,9 +91,9 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 	if binding.Decl.Type != nil {
 		wanted = c.resolveType(binding.Decl.Type)
 	}
-	actual := c.valueInitializer(binding.Decl, wanted, "package lazy initializer")
+	actual := c.valueInitializer(binding.Decl, wanted, "package value initializer")
 	if actual == Ok || actual == Never {
-		c.errorf(binding.Decl.Pos, "package lazy %s must produce a value", binding.Decl.Name)
+		c.errorf(binding.Decl.Pos, "package value %s must produce a value", binding.Decl.Name)
 		actual = Invalid
 	}
 	if wanted != nil {
@@ -111,17 +111,17 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 	metadata := c.info.lazyBindings[binding.Decl]
 	metadata.Kind = "package binding"
 	if metadata.Effects != "nothing" {
-		c.errorf(binding.Decl.Pos, "package lazy %s requires a pure initializer, found uses %s", binding.Decl.Name, metadata.Effects)
+		c.errorf(binding.Decl.Pos, "package value %s requires a pure initializer, found uses %s", binding.Decl.Name, metadata.Effects)
 	}
 	if len(boundary.Needs) != 0 {
-		c.errorf(binding.Decl.Pos, "package lazy %s cannot require ambient values", binding.Decl.Name)
+		c.errorf(binding.Decl.Pos, "package value %s cannot require ambient values", binding.Decl.Name)
 	}
 	return actual
 }
 
 func (c *checker) packageBindingRead(node *syntax.Ident, binding *PackageBinding) Type {
 	if c.comptimeContext != nil {
-		c.diags.AddCode(node.Pos, "comptime.capture", "comptime cannot read runtime package lazy value %s", node.Name)
+		c.diags.AddCode(node.Pos, "comptime.capture", "comptime cannot read runtime package value %s", node.Name)
 	}
 	typ := c.ensurePackageBinding(binding)
 	c.info.defs[node] = binding.Decl
@@ -493,7 +493,7 @@ func (c *checker) packageDependencyGraph() {
 				names = append(names, member.Pkg.Path+"."+member.Decl.Name)
 			}
 			names = append(names, binding.Pkg.Path+"."+binding.Decl.Name)
-			c.errorf(binding.Decl.Pos, "package lazy dependency cycle: %s", strings.Join(names, " -> "))
+			c.errorf(binding.Decl.Pos, "package value dependency cycle: %s", strings.Join(names, " -> "))
 			return
 		}
 		states[binding] = 1

@@ -1,0 +1,14 @@
+import "example.com/package-values/values"
+
+Answer = values.Base * 2
+Unused: Int = panic("unused values are never forced")
+pred positive(n: Int) { n > 0 }
+Limit: Int where positive = 3
+
+fn main() {
+  println(Answer)
+  n: Int where positive = Limit
+  println(n)
+  local = Answer + 1
+  println(local)
+}

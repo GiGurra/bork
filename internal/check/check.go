@@ -970,7 +970,7 @@ func (c *checker) checkFunc(fn *Func) {
 // already visible. bork does not allow shadowing.
 func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 	if c.pkg.bindings[name] != nil {
-		c.errorf(pos, "%s is already the name of a package lazy value (bork does not allow shadowing)", name)
+		c.errorf(pos, "%s is already the name of a package value (bork does not allow shadowing)", name)
 		return true
 	}
 	for i := len(c.scopes) - 1; i >= 0; i-- {

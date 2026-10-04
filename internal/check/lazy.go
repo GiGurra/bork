@@ -73,7 +73,7 @@ func (c *checker) valueInitializer(s *syntax.Binding, want Type, boundary string
 	c.used = 0
 	c.initializerContext = ctx
 	defer func() {
-		if s.Lazy || s.AsyncScope != nil {
+		if s.Lazy || s.Package || s.AsyncScope != nil {
 			names := []string{}
 			for name := range ctx.captures {
 				names = append(names, name)

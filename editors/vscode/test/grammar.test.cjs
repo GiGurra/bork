@@ -184,3 +184,10 @@ test('named and qualified typed interpolators keep hole expression scopes', () =
   has(ls, 1, '$$', 'constant.character.escape.bork');
   has(ls, 1, 'nested', 'string.interpolated.bork');
 });
+
+test('package values use binding scopes rather than type scopes', () => {
+  const ls = tokenize('Answer = 42\nLimit: Int = 3\nlazy Other = 1');
+  has(ls, 0, 'Answer', 'variable.other.readwrite.bork');
+  has(ls, 1, 'Limit', 'variable.other.readwrite.bork');
+  has(ls, 2, 'Other', 'variable.other.readwrite.bork');
+});

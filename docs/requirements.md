@@ -126,7 +126,7 @@ In priority order. When two values conflict, the higher one wins.
 
 ### General
 
-- **Strict evaluation by default.** Explicit lazy bindings and fields are proposed below; ordinary expressions remain eager.
+- **Strict evaluation by default.** Explicit lazy bindings and fields are proposed below; ordinary local expressions remain eager; pure package values are memoized on first read.
 - **A short propagation operator** (like Rust's `?`), so handling failures stays cheap. See section 4.
 - **No user-defined symbolic operators** (e.g. `|+|`, `>>=`).
 - **No hidden resolution magic.** Type class instances are resolved implicitly, but only from an explicitly imported, bounded set of places (see type classes below). Nothing like Scala 2's implicit conversions or whole-program implicit search.
@@ -3323,7 +3323,7 @@ can contribute to an inferred result. Lazy record fields provide a passable lazy
 value through `type Lazy[T] = { lazy value: T }`. Pure sibling-dependent defaults
 are computed fields: construction creates their cells, copies invalidate affected
 dependencies, and structural equality, Show, encoding and writable schemas omit
-them. Pure package `lazy Name = expr` bindings use process-lifetime memo cells,
+them. Pure package `Name = expr`, `Name: T = expr`, and `lazy Name = expr` bindings use process-lifetime memo cells,
 ordinary export visibility and forward references. Initializers cannot retain
 scopes or require ambient values. Direct and helper-induced dependency cycles
 are rejected; compiler evaluation never forces package cells. The complete design, including

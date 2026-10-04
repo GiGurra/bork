@@ -54,7 +54,9 @@ fn main() {
 
 A function that returns nothing leaves out the result type, as `main` does.
 
-A value shared by the whole package is declared at the top level with `lazy`, as in `lazy MaxRetries = 3`. It is computed the first time it is read.
+A value shared by the whole package is declared at the top level, as in `MaxRetries = 3` or `MaxRetries: Int = 3`. Its initializer must be pure: no effects or ambient values. It is computed once, the first time it is read, and is never computed if unused. `lazy MaxRetries = 3` means the same thing. Local bindings inside functions still evaluate eagerly.
+
+Package values can refer to values declared later or in another file in the same package. Dependency cycles are compile errors, including through helper functions. An uppercase name is exported, as with functions and types. An annotation can require facts (`Limit: Int where positive = 3`); the initializer must prove them and reads retain those promises. Package values are runtime values, so `comptime` cannot read them. A package initializer can itself use `comptime { ... }` for a closed computation.
 
 ## Everything is an expression
 

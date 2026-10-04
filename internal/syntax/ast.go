@@ -23,7 +23,7 @@ type File struct {
 	Types    []*TypeDecl
 	Ambients []*AmbientDecl
 	Funcs    []*FuncDecl
-	// Bindings contains package lazy values; ordinary bindings remain local.
+	// Bindings contains immutable package values.
 	Bindings []*Binding
 	Tests    []*TestDecl
 	Comments []Comment
@@ -398,6 +398,8 @@ type Stmt interface{ stmtNode() }
 // Binding is `name = value`, or `name: Type = value`. Bindings are
 // immutable.
 type Binding struct {
+	// Package values use process-lifetime memo cells, including without lazy.
+	Package    bool
 	AsyncScope Expr
 	AsyncPos   diag.Pos
 	Lazy       bool
