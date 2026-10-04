@@ -17,6 +17,10 @@ import (
 // the captured subprocess environment or Go build cache. Set it before tests run.
 var goStageCacheDir = os.UserCacheDir
 
+// scheduleCacheTrim lets driver tests keep detached maintenance out of
+// temporary cache roots they remove on cleanup.
+var scheduleCacheTrim = queueCacheTrim
+
 // stageGo gives Go a stable package directory without reusing semantic results.
 // The lock remains held until the caller has finished running Go. Unsupported
 // platforms, unavailable caches and failed publication use temporary staging.
@@ -25,7 +29,7 @@ func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, contex
 		if root, err := goStageProgramRoot(files); err == nil {
 			key := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%x", root, mode, context.namespace)))
 			if dir, pinned, release, err := stageGoStable(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: goStageSchema, Program: root, Mode: mode, Namespace: context.namespace}); err == nil {
-				return dir, pinned, func() { release(); _ = queueCacheTrim(base) }, nil
+				return dir, pinned, func() { release(); _ = scheduleCacheTrim(base) }, nil
 			}
 		}
 	}
