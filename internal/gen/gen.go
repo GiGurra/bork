@@ -437,10 +437,15 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	if err != nil {
 		return nil, fmt.Errorf("generated Go is invalid (compiler bug): %w\n%s", err, buf.String())
 	}
+	if g.debugSource != "" {
+		return g.mapDebugSource(out)
+	}
 	return out, nil
 }
 
 type gen struct {
+	debugSource    string
+	debugFiles     map[string]bool
 	artifactMode   bool
 	proofMode      bool
 	candidateNames map[*check.Var]*ast.Ident
@@ -887,6 +892,7 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 		drop(i)
 	}
 	k := sink{ret: fn.Result != check.Ok}
+	drops = append(g.debugLine(fd.Pos), drops...)
 	decl.Body = &ast.BlockStmt{List: append(drops, g.guardLabels(func() []ast.Stmt { return g.blockInto(fn.Body, k) })...)}
 	return decl
 }
@@ -1622,6 +1628,7 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 		}
 		return append(out, g.endMocks(mocks)...)
 	}
+	out = append(out, g.debugLine(b.Tail.Pos())...)
 	out = append(out, g.into(b.Tail, k)...)
 	if k.ret || b.Tail.Type() == check.Never {
 		return out // returning ended them
@@ -1633,6 +1640,16 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 	var out []ast.Stmt
 	for _, s := range list {
+		switch statement := s.(type) {
+		case *check.Let:
+			out = append(out, g.debugLine(statement.Var.Pos)...)
+		case *check.ExprStmt:
+			out = append(out, g.debugLine(statement.X.Pos())...)
+		case *check.Trust:
+			out = append(out, g.debugLine(statement.Pos)...)
+		case *check.Mock:
+			out = append(out, g.debugLine(statement.Pos)...)
+		}
 		switch s := s.(type) {
 		case *check.Let:
 			if s.Initializer != nil {

@@ -218,10 +218,20 @@ jobs:
         with:
           path: ${{ steps.go-cache.outputs.cache-paths }}
           key: ${{ steps.go-cache.outputs.cache-key }}
+  debug:
+    name: Debug adapter integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-go
+        with:
+          cache-name: debug
+      - run: go install github.com/go-delve/delve/cmd/dlv@v1.27.2
+      - run: BORK_TEST_DLV="$(go env GOPATH)/bin/dlv" go test ./internal/driver -run '^TestDebugDAPIntegration$' -count=1
   ci-ok:
     name: CI ok
     if: always()
-    needs: [grammar, tree-sitter, editors, shards, lint, examples, suite, replay, cache-maintenance, go-switching]
+    needs: [grammar, tree-sitter, editors, shards, lint, examples, suite, replay, cache-maintenance, go-switching, debug]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed

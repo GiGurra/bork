@@ -48,6 +48,12 @@
           "default": "bork",
           "scope": "machine",
           "description": "Path to the bork binary. Run bork: Restart Language Server after changing this setting."
+        },
+        "bork.delvePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional debugger executable override. Leave empty to use the debugger installed by bork."
         }
       }
     },
@@ -80,6 +86,61 @@
       {
         "command": "bork.runTest",
         "title": "bork: Run Test"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "bork",
+        "label": "bork",
+        "languages": [
+          "bork"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "A bork package directory or script to build and debug."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "bork",
+            "request": "launch",
+            "name": "Debug bork",
+            "program": "${workspaceFolder}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "bork: Launch",
+            "body": {
+              "type": "bork",
+              "request": "launch",
+              "name": "Debug bork",
+              "program": "${workspaceFolder}"
+            }
+          }
+        ]
       }
     ]
   },

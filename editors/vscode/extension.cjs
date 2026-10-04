@@ -20,6 +20,7 @@ async function disposeClient() {
 }
 
 async function activate(context) {
+  require('./debugging.cjs').registerDebugging(vscode, context);
   const watchers = [
     vscode.workspace.createFileSystemWatcher('**/*.bork'),
     vscode.workspace.createFileSystemWatcher('**/bork.mod'),

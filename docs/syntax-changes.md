@@ -11,7 +11,7 @@ Everything about *meaning* comes from the compiler packages. The language server
 | Tokens and keywords | `internal/syntax/token.go`, `internal/syntax/lexer.go` | New token kinds, the `keywords` map, literal forms |
 | Parser and syntax tree | `internal/syntax/parser.go` and the AST files in `internal/syntax/` | Parsing, error recovery, positions |
 | Checker | `internal/check/` | Rules, types, facts, effects, diagnostics |
-| Code generation | `internal/gen/` | Emitted Go |
+| Code generation | `internal/gen/` | Emitted Go and debug source mapping in `debug.go`; new runtime statements must carry source positions |
 | Formatter | `internal/format/` | Layout and indentation; `bork fmt` output must stay idempotent |
 | Describe | `internal/describe/` | `bork describe` output for the new construct |
 | Prelude and standard library | `internal/prelude/`, `internal/std/` | Any bork sources that should use or exercise the new syntax |

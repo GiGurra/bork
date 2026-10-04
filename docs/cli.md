@@ -53,6 +53,10 @@ bork install .                 # build, then put the executable in BORKBIN
 
 `bork install` names the executable after the source file or directory, creates `BORKBIN` if needed, and replaces an existing executable only after a successful build. Add `BORKBIN` to your `PATH` to run installed programs by name. See [settings](#settings) for where it is.
 
+## `bork debug`
+
+`bork debug build [path] -o program` builds with bork source locations, disables optimization and inlining, and retains generated Go in `program.bork-debug/`. `bork debug setup` installs the pinned optional debugger into BORKCACHE. `bork debug dap --listen 127.0.0.1:0` launches its loopback DAP server. See [debugging](debugging.md) for editor setup and runtime limitations.
+
 ## Scripts
 
 ```sh

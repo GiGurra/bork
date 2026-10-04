@@ -463,7 +463,12 @@ func buildGoWithModeObserved(files []*syntax.File, goSrc []byte, out string, mod
 // buildStagedGo builds an already-published stage. Its caller owns the stage
 // lock and cleanup, including any observation of the effective staged bytes.
 func buildStagedGoObserved(files []*syntax.File, absOut, dir string, pinned bool, context *goContext, observation *executionObservation) error {
-	cmd := context.command("build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
+	return buildStagedGoOptions(files, absOut, dir, pinned, context, observation)
+}
+
+func buildStagedGoOptions(files []*syntax.File, absOut, dir string, pinned bool, context *goContext, observation *executionObservation, options ...string) error {
+	args := append([]string{"build", "-mod=readonly", "-buildvcs=false", "-o", absOut}, options...)
+	cmd := context.command(append(args, ".")...)
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
 	observation.command(cmd, true)
