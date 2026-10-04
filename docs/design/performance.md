@@ -645,3 +645,19 @@ runtime. This measures return latency separately from receipt availability; an
 immediate repeat while publication is in flight may compile again. Large jobs and
 busy/unwritable caches skip publication. Automatic use remains off pending lifecycle
 integration; proof-evaluator programs continue to bypass at ordinary cost.
+
+Staging version 2 adds shared accounting and persistent program metadata while
+keeping stable absolute package paths. Seven paired fresh CLI emissions per row,
+with writable private XDG_CACHE_HOME, shared warm Go build cache, and both staging
+versions warmed before measurement:
+
+| Program | Version 1 median (min–max), ms | Version 2 median (min–max), ms |
+| --- | ---: | ---: |
+| config | 211.41 (205.40–223.16) | 208.59 (199.35–408.42) |
+| http_server | 261.40 (258.22–287.62) | 271.11 (263.10–301.27) |
+
+Emitted bytes match in every pair. Tests were running during this experiment;
+the config maximum records that variation. HTTP's median adds about 10 ms, which
+should be revisited if accounting grows with a fuller cache. Cache-full, busy and
+unsupported cases still build through temporary staging. These are ordinary CLI
+emission measurements, separate from first-request Session inventory seeding.

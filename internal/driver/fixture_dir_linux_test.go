@@ -41,7 +41,13 @@ func freshFixtureDir(t *testing.T, base, key string) (string, bool) {
 	if err := os.MkdirAll(filepath.Join(base, "locks"), 0o700); err != nil {
 		return "", false
 	}
-	lock, err := lockGoStage(goStageLockPath(base, key))
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = root.Close() }()
+	slot := sha256.Sum256([]byte(key))
+	lock, err := (cacheStore{root: base}).lock(root, filepath.Join("locks", fmt.Sprintf("%02x.lock", slot[0])))
 	if err != nil {
 		return "", false
 	}
