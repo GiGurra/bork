@@ -91,6 +91,8 @@ func defaultText(x syntax.Expr) string {
 		return strconv.Quote(x.Value)
 	case *syntax.BoolLit:
 		return strconv.FormatBool(x.Value)
+	case *syntax.Binary:
+		return "(" + defaultText(x.X) + " " + strings.Trim(x.Op.String(), "'") + " " + defaultText(x.Y) + ")"
 	case *syntax.Unary:
 		return strings.Trim(x.Op.String(), "'") + defaultText(x.X)
 	case *syntax.Ident:

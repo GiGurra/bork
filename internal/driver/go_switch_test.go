@@ -63,6 +63,9 @@ fn main() uses io { println(trimmed()) }
 	if session.editorContext.tool != wantTool || session.editorContext.values["GOTOOLCHAIN"] != "local" {
 		t.Fatalf("offline editor did not freeze selected SDK: %+v", session.editorContext.values)
 	}
+	if out, err := Doc(root, DocOptions{}); err != nil || !strings.Contains(string(out), "contains unsafe Go") {
+		t.Fatalf("offline documentation did not use cached SDK: %s, %v", out, err)
+	}
 	if _, err := dependencyGoWithSettings(root, []string{"GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local"}, "env", "GOVERSION"); err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +87,9 @@ fn main() uses io { println(trimmed()) }
 		if err != nil || strings.TrimSpace(string(out)) != cached.values["GOVERSION"] {
 			t.Fatalf("queried/executed SDK mismatch: %q %v", out, err)
 		}
+	}
+	if out, err := Doc(root, DocOptions{}); err != nil || !strings.Contains(string(out), "contains unsafe Go") {
+		t.Fatalf("offline documentation through launcher wrapper: %s, %v", out, err)
 	}
 	t.Setenv("GOTOOLCHAIN", "local")
 	local := captureGoContext()

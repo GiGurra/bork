@@ -153,6 +153,14 @@ func toolchainTarget(cmd *cobra.Command, args []string) (string, bool) {
 			path = "."
 		}
 		return path, true
+	case "doc":
+		if len(args) != 0 {
+			if _, err := os.Stat(args[0]); err == nil || !os.IsNotExist(err) {
+				return args[0], true
+			}
+		}
+		// Import paths are resolved in the current consumer project.
+		return ".", true
 	case "describe":
 		if len(args) == 0 {
 			return ".", true

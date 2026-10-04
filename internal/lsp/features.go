@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/doccomment"
 	"github.com/GiGurra/bork/internal/driver"
 	borkformat "github.com/GiGurra/bork/internal/format"
 	"github.com/GiGurra/bork/internal/modcache"
@@ -68,6 +69,9 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 			return nil, nil
 		}
 		text := "```bork\n" + result.Type + "\n```"
+		if result.Documentation != "" {
+			text += "\n\n" + doccomment.Markdown(result.Documentation)
+		}
 		if pkg.stale {
 			text = "**Stale: last successful check.**\n\n" + text
 		}

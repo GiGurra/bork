@@ -355,3 +355,36 @@ func TestLintCLI(t *testing.T) {
 		t.Fatal("lint accepted compiler error")
 	}
 }
+
+func TestDocCommand(t *testing.T) {
+	exe := cliExecutable(t, false)
+	root := t.TempDir()
+	path := filepath.Join(root, "lib.bork")
+	if err := os.WriteFile(path, []byte("// Answer is documented.\nfn Answer(): Int { 42 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"doc"}, {"doc", path, "--html"}} {
+		cmd := exec.Command(exe, args...)
+		cmd.Dir = root
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil || stderr.Len() != 0 || !bytes.Contains(stdout.Bytes(), []byte("Answer is documented.")) {
+			t.Fatalf("doc: %v, %s / %s", err, &stdout, &stderr)
+		}
+		if len(args) == 1 && !bytes.HasPrefix(stdout.Bytes(), []byte("# Bork API\n")) {
+			t.Fatalf("default format: %s", &stdout)
+		}
+		if len(args) > 1 && !bytes.HasPrefix(stdout.Bytes(), []byte("<!doctype html>")) {
+			t.Fatalf("HTML: %s", &stdout)
+		}
+	}
+	if err := os.WriteFile(path, []byte("fn Answer(): Int { missing }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(exe, "doc", path)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err == nil || stdout.Len() != 0 || !bytes.Contains(stderr.Bytes(), []byte("undefined: missing")) {
+		t.Fatalf("failed docs wrote partial stdout: %s / %s", &stdout, &stderr)
+	}
+}

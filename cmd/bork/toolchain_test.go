@@ -140,6 +140,21 @@ func TestToolchainTarget(t *testing.T) {
 	if !enabled || path != `C:\project\main.bork` {
 		t.Fatalf("describe target: %s, %t", path, enabled)
 	}
+	docDirectory := t.TempDir()
+	cmd = &cobra.Command{Use: "doc"}
+	for _, argument := range []string{docDirectory, "bork/http", "example.com/library/api", ""} {
+		var arguments []string
+		if argument != "" {
+			arguments = []string{argument}
+		}
+		want := "."
+		if argument == docDirectory {
+			want = docDirectory
+		}
+		if got, enabled := toolchainTarget(cmd, arguments); !enabled || got != want {
+			t.Fatalf("doc target %q: %s, %t", argument, got, enabled)
+		}
+	}
 	cmd = envCommand()
 	if err := cmd.Flags().Set("write", "true"); err != nil {
 		t.Fatal(err)
