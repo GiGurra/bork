@@ -2,3 +2,6 @@
 /hello
 /bork
 __pycache__/
+# Generated documentation
+/site/
+/.venv-docs/
