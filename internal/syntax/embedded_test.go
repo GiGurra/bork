@@ -104,9 +104,11 @@ func TestCompilerIdentifiers(t *testing.T) {
 			t.Fatalf("compiler identifiers rejected: %v", compiler)
 		}
 	}
-	user := &diag.List{}
-	Parse("prelude/internal.bork", source, user)
-	if user.Len() == 0 {
-		t.Fatal("ordinary source accepted reserved compiler identifiers")
+	for _, source := range [][]byte{source, []byte(`fn main() { println(s"${_helper()}") }`)} {
+		user := &diag.List{}
+		Parse("prelude/internal.bork", source, user)
+		if user.Len() == 0 {
+			t.Fatal("ordinary source accepted reserved compiler identifiers")
+		}
 	}
 }
