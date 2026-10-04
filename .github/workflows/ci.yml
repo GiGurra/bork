@@ -47,15 +47,29 @@ jobs:
       - name: Run tests
         run: go test ./... -count=1
 
-      - name: Run tests with -race
-        run: go test -race ./... -count=1
-
       # The tests run the examples (with their args.txt) and check their
       # output; this checks the CLI itself on each of them.
       - name: Check the examples with the CLI
         run: |
           go install ./cmd/bork
           for d in examples/*/; do bork check "$d"; done
+  race:
+    name: Race (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, driver-cases, driver-examples, driver-integration-0, driver-integration-1]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Run race group
+        env:
+          GOTOOLCHAIN: local
+        run: python3 scripts/race.py '${{ matrix.group }}'
   replay:
     name: Captured-input parity
     runs-on: ubuntu-latest
