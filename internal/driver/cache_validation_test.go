@@ -12,9 +12,10 @@ import (
 )
 
 func TestCacheValidationOwnedResult(t *testing.T) {
+	t.Parallel()
 	body, original := cacheArtifactFixture(t)
 	body.Warnings = []cacheArtifactWarning{{Pos: diag.Pos{File: body.Request.Path, Line: 1, Col: 1}, Message: "warning", Severity: "warning", Fixes: []diag.Fix{{Message: "fix", Edits: []diag.TextEdit{{Replacement: "owned"}}}}}}
-	result, err := body.validate(body.Request, body.Namespace)
+	result, err := validateOwnedCacheFixture(body, body.Request, body.Namespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func TestCacheValidationRejectsChanges(t *testing.T) {
 			case "namespace":
 				namespace = sha256.Sum256([]byte("another compiler"))
 			}
-			if _, err := body.validate(request, namespace); err == nil {
+			if _, err := validateOwnedCacheFixture(body, request, namespace); err == nil {
 				t.Fatal("changed input accepted")
 			}
 		})
@@ -90,6 +91,7 @@ func TestCacheValidationRejectsChanges(t *testing.T) {
 }
 
 func TestCacheValidationMetadataInventory(t *testing.T) {
+	t.Parallel()
 	body, original := cacheArtifactFixture(t)
 	usage := &goUsage{}
 	names := (goPackages{context: original.context, usage: usage}).Names([]string{"fmt"})
@@ -101,7 +103,7 @@ func TestCacheValidationMetadataInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	body.Names = []*goNameReceipt{receipt}
-	if _, err := body.validate(body.Request, body.Namespace); err != nil {
+	if _, err := validateOwnedCacheFixture(body, body.Request, body.Namespace); err != nil {
 		t.Fatal(err)
 	}
 	// Keep the inventory structurally complete while changing a content digest.
@@ -114,7 +116,7 @@ func TestCacheValidationMetadataInventory(t *testing.T) {
 	if !body.valid() {
 		t.Fatal("fixture must remain structurally valid")
 	}
-	if _, err := body.validate(body.Request, body.Namespace); err == nil {
+	if _, err := validateOwnedCacheFixture(body, body.Request, body.Namespace); err == nil {
 		t.Fatal("changed metadata digest accepted")
 	}
 }
@@ -142,11 +144,13 @@ func TestCacheValidationRejectsLauncherChangedAfterStartup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mutated := false
 	restore := func(receipt *goContextReceipt) (*goContext, error) {
-		ctx, err := receipt.restoreWithToolEvidence(resolveGoContext(), digest, evidence)
+		ctx, err := receipt.restoreWithToolEvidence(resolveOwnedReceiptGoContext(), digest, evidence)
 		if err != nil {
 			return nil, err
 		}
+		mutated = true
 		bytes[len(bytes)-1] ^= 1
 		if err := os.WriteFile(launcher, bytes, 0700); err != nil {
 			t.Fatal(err)
@@ -158,5 +162,8 @@ func TestCacheValidationRejectsLauncherChangedAfterStartup(t *testing.T) {
 	}
 	if _, err := body.validateWithContext(body.Request, body.Namespace, restore); err == nil {
 		t.Fatal("post-startup equal-mtime launcher edit accepted")
+	}
+	if !mutated {
+		t.Fatal("launcher mutation callback was not reached")
 	}
 }

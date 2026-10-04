@@ -14,6 +14,7 @@ import (
 )
 
 func TestCacheCleanNamespacesVersionsAndPreservation(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	body, _ := cacheArtifactFixture(t)
 	base := t.TempDir()

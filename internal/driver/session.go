@@ -37,6 +37,9 @@ type Session struct {
 	watch   bool
 	attempt *watchAttempt
 	observe func(string)
+	// Private fixture settings are assigned before the Session's first request.
+	// Production sessions use the current process environment on every request.
+	goSettings []string
 }
 
 // SessionStats counts requests and explains the most recent hit or miss.
@@ -92,7 +95,7 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 	} else if s.watch && s.attempt != nil {
 		previous = s.attempt.context
 	}
-	context := captureSessionGoContext(previous)
+	context := captureSessionGoContextWithSettings(previous, s.goSettings)
 	phase(s.observe, "validate")
 	if reason := s.hitMissReason(path, emit, context); reason == "" {
 		s.stats.Hits++

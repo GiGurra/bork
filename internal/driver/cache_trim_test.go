@@ -162,6 +162,7 @@ func TestCacheTrimDetachedEntryRepublicationAndTrashRecovery(t *testing.T) {
 	}
 }
 func TestCacheTrimResultNamespacesAndLocators(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	now := time.Unix(1700000000, 0)

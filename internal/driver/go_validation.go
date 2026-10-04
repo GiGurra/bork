@@ -32,7 +32,11 @@ type goContextValidation struct {
 }
 
 func captureSessionGoContext(previous *goContext) *goContext {
-	resolved := resolveGoContext()
+	return captureSessionGoContextWithSettings(previous, nil)
+}
+
+func captureSessionGoContextWithSettings(previous *goContext, settings []string) *goContext {
+	resolved := resolveGoContextWithOptions(goContextOptions{settings: settings, moduleHook: goModuleHook})
 	if previous != nil && previous.validation != nil && resolved.err == nil && resolved.driverErr == nil &&
 		slices.Equal(resolved.processEnv, previous.processEnv) && resolved.tool == previous.tool &&
 		resolved.driver == previous.driver && resolved.self == previous.self && previous.validation.current() {

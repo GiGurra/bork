@@ -11,10 +11,11 @@ import (
 
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/gen"
 )
 
 func TestSessionEmitHitAndSourceEdit(t *testing.T) {
-	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "main.bork")
 	write := func(src string) {
@@ -24,7 +25,7 @@ func TestSessionEmitHitAndSourceEdit(t *testing.T) {
 		}
 	}
 	write(`fn main() { println("old") }`)
-	session := NewSession()
+	session := newOwnedFixtureSession("GOPACKAGESDRIVER=off")
 	first, err := session.Emit(root)
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +51,7 @@ func TestSessionEmitHitAndSourceEdit(t *testing.T) {
 	if err != nil || bytes.Equal(first, changed) {
 		t.Fatalf("source edit was missed: %v", err)
 	}
-	clean, err := Emit(root)
+	clean, err := emitOwnedSessionFixture(root, session.goSettings)
 	if err != nil || !bytes.Equal(changed, clean) {
 		t.Fatalf("changed output differs from clean: %v", err)
 	}
@@ -60,13 +61,13 @@ func TestSessionEmitHitAndSourceEdit(t *testing.T) {
 }
 
 func TestSessionBypassesEvaluationAndTypes(t *testing.T) {
-	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Parallel()
 	for _, fixture := range []struct{ name, reason string }{
 		{"embed", "compile-time evaluator"},
 		{"go_user_deps", "Go type metadata"},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			session := NewSession()
+			session := newOwnedFixtureSession("GOPACKAGESDRIVER=off")
 			path := filepath.Join("../../testdata/cases", fixture.name)
 			for range 2 {
 				if _, err := session.Emit(path); err != nil {
@@ -81,12 +82,12 @@ func TestSessionBypassesEvaluationAndTypes(t *testing.T) {
 }
 
 func TestSessionCheckWarningsOwned(t *testing.T) {
-	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte("fn main() { lazy x = 1; println(x) }"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	session := NewSession()
+	session := newOwnedFixtureSession("GOPACKAGESDRIVER=off")
 	want, err := session.Check(root)
 	if err != nil || len(want) == 0 {
 		t.Fatalf("warnings: %v, %v", want, err)
@@ -104,12 +105,12 @@ func TestSessionCheckWarningsOwned(t *testing.T) {
 }
 
 func TestSessionConcurrentRequests(t *testing.T) {
-	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte("fn main() {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	session := NewSession()
+	session := newOwnedFixtureSession("GOPACKAGESDRIVER=off")
 	want, err := session.Emit(root)
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +161,7 @@ func TestSessionWindowsDriveContextBypass(t *testing.T) {
 }
 
 func TestSessionMatchesClean(t *testing.T) {
-	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Parallel()
 	for _, fixture := range []struct{ name, path, source string }{
 		{name: "hello", path: "../../examples/hello"},
 		{name: "generics", source: "fn identity[T](x:T):T{x}\nfn main(){println(identity(1))}"},
@@ -174,7 +175,7 @@ func TestSessionMatchesClean(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			session := NewSession()
+			session := newOwnedFixtureSession("GOPACKAGESDRIVER=off")
 			first, err := session.Emit(path)
 			if err != nil {
 				t.Fatal(err)
@@ -309,7 +310,7 @@ func TestSessionRefreshesStandardPackageNames(t *testing.T) {
 }
 
 func TestSessionAssetChanges(t *testing.T) {
-	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Parallel()
 	root := t.TempDir()
 	assets := filepath.Join(root, "assets")
 	if err := os.Mkdir(assets, 0o755); err != nil {
@@ -322,7 +323,7 @@ func TestSessionAssetChanges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte("import assets \"bork/embed\"\nfn main(){println(assets.ReadString(\"assets/value\"));println(assets.Directory(\"assets\").Paths())}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	session := NewSession()
+	session := newOwnedFixtureSession("GOPACKAGESDRIVER=off")
 	if _, err := session.Emit(root); err != nil {
 		t.Fatal(err)
 	}
@@ -349,19 +350,19 @@ func TestSessionAssetChanges(t *testing.T) {
 	if err != nil || session.Stats().Misses != 3 {
 		t.Fatalf("membership edit: %v, %+v", err, session.Stats())
 	}
-	want, err := Emit(root)
+	want, err := emitOwnedSessionFixture(root, session.goSettings)
 	if err != nil || !bytes.Equal(got, want) {
 		t.Fatalf("asset result differs from clean: %v", err)
 	}
 }
 
 func TestSessionAddedInvalidDefaultAndRepair(t *testing.T) {
-	t.Setenv("GOPACKAGESDRIVER", "off")
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte("fn main(){}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	session := NewSession()
+	session := newOwnedFixtureSession("GOPACKAGESDRIVER=off")
 	if _, err := session.Check(root); err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +377,7 @@ func TestSessionAddedInvalidDefaultAndRepair(t *testing.T) {
 	if err == nil {
 		t.Fatal("cached success hid an unused invalid default")
 	}
-	_, _, cleanErr := Check(root)
+	_, cleanErr := checkOwnedSessionFixture(root, session.goSettings)
 	if fmt.Sprint(err) != fmt.Sprint(cleanErr) {
 		t.Fatal("failure diagnostics differ from clean")
 	}
@@ -409,4 +410,28 @@ func TestSessionConfigurationAndModeChanges(t *testing.T) {
 	if _, err := other.Check(root); err != nil || other.Stats().Misses != 1 || other.Stats().Hits != 0 {
 		t.Fatalf("separate session: %v, %+v", err, other.Stats())
 	}
+}
+
+func newOwnedFixtureSession(settings ...string) *Session {
+	return &Session{goSettings: append([]string(nil), settings...)}
+}
+
+func checkOwnedSessionFixture(path string, settings []string) (*compiledProgram, error) {
+	loaded, module, err := loadCompilationInputs(path, nil)
+	if err != nil {
+		return nil, err
+	}
+	ctx := captureGoContextWithOptions(goContextOptions{settings: settings, moduleHook: goModuleHook})
+	return checkLoadedProgramObserved(loaded, module, ctx, captureEmbedsSnapshot, nil)
+}
+
+func emitOwnedSessionFixture(path string, settings []string) ([]byte, error) {
+	program, err := checkOwnedSessionFixture(path, settings)
+	if err != nil {
+		return nil, err
+	}
+	if err := program.requireMain(); err != nil {
+		return nil, err
+	}
+	return gen.Package(program.files, program.info)
 }
