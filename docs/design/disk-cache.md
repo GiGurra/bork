@@ -148,8 +148,8 @@ scans from result and staging publication. The next slice coalesces use marking
 at one hour: validated result hits mark the artifact and only a still-matching
 namespace locator; stages keep an independent `used` marker across tree swaps.
 Busy result lifecycle locks skip marking, and marker failures never fail a build.
-Bounded daily trim follows separately; automatic complete-result caching stays
-disabled until maintenance and the acceptance matrix pass.
+Bounded daily trim and the population matrix are implemented. Automatic Linux
+CLI result reuse now follows the validated rollout described below.
 
 Mark successful result hits and stage use with approximate last-use mtimes,
 writing at most once per hour. Publications naturally mark new entries used.
@@ -265,7 +265,7 @@ pretending it was emptied. Report entry counts and bytes removed concisely.
    serialization/rehydration parity tests and no disk hits enabled yet.
 2. Add bounded atomic result storage and supported receipt validation; prepare
    a real CLI check/emission path behind an internal opt-in test gate. Keep
-   AST-returning APIs fresh. Automatic reads/writes remain disabled.
+   AST-returning APIs fresh. This initial test gate preceded automatic reuse.
 3. Replace the initial budget lifecycle with direct sharded lookup, hourly use
    marking and bounded daily age-based trim; retain clean commands. Enable the
    CLI cache only after flat per-build cost and separate trim measurements pass.
@@ -310,8 +310,8 @@ admission slots when selecting pending publications and preserve their lock inod
 `BORK_CACHE=off` explicitly disables result-cache lookup and publication. An
 unwritable cache, oversized job or unavailable process/locking facility skips
 publication and returns ordinary output. Other platforms currently skip detached
-publication. Automatic persistent use remains disabled until age-based retention
-and cleanup land. Tests opt into an explicit completion pipe and optional barrier;
+publication. Linux automatic publication is now enabled after age-based retention,
+cleanup and the population matrix. Tests opt into an explicit completion pipe and optional barrier;
 they wait for publication or process exit without sleep-based polling. These pipes
 are never inherited by Go subprocesses.
 
@@ -372,3 +372,28 @@ files). This is an eviction hint only: hit validation still certifies the comple
 checksummed artifact and every semantic receipt. Unsupported/truncated headers retain
 ordinary LRU eligibility. Empty result namespace directories are removed under
 MUTATION so failed publication does not accumulate directory records.
+
+
+## Automatic Linux CLI rollout
+
+`bork check`, `emit`, `build`, and `run` now enable validated complete-result
+reuse at CLI startup. Library AST APIs, install, test and watch retain their
+existing pipelines. Build hits reconstruct only owned source-location records,
+using the original root-source identity for staging; they still invoke Go with
+validated module and context data. Build misses pass their fresh checked graph
+directly to generation and Go work once. Run executes the resulting program on
+every invocation. No native executable or evaluation result is retained here.
+
+Eligible misses always use bounded detached publication on Linux. Failed
+admission, an unwritable root, or unavailable image/process facilities skip
+publication; there is no inline certification fallback. Source loading and
+eligibility precede expensive inventories. Deferred requests do not collect
+comptime/predicate observations. Proof/evaluator execution, Go export loading,
+custom drivers and assets remain bypasses. macOS staging/trim remains supported;
+automatic result reuse awaits its compiler-image identity implementation.
+
+Every test CLI has a linker-only marker. Detached trim and publication are off
+in marked images unless `BORK_TEST_CACHE_TRIM=on` or
+`BORK_TEST_CACHE_PUBLISH=on` respectively. Cache tests opt in and wait using
+owned completion pipes. Production activation in an enabled test image also
+requires `BORK_TEST_CACHE_PRODUCTION=1`; ordinary CLI images need no opt-in.

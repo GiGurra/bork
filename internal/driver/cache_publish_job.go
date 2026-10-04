@@ -38,6 +38,7 @@ type cachePublishJob struct {
 	Go          cachePublishGo         `json:"go"`
 	Names       []cachePublishName     `json:"names"`
 	Module      cacheArtifactModule    `json:"module"`
+	RootSource  string                 `json:"root_source"`
 	SourcePaths []string               `json:"source_paths"`
 	GoSource    []byte                 `json:"go_source"`
 	Warnings    []cacheArtifactWarning `json:"warnings"`
@@ -46,7 +47,7 @@ type cachePublishJob struct {
 func newCachePublishJob(root string, artifact *sessionArtifact) (*cachePublishJob, error) {
 	// Bound owned clones before creating them, as well as the encoded handoff.
 	budget := cacheEncodingBudget{remaining: cachePublishJobMaxBytes - 1024}
-	for _, value := range []any{artifact.goSrc, artifact.module.mod, artifact.module.sum, artifact.warnings, artifact.context.processEnv, artifact.context.values, artifact.sourcePaths} {
+	for _, value := range []any{artifact.goSrc, artifact.module.mod, artifact.module.sum, artifact.warnings, artifact.context.processEnv, artifact.context.values, artifact.sourcePaths, artifact.rootSource} {
 		if err := budget.value(reflect.ValueOf(value), 0); err != nil {
 			return nil, err
 		}
@@ -73,7 +74,7 @@ func newCachePublishJob(root string, artifact *sessionArtifact) (*cachePublishJo
 		return nil, err
 	}
 	ctx := artifact.context
-	job := &cachePublishJob{Schema: cachePublishJobSchema, Root: root, Request: cacheArtifactRequest{Path: artifact.path, Cwd: source.Cwd, Emit: artifact.emit}, Source: source, Go: cachePublishGo{ProcessEnv: slices.Clone(ctx.processEnv), Values: maps.Clone(ctx.values), Tool: ctx.tool, Driver: ctx.driver, Self: ctx.self, ToolDigest: ctx.toolDigest, Namespace: ctx.namespace}, Module: cacheArtifactModule{Mod: slices.Clone(artifact.module.mod), Sum: slices.Clone(artifact.module.sum)}, GoSource: slices.Clone(artifact.goSrc), SourcePaths: slices.Clone(artifact.sourcePaths)}
+	job := &cachePublishJob{Schema: cachePublishJobSchema, Root: root, Request: cacheArtifactRequest{Path: artifact.path, Cwd: source.Cwd, Emit: artifact.emit}, Source: source, Go: cachePublishGo{ProcessEnv: slices.Clone(ctx.processEnv), Values: maps.Clone(ctx.values), Tool: ctx.tool, Driver: ctx.driver, Self: ctx.self, ToolDigest: ctx.toolDigest, Namespace: ctx.namespace}, Module: cacheArtifactModule{Mod: slices.Clone(artifact.module.mod), Sum: slices.Clone(artifact.module.sum)}, GoSource: slices.Clone(artifact.goSrc), RootSource: artifact.rootSource, SourcePaths: slices.Clone(artifact.sourcePaths)}
 	for _, name := range artifact.names {
 		if !name.standard {
 			return nil, errUnsupportedGoReceipt
@@ -147,7 +148,7 @@ func (job *cachePublishJob) candidate() (*sessionArtifact, error) {
 	if ctx.namespace != job.Go.Namespace || !supportedCacheMissSettings(ctx) {
 		return nil, errUnsupportedGoReceipt
 	}
-	candidate := &sessionArtifact{path: job.Request.Path, emit: job.Request.Emit, inputs: inputs, module: &goModuleInputs{mod: slices.Clone(job.Module.Mod), sum: slices.Clone(job.Module.Sum)}, assets: newEmbedSnapshot(inputs), context: ctx, goSrc: slices.Clone(job.GoSource), sourcePaths: slices.Clone(job.SourcePaths)}
+	candidate := &sessionArtifact{path: job.Request.Path, emit: job.Request.Emit, inputs: inputs, module: &goModuleInputs{mod: slices.Clone(job.Module.Mod), sum: slices.Clone(job.Module.Sum)}, assets: newEmbedSnapshot(inputs), context: ctx, goSrc: slices.Clone(job.GoSource), rootSource: job.RootSource, sourcePaths: slices.Clone(job.SourcePaths)}
 	for _, name := range job.Names {
 		candidate.names = append(candidate.names, goNameInput{paths: slices.Clone(name.Paths), names: maps.Clone(name.Names), standard: true})
 	}

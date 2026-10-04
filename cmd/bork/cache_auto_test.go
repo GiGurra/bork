@@ -23,7 +23,7 @@ func TestAutomaticCacheCLI(t *testing.T) {
 	t.Setenv("BORK_TEST_DISK_CACHE_BACKGROUND", "")
 	t.Setenv("GOTOOLCHAIN", "local")
 	t.Setenv("GOPACKAGESDRIVER", "off")
-	for _, mode := range []string{"check", "emit", "build", "run", "off"} {
+	for _, mode := range []string{"check", "emit", "build", "run", "off", "workers-off", "unwritable"} {
 		t.Run(mode, func(t *testing.T) {
 			sourceRoot := t.TempDir()
 			source := filepath.Join(sourceRoot, "main.bork")
@@ -31,6 +31,14 @@ func TestAutomaticCacheCLI(t *testing.T) {
 				t.Fatal(err)
 			}
 			cache := filepath.Join(t.TempDir(), "cache")
+			if mode == "unwritable" {
+				if err := os.WriteFile(cache, []byte("blocked"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "workers-off" {
+				t.Setenv("BORK_TEST_CACHE_PUBLISH", "")
+			}
 			t.Setenv("BORKCACHE", cache)
 			t.Setenv("BORK_CACHE", "on")
 			if mode == "off" {
@@ -53,7 +61,7 @@ func TestAutomaticCacheCLI(t *testing.T) {
 
 			outputPath := filepath.Join(t.TempDir(), "program")
 			commandName := mode
-			if mode == "off" {
+			if mode == "off" || mode == "workers-off" || mode == "unwritable" {
 				commandName = "check"
 			}
 			args := []string{commandName, source}
@@ -81,6 +89,18 @@ func TestAutomaticCacheCLI(t *testing.T) {
 				}
 				if _, err := os.Stat(filepath.Join(cache, "jobs")); !os.IsNotExist(err) {
 					t.Fatal("disabled cache queued publication", err)
+				}
+				return
+			}
+			if mode == "workers-off" || mode == "unwritable" {
+				data, err := os.ReadFile(probe)
+				if err != nil || string(data) != "publish-skip\n" {
+					t.Fatalf("worker opt-out/failure: %q %v", data, err)
+				}
+				if mode == "workers-off" {
+					if _, err := os.Stat(filepath.Join(cache, "jobs")); !os.IsNotExist(err) {
+						t.Fatal("test worker spawned without opt-in", err)
+					}
 				}
 				return
 			}

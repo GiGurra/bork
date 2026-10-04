@@ -77,7 +77,7 @@ func compileCacheMissWithBuild(path string, emit bool, observe func(string), bui
 		return src, warningData, nil, nil
 	}
 
-	return src, warningData, &sessionArtifact{path: path, emit: emit, inputs: program.inputs, module: module, assets: program.assets, context: context, names: usage.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData), sourcePaths: sourcePaths(program.files)}, nil
+	return src, warningData, &sessionArtifact{path: path, emit: emit, inputs: program.inputs, module: module, assets: program.assets, context: context, names: usage.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData), rootSource: goStageRootSource(program.files), sourcePaths: sourcePaths(program.files)}, nil
 }
 
 // captureCacheMiss independently re-proves late metadata against names actually

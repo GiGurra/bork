@@ -9,9 +9,8 @@ import (
 
 // cachedCompilation contains an owned result, without a checker or AST. It is
 // constructed only after all supported receipts have passed fresh validation.
-// No production caller serves it until cache lifecycle support is installed.
 type cachedCompilation struct {
-	inputs      *sourceSnapshot
+	rootSource  string
 	sourcePaths []string
 	goSource    []byte
 	warnings    []diag.Diagnostic
@@ -48,7 +47,7 @@ func (body *cacheArtifactBody) validateWithContext(request cacheArtifactRequest,
 	for index, warning := range body.Warnings {
 		warnings[index] = diag.Diagnostic{Pos: warning.Pos, End: warning.End, Msg: warning.Message, Code: warning.Code, Severity: warning.Severity, Fixes: warning.Fixes}
 	}
-	result := &cachedCompilation{inputs: inputs, sourcePaths: slices.Clone(body.SourcePaths), goSource: slices.Clone(body.GoSource), warnings: cloneSessionDiagnostics(warnings), module: &goModuleInputs{mod: slices.Clone(body.Module.Mod), sum: slices.Clone(body.Module.Sum)}, context: context}
+	result := &cachedCompilation{rootSource: body.RootSource, sourcePaths: slices.Clone(body.SourcePaths), goSource: slices.Clone(body.GoSource), warnings: cloneSessionDiagnostics(warnings), module: &goModuleInputs{mod: slices.Clone(body.Module.Mod), sum: slices.Clone(body.Module.Sum)}, context: context}
 	// Recheck after assembling the result. Inputs changed during validation are
 	// misses; the normal compiler remains responsible for rebuilding them.
 	for _, name := range names {

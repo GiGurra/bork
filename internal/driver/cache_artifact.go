@@ -39,6 +39,7 @@ type cacheArtifactBody struct {
 	Names       []*goNameReceipt       `json:"names"`
 	Module      cacheArtifactModule    `json:"module"`
 	GoSource    []byte                 `json:"go_source"`
+	RootSource  string                 `json:"root_source"`
 	SourcePaths []string               `json:"source_paths"`
 	Warnings    []cacheArtifactWarning `json:"warnings"`
 }
@@ -98,7 +99,7 @@ func cacheArtifactFromObserved(artifact *sessionArtifact, paths []string, namesp
 	if err != nil {
 		return nil, err
 	}
-	body := &cacheArtifactBody{Schema: cacheArtifactSchema, Namespace: namespace, Key: key, Request: request, Source: source, Go: configuration, Module: cacheArtifactModule{Mod: slices.Clone(artifact.module.mod), Sum: slices.Clone(artifact.module.sum)}, GoSource: slices.Clone(artifact.goSrc), SourcePaths: slices.Clone(paths)}
+	body := &cacheArtifactBody{Schema: cacheArtifactSchema, Namespace: namespace, Key: key, Request: request, Source: source, Go: configuration, Module: cacheArtifactModule{Mod: slices.Clone(artifact.module.mod), Sum: slices.Clone(artifact.module.sum)}, GoSource: slices.Clone(artifact.goSrc), RootSource: artifact.rootSource, SourcePaths: slices.Clone(paths)}
 	phase(observe, "metadata-receipts")
 	for _, input := range artifact.names {
 		name, err := input.receiptSnapshot()
@@ -162,6 +163,9 @@ func (b *cacheArtifactBody) valid() bool {
 		}
 	}
 	if len(b.Module.Mod) == 0 || len(b.SourcePaths) == 0 || b.Request.Emit && len(b.GoSource) == 0 || !b.Request.Emit && len(b.GoSource) != 0 {
+		return false
+	}
+	if b.RootSource != "" && (!validReceiptPath(b.RootSource) || !slices.Contains(b.SourcePaths, b.RootSource)) {
 		return false
 	}
 	for _, path := range b.SourcePaths {

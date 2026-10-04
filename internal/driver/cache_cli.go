@@ -108,21 +108,24 @@ func lookupCachedCompilation(path string, emit bool) *cachedCompilation {
 }
 
 func cachedBuild(path, out string) error {
-	if result := lookupCachedCompilation(path, true); result != nil {
+	if result := lookupCachedCompilation(path, true); result != nil && result.rootSource != "" {
 		// These are only source-location records for staging/error mapping. No
 		// parser/checker state is reconstructed or reused.
-		files := make([]*syntax.File, 0, len(result.sourcePaths))
-		for _, path := range result.sourcePaths {
-			resolved, err := result.inputs.readPath(path)
-			read, found := result.inputs.reads[sourceReadKey{"file", resolved}]
-			files = append(files, &syntax.File{Path: path, Prelude: err != nil || !found || read.err != nil})
-		}
+		files := cachedBuildFiles(result)
 		return buildGoWithContext(files, result.goSource, out, result.module, result.context)
 	}
 	_, _, err := freshCachedCompileWithBuild(path, true, func(program *compiledProgram, source []byte) error {
 		return buildGoWithContext(program.files, source, out, program.module, program.context, program.info.Embeds...)
 	})
 	return err
+}
+
+func cachedBuildFiles(result *cachedCompilation) []*syntax.File {
+	files := make([]*syntax.File, 0, len(result.sourcePaths))
+	for _, path := range result.sourcePaths {
+		files = append(files, &syntax.File{Path: path, Prelude: path != result.rootSource})
+	}
+	return files
 }
 
 func freshCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
