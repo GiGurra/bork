@@ -70,6 +70,12 @@ bork check --json .     # one JSON object per diagnostic
 
 `check` is the quickest way to get the compiler's answer, because it stops before generating and building Go.
 
+Non-exhaustive matches include a structured fix in `check --json`. It adds
+missing cases with destructuring patterns and `todo()` bodies. Effect errors
+also include fixes for the function's `uses` clause. The language server exposes
+these as quick fixes and formats the result; replace generated `todo()` calls
+with the intended behavior.
+
 It also warns about leftover development markers: `dbg(...)` calls and `todo()` placeholders. Warnings do not fail the check.
 
 `--json` is meant for editors, scripts, and coding agents. Each diagnostic has a stable code, a position, and, where the compiler knows the repair, the text edits that apply it. `build`, `install`, and `test` accept `--json` too, and write the diagnostics to standard error. See [JSON diagnostics](diagnostics.md) and [watch mode](watch.md).

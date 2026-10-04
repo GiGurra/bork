@@ -38,6 +38,11 @@ immediately. Broken edits publish current errors while hover and completion use
 the last successful check, marked **Stale**. Navigation positions may move while
 a buffer is broken. Formatting uses the current text regardless of type errors.
 
+Quick fixes add the effects a function needs and fill missing match arms with
+destructuring patterns. Generated arms call `todo()` until you implement them.
+Fixes use current compiler diagnostics, even before the first successful check,
+and format the edited document with `bork fmt`.
+
 References search the compiler graphs for open packages and their imports.
 Rename currently supports local variables and package-private functions, requires
 successful current checks, and refuses names already present in affected packages. Proposed edits are

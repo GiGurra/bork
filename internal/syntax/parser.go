@@ -1379,6 +1379,7 @@ func (p *parser) matchExpr() Expr {
 		p.skipNewlines()
 		m.Arms = append(m.Arms, &Arm{Pattern: pat, Body: p.expr()})
 	})
+	m.Close = p.toks[p.i-1].Pos
 	return m
 }
 

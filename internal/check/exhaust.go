@@ -275,6 +275,14 @@ func useful(earlier []*Pat, p *Pat) bool {
 // missingCases describes the values of type t that no pattern matches,
 // one per top-level constructor (so all missing variants are listed).
 func missingCases(pats []*Pat, t Type) []string {
+	var out []string
+	for _, w := range missingWitnesses(pats, t) {
+		out = append(out, w.describe(true))
+	}
+	return out
+}
+
+func missingWitnesses(pats []*Pat, t Type) []*witness {
 	rows := make([]row, len(pats))
 	for i, p := range pats {
 		rows[i] = row{p}
@@ -285,12 +293,12 @@ func missingCases(pats []*Pat, t Type) []string {
 		if w == nil {
 			return nil
 		}
-		return []string{w[0].describe(true)}
+		return []*witness{w[0]}
 	}
-	var missing []string
+	var missing []*witness
 	for _, c := range all {
 		if w := uncoveredFor(rows, c, make(row, len(c.args)), []Type{t}); w != nil {
-			missing = append(missing, w[0].describe(true))
+			missing = append(missing, w[0])
 		}
 	}
 	return missing

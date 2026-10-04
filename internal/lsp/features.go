@@ -253,7 +253,8 @@ func (s *server) codeActions(path string, p documentParams) []any {
 	}
 	for _, d := range s.diagnostics[path] {
 		start := lspPosition(s.source(path), d.Pos)
-		if start.Line < p.Range.Start.Line || start.Line > p.Range.End.Line {
+		end := lspPosition(s.source(path), d.End)
+		if end.Line < p.Range.Start.Line || start.Line > p.Range.End.Line {
 			continue
 		}
 		for _, fix := range d.Fixes {
@@ -269,12 +270,50 @@ func (s *server) codeActions(path string, p documentParams) []any {
 				src := s.source(file)
 				changes[fileURI(file)] = append(changes[fileURI(file)], textEdit{sourceRange{lspPosition(src, edit.Start), lspPosition(src, edit.End)}, edit.Replacement})
 			}
-			if len(changes) > 0 {
+			if len(changes) > 0 && s.formatFix(changes) {
 				out = append(out, map[string]any{"title": fix.Message, "kind": "quickfix", "edit": map[string]any{"changes": changes}})
 			}
 		}
 	}
 	return out
+}
+
+// The compiler owns the fix and formatter. Apply its edits to the current
+// buffer before formatting so even a fix inserted into an inline expression
+// yields a document that passes bork fmt --check.
+func (s *server) formatFix(changes map[string][]textEdit) bool {
+	for uri, edits := range changes {
+		path, err := filePath(uri)
+		if err != nil {
+			return false
+		}
+		src := s.source(path)
+		text := src
+		edits = slices.Clone(edits)
+		slices.SortFunc(edits, func(a, b textEdit) int {
+			if a.Range.Start.Line != b.Range.Start.Line {
+				return b.Range.Start.Line - a.Range.Start.Line
+			}
+			return b.Range.Start.Character - a.Range.Start.Character
+		})
+		for _, edit := range edits {
+			start, err := byteOffset(text, edit.Range.Start)
+			if err != nil {
+				return false
+			}
+			end, err := byteOffset(text, edit.Range.End)
+			if err != nil || end < start {
+				return false
+			}
+			text = text[:start] + edit.NewText + text[end:]
+		}
+		formatted, err := borkformat.Source(path, []byte(text))
+		if err != nil {
+			return false
+		}
+		changes[uri] = []textEdit{{sourceRange{position{}, endPosition(src)}, string(formatted)}}
+	}
+	return true
 }
 
 // Interpolation holes sit inside one lexer token. Candidates inside that token
