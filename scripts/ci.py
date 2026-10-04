@@ -12,10 +12,11 @@ import sys
 import time
 
 DRIVER = "github.com/GiGurra/bork/internal/driver"
+PACKAGE_SHARDS = {"lsp": "github.com/GiGurra/bork/internal/lsp"}
 DEDICATED = {"driver-examples": "TestExamples"}
 CASE_SHARDS = 3
 INTEGRATION_SHARDS = 4
-SHARDS = ("core", *(f"driver-cases-{i}" for i in range(CASE_SHARDS)), *DEDICATED,
+SHARDS = ("core", *PACKAGE_SHARDS, *(f"driver-cases-{i}" for i in range(CASE_SHARDS)), *DEDICATED,
           *(f"driver-integration-{i}" for i in range(INTEGRATION_SHARDS)))
 TIMINGS = Path(__file__).with_name("ci-timings.json")
 WARN_SECONDS = 120
@@ -90,7 +91,11 @@ def discover(mode, deadline=None):
 
 
 def partition(packages, names, weights):
-    groups = {"core": [package for package in packages if package != DRIVER]}
+    groups = {"core": [package for package in packages if package != DRIVER and package not in PACKAGE_SHARDS.values()]}
+    groups.update({group: [package] for group, package in PACKAGE_SHARDS.items() if package in packages})
+    covered_packages = [package for group, entries in groups.items() for package in entries]
+    if len(packages) != len(set(packages)) or len(covered_packages) != len(set(covered_packages)) or set(covered_packages) != set(packages) - {DRIVER}:
+        raise RuntimeError("package partition is not disjoint and complete")
     groups.update({group: [name] for group, name in DEDICATED.items()})
     integration = [group for group in SHARDS if group.startswith("driver-integration-")]
     cases = [group for group in SHARDS if group.startswith("driver-cases-")]
@@ -106,7 +111,7 @@ def partition(packages, names, weights):
         group = min(targets, key=lambda group: (totals[group], group))
         groups[group].append(name)
         totals[group] += cost(name)
-    covered = [name for group, entries in groups.items() if group != "core" for name in entries]
+    covered = [name for group, entries in groups.items() if group != "core" and group not in PACKAGE_SHARDS for name in entries]
     if len(covered) != len(set(covered)) or set(covered) != set(names):
         raise RuntimeError("driver partition is not disjoint and complete")
     return {group: sorted(entries) for group, entries in groups.items()}
@@ -124,7 +129,7 @@ def read_weights(mode, path):
 
 def command(mode, shard, entries):
     result = ["go", "test", *go_flags(mode), "-count=1"]
-    if shard == "core":
+    if shard == "core" or shard in PACKAGE_SHARDS:
         return [*result, *entries]
     if shard.startswith("driver-cases-"):
         expression = "^TestCases$/^(" + "|".join(re.escape(name.split("/", 1)[1]) for name in entries) + ")$"

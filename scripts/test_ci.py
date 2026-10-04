@@ -16,11 +16,22 @@ class PartitionTests(unittest.TestCase):
                  *(f"TestIntegration{i}" for i in range(12))]
         packages = [ci.DRIVER, "example/core", "example/new-package"]
         groups = ci.partition(packages, names, {"TestIntegration0": 90})
-        covered = [name for group, entries in groups.items() if group != "core" for name in entries]
+        covered = [name for group, entries in groups.items() if group != "core" and group not in ci.PACKAGE_SHARDS for name in entries]
         self.assertCountEqual(covered, names)
         self.assertEqual(len(covered), len(set(covered)))
         self.assertEqual(groups["core"], ["example/core", "example/new-package"])
         self.assertEqual(groups, ci.partition(list(reversed(packages)), list(reversed(names)), {"TestIntegration0": 90}))
+
+    def test_lsp_has_its_own_package_shard_in_both_modes(self):
+        lsp = ci.PACKAGE_SHARDS["lsp"]
+        packages = [ci.DRIVER, lsp, "example/core"]
+        groups = ci.partition(packages, list(ci.DEDICATED.values()), {})
+        self.assertEqual(groups["core"], ["example/core"])
+        self.assertEqual(groups["lsp"], [lsp])
+        for mode in ("normal", "race"):
+            self.assertEqual(ci.command(mode, "lsp", [lsp])[-1], lsp)
+        with self.assertRaises(RuntimeError):
+            ci.partition([*packages, lsp], list(ci.DEDICATED.values()), {})
 
     def test_longest_tests_land_in_different_shards(self):
         heavy = [f"TestHeavy{i}" for i in range(ci.INTEGRATION_SHARDS)]
