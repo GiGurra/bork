@@ -19,6 +19,10 @@ type cachedCompilation struct {
 }
 
 func (body *cacheArtifactBody) validate(request cacheArtifactRequest, namespace [sha256.Size]byte) (*cachedCompilation, error) {
+	return body.validateWithContext(request, namespace, func(receipt *goContextReceipt) (*goContext, error) { return receipt.restore(resolveGoContext()) })
+}
+
+func (body *cacheArtifactBody) validateWithContext(request cacheArtifactRequest, namespace [sha256.Size]byte, restore func(*goContextReceipt) (*goContext, error)) (*cachedCompilation, error) {
 	if !body.valid() || body.Namespace != namespace || body.Request != request {
 		return nil, errInvalidCacheArtifact
 	}
@@ -27,14 +31,14 @@ func (body *cacheArtifactBody) validate(request cacheArtifactRequest, namespace 
 		return nil, errInvalidCacheArtifact
 	}
 	// Resolve PATH and raw environment in this process, never from saved fields.
-	context, err := body.Go.restore(resolveGoContext())
+	context, err := restore(body.Go)
 	if err != nil {
 		return nil, err
 	}
 	names := make([]*goNameInput, 0, len(body.Names))
 	for _, receipt := range body.Names {
 		name, err := receipt.restore(context.validation)
-		if err != nil || !name.inputs.current() {
+		if err != nil {
 			return nil, errUnsupportedGoReceipt
 		}
 		names = append(names, name)
@@ -47,7 +51,7 @@ func (body *cacheArtifactBody) validate(request cacheArtifactRequest, namespace 
 	// Recheck after assembling the result. Inputs changed during validation are
 	// misses; the normal compiler remains responsible for rebuilding them.
 	for _, name := range names {
-		if !name.inputs.current() {
+		if !name.inputs.currentMetadata() {
 			return nil, errUnsupportedGoReceipt
 		}
 	}

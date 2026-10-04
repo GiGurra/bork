@@ -69,6 +69,11 @@ type cacheArtifactEnvelope struct {
 }
 
 func cacheArtifactFrom(artifact *sessionArtifact, paths []string, namespace [sha256.Size]byte) (*cacheArtifactBody, error) {
+	return cacheArtifactFromObserved(artifact, paths, namespace, nil)
+}
+
+func cacheArtifactFromObserved(artifact *sessionArtifact, paths []string, namespace [sha256.Size]byte, observe func(string)) (*cacheArtifactBody, error) {
+	defer phase(observe, "")
 	if artifact == nil || artifact.assets == nil || artifact.module == nil || artifact.inputs == nil || artifact.context == nil {
 		return nil, errInvalidCacheArtifact
 	}
@@ -78,10 +83,12 @@ func cacheArtifactFrom(artifact *sessionArtifact, paths []string, namespace [sha
 	if hasAssets {
 		return nil, errInvalidCacheArtifact
 	}
+	phase(observe, "source-receipt")
 	source, err := artifact.inputs.receipt()
 	if err != nil {
 		return nil, err
 	}
+	phase(observe, "go-receipt")
 	configuration, err := artifact.context.receipt()
 	if err != nil {
 		return nil, err
@@ -92,6 +99,7 @@ func cacheArtifactFrom(artifact *sessionArtifact, paths []string, namespace [sha
 		return nil, err
 	}
 	body := &cacheArtifactBody{Schema: cacheArtifactSchema, Namespace: namespace, Key: key, Request: request, Source: source, Go: configuration, Module: cacheArtifactModule{Mod: slices.Clone(artifact.module.mod), Sum: slices.Clone(artifact.module.sum)}, GoSource: slices.Clone(artifact.goSrc), SourcePaths: slices.Clone(paths)}
+	phase(observe, "metadata-receipts")
 	for _, input := range artifact.names {
 		name, err := input.receipt()
 		if err != nil {
@@ -103,6 +111,7 @@ func cacheArtifactFrom(artifact *sessionArtifact, paths []string, namespace [sha
 	for _, warning := range warnings {
 		body.Warnings = append(body.Warnings, cacheArtifactWarning{Pos: warning.Pos, End: warning.End, Message: warning.Msg, Code: warning.Code, Severity: warning.Severity, Fixes: warning.Fixes})
 	}
+	phase(observe, "final-receipt-validation")
 	if !body.valid() || !artifact.inputs.current() || !artifact.assets.current() || !artifact.context.validation.current() {
 		return nil, errInvalidCacheArtifact
 	}

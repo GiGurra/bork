@@ -65,13 +65,28 @@ func (r *goContextReceipt) restore(resolved *goContext) (*goContext, error) {
 		!slices.Equal(r.ProcessEnv, resolved.processEnv) || r.Tool != resolved.tool || r.Driver != resolved.driver || r.Self != resolved.self {
 		return nil, errUnsupportedGoReceipt
 	}
+
+	digest, evidence, err := captureGoToolEvidence(resolved.tool)
+	if err != nil {
+		return nil, errUnsupportedGoReceipt
+	}
+	ctx, err := r.restoreWithToolEvidence(resolved, digest, evidence)
+	if err != nil || !ctx.validation.current() {
+		return nil, errUnsupportedGoReceipt
+	}
+	return ctx, nil
+}
+
+// restoreWithToolEvidence assembles a context from independently hashed launcher
+// bytes. Its caller must perform a final full context.current before serving.
+func (r *goContextReceipt) restoreWithToolEvidence(resolved *goContext, digest [sha256.Size]byte, evidence *goToolEvidence) (*goContext, error) {
+	if !r.valid() || resolved == nil || resolved.err != nil || resolved.driverErr != nil ||
+		!slices.Equal(r.ProcessEnv, resolved.processEnv) || r.Tool != resolved.tool || r.Driver != resolved.driver || r.Self != resolved.self || evidence == nil || digest != r.ToolDigest {
+		return nil, errUnsupportedGoReceipt
+	}
 	inputs, err := r.Inputs.snapshot()
 	if err != nil {
 		return nil, err
-	}
-	digest, evidence, err := captureGoToolEvidence(resolved.tool)
-	if err != nil || digest != r.ToolDigest {
-		return nil, errUnsupportedGoReceipt
 	}
 	bridge, selfFile, err := freshBridgeEvidence(resolved.self)
 	if err != nil || bridge != r.BridgeDigest || selfFile.Mode() != r.BridgeMode {
@@ -84,7 +99,7 @@ func (r *goContextReceipt) restore(resolved *goContext) (*goContext, error) {
 	if sameRunningImage(selfFile) {
 		v.selfFile = selfFile
 	}
-	if !v.accepts(ctx) || !v.current() {
+	if !v.accepts(ctx) || !v.currentConfiguration() {
 		return nil, errUnsupportedGoReceipt
 	}
 	ctx.validation = v

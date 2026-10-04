@@ -41,15 +41,16 @@ type SessionStats struct {
 }
 
 type sessionArtifact struct {
-	path     string
-	emit     bool
-	inputs   *sourceSnapshot
-	module   *goModuleInputs
-	assets   *embedSnapshot
-	context  *goContext
-	names    []goNameInput
-	goSrc    []byte
-	warnings []diag.Diagnostic
+	sourcePaths []string
+	path        string
+	emit        bool
+	inputs      *sourceSnapshot
+	module      *goModuleInputs
+	assets      *embedSnapshot
+	context     *goContext
+	names       []goNameInput
+	goSrc       []byte
+	warnings    []diag.Diagnostic
 }
 
 func NewSession() *Session { return &Session{} }
@@ -156,7 +157,7 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 		s.stats.Bypasses++
 		s.stats.Reason = "inputs changed during compilation"
 	} else {
-		s.last = &sessionArtifact{path: path, emit: emit, inputs: program.inputs, module: program.module, assets: program.assets, context: context, names: usage.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData)}
+		s.last = &sessionArtifact{sourcePaths: sourcePaths(program.files), path: path, emit: emit, inputs: program.inputs, module: program.module, assets: program.assets, context: context, names: usage.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData)}
 	}
 	return src, warningData, nil
 }

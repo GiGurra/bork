@@ -517,3 +517,67 @@ availability checks. Standard-name restoration requires every recorded package's
 complete immediate-file inventory, including ignored and test files. These private
 primitives do not enable result hits; fresh-CLI timing must include their validation
 and outcome decoding when the storage path is wired.
+
+### Fresh-process disk result gate
+
+The first result-cache integration uses a link-time test gate and an explicit
+private root. Environment settings alone cannot enable ordinary compiler builds.
+Automatic use remains disabled pending admission budgets, eviction and `bork clean`.
+
+Seven fresh CLI processes per row, warm filesystem and Go caches, on the same
+Ryzen 7 host while other checks ran:
+
+| Hello operation | Ordinary median (min–max), ms | Disk hit median (min–max), ms | First miss/publication, ms |
+| --- | ---: | ---: | ---: |
+| Check | 51.27 (49.69–70.73) | 38.02 (36.53–41.54) | 167.94 |
+| Emit | 58.81 (57.93–65.21) | 37.89 (37.10–41.14) | 178.02 |
+
+Initially hits took about 85 ms: five launcher hash passes and two SDK inventory
+passes erased the checking savings. The consolidated path starts actual compiler
+and launcher hashing concurrently at process initialization, restores configuration
+from the independently captured launcher evidence, hashes each metadata inventory
+once, then checks source/configuration and launcher content before serving. It
+never trusts persisted stat evidence. Ordinary Session validation is unchanged.
+
+An actual CLI first-miss phase trace (seven fresh processes) explains the remaining
+penalty. Total median was 162.91 ms (160.18–172.29); independently measured phase
+medians do not necessarily sum to that total:
+
+| Phase | Median ms |
+| --- | ---: |
+| First Session configuration | 40.82 |
+| Checking, including metadata inventory capture | 52.34 |
+| Parsing | 2.72 |
+| Publication Go receipt | 20.55 |
+| Publication metadata receipts | 18.42 |
+| Publication final receipt validation | 10.36 |
+| Encoding and atomic store | 2.46 |
+| Publication source receipt | 0.02 |
+
+The write itself is cheap. First-Session inventory capture and repeated launcher
+validation inside component receipts dominate the extra cost. The publication
+benchmark separates these stages, but a warm long-lived benchmark can activate
+the two-second launcher stat guard and therefore understate fresh-process costs.
+Use the test-gated CLI phase trace for first-miss profiling. Before automatic use,
+consolidate publication around a final composite certification and reduce inventory
+work on misses and bypasses. Future build/run/test integration can overlap owned
+publication with downstream Go builds; check/emit exit immediately, so background
+publication alone cannot hide their cost.
+
+All 37 runnable top-level `examples/` programs emitted successfully in the gate:
+17 (46%) qualified, 17 bypassed for compile-time evaluators (including proof
+execution), two for external/unavailable Go names (`sql`, `uuid`), and one for
+assets (`embed`). Eligible examples include filesystem, process, CSV, archive,
+accounts and parallel-list programs as well as hello; the eligible fraction still
+limits this layer's practical benefit.
+
+| Realistic emission | Ordinary median (min–max), ms | Repeated gated bypass median (min–max), ms |
+| --- | ---: | ---: |
+| config | 320.73 (312.94–354.65) | 412.98 (395.44–432.26) |
+| http_server | 515.08 (501.32–556.60) | 584.23 (571.92–617.48) |
+
+These rows use seven fresh processes, the host's default staging fallback and warm
+Go cache; they are not the writable stable-staging measurements above. Both run
+proof evaluators, so neither publishes a result nor produces a disk hit. Proven
+execution receipts are prerequisite to gains on these programs. Keep evaluator
+bypass until the complete closure and external-input contract is established.
