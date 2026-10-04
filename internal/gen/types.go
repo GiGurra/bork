@@ -479,7 +479,7 @@ func _runTests(tests []_test) {
 			action := "pass"
 			if t.run == nil || r.skip { action = "skip" } else if r.msg != "" { action = "fail" }
 			name := t.selector
-			if name == "" { name = t.name }
+			if !t.declared { name = t.name }
 			err := json.NewEncoder(report).Encode(struct {
 				Action string ` + "`" + `json:"action"` + "`" + `
 				Name string ` + "`" + `json:"name"` + "`" + `
