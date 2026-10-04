@@ -17,7 +17,10 @@ type InterpolationIssue = { hole: Option[Int], message: String }
 
 A library declares the instance in its builder type's own package. The compiler
 automatically selects that owner-declared instance for the factory result type,
-without requiring caller `use` or a SQL/compiler registration. Caller scope cannot
+without requiring caller `use` or a SQL/compiler registration. The complete
+dictionary graph resolves in that owner scope; caller dictionaries cannot alter
+helper policy. Constrained validator instance heads are forbidden, since runtime
+facts cannot decide whether compile-time validation is enabled. Caller scope cannot
 replace or suppress the validator. An absent instance preserves the ordinary
 factory/Interpolate/Finish protocol. Ambiguous or unsatisfied declared instances
 are errors, not silently skipped. Concrete generic instances use ordinary class
@@ -32,10 +35,19 @@ values, builder, receiver, or factory callback. This preserves eager once-only
 runtime evaluation and permits effectful holes and factories. Validators and
 helper calls must be pure under existing effects/comptime checks.
 
+Batch distinct validator calls per source package into one execution, preserving
+source order in the result mapping. Deduplicate repeated (validator identity,
+parts, hole kinds) calls and cache their bounded results with the compiler,
+validator/helper closure, Go/module and effective evaluation policy identities;
+batch only cache misses. Files with no validator-bearing interpolation pay zero
+extra execution cost. Measure check time for a file with about 50 SQL sites
+against main, including warm reuse and a changed-site miss.
+
 Run validation with existing bounded native comptime/predicate execution and
 value transport, including its timeout, output limits, dependency checks and
 process cleanup. Return no issues to accept; each Some(index) names a zero-based
-hole and reports at that hole expression's position. None reports at the prefix
+hole and reports the validator message at that hole expression's position, with
+a short note naming the validator. None reports at the prefix
 (for literal-only problems). Invalid indices/results, panic, timeout or failed
 proofs reject compilation at the prefix with a validator failure diagnostic.
 Validation does not add a runtime call or bake a user-visible capability.
@@ -59,8 +71,14 @@ an Unknown kind also defers. Rendering still flattens composition and validates
 all real boundaries for the actual driver dialect. Unterminated literal fragment
 text can be completed by composition, so an end-of-input error alone is deferred;
 known holes already inside a quote/comment are still rejected before that point.
-Local literal manual placeholders must be quoted in their own component or use
-the explicit Unsafe API; nesting does not bypass this construction rule.
+Every literal component is checked from an unquoted SQL context. Known bound
+and identifier holes inside quotes/comments or partial tokens, and literal manual
+placeholders, must satisfy this component-local construction contract. This is
+stricter than flattened rendering: wrapping a locally rejected component in
+additional quotes cannot make its construction legal. Unknown fragment boundaries
+still defer subsequent checking. This is an explicit SQL-library rule, not a
+claim that the former renderer rejects every locally invalid component in every
+possible outer context. Use the explicit Unsafe API for intentional raw text.
 
 Runtime boundary fixtures that deliberately construct now-invalid literals move
 to compile-error fixtures. Keep runtime composition, dialect ambiguity and lazy
@@ -71,3 +89,6 @@ coverage, bad index/panic/timeout checks, and direct metadata tests.
 The runnable SQL interpolation example's commented quoted-hole line becomes a
 compile-error example. Document which checks occur at compile time and which
 remain mandatory at render time, including runtime fragments and dialects.
+
+User documentation includes a short validator-writing section and a table of
+compile-time versus mandatory render-time checks.
