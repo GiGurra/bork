@@ -1740,6 +1740,7 @@ func (p *parser) interp(t Token, prefix Expr) *Interp {
 	offset := 2 // s followed by the opening quote
 	if prefix != nil {
 		e.Pos = prefix.Position()
+		e.PrefixEnd = t.Pos
 		offset = 1 // token starts at the opening quote
 	}
 	raw := t.Text[1 : len(t.Text)-1]

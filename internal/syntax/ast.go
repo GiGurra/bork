@@ -485,10 +485,11 @@ type RuneLit struct {
 // holds the (unquoted) text around the expressions, so it has one more
 // element than Exprs.
 type Interp struct {
-	Prefix Expr // nil for the built-in s prefix
-	Pos    diag.Pos
-	Parts  []string
-	Exprs  []Expr
+	Prefix    Expr     // nil for the built-in s prefix
+	PrefixEnd diag.Pos // opening quote position for a named prefix
+	Pos       diag.Pos
+	Parts     []string
+	Exprs     []Expr
 }
 
 // StaticPartsLit is created only by the checker for a named interpolation.

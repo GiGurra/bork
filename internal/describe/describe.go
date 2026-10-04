@@ -179,7 +179,8 @@ func (s *sourceIndex) selectVar(v *check.Var, site diag.Pos) {
 
 func (s *sourceIndex) walk(x check.Expr) {
 	if source := s.info.Interpolations[x]; source != nil {
-		if s.contains(source.Prefix, source.Width) {
+		start, end := source.Prefix.Start, source.Prefix.End
+		if start.File == s.pos.File && (s.pos.Line > start.Line || s.pos.Line == start.Line && s.pos.Col >= start.Col) && (s.pos.Line < end.Line || s.pos.Line == end.Line && s.pos.Col < end.Col) {
 			s.choose(x, x.Type(), definition(source.Factory))
 		}
 		s.walkInterpolationHoles(source.Holes)

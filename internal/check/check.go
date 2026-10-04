@@ -206,8 +206,7 @@ type TryInfo struct {
 // InterpolationSource retains source expressions hidden by named interpolation lowering.
 // Holes refer to the expressions already lowered for execution.
 type InterpolationSource struct {
-	Prefix  diag.Pos
-	Width   int
+	Prefix  SourceSpan
 	Factory Expr
 	Holes   []Expr
 }

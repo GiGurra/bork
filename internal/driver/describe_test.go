@@ -726,10 +726,12 @@ fn example(value: Int) {
   statement = dbsql.SQL"SELECT $value"
 }
 `
-	for _, prefix := range []string{"dbsql.SQL", `SQL"`} {
-		result := describeAt(t, qualified, prefix, "")
-		if result.typ != "dbsql.Statement" || !result.defined {
-			t.Fatalf("qualified interpolator %s: %+v", prefix, result)
+	for _, spelling := range []string{"dbsql.SQL", "dbsql    .    SQL", "dbsql/*comment*/.SQL"} {
+		for _, prefix := range []string{spelling, `SQL"`} {
+			result := describeAt(t, strings.Replace(qualified, "dbsql.SQL", spelling, 1), prefix, "")
+			if result.typ != "dbsql.Statement" || !result.defined {
+				t.Fatalf("qualified interpolator %s: %+v", prefix, result)
+			}
 		}
 	}
 }

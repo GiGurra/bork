@@ -330,7 +330,7 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			l.interpolationSources = capture
 			result := l.expr(call)
 			l.interpolationSources = outer
-			source := &InterpolationSource{Prefix: x.Prefix.Position(), Width: len(x.Prefix.(*syntax.Ident).Name), Factory: capture[factory]}
+			source := &InterpolationSource{Prefix: SourceSpan{Start: x.Prefix.Position(), End: x.PrefixEnd}, Factory: capture[factory]}
 			for _, hole := range x.Exprs {
 				source.Holes = append(source.Holes, capture[hole])
 			}
