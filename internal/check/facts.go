@@ -212,9 +212,11 @@ type factChecker struct {
 	// declared functions, which call and parameter they belong to.
 	lambdaArgs map[*Var]lambdaArg
 	// observe captures the proof context for queries keyed by source position.
-	observe    func(diag.Pos, env)
-	producer   *Generate
-	yieldCheck func(*Yield, env)
+	lintProven   map[diag.Pos]bool
+	lintChecking bool
+	observe      func(diag.Pos, env)
+	producer     *Generate
+	yieldCheck   func(*Yield, env)
 }
 
 // lambdaArg places a lambda's parameter: the lambda is argument arg of
@@ -590,6 +592,14 @@ func (f *factChecker) walk(x Expr, e env) {
 			f.walk(a, e)
 		}
 		f.callObligations(x, e)
+		if f.lintProven != nil && !f.lintChecking && f.collect == nil && f.fn != nil && f.fn.Pkg != nil && f.fn.Pkg.Root && !f.fn.Decl.IsPred && x.Func.Decl.IsPred {
+			f.lintChecking = true
+			proved, queries := f.proveCondition(x, true, e, 0)
+			f.lintChecking = false
+			if proved && len(queries) == 0 {
+				f.lintProven[x.Pos()] = true
+			}
+		}
 	case *CallBuiltin:
 		for _, a := range x.Args {
 			f.walk(a, e)

@@ -55,6 +55,7 @@ func (s *Session) Analyze(path string, overlays map[string]string) (*EditorAnaly
 	warnings := check.DebugWarnings(program.info)
 	warnings.Append(check.LazyWarnings(program.info))
 	warnings.Append(check.MigrationWarnings(program.info))
+	warnings.Append(check.LintWarnings(program.files, program.info))
 	a := &EditorAnalysis{program: program, usage: usage, overlays: maps.Clone(overlays), warnings: warnings.Sorted()}
 	s.editor, s.editorPath = a, path
 	return a, nil
