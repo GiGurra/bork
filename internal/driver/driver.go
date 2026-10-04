@@ -71,7 +71,7 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 // CheckWarnings returns the owned warning diagnostics used by the CLI, without
 // exposing mutable checked state. Check remains available to AST consumers.
 func CheckWarnings(path string) ([]diag.Diagnostic, error) {
-	if cacheTestState != nil {
+	if cacheTestState != nil && os.Getenv("BORK_CACHE") != "off" {
 		_, warnings, err := testCachedCompile(path, false)
 		return warnings, err
 	}
@@ -254,7 +254,7 @@ func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModu
 // Emit compiles the package at path to Go source. A program must have
 // a main function.
 func Emit(path string) ([]byte, error) {
-	if cacheTestState != nil {
+	if cacheTestState != nil && os.Getenv("BORK_CACHE") != "off" {
 		src, _, err := testCachedCompile(path, true)
 		return src, err
 	}
