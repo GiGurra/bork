@@ -234,7 +234,8 @@ entirely inside the initializer still follow ordinary affine rules.
 
 ## Package bindings, tooling and implementation
 
-Package `lazy Name: T = expr` is a runtime memo with ordinary export visibility;
+Package `Name = expr`, `Name: T = expr`, and `lazy Name: T = expr` are runtime
+memos with ordinary export visibility;
 package reads never become implicit compile-time execution. Names may refer to later
 package declarations, and exported names can be read through an import. Direct
 and helper-induced dependency cycles receive a diagnostic with the declaration

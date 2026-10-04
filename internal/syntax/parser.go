@@ -233,7 +233,7 @@ func (p *parser) expect(k Kind, what string) Token {
 // syncTopLevel skips ahead to the next declaration at the start of a line.
 func (p *parser) syncTopLevel() {
 	for !p.at(EOF) {
-		if (p.at(KwFn) || p.at(KwType) || p.at(TIdent) && p.tok().Text == "providers" && p.peekKind() == TIdent) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
+		if (p.at(KwFn) || p.at(KwType) || p.at(TIdent) && (p.tok().Text == "providers" && p.peekKind() == TIdent || p.peekKind() == Assign || p.peekKind() == Colon || p.tok().Text == "lazy" && p.peekKind() == TIdent)) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
 			return
 		}
 		p.next()

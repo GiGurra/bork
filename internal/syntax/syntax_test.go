@@ -359,3 +359,35 @@ func TestNamedInterpolatorRequiresAdjacency(t *testing.T) {
 		t.Fatal("accepted a separated prefix")
 	}
 }
+
+func TestParsePackageValues(t *testing.T) {
+	d := &diag.List{}
+	file := Parse("t.bork", []byte("Answer=42\nTyped:Int=3\nlazy Later=4\nfn main(){local=1;lazy deferred=2}"), d)
+	if d.Len() != 0 {
+		t.Fatal(d.Error())
+	}
+	if len(file.Bindings) != 3 {
+		t.Fatalf("bindings: %+v", file.Bindings)
+	}
+	for i, b := range file.Bindings {
+		if !b.Package || b.Lazy != (i == 2) {
+			t.Fatalf("binding: %+v", b)
+		}
+	}
+	if file.Bindings[1].Type == nil {
+		t.Fatal("lost annotation")
+	}
+	for _, stmt := range file.Funcs[0].Body.Stmts {
+		if stmt.(*Binding).Package {
+			t.Fatal("local became a package binding")
+		}
+	}
+}
+
+func TestParsePackageValueRecovery(t *testing.T) {
+	d := &diag.List{}
+	file := Parse("t.bork", []byte("A=)\nB=)\nC=1"), d)
+	if d.Len() != 2 || len(file.Bindings) != 1 || file.Bindings[0].Name != "C" {
+		t.Fatalf("%s; bindings=%+v", d.Error(), file.Bindings)
+	}
+}
