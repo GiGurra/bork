@@ -8,8 +8,9 @@ import (
 )
 
 func TestScopeDeadlineRuntime(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
-		t.Skip("builds and runs a Go race test")
+		t.Skip("builds and runs a generated Go test")
 	}
 	dir := t.TempDir()
 	for name, source := range map[string]string{
@@ -22,7 +23,7 @@ func TestScopeDeadlineRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("go", "test", "-race", "./...")
+	cmd := exec.Command("go", runtimeTestArgs()...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("scope deadline runtime: %v\n%s", err, out)

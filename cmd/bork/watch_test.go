@@ -21,10 +21,7 @@ func TestCheckWatchJSONAndManualSignal(t *testing.T) {
 		t.Skip("SIGHUP is a Unix retrigger")
 	}
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "bork")
-	if output, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, output)
-	}
+	exe := cliExecutable(t, false)
 	path := filepath.Join(dir, "main.bork")
 	if err := os.WriteFile(path, []byte("fn main() { println(missing) }\n"), 0o644); err != nil {
 		t.Fatal(err)
