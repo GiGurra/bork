@@ -1,0 +1,12 @@
+{
+  "name": "bork-playground-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/client.test.mjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

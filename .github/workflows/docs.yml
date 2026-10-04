@@ -25,12 +25,28 @@ jobs:
           python-version: '3.13'
           cache: pip
           cache-dependency-path: scripts/docs-requirements.txt
+      - uses: ./.github/actions/setup-go
+        with:
+          cache-name: docs
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/playground/package-lock.json
       - run: pip install -r scripts/docs-requirements.txt
       - run: python -m unittest discover -s scripts -p 'test_docs_site.py'
       - name: Build documentation
         env:
           BORK_DOCS_REVISION: ${{ github.sha }}
-        run: mkdocs build --strict
+        run: |
+          mkdocs build --strict
+          python scripts/build_playground.py
+      - run: npm ci --prefix web/playground
+      - run: npm test --prefix web/playground
+      - name: Install browser for playground smoke tests
+        working-directory: web/playground
+        run: npx --no-install playwright install --with-deps chromium
+      - run: npm run test:browser --prefix web/playground
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:

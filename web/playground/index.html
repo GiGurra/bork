@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Try bork's checker, types and formatter in your browser.">
+  <title>bork playground</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.mjs"></script>
+</head>
+<body>
+  <main>
+    <header><a href="../">bork docs</a><span>Browser playground</span></header>
+    <h1>Try bork.</h1>
+    <p>Explore types, effects, and guarded facts. Your code stays in this browser.</p>
+    <p class="scope">This checks one file with the prelude. Imports, Go interop, compile-time execution, and deferred proofs need local bork. Programs are not run.</p>
+    <div class="toolbar">
+      <label for="example">Example</label>
+      <select id="example">
+        <option value="hello">Hello</option>
+        <option value="facts">Guarded facts</option>
+        <option value="unions">Matching results</option>
+        <option value="effects">An effect error</option>
+        <option value="local">A proof that needs local bork</option>
+      </select>
+      <button id="check" type="button">Check</button>
+      <button id="format" type="button">Format</button>
+      <button id="describe" type="button">Inspect type</button>
+      <button id="download" type="button">Download source</button>
+    </div>
+    <label for="source" class="editor-label">playground.bork</label>
+    <textarea id="source" spellcheck="false" aria-describedby="editor-help"></textarea>
+    <p id="editor-help" class="help">Place the cursor on a name or expression, then choose Inspect type. Click a diagnostic to jump to its position.</p>
+    <section aria-label="Compiler results" aria-live="polite">
+      <p id="status" role="status">Choose Check to load the compiler.</p>
+      <ul id="diagnostics"></ul>
+      <pre id="type" hidden></pre>
+    </section>
+    <footer><a href="../tour/">Take the tour</a> · <code>go install github.com/GiGurra/bork/cmd/bork@latest</code><p>To check the downloaded file locally: <code>bork check playground.bork</code></p></footer>
+  </main>
+</body>
+</html>
