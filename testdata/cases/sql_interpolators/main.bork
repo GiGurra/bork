@@ -17,21 +17,21 @@ fn demo() uses io + net: Ok | dbsql.Error | DecodeError {
   inspect(query, dbsql.Dialect.Postgres)
   inspect(query, dbsql.Dialect.Postgres)
   quoted = dbsql.Name("a\"; DROP TABLE users; --")?
-  inspect(dbsql.SQL"SELECT $quoted FROM $table" , dbsql.Dialect.Postgres)
+  inspect(dbsql.SQL"SELECT $quoted FROM $table", dbsql.Dialect.Postgres)
   dotted = dbsql.Name("public.users")?
-  inspect(dbsql.SQL"SELECT * FROM $dotted" , dbsql.Dialect.Sqlite)
+  inspect(dbsql.SQL"SELECT * FROM $dotted", dbsql.Dialect.Sqlite)
   schema = dbsql.Name("public")?
-  inspect(dbsql.SQL"SELECT * FROM $schema.$table" , dbsql.Dialect.Postgres)
-  inspect(dbsql.SQL"SELECT ${true}, ${1.25}, ${utf8Bytes("hello")}, ${dbsql.Null {}}" , dbsql.Dialect.Postgres)
+  inspect(dbsql.SQL"SELECT * FROM $schema.$table", dbsql.Dialect.Postgres)
+  inspect(dbsql.SQL"SELECT ${true}, ${1.25}, ${utf8Bytes("hello")}, ${dbsql.Null {}}", dbsql.Dialect.Postgres)
   scope app {
     db = dbsql.OpenSqlite(":memory:", app)?
-    created = dbsql.SQL"CREATE TABLE users (name TEXT, note TEXT)" .Exec(db)?
+    created = dbsql.SQL"CREATE TABLE users (name TEXT, note TEXT)".Exec(db)?
     scope transaction {
       tx = dbsql.Begin(db, transaction)?
-      inserted = dbsql.SQL"INSERT INTO $table (name, note) VALUES ($hostile, ${dbsql.Null {}})" .Exec(tx)?
+      inserted = dbsql.SQL"INSERT INTO $table (name, note) VALUES ($hostile, ${dbsql.Null {}})".Exec(tx)?
       dbsql.Commit(tx)?
     }
-    println(dbsql.SQL"SELECT ${true} AS active, ${1.25} AS score, ${utf8Bytes("hi")} AS data, ${dbsql.Null {}} AS note" .QueryJson(db)?)
+    println(dbsql.SQL"SELECT ${true} AS active, ${1.25} AS score, ${utf8Bytes("hi")} AS data, ${dbsql.Null {}} AS note".QueryJson(db)?)
     println(query.Query[Row](db)?)
     println(query.QueryJson(db)?)
     println(query.Rows[Row](db).toList())

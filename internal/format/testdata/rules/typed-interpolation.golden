@@ -1,2 +1,4 @@
 statement = sql.SQL"SELECT $name WHERE id = ${id + 1}"
 result = Tag"literal $$ ${Other"nested $name"}"
+rows = sql.SQL"SELECT ${f("x")}".Query[Row](db)
+accepts("query", sql.SQL"SELECT $value", dialect)

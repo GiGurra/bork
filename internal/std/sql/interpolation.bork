@@ -61,7 +61,11 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
       adjacent := func(j int) bool {
         if j < 0 || j >= len(text) { return false }
         c := text[j]
-        return word(c) || c == 0 || c == '\'' || c == '"' || c == '`' || c == '[' || c == ']' || c == ':' || c == '@' || c == '.' && !identifier
+        if c == ':' {
+          if postgres && (j == i+1 && j+1 < len(text) && text[j+1] == ':' || j == i-1 && j > 0 && text[j-1] == ':') { return false }
+          return true
+        }
+        return word(c) || c == 0 || c == '\'' || c == '"' || c == '`' || c == '[' || c == ']' || c == '@' || c == '.' && !identifier
       }
       if adjacent(i-1) || adjacent(i+1) { return fail(fmt.Sprintf("SQL hole %d is inside or adjacent to a partial token", hole+1)) }
       switch part := part.(type) {
@@ -118,6 +122,10 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
         } else { i++ }
       }
       if depth > 0 { return fail("SQL block comment is not terminated") }
+    } else if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c >= 128 {
+      // Dollar signs inside unquoted identifiers are not parameters or quotes.
+      i++
+      for i < len(text) && word(text[i]) { i++ }
     } else if postgres && c == '$' {
       j := i+1
       if j < len(text) && text[j] >= '0' && text[j] <= '9' { return fail("write a SQL value hole instead of a literal parameter placeholder") }

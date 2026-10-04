@@ -15,10 +15,10 @@ fn (builder: TraceBuilder) Interpolate(value: Int) uses io: TraceBuilder { print
 fn (builder: TraceBuilder) Finish() uses io: Int { println("finish"); 2 }
 fn main() {
   name = "Ada"
-  println(Tag"Hello $name and ${1 + 2}!" .text)
-  println(Tag"literal $$" .text)
-  println(Tag"${Tag"nested $name".text}" .text)
-  println(Tag"$${literal} ${'}'} ${1 /* } */ + 2}" .text)
-  println(Tag"${Tag"${"}"}".text}" .text)
-  println(Trace"${nextValue("first")} ${nextValue("second")}" )
+  println(Tag"Hello $name and ${1 + 2}!".text)
+  println(Tag"literal $$".text)
+  println(Tag"${Tag"nested $name".text}".text)
+  println(Tag"$${literal} ${'}'} ${1 /* } */ + 2}".text)
+  println(Tag"${Tag"${"}"}".text}".text)
+  println(Trace"${nextValue("first")} ${nextValue("second")}")
 }

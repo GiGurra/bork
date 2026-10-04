@@ -152,7 +152,11 @@ func joinsTokens(a, b item) bool {
 		return true
 	}
 	d := &diag.List{}
-	ts, _ := syntax.Lex("", []byte(a.text+b.text), d)
+	left := a.text
+	if a.kind == syntax.TInterp && strings.HasPrefix(left, `"`) {
+		left = "s" + left // a custom prefix is in the preceding formatter item
+	}
+	ts, _ := syntax.Lex("", []byte(left+b.text), d)
 	var kinds []syntax.Kind
 	for _, t := range ts {
 		if t.Kind != syntax.EOF && (t.Kind != syntax.Semi || t.Text == ";") {
