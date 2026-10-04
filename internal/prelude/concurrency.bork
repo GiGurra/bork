@@ -221,9 +221,3 @@ fn received[T](ch: Channel[T]) uses state: List[T] unsafe go {
     out = append(out, v)
   }
 }
-
-// sleep pauses the routine for ms milliseconds.
-fn sleep(ms: Int) uses clock unsafe go {
-  import "time"
-  time.Sleep(time.Duration(ms) * time.Millisecond)
-}

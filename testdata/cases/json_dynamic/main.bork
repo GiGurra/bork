@@ -1,6 +1,6 @@
 import "bork/json"
 fn main() {
-  match (parseJson("{\"items\":[{\"name\":\"bork\",\"nothing\":null}],\"exact\":12345678901234567890}")) {
+  match (json.Parse("{\"items\":[{\"name\":\"bork\",\"nothing\":null}],\"exact\":12345678901234567890}")) {
     value: Json => {
       println(json.At(value, ["items", 0, "name"]))
       println(json.At(value, ["items", 0, "nothing"]))

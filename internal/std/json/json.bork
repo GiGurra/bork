@@ -1,5 +1,5 @@
 // Package json queries dynamic JSON values and streams JSON Lines. Typed
-// decoding/encoding remains available through the prelude's Decode and Encode.
+// codecs use the prelude's Decode and Encode classes.
 
 // Field returns the first matching object field. None also covers other kinds.
 fn Field(value: Json, name: String): Option[Json] {
@@ -36,7 +36,7 @@ type Indent = Int where ValidIndent
 // constructed number values give JsonError. Zero adds newlines with no indent.
 fn Pretty(value: Json, spaces: Indent = 2): String | JsonError {
   validateNumbers(value)?
-  indentJson(renderJson(value), spaces)
+  indentJson(Render(value), spaces)
 }
 fn indentJson(text: String, spaces: Indent): String | JsonError unsafe go {
   import "bytes"
@@ -54,7 +54,7 @@ fn validateNumbers(value: Json): Ok | JsonError unsafe go {
   check = func(value Json) *JsonError {
     switch value := value.(type) {
     case Json_Number:
-      parsed := parseJson(value.text)
+      parsed := Parse(value.text)
       if failure, failed := parsed.(JsonError); failed { return &failure }
       if _, number := parsed.(Json_Number); !number { return &JsonError{message: "expected a JSON number"} }
     case Json_Array:

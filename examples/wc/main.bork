@@ -1,3 +1,4 @@
+import "bork/process"
 import "bork/fs"
 
 // wc counts the lines, words, and bytes in files, like Unix wc:
@@ -54,17 +55,17 @@ fn report(counts: List[FileCount]) uses io: Bool {
 }
 
 fn main() {
-  paths = args()
+  paths = process.Args()
   if (paths.isEmpty()) {
     eprintln("usage: wc FILE...")
-    exit(2)
+    process.Exit(2)
   }
   counts = scope s {
     tasks = paths.map(path => spawn(s, () => FileCount { path: path, result: countFile(path) }))
     tasks.map(t => await(t))
   }
   if (!report(counts)) {
-    exit(1)
+    process.Exit(1)
   }
 }
 

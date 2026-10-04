@@ -1,21 +1,6 @@
 // IoError is returned when reading or writing outside the program fails.
 type IoError = { path: String, message: String }
 
-// The program's environment.
-
-// args is the program's command-line arguments (without its name).
-fn args() uses io: List[String] unsafe go {
-  import "os"
-  return os.Args[1:]
-}
-
-// exit ends the program with the given status code, without closing
-// scopes.
-fn exit(code: Int) uses io: Never unsafe go {
-  import "os"
-  os.Exit(int(code))
-}
-
 // eprintln prints text and a newline to standard error.
 fn eprintln(text: String) uses io unsafe go {
   import "fmt"

@@ -611,7 +611,7 @@ func (c *checker) resolveDictsWith(inst *Instance, pos diag.Pos, have [][]*Const
 }
 
 // promisesArgFacts checks that a call with constrained type arguments
-// (decodeJson[Port]) can promise their constraints for results of
+// (json.Decode[Port]) can promise their constraints for results of
 // those types. By parametricity, a generic function gets values of a
 // type parameter only from its arguments (which must satisfy the
 // constraints) and from the instances of the parameter's bounds, which

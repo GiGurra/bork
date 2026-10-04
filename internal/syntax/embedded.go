@@ -31,7 +31,7 @@ func ParseEmbedded(path string, src []byte, diags *diag.List) *File {
 		source = cached.(*lexedSource)
 	} else {
 		before := diags.Len()
-		tokens, comments := Lex(path, src, diags)
+		tokens, comments := LexCompiler(path, src, diags)
 		source = &lexedSource{text: string(src), tokens: tokens, comments: comments}
 		// Replay lexing failures normally rather than caching their diagnostics.
 		if diags.Len() == before {
@@ -41,5 +41,5 @@ func ParseEmbedded(path string, src []byte, diags *diag.List) *File {
 	}
 	// Comments escape through File and may be changed by callers. Tokens remain
 	// private to the parser, which only reads them.
-	return parse(path, source.text, source.tokens, slices.Clone(source.comments), diags)
+	return parse(path, source.text, source.tokens, slices.Clone(source.comments), diags, true)
 }

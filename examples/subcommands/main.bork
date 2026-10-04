@@ -1,3 +1,4 @@
+import "bork/process"
 import "bork/cli"
 pred validPort(n: Int) { n > 0 && n < 65536 }
 type Serve = {
@@ -18,7 +19,7 @@ fn main() {
       }, flags: [cli.Flag { field: "words", positional: true }])
   ]
   match (cli.RunCommands("app", "Typed subcommands", commands)) {
-    error: cli.Error => { println(error); exit(2) }
+    error: cli.Error => { println(error); process.Exit(2) }
     Ok => {}
   }
 }

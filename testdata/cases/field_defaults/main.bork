@@ -1,3 +1,4 @@
+import "bork/json"
 import "bork/env"
 import "bork/encoding"
 pred positive(x: Int) { x > 0 }
@@ -31,10 +32,10 @@ type CsvDefault = { name: String = "default", value: Int } derive (Decode, Encod
 fn main() uses io {
   println(Options { required: "input" })
   println(Options { required: "input", port: 9090 })
-  println(decodeJson[Options]("{\"required\":\"json\"}"))
-  println(decodeJson[Options]("{\"required\":\"json\",\"optional\":null}"))
-  println(decodeJson[Options]("{\"required\":\"json\",\"port\":0}"))
-  println(decodeJson[Box[Int]]("{\"value\":1}"))
+  println(json.Decode[Options]("{\"required\":\"json\"}"))
+  println(json.Decode[Options]("{\"required\":\"json\",\"optional\":null}"))
+  println(json.Decode[Options]("{\"required\":\"json\",\"port\":0}"))
+  println(json.Decode[Box[Int]]("{\"value\":1}"))
   println(Box { value: "generic" })
   println(Choice.Item {})
   println(Schema[Options]())

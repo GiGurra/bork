@@ -15,7 +15,9 @@ group, including shell-wrapper descendants. Descendants that leave the group
 or outlive the direct child's normal exit are outside its ownership. Group
 cancellation applies while the direct child is running; other targets kill only
 the direct child.
-Args and Exit alias the prelude helpers. Process operations declare io + state;
+Args returns command-line arguments without the program name; Exit terminates
+with the given status without closing scopes. These are the only process
+argument/exit helpers. Process operations declare io + state;
 Args/Exit declare io. Pid reads the stored ID without effects.
 
 The scope runtime registers SIGINT/SIGTERM for the program lifetime, cancelling

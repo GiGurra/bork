@@ -1,8 +1,9 @@
+import codecs "bork/json"
 import urls "bork/url"
 
 // Body decodes JSON into a proven value, including derived field constraints.
 fn Body[T: Decode](request: Request): T | JsonError | DecodeError {
-  decodeJson[T](request.body)
+  codecs.Decode[T](request.body)
 }
 
 // Query parses URL query values and preserves repeated keys.
@@ -40,7 +41,7 @@ fn fieldsJson[T: Decode](values: Headers): Json | DecodeError unsafe go {
     if len(raw) != 1 { return DecodeError{path: "."+field.Name, message: "expected exactly one value"} }
     var value Json = Json_String{value: raw[0]}
     if field.Kind != "string" {
-      parsed := parseJson(raw[0])
+      parsed := parseJsonValue(raw[0])
       if failure, failed := parsed.(JsonError); failed { return DecodeError{path: "."+field.Name, message: failure.message} }
       value = parsed.(Json)
     }
@@ -91,3 +92,5 @@ fn Multipart(request: Request, maxBodyBytes: BodyLimit = 16777216): MultipartFor
   }
   return MultipartForm{values: _borkMapOf(keys, values), files: files}
 }
+
+fn parseJsonValue(text: String): Json | JsonError { codecs.Parse(text) }

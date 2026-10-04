@@ -1,3 +1,4 @@
+import "bork/time"
 fn Fetch(url: String) uses net: String {
   s"real $url"
 }
@@ -14,7 +15,7 @@ test "a failing test with a task waiting in a mock fails, and does not hang" {
       s"got $r"
     }
     launch(s, () => println(Fetch("a")))
-    sleep(30)
+    _ = time.Sleep(s, time.Nanoseconds((30) * 1000000))
     assertEqual(1, 2)
   }
 }

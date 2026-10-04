@@ -1,3 +1,4 @@
+import "bork/time"
 fn broken(): Int { panic("work failed") }
 fn fails(work: () => Ok): Bool unsafe go {
   failed := false
@@ -9,7 +10,7 @@ test "awaitAll joins every task before propagating a panic" {
     finished = atom(false)
     tasks = [
       spawn(s, () => broken()),
-      spawn(s, () => { sleep(20); assertEqual(update(finished, old => true), true); 2 }),
+      spawn(s, () => { _ = time.Sleep(s, time.Nanoseconds((20) * 1000000)); assertEqual(update(finished, old => true), true); 2 }),
     ]
     assertEqual(fails(() => assertEqual(tasks.awaitAll(), [1, 2])), true)
     assertEqual(current(finished), true)

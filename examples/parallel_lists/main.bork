@@ -1,3 +1,4 @@
+import "bork/process"
 import "bork/time"
 
 // Model eight independent I/O waits with cancellation-aware delays.
@@ -17,7 +18,7 @@ fn elapsed(start: time.Instant) uses clock: String {
 fn main() {
   xs = range(1, 9)
   println(xs.parMap(n => n * n))
-  benchmark = args().includes("--benchmark")
+  benchmark = process.Args().includes("--benchmark")
   scope s {
     if (benchmark) {
       start = time.Now()

@@ -1,3 +1,4 @@
+import "bork/time"
 // A connection that says when it opens and closes.
 type Conn = resource
 
@@ -81,7 +82,7 @@ fn main() uses io + clock + state {
     // A task of b can use old once it is attached to b too.
     shared = attach(old, b.scope)
     launch(b.scope, () => {
-      sleep(20)
+      _ = time.Sleep(b.scope, time.Nanoseconds((20) * 1000000))
       println(s"task of b uses ${nameOf(shared)}")
     })
     closeScope(a)
@@ -168,7 +169,7 @@ fn siblingTask() uses io + clock + state: Ok | Failed {
   scope app {
     x = openScope(app)
     launch(x.scope, () => worker(app))
-    sleep(20)
+    _ = time.Sleep(app, time.Nanoseconds((20) * 1000000))
     check(true)?
     closeScope(x)
   }
@@ -177,7 +178,7 @@ fn siblingTask() uses io + clock + state: Ok | Failed {
 fn worker(app: Scope) uses io + clock + state {
   b = openScope(app)
   c = connect("worker", b.scope)
-  sleep(60)
+  _ = time.Sleep(app, time.Nanoseconds((60) * 1000000))
   println(s"worker still uses ${nameOf(c)}")
   closeScope(b)
 }

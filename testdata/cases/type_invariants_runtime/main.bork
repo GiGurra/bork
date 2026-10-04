@@ -1,3 +1,4 @@
+import "bork/json"
 import "bork/env"
 import "bork/encoding"
 import "bork/cli"
@@ -13,9 +14,9 @@ test "generated values satisfy whole invariants" (r: Range, s: State) {
   assert(stateValid(s))
 }
 test "decoding checks completed values and defaults" {
-  match (decodeJson[Range]("{\"lo\":20}")) { Range => assert(false), e: DecodeError => assertEqual(e.path, ".lo"), JsonError => assert(false) }
-  match (decodeJson[Range]("{\"lo\":2,\"hi\":3}")) { r: Range => assert(r.lo <= r.hi), _ => assert(false) }
-  match (decodeJson[State]("{\"type\":\"Running\",\"lo\":9,\"hi\":2}")) { State => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (json.Decode[Range]("{\"lo\":20}")) { Range => assert(false), e: DecodeError => assertEqual(e.path, ".lo"), JsonError => assert(false) }
+  match (json.Decode[Range]("{\"lo\":2,\"hi\":3}")) { r: Range => assert(r.lo <= r.hi), _ => assert(false) }
+  match (json.Decode[State]("{\"type\":\"Running\",\"lo\":9,\"hi\":2}")) { State => assert(false), DecodeError => assert(true), JsonError => assert(false) }
 }
 fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
   import "encoding/json"
@@ -33,12 +34,12 @@ type Box[T] = { value: T, n: Int } where boxValid derive (Decode)
 pred accepted(s: Gate) { match (s) { Gate.Accepted => true, Gate.Rejected => false } }
 type Gate = sealed { Accepted, Rejected } where accepted derive (Decode)
 test "sealed-wide decoders validate fieldless variants" {
-  match (decodeJson[Gate]("\"Accepted\"")) { Gate => assert(true), _ => assert(false) }
-  match (decodeJson[Gate]("\"Rejected\"")) { Gate => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (json.Decode[Gate]("\"Accepted\"")) { Gate => assert(true), _ => assert(false) }
+  match (json.Decode[Gate]("\"Rejected\"")) { Gate => assert(false), DecodeError => assert(true), JsonError => assert(false) }
 }
 test "generic invariants validate and generate" (b: Box[String]) {
   assert(b.n > 0)
-  match (decodeJson[Box[String]]("{\"value\":\"x\",\"n\":0}")) { Box => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (json.Decode[Box[String]]("{\"value\":\"x\",\"n\":0}")) { Box => assert(false), DecodeError => assert(true), JsonError => assert(false) }
 }
 test "schema loaders check completed invariants" {
   lookup = (name: String) => if (name == "CFG_LO") { Option.Some { value: "20" } } else { Option.None }
@@ -55,7 +56,7 @@ pred nonzero(n: Int) { n != 0 }
 pred safeDivisor(d: Divisor) { 10 / d.n >= 0 }
 type Divisor = { n: Int where nonzero } where safeDivisor derive (Decode, GoStruct)
 test "invalid fields suppress whole-value checks" {
-  match (decodeJson[Divisor]("{\"n\":0}")) { Divisor => assert(false), e: DecodeError => assertEqual(e.path, ".n"), JsonError => assert(false) }
+  match (json.Decode[Divisor]("{\"n\":0}")) { Divisor => assert(false), e: DecodeError => assertEqual(e.path, ".n"), JsonError => assert(false) }
   match (readGo[Divisor]("{\"N\":0}")) { Divisor => assert(false), e: GoValueError => assertEqual(e.path, "result.n") }
 }
 fn main() {}

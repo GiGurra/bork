@@ -1,3 +1,4 @@
+import "bork/json"
 import "bork/uuid"
 import "bork/env"
 use uuid.Codecs
@@ -27,10 +28,10 @@ fn exercise() uses io + random + clock + state: Ok | ParseError | IoError {
   println(uuid.Parse("urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6") == id)
   println(uuid.Parse("f81d4fae7dec11d0a76500a0c91e6bf6") == id)
   println(match (uuid.Parse("bad")) { error: ParseError => true; _ => false })
-  println(encodeJson(id))
-  println(decodeJson[uuid.Uuid]("\"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\"") == id)
-  println(decodeJson[uuid.Uuid]("42"))
-  println(decodeJson[Settings]("{\"id\":\"bad\"}"))
+  println(json.Encode(id))
+  println(json.Decode[uuid.Uuid]("\"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\"") == id)
+  println(json.Decode[uuid.Uuid]("42"))
+  println(json.Decode[Settings]("{\"id\":\"bad\"}"))
   println({ id: "value" }.get(id))
   println(uuid.Nil())
   first = uuid.V4()?
@@ -39,7 +40,7 @@ fn exercise() uses io + random + clock + state: Ok | ParseError | IoError {
   println(first != second)
   later = uuid.V7()?
   println(uuid.Version(later) == 7)
-  println(decodeJson[uuid.Uuid](encodeJson(later)) == later)
+  println(json.Decode[uuid.Uuid](json.Encode(later)) == later)
   println(entropyFailures(uuid.V4, uuid.V7))
   setup()
   println(env.Load[Settings]("BORK_UUID_"))

@@ -11,15 +11,15 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [parallel.bork](parallel.bork) | Ordered, bounded pure and scoped parallel list operations |
 | [lists.bork](lists.bork) | List constructors, `notEmpty`, and list methods |
 | [strings.bork](strings.bork) | Number and Boolean parsing, and string methods |
-| [runes.bork](runes.bork) | Unicode rune helpers |
+| [runes.bork](runes.bork) | Unicode rune methods |
 | [maps.bork](maps.bork) | `Entry` and persistent map methods |
 | [bytes.bork](bytes.bork) | Immutable bytes and UTF-8 conversions |
 | [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, `GoStruct`, and primitive ordering instances |
-| [json.bork](json.bork) | JSON values, parsing, rendering, `Decode`, `Encode`, and their instances |
+| [json.bork](json.bork) | JSON values, `Decode`, `Encode`, their instances, and reserved internal helpers |
 | [fanin.bork](fanin.bork) | Ordered task fan-in, races, typed channel selection, and cooperative timeouts |
-| [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and sleep |
+| [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and cancellable delay |
 | [scopes.bork](scopes.bork) | Resource attachment, scope policies, and finalizers |
-| [environment.bork](environment.bork) | `IoError`, arguments, exit, and standard error output |
+| [environment.bork](environment.bork) | `IoError` and standard error output |
 | [testing.bork](testing.bork) | `Mock`, the handle of a mock in a test, and its `count` and `calls` |
 
 Parallel list callbacks are pure by default: `xs.parMap(f, workers: 4)`.
@@ -60,3 +60,23 @@ Internal helpers can opt into caller locations by calling
 String and forwards it to tracked helper calls, assertions, snapshots and dbg.
 It is accepted only in prelude/standard-library function bodies. Ordinary
 function types stay unchanged; a function value captures its reference site.
+
+Prelude audit (pre-1.0 clean break): process arguments and exit belong to
+`bork/process` (`Args`, `Exit`); JSON text belongs to `bork/json` (`Parse`,
+`Render`, `Decode`, `Encode`). Sleeping belongs to `bork/time.Sleep`, with a
+scope and a Duration; cancellation is observable as `Cancelled`. There are no
+deprecated aliases. Unicode tests are Rune methods; `runeToString(r)` stays until Rune is distinct from numeric Int32.
+
+The JSON type family and Decode/Encode classes remain here because derived
+instances and user instances need a shared vocabulary without imports. Their
+implementation helpers (`_jsonKind`, `_decodeMismatch`, `_atPath`, `_decodeItems`,
+`_decodeFields`, `_jsonFieldPut`, `_jsonFieldsOf`) use compiler-reserved names;
+ordinary source cannot name them. Compiler-embedded sources may use reserved
+names, including inside interpolations.
+
+The rest stays: println/eprintln, concurrency and scope primitives (including
+delay/cancelAfter), range/prepend, scalar parse functions, bytes/UTF-8
+construction, collection methods, Eq/Ord/Show/GoStruct, and Mock methods. These
+are core value operations or language/runtime primitives, rather than duplicate
+standard-package services. No other user-visible implementation helpers or OS
+entry points were found in the topic files.
