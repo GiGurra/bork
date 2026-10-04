@@ -60,12 +60,22 @@ The encoding must either reconstruct that evidence safely on this platform or
 reject the entry. A first focused receipt implementation may bypass assets
 until their identity encoding is covered by tests.
 
-Standard Go names require the recorded SDK directory membership and all
-immediate file-content digests, plus supported configuration evidence. A
-configuration receipt includes raw environment, resolved Go/driver/bridge,
-launcher digest, saved GOENV and SDK go.env, telemetry setting, cwd module/work
-candidates including negatives, executable availability and cache/tmp modes.
-Unsupported flags/toolchain switching/wrappers retain full discovery/bypass.
+Installed Go SDKs are treated as immutable, matching Go's object-cache policy.
+In-place edits of GOROOT or the Go launcher are unsupported. Capture/publication
+may retain complete SDK name content/membership evidence, but a checked-result
+hit identifies the installation by GOROOT path, Go version, and the resolved
+launcher and GOROOT VERSION file's device/inode/size/mode/mtime identities.
+No SDK content hashing or membership walks run on this hit path. Toolchain
+replacement, upgrades, path switches and missing VERSION files decline reuse.
+Version 2 Go receipts record this explicit policy identity separately from
+content receipts; unknown/missing policy evidence declines the cheap path.
+
+Configuration checks still include raw environment, resolved Go/driver/bridge,
+saved GOENV and SDK go.env, telemetry setting, cwd module/work candidates
+including negatives, executable availability and cache/tmp modes. Compiler
+identity still uses its actual executable content digest. Unsupported flags,
+toolchain switching and wrappers retain full discovery/bypass. Source/asset
+content and membership checks are unchanged.
 
 The compiler/configuration/source receipt APIs should also be reusable by the
 comptime cache, but evaluated-value receipts additionally require a proven
@@ -73,9 +83,10 @@ execution closure, rooted input identities, dependency/proof context and shared
 versioned value limits. Keep evaluator usage markers until that boundary is
 closed; limits and cross-target hardening land before value reuse.
 
-No stat tuple is trusted merely because it was persisted. Re-establish launcher
-byte evidence once per process and a new monotonic observation window before
-using the existing two-second shortcut. Do not deserialize stable-since times.
+Persistent stat identity is trusted only for the explicitly immutable installed
+SDK policy above. Other content-certified paths re-establish launcher byte
+evidence and a monotonic observation window before using the existing two-second
+shortcut. Do not deserialize stable-since times.
 A matching proven configuration receipt can reconstruct pinned Go values/env
 without rerunning `go env`; this must preserve all existing configuration-change
 tests. If it cannot, perform fresh discovery. Measure this separately: paying

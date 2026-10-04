@@ -732,3 +732,45 @@ replacement before automatic complete-result caching is enabled.
 ```sh
 go test ./internal/driver -run '^$' -bench '^BenchmarkGoStagePublication$' -benchtime=20x -count=3
 ```
+
+
+The installed-SDK hit policy supersedes the earlier requirement to hash SDK
+contents and launcher bytes on every fresh-process hit. As with Go's object
+cache, in-place GOROOT or launcher edits are unsupported. Go receipt schema 2
+records the installation root/version and launcher/VERSION file stat identities;
+metadata-result hits validate those identities without SDK membership walks.
+Source/configuration/environment/compiler validation remains in place. Generic
+content-certified receipt restoration and publication retain their content checks.
+
+Fresh CLI wall times on the same host, 15 invocations per arm after one priming
+invocation, show these medians (min–max), in milliseconds. These specially built
+CLIs enable the still-test-gated result store; every claimed hit was confirmed
+by its probe. Go caches/filesystem caches are warm and stdout is discarded.
+
+| Fixture / operation | Ordinary uncached | Old content-heavy hit | Installed-SDK hit |
+| --- | ---: | ---: | ---: |
+| hello / check | 48.89 (47.72–50.33) | 37.03 (36.21–38.24) | 18.50 (17.53–19.51) |
+| hello / emit | 57.49 (56.38–58.34) | 37.44 (36.86–37.95) | 19.14 (18.90–19.59) |
+| calculator, two files / check | 50.05 (49.21–51.64) | 37.26 (36.43–38.61) | 19.05 (18.29–19.78) |
+| calculator, two files / emit | 62.30 (61.87–64.25) | 38.08 (37.29–39.01) | 19.84 (19.30–20.84) |
+
+Hello is 12 Bork bytes, emitting 37,719 Go bytes; its old receipt was 146,154
+bytes. The two-file fixture splits the unchanged 5,064-byte calculator example
+before `fn main`, putting parser/evaluator declarations in `expressions.bork`
+and its entry point in `main.bork`. Calculator is the largest eligible example
+by Bork source bytes. The larger http_server example (7,624 bytes) and the
+two-file config example still bypass because they execute proof evaluators.
+These measurements do not claim evaluator hits or a speedup for those examples.
+`build` is also outside the current test-gated result lookup entry points, so
+its ordinary Go build cost is not reported as a result-cache hit.
+
+The content-heavy before benchmark separated decode (3.90 ms), source hashing
+(0.057 ms), Go receipt restoration (19.94 ms, including launcher hashing), and
+SDK names content/membership validation (7.02 ms). A launcher SHA alone cost
+9.64 ms. These are N=3 medians of five-iteration in-process averages, measured
+independently and not additive: generic restoration also performs an extra
+launcher endpoint validation that the CLI had already consolidated. The exact
+old CLI-style overlapped entry point cost 28.63 ms in-process before process
+startup/compiler identity, versus the 37–38 ms fresh-CLI results above.
+
+Population acceptance and automatic enablement remain separate follow-ups.

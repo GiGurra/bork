@@ -11,13 +11,15 @@ import (
 	"unicode/utf8"
 )
 
-const goReceiptSchema = 1
+const goReceiptSchema = 2
 
 var errUnsupportedGoReceipt = errors.New("cannot persist Go observations")
 
 // This is only the supported metadata-name configuration inventory, not an
-// export-data or execution receipt. No stat tuple or stable-since time persists.
+// export-data or execution receipt. Installed-SDK stat identities apply only under
+// the immutable-SDK policy; no monotonic stable-since time persists.
 type goContextReceipt struct {
+	InstalledSDK     *installedSDKIdentity  `json:"installed_sdk"`
 	Schema           int                    `json:"schema"`
 	ProcessEnv       []string               `json:"process_env"`
 	Values           map[string]string      `json:"values"`
@@ -63,7 +65,7 @@ func (ctx *goContext) receiptSnapshot() (*goContextReceipt, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := &goContextReceipt{Schema: goReceiptSchema, ProcessEnv: slices.Clone(ctx.processEnv), Values: maps.Clone(ctx.values), Tool: ctx.tool, Driver: ctx.driver, Self: ctx.self, ToolDigest: ctx.toolDigest, BridgeDigest: bridge, BridgeMode: v.selfMode, Inputs: inputs, Root: v.root, Version: v.version, Cache: v.cache, Tmp: v.tmp, ResolvedLauncher: v.resolvedLauncher, Compilers: maps.Clone(v.compilers), DirectoryModes: maps.Clone(v.directoryModes)}
+	out := &goContextReceipt{InstalledSDK: captureInstalledSDK(ctx.tool, v.root, v.version), Schema: goReceiptSchema, ProcessEnv: slices.Clone(ctx.processEnv), Values: maps.Clone(ctx.values), Tool: ctx.tool, Driver: ctx.driver, Self: ctx.self, ToolDigest: ctx.toolDigest, BridgeDigest: bridge, BridgeMode: v.selfMode, Inputs: inputs, Root: v.root, Version: v.version, Cache: v.cache, Tmp: v.tmp, ResolvedLauncher: v.resolvedLauncher, Compilers: maps.Clone(v.compilers), DirectoryModes: maps.Clone(v.directoryModes)}
 	if !out.valid() {
 		return nil, errUnsupportedGoReceipt
 	}
@@ -93,8 +95,20 @@ func (r *goContextReceipt) restore(resolved *goContext) (*goContext, error) {
 // restoreWithToolEvidence assembles a context from independently hashed launcher
 // bytes. Its caller must perform a final full context.current before serving.
 func (r *goContextReceipt) restoreWithToolEvidence(resolved *goContext, digest [sha256.Size]byte, evidence *goToolEvidence) (*goContext, error) {
+	return r.restoreResolved(resolved, digest, evidence, false)
+}
+func (r *goContextReceipt) restoreInstalledSDK(resolved *goContext) (*goContext, error) {
+	if r == nil {
+		return nil, errUnsupportedGoReceipt
+	}
+	return r.restoreResolved(resolved, r.ToolDigest, nil, true)
+}
+func (r *goContextReceipt) restoreResolved(resolved *goContext, digest [sha256.Size]byte, evidence *goToolEvidence, installed bool) (*goContext, error) {
 	if !r.valid() || resolved == nil || resolved.err != nil || resolved.driverErr != nil ||
-		!slices.Equal(r.ProcessEnv, resolved.processEnv) || r.Tool != resolved.tool || r.Driver != resolved.driver || r.Self != resolved.self || evidence == nil || digest != r.ToolDigest {
+		!slices.Equal(r.ProcessEnv, resolved.processEnv) || r.Tool != resolved.tool || r.Driver != resolved.driver || r.Self != resolved.self || (!installed && evidence == nil) || digest != r.ToolDigest {
+		return nil, errUnsupportedGoReceipt
+	}
+	if installed && !r.InstalledSDK.current(resolved.tool, r.Root, r.Version) {
 		return nil, errUnsupportedGoReceipt
 	}
 	inputs, err := r.Inputs.snapshot()
@@ -109,6 +123,10 @@ func (r *goContextReceipt) restoreWithToolEvidence(resolved *goContext, digest [
 	ctx.pinSettings()
 	ctx.namesCache = ctx.values["GO111MODULE"] != "off" && ctx.driver == "off"
 	v := &goContextValidation{inputs: inputs, root: r.Root, version: r.Version, cache: r.Cache, tmp: r.Tmp, compilers: maps.Clone(r.Compilers), directoryModes: maps.Clone(r.DirectoryModes), launcher: r.Tool, resolvedLauncher: r.ResolvedLauncher, toolDigest: digest, toolEvidence: evidence, self: r.Self, selfMode: r.BridgeMode, selfDigest: bridge}
+	if installed {
+		id := *r.InstalledSDK
+		v.installedSDK = &id
+	}
 	if sameRunningImage(selfFile) {
 		v.selfFile = selfFile
 	}

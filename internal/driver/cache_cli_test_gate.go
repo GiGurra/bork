@@ -20,16 +20,11 @@ var cacheTestGate string
 var cacheTestState = startCacheTestState()
 
 type cacheTestStartup struct {
-	start        sync.Once
-	toolDone     chan struct{}
-	toolContext  *goContext
-	toolDigest   [sha256.Size]byte
-	toolEvidence *goToolEvidence
-	toolErr      error
-	root         string
-	done         chan struct{}
-	namespace    [sha256.Size]byte
-	err          error
+	start     sync.Once
+	root      string
+	done      chan struct{}
+	namespace [sha256.Size]byte
+	err       error
 }
 
 func startCacheTestState() *cacheTestStartup {
@@ -47,15 +42,9 @@ func startCacheTestState() *cacheTestStartup {
 func (state *cacheTestStartup) startIdentity() {
 	state.start.Do(func() {
 		state.done = make(chan struct{})
-		state.toolDone = make(chan struct{})
-		state.toolContext = resolveGoContext()
 		go func() {
 			state.namespace, state.err = compilerArtifactNamespace(strconv.Itoa(cacheArtifactSchema), cacheArtifactLayout)
 			close(state.done)
-		}()
-		go func() {
-			state.toolDigest, state.toolEvidence, state.toolErr = captureGoToolEvidence(state.toolContext.tool)
-			close(state.toolDone)
 		}()
 	})
 }
@@ -81,12 +70,8 @@ func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error
 			if body.Namespace != state.namespace {
 				return freshTestCachedCompile(path, emit)
 			}
-			<-state.toolDone
 			restore := func(receipt *goContextReceipt) (*goContext, error) {
-				if state.toolErr != nil {
-					return nil, errUnsupportedGoReceipt
-				}
-				return receipt.restoreWithToolEvidence(resolveGoContext(), state.toolDigest, state.toolEvidence)
+				return receipt.restoreInstalledSDK(resolveGoContext())
 			}
 			result, err := body.validateWithContext(request, body.Namespace, restore)
 			<-state.done
