@@ -11,6 +11,7 @@ import (
 // Exercise shared retry token admission and cancellation under the race detector
 // using the actual generated implementation.
 func TestHTTPRetryRace(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds and runs a Go race executable")
 	}

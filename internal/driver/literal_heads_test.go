@@ -10,6 +10,7 @@ import (
 )
 
 func TestLiteralHeadsRejected(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"nominal invariant", "type Range[T] = { label: T, lo: Int = 1, hi: Int = 2 } where ordered\npred ordered[T](r: Range[T]) { r.lo <= r.hi }\nfn main() { println(Range[String] { label: \"bad\", hi: 0 }) }", "is false"},
 		{"sibling fact", "pred atLeast(x: Int, lo: Int) { x>=lo }\ntype Range[T] = { label: T, lo: Int, hi: Int where atLeast(lo) }\nfn main() { println(Range[String] { label: \"bad\", lo: 2, hi: 1 }) }", "is false"},
@@ -36,6 +37,7 @@ func TestLiteralHeadsRejected(t *testing.T) {
 		{"unvalidated facts", "pred positive(x: Int) { x > 0 }\nfn make(x: Int): Option[Int] { Option[Int where positive].Some { value: x } }\nfn main() { println(make(1)) }", "not proven"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "main.bork")
 			if err := os.WriteFile(path, []byte(tc.source+"\n"), 0o644); err != nil {
 				t.Fatal(err)
@@ -49,6 +51,7 @@ func TestLiteralHeadsRejected(t *testing.T) {
 }
 
 func TestLiteralHeadVisibilityAndFixes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, source, want string
 		fixes              int
@@ -62,6 +65,7 @@ func TestLiteralHeadVisibilityAndFixes(t *testing.T) {
 		{"inaccessible owner", "fn main() { api.Choose(.{ values: [] }) }", "several expected constructors", 2, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			files := map[string]string{
 				"bork.mod":  "module example.com/heads\n",

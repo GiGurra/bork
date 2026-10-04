@@ -11,6 +11,7 @@ import (
 )
 
 func TestAsyncBindingChecks(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"compile time candidate", "pred p(x:Int){scope s{async(s) y=x;y>0}}\nfn main(){n:Int where p=1;println(n)}", "cannot schedule an async initializer"},
 		{"unused effects", "fn work() uses io:Int{println(1);1}\nfn f(){scope s{async(s) ignored=work()}}", "uses io"},
@@ -53,6 +54,7 @@ func TestAsyncBindingChecks(t *testing.T) {
 		{"owner early try", "type Failed={}\nfn choice(s:Scope):Scope|Failed{s}\nfn f():Int|Failed{scope s{async(choice(s)?) x=1;x}}", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
@@ -70,6 +72,7 @@ func TestAsyncBindingChecks(t *testing.T) {
 }
 
 func TestDescribeAsyncNeverStarts(t *testing.T) {
+	t.Parallel()
 	source := "fn work(n:Int) uses io:Int{println(n);n}\nfn main(){n=7\n scope s {\n async(s) x=work(n)\n println(x)\n }}"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
@@ -89,6 +92,7 @@ func TestDescribeAsyncNeverStarts(t *testing.T) {
 
 // Exercise generated scope, initializer and memo code together under -race.
 func TestAsyncBindingRace(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds and runs a Go race executable")
 	}

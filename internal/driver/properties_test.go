@@ -12,6 +12,7 @@ import (
 // --auto-properties, and compares the report with
 // expected_auto_test_output.txt.
 func TestAutoProperties(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join("..", "..", "testdata", "cases", "properties_auto")
 	var out strings.Builder
 	code, err := Test(dir, &out, TestOptions{AutoProperties: true})
@@ -24,8 +25,10 @@ func TestAutoProperties(t *testing.T) {
 
 // Joint requirements must filter every generated and shrunk argument tuple.
 func TestFunctionWhereAutoProperties(t *testing.T) {
+	t.Parallel()
 	for _, fixture := range []string{"function_where_runtime", "function_where_shrink"} {
 		t.Run(fixture, func(t *testing.T) {
+			t.Parallel()
 			dir := filepath.Join("..", "..", "testdata", "cases", fixture)
 			var out strings.Builder
 			code, err := Test(dir, &out, TestOptions{AutoProperties: true})
@@ -43,6 +46,7 @@ var seedLine = regexp.MustCompile(`case \d+, seed (-?\d+)`)
 // TestPropertySeed checks that a failure's seed reproduces it, and that
 // --cases sets how many cases run.
 func TestPropertySeed(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join("..", "..", "testdata", "cases", "properties")
 	var first strings.Builder
 	if _, err := Test(dir, &first, TestOptions{}); err != nil {

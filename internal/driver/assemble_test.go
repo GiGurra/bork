@@ -11,6 +11,7 @@ import (
 )
 
 func TestDescribeAssembly(t *testing.T) {
+	t.Parallel()
 	source := `type Config = {}
 type Db = {}
 type Server = {}
@@ -53,6 +54,7 @@ fn scenario(s: Scope): Server { assemble[Server](s, server, db, config) }
 }
 
 func TestDescribeProviderBundle(t *testing.T) {
+	t.Parallel()
 	source := `ambient trace: String
 type Config = {}
 type Db = {}

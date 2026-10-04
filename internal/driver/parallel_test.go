@@ -11,6 +11,7 @@ import (
 // TestParallelTests runs the tests_parallel case with --parallel: the
 // report is the one it gives run one test at a time.
 func TestParallelTests(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join("..", "..", "testdata", "cases", "tests_parallel")
 	want, err := os.ReadFile(filepath.Join(dir, "expected_test_output.txt"))
 	if err != nil {
@@ -32,6 +33,7 @@ func TestParallelTests(t *testing.T) {
 // assertSnapshot, called where no test can be told (Go code dropped
 // the labels), says so.
 func TestParallelTestsOverlap(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// The tests meet in a directory: each adds a file to it.
 	meet := t.TempDir()

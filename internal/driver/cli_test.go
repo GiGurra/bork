@@ -9,6 +9,7 @@ import (
 )
 
 func TestCLIRun(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
 pred validPort(n: Int) { n > 0 && n < 65536 }
@@ -42,6 +43,7 @@ fn main() {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cmd := exec.Command(exe, tt.args...)
 			cmd.Env = append(os.Environ(), "BORK_CLI_TEST_NAME="+tt.env)
 			out, err := cmd.CombinedOutput()
@@ -63,6 +65,7 @@ fn main() {
 }
 
 func TestCLIConfigFiles(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
 pred validPort(n: Int) { n > 0 && n < 65536 }
@@ -118,6 +121,7 @@ fn main() {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			for name, data := range map[string]string{"base.json": tt.base, "override.json": tt.override, "selected.json": tt.selected} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
@@ -146,6 +150,7 @@ fn main() {
 }
 
 func TestCLIConfigSelectors(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
 pred selected(value: Option[String]) { match (value) { Option.Some { value: _ } => true, Option.None => false } }

@@ -8,6 +8,7 @@ import (
 )
 
 func TestDescribeGeneratedConstructor(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(n: Int) { n > 0 }
 type Config = private {
   // Request budget in bytes.

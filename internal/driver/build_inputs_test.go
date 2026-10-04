@@ -11,6 +11,7 @@ import (
 )
 
 func TestComptimeBuildInputs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for name, data := range map[string]string{
 		ModFile:      "module example.com/buildinputs\n",
@@ -64,6 +65,7 @@ fn main(){a=comptime{lib.Text()};b=comptime{build.ReadBytes("raw.bin")};println(
 }
 
 func TestComptimeBuildInputRejections(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, path, data, want string }{
 		{"runtime", `fn main(){println(build.ReadString("x"))}`, "x", "hi", "build effects may run only inside comptime"},
 		{"runtime explicit", `fn main() uses build{_=build.ReadString("x")}`, "x", "hi", "build effects may run only inside comptime"},
@@ -77,6 +79,7 @@ fn main(){println(comptime{read("x")})}`, "x", "hi", "constant String path"},
 		{"file limit", `fn main(){println(comptime{build.ReadString("x")})}`, "x", strings.Repeat("a", buildFileLimit+1), "exceeds 16 MiB"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			for name, data := range map[string]string{ModFile: "module example.com/buildinputs\n", "main.bork": "import \"bork/build\"\n" + tc.source, tc.path: tc.data} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
@@ -92,6 +95,7 @@ fn main(){println(comptime{read("x")})}`, "x", "hi", "constant String path"},
 }
 
 func TestBuildReadInventory(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	key := buildReadKey{dir, "ReadBytes", "file"}
 	missing := &buildSnapshot{reads: map[buildReadKey]buildRead{key: readBuildInput(key)}}
@@ -144,6 +148,7 @@ func TestBuildReadInventory(t *testing.T) {
 }
 
 func TestBuildReadEstablishedRootLink(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	root := filepath.Join(dir, "real")
 	if err := os.Mkdir(root, 0o755); err != nil {
@@ -184,6 +189,7 @@ func TestBuildReadEstablishedRootLink(t *testing.T) {
 }
 
 func TestComptimeBuildNativeEntrypoint(t *testing.T) {
+	t.Parallel()
 	for _, source := range []string{
 		"fn main() uses build unsafe go {}",
 		`import "bork/build"
@@ -204,6 +210,7 @@ fn main() uses io + build unsafe go {fmt.Println(text())}`,
 }
 
 func TestComptimeBuildInputPreflight(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, data, want string }{
 		{"string", `pred good(s:String){s=="hello"}
 fn must(s:String where good):Int{42}
@@ -216,6 +223,7 @@ fn must(s:String where nonEmpty):Int{panic("must not execute")}
 fn main(){println(comptime{must(build.ReadString("input"))})}`, "", "nonEmpty(\"\") is false"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			for name, data := range map[string]string{"main.bork": "import \"bork/build\"\n" + tc.source, "input": tc.data} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
@@ -237,6 +245,7 @@ fn main(){println(comptime{must(build.ReadString("input"))})}`, "", "nonEmpty(\"
 }
 
 func TestBuildReadFrozenInventory(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "file")
 	if err := os.WriteFile(file, []byte("frozen"), 0o644); err != nil {
@@ -257,6 +266,7 @@ func TestBuildReadFrozenInventory(t *testing.T) {
 }
 
 func TestBuildReadComponentReplacement(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "sub")
 	if err := os.Mkdir(sub, 0o755); err != nil {
@@ -284,6 +294,7 @@ func TestBuildReadComponentReplacement(t *testing.T) {
 }
 
 func TestFailedBuildReadAttemptRetainsTrigger(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(`import "bork/build"
 fn main(){println(comptime{build.ReadString("missing")})}`), 0o644); err != nil {
@@ -312,6 +323,7 @@ fn main(){println(comptime{build.ReadString("missing")})}`), 0o644); err != nil 
 }
 
 func TestWatchMissingBuildInputRecovers(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
 	if err := os.WriteFile(path, []byte(`import "bork/build"

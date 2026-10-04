@@ -9,6 +9,7 @@ import (
 )
 
 func TestCLISubcommands(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
 pred validPort(n: Int) { n > 0 && n < 65536 }
@@ -69,6 +70,7 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			base := tt.base
 			if base == "" {
@@ -101,6 +103,7 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 }
 
 func TestCLISubcommandMetadata(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
 type Options = {} derive (Decode)
@@ -136,6 +139,7 @@ fn main() {
 }
 
 func TestCLISubcommandEffects(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
 fn partial(commands: List[cli.Command]) uses io: Ok | cli.Error | cli.Help { cli.Dispatch("app", "", [], commands) }
