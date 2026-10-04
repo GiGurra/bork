@@ -410,6 +410,8 @@ type gen struct {
 	usesAsync        bool
 	evalMode         bool
 	comptimeCaptures map[*check.Var]check.Expr
+	comptimeResults  map[*check.Comptime]ast.Expr
+	comptimePackages map[*check.PackageBinding]ast.Expr
 	comptimeMode     bool
 	// Captures disappear from emitted recipes; retain valid Go bindings for their declarations.
 	comptimeReads    map[*check.Var]bool
@@ -848,6 +850,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 	t := e.Type()
 	switch e := e.(type) {
 	case *check.Comptime:
+		if result := g.comptimeResults[e]; result != nil {
+			return nil, result
+		}
 		if e.Value == nil {
 			if !g.evalMode {
 				panic("unevaluated comptime value reached generation")
@@ -897,6 +902,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		}
 		return nil, g.instance(e.Inst)
 	case *check.VarRef:
+		if result := g.comptimePackages[e.Var.PackageBinding]; result != nil {
+			return nil, result
+		}
 		if value := g.comptimeCaptures[e.Var]; value != nil {
 			return g.value(value)
 		}

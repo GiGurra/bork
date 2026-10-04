@@ -120,9 +120,6 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 }
 
 func (c *checker) packageBindingRead(node *syntax.Ident, binding *PackageBinding) Type {
-	if c.comptimeContext != nil {
-		c.diags.AddCode(node.Pos, "comptime.capture", "comptime cannot read runtime package value %s", node.Name)
-	}
 	typ := c.ensurePackageBinding(binding)
 	c.info.defs[node] = binding.Decl
 	if len(c.packagePath) != 0 {
@@ -375,12 +372,13 @@ func constraintSubjects(subject Type, path string) []Type {
 }
 
 // Resolve dependencies through pure helper bodies after every body is lowered.
-// This also marks compiler evaluation boundaries that would read runtime cells.
+// This also marks predicate boundaries that would read runtime cells.
 func (c *checker) packageDependencyGraph() {
 	if len(c.info.PackageBindings) == 0 {
 		return
 	}
 	graph := map[*Func]packageDependencies{}
+	c.info.packageGraph = graph
 	for _, function := range c.info.FuncOf {
 		dependencies := newPackageDependencies(c.info)
 		dependencies.tree(function.Body)

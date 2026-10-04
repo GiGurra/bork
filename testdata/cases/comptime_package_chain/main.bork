@@ -1,0 +1,8 @@
+Squares = comptime { range(1, 6).map(n => n * n) }
+Total = comptime { Squares.fold(0, (s, n) => s + n) }
+Unused: Int = panic("unused package values stay lazy")
+
+fn main() {
+  println(Total)
+  println(comptime { Squares.length() + Total })
+}

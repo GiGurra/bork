@@ -17,13 +17,22 @@ import (
 // ComptimeProgram executes one checked recipe and writes a versioned value to
 // a compiler-owned file. stdout is never part of the result protocol.
 func ComptimeProgram(files []*syntax.File, info *check.Info, node *check.Comptime) ([]byte, error) {
+	return comptimeProgram(files, info, []*check.Comptime{node}, nil, false)
+}
+
+// ComptimeBatchProgram exposes checked recipes through a request protocol. A
+// getter can only read a result the driver has already evaluated and validated.
+func ComptimeBatchProgram(files []*syntax.File, info *check.Info, nodes []*check.Comptime, packages map[*check.PackageBinding]*check.Comptime) ([]byte, error) {
+	return comptimeProgram(files, info, nodes, packages, true)
+}
+
+func comptimeProgram(files []*syntax.File, info *check.Info, nodes []*check.Comptime, packages map[*check.PackageBinding]*check.Comptime, batch bool) ([]byte, error) {
 	g := newGen(info)
-	g.evalMode = true
-	g.comptimeMode = true
+	g.evalMode, g.comptimeMode = true, true
 	g.comptimeCaptures = map[*check.Var]check.Expr{}
 	var captureValue func(*check.Var)
 	captureValue = func(v *check.Var) {
-		if _, ok := g.comptimeCaptures[v]; ok || v.Let == nil {
+		if _, ok := g.comptimeCaptures[v]; ok || v.Let == nil || v.PackageBinding != nil {
 			return
 		}
 		g.comptimeCaptures[v] = v.Let.Value
@@ -37,31 +46,90 @@ func ComptimeProgram(files []*syntax.File, info *check.Info, node *check.Comptim
 			return true
 		})
 	}
-	for _, capture := range node.Captures {
-		captureValue(capture)
+	var roots []*check.Func
+	for _, node := range nodes {
+		for _, capture := range node.Captures {
+			captureValue(capture)
+		}
+		roots = append(roots, check.ComptimeHelpers(node)...)
 	}
-	roots := check.ComptimeHelpers(node)
 	encoder := &comptimeEncoder{g: g, names: map[check.Type]string{}}
-	entry, err := encoder.function(node.Type())
-	if err != nil {
-		return nil, err
+	if batch {
+		g.comptimeResults = map[*check.Comptime]ast.Expr{}
+		g.comptimePackages = map[*check.PackageBinding]ast.Expr{}
+		for i, node := range nodes {
+			var typ bytes.Buffer
+			if err := printer.Fprint(&typ, token.NewFileSet(), g.goType(node.Type())); err != nil {
+				return nil, err
+			}
+			source := fmt.Sprintf("package main; var _ctMemo%d %s; var _ctReady%d bool; func _ctGet%d() %s {if !_ctReady%d {panic(\"unresolved comptime dependency\")};return _ctMemo%d}", i, typ.String(), i, i, typ.String(), i, i)
+			parsed, err := parser.ParseFile(token.NewFileSet(), "", source, 0)
+			if err != nil {
+				return nil, err
+			}
+			g.extraFuncs = append(g.extraFuncs, parsed.Decls...)
+			g.comptimeResults[node] = &ast.CallExpr{Fun: ast.NewIdent(fmt.Sprintf("_ctGet%d", i))}
+		}
+		for binding, node := range packages {
+			g.comptimePackages[binding] = g.comptimeResults[node]
+		}
 	}
 	runtime, err := parser.ParseFile(token.NewFileSet(), "", comptimeRuntime+fmt.Sprintf("\nconst (_ctSchemaVersion=%d; _ctResultLimit=%d; _ctNodeLimit=%d; _ctDepthLimit=%d)", check.ComptimeSchemaVersion, check.ComptimeResultLimit, check.ComptimeNodeLimit, check.ComptimeDepthLimit), 0)
 	if err != nil {
 		return nil, err
 	}
 	g.extraFuncs = append(g.extraFuncs, runtime.Decls...)
-	g.imports["encoding/json"] = true
-	g.imports["os"] = true
-	recipe := g.ComptimeLambda(node)
-	encoded := &ast.CallExpr{Fun: ast.NewIdent(entry), Args: []ast.Expr{&ast.CallExpr{Fun: recipe}, &ast.BasicLit{Kind: token.INT, Value: "0"}}}
-	statements := []ast.Stmt{}
-	if node.Type() == check.Ok {
-		statements = append(statements, &ast.ExprStmt{X: &ast.CallExpr{Fun: recipe}})
-		encoded = &ast.CallExpr{Fun: ast.NewIdent(entry), Args: []ast.Expr{g.okValue(), &ast.BasicLit{Kind: token.INT, Value: "0"}}}
+	g.imports["encoding/json"], g.imports["os"] = true, true
+	var cases []ast.Stmt
+	for i, node := range nodes {
+		entry, err := encoder.function(node.Type())
+		if err != nil {
+			return nil, err
+		}
+		var recipe ast.Expr = &ast.CallExpr{Fun: g.ComptimeLambda(node)}
+		var statements []ast.Stmt
+		var value ast.Expr = recipe
+		if batch {
+			memo := ast.NewIdent(fmt.Sprintf("_ctMemo%d", i))
+			if node.Type() == check.Ok {
+				statements = append(statements, &ast.ExprStmt{X: recipe})
+				recipe = g.okValue()
+			}
+			statements = append(statements,
+				&ast.AssignStmt{Lhs: []ast.Expr{memo}, Tok: token.ASSIGN, Rhs: []ast.Expr{recipe}},
+				&ast.AssignStmt{Lhs: []ast.Expr{ast.NewIdent(fmt.Sprintf("_ctReady%d", i))}, Tok: token.ASSIGN, Rhs: []ast.Expr{ast.NewIdent("true")}})
+			value = memo
+		} else if node.Type() == check.Ok {
+			statements = append(statements, &ast.ExprStmt{X: recipe})
+			value = g.okValue()
+		}
+		encoded := &ast.CallExpr{Fun: ast.NewIdent(entry), Args: []ast.Expr{value, &ast.BasicLit{Kind: token.INT, Value: "0"}}}
+		statements = append(statements, &ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_ctEmit"), Args: []ast.Expr{encoded}}})
+		if batch {
+			cases = append(cases, &ast.CaseClause{List: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(i)}}, Body: statements})
+		} else {
+			cases = statements
+		}
 	}
-	statements = append(statements, &ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_ctEmit"), Args: []ast.Expr{encoded}}})
-	main := &ast.FuncDecl{Name: ast.NewIdent("main"), Type: &ast.FuncType{Params: &ast.FieldList{}}, Body: &ast.BlockStmt{List: statements}}
+	main := &ast.FuncDecl{Name: ast.NewIdent("main"), Type: &ast.FuncType{Params: &ast.FieldList{}}, Body: &ast.BlockStmt{List: cases}}
+	if batch {
+		skeleton, err := parser.ParseFile(token.NewFileSet(), "", `package main
+  func main(){
+   reply:=os.Stdout
+   discard,err:=os.OpenFile(os.DevNull,os.O_WRONLY,0);if err!=nil{panic(err)};defer discard.Close();os.Stdout=discard
+   for {var index int;if _,err:=fmt.Fscan(os.Stdin,&index);err!=nil{return}
+    _ctNodes=0;_ctBudget=_ctResultLimit-128
+    switch index {}
+    if _,err:=reply.Write([]byte{1});err!=nil{panic(err)}
+   }
+  }`, 0)
+		if err != nil {
+			return nil, err
+		}
+		main = skeleton.Decls[0].(*ast.FuncDecl)
+		loop := main.Body.List[len(main.Body.List)-1].(*ast.ForStmt)
+		loop.Body.List[4].(*ast.SwitchStmt).Body.List = cases
+	}
 	return generate(g, files, roots, main)
 }
 

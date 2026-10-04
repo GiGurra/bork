@@ -1,0 +1,9 @@
+import "example.com/comptime-package/values"
+
+Total = comptime { values.Total() }
+Count = comptime { values.Squares.length() }
+
+fn main() {
+  println(Total)
+  println(Count)
+}
