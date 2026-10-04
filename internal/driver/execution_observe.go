@@ -2,106 +2,129 @@ package driver
 
 import (
 	"crypto/sha256"
-	"errors"
-	"fmt"
+	"encoding/binary"
 	"os/exec"
-	"path/filepath"
-	"slices"
-	"strings"
-
-	"github.com/GiGurra/bork/internal/check"
-	"github.com/GiGurra/bork/internal/syntax"
+	"time"
 )
 
-// These bounded counters describe actual executions, not eligibility for hits.
-// In particular a validated Go inventory does not certify generated support,
-// contextual Facts, ordered prior values, or the enclosing compilation.
+// Request-owned observations are not execution receipts. Installed SDK identity
+// follows the shared immutable-installation policy, not a consumed-input proof.
 type executionObservations struct {
-	Invocations, Captured, Validated, Declined uint64
-	LastGoIdentity                             [sha256.Size]byte
-	LastDecline                                executionDecline
+	Invocations, Captured, Validated, Declined, MemoHits uint64
+	LastBuild, LastProcess                               [sha256.Size]byte
+	LastMode                                             string
+	LastLimit                                            time.Duration
+	LastSDK                                              installedSDKIdentity
+	LastDecline                                          executionDecline
 }
 
 func (o *executionObservations) decline(reason executionDecline) {
 	o.Declined++
-	// Do not retain arbitrary subprocess/path diagnostic payloads in accounting.
 	if len(reason) > 512 {
-		reason = "execution inventory declined"
+		reason = "execution observation declined"
 	}
 	o.LastDecline = reason
 }
 
-func (o *executionObservations) finish(inventory *goExecutionInventory, cleanup func()) {
-	defer cleanup()
-	if inventory.current() {
-		o.Validated++
+type executionObservation struct {
+	usage   *goUsage
+	context *goContext
+	token   executionInvocation
+	sdk     *installedSDKIdentity
+}
+
+func beginExecutionObservation(usage *goUsage, context *goContext, mode string, limit time.Duration) *executionObservation {
+	if usage == nil {
+		return nil
+	}
+	usage.evaluator = true
+	if usage.deferInputs {
+		return nil
+	}
+	if usage.execution == nil {
+		usage.execution = &executionTracker{}
+	}
+	observation := &executionObservation{usage: usage, context: context, token: usage.execution.begin(nil)}
+	counts := &usage.executions
+	counts.Invocations++
+	counts.LastMode, counts.LastLimit = mode, limit
+	// Clear witnesses so a failed call or memo hit cannot inherit an older build.
+	counts.LastBuild, counts.LastProcess = [sha256.Size]byte{}, [sha256.Size]byte{}
+	counts.LastSDK = installedSDKIdentity{}
+	if context != nil && context.err == nil {
+		observation.sdk = captureInstalledSDK(context.tool, context.values["GOROOT"], context.values["GOVERSION"])
+	}
+	if observation.sdk == nil {
+		counts.decline("installed SDK identity unavailable")
 	} else {
-		o.decline("Go execution inputs changed during execution")
+		counts.Captured++
+		counts.LastSDK = *observation.sdk
+	}
+	return observation
+}
+
+func (o *executionObservation) finish() {
+	if o == nil {
+		return
+	}
+	defer o.usage.execution.decline(o.token, executionClosureUnavailable)
+	if o.sdk == nil {
+		return
+	}
+	if o.sdk.current(o.context.tool, o.context.values["GOROOT"], o.context.values["GOVERSION"]) {
+		o.usage.executions.Validated++
+	} else {
+		o.usage.executions.decline("installed SDK identity changed during evaluation")
 	}
 }
 
-// buildObservedComptime keeps the published stage locked through execution and
-// endpoint validation. One-shot callers and unsupported selections retain their
-// ordinary build path; there are no result lookups or certification here.
-func buildObservedComptime(files []*syntax.File, source []byte, out string, module *goModuleInputs, ctx *goContext, usage *goUsage, audit check.ExecutionAudit, embeds []*check.Embedded) (func(), error) {
-	finish := func() {}
-	if usage == nil {
-		return finish, buildGoWithMode(files, source, out, module, ctx, "comptime", embeds...)
+// Bind actual command descriptors separately for build and evaluator processes.
+// Hashing is bounded and preserves ordered argv/env; these are observations only.
+func (o *executionObservation) command(cmd *exec.Cmd, build bool) {
+	if o == nil {
+		return
 	}
-	usage.evaluator = true
-	observations := &usage.executions
-	observations.Invocations++
-	decline := executionDecline(audit.Decline)
-	if decline == "" && (ctx == nil || ctx.err != nil || ctx.values["CGO_ENABLED"] != "0") {
-		decline = "execution observation requires captured CGO-disabled context"
-	}
-	if decline == "" && (ctx.driver != "off" || ctx.driverErr != nil || goModuleHook != nil) {
-		decline = "unsupported execution driver or module hook"
-	}
-	if decline != "" {
-		observations.decline(decline)
-		return finish, buildGoWithMode(files, source, out, module, ctx, "comptime", embeds...)
-	}
-	absOut, err := filepath.Abs(out)
-	if err != nil {
-		return finish, err
-	}
-	dir, pinned, cleanup, err := stageGo(files, source, module, ctx, "comptime", embeds)
-	if err != nil {
-		return finish, err
-	}
-	inventory, decline := captureGoExecution(ctx, goExecutionStage{Root: dir, Mode: "comptime", Output: absOut, Program: source, Module: module})
-	if decline != "" {
-		observations.decline(decline)
-		// Use this already-published stage. Restaging could change the effective
-		// module inputs or invoke a test hook a second time.
-		err := buildStagedGo(files, absOut, dir, pinned, ctx)
-		cleanup()
-		return finish, err
-	}
-	observations.Captured++
-	observations.LastGoIdentity = inventory.identity()
-	inv := inventory.Invocation
-	cmd := exec.Command(inv.Tool, inv.BuildArgs...)
-	cmd.Dir = inv.Root
-	cmd.Env = slices.Clone(inv.Env)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		observations.decline("observed Go build failed")
-		cleanup()
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if diags := unsafeGoErrors(sourcePaths(files), dir, string(output)); diags != nil {
-				return finish, &DiagError{Diags: diags}
+	total := len(cmd.Path) + len(cmd.Dir) + 32
+	for _, values := range [][]string{cmd.Args, cmd.Env} {
+		for _, value := range values {
+			if len(value) > executionIdentityMaxBytes-total-8 {
+				o.usage.executions.decline("command observation exceeds budget")
+				return
 			}
-			if pinned {
-				return finish, fmt.Errorf("building generated program with pinned Go dependencies failed (offline builds need the modules in Go's cache):\n%s", strings.TrimSpace(string(output)))
-			}
-			return finish, fmt.Errorf("go build failed on the generated code (this is a bork compiler bug):\n%s", strings.TrimSpace(string(output)))
+			total += len(value) + 8
 		}
-		return finish, fmt.Errorf("running go build (is Go installed?): %w", err)
 	}
-	return func() {
-		observations.finish(inventory, cleanup)
-	}, nil
+	if total > executionIdentityMaxBytes {
+		o.usage.executions.decline("command observation exceeds budget")
+		return
+	}
+	digest := sha256.New()
+	var length [8]byte
+	write := func(value string) {
+		binary.BigEndian.PutUint64(length[:], uint64(len(value)))
+		_, _ = digest.Write(length[:])
+		_, _ = digest.Write([]byte(value))
+	}
+	write(cmd.Path)
+	write(cmd.Dir)
+	for _, values := range [][]string{cmd.Args, cmd.Env} {
+		binary.BigEndian.PutUint64(length[:], uint64(len(values)))
+		_, _ = digest.Write(length[:])
+		for _, value := range values {
+			write(value)
+		}
+	}
+	var identity [sha256.Size]byte
+	copy(identity[:], digest.Sum(nil))
+	if build {
+		o.usage.executions.LastBuild = identity
+	} else {
+		o.usage.executions.LastProcess = identity
+	}
+}
+
+func (o *executionObservation) memoHit() {
+	if o != nil {
+		o.usage.executions.MemoHits++
+	}
 }

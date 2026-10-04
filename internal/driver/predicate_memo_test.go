@@ -256,6 +256,12 @@ func TestPredicateMemoCompilationScope(t *testing.T) {
 		if _, err := checkLoadedProgramTracked(loaded, module, ctx, captureEmbedsSnapshot, usage, nil); err != nil {
 			t.Fatal(err)
 		}
+		if usage.executions.Invocations != 10 || usage.executions.MemoHits != 4 || len(usage.execution.invocations) != 10 {
+			t.Fatalf("logical accounting: %+v", usage.executions)
+		}
+		if _, eligible := usage.execution.receipts(); eligible {
+			t.Fatal("memo allowed enclosing reuse")
+		}
 		// Four value evaluators still run freshly. Two identical proof programs
 		// each run once across recipe checks, result checks and final Facts.
 		if got := count(); got != 6*n || !usage.evaluator {

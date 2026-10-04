@@ -1,10 +1,11 @@
 # Shared execution collector API draft
 
-Status: API review for the collector foundation from evaluation-cache.md. No
-execution hits or evaluator marker changes are introduced. Comptime owns the
-collector/receipt foundation; perf reviews the API and owns lookup/storage and
-proof reuse integration. Canonical comptime values and current-graph reconstruction
-remain in the comptime layer.
+Status: identity/tracker primitives and static auditing are implemented, but
+execution candidates and receipts remain ineligible. Request-owned observation
+uses shared installed-SDK identity and ordinary commands; cross-request proof and
+comptime value reuse are deferred after the measured payoff checkpoint in
+[go-execution-inventory.md](go-execution-inventory.md). The boundary below is the
+remaining certification design, not a callable reuse API.
 
 The proposed private driver boundary is:
 
