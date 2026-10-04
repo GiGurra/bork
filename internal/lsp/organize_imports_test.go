@@ -125,7 +125,7 @@ func TestOrganizeImportsProtocol(t *testing.T) {
 		}
 	}
 	path := filepath.Join(dir, "main.bork")
-	src := "// Header 🐶\nimport beta \"example.com/organize/b\" /* B comment\n   spanning lines */\n// A comment\nimport \"example.com/organize/a\"\nimport \"example.com/organize/c\" // unused comment\nfn main() uses io { println(a.A() + beta.B()) }\n"
+	src := "// Header 🐶\nimport beta \"example.com/organize/b\" /* B comment\n   spanning lines */\n// A comment\nimport /* used reason */ \"example.com/organize/a\"\nimport /* unused reason */ \"example.com/organize/c\" // unused comment\nfn main() uses io { println(a.A() + beta.B()) }\n"
 	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -142,8 +142,8 @@ func TestOrganizeImportsProtocol(t *testing.T) {
 		if strings.Contains(result, "import \"example.com/organize/c\"") || strings.Index(result, "/a\"") > strings.Index(result, "/b\"") {
 			t.Fatalf("imports not organized: %s", result)
 		}
-		for _, comment := range []string{"// Header 🐶", "// A comment", "/* B comment\n   spanning lines */", "// unused comment"} {
-			if !strings.Contains(result, comment) {
+		for _, comment := range []string{"// Header 🐶", "// A comment", "/* B comment\n   spanning lines */", "// unused comment", "/* used reason */", "/* unused reason */"} {
+			if strings.Count(result, comment) != 1 {
 				t.Fatalf("lost comment: %s", result)
 			}
 		}
@@ -169,6 +169,21 @@ func TestOrganizeImportsProtocol(t *testing.T) {
 	result := actions[0].Edit.Changes[fileURI(path)][0].NewText
 	if _, err := driver.NewSession().Analyze(dir, map[string]string{path: result}); err != nil {
 		t.Fatalf("semicolon import action does not check: %v\n%s", err, result)
+	}
+	inlineMain := "import \"example.com/organize/a\"; fn main() uses io { println(a.A()) } // keep\n"
+	actions = protocolActions(t, path, inlineMain, sourceRange{}, []string{"source.organizeImports"})
+	if len(actions) != 1 {
+		t.Fatalf("inline main actions: %+v", actions)
+	}
+	result = actions[0].Edit.Changes[fileURI(path)][0].NewText
+	if !strings.Contains(result, "fn main()") || strings.Count(result, "// keep") != 1 {
+		t.Fatalf("lost inline declaration: %s", result)
+	}
+	if _, err := driver.NewSession().Analyze(dir, map[string]string{path: result}); err != nil {
+		t.Fatalf("inline declaration edit does not check: %v", err)
+	}
+	if next := protocolActions(t, path, result, sourceRange{}, []string{"source.organizeImports"}); len(next) != 0 {
+		t.Fatalf("inline declaration organization not idempotent: %+v", next)
 	}
 	broken := src + "fn broken() { missing }\n"
 	if actions := protocolActions(t, path, broken, sourceRange{}, []string{"source.organizeImports"}); len(actions) != 0 {

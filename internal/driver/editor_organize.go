@@ -40,13 +40,35 @@ func EditorOrganizeImports(path, source string, diagnostics []diag.Diagnostic) (
 	}
 	offset := func(pos diag.Pos) int { return offsets[pos.Line-1] + pos.Col - 1 }
 	start, end := offset(imports[0].Pos), offset(imports[len(imports)-1].End)
+	tokens, _ := syntax.Lex(path, []byte(source), &diag.List{})
+	onlySeparators := func(lo, hi int) bool {
+		for _, token := range tokens {
+			if token.Kind != syntax.EOF && token.Kind != syntax.Semi && offset(token.Pos) >= lo && offset(token.Pos) < hi {
+				return false
+			}
+		}
+		return true
+	}
 	lastLine := imports[len(imports)-1].End.Line
 	for _, comment := range files[0].Comments {
-		if comment.Pos.Line == lastLine && offset(comment.Pos) >= end {
+		if comment.Pos.Line == lastLine && offset(comment.Pos) >= end && onlySeparators(end, offset(comment.Pos)) {
 			end = offset(comment.End)
 			lastLine = comment.End.Line
 		}
 	}
+	// Consume the separators belonging to the final import, so replacing
+	// an inline import cannot leave a standalone semicolon or add a blank
+	// line on every subsequent organization pass.
+	for _, token := range tokens {
+		if token.Kind == syntax.EOF || offset(token.Pos) < end {
+			continue
+		}
+		if token.Kind != syntax.Semi {
+			break
+		}
+		end = min(len(source), max(offset(token.End), offset(token.Pos)+len(token.Text)))
+	}
+	end = len(source) - len(strings.TrimLeft(source[end:], " \t\r\n"))
 	entries := make([]entry, len(imports))
 	for i, imp := range imports {
 		entries[i] = entry{path: imp.Path, name: imp.Name, text: source[offset(imp.Pos):offset(imp.End)], unused: unused[imp.Pos]}
@@ -56,13 +78,23 @@ func EditorOrganizeImports(path, source string, diagnostics []diag.Diagnostic) (
 			continue
 		}
 		previous, following := -1, -1
+		inside := -1
 		for i, imp := range imports {
+			if offset(imp.Pos) <= offset(comment.Pos) && offset(comment.End) <= offset(imp.End) {
+				inside = i
+			}
 			if offset(imp.End) <= offset(comment.Pos) {
 				previous = i
 			}
 			if following < 0 && offset(imp.Pos) >= offset(comment.End) {
 				following = i
 			}
+		}
+		if inside >= 0 {
+			if entries[inside].unused {
+				entries[inside].leading = append(entries[inside].leading, comment.Text)
+			}
+			continue
 		}
 		if previous >= 0 && imports[previous].End.Line == comment.Pos.Line {
 			entries[previous].trailing = append(entries[previous].trailing, comment.Text)
