@@ -49,6 +49,17 @@ Language-server activation requires a trusted workspace because checking may
 execute compile-time code or Go tools. Highlighting remains lexical and works
 without a compiler. Files in virtual workspaces are not supported by the client.
 
+## Lint warnings
+
+Unused bindings, parameters and private declarations, proved predicate checks,
+redundant boolean expressions and needless declared effects are reported as LSP
+warnings. Use the lightbulb for safe fixes, including discarding an unused local
+value while preserving its effects. Run `bork lint --json .` for the same warnings
+outside the editor. Suppress an advisory rule with
+`// lint:ignore lint.unused-binding reason` immediately before or on its line.
+Exported APIs may intentionally reserve extra effects; suppress that warning when
+keeping this headroom. Compiler errors are never suppressed.
+
 ## Develop and package
 
 Install dependencies and open an extension development window from the repo root:

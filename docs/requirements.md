@@ -3966,3 +3966,16 @@ authors can test their own local Go helper packages through a temporary compiler
 replacement that never enters committed manifests. Cache cleaning preserves
 shared Go module downloads. A committed library/consumer fixture is verified and
 built offline with a local file proxy.
+
+
+### Advisory linting
+
+`bork lint` reports compiler-backed advisory warnings for unused bindings,
+parameters and private declarations, redundant proved predicate checks, boolean
+simplifications and needless declared effects. The LSP publishes the same warnings
+and safe fixes. `// lint:ignore <rule-code> reason` on the same or preceding line
+suppresses these warnings (comma-separated codes or `all` are allowed). Exported
+functions may deliberately reserve effects for API compatibility; this is a
+reason to suppress that advisory warning. Existing compiler errors, including
+shadowing, unreachable match arms, unused imports and private-function effect
+checks, retain their enforcement and cannot be suppressed.

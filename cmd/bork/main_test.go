@@ -310,3 +310,34 @@ func TestDepsCLI(t *testing.T) {
 	run(false, "get", "toolchain@latest")
 	run(false, "get", "--", "-u")
 }
+
+func TestLintCLI(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte("fn main() { unused = 42 }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	exe := cliExecutable(t, false)
+	cmd := exec.Command(exe, "lint", "--json", path)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("lint: %v %s", err, &stderr)
+	}
+	var result struct {
+		Code, Severity string
+		Fixes          []json.RawMessage
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("JSON: %v %s", err, &stdout)
+	}
+	if result.Code != "lint.unused-binding" || result.Severity != "warning" || len(result.Fixes) != 1 || stderr.Len() != 0 {
+		t.Fatalf("result: %+v %s", result, &stderr)
+	}
+	if err := os.WriteFile(path, []byte("fn main() { println(missing) }\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := exec.Command(exe, "lint", path).Run(); err == nil {
+		t.Fatal("lint accepted compiler error")
+	}
+}
