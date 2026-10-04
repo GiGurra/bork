@@ -1,0 +1,47 @@
+// This package demonstrates facts, effects and ambient APIs.
+
+// Positive is the promise used by Count.
+pred Positive(n: Int) { n > 0 }
+type Count = Int where Positive
+
+// Item has package-owned construction.
+type Item = private {
+  // The item count.
+  value: Count = 1,
+  // A lazy computed default.
+  lazy computed: Int = 2,
+}
+fn NewItem = Item.new
+
+pred Ordered(r: Range) { r.lo <= r.hi }
+type Range = { lo: Int, hi: Int } where Ordered
+fn NewRange = Range.new
+
+type State = sealed { Shown { value: Int }, hidden { secret: String } }
+
+pred NonEmpty(value: String) { value.byteLength() > 0 }
+logged propagated("x-trace") ambient Trace: String where NonEmpty
+
+// Read keeps its positive input and uses the optional trace.
+// Its documentation contains <script>literal text</script>.
+fn Read(value: Count) where value < 100 uses io needs Trace?: Count {
+  println(value)
+  value
+}
+
+fn (self: Item) Value(): Count { self.value }
+fn (self: Item) secret(): Count { self.value }
+
+class Render[T] {
+  // Render converts a value to display text.
+  fn render(value: T): String
+}
+instance ItemRender: Render[Item] { fn render(value: Item): String { toString(value.value) } }
+instances Default { ItemRender }
+
+fn provide(n: Int = 7) where n > 0 uses io needs Trace?: Int { _ = Trace; println(n); n }
+providers Wiring = { number: provide }
+
+fn Identity[T: Show](value: T): T { value }
+Version = 1
+fn hidden(): String { "PRIVATE_FUNCTION_BODY" }

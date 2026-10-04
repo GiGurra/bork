@@ -17,6 +17,7 @@ type Result struct {
 	Lazy           *check.LazyDescription           `json:"lazy,omitempty"`
 	ProviderBundle *check.ProviderBundleDescription `json:"provider_bundle,omitempty"`
 	Assembly       *check.Assembly                  `json:"assembly,omitempty"`
+	Documentation  string                           `json:"documentation,omitempty"`
 	SchemaVersion  int                              `json:"schema_version"`
 	Position       diag.Pos                         `json:"position"`
 	Type           string                           `json:"type"`

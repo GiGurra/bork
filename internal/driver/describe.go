@@ -9,6 +9,7 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/describe"
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/doccomment"
 	"github.com/GiGurra/bork/internal/std"
 )
 
@@ -43,6 +44,15 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 	selected, err := describe.Lookup(files, info, pos, src)
 	if err != nil {
 		return nil, err
+	}
+	documentation := ""
+	if selected.Definition != nil {
+		for _, file := range files {
+			if file.Path == selected.Definition.File {
+				documentation = doccomment.At(file, *selected.Definition)
+				break
+			}
+		}
 	}
 	var facts []check.KnownFact
 	var proof *check.Proof
@@ -81,7 +91,7 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 		methods = []check.MethodDescription{}
 	}
 	if selected.ProviderBundle != nil {
-		return &describe.Result{SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
+		return &describe.Result{Documentation: documentation, SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
 	}
 	var async *check.AsyncDescription
 	lazy := info.LazyFieldDescription(selected.Expr)
@@ -89,7 +99,7 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 		lazy = v.Var.Let.Lazy
 		async = v.Var.Let.Async
 	}
-	return &describe.Result{Async: async, Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
+	return &describe.Result{Documentation: documentation, Async: async, Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
 }
 
 // belongsTo names the scopes the selected value belongs to.

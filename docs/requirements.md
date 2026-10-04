@@ -4004,3 +4004,21 @@ checks, retain their enforcement and cannot be suppressed.
   dependency commands. Explicit `GOTOOLCHAIN=local` and pinned older SDKs
   report the minimum version error. Selected SDK settings appear in `bork env`;
   compilation identity follows the selected SDK. See [Go toolchains](cli.md#go-toolchains).
+### Checked package documentation (bork-khnvl1)
+
+`bork doc [package]` renders the checker-owned public API as Markdown;
+`--html` produces a standalone escaped HTML page and `--all` includes packages
+below the target in the same module, excluding hidden directories, vendor and
+nested modules. File arguments document their whole package. Local packages,
+embedded standard packages and cached pinned libraries use the normal compiler
+checks and selected dependency graph. Documentation does not download missing
+modules or Go toolchains, and failures produce no partial document.
+Bork compiler selection follows the same rule as bork check.
+
+Signatures preserve facts/where constraints, effects, ambient needs, generic
+bounds, defaults and construction privacy. Private declarations and variants,
+tests and implementation bodies are omitted. Generated constructors include
+completed-value obligations. Source labels are relative to the module rather
+than guessed repository URLs. Adjacent whole-line comments and fenced examples
+share one renderer with LSP hover. Authors can commit generated API.md or HTML;
+a hosted documentation workflow and library index remain deferred.

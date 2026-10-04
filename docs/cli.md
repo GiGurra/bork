@@ -15,6 +15,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | [`bork fmt`](#fmt) | Format source files |
 | [`bork lsp`](#lsp) | Serve editor features over stdio |
 | [`bork editor install vscode`](#editor-install-vscode) | Install the verified release extension |
+| [`bork doc`](#doc) | Render checked public package APIs |
 | [`bork describe`](#describe) | Ask the compiler about the code at a position |
 | [`bork emit`](#emit) | Print the Go code generated for a program |
 | [`bork env`](#settings) | Show or save compiler settings |
@@ -133,6 +134,42 @@ bork fmt --check .    # list the files that would change, and exit 1 if there ar
 ```
 
 `fmt` prints the paths it changed. It indents with two spaces and normalizes spacing and blank lines. It keeps your line breaks and comments. Hidden directories, `vendor`, and symbolic links are skipped.
+
+## Doc
+
+```sh
+bork doc                              # this package, as Markdown
+bork doc ./lib --all > API.md          # packages below lib, in this module
+bork doc bork/http                     # a standard package
+bork doc example.com/library/api       # a pinned library package
+bork doc example.com/library --all --html > api.html
+```
+
+A `.bork` file argument documents its whole package. `--all` walks package
+subdirectories in the same module, skipping hidden directories, `vendor`,
+and nested modules; it also works for library modules that have no root
+package. Standard packages take one package argument without `--all`.
+
+The compiler checks each package before writing any output. Signatures retain
+facts and `where` clauses, effects (`uses`), ambient requirements (`needs`),
+generic bounds, defaults, and construction privacy. Private declarations,
+private variants, tests, and implementation bodies are omitted. Adjacent
+whole-line `//` comments document declarations; leading comments separated
+from the first declaration by a blank line document the package. Comments
+before imports also document the package. Hover and `bork doc` share the same
+comment renderer, including fenced examples and escaped HTML.
+
+Like `bork check`, documentation follows the project minimum compiler and
+`BORKTOOLCHAIN` selection. Library documentation uses the versions already selected by the consumer's
+`bork.mod` and verified against `bork.sum`. It reads cached dependencies and
+never downloads missing modules or Go toolchains. Run `bork deps download`
+first when needed. Standard APIs come from the running compiler. Output
+contains relative source labels and no guessed repository links. HTML is a
+standalone page with a table of contents and no external assets.
+
+Library authors can commit `API.md` or `api.html` next to their source and
+regenerate it when their API changes. This supplies documentation for `.bork`
+APIs that Go documentation tools cannot render.
 
 ## Describe
 

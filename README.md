@@ -211,6 +211,7 @@ Vim, Neovim, Emacs, Helix and Zed are linked from [editor setup](docs/editors.md
 
 - [Documentation](docs/README.md): the tour, a page for each part of the language, and the command-line reference.
 - [Standard packages](docs/std/README.md): files, HTTP, JSON, SQL, time, and more.
+- [Package API documentation](docs/cli.md#doc): run `bork doc`, with `--all` for a module or `--html` for a standalone page; standard and cached pinned libraries work too.
 - [Dependency tooling](docs/cli.md#deps): pin Go and bork libraries in `bork.mod` with `bork deps`; commit `bork.sum` and generated `go.mod`.
 - [Library and consumer example](testdata/libraries/README.md): publish, pin and upgrade a Bork library, with an offline proxy test. Scripts accept Bork libraries through `bork:require`; editor navigation keeps cached sources read-only.
 - [Examples](docs/examples.md): runnable programs, from `wc` to an HTTP service.

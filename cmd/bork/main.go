@@ -90,6 +90,12 @@ type describeParams struct {
 	JSON     bool   `optional:"true" descr:"write the compiler description as JSON"`
 }
 
+type docParams struct {
+	Path string `positional:"true" optional:"true" default:"." descr:"package directory, source file, standard package or pinned library package"`
+	All  bool   `optional:"true" descr:"document every package below the target in its module"`
+	HTML bool   `optional:"true" descr:"write one standalone HTML page instead of Markdown"`
+}
+
 type depsParams struct {
 	Path string `optional:"true" default:"." descr:"directory in the bork module"`
 }
@@ -363,6 +369,19 @@ func main() {
 					}
 					if p.Check && len(changed) > 0 {
 						os.Exit(1)
+					}
+				},
+			},
+			boa.CmdT[docParams]{
+				Use:   "doc",
+				Short: "render checked public package APIs as Markdown or HTML",
+				RunFunc: func(p *docParams, cmd *cobra.Command, _ []string) {
+					text, err := driver.Doc(p.Path, driver.DocOptions{All: p.All, HTML: p.HTML})
+					if err != nil {
+						fail(err)
+					}
+					if _, err := cmd.OutOrStdout().Write(text); err != nil {
+						fail(err)
 					}
 				},
 			},
