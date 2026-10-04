@@ -41,6 +41,7 @@ python3 -m unittest discover -s scripts -p 'test_docs_site.py'
 
 | Note | Subject |
 | --- | --- |
+| [browser playground](design/playground.md) | Browser-local checking, hosting, download size, and execution boundaries |
 | [async](design/async.md) | Transparent async bindings |
 | [lazy](design/lazy.md) | Lazy bindings and computed record fields |
 | [comptime](design/comptime.md) | Compile-time evaluation |
