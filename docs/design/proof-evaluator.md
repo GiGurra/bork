@@ -88,11 +88,12 @@ The fresh arm discards only the proof cache before each request. Sample medians:
 | config | 184.34 ms | 94.77 ms | 115.82 / 26.58 ms |
 | http_server | 233.28 ms | 122.72 ms | 112.89 / 1.90 ms |
 
-Config retained one additional miss in two samples; a third sample was 72.41 ms
-with facts at 4.34 ms. A subsequent ten-iteration reuse probe reported 0.9–1.0
-hits/request and 72.69–83.20 ms total. The benchmark exposes batch-hit/miss metrics
-so residual misses stay visible. These are full editor rechecks; source checking
-still costs approximately 55 ms for config and 105 ms for HTTP.
+These initial samples retained one additional config miss in two runs. Diagnosis
+found identical stage/module/tool/environment inputs but swapped final field-default
+queries: `Facts` iterated a map. Ordering ordinary defaults by declaration position
+removes that observed source variation. The current profile below reports one
+hit/request and zero misses for both fixtures after priming. The eight-default
+ordering regression fails on the previous implementation.
 
 ```sh
 go test ./internal/driver -run '^$' -bench '^BenchmarkSessionProofEdits$' -benchtime=5x -count=3
@@ -109,3 +110,41 @@ execution in a fresh CLI process. CLI reuse still needs independently certified
 execution artifacts in the disk cache, including support/import initialization,
 the Go build closure and native/policy inputs. The static audit alone is
 insufficient evidence for a persisted execution cache hit.
+
+## Incremental checking checkpoint
+
+After the ordering fix, three five-edit samples on the same host give the
+following medians. Editor edits alternate trailing newlines, retaining all proof
+arguments; these are full checks with validated warm Go context/object caches.
+
+| Editor fixture | Fresh proofs | Session proofs | Check phase | Configuration | Facts with reuse |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| config | 190.95 ms | 72.90 ms | 55.72 ms | 10.24 ms | 4.42 ms |
+| http_server | 240.15 ms | 123.72 ms | 106.74 ms | 10.33 ms | 1.97 ms |
+
+The check phase includes tracked Go package-name discovery, so it is an upper
+bound on Bork type-checking time. Config's fresh proofs take 121.26 ms and HTTP's
+117.52 ms; parsing/lowering/lifetimes and remaining overhead account for the rest.
+
+The config one-shot CLI compiler path after a host-string edit takes 724.17 ms:
+final Go staging/build 473.04 ms, freshly executed Facts 184.21 ms, check/name
+discovery 27.90 ms, generation 19.54 ms and Go configuration 16.97 ms. This
+three-by-five profile clears process-local Go names to model fresh CLI requests,
+with CGO disabled and Go subprocess workers fixed at two. It excludes process
+startup and compiler-image hashing. It is distinct from the earlier unrestricted
+fresh-process wall measurement of 598.34 ms; compare within each setup.
+
+```sh
+go test ./internal/driver -run '^$' -bench '^BenchmarkSessionProofEdits$' -benchtime=5x -count=3
+go test ./internal/driver -run '^$' -bench '^BenchmarkProofCLIEditPhases$' -benchtime=5x -count=3
+```
+
+General package interface artifacts are deferred at this checkpoint. They would
+not reduce the dominant CLI native-build/proof costs, and current editor checking
+is bounded at roughly 56/107 ms including dependency discovery. Revisit artifacts
+when profiles on larger real package graphs show unchanged-package Bork checking
+dominating edit latency after cheaper discovery/proof reuse, and a small edit can
+avoid substantial checking work. Any implementation must first demonstrate a
+net win and clean-versus-incremental parity for public types, predicates/defaults,
+bodies, imported dependencies and test/mock overlays. CLI disk proof reuse remains
+separate deferred work, tracked as bork-44yvg8.
