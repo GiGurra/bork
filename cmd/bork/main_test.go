@@ -22,7 +22,7 @@ func TestDiagnosticJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("fn main() { println(missing) }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range []string{"check", "build", "test"} {
+	for _, command := range []string{"check", "build", "install", "test"} {
 		t.Run(command, func(t *testing.T) {
 			cmd := exec.Command(exe, command, "--json", path)
 			var stdout, stderr bytes.Buffer

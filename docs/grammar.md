@@ -347,3 +347,20 @@ module-root symlinks are accepted and their identities are tracked. The compiler
 captures every read site before execution, including guarded sites, and gives
 evaluators frozen bytes. Files are limited to 16 MiB each and 64 MiB together.
 Result caching remains planned in the [comptime design](design/comptime.md).
+
+## Compiler command settings
+
+These are CLI forms, independent of source syntax:
+
+```text
+bork env [-json | --json] [VAR...]
+bork env -w VAR=value...
+bork env -u VAR...
+bork install [path]
+```
+
+Settings are `BORKCACHE`, `BORKBIN`, and `BORK_CACHE` (`on` or `off`).
+Environment variables override saved values in `os.UserConfigDir()/bork/env.json`,
+which override defaults. Directory settings require absolute paths; empty values
+fall through. See [the compiler settings reference](../README.md#getting-started)
+for defaults and installation behavior.

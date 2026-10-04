@@ -21,11 +21,10 @@ type CacheCleanReport struct {
 // Clean removes compiler-owned artifacts, preserving project outputs, Go's
 // cache and permanent coordination files. Waiting for active clients is cancellable.
 func Clean(ctx context.Context, all bool) (CacheCleanReport, error) {
-	base, err := os.UserCacheDir()
+	directory, err := cacheRootDir()
 	if err != nil {
 		return CacheCleanReport{}, err
 	}
-	directory := filepath.Join(base, "bork")
 	if _, err := os.Stat(directory); errors.Is(err, os.ErrNotExist) {
 		return CacheCleanReport{}, nil
 	} else if err != nil {

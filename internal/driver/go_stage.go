@@ -21,10 +21,10 @@ var goStageCacheDir = os.UserCacheDir
 // The lock remains held until the caller has finished running Go. Unsupported
 // platforms, unavailable caches and failed publication use temporary staging.
 func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, context *goContext, mode string, embeds []*check.Embedded) (string, bool, func(), error) {
-	if base, err := goStageCacheDir(); err == nil {
+	if base, err := cacheRootDir(); err == nil && !cacheDisabled() {
 		if root, err := goStageProgramRoot(files); err == nil {
 			key := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%x", root, mode, context.namespace)))
-			if dir, pinned, release, err := stageGoStable(filepath.Join(base, "bork"), fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: 2, Program: root, Mode: mode, Namespace: context.namespace}); err == nil {
+			if dir, pinned, release, err := stageGoStable(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: 2, Program: root, Mode: mode, Namespace: context.namespace}); err == nil {
 				return dir, pinned, release, nil
 			}
 		}

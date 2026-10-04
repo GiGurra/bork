@@ -3228,6 +3228,37 @@ it would make the intended optional layer or inference context clear.
 - **Comparing incompatible types is a compile error.**
 - **Constrained and unconstrained versions of a type are comparable.** `Int == (Int where positive)` is fine, because both are `Int` values.
 
+### Compiler environment and installation (implemented: bork-xvuvia)
+
+`bork env [-json] [VAR...]` reports effective `BORKCACHE`, `BORKBIN`, and
+`BORK_CACHE` values with sources (`environment`, `config`, or `default`).
+`bork env -w VAR=value...` persists settings in `os.UserConfigDir()/bork/env.json`;
+`-u VAR...` removes saved values. Environment variables win over configuration,
+which wins over defaults; empty values fall through. Writes validate all edits
+before atomically replacing the file; reads never rewrite or migrate settings.
+Unknown saved keys survive edits for forward compatibility, while unknown requested
+names and invalid values are errors.
+
+`BORKCACHE` defaults to `os.UserCacheDir()/bork` and selects the shared root for
+compiler results, staging and locks, including `bork clean`. Cache namespace and
+locking layouts remain unchanged; root relocation is operational rather than a
+semantic compiler input. `BORK_CACHE=off` disables compiler result reuse and
+persistent staging, including when saved in the configuration. Go's cache is
+independent. Result reuse currently remains gated for integration tests.
+
+`bork install [path]` defaults to `.` and builds into `BORKBIN`, whose default is
+Go's effective `GOBIN`, else the first effective `GOPATH` entry plus `/bin`
+(normally `~/go/bin`). Explicit settings always win and are never moved. Paths
+must be absolute. The installed name follows `bork build`'s default name, with
+`.exe` for Windows targets; replacement happens only after a successful build.
+Output placement and cache root do not change generated program semantics; Go
+configuration and captured program inputs remain part of existing receipts.
+
+The three settings are the supported compiler environment API. Test-runner
+`BORK_SEED`, `BORK_CASES`, `BORK_PARALLEL`, `BORK_SNAPSHOTS`, and
+`BORK_UPDATE_SNAPSHOTS` are protocol values controlled by CLI flags. Internal,
+test and benchmark controls are unsupported and cannot be persisted by `bork env`.
+
 ### Packages and modules
 
 - **Go style.** A directory is a package, a module file at the root names the module, imports use module paths, and there are no circular package dependencies.
