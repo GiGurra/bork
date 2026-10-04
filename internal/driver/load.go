@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/manifest"
 	"github.com/GiGurra/bork/internal/prelude"
 	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -22,8 +23,9 @@ const ModFile = "bork.mod"
 
 // module is the module a package belongs to.
 type module struct {
-	root string // the directory holding bork.mod
-	path string // the module path; "" without a bork.mod
+	root    string // the directory holding bork.mod
+	path    string // the module path; "" without a bork.mod
+	version string // minimum compiler requirement, if declared
 	// unsafe holds the packages allowed to contain unsafe go.
 	unsafe       map[string]bool
 	requirements []gomodule.Version
@@ -75,6 +77,15 @@ func parseModFile(text string) (module, error) {
 			mod.path = fields[1]
 		case mod.path == "":
 			return module{}, fmt.Errorf("expected `module <path>`, found %q", line)
+		case len(fields) == 2 && fields[0] == "bork":
+			if mod.version != "" {
+				return module{}, fmt.Errorf("duplicate bork version directive")
+			}
+			version, err := manifest.ParseVersion(fields[1])
+			if err != nil {
+				return module{}, err
+			}
+			mod.version = version.Minimum
 		case len(fields) == 2 && fields[0] == "unsafe":
 			path, err := strconv.Unquote(fields[1])
 			if err != nil {

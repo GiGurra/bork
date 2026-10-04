@@ -41,10 +41,14 @@ func envCommand() *cobra.Command {
 				return toolenv.Update(nil, args)
 			}
 			if len(args) == 0 {
-				args = toolenv.Names()
+				args = append(toolenv.Names(), "BORKVERSION")
 			}
 			values := map[string]toolenv.Setting{}
 			for _, name := range args {
+				if name == "BORKVERSION" {
+					values[name] = toolenv.Setting{Value: version(), Source: compilerSelection.Reason}
+					continue
+				}
 				setting, err := toolenv.Lookup(name)
 				if err != nil {
 					return err

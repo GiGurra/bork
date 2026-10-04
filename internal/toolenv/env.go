@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/GiGurra/bork/internal/manifest"
 )
 
 // Names is the complete set of supported user settings, in display order.
-func Names() []string { return []string{"BORKCACHE", "BORKBIN", "BORK_CACHE"} }
+func Names() []string { return []string{"BORKCACHE", "BORKBIN", "BORK_CACHE", "BORKTOOLCHAIN"} }
 
 // Setting includes the origin of an effective value.
 type Setting struct {
@@ -70,7 +72,18 @@ func validate(name, value string) error {
 	if value == "" {
 		return nil
 	}
-	if name == "BORK_CACHE" {
+	if name == "BORKTOOLCHAIN" {
+		if value == "auto" || value == "local" {
+			return nil
+		}
+		version, err := manifest.ParseVersion(value)
+		if err != nil {
+			return err
+		}
+		if version.Query != version.Minimum {
+			return fmt.Errorf("BORKTOOLCHAIN must pin a full version such as v0.4.2")
+		}
+	} else if name == "BORK_CACHE" {
 		if value != "on" && value != "off" {
 			return fmt.Errorf("BORK_CACHE must be on or off")
 		}
@@ -138,6 +151,8 @@ func defaultValue(name string) (string, error) {
 		return goBin(values["GOBIN"], values["GOPATH"])
 	case "BORK_CACHE":
 		return "on", nil
+	case "BORKTOOLCHAIN":
+		return "auto", nil
 	}
 	return "", fmt.Errorf("unknown bork setting %q", name)
 }

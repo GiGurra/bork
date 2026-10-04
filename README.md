@@ -16,6 +16,8 @@ go install github.com/GiGurra/bork/cmd/bork@latest
 
 Update explicitly with `bork upgrade`, or choose a release with `bork upgrade v0.4.0`. This runs `go install` into `BORKBIN` (shown by `bork env BORKBIN`) and reports the old and installed versions. Add that directory to `PATH`. See [upgrades](docs/cli.md#upgrades).
 
+Projects can set a minimum compiler with `bork 0.4` in `bork.mod`. Older compilers automatically install and use a suitable release through Go's module proxy. Use `BORKTOOLCHAIN=local` to disable switching, or `BORKTOOLCHAIN=v0.4.2` to pin an exact compiler. `bork version` and `bork env BORKVERSION` explain the selection. See [compiler versions](docs/cli.md#compiler-versions).
+
 ## Start a project
 
 ```sh
