@@ -253,6 +253,13 @@ Binary data uses immutable `Bytes`: `utf8Bytes("hello")`,
 
 ## Standard packages
 
+Process helpers require `import "bork/process"` (`process.Args()`,
+`process.Exit(code)`). JSON text codecs require `import "bork/json"`
+(`json.Parse`, `json.Render`, `json.Decode[T]`, `json.Encode`); the Json types and
+Decode/Encode classes remain available for derive. Use `time.Sleep(s, duration)` from `bork/time` for cancellable pauses and Rune
+methods such as `r.isDigit()` for Unicode tests. These replace the former prelude globals in a pre-1.0 clean break;
+`runeToString(r)` still gives a character while Rune aliases numeric Int32.
+
 | Package | Description |
 | --- | --- |
 | [bork/archive](docs/std/archive.md) | ZIP and TAR Bytes codecs and file iteration |
@@ -339,10 +346,3 @@ remains planned in the
 
 Contributor test shards, timing refresh and Go cache behavior are documented in
 [the CI guide](docs/ci.md).
-
-Process helpers require `import "bork/process"` (`process.Args()`,
-`process.Exit(code)`). JSON text codecs require `import "bork/json"`
-(`json.Parse`, `json.Render`, `json.Decode[T]`, `json.Encode`); the Json types and
-Decode/Encode classes remain available for derive. Use `time.Sleep(s, duration)` from `bork/time` for cancellable pauses and Rune methods such as `r.isDigit()` for
-Unicode tests. These replace the former prelude globals in a pre-1.0 clean break;
-`runeToString(r)` still gives a character while Rune aliases numeric Int32.
