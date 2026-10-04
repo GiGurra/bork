@@ -24,7 +24,7 @@ brew install gigurra/tap/bork
 
 The formula installs Go as a runtime dependency. Use `brew upgrade bork` to update an installation managed by Homebrew; `bork upgrade` installs a compiler into `BORKBIN` instead.
 
-Update explicitly with `bork upgrade`, or choose a release with `bork upgrade v0.4.0`. This runs `go install` into `BORKBIN` (shown by `bork env BORKBIN`) and reports the old and installed versions. Add that directory to `PATH`. See [upgrades](docs/cli.md#upgrades).
+Update explicitly with `bork upgrade`, or choose a release with `bork upgrade v0.4.0`. This runs `go install` into `BORKBIN` (shown by `bork env BORKBIN`) and reports the old and installed versions. Add that directory to `PATH`. See [upgrades](docs/cli.md#upgrades). Interactive commands can offer a quiet daily update notice; disable it with `bork env -w BORKUPDATECHECK=off`.
 
 Projects can set a minimum compiler with `bork 0.4` in `bork.mod`. Older compilers automatically install and use a suitable release through Go's module proxy. Use `BORKTOOLCHAIN=local` to disable switching, or `BORKTOOLCHAIN=v0.4.2` to pin an exact compiler. `bork version` and `bork env BORKVERSION` explain the selection. See [compiler versions](docs/cli.md#compiler-versions).
 

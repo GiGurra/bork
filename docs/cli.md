@@ -165,6 +165,7 @@ Compiler settings control storage and toolchain selection:
 | `BORKBIN` | Go's `GOBIN`, or else `GOPATH/bin` (normally `~/go/bin`) | Where `bork install` and `bork upgrade` put executables |
 | `BORK_CACHE` | `on` | Set to `off` to turn off the compile cache |
 | `BORKTOOLCHAIN` | `auto` | Automatically satisfy project compiler requirements; `local` disables switching, or an exact version such as `v0.4.2` selects that compiler |
+| `BORKUPDATECHECK` | `on` | Quiet daily update notice in interactive commands; set `off` to disable |
 | `BORKVERSION` | the selected compiler's version | Read-only; also reports why that compiler was selected |
 
 ```sh
@@ -284,3 +285,24 @@ collision rejection. Exported names, types and fields are not yet renameable.
 Completion offers visible symbols, fields, named arguments and match patterns,
 plus snippets in supporting clients. Auto-imports search standard packages and
 the current module after two name characters.
+
+
+## Update notices
+
+Interactive successful `check`, `build`, `install`, `fmt`, `new` and `version`
+commands can print a quiet notice when a newer compiler is available. A detached
+worker checks the configured Go module proxy at most once per UTC day and saves
+its result under `BORKCACHE/updates`. Network requests never delay the command;
+its result may produce a notice on a later command that day. Notices print at
+most once per day for the running compiler version.
+
+```sh
+bork env -w BORKUPDATECHECK=off
+bork env BORKUPDATECHECK
+```
+
+JSON, machine output, program execution, LSP sessions, redirected output and
+any nonempty `CI` environment variable suppress both checks and notices.
+Development compilers skip checks. Offline failures are silent; only a successful
+check from the current UTC day can produce a notice. `GOPROXY=off` or `direct`
+does not run an HTTP check. Updating remains explicit with `bork upgrade`.
