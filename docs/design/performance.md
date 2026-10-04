@@ -315,6 +315,51 @@ the compiler's own checking/generation work. These examples can load Go types
 and run proofs; the conservative complete-result Session does not claim hits
 for them.
 
+## Stable Go staging implementation
+
+Generated Go now uses a fixed tree per canonical program source directory,
+output mode (`program`, `test`, `predicate`, `comptime`) and pinned Go context.
+A cross-process lock spans complete captured source/module/asset replacement
+and Go compilation. Go's own content keys validate compilation reuse; Bork
+predicates, comptime execution and user programs still run freshly. The current
+layout remains one main package; fixed tree/subpackage paths support later
+multi-package output without moving unchanged packages after every edit.
+
+Linux and macOS use kernel file locks. Other platforms and any unavailable
+cache/lock/publication use the existing temporary-directory build. Staging
+lives under `os.UserCacheDir()/bork/stage/v1`. Each entry retains its current
+source tree; abandoned replacements are removed on its next request. A fixed pool of 256 hashed lock slots remains outside entries and is never
+removed while processes may use it; collisions only serialize unrelated builds.
+Eviction/`bork clean` belong to the subsequent persistent-cache slice.
+
+Seven alternating one-request runs compared forced temporary fallback with
+stable staging on exactly the same compiler/worktree, captured inputs and
+process environment. A private writable cache was required because this
+execution environment's default cache root is read-only. Replacing only its
+stage-root directory with a regular file forced fallback without changing the
+Go configuration. All Go dependency caches were primed. Milliseconds:
+
+| Program / stage | Temporary median (min–max) | Stable median (min–max) |
+| --- | ---: | ---: |
+| config Bork emission | 315.55 (293.65–394.92) | 167.28 (163.35–185.10) |
+| config Go build | 299.00 (278.54–455.20) | 40.30 (39.07–42.33) |
+| HTTP Bork emission | 472.52 (428.76–508.38) | 219.55 (208.26–227.60) |
+| HTTP Go build | 778.13 (714.48–792.25) | 57.07 (55.90–67.16) |
+
+The Go-stage benchmark keeps a fixed output executable, so Go may skip linking
+when it already matches. Emission runs create fresh evaluator executables and
+execute them each time. Exact emission bytes remain unchanged between modes.
+Tests cover competing processes, complete replacement after source/module/
+asset edits, stale checksum/asset removal, cache failure, absolute generated
+source paths, mapped caller/panic paths and Linux DWARF source positions.
+
+First Session hello requests, using the same three five-request protocol as the
+launcher table below, measured 94.01 ms check (93.81–97.29) and 102.73 ms emit
+(102.21–109.98). Established hits stayed 9.29 and 9.34 ms respectively, with
+one hit/request. The pure hello path does not build evaluators; stable staging
+adds no inventory work to it. These samples are startup monitoring, not evidence
+that staging accelerates a check with no Go builds.
+
 ## Launcher validation after monotonic observation
 
 Launcher metadata can skip hashing after more than two seconds of monotonic

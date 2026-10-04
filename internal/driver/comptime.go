@@ -175,7 +175,7 @@ func runComptime(files []*syntax.File, source []byte, module *goModuleInputs, go
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "eval")
-	if err := buildGoWithContext(files, source, exe, module, goctx, embeds...); err != nil {
+	if err := buildGoWithMode(files, source, exe, module, goctx, "comptime", embeds...); err != nil {
 		return nil, err
 	}
 	result := filepath.Join(dir, "result.json")
