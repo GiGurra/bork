@@ -1,0 +1,14 @@
+import "bork/http"
+
+fn request(path: String): http.Request {
+  .{ method: "GET", path: path, query: "", params: {:}, headers: {:}, body: "" }
+}
+
+test "health handler" {
+  scope s {
+    response = handler(request("/health"), s)
+    assertEqual(response.status, 200)
+    assertEqual(response.body, "ok")
+    assertEqual(handler(request("/missing"), s).status, 404)
+  }
+}

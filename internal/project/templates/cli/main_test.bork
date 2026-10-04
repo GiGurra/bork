@@ -1,0 +1,5 @@
+test "handles command-line arguments" {
+  assertEqual(greeting(["Ada"]), "Hello, Ada!")
+  assertEqual(greeting([]), "Hello, bork!")
+  assertEqual(greeting(["Ada", "Bob"]), "usage: pass one name")
+}

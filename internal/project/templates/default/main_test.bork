@@ -1,0 +1,3 @@
+test "greets by name" {
+  assertEqual(greeting("Ada"), "Hello, Ada!")
+}
