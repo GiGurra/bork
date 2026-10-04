@@ -658,6 +658,10 @@ func (a *executionAuditor) expr(x Expr, depth int, optional bool) {
 		}
 		many(x.Args)
 	case *CallValue:
+		walk(x.Fun)
+		if a.report.Decline != "" {
+			return
+		}
 		many(x.Args)
 		target := x.Fun
 		for budget := 0; budget < executionAuditDepthLimit; budget++ {

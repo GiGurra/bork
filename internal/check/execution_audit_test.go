@@ -264,3 +264,13 @@ func TestExecutionAuditInvocationSignatureAndOwnedReport(t *testing.T) {
 	}
 	call.Inst.Params = saved
 }
+
+func TestExecutionAuditCallbackAliasVariableKinds(t *testing.T) {
+	info := executionAuditProgram(t, "pred p(n:Int){cb=()=>n>0;cb()}")
+	call := info.Funcs["p"].Body.Tail.(*CallValue)
+	ref := call.Fun.(*VarRef)
+	ref.Var.Kind = VarKind(999)
+	if got := AuditExecutionQueries(info, []Query{executionAuditIntQuery(info, "p")}); !strings.Contains(got.Decline, "variable kind") {
+		t.Fatalf("unknown callback alias qualified: %+v", got)
+	}
+}
