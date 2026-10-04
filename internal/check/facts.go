@@ -1,8 +1,11 @@
 package check
 
 import (
+	"cmp"
 	"fmt"
 	"go/constant"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -119,7 +122,20 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 		f.function(fn)
 	}
 	checkedDefaults := map[*syntax.FieldDecl]bool{}
-	for field := range info.fieldDefaults {
+	// A map walk would reorder otherwise identical evaluator batches between
+	// checks, defeating generated-program proof reuse and Go's object cache.
+	defaults := slices.SortedFunc(maps.Keys(info.fieldDefaults), func(a, b *Field) int {
+		return cmp.Or(
+			cmp.Compare(a.Decl.Pos.File, b.Decl.Pos.File),
+			cmp.Compare(a.Decl.Pos.Line, b.Decl.Pos.Line),
+			cmp.Compare(a.Decl.Pos.Col, b.Decl.Pos.Col),
+			cmp.Compare(TypeText(a.Type, nil), TypeText(b.Type, nil)),
+			cmp.Compare(a.defaultUse.File, b.defaultUse.File),
+			cmp.Compare(a.defaultUse.Line, b.defaultUse.Line),
+			cmp.Compare(a.defaultUse.Col, b.defaultUse.Col),
+		)
+	})
+	for _, field := range defaults {
 		if field.Computed {
 			// Calls must be valid for every independent value admitted by the
 			// declaration, including values constructed by Decode/Go boundaries.
