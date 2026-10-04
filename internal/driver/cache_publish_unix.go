@@ -110,8 +110,9 @@ func queueCachePublication(directory string, artifact *sessionArtifact) bool {
 		return false
 	}
 	defer func() { _ = image.Close() }()
-	// Descriptor execution keeps the child's image identical to the actual parent,
-	// even if an installer has replaced the os.Executable pathname meanwhile.
+	// Linux executes this descriptor directly. Darwin executes its pathname,
+	// then the child verifies this inherited descriptor against its mapped vnode;
+	// an installer race skips publication.
 	extras := []*os.File{image, file, slot}
 	notification, barrier := 0, 0
 	for _, hook := range []struct {

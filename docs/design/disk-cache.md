@@ -213,8 +213,10 @@ terminal or user streams. BORK_CACHE=off disables scheduling. Other platforms
 use temporary staging until a bounded detached launcher is available.
 
 Linux executes the inherited compiler image descriptor. macOS executes its
-pathname and verifies the inherited file descriptor against its own kernel
-mapped vnode before maintenance or result publication. Both retain a directory descriptor for the queued cache root, so
+pathname and verifies the inherited file descriptor against the executable
+path before maintenance. Result publication additionally binds the inherited
+image to the child's kernel mapped vnode; query errors skip result reuse without
+disabling the already-supported maintenance launcher. Both retain a directory descriptor for the queued cache root, so
 root replacement cannot redirect the worker. The same platform image launchers also support bounded eligible-result
 publication; pathname races cause a skipped publication.
 Test-gated pipe barriers and completion notifications verify detachment,

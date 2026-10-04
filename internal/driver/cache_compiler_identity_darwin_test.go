@@ -137,7 +137,9 @@ func TestDarwinCompilerSDKLayout(t *testing.T) {
 _Static_assert(sizeof(struct proc_regioninfo) == 96, "region metadata size");
 _Static_assert(sizeof(struct proc_regionwithpathinfo) == 1272, "region with vnode size");
 _Static_assert(offsetof(struct proc_regionwithpathinfo, prp_prinfo.pri_address) == 80, "region address");
+_Static_assert(offsetof(struct proc_regionwithpathinfo, prp_prinfo.pri_size) == 88, "region size");
 _Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_stat.vst_dev) == 96, "vnode device");
+_Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_stat.vst_mode) == 100, "vnode mode");
 _Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_stat.vst_ino) == 104, "vnode inode");
 _Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_stat.vst_size) == 184, "vnode size");
 _Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_type) == 232, "vnode type");
