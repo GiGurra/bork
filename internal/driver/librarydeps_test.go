@@ -402,7 +402,7 @@ func TestLibraryRootImportAlias(t *testing.T) {
 	if err := Deps(root, "get", []string{"example.com/my-library@v1.0.0"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := Check(root); err != nil {
+	if err := Build(root, filepath.Join(t.TempDir(), "consumer")); err != nil {
 		t.Fatal(err)
 	}
 }

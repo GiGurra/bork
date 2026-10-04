@@ -659,7 +659,7 @@ func (c *checker) checkTest(td *syntax.TestDecl, names map[string]diag.Pos) {
 func (c *checker) declarePackages(files []*syntax.File, root string) {
 	c.pkgs = map[string]*Package{}
 	c.preludePkg = &Package{Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}, classes: map[string]*Class{}}
-	byName := map[string]int{}
+	prefixes := map[string]bool{}
 	for _, f := range files {
 		if f.Prelude || c.pkgs[f.Package] != nil {
 			continue
@@ -668,11 +668,17 @@ func (c *checker) declarePackages(files []*syntax.File, root string) {
 		pkg := &Package{Path: f.Package, Name: name, Root: f.Package == root,
 			Funcs: map[string]*Func{}, types: map[string]*typeEntry{}, imports: map[string]*Package{}, used: map[string]bool{}, classes: map[string]*Class{}}
 		if !pkg.Root {
-			byName[name]++
-			pkg.GoPrefix = "_" + name + "_"
-			if n := byName[name]; n > 1 {
-				pkg.GoPrefix = "_" + name + strconv.Itoa(n) + "_"
+			stem := strings.Map(func(r rune) rune {
+				if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
+					return r
+				}
+				return '_'
+			}, name)
+			pkg.GoPrefix = "_" + stem + "_"
+			for n := 2; prefixes[pkg.GoPrefix]; n++ {
+				pkg.GoPrefix = "_" + stem + strconv.Itoa(n) + "_"
 			}
+			prefixes[pkg.GoPrefix] = true
 		}
 		c.pkgs[f.Package] = pkg
 		c.info.Packages = append(c.info.Packages, pkg)
