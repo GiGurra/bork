@@ -240,7 +240,10 @@ dictionaries must be limited to the computation's reachable code.
 
 Initial execution limit: ten seconds per evaluator batch; cap each captured
 file at 16 MiB, aggregate build files at 64 MiB and serialized results at 16 MiB.
-Decode at most one million nodes and depth 256. Enforce read/output bounds while
+Decode at most one million nodes and depth 256. The schema parser checks these
+budgets before consuming each value node, rejects duplicate fields and validates
+scalar field types before constructing the typed result. The shared value-limit
+policy has its own version for future reuse keys. Enforce read/output bounds while
 streaming, not after unbounded allocation. Kill and reap the evaluator process
 on timeout, including compiler-started descendants where supported. Bound
 stderr/log capture and avoid using stdout as a fragile protocol stream; use a

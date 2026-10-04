@@ -39,10 +39,57 @@ func TestComptimeTransportValidation(t *testing.T) {
 		`{"Version":3,"Value":{"Kind":"Int","Text":"1"}}`,
 		`{"Version":2,"Value":{"Kind":"Int","Text":"1","Unknown":true}}`,
 		`{"Version":2,"Value":{"Kind":"Int","Text":"1"}} {}`,
+		`{"Version":2,"Version":2,"Value":{"Kind":"Int","Text":"1"}}`,
+		`{"Version":2,"Value":{"Kind":"Int","Text":"1","Text":"2"}}`,
+		`{"Version":2,"Value":{"Kind":"Ok","Items":[],"Items":[]}}`,
+		`{"Version":2,"Value":{"Kind":null}}`,
+		`{"Version":2,"Value":{"Kind":"Ok","Nil":null}}`,
+		`{"Version":2,"Value":null}`,
+		`{"Version":2}`,
+		`{"Value":{"Kind":"Int","Text":"1"}}`,
 	} {
 		if _, err := DecodeComptime(&Comptime{expr: expr{typ: Int}}, []byte(data)); err == nil {
 			t.Fatalf("accepted malformed transport %s", data)
 		}
+	}
+}
+
+func TestComptimeTransportBudgetsDuringParsing(t *testing.T) {
+	envelope := func(value string) []byte {
+		return []byte(`{"Version":2,"Value":` + value + `}`)
+	}
+	for _, tc := range []struct {
+		name  string
+		value string
+		nodes int
+		depth int
+	}{
+		// Invalid suffixes show that limits reject the next node before its
+		// contents are decoded, rather than validating a materialized tree.
+		{"wide before malformed suffix", `{"Items":[{},INVALID]}`, 2, 256},
+		{"deep before malformed suffix", `{"Items":[{"Items":[INVALID]}]}`, 10, 1},
+		{"duplicate Items cannot reset budget", `{"Items":[{},{}],"Items":[]}`, 2, 256},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseComptimeTransport(envelope(tc.value), tc.nodes, tc.depth)
+			if err == nil || !strings.Contains(err.Error(), "depth or node limit") {
+				t.Fatalf("budget did not reject before parsing suffix: %v", err)
+			}
+		})
+	}
+	value := `{}`
+	for range ComptimeDepthLimit {
+		value = `{"Items":[` + value + `]}`
+	}
+	if _, err := parseComptimeTransport(envelope(value), ComptimeNodeLimit, ComptimeDepthLimit); err != nil {
+		t.Fatalf("rejected exact depth boundary: %v", err)
+	}
+	value = `{"Items":[` + value + `]}`
+	if _, err := DecodeComptime(&Comptime{expr: expr{typ: Int}}, envelope(value)); err == nil || !strings.Contains(err.Error(), "depth or node limit") {
+		t.Fatalf("public decoder accepted excessive depth: %v", err)
+	}
+	if _, err := parseComptimeTransport(envelope(`{"Items":[{},{}]}`), 3, 1); err != nil {
+		t.Fatalf("rejected exact node boundary: %v", err)
 	}
 }
 

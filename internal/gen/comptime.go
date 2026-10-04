@@ -46,7 +46,7 @@ func ComptimeProgram(files []*syntax.File, info *check.Info, node *check.Comptim
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := parser.ParseFile(token.NewFileSet(), "", comptimeRuntime+"\nconst _ctSchemaVersion="+strconv.Itoa(check.ComptimeSchemaVersion), 0)
+	runtime, err := parser.ParseFile(token.NewFileSet(), "", comptimeRuntime+fmt.Sprintf("\nconst (_ctSchemaVersion=%d; _ctResultLimit=%d; _ctNodeLimit=%d; _ctDepthLimit=%d)", check.ComptimeSchemaVersion, check.ComptimeResultLimit, check.ComptimeNodeLimit, check.ComptimeDepthLimit), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		body = "if len(value)>1000000-_ctNodes {panic(\"comptime result exceeds node limit\")}; out:=_ctValue{Kind:" + kind + ",Nil:value==nil}; for _,item:=range value {out.Items=append(out.Items," + child + "(item,depth+1))}; return out"
+		body = "if len(value)>_ctNodeLimit-_ctNodes {panic(\"comptime result exceeds node limit\")}; out:=_ctValue{Kind:" + kind + ",Nil:value==nil}; for _,item:=range value {out.Items=append(out.Items," + child + "(item,depth+1))}; return out"
 	case *check.Map:
 		key, err := e.function(t.Key)
 		if err != nil {
@@ -139,7 +139,7 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 		if err := printer.Fprint(&valueType, token.NewFileSet(), e.g.goType(t.Value)); err != nil {
 			return "", err
 		}
-		body = "if _,ok:=value.impl().(*_mapCore);!ok{panic(\"comptime map result must use insertion order; call inOrder() on sorted maps\")};if value.impl().size()>(1000000-_ctNodes)/2{panic(\"comptime result exceeds node limit\")};out:=_ctValue{Kind:" + kind + "};value.impl().each(func(entry *_mapEntry)bool{out.Items=append(out.Items," + key + "(entry.key.(" + keyType.String() + "),depth+1)," + value + "(entry.val.(" + valueType.String() + "),depth+1));return true});return out"
+		body = "if _,ok:=value.impl().(*_mapCore);!ok{panic(\"comptime map result must use insertion order; call inOrder() on sorted maps\")};if value.impl().size()>(_ctNodeLimit-_ctNodes)/2{panic(\"comptime result exceeds node limit\")};out:=_ctValue{Kind:" + kind + "};value.impl().each(func(entry *_mapEntry)bool{out.Items=append(out.Items," + key + "(entry.key.(" + keyType.String() + "),depth+1)," + value + "(entry.val.(" + valueType.String() + "),depth+1));return true});return out"
 	case *check.Sealed:
 		body = "switch value:=value.(type){"
 		for _, variant := range t.Variants {
@@ -208,13 +208,13 @@ type _ctValue struct {
  Nil bool
 }
 var _ctNodes int
-var _ctBudget = (16<<20)-128
+var _ctBudget = _ctResultLimit-128
 func _ctReserve(size int){if size>_ctBudget{panic("comptime result exceeds 16 MiB")};_ctBudget-=size}
 func _ctCheck(depth int,kind string) {
  _ctReserve(80+6*len(kind))
- if depth>256 {panic("comptime result exceeds depth limit")}
+ if depth>_ctDepthLimit {panic("comptime result exceeds depth limit")}
  _ctNodes++
- if _ctNodes>1000000 {panic("comptime result exceeds node limit")}
+ if _ctNodes>_ctNodeLimit {panic("comptime result exceeds node limit")}
 }
 type _ctWriter struct {file *os.File; remaining int}
 func (w *_ctWriter) Write(p []byte)(int,error){
@@ -226,7 +226,7 @@ func _ctEmit(value _ctValue){
  file,err:=os.OpenFile(os.Args[1],os.O_WRONLY|os.O_CREATE|os.O_TRUNC,0600)
  if err!=nil {panic(err)}
  defer file.Close()
- if err:=json.NewEncoder(&_ctWriter{file:file,remaining:16<<20}).Encode(struct{Version int;Value _ctValue}{_ctSchemaVersion,value});err!=nil {panic(err)}
+ if err:=json.NewEncoder(&_ctWriter{file:file,remaining:_ctResultLimit}).Encode(struct{Version int;Value _ctValue}{_ctSchemaVersion,value});err!=nil {panic(err)}
 }
 `
 
