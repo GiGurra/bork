@@ -26,6 +26,7 @@ jobs:
           cache-dependency-path: editors/vscode/package-lock.json
       - run: npm ci --prefix editors/vscode
       - run: npm test --prefix editors/vscode
+      - run: npm run package --prefix editors/vscode
   shards:
     name: Test shard plan
     runs-on: ubuntu-latest

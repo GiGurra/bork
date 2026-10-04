@@ -7,7 +7,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/GiGurra/bork"
+    "url": "https://github.com/GiGurra/bork",
+    "directory": "editors/vscode"
   },
   "engines": {
     "vscode": "^1.82.0"
@@ -53,12 +54,14 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "package": "vsce package"
+    "package": "npm run validate && vsce package --baseContentUrl https://github.com/GiGurra/bork/blob/main/editors/vscode --baseImagesUrl https://github.com/GiGurra/bork/raw/main/editors/vscode",
+    "validate": "node scripts/validate.cjs"
   },
   "devDependencies": {
     "@vscode/vsce": "^4.0.0",
     "vscode-oniguruma": "^2.0.1",
-    "vscode-textmate": "^9.3.2"
+    "vscode-textmate": "^9.3.2",
+    "ovsx": "1.2.0"
   },
   "main": "./extension.cjs",
   "capabilities": {
@@ -70,5 +73,23 @@
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
+  },
+  "icon": "images/icon.png",
+  "homepage": "https://gigurra.github.io/bork/",
+  "bugs": {
+    "url": "https://github.com/GiGurra/bork/issues"
+  },
+  "keywords": [
+    "bork",
+    "language",
+    "backend",
+    "go",
+    "lsp",
+    "immutable",
+    "type-checking"
+  ],
+  "galleryBanner": {
+    "color": "#103c36",
+    "theme": "dark"
   }
 }
