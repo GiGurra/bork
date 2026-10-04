@@ -1,0 +1,1 @@
+main.bork:1:1: package value dependency cycle: main.A -> main.B -> main.A

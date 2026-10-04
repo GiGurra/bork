@@ -37,7 +37,7 @@ func TestComptimeTimeoutKillsDescendants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"recipe", "proof"} {
+	for _, mode := range []string{"recipe", "proof", "package batch"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
@@ -52,6 +52,9 @@ if err:=cmd.Start();err!=nil{panic(err)}
 for{}`, strconv.Quote(testExecutable), strconv.Quote(marker))
 			source := "fn spin():Int unsafe go{" + body + "}\nfn main(){println(comptime{spin()})}"
 			want := "evaluation exceeded 1s"
+			if mode == "package batch" {
+				source = "Base=1\nfn spin():Int unsafe go{" + body + "}\nfn main(){println(comptime{spin()+Base})}"
+			}
 			if mode == "proof" {
 				source = "pred spin(n:Int) unsafe go{" + body + "}\nfn require(n:Int where spin):Int{n}\nfn main(){println(comptime{require(1)})}"
 				want = "predicate evaluation exceeded 1s"

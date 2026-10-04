@@ -121,12 +121,26 @@ func (c *checker) checkComptimeTypes() {
 		c.checkComptimeRecipe(reflect.ValueOf(node.Body))
 	}
 	nodes := append([]*Comptime(nil), c.info.Comptimes...)
+	checkedPackages := map[*PackageBinding]bool{}
 	for _, batch := range c.info.InterpolationBatches {
 		nodes = append(nodes, batch.Recipe)
 	}
 	for _, node := range nodes {
-		if len(c.info.PackageBindings) != 0 && packageRuntimeReads(c.info, node.Body) {
-			c.diags.AddCode(node.Pos(), "comptime.capture", "comptime cannot read runtime package values, including through helper calls")
+		var checkPackage func(*PackageBinding)
+		checkPackage = func(binding *PackageBinding) {
+			if checkedPackages[binding] {
+				return
+			}
+			checkedPackages[binding] = true
+			if path := unsupportedComptimeType(binding.Type, map[Type]bool{}); path != "" {
+				c.diags.AddCode(node.Pos(), "comptime.result", "comptime cannot bake package value %s of type %s: %s", binding.Decl.Name, binding.Type, path)
+			}
+			for _, dependency := range binding.Dependencies {
+				checkPackage(dependency)
+			}
+		}
+		for _, binding := range ComptimePackageBindings(c.info, node) {
+			checkPackage(binding)
 		}
 		if path := unsupportedComptimeType(node.Type(), map[Type]bool{}); path != "" {
 			c.diags.AddCode(node.Pos(), "comptime.result", "comptime cannot bake result type %s: %s", node.Type(), path)

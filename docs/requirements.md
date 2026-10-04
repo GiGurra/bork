@@ -3326,7 +3326,9 @@ dependencies, and structural equality, Show, encoding and writable schemas omit
 them. Pure package `Name = expr`, `Name: T = expr`, and `lazy Name = expr` bindings use process-lifetime memo cells,
 ordinary export visibility and forward references. Initializers cannot retain
 scopes or require ambient values. Direct and helper-induced dependency cycles
-are rejected; compiler evaluation never forces package cells. The complete design, including
+are rejected. Comptime reads evaluate the needed pure package values in dependency
+order, batch evaluator builds, and bake their checked data; other values remain
+lazy at runtime. The complete design, including
 effects, facts, scopes, copies, derivation and tooling, is in
 [lazy bindings and record fields](design/lazy.md). Transparent async local bindings
 (bork-mais5u, implemented) share access machinery under the

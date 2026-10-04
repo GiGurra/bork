@@ -23,7 +23,7 @@ Use it for lookup tables, parsed constants, and anything else that is known befo
 
 A `comptime` block is closed and pure:
 
-- It can use literals, names bound to literals, functions, and the results of earlier `comptime` blocks.
+- It can use literals, names bound to literals, functions, pure package values, and the results of other `comptime` blocks.
 - It cannot use run-time values, such as function parameters or the result of reading input.
 - It cannot have effects such as `io` or `net`. The one exception is reading build files, described below.
 
@@ -34,6 +34,20 @@ fn main() {
   println(squares, total)
 }
 ```
+
+Package values read by `comptime` are evaluated during compilation, including through helper functions and imports. Their dependencies may be declared later or in another file. The compiler evaluates dependencies first, checks their facts, and stores the finished values as data. A dependency cycle is a compile error.
+
+```bork
+Squares = comptime { range(1, 6).map(n => n * n) }
+Total = comptime { Squares.fold(0, (s, n) => s + n) }
+
+fn main() {
+  println(Total)
+  println(comptime { Squares.length() })
+}
+```
+
+Here `Total` is `55`. Package initializers need not contain `comptime` themselves: `Limit = 6` can also be read by a block. Values that no compile-time computation reads keep their usual lazy runtime initialization. A package value read at compile time must have one of the data types supported for results below.
 
 The result can be made of numbers, strings, Bools, runes, lists, records, options and other sealed or union values, and maps. `Bytes`, functions, and resources cannot be stored.
 

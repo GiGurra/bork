@@ -1,0 +1,2 @@
+Squares = comptime { range(1, Last).map(n => n * n) }
+fn Total(): Int { comptime { Squares.fold(0, (s, n) => s + n) } }

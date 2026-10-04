@@ -26,7 +26,7 @@ Package    = { File } .
 Script     = [ Shebang EOL ] { HeaderDirective EOL } { Import EOL } { Use EOL } { ( Decl | Binding | Expr ) EOL } . (* statements become implicit-main locals; explicit lazy remains package-level *)
 HeaderDirective = "// bork:require" ModulePath PinnedVersion | "// bork:unsafe" . (* standalone script header only *)
 File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | Instances | Providers | PackageBinding ) EOL } .
-PackageBinding = [ "lazy" ] Ident [ ":" Type ] "=" Expr . (* pure runtime memo; uppercase names are exported *)
+PackageBinding = [ "lazy" ] Ident [ ":" Type ] "=" Expr . (* pure memo; comptime reads bake data; uppercase names are exported *)
 AmbientDecl = { "logged" | "propagated" "(" String ")" } "ambient" Ident ":" Type .     (* ambient traceId: String: a value functions read with needs, bound by with *)
 Use        = "use" UseItem .                (* use money.DecodeAmount, use money.*, use api.Json *)
 UseItem    = Ident | Ident "." ( Ident | "*" ) .
