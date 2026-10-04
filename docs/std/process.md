@@ -45,7 +45,8 @@ returns its result and can be repeated. `Stop(process)` cancels just that child,
 and `Pid` gives its process ID. Processes are killed on owner cancellation and
 reaped at final scope cleanup, even without Await. `attach` moves cancellation
 to the destination scope. These operations declare io and state effects;
-`process.Args` and `process.Exit` alias the prelude helpers with io effects.
+`process.Args()` returns arguments without the program name. `process.Exit(code)`
+terminates without closing scopes. Both require io.
 
 SIGINT and SIGTERM cancel root scopes; nested scopes inherit cancellation.
 Scope-aware waits and checkpoints observe it, and cleanup runs as scopes end.

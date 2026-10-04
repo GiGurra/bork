@@ -106,8 +106,7 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 func TestCLISubcommandMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/time"
-import "bork/cli"
+	source := `import "bork/cli"
 type Options = {} derive (Decode)
 fn command(name: String): cli.Command { cli.Subcommand[Options](name, "", (options, s) => { println("handler") }) }
 fn main() {
@@ -143,8 +142,7 @@ fn main() {
 func TestCLISubcommandEffects(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/time"
-import "bork/cli"
+	source := `import "bork/cli"
 fn partial(commands: List[cli.Command]) uses io: Ok | cli.Error | cli.Help { cli.Dispatch("app", "", [], commands) }
 fn main() {}
 `
