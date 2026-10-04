@@ -44,7 +44,7 @@ func TestPackageLazyChecks(t *testing.T) {
 		{"generic renderer reference cycle", "type C={}\ninstance Render:Show[C]{fn show(c:C):String{Value}}\nfn render[T](value:T):String{s\"$value\"}\nfn wrap[T](value:T):String{f:(T)=>String=render;f(value)}\nlazy Value:String=wrap(C{})\nfn main(){}", "dependency cycle"},
 		{"generic Show cycle", "type D={}\ninstance ShowD:Show[D]{fn show(d:D):String{Value}}\ntype C[T]={n:T}\ninstance ShowC[T:Show]:Show[C[T]]{fn show(c:C[T]):String{s\"${c.n}\"}}\nlazy Value:String=s\"${C[D]{n:D{}}}\"\nfn main(){}", "dependency cycle"},
 		{"generic predicate renderer", "type C={}\ninstance Render:Show[C]{fn show(c:C):String{Value}}\nlazy Value:String=\"expected\"\npred valid[T](value:T){s\"$value\"==\"expected\"}\nfn main(){c:C where valid=C{};println(c)}", "not proven"},
-		{"ambient", "ambient label:String\nfn read()needs label:String{label}\nlazy Value=read()\nfn main(){}", "ambient"},
+		{"ambient", "ambient label:String\nfn read()needs label:String{label}\nlazy Value=read()\nfn main(){}", "signature does not provide"},
 		{"fresh comptime initializer", "lazy Value=comptime{21*2}\nfn main(){println(Value)}", ""},
 		{"generic plain renderer", "type C={}\ninstance Render:Show[C]{fn show(c:C):String{Value}}\nfn render[T](value:T):String{s\"$value\"}\nlazy Value:String=render(1)\nfn main(){}", ""},
 		{"decoder invariant cycle", "type C={n:Int} where Valid derive(Decode)\npred Valid(c:C){Value>0}\nlazy Value:Int={_=json.Decode[C](\"{\\\"n\\\":1}\");1}\nfn main(){}", "dependency cycle"},
@@ -59,7 +59,7 @@ func TestPackageLazyChecks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			source := tc.source
 			if strings.Contains(source, "json.") {
 				source = "import \"bork/json\"\n" + source
@@ -90,7 +90,7 @@ func TestPackageLazyImports(t *testing.T) {
 	} {
 		t.Run(tc.source, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			if err := os.Mkdir(filepath.Join(dir, "values"), 0o755); err != nil {
 				t.Fatal(err)
 			}

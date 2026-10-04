@@ -43,7 +43,7 @@ func TestComputedFieldChecks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
 			}

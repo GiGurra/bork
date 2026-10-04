@@ -183,7 +183,7 @@ fn main(){println(a())}`, "cyclic comptime"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			if err := os.WriteFile(filepath.Join(dir, ModFile), []byte("module example.com/comptime\nunsafe \"example.com/comptime\"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
