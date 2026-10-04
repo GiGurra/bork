@@ -373,8 +373,10 @@ Use Unknown conservatively when the property depends on runtime data.
 Validators and their helpers must be pure. Concrete generic instances resolve
 all dictionaries in the builder owner's scope; constrained heads and unresolved
 runtime dictionaries are rejected. The compiler batches distinct calls per
-package, evaluates them with the bounded native comptime evaluator, and memoizes
-identical parts/kinds within a build. Panics, invalid indices and timeouts fail
+package, evaluates them with a bounded evaluator, and memoizes identical
+parts/kinds within a build. Eligible standard-library validators ship as generated
+compiler intrinsics; user-library validators use the ordinary comptime process.
+Both paths run fresh validation on each check. Panics, invalid indices and timeouts fail
 checking. Runtime hole/factory evaluation remains once-only in source order.
 Libraries must keep runtime checks for properties metadata cannot prove; see
 [SQL's compile-time and render-time checks](std/sql.md).

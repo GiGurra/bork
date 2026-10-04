@@ -1811,7 +1811,7 @@ func artifactCall(index int, request Request) []InterpolationIssue {
 }
 
 func init() {
-	descriptors = []Descriptor{{Package: "bork/sql", Instance: "sqlInterpolationValidator", Builder: "Builder", Signature: "(StaticParts,List[InterpolationHole])->List[InterpolationIssue]", Identity: "3f2edd9caf38f3b9acb3be01507150f9cb9158ca5b3e29335c454c00d9b68055", Sources: []Source{{Path: "prelude/bytes.bork", Digest: "c47ebb288449f603a522fd3b174a8064e6d27263c83e5fdf13d26bce9bd1a5ca"}, {Path: "prelude/classes.bork", Digest: "303b8b27423bddad847f15f6965e6ceb9acf0a8fb5f881b59a92c4f8cd865896"}, {Path: "prelude/concurrency.bork", Digest: "3bd0e270aa35dfc40846d3fe752a798fea1035d52489155851a5828055cc17f3"}, {Path: "prelude/environment.bork", Digest: "dfa755e4c990b15c9b315772c0992e52a6d29e90825cf247ec7c92a9abf6f8b8"}, {Path: "prelude/fanin.bork", Digest: "81fca472030e6849549e475d808e59ccf0f6455a47c517b44fe0255d3352d306"}, {Path: "prelude/interpolation.bork", Digest: "3bcb0d676886a4f05ecb2889ae0883690f3c9e3597e2faf9fac5b7339d88fba5"}, {Path: "prelude/json.bork", Digest: "898e2a28f983f890426990690a659514d97c28759664985477b3ec779b84041f"}, {Path: "prelude/lists.bork", Digest: "bbcbe6d4d971a5e6f10f375396aabb2fd601dbe282fe8394bf94974f268ad026"}, {Path: "prelude/maps.bork", Digest: "6c0d7503959a9099cbf707539892fd082f49aa39df2aeb93187c754c17bb2024"}, {Path: "prelude/options.bork", Digest: "43a752251183cf8596c24d61a9d711ba5c3c7971e9ae72601d27fa03ce5311e0"}, {Path: "prelude/parallel.bork", Digest: "be0ee099fa43c5f1ddad89075ae42091cca3621937e391757376efc97319637c"}, {Path: "prelude/prelude.bork", Digest: "5d43fbc22a7a8ef31ed219539456a934da2da84f94a0d3928735cc6b61110bef"}, {Path: "prelude/runes.bork", Digest: "9b14ac2de36be3779dc30b3b3e35423c5db42191fbb38e6a7f92eae6e6d7a90d"}, {Path: "prelude/scopes.bork", Digest: "6d2b8c3465a01cc966b2e1a7a82b80cd228d270442b02021758dbc65582161cc"}, {Path: "prelude/sequences.bork", Digest: "654792616fd22ad60b42db9df467d2460acb8709e8a4ad35d75658aa7238c610"}, {Path: "prelude/strings.bork", Digest: "7f8d761dd588149934888ef091361ccea793e5ca7cc2def9d75c87a7eae44f50"}, {Path: "prelude/testing.bork", Digest: "471c8f83e724fd7a4bc354326ed1e0e4ac5319322d494217d857b808a4a4cbf9"}, {Path: "bork/sql/interpolation.bork", Digest: "454ecf6e30a879710a9981730ab63fd71f91342352d25c805bea81d99a206c02"}, {Path: "bork/sql/sequences.bork", Digest: "ed0551c688d79e5ed6729f4f91b2a446cf2a335a3d409e5052b4d272908d2184"}, {Path: "bork/sql/sql.bork", Digest: "2376e5f4bb1aceebb924b7bd2bb2896b0d2300022fad7c35825e9549fd829fa1"}, {Path: "bork/sql/unsafe.bork", Digest: "324dd0dace308259340573333a4f29e4aa4a02bfd56126783325586d70ee2796"}}, Definitions: []Source{{Path: "bork/sql/interpolation.bork:163:3", Digest: "8c6d377ab4b8cbee3c11e33c6ee41ecbf47a887c1f016c7768d2fd9c4a6277b6"}, {Path: "bork/sql/interpolation.bork:167:1", Digest: "7822014979f7a65169734b0c1c8f571904115e7d0e805b268a28a322ae897e4f"}, {Path: "bork/sql/interpolation.bork:31:1", Digest: "456e6b69cc42ff6150a8c6a5fb5a30f4fadc04e981ee25faa099646448188581"}}}}
+	descriptors = []Descriptor{{Package: "bork/sql", Instance: "sqlInterpolationValidator", Builder: "Builder", Signature: "(StaticParts,List[InterpolationHole])->List[InterpolationIssue]", Identity: "b7ba162329d3e5338ce6da81d98593f9a656dc47a9b3df319bf31bda57eb1ce1", Sources: []Source{{Path: "prelude/bytes.bork", Digest: "c47ebb288449f603a522fd3b174a8064e6d27263c83e5fdf13d26bce9bd1a5ca"}, {Path: "prelude/classes.bork", Digest: "303b8b27423bddad847f15f6965e6ceb9acf0a8fb5f881b59a92c4f8cd865896"}, {Path: "prelude/concurrency.bork", Digest: "3bd0e270aa35dfc40846d3fe752a798fea1035d52489155851a5828055cc17f3"}, {Path: "prelude/environment.bork", Digest: "dfa755e4c990b15c9b315772c0992e52a6d29e90825cf247ec7c92a9abf6f8b8"}, {Path: "prelude/fanin.bork", Digest: "81fca472030e6849549e475d808e59ccf0f6455a47c517b44fe0255d3352d306"}, {Path: "prelude/interpolation.bork", Digest: "3bcb0d676886a4f05ecb2889ae0883690f3c9e3597e2faf9fac5b7339d88fba5"}, {Path: "prelude/json.bork", Digest: "898e2a28f983f890426990690a659514d97c28759664985477b3ec779b84041f"}, {Path: "prelude/lists.bork", Digest: "bbcbe6d4d971a5e6f10f375396aabb2fd601dbe282fe8394bf94974f268ad026"}, {Path: "prelude/maps.bork", Digest: "6c0d7503959a9099cbf707539892fd082f49aa39df2aeb93187c754c17bb2024"}, {Path: "prelude/options.bork", Digest: "43a752251183cf8596c24d61a9d711ba5c3c7971e9ae72601d27fa03ce5311e0"}, {Path: "prelude/parallel.bork", Digest: "be0ee099fa43c5f1ddad89075ae42091cca3621937e391757376efc97319637c"}, {Path: "prelude/prelude.bork", Digest: "5d43fbc22a7a8ef31ed219539456a934da2da84f94a0d3928735cc6b61110bef"}, {Path: "prelude/runes.bork", Digest: "9b14ac2de36be3779dc30b3b3e35423c5db42191fbb38e6a7f92eae6e6d7a90d"}, {Path: "prelude/scopes.bork", Digest: "6d2b8c3465a01cc966b2e1a7a82b80cd228d270442b02021758dbc65582161cc"}, {Path: "prelude/sequences.bork", Digest: "654792616fd22ad60b42db9df467d2460acb8709e8a4ad35d75658aa7238c610"}, {Path: "prelude/strings.bork", Digest: "7f8d761dd588149934888ef091361ccea793e5ca7cc2def9d75c87a7eae44f50"}, {Path: "prelude/testing.bork", Digest: "471c8f83e724fd7a4bc354326ed1e0e4ac5319322d494217d857b808a4a4cbf9"}, {Path: "bork/sql/interpolation.bork", Digest: "454ecf6e30a879710a9981730ab63fd71f91342352d25c805bea81d99a206c02"}, {Path: "bork/sql/sequences.bork", Digest: "ed0551c688d79e5ed6729f4f91b2a446cf2a335a3d409e5052b4d272908d2184"}, {Path: "bork/sql/sql.bork", Digest: "2376e5f4bb1aceebb924b7bd2bb2896b0d2300022fad7c35825e9549fd829fa1"}, {Path: "bork/sql/unsafe.bork", Digest: "324dd0dace308259340573333a4f29e4aa4a02bfd56126783325586d70ee2796"}}, Definitions: []Source{{Path: "bork/sql/interpolation.bork:163:3", Digest: "8c6d377ab4b8cbee3c11e33c6ee41ecbf47a887c1f016c7768d2fd9c4a6277b6"}, {Path: "bork/sql/interpolation.bork:167:1", Digest: "7822014979f7a65169734b0c1c8f571904115e7d0e805b268a28a322ae897e4f"}, {Path: "bork/sql/interpolation.bork:31:1", Digest: "456e6b69cc42ff6150a8c6a5fb5a30f4fadc04e981ee25faa099646448188581"}}}}
 	nativeEvaluation = func(calls []Call) []byte {
 		nativeEnter()
 		defer nativeLeave()
@@ -3121,16 +3121,7 @@ func (c *_hashCore) mapVals(f func(v any) any) _mapImpl {
 	nativeEnter()
 	defer nativeLeave()
 	panic("comptime cannot iterate an unordered map")
-	return &_hashCore{trie: func() *_hnode {
-		nativeStep()
-		return c.trie.mapEntries(func(e *_mapEntry) *_mapEntry {
-			nativeEnter()
-			defer nativeLeave()
-			return &_mapEntry{key: e.key, hkey: e.hkey, hash: e.hash, val: func() any { nativeStep(); return f(e.val) }()}
-		})
-	}(),
 
-		n: c.n}
 }
 
 // _implOf is the core of a _Map value reached by reflection.
@@ -3810,11 +3801,11 @@ func _sql_scanStatement(statement _sql_Statement, dialect _sql_Dialect) any {
 			if func() bool { nativeStep(); return adjacent(i - 1) }() || func() bool { nativeStep(); return adjacent(i + 1) }() {
 				return func() scanError {
 					nativeStep()
-					return failHole(func() string {
+					return failHole(func(_callee func(format string, a ...any) string, _arg0 string, _arg1 int) string {
 						nativeStep()
-						return _gopkg_fmt.Sprintf("SQL hole %d is inside or adjacent to a partial token", hole+1)
-					}(),
-					)
+						nativeAllocate(52 + 32)
+						return _callee(_arg0, _arg1)
+					}(_gopkg_fmt.Sprintf, "SQL hole %d is inside or adjacent to a partial token", hole+1))
 				}()
 
 			}
@@ -3831,7 +3822,12 @@ func _sql_scanStatement(statement _sql_Statement, dialect _sql_Dialect) any {
 					nativeStep()
 					nativeAllocate(len(_arg0))
 					return _callee(_arg0)
-				}(query.WriteString, func() string { nativeStep(); return _gopkg_strings.ReplaceAll(part.value, "\"", "\"\"") }())
+				}(query.WriteString, func(_callee func(s string, old string,
+					new string) string, _arg0 string, _arg1 string, _arg2 string) string {
+					nativeStep()
+					nativeAllocate(nativeExpansion(len(_arg0), len(_arg2)))
+					return _callee(_arg0, _arg1, _arg2)
+				}(_gopkg_strings.ReplaceAll, part.value, "\"", "\"\""))
 				func(_callee func(c byte) error, _arg0 byte) error {
 					nativeStep()
 					nativeAllocate(1)

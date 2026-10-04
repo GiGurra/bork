@@ -22,7 +22,7 @@ type nativeInterpolationPlan struct {
 // This mode executes compiler-owned intrinsic code. It makes no live-SDK or
 // evaluated-result freshness claim, and remains evaluator-bearing for Session.
 func prepareNativeInterpolation(files []*syntax.File, info *check.Info, node *check.Comptime, ctx *goContext) (*nativeInterpolationPlan, bool) {
-	if ctx.err != nil || ctx.driverErr != nil || ctx.driver != "off" || ctx.values["GOOS"] != runtime.GOOS || ctx.values["GOARCH"] != runtime.GOARCH || ctx.values["GOFLAGS"] != "" || ctx.values["GOEXPERIMENT"] != "" || ctx.values["GOVERSION"] != runtime.Version() || ctx.processValue("GOCACHEPROG") != "" || goModuleHook != nil {
+	if ctx.err != nil || ctx.driverErr != nil || ctx.driver != "off" || ctx.values["GOOS"] != runtime.GOOS || ctx.values["GOARCH"] != runtime.GOARCH || ctx.values["GOFLAGS"] != "" || ctx.values["GOEXPERIMENT"] != "" || ctx.values["GODEBUG"] != "" || ctx.values["GOFIPS140"] != "off" || (runtime.GOARCH == "amd64" && ctx.values["GOAMD64"] != "v1") || ctx.values["GOVERSION"] != runtime.Version() || ctx.processValue("GOCACHEPROG") != "" || goModuleHook != nil {
 		return nil, false
 	}
 	values, ok := node.Body.Tail.(*check.ListLit)
@@ -45,6 +45,7 @@ func prepareNativeInterpolation(files []*syntax.File, info *check.Info, node *ch
 	}
 	plan := &nativeInterpolationPlan{}
 	inputBytes := 0
+	expectedDefinitions := map[string]string{}
 	for _, value := range values.Elems {
 		call, ok := value.(*check.Call)
 		if !ok || call.Func == nil || call.Func.Of == nil || call.Inst == nil || call.Inst.Func != call.Func || len(call.Inst.TypeArgs) != 0 || len(call.Inst.Dicts) != 0 || len(call.Args) != 2 {
@@ -65,6 +66,7 @@ func prepareNativeInterpolation(files []*syntax.File, info *check.Info, node *ch
 			}
 		}
 		for _, definition := range descriptor.Definitions {
+			expectedDefinitions[definition.Path] = definition.Digest
 			if definitions[definition.Path] != definition.Digest {
 				return nil, false
 			}
@@ -73,8 +75,9 @@ func prepareNativeInterpolation(files []*syntax.File, info *check.Info, node *ch
 		if !ok {
 			return nil, false
 		}
+		inputBytes += 32
 		for _, part := range request.Parts {
-			inputBytes += len(part)
+			inputBytes += 16 + len(part)
 		}
 		for _, hole := range request.Holes {
 			inputBytes += 32
@@ -86,6 +89,9 @@ func prepareNativeInterpolation(files []*syntax.File, info *check.Info, node *ch
 			return nil, false
 		}
 		plan.calls = append(plan.calls, stdvalidators.Call{Binding: binding, Request: request})
+	}
+	if len(expectedDefinitions) != len(definitions) {
+		return nil, false
 	}
 	namespace, err := compilerArtifactNamespace(nativeInterpolationMode, "artifact-abi-1")
 	if err != nil {

@@ -66,3 +66,30 @@ func validateInterpolation(){select{}}
 		t.Fatalf("blocking artifact accepted: %v", err)
 	}
 }
+
+func TestArtifactRejectsUnboundedNativeOperations(t *testing.T) {
+	runtimeSource, err := os.ReadFile("../stdvalidators/runtime.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{`_ = new([1<<40]byte)`, `s:="x";for{s+=s}`, `_ = [1<<40]byte{}`, `var x [1<<40]byte;_ = x`, `m:=map[string]any{};m["self"]=m;_ = fmt.Sprintf("%v",m)`, `var x any="x";_ = fmt.Sprintf("%v",x)`, `_ = strings.Repeat("x",1<<40)`, `_ = fmt.Sprintf("%1000000s", "x")`, `f:="%s";_ = fmt.Sprintf(f,"x")`, `s:="x";_ = []byte(s)`, `xs:=[]byte{1};_ = string(xs)`, `f:=fmt.Sprintf;_ = f("%1000000s","x")`, `f:=strings.ReplaceAll;_ = f("x","x","x")`, `type S string;s:=S("x");for{s+=s}`, `type B []byte;s:="x";_ = B(s)`, `type B []byte;xs:=B{1};_ = string(xs)`, `println("x")`, `print("x")`} {
+		source := []byte("package main\nimport(\"fmt\";\"strings\")\nvar _=fmt.Sprintf;var _=strings.Index\nfunc validateInterpolation(){" + body + "}\n")
+		if _, err := guardArtifact(source, runtimeSource, "validateInterpolation"); err == nil {
+			t.Errorf("unbounded native operation accepted: %s", body)
+		}
+	}
+}
+
+func TestArtifactRejectsUnknownGeneratedHelper(t *testing.T) {
+	runtimeSource, err := os.ReadFile("../stdvalidators/runtime.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := []byte(`package main
+func _showList(values []string)string {var result string;for _,value:=range values{result+=value};return result}
+func validator(){_ = _showList([]string{"hello"})}
+`)
+	if _, err := guardArtifact(source, runtimeSource, "validator"); err == nil || !strings.Contains(err.Error(), "unsupported generated artifact helper") {
+		t.Fatalf("unknown generated formatter accepted: %v", err)
+	}
+}

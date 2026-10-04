@@ -14,9 +14,14 @@ issues to holes. Execute every call afresh; this slice introduces no cross-build
 result cache and does not claim that execution receipts are certified.
 
 Use in-process artifacts to remove both Go build and process startup costs.
-Generated function entries and loops receive budget/deadline guards; function
+Generated function entries, call edges and loops receive budget/deadline guards; function
 entries also enforce a recursion limit. The wrapper catches panics and serializes
-the generated encoder's budget state. Input and output budgets remain bounded.
+the generated encoder's budget state. Input and output budgets remain bounded. Native allocation, step or depth budget
+exhaustion retries the ordinary evaluator with the remaining deadline, preserving
+program behavior. Native attempts and retries each have their own uncertified
+tracker token. Raw Go admission rejects unknown calls and allocation forms;
+formatting accepts scalar arguments, and string/buffer growth is charged before
+executing bounded standard operations.
 Unsupported target/effective policy falls back before executing an artifact.
 Only reviewed standard implementations whose complete dependency closure is
 compiled into the tool may register; arbitrary unsafe helpers remain outside
@@ -29,3 +34,18 @@ Measure unchanged and changed calls on the same 50-site fixture, and test bindin
 mutation, fallback, panic/timeout/budget handling, concurrency, diagnostics and
 staleness. The target is negligible unchanged-site overhead and changed-site
 checks well below 0.1s.
+
+## Measurement
+
+The same 50 distinct SQL sites used for #250, checked with `BORK_CACHE=off` and
+`GOPACKAGESDRIVER=off`, retaining the ordinary Go build cache:
+
+| Check | Main at #250 | Generated intrinsic |
+| --- | ---: | ---: |
+| First check | 0.456 s | 0.069 s |
+| Median of three repeated checks | 0.434 s | 0.069 s |
+| One changed literal | — | 0.067 s |
+
+These are fresh CLI processes: validation runs on every check, with no evaluated
+result reuse. Native attempts use the shared tracker but remain uncertified.
+The registry namespace identifies the actual compiler image, not the live Go SDK.

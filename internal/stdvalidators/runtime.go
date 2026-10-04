@@ -59,12 +59,20 @@ var nativeMutex sync.Mutex
 var nativeDeadline time.Time
 var nativeSteps, nativeDepth, nativeBytes int
 
+// BudgetError identifies limits introduced by the intrinsic execution mode.
+// The driver may retry these in the ordinary evaluator with remaining time.
+type BudgetError struct{ Kind string }
+
+func (e *BudgetError) Error() string { return "standard validator " + e.Kind + " limit exceeded" }
+
+type budgetPanic string
+
 // Every generated call and function entry/loop reaches these guards. Their
 // implementation is compiler-owned support, outside the instrumented closure.
 func nativeStep() {
 	nativeSteps++
 	if nativeSteps > 4_000_000 {
-		panic("standard validator execution step limit exceeded")
+		panic(budgetPanic("execution step"))
 	}
 	if nativeSteps&63 == 0 && !time.Now().Before(nativeDeadline) {
 		panic("standard validator evaluation deadline exceeded")
@@ -74,15 +82,21 @@ func nativeStep() {
 // Conservatively charge growing buffers before allocation or writes.
 func nativeAllocate(size int) {
 	if size < 0 || size > (16<<20)-nativeBytes {
-		panic("standard validator allocation limit exceeded")
+		panic(budgetPanic("allocation"))
 	}
 	nativeBytes += size
+}
+func nativeExpansion(source, replacement int) int {
+	if source < 0 || source >= 16<<20 || replacement < 0 || replacement > ((16<<20)/(source+1)) {
+		panic(budgetPanic("allocation"))
+	}
+	return source + (source+1)*replacement
 }
 func nativeEnter() {
 	nativeStep()
 	nativeDepth++
 	if nativeDepth > 256 {
-		panic("standard validator recursion limit exceeded")
+		panic(budgetPanic("recursion"))
 	}
 }
 func nativeLeave() { nativeDepth-- }
@@ -108,11 +122,21 @@ func Run(calls []Call, limit time.Duration) (out []byte, err error) {
 	defer func() {
 		if value := recover(); value != nil {
 			out = nil
-			err = fmt.Errorf("standard validator failed: %v", value)
+			if budget, ok := value.(budgetPanic); ok {
+				err = &BudgetError{Kind: string(budget)}
+			} else {
+				if message, ok := value.(string); ok {
+					err = fmt.Errorf("standard validator failed: %s", message)
+				} else {
+					err = fmt.Errorf("standard validator failed with panic type %T", value)
+				}
+			}
 		}
 	}()
 	total := 0
 	for _, call := range calls {
+		nativeStep()
+		total += 32
 		b := call.Binding
 		if b.index < 0 || b.index >= len(descriptors) || b.descriptor.Identity != descriptors[b.index].Identity {
 			return nil, fmt.Errorf("invalid standard validator binding")
@@ -122,7 +146,7 @@ func Run(calls []Call, limit time.Duration) (out []byte, err error) {
 			return nil, fmt.Errorf("invalid standard validator parts")
 		}
 		for _, part := range r.Parts {
-			total += len(part)
+			total += 16 + len(part)
 		}
 		for _, hole := range r.Holes {
 			total += 32

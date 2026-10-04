@@ -25,7 +25,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	var source strings.Builder
 	number := 0
 	for _, pkg := range std.Packages() {

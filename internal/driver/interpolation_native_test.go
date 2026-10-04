@@ -3,6 +3,7 @@ package driver
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"testing"
 
@@ -24,6 +25,16 @@ func TestStandardInterpolationArtifactBinding(t *testing.T) {
 	plan, ok := prepareNativeInterpolation(files, info, node, ctx)
 	if !ok {
 		t.Fatal("standard validator did not select compiler artifact")
+	}
+	usage := &goUsage{}
+	if _, err := runNativeInterpolation(plan, ctx, usage); err != nil {
+		t.Fatal(err)
+	}
+	if !usage.evaluator || usage.execution == nil || len(usage.execution.invocations) != 1 || !usage.execution.invocations[0].complete {
+		t.Fatal("native dispatch was not accounted once")
+	}
+	if _, certified := usage.execution.receipts(); certified {
+		t.Fatal("native namespace certified a receipt")
 	}
 	if len(plan.calls) != 1 {
 		t.Fatal("wrong artifact batch")
@@ -70,5 +81,16 @@ func TestStandardInterpolationAvoidsGoBuild(t *testing.T) {
 	ctx.tool = launcher
 	if _, err := checkLoadedProgramObserved(loaded, module, ctx, captureEmbedsSnapshot, nil); err != nil {
 		t.Fatalf("artifact needed external Go execution: %v", err)
+	}
+}
+
+func TestStandardInterpolationBudgetFallback(t *testing.T) {
+	savedHook := goModuleHook
+	goModuleHook = nil
+	t.Cleanup(func() { goModuleHook = savedHook })
+	dir := validatorFixture(t, `import "bork/sql"
+ fn main(){println(sql.SQL"SELECT `+strings.Repeat(" ", 700_000)+`${42}")}`)
+	if _, _, err := Check(dir); err != nil {
+		t.Fatalf("intrinsic budget changed valid SQL behavior: %v", err)
 	}
 }

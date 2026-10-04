@@ -2,7 +2,9 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/GiGurra/bork/internal/stdvalidators"
 	"io"
 	"os"
 	"os/exec"
@@ -150,15 +152,34 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		}
 		var value []byte
 		var err error
+		fallbackCtx := goctx
+		handled := false
 		if native, ok := prepareNativeInterpolation(files, info, node, goctx); ok {
+			start := time.Now()
 			value, err = runNativeInterpolation(native, goctx, usage)
-		} else {
+			handled = true
+			var budget *stdvalidators.BudgetError
+			if errors.As(err, &budget) {
+				remaining := goctx.comptimeLimit() - time.Since(start)
+				if remaining > 0 {
+					copy := *goctx
+					copy.evalLimit = remaining
+					fallbackCtx = &copy
+					handled = false
+				}
+			}
+		}
+		if !handled {
 			source, generationError := gen.ComptimeProgram(files, info, node)
 			if generationError != nil {
 				diags.AddCode(node.Pos(), "comptime.result", "cannot bake computation: %v", generationError)
 				return
 			}
-			value, err = runComptimeObserved(files, source, module, goctx, usage, check.AuditComptimeExecution(info, node), info.Embeds...)
+			if usage == nil {
+				value, err = runComptime(files, source, module, fallbackCtx, info.Embeds...)
+			} else {
+				value, err = runComptimeObserved(files, source, module, fallbackCtx, usage, check.AuditComptimeExecution(info, node), info.Embeds...)
+			}
 		}
 		if err != nil {
 			diags.AddCode(node.Pos(), "comptime.evaluate", "comptime failed: %v", err)

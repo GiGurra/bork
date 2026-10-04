@@ -71,3 +71,12 @@ func TestRunLimitsAndOwnership(t *testing.T) {
 		t.Fatalf("invalid binding: %v", err)
 	}
 }
+
+func TestRunDoesNotFormatArbitraryPanic(t *testing.T) {
+	original := nativeEvaluation
+	t.Cleanup(func() { nativeEvaluation = original })
+	nativeEvaluation = func([]Call) []byte { cycle := []any{nil}; cycle[0] = cycle; panic(cycle) }
+	if _, err := Run(nil, time.Second); err == nil || !strings.Contains(err.Error(), "panic type []interface {}") {
+		t.Fatalf("arbitrary panic: %v", err)
+	}
+}
