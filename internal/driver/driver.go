@@ -324,6 +324,11 @@ func buildGoWithContext(files []*syntax.File, goSrc []byte, out string, module *
 	return buildGoWithMode(files, goSrc, out, module, context, "program", embeds...)
 }
 
+// goBuildCommandHook is initialized by tests before any compilation starts.
+// Production always invokes the normal build command. An execution receipt
+// collector must observe the effective hook command or decline this candidate.
+var goBuildCommandHook func(*goContext, string, *exec.Cmd) (*exec.Cmd, func([]byte) bool, func())
+
 func buildGoWithMode(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, context *goContext, mode string, embeds ...*check.Embedded) error {
 	if context.err != nil {
 		return fmt.Errorf("determining Go build configuration (is Go installed?): %w", context.err)
@@ -340,7 +345,21 @@ func buildGoWithMode(files []*syntax.File, goSrc []byte, out string, module *goM
 	cmd := context.command("build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
+	normal := cmd
+	var fallback func([]byte) bool
+	if goBuildCommandHook != nil {
+		if cached, retry, cleanup := goBuildCommandHook(context, mode, normal); cached != nil {
+			if cleanup != nil {
+				defer cleanup()
+			}
+			cmd = cached
+			fallback = retry
+		}
+	}
 	output, err := cmd.CombinedOutput()
+	if err != nil && fallback != nil && fallback(output) {
+		output, err = normal.CombinedOutput()
+	}
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {

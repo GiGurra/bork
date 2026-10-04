@@ -33,6 +33,7 @@ func TestMain(m *testing.M) {
 	goModuleHook = func(goMod []byte) []byte {
 		return fmt.Appendf(goMod, "\nrequire example.com/bindtest v0.0.0\n\nreplace example.com/bindtest => %s\n", dir)
 	}
+	configureCachedTestLinks()
 	os.Exit(m.Run())
 }
 
