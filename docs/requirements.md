@@ -3986,3 +3986,9 @@ functions may deliberately reserve effects for API compatibility; this is a
 reason to suppress that advisory warning. Existing compiler errors, including
 shadowing, unreachable match arms, unused imports and private-function effect
 checks, retain their enforcement and cannot be suppressed.
+
+- **Explicit update notice (implemented).** Released compilers can check the
+  module proxy once per UTC day in a detached worker and show a cached newer
+  version notice after useful interactive work. CI, JSON, machine output and
+  redirected output suppress it. `BORKUPDATECHECK=off` disables it, and offline
+  failures are silent. Updates remain explicit. See [update notices](cli.md#update-notices).

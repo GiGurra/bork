@@ -14,7 +14,9 @@ import (
 )
 
 // Names is the complete set of supported user settings, in display order.
-func Names() []string { return []string{"BORKCACHE", "BORKBIN", "BORK_CACHE", "BORKTOOLCHAIN"} }
+func Names() []string {
+	return []string{"BORKCACHE", "BORKBIN", "BORK_CACHE", "BORKTOOLCHAIN", "BORKUPDATECHECK"}
+}
 
 // Setting includes the origin of an effective value.
 type Setting struct {
@@ -83,9 +85,9 @@ func validate(name, value string) error {
 		if version.Query != version.Minimum {
 			return fmt.Errorf("BORKTOOLCHAIN must pin a full version such as v0.4.2")
 		}
-	} else if name == "BORK_CACHE" {
+	} else if name == "BORK_CACHE" || name == "BORKUPDATECHECK" {
 		if value != "on" && value != "off" {
-			return fmt.Errorf("BORK_CACHE must be on or off")
+			return fmt.Errorf("%s must be on or off", name)
 		}
 	} else if !filepath.IsAbs(value) {
 		return fmt.Errorf("%s must be an absolute path", name)
@@ -149,7 +151,7 @@ func defaultValue(name string) (string, error) {
 			return "", err
 		}
 		return goBin(values["GOBIN"], values["GOPATH"])
-	case "BORK_CACHE":
+	case "BORK_CACHE", "BORKUPDATECHECK":
 		return "on", nil
 	case "BORKTOOLCHAIN":
 		return "auto", nil

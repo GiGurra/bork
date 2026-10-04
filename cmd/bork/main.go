@@ -256,6 +256,9 @@ func version() string {
 }
 
 func main() {
+	if runUpdateWorker(os.Args) {
+		return
+	}
 	driver.EnableCLICache()
 	if len(os.Args) > 1 && os.Args[1] == "env" {
 		for i := 2; i < len(os.Args); i++ {
@@ -532,6 +535,7 @@ func main() {
 			fail(err)
 		}
 	}
+	root.PersistentPostRun = func(cmd *cobra.Command, _ []string) { maybeUpdateNotice(cmd) }
 	root.SilenceUsage, root.SilenceErrors = true, true
 	if err := root.Execute(); err != nil {
 		fail(err)
