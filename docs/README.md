@@ -22,7 +22,7 @@ Each page covers one area in plain terms, with code you can run.
 | [Scopes and tasks](language/scopes.md) | Resources, tasks, channels, shared state, cancellation, and `lazy` and `async` bindings |
 | [Compile-time evaluation](language/comptime.md) | `comptime` blocks and reading files at build time |
 | [Typed interpolation](language/interpolators.md) | `s"..."`, `sql.SQL"..."`, and defining your own prefix |
-| [Packages](language/packages.md) | Packages, modules, imports, type classes, and dependency assembly |
+| [Packages and type classes](language/packages.md) | Packages, modules, imports, type classes, derived instances, and dependency assembly |
 | [Calling Go](language/go-interop.md) | `unsafe go`, bindings to Go functions, and Go dependencies |
 | [Testing](language/testing.md) | Tests, snapshots, mocks, and property tests |
 

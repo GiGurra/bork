@@ -87,7 +87,7 @@ More on [facts](docs/language/facts.md).
 
 ### Effects
 
-A function's signature says what it does to the outside world: `uses io`, `net`, `clock`, `random`, or `state`. A function that declares nothing is pure, and the compiler holds it to that. Only `main` may do anything without saying so.
+A function's signature says what it does to the outside world: `uses io`, `net`, `clock`, `random`, or `state`. A function that declares nothing is pure, and the compiler holds it to that. Only `main` and tests may use effects without saying so.
 
 ```bork
 fn greeting(name: String): String {

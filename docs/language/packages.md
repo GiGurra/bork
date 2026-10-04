@@ -1,4 +1,4 @@
-# Packages
+# Packages and type classes
 
 ## Packages and modules
 
@@ -25,11 +25,11 @@ type Cents = Int where positive
 type Price = { label: String, amount: Cents }
 
 fn Format(p: Price): String {
-  s"${p.label}: ${dollars(p.amount)}"
+  s"${p.label}: ${unit(p.amount)}"
 }
 
-fn dollars(cents: Int): String {
-  s"$$${cents / 100}.${cents % 100}"
+fn unit(cents: Int): String {
+  s"$cents cents"
 }
 ```
 
@@ -43,7 +43,7 @@ fn main() {
 }
 ```
 
-- **Names that start with an upper-case letter are exported.** `Format`, `Price`, and `Cents` can be used by other packages. `dollars` and `positive` cannot.
+- **Names that start with an upper-case letter are exported.** `Format`, `Price`, and `Cents` can be used by other packages. `unit` and `positive` cannot be named by them. The fields of an exported record are visible wherever the record is.
 - An import can be renamed: `import cash "example.com/shop/money"`.
 - An unused import is an error, and packages cannot import each other in a circle.
 - The program is run from the root: `bork run shop`.
@@ -121,7 +121,7 @@ type Money = { cents: Int }
 
 instance showMoney: Show[Money] {
   fn show(m: Money): String {
-    s"$$${m.cents / 100}.${m.cents % 100}"
+    s"${m.cents} cents"
   }
 }
 

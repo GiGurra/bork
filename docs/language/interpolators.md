@@ -22,7 +22,7 @@ fn main() {
 
 ## `sql.SQL"..."`
 
-Building a query by pasting user input into text is how SQL injection happens. The `sql.SQL` prefix from [bork/sql](../std/sql.md) builds a `Statement` instead of a `String`. The literal text is the query, and each inserted value is sent to the database separately, as a bound parameter.
+The `sql.SQL` prefix from [bork/sql](../std/sql.md) builds a `Statement` instead of a `String`. The literal text is the query, and each inserted value is sent to the database separately, as a bound parameter.
 
 ```bork
 import "bork/sql"
@@ -35,6 +35,8 @@ fn byName(db: sql.Connection, name: String) uses io + net: List[User] | sql.Erro
 ```
 
 Whatever `name` contains, it is only ever a value. It cannot change the query.
+
+`derive (Decode)` lets rows be read into `User` records. See [derived instances](packages.md#derived-instances).
 
 Types carry this through the API. Query functions take a `Statement`, and a `Statement` comes from a literal in your source code, so a `String` assembled at run time cannot be run as a query by accident. Running such text is possible, but it has to be spelled out with `sql.Unsafe(text)`.
 
@@ -120,4 +122,4 @@ A library can also check its literals at compile time, as `sql.SQL` does, by dec
 
 ---
 
-Previous: [Compile-time evaluation](comptime.md) · Next: [Packages](packages.md) · [All pages](../README.md#the-language)
+Previous: [Compile-time evaluation](comptime.md) · Next: [Packages and type classes](packages.md) · [All pages](../README.md#the-language)

@@ -22,7 +22,7 @@ fn main() {
 - A record is built by naming its type and its fields. A field with a default (`age: Int = 18`) can be left out.
 - Fields are read with a dot.
 - `==` compares records by their contents.
-- Printing a record shows it as it is written in code.
+- Printing a record shows its type name and fields, much as it is written in code.
 
 ### Changed copies
 

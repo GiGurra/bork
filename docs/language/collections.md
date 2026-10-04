@@ -61,7 +61,7 @@ fn main() {
 }
 ```
 
-There is no `while`, and no variable to count with. A loop that builds up a value is written as a `fold` or as a function that calls itself.
+`for` goes through a `List` or a `Seq`. There is no `while`, and no variable to count with. A loop that builds up a value is written as a `fold` or as a function that calls itself.
 
 ## Maps
 
@@ -89,7 +89,7 @@ true
 ```
 
 - A map literal is `{ key: value, ... }`. The empty map is `{:}`.
-- `put` and `remove` give a new map. The old one is unchanged, and the two share most of their storage, so this is cheap even for large maps.
+- `put` and `remove` give a new map. The old one is unchanged, and the two share most of their storage.
 - A map remembers the order in which keys were added. `m.sorted()` gives a map that keeps its keys in sorted order.
 - Two maps are equal when they hold the same entries.
 
@@ -100,9 +100,9 @@ Lists and maps work together. `groupBy` makes a map from a list, and `entries()`
 ```bork
 fn main() {
   words = ["apple", "avocado", "banana", "blueberry", "cherry"]
-  byLetter = words.groupBy(w => w.substring(0, 1))
-  println(byLetter)
-  counts = byLetter.mapValues(List.length)
+  byLength = words.groupBy(w => w.byteLength())
+  println(byLength)
+  counts = byLength.mapValues(List.length)
   println(counts.entries().filter(e => e.value > 1).toMap())
 }
 ```
@@ -136,7 +136,7 @@ fn main() {
 
 The first line of `main` computes only as many squares as it takes to find three even ones. A sequence can be consumed more than once, and each time it starts from the beginning.
 
-Standard packages use sequences for input that should not be loaded all at once, such as the lines of a file or the rows of a query.
+Standard packages use sequences for input that should not be loaded all at once, such as the lines of a file or the rows of a query. Such a sequence does I/O as it is consumed, and its type says so: `Seq[String] uses io`. The function that consumes it needs that [effect](effects.md).
 
 ## Bytes
 
@@ -173,7 +173,7 @@ fn main() {
 }
 ```
 
-The function given to `parMap` must be pure, which is what makes running it in parallel safe. `parFilter`, `parFlatMap`, and `parForEach` work the same way. `workers` limits how many run at a time, and defaults to the number of CPUs.
+The function given to `parMap` must be pure, meaning it has no [effects](effects.md). `parFilter`, `parFlatMap`, and `parForEach` work the same way. `workers` limits how many run at a time, and defaults to the number of CPUs.
 
 For work that has effects, such as calling a service for each element, use the `In` forms. They take a [scope](scopes.md), so the work can be cancelled, and they return `Cancelled` if it was. The [parallel_lists example](../../examples/parallel_lists/main.bork) shows them.
 

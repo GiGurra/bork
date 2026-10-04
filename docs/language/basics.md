@@ -36,7 +36,7 @@ fn area(width: Int, height: Int): Int {
 }
 
 fn greet(name: String, greeting: String = "Hello"): String {
-  s"$greeting, $name!"
+  greeting + ", " + name + "!"
 }
 
 fn main() {
@@ -53,6 +53,8 @@ fn main() {
 - Arguments can be passed by name, in any order, after the positional ones.
 
 A function that returns nothing leaves out the result type, as `main` does.
+
+A value shared by the whole package is declared at the top level with `lazy`, as in `lazy MaxRetries = 3`. It is computed the first time it is read.
 
 ## Everything is an expression
 
@@ -74,6 +76,8 @@ fn main() {
 ```
 
 A block `{ ... }` is a sequence of bindings and expressions, and its value is its last expression.
+
+An `if` without an `else` gives no value. It is used as a statement, to do something or to `return` early.
 
 A value that is computed and then ignored is a compile error. This catches a forgotten result. To drop one on purpose, bind it to `_`:
 
@@ -101,9 +105,9 @@ fn main() {
 }
 ```
 
-This prints `1000000 255 3 0.3`. Arithmetic on number literals is exact, which is why `0.1 + 0.2` is `0.3`.
+This prints `1000000 255 3 0.3`. Arithmetic on number literals is exact, which is why `0.1 + 0.2` is `0.3`. That applies to literals only. Floats held in names are ordinary 64-bit floats, and adding those two gives `0.30000000000000004`.
 
-Number types never mix on their own. Convert with `toInt`, `toFloat`, `toInt8`, and so on. When the value might not fit, the conversion returns a union and you have to handle the failure:
+Number types never mix on their own. Convert with `toInt`, `toFloat`, `toInt8`, and so on. When the value might not fit, the conversion returns either the number or an `OutOfRange`, and `match` tells them apart. [Matching and errors](matching.md) explains this form.
 
 ```bork
 fn main() {
@@ -118,6 +122,18 @@ fn main() {
 ```
 
 Integers wrap around on overflow. Dividing by a constant zero is a compile error.
+
+## Operators
+
+| Operators | Work on |
+| --- | --- |
+| `+` `-` `*` `/` | two numbers of the same type. `+` also joins strings |
+| `%` | two integers of the same type |
+| `<` `<=` `>` `>=` | numbers, strings, and runes |
+| `==` `!=` | any two values of the same type that can be compared |
+| `&&` `||` `!` | `Bool`. The right side of `&&` and `||` runs only when needed |
+
+`==` compares by content: two records, lists, or maps are equal when their parts are. Functions cannot be compared.
 
 ## Text
 
@@ -149,7 +165,7 @@ PADDED TEXT
 
 Only strings with the `s` prefix interpolate. `toString(x)` gives the same text as printing `x`.
 
-String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `endsWith`, `indexOf`, `toUpper`, `toLower`, `trim`, `replaceAll`, `repeat`, `substring`, `split`, `fields`, `lines`, and `runeAt`. To turn text into a value, use `parseInt`, `parseFloat`, or `parseBool`, which return the value or a `ParseError`.
+String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `endsWith`, `indexOf`, `toUpper`, `toLower`, `trim`, `replaceAll`, `repeat`, `substring`, `split`, `fields`, `lines`, and `runeAt`. The ones that may find nothing say so in their result: `indexOf` and `runeAt` return an `Option`, and `substring` returns the text or an `OutOfRange`. To turn text into a value, use `parseInt`, `parseFloat`, or `parseBool`, which return the value or a `ParseError`.
 
 ## Runes
 
@@ -173,7 +189,7 @@ Option.Some { value: ö }
 ```
 
 - `r.code()` gives the code point as an `Int32`.
-- `n.rune()` goes the other way and returns an `Option[Rune]`, because not every number is a valid character.
+- `n.rune()` on an `Int32` goes the other way and returns an `Option[Rune]`, because not every number is a valid character. An [`Option`](types.md#option) is a value that may be missing.
 - `isDigit`, `isLetter`, `isSpace`, `isUpper`, and `isLower` test what kind of character it is.
 
 ## Functions as values
@@ -197,7 +213,7 @@ fn main() {
 }
 ```
 
-`(Int) => Int` is the type of a function from `Int` to `Int`. A lambda can use the names around it. `return` and `?` are not allowed inside a lambda.
+`(Int) => Int` is the type of a function from `Int` to `Int`. A lambda can use the names around it. `return` is not allowed inside a lambda.
 
 ## Methods
 
@@ -221,6 +237,19 @@ fn main() {
 You declare a method by putting a receiver in parentheses before the name: `fn (u: User) isAdult()`. Methods can be added to your own types and to built-in ones such as `List` and `String`.
 
 `Type.method` names a method as a function value, as in `String.byteLength` above.
+
+A newline ends a statement, so a chain that continues on the next line must show that it is not finished. End the line with the dot:
+
+```bork
+fn main() {
+  names = ["tim", "ada"].
+  sorted().
+  map(n => n.toUpper())
+  println(names)
+}
+```
+
+Inside parentheses and brackets, newlines are ignored.
 
 ## Pipes
 

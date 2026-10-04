@@ -245,24 +245,28 @@ With the rule, a value known to be `positive` is also known to be `nonNegative`.
 Sometimes you know something the compiler cannot work out. `trust` states it:
 
 ```bork
-pred atMost(x: Int, max: Int) { x <= max }
+pred even(n: Int) { n % 2 == 0 }
 
-fn clampPercent(n: Int): Int where atMost(100) {
-  result = if (n > 100) { 100 } else { n }
-  trust atMost(result, 100)
+fn double(n: Int): Int where even {
+  result = n * 2
+  trust even(result)
   result
 }
 
 fn main() {
-  println(clampPercent(250))
+  println(double(21))
 }
 ```
 
-`trust` is a visible, searchable escape hatch. It is also checked when the tests run: in `bork test`, every `trust` is evaluated, and a false one fails the test with the offending value.
+The compiler does not reason about multiplication, so without the `trust` line this function is rejected: the promised `even` is not proven.
+
+A `trust` is checked when the tests run. Under `bork test`, every `trust` is evaluated, and a false one fails the test with the offending value.
 
 ## What facts cost
 
-Nothing at run time. Facts exist only during compilation, and the generated program contains just the checks you wrote yourself.
+Proving a fact costs nothing at run time. Facts exist only during compilation, and the generated program does not carry them.
+
+The checks that do run are the ones written in the code, such as the `if` in a validation function. Derived decoders are the other case: when JSON or another input is [decoded into a type](packages.md#derived-instances), the predicates on that type run on the incoming data.
 
 ## Where facts can be written
 

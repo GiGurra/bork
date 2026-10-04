@@ -1,6 +1,6 @@
 # Scopes and tasks
 
-A scope is a block that owns things with a lifetime: open files, connections, and running tasks. When the block ends, everything it owns is finished or closed. This one idea covers both resource cleanup and concurrency.
+A scope is a block that owns things with a lifetime: open files, connections, and running tasks. When the block ends, everything it owns is finished or closed.
 
 ## Scopes own resources
 
@@ -41,7 +41,9 @@ fn broken(path: String) uses io: String | fs.Error {
 file may be released: it belongs to scope s, which ended on line 4
 ```
 
-There is no `close` to forget and no way to use a closed file. A function that needs an open resource takes it as a parameter, and its caller's scope keeps it open for the duration of the call.
+Files are not closed by hand. A function that needs an open resource takes it as a parameter, and its caller's scope keeps it open for the duration of the call.
+
+A scope is itself a value, of type `Scope`, so a function can take one as a parameter and open resources or start tasks in it. Several examples below do this with `s: Scope`.
 
 ## Tasks
 
@@ -65,7 +67,7 @@ fn main() {
 - `spawn(s, () => ...)` gives a `Task[T]`, and `await(task)` waits for its result.
 - `launch(s, () => ...)` starts a task that has no result to wait for.
 
-Because every task belongs to a scope, no task is left running by accident. When the scope block is finished, all of its work is finished.
+Every task belongs to a scope. When the scope block is finished, all of its tasks are finished.
 
 Lists of tasks have helpers: `tasks.awaitAll()` gives every result in order, and `tasks.awaitFirst(s)` the first to finish. `race(s, [...])` runs several functions and keeps the first result, cancelling the others. See the [task_fanin example](../../examples/task_fanin/main.bork).
 
@@ -99,6 +101,9 @@ scope s with taskTimeout(100), cleanupTimeout(500) {
   ...
 }
 ```
+
+- `taskTimeout(ms)` limits how long the scope waits for its tasks to stop once it has been cancelled. After that it stops waiting, and a task that is still running is left behind. This is the one case where a task outlives its scope.
+- `cleanupTimeout(ms)` limits how long the scope waits for each resource to close.
 
 ## Channels
 

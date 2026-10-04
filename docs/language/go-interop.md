@@ -1,6 +1,6 @@
 # Calling Go
 
-bork programs compile to Go, and a bork package can use Go code directly. This is how the standard packages are built. It is also the one place where the compiler's guarantees depend on what you write, so it is fenced in and has to be switched on.
+bork programs compile to Go, and a bork package can use Go code directly. Here the compiler's guarantees depend on what you write, so Go code has to be switched on per package.
 
 Most programs never need this page.
 
@@ -13,7 +13,7 @@ module example.com/tools
 unsafe "example.com/tools/text"
 ```
 
-So a look at `bork.mod` shows where Go code can be, and a new entry there shows up in review. A program without a `bork.mod` cannot contain Go at all.
+`bork.mod` therefore lists every place where Go code can be. A program without a `bork.mod` cannot contain Go at all.
 
 ## Binding a Go function
 
@@ -30,7 +30,7 @@ The string is the Go import path, a dot, and the function name. Values are conve
 | Go | bork |
 | --- | --- |
 | integers, floats, `string`, `bool` | the number types, `String`, `Bool` |
-| slices and arrays | `List[T]` |
+| slices, and arrays coming from Go | `List[T]` |
 | maps | `Map[K, V]` |
 | `[]byte` | `Bytes` |
 | pointers | `Option[T]` |
@@ -101,8 +101,8 @@ This writes `go-deps.mod` and `go-deps.sum` next to `bork.mod`. Commit them. See
 
 ## More
 
-The [Go helper reference](../std-go.md) describes the helper API that Go bodies can use for options, maps, and scopes. The standard packages under `internal/std` are full-size examples of all of the above.
+The [Go helper reference](../std-go.md) describes the helper API that Go bodies can use for options, maps, and scopes. The standard packages under [internal/std](../../internal/std) are full-size examples of all of the above.
 
 ---
 
-Previous: [Packages](packages.md) · Next: [Testing](testing.md) · [All pages](../README.md#the-language)
+Previous: [Packages and type classes](packages.md) · Next: [Testing](testing.md) · [All pages](../README.md#the-language)

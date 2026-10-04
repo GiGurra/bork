@@ -18,7 +18,7 @@ fn main() {
 }
 ```
 
-`total` declares no effects, so it is **pure**: given the same arguments it gives the same result, and it does nothing else. `printTotal` prints, so it says `uses io`.
+`total` declares no effects, so it is **pure**: given the same arguments it gives the same result, and it does not touch the outside world. `printTotal` prints, so it says `uses io`.
 
 `uses` comes after the parameters and before the result type. Several effects are joined with `+`: `uses io + net`.
 
@@ -49,9 +49,11 @@ fn total(prices: List[Int]): Int {
 total uses io (it calls println), but its signature allows no effects; declare it: uses io
 ```
 
-So a signature can be trusted. If a function has no `uses`, calling it cannot touch a file or the network, however deep its call tree goes. When reading or reviewing code, the signatures tell you where the outside world comes in.
+If a function has no `uses`, nothing it calls can read a file or use the network, however deep its call tree goes.
 
-`main` and tests may use every effect without declaring them.
+Three things are not tracked as effects: logging with [bork/log](../std/log.md), the development helper `dbg`, and panics. A pure function can do those. Go code is the other limit, since the effects of an [`unsafe go`](go-interop.md) function are declared by its author.
+
+`main` and tests may use every run-time effect without declaring them. If `main` does declare `uses`, it is held to it.
 
 ## Functions passed as arguments
 
@@ -93,7 +95,7 @@ fn main() {
 
 ## Ambient values
 
-Some values belong to a whole request: a trace id, the signed-in user, a locale. Passing them through every function as a parameter is noisy. An ambient value is declared once, bound for a block of code, and read by the functions that say they need it.
+Some values belong to a whole request: a trace id, the signed-in user, a locale. An ambient value is an alternative to passing them through every function as a parameter. It is declared once, bound for a block of code, and read by the functions that say they need it.
 
 ```bork
 ambient requestId: String
@@ -117,7 +119,7 @@ fn main() {
 - `needs requestId` in a signature lets the function read it by name. It comes after `uses`.
 - `with (requestId: ...) { ... }` binds it for the block.
 
-This is still checked. A function that needs a value can only be called from inside a `with` that binds it, or from another function that needs it. `handle` declares the need because it calls `log`. Leaving out the `with` in `main` is a compile error, so a missing value is found by the compiler and not in production.
+This is still checked. A function that needs a value can only be called from inside a `with` that binds it, or from another function that needs it. `handle` declares the need because it calls `log`. Leaving out the `with` in `main` is a compile error.
 
 A function can treat a value as optional with `needs locale?`, and then reads it as an `Option`.
 

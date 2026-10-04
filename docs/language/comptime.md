@@ -23,7 +23,7 @@ Use it for lookup tables, parsed constants, and anything else that is known befo
 
 A `comptime` block is closed and pure:
 
-- It can use literals, functions, and the results of earlier `comptime` blocks.
+- It can use literals, names bound to literals, functions, and the results of earlier `comptime` blocks.
 - It cannot use run-time values, such as function parameters or the result of reading input.
 - It cannot have effects such as `io` or `net`. The one exception is reading build files, described below.
 
@@ -35,7 +35,7 @@ fn main() {
 }
 ```
 
-The result can be numbers, strings, lists, records, sealed and union values, and maps.
+The result can be made of numbers, strings, Bools, runes, lists, records, options and other sealed or union values, and maps. `Bytes`, functions, and resources cannot be stored.
 
 ## Failing the build
 

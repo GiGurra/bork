@@ -29,7 +29,7 @@ ok    an empty title gives an empty slug
 - `assert(condition)` fails when the condition is false.
 - A panic fails the test too.
 
-A test body may use any [effect](effects.md), like `main`.
+A test body may use any run-time [effect](effects.md) without declaring it, like `main`.
 
 ## Snapshots
 
@@ -51,7 +51,7 @@ The first run fails because there is no snapshot yet. `bork test --update` write
 
 ## Mocks
 
-A test can replace a function that has effects, so that it never touches the real network, clock, or disk. Nothing in the code under test has to change, and there are no interfaces to introduce.
+A test can replace a function that has effects, so that it never touches the real network, clock, or disk. Nothing in the code under test has to change.
 
 ```bork
 import "bork/time"
@@ -106,7 +106,7 @@ test "reversing twice changes nothing" (xs: List[Int]) {
 ```
 
 - Generated values respect the `where` clauses on the parameters.
-- Edge cases are tried first: zero, one, the largest and smallest numbers, empty strings and lists.
+- Edge cases are mixed in often: zero, one, the largest and smallest numbers, empty strings and lists, and the constants that the `where` clauses mention.
 - When a case fails, it is shrunk to a simpler one that still fails, and reported with its values and a seed. `bork test --seed N` repeats the run.
 - Each property runs 100 cases. `bork test --cases N` changes that.
 

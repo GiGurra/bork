@@ -33,7 +33,7 @@ Inside the braces, `{ radius }` binds the field to a name of its own, `{ height:
 | Pattern | Matches |
 | --- | --- |
 | `_` | anything |
-| `42`, `"yes"`, `'a'`, `true` | that exact value |
+| `42`, `"yes"`, `'a'`, `true` | that exact value, when the value being matched has that type |
 | `n` | anything, and names it `n` |
 | `n: Int` | a value of that type, named `n` |
 | `NotFound` | a value of that type, without naming it |
@@ -81,7 +81,7 @@ match is not exhaustive: missing Light.Amber
 
 The check looks inside nested patterns too, and reports the exact shape that is missing. An arm that can never be reached is also an error.
 
-This is what makes changing a program safe. Add a variant to a sealed type, or a new failure to a function's result, and the compiler lists every place that has to change.
+Add a variant to a sealed type, or a new failure to a function's result, and the compiler lists every `match` that has to change.
 
 ## Failures are values
 
@@ -118,7 +118,7 @@ The signature of `withdraw` lists everything that can happen, and the `match` in
 
 ## The `?` operator
 
-Passing a failure up to the caller is so common that it has an operator. `find(id)?` means: if the result is the success value, keep it and carry on. Otherwise return the failure from this function right away.
+The `?` operator passes a failure up to the caller. `find(id)?` means: if the result is the success value, keep it and carry on. Otherwise return the failure from this function right away.
 
 "Success" is the first member of the union. Every other member must be something the enclosing function is able to return, so `withdraw` has `NotFound` in its own result type.
 
@@ -198,7 +198,7 @@ fn main() {
 }
 ```
 
-While writing code, `todo()` fills in a branch you have not written yet. It compiles, and panics if it is reached. `dbg(expr)` prints an expression with its value and location and then returns the value, so it can wrap any part of an expression. `bork check` warns about both so they are not left behind.
+For unfinished code there is `todo()`, described under [development helpers](testing.md#development-helpers).
 
 ---
 
