@@ -128,13 +128,15 @@ If `BORKBIN` is absent from `PATH`, the command warns you to add it. If you are 
 
 ## Settings
 
-Three settings control where the compiler keeps things:
+Compiler settings control storage and toolchain selection:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `BORKCACHE` | the user cache directory plus `bork` (`~/.cache/bork` on Linux) | Where compiler results and staged builds are kept |
 | `BORKBIN` | Go's `GOBIN`, or else `GOPATH/bin` (normally `~/go/bin`) | Where `bork install` and `bork upgrade` put executables |
 | `BORK_CACHE` | `on` | Set to `off` to turn off the compile cache |
+| `BORKTOOLCHAIN` | `auto` | Automatically satisfy project compiler requirements; `local` disables switching, or an exact version such as `v0.4.2` selects that compiler |
+| `BORKVERSION` | the selected compiler's version | Read-only; also reports why that compiler was selected |
 
 ```sh
 bork env                        # show every setting and where its value comes from
@@ -147,6 +149,23 @@ bork env -u BORKBIN             # remove a saved setting
 A value comes from the first of these that sets it: an environment variable, a saved setting, the default. An environment variable therefore still wins after `-w` or `-u`. `BORKCACHE` and `BORKBIN` must be absolute paths.
 
 Saved settings live in `bork/env.json` under the user configuration directory (`~/.config/bork/env.json` on Linux).
+
+## Compiler versions
+
+A project can declare a minimum compiler version after its module line:
+
+```text
+module example.com/shop
+bork 0.4
+```
+
+With the default `BORKTOOLCHAIN=auto`, a compiler older than the requirement downloads and builds a suitable compiler through your Go module proxy, then runs it with the same arguments, working directory and input/output. `bork 0.4` resolves to the latest published `v0.4.x` when first downloaded; `bork 0.4.2` requests that exact release if switching is necessary. A newer installed compiler already satisfies this minimum. Development builds from a checkout remain local in auto mode.
+
+Compiler installations live in `BORKCACHE/toolchains/<os>-<arch>/<version>`. Later runs reuse them, including offline. Minor-version resolutions are cached until `bork clean --all`, so a project keeps its first resolved patch while the cache exists. Pin an exact version with `BORKTOOLCHAIN=v0.4.2` for reproducible builds across machines. An override below the project's minimum is an error. `BORKTOOLCHAIN=local` uses the running compiler and errors when it is too old.
+
+The nearest `bork.mod` to the command's file or directory supplies the requirement. `bork env`, `bork version`, and `bork lsp` use the current directory; `bork describe` uses the source file in its position argument. `bork env BORKVERSION` and `bork version` show the selected compiler and its reason. Updating settings (`env -w` or `env -u`), formatting, cleaning, project creation and compiler upgrades use the local executable so you can repair settings without downloading a compiler.
+
+Switching needs Go on `PATH` to install an uncached compiler. Download failures report how to check network and module-proxy access. The installed executable in `BORKBIN` stays unchanged, and different compiler images use separate compile-cache namespaces. `bork clean` keeps downloaded compilers; `bork clean --all` also removes them, waiting for an active installation to finish.
 
 ## The compile cache
 

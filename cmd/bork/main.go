@@ -19,6 +19,8 @@ import (
 	borkformat "github.com/GiGurra/bork/internal/format"
 	"github.com/GiGurra/bork/internal/lsp"
 	"github.com/GiGurra/bork/internal/project"
+	"github.com/GiGurra/bork/internal/toolchain"
+	"github.com/GiGurra/bork/internal/toolenv"
 	"github.com/spf13/cobra"
 )
 
@@ -235,8 +237,13 @@ func failDiagnostics(err error, asJSON bool, output io.Writer) {
 	os.Exit(1)
 }
 
+var releaseVersion string // Set by release builds; go install carries module metadata.
+
 func version() string {
-	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+	if releaseVersion != "" {
+		return releaseVersion
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Sum != "" && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 		return bi.Main.Version
 	}
 	return "dev"
@@ -277,6 +284,15 @@ func main() {
 				RunFunc: func(p *cleanParams, cmd *cobra.Command, _ []string) {
 					ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
 					defer stop()
+					if p.All {
+						cache, err := toolenv.Value("BORKCACHE")
+						if err != nil {
+							fail(err)
+						}
+						if err := toolchain.Clean(ctx, cache); err != nil {
+							fail(err)
+						}
+					}
 					report, err := driver.Clean(ctx, p.All)
 					if err != nil {
 						fail(err)
@@ -480,11 +496,16 @@ func main() {
 				Use:   "version",
 				Short: "print the bork version",
 				RunFunc: func(_ *boa.NoParams, _ *cobra.Command, _ []string) {
-					fmt.Println("bork", version())
+					fmt.Printf("bork %s (%s)\n", version(), compilerSelection.Reason)
 				},
 			},
 		),
 	}
 	command.SubCmds = append(command.SubCmds, envCommand(), upgradeCommand())
-	command.Run()
+	root := command.ToCobra()
+	configureToolchain(root)
+	root.SilenceUsage, root.SilenceErrors = true, true
+	if err := root.Execute(); err != nil {
+		fail(err)
+	}
 }

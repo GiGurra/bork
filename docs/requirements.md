@@ -3270,6 +3270,8 @@ test and benchmark controls are unsupported and cannot be persisted by `bork env
 
 ### Packages and modules
 
+- **Compiler requirements (implemented).** An optional `bork 0.4` or `bork 0.4.2` line after the module declaration sets a minimum compiler version. The CLI selects a suitable immutable compiler through the Go module proxy and a versioned local cache when needed. `BORKTOOLCHAIN=local` disables switching; an exact version override pins the compiler and must meet the project requirement. `bork env BORKVERSION` and `bork version` explain selection. See [compiler versions](cli.md#compiler-versions).
+
 - **Go style.** A directory is a package, a module file at the root names the module, imports use module paths, and there are no circular package dependencies.
 - **Record construction can belong to a package:** `type Config = private { ... }` restricts literals and `copy` to its declaring package. Fields stay readable and destructurable by importers. This includes nested copy paths and aliases. Package-owned Decode and GoStruct dictionaries are checked construction APIs that importers can use; foreign derivation cannot reconstruct a private record or nested private representation without delegating to a codec provided by its owner. Encode can read its public fields. Whole-value invariants are specified separately in bork-kum0ep.
 - **Visibility follows Go:** names starting with an upper-case letter are exported. This applies to top-level declarations (functions, predicates, types); the fields of an exported type are visible wherever the type is. Upper-case sealed variants are visible there too; lower-case variants are private to their declaring package and cannot be constructed or matched elsewhere, including generic variants.

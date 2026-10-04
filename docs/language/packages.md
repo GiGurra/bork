@@ -48,6 +48,8 @@ fn main() {
 - An unused import is an error, and packages cannot import each other in a circle.
 - The program is run from the root: `bork run shop`.
 
+An optional `bork 0.4` line after `module <path>` declares a minimum compiler version. The CLI selects a suitable compiler automatically when needed; see [compiler versions](../cli.md#compiler-versions) for exact pins, cached downloads and offline use.
+
 [Standard packages](../std/README.md) are imported as `bork/name` and need no `bork.mod`.
 
 ## Type classes

@@ -229,6 +229,10 @@ Source spans follow the lexer's token ends, independently of printed token text.
 Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. User modules declare `require <module> <canonical version>` lines in `bork.mod`, with Go-format checksums in `bork.sum` and a generated `go.mod`. Check/build diagnoses requirement drift from the generated manifest. Requirements merge with imported std dependencies by Go minimum version selection. `bork deps init/get/download` maintains them with Go module tools; `bork deps migrate` converts legacy `go-deps.mod`/`go-deps.sum` projects, which remain readable. See [std Go dependencies](std-go.md).
 
 
+## Module compiler requirements
+
+`bork.mod` may include one `bork <version>` directive after its `module` line. A minor version such as `0.4` declares a minimum of `v0.4.0` and resolves its latest patch when the CLI needs another compiler; a full version such as `0.4.2` declares that minimum and download target. Compiler selection settings and cache behavior are described in [the CLI](cli.md#compiler-versions).
+
 ## Internal helper locations
 
 `compilerCallerLocation()` is an internal zero-argument intrinsic accepted only
