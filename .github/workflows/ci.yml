@@ -26,31 +26,47 @@ jobs:
           cache-dependency-path: editors/vscode/package-lock.json
       - run: npm ci --prefix editors/vscode
       - run: npm test --prefix editors/vscode
-  test:
-    name: Test
+  shards:
+    name: Test shard plan
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.matrix.outputs.groups }}
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 -m unittest discover -s scripts -p 'test_ci.py'
+      - id: matrix
+        run: |
+          groups="$(python3 scripts/ci.py matrix)"
+          echo "groups=$groups" >> "$GITHUB_OUTPUT"
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Go
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-go
         id: go-cache
-        uses: ./.github/actions/setup-go
         with:
-          cache-name: test
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+          cache-name: lint
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
-
-      - name: Run tests
-        run: go test ./... -count=1
-
-      # The tests run the examples (with their args.txt) and check their
-      # output; this checks the CLI itself on each of them.
-      - name: Check the examples with the CLI
-        run: |
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.cache-paths }}
+          key: ${{ steps.go-cache.outputs.cache-key }}
+  examples:
+    name: CLI examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-go
+        id: go-cache
+        with:
+          cache-name: examples
+      # Suite tests run examples with args.txt and check output. This checks
+      # the CLI itself on every example in its own parallel job.
+      - run: |
           go install ./cmd/bork
           for d in examples/*/; do bork check "$d"; done
       - uses: actions/cache/save@v4
@@ -58,28 +74,22 @@ jobs:
         with:
           path: ${{ steps.go-cache.outputs.cache-paths }}
           key: ${{ steps.go-cache.outputs.cache-key }}
-  race:
-    name: Race (${{ matrix.group }})
+  suite:
+    name: ${{ matrix.mode == 'race' && 'Race' || 'Test' }} (${{ matrix.shard }})
+    needs: shards
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
-        group: [core, driver-cases, driver-examples, driver-integration-0, driver-integration-1]
+        mode: [normal, race]
+        shard: ${{ fromJSON(needs.shards.outputs.groups) }}
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go
-        id: go-cache
+      - uses: ./.github/actions/test-suite
         with:
-          cache-name: race-${{ matrix.group }}
-      - name: Run race group
-        env:
-          GOTOOLCHAIN: local
-        run: python3 scripts/race.py '${{ matrix.group }}'
-      - uses: actions/cache/save@v4
-        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.go-cache.outputs.cache-paths }}
-          key: ${{ steps.go-cache.outputs.cache-key }}
+          mode: ${{ matrix.mode }}
+          shard: ${{ matrix.shard }}
   replay:
     name: Captured-input parity
     runs-on: ubuntu-latest
@@ -99,7 +109,7 @@ jobs:
   ci-ok:
     name: CI ok
     if: always()
-    needs: [grammar, test, race, replay]
+    needs: [grammar, shards, lint, examples, suite, replay]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed
