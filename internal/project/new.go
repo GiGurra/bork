@@ -87,7 +87,10 @@ func New(path, template, modulePath string) error {
 
 // NextSteps returns commands to run from the shell after creating a project.
 func NextSteps(path, template string) string {
-	// Single quotes also make paths containing spaces safe to copy into a shell.
+	// Single quotes protect spaces; ./ prevents cd from interpreting options.
+	if !filepath.IsAbs(path) {
+		path = "./" + path
+	}
 	quoted := "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
 	steps := "  cd " + quoted + "\n  bork check .\n  bork test .\n"
 	if template != "lib" {

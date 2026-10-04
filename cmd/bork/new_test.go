@@ -19,7 +19,7 @@ func TestNewTemplates(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new: %v\n%s", err, out)
 			}
-			if !strings.Contains(string(out), "cd 'starter'") || !strings.Contains(string(out), "bork test .") {
+			if !strings.Contains(string(out), "cd './starter'") || !strings.Contains(string(out), "bork test .") {
 				t.Fatalf("next steps: %s", out)
 			}
 			dir := filepath.Join(root, "starter")
