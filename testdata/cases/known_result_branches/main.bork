@@ -1,0 +1,32 @@
+pred positive(n: Int) { n > 0 }
+type C = {
+  n: Int
+  lazy value: Int where positive = {
+    if (n == 1) { return -1 }
+    2
+  }
+}
+fn eager(): Int where positive {
+  n = 0
+  if (n == 1) { return -1 }
+  2
+}
+fn rounded(): Int where positive {
+  n: Float32 = 16777217.0
+  if (n != 16777216.0) { return -1 }
+  2
+}
+fn main() {
+  c = C { n: 0 }
+  println(c.value)
+  println(c.copy(n: 2).value)
+  println(eager())
+  println(rounded())
+  n = 0
+  lazy local: Int where positive = { if (n == 1) { return -1 }; 2 }
+  println(local)
+  scope s {
+    async(s) result: Int where positive = { if (n == 1) { return -1 }; 2 }
+    println(result)
+  }
+}
