@@ -4,7 +4,9 @@ Language support for [bork](https://github.com/GiGurra/bork), a backend language
 
 ## Install
 
-Find **bork** (`gigurra.bork`) in the Extensions view, or open its [Marketplace page](https://marketplace.visualstudio.com/items?itemName=gigurra.bork). VSCodium and editors using Open VSX can use the [Open VSX page](https://open-vsx.org/extension/gigurra/bork). Registry listings become available after the first release.
+Download the `.vsix` from a [compiler GitHub Release](https://github.com/GiGurra/bork/releases), then install it with `code --install-extension <downloaded.vsix>` (or the editor's **Install from VSIX** command). The same package works in Cursor and VSCodium. A Marketplace account is not required.
+
+Registry publishing is available separately: find **bork** (`gigurra.bork`) in the Extensions view, or open its [Marketplace page](https://marketplace.visualstudio.com/items?itemName=gigurra.bork). VSCodium and editors using Open VSX can use the [Open VSX page](https://open-vsx.org/extension/gigurra/bork). Registry listings become available after a maintainer publishes to those registries.
 
 Install [Go](https://go.dev/dl/) 1.26 or later, then the compiler:
 

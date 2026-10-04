@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ['v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      homebrew_only:
+        description: Sync the tap to the latest published release without making a release
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: bork-release
+  queue: max
+
+jobs:
+  version:
+    if: >-
+      inputs.homebrew_only != true &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+      enabled: ${{ steps.version.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Require successful main CI and select the release version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SOURCE_SHA&event=push&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success")] | length')
+          if [ "$passed" = 0 ]; then
+            echo '::error::This commit has no successful main CI run; no release tag will be created.'
+            exit 1
+          fi
+          # CI runs started before release automation existed need no retroactive release.
+          if ! git cat-file -e "$SOURCE_SHA:scripts/release.py"; then
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT" = push ]; then
+            version=${SOURCE_REF#refs/tags/}
+            python3 -c 'import sys; sys.path.insert(0, "scripts"); import release; release.version_tuple(sys.argv[1])' "$version"
+          else
+            version=$(git tag --points-at "$SOURCE_SHA" | python3 -c '
+          import sys
+          sys.path.insert(0, "scripts")
+          import release
+          tags = [tag.strip() for tag in sys.stdin if release.VERSION.fullmatch(tag.strip())]
+          print(max(tags, key=release.version_tuple) if tags else "")')
+            if [ -z "$version" ]; then
+              version=$(python3 scripts/release.py version $(git tag --list))
+              latest=$(git tag --list | python3 -c '
+          import sys
+          sys.path.insert(0, "scripts")
+          import release
+          tags = [tag.strip() for tag in sys.stdin if release.VERSION.fullmatch(tag.strip())]
+          print(max(tags, key=release.version_tuple) if tags else "")')
+              if [ -n "$latest" ]; then
+                git merge-base --is-ancestor "$latest" "$SOURCE_SHA"
+              fi
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo 'enabled=true' >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    if: needs.version.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build and archive the compiler
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          binary=bin/bork
+          if [ "$GOOS" = windows ]; then binary=bin/bork.exe; fi
+          go build -trimpath -ldflags="-s -w -X main.releaseVersion=$VERSION" -o "$binary" ./cmd/bork
+          python3 scripts/release.py archive --binary "$binary" --version "$VERSION" --os "$GOOS" --arch "$GOARCH"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  extension:
+    needs: version
+    if: needs.version.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - run: npm ci --prefix editors/vscode
+      - run: npm run package --prefix editors/vscode
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-vsix
+          path: editors/vscode/*.vsix
+          if-no-files-found: error
+
+  publish:
+    needs: [version, build, extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Verify artifacts, tag the tested commit, and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          SOURCE_SHA: ${{ needs.version.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release.py checksums --version "$VERSION" dist
+          git fetch origin --tags
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            test "$(git rev-list -n 1 "$VERSION")" = "$SOURCE_SHA"
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email 'github-actions[bot]@users.noreply.github.com'
+            git tag -a "$VERSION" "$SOURCE_SHA" -m "Release $VERSION"
+            git push origin "$VERSION"
+          fi
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/* --clobber
+          else
+            latest=false
+            if [ "$(python3 scripts/release.py latest $(git tag --list))" = "$VERSION" ]; then latest=true; fi
+            gh release create "$VERSION" dist/* --verify-tag --title "bork $VERSION" --generate-notes --latest="$latest"
+          fi
+
+  homebrew:
+    needs: [version, publish]
+    if: >-
+      !cancelled() &&
+      (inputs.homebrew_only == true || needs.publish.result == 'success')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check for the tap deploy key
+        id: key
+        env:
+          TAP_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          if [ -z "$TAP_KEY" ]; then
+            echo 'Homebrew deploy key is absent; skipping tap update.'
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v6
+        if: steps.key.outputs.enabled == 'true'
+        with:
+          repository: GiGurra/homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          path: tap
+      - name: Write the formula, including the first release
+        if: steps.key.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          url="https://github.com/GiGurra/bork/archive/refs/tags/$version.tar.gz"
+          curl --fail --location --retry 12 --retry-delay 5 --retry-all-errors --max-time 60 "$url" -o source.tar.gz
+          checksum=$(python3 -c 'import hashlib; print(hashlib.sha256(open("source.tar.gz", "rb").read()).hexdigest())')
+          mkdir -p tap/Formula
+          python3 scripts/release.py formula --version "$version" --sha256 "$checksum" > tap/Formula/bork.rb
+          ruby -c tap/Formula/bork.rb
+          git -C tap config user.name 'github-actions[bot]'
+          git -C tap config user.email 'github-actions[bot]@users.noreply.github.com'
+          git -C tap add Formula/bork.rb
+          if ! git -C tap diff --cached --quiet; then
+            git -C tap commit -m "bork $version"
+            git -C tap push
+          fi

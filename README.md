@@ -14,6 +14,16 @@ bork compiles through Go, so [Go](https://go.dev/dl/) 1.26 or later must be inst
 go install github.com/GiGurra/bork/cmd/bork@latest
 ```
 
+Prebuilt archives for Linux, macOS and Windows (amd64 and arm64) are available on [GitHub Releases](https://github.com/GiGurra/bork/releases), with `checksums.txt` and the VS Code `.vsix`. Extract the compiler archive and put `bork` (`bork.exe` on Windows) on `PATH`. Go is still required to compile programs.
+
+On macOS or Linux with Homebrew:
+
+```sh
+brew install gigurra/tap/bork
+```
+
+The formula installs Go as a runtime dependency. Use `brew upgrade bork` to update an installation managed by Homebrew; `bork upgrade` installs a compiler into `BORKBIN` instead.
+
 Update explicitly with `bork upgrade`, or choose a release with `bork upgrade v0.4.0`. This runs `go install` into `BORKBIN` (shown by `bork env BORKBIN`) and reports the old and installed versions. Add that directory to `PATH`. See [upgrades](docs/cli.md#upgrades).
 
 Projects can set a minimum compiler with `bork 0.4` in `bork.mod`. Older compilers automatically install and use a suitable release through Go's module proxy. Use `BORKTOOLCHAIN=local` to disable switching, or `BORKTOOLCHAIN=v0.4.2` to pin an exact compiler. `bork version` and `bork env BORKVERSION` explain the selection. See [compiler versions](docs/cli.md#compiler-versions).
