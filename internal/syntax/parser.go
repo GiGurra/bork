@@ -200,6 +200,7 @@ func (p *parser) importDecl() (imp *Import) {
 		imp.Name = p.next().Text
 	}
 	t := p.expect(TString, "(the package's import path)")
+	imp.End = t.End
 	path, err := strconv.Unquote(t.Text)
 	if err != nil || path == "" || strings.HasPrefix(path, "/") || strings.HasSuffix(path, "/") || strings.Contains(path, "\\") {
 		p.errorf(t.Pos, "invalid import path %s", t.Text)

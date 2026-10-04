@@ -38,7 +38,11 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 	case "textDocument/documentSymbol":
 		return symbols(path, src), nil
 	case "textDocument/codeAction":
-		return s.codeActions(path, p), nil
+		out := s.codeActions(path, p)
+		if action := s.organizeImports(path, p); action != nil {
+			out = append(out, action)
+		}
+		return out, nil
 	}
 	pkg := s.state(path)
 	if method == "textDocument/completion" {

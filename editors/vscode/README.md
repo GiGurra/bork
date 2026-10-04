@@ -43,6 +43,11 @@ destructuring patterns. Generated arms call `todo()` until you implement them.
 Fixes use current compiler diagnostics, even before the first successful check,
 and format the edited document with `bork fmt`.
 
+**Organize Imports** removes imports the compiler reports as unused, sorts the
+remaining imports by path, and preserves comments. It formats the result and
+uses current compiler diagnostics to remove only unused imports. The action
+requires valid syntax and no remaining errors other than unused imports.
+
 References search the compiler graphs for open packages and their imports.
 Rename currently supports local variables and package-private functions, requires
 successful current checks, and refuses names already present in affected packages. Proposed edits are

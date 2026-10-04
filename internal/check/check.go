@@ -601,7 +601,8 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 		pkg := c.pkgs[f.Package]
 		for _, imp := range f.Imports {
 			if pkg.imports[imp.Name] != nil && !pkg.used[imp.Name] {
-				c.errorf(imp.Pos, "%s is imported but not used", imp.Path)
+				c.diags.AddCode(imp.Pos, "import.unused", "%s is imported but not used", imp.Path)
+				c.diags.Suggest(imp.Pos, "import.unused", imp.End, diag.Fix{Message: "Remove unused import", Edits: []diag.TextEdit{{Start: imp.Pos, End: imp.End}}})
 			}
 		}
 	}
