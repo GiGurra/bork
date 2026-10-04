@@ -122,6 +122,23 @@ func executable(dir string) string {
 // Ensure resolves a query once and publishes a verified, immutable compiler.
 // Minor queries retain their first resolution until toolchain caches are cleaned.
 func Ensure(ctx context.Context, root, query string, output io.Writer) (path, version string, err error) {
+	return ensure(ctx, root, query, output, nil)
+}
+
+// WithCompiler holds the installation lock through the callback. Callers can
+// start the compiler while cleanup is excluded, then wait after releasing it.
+func WithCompiler(ctx context.Context, root, query string, output io.Writer, start func(path, version string) error) error {
+	_, _, err := ensure(ctx, root, query, output, start)
+	return err
+}
+
+func ensure(ctx context.Context, root, query string, output io.Writer, start func(path, version string) error) (path, version string, err error) {
+	finish := func(path, version string) (string, string, error) {
+		if start != nil {
+			return path, version, start(path, version)
+		}
+		return path, version, nil
+	}
 	parsed, err := manifest.ParseVersion(query)
 	if err != nil {
 		return "", "", err
@@ -155,7 +172,7 @@ func Ensure(ctx context.Context, root, query string, output io.Writer) (path, ve
 		if version != resolved {
 			return "", "", fmt.Errorf("cached compiler %s reports %s", path, version)
 		}
-		return path, version, nil
+		return finish(path, version)
 	} else if _, statErr := os.Stat(path); statErr == nil {
 		return "", "", fmt.Errorf("cached compiler is invalid: %w; run bork clean --all to remove it", err)
 	}
@@ -193,7 +210,7 @@ func Ensure(ctx context.Context, root, query string, output io.Writer) (path, ve
 			return "", "", err
 		}
 	}
-	return path, version, nil
+	return finish(path, version)
 }
 
 func acquire(ctx context.Context, path string) (func(), error) {

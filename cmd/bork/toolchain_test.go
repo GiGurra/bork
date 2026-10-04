@@ -71,7 +71,7 @@ func TestToolchainCLI(t *testing.T) {
 		t.Fatalf("project reason: %v\n%s", err, out)
 	}
 	oldCompiler := filepath.Join(dir, "old-bork"+filepath.Ext(exe))
-	build := exec.Command(cliFixture.tool, "build", "-ldflags=-X main.releaseVersion=v0.3.9", "-o", oldCompiler, ".")
+	build := exec.Command(cliFixture.tool, "build", "-ldflags=-X main.releaseVersion=v0.3.9 -X github.com/GiGurra/bork/internal/driver.cacheTestGate=test", "-o", oldCompiler, ".")
 	build.Dir, build.Env = cliFixture.source, cliFixture.env
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build old compiler: %v\n%s", err, out)
@@ -90,6 +90,41 @@ func TestToolchainCLI(t *testing.T) {
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), "fixture v0.4.2") || !strings.Contains(string(out), "selected by "+filepath.Join(dir, "bork.mod")) {
 		t.Fatalf("automatic minimum switch: %v\n%s", err, out)
+	}
+	for _, args := range [][]string{{"version", "--future-flag"}, {"future-command"}} {
+		cmd = exec.Command(oldCompiler, args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), "fixture v0.4.2") {
+			t.Fatalf("new compiler CLI forwarding: %v\n%s", err, out)
+		}
+	}
+	application := filepath.Join(dir, "application")
+	if err := os.Mkdir(application, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(application, "bork.mod"), []byte("module example.com/application\nunsafe \"example.com/application\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	program := `fn inspect() uses io: String unsafe go {
+  import "os"
+  import "os/exec"
+  output, err := exec.Command(os.Getenv("ORIGINAL_BORK"), "version").CombinedOutput()
+  if err != nil { return "nested bork failed: " + string(output) }
+  return "markers=" + os.Getenv("BORK_TOOLCHAIN_SELECTED") + "|" + os.Getenv("BORK_TOOLCHAIN_REASON") + " nested=" + string(output)
+}
+fn main() uses io { println(inspect()) }
+`
+	if err := os.WriteFile(filepath.Join(application, "main.bork"), []byte(program), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORIGINAL_BORK", exe)
+	t.Setenv("BORKTOOLCHAIN", "local")
+	t.Setenv(toolchain.SelectedEnv, "v0.3.9")
+	t.Setenv(toolchain.ReasonEnv, "selected by test handoff")
+	cmd = exec.Command(oldCompiler, "run", ".")
+	cmd.Dir = application
+	if out, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(out), "markers=| nested=bork dev (local compiler)") {
+		t.Fatalf("switch markers leaked to user program/nested bork: %v\n%s", err, out)
 	}
 	t.Setenv(toolchain.SelectedEnv, "v0.9.0")
 	cmd = exec.Command(exe, "version")

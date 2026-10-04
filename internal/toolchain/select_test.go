@@ -95,8 +95,26 @@ func TestEnsureCompiler(t *testing.T) {
 	if _, _, err := Ensure(context.Background(), root, "v0.5.0", io.Discard); err == nil || !strings.Contains(err.Error(), "requires Go") {
 		t.Fatalf("missing Go: %v", err)
 	}
-	if err := Clean(context.Background(), root); err != nil {
+	cleaned := make(chan error, 1)
+	if err := WithCompiler(context.Background(), root, "v0.4.2", io.Discard, func(path, _ string) error {
+		go func() { cleaned <- Clean(context.Background(), root) }()
+		select {
+		case err := <-cleaned:
+			t.Fatalf("cleanup raced compiler startup: %v", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+		_, err := os.Stat(path)
+		return err
+	}); err != nil {
 		t.Fatal(err)
+	}
+	select {
+	case err := <-cleaned:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cleanup remained blocked after startup")
 	}
 	if _, err := os.Stat(filepath.Join(root, "toolchains")); !os.IsNotExist(err) {
 		t.Fatalf("clean kept compilers: %v", err)

@@ -503,7 +503,11 @@ func main() {
 	}
 	command.SubCmds = append(command.SubCmds, envCommand(), upgradeCommand())
 	root := command.ToCobra()
-	configureToolchain(root)
+	if path, enabled := earlyToolchainTarget(root, os.Args[1:]); enabled {
+		if err := selectToolchain(root, path); err != nil {
+			fail(err)
+		}
+	}
 	root.SilenceUsage, root.SilenceErrors = true, true
 	if err := root.Execute(); err != nil {
 		fail(err)
