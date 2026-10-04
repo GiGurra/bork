@@ -16,6 +16,15 @@ func isolate(t *testing.T) {
 	t.Setenv("APPDATA", dir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
+	// Without a mode file, go env may leave telemetry writers that race
+	// TempDir cleanup.
+	telemetry := filepath.Join(dir, "config", "go", "telemetry")
+	if err := os.MkdirAll(telemetry, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(telemetry, "mode"), []byte("off"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range Names() {
 		t.Setenv(name, "")
 	}
