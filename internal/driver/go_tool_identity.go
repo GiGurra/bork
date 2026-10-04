@@ -77,6 +77,9 @@ func captureGoToolEvidence(path string) ([sha256.Size]byte, *goToolEvidence, err
 }
 
 func (v *goContextValidation) toolCurrent() bool {
+	if v.installedSDK != nil {
+		return v.installedSDK.current(v.launcher, v.root, v.version)
+	}
 	if v.toolEvidence == nil {
 		digest, err := goToolDigest(v.launcher)
 		return err == nil && digest == v.toolDigest
