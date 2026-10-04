@@ -85,6 +85,20 @@ func loadGoContext(ctx *goContext) *goContext {
 		ctx.err = err
 		return ctx
 	}
+	// Include launcher bytes, not just its path/version. A full toolchain/input
+	// inventory is still required before compilation-result reuse.
+	ctx.toolDigest, err = goToolDigest(ctx.tool)
+	if err != nil {
+		ctx.err = err
+		return ctx
+	}
+	ctx.pinSettings()
+	ctx.namesCache = ctx.values["GO111MODULE"] != "off" && ctx.driver == "off" && ctx.driverErr == nil
+	return ctx
+}
+
+// pinSettings derives subprocess settings and namespace from captured values.
+func (ctx *goContext) pinSettings() {
 	// Prevent later saved-GOENV edits from changing a generated subprocess's
 	// settings. Derived read-only values are identity evidence, not overrides.
 	keys := make([]string, 0, len(ctx.values))
@@ -103,18 +117,9 @@ func loadGoContext(ctx *goContext) *goContext {
 		}
 	}
 	ctx.env = append(ctx.env, "GOENV=off")
-	// Include launcher bytes, not just its path/version. A full toolchain/input
-	// inventory is still required before compilation-result reuse.
-	ctx.toolDigest, err = goToolDigest(ctx.tool)
-	if err != nil {
-		ctx.err = err
-		return ctx
-	}
 	identity = append(identity, ctx.tool, ctx.driver, fmt.Sprintf("%x", ctx.toolDigest))
 	encoded, _ := json.Marshal(identity)
 	ctx.namespace = sha256.Sum256(encoded)
-	ctx.namesCache = ctx.values["GO111MODULE"] != "off" && ctx.driver == "off" && ctx.driverErr == nil
-	return ctx
 }
 
 func readOnlyGoSetting(key string) bool {
