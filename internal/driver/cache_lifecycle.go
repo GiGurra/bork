@@ -19,15 +19,21 @@ const cacheInventoryLimit = 4096
 // Lifecycle limits count all compiler namespaces. The smaller test policy is
 // private; no user-controlled policy can make an artifact bypass decoder bounds.
 type cacheLimits struct {
+	stageNodes  int
+	stageBytes  int64
 	resultBytes int64
 	entries     int
 }
 
 func (s cacheStore) limits() cacheLimits {
 	if s.policy != nil {
-		return *s.policy
+		out := *s.policy
+		if out.stageNodes <= 0 {
+			out.stageNodes = goStageInventoryLimit
+		}
+		return out
 	}
-	return cacheLimits{resultBytes: cacheResultByteLimit, entries: cacheEntryLimit}
+	return cacheLimits{stageNodes: goStageInventoryLimit, stageBytes: cacheResultByteLimit, resultBytes: cacheResultByteLimit, entries: cacheEntryLimit}
 }
 
 type cacheResultEntry struct {
