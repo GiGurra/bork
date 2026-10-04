@@ -139,7 +139,7 @@ fn main() {run(1)}`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(t.TempDir(), "main.bork")
+			path := filepath.Join(fixtureDir(t), "main.bork")
 			if err := os.WriteFile(path, []byte(tc.source+"\n"), 0644); err != nil {
 				t.Fatal(err)
 			}

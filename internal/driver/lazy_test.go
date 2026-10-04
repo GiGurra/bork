@@ -44,7 +44,7 @@ func TestLazyBindingChecks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			if err := os.WriteFile(filepath.Join(dir, "bork.mod"), []byte("module example.com/lazytest\nunsafe \"example.com/lazytest\"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}

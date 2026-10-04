@@ -36,7 +36,7 @@ fn main(){println(comptime{choose()})}`, "Option.Some { value: 9 }\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +87,7 @@ fn main(){println(comptime{bad()})}`, "valid(Value.N { n: -1 }) is false"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			for name, data := range map[string]string{ModFile: "module example.com/comptime\nunsafe \"example.com/comptime\"\n", "main.bork": tc.source} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
 					t.Fatal(err)
