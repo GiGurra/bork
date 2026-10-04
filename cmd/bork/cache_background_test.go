@@ -24,6 +24,7 @@ func TestDiskCacheBackgroundPublication(t *testing.T) {
 	t.Setenv("GOPACKAGESDRIVER", "off")
 	t.Setenv("GOTOOLCHAIN", "local")
 	t.Setenv("BORK_TEST_DISK_CACHE_BACKGROUND", "1")
+	t.Setenv("BORK_TEST_CACHE_PUBLISH", "on")
 	t.Setenv("BORK_TEST_CACHE_PUBLISH_NOTIFY_FD", "3")
 	t.Setenv("BORK_TEST_CACHE_PUBLISH_BARRIER_FD", "4")
 	root := t.TempDir()

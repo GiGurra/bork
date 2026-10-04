@@ -33,6 +33,7 @@ func TestCacheTrimDetached(t *testing.T) {
 	t.Setenv("GOTOOLCHAIN", "local")
 	t.Setenv("GOPACKAGESDRIVER", "off")
 	t.Setenv("BORK_TEST_DISK_CACHE_DIRECTORY", "")
+	t.Setenv("BORK_TEST_CACHE_TRIM", "on")
 	t.Setenv("BORK_TEST_CACHE_TRIM_TIMEOUT_MS", "")
 	source := filepath.Join(root, "main.bork")
 	if err := os.WriteFile(source, []byte("fn main(){}\n"), 0600); err != nil {

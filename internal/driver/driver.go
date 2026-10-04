@@ -71,8 +71,8 @@ func Check(path string) ([]*syntax.File, *check.Info, error) {
 // CheckWarnings returns the owned warning diagnostics used by the CLI, without
 // exposing mutable checked state. Check remains available to AST consumers.
 func CheckWarnings(path string) ([]diag.Diagnostic, error) {
-	if cacheTestState != nil && !cacheDisabled() {
-		_, warnings, err := testCachedCompile(path, false)
+	if cacheCLIState != nil && !cacheDisabled() {
+		_, warnings, err := cachedCompile(path, false)
 		return warnings, err
 	}
 	_, info, err := Check(path)
@@ -303,8 +303,8 @@ func evaluatorWithTimeoutMemo(files []*syntax.File, info *check.Info, module *go
 // Emit compiles the package at path to Go source. A program must have
 // a main function.
 func Emit(path string) ([]byte, error) {
-	if cacheTestState != nil && !cacheDisabled() {
-		src, _, err := testCachedCompile(path, true)
+	if cacheCLIState != nil && !cacheDisabled() {
+		src, _, err := cachedCompile(path, true)
 		return src, err
 	}
 	_, _, goSrc, err := emit(path)
@@ -348,6 +348,9 @@ func (program *compiledProgram) requireMain() error {
 
 // Build compiles the package at path into an executable at out.
 func Build(path, out string) error {
+	if cacheCLIState != nil && !cacheDisabled() {
+		return cachedBuild(path, out)
+	}
 	program, goSrc, err := emitProgramObserved(path, nil)
 	if err != nil {
 		return err

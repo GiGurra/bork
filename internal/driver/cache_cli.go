@@ -3,8 +3,10 @@ package driver
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/GiGurra/bork/internal/syntax"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -17,17 +19,18 @@ import (
 // age-based retention and population-independent performance permit automatic use.
 var cacheTestGate string
 
-var cacheTestState = startCacheTestState()
+var cacheCLIState = startCacheTestState()
 
-type cacheTestStartup struct {
-	start     sync.Once
-	root      string
-	done      chan struct{}
-	namespace [sha256.Size]byte
-	err       error
+type cacheCLIStartup struct {
+	production bool
+	start      sync.Once
+	root       string
+	done       chan struct{}
+	namespace  [sha256.Size]byte
+	err        error
 }
 
-func startCacheTestState() *cacheTestStartup {
+func startCacheTestState() *cacheCLIStartup {
 	if cacheTestGate != "enabled" || !cacheTrimSupported() || cacheDisabled() {
 		return nil
 	}
@@ -36,10 +39,23 @@ func startCacheTestState() *cacheTestStartup {
 		return nil
 	}
 
-	return &cacheTestStartup{root: root}
+	return &cacheCLIStartup{root: root}
 }
 
-func (state *cacheTestStartup) startIdentity() {
+// EnableCLICache activates owned complete-result reuse for the command-line
+// process. Library callers keep the ordinary AST pipeline unless explicitly
+// enabled. Unsupported platforms use their ordinary compiler path.
+func EnableCLICache() {
+	if cacheTestGate != "" && (cacheTestGate != "enabled" || os.Getenv("BORK_TEST_CACHE_PRODUCTION") != "1") || cacheDisabled() || runtime.GOOS != "linux" {
+		return
+	}
+	root, err := cacheRootDir()
+	if err == nil {
+		cacheCLIState = &cacheCLIStartup{root: root, production: true}
+	}
+}
+
+func (state *cacheCLIStartup) startIdentity() {
 	state.start.Do(func() {
 		state.done = make(chan struct{})
 		go func() {
@@ -49,11 +65,17 @@ func (state *cacheTestStartup) startIdentity() {
 	})
 }
 
-func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
-	state := cacheTestState
+func cachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
+	if result := lookupCachedCompilation(path, emit); result != nil {
+		return result.goSource, result.warnings, nil
+	}
+	return freshCachedCompile(path, emit)
+}
+func lookupCachedCompilation(path string, emit bool) *cachedCompilation {
+	state := cacheCLIState
 	cwd, err := os.Getwd()
 	if err != nil {
-		return freshTestCachedCompile(path, emit)
+		return nil
 	}
 	request := cacheArtifactRequest{Path: path, Cwd: cwd, Emit: emit}
 
@@ -65,10 +87,10 @@ func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error
 			state.startIdentity()
 			<-state.done
 			if state.err != nil {
-				return freshTestCachedCompile(path, emit)
+				return nil
 			}
 			if body.Namespace != state.namespace {
-				return freshTestCachedCompile(path, emit)
+				return nil
 			}
 			restore := func(receipt *goContextReceipt) (*goContext, error) {
 				return receipt.restoreInstalledSDK(resolveGoContext())
@@ -79,22 +101,52 @@ func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error
 				(cacheStore{root: state.root, namespace: body.Namespace}).touch(body.Key)
 				_ = queueCacheTrim(state.root)
 				testCacheProbe("hit")
-				return result.goSource, result.warnings, nil
+				return result
 			}
 		}
 	}
-	return freshTestCachedCompile(path, emit)
+	return nil
 }
 
-func freshTestCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
+func cachedBuild(path, out string) error {
+	if result := lookupCachedCompilation(path, true); result != nil {
+		// These are only source-location records for staging/error mapping. No
+		// parser/checker state is reconstructed or reused.
+		files := make([]*syntax.File, 0, len(result.sourcePaths))
+		for _, path := range result.sourcePaths {
+			resolved, err := result.inputs.readPath(path)
+			read, found := result.inputs.reads[sourceReadKey{"file", resolved}]
+			files = append(files, &syntax.File{Path: path, Prelude: err != nil || !found || read.err != nil})
+		}
+		return buildGoWithContext(files, result.goSource, out, result.module, result.context)
+	}
+	_, _, err := freshCachedCompileWithBuild(path, true, func(program *compiledProgram, source []byte) error {
+		return buildGoWithContext(program.files, source, out, program.module, program.context, program.info.Embeds...)
+	})
+	return err
+}
+
+func freshCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
+	return freshCachedCompileWithBuild(path, emit, nil)
+}
+func freshCachedCompileWithBuild(path string, emit bool, build func(*compiledProgram, []byte) error) ([]byte, []diag.Diagnostic, error) {
 
 	timings := newCacheTestTimings()
 	defer timings.finish()
 
-	background := os.Getenv("BORK_TEST_DISK_CACHE_BACKGROUND") == "1"
+	background := cacheCLIState.production || os.Getenv("BORK_TEST_DISK_CACHE_BACKGROUND") == "1"
 	compile := compileCacheMiss
 	if background {
 		compile = compileCacheMissUncaptured
+	}
+	if build != nil {
+		compile = func(path string, emit bool, observe func(string)) ([]byte, []diag.Diagnostic, *sessionArtifact, error) {
+			source, warnings, artifact, err := compileCacheMissWithBuild(path, emit, observe, build)
+			if err == nil && artifact != nil && !background {
+				artifact = captureCacheMiss(artifact)
+			}
+			return source, warnings, artifact, err
+		}
 	}
 	src, warnings, artifact, err := compile(path, emit, timings.observer("compile/"))
 	if err != nil {
@@ -105,7 +157,7 @@ func freshTestCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, 
 		testCacheProbe("bypass")
 		return src, warnings, nil
 	}
-	state := cacheTestState
+	state := cacheCLIState
 	if background {
 		timings.phase("publication/queue")
 		if queueCachePublication(state.root, artifact) {
@@ -139,6 +191,9 @@ func freshTestCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, 
 }
 
 func testCacheProbe(status string) {
+	if cacheTestGate != "enabled" {
+		return
+	}
 	path := os.Getenv("BORK_TEST_DISK_CACHE_PROBE")
 	if path == "" {
 		return
@@ -160,6 +215,9 @@ type cacheTestTimings struct {
 }
 
 func newCacheTestTimings() *cacheTestTimings {
+	if cacheTestGate != "enabled" {
+		return nil
+	}
 	path := os.Getenv("BORK_TEST_DISK_CACHE_TIMINGS")
 	if path == "" {
 		return nil

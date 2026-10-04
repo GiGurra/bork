@@ -26,6 +26,12 @@ func compileCacheMiss(path string, emit bool, observe func(string)) ([]byte, []d
 // compileCacheMissUncaptured keeps expensive certification out of ordinary
 // compilation. Only an eligible owned result reaches the publisher.
 func compileCacheMissUncaptured(path string, emit bool, observe func(string)) ([]byte, []diag.Diagnostic, *sessionArtifact, error) {
+	return compileCacheMissWithBuild(path, emit, observe, nil)
+}
+
+// The optional consumer uses the same fresh program for Go work, including
+// bypass programs. It must not retain the checked graph.
+func compileCacheMissWithBuild(path string, emit bool, observe func(string), build func(*compiledProgram, []byte) error) ([]byte, []diag.Diagnostic, *sessionArtifact, error) {
 	defer phase(observe, "")
 	loaded, module, err := loadCompilationInputs(path, observe)
 	if err != nil {
@@ -52,6 +58,12 @@ func compileCacheMissUncaptured(path string, emit bool, observe func(string)) ([
 		src, err = gen.Package(program.files, program.info)
 		if err != nil {
 			return nil, nil, nil, err
+		}
+	}
+	if build != nil {
+		phase(observe, "go-build")
+		if err := build(program, src); err != nil {
+			return nil, warningData, nil, err
 		}
 	}
 	// These paths stop before any cache configuration/SDK inventory capture.
