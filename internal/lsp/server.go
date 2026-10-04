@@ -41,6 +41,7 @@ type server struct {
 	workspaceRoots             []string
 	renameSessions             map[string]*driver.Session
 	renameVerificationSessions map[string]*driver.Session
+	navigationSessions         map[string]*driver.Session
 }
 type documentParams struct {
 	TextDocument struct {
@@ -223,6 +224,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			"signatureHelpProvider":  map[string]any{"triggerCharacters": []string{"(", ",", ":"}, "retriggerCharacters": []string{","}},
 			"semanticTokensProvider": semanticTokensCapability(),
 			"inlayHintProvider":      true, "hoverProvider": true, "definitionProvider": true, "documentFormattingProvider": true,
+			"typeDefinitionProvider": true, "implementationProvider": true, "callHierarchyProvider": true, "workspaceSymbolProvider": true, "documentHighlightProvider": true,
 			"referencesProvider": true, "renameProvider": map[string]any{"prepareProvider": true},
 			"documentSymbolProvider": true, "completionProvider": map[string]any{"triggerCharacters": []string{"."}},
 			"codeLensProvider":   map[string]any{"resolveProvider": false},
@@ -250,11 +252,18 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 	case "workspace/didChangeWatchedFiles":
 		return nil, nil, true
 	}
+	if m.Method == "workspace/symbol" || m.Method == "callHierarchy/incomingCalls" || m.Method == "callHierarchy/outgoingCalls" {
+		result, err := s.navigationRequest(m.Method, m.Params)
+		if err != nil {
+			return nil, &rpcError{-32602, err.Error()}, false
+		}
+		return result, nil, false
+	}
 	switch m.Method {
 	case "textDocument/didOpen", "textDocument/didChange", "textDocument/didSave", "textDocument/didClose",
 		"textDocument/signatureHelp", "textDocument/semanticTokens/full", "textDocument/semanticTokens/range",
 		"textDocument/hover", "textDocument/definition", "textDocument/completion", "textDocument/references",
-		"textDocument/rename", "textDocument/prepareRename", "textDocument/formatting", "textDocument/documentSymbol", "textDocument/codeAction", "textDocument/codeLens", "bork/tests", "textDocument/inlayHint":
+		"textDocument/rename", "textDocument/prepareRename", "textDocument/formatting", "textDocument/documentSymbol", "textDocument/codeAction", "textDocument/codeLens", "bork/tests", "textDocument/inlayHint", "textDocument/typeDefinition", "textDocument/implementation", "textDocument/prepareCallHierarchy", "textDocument/documentHighlight":
 	default:
 		return nil, &rpcError{-32601, "method not found"}, false
 	}

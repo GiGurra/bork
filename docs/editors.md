@@ -102,3 +102,23 @@ clone this repository, run **zed: install dev extension** from Zed's command
 palette, and select `editors/zed`. Rust and a C compiler are required to build
 the development extension. Its README covers compiler path overrides and
 building the WASM artifact. Registry publication is a separate step.
+
+## Navigation
+
+The language server supplies type definitions for checked expressions and written
+types, including container elements and union members. Implementation lookup
+lists known class instances or method implementations and sealed variants.
+Document highlights follow declaration identity, so a same-spelled local or field
+in another scope stays separate.
+
+Call hierarchy uses statically resolved compiler calls, including calls folded
+away during checking. Concrete class calls lead to their selected implementation;
+tests appear as callers and can be expanded. Calls through function values have
+no static target. Readable disk dependencies can be navigation targets; embedded
+standard-library sources currently have no editor URI.
+
+Workspace symbol search and incoming calls include closed packages in configured
+workspace folders. The compiler validates cached analyses against disk changes
+and unsaved buffers before each workspace query. Empty workspace folders are
+allowed. Broken workspace packages must check before workspace results are
+available.

@@ -29,6 +29,17 @@ func (w *EditorWorkspace) Sources() map[string]string {
 	}
 	return out
 }
+
+// OwnsSource distinguishes workspace declarations from readable dependency graphs.
+func (w *EditorWorkspace) OwnsSource(path string) bool {
+	for _, root := range w.paths {
+		if path == root || filepath.Dir(path) == root {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *EditorWorkspace) References(def diag.Pos) []check.SourceReference {
 	seen := map[check.SourceReference]bool{}
 	for _, a := range w.analyses {
@@ -57,7 +68,6 @@ func (w *EditorWorkspace) References(def diag.Pos) []check.SourceReference {
 // are excluded unless supplied as explicit workspace roots.
 func WorkspacePackages(path string, roots []string, overlays map[string]string) ([]string, error) {
 	reader := overlaySources{files: overlays}
-	cache := modcache.Root()
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -78,6 +88,7 @@ func WorkspacePackages(path string, roots []string, overlays map[string]string) 
 		}
 		return []string{dir}, nil
 	}
+	cache := modcache.Root()
 	roots = append(slices.Clone(roots), owner.root)
 	packages := map[string]bool{}
 	visited := map[string]bool{}
@@ -340,4 +351,44 @@ func renamePosition(pos diag.Pos, edits []diag.TextEdit) diag.Pos {
 		}
 	}
 	return out
+}
+
+// AnalyzeNavigationWorkspace includes each explicit editor root, including
+// independent standalone directories. Empty roots contribute no packages.
+func AnalyzeNavigationWorkspace(path string, roots []string, overlays map[string]string, sessions map[string]*Session) (*EditorWorkspace, error) {
+	candidates := append(slices.Clone(roots), path)
+	owned := map[string]bool{}
+	reader := overlaySources{files: overlays}
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		paths, err := WorkspacePackages(candidate, roots, overlays)
+		if err != nil {
+			return nil, err
+		}
+		for _, packagePath := range paths {
+			directory, err := reader.isDirectory(packagePath)
+			if err != nil {
+				return nil, err
+			}
+			if directory {
+				entries, err := reader.directory(packagePath)
+				if err != nil {
+					return nil, err
+				}
+				hasSource := false
+				for _, entry := range entries {
+					hasSource = hasSource || !entry.directory && filepath.Ext(entry.name) == ".bork"
+				}
+				if !hasSource {
+					continue
+				}
+			}
+			owned[packagePath] = true
+		}
+	}
+	return analyzeWorkspacePackages(slices.Sorted(maps.Keys(owned)), overlays, sessions)
 }

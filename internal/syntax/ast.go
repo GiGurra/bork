@@ -141,6 +141,7 @@ type FuncDecl struct {
 	// Constructor names the owning record in `fn New = Config.new`.
 	Constructor *TypeExpr
 	Pos         diag.Pos
+	End         diag.Pos // just after the complete declaration, including a body when present
 	Name        string
 	// IsPred is set for `pred name(x: T, ...) { ... }`: a function
 	// returning Bool that can be used in `where` clauses.
