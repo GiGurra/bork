@@ -361,6 +361,7 @@ type _test struct {
 	selector string
 	file string
 	line int
+	declared bool
 }
 
 // _skip is the panic of a test that finds it cannot run.
@@ -401,10 +402,10 @@ func _testCurrent() *_testRun {
 // _runTests runs the tests, each until it fails (panics), and reports
 // them in order. $BORK_PARALLEL tests run at a time (default 1).
 func _runTests(tests []_test) {
-	if filter := os.Getenv("BORK_TEST_FILTER"); filter != "" {
+	if filter := os.Getenv("BORK_TEST_FILTER"); os.Getenv("BORK_TEST_FILTER_SET") == "true" {
 		selected := tests[:0]
 		for _, t := range tests {
-			if t.selector == filter { selected = append(selected, t) }
+			if t.declared && t.selector == filter { selected = append(selected, t) }
 		}
 		tests = selected
 		if len(tests) == 0 { fmt.Fprintln(os.Stderr, "no test matches --filter"); os.Exit(1) }
@@ -477,13 +478,15 @@ func _runTests(tests []_test) {
 		if report != nil {
 			action := "pass"
 			if t.run == nil || r.skip { action = "skip" } else if r.msg != "" { action = "fail" }
+			name := t.selector
+			if name == "" { name = t.name }
 			err := json.NewEncoder(report).Encode(struct {
 				Action string ` + "`" + `json:"action"` + "`" + `
 				Name string ` + "`" + `json:"name"` + "`" + `
 				File string ` + "`" + `json:"file"` + "`" + `
 				Line int ` + "`" + `json:"line"` + "`" + `
 				Message string ` + "`" + `json:"message,omitempty"` + "`" + `
-			}{action, t.selector, t.file, t.line, func() string { if t.run == nil { return t.name }; return r.msg }()})
+			}{action, name, t.file, t.line, func() string { if t.run == nil { return t.name }; return r.msg }()})
 			if err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
 		}
 		r.mu.Lock()

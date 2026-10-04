@@ -147,8 +147,19 @@ func TestDiagnosticJSON(t *testing.T) {
 			if passing && err != nil || !passing && cmd.ProcessState.ExitCode() != 1 {
 				t.Fatalf("unexpected test exit: %v", err)
 			}
-			if stderr.Len() != 0 || !strings.Contains(stdout.String(), "example") || !strings.Contains(stdout.String(), "passed,") {
-				t.Fatalf("test report must remain on stdout: %s / %s", &stdout, &stderr)
+			var result struct {
+				Action, Name, File, Message string
+				Line                        int
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatalf("result JSON: %v: %s", err, &stdout)
+			}
+			wantAction := "fail"
+			if passing {
+				wantAction = "pass"
+			}
+			if result.Action != wantAction || result.Name != "example" || result.File != path || result.Line != 1 || !strings.Contains(stderr.String(), "passed,") {
+				t.Fatalf("unexpected test streams: %s / %s", &stdout, &stderr)
 			}
 		})
 	}
@@ -160,16 +171,19 @@ func TestDiagnosticJSON(t *testing.T) {
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("snapshot test: %v\n%s\n%s", err, &stdout, &stderr)
 		}
-		wantDiagnostics, err := os.ReadFile(filepath.Join(fixture, "expected_diagnostics.jsonl"))
-		if err != nil {
-			t.Fatal(err)
-		}
 		wantReport, err := os.ReadFile(filepath.Join(fixture, "expected_test_output.txt"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if stderr.String() != string(wantDiagnostics) || stdout.String()+"exit code 0\n" != string(wantReport) {
-			t.Fatalf("snapshot JSON golden mismatch:\nstdout: %s\nstderr: %s", &stdout, &stderr)
+		var result struct {
+			Action, Name string
+			Line         int
+		}
+		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.Action != "pass" || result.Name != "json snapshot" || result.Line != 1 || stderr.String()+"exit code 0\n" != string(wantReport) {
+			t.Fatalf("snapshot JSON result mismatch:\nstdout: %s\nstderr: %s", &stdout, &stderr)
 		}
 	})
 }

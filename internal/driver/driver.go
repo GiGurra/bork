@@ -532,6 +532,8 @@ type TestOptions struct {
 	JSON bool
 	// Filter selects tests by their exact declaration name.
 	Filter string
+	// FilterSet distinguishes an empty declaration name from no filter.
+	FilterSet bool
 	// Update writes the snapshots that assertSnapshot finds missing or
 	// different, instead of failing.
 	Update bool
@@ -617,7 +619,7 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	if opts.Parallel > 1 {
 		parallel = strconv.Itoa(opts.Parallel)
 	}
-	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update, "BORK_SEED="+seed, "BORK_CASES="+cases, "BORK_PARALLEL="+parallel, "BORK_TEST_REPORT="+report, "BORK_TEST_FILTER="+opts.Filter)
+	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update, "BORK_SEED="+seed, "BORK_CASES="+cases, "BORK_PARALLEL="+parallel, "BORK_TEST_REPORT="+report, "BORK_TEST_FILTER="+opts.Filter, "BORK_TEST_FILTER_SET="+strconv.FormatBool(opts.FilterSet || opts.Filter != ""))
 	runErr := cmd.Run()
 	if report != "" {
 		f, err := os.Open(report)

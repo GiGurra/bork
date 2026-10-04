@@ -162,10 +162,10 @@ func TestsWith(files []*syntax.File, info *check.Info, opts TestOptions) ([]byte
 		if i < len(info.Tests) {
 			test := info.Tests[i].Test
 			selector, file, line = test.Name, test.Pos.File, test.Pos.Line
-		} else {
-			selector, _ = strconv.Unquote(entry.Elts[0].(*ast.BasicLit).Value)
 		}
-		entry.Elts = append(entry.Elts, strLit(selector), strLit(file), &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(line)})
+		// Generated rule and automatic property tests are not named test
+		// declarations; their display labels must not match --filter.
+		entry.Elts = append(entry.Elts, strLit(selector), strLit(file), &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(line)}, ast.NewIdent(strconv.FormatBool(i < len(info.Tests))))
 	}
 	roots = append(roots, g.propRoots...)
 	if g.mockErrors.Len() > 0 {

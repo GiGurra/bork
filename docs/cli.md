@@ -88,7 +88,7 @@ bork test --seed 42 .          # repeat property tests with a given seed
 bork test --auto-properties .  # also call trusted functions on generated arguments
 ```
 
-With `--json`, each result has `action` (`pass`, `fail`, or `skip`), `name`, `file`, and `line`, plus `message` for failures or skipped tests with a reason. Results appear after execution; compiler diagnostics remain JSON Lines on stderr. `--filter` selects an exact declaration name and exits with status 1 if it matches nothing.
+With `--json`, each result has `action` (`pass`, `fail`, or `skip`), `name`, `file`, and `line`, plus `message` for failures or skipped tests with a reason. Results appear after execution; compiler diagnostics remain JSON Lines on stderr. `--filter` selects an exact `test` declaration name (excluding generated rule and automatic property tests) and exits with status 1 if it matches nothing.
 
 The command exits with status 1 if a test fails. [Testing](language/testing.md) describes what tests can do.
 
