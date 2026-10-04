@@ -16,12 +16,14 @@ import (
 // EditorAnalysis is a successful checked snapshot. Its compiler graph remains
 // private, separate from Check/Emit artifacts. Use it serially with its Session.
 type EditorAnalysis struct {
-	program  *compiledProgram
-	usage    *goUsage
-	overlays map[string]string
-	warnings []diag.Diagnostic
-	semantic map[string][]check.SemanticToken
-	symbols  *check.SymbolIndex
+	program           *compiledProgram
+	usage             *goUsage
+	overlays          map[string]string
+	warnings          []diag.Diagnostic
+	semantic          map[string][]check.SemanticToken
+	symbols           *check.SymbolIndex
+	navigationSymbols map[diag.Pos]map[string]check.Symbol
+	navigationCalls   []EditorCallEdge
 }
 
 // Analyze checks a package using absolute-path unsaved source overlays. Returned

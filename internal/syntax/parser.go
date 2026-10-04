@@ -462,6 +462,7 @@ func (p *parser) funcDeclIn(withBody, inBraces bool) *FuncDecl {
 	}
 	name := p.expect(TIdent, "(function name)")
 	fn := &FuncDecl{Pos: pos, Name: name.Text, IsPred: isPred}
+	defer func() { fn.End = p.toks[p.i-1].End }()
 	if p.at(Assign) {
 		p.next()
 		target := p.expect(TIdent, "(record name)")
