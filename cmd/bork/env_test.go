@@ -18,10 +18,7 @@ func TestEnvAndInstallCLI(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		suffix = ".exe"
 	}
-	exe := filepath.Join(dir, "bork"+suffix)
-	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, false)
 	// UserConfigDir uses different platform variables. Preserve Go's effective
 	// cache/module paths when macOS requires changing HOME to isolate bork.
 	switch runtime.GOOS {

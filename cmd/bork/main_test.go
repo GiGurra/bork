@@ -13,11 +13,7 @@ import (
 
 func TestDiagnosticJSON(t *testing.T) {
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "bork")
-	build := exec.Command("go", "build", "-o", exe, ".")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, false)
 	path := filepath.Join(dir, "main.bork")
 	if err := os.WriteFile(path, []byte("fn main() { println(missing) }\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -179,10 +175,7 @@ func TestDiagnosticJSON(t *testing.T) {
 }
 
 func TestFormatCLI(t *testing.T) {
-	exe := filepath.Join(t.TempDir(), "bork")
-	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, false)
 	dir := t.TempDir()
 	good := filepath.Join(dir, "main.bork")
 	src := []byte("fn main(){println(1)}")
@@ -243,10 +236,7 @@ func TestFormatCLI(t *testing.T) {
 
 func TestDescribeCLI(t *testing.T) {
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "bork")
-	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, false)
 	path := filepath.Join(dir, "main.bork")
 	source := "pred positive(n: Int) { n > 0 }\nfn example(n: Int) uses io { println(n) }\n"
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
@@ -293,10 +283,7 @@ func TestDescribeCLI(t *testing.T) {
 }
 
 func TestDepsCLI(t *testing.T) {
-	exe := filepath.Join(t.TempDir(), "bork")
-	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, false)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "bork.mod"), []byte("module example.com/app\n"), 0o644); err != nil {
 		t.Fatal(err)

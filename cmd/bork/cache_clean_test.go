@@ -14,10 +14,7 @@ func TestCacheCleanCLI(t *testing.T) {
 		t.Skip("persistent locks supported on Linux/Darwin")
 	}
 	directory := t.TempDir()
-	exe := filepath.Join(directory, "bork-test")
-	if output, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, output)
-	}
+	exe := cliExecutable(t, false)
 	switch runtime.GOOS {
 	case "darwin":
 		t.Setenv("HOME", directory)

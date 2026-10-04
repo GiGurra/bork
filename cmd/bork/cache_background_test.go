@@ -27,10 +27,7 @@ func TestDiskCacheBackgroundPublication(t *testing.T) {
 	t.Setenv("BORK_TEST_CACHE_PUBLISH_NOTIFY_FD", "3")
 	t.Setenv("BORK_TEST_CACHE_PUBLISH_BARRIER_FD", "4")
 	root := t.TempDir()
-	exe := filepath.Join(root, "bork")
-	if out, err := exec.Command("go", "build", "-ldflags=-X github.com/GiGurra/bork/internal/driver.cacheTestGate=enabled", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, true)
 	program := filepath.Join(root, "main.bork")
 	original := []byte("fn main(){ println(1) }\n")
 	if err := os.WriteFile(program, original, 0600); err != nil {
