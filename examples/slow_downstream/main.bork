@@ -25,6 +25,7 @@ fn got(result: String | Closed | Cancelled): String {
 }
 fn main() {
   scope app with cleanupTimeout(5000) {
+    started = channel[Bool](app, 4)
     finish = channel[Bool](app, 4)
     completed = channel[String](app, 6)
     active = atom(0)
@@ -33,6 +34,7 @@ fn main() {
     listener = http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       count = update(active, n => n + 1)
       _ = update(peak, n => if (count > n) { count } else { n })
+      _ = send(started, true)
       _ = receive(finish)
       _ = update(active, n => n - 1)
       http.Text(200, "finished")
@@ -54,6 +56,10 @@ fn main() {
         // Accepted requests are gated, so the first completions are overloads.
         first = got(receive(completed))
         second = got(receive(completed))
+        // Admission reserves slots before handler bodies run. Wait for both
+        // handlers to enter before observing their peak or opening the gates.
+        _ = receive(started)
+        _ = receive(started)
         println("shed", first, second)
         match (http.AdmissionState(server)) {
           Option.Some { value } => println("bounded downstream", value.inFlight, "active", value.queued, "queued")
