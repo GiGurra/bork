@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/GiGurra/bork/internal/check"
 )
@@ -23,6 +24,10 @@ type goStageMetadata struct {
 }
 
 func stageGoStable(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata) (string, bool, func(), error) {
+	return stageGoStableAt(base, key, source, module, embeds, metadata, time.Now())
+}
+
+func stageGoStableAt(base, key string, source []byte, module *goModuleInputs, embeds []*check.Embedded, metadata goStageMetadata, now time.Time) (string, bool, func(), error) {
 	if _, ok := cacheHexDigest(key); !ok || metadata.Schema != goStageSchema || !validReceiptPath(metadata.Program) || !filepath.IsAbs(metadata.Program) || metadata.Mode == "" {
 		return "", false, nil, errInvalidCacheArtifact
 	}
@@ -132,6 +137,9 @@ func stageGoStable(base, key string, source []byte, module *goModuleInputs, embe
 	if closeErr != nil {
 		return "", false, nil, closeErr
 	}
+	// Tree replacement changes directory mtimes on every request; a separate
+	// marker preserves hourly coalescing across edits and Go subprocess use.
+	_ = markCacheUse(root, filepath.Join(entry, "used"), now, true)
 	success = true
 	release := func() { _ = slot.Close(); _ = root.Close() }
 	return filepath.Join(base, tree), pinned, release, nil

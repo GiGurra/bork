@@ -133,9 +133,12 @@ or compilation. Locators use the same hourly marking and daily age rule as
 results; an orphan or missing locator merely causes a miss.
 
 The first implementation slice provides these layouts and removes admission
-scans from result and staging publication. Hourly marking and bounded daily trim
-follow separately; automatic complete-result caching stays disabled until those
-slices and the acceptance matrix pass.
+scans from result and staging publication. The next slice coalesces use marking
+at one hour: validated result hits mark the artifact and only a still-matching
+namespace locator; stages keep an independent `used` marker across tree swaps.
+Busy result lifecycle locks skip marking, and marker failures never fail a build.
+Bounded daily trim follows separately; automatic complete-result caching stays
+disabled until maintenance and the acceptance matrix pass.
 
 Mark successful result hits and stage use with approximate last-use mtimes,
 writing at most once per hour. Publications naturally mark new entries used.
