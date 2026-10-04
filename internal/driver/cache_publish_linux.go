@@ -199,7 +199,7 @@ func runCachePublisher() bool {
 	}
 	ok := (cacheStore{root: job.Root, namespace: namespace}).write(body) == nil
 	if ok {
-		_ = queueCacheTrim(job.Root)
+		_ = scheduleCacheTrim(job.Root)
 	}
 	return ok
 }

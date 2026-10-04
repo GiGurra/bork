@@ -14,6 +14,18 @@ sanitization or deduplication silently changing coverage. If `TestCases`'
 directory-selection rules change, update the runner
 and its fixture-discovery regression test together.
 
+The seven concurrency runtime tests in `internal/gen` run their assertions in
+both modes. Their child Go tests use `-race` when the parent binary has race
+instrumentation; normal parents run ordinary children. Independent runtime roots
+run in parallel. Map and snapshot children retain their existing ordinary Go
+test commands. The race `core` shard includes `internal/gen`.
+
+The four HTTP `*Race` integration tests build and execute generated programs
+with the Go race detector. They skip before parallel scheduling in ordinary
+test binaries and run when the parent binary is built with `-race`. Their parent
+names remain discoverable in both modes; race shards retain all four tests.
+Ordinary HTTP golden cases still run in normal shards.
+
 The integration partition assigns the longest measured parents first to the
 least loaded shard, breaking ties by name. `scripts/ci-timings.json` contains
 separate normal/race weights. A new parent receives a five-second provisional
@@ -90,3 +102,11 @@ With an explicit `XDG_CACHE_HOME`, remove its `bork/test-outputs-v1` directory
 instead. Production `bork clean` owns compiler artifacts and does not remove
 this test-only layer. CI persists `GOCACHE`, not these native targets, so the
 main benefit is repeated local runs; a cold hosted run may see little change.
+
+CLI integration tests build at most one ordinary compiler and one test-gated
+compiler per package test run. Each build uses the environment captured before
+individual tests change runtime settings. A package-owned temporary directory
+holds these native executables and is removed after the run; no executable is
+retained between invocations. CLI commands still start fresh processes, cache
+fixtures remain isolated, and tests requiring different compiler images retain
+their distinct builds.

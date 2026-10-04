@@ -18,10 +18,7 @@ func TestCacheTrimDetached(t *testing.T) {
 		t.Skip("platform uses temporary staging")
 	}
 	root := t.TempDir()
-	exe := filepath.Join(root, "bork")
-	if output, err := exec.Command("go", "build", "-ldflags=-X github.com/GiGurra/bork/internal/driver.cacheTestGate=enabled", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build CLI: %v\n%s", err, output)
-	}
+	exe := cliExecutable(t, true)
 	telemetry := filepath.Join(root, "telemetry")
 	if err := os.Mkdir(telemetry, 0700); err != nil {
 		t.Fatal(err)

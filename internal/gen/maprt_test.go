@@ -11,6 +11,7 @@ import (
 // and compares it with a plain Go map and slice, with hash functions
 // that force collisions at every level of the trie.
 func TestMapRuntime(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds and runs a Go test")
 	}
