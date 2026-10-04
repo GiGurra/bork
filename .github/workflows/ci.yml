@@ -116,9 +116,9 @@ jobs:
         with:
           cache-name: cache-maintenance
       - name: Exercise portable retention and staging locks
-        run: go test -race ./internal/driver -run '^(TestCacheTrim|TestCacheResultHourlyUse|TestGoStageHourlyUseSurvivesReplacement)' -count=1
+        run: go test -race ./internal/driver -run '^(TestCacheTrim|TestCacheResultHourlyUse|TestGoStageHourlyUseSurvivesReplacement|TestCompilerArtifactNamespace|TestDarwinCompiler|TestCacheInstalledSDK|TestGoReceiptRoundtrip|TestGoNameReceiptRoundtrip)' -count=1
       - name: Exercise detached maintenance and its hard timeout
-        run: go test -race ./cmd/bork -run '^TestCacheTrimDetached$' -count=1
+        run: go test -race ./cmd/bork -run '^(TestCacheTrimDetached|TestDiskCacheBackgroundPublication|TestAutomaticCacheCLI)$' -count=1
       - uses: actions/cache/save@v4
         if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
         with:

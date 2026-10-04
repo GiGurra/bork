@@ -45,7 +45,7 @@ func startCacheTestState() *cacheCLIStartup {
 // process. Library callers keep the ordinary AST pipeline unless explicitly
 // enabled. Unsupported platforms use their ordinary compiler path.
 func EnableCLICache() {
-	if cacheTestGate != "" && (cacheTestGate != "enabled" || os.Getenv("BORK_TEST_CACHE_PRODUCTION") != "1") || cacheDisabled() || runtime.GOOS != "linux" {
+	if cacheTestGate != "" && (cacheTestGate != "enabled" || os.Getenv("BORK_TEST_CACHE_PRODUCTION") != "1") || cacheDisabled() || (runtime.GOOS != "linux" && runtime.GOOS != "darwin") {
 		return
 	}
 	root, err := cacheRootDir()

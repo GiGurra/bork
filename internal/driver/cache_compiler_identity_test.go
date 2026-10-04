@@ -16,7 +16,7 @@ import (
 
 func TestCompilerArtifactNamespace(t *testing.T) {
 	digest, err := hashCompilerImage()
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		if !errors.Is(err, errCompilerImageUnavailable) {
 			t.Fatalf("unsupported platform identity: %v", err)
 		}
@@ -25,7 +25,11 @@ func TestCompilerArtifactNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile("/proc/self/exe")
+	path, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,8 +13,8 @@ import (
 
 func receiptGoContext(t *testing.T) *goContext {
 	t.Helper()
-	if runtime.GOOS != "linux" {
-		t.Skip("running image persistence currently Linux-only")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("running image persistence needs Linux or macOS")
 	}
 	t.Setenv("GOPACKAGESDRIVER", "off")
 	t.Setenv("GOTOOLCHAIN", "local")

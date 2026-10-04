@@ -107,7 +107,7 @@ func captureCacheMiss(candidate *sessionArtifact) *sessionArtifact {
 // These unsupported settings are already known from the ordinary go env result.
 // Decline before attempting to capture a cache configuration inventory.
 func supportedCacheMissSettings(ctx *goContext) bool {
-	if runtime.GOOS != "linux" || !supportedGoVersion(ctx.values["GOVERSION"]) || ctx.values["GOFLAGS"] != "" || (ctx.values["GOFIPS140"] != "" && ctx.values["GOFIPS140"] != "off") || (ctx.values["GOWORK"] != "" && ctx.values["GOWORK"] != "off") {
+	if (runtime.GOOS != "linux" && runtime.GOOS != "darwin") || !supportedGoVersion(ctx.values["GOVERSION"]) || ctx.values["GOFLAGS"] != "" || (ctx.values["GOFIPS140"] != "" && ctx.values["GOFIPS140"] != "off") || (ctx.values["GOWORK"] != "" && ctx.values["GOWORK"] != "off") {
 		return false
 	}
 	switch ctx.values["GOTOOLCHAIN"] {
