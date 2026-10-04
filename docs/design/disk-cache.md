@@ -164,6 +164,30 @@ indexes or semantic evidence. Tests must exercise interrupted/resumed progress,
 invalid cursors, bounded traversal and concurrent directory changes. Large entry
 removal also respects the per-run traversal/time budget.
 
+The private first engine supports Linux amd64 and uses `getdents64` directory
+cookies to resume without rereading an unbounded prefix. Concurrent directory
+changes may defer entries to a later cycle; removal retries an exhausted cookie
+when remaining names prevent deleting a directory. Cookies never authorize
+semantic cache hits. Each call charges at most 4,096 traversal/removal steps,
+checks cancellation between steps, and applies a cooperative 250 ms deadline.
+The detached process supplies the separate hard runtime limit when integrated.
+
+Progress is a bounded 256 KiB JSON record under a permanent nonblocking trim
+lock. Removal stores hex-encoded basename components once, preserving filenames
+without quadratic full-path stacks. Canonical component validation binds every
+removal frame to the candidate's SLOT. Stage age is rechecked between workers;
+a fresh publication stops partial deletion. A missing historical `used` marker
+can be migrated from the newest recognizable entry/metadata/tree timestamp under
+SLOT and MUTATION. Corrupt or future-cutoff progress resets conservatively.
+
+Current generated stage trees are flat: main/module files plus rewritten
+`_bork_embed/e%df%d.bin` files. Engine limits of 2,048 removal frames and 4,096
+relative-path bytes cover this production shape. Manually malformed or future
+unsupported deeper trees are skipped without restarting the cycle and remain
+removable through explicit clean; revisit these bounds before expanding staged
+output layouts. The engine is private and unscheduled in this slice. Detached
+scheduling, unsupported-platform behavior and the population matrix follow.
+
 Trim acquires candidate SLOT and MUTATION locks only nonblocking, skips busy
 entries, then rechecks age and path identity before deletion. It never removes
 a Go subprocess's staged inputs or waits behind an active build. Deleted program
