@@ -10,6 +10,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | [`bork check`](#check) | Type-check without building |
 | [`bork test`](#test) | Run a package's tests |
 | [`bork fmt`](#fmt) | Format source files |
+| [`bork lsp`](#lsp) | Serve editor features over stdio |
 | [`bork describe`](#describe) | Ask the compiler about the code at a position |
 | [`bork emit`](#emit) | Print the Go code generated for a program |
 | [`bork env`](#settings) | Show or save compiler settings |
@@ -141,4 +142,17 @@ Most programs never need this. See [calling Go](language/go-interop.md).
 
 ## Editor support
 
-There is a [VS Code extension](../editors/vscode/README.md) for syntax highlighting.
+## lsp
+
+`bork lsp` runs a Language Server Protocol server over stdio. Configure an LSP
+client to launch that command; stdout contains protocol messages. The
+[VS Code extension](../editors/vscode/README.md) starts it automatically and
+provides highlighting, diagnostics, hover, definitions, references, completion,
+symbols, formatting and compiler quick fixes.
+
+Open documents are checked as packages with unsaved-buffer overlays. LSP
+positions use zero-based lines and UTF-16 columns. Broken edits retain the last
+successful navigation snapshot; hover and completion label it stale. References
+cover open packages and their loaded imports. Rename supports local variables
+and package-private functions, with current successful checks and conservative
+collision rejection. Exported names, types and fields are not yet renameable.

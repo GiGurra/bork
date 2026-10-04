@@ -1,4 +1,6 @@
-node_modules/**
 test/**
+node_modules/@vscode/vsce/**
+node_modules/vscode-oniguruma/**
+node_modules/vscode-textmate/**
 package-lock.json
-.gitignore
+*.vsix

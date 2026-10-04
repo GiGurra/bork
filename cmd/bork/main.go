@@ -17,6 +17,7 @@ import (
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/driver"
 	borkformat "github.com/GiGurra/bork/internal/format"
+	"github.com/GiGurra/bork/internal/lsp"
 	"github.com/spf13/cobra"
 )
 
@@ -247,6 +248,14 @@ func main() {
 		Use:   "bork",
 		Short: "the bork compiler: a pragmatic backend language of guarantees",
 		SubCmds: boa.SubCmds(
+			boa.CmdT[boa.NoParams]{
+				Use: "lsp", Short: "serve the Language Server Protocol over stdio",
+				RunFunc: func(_ *boa.NoParams, _ *cobra.Command, _ []string) {
+					if err := lsp.Serve(os.Stdin, os.Stdout); err != nil {
+						fail(err)
+					}
+				},
+			},
 			boa.CmdT[cleanParams]{
 				Use: "clean", Short: "remove bork compiler caches",
 				RunFunc: func(p *cleanParams, cmd *cobra.Command, _ []string) {
