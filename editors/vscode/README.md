@@ -67,6 +67,16 @@ the current buffer. Other LSP clients can pass the same `inlayHints` options in
 `initializationOptions` or send `workspace/didChangeConfiguration` with
 `settings.bork.inlayHints`.
 
+Use **Go to Type Definition**, **Go to Implementations**, **Show Call Hierarchy**
+and **Go to Symbol in Workspace** for compiler-backed navigation. Type definition
+follows inferred types and container/union members; implementations list checked
+class instances, concrete methods and sealed variants. Call hierarchy includes
+closed workspace packages and tests, resolves concrete class calls, and retains
+calls folded during checking. Calls through function values have no static target.
+Document highlights distinguish symbols by compiler identity, including shadowed
+locals and same-spelled fields. Workspace queries check current disk files and
+unsaved buffers; all workspace packages must check successfully.
+
 References and rename use compiler declaration identities across local workspace
 packages, including importers whose files are closed. Rename supports local
 variables, parameters, functions (including exports), types, record fields,
