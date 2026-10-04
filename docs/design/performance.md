@@ -353,6 +353,13 @@ Tests cover competing processes, complete replacement after source/module/
 asset edits, stale checksum/asset removal, cache failure, absolute generated
 source paths, mapped caller/panic paths and Linux DWARF source positions.
 
+First Session hello requests, using the same three five-request protocol as the
+launcher table below, measured 94.01 ms check (93.81–97.29) and 102.73 ms emit
+(102.21–109.98). Established hits stayed 9.29 and 9.34 ms respectively, with
+one hit/request. The pure hello path does not build evaluators; stable staging
+adds no inventory work to it. These samples are startup monitoring, not evidence
+that staging accelerates a check with no Go builds.
+
 ## Launcher validation after monotonic observation
 
 Launcher metadata can skip hashing after more than two seconds of monotonic
