@@ -21,6 +21,15 @@ func (input goNameInput) receipt() (*goNameReceipt, error) {
 	if !input.standard || input.inputs == nil || !input.inputs.current() {
 		return nil, errUnsupportedGoReceipt
 	}
+	return input.receiptSnapshot()
+}
+
+// receiptSnapshot clones the metadata observations and checks their shape. Its
+// owner separately validates this inventory and shared context before publication.
+func (input goNameInput) receiptSnapshot() (*goNameReceipt, error) {
+	if !input.standard || input.inputs == nil {
+		return nil, errUnsupportedGoReceipt
+	}
 	directories, err := input.inputs.directories.receipt()
 	if err != nil {
 		return nil, err

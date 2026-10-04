@@ -217,3 +217,29 @@ func TestCacheArtifactDeclinesAssetsAndLossyStrings(t *testing.T) {
 		t.Fatal("failed/absent result persisted")
 	}
 }
+
+func TestCacheArtifactCompositeCertification(t *testing.T) {
+	for _, change := range []string{"source", "metadata"} {
+		t.Run(change, func(t *testing.T) {
+			body, artifact := cacheArtifactFixture(t)
+			switch change {
+			case "source":
+				if err := os.WriteFile(body.Request.Path, []byte("fn main() { println(1) }\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "metadata":
+				if len(artifact.names) == 0 {
+					t.Fatal("no metadata inventory")
+				}
+				for path, digest := range artifact.names[0].inputs.files {
+					digest[0] ^= 1
+					artifact.names[0].inputs.files[path] = digest
+					break
+				}
+			}
+			if _, err := cacheArtifactFrom(artifact, body.SourcePaths, body.Namespace); err == nil {
+				t.Fatal("composite certification accepted changed input")
+			}
+		})
+	}
+}

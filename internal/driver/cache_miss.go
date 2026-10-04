@@ -66,7 +66,7 @@ func compileCacheMiss(path string, emit bool, observe func(string)) ([]byte, []d
 			return src, warningData, nil, nil
 		}
 	}
-	if !program.inputs.current() || !fresh.validation.current() {
+	if !program.inputs.current() {
 		return src, warningData, nil, nil
 	}
 	return src, warningData, &sessionArtifact{path: path, emit: emit, inputs: program.inputs, module: module, assets: program.assets, context: fresh, names: verified.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData), sourcePaths: sourcePaths(program.files)}, nil
