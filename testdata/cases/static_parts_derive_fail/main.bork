@@ -1,0 +1,2 @@
+type Wrapper = { parts: StaticParts } derive (Decode, GoStruct)
+fn main() {}

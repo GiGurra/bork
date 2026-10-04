@@ -33,7 +33,7 @@ type cacheTestStartup struct {
 }
 
 func startCacheTestState() *cacheTestStartup {
-	if cacheTestGate != "enabled" {
+	if cacheTestGate != "enabled" || os.Getenv("BORK_CACHE") == "off" {
 		return nil
 	}
 	root := os.Getenv("BORK_TEST_DISK_CACHE_DIRECTORY")
@@ -94,6 +94,7 @@ func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error
 			result, err := body.validateWithContext(request, body.Namespace, restore)
 			<-state.done
 			if err == nil && state.err == nil && state.namespace == body.Namespace {
+				(cacheStore{root: state.root, namespace: body.Namespace}).touch(body.Key)
 				testCacheProbe("hit")
 				return result.goSource, result.warnings, nil
 			}
@@ -107,7 +108,12 @@ func freshTestCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, 
 	timings := newCacheTestTimings()
 	defer timings.finish()
 
-	src, warnings, artifact, err := compileCacheMiss(path, emit, timings.observer("compile/"))
+	background := os.Getenv("BORK_TEST_DISK_CACHE_BACKGROUND") == "1"
+	compile := compileCacheMiss
+	if background {
+		compile = compileCacheMissUncaptured
+	}
+	src, warnings, artifact, err := compile(path, emit, timings.observer("compile/"))
 	if err != nil {
 		testCacheProbe("error")
 		return src, warnings, err
@@ -117,6 +123,15 @@ func freshTestCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, 
 		return src, warnings, nil
 	}
 	state := cacheTestState
+	if background {
+		timings.phase("publication/queue")
+		if queueCachePublication(state.root, artifact) {
+			testCacheProbe("queued")
+		} else {
+			testCacheProbe("publish-skip")
+		}
+		return src, warnings, nil
+	}
 	state.startIdentity()
 	<-state.done
 	if state.err != nil {

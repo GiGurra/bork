@@ -17,6 +17,8 @@ var update = flag.Bool("update", false, "rewrite expected files with actual resu
 // TestMain lets test cases bind example.com/bindtest, a local Go module
 // with the shapes Go's standard library does not have.
 func TestMain(m *testing.M) {
+	configureTestStageCache()
+
 	// Parallel cases each start Go tools; keep their GC/build workers bounded
 	// without changing this process's runtime or an explicit caller setting.
 	if os.Getenv("GOMAXPROCS") == "" {

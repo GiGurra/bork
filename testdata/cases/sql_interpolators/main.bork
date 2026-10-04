@@ -1,0 +1,47 @@
+import dbsql "bork/sql"
+
+type Row = { name: String, note: Option[String] } derive (Decode)
+fn inspect(statement: dbsql.Statement, dialect: dbsql.Dialect) uses io {
+  match (statement.Render(dialect)) {
+    rendered: dbsql.Rendered => println(rendered.query, rendered.params)
+    error: dbsql.Error => println(error.operation, error.message)
+  }
+}
+fn demo() uses io + net: Ok | dbsql.Error | DecodeError {
+  hostile = "Ada'); DROP TABLE users; --"
+  table = dbsql.Name("users")?
+  column = dbsql.Name("name")?
+  fragment = dbsql.SQL"$column = $hostile"
+  query = dbsql.SQL"SELECT name, note FROM $table WHERE $fragment OR name = ${"other"}"
+  inspect(query, dbsql.Dialect.Sqlite)
+  inspect(query, dbsql.Dialect.Postgres)
+  inspect(query, dbsql.Dialect.Postgres)
+  quoted = dbsql.Name("a\"; DROP TABLE users; --")?
+  inspect(dbsql.SQL"SELECT $quoted FROM $table", dbsql.Dialect.Postgres)
+  dotted = dbsql.Name("public.users")?
+  inspect(dbsql.SQL"SELECT * FROM $dotted", dbsql.Dialect.Sqlite)
+  schema = dbsql.Name("public")?
+  inspect(dbsql.SQL"SELECT * FROM $schema.$table", dbsql.Dialect.Postgres)
+  inspect(dbsql.SQL"SELECT ${true}, ${1.25}, ${utf8Bytes("hello")}, ${dbsql.Null {}}", dbsql.Dialect.Postgres)
+  scope app {
+    db = dbsql.OpenSqlite(":memory:", app)?
+    created = dbsql.SQL"CREATE TABLE users (name TEXT, note TEXT)".Exec(db)?
+    scope transaction {
+      tx = dbsql.Begin(db, transaction)?
+      inserted = dbsql.SQL"INSERT INTO $table (name, note) VALUES ($hostile, ${dbsql.Null {}})".Exec(tx)?
+      dbsql.Commit(tx)?
+    }
+    println(dbsql.SQL"SELECT ${true} AS active, ${1.25} AS score, ${utf8Bytes("hi")} AS data, ${dbsql.Null {}} AS note".QueryJson(db)?)
+    println(query.Query[Row](db)?)
+    println(query.QueryJson(db)?)
+    println(query.Rows[Row](db).toList())
+    println(query.RowsJson(db).toList())
+    bad = dbsql.SQL"SELECT '$hostile'"
+    println(bad.RowsJson(db).toList())
+    println(bad.RowsJson(db).toList())
+    println(bad.Rows[Row](db).toList())
+  }
+}
+fn main() {
+  match (demo()) { error: dbsql.Error => println(error.operation, error.message), error: DecodeError => println(error.message), _ => {} }
+}
