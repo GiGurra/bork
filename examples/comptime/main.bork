@@ -1,0 +1,34 @@
+import "bork/build"
+import "bork/json"
+
+pred positive(value: Int) { value > 0 }
+pred nonEmpty(value: String) { value.byteLength() > 0 }
+pred supported(config: Config) { config.limit <= 4 }
+
+type Config = {
+  name: String where nonEmpty
+  limit: Int where positive
+} where supported derive (Decode)
+
+// The decoded record carries its whole-value invariant into ordinary calls.
+fn configuredName(config: Config where supported): String { config.name }
+
+fn main() {
+  squares = comptime {
+    range(1, 5).map(n => Entry[Int, Int] { key: n, value: n * n }).toMap()
+  }
+  config = comptime {
+    match (json.Decode[Config](build.ReadString("config.json"))) {
+      value: Config => value
+      error => panic(s"invalid build configuration: $error")
+    }
+  }
+  // This block depends on both earlier baked values, not runtime bindings.
+  selected = comptime { squares.getOr(config.limit, 0) }
+  total = comptime { squares.values().fold(0, (sum, n) => sum + n) }
+
+  println(s"squares: $squares")
+  println(s"configuration: ${configuredName(config)}")
+  println(s"square(${config.limit}): $selected")
+  println(s"sum: $total")
+}
