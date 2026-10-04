@@ -4,6 +4,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 
 | Command | What it does |
 | --- | --- |
+| [`bork script`](#scripts) | Run one file with an implicit main |
 | [`bork run`](#run-build-and-install) | Compile and run a program |
 | [`bork build`](#run-build-and-install) | Compile a program to an executable |
 | [`bork install`](#run-build-and-install) | Compile a program and install the executable |
@@ -32,6 +33,14 @@ bork install .                 # build, then put the executable in BORKBIN
 ```
 
 `bork install` names the executable after the source file or directory, creates `BORKBIN` if needed, and replaces an existing executable only after a successful build. Add `BORKBIN` to your `PATH` to run installed programs by name. See [settings](#settings) for where it is.
+
+## Scripts
+
+```sh
+bork script hello.bork -- Ada   # top-level statements, with or without a shebang
+```
+
+A script with `#!/usr/bin/env -S bork script` on its first line can also run directly after `chmod +x hello.bork`. It uses the normal compile cache. See [scripts](language/scripts.md) for binding scope, inline Go dependencies and project rules.
 
 ## Check
 

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -28,6 +29,12 @@ func userGoDependenciesFrom(files []*syntax.File, reader sourceReader) ([]std.Go
 			return nil, err
 		}
 		if mod.path == "" {
+			if f.Script {
+				header := readScriptHeader(f, false, &diag.List{})
+				if len(header.requirements) != 0 {
+					return scriptGoDependencies(f, header.requirements, reader)
+				}
+			}
 			continue
 		}
 		manifestPath := filepath.Join(mod.root, "go-deps.mod")

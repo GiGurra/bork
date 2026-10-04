@@ -189,7 +189,7 @@ func ensureStageDirectory(root *os.Root, path string, mode os.FileMode) error {
 		partial = filepath.Join(partial, component)
 		info, err := root.Lstat(partial)
 		if errors.Is(err, os.ErrNotExist) {
-			if err := root.Mkdir(partial, mode); err != nil {
+			if err := root.Mkdir(partial, mode); err != nil && !errors.Is(err, os.ErrExist) {
 				return err
 			}
 			info, err = root.Lstat(partial)

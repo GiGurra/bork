@@ -28,6 +28,9 @@ func Describe(position, where string) (*describe.Result, error) {
 		return nil, err
 	}
 	path := filepath.Dir(pos.File)
+	if strings.HasPrefix(string(src), "#!") {
+		path = pos.File
+	}
 	program, err := checkProgramObserved(path, nil)
 	if err != nil {
 		return nil, err

@@ -1,0 +1,6 @@
+#!/usr/bin/env -S bork script
+// bork:require github.com/google/uuid v1.6.0
+// bork:unsafe
+
+fn valid(text: String): Ok | GoError unsafe go "github.com/google/uuid.Validate"
+println(valid("00000000-0000-0000-0000-000000000001"))

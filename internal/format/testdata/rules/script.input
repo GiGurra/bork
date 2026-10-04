@@ -1,0 +1,5 @@
+#!/usr/bin/env -S bork script
+// bork:require github.com/google/uuid v1.6.0
+// bork:unsafe
+x=1
+println(x)

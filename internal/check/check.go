@@ -22,8 +22,9 @@ type Package struct {
 	// ("" for the root package and the prelude).
 	GoPrefix string
 	// Funcs holds the package's own functions by name.
-	Funcs    map[string]*Func
-	bindings map[string]*PackageBinding
+	Funcs        map[string]*Func
+	bindings     map[string]*PackageBinding
+	scriptLocals map[string]diag.Pos
 	// methods holds the package's methods, by receiver type (see
 	// methodKey) and name.
 	methods map[string]map[string]*Func
@@ -674,6 +675,28 @@ func (c *checker) declarePackages(files []*syntax.File, root string) {
 		}
 		c.pkgs[f.Package] = pkg
 		c.info.Packages = append(c.info.Packages, pkg)
+	}
+	for _, file := range files {
+		if !file.Script {
+			continue
+		}
+		pkg := c.pkgs[file.Package]
+		if pkg == nil {
+			continue
+		}
+		if pkg.scriptLocals == nil {
+			pkg.scriptLocals = map[string]diag.Pos{}
+		}
+		for _, fn := range file.Funcs {
+			if !fn.ScriptMain {
+				continue
+			}
+			for _, stmt := range fn.Body.Stmts {
+				if binding, ok := stmt.(*syntax.Binding); ok && binding.Name != "_" {
+					pkg.scriptLocals[binding.Name] = binding.Pos
+				}
+			}
+		}
 	}
 	c.rootPkg = c.pkgs[root]
 	if c.rootPkg == nil {
@@ -1360,8 +1383,20 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 		c.errorf(e.Pos, "%s is a package; use one of its names, as in %s.Name", e.Name, e.Name)
 		return Invalid
 	}
+	if c.scriptLocalError(e.Pos, e.Name) {
+		return Invalid
+	}
 	c.errorf(e.Pos, "undefined: %s", e.Name)
 	return Invalid
+}
+
+func (c *checker) scriptLocalError(pos diag.Pos, name string) bool {
+	declaration, ok := c.pkg.scriptLocals[name]
+	if !ok || c.fn == nil || c.fn.Decl.ScriptMain {
+		return false
+	}
+	c.errorf(pos, "%s is a script local declared at %s; functions cannot capture script locals (use lazy %s = ... for a pure package value)", name, declaration, name)
+	return true
 }
 
 func (c *checker) unary(e *syntax.Unary) Type {
@@ -1558,7 +1593,9 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 		case c.notFound(id.Name) != "":
 			c.errorf(id.Pos, "%s", c.notFound(id.Name))
 		default:
-			c.errorf(id.Pos, "undefined function: %s", id.Name)
+			if !c.scriptLocalError(id.Pos, id.Name) {
+				c.errorf(id.Pos, "undefined function: %s", id.Name)
+			}
 		}
 		for _, a := range e.Args[checked:] {
 			c.expr(a)

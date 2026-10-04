@@ -266,6 +266,9 @@ func main() {
 						fail(err)
 					}
 					fmt.Printf("Removed %d results, %d staged trees and %d temporary files (%d bytes).\n", report.Results, report.Stages, report.Temporaries, report.Bytes)
+					if report.Dependencies != 0 {
+						fmt.Printf("Removed %d resolved script dependency graphs.\n", report.Dependencies)
+					}
 				},
 			},
 			boa.CmdT[boa.NoParams]{
@@ -367,6 +370,16 @@ func main() {
 				},
 				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
 					code, err := driver.Run(p.Path, p.Args)
+					if err != nil {
+						fail(err)
+					}
+					os.Exit(code)
+				},
+			},
+			boa.CmdT[runParams]{
+				Use: "script", Short: "compile and run a single .bork script with an implicit main",
+				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
+					code, err := driver.RunScript(p.Path, p.Args)
 					if err != nil {
 						fail(err)
 					}
