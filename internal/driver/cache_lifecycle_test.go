@@ -130,3 +130,102 @@ func TestCacheResultTouch(t *testing.T) {
 	store.touch(body.Key)
 	_ = mutation.Close()
 }
+
+func TestCacheResultHourlyUse(t *testing.T) {
+	body, _ := cacheArtifactFixture(t)
+	store := cacheStore{root: t.TempDir(), namespace: body.Namespace}
+	if err := store.write(body); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Unix(1700000000, 0)
+	paths := []string{filepath.Join(store.root, store.path(body.Key)), filepath.Join(store.root, cacheIndexPath(body.Key))}
+	for _, path := range paths {
+		if err := os.Chtimes(path, start, start); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertTime := func(want time.Time) {
+		t.Helper()
+		for _, path := range paths {
+			info, err := os.Stat(path)
+			if err != nil || !info.ModTime().Equal(want) {
+				t.Fatalf("%s mtime = %v, err %v; want %v", path, info, err, want)
+			}
+		}
+	}
+	store.touchAt(body.Key, start.Add(time.Hour-time.Second))
+	assertTime(start)
+	next := start.Add(time.Hour)
+	store.touchAt(body.Key, next)
+	assertTime(next)
+	store.touchAt(body.Key, next.Add(10*time.Minute))
+	assertTime(next)
+	store.touchAt(body.Key, start.Add(-time.Hour))
+	assertTime(next)
+	root, err := os.OpenRoot(store.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	for _, name := range []string{store.lockName(body.Key), "mutation.lock"} {
+		lock, err := store.lock(root, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		store.touchAt(body.Key, next.Add(2*time.Hour))
+		assertTime(next)
+		_ = lock.Close()
+	}
+	// A replaced pointer belongs to the other compiler, even when old enough.
+	other := cacheStore{root: store.root, namespace: sha256.Sum256([]byte("other compiler"))}
+	if err := other.writeIndex(root, body.Key); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(paths[1], start, start); err != nil {
+		t.Fatal(err)
+	}
+	store.touchAt(body.Key, next.Add(2*time.Hour))
+	info, err := os.Stat(paths[1])
+	if err != nil || !info.ModTime().Equal(start) {
+		t.Fatal("foreign locator refreshed", err)
+	}
+}
+
+func TestCacheUseDeclinesAliases(t *testing.T) {
+	base := t.TempDir()
+	outside := filepath.Join(base, "outside")
+	start := time.Unix(1700000000, 0)
+	if err := os.WriteFile(outside, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(outside, start, start); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("outside", filepath.Join(base, "used")); err != nil {
+		t.Skip(err)
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := markCacheUse(root, "used", start.Add(2*time.Hour), true); err == nil {
+		t.Fatal("alias accepted")
+	}
+	info, err := os.Stat(outside)
+	if err != nil || !info.ModTime().Equal(start) {
+		t.Fatal("alias target touched", err)
+	}
+	if err := os.Mkdir(filepath.Join(base, "dir"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("dir", filepath.Join(base, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	if err := markCacheUse(root, filepath.Join("alias", "used"), start, true); err == nil {
+		t.Fatal("ancestor alias accepted")
+	}
+	if _, err := os.Stat(filepath.Join(base, "dir", "used")); !os.IsNotExist(err) {
+		t.Fatal("marker created through alias", err)
+	}
+}

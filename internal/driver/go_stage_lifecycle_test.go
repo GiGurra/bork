@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func stageLifecycleKey(index int) string {
@@ -129,5 +130,54 @@ func TestGoStageDeclinesContainedEntryAlias(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(dir, "main.go")); err != nil || string(data) != "first" {
 		t.Fatal("aliased tree was overwritten")
+	}
+}
+
+func TestGoStageHourlyUseSurvivesReplacement(t *testing.T) {
+	requireStageLock(t)
+	base := t.TempDir()
+	key := stageLifecycleKey(1)
+	metadata := stageMetadataForTest(t)
+	module := &goModuleInputs{mod: []byte("module stage\n")}
+	start := time.Unix(1700000000, 0)
+	publish := func(source string, now time.Time) {
+		t.Helper()
+		_, _, release, err := stageGoStableAt(base, key, []byte(source), module, nil, metadata, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		release()
+	}
+	marker := filepath.Join(base, goStageEntryPath(key), "used")
+	assertTime := func(want time.Time) {
+		t.Helper()
+		info, err := os.Stat(marker)
+		if err != nil || !info.ModTime().Equal(want) {
+			t.Fatalf("marker %v, err %v; want %v", info, err, want)
+		}
+	}
+	publish("first", start)
+	assertTime(start)
+	publish("edited", start.Add(time.Hour-time.Second))
+	assertTime(start)
+	data, err := os.ReadFile(filepath.Join(base, goStageEntryPath(key), "tree", "main.go"))
+	if err != nil || string(data) != "edited" {
+		t.Fatal("fresh replacement failed", err)
+	}
+	publish("again", start.Add(time.Hour))
+	assertTime(start.Add(time.Hour))
+	publish("clock moved back", start.Add(-time.Hour))
+	assertTime(start.Add(time.Hour))
+	// Retention hints cannot turn a successful compilation into failure.
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(marker, 0700); err != nil {
+		t.Fatal(err)
+	}
+	publish("bad marker", start.Add(2*time.Hour))
+	data, err = os.ReadFile(filepath.Join(base, goStageEntryPath(key), "tree", "main.go"))
+	if err != nil || string(data) != "bad marker" {
+		t.Fatal("hint failure lost stage", err)
 	}
 }
