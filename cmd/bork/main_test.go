@@ -298,7 +298,7 @@ func TestDepsCLI(t *testing.T) {
 		}
 	}
 	run(true, "init", "--path", dir)
-	for _, name := range []string{"go-deps.mod", "go-deps.sum"} {
+	for _, name := range []string{"go.mod", "bork.sum"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Fatal(err)
 		}

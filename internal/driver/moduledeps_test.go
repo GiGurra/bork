@@ -88,3 +88,56 @@ func TestDepsProtectsHandwrittenGoModule(t *testing.T) {
 		t.Fatal("Go module changed")
 	}
 }
+
+func TestDependencyMigrationRecovery(t *testing.T) {
+	t.Parallel()
+	for _, leftover := range []string{"both", "sum only", "conflict"} {
+		t.Run(leftover, func(t *testing.T) {
+			root := t.TempDir()
+			mod, err := parseModFile("module example.com/app\nrequire example.com/lib v1.0.0\n")
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := generatedModule(mod, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			files := map[string]string{
+				ModFile:       "module example.com/app\nrequire example.com/lib v1.0.0\n",
+				"go.mod":      string(data),
+				"bork.sum":    "example.com/lib v1.0.0 h1:content\nexample.com/lib v1.0.0/go.mod h1:metadata\n",
+				"go-deps.sum": "old sums\n",
+			}
+			if leftover != "sum only" {
+				version := "v1.0.0"
+				if leftover == "conflict" {
+					version = "v1.1.0"
+				}
+				files["go-deps.mod"] = "module descriptive\ngo 1.22\nrequire example.com/lib " + version + "\n"
+			}
+			for name, text := range files {
+				if err := os.WriteFile(filepath.Join(root, name), []byte(text), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err = Deps(root, "migrate", nil)
+			if leftover == "conflict" {
+				if err == nil || !strings.Contains(err.Error(), "differ") {
+					t.Fatalf("conflicting migration: %v", err)
+				}
+				if _, err := os.Stat(filepath.Join(root, "go-deps.mod")); err != nil {
+					t.Fatal("conflicting manifest was removed")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"go-deps.mod", "go-deps.sum"} {
+				if _, err := os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
+					t.Fatalf("leftover %s: %v", name, err)
+				}
+			}
+		})
+	}
+}

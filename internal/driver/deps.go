@@ -48,9 +48,15 @@ func Deps(path, action string, packages []string) error {
 	}
 	legacy := err == nil
 	if legacy && len(mod.requirements) != 0 {
+		if action == "migrate" {
+			return finishDependencyMigration(mod, data)
+		}
 		return errors.New("legacy and bork.mod requirements cannot be mixed; remove one set before migration")
 	}
 	if action == "migrate" && !legacy {
+		if _, err := os.Stat(filepath.Join(mod.root, "go-deps.sum")); err == nil {
+			return finishDependencyMigration(mod, nil)
+		}
 		return errors.New("no legacy go-deps.mod to migrate")
 	}
 	native := !legacy || action == "migrate"
@@ -224,10 +230,62 @@ func Deps(path, action string, packages []string) error {
 		}
 	}
 	if action == "migrate" {
-		for _, name := range []string{"go-deps.mod", "go-deps.sum"} {
-			if err := os.Remove(filepath.Join(mod.root, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
+		return removeLegacyDependencies(mod.root)
+	}
+	return nil
+}
+
+// A successful native publication can precede an interrupted legacy cleanup.
+// Resume only when both sets agree, never by dropping conflicting requirements.
+func finishDependencyMigration(mod module, legacy []byte) error {
+	data, err := os.ReadFile(filepath.Join(mod.root, "go.mod"))
+	if err != nil {
+		return err
+	}
+	if err := checkGeneratedModule(mod, data); err != nil {
+		return err
+	}
+	if len(legacy) != 0 {
+		f, err := modfile.Parse("go-deps.mod", legacy, nil)
+		if err != nil {
+			return err
+		}
+		if len(f.Require) != len(mod.requirements) {
+			return errors.New("legacy and bork.mod requirements differ; reconcile them before migration")
+		}
+		versions := map[string]string{}
+		for _, dep := range mod.requirements {
+			versions[dep.Path] = dep.Version
+		}
+		for _, dep := range f.Require {
+			if versions[dep.Mod.Path] != dep.Mod.Version {
+				return errors.New("legacy and bork.mod requirements differ; reconcile them before migration")
 			}
+			delete(versions, dep.Mod.Path)
+		}
+		if len(versions) != 0 {
+			return errors.New("legacy and bork.mod requirements differ; reconcile them before migration")
+		}
+	}
+	sums, err := os.ReadFile(filepath.Join(mod.root, "bork.sum"))
+	if err != nil {
+		return err
+	}
+	if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: mod.root, Mod: data, Sum: sums}); err != nil {
+		return err
+	}
+	if len(legacy) != 0 {
+		if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: mod.root, Mod: legacy, Sum: sums}); err != nil {
+			return err
+		}
+	}
+	return removeLegacyDependencies(mod.root)
+}
+
+func removeLegacyDependencies(root string) error {
+	for _, name := range []string{"go-deps.mod", "go-deps.sum"} {
+		if err := os.Remove(filepath.Join(root, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
 	return nil
