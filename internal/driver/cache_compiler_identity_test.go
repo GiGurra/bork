@@ -15,6 +15,7 @@ import (
 )
 
 func TestCompilerArtifactNamespace(t *testing.T) {
+	t.Parallel()
 	digest, err := hashCompilerImage()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		if !errors.Is(err, errCompilerImageUnavailable) {
@@ -60,6 +61,7 @@ func TestCompilerArtifactNamespace(t *testing.T) {
 }
 
 func TestCompilerIdentityRunningInode(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("running image access is Linux-only")
 	}

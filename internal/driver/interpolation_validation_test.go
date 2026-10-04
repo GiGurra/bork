@@ -30,6 +30,7 @@ func validatorFixture(t *testing.T, source string) string {
 }
 
 func TestInterpolationValidatorBatchAndMemo(t *testing.T) {
+	t.Parallel()
 	source := validatorBuilder + `instance validation:InterpolationValidator[Builder]{
  fn validateInterpolation(parts:StaticParts,holes:List[InterpolationHole]):List[InterpolationIssue]{[]}
  }
@@ -58,6 +59,7 @@ func TestInterpolationValidatorBatchAndMemo(t *testing.T) {
 }
 
 func TestInterpolationValidatorCompletedComptimeDependency(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("shell launcher")
 	}
@@ -92,6 +94,7 @@ func TestInterpolationValidatorCompletedComptimeDependency(t *testing.T) {
 }
 
 func TestInterpolationValidatorLimitsAndDiagnostics(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, body, want string }{
 		{"bad index", `[InterpolationIssue{hole:Option.Some{value:3},message:"bad"}]`, "returned invalid hole index 3"},
 		{"panic", `panic("validator panic")`, "validator panic"},
@@ -109,7 +112,9 @@ func TestInterpolationValidatorLimitsAndDiagnostics(t *testing.T) {
 				t.Fatal(err)
 			}
 			ctx := captureGoContext()
-			ctx.evalLimit = 150 * time.Millisecond
+			if tc.name == "timeout" {
+				ctx.evalLimit = 150 * time.Millisecond
+			}
 			_, err = checkLoadedProgramObserved(loaded, module, ctx, captureEmbedsSnapshot, nil)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want %q, got %v", tc.want, err)
@@ -119,6 +124,7 @@ func TestInterpolationValidatorLimitsAndDiagnostics(t *testing.T) {
 }
 
 func TestInterpolationWithoutValidatorHasNoEvaluator(t *testing.T) {
+	t.Parallel()
 	dir := validatorFixture(t, validatorBuilder+`fn main(){println(Tag"${1}")}`)
 	loaded, module, err := loadCompilationInputs(dir, nil)
 	if err != nil {
@@ -135,6 +141,7 @@ func TestInterpolationWithoutValidatorHasNoEvaluator(t *testing.T) {
 }
 
 func TestInterpolationValidatorOwnerAndMetadata(t *testing.T) {
+	t.Parallel()
 	dir := validatorFixture(t, `import renamed "example.com/validator/lib"
 instance callerPolicy:renamed.Policy[Int]{fn policy():Bool{false}}
 instance callerValidator:InterpolationValidator[renamed.Builder[Int]]{
@@ -182,6 +189,7 @@ instance validation[T:Policy]:InterpolationValidator[Builder[T]]{
 }
 
 func TestInterpolationValidatorPurity(t *testing.T) {
+	t.Parallel()
 	source := validatorBuilder + `instance validation:InterpolationValidator[Builder]{
  fn validateInterpolation(parts:StaticParts,holes:List[InterpolationHole]):List[InterpolationIssue]{println("impure");[]}
  }
@@ -193,6 +201,7 @@ func TestInterpolationValidatorPurity(t *testing.T) {
 }
 
 func TestInterpolationValidatorOutsideFunctions(t *testing.T) {
+	t.Parallel()
 	for _, source := range []string{
 		`import "bork/sql"
 lazy query=sql.SQL"SELECT ${1}"
@@ -209,6 +218,7 @@ fn main(){_=Queries{}.query}`,
 }
 
 func TestInterpolationValidatorSelectionErrors(t *testing.T) {
+	t.Parallel()
 	method := `fn validateInterpolation(parts:StaticParts,holes:List[InterpolationHole]):List[InterpolationIssue]{[]}`
 	generic := `type Builder[T]={}
 fn Tag(parts:StaticParts):Builder[Int]{Builder[Int]{}}

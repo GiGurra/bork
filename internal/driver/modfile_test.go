@@ -6,6 +6,7 @@ import (
 )
 
 func TestParseModFile(t *testing.T) {
+	t.Parallel()
 	mod, err := parseModFile("// shop\nmodule example.com/shop // the shop\n\nunsafe \"example.com/shop/ffi\" // bindings\nunsafe \"example.com/shop\"\n")
 	if err != nil {
 		t.Fatal(err)

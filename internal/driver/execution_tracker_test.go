@@ -3,6 +3,7 @@ package driver
 import "testing"
 
 func TestExecutionTrackerRejectsForeignDuplicateUnboundAndMismatched(t *testing.T) {
+	t.Parallel()
 	candidate := testExecutionIdentity(t, "actual query")
 	for _, kind := range []string{"foreign", "duplicate", "unbound", "mismatched", "unresolved", "declined"} {
 		t.Run(kind, func(t *testing.T) {
@@ -40,6 +41,7 @@ func TestExecutionTrackerRejectsForeignDuplicateUnboundAndMismatched(t *testing.
 }
 
 func TestExecutionTrackerOwnsExpectedInputAndBoundsInvocations(t *testing.T) {
+	t.Parallel()
 	candidate := testExecutionIdentity(t, "ordered query")
 	tracker := &executionTracker{}
 	token := tracker.begin(candidate)

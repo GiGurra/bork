@@ -10,6 +10,7 @@ import (
 )
 
 func TestUnitMigrationFixes(t *testing.T) {
+	t.Parallel()
 	source := `type Error = { message: String }
 type Result = Unit | Error
 type Work = () => Unit
@@ -67,6 +68,7 @@ fn main() {
 }
 
 func TestUnitVariantIsNotDeprecated(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	source := "type Result = sealed { Unit { value: Int } }\nfn main() { println(Result.Unit { value: 1 }) }\n"
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
@@ -82,6 +84,7 @@ func TestUnitVariantIsNotDeprecated(t *testing.T) {
 }
 
 func TestDescribeOk(t *testing.T) {
+	t.Parallel()
 	for _, spelling := range []string{"Ok", "Unit"} {
 		source := "fn success(): " + spelling + " { Ok }\nfn main() { success() }\n"
 		if result := describeAt(t, source, "success() }", ""); result.typ != "() => Ok" {

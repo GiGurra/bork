@@ -450,6 +450,7 @@ func TestStandardNameInputsKeepMetadataDriverEvidence(t *testing.T) {
 }
 
 func TestMetadataContentHashRejectsSpecialFiles(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("requires Unix special file")
 	}

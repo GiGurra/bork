@@ -12,6 +12,7 @@ import (
 )
 
 func TestSourceSnapshotFrozenReads(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	name := filepath.Join(root, "main.bork")
 	if err := os.WriteFile(name, []byte("old"), 0o644); err != nil {
@@ -57,6 +58,7 @@ func TestSourceSnapshotFrozenReads(t *testing.T) {
 }
 
 func TestSourceSnapshotMissingModuleAndMembership(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	snapshot := newSourceSnapshot()
 	module := filepath.Join(root, ModFile)
@@ -82,6 +84,7 @@ func TestSourceSnapshotMissingModuleAndMembership(t *testing.T) {
 }
 
 func TestSourceSnapshotReplaysLoad(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	api := filepath.Join(root, "api")
 	if err := os.MkdirAll(api, 0o755); err != nil {
@@ -153,6 +156,7 @@ func (s *editingSources) readFile(path string) ([]byte, error) {
 	return bytes, err
 }
 func TestSourceSnapshotRetriesDuringCapture(t *testing.T) {
+	t.Parallel()
 	for _, continuous := range []bool{false, true} {
 		name := "once"
 		if continuous {
@@ -193,6 +197,7 @@ func TestSourceSnapshotRetriesDuringCapture(t *testing.T) {
 }
 
 func TestSourceSnapshotConcurrentReplay(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte("fn main() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -228,6 +233,7 @@ func TestSourceSnapshotConcurrentReplay(t *testing.T) {
 }
 
 func TestSourceSnapshotPreservesIOPaths(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	child := filepath.Join(root, "external", "child")
 	if err := os.MkdirAll(child, 0o755); err != nil {

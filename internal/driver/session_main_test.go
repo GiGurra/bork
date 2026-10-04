@@ -10,6 +10,7 @@ import (
 )
 
 func TestSessionEmitRequiresMain(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "helper.bork")
 	if err := os.WriteFile(path, []byte("fn helper() {}\n"), 0600); err != nil {
 		t.Fatal(err)

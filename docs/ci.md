@@ -26,6 +26,13 @@ test binaries and run when the parent binary is built with `-race`. Their parent
 names remain discoverable in both modes; race shards retain all four tests.
 Ordinary HTTP golden cases still run in normal shards.
 
+New driver test roots must call `t.Parallel()` unless a nearby comment explains
+why they must run sequentially. Check descendants and shared helpers for
+`t.Setenv`, `t.Chdir`, and mutable process globals before adding parallelism;
+those operations also require sequential ancestors. Prefer per-call settings
+and independently owned fixture roots. See the [serial-root audit](design/driver-test-scheduling.md)
+for existing exceptions and planned refactors.
+
 The integration partition assigns the longest measured parents first to the
 least loaded shard, breaking ties by name. `scripts/ci-timings.json` contains
 separate normal/race weights. A new parent receives a five-second provisional

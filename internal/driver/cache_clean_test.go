@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -116,6 +117,7 @@ func (c *cleanWaitingContext) Done() <-chan struct{} {
 	return c.Context.Done()
 }
 func TestCacheCleanWaitsForStageAndCancellation(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	for _, cancelled := range []bool{false, true} {
 		t.Run(map[bool]string{false: "release", true: "cancel"}[cancelled], func(t *testing.T) {
@@ -161,6 +163,7 @@ func TestCacheCleanWaitsForStageAndCancellation(t *testing.T) {
 	}
 }
 func TestCacheCleanDrainsPublisherAdmission(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(base, "locks", "publish-v1"), 0700); err != nil {
@@ -187,6 +190,7 @@ func TestCacheCleanDrainsPublisherAdmission(t *testing.T) {
 	}
 }
 func TestCacheCleanMissingUnavailableAndSymlink(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	report, err := cleanCache(context.Background(), filepath.Join(t.TempDir(), "missing"), [32]byte{}, true)
 	if err != nil || report != (CacheCleanReport{}) {
@@ -221,6 +225,7 @@ func TestCacheCleanMissingUnavailableAndSymlink(t *testing.T) {
 }
 
 func TestCacheCleanLocatorTemporaries(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	namespace := sha256.Sum256([]byte("compiler"))
@@ -268,6 +273,7 @@ func (c *batchCancelContext) Err() error {
 }
 
 func TestCacheCleanDirectoryBatchesCancel(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	for index := range 700 {
 		if err := os.WriteFile(filepath.Join(base, fmt.Sprint(index)), nil, 0600); err != nil {
@@ -285,26 +291,30 @@ func TestCacheCleanDirectoryBatchesCancel(t *testing.T) {
 	}
 }
 
-func TestCacheRemovalSupportsLargeTree(t *testing.T) {
+// Accounting must cross every read batch and visit nested directories without
+// imposing an inventory-wide node cap. Small per-call batches exercise the same
+// traversal as production without creating tens of thousands of hardlinks.
+func TestCacheRemovalMultiBatchNestedAccounting(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
+	const batchSize = 8
 	base := t.TempDir()
-	if err := os.Mkdir(filepath.Join(base, "entry"), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(base, "entry", "nested"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	payload := filepath.Join(base, "payload")
-	if err := os.WriteFile(payload, []byte("x"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	// Valid staged trees can exceed the old node cap through files plus parent
-	// directories. Cleanup also needs to remove interrupted/malformed large trees.
-	for index := range goStageInventoryLimit + 1 {
-		if index%16384 == 0 {
-			payload = filepath.Join(base, fmt.Sprintf("payload-%d", index))
-			if err := os.WriteFile(payload, []byte("x"), 0600); err != nil {
+	for index := 1; index <= 2*batchSize+1; index++ {
+		for directory, width := range map[string]int{"entry": index, "entry/nested": 2 * index} {
+			if err := os.WriteFile(filepath.Join(base, directory, fmt.Sprint(index)), []byte(strings.Repeat("x", width)), 0600); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := os.Link(payload, filepath.Join(base, "entry", fmt.Sprint(index))); err != nil {
+	}
+	payload := filepath.Join(base, "payload")
+	if err := os.WriteFile(payload, []byte(strings.Repeat("y", 17)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"entry/hardlink", "entry/nested/hardlink"} {
+		if err := os.Link(payload, filepath.Join(base, name)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -313,13 +323,15 @@ func TestCacheRemovalSupportsLargeTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = root.Close() }()
-	size, err := cacheRemovalBytes(context.Background(), root, "entry")
-	if err != nil || size != int64(goStageInventoryLimit+1) {
-		t.Fatalf("large tree accounting: %d %v", size, err)
+	size, err := cacheRemovalBytesWithBatch(context.Background(), root, "entry", batchSize)
+	// 1..17 bytes at the root, 2..34 bytes nested, and two 17-byte links.
+	if err != nil || size != 493 {
+		t.Fatalf("multi-batch nested accounting: %d %v", size, err)
 	}
 }
 
 func TestCacheCleanRejectsAliasedLayersAndLocks(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	for _, alias := range []string{"stage/v3", "results/v2", "jobs/v1", "locks/publish-v1", "locks/stage-v3", "stage/v1/locks"} {
 		t.Run(alias, func(t *testing.T) {

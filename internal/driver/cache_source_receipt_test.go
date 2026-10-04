@@ -36,6 +36,7 @@ func roundtripSourceReceipt(t *testing.T, inputs *sourceSnapshot) (*sourceReceip
 }
 
 func TestSourceReceiptReplaysLoader(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	main := filepath.Join(root, "main.bork")
 	if err := os.WriteFile(main, []byte("fn main() {}\n"), 0600); err != nil {
@@ -62,6 +63,7 @@ func TestSourceReceiptReplaysLoader(t *testing.T) {
 }
 
 func TestSourceReceiptContentMembershipAndMissing(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"content", "membership", "missing"} {
 		t.Run(change, func(t *testing.T) {
 			root := t.TempDir()
@@ -158,6 +160,7 @@ func TestSourceReceiptRawPaths(t *testing.T) {
 }
 
 func TestSourceReceiptUnsupported(t *testing.T) {
+	t.Parallel()
 	for _, mutation := range []func(*sourceSnapshot){
 		func(s *sourceSnapshot) { s.driveContext = true },
 		func(s *sourceSnapshot) { s.rooted = &buildSnapshot{} },
@@ -195,6 +198,7 @@ func TestSourceReceiptUnsupported(t *testing.T) {
 }
 
 func TestSourceReceiptInvalidUTF8Declines(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix byte filenames")
 	}

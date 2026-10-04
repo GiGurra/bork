@@ -22,6 +22,7 @@ func requireStageLock(t *testing.T) {
 }
 
 func TestStableGoStageReplacesCompleteInputs(t *testing.T) {
+	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	module := &goModuleInputs{mod: []byte("module example.com/old\ngo 1.26\n"), sum: []byte("old checksum\n")}
@@ -169,6 +170,7 @@ func TestGoStageProcessHelper(t *testing.T) {
 }
 
 func TestGoStageLockPoolBounded(t *testing.T) {
+	t.Parallel()
 	// Cache eviction must not leave an unbounded permanent lock per program.
 	base := t.TempDir()
 	slots := map[string]bool{}

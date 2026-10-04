@@ -25,6 +25,7 @@ func TestGoBindingsReject32BitTarget(t *testing.T) {
 // programs without user bindings does not depend on an installed Go toolchain.
 // There are none yet; adding one must first add that signature mechanism.
 func TestShippedGoBindingsRequireSignatures(t *testing.T) {
+	t.Parallel()
 	diags := &diag.List{}
 	files := prelude.Parse(diags)
 	entries, err := os.ReadDir("../std")
@@ -105,6 +106,7 @@ func TestImportedDefaultFactsNeedProofPerBuild(t *testing.T) {
 }
 
 func TestImportedDefaultsRetainUseSiteFacts(t *testing.T) {
+	t.Parallel()
 	for name, main := range map[string]string{
 		"explicit": "_ = api.Inner { value: 0 }",
 		"sibling":  "_ = api.Pair { upper: 0 }",
@@ -136,6 +138,7 @@ func TestImportedDefaultsRetainUseSiteFacts(t *testing.T) {
 // The HTTP package is normally imported by fixtures. Check its default facts
 // with HTTP as the declaring root too, rather than trusting them in every test.
 func TestHTTPDeclaredDefaultFacts(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte("import \"bork/http\"\nfn Noop(request: http.Request) {}\nfn main() {}\n"), 0o644); err != nil {
 		t.Fatal(err)

@@ -10,6 +10,7 @@ import (
 )
 
 func TestWatchRecoversAndTracksEqualMtimeEdits(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	before := []byte("fn main() { println(missing) }\n")
 	if err := os.WriteFile(path, before, 0o644); err != nil {
@@ -51,6 +52,7 @@ func TestWatchRecoversAndTracksEqualMtimeEdits(t *testing.T) {
 }
 
 func TestWatchMissingRootAppears(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -78,6 +80,7 @@ func TestWatchMissingRootAppears(t *testing.T) {
 }
 
 func TestWatchManualRetrigger(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	if err := os.WriteFile(path, []byte("fn main() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -104,6 +107,7 @@ func TestWatchManualRetrigger(t *testing.T) {
 }
 
 func TestWatchAttemptRetainsBypassedInputs(t *testing.T) {
+	t.Parallel()
 	session := NewSession()
 	session.watch = true
 	if _, err := session.Check("../../examples/config"); err != nil {
@@ -119,6 +123,7 @@ func TestWatchAttemptRetainsBypassedInputs(t *testing.T) {
 }
 
 func TestWatchCancellationDuringValidationDoesNotPublish(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	published, err := publishWatchResult(ctx, WatchResult{}, func() bool {
@@ -134,6 +139,7 @@ func TestWatchCancellationDuringValidationDoesNotPublish(t *testing.T) {
 }
 
 func TestWatchBypassDoesNotRecompileWhilePolling(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	session := NewSession()
@@ -168,6 +174,7 @@ func (sources notifyingWatchSources) readFile(path string) ([]byte, error) {
 }
 
 func TestWatchMissingAssetRecovers(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "main.bork")
 	if err := os.WriteFile(path, []byte("import \"bork/embed\"\nfn main() { println(embed.ReadString(\"asset\")) }\n"), 0o644); err != nil {
@@ -199,6 +206,7 @@ func TestWatchMissingAssetRecovers(t *testing.T) {
 }
 
 func TestWatchIncludesMigrationWarning(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	if err := os.WriteFile(path, []byte("fn success(): Unit { Ok }\nfn main() { success() }\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -220,6 +228,7 @@ func TestWatchIncludesMigrationWarning(t *testing.T) {
 }
 
 func TestWatchPendingManualRequestWithholdsOldResult(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	if err := os.WriteFile(path, []byte("fn main() {}\n"), 0o644); err != nil {
 		t.Fatal(err)

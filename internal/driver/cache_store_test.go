@@ -158,6 +158,7 @@ func TestCacheStoreDeclinesSymlinkEscape(t *testing.T) {
 }
 
 func TestCacheStoreLockPoolBounded(t *testing.T) {
+	t.Parallel()
 	store := cacheStore{namespace: sha256.Sum256([]byte("namespace"))}
 	slots := map[string]bool{}
 	for i := 0; i < 4096; i++ {

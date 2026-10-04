@@ -162,6 +162,7 @@ func TestDepsHelper(t *testing.T) {
 }
 
 func TestDepsHelperErrors(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := Deps(root, "init", nil); err == nil || !strings.Contains(err.Error(), "bork.mod") {
 		t.Fatalf("no module: %v", err)
