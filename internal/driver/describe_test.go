@@ -693,3 +693,43 @@ func TestDescribeFunctionRequirementProof(t *testing.T) {
 		t.Fatalf("function requirement missing from body facts: %+v", result)
 	}
 }
+
+func TestDescribeNamedInterpolation(t *testing.T) {
+	t.Parallel()
+	source := `type Builder = {}
+type Output = { text: String }
+fn Tag(parts: StaticParts): Builder { Builder {} }
+fn (b: Builder) Interpolate[T: Show](value: T): Builder { b }
+fn (b: Builder) Finish(): Output { Output { text: "" } }
+fn add(x: Int): Int { x + 1 }
+fn example(name: String) uses io {
+  println(Tag"$name ${add(1)} ${Tag"nested".text} ${1 + 2}".text)
+}
+`
+	for _, tc := range []struct{ fragment, typ string }{
+		{`Tag"$name`, "Output"},
+		{`name ${`, "String"},
+		{"add(1)", "(Int) => Int"},
+		{"(1)}", "Int"},
+		{`Tag"nested`, "Output"},
+		{"1 + 2", "Int"},
+	} {
+		t.Run(tc.fragment, func(t *testing.T) {
+			result := describeAt(t, source, tc.fragment, "")
+			if result.typ != tc.typ {
+				t.Fatalf("interpolated %s: %+v", tc.fragment, result)
+			}
+		})
+	}
+	qualified := `import dbsql "bork/sql"
+fn example(value: Int) {
+  statement = dbsql.SQL"SELECT $value"
+}
+`
+	for _, prefix := range []string{"dbsql.SQL", `SQL"`} {
+		result := describeAt(t, qualified, prefix, "")
+		if result.typ != "dbsql.Statement" || !result.defined {
+			t.Fatalf("qualified interpolator %s: %+v", prefix, result)
+		}
+	}
+}

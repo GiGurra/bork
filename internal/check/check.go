@@ -203,7 +203,18 @@ type TryInfo struct {
 // and the packages it imports. Later passes (lifetimes, facts, and code
 // generation) read it, and the typed tree of each function body
 // (Func.Body), instead of re-deriving types.
+// InterpolationSource retains source expressions hidden by named interpolation lowering.
+// Holes refer to the expressions already lowered for execution.
+type InterpolationSource struct {
+	Prefix  diag.Pos
+	Width   int
+	Factory Expr
+	Holes   []Expr
+}
+
 type Info struct {
+	Interpolations map[Expr]*InterpolationSource
+
 	PackageBindings []*PackageBinding
 
 	// GoImportNames resolves unsafe Go imports without mutating source syntax.

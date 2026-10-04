@@ -21,7 +21,8 @@ type lowerer struct {
 	vars      map[any]*Var
 	yieldElem Type
 	// withs counts the with bindings, to name them apart.
-	withs int
+	withs                int
+	interpolationSources map[syntax.Expr]Expr
 }
 
 // needs is what the call or reference x passes for its callee's needs.
@@ -228,7 +229,12 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 	panic(fmt.Sprintf("unhandled statement %T", s))
 }
 
-func (l *lowerer) expr(x syntax.Expr) Expr {
+func (l *lowerer) expr(x syntax.Expr) (result Expr) {
+	if capture := l.interpolationSources; capture != nil {
+		if _, wanted := capture[x]; wanted {
+			defer func() { capture[x] = result }()
+		}
+	}
 	if payload := l.info.optionPayloads[x]; payload != nil {
 		value := l.exprRaw(x, payload)
 		opt := l.info.types[x].(*Sealed)
@@ -308,7 +314,31 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		return &RecordLit{expr: at, Record: rec, Fields: []*FieldValue{{Name: "values", Field: rec.Fields[0], Value: list}}}
 	case *syntax.Interp:
 		if call := l.info.interpolatorCalls[x]; call != nil {
-			return l.expr(call)
+			factory := call
+			for {
+				selector, ok := factory.Fun.(*syntax.Selector)
+				if !ok {
+					break
+				}
+				factory = selector.X.(*syntax.Call)
+			}
+			capture := map[syntax.Expr]Expr{factory: nil}
+			for _, hole := range x.Exprs {
+				capture[hole] = nil
+			}
+			outer := l.interpolationSources
+			l.interpolationSources = capture
+			result := l.expr(call)
+			l.interpolationSources = outer
+			source := &InterpolationSource{Prefix: x.Prefix.Position(), Width: len(x.Prefix.(*syntax.Ident).Name), Factory: capture[factory]}
+			for _, hole := range x.Exprs {
+				source.Holes = append(source.Holes, capture[hole])
+			}
+			if l.info.Interpolations == nil {
+				l.info.Interpolations = map[Expr]*InterpolationSource{}
+			}
+			l.info.Interpolations[result] = source
+			return result
 		}
 		return &Interp{expr: at, Parts: x.Parts, Exprs: l.exprs(x.Exprs)}
 	case *syntax.Ident:
