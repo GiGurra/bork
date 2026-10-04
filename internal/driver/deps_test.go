@@ -12,6 +12,7 @@ import (
 // Both drivers must compile in a generated module, independent of bork's own
 // go.mod. A warm module cache must also support an explicitly offline build.
 func TestStandardGoDependencies(t *testing.T) {
+	t.Parallel()
 	source := []byte(`package main
 import (
  "database/sql"
@@ -30,22 +31,26 @@ func main() {
 `)
 	files := []*syntax.File{{Package: "bork/sql"}}
 	exe := filepath.Join(t.TempDir(), "program")
-	if err := buildGo(files, source, exe); err != nil {
+	module, err := captureGoModule(files, diskSources{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GOPROXY", "off")
+	if err := buildGoWithContext(files, source, exe, module, captureGoContext()); err != nil {
+		t.Fatal(err)
+	}
+	offlineSettings := []string{"GOPROXY=off", "GOSUMDB=unsupported.invalid"}
 	// This unconfigured checksum DB would fail if the build tried to consult
 	// it. Shipped checksums must suffice independently of a cached default DB.
-	t.Setenv("GOSUMDB", "unsupported.invalid")
-	if err := buildGo(files, source, exe); err != nil {
+	offline := captureGoContextWithOptions(goContextOptions{settings: offlineSettings, moduleHook: goModuleHook})
+	if err := buildGoWithContext(files, source, exe, module, offline); err != nil {
 		t.Fatalf("warm cache offline build: %v", err)
 	}
 	out, err := exec.Command(exe).CombinedOutput()
 	if err != nil || string(out) != "42\n" {
 		t.Fatalf("driver program: %s %v", out, err)
 	}
-	t.Setenv("GOMODCACHE", t.TempDir())
-	if err := buildGo(files, source, exe); err == nil || !strings.Contains(err.Error(), "offline builds need the modules in Go's cache") {
+	cold := captureGoContextWithOptions(goContextOptions{settings: append(offlineSettings, "GOMODCACHE="+t.TempDir()), moduleHook: goModuleHook})
+	if err := buildGoWithContext(files, source, exe, module, cold); err == nil || !strings.Contains(err.Error(), "offline builds need the modules in Go's cache") {
 		t.Fatalf("cold cache offline build: %v", err)
 	}
 }

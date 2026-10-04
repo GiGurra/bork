@@ -7,10 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GiGurra/bork/internal/gen"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
 func TestUserGoDependencies(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	write := func(name, data string) {
 		t.Helper()
@@ -41,20 +43,20 @@ func TestUserGoDependencies(t *testing.T) {
 	if err := Build(root, exe); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GOPROXY", "off")
-	t.Setenv("GOSUMDB", "unsupported.invalid")
-	if _, _, err := Check(root); err != nil {
+	offlineSettings := []string{"GOPROXY=off", "GOSUMDB=unsupported.invalid"}
+	offline := captureGoContextWithOptions(goContextOptions{settings: offlineSettings, moduleHook: goModuleHook})
+	if _, err := checkGoContextFixture(root, offline); err != nil {
 		t.Fatalf("offline checking from module cache: %v", err)
 	}
-	if err := Build(root, exe); err != nil {
+	if err := buildDependencyFixture(root, exe, offline); err != nil {
 		t.Fatalf("offline build from module cache: %v", err)
 	}
 	out, err := exec.Command(exe).CombinedOutput()
 	if err != nil || string(out) != "Ok\n" {
 		t.Fatalf("program: %s %v", out, err)
 	}
-	t.Setenv("GOMODCACHE", t.TempDir())
-	if _, _, err := Check(root); err == nil || !strings.Contains(err.Error(), "github.com/google/uuid") {
+	cold := captureGoContextWithOptions(goContextOptions{settings: append(offlineSettings, "GOMODCACHE="+t.TempDir()), moduleHook: goModuleHook})
+	if _, err := checkGoContextFixture(root, cold); err == nil || !strings.Contains(err.Error(), "github.com/google/uuid") {
 		t.Fatalf("cold offline cache must fail at binding: %v", err)
 	}
 }
@@ -94,4 +96,21 @@ func TestUserGoManifestErrors(t *testing.T) {
 		t.Fatalf("check-only program must validate its manifest: %v", err)
 	}
 
+}
+
+// Use the ordinary fresh check/generate/build pipeline with captured offline
+// settings; the first build above still exercises the public Build entry point.
+func buildDependencyFixture(path, out string, ctx *goContext) error {
+	program, err := checkGoContextFixture(path, ctx)
+	if err != nil {
+		return err
+	}
+	if err := program.requireMain(); err != nil {
+		return err
+	}
+	source, err := gen.Package(program.files, program.info)
+	if err != nil {
+		return err
+	}
+	return buildGoWithContext(program.files, source, out, program.module, program.context, program.info.Embeds...)
 }
