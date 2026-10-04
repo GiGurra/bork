@@ -139,7 +139,10 @@ any bytes. Existing checking can evaluate compile-time expressions, as with
 `bork check`; this command does not run package tests or a program entrypoint.
 
 Use a small document model between checker/driver queries and Markdown/HTML
-renderers. Both formats share ordering, visibility, comments, and signatures.
+renderers. Both formats share ordering, visibility, comments, and signatures. The LSP
+hover uses the same doc-comment renderer as `bork doc`, so comment text and
+markup have one interpretation. Render facts/`where` constraints and `uses`
+effects prominently in signatures, alongside `requires` and ambient `needs`.
 A JSON format, remote module queries, and a public structured schema are not
 needed for the first implementation. Keep `bork describe` for position/fact
 queries and editor interactions.
