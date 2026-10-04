@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -122,6 +123,35 @@ class MeasurementTests(unittest.TestCase):
             self.assertEqual(result["result"], 1)
             self.assertEqual(result["selected"], [])
             self.assertLess(result["seconds"], 1)
+
+    @unittest.skipUnless(Path("/proc").is_dir(), "Linux process-state check")
+    def test_timeout_kills_descendant_even_after_leader_exits(self):
+        import os
+        import signal
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as directory:
+            pid_file = Path(directory) / "child.pid"
+            child = ("import os,signal,time; from pathlib import Path; "
+                     "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+                     f"Path({str(pid_file)!r}).write_text(str(os.getpid())); time.sleep(30)")
+            parent = (f"import subprocess,time; subprocess.Popen([{sys.executable!r}, '-c', {child!r}], "
+                      "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(30)")
+            try:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    ci.execute([sys.executable, "-c", parent], time.monotonic() + 1)
+                pid = int(pid_file.read_text())
+                state = Path(f"/proc/{pid}/stat")
+                deadline = time.monotonic() + 1
+                while state.exists() and state.read_text().split()[2] != "Z":
+                    self.assertLess(time.monotonic(), deadline, "descendant survived timeout")
+                    time.sleep(0.01)
+            finally:
+                if pid_file.exists():
+                    try:
+                        os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
 
 
 if __name__ == "__main__":

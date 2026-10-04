@@ -33,12 +33,21 @@ def execute(command, deadline=None, capture=False):
         remaining = None if deadline is None else max(0, deadline - time.monotonic())
         stdout, _ = process.communicate(timeout=remaining)
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
         try:
             process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
+            pass
+        # The leader may exit before a descendant that ignores SIGTERM.
+        # Always escalate the group, even if communicate already returned.
+        try:
             os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
+        except ProcessLookupError:
+            pass
+        process.communicate()
         raise
     if process.returncode:
         if stdout:
