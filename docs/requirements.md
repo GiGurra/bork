@@ -3942,9 +3942,13 @@ source overlays for package siblings and imports. Hover shows types and proven
 facts; definitions, references, completion, document symbols, formatting and
 compiler suggested-edit quick fixes share compiler and formatter behavior.
 Broken edits retain the last successful analysis for navigation, with stale
-hover/completion labels. References cover loaded open-package/import graphs;
-rename is limited to local variables and private functions until a complete
-workspace reference index exists. The packageable VS Code client locates a
+hover/completion labels. References and rename use a compiler-owned declaration index across local
+workspace packages, including closed importers. Rename includes exported
+functions, types, record fields, variants, predicates, package values, locals
+and parameters. Proposed edits recheck in memory and preserve checked bindings;
+libraries and standard sources remain read-only. Broken workspace packages and
+opaque raw Go bodies prevent edits. Classes, instances and ambient values are
+not yet renameable. The packageable VS Code client locates a
 configured or PATH-installed compiler. Packaging does not publish it.
 
 The in-repository tree-sitter grammar provides structural highlighting, locals,

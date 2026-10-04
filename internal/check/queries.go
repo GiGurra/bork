@@ -530,6 +530,8 @@ func editorTypeQueryChecker(info *Info, from *Package) *checker {
 	copy := *info
 	copy.writtenTypes = maps.Clone(info.writtenTypes)
 	copy.typeUses = maps.Clone(info.typeUses)
+	copy.sourceDefinitions = maps.Clone(info.sourceDefinitions)
+	copy.sourceNames = maps.Clone(info.sourceNames)
 	c := queryChecker(&copy, from)
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
 	return c

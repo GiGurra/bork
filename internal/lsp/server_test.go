@@ -230,9 +230,7 @@ func TestRenameRejectsIncompleteAndCollidingEdits(t *testing.T) {
 		p    position
 		name string
 	}{
-		{"fn Answer(): Int { 42 }\nfn main() uses io { println(Answer()) }\n", position{1, 28}, "Other"},
 		{"fn main() uses io { x = 1; y = 2; println(x + y) }\n", position{0, 42}, "y"},
-		{"type Item = { value: Int }\nfn use(item: Item): Int { item.value }\nfn main() {}\n", position{1, 31}, "other"},
 	} {
 		s, path := newTestServer(t, tc.src)
 		p := documentParams{Position: tc.p, NewName: tc.name}
@@ -275,12 +273,16 @@ func TestRenameIncludesSignatureRequirements(t *testing.T) {
 	}
 }
 
-func TestRenameRejectsUnindexedWherePredicate(t *testing.T) {
+func TestRenameIncludesWherePredicate(t *testing.T) {
 	src := "pred positive(n: Int) { n > 0 }\nfn identity(n: Int where positive): Int where positive { n }\nfn main() {}\n"
 	s, path := newTestServer(t, src)
 	p := documentParams{Position: position{0, 6}, NewName: "aboveZero"}
-	if _, err := s.feature("textDocument/rename", path, p); err == nil {
-		t.Fatal("partial predicate rename accepted")
+	result, err := s.feature("textDocument/rename", path, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edits := result.(map[string]any)["changes"].(map[string][]textEdit)[fileURI(path)]; len(edits) != 3 {
+		t.Fatalf("where references omitted: %+v", edits)
 	}
 }
 

@@ -471,6 +471,7 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 	case 1:
 		name := p.Path[0]
 		t := c.typeNamed(name)
+		c.noteSourceType(p.Pos, name)
 		if t == nil {
 			if p.Braces {
 				c.unknownType(p.Pos, name)
@@ -506,6 +507,7 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 		return c.within(inner, rec, st, p.Pos)
 	case 2:
 		owner, name := p.Path[0], p.Path[1]
+		c.noteSourceType(p.Pos, owner)
 		v := c.variantRef(p.Pos, owner, name, st)
 		if v == nil {
 			return nil

@@ -327,6 +327,8 @@ type Info struct {
 	propagatedHeaders map[string]*Ambient
 	// recordTargets records what each record literal builds: a *Record
 	// or a *Variant.
+	sourceDefinitions      map[diag.Pos]diag.Pos
+	sourceNames            map[diag.Pos]string
 	writtenTypes           map[*syntax.TypeExpr]Type
 	constructorConstraints map[syntax.Expr][]*Constraint
 	recordTargets          map[*syntax.RecordLit]any
@@ -430,6 +432,8 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			callArgs:               map[*syntax.Call][]syntax.Expr{},
 			callOrder:              map[*syntax.Call][]int{},
 			callTypeArgs:           map[*syntax.Call][]*syntax.TypeExpr{},
+			sourceDefinitions:      map[diag.Pos]diag.Pos{},
+			sourceNames:            map[diag.Pos]string{},
 			writtenTypes:           map[*syntax.TypeExpr]Type{},
 			constructorConstraints: map[syntax.Expr][]*Constraint{},
 			recordTargets:          map[*syntax.RecordLit]any{},

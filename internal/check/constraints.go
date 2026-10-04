@@ -154,14 +154,22 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			for i, p := range fd.Params {
 				scope[p.Name] = fn.Params[i]
 			}
+			positions := map[string]diag.Pos{}
+			for _, p := range fd.Params {
+				positions[p.Name] = p.Pos
+			}
 			c.useTypeParams(fn)
 			c.fieldWhere = fd.Constructor != nil
 			fn.ParamConstraints = make([][]*Constraint, len(fd.Params))
 			for i, p := range fd.Params {
 				fn.ParamConstraints[i] = c.constraintsOf(p.Type, fn.Params[i], scope)
+				c.noteConstraintSources(fn.ParamConstraints[i], positions)
 			}
 			c.fieldWhere = false
 			fn.ResultConstraints = c.memberConstraints(fd.Result, fn.Result, scope)
+			for _, member := range fn.ResultConstraints {
+				c.noteConstraintSources(member.Constraints, positions)
+			}
 			c.useTypeParams(nil)
 			c.inPrelude = false
 		}
@@ -197,13 +205,18 @@ func (c *checker) fieldConstraints(fields []*Field, decls []*syntax.FieldDecl) {
 	c.fieldWhere = true
 	defer func() { c.fieldWhere = false }()
 	scope := map[string]Type{}
+	positions := map[string]diag.Pos{}
 	for _, f := range fields {
+		if f.Decl != nil {
+			positions[f.Name] = f.Decl.Pos
+		}
 		scope[f.Name] = f.Type
 	}
 	for _, f := range fields {
 		for _, fd := range decls {
 			if fd.Name == f.Name {
 				f.Constraints = c.constraintsOf(fd.Type, f.Type, scope)
+				c.noteConstraintSources(f.Constraints, positions)
 				var mark func(*Constraint)
 				mark = func(con *Constraint) {
 					for i := range con.Args {
@@ -436,6 +449,8 @@ func (c *checker) checkedConstraintAtom(ref *syntax.PredRef, subject Type, scope
 		c.errorf(ref.Pos, "unknown predicate %s", ref.Name)
 		return nil
 	}
+	c.info.sourceDefinitions[ref.Pos] = fn.Decl.Pos
+	c.info.sourceNames[ref.Pos] = ref.Name
 	if !fn.Decl.IsPred {
 		c.errorf(ref.Pos, "%s is a function, not a predicate (declare it with pred)", ref.Name)
 		return nil
@@ -591,4 +606,19 @@ func (info *Info) PredicateDicts(from *Package, inst *Instance) bool {
 		}
 	}
 	return c.resolveDicts(inst, diag.Pos{})
+}
+
+// Retain the checked scope identities of names that appear only in facts.
+func (c *checker) noteConstraintSources(constraints []*Constraint, positions map[string]diag.Pos) {
+	for _, con := range constraints {
+		if pos, ok := positions[con.PredParam]; ok {
+			c.info.sourceDefinitions[con.Pos] = pos
+		}
+		for _, arg := range con.Args {
+			if pos, ok := positions[arg.Param]; ok && arg.Const == nil && arg.source != nil {
+				c.info.sourceDefinitions[arg.source.Position()] = pos
+			}
+		}
+		c.noteConstraintSources(con.Or, positions)
+	}
 }

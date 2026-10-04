@@ -11,7 +11,6 @@ import (
 	"github.com/GiGurra/bork/internal/describe"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/std"
-	"github.com/GiGurra/bork/internal/syntax"
 )
 
 // EditorAnalysis is a successful checked snapshot. Its compiler graph remains
@@ -22,6 +21,7 @@ type EditorAnalysis struct {
 	overlays map[string]string
 	warnings []diag.Diagnostic
 	semantic map[string][]check.SemanticToken
+	symbols  *check.SymbolIndex
 }
 
 // Analyze checks a package using absolute-path unsaved source overlays. Returned
@@ -155,73 +155,9 @@ func (o overlaySources) directory(name string) ([]sourceEntry, error) {
 
 // Definition resolves a token identity without evaluating facts.
 func (a *EditorAnalysis) Definition(pos diag.Pos) (*diag.Pos, error) {
-	for _, file := range a.program.files {
-		path, err := filepath.Abs(file.Path)
-		if err == nil && path == pos.File && !file.Prelude && !strings.HasPrefix(file.Package, std.Prefix) {
-			pos.File = file.Path
-			// Declaration positions point at fn/type keywords. Resolve their
-			// identifier tokens before using them as editor identities.
-			for _, fn := range file.Funcs {
-				if fn.ScriptMain {
-					continue
-				}
-				namePos := editorDeclarationName(file, fn.Pos, fn.Name)
-				if pos.Line == namePos.Line && pos.Col >= namePos.Col && pos.Col < namePos.Col+len(fn.Name) {
-					namePos.File = path
-					return &namePos, nil
-				}
-			}
-			selection, err := describe.Lookup(a.program.files, a.program.info, pos, []byte(file.Source))
-			if err != nil {
-				return nil, err
-			}
-			if selection.Definition == nil {
-				return nil, nil
-			}
-			result := *selection.Definition
-			for _, target := range a.program.files {
-				if target.Path == result.File && !target.Prelude && !strings.HasPrefix(target.Package, std.Prefix) {
-					for _, fn := range target.Funcs {
-						if fn.ScriptMain {
-							continue
-						}
-						if result == fn.Pos {
-							result = editorDeclarationName(target, fn.Pos, fn.Name)
-							break
-						}
-					}
-					for _, typ := range target.Types {
-						if result == typ.Pos {
-							result = editorDeclarationName(target, typ.Pos, typ.Name)
-							break
-						}
-					}
-					result.File, err = filepath.Abs(result.File)
-					return &result, err
-				}
-			}
-			return nil, nil
-		}
+	reference := a.ReferenceAt(pos)
+	if reference == nil {
+		return nil, nil
 	}
-	return nil, nil
-}
-
-func editorDeclarationName(file *syntax.File, start diag.Pos, name string) diag.Pos {
-	tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
-	depth := 0
-	for _, token := range tokens {
-		if token.Pos.Line < start.Line || token.Pos.Line == start.Line && token.Pos.Col < start.Col {
-			continue
-		}
-		switch token.Kind {
-		case syntax.LParen, syntax.LBrack:
-			depth++
-		case syntax.RParen, syntax.RBrack:
-			depth--
-		}
-		if token.Kind == syntax.TIdent && token.Text == name && depth == 0 {
-			return token.Pos
-		}
-	}
-	return start
+	return &reference.Definition, nil
 }

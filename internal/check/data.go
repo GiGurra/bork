@@ -117,7 +117,11 @@ func (c *checker) isTypeRef(x syntax.Expr) (string, bool) {
 	if !ok || c.lookup(id.Name) != nil {
 		return "", false
 	}
-	return id.Name, c.isTypeName(id.Name)
+	isType := c.isTypeName(id.Name)
+	if isType {
+		c.noteSourceType(id.Pos, id.Name)
+	}
+	return id.Name, isType
 }
 
 func (c *checker) selector(e *syntax.Selector, want Type) Type {
@@ -219,6 +223,7 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 		return c.specializedLit(e, t, "")
 	case *syntax.Ident:
 		typ := c.typeNamed(t.Name)
+		c.noteSourceType(t.Pos, t.Name)
 		if typ == nil {
 			c.unknownType(t.Pos, t.Name)
 			c.skipFieldInits(e)
@@ -248,6 +253,7 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 			return c.specializedLit(e, head, t.Name)
 		}
 		owner := t.X.(*syntax.Ident).Name
+		c.noteSourceType(t.X.Position(), owner)
 		if s, ok := c.typeNamed(owner).(*Sealed); ok && len(s.TypeParams) > 0 {
 			return c.genericLit(e, s, t.Name, owner+"."+t.Name, want)
 		}

@@ -333,9 +333,12 @@ to restart the language server or show its output.
 Open documents are checked as packages with unsaved-buffer overlays. LSP
 positions use zero-based lines and UTF-16 columns. Broken edits retain the last
 successful navigation snapshot; hover and completion label it stale. References
-cover open packages and their loaded imports. Rename supports local variables
-and package-private functions, with current successful checks and conservative
-collision rejection. Exported names, types and fields are not yet renameable.
+and rename cover local workspace packages and their closed importers. Rename
+supports locals, parameters, exported functions, types, record fields, variants,
+predicates and package values. It checks proposed edits in memory and preserves
+checked bindings, including shorthand patterns and facts. All local packages
+must check; dependency sources are read-only. Raw Go bodies in affected packages
+prevent rename. Classes, instances and ambient values are not yet renameable.
 Completion offers visible symbols, fields, named arguments and match patterns,
 plus snippets in supporting clients. Auto-imports search standard packages and
 the current module after two name characters.
