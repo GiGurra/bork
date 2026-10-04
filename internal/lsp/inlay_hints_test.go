@@ -54,6 +54,9 @@ func inlayProtocol(t *testing.T, source string, options map[string]bool, selecti
 	if err := Serve(&in, &out); err != nil {
 		t.Fatal(err)
 	}
+	if changed != "" && bytes.Contains(out.Bytes(), []byte(`"version":2`)) {
+		t.Fatal("inlay request checked the pending changed buffer")
+	}
 	r := bufio.NewReader(&out)
 	for {
 		line, err := r.ReadString('\n')

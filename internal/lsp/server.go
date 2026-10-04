@@ -122,7 +122,7 @@ func ServeWithVersion(in io.Reader, out io.Writer, version string) error {
 				}
 				return fmt.Errorf("client exited without shutdown")
 			}
-			if len(m.ID) > 0 && m.Method != "initialize" && m.Method != "shutdown" && m.Method != "textDocument/codeLens" && m.Method != "bork/tests" {
+			if len(m.ID) > 0 && m.Method != "initialize" && m.Method != "shutdown" && m.Method != "textDocument/codeLens" && m.Method != "bork/tests" && m.Method != "textDocument/inlayHint" {
 				if err := flush(); err != nil {
 					return err
 				}
