@@ -164,6 +164,13 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 			return nil, &DiagError{Diags: diags}
 		}
 	}
+	if len(info.InterpolationBatches) > 0 {
+		phase(observe, "interpolation-validators")
+		evaluateInterpolationValidators(files, info, diags, module, context, usage)
+		if diags.Len() > 0 {
+			return nil, &DiagError{Diags: diags}
+		}
+	}
 	phase(observe, "facts")
 	if usage != nil {
 		inner := eval

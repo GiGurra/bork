@@ -147,6 +147,14 @@ func (g *gen) constant(v constant.Value, t check.Type) ast.Expr {
 func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncDecl) ([]byte, error) {
 	info := g.info
 	for _, class := range info.Classes {
+		// Dictionary declarations refer to method signatures even when no
+		// instance is reachable. Register those types before emitting types.
+		for _, method := range class.Methods {
+			for _, param := range method.Params {
+				g.goType(param)
+			}
+			g.goType(method.Result)
+		}
 		if check.IsGoStruct(class) {
 			g.goType(info.Named["GoValueError"])
 		}

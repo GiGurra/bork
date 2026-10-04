@@ -10,7 +10,7 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [options.bork](options.bork) | `Option` and its methods |
 | [parallel.bork](parallel.bork) | Ordered, bounded pure and scoped parallel list operations |
 | [lists.bork](lists.bork) | List constructors, `notEmpty`, and list methods |
-| [interpolation.bork](interpolation.bork) | Compiler-created `StaticParts` for typed interpolator factories |
+| [interpolation.bork](interpolation.bork) | Compiler-created `StaticParts`, hole metadata, and optional `InterpolationValidator` |
 | [strings.bork](strings.bork) | Number and Boolean parsing, and string methods |
 | [runes.bork](runes.bork) | Unicode rune methods |
 | [maps.bork](maps.bork) | `Entry` and persistent map methods |

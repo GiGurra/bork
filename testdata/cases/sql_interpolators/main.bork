@@ -36,7 +36,8 @@ fn demo() uses io + net: Ok | dbsql.Error | DecodeError {
     println(query.QueryJson(db)?)
     println(query.Rows[Row](db).toList())
     println(query.RowsJson(db).toList())
-    bad = dbsql.SQL"SELECT '$hostile'"
+    dynamic = dbsql.SQL""
+    bad = dbsql.SQL"${dynamic}SELECT '$hostile'"
     println(bad.RowsJson(db).toList())
     println(bad.RowsJson(db).toList())
     println(bad.Rows[Row](db).toList())
