@@ -469,3 +469,41 @@ this layout reuses Go compilation without certifying Bork semantic hits.
 ordinary `ns/op` and allocation columns describe the complete first request.
 Calibration uses whole requests so very short phases cannot accidentally
 schedule millions of full compilations. Unexecuted phases are skipped.
+
+### Persisted-receipt identity prerequisites
+
+The first receipts slice adds owned loader observations and compiler identity
+without enabling persisted hits or adding work to ordinary compilation. The
+compiler namespace hashes the actual running image once per process. On Linux
+this reads `/proc/self/exe`, so replacing the installed pathname does not change
+which compiler is identified. Other platforms conservatively decline persistence
+until they have an equivalent running-image boundary.
+
+An embedded Go build ID cannot replace the SHA: changing an equal-length string
+literal in a linked binary changed its output and SHA while `go tool buildid`
+continued to report the same entire ID, including the final content component.
+A missing or stripped ID is therefore not the only case needing full hashing.
+
+`BenchmarkCacheReceiptPrerequisites` hashes afresh on every iteration, rather than
+using the process memo or the launcher's established stat shortcut. Set
+`BORK_BENCH_COMPILER_IMAGE` to a freshly built CLI to avoid measuring the larger
+Go test image. Seven samples of ten iterations on this host used a 16,705,933-byte
+Bork image and a 17,142,188-byte Go launcher:
+
+| Prerequisite | Median ms | Min–max ms |
+| --- | ---: | ---: |
+| Compiler SHA | 10.35 | 9.57–12.63 |
+| Go launcher SHA | 11.71 | 11.13–12.20 |
+| Source receipt content/membership validation | 0.047 | 0.035–0.056 |
+| Both hashes and validation, sequential | 19.86 | 19.66–20.17 |
+| Both hashes concurrent with validation, joined | 10.78 | 10.42–11.70 |
+
+These are uncached identity and loader-validation costs with warm filesystem
+buffers, not complete fresh-CLI disk-hit measurements. The source sample observes
+one small file, its directory, and a missing module file. Configuration, standard
+library names, decoding, and publication still need their own receipts and
+measurement. Samples ran alongside other checks; separately calibrated medians
+need not sum to the combined median. Concurrency reduces wall time, not CPU work.
+When persisted reads are enabled, start image and resolved-launcher hashing beside
+source loading/receipt validation, and join before accepting any result. Keep
+ordinary uncached startup free of this work while disk reads remain disabled.
