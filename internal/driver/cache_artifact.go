@@ -89,7 +89,7 @@ func cacheArtifactFromObserved(artifact *sessionArtifact, paths []string, namesp
 		return nil, err
 	}
 	phase(observe, "go-receipt")
-	configuration, err := artifact.context.receipt()
+	configuration, err := artifact.context.receiptSnapshot()
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func cacheArtifactFromObserved(artifact *sessionArtifact, paths []string, namesp
 	body := &cacheArtifactBody{Schema: cacheArtifactSchema, Namespace: namespace, Key: key, Request: request, Source: source, Go: configuration, Module: cacheArtifactModule{Mod: slices.Clone(artifact.module.mod), Sum: slices.Clone(artifact.module.sum)}, GoSource: slices.Clone(artifact.goSrc), SourcePaths: slices.Clone(paths)}
 	phase(observe, "metadata-receipts")
 	for _, input := range artifact.names {
-		name, err := input.receipt()
+		name, err := input.receiptSnapshot()
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +112,17 @@ func cacheArtifactFromObserved(artifact *sessionArtifact, paths []string, namesp
 		body.Warnings = append(body.Warnings, cacheArtifactWarning{Pos: warning.Pos, End: warning.End, Message: warning.Msg, Code: warning.Code, Severity: warning.Severity, Fixes: warning.Fixes})
 	}
 	phase(observe, "final-receipt-validation")
-	if !body.valid() || !artifact.inputs.current() || !artifact.assets.current() || !artifact.context.validation.current() {
+	if !body.valid() {
+		return nil, errInvalidCacheArtifact
+	}
+	// Certify each SDK inventory once, then all source/configuration observations.
+	// Component snapshots above must never be served independently as proof.
+	for _, input := range artifact.names {
+		if input.inputs == nil || !input.inputs.currentMetadata() {
+			return nil, errInvalidCacheArtifact
+		}
+	}
+	if !artifact.inputs.current() || !artifact.assets.current() || !artifact.context.validation.current() {
 		return nil, errInvalidCacheArtifact
 	}
 	return body, nil

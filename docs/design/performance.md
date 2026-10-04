@@ -604,3 +604,28 @@ variation. They do not claim evaluator result hits. Compiler and launcher hashin
 is now lazy: overlap it with candidate validation or eligible publication, while
 skipping it entirely on known-bypass misses. This takes precedence over unconditional
 startup hashing because unknown programs must not pay extra cache inventory costs.
+
+Composite publication snapshots component observations without repeating their
+current-input checks, then certifies each metadata inventory once before a final
+source/assets/shared-context check. Standalone component receipt APIs still perform
+full validation. Paired seven-process hello check first-miss profiles after the
+ordinary-cost bypass change:
+
+| Phase | Before composite, median ms | Composite, median ms |
+| --- | ---: | ---: |
+| Late eligible inventory capture | 98.53 | 88.55 |
+| Publication Go receipt | 20.15 | 0.05 |
+| Publication metadata receipts | 18.01 | 0.22 |
+| Final publication certification | 10.10 | 18.36 |
+| Encoding/store | 2.13 | 2.19 |
+| Total first miss | 207.91 | 168.37 |
+
+This removes repeated certification; it does not meet the automatic-cache
+acceptance bar of ordinary compilation plus about 10–15 ms on an eligible miss.
+The remaining late inventory capture is the target. Reusing SDK certification
+from launcher SHA and GOROOT directory identity is insufficient: an in-place SDK
+file edit with restored mtime leaves launcher bytes and the parent directory's
+device/inode/mtime/ctime unchanged. SDK content proof remains required. The next
+experiment moves owned receipt verification/publication to a bounded, low-priority
+detached child, retaining ordinary-cost bypasses and explicit opt-out. Automatic
+use waits for measured parent overhead and lifecycle integration.

@@ -38,7 +38,20 @@ type goContextReceipt struct {
 }
 
 func (ctx *goContext) receipt() (*goContextReceipt, error) {
-	if ctx == nil || ctx.validation == nil || !ctx.validation.accepts(ctx) || !ctx.validation.current() {
+	if ctx == nil || ctx.validation == nil || !ctx.validation.current() {
+		return nil, errUnsupportedGoReceipt
+	}
+	receipt, err := ctx.receiptSnapshot()
+	if err != nil || !ctx.validation.current() {
+		return nil, errUnsupportedGoReceipt
+	}
+	return receipt, nil
+}
+
+// receiptSnapshot owns captured observations but does not certify them against
+// current contents. Its owner must validate the complete graph before publication.
+func (ctx *goContext) receiptSnapshot() (*goContextReceipt, error) {
+	if ctx == nil || ctx.validation == nil || !ctx.validation.accepts(ctx) {
 		return nil, errUnsupportedGoReceipt
 	}
 	v := ctx.validation
@@ -51,7 +64,7 @@ func (ctx *goContext) receipt() (*goContextReceipt, error) {
 		return nil, err
 	}
 	out := &goContextReceipt{Schema: goReceiptSchema, ProcessEnv: slices.Clone(ctx.processEnv), Values: maps.Clone(ctx.values), Tool: ctx.tool, Driver: ctx.driver, Self: ctx.self, ToolDigest: ctx.toolDigest, BridgeDigest: bridge, BridgeMode: v.selfMode, Inputs: inputs, Root: v.root, Version: v.version, Cache: v.cache, Tmp: v.tmp, ResolvedLauncher: v.resolvedLauncher, Compilers: maps.Clone(v.compilers), DirectoryModes: maps.Clone(v.directoryModes)}
-	if !out.valid() || !v.current() {
+	if !out.valid() {
 		return nil, errUnsupportedGoReceipt
 	}
 	return out, nil
