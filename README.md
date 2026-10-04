@@ -58,7 +58,7 @@ fn describe(id: Int): String {
 }
 ```
 
-Without the last arm, the program does not compile: `match is not exhaustive: missing NotFound`.
+Without the last arm, the program does not compile: `match is not exhaustive: missing NotFound`. More on [types](docs/language/types.md) and [matching](docs/language/matching.md).
 
 ### Facts
 
@@ -83,9 +83,11 @@ transfer requires amount to be positive, but that is not proven for amount
 transfer requires amount to be positive, but positive(0) is false
 ```
 
+More on [facts](docs/language/facts.md).
+
 ### Effects
 
-A function's signature says what it does to the outside world: `uses io`, `net`, `clock`, `random`, or `state`. A function that declares nothing is pure, and the compiler holds it to that. Only `main` may do anything without saying so.
+A function's signature says what it does to the outside world: `uses io`, `net`, `clock`, `random`, or `state`. A function that declares nothing is pure, and the compiler holds it to that. Only `main` and tests may use effects without saying so.
 
 ```bork
 fn greeting(name: String): String {
@@ -97,7 +99,7 @@ fn greet(name: String) uses io {
 }
 ```
 
-Printing inside `greeting` would be an error: `greeting uses io (it calls println), but its signature allows no effects`.
+Printing inside `greeting` would be an error: `greeting uses io (it calls println), but its signature allows no effects`. More on [effects](docs/language/effects.md).
 
 ### Scopes and tasks
 
@@ -121,7 +123,7 @@ fn main() {
 }
 ```
 
-The `?` returns an error to the caller and keeps the successful value.
+The `?` returns an error to the caller and keeps the successful value. More on [scopes and tasks](docs/language/scopes.md).
 
 ### Compile-time evaluation
 
@@ -138,6 +140,8 @@ fn main() {
 }
 ```
 
+More on [compile-time evaluation](docs/language/comptime.md).
+
 ### Typed string interpolation
 
 `s"..."` builds a String. A library can define its own prefix that keeps the inserted values apart from the literal text. `sql.SQL` sends them to the database as bound parameters, so they are never spliced into the SQL text.
@@ -152,11 +156,11 @@ fn find(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error 
 }
 ```
 
-The library also checks the literal while compiling. Writing `'$name'` in quotes is rejected: `SQL hole is inside quoted text or an identifier`.
+The library also checks the literal while compiling. Writing `'$name'` in quotes is rejected: `SQL hole is inside quoted text or an identifier`. More on [typed interpolation](docs/language/interpolators.md).
 
 ## Learn more
 
-- [Documentation](docs/README.md): the tour and the command-line reference.
+- [Documentation](docs/README.md): the tour, a page for each part of the language, and the command-line reference.
 - [Standard packages](docs/std/README.md): files, HTTP, JSON, SQL, time, and more.
 - [Examples](docs/examples.md): runnable programs, from `wc` to an HTTP service.
 - [Contributing and design notes](docs/contributing.md): the grammar, requirements, and design documents.

@@ -131,7 +131,7 @@ fn unchecked(label: String, n: Int): Expense {
 Expense requires cents to be positive, but that is not proven for n
 ```
 
-The check happens once, where the data comes in. Every function that later receives an `Expense` knows the amount is positive without checking again.
+The check happens once, where the data comes in. Every function that later receives an `Expense` knows the amount is positive without checking again. [Facts](language/facts.md) covers this in full.
 
 ## Files and effects
 
@@ -272,6 +272,8 @@ ok    rejects an amount that is not positive
 2 passed, 0 failed
 ```
 
+[Testing](language/testing.md) covers snapshots, mocks, and property tests.
+
 ## The everyday commands
 
 ```sh
@@ -287,5 +289,6 @@ See the [command-line reference](cli.md) for all of them.
 
 ## Where to go next
 
+- The [language pages](README.md#the-language) explain each area in more depth, starting with [the basics](language/basics.md).
 - The [examples](examples.md) are complete programs, each with its expected output.
 - The [standard packages](std/README.md) cover files, HTTP, JSON, SQL, and more.

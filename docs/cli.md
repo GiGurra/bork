@@ -58,7 +58,7 @@ bork test --seed 42 .          # repeat property tests with a given seed
 bork test --auto-properties .  # also call trusted functions on generated arguments
 ```
 
-The command exits with status 1 if a test fails.
+The command exits with status 1 if a test fails. [Testing](language/testing.md) describes what tests can do.
 
 ## Fmt
 
@@ -137,7 +137,7 @@ bork deps get github.com/google/uuid@none        # remove it
 bork deps download                               # download pinned dependencies and fill in checksums
 ```
 
-Most programs never need this.
+Most programs never need this. See [calling Go](language/go-interop.md).
 
 ## Editor support
 
