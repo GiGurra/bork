@@ -105,3 +105,39 @@ test('an edit while checking cannot receive stale success', async ({ page }) => 
   await expect(check).toBeEnabled();
   await expect(page.getByRole('status')).toContainText('Code changed');
 });
+
+for (const phase of ['fetch', 'body']) {
+  test(`a stalled manifest ${phase} times out and retries`, async ({ page }) => {
+    await page.clock.install();
+    await page.addInitScript(phase => {
+      const original = window.fetch;
+      let first = true;
+      window.fetch = (url, options) => {
+        if (String(url).endsWith('manifest.json') && first) {
+          first = false;
+          const stalled = () => new Promise((resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+          });
+          return phase === 'fetch' ? stalled() : Promise.resolve({ ok: true, json: stalled });
+        }
+        return original(url, options);
+      };
+    }, phase);
+    await page.goto('/try/');
+    const check = page.getByRole('button', { name: 'Check', exact: true });
+    await check.click();
+    await expect(check).toBeDisabled();
+    await page.clock.runFor(15001);
+    await expect(page.getByRole('status')).toContainText('asset loading timed out');
+    await expect(check).toBeEnabled();
+    await check.click();
+    await expect(page.getByRole('status')).toContainText('Checked successfully', { timeout: 30000 });
+  });
+}
+
+test('class instances check without following declaration cycles', async ({ page }) => {
+  await page.goto('/try/');
+  await page.getByLabel('playground.bork', { exact: true }).fill('class Show[T] { fn show(x: T): String }\ninstance intShow: Show[Int] { fn show(x: Int): String { "hi" } }\nfn main() {}');
+  await page.getByRole('button', { name: 'Check', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Checked successfully', { timeout: 30000 });
+});

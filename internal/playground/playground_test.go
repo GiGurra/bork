@@ -11,6 +11,8 @@ func TestCheck(t *testing.T) {
 		ok, local             bool
 	}{
 		{"hello", `fn main() { println("Hello!") }`, "", true, false},
+		{"instance", "class Show[T] { fn show(x: T): String }\ninstance intShow: Show[Int] { fn show(x: Int): String { \"hi\" } }\nfn main() {}", "", true, false},
+		{"instance comptime", "class Show[T] { fn show(x: T): String }\ninstance intShow: Show[Int] { fn show(x: Int): String { comptime { \"hi\" } } }\nfn main() {}", "comptime execution", false, true},
 		{"undefined", `fn main() { println(missing) }`, "undefined: missing", false, false},
 		{"effect", `fn greet() { println("hi") }`, "uses io", false, false},
 		{"parse", `fn main( {`, "", false, false},

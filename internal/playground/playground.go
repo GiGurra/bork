@@ -85,7 +85,7 @@ func Handle(request Request) (response Response) {
 			unavailable(typ.Pos, "Go type bindings")
 		}
 	}
-	walkSyntax(reflect.ValueOf(file), func(node *syntax.Comptime) { unavailable(node.Pos, "comptime execution") })
+	walkSyntax(reflect.ValueOf(file), make(map[any]bool), func(node *syntax.Comptime) { unavailable(node.Pos, "comptime execution") })
 	if diags.Len() != 0 {
 		response.Diagnostics = diags.Sorted()
 		return response
@@ -133,9 +133,9 @@ func Handle(request Request) (response Response) {
 	return response
 }
 
-// Parsed syntax is an acyclic tree. Inspect nested comptime expressions before
-// checking, including those in field defaults, tests and package bindings.
-func walkSyntax(value reflect.Value, visit func(*syntax.Comptime)) {
+// Inspect nested comptime expressions before checking. Instance methods point
+// back to their owning declarations, so visit each pointer only once.
+func walkSyntax(value reflect.Value, seen map[any]bool, visit func(*syntax.Comptime)) {
 	if !value.IsValid() {
 		return
 	}
@@ -144,18 +144,25 @@ func walkSyntax(value reflect.Value, visit func(*syntax.Comptime)) {
 		if value.IsNil() {
 			return
 		}
+		if value.Kind() == reflect.Pointer {
+			key := value.Interface()
+			if seen[key] {
+				return
+			}
+			seen[key] = true
+		}
 		if node, ok := value.Interface().(*syntax.Comptime); ok {
 			visit(node)
 			return
 		}
-		walkSyntax(value.Elem(), visit)
+		walkSyntax(value.Elem(), seen, visit)
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
-			walkSyntax(value.Field(i), visit)
+			walkSyntax(value.Field(i), seen, visit)
 		}
 	case reflect.Slice:
 		for i := 0; i < value.Len(); i++ {
-			walkSyntax(value.Index(i), visit)
+			walkSyntax(value.Index(i), seen, visit)
 		}
 	}
 }

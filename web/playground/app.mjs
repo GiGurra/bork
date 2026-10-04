@@ -32,10 +32,19 @@ document.querySelector('#example').addEventListener('change', event => {
 
 async function getCompiler() {
   if (compiler) return compiler;
-  const response = await fetch('build/manifest.json', { cache: 'no-store' });
-  if (!response.ok) throw new Error('Compiler assets are unavailable. Use local bork or try again.');
-  const manifest = await response.json();
-  compiler = new CompilerClient(new URL(manifest.worker, location.href));
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch('build/manifest.json', { cache: 'no-store', signal: controller.signal });
+    if (!response.ok) throw new Error('Compiler assets are unavailable. Use local bork or try again.');
+    const manifest = await response.json();
+    compiler = new CompilerClient(new URL(manifest.worker, location.href));
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('Compiler asset loading timed out. Try again or use local bork.');
+    throw error;
+  } finally {
+    clearTimeout(deadline);
+  }
   return compiler;
 }
 
