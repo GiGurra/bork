@@ -2,6 +2,8 @@ package gen
 
 import (
 	"context"
+	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/syntax"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,5 +93,20 @@ func validator(){_ = _showList([]string{"hello"})}
 `)
 	if _, err := guardArtifact(source, runtimeSource, "validator"); err == nil || !strings.Contains(err.Error(), "unsupported generated artifact helper") {
 		t.Fatalf("unknown generated formatter accepted: %v", err)
+	}
+}
+
+func TestArtifactBindsSeparateAliasSource(t *testing.T) {
+	diags := &diag.List{}
+	files := syntax.ParseFiles([]string{"payload.bork", "aliases.bork", "unrelated.bork"}, [][]byte{[]byte(`type Payload={amount:Amount}`), []byte(`type Amount=Int`), []byte(`type Unrelated={text:String}`)}, false, diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags)
+	}
+	bound := map[string]bool{"payload.bork": true}
+	if err := artifactAliasSources(files, bound, nil, nil, []*syntax.TypeDecl{files[0].Types[0]}); err != nil {
+		t.Fatal(err)
+	}
+	if !bound["aliases.bork"] || bound["unrelated.bork"] {
+		t.Fatalf("alias closure: %v", bound)
 	}
 }
