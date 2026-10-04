@@ -115,3 +115,24 @@ collector stage declines safely. Source/name/config receipts alone never make a
 candidate eligible. Only afterward add Session proof/value lookup through perf's
 store interface and current-graph reconstruction; persistence stays separately
 versioned through perf's bounded envelope.
+
+## Static audit boundary
+
+`check.AuditExecutionQueries` and `check.AuditComptimeExecution` produce owned
+static reports without retaining checked graph pointers. They follow all query
+leaves, implementations, defaults, constraints, dictionary methods and closed
+captures. Required prior sites are an inventory; the eventual driver receipt must
+bind their actual ordered site/type/value identities. Unknown nodes, variable
+kinds and targets decline. Traversal and expanded type display have independent
+bounds; repeated structural edges consume rendering budget even when graph
+traversal can memoize them.
+
+The initial policy deliberately declines generic implementations, unresolved
+higher-order callbacks, generated class implementations, ambient/runtime memos,
+lazy cells, assets and build reads. Dictionary methods and field decoders retain
+the checked declaration order. The first intrinsic is resolved prelude
+`String.byteLength`, with an exact signature/body contract and implementation
+hash. That static match still requires the compiler/intrinsic namespace and
+endpoint-coherent tool/package closure; a static report cannot certify execution
+or enable a hit. `prepareExecution`, candidate/receipt current checks and tracker
+certification remain ineligible throughout this slice.
