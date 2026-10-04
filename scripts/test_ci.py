@@ -34,9 +34,10 @@ class PartitionTests(unittest.TestCase):
         self.assertEqual(groups, ci.partition(list(reversed(packages)), list(ci.DEDICATED.values()), weights, list(reversed(names))))
         self.assertNotEqual(next(g for g in ci.LSP_SHARDS if "TestHeavy" in groups[g]), next(g for g in ci.LSP_SHARDS if "TestOther" in groups[g]))
         for mode in ("normal", "race"):
-            command = ci.command(mode, "lsp-0", ["TestHeavy", "FuzzNew"])
-            self.assertEqual(command[-3:], ["./internal/lsp", "-run", "^(TestHeavy|FuzzNew)$"])
-            self.assertEqual("-race" in command, mode == "race")
+            for shard in ci.LSP_SHARDS:
+                command = ci.command(mode, shard, ["TestHeavy", "FuzzNew"])
+                self.assertEqual(command[-3:], ["./internal/lsp", "-run", "^(TestHeavy|FuzzNew)$"])
+                self.assertEqual("-race" in command, mode == "race")
         for tests in ([], ["TestDuplicate", "TestDuplicate"]):
             with self.assertRaises(RuntimeError):
                 ci.partition(packages, list(ci.DEDICATED.values()), {}, tests)
