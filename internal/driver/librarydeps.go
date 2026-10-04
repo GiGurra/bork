@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/gotoolchain"
 	"github.com/GiGurra/bork/internal/std"
 	"github.com/GiGurra/bork/internal/syntax"
 	"golang.org/x/mod/modfile"
@@ -41,10 +42,24 @@ func dependenciesLocalOnly(reader sourceReader) bool {
 }
 
 func dependencyGoWithSettings(dir string, settings []string, args ...string) ([]byte, error) {
-	cmd := exec.Command("go", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS=")
-	cmd.Env = append(cmd.Env, settings...)
+	env := append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS=")
+	local := false
+	for _, setting := range settings {
+		if setting == "GOTOOLCHAIN=local" {
+			local = true
+			continue
+		}
+		env = append(env, setting)
+	}
+	_, env, tool, err := gotoolchain.Query("go", dir, env)
+	if err != nil {
+		return nil, err
+	}
+	if local {
+		env = append(env, "GOTOOLCHAIN=local")
+	}
+	cmd := exec.Command(tool, args...)
+	cmd.Dir, cmd.Env = dir, env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

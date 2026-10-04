@@ -176,6 +176,8 @@ Compiler settings control storage and toolchain selection:
 | `BORK_CACHE` | `on` | Set to `off` to turn off the compile cache |
 | `BORKTOOLCHAIN` | `auto` | Automatically satisfy project compiler requirements; `local` disables switching, or an exact version such as `v0.4.2` selects that compiler |
 | `BORKUPDATECHECK` | `on` | Quiet daily update notice in interactive commands; set `off` to disable |
+| `GOTOOLCHAIN` | Go's effective selection policy | Read-only here; inherited from the process or `go env -w`, with the Bork minimum applied |
+| `GOVERSION`, `GOROOT` | the selected Go SDK | Read-only; used for Go compilation and cache identity |
 | `BORKVERSION` | the selected compiler's version | Read-only; also reports why that compiler was selected |
 
 ```sh
@@ -316,3 +318,27 @@ any nonempty `CI` environment variable suppress both checks and notices.
 Development compilers skip checks. Offline failures are silent; only a successful
 check from the current UTC day can produce a notice. `GOPROXY=off` or `direct`
 does not run an HTTP check. Updating remains explicit with `bork upgrade`.
+
+## Go toolchains
+
+Bork requires Go 1.26.0 or newer for generated programs and evaluators. With Go
+1.21+ installed and Go's default `GOTOOLCHAIN=auto`, an older installed SDK is
+raised to `go1.26.0+auto`; Go finds that SDK on PATH or downloads it. Newer SDKs
+remain selected. `+path` policies search PATH without downloading. Explicit
+`local` or exact-version policies stay explicit and report an error if the
+selected version is too old. Process settings and saved `go env -w` settings
+are both respected.
+
+```sh
+bork env GOTOOLCHAIN GOVERSION GOROOT
+go env -w GOTOOLCHAIN=auto
+GOTOOLCHAIN=local bork build .
+```
+
+Go settings are managed by Go, rather than `bork env -w`. Toolchain downloads
+need network access to the Go module proxy and checksum database; once cached,
+they can be reused offline. Download errors include Go's output. The compile
+cache includes the selected SDK's version, root and executable identity.
+Switched or unusual toolchains conservatively reload metadata when the fast
+cache inventory cannot certify their configuration. See
+[Go's toolchain selection](https://go.dev/doc/toolchain).

@@ -3999,3 +3999,8 @@ checks, retain their enforcement and cannot be suppressed.
   version notice after useful interactive work. CI, JSON, machine output and
   redirected output suppress it. `BORKUPDATECHECK=off` disables it, and offline
   failures are silent. Updates remain explicit. See [update notices](cli.md#update-notices).
+- **Go toolchain minimum (implemented).** Go 1.21+ launchers can automatically
+  select Go 1.26.0+ for compiler metadata, generated builds, evaluators and
+  dependency commands. Explicit `GOTOOLCHAIN=local` and pinned older SDKs
+  report the minimum version error. Selected SDK settings appear in `bork env`;
+  compilation identity follows the selected SDK. See [Go toolchains](cli.md#go-toolchains).

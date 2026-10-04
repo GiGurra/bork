@@ -55,6 +55,18 @@ func captureSessionGoContextWithSettings(previous *goContext, settings []string)
 	return ctx
 }
 
+// Cached analysis may select an installed/downloaded SDK, but may not download
+// one. Freeze later commands to that SDK after selection, preserving a user's
+// explicit GOTOOLCHAIN=local constraint during discovery.
+func captureCachedGoContext(previous *goContext, settings []string) *goContext {
+	ctx := captureSessionGoContextWithSettings(previous, append(slices.Clone(settings), "GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off"))
+	if ctx.err == nil && ctx.values["GOTOOLCHAIN"] != "local" {
+		ctx.values["GOTOOLCHAIN"] = "local"
+		ctx.pinSettings()
+	}
+	return ctx
+}
+
 func supportedGoVersion(version string) bool {
 	return strings.HasPrefix(version, "go1.26.") || strings.HasPrefix(version, "go1.27.")
 }

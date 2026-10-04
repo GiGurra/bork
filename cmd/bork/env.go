@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/GiGurra/bork/internal/gotoolchain"
+	"os"
 	"strconv"
 	"strings"
 
@@ -41,10 +43,22 @@ func envCommand() *cobra.Command {
 				return toolenv.Update(nil, args)
 			}
 			if len(args) == 0 {
-				args = append(toolenv.Names(), "BORKVERSION")
+				args = append(toolenv.Names(), "BORKVERSION", "GOTOOLCHAIN", "GOVERSION", "GOROOT")
 			}
 			values := map[string]toolenv.Setting{}
+			var goValues map[string]string
 			for _, name := range args {
+				if name == "GOTOOLCHAIN" || name == "GOVERSION" || name == "GOROOT" {
+					if goValues == nil {
+						var err error
+						goValues, _, _, err = gotoolchain.Query("go", "", os.Environ())
+						if err != nil {
+							return err
+						}
+					}
+					values[name] = toolenv.Setting{Value: goValues[name], Source: "Go toolchain (minimum " + gotoolchain.Minimum + ")"}
+					continue
+				}
 				if name == "BORKVERSION" {
 					values[name] = toolenv.Setting{Value: version(), Source: compilerSelection.Reason}
 					continue

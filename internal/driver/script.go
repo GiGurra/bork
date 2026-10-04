@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/GiGurra/bork/internal/gotoolchain"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -153,10 +154,14 @@ func scriptGoDependencies(file *syntax.File, requirements []gomodule.Version, re
 	if err := os.WriteFile(filepath.Join(temp, "go.mod"), []byte("module borkscript\ngo 1.26\n"), 0o600); err != nil {
 		return nil, err
 	}
+	_, goEnv, goTool, err := gotoolchain.Query("go", temp, append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS="))
+	if err != nil {
+		return nil, err
+	}
 	run := func(args ...string) error {
-		cmd := exec.Command("go", args...)
+		cmd := exec.Command(goTool, args...)
 		cmd.Dir = temp
-		cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS=")
+		cmd.Env = goEnv
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("resolve script dependencies: go %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 		}

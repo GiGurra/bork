@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/gotoolchain"
 	"github.com/GiGurra/bork/internal/std"
 	"golang.org/x/mod/modfile"
 )
@@ -139,10 +140,14 @@ func DepsWithOutput(path, action string, packages []string, out io.Writer) error
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
+	_, goEnv, goTool, err := gotoolchain.Query("go", dir, append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS="))
+	if err != nil {
+		return err
+	}
 	run := func(args ...string) error {
-		cmd := exec.Command("go", args...)
+		cmd := exec.Command(goTool, args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOFLAGS=")
+		cmd.Env = goEnv
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("go %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 		}
