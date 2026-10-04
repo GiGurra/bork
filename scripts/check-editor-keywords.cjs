@@ -23,4 +23,4 @@ for (const grammar of grammars) {
     assert.ok(new RegExp(`\\b${keyword}\\b`).test(source), `${grammar} omits compiler keyword ${keyword}`);
   }
 }
-console.log(`All ${keywords.length} compiler keywords occur in ${grammars.length} editor grammars.`);
+console.log(`All ${keywords.length} compiler keywords occur in ${grammars.length} editor syntax sources.`);

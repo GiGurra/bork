@@ -3954,6 +3954,13 @@ allowlist whose entries must exist and remain malformed. Generated parser source
 and compiler-keyword coverage are checked for drift. This grammar supplies editor
 structure; compiler diagnostics and formatting come from `bork lsp`.
 
+Native packages under `editors/` cover Vim, Neovim 0.11+, Emacs 29+, Helix and
+Zed. CI highlights every example/case with their lexical or adapted tree-sitter
+queries, tests real Neovim/Eglot compiler attachment, builds the Helix grammar and
+Zed WASM extension, and checks keyword/query drift. Upstream integration patches
+are review drafts; registry publication and third-party submissions are separate
+steps. See [editor setup](editors.md) for package installation.
+
 ### Single-file scripts (implemented)
 
 A `.bork` file beginning with a shebang is a script; `bork script <file>` also selects script mode without a shebang. Top-level ordinary bindings and executable statements run eagerly, in order, as locals in an implicit main with entrypoint effects. Helper functions cannot capture these locals; they take parameters or read explicit pure `lazy` package values. An explicit main and importing scripts as packages are rejected. Source positions, formatter output and describe queries retain the original file.

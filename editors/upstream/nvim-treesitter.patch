@@ -11,7 +11,7 @@ index 367c3ba..51c7401 100644
  [bpftrace](https://github.com/sgruszka/tree-sitter-bpftrace) | unstable | `H  J `
  [brightscript](https://github.com/ajdelcimmuto/tree-sitter-brightscript) | unstable | `HFIJ `
 diff --git a/lua/nvim-treesitter/parsers.lua b/lua/nvim-treesitter/parsers.lua
-index fca90f6..d122ea4 100644
+index fca90f6..39dfeb3 100644
 --- a/lua/nvim-treesitter/parsers.lua
 +++ b/lua/nvim-treesitter/parsers.lua
 @@ -116,6 +116,14 @@ return {
@@ -21,7 +21,7 @@ index fca90f6..d122ea4 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = 'd882ca6cf5107ede0ada5ed201f1b6298e93d150',
++      revision = 'e9c1cc0d096656cb824d9ee3ddfd47b04f9f76fc',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,

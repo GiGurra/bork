@@ -422,3 +422,5 @@ structure for editor highlighting, indentation, folds and Go injection. CI parse
 every example and compiler case; deliberately malformed syntax cases form an
 explicit, checked recovery allowlist. Compiler syntax and validation remain the
 authority. Keyword drift is checked against `internal/syntax/token.go`.
+[Native editor packages](editors.md) adapt the shared queries and provide Vim and
+Emacs lexical highlighting; CI exercises every example and case in each format.

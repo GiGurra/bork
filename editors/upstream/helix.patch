@@ -1,5 +1,5 @@
 diff --git a/languages.toml b/languages.toml
-index a5403e6..15a5d5d 100644
+index a5403e6..e69a200 100644
 --- a/languages.toml
 +++ b/languages.toml
 @@ -19,6 +19,7 @@ beancount-language-server = { command = "beancount-language-server" }
@@ -29,7 +29,7 @@ index a5403e6..15a5d5d 100644
 +
 +[[grammar]]
 +name = "bork"
-+source = { git = "https://github.com/GiGurra/bork", rev = "d882ca6cf5107ede0ada5ed201f1b6298e93d150", subpath = "editors/tree-sitter-bork" }
++source = { git = "https://github.com/GiGurra/bork", rev = "e9c1cc0d096656cb824d9ee3ddfd47b04f9f76fc", subpath = "editors/tree-sitter-bork" }
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
 index 0000000..b1713d1
