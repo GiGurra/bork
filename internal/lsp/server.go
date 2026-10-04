@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -232,14 +233,16 @@ func (s *server) source(path string) string {
 	src, _ := os.ReadFile(path)
 	return string(src)
 }
-func (s *server) state(path string) *packageState { return s.packages[filepath.Dir(path)] }
+func (s *server) state(path string) *packageState {
+	return s.packages[analysisPath(path, s.source(path))]
+}
 
 func (s *server) check() error {
 	overlays := map[string]string{}
 	dirs := map[string]bool{}
 	for path, doc := range s.docs {
 		overlays[path] = doc.text
-		dirs[filepath.Dir(path)] = true
+		dirs[analysisPath(path, doc.text)] = true
 	}
 	next := map[string][]diag.Diagnostic{}
 	// Check every open package, including reverse users of an edited import.
@@ -261,7 +264,7 @@ func (s *server) check() error {
 				ds = de.Diags.Sorted()
 			} else {
 				for path := range s.docs {
-					if filepath.Dir(path) == dir {
+					if analysisPath(path, s.source(path)) == dir {
 						ds = append(ds, diag.Diagnostic{Pos: diag.Pos{File: path, Line: 1, Col: 1}, Msg: err.Error(), Code: "lsp.check"})
 						break
 					}
@@ -331,4 +334,11 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func analysisPath(path, src string) string {
+	if strings.HasPrefix(src, "#!") {
+		return path
+	}
+	return filepath.Dir(path)
 }

@@ -283,3 +283,76 @@ func TestRenameRejectsUnindexedWherePredicate(t *testing.T) {
 		t.Fatal("partial predicate rename accepted")
 	}
 }
+
+func TestAnalysisPathForScripts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "run.bork")
+	if analysisPath(path, "#!/usr/bin/env bork\nprintln(42)\n") != path {
+		t.Fatal("script analyzed neighboring package")
+	}
+	if analysisPath(path, "fn main() {}\n") != filepath.Dir(path) {
+		t.Fatal("ordinary file omitted siblings")
+	}
+}
+
+func TestStdioDocumentLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	uri := fileURI(path)
+	source := "fn main() uses io { value = 42; println(value) }\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var in, out bytes.Buffer
+	messages := []map[string]any{
+		{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{}},
+		{"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": map[string]any{"textDocument": map[string]any{"uri": uri, "version": 1, "text": source}}},
+		{"jsonrpc": "2.0", "method": "textDocument/didChange", "params": map[string]any{"textDocument": map[string]any{"uri": uri, "version": 2}, "contentChanges": []any{map[string]any{"text": strings.Replace(source, "42", "missing", 1)}}}},
+		{"jsonrpc": "2.0", "id": 2, "method": "textDocument/hover", "params": map[string]any{"textDocument": map[string]any{"uri": uri}, "position": position{0, 43}}},
+		// A delayed old version must not repair the current broken document.
+		{"jsonrpc": "2.0", "method": "textDocument/didChange", "params": map[string]any{"textDocument": map[string]any{"uri": uri, "version": 1}, "contentChanges": []any{map[string]any{"text": source}}}},
+		{"jsonrpc": "2.0", "method": "textDocument/didSave", "params": map[string]any{"textDocument": map[string]any{"uri": uri}}},
+		{"jsonrpc": "2.0", "method": "textDocument/didClose", "params": map[string]any{"textDocument": map[string]any{"uri": uri}}},
+		{"jsonrpc": "2.0", "id": 3, "method": "shutdown"},
+		{"jsonrpc": "2.0", "method": "exit"},
+	}
+	for _, m := range messages {
+		if err := writeMessage(&in, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Serve(&in, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Stale: last successful check") {
+		t.Fatalf("missing stale stdio hover: %s", &out)
+	}
+	reader := bufio.NewReader(&out)
+	counts := map[int]int{}
+	for {
+		m, err := readMessage(reader)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Method != "textDocument/publishDiagnostics" {
+			continue
+		}
+		var params struct {
+			Version     *int  `json:"version"`
+			Diagnostics []any `json:"diagnostics"`
+		}
+		if err := json.Unmarshal(m.Params, &params); err != nil {
+			t.Fatal(err)
+		}
+		if params.Version != nil {
+			counts[*params.Version] = len(params.Diagnostics)
+		} else if len(params.Diagnostics) != 0 {
+			t.Fatal("close did not clear diagnostics")
+		}
+	}
+	if counts[1] != 0 || counts[2] == 0 {
+		t.Fatalf("document versions/diagnostics: %+v", counts)
+	}
+}

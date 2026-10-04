@@ -221,6 +221,9 @@ func symbols(path, src string) []any {
 	}
 	file := files[0]
 	for _, fn := range file.Funcs {
+		if strings.HasPrefix(src, "#!") && fn.Name == "main" {
+			continue
+		}
 		add(fn.Name, 12, fn.Pos)
 	}
 	for _, typ := range file.Types {
@@ -394,7 +397,7 @@ func (s *server) validateRename(changes map[string][]textEdit) error {
 			text = text[:start] + edit.NewText + text[end:]
 		}
 		overlays[path] = text
-		dirs[filepath.Dir(path)] = true
+		dirs[analysisPath(path, text)] = true
 	}
 	for dir := range dirs {
 		if _, err := driver.NewSession().Analyze(dir, overlays); err != nil {

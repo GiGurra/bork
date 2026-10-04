@@ -68,10 +68,12 @@ check 117 ms, configuration 10 ms, parse 3.5 ms, lifetimes 1.2 ms). Timing varie
 on the shared host. No comptime or Go type-loading phase was observed for these
 examples. Incr has the phase benchmark for package-level incremental work.
 
-Cold review found four rename defects: sibling collisions, a method name
-matching its receiver, reserved underscore identifiers, and missing signature
-requirement references. Fixes include sibling-wide collision checks, nesting-aware
-declaration positions, lexer-diagnostic validation and typed requirement lookup.
-Rename also checks proposed edits in an isolated overlay Session before returning
-them, rejecting unsupported named-predicate references rather than offering a
-partial edit. No proposed edits are written to disk.
+Rename scans sibling files for collisions, resolves declaration positions past
+receiver signatures, validates names with lexer diagnostics and indexes typed
+signature requirements. Proposed edits must also check in an isolated overlay
+Session. Unsupported named-predicate references are rejected rather than offered
+as partial edits. No proposed edits are written to disk.
+
+Shebang scripts select their own file as the analysis root; ordinary documents
+select the containing directory. This keeps script roots independent of adjacent
+package files. Script parsing itself follows the compiler's syntax support.
