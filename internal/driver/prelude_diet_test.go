@@ -16,7 +16,7 @@ fn main() { println(json.Decode[Config](json.Encode(Config { count: 2 })), json.
 fn main() { println(process.Args()); if (false) { process.Exit(1) } }`, ""},
 		{"cancellable sleep", `import "bork/time"
 fn main() { scope s { cancel(s); println(time.Sleep(s, time.Nanoseconds(0))) } }`, ""},
-		{"rune methods", `fn main() { println('1'.isDigit(), 'a'.isLetter(), ' '.isSpace(), 'A'.isUpper(), 'a'.isLower(), runeToString('a')) }`, ""},
+		{"rune methods", `fn main() { println('1'.isDigit(), 'a'.isLetter(), ' '.isSpace(), 'A'.isUpper(), 'a'.isLower(), toString('a')) }`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) { checkPreludeSource(t, tc.source, tc.want) })
 	}

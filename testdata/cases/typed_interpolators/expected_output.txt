@@ -1,7 +1,7 @@
 Hello [Ada] and [3]!
 literal $
 [nested [Ada]]
-${literal} [125] [3]
+${literal} [}] [3]
 [[}]]
 prefix
 first

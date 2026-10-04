@@ -84,7 +84,7 @@ fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
     } else if (r.isDigit()) {
       parseNumber(src, at)
     } else {
-      SyntaxError { at: at, message: s"unexpected ${runeToString(r)}" }
+      SyntaxError { at: at, message: s"unexpected ${toString(r)}" }
     }
     Option.None => SyntaxError { at: at, message: "unexpected end of input" }
   }

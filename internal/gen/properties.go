@@ -272,7 +272,7 @@ func ungeneratable(t check.Type, seen map[check.Type]bool) check.Type {
 		}
 		return ungeneratable(t.Value, seen)
 	}
-	if t == check.Bool || t == check.String || check.IsNumeric(t) {
+	if t == check.Bool || t == check.String || t == check.Rune || check.IsNumeric(t) {
 		return nil
 	}
 	return t
@@ -293,7 +293,7 @@ func (g *gen) genValue(t check.Type, cons []*check.Constraint, depth ast.Expr, w
 	}
 	var base ast.Expr
 	switch {
-	case t == check.Bool || t == check.String || check.IsNumeric(t):
+	case t == check.Bool || t == check.String || t == check.Rune || check.IsNumeric(t):
 		base = g.genBasic(t, top)
 	case len(nested) == 0:
 		base = &ast.CallExpr{Fun: g.genFuncFor(t), Args: []ast.Expr{ast.NewIdent(choicesVar), depth}}
@@ -619,6 +619,9 @@ func (g *gen) genBasic(t check.Type, cons []*check.Constraint) ast.Expr {
 	switch {
 	case t == check.Bool:
 		return call("bool")
+	case t == check.Rune:
+		g.goType(t)
+		return call("rune")
 	case t == check.String:
 		pool := &ast.CompositeLit{Type: &ast.ArrayType{Elt: ast.NewIdent("string")}}
 		seen := map[string]bool{}
@@ -915,6 +918,12 @@ func (c *_choices) float(pool []float64) float64 {
 }
 
 var _alphabet = []string{"a", "b", "c", "x", "y", "z", " ", "A", "Z", "0", "9", "-", "_", ".", "é", "日", "\n", "\t", "\"", "\\", "😀"}
+
+func (c *_choices) rune() _Rune {
+ n := c.int(0, 0x10ffff-0x800, []int64{0, 'a', 'å', '界', 0xfffd, 0x10ffff-0x800})
+ if n >= 0xd800 { n += 0x800 }
+ return _Rune(n)
+}
 
 func (c *_choices) string(pool []string) string {
 	if c.draw(3) == 2 {

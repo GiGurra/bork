@@ -140,7 +140,7 @@ func unsupportedComptimeType(t Type, seen map[Type]bool) string {
 	seen[t] = true
 	switch t := t.(type) {
 	case *Basic:
-		if t == Bool || t == String || t == Ok || IsNumeric(t) {
+		if t == Bool || t == String || t == Rune || t == Ok || IsNumeric(t) {
 			return ""
 		}
 	case *List:

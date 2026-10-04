@@ -13,6 +13,10 @@ func TestComptimeTransportValidation(t *testing.T) {
 		value comptimeValue
 		want  string
 	}{
+		{"rune negative", Rune, comptimeValue{Kind: "Rune", Text: "-1"}, "invalid Unicode scalar"},
+		{"rune surrogate", Rune, comptimeValue{Kind: "Rune", Text: "55296"}, "invalid Unicode scalar"},
+		{"rune upper bound", Rune, comptimeValue{Kind: "Rune", Text: "1114112"}, "invalid Unicode scalar"},
+		{"rune integer width", Rune, comptimeValue{Kind: "Rune", Text: "4294967296"}, "invalid Unicode scalar"},
 		{"signed width", Int8, comptimeValue{Kind: "Int8", Text: "128"}, "value out of range"},
 		{"unsigned sign", Uint64, comptimeValue{Kind: "Uint64", Text: "-1"}, "invalid syntax"},
 		{"wrong type", Int, comptimeValue{Kind: "String", Text: "1"}, "expected result type"},

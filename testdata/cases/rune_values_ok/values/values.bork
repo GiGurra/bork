@@ -1,0 +1,2 @@
+fn Letter(): Rune { '界' }
+fn Letters(): List[Rune] { ['界', 'a'] }

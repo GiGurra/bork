@@ -151,6 +151,8 @@ func (c *checker) generatedGoType(t Type) types.Type {
 			return types.Typ[types.String]
 		case "Bytes":
 			return types.NewSlice(types.Typ[types.Uint8])
+		case "Rune":
+			return types.Typ[types.Int32]
 		case "Int":
 			return types.Typ[types.Int64]
 		case "Float":

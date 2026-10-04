@@ -87,12 +87,12 @@ fn (s: String) runeAt(index: Int): Option[Rune] unsafe go {
     i := int64(0)
     for _, r := range s {
       if i == index {
-        return Option_Some[int32]{value: r}
+        return Option_Some[_Rune]{value: _Rune(r)}
       }
       i++
     }
   }
-  return Option_None[int32]{}
+  return Option_None[_Rune]{}
 }
 // substring is the runes from index from up to (not including) index
 // to. It is OutOfRange unless 0 <= from <= to <= s.runeCount().

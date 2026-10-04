@@ -10,7 +10,7 @@ fn describe(r: Rune): String {
   match (r) {
     'a' => "the letter a"
     '\n' => "a newline"
-    _ => if (r.isUpper()) { "upper " + runeToString(r) } else { "other " + runeToString(r) }
+    _ => if (r.isUpper()) { "upper " + toString(r) } else { "other " + toString(r) }
   }
 }
 
@@ -20,8 +20,8 @@ fn main() {
   println(s.runeAt(2), s.runeAt(99))
   println(s.substring(0, 5), s.substring(3, 2))
   r = 'ü'
-  next: Rune = r + 1
-  println(r, next, runeToString(next), toString('A'))
+  next = (r.code() + 1).rune()
+  println(r, next, toString(next), toString('A'))
   println(describe('a'), describe('\n'), describe('Q'), describe('å'))
   println('x'.isLetter(), ' '.isSpace(), 'X'.isLower())
 }

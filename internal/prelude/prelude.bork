@@ -2,7 +2,8 @@
 // package. Functions are implemented in Go (`unsafe go`), in terms of
 // how bork values look in Go:
 //
-//   Int, Int8, ... Uint64  int64, int8, ... uint64 (Rune is int32)
+//   Int, Int8, ... Uint64  int64, int8, ... uint64
+//   Rune                   _Rune (a distinct int32; rune(r) for Go APIs)
 //   Float32, Float         float32, float64
 //   String, Bool           string, bool
 //   Bytes                  a distinct []byte; use _borkBytesFrom/Data to copy

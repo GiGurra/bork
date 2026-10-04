@@ -295,6 +295,10 @@ func (w *bindWriter) fromGo(x string, gt types.Type, t check.Type, path string) 
 	switch u := gt.Underlying().(type) {
 	case *types.Basic:
 		bt := w.g.typeText(t)
+		if t == check.Rune {
+			w.g.imports["unicode/utf8"] = true
+			fail("!utf8.ValidRune(rune("+x+"))", `"invalid Unicode scalar"`)
+		}
 		if check.IsInteger(t) && !fits(u, t) {
 			v, ok := w.newTmp(), w.newTmp()
 			w.line(fmt.Sprintf("%s, %s := _bindFits[%s](%s)", v, ok, bt, x))
