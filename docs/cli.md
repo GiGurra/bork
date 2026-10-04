@@ -281,3 +281,6 @@ successful navigation snapshot; hover and completion label it stale. References
 cover open packages and their loaded imports. Rename supports local variables
 and package-private functions, with current successful checks and conservative
 collision rejection. Exported names, types and fields are not yet renameable.
+Completion offers visible symbols, fields, named arguments and match patterns,
+plus snippets in supporting clients. Auto-imports search standard packages and
+the current module after two name characters.

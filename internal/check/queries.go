@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -447,4 +448,122 @@ func writtenTypeAtomText(t *syntax.TypeExpr) string {
 		parts = append(parts, writtenTypeText(a))
 	}
 	return t.Name + "[" + strings.Join(parts, ", ") + "]"
+}
+
+// EditorType resolves written type syntax with the compiler's normal package,
+// alias and generic rules. Invalid or inaccessible types return Invalid.
+func EditorType(info *Info, from *Package, typ *syntax.TypeExpr) Type {
+	c := editorTypeQueryChecker(info, from)
+	t := c.resolveType(typ)
+	if c.diags.Len() != 0 {
+		return Invalid
+	}
+	return t
+}
+
+// EditorCallable resolves a declaration with ordinary package lookup rules.
+func EditorCallable(info *Info, from *Package, name string) *CallableDescription {
+	fn, ok := queryChecker(info, from).funcNamed(name)
+	if !ok {
+		return nil
+	}
+	return DescribeCallable(fn, fn.Params, from, false)
+}
+
+// EditorVariantFields uses the same variant lookup and visibility as a
+// specialized constructor. It returns declaration fields for an unresolved
+// generic head and substituted fields for an explicitly specialized one.
+func EditorVariantFields(info *Info, from *Package, owner *syntax.TypeExpr, name string) []*Field {
+	c := editorTypeQueryChecker(info, from)
+	var typ Type
+	if len(owner.Args) == 0 {
+		typ = c.typeNamed(owner.Name)
+	} else {
+		typ = c.resolveType(owner)
+	}
+	sealed, ok := typ.(*Sealed)
+	if !ok {
+		return nil
+	}
+	variant := c.specializedVariant(owner.Pos, sealed, name)
+	if variant == nil || c.diags.Len() != 0 {
+		return nil
+	}
+	return variant.Fields
+}
+
+// EditorVisibleTypes includes only names available without a package qualifier.
+func EditorVisibleTypes(info *Info, from *Package) map[string]Type {
+	c := queryChecker(info, from)
+	out := maps.Clone(basicTypes)
+	for _, pkg := range []*Package{c.preludePkg, from} {
+		if pkg == nil {
+			continue
+		}
+		for name, entry := range pkg.types {
+			out[name] = c.resolveDecl(entry)
+		}
+	}
+	return out
+}
+
+// EditorVisibleVariants applies the compiler's constructor/pattern visibility.
+func EditorVisibleVariants(info *Info, from *Package, sealed *Sealed) []*Variant {
+	c := queryChecker(info, from)
+	var out []*Variant
+	for _, v := range sealed.Variants {
+		if c.visibleVariant(diag.Pos{}, sealed, v.Name) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func editorTypeQueryChecker(info *Info, from *Package) *checker {
+	copy := *info
+	copy.writtenTypes = maps.Clone(info.writtenTypes)
+	copy.typeUses = maps.Clone(info.typeUses)
+	c := queryChecker(&copy, from)
+	c.appliedWhere = map[*syntax.TypeExpr]bool{}
+	return c
+}
+
+// EditorRecordFields also exposes a generic declaration before its literal's
+// fields have supplied enough information to infer type arguments.
+func EditorRecordFields(info *Info, from *Package, head *syntax.TypeExpr) []*Field {
+	c := editorTypeQueryChecker(info, from)
+	var typ Type
+	if len(head.Args) == 0 {
+		typ = c.typeNamed(head.Name)
+	} else {
+		typ = c.resolveType(head)
+	}
+	if record, ok := typ.(*Record); ok && c.diags.Len() == 0 {
+		return record.Fields
+	}
+	return nil
+}
+
+// EditorRemainingParameters follows the same name/position assignment as calls.
+func EditorRemainingParameters(callable *CallableDescription, args []syntax.Argument) []ParameterDescription {
+	var names []string
+	for _, p := range callable.Parameters {
+		names = append(names, p.Name)
+	}
+	used := map[int]bool{}
+	next := 0
+	for _, arg := range args {
+		index := argumentIndex(names, arg.Name, next)
+		if arg.Name == "" {
+			next++
+		}
+		used[index] = true
+	}
+	var out []ParameterDescription
+	for i, p := range callable.Parameters {
+		if !used[i] && !p.Receiver {
+			out = append(out, p)
+		}
+	}
+	return out
 }

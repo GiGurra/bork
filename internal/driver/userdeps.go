@@ -63,8 +63,9 @@ func programGoModuleFrom(files []*syntax.File, reader sourceReader) ([]byte, []b
 // goModuleInputs owns the merged module bytes for one compilation request.
 // Every metadata load and generated build stages copies of these same bytes.
 type goModuleInputs struct {
-	mod []byte
-	sum []byte
+	libraries *libraryGraph
+	mod       []byte
+	sum       []byte
 }
 
 func captureGoModule(files []*syntax.File, reader sourceReader) (*goModuleInputs, error) {
@@ -72,12 +73,13 @@ func captureGoModule(files []*syntax.File, reader sourceReader) (*goModuleInputs
 	if err != nil {
 		return nil, err
 	}
+	var graph *libraryGraph
 	libraries, err := hasLibrarySources(files, reader)
 	if err != nil {
 		return nil, err
 	}
 	if libraries {
-		graph, err := compileLibraryGraph(files, reader)
+		graph, err = compileLibraryGraph(files, reader)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +89,7 @@ func captureGoModule(files []*syntax.File, reader sourceReader) (*goModuleInputs
 	if err != nil {
 		return nil, err
 	}
-	return &goModuleInputs{slices.Clone(mod), slices.Clone(sum)}, nil
+	return &goModuleInputs{mod: slices.Clone(mod), sum: slices.Clone(sum), libraries: graph}, nil
 }
 
 func (inputs *goModuleInputs) write(dir string, hook goModuleHookFunc) (bool, error) {

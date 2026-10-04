@@ -29,6 +29,10 @@ func (c *checker) namedArgs(e *syntax.Call, name string, fn *Func, args []syntax
 	}
 	c.ensureDefaults(fn)
 	params := fn.Decl.Params
+	var names []string
+	for _, p := range params {
+		names = append(names, p.Name)
+	}
 	out := make([]syntax.Expr, len(params))
 	order := make([]int, 0, len(params))
 	offset := len(args) - len(e.Args) // receiver inserted by methodCallOf
@@ -50,13 +54,7 @@ func (c *checker) namedArgs(e *syntax.Call, name string, fn *Func, args []syntax
 			next++
 		} else {
 			named = true
-			index = -1
-			for j, p := range params {
-				if p.Name == arg.Name {
-					index = j
-					break
-				}
-			}
+			index = argumentIndex(names, arg.Name, next)
 			if index < 0 {
 				c.diags.AddCode(arg.Pos, "call.unknown_argument", "%s has no parameter named %s", name, arg.Name)
 				candidates := params
@@ -164,4 +162,16 @@ func nameDistance(a, b string) int {
 		}
 	}
 	return row[len(right)]
+}
+
+func argumentIndex(names []string, name string, next int) int {
+	if name == "" {
+		return next
+	}
+	for i, candidate := range names {
+		if candidate == name {
+			return i
+		}
+	}
+	return -1
 }

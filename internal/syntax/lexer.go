@@ -161,7 +161,7 @@ func (lx *lexer) lineComment(pos diag.Pos) {
 	for lx.off < len(lx.src) && lx.peek(0) != '\n' {
 		lx.advance()
 	}
-	lx.comments = append(lx.comments, Comment{Text: string(lx.src[start:lx.off]), Pos: pos})
+	lx.comments = append(lx.comments, Comment{Text: string(lx.src[start:lx.off]), Pos: pos, End: lx.pos()})
 }
 
 func (lx *lexer) blockComment(pos diag.Pos) {
@@ -183,7 +183,7 @@ func (lx *lexer) blockComment(pos diag.Pos) {
 			hasNewline = true
 		}
 	}
-	lx.comments = append(lx.comments, Comment{Text: string(lx.src[start:lx.off]), Pos: pos})
+	lx.comments = append(lx.comments, Comment{Text: string(lx.src[start:lx.off]), Pos: pos, End: lx.pos()})
 	// A multi-line comment acts like a newline, as in Go.
 	if hasNewline {
 		lx.newline(pos)
