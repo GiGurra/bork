@@ -224,18 +224,45 @@ fn main(){println(comptime{huge()})}`, "result exceeds 16 MiB"},
 }
 
 func TestComptimeRequiresNativeTarget(t *testing.T) {
-	target := "windows"
-	if runtime.GOOS == target {
-		target = "linux"
+	otherOS := "windows"
+	if runtime.GOOS == otherOS {
+		otherOS = "linux"
 	}
-	t.Setenv("GOOS", target)
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte("fn main(){println(comptime{1})}"), 0o644); err != nil {
-		t.Fatal(err)
+	otherArch := "arm64"
+	if runtime.GOARCH == otherArch {
+		otherArch = "amd64"
 	}
-	_, _, err := Check(dir)
-	if err == nil || !strings.Contains(err.Error(), "comptime requires native target") {
-		t.Fatalf("unexpected cross-target result: %v", err)
+	for _, target := range []struct{ name, goos, goarch string }{
+		{"OS", otherOS, runtime.GOARCH},
+		{"architecture", runtime.GOOS, otherArch},
+	} {
+		t.Run(target.name, func(t *testing.T) {
+			t.Setenv("GOOS", runtime.GOOS)
+			t.Setenv("GOARCH", runtime.GOARCH)
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte("fn main(){println(comptime{1})}"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			session := NewSession()
+			if _, err := session.Check(dir); err != nil {
+				t.Fatalf("native request: %v", err)
+			}
+			t.Setenv("GOOS", target.goos)
+			t.Setenv("GOARCH", target.goarch)
+			for name, run := range map[string]func() error{
+				"one-shot": func() error { _, _, err := Check(dir); return err },
+				"Session":  func() error { _, err := session.Check(dir); return err },
+			} {
+				if err := run(); err == nil || !strings.Contains(err.Error(), "comptime requires native target") {
+					t.Fatalf("%s cross-target request: %v", name, err)
+				}
+			}
+			t.Setenv("GOOS", runtime.GOOS)
+			t.Setenv("GOARCH", runtime.GOARCH)
+			if _, err := session.Check(dir); err != nil || session.Stats().Hits != 0 {
+				t.Fatalf("native recovery: %v, stats=%+v", err, session.Stats())
+			}
+		})
 	}
 }
 

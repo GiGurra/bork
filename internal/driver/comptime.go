@@ -204,11 +204,11 @@ func runComptime(files []*syntax.File, source []byte, module *goModuleInputs, go
 		return nil, err
 	}
 	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(io.LimitReader(file, (16<<20)+1))
+	data, err := io.ReadAll(io.LimitReader(file, check.ComptimeResultLimit+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > 16<<20 {
+	if len(data) > check.ComptimeResultLimit {
 		return nil, fmt.Errorf("result exceeds 16 MiB")
 	}
 	return data, nil

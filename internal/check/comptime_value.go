@@ -1,12 +1,9 @@
 package check
 
 import (
-	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"go/constant"
-	"io"
 	"strconv"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -24,32 +21,20 @@ type comptimeValue struct {
 
 // DecodeComptime validates compiler transport against the concrete checked type.
 func DecodeComptime(node *Comptime, data []byte) (Expr, error) {
-	if len(data) > 16<<20 {
+	if len(data) > ComptimeResultLimit {
 		return nil, fmt.Errorf("result exceeds 16 MiB")
 	}
-	var envelope struct {
-		Version int
-		Value   comptimeValue
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&envelope); err != nil {
+	value, err := parseComptimeTransport(data, ComptimeNodeLimit, ComptimeDepthLimit)
+	if err != nil {
 		return nil, err
 	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return nil, fmt.Errorf("unexpected trailing result data")
-	}
-	if envelope.Version != ComptimeSchemaVersion {
-		return nil, fmt.Errorf("unsupported result schema %d", envelope.Version)
-	}
-	budget := 1000000
-	return decodeComptimeValue(envelope.Value, node.Type(), node.Pos(), 0, &budget)
+	budget := ComptimeNodeLimit
+	return decodeComptimeValue(value, node.Type(), node.Pos(), 0, &budget)
 }
 
 func decodeComptimeValue(v comptimeValue, t Type, pos diag.Pos, depth int, budget *int) (Expr, error) {
 	*budget--
-	if depth > 256 || *budget < 0 {
+	if depth > ComptimeDepthLimit || *budget < 0 {
 		return nil, fmt.Errorf("result exceeds depth or node limit")
 	}
 	if v.Kind != TypeText(t, nil) {
