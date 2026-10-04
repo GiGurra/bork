@@ -17,7 +17,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | [`bork emit`](#emit) | Print the Go code generated for a program |
 | [`bork env`](#settings) | Show or save compiler settings |
 | [`bork clean`](#the-compile-cache) | Remove the compiler's caches |
-| [`bork deps`](#deps) | Manage Go dependencies of a module |
+| [`bork deps`](#deps) | Manage Go and bork dependencies of a module |
 | `bork version` | Print the version |
 | [`bork upgrade`](#upgrades) | Install the latest or requested compiler version |
 | `bork completion` | Print a completion script for bash, zsh, fish, or PowerShell |
@@ -180,6 +180,12 @@ bork deps get github.com/google/uuid@none        # remove it
 bork deps download                               # download, fill checksums, and repair generated go.mod
 bork deps migrate                                # convert legacy go-deps.mod/go-deps.sum
 ```
+
+For a bork library, pass its module path (`github.com/acme/lib@v1.0.0`) and
+import packages by module path plus directory. The helper prints newly selected
+libraries containing unsafe Go packages, including transitive ones. Their own
+`unsafe` grants are trusted without a consumer approval step. See
+[library dependencies](language/packages.md#library-dependencies).
 
 `bork.mod` is authoritative. Check/build diagnoses manual changes to generated
 requirements with a hint to run `bork deps download`. Existing `go-deps.*`

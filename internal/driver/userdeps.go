@@ -70,6 +70,17 @@ func captureGoModule(files []*syntax.File, reader sourceReader) (*goModuleInputs
 	if err != nil {
 		return nil, err
 	}
+	libraries, err := hasLibrarySources(files, reader)
+	if err != nil {
+		return nil, err
+	}
+	if libraries {
+		graph, err := compileLibraryGraph(files, reader)
+		if err != nil {
+			return nil, err
+		}
+		mod, sum = graph.mod, graph.sum
+	}
 	return &goModuleInputs{slices.Clone(mod), slices.Clone(sum)}, nil
 }
 
