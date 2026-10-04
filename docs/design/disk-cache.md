@@ -189,8 +189,24 @@ an interrupted worker leaves recognizable detached trash for later maintenance
 or explicit clean. Trash is streamed first in each cycle and also deleted after
 detachment. Explicit clean drains maintenance admission/worker locks before
 selecting trash. Unknown paths and aliases remain untouched. The engine is
-portable and private/unscheduled in this slice; detached scheduling and the
-population matrix follow.
+portable. Linux and macOS queue detached maintenance after staged Go work,
+a complete-result hit, or result publication. The parent reads bounded state
+and acquires a nonblocking admission lease; it performs no directory scans.
+One child per cache root processes up to eight 128-shard steps within a shared
+five-second cooperative deadline, with a separate 15-second process-group
+kill timer for blocked filesystem work. It has low priority and inherits no
+terminal or user streams. BORK_CACHE=off disables scheduling. Other platforms
+use temporary staging until a bounded detached launcher is available.
+
+Linux executes the inherited compiler image descriptor. macOS executes its
+pathname and verifies that it still names the inherited image identity before
+maintenance. Both retain a directory descriptor for the queued cache root, so
+root replacement cannot redirect the worker. These are maintenance-only
+launchers; macOS does not gain semantic result publication through this path.
+Test-gated pipe barriers and completion notifications verify detachment,
+opt-out and the hard timeout without timing-based publication waits. Native
+macOS CI exercises the launcher as well as portable trim. The population
+acceptance matrix remains the next slice.
 
 Trim acquires candidate SLOT and MUTATION locks only nonblocking, skips busy
 entries, then rechecks age and path identity before deletion. It never removes

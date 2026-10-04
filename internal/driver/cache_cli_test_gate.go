@@ -33,7 +33,7 @@ type cacheTestStartup struct {
 }
 
 func startCacheTestState() *cacheTestStartup {
-	if cacheTestGate != "enabled" || cacheDisabled() {
+	if cacheTestGate != "enabled" || !cacheTrimSupported() || cacheDisabled() {
 		return nil
 	}
 	root := os.Getenv("BORK_TEST_DISK_CACHE_DIRECTORY")
@@ -92,6 +92,7 @@ func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error
 			<-state.done
 			if err == nil && state.err == nil && state.namespace == body.Namespace {
 				(cacheStore{root: state.root, namespace: body.Namespace}).touch(body.Key)
+				_ = queueCacheTrim(state.root)
 				testCacheProbe("hit")
 				return result.goSource, result.warnings, nil
 			}
@@ -147,6 +148,7 @@ func freshTestCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, 
 		testCacheProbe("write-miss")
 	} else {
 		testCacheProbe("miss")
+		_ = queueCacheTrim(state.root)
 	}
 	return src, warnings, nil
 }
