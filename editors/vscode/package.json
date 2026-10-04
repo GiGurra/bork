@@ -1,8 +1,8 @@
 {
   "name": "bork",
   "displayName": "bork",
-  "description": "Syntax highlighting for the bork language, including embedded Go.",
-  "version": "0.0.1",
+  "description": "Language support for bork: highlighting, diagnostics, navigation, completion and formatting.",
+  "version": "0.1.0",
   "publisher": "gigurra",
   "license": "MIT",
   "repository": {
@@ -10,7 +10,7 @@
     "url": "https://github.com/GiGurra/bork"
   },
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.82.0"
   },
   "categories": [
     "Programming Languages"
@@ -38,13 +38,37 @@
           "meta.embedded.block.go": "go"
         }
       }
-    ]
+    ],
+    "configuration": {
+      "title": "bork",
+      "properties": {
+        "bork.serverPath": {
+          "type": "string",
+          "default": "bork",
+          "scope": "machine",
+          "description": "Path to the bork binary. Restart the extension after changing this setting."
+        }
+      }
+    }
   },
   "scripts": {
-    "test": "node --test test/*.test.cjs"
+    "test": "node --test test/*.test.cjs",
+    "package": "vsce package"
   },
   "devDependencies": {
+    "@vscode/vsce": "^4.0.0",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
+  },
+  "main": "./extension.cjs",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The compiler may run compile-time code and Go tools."
+    },
+    "virtualWorkspaces": false
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }

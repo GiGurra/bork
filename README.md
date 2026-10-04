@@ -160,6 +160,13 @@ fn find(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error 
 
 The library also checks the literal while compiling. Writing `'$name'` in quotes is rejected: `SQL hole is inside quoted text or an identifier`. More on [typed interpolation](docs/language/interpolators.md).
 
+## Editor support
+
+The [VS Code extension](editors/vscode/README.md) combines syntax highlighting
+with `bork lsp`: diagnostics for unsaved edits, types and facts on hover,
+navigation, completion, formatting and compiler fixes. Other LSP clients can
+launch `bork lsp` over stdio.
+
 ## Learn more
 
 - [Documentation](docs/README.md): the tour, a page for each part of the language, and the command-line reference.

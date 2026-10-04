@@ -30,6 +30,7 @@ Each page covers one area in plain terms, with code you can run.
 
 - [The bork command](cli.md): every command, the settings, and the compile cache.
 - [Standard packages](std/README.md): files, HTTP, JSON, SQL, time, and more.
+- [Editor support and VS Code](../editors/vscode/README.md): `bork lsp` checks unsaved buffers and supplies navigation, completion and formatting.
 - [JSON diagnostics](diagnostics.md), [watch mode](watch.md), and [compiler code queries](describe.md): the compiler's interfaces for editors and tools.
 
 ## For contributors

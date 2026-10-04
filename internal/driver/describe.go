@@ -32,6 +32,10 @@ func Describe(position, where string) (*describe.Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	return describeProgram(program, pos, src, where)
+}
+
+func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where string) (*describe.Result, error) {
 	files, info := program.files, program.info
 	selected, err := describe.Lookup(files, info, pos, src)
 	if err != nil {

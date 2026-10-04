@@ -3909,3 +3909,17 @@ results (invalid scalars return GoValueError). Collection bindings copy and
 convert elements at the Go interop boundary; these are O(n) conversions, as
 with other collection bindings. Inline unsafe Go uses `rune(r)`/`int32(r)`
 when calling Go and `_Rune(n)` when explicitly constructing a trusted Rune.
+
+
+## Editor language server
+
+`bork lsp` implements LSP over stdio, with full-document synchronization and
+UTF-16 positions. Diagnostics use the in-process compiler Session and unsaved
+source overlays for package siblings and imports. Hover shows types and proven
+facts; definitions, references, completion, document symbols, formatting and
+compiler suggested-edit quick fixes share compiler and formatter behavior.
+Broken edits retain the last successful analysis for navigation, with stale
+hover/completion labels. References cover loaded open-package/import graphs;
+rename is limited to local variables and private functions until a complete
+workspace reference index exists. The packageable VS Code client locates a
+configured or PATH-installed compiler. Packaging does not publish it.

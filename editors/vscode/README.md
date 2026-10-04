@@ -1,46 +1,60 @@
-# bork syntax highlighting
+# bork for VS Code
 
-This local VS Code extension recognizes `.bork` files. It highlights declarations,
-keywords, comments, numbers, runes, strings, `$name` and `${...}` interpolation,
-records and maps, generic arguments, and `|>` pipelines. `unsafe go { ... }`
-bodies use VS Code's built-in Go grammar, including nested braces and Go strings
-and comments. It provides comment toggling and bracket/quote pairing.
+The extension highlights `.bork` files, including embedded Go, and launches
+`bork lsp` for diagnostics, types and proven facts on hover, go-to-definition,
+references, conservative completion, document symbols, formatting and suggested
+compiler fixes. Install a current `bork` binary on PATH or set `bork.serverPath`
+to its absolute path. Restart the extension after changing that setting.
 
-From the repository root, open an extension development window:
+Unsaved files participate in package checking, including imported files and new
+siblings. Changes are checked after a 150 ms pause; open/save checks run
+immediately. Broken edits publish current errors while hover and completion use
+the last successful check, marked **Stale**. Navigation positions may move while
+a buffer is broken. Formatting uses the current text regardless of type errors.
+
+References search the compiler graphs for open packages and their imports.
+Rename currently supports local variables and package-private functions, requires
+successful current checks, and refuses names already present in affected files.
+It does not rename exported names, types or fields. Completion offers package
+functions/types/values and visible methods after a dot. Standard-library and
+prelude definitions use virtual compiler paths and are not opened as disk files.
+
+Language-server activation requires a trusted workspace because checking may
+execute compile-time code or Go tools. Highlighting remains lexical and works
+without a compiler. Files in virtual workspaces are not supported by the client.
+
+Install dependencies and open an extension development window from the repo root:
 
 ```sh
+npm ci --prefix editors/vscode
 code --extensionDevelopmentPath="$PWD/editors/vscode" "$PWD/examples/hello/main.bork"
 ```
 
-For a persistent local installation on Linux or macOS, copy this directory into
-VS Code's extensions directory and reload VS Code:
+To create and install a local VSIX (Node.js 22 or later):
 
 ```sh
-mkdir -p "$HOME/.vscode/extensions"
-cp -R editors/vscode "$HOME/.vscode/extensions/gigurra.bork-0.0.1"
+npm run package --prefix editors/vscode
+code --install-extension editors/vscode/bork-0.1.0.vsix
 ```
 
-On Windows the directory is `%USERPROFILE%\.vscode\extensions`. VS Code Insiders
-uses `.vscode-insiders` instead of `.vscode`. Select **bork** in the language mode
-menu if a file was already open. No Go compiler or extension activation code is
-needed for highlighting. This is a local extension, not a Marketplace release.
+The package contains the language client; it locates the separately installed
+compiler rather than bundling platform binaries. This does not publish to the
+Marketplace. The client follows the official [VS Code language server guide](https://code.visualstudio.com/api/language-extensions/language-server-extension-guide),
+and packaging uses [vsce](https://code.visualstudio.com/api/working-with-extensions/publishing-extension).
 
 Other TextMate-compatible editors can use
 [`syntaxes/bork.tmLanguage.json`](syntaxes/bork.tmLanguage.json), register the
 `source.bork` scope for `.bork`, and provide a `source.go` grammar for embedded Go.
-Highlighting is lexical; contextual keywords can also be used as names in bork,
-so some such names will use keyword colors. This extension does not provide
-completion, diagnostics or a language server.
+Any LSP client can launch `bork lsp` over stdio with full-document synchronization.
 
-Run the grammar tests from the repository root (Node.js 18 or later):
+Run the grammar and client tests:
 
 ```sh
-npm ci --prefix editors/vscode
 npm test --prefix editors/vscode
 ```
 
-Tests use VS Code's TextMate engine and Oniguruma regex engine. They check scopes,
-interpolation boundaries, embedded Go nesting, and tokenization of all cases and
-examples. A small Go grammar stand-in keeps the tests self-contained. To also
-check integration with a real Go grammar, set `BORK_GO_GRAMMAR` to its absolute
-path when running the tests; JSON and plist TextMate grammars are supported.
+Grammar tests use VS Code's TextMate and Oniguruma engines. They check scopes,
+interpolation boundaries, embedded Go nesting, and all cases and examples.
+To check integration with a real Go grammar, set `BORK_GO_GRAMMAR` to its absolute
+path; JSON and plist grammars are supported. Client tests check launch and cleanup
+without requiring a graphical VS Code process.

@@ -26,17 +26,20 @@ type goUsage struct {
 	execution  *executionTracker
 }
 
-// Session reuses the last successful complete-program result. It owns no parsed
-// or checked graph. Requests are serialized and all returned data is independent.
+// Session reuses the last successful complete-program result. Check and Emit
+// retain no compiler graph and return independent data. Analyze separately
+// retains an editor query snapshot, used serially by the language server.
 // Go type/export metadata, custom drivers and compile-time evaluation bypass
 // reuse until their dependencies can be validated.
 type Session struct {
-	mu      sync.Mutex
-	last    *sessionArtifact
-	stats   SessionStats
-	watch   bool
-	attempt *watchAttempt
-	observe func(string)
+	editor     *EditorAnalysis
+	editorPath string
+	mu         sync.Mutex
+	last       *sessionArtifact
+	stats      SessionStats
+	watch      bool
+	attempt    *watchAttempt
+	observe    func(string)
 	// Private fixture settings are assigned before the Session's first request.
 	// Production sessions use the current process environment on every request.
 	goSettings []string
