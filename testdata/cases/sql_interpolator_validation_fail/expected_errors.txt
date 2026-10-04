@@ -8,3 +8,4 @@ main.bork:10:23: SQL hole 1 is inside or adjacent to a partial token (validator 
 main.bork:11:25: SQL hole 1 is inside or adjacent to a partial token (validator bork/sql.sqlInterpolationValidator)
 main.bork:12:7: write a SQL value hole instead of a literal parameter placeholder (validator bork/sql.sqlInterpolationValidator)
 main.bork:13:7: SQL literal text contains NUL (validator bork/sql.sqlInterpolationValidator)
+main.bork:14:7: write a SQL value hole instead of a literal parameter placeholder (validator bork/sql.sqlInterpolationValidator)

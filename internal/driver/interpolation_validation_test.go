@@ -136,23 +136,29 @@ func TestInterpolationWithoutValidatorHasNoEvaluator(t *testing.T) {
 
 func TestInterpolationValidatorOwnerAndMetadata(t *testing.T) {
 	dir := validatorFixture(t, `import renamed "example.com/validator/lib"
-fn main(){local=renamed.Tag;_=renamed.Tag"${1} ${renamed.Value{}}";_=local"${2} ${renamed.Value{}}"}`)
+instance callerPolicy:renamed.Policy[Int]{fn policy():Bool{false}}
+instance callerValidator:InterpolationValidator[renamed.Builder[Int]]{
+fn validateInterpolation(parts:StaticParts,holes:List[InterpolationHole]):List[InterpolationIssue]{[InterpolationIssue{hole:Option.None,message:"caller override"}]}}
+fn main(){_=renamed.Exercise();local=renamed.Tag;_=renamed.Tag"${1} ${renamed.Value{}}";_=local"${2} ${renamed.Value{}}";_=local"other ${4} ${renamed.Value{}}"}`)
 	lib := filepath.Join(dir, "lib")
 	if err := os.Mkdir(lib, 0700); err != nil {
 		t.Fatal(err)
 	}
 	source := `type Value={}
+class Policy[T]{fn policy():Bool}
+instance ownerPolicy:Policy[Int]{fn policy():Bool{true}}
 type Builder[T]={}
 fn Tag(parts:StaticParts):Builder[Int]{Builder[Int]{}}
 fn (b:Builder[T]) Interpolate[T,V](value:V):Builder[T]{b}
 fn (b:Builder[T]) Finish[T]():Bool{true}
-instance validation[T:Ord]:InterpolationValidator[Builder[T]]{
+fn Exercise():Bool{Tag"${3} ${Value{}}"}
+instance validation[T:Policy]:InterpolationValidator[Builder[T]]{
  fn validateInterpolation(parts:StaticParts,holes:List[InterpolationHole]):List[InterpolationIssue]{
  first=holes.get(0).getOr(InterpolationHole{kinds:[]})
  second=holes.get(1).getOr(InterpolationHole{kinds:[]})
  builtin=match(first.kinds.get(0).getOr(InterpolationKind.Unknown)){InterpolationKind.Builtin{name}=>name=="Int",_=>false}
  named=match(second.kinds.get(0).getOr(InterpolationKind.Unknown)){InterpolationKind.Named{packagePath,name}=>packagePath=="example.com/validator/lib"&&name=="Value",_=>false}
- if(builtin&&named){[]}else{[InterpolationIssue{hole:Option.None,message:"wrong metadata"}]}
+ if(builtin&&named&&policy[T]()){[]}else{[InterpolationIssue{hole:Option.None,message:"wrong metadata"}]}
  }
 }`
 	if err := os.WriteFile(filepath.Join(lib, "lib.bork"), []byte(source), 0600); err != nil {
@@ -162,8 +168,16 @@ instance validation[T:Ord]:InterpolationValidator[Builder[T]]{
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(info.InterpolationBatches) != 1 || len(info.InterpolationBatches[0].Sites) != 2 {
-		t.Fatal("qualified/local prefixes lost validator")
+	if len(info.InterpolationBatches) != 2 || len(info.InterpolationBatches[0].Sites)+len(info.InterpolationBatches[1].Sites) != 4 {
+		t.Fatal("qualified/local prefixes or package batches lost validator")
+	}
+	first := info.InterpolationBatches[0].Recipe.Value.(*check.ListLit).Elems[0]
+	second := info.InterpolationBatches[1].Recipe.Value.(*check.ListLit).Elems[0]
+	if first != second {
+		t.Fatal("identical validator calls were re-evaluated across packages")
+	}
+	if info.InterpolationBatches[1].Recipe.Value.(*check.ListLit).Elems[1] == first {
+		t.Fatal("new call in mixed cached/new batch lost its result index")
 	}
 }
 
@@ -175,5 +189,51 @@ func TestInterpolationValidatorPurity(t *testing.T) {
 	_, _, err := Check(validatorFixture(t, source))
 	if err == nil || !strings.Contains(err.Error(), "io") {
 		t.Fatalf("impure validator accepted: %v", err)
+	}
+}
+
+func TestInterpolationValidatorOutsideFunctions(t *testing.T) {
+	for _, source := range []string{
+		`import "bork/sql"
+lazy query=sql.SQL"SELECT ${1}"
+fn main(){_=query}`,
+		`import "bork/sql"
+type Queries={n:Int=1,lazy query:sql.Statement=sql.SQL"SELECT $n"}
+fn main(){_=Queries{}.query}`,
+	} {
+		_, _, err := Check(validatorFixture(t, source))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestInterpolationValidatorSelectionErrors(t *testing.T) {
+	method := `fn validateInterpolation(parts:StaticParts,holes:List[InterpolationHole]):List[InterpolationIssue]{[]}`
+	generic := `type Builder[T]={}
+fn Tag(parts:StaticParts):Builder[Int]{Builder[Int]{}}
+fn (b:Builder[T]) Interpolate[T,V](value:V):Builder[T]{b}
+fn (b:Builder[T]) Finish[T]():Bool{true}
+`
+	for _, tc := range []struct{ name, source, want string }{
+		{"ambiguous", validatorBuilder + `instance one:InterpolationValidator[Builder]{` + method + `}
+instance two:InterpolationValidator[Builder]{` + method + `}
+fn main(){_=Tag"${1}"}`, "more than one instance of InterpolationValidator"},
+		{"constrained", validatorBuilder + `pred good(b:Builder){true}
+instance one:InterpolationValidator[Builder where good]{` + method + `}
+fn main(){_=Tag"${1}"}`, "cannot have a constrained instance head"},
+		{"unsatisfied", generic + `class Policy[T]{fn policy():Bool}
+instance one[T:Policy]:InterpolationValidator[Builder[T]]{` + method + `}
+fn main(){_=Tag"${1}"}`, "no instance of Policy for Int"},
+		{"open", generic + `instance one[T]:InterpolationValidator[Builder[T]]{` + method + `}
+fn open[T](factory:(StaticParts)=>Builder[T]):Bool{factory"${1}"}
+fn main(){}`, "needs closed type arguments and dictionaries"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := Check(validatorFixture(t, tc.source))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want %q, got %v", tc.want, err)
+			}
+		})
 	}
 }

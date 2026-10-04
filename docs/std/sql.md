@@ -114,7 +114,7 @@ text before calling the shared execution implementation.
 [examples/sql_interpolation](../../examples/sql_interpolation/README.md) prints
 separate query text and parameters, quotes names with `sql.Name`, composes a
 fragment, proves hostile input leaves the table intact, and streams decoded rows.
-Its commented quoted-hole example explains the rendering error.
+Its commented quoted-hole example explains the compile error.
 
 `bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](../../examples/sql/main.bork).
 

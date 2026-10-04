@@ -18,7 +18,6 @@ type InterpolationSite struct {
 	Holes     []diag.Pos
 	Validator string
 	Package   string
-	Owner     *Func
 	Call      *Call
 	Key       string
 	Index     int
@@ -157,7 +156,7 @@ func (l *lowerer) interpolationSite(source *syntax.Interp, dict *Dict, parts Exp
 	holes := &ListLit{expr: expr{pos: at, typ: &List{Elem: holeType}}}
 	text := func(s string) Expr { return &Const{expr: expr{pos: at, typ: String}, Value: constant.MakeString(s)} }
 	var metadata [][]interpolationKind
-	site := &InterpolationSite{Prefix: at, Owner: l.currentFunc, Validator: dict.Inst.Name}
+	site := &InterpolationSite{Prefix: at, Validator: dict.Inst.Name}
 	if dict.Inst.Pkg.Path != "" {
 		site.Validator = dict.Inst.Pkg.Path + "." + site.Validator
 	}
@@ -237,7 +236,7 @@ func (l *lowerer) interpolationBatches() {
 		if batch == nil {
 			values := &ListLit{expr: expr{pos: site.Prefix, typ: &List{Elem: site.Call.Type()}}}
 			body := &Block{expr: expr{pos: site.Prefix, typ: values.Type()}, Tail: values, End: site.Prefix}
-			batch = &InterpolationBatch{Recipe: &Comptime{expr: expr{pos: site.Prefix, typ: body.Type()}, Body: body, Owner: site.Owner}}
+			batch = &InterpolationBatch{Recipe: &Comptime{expr: expr{pos: site.Prefix, typ: body.Type()}, Body: body, Owner: &Func{Decl: &syntax.FuncDecl{Pos: site.Prefix, Name: "interpolation"}, Pkg: site.Call.Func.Pkg, Result: body.Type()}}}
 			batches[site.Package] = batch
 			l.info.InterpolationBatches = append(l.info.InterpolationBatches, batch)
 		}

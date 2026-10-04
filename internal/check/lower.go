@@ -24,7 +24,6 @@ type lowerer struct {
 	withs                int
 	interpolationSources map[syntax.Expr]Expr
 	interpolationSites   []*InterpolationSite
-	currentFunc          *Func
 }
 
 // needs is what the call or reference x passes for its callee's needs.
@@ -122,9 +121,6 @@ func (c *checker) lower(files []*syntax.File) {
 }
 
 func (l *lowerer) function(fn *Func) {
-	previous := l.currentFunc
-	l.currentFunc = fn
-	defer func() { l.currentFunc = previous }()
 	for i, p := range fn.Decl.Params {
 		v := &Var{Name: p.Name, Pos: p.Pos, Type: fn.Params[i], Kind: VarParam, Index: i}
 		if fn.Decl.Constructor != nil {

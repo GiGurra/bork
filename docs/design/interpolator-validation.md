@@ -92,3 +92,15 @@ remain mandatory at render time, including runtime fragments and dialects.
 
 User documentation includes a short validator-writing section and a table of
 compile-time versus mandatory render-time checks.
+
+## Measured checking cost
+
+On this development server, optimized CLI binaries checked one file containing
+50 distinct SQL literal sites against the branch's main baseline `fd17c81`.
+`BORK_CACHE=off` and `GOPACKAGESDRIVER=off`; Go's normal build cache was retained.
+Three warm runs had median 0.063s on main and 0.241s with validation (0.178s added).
+The first validation check took 0.450s; editing one site's literal took 0.512s.
+These are one package batch with 50 calls, not 50 evaluator processes. There is
+no cross-build validator-result cache: subsequent checks execute the batch again,
+while Go can reuse its compiled dependencies. The focused regression checks that
+repeated parts/kinds produce one call and no-validator programs launch no evaluator.

@@ -137,7 +137,10 @@ fn scanStatement(statement: Statement, dialect: Dialect): Rendered | scanError u
         delimiter := text[i:j+1]
         i = j+1
         end := strings.Index(text[i:], delimiter)
-        if end < 0 { return failEnd("Postgres dollar quote is not terminated") }
+        if end < 0 {
+          if strings.ContainsRune(text[i:], 0) { return failHole("SQL hole is inside a dollar quote") }
+          return failEnd("Postgres dollar quote is not terminated")
+        }
         if strings.ContainsRune(text[i:i+end], 0) { return failHole("SQL hole is inside a dollar quote") }
         i += end+len(delimiter)
       } else { i++ }

@@ -11,4 +11,5 @@ fn main() {
   _ = sql.SQL"SELECT x.$value"
   _ = sql.SQL"SELECT $$1, $value"
   _ = sql.SQL"SELECT \u0000, $value"
+  _ = sql.SQL"SELECT $$$$ $value"
 }
