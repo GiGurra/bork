@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func tryLock(_ *os.File) error {
+func tryLock(_ *os.File, _ bool) error {
 	return errors.New("compiler switching is unsupported on this platform")
 }
 func lockBusy(_ error) bool { return false }

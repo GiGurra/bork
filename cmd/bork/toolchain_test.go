@@ -154,4 +154,16 @@ func TestToolchainTarget(t *testing.T) {
 	if path, enabled := toolchainTarget(cmd, []string{"example.com/lib@latest"}); !enabled || path != "/project" {
 		t.Fatalf("deps target: %s, %t", path, enabled)
 	}
+	root := &cobra.Command{Use: "bork"}
+	test := &cobra.Command{Use: "test"}
+	test.Flags().BoolP("json", "j", false, "")
+	test.Flags().BoolP("update", "u", false, "")
+	test.Flags().IntP("seed", "s", 0, "")
+	test.Flags().IntP("cases", "c", 100, "")
+	root.AddCommand(test)
+	for _, args := range [][]string{{"test", "-js", "7", "/project"}, {"test", "-uc", "10", "/project"}, {"test", "-js7", "/project"}, {"test", "-js=7", "/project"}} {
+		if path, enabled := earlyToolchainTarget(root, args); !enabled || path != "/project" {
+			t.Errorf("%v: %s, %t", args, path, enabled)
+		}
+	}
 }

@@ -97,10 +97,13 @@ func TestEnsureCompiler(t *testing.T) {
 	}
 	cleaned := make(chan error, 1)
 	if err := WithCompiler(context.Background(), root, "v0.4.2", io.Discard, func(path, _ string) error {
+		if _, _, err := Ensure(context.Background(), root, "v0.4.2", io.Discard); err != nil {
+			return err
+		}
 		go func() { cleaned <- Clean(context.Background(), root) }()
 		select {
 		case err := <-cleaned:
-			t.Fatalf("cleanup raced compiler startup: %v", err)
+			t.Fatalf("cleanup raced compiler execution: %v", err)
 		case <-time.After(50 * time.Millisecond):
 		}
 		_, err := os.Stat(path)
@@ -114,7 +117,7 @@ func TestEnsureCompiler(t *testing.T) {
 			t.Fatal(err)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("cleanup remained blocked after startup")
+		t.Fatal("cleanup remained blocked after execution")
 	}
 	if _, err := os.Stat(filepath.Join(root, "toolchains")); !os.IsNotExist(err) {
 		t.Fatalf("clean kept compilers: %v", err)

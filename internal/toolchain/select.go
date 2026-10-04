@@ -122,23 +122,6 @@ func executable(dir string) string {
 // Ensure resolves a query once and publishes a verified, immutable compiler.
 // Minor queries retain their first resolution until toolchain caches are cleaned.
 func Ensure(ctx context.Context, root, query string, output io.Writer) (path, version string, err error) {
-	return ensure(ctx, root, query, output, nil)
-}
-
-// WithCompiler holds the installation lock through the callback. Callers can
-// start the compiler while cleanup is excluded, then wait after releasing it.
-func WithCompiler(ctx context.Context, root, query string, output io.Writer, start func(path, version string) error) error {
-	_, _, err := ensure(ctx, root, query, output, start)
-	return err
-}
-
-func ensure(ctx context.Context, root, query string, output io.Writer, start func(path, version string) error) (path, version string, err error) {
-	finish := func(path, version string) (string, string, error) {
-		if start != nil {
-			return path, version, start(path, version)
-		}
-		return path, version, nil
-	}
 	parsed, err := manifest.ParseVersion(query)
 	if err != nil {
 		return "", "", err
@@ -147,6 +130,11 @@ func ensure(ctx context.Context, root, query string, output io.Writer, start fun
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return "", "", err
 	}
+	lifetime, err := acquireMode(ctx, filepath.Join(root, "toolchains-use.lock"), false)
+	if err != nil {
+		return "", "", err
+	}
+	defer lifetime()
 	release, err := acquire(ctx, filepath.Join(root, "toolchains.lock"))
 	if err != nil {
 		return "", "", err
@@ -172,7 +160,7 @@ func ensure(ctx context.Context, root, query string, output io.Writer, start fun
 		if version != resolved {
 			return "", "", fmt.Errorf("cached compiler %s reports %s", path, version)
 		}
-		return finish(path, version)
+		return path, version, nil
 	} else if _, statErr := os.Stat(path); statErr == nil {
 		return "", "", fmt.Errorf("cached compiler is invalid: %w; run bork clean --all to remove it", err)
 	}
@@ -210,10 +198,32 @@ func ensure(ctx context.Context, root, query string, output io.Writer, start fun
 			return "", "", err
 		}
 	}
-	return finish(path, version)
+	return path, version, nil
+}
+
+// WithCompiler retains a shared execution lease for the whole callback. Other
+// compilers and nested invocations can run/install while cleanup waits.
+func WithCompiler(ctx context.Context, root, query string, output io.Writer, run func(path, version string) error) error {
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return err
+	}
+	release, err := acquireMode(ctx, filepath.Join(root, "toolchains-use.lock"), false)
+	if err != nil {
+		return err
+	}
+	defer release()
+	path, version, err := Ensure(ctx, root, query, output)
+	if err != nil {
+		return err
+	}
+	return run(path, version)
 }
 
 func acquire(ctx context.Context, path string) (func(), error) {
+	return acquireMode(ctx, path, true)
+}
+
+func acquireMode(ctx context.Context, path string, exclusive bool) (func(), error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
@@ -223,7 +233,7 @@ func acquire(ctx context.Context, path string) (func(), error) {
 			_ = file.Close()
 			return nil, err
 		}
-		if err := tryLock(file); err == nil {
+		if err := tryLock(file, exclusive); err == nil {
 			return func() { _ = file.Close() }, nil
 		} else if !lockBusy(err) {
 			_ = file.Close()
@@ -242,6 +252,11 @@ func Clean(ctx context.Context, root string) error {
 	if _, err := os.Stat(filepath.Join(root, "toolchains")); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
+	lifetime, err := acquire(ctx, filepath.Join(root, "toolchains-use.lock"))
+	if err != nil {
+		return err
+	}
+	defer lifetime()
 	release, err := acquire(ctx, filepath.Join(root, "toolchains.lock"))
 	if err != nil {
 		return err
