@@ -28,6 +28,21 @@ jobs:
       - run: npm ci --prefix editors/vscode
       - run: npm test --prefix editors/vscode
       - run: npm run package --prefix editors/vscode
+  tree-sitter:
+    name: Tree-sitter grammar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: editors/tree-sitter-bork/package-lock.json
+      - run: npm ci --prefix editors/tree-sitter-bork
+      - run: npm run generate --prefix editors/tree-sitter-bork
+      - run: git diff --exit-code -- editors/tree-sitter-bork/src
+      - run: npm test --prefix editors/tree-sitter-bork
+      - run: node scripts/check-editor-keywords.cjs
   shards:
     name: Test shard plan
     runs-on: ubuntu-latest
@@ -130,7 +145,7 @@ jobs:
   ci-ok:
     name: CI ok
     if: always()
-    needs: [grammar, shards, lint, examples, suite, replay, cache-maintenance]
+    needs: [grammar, tree-sitter, shards, lint, examples, suite, replay, cache-maintenance]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed

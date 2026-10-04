@@ -1,0 +1,222 @@
+==================
+Contracts and records
+==================
+type Port = Int where between(1, 65535)
+type Box[T] = private { lazy value: T } derive (Encode)
+type Event = sealed { Stop, Item { value: Int } }
+fn (xs: List[Int]) head() where xs.length() > 0 uses nothing: Int { xs.first() }
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (type
+      (qualified_name
+        (identifier))
+      (where_clause
+        (requirement
+          (qualified_name
+            (identifier))
+          (number)
+          (number)))))
+  (type_declaration
+    (identifier)
+    (type_parameters
+      (identifier))
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))
+    (derive_clause
+      (qualified_name
+        (identifier))))
+  (type_declaration
+    (identifier)
+    (variant
+      (identifier))
+    (variant
+      (identifier)
+      (record_type
+        (field_declaration
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))))))
+  (function_declaration
+    (receiver
+      (identifier)
+      (type
+        (qualified_name
+          (identifier))
+        (type_arguments
+          (type
+            (qualified_name
+              (identifier))))))
+    (identifier)
+    (parameters)
+    (where_clause
+      (requirement
+        (requirement
+          (qualified_name
+            (identifier)
+            (identifier)))
+        (requirement
+          (number))))
+    (uses_clause
+      (identifier))
+    (type
+      (qualified_name
+        (identifier)))
+    (block
+      (call_expression
+        (qualified_name
+          (identifier)
+          (identifier))))))
+
+==================
+Typed interpolation and embedded Go
+==================
+fn query(n: Int) { sql.SQL"SELECT ${n + 1}, ${s"nested $n"}" }
+fn goValue(): String unsafe go {
+  // } remains a comment
+  x := `}`
+  if true { x = "{ escaped \" }" }
+  return x
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))
+    (block
+      (interpolated_string
+        (qualified_name
+          (identifier)
+          (identifier))
+        (interpolation
+          (binary_expression
+            (qualified_name
+              (identifier))
+            (number)))
+        (interpolation
+          (interpolated_string
+            (qualified_name
+              (identifier))
+            (interpolation
+              (identifier)))))))
+  (function_declaration
+    (identifier)
+    (parameters)
+    (type
+      (qualified_name
+        (identifier)))
+    (go_body
+      (go_content))))
+
+==================
+Script, chains, scopes and patterns
+==================
+#!/usr/bin/env -S bork script
+import "bork/sql"
+scope app with taskTimeout(100) {
+  rows = sql.SQL"SELECT 1"
+    .Query[Int](db)?
+  match (rows) {
+    [first, ...rest] => println(first, rest)
+    [] => println("empty")
+  }
+}
+---
+
+(source_file
+  (shebang)
+  (import_declaration
+    (string))
+  (scope_expression
+    (identifier)
+    (call_expression
+      (qualified_name
+        (identifier))
+      (argument
+        (number)))
+    (block
+      (binding
+        (identifier)
+        (try_expression
+          (call_expression
+            (generic_expression
+              (selector_expression
+                (interpolated_string
+                  (qualified_name
+                    (identifier)
+                    (identifier)))
+                (identifier))
+              (type_arguments
+                (type
+                  (qualified_name
+                    (identifier)))))
+            (argument
+              (qualified_name
+                (identifier))))))
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (pattern
+              (qualified_name
+                (identifier)))
+            (pattern
+              (qualified_name
+                (identifier))))
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (qualified_name
+                (identifier)))
+            (argument
+              (qualified_name
+                (identifier)))))
+        (match_arm
+          (pattern)
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (string))))))))
+
+==================
+Contextual names and newline records
+==================
+fn main() {
+  lazy = 1
+  items = {:}
+  .{ value: lazy }
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (number))
+      (binding
+        (identifier)
+        (map_literal))
+      (record_expression
+        (record_literal
+          (identifier)
+          (qualified_name
+            (identifier)))))))

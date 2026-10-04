@@ -3947,6 +3947,13 @@ rename is limited to local variables and private functions until a complete
 workspace reference index exists. The packageable VS Code client locates a
 configured or PATH-installed compiler. Packaging does not publish it.
 
+The in-repository tree-sitter grammar provides structural highlighting, locals,
+indentation, folds and Go injection for other editors. CI checks every example
+and compiler case, requiring clean trees except for an explicit recovery-fixture
+allowlist whose entries must exist and remain malformed. Generated parser sources
+and compiler-keyword coverage are checked for drift. This grammar supplies editor
+structure; compiler diagnostics and formatting come from `bork lsp`.
+
 ### Single-file scripts (implemented)
 
 A `.bork` file beginning with a shebang is a script; `bork script <file>` also selects script mode without a shebang. Top-level ordinary bindings and executable statements run eagerly, in order, as locals in an implicit main with entrypoint effects. Helper functions cannot capture these locals; they take parameters or read explicit pure `lazy` package values. An explicit main and importing scripts as packages are rejected. Source positions, formatter output and describe queries retain the original file.
