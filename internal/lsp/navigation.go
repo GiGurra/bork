@@ -87,7 +87,8 @@ func (s *server) navigationFeature(method, path string, p documentParams) (any, 
 		return out, nil
 	}
 	src := s.source(path)
-	if pkg.analysis.Sources()[path] != src {
+	sources := pkg.analysis.Sources()
+	if sources[path] != src {
 		return out, nil
 	}
 	pos, err := compilerPosition(path, src, p.Position)
@@ -103,12 +104,18 @@ func (s *server) navigationFeature(method, path string, p documentParams) (any, 
 			items = pkg.analysis.EditorImplementations(pos)
 		}
 		for _, item := range items {
+			if sources[item.SelectionStart.File] != s.source(item.SelectionStart.File) {
+				continue
+			}
 			if loc, ok := s.navigationLocation(item); ok {
 				out = append(out, loc)
 			}
 		}
 	case "textDocument/prepareCallHierarchy":
 		if item, err := pkg.analysis.EditorCallHierarchy(pos); err == nil {
+			if sources[item.SelectionStart.File] != s.source(item.SelectionStart.File) {
+				return out, nil
+			}
 			if item, ok := s.hierarchyItem(*item); ok {
 				out = append(out, item)
 			}

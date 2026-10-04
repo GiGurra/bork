@@ -397,3 +397,24 @@ func BenchmarkNavigationHTTPServer(b *testing.B) {
 		}
 	})
 }
+
+func TestNavigationClearsChangedClosedTargets(t *testing.T) {
+	dir, path, main, api := navigationFixture(t)
+	s := &server{out: &bytes.Buffer{}, initialized: true, docs: map[string]document{path: {main, 1}}, packages: map[string]*packageState{}, diagnostics: map[string][]diag.Diagnostic{}}
+	if err := s.check(); err != nil {
+		t.Fatal(err)
+	}
+	apiPath := filepath.Join(dir, "api/api.bork")
+	if err := os.WriteFile(apiPath, []byte("// changed after last check\n"+api), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []struct{ method, cursor string }{{"textDocument/typeDefinition", "first ="}, {"textDocument/prepareCallHierarchy", "api.Make()"}} {
+		result, err := s.navigationFeature(query.method, path, documentParams{Position: navigationPosition(t, main, query.cursor)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, ok := result.([]any); !ok || len(got) != 0 {
+			t.Fatalf("%s reused obsolete closed target positions: %+v", query.method, result)
+		}
+	}
+}
