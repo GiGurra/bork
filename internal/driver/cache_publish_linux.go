@@ -49,7 +49,7 @@ func init() {
 }
 
 func queueCachePublication(directory string, artifact *sessionArtifact) bool {
-	if cacheDisabled() {
+	if !cacheTrimSupported() || cacheDisabled() {
 		return false
 	}
 	job, err := newCachePublishJob(directory, artifact)
@@ -196,7 +196,11 @@ func runCachePublisher() bool {
 	if err != nil {
 		return false
 	}
-	return (cacheStore{root: job.Root, namespace: namespace}).write(body) == nil
+	ok := (cacheStore{root: job.Root, namespace: namespace}).write(body) == nil
+	if ok {
+		_ = queueCacheTrim(job.Root)
+	}
+	return ok
 }
 
 func lowerCachePublisherPriority() {
