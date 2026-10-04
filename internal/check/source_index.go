@@ -177,9 +177,7 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 	}
 	for expr, variant := range info.contextVariants {
 		if variant != nil && expr.Name != "" {
-			pos := expr.Pos
-			pos.Col++
-			b.reference(pos, variant.Parent.Decl.Variants[variant.Index].Pos, "", "")
+			b.contextVariant(expr, variant)
 		}
 	}
 	for literal, target := range info.recordTargets {
@@ -193,9 +191,7 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 			case *syntax.Selector:
 				b.reference(head.Pos, target.Parent.Decl.Variants[target.Index].Pos, "", "")
 			case *syntax.ContextName:
-				pos := head.Pos
-				pos.Col++
-				b.reference(pos, target.Parent.Decl.Variants[target.Index].Pos, "", "")
+				b.contextVariant(head, target)
 			}
 		}
 		for _, initializer := range literal.Fields {
@@ -602,4 +598,11 @@ func (b *sourceIndexBuilder) referenceNamed(pos diag.Pos, name string, def diag.
 		pos = positions[len(positions)-1]
 	}
 	b.reference(pos, def, "", "")
+}
+
+func (b *sourceIndexBuilder) contextVariant(expr *syntax.ContextName, variant *Variant) {
+	positions := b.pathPositions(expr.Pos, []string{expr.Name})
+	if len(positions) == 1 {
+		b.reference(positions[0], variant.Parent.Decl.Variants[variant.Index].Pos, "", "")
+	}
 }

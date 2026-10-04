@@ -134,6 +134,24 @@ func TestRenameSpacedVariantPatterns(t *testing.T) {
 	}
 }
 
+func TestRenameMultilineContextVariants(t *testing.T) {
+	for _, tail := range []string{"Some", "Some { value: 1 }"} {
+		fields := ""
+		if strings.Contains(tail, "{") {
+			fields = " { value: Int }"
+		}
+		src := "type Choice = sealed { Some" + fields + ", Empty }\nfn Use(): Choice { .\n " + tail + " }\n"
+		s, path := newTestServer(t, src)
+		result, err := s.feature("textDocument/rename", path, documentParams{Position: position{0, 24}, NewName: "Present"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if edits := result.(map[string]any)["changes"].(map[string][]textEdit)[fileURI(path)]; len(edits) != 2 {
+			t.Fatalf("multiline context variant omitted: %+v", edits)
+		}
+	}
+}
+
 func TestRenameUnusedProviderBundleReference(t *testing.T) {
 	src := "fn logFailures(): ScopePolicy { ScopePolicy.TaskTimeout { ms: 1 } }\nproviders Policies = { policy: logFailures }\n"
 	s, path := newTestServer(t, src)
