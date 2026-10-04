@@ -1,0 +1,44 @@
+// bork run examples/sql_interpolation: values bind; names quote; fragments compose.
+import "bork/sql"
+
+type User = { name: String } derive (Decode)
+type Count = { count: Int } derive (Decode)
+fn demo() uses io + net: Ok | sql.Error | DecodeError {
+  // Even SQL-looking runtime input remains one value.
+  hostile = "Ada'); DROP TABLE users; --"
+  table = sql.Name("users")?
+  column = sql.Name("name")?
+  filter = sql.SQL"$column = $hostile"
+  query = sql.SQL"SELECT $column FROM $table WHERE $filter"
+  rendered = query.Render(sql.Dialect.Sqlite)?
+  println(s"query: ${rendered.query}")
+  println(s"parameters: ${rendered.params}")
+  scope app {
+    db = sql.OpenSqlite(":memory:", app)?
+    created = sql.SQL"CREATE TABLE $table (name TEXT)".Exec(db)?
+    first = sql.SQL"INSERT INTO $table (name) VALUES (${"Ada"})".Exec(db)?
+    second = sql.SQL"INSERT INTO $table (name) VALUES ($hostile)".Exec(db)?
+    matched = query.Query[User](db)?
+    println(s"exact matches: ${matched.length()}")
+    counts = sql.SQL"SELECT count(*) AS count FROM $table".Query[Count](db)?
+    println(s"table still exists; rows: ${counts.get(0).getOr(Count { count: 0 }).count}")
+    // Each traversal renders and queries lazily while the connection is in scope.
+    for (result in query.Rows[User](db)) {
+      match (result) {
+        user: User => println(s"streamed name: ${user.name}")
+        error: sql.Error => { return error }
+        error: DecodeError => { return error }
+      }
+    }
+    // Do not put quotes around a hole: the library rejects it during rendering.
+    // rejected = sql.SQL"SELECT '$hostile'".Render(sql.Dialect.Sqlite)
+    // This returns sql.Error with operation "interpolate", before any query runs.
+  }
+}
+fn main() {
+  match (demo()) {
+    error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
+    error: DecodeError => eprintln(s"${error.path}: ${error.message}")
+    _ => {}
+  }
+}

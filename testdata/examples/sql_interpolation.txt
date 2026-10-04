@@ -1,0 +1,5 @@
+query: SELECT "name" FROM "users" WHERE "name" = ?
+parameters: ["Ada'); DROP TABLE users; --"]
+exact matches: 1
+table still exists; rows: 2
+streamed name: Ada'); DROP TABLE users; --
