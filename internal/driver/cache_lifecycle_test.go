@@ -18,6 +18,9 @@ func lifecycleBody(t *testing.T, original *cacheArtifactBody, index int) *cacheA
 	t.Helper()
 	body := *original
 	body.Request.Path = fmt.Sprintf("%s-%04d", original.Request.Path, index)
+	if err := os.WriteFile(body.Request.Path, []byte("fixture target"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	var err error
 	body.Key, err = body.Request.key()
 	if err != nil {

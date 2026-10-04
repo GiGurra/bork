@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 
@@ -18,6 +19,10 @@ import (
 	borkformat "github.com/GiGurra/bork/internal/format"
 	"github.com/spf13/cobra"
 )
+
+type cleanParams struct {
+	All bool `optional:"true" descr:"remove artifacts from all compiler and staging versions"`
+}
 
 type pathParams struct {
 	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
@@ -229,6 +234,18 @@ func main() {
 		Use:   "bork",
 		Short: "the bork compiler: a pragmatic backend language of guarantees",
 		SubCmds: boa.SubCmds(
+			boa.CmdT[cleanParams]{
+				Use: "clean", Short: "remove bork compiler caches",
+				RunFunc: func(p *cleanParams, cmd *cobra.Command, _ []string) {
+					ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+					defer stop()
+					report, err := driver.Clean(ctx, p.All)
+					if err != nil {
+						fail(err)
+					}
+					fmt.Printf("Removed %d results, %d staged trees and %d temporary files (%d bytes).\n", report.Results, report.Stages, report.Temporaries, report.Bytes)
+				},
+			},
 			boa.CmdT[boa.NoParams]{
 				Use:   "deps",
 				Short: "manage pinned user Go dependencies beside bork.mod",

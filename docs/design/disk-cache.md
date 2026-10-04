@@ -260,3 +260,25 @@ which entry lock protects the tree. An entry's abandoned `new-*`/`previous` tree
 removed while its SLOT and MUTATION are held. Unsupported or unavailable caches keep
 temporary staging. Version 1 publishers are retired without compatibility shims;
 `clean --all` will recognize and remove their entries while preserving old lock files.
+
+The cleanup slice exposes `bork clean` and `bork clean --all`. It first drains the
+eight publisher admission slots, retaining them through cleanup so a queued child
+cannot repopulate selected entries. Select under MUTATION, release it before waiting
+for each entry slot, then reacquire MUTATION and recheck the selected identity before
+removal. All waits are cancellable; an interrupted operation may have removed earlier
+selected entries. Cleanup recognizes current result schema namespaces, staging-v2,
+and (with --all) legacy staging-v1 with its original lock mapping. Lock files remain.
+A missing cache succeeds; inaccessible storage or unsupported locking reports errors.
+On platforms without current-result image identity, default cleanup covers staging;
+--all selects all recognized result namespaces without that identity prerequisite.
+
+Abandoned result temporaries and zero-byte job names left before descriptor unlink
+are also selected; draining admission protects parent-side handoff creation. Cleanup
+uses bounded no-follow traversal and can remove malformed entry symlinks without
+following their targets. Unrecognized cache paths, project outputs and Go's cache
+are preserved. Result maintenance additionally reads a bounded canonical request
+header to prioritize conclusively absent selected targets (including standalone
+files). This is an eviction hint only: hit validation still certifies the complete
+checksummed artifact and every semantic receipt. Unsupported/truncated headers retain
+ordinary LRU eligibility. Empty result namespace directories are removed under
+MUTATION so failed publication does not accumulate directory records.
