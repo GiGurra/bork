@@ -348,17 +348,14 @@ func hasLibrarySources(files []*syntax.File, reader sourceReader) (bool, error) 
 		if file.Prelude || strings.HasPrefix(file.Package, std.Prefix) {
 			continue
 		}
-		if root == "" {
-			mod, err := findModuleFrom(filepath.Dir(file.Path), reader)
-			if err != nil {
-				return false, err
-			}
-			root = mod.path
-			if root == "" {
-				root = file.Package
-			}
+		mod, err := findModuleFrom(filepath.Dir(file.Path), reader)
+		if err != nil {
+			return false, err
 		}
-		if file.Package != root && !strings.HasPrefix(file.Package, root+"/") {
+		if root == "" {
+			root = mod.root
+		}
+		if mod.root != root {
 			return true, nil
 		}
 	}
