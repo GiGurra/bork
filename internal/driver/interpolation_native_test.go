@@ -39,16 +39,23 @@ func TestStandardInterpolationArtifactBinding(t *testing.T) {
 	if len(plan.calls) != 1 {
 		t.Fatal("wrong artifact batch")
 	}
-	// A change to either source bytes or checked implementation declines the artifact.
+
+	boundSources := map[string]bool{}
+	for _, source := range plan.calls[0].Binding.Descriptor().Sources {
+		boundSources[source.Path] = true
+	}
+	// Relevant source changes decline; unrelated prelude/SQL sources stay eligible.
 	for _, file := range files {
-		if file.Package == "bork/sql" {
-			original := file.Source
-			file.Source += "\n"
-			if _, ok := prepareNativeInterpolation(files, info, node, ctx); ok {
-				t.Fatal("changed source accepted")
-			}
-			file.Source = original
+		if !file.Prelude && file.Package != "bork/sql" {
+			continue
 		}
+		original := file.Source
+		file.Source += "\n"
+		_, accepted := prepareNativeInterpolation(files, info, node, ctx)
+		if accepted == boundSources[file.Path] {
+			t.Fatalf("source %s accepted=%v bound=%v", file.Path, accepted, boundSources[file.Path])
+		}
+		file.Source = original
 	}
 	helpers := gen.ComptimeFunctions(files, info, node)
 	original := helpers[0].Decl.Name

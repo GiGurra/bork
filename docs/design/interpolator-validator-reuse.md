@@ -49,3 +49,18 @@ The same 50 distinct SQL sites used for #250, checked with `BORK_CACHE=off` and
 These are fresh CLI processes: validation runs on every check, with no evaluated
 result reuse. Native attempts use the shared tracker but remain uncertified.
 The registry namespace identifies the actual compiler image, not the live Go SDK.
+
+## Regeneration scope
+
+The SQL artifact binds three of the seventeen prelude files: `classes.bork`
+(the emitted `Ord` dictionary ABI), `interpolation.bork`, and `options.bork`.
+Edits to the other fourteen prelude files do not regenerate it. It binds
+`bork/sql/interpolation.bork` and `bork/sql/sql.bork`; unused SQL sequence and
+unsafe APIs are outside its closure. Binding remains conservative at file
+granularity, so any edit inside a bound file still requires regeneration.
+
+The staleness failure lists changed bound source paths (or runtime support /
+generator output) and prints the exact fix: `go generate ./internal/stdvalidators`.
+Only required classes, the selected instances, and reachable validator functions
+are emitted into an artifact; unrelated class signatures and instances cannot
+pull their prelude sources into its bound closure.
