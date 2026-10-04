@@ -25,11 +25,7 @@ func TestDiskCacheCLIParity(t *testing.T) {
 	t.Setenv("GOPACKAGESDRIVER", "off")
 	t.Setenv("GOTOOLCHAIN", "local")
 	root := t.TempDir()
-	exe := filepath.Join(root, "bork-test-cache")
-	build := exec.Command("go", "build", "-ldflags=-X github.com/GiGurra/bork/internal/driver.cacheTestGate=enabled", "-o", exe, ".")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build test CLI: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, true)
 	program := filepath.Join(root, "program")
 	if err := os.Mkdir(program, 0700); err != nil {
 		t.Fatal(err)
@@ -186,14 +182,7 @@ fn main(){println(comptime{readForeign(%q)})}`, foreign)
 
 func TestDiskCacheCLIRequiresBuiltGate(t *testing.T) {
 	root := t.TempDir()
-	exe := filepath.Join(root, "bork")
-	if runtime.GOOS == "windows" {
-		exe += ".exe"
-	}
-	command := exec.Command("go", "build", "-o", exe, ".")
-	if out, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
+	exe := cliExecutable(t, false)
 	source := filepath.Join(root, "main.bork")
 	if err := os.WriteFile(source, []byte("fn main() {}\n"), 0600); err != nil {
 		t.Fatal(err)

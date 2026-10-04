@@ -90,3 +90,11 @@ With an explicit `XDG_CACHE_HOME`, remove its `bork/test-outputs-v1` directory
 instead. Production `bork clean` owns compiler artifacts and does not remove
 this test-only layer. CI persists `GOCACHE`, not these native targets, so the
 main benefit is repeated local runs; a cold hosted run may see little change.
+
+CLI integration tests build at most one ordinary compiler and one test-gated
+compiler per package test run. Each build uses the environment captured before
+individual tests change runtime settings. A package-owned temporary directory
+holds these native executables and is removed after the run; no executable is
+retained between invocations. CLI commands still start fresh processes, cache
+fixtures remain isolated, and tests requiring different compiler images retain
+their distinct builds.
