@@ -28,7 +28,8 @@ directory: two directories and 3,648 Bork bytes. Its private records, checked
 constructors and derived codecs require the flat fallback. Hello and calculator
 also stay flat. Their comparisons measure the fallback/common case, not the
 cost or benefit of a general emitter. All measured programs produced identical
-stdout to the ordinary compiler; a focused regression also verifies the scoring
+stdout for their initial fixture builds to the ordinary compiler. Edited builds
+were compiled successfully but not executed for parity. A focused regression verifies the scoring
 model's output and the shared runtime's Rune declaration.
 
 ## Measurements
@@ -77,9 +78,12 @@ Reusing type-checking alone cannot materially improve this workload. This is
 separate from the custom-stage layout comparison above; values are medians of
 individual phase sample means and need not sum exactly to the total median.
 
+Measurements used compiler revision `c61f18690312dd44f2c2272e0372f01a0e3ce40e`.
 The temporary benchmark harness is attached to awb ticket `bork-iqrd0t` as
 `go_packages_benchmark_test.go`. Retrieve it into a clean checkout to reproduce;
 it is deliberately excluded from the production compiler and this docs-only PR.
+The harness SHA-256 is
+`79571c543265673fe5f5441194c03921fb79a4be6f43304e9c039263d22e4387`.
 
 ```sh
 awb attach get bork-iqrd0t go_packages_benchmark_test.go --output internal/driver/go_packages_benchmark_test.go
