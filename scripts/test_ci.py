@@ -16,22 +16,40 @@ class PartitionTests(unittest.TestCase):
                  *(f"TestIntegration{i}" for i in range(12))]
         packages = [ci.DRIVER, "example/core", "example/new-package"]
         groups = ci.partition(packages, names, {"TestIntegration0": 90})
-        covered = [name for group, entries in groups.items() if group != "core" and group not in ci.PACKAGE_SHARDS for name in entries]
+        covered = [name for group, entries in groups.items() if group != "core" and group not in ci.PACKAGE_SHARDS and group not in ci.LSP_SHARDS for name in entries]
         self.assertCountEqual(covered, names)
         self.assertEqual(len(covered), len(set(covered)))
         self.assertEqual(groups["core"], ["example/core", "example/new-package"])
         self.assertEqual(groups, ci.partition(list(reversed(packages)), list(reversed(names)), {"TestIntegration0": 90}))
 
-    def test_lsp_has_its_own_package_shard_in_both_modes(self):
-        lsp = ci.PACKAGE_SHARDS["lsp"]
-        packages = [ci.DRIVER, lsp, "example/core"]
-        groups = ci.partition(packages, list(ci.DEDICATED.values()), {})
+    def test_lsp_tests_have_exact_balanced_coverage_in_both_modes(self):
+        packages = [ci.DRIVER, ci.LSP, "example/core"]
+        names = ["TestHeavy", "TestOther", "ExampleNew", "FuzzNew", "TestFuture"]
+        weights = {"lsp:TestHeavy": 60, "lsp:TestOther": 55}
+        groups = ci.partition(packages, list(ci.DEDICATED.values()), weights, names)
+        covered = [name for group in ci.LSP_SHARDS for name in groups[group]]
+        self.assertCountEqual(covered, names)
+        self.assertEqual(len(covered), len(set(covered)))
         self.assertEqual(groups["core"], ["example/core"])
-        self.assertEqual(groups["lsp"], [lsp])
+        self.assertEqual(groups, ci.partition(list(reversed(packages)), list(ci.DEDICATED.values()), weights, list(reversed(names))))
+        self.assertNotEqual(next(g for g in ci.LSP_SHARDS if "TestHeavy" in groups[g]), next(g for g in ci.LSP_SHARDS if "TestOther" in groups[g]))
         for mode in ("normal", "race"):
-            self.assertEqual(ci.command(mode, "lsp", [lsp])[-1], lsp)
+            command = ci.command(mode, "lsp-0", ["TestHeavy", "FuzzNew"])
+            self.assertEqual(command[-3:], ["./internal/lsp", "-run", "^(TestHeavy|FuzzNew)$"])
+            self.assertEqual("-race" in command, mode == "race")
+        for tests in ([], ["TestDuplicate", "TestDuplicate"]):
+            with self.assertRaises(RuntimeError):
+                ci.partition(packages, list(ci.DEDICATED.values()), {}, tests)
         with self.assertRaises(RuntimeError):
-            ci.partition([*packages, lsp], list(ci.DEDICATED.values()), {})
+            ci.partition([*packages, ci.LSP], list(ci.DEDICATED.values()), {}, names)
+
+    def test_lsp_discovery_rejects_empty_and_duplicate_lists(self):
+        with patch.object(ci, "output", return_value=["TestOne", "ExampleNew", "FuzzNew", "ok package"]) as output:
+            self.assertEqual(ci.discover_lsp("race"), ["TestOne", "ExampleNew", "FuzzNew"])
+            self.assertIn("-race", output.call_args.args[0])
+        for names in ([], ["TestOne", "TestOne"]):
+            with patch.object(ci, "output", return_value=names), self.assertRaises(RuntimeError):
+                ci.discover_lsp("normal")
 
     def test_longest_tests_land_in_different_shards(self):
         heavy = [f"TestHeavy{i}" for i in range(ci.INTEGRATION_SHARDS)]
@@ -87,6 +105,17 @@ class MeasurementTests(unittest.TestCase):
         result = self.measure([*events, {"Action": "pass", "Elapsed": 10}])
         self.assertEqual(result["driver"], {"TestParallel": 7.5, "TestSerial": 5})
 
+    def test_lsp_measurements_include_parallel_subtests_and_reject_duplicates(self):
+        events = [{"Action": "pass", "Test": "TestDriver", "Elapsed": 1},
+                  {"Action": "pass", "Elapsed": 1},
+                  {"Package": ci.LSP, "Action": "pass", "Test": "TestParallel/a", "Elapsed": 3},
+                  {"Package": ci.LSP, "Action": "pass", "Test": "TestParallel/b", "Elapsed": 4},
+                  {"Package": ci.LSP, "Action": "pass", "Test": "TestParallel", "Elapsed": 0},
+                  {"Package": ci.LSP, "Action": "pass", "Elapsed": 5}]
+        self.assertEqual(self.measure(events)["lsp"], {"TestParallel": 7})
+        with self.assertRaises(RuntimeError):
+            self.measure([*events, events[-2]])
+
     def test_failed_truncated_or_repeated_measurements_are_rejected(self):
         for events in [
             [{"Action": "fail", "Test": "TestBad"}],
@@ -113,6 +142,7 @@ class MeasurementTests(unittest.TestCase):
             args = SimpleNamespace(mode="normal", shard="core", timings=Path("unused"), report=report)
             with patch.object(ci, "discover", return_value=([ci.DRIVER, "example/core"], list(ci.DEDICATED.values()))), \
                  patch.object(ci, "read_weights", return_value={}), \
+                 patch.object(ci, "discover_lsp", return_value=["TestOne"]), \
                  patch.object(ci, "command", return_value=[sys.executable, "-c", "import time; time.sleep(10)"]), \
                  patch.object(ci, "FAIL_SECONDS", 0.1), patch("builtins.print"):
                 self.assertEqual(ci.run_shard(args), 1)

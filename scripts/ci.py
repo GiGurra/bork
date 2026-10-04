@@ -12,11 +12,13 @@ import sys
 import time
 
 DRIVER = "github.com/GiGurra/bork/internal/driver"
-PACKAGE_SHARDS = {"lsp": "github.com/GiGurra/bork/internal/lsp"}
+LSP = "github.com/GiGurra/bork/internal/lsp"
+LSP_SHARDS = ("lsp-0", "lsp-1")
+PACKAGE_SHARDS = {}
 DEDICATED = {"driver-examples": "TestExamples"}
 CASE_SHARDS = 3
 INTEGRATION_SHARDS = 4
-SHARDS = ("core", *PACKAGE_SHARDS, *(f"driver-cases-{i}" for i in range(CASE_SHARDS)), *DEDICATED,
+SHARDS = ("core", *PACKAGE_SHARDS, *LSP_SHARDS, *(f"driver-cases-{i}" for i in range(CASE_SHARDS)), *DEDICATED,
           *(f"driver-integration-{i}" for i in range(INTEGRATION_SHARDS)))
 TIMINGS = Path(__file__).with_name("ci-timings.json")
 WARN_SECONDS = 120
@@ -90,12 +92,32 @@ def discover(mode, deadline=None):
     return packages, [name for name in names if name != "TestCases"] + case_tests()
 
 
-def partition(packages, names, weights):
-    groups = {"core": [package for package in packages if package != DRIVER and package not in PACKAGE_SHARDS.values()]}
+def discover_lsp(mode, deadline=None):
+    names = [line for line in output(["go", "test", *go_flags(mode), "./internal/lsp", "-list", "^(Test|Example|Fuzz)"], deadline)
+             if re.fullmatch(r"(?:Test|Example|Fuzz)\w*", line)]
+    if not names or len(names) != len(set(names)):
+        raise RuntimeError("LSP test discovery was empty or ambiguous")
+    return names
+
+
+def partition(packages, names, weights, lsp_names=()):
+    groups = {"core": [package for package in packages if package not in (DRIVER, LSP) and package not in PACKAGE_SHARDS.values()]}
     groups.update({group: [package] for group, package in PACKAGE_SHARDS.items() if package in packages})
     covered_packages = [package for group, entries in groups.items() for package in entries]
-    if len(packages) != len(set(packages)) or len(covered_packages) != len(set(covered_packages)) or set(covered_packages) != set(packages) - {DRIVER}:
+    if len(packages) != len(set(packages)) or len(covered_packages) != len(set(covered_packages)) or set(covered_packages) != set(packages) - {DRIVER, LSP}:
         raise RuntimeError("package partition is not disjoint and complete")
+    if LSP in packages:
+        if not lsp_names or len(lsp_names) != len(set(lsp_names)):
+            raise RuntimeError("LSP partition requires unique discovered tests")
+        groups.update({group: [] for group in LSP_SHARDS})
+        totals = dict.fromkeys(LSP_SHARDS, 0.0)
+        for name in sorted(lsp_names, key=lambda name: (-max(0.01, weights.get("lsp:" + name, 5.0)), name)):
+            group = min(LSP_SHARDS, key=lambda group: (totals[group], group))
+            groups[group].append(name)
+            totals[group] += max(0.01, weights.get("lsp:" + name, 5.0))
+        covered = [name for group in LSP_SHARDS for name in groups[group]]
+        if len(covered) != len(set(covered)) or set(covered) != set(lsp_names):
+            raise RuntimeError("LSP partition is not disjoint and complete")
     groups.update({group: [name] for group, name in DEDICATED.items()})
     integration = [group for group in SHARDS if group.startswith("driver-integration-")]
     cases = [group for group in SHARDS if group.startswith("driver-cases-")]
@@ -111,7 +133,7 @@ def partition(packages, names, weights):
         group = min(targets, key=lambda group: (totals[group], group))
         groups[group].append(name)
         totals[group] += cost(name)
-    covered = [name for group, entries in groups.items() if group != "core" and group not in PACKAGE_SHARDS for name in entries]
+    covered = [name for group, entries in groups.items() if group != "core" and group not in PACKAGE_SHARDS and group not in LSP_SHARDS for name in entries]
     if len(covered) != len(set(covered)) or set(covered) != set(names):
         raise RuntimeError("driver partition is not disjoint and complete")
     return {group: sorted(entries) for group, entries in groups.items()}
@@ -121,7 +143,7 @@ def read_weights(mode, path):
     data = json.loads(path.read_text())
     if data.get("version") != 1:
         raise RuntimeError("unsupported CI timing file version")
-    weights = data[mode]["driver"] | data[mode]["cases"]
+    weights = data[mode]["driver"] | data[mode]["cases"] | {"lsp:" + name: cost for name, cost in data[mode].get("lsp", {}).items()}
     if any(not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0 for cost in weights.values()):
         raise RuntimeError("CI timing weights must be finite nonnegative seconds")
     return weights
@@ -135,7 +157,7 @@ def command(mode, shard, entries):
         expression = "^TestCases$/^(" + "|".join(re.escape(name.split("/", 1)[1]) for name in entries) + ")$"
         return [*result, "./internal/driver", "-run", expression]
     expression = "^(" + "|".join(re.escape(name) for name in entries) + ")$"
-    return [*result, "./internal/driver", "-run", expression]
+    return [*result, "./internal/lsp" if shard in LSP_SHARDS else "./internal/driver", "-run", expression]
 
 
 def budget_result(elapsed, status):
@@ -155,7 +177,7 @@ def run_shard(args):
     status = 0
     try:
         packages, names = discover(args.mode, deadline)
-        groups = partition(packages, names, read_weights(args.mode, args.timings))
+        groups = partition(packages, names, read_weights(args.mode, args.timings), discover_lsp(args.mode, deadline))
         entries = groups[args.shard]
         if not entries:
             raise RuntimeError("selected shard is empty")
@@ -178,6 +200,7 @@ def run_shard(args):
 
 def measurements(path):
     tests = {}
+    lsp_tests = {}
     packages = {}
     for line in path.read_text().splitlines():
         event = json.loads(line)
@@ -187,11 +210,12 @@ def measurements(path):
             continue
         package = event["Package"]
         if "Test" in event:
-            if package == DRIVER:
+            if package in (DRIVER, LSP):
+                target = tests if package == DRIVER else lsp_tests
                 name = event["Test"]
-                if name in tests:
+                if name in target:
                     raise RuntimeError("timings must come from one -count=1 run")
-                tests[name] = event.get("Elapsed", 0.0)
+                target[name] = event.get("Elapsed", 0.0)
         else:
             if package in packages:
                 raise RuntimeError("timings contain duplicate package results")
@@ -201,11 +225,16 @@ def measurements(path):
     # A serial parent's Elapsed contains child work, while a parallel parent
     # can return before its children execute. max(parent, sum(children))
     # retains that work without counting nested serial time twice.
-    costs = dict(tests)
-    for name in sorted(tests, key=lambda name: (-name.count("/"), name)):
-        children = [child for child in tests if child.rpartition("/")[0] == name]
-        costs[name] = max(tests[name], sum(costs[child] for child in children))
+    def parent_costs(tests):
+        costs = dict(tests)
+        for name in sorted(tests, key=lambda name: (-name.count("/"), name)):
+            children = [child for child in tests if child.rpartition("/")[0] == name]
+            costs[name] = max(tests[name], sum(costs[child] for child in children))
+        return costs
+    costs = parent_costs(tests)
+    lsp_costs = parent_costs(lsp_tests)
     return {"packages": dict(sorted(packages.items())),
+            "lsp": {name: round(lsp_costs[name], 2) for name in sorted(lsp_costs) if "/" not in name},
             "cases": {name: round(costs[name], 2) for name in sorted(costs)
                       if name.startswith("TestCases/") and name.count("/") == 1},
             "driver": {name: round(costs[name], 2) for name in sorted(costs) if "/" not in name}}
@@ -215,7 +244,7 @@ def refresh(args):
     measurement = measurements(args.input)
     packages, names = discover(args.mode)
     measured = (set(measurement["driver"]) - {"TestCases"}) | set(measurement["cases"])
-    if set(measurement["packages"]) != set(packages) or measured != set(names):
+    if set(measurement["packages"]) != set(packages) or measured != set(names) or set(measurement["lsp"]) != set(discover_lsp(args.mode)):
         raise RuntimeError("timing input must cover every current package and driver parent")
     data = json.loads(args.timings.read_text()) if args.timings.exists() else {"version": 1}
     data[args.mode] = measurement
@@ -245,7 +274,7 @@ def main():
         refresh(args)
         return 0
     packages, names = discover(args.mode)
-    print(json.dumps(partition(packages, names, read_weights(args.mode, args.timings)), indent=2))
+    print(json.dumps(partition(packages, names, read_weights(args.mode, args.timings), discover_lsp(args.mode)), indent=2))
     return 0
 
 
