@@ -1,0 +1,12 @@
+type Alias = StaticParts
+type Wrapper = { parts: StaticParts }
+type Data = { values: List[String] }
+fn bad(values: List[String], parts: StaticParts, wrapper: Wrapper) {
+  direct = StaticParts { values: values }
+  alias = Alias { values: values }
+  copied = parts.copy(values: values)
+  nested = wrapper.copy(parts.values: values)
+  converted = Data { values: values }.into[StaticParts]()
+  decoded = decode[StaticParts](Json.Object { fields: [] })
+}
+fn main() {}

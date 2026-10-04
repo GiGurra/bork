@@ -1422,7 +1422,7 @@ func (p *parser) primary() Expr {
 		return &RuneLit{Pos: t.Pos, Text: t.Text}
 	case TInterp:
 		p.next()
-		return p.interp(t)
+		return p.interp(t, nil)
 	case TString:
 		p.next()
 		v, err := strconv.Unquote(t.Text)
@@ -1468,7 +1468,11 @@ func (p *parser) primary() Expr {
 			return se
 		}
 		p.next()
-		return &Ident{Pos: t.Pos, Name: p.qualify(t)}
+		name := &Ident{Pos: t.Pos, Name: p.qualify(t)}
+		if p.at(TInterp) && p.toks[p.i-1].End == p.tok().Pos {
+			return p.interp(p.next(), name)
+		}
+		return name
 	case LBrack:
 		p.next()
 		lit := &ListLit{Pos: t.Pos}
@@ -1731,11 +1735,16 @@ func (p *parser) goPos(start diag.Pos, line, col int) diag.Pos {
 // interp splits an interpolated string into its text parts and
 // expressions: `$name` is a name, `${...}` any expression, and `$$` a
 // dollar sign.
-func (p *parser) interp(t Token) *Interp {
-	e := &Interp{Pos: t.Pos}
+func (p *parser) interp(t Token, prefix Expr) *Interp {
+	e := &Interp{Pos: t.Pos, Prefix: prefix}
+	offset := 2 // s followed by the opening quote
+	if prefix != nil {
+		e.Pos = prefix.Position()
+		offset = 1 // token starts at the opening quote
+	}
 	raw := t.Text[1 : len(t.Text)-1]
-	// Columns in raw are relative to the opening quote, after the s.
-	col := func(i int) int { return t.Pos.Col + 2 + i }
+	// Columns in raw are relative to the opening quote.
+	col := func(i int) int { return t.Pos.Col + offset + i }
 	var seg strings.Builder
 	endPart := func() {
 		text, err := strconv.Unquote(`"` + seg.String() + `"`)
@@ -1791,25 +1800,11 @@ func (p *parser) interp(t Token) *Interp {
 // from, skipping nested braces and string literals. It returns -1 if
 // there is none.
 func matchingBrace(s string, from int) int {
-	depth := 1
-	for i := from; i < len(s); i++ {
-		switch s[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return i
-			}
-		case '"':
-			for i++; i < len(s) && s[i] != '"'; i++ {
-				if s[i] == '\\' {
-					i++
-				}
-			}
-		}
+	end := braceEnd([]byte(s), from)
+	if end < 0 {
+		return -1
 	}
-	return -1
+	return end - 1
 }
 
 // subExpr parses the expression inside ${...}, starting at pos.

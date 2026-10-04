@@ -1,0 +1,2 @@
+statement=sql.SQL"SELECT $name WHERE id = ${id + 1}"
+result=Tag"literal $$ ${Other"nested $name"}"

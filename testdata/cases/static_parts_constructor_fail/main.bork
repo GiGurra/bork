@@ -1,0 +1,2 @@
+fn Forge = StaticParts.new
+fn main() {}

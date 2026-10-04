@@ -299,7 +299,17 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		return &For{expr: at, Var: v, Items: items, Body: l.block(x.Body)}
 	case *syntax.LoopControl:
 		return &LoopControl{expr: at, Continue: x.Continue}
+	case *syntax.StaticPartsLit:
+		rec := typ.(*Record)
+		list := &ListLit{expr: expr{pos: x.Pos, typ: &List{Elem: String}}}
+		for _, part := range x.Parts {
+			list.Elems = append(list.Elems, &Const{expr: expr{pos: x.Pos, typ: String}, Value: constant.MakeString(part)})
+		}
+		return &RecordLit{expr: at, Record: rec, Fields: []*FieldValue{{Name: "values", Field: rec.Fields[0], Value: list}}}
 	case *syntax.Interp:
+		if call := l.info.interpolatorCalls[x]; call != nil {
+			return l.expr(call)
+		}
 		return &Interp{expr: at, Parts: x.Parts, Exprs: l.exprs(x.Exprs)}
 	case *syntax.Ident:
 		if at.typ == Ok && l.info.defs[x] == nil {

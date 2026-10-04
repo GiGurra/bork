@@ -7,20 +7,20 @@ type Count = { count: Int } derive (Decode)
 fn demo() uses io + net: Ok | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
-    created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)", [])?
+    created = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)" .Exec(db)?
     scope transaction {
       tx = sql.Begin(db, transaction)?
-      inserted = sql.Exec(tx, "INSERT INTO users(name, note) VALUES (?, ?)", ["Ada", sql.Null {}])?
+      inserted = sql.SQL"INSERT INTO users(name, note) VALUES (${"Ada"}, ${sql.Null {}})" .Exec(tx)?
       println(s"inserted ${inserted.rowsAffected}")
       sql.Commit(tx)?
     }
     scope transaction {
       tx = sql.Begin(db, transaction)?
-      discarded = sql.Exec(tx, "INSERT INTO users(name) VALUES (?)", ["discarded"])?
+      discarded = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})" .Exec(tx)?
     }
-    users = sql.Query[User](db, "SELECT id, name, note FROM users ORDER BY id", [])?
+    users = sql.SQL"SELECT id, name, note FROM users ORDER BY id" .Query[User](db)?
     println(users)
-    count = sql.Query[Count](db, "SELECT count(*) AS count FROM users", [])?
+    count = sql.SQL"SELECT count(*) AS count FROM users" .Query[Count](db)?
     println(count)
   }
 }
@@ -36,12 +36,12 @@ test "commit persists and scope end rolls back" {
     opened = sql.OpenSqlite(":memory:", app)
     match (opened) {
       db: sql.Connection => {
-        created = sql.Exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)", [])
+        created = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)" .Exec(db)
         scope transaction {
           begun = sql.Begin(db, transaction)
           match (begun) {
             tx: sql.Transaction => {
-              inserted = sql.Exec(tx, "INSERT INTO users(name) VALUES ('kept')", [])
+              inserted = sql.SQL"INSERT INTO users(name) VALUES (${"kept"})" .Exec(tx)
               committed = sql.Commit(tx)
             }
             _ => assert(false)
@@ -50,11 +50,11 @@ test "commit persists and scope end rolls back" {
         scope transaction {
           begun = sql.Begin(db, transaction)
           match (begun) {
-            tx: sql.Transaction => { inserted = sql.Exec(tx, "INSERT INTO users(name) VALUES ('discarded')", []) }
+            tx: sql.Transaction => { inserted = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})" .Exec(tx) }
             _ => assert(false)
           }
         }
-        result: List[Count] | sql.Error | DecodeError = sql.Query(db, "SELECT count(*) AS count FROM users", [])
+        result: List[Count] | sql.Error | DecodeError = sql.SQL"SELECT count(*) AS count FROM users" .Query[Count](db)
         match (result) {
           rows: List[Count] => assertEqual(rows, [Count { count: 1 }])
           _ => assert(false)

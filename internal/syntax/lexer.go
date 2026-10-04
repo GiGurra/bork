@@ -194,6 +194,9 @@ func (lx *lexer) ident(pos diag.Pos) {
 		lx.diags.AddCode(pos, "syntax.error", "identifiers cannot start with '_' (reserved for the compiler)")
 	}
 	lx.emit(TIdent, text, pos)
+	if lx.peek(0) == '"' {
+		lx.interp(lx.pos())
+	}
 }
 
 // number lexes an integer (`42`, `1_000`, `0xFF`, `0b1010`, `0o17`) or
@@ -454,43 +457,95 @@ func (lx *lexer) runeLit(pos diag.Pos) {
 	lx.emit(TRune, string(lx.src[start:lx.off]), pos)
 }
 
-// interp lexes the string part of s"...", right after the s. Inside
+// interp lexes the string part after an adjacent prefix. Inside
 // ${...}, quotes start nested string literals, so s"${f("x")}" is one
 // token. The parser splits the text into literal parts and expressions.
 func (lx *lexer) interp(pos diag.Pos) {
 	start := lx.off
-	lx.advance() // opening quote
-	depth := 0
-	for {
-		if lx.off >= len(lx.src) || lx.peek(0) == '\n' {
-			lx.diags.AddCode(pos, "syntax.error", "string literal is not terminated")
-			lx.emit(TInterp, `""`, pos)
-			return
+	end := quotedEnd(lx.src, start, true)
+	if end < 0 {
+		for lx.off < len(lx.src) && lx.peek(0) != '\n' {
+			lx.advance()
 		}
-		c := lx.advance()
-		switch {
-		case c == '\\' && lx.off < len(lx.src) && lx.peek(0) != '\n':
-			lx.advance()
-		case depth == 0 && c == '"':
-			lx.emit(TInterp, string(lx.src[start:lx.off]), pos)
-			return
-		case depth == 0 && c == '$' && lx.peek(0) == '{':
-			lx.advance()
-			depth = 1
-		case depth > 0 && c == '{':
-			depth++
-		case depth > 0 && c == '}':
-			depth--
-		case depth > 0 && c == '"':
-			// A string literal inside the expression.
-			for lx.off < len(lx.src) && lx.peek(0) != '"' && lx.peek(0) != '\n' {
-				if lx.advance() == '\\' && lx.off < len(lx.src) {
-					lx.advance()
-				}
+		lx.diags.AddCode(pos, "syntax.error", "string literal is not terminated")
+		lx.emit(TInterp, `""`, pos)
+		return
+	}
+	for lx.off < end {
+		lx.advance()
+	}
+	lx.emit(TInterp, string(lx.src[start:end]), pos)
+}
+
+// quotedEnd and braceEnd share the rules for nested literals and comments in
+// hole expressions. Both return the position after their closing delimiter.
+func quotedEnd(src []byte, start int, interpolated bool) int {
+	quote := src[start]
+	for i := start + 1; i < len(src); i++ {
+		switch src[i] {
+		case '\n':
+			return -1
+		case '\\':
+			i++
+		case quote:
+			return i + 1
+		case '$':
+			if !interpolated || i+1 >= len(src) {
+				continue
 			}
-			if lx.peek(0) == '"' {
-				lx.advance()
+			switch src[i+1] {
+			case '$':
+				i++
+			case '{':
+				end := braceEnd(src, i+2)
+				if end < 0 {
+					return -1
+				}
+				i = end - 1
 			}
 		}
 	}
+	return -1
+}
+
+func braceEnd(src []byte, from int) int {
+	depth := 1
+	for i := from; i < len(src); i++ {
+		switch src[i] {
+		case '\n':
+			return -1
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		case '\'', '"':
+			interpolated := src[i] == '"' && i > 0 && (isLetter(src[i-1]) || isDigit(src[i-1]))
+			end := quotedEnd(src, i, interpolated)
+			if end < 0 {
+				return -1
+			}
+			i = end - 1
+		case '/':
+			if i+1 < len(src) && src[i+1] == '/' {
+				return -1 // single-line interpolated strings cannot resume after //
+			}
+			if i+1 < len(src) && src[i+1] == '*' {
+				i += 2
+				for i+1 < len(src) && (src[i] != '*' || src[i+1] != '/') {
+					if src[i] == '\n' {
+						return -1
+					}
+					i++
+				}
+				if i+1 >= len(src) {
+					return -1
+				}
+				i++
+			}
+		}
+	}
+	return -1
 }

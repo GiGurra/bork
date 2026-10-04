@@ -1,0 +1,40 @@
+single quote true
+double quote true
+backtick true
+bracket true
+line comment true
+SQLite CR comment true
+block comment true
+nested block comment true
+dollar quote true
+tagged dollar quote true
+unicode dollar quote true
+escape string true
+ambiguous ordinary string true
+prefix token true
+suffix token true
+adjacent holes true
+value after dot true
+manual question placeholder true
+manual numeric placeholder true
+manual named placeholder true
+manual at placeholder true
+manual dollar placeholder true
+manual pg placeholder true
+NUL text true
+unterminated quote true
+unterminated comment true
+unterminated dollar quote true
+composed comment true
+split comment delimiter true
+composed quotes true
+composed token true
+quoted manual placeholders true
+comment placeholders true
+escaped quote literal true
+ordinary sqlite backslash true
+pg JSON operator true
+pg CR ends comment true
+newline ends comment true
+empty identifier true
+NUL identifier true

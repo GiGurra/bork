@@ -1,0 +1,3 @@
+// StaticParts preserves literal provenance for named interpolators. Only the
+// compiler constructs it at a prefix site; runtime Strings cannot become parts.
+type StaticParts = private { values: List[String] }

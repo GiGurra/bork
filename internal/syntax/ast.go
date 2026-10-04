@@ -485,9 +485,17 @@ type RuneLit struct {
 // holds the (unquoted) text around the expressions, so it has one more
 // element than Exprs.
 type Interp struct {
+	Prefix Expr // nil for the built-in s prefix
+	Pos    diag.Pos
+	Parts  []string
+	Exprs  []Expr
+}
+
+// StaticPartsLit is created only by the checker for a named interpolation.
+// It has no source syntax: runtime Strings cannot acquire literal provenance.
+type StaticPartsLit struct {
 	Pos   diag.Pos
 	Parts []string
-	Exprs []Expr
 }
 
 type StringLit struct {
@@ -766,30 +774,32 @@ func (e *Copy) Position() diag.Pos        { return e.X.Position() }
 func (e *Match) Position() diag.Pos       { return e.Pos }
 func (e *Try) Position() diag.Pos         { return e.X.Position() }
 
-func (*IntLit) exprNode()    {}
-func (*FloatLit) exprNode()  {}
-func (*Interp) exprNode()    {}
-func (*RuneLit) exprNode()   {}
-func (*StringLit) exprNode() {}
-func (*BoolLit) exprNode()   {}
-func (*Ident) exprNode()     {}
-func (*Unary) exprNode()     {}
-func (*Binary) exprNode()    {}
-func (*Call) exprNode()      {}
-func (*If) exprNode()        {}
-func (*Block) exprNode()     {}
-func (*Return) exprNode()    {}
+func (*IntLit) exprNode()         {}
+func (*FloatLit) exprNode()       {}
+func (*Interp) exprNode()         {}
+func (*StaticPartsLit) exprNode() {}
+func (*RuneLit) exprNode()        {}
+func (*StringLit) exprNode()      {}
+func (*BoolLit) exprNode()        {}
+func (*Ident) exprNode()          {}
+func (*Unary) exprNode()          {}
+func (*Binary) exprNode()         {}
+func (*Call) exprNode()           {}
+func (*If) exprNode()             {}
+func (*Block) exprNode()          {}
+func (*Return) exprNode()         {}
 
-func (e *IntLit) Position() diag.Pos    { return e.Pos }
-func (e *FloatLit) Position() diag.Pos  { return e.Pos }
-func (e *Interp) Position() diag.Pos    { return e.Pos }
-func (e *RuneLit) Position() diag.Pos   { return e.Pos }
-func (e *StringLit) Position() diag.Pos { return e.Pos }
-func (e *BoolLit) Position() diag.Pos   { return e.Pos }
-func (e *Ident) Position() diag.Pos     { return e.Pos }
-func (e *Unary) Position() diag.Pos     { return e.Pos }
-func (e *Binary) Position() diag.Pos    { return e.X.Position() }
-func (e *Call) Position() diag.Pos      { return e.Fun.Position() }
-func (e *If) Position() diag.Pos        { return e.Pos }
-func (e *Block) Position() diag.Pos     { return e.Pos }
-func (e *Return) Position() diag.Pos    { return e.Pos }
+func (e *IntLit) Position() diag.Pos         { return e.Pos }
+func (e *FloatLit) Position() diag.Pos       { return e.Pos }
+func (e *Interp) Position() diag.Pos         { return e.Pos }
+func (e *StaticPartsLit) Position() diag.Pos { return e.Pos }
+func (e *RuneLit) Position() diag.Pos        { return e.Pos }
+func (e *StringLit) Position() diag.Pos      { return e.Pos }
+func (e *BoolLit) Position() diag.Pos        { return e.Pos }
+func (e *Ident) Position() diag.Pos          { return e.Pos }
+func (e *Unary) Position() diag.Pos          { return e.Pos }
+func (e *Binary) Position() diag.Pos         { return e.X.Position() }
+func (e *Call) Position() diag.Pos           { return e.Fun.Position() }
+func (e *If) Position() diag.Pos             { return e.Pos }
+func (e *Block) Position() diag.Pos          { return e.Pos }
+func (e *Return) Position() diag.Pos         { return e.Pos }

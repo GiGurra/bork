@@ -1,5 +1,5 @@
 // Package sql owns database pools and transactions in scopes, and decodes rows
-// through Decode. Use SQL placeholders for values rather than interpolating SQL.
+// through Decode. SQL-prefixed literals bind values and quote Identifier holes.
 type Connection = resource
 type Transaction = resource
 type Error = { operation: String, message: String }
@@ -24,7 +24,7 @@ fn Open(driver: String, dataSource: String, s: Scope) uses io + net: Connection 
     db.Close()
     return Error{operation: "open", message: err.Error()}
   }
-  state := _borkNewResourceHandle(db, s)
+  state := _borkNewResourceHandle(struct { *sql.DB; driver string }{db, driver}, s)
   return Connection{handle: state, owner: s.Own(func() { state.Close(); if err := db.Close(); err != nil { panic(err) } })}
 }
 fn OpenSqlite(dataSource: String, s: Scope) uses io + net: Connection | Error { Open("sqlite", dataSource, s) }
@@ -36,9 +36,10 @@ fn Begin(connection: Connection, s: Scope) uses io + net: Transaction | Error un
   import "database/sql"
   import "errors"
   state := _borkNewResourceHandle(nil, s)
-  tx, err := connection.handle.(*_borkResourceHandle).Value.(*sql.DB).BeginTx(state.Context(), nil)
+  parent := connection.handle.(*_borkResourceHandle).Value.(struct { *sql.DB; driver string })
+  tx, err := parent.DB.BeginTx(state.Context(), nil)
   if err != nil { state.Close(); return Error{operation: "begin", message: err.Error()} }
-  state.Value = tx
+  state.Value = struct { *sql.Tx; driver string }{tx, parent.driver}
   return Transaction{handle: state, owner: s.Own(func() {
     state.Close()
     if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { panic(err) }
@@ -47,7 +48,7 @@ fn Begin(connection: Connection, s: Scope) uses io + net: Transaction | Error un
 fn Commit(transaction: Transaction) uses io + net: Ok | Error unsafe go {
   import "database/sql"
   _ = transaction.handle.(*_borkResourceHandle).Context()
-  if err := transaction.handle.(*_borkResourceHandle).Value.(*sql.Tx).Commit(); err != nil { return Error{operation: "commit", message: err.Error()} }
+  if err := transaction.handle.(*_borkResourceHandle).Value.(struct { *sql.Tx; driver string }).Tx.Commit(); err != nil { return Error{operation: "commit", message: err.Error()} }
   return _borkOk()
 }
 // Rollback is harmless after a transaction has already committed or rolled back.
@@ -55,7 +56,7 @@ fn Rollback(transaction: Transaction) uses io + net: Ok | Error unsafe go {
   import "database/sql"
   import "errors"
   _ = transaction.handle.(*_borkResourceHandle).Context()
-  if err := transaction.handle.(*_borkResourceHandle).Value.(*sql.Tx).Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { return Error{operation: "rollback", message: err.Error()} }
+  if err := transaction.handle.(*_borkResourceHandle).Value.(struct { *sql.Tx; driver string }).Tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) { return Error{operation: "rollback", message: err.Error()} }
   return _borkOk()
 }
 

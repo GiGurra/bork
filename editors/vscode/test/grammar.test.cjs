@@ -174,3 +174,13 @@ test('lazy is contextual at independent field heads', () => {
  has(ls, 0, 'lazy', 'keyword.control.bork');
  assert.ok(!scopes(ls, 1, 'lazy').includes('keyword.control.bork'));
 });
+
+test('named and qualified typed interpolators keep hole expression scopes', () => {
+  const ls = tokenize('statement = sql.SQL"SELECT $name WHERE id = ${id + 1}"\nresult = Tag"literal $$ ${Other"nested $name"}"');
+  has(ls, 0, 'SELECT', 'string.interpolated.bork');
+  has(ls, 0, '$name', 'variable.other.interpolated.bork');
+  has(ls, 0, 'id +', 'meta.embedded.expression.bork');
+  has(ls, 1, 'literal', 'string.interpolated.bork');
+  has(ls, 1, '$$', 'constant.character.escape.bork');
+  has(ls, 1, 'nested', 'string.interpolated.bork');
+});

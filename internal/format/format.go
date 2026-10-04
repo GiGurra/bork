@@ -59,7 +59,7 @@ func Source(path string, src []byte) ([]byte, error) {
 			text = strings.Trim(t.Kind.String(), "'")
 		}
 		if t.Kind == syntax.TInterp {
-			text = "s" + text
+			text = string(src[offset(t.Pos):offset(t.End)])
 		}
 		if t.Kind == syntax.TGoCode {
 			text = "{" + text + "}"
@@ -176,6 +176,9 @@ func endsExpr(k syntax.Kind) bool {
 }
 
 func space(a, b item) bool {
+	if a.kind == syntax.TIdent && b.kind == syntax.TInterp && a.end == b.start {
+		return false
+	}
 	if a.comment || b.comment {
 		return true
 	}
