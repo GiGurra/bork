@@ -1966,7 +1966,7 @@ func varDecl(id *ast.Ident, typ ast.Expr) ast.Stmt {
 	}}}
 }
 
-// typed gives a number constant x its Go type explicitly, for contexts
+// typed gives a number or rune constant x its Go type explicitly, for contexts
 // where Go would otherwise pick a default type.
 func (g *gen) typed(x ast.Expr, t check.Type) ast.Expr {
 	if (check.IsNumeric(t) || t == check.Rune) && isConst(x) {

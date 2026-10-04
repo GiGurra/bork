@@ -1212,7 +1212,7 @@ import (
 
 type _Rune int32
 
-func (r _Rune) _borkShow() string { return string(r) }
+func (r _Rune) String() string { return string(r) }
 
 // _show renders a field value for String methods: strings are quoted,
 // everything else is printed as by _str.

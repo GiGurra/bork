@@ -656,7 +656,7 @@ func (c *checker) toGoSeen(t Type, g types.Type, seen map[goConvPair]bool) bool 
 func isGoByte(t types.Type) bool { return types.Identical(t, types.Typ[types.Byte]) }
 
 // isKeyType reports whether a map key converts one to one at the
-// boundary: integers, String, and Bool. (Not floats: NaN keys are
+// boundary: integers, Rune, String, and Bool. (Not floats: NaN keys are
 // never equal, so a Go map can hold several.)
 func isKeyType(t Type) bool { return IsInteger(t) || t == Rune || t == String || t == Bool }
 

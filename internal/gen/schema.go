@@ -64,6 +64,7 @@ func (g *gen) decodeKind(typ check.Type) string {
 
 func (g *gen) fieldDefault(field *check.Field) string {
 	setup, value := g.value(field.Default)
+	value = g.typed(value, field.Type)
 	if len(setup) == 0 {
 		return g.text(value)
 	}
