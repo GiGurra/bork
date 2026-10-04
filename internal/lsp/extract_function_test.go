@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/GiGurra/bork/internal/diag"
-	"github.com/GiGurra/bork/internal/driver"
 	borkformat "github.com/GiGurra/bork/internal/format"
 )
 
@@ -58,7 +57,7 @@ func BenchmarkExtractFunctionHTTPServer(b *testing.B) {
 	}
 }
 
-func protocolExtractionActions(t *testing.T, path, source string, selection sourceRange, only []string) []protocolExtractionAction {
+func protocolExtractionActions(t *testing.T, path, source string, selection sourceRange, only []string, requireValid bool) []protocolExtractionAction {
 	t.Helper()
 	var in, out bytes.Buffer
 	for _, m := range []map[string]any{
@@ -75,6 +74,7 @@ func protocolExtractionActions(t *testing.T, path, source string, selection sour
 	if err := Serve(&in, &out); err != nil {
 		t.Fatal(err)
 	}
+	originalChecked := false
 	r := bufio.NewReader(bytes.NewReader(out.Bytes()))
 	for {
 		line, err := r.ReadString('\n')
@@ -99,11 +99,32 @@ func protocolExtractionActions(t *testing.T, path, source string, selection sour
 			ID     int
 			Result json.RawMessage
 			Error  any
+			Method string
+			Params struct {
+				URI         string
+				Diagnostics []struct {
+					Severity int
+					Message  string
+				}
+			}
 		}
 		if err := json.Unmarshal(body, &response); err != nil {
 			t.Fatal(err)
 		}
+		if requireValid && response.Method == "textDocument/publishDiagnostics" {
+			if response.Params.URI == fileURI(path) {
+				originalChecked = true
+			}
+			for _, diagnostic := range response.Params.Diagnostics {
+				if diagnostic.Severity == 1 {
+					t.Fatalf("invalid original extraction fixture: %s", diagnostic.Message)
+				}
+			}
+		}
 		if response.ID == 2 {
+			if requireValid && !originalChecked {
+				t.Fatal("original source was not checked before extraction")
+			}
 			if response.Error != nil {
 				t.Fatalf("code action error: %+v", response.Error)
 			}
@@ -138,6 +159,7 @@ func TestExtractFunctionProtocol(t *testing.T) {
 		{"alias", "import \"example.com/extract/api\"\nfn echo(value: api.Item): api.Item { [|value|] }\nfn main() {}\n", "fn extracted(value: api.Item): api.Item"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			session := parallelProtocolFixture(t)
 			dir := t.TempDir()
 			path := filepath.Join(dir, "main.bork")
 			if tc.name == "alias" {
@@ -155,7 +177,7 @@ func TestExtractFunctionProtocol(t *testing.T) {
 			if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			actions := protocolExtractionActions(t, path, src, sourceRange{start, end}, []string{"refactor.extract"})
+			actions := protocolExtractionActions(t, path, src, sourceRange{start, end}, []string{"refactor.extract"}, true)
 			if len(actions) != 1 || actions[0].Kind != "refactor.extract" {
 				t.Fatalf("actions: %+v", actions)
 			}
@@ -168,7 +190,7 @@ func TestExtractFunctionProtocol(t *testing.T) {
 			if err != nil || string(formatted) != result {
 				t.Fatalf("not formatted: %v\n%s", err, result)
 			}
-			if _, err := driver.NewSession().Analyze(dir, map[string]string{path: result}); err != nil {
+			if _, err := session.Analyze(dir, map[string]string{path: result}); err != nil {
 				t.Fatalf("does not check: %v\n%s", err, result)
 			}
 		})
@@ -176,7 +198,7 @@ func TestExtractFunctionProtocol(t *testing.T) {
 }
 
 func TestExtractFunctionRejectsUnsupportedSelections(t *testing.T) {
-	for _, source := range []string{
+	for i, source := range []string{
 		`fn value() uses io: Int { println("real"); 1 }
  test "example" { mock value() { [|value() + 1|] }; assertEqual(value(), 2) }
  fn main() {}`,
@@ -188,20 +210,18 @@ func TestExtractFunctionRejectsUnsupportedSelections(t *testing.T) {
 		"fn sum(x: Int): Int { [|missing + x|] }\nfn main() {}\n",
 		"fn choose(value: Int | String, flag: Bool) uses io: Int | String { result: Int | String = [|if (flag) { value? } else { \"fallback\" }|]; println(\"after\"); result }\nfn main() {}\n",
 	} {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "main.bork")
-		src, start, end := extractionSelection(t, path, source)
-		if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(src, "missing") {
-			if _, err := driver.NewSession().Analyze(dir, map[string]string{path: src}); err != nil {
-				t.Fatalf("invalid rejection fixture: %v", err)
+		t.Run(fmt.Sprintf("selection-%d", i), func(t *testing.T) {
+			parallelProtocolFixture(t)
+			dir := t.TempDir()
+			path := filepath.Join(dir, "main.bork")
+			src, start, end := extractionSelection(t, path, source)
+			if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+				t.Fatal(err)
 			}
-		}
-		if actions := protocolExtractionActions(t, path, src, sourceRange{start, end}, []string{"refactor.extract"}); len(actions) != 0 {
-			t.Fatalf("unsupported selection: %+v", actions)
-		}
+			if actions := protocolExtractionActions(t, path, src, sourceRange{start, end}, []string{"refactor.extract"}, !strings.Contains(src, "missing")); len(actions) != 0 {
+				t.Fatalf("unsupported selection: %+v", actions)
+			}
+		})
 	}
 }
 
