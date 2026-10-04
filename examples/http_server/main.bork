@@ -1,3 +1,5 @@
+import "bork/process"
+import "bork/json"
 // http_server is a small REST API for a todo list, kept in memory:
 //
 //   bork run examples/http_server -- serve localhost:8080
@@ -41,15 +43,15 @@ fn emptyStore(): Store {
 }
 
 fn notFound(id: Int): http.Response {
-  http.JsonReply(404, encodeJson(Problem { path: "", message: s"no todo $id" }))
+  http.JsonReply(404, json.Encode(Problem { path: "", message: s"no todo $id" }))
 }
 
 fn list(store: Atom[Store]) uses state: http.Response {
-  http.JsonReply(200, encodeJson(current(store).todos.values()))
+  http.JsonReply(200, json.Encode(current(store).todos.values()))
 }
 
 fn create(store: Atom[Store], body: String) uses state: http.Response {
-  r: NewTodo | JsonError | DecodeError = decodeJson(body)
+  r: NewTodo | JsonError | DecodeError = json.Decode(body)
   match (r) {
     req: NewTodo => {
       // The id is the one this update gave out: s is the state it made.
@@ -60,18 +62,18 @@ fn create(store: Atom[Store], body: String) uses state: http.Response {
       id = s.nextId - 1
       log.Info("created", { "id": id, "title": req.title })
       match (s.todos.get(id)) {
-        Option.Some { value: item } => http.JsonReply(201, encodeJson(item))
+        Option.Some { value: item } => http.JsonReply(201, json.Encode(item))
         Option.None => notFound(id)
       }
     }
-    e: JsonError => http.JsonReply(400, encodeJson(Problem { path: "", message: e.message }))
-    e: DecodeError => http.JsonReply(422, encodeJson(Problem { path: e.path, message: e.message }))
+    e: JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: e.message }))
+    e: DecodeError => http.JsonReply(422, json.Encode(Problem { path: e.path, message: e.message }))
   }
 }
 
 fn show(store: Atom[Store], id: Int) uses state: http.Response {
   match (current(store).todos.get(id)) {
-    Option.Some { value: item } => http.JsonReply(200, encodeJson(item))
+    Option.Some { value: item } => http.JsonReply(200, json.Encode(item))
     Option.None => notFound(id)
   }
 }
@@ -172,18 +174,18 @@ fn demo() uses io + net + clock + state: Ok | IoError {
 }
 
 fn main() {
-  result = match (args()) {
+  result = match (process.Args()) {
     ["serve", addr] => serve(addr)
     ["demo"] => demo()
     _ => {
       eprintln("usage: http_server serve ADDR | demo")
-      exit(2)
+      process.Exit(2)
     }
   }
   match (result) {
     e: IoError => {
       eprintln(s"http_server: ${e.path}: ${e.message}")
-      exit(1)
+      process.Exit(1)
     }
     _ => {}
   }

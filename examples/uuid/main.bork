@@ -1,8 +1,9 @@
+import "bork/json"
 import "bork/uuid"
 use uuid.Codecs
 fn main() {
   match (uuid.Parse("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")) {
-    id: uuid.Uuid => { println(id); println(encodeJson(id)) }
+    id: uuid.Uuid => { println(id); println(json.Encode(id)) }
     error: ParseError => println(error)
   }
 }

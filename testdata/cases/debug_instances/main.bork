@@ -1,16 +1,17 @@
+import "bork/json"
 pred positive(x: Int) { x > 0 }
 type Pos = Int where positive
 type Config = { port: Pos }
 instance encodePos: Encode[Pos] {
   fn encode(x: Pos): Json { Json.String { value: s":$x" } }
 }
-fn encodeParam(x: Pos): String { encodeJson(dbg(x)) }
+fn encodeParam(x: Pos): String { json.Encode(dbg(x)) }
 fn main() {
   p: Pos = 1
-  println(encodeJson(p))
-  println(encodeJson(dbg(p)))
+  println(json.Encode(p))
+  println(json.Encode(dbg(p)))
   c = Config { port: 2 }
-  println(encodeJson(dbg(c.port)))
+  println(json.Encode(dbg(c.port)))
   println(encodeParam(3))
-  println(encodeJson(dbg(4)))
+  println(json.Encode(dbg(4)))
 }

@@ -1,3 +1,4 @@
+import codecs "bork/json"
 import "bork/env"
 import "bork/encoding"
 pred positive(x: Int) { x > 0 }
@@ -12,9 +13,9 @@ fn round[T: GoStruct](value: T): T | GoValueError unsafe go {
   if len(errs)>0 { return errs[0] }; return result
 }
 fn json[T: Decode + Encode](text: String) uses io {
-  result: T | JsonError | DecodeError = decodeJson(text)
+  result: T | JsonError | DecodeError = codecs.Decode(text)
   match (result) {
-    value: T => println(encodeJson(value))
+    value: T => println(codecs.Encode(value))
     err: JsonError => println(err)
     err: DecodeError => println(s"error ${err.path}: ${err.message}")
   }
@@ -23,7 +24,7 @@ fn work(n: Int) uses io: Int { println(s"force $n"); n }
 fn main() {
   c = Config { lo: 2, hi: 6 }
   println("encode")
-  println(encodeJson(c))
+  println(codecs.Encode(c))
   println(round(c))
   json[Config]("{}")
   json[Config]("{\"lo\":3,\"hi\":4}")

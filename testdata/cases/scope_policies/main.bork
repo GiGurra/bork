@@ -2,7 +2,7 @@ fn main() {
   // The default policy waits for every finalizer.
   scope s {
     onClose(s, () => {
-      sleep(30)
+      stubborn(30)
       println("slow finalizer done")
     })
   }
@@ -11,7 +11,7 @@ fn main() {
   scope s with cleanupTimeout(10) {
     onClose(s, () => println("quick finalizer done"))
     onClose(s, () => {
-      sleep(200)
+      stubborn(200)
       println("never seen: the program ends first")
     })
   }

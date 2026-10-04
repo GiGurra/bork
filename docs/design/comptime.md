@@ -97,6 +97,7 @@ The initial API is a compiler intrinsic package, `bork/build`:
 
 ```bork
 import "bork/build"
+import "bork/json"
 
 // ReadString(path: String) uses build: String
 // ReadBytes(path: String) uses build: List[Byte]
@@ -106,7 +107,7 @@ fn configText() uses build: String {
 
 fn settings(): Config {
   comptime {
-    match (decodeJson[Config](configText())) {
+    match (json.Decode[Config](configText())) {
       value: Config => value
       error => panic(s"invalid build config: $error")
     }

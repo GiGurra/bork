@@ -1,30 +1,31 @@
 // Runes (Unicode code points). These count and index runes, not bytes.
 
+// runeToString gives the character; Rune currently aliases numeric Int32.
 fn runeToString(r: Rune): String unsafe go {
   return string(r)
 }
 
-fn isDigit(r: Rune): Bool unsafe go {
+fn (r: Rune) isDigit(): Bool unsafe go {
   import "unicode"
   return unicode.IsDigit(r)
 }
 
-fn isLetter(r: Rune): Bool unsafe go {
+fn (r: Rune) isLetter(): Bool unsafe go {
   import "unicode"
   return unicode.IsLetter(r)
 }
 
-fn isSpace(r: Rune): Bool unsafe go {
+fn (r: Rune) isSpace(): Bool unsafe go {
   import "unicode"
   return unicode.IsSpace(r)
 }
 
-fn isUpper(r: Rune): Bool unsafe go {
+fn (r: Rune) isUpper(): Bool unsafe go {
   import "unicode"
   return unicode.IsUpper(r)
 }
 
-fn isLower(r: Rune): Bool unsafe go {
+fn (r: Rune) isLower(): Bool unsafe go {
   import "unicode"
   return unicode.IsLower(r)
 }

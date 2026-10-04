@@ -1,3 +1,4 @@
+import "bork/json"
 import "example.com/lazy_computed_codecs/settings"
 import "bork/env"
 import "bork/encoding"
@@ -22,25 +23,25 @@ fn decoders[T: GoStruct](): Int unsafe go {
  return count
 }
 fn decode(text: String) uses io {
-  result: Config | JsonError | DecodeError = decodeJson(text)
-  match (result) { c: Config => { println(c.doubled); println(encodeJson(c)) }, e: JsonError => println(e), e: DecodeError => println(s"error ${e.path}: ${e.message}") }
+  result: Config | JsonError | DecodeError = json.Decode(text)
+  match (result) { c: Config => { println(c.doubled); println(json.Encode(c)) }, e: JsonError => println(e), e: DecodeError => println(s"error ${e.path}: ${e.message}") }
 }
 fn main() {
-  c = Config { n: 3 }; println(encodeJson(c))
+  c = Config { n: 3 }; println(json.Encode(c))
   match (round(c)) { v: Config => println(v.doubled), e: GoValueError => println(e) }
   println(fields[Config]()); println(decoders[Config]())
   println(zero[Config]())
   decode("{\"n\":5}")
   decode("{\"n\":0}")
   decode("{\"n\":1,\"doubled\":9}")
-  choice: Choice = .Item { n: 7 }; println(encodeJson(choice))
+  choice: Choice = .Item { n: 7 }; println(json.Encode(choice))
   loaded = env.LoadWith[Config]("", name => if (name == "N") { .Some { value: "8" } } else { .None })
   match (loaded) { v: Config => println(v.doubled), e: env.ConfigError => println(e) }
   rows = encoding.DecodeCsv[Config]("n,tag\n6,row\n")
   match (rows) { values: List[Config] => println(values.map(row => row.doubled)), e: encoding.CsvError => println(e), e: encoding.CsvErrors => println(e) }
   println(fields[Callback]())
-  cb: Callback | DecodeError | JsonError = decodeJson("{\"n\":4}")
-  match (cb) { value: Callback => { println(value.call()); println(encodeJson(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
-  privateResult: PrivateComputed | DecodeError | JsonError = decodeJson("{\"n\":7}")
-  match (privateResult) { value: PrivateComputed => { println(value.secret.value); println(encodeJson(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
+  cb: Callback | DecodeError | JsonError = json.Decode("{\"n\":4}")
+  match (cb) { value: Callback => { println(value.call()); println(json.Encode(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
+  privateResult: PrivateComputed | DecodeError | JsonError = json.Decode("{\"n\":7}")
+  match (privateResult) { value: PrivateComputed => { println(value.secret.value); println(json.Encode(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
 }

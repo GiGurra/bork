@@ -11,7 +11,8 @@ import (
 func TestCLISubcommands(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import "bork/time"
+import "bork/cli"
 pred validPort(n: Int) { n > 0 && n < 65536 }
 type Serve = {
  config: Option[String]
@@ -23,7 +24,7 @@ type Serve = {
 type Echo = { words: List[String] } derive (Decode)
 fn commands(): List[cli.Command] {
  [cli.Subcommand[Serve]("serve", "Serve a host", (options, s) => {
-    sleep(0)
+    _ = time.Sleep(s, time.Nanoseconds(0))
     onClose(s, () => { println("serve closed") })
     println(options)
   }, [cli.Flag { field: "port", short: "p", env: "BORK_SUBCOMMAND_PORT" }, cli.Flag { field: "config", configFile: true }], configFiles: ["base.json"]),

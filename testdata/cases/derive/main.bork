@@ -1,3 +1,4 @@
+import "bork/json"
 pred nonEmpty(s: String) { s.byteLength() > 0 }
 pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
 
@@ -17,18 +18,18 @@ type Shape = sealed {
 fn greet(name: String where nonEmpty): String { s"hello $name" }
 
 fn user(s: String) uses io {
-  r: CreateUser | JsonError | DecodeError = decodeJson(s)
+  r: CreateUser | JsonError | DecodeError = json.Decode(s)
   match (r) {
-    u: CreateUser => println(s"${greet(u.name)}: ${encodeJson(u)}")
+    u: CreateUser => println(s"${greet(u.name)}: ${json.Encode(u)}")
     e: JsonError => println(e)
     e: DecodeError => println(s"error at ${e.path}: ${e.message}")
   }
 }
 
 fn shape(s: String) uses io {
-  r: Shape | JsonError | DecodeError = decodeJson(s)
+  r: Shape | JsonError | DecodeError = json.Decode(s)
   match (r) {
-    sh: Shape => println(encodeJson(sh))
+    sh: Shape => println(json.Encode(sh))
     e: JsonError => println(e)
     e: DecodeError => println(s"error at ${e.path}: ${e.message}")
   }
@@ -55,9 +56,9 @@ type Pair[A, B] = { first: A, second: B } derive (Decode, Encode)
 type Order = { id: Int, items: List[Pair[String, Int]], shape: Shape } derive (Decode, Encode)
 
 fn order(s: String) uses io {
-  r: Order | JsonError | DecodeError = decodeJson(s)
+  r: Order | JsonError | DecodeError = json.Decode(s)
   match (r) {
-    o: Order => println(encodeJson(o))
+    o: Order => println(json.Encode(o))
     e: JsonError => println(e)
     e: DecodeError => println(s"error at ${e.path}: ${e.message}")
   }

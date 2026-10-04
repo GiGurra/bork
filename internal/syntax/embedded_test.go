@@ -94,3 +94,21 @@ func BenchmarkEmbeddedParse(b *testing.B) {
 		})
 	}
 }
+
+func TestCompilerIdentifiers(t *testing.T) {
+	source := []byte("fn _helper(): Int { 1 }\nfn main() { println(s\"${_helper()}\") }\n")
+	for range 2 {
+		compiler := &diag.List{}
+		ParseEmbedded("prelude/internal.bork", source, compiler)
+		if compiler.Len() != 0 {
+			t.Fatalf("compiler identifiers rejected: %v", compiler)
+		}
+	}
+	for _, source := range [][]byte{source, []byte(`fn main() { println(s"${_helper()}") }`)} {
+		user := &diag.List{}
+		Parse("prelude/internal.bork", source, user)
+		if user.Len() == 0 {
+			t.Fatal("ordinary source accepted reserved compiler identifiers")
+		}
+	}
+}

@@ -1,3 +1,4 @@
+import codecs "bork/json"
 import "bork/fs"
 import "bork/sql"
 type Row = { n: Int } derive (Decode)
@@ -19,7 +20,7 @@ fn demo() uses io + net: Ok | fs.Error | sql.Error {
     println(sql.RowsJson(db, "SELECT 3 AS n", []).toList())
     println(sql.RowsJson(db, "SELECT missing FROM missing", []).map(value => match (value) {
       error: sql.Error => error.operation
-      json: Json => renderJson(json)
+      json: Json => codecs.Render(json)
       }).toList())
   }
 }

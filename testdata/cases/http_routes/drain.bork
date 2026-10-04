@@ -1,3 +1,4 @@
+import "bork/time"
 import "bork/http"
 
 type Signal = resource
@@ -16,7 +17,7 @@ fn drainTest() uses io + net + clock + state {
     scope serverScope with cleanupTimeout(1000) {
       match (http.Listen("127.0.0.1:0", serverScope, (req, rs) => {
         mark(started)
-        sleep(50)
+        _ = time.Sleep(rs, time.Nanoseconds(50000000))
         _ = update(finished, old => true)
         http.Text(200, "drained")
       })) {

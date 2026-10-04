@@ -29,10 +29,10 @@ type item struct {
 // become one blank line, and nested delimiters use two spaces. Comments, literals,
 // interpolations and unsafe Go bodies retain their exact text, except CRLF line
 // comment endings become LF. Lexically invalid input is rejected; incomplete
-// or ill-typed programs can still be formatted.
+// or ill-typed programs, including reserved compiler identifiers, can still be formatted.
 func Source(path string, src []byte) ([]byte, error) {
 	d := &diag.List{}
-	tokens, comments := syntax.Lex(path, src, d)
+	tokens, comments := syntax.LexCompiler(path, src, d)
 	if d.Len() != 0 {
 		return nil, fmt.Errorf("%s", d.Error())
 	}

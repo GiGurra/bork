@@ -4,7 +4,7 @@ import "bork/fs"
 type Item = { name: String, count: Int } derive (Encode)
 fn nextText(reader: json.Reader) uses io: String {
   match (json.Next(reader)) {
-    Option.Some { value } => renderJson(value)
+    Option.Some { value } => json.Render(value)
     Option.None => "EOF"
     error: json.LineError => s"bad line ${error.line}"
     error: IoError => "IO error"

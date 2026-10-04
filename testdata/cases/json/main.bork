@@ -1,32 +1,33 @@
+import "bork/json"
 fn main() {
-  j = parseJson("{\"a\": [1, 2.5, true, null, \"x\"], \"b\": {}}")
+  j = json.Parse("{\"a\": [1, 2.5, true, null, \"x\"], \"b\": {}}")
   println(j)
   match (j) {
-    v: Json => println(renderJson(v))
+    v: Json => println(json.Render(v))
     e: JsonError => println(e)
   }
-  println(parseJson("{bad"))
-  xs: List[Int] | JsonError | DecodeError = decodeJson("[1, 2, 3]")
+  println(json.Parse("{bad"))
+  xs: List[Int] | JsonError | DecodeError = json.Decode("[1, 2, 3]")
   println(xs)
-  ys: List[Int] | JsonError | DecodeError = decodeJson("[1, \"two\", 3]")
+  ys: List[Int] | JsonError | DecodeError = json.Decode("[1, \"two\", 3]")
   println(ys)
-  zs: List[Option[String]] | JsonError | DecodeError = decodeJson("[\"a\", null]")
+  zs: List[Option[String]] | JsonError | DecodeError = json.Decode("[\"a\", null]")
   println(zs)
-  println(encodeJson([Option.Some { value: 1 }, Option.None]))
+  println(json.Encode([Option.Some { value: 1 }, Option.None]))
   escapes()
 }
 
 fn escapes() uses io {
-  match (parseJson("{\"s\": \"a\\\"b\\n\\u00e9\", \"n\": -1.5e3, \"z\": 0}")) {
-    v: Json => println(renderJson(v))
+  match (json.Parse("{\"s\": \"a\\\"b\\n\\u00e9\", \"n\": -1.5e3, \"z\": 0}")) {
+    v: Json => println(json.Render(v))
     e: JsonError => println(e)
   }
-  println(parseJson("[1,"))
-  println(parseJson("1 2"))
-  println(parseJson("{\"a\": 01}"))
-  println(parseJson("[1,\n  tru]"))
-  b: Bool | JsonError | DecodeError = decodeJson("1")
+  println(json.Parse("[1,"))
+  println(json.Parse("1 2"))
+  println(json.Parse("{\"a\": 01}"))
+  println(json.Parse("[1,\n  tru]"))
+  b: Bool | JsonError | DecodeError = json.Decode("1")
   println(b)
-  i: Int | JsonError | DecodeError = decodeJson("1.5")
+  i: Int | JsonError | DecodeError = json.Decode("1.5")
   println(i)
 }

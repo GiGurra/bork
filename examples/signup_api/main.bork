@@ -1,3 +1,5 @@
+import "bork/process"
+import "bork/json"
 // signup_api is a JSON-over-HTTP endpoint with constrained request
 // fields:
 //
@@ -46,11 +48,11 @@ fn register(req: SignUp): Account {
 }
 
 fn signup(body: String): http.Response {
-  r: SignUp | JsonError | DecodeError = decodeJson(body)
+  r: SignUp | JsonError | DecodeError = json.Decode(body)
   match (r) {
-    req: SignUp => http.JsonReply(201, encodeJson(register(req)))
-    e: JsonError => http.JsonReply(400, encodeJson(Problem { path: "", message: e.message }))
-    e: DecodeError => http.JsonReply(422, encodeJson(Problem { path: e.path, message: e.message }))
+    req: SignUp => http.JsonReply(201, json.Encode(register(req)))
+    e: JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: e.message }))
+    e: DecodeError => http.JsonReply(422, json.Encode(Problem { path: e.path, message: e.message }))
   }
 }
 
@@ -116,18 +118,18 @@ fn demo() uses io + net + clock + state: Ok | IoError {
 }
 
 fn main() {
-  result = match (args()) {
+  result = match (process.Args()) {
     ["serve", addr] => serve(addr)
     ["demo"] => demo()
     _ => {
       eprintln("usage: signup_api serve ADDR | demo")
-      exit(2)
+      process.Exit(2)
     }
   }
   match (result) {
     e: IoError => {
       eprintln(s"signup_api: ${e.path}: ${e.message}")
-      exit(1)
+      process.Exit(1)
     }
     _ => {}
   }

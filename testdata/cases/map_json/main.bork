@@ -1,10 +1,11 @@
+import "bork/json"
 type Prices = { currency: String, items: Map[String, Int] } derive (Decode, Encode)
 
 fn main() {
   p = Prices { currency: "SEK", items: { "apple": 5, "pear": 7 } }
-  println(encodeJson(p))
-  println(decodeJson[Prices]("{\"currency\": \"EUR\", \"items\": {\"b\": 2, \"a\": 1}}"))
-  println(decodeJson[Prices]("{\"currency\": \"EUR\", \"items\": {\"b\": \"two\"}}"))
-  println(decodeJson[Map[String, List[Int]]]("{\"x\": [1, 2], \"y\": []}"))
-  println(encodeJson({ "nested": { "deep": true } }))
+  println(json.Encode(p))
+  println(json.Decode[Prices]("{\"currency\": \"EUR\", \"items\": {\"b\": 2, \"a\": 1}}"))
+  println(json.Decode[Prices]("{\"currency\": \"EUR\", \"items\": {\"b\": \"two\"}}"))
+  println(json.Decode[Map[String, List[Int]]]("{\"x\": [1, 2], \"y\": []}"))
+  println(json.Encode({ "nested": { "deep": true } }))
 }
