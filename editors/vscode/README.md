@@ -57,6 +57,16 @@ outward returns, `?` propagation or loop control, create resource scopes, captur
 locals used afterward,
 or occur inside a mock body, are not offered; neither are edits whose contracts or lifetimes cannot be proved.
 
+Inlay hints show inferred binding types by default. Enable positional parameter
+names with `bork.inlayHints.parameters` and proven binding facts with
+`bork.inlayHints.facts`; toggle types with `bork.inlayHints.types`. Parameter hints
+use the compiler's resolved function or method and skip explicit argument labels
+and arguments already named after their parameter. Hints use the last successful
+compiler snapshot without checking again and clear when its source differs from
+the current buffer. Other LSP clients can pass the same `inlayHints` options in
+`initializationOptions` or send `workspace/didChangeConfiguration` with
+`settings.bork.inlayHints`.
+
 References search the compiler graphs for open packages and their imports.
 Rename currently supports local variables and package-private functions, requires
 successful current checks, and refuses names already present in affected packages. Proposed edits are

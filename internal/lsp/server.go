@@ -35,6 +35,9 @@ type server struct {
 	diagnostics           map[string][]diag.Diagnostic
 	initialized, shutdown bool
 	snippets              bool
+	inlaySettings         inlayHintSettings
+	inlayRefreshSupport   bool
+	inlayRefreshID        uint64
 }
 type documentParams struct {
 	TextDocument struct {
@@ -110,13 +113,16 @@ func ServeWithVersion(in io.Reader, out io.Writer, version string) error {
 				return item.err
 			}
 			m := item.m
+			if m.Method == "" && len(m.ID) > 0 && (len(m.Result) > 0 || len(m.Error) > 0) {
+				continue // Acknowledgment of a server-to-client refresh request.
+			}
 			if m.Method == "exit" {
 				if s.shutdown {
 					return nil
 				}
 				return fmt.Errorf("client exited without shutdown")
 			}
-			if len(m.ID) > 0 && m.Method != "initialize" && m.Method != "shutdown" && m.Method != "textDocument/codeLens" && m.Method != "bork/tests" {
+			if len(m.ID) > 0 && m.Method != "initialize" && m.Method != "shutdown" && m.Method != "textDocument/codeLens" && m.Method != "bork/tests" && m.Method != "textDocument/inlayHint" {
 				if err := flush(); err != nil {
 					return err
 				}
@@ -163,7 +169,15 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			return nil, &rpcError{-32600, "already initialized"}, false
 		}
 		var init struct {
+			InitializationOptions struct {
+				InlayHints inlayHintSettings `json:"inlayHints"`
+			} `json:"initializationOptions"`
 			Capabilities struct {
+				Workspace struct {
+					InlayHint struct {
+						RefreshSupport bool `json:"refreshSupport"`
+					} `json:"inlayHint"`
+				} `json:"workspace"`
 				TextDocument struct {
 					Completion struct {
 						CompletionItem struct {
@@ -179,12 +193,14 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			}
 		}
 		s.snippets = init.Capabilities.TextDocument.Completion.CompletionItem.SnippetSupport
+		s.inlaySettings = init.InitializationOptions.InlayHints
+		s.inlayRefreshSupport = init.Capabilities.Workspace.InlayHint.RefreshSupport
 		s.initialized = true
 		return map[string]any{"capabilities": map[string]any{
 			"positionEncoding": "utf-16", "textDocumentSync": map[string]any{"openClose": true, "change": 1, "save": map[string]any{"includeText": false}},
 			"signatureHelpProvider":  map[string]any{"triggerCharacters": []string{"(", ",", ":"}, "retriggerCharacters": []string{","}},
 			"semanticTokensProvider": semanticTokensCapability(),
-			"hoverProvider":          true, "definitionProvider": true, "documentFormattingProvider": true,
+			"inlayHintProvider":      true, "hoverProvider": true, "definitionProvider": true, "documentFormattingProvider": true,
 			"referencesProvider": true, "renameProvider": map[string]any{"prepareProvider": true},
 			"documentSymbolProvider": true, "completionProvider": map[string]any{"triggerCharacters": []string{"."}},
 			"codeLensProvider":   map[string]any{"resolveProvider": false},
@@ -204,6 +220,11 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 	switch m.Method {
 	case "initialized", "$/cancelRequest", "$/setTrace":
 		return nil, nil, false
+	case "workspace/didChangeConfiguration":
+		if err := s.configureInlays(m.Params); err != nil {
+			return nil, &rpcError{-32602, "invalid configuration"}, false
+		}
+		return nil, nil, false
 	case "workspace/didChangeWatchedFiles":
 		return nil, nil, true
 	}
@@ -211,7 +232,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 	case "textDocument/didOpen", "textDocument/didChange", "textDocument/didSave", "textDocument/didClose",
 		"textDocument/signatureHelp", "textDocument/semanticTokens/full", "textDocument/semanticTokens/range",
 		"textDocument/hover", "textDocument/definition", "textDocument/completion", "textDocument/references",
-		"textDocument/rename", "textDocument/prepareRename", "textDocument/formatting", "textDocument/documentSymbol", "textDocument/codeAction", "textDocument/codeLens", "bork/tests":
+		"textDocument/rename", "textDocument/prepareRename", "textDocument/formatting", "textDocument/documentSymbol", "textDocument/codeAction", "textDocument/codeLens", "bork/tests", "textDocument/inlayHint":
 	default:
 		return nil, &rpcError{-32601, "method not found"}, false
 	}
