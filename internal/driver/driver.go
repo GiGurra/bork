@@ -196,7 +196,7 @@ func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModu
 		}
 		defer func() { _ = os.RemoveAll(dir) }()
 		exe := filepath.Join(dir, "eval")
-		if err := buildGoWithContext(files, goSrc, exe, module, context, info.Embeds...); err != nil {
+		if err := buildGoWithMode(files, goSrc, exe, module, context, "predicate", info.Embeds...); err != nil {
 			return nil, err
 		}
 		stderr := &boundedOutput{limit: 64 << 10}
@@ -292,6 +292,10 @@ func buildGoWithModule(files []*syntax.File, goSrc []byte, out string, module *g
 }
 
 func buildGoWithContext(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, context *goContext, embeds ...*check.Embedded) error {
+	return buildGoWithMode(files, goSrc, out, module, context, "program", embeds...)
+}
+
+func buildGoWithMode(files []*syntax.File, goSrc []byte, out string, module *goModuleInputs, context *goContext, mode string, embeds ...*check.Embedded) error {
 	if context.err != nil {
 		return fmt.Errorf("determining Go build configuration (is Go installed?): %w", context.err)
 	}
@@ -299,21 +303,11 @@ func buildGoWithContext(files []*syntax.File, goSrc []byte, out string, module *
 	if err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "bork-build-*")
+	dir, pinned, cleanup, err := stageGo(files, goSrc, module, context, mode, embeds)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), goSrc, 0o644); err != nil {
-		return err
-	}
-	if err := stageEmbeds(dir, embeds); err != nil {
-		return err
-	}
-	pinned, err := module.write(dir)
-	if err != nil {
-		return err
-	}
+	defer cleanup()
 	cmd := context.command("build", "-mod=readonly", "-buildvcs=false", "-o", absOut, ".")
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
@@ -432,7 +426,7 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "tests")
-	if err := buildGoWithContext(files, goSrc, exe, program.module, program.context, info.Embeds...); err != nil {
+	if err := buildGoWithMode(files, goSrc, exe, program.module, program.context, "test", info.Embeds...); err != nil {
 		return 1, err
 	}
 	cmd := exec.Command(exe)
