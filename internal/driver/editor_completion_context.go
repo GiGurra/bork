@@ -3,6 +3,8 @@ package driver
 import (
 	"strings"
 
+	"github.com/GiGurra/bork/internal/check"
+
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
@@ -148,7 +150,16 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 				}
 			}
 			if callable != nil && callable.NamedArguments && editorLabelPosition(prior[open+1:]) {
-				for _, parameter := range callable.Parameters {
+				lo, _ := editorByteOffset(src, prior[open].End)
+				hi, _ := editorByteOffset(src, at)
+				var supplied []syntax.Argument
+				parsed := syntax.Parse("completion.bork", []byte("fn Completion() { completion("+src[lo:hi]+") }"), &diag.List{})
+				if len(parsed.Funcs) > 0 && parsed.Funcs[0].Body != nil {
+					if call, ok := parsed.Funcs[0].Body.Tail.(*syntax.Call); ok {
+						supplied = call.Arguments
+					}
+				}
+				for _, parameter := range check.EditorRemainingParameters(callable, supplied) {
 					if !editorCompletionLabelUsed(prior[open+1:], parameter.Name) {
 						add(EditorCompletion{Name: parameter.Name, Text: parameter.Name + ": ", Detail: parameter.Type, Kind: "variable"})
 					}

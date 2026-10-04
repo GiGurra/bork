@@ -350,3 +350,61 @@ func TestCompletionVisibilityAndCompoundMatch(t *testing.T) {
 		t.Fatalf("compound match: %+v", items)
 	}
 }
+
+func TestCompletionExistingLabelsCheckAfterAcceptance(t *testing.T) {
+	src := "type User = { name: String }\nfn greet(name: String): String { name }\nfn main() uses io { user = User { name: \"Ada\" }; println(greet(name: user.name)) }\n"
+	for _, needle := range []string{"name: \"Ada\"", "name: user.name"} {
+		t.Run(needle, func(t *testing.T) {
+			s, path := newTestServer(t, src)
+			marked := strings.Replace(src, needle, strings.Replace(needle, "name", "na|me", 1), 1)
+			item := completionItem(completeAt(t, s, path, marked), "name")
+			if item == nil {
+				t.Fatal("missing label")
+			}
+			edit := item["textEdit"].(textEdit)
+			current := strings.Replace(marked, "|", "", 1)
+			lo, _ := byteOffset(current, edit.Range.Start)
+			hi, _ := byteOffset(current, edit.Range.End)
+			accepted := current[:lo] + edit.NewText + current[hi:]
+			if _, err := driver.NewSession().Analyze(filepath.Dir(path), map[string]string{path: accepted}); err != nil {
+				t.Fatalf("accepted completion fails: %v\n%s", err, accepted)
+			}
+		})
+	}
+}
+
+func TestCompletionInferredGenericRecordAndPositionalArguments(t *testing.T) {
+	src := "type Box[T] = { value: T }\nfn main() { box = Box { value: 1 } }\n"
+	s, path := newTestServer(t, src)
+	marked := strings.Replace(src, "value: 1", "va|lue: 1", 1)
+	item := completionItem(completeAt(t, s, path, marked), "value")
+	if item == nil {
+		t.Fatal("missing inferred generic field")
+	}
+	edit := item["textEdit"].(textEdit)
+	current := strings.Replace(marked, "|", "", 1)
+	lo, _ := byteOffset(current, edit.Range.Start)
+	hi, _ := byteOffset(current, edit.Range.End)
+	if _, err := driver.NewSession().Analyze(filepath.Dir(path), map[string]string{path: current[:lo] + edit.NewText + current[hi:]}); err != nil {
+		t.Fatal(err)
+	}
+	src = "fn greet(user: String, suffix: String): String { user + suffix }\nfn main() uses io { suffix = \"!\"; println(greet(\"Ada\", suffix)) }\n"
+	s, path = newTestServer(t, src)
+	marked = strings.Replace(src, "greet(\"Ada\", suffix)", "greet(\"Ada\", |suffix)", 1)
+	items := completeAt(t, s, path, marked)
+	if completionItem(items, "user") != nil {
+		t.Fatal("offered already supplied positional parameter")
+	}
+	item = completionItem(items, "suffix")
+	if item == nil {
+		t.Fatal("missing remaining parameter")
+	}
+	edit = item["textEdit"].(textEdit)
+	current = strings.Replace(marked, "|", "", 1)
+	lo, _ = byteOffset(current, edit.Range.Start)
+	hi, _ = byteOffset(current, edit.Range.End)
+	accepted := current[:lo] + edit.NewText + current[hi:]
+	if _, err := driver.NewSession().Analyze(filepath.Dir(path), map[string]string{path: accepted}); err != nil {
+		t.Fatalf("named label completion fails: %v\n%s", err, accepted)
+	}
+}

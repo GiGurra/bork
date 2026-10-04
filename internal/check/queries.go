@@ -527,3 +527,43 @@ func editorTypeQueryChecker(info *Info, from *Package) *checker {
 	c.appliedWhere = map[*syntax.TypeExpr]bool{}
 	return c
 }
+
+// EditorRecordFields also exposes a generic declaration before its literal's
+// fields have supplied enough information to infer type arguments.
+func EditorRecordFields(info *Info, from *Package, head *syntax.TypeExpr) []*Field {
+	c := editorTypeQueryChecker(info, from)
+	var typ Type
+	if len(head.Args) == 0 {
+		typ = c.typeNamed(head.Name)
+	} else {
+		typ = c.resolveType(head)
+	}
+	if record, ok := typ.(*Record); ok && c.diags.Len() == 0 {
+		return record.Fields
+	}
+	return nil
+}
+
+// EditorRemainingParameters follows the same name/position assignment as calls.
+func EditorRemainingParameters(callable *CallableDescription, args []syntax.Argument) []ParameterDescription {
+	var names []string
+	for _, p := range callable.Parameters {
+		names = append(names, p.Name)
+	}
+	used := map[int]bool{}
+	next := 0
+	for _, arg := range args {
+		index := argumentIndex(names, arg.Name, next)
+		if arg.Name == "" {
+			next++
+		}
+		used[index] = true
+	}
+	var out []ParameterDescription
+	for i, p := range callable.Parameters {
+		if !used[i] && !p.Receiver {
+			out = append(out, p)
+		}
+	}
+	return out
+}

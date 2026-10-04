@@ -235,8 +235,13 @@ func (a *EditorAnalysis) EditorTypeFields(path, head string) []EditorCompletion 
 		return files[0].Types[0].Alias
 	}
 	if typ := parse(head); typ != nil {
-		if fields := editorFields(check.EditorType(a.program.info, from, typ), from); len(fields) > 0 {
-			return fields
+		fields := check.EditorRecordFields(a.program.info, from, typ)
+		var out []EditorCompletion
+		for _, field := range fields {
+			out = append(out, EditorCompletion{Name: field.Name, Detail: check.TypeText(field.Type, from), Kind: "field"})
+		}
+		if len(out) > 0 {
+			return out
 		}
 	}
 	if dot := strings.LastIndexByte(head, '.'); dot > 0 {

@@ -24,7 +24,13 @@ var standardEditorSymbols = sync.OnceValue(func() []EditorCompletion {
 
 func editorImportSymbols(pkg string, paths []string, srcs [][]byte) []EditorCompletion {
 	var out []EditorCompletion
-	for _, file := range syntax.ParseFiles(paths, srcs, strings.HasPrefix(pkg, std.Prefix), &diag.List{}) {
+	files := syntax.ParseFiles(paths, srcs, strings.HasPrefix(pkg, std.Prefix), &diag.List{})
+	for _, file := range files {
+		if file.Script {
+			return nil
+		}
+	}
+	for _, file := range files {
 		add := func(name, kind string) {
 			if check.Exported(name) {
 				out = append(out, EditorCompletion{Name: name, Detail: "from " + pkg, Kind: kind, Rank: 4, ImportPath: pkg})
@@ -60,6 +66,11 @@ func (a *EditorAnalysis) EditorImportSymbols(path string) []EditorCompletion {
 		}
 	}
 	for _, mod := range roots {
+		type sources struct {
+			paths []string
+			text  [][]byte
+		}
+		packages := map[string]*sources{}
 		_ = filepath.WalkDir(mod.root, func(name string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
@@ -95,9 +106,18 @@ func (a *EditorAnalysis) EditorImportSymbols(path string) []EditorCompletion {
 			if rel != "." {
 				pkg += "/" + filepath.ToSlash(rel)
 			}
-			out = append(out, editorImportSymbols(pkg, []string{name}, [][]byte{text})...)
+			group := packages[pkg]
+			if group == nil {
+				group = &sources{}
+				packages[pkg] = group
+			}
+			group.paths = append(group.paths, name)
+			group.text = append(group.text, text)
 			return nil
 		})
+		for pkg, sources := range packages {
+			out = append(out, editorImportSymbols(pkg, sources.paths, sources.text)...)
+		}
 	}
 	return out
 }

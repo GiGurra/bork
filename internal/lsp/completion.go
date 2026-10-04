@@ -56,8 +56,23 @@ func (s *server) completion(pkg *packageState, file, src string, p position) []a
 		if text == "" {
 			text = c.Name
 		}
+		if strings.HasSuffix(text, ": ") {
+			for _, token := range tokens {
+				if before(token.Pos, offsetPos(src, end)) || token.Kind == syntax.Semi {
+					continue
+				}
+				if token.Kind == syntax.Colon {
+					text = c.Name
+				}
+				break
+			}
+		}
+		itemRange := replace
+		if prefix == "" && strings.HasSuffix(text, ": ") {
+			itemRange.End = itemRange.Start
+		}
 		kinds := map[string]int{"method": 2, "function": 3, "field": 5, "variable": 6, "type": 7, "module": 9, "enumMember": 20, "keyword": 14}
-		item := map[string]any{"label": c.Name, "detail": detail, "kind": kinds[c.Kind], "sortText": fmt.Sprintf("%d-%s", c.Rank, c.Name), "textEdit": textEdit{replace, text}}
+		item := map[string]any{"label": c.Name, "detail": detail, "kind": kinds[c.Kind], "sortText": fmt.Sprintf("%d-%s", c.Rank, c.Name), "textEdit": textEdit{itemRange, text}}
 		out = append(out, item)
 		return item
 	}
