@@ -38,8 +38,8 @@ func Doc(path string, opts DocOptions) ([]byte, error) {
 	if len(targets) == 0 {
 		return nil, fmt.Errorf("no Bork packages in %s", path)
 	}
-	settings := []string{"GOPROXY=off", "GONOPROXY=none", "GOSUMDB=off", "GOTOOLCHAIN=local"}
-	ctx := captureGoContextWithOptions(goContextOptions{settings: settings})
+	settings := []string{"GOPACKAGESDRIVER=off"}
+	ctx := captureCachedGoContext(nil, settings)
 	var packages []apidoc.Package
 	var programs []*EditorAnalysis
 	for _, target := range targets {
@@ -99,7 +99,7 @@ func Doc(path string, opts DocOptions) ([]byte, error) {
 			return nil, fmt.Errorf("documentation inputs changed; retry bork doc")
 		}
 	}
-	if current := captureGoContextWithOptions(goContextOptions{settings: settings}); current.namespace != ctx.namespace {
+	if current := captureCachedGoContext(nil, settings); current.namespace != ctx.namespace {
 		return nil, fmt.Errorf("go configuration changed; retry bork doc")
 	}
 	if opts.HTML {
