@@ -27,7 +27,7 @@ func readerPages(t *testing.T) []string {
 	t.Helper()
 	root := filepath.Join("..", "..")
 	pages := []string{filepath.Join(root, "README.md")}
-	for _, pattern := range []string{"README.md", "tour.md", "cli.md", "examples.md", "contributing.md", filepath.Join("language", "*.md")} {
+	for _, pattern := range []string{"README.md", "tour.md", "cli.md", "examples.md", "contributing.md", filepath.Join("language", "*.md"), filepath.Join("std", "README.md")} {
 		found, err := filepath.Glob(filepath.Join(root, "docs", pattern))
 		if err != nil {
 			t.Fatal(err)
