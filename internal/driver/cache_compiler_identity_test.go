@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -93,17 +95,30 @@ func TestCompilerIdentityRunningInode(t *testing.T) {
 	if err := os.WriteFile(program, self, 0700); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(program, "-test.run=^TestCompilerIdentityRunningInode$", "-test.timeout=30s")
-	command.Env = append(os.Environ(), "BORK_IDENTITY_HELPER_READY="+ready)
-	input, err := command.StdinPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The ready file is only a handshake; use the existing polling helper below.
+	var command *exec.Cmd
+	var input io.WriteCloser
 	output := &identityOutput{}
-	command.Stdout, command.Stderr = output, output
-	if err := command.Start(); err != nil {
-		t.Fatal(err)
+	// A concurrent fork elsewhere in this parallel test binary can briefly
+	// inherit the descriptor that wrote program, so exec may report
+	// ETXTBSY (golang/go#22315). Retry with a fresh command.
+	for attempt := 0; ; attempt++ {
+		command = exec.Command(program, "-test.run=^TestCompilerIdentityRunningInode$", "-test.timeout=30s")
+		command.Env = append(os.Environ(), "BORK_IDENTITY_HELPER_READY="+ready)
+		input, err = command.StdinPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The ready file is only a handshake; use the existing polling helper below.
+		command.Stdout, command.Stderr = output, output
+		err = command.Start()
+		if err == nil {
+			break
+		}
+		_ = input.Close()
+		if !errors.Is(err, syscall.ETXTBSY) || attempt == 50 {
+			t.Fatal(err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Cleanup(func() { _ = command.Process.Kill() })
 	if err := waitIdentityReady(ready); err != nil {
