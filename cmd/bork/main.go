@@ -485,6 +485,6 @@ func main() {
 			},
 		),
 	}
-	command.SubCmds = append(command.SubCmds, envCommand())
+	command.SubCmds = append(command.SubCmds, envCommand(), upgradeCommand())
 	command.Run()
 }
