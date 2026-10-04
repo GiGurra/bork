@@ -68,6 +68,16 @@ func BenchmarkCacheHitBreakdown(b *testing.B) {
 			}
 			return nil
 		}},
+		{"installed-sdk-hit-including-decode", func() error {
+			hit, err := decodeCacheArtifact(bytes.NewReader(encoded), body.Namespace, body.Key)
+			if err != nil {
+				return err
+			}
+			_, err = hit.validateWithContext(body.Request, body.Namespace, func(receipt *goContextReceipt) (*goContext, error) {
+				return receipt.restoreInstalledSDK(resolveGoContext())
+			})
+			return err
+		}},
 		{"cli-style-hit-overlapped-launcher", func() error {
 			var digest [sha256.Size]byte
 			var evidence *goToolEvidence

@@ -91,7 +91,9 @@ func BenchmarkCachePopulation(b *testing.B) {
 					if hit == nil {
 						return fmt.Errorf("hit miss")
 					}
-					_, err := hit.validate(body.Request, namespace)
+					_, err := hit.validateWithContext(body.Request, namespace, func(receipt *goContextReceipt) (*goContext, error) {
+						return receipt.restoreInstalledSDK(resolveGoContext())
+					})
 					if err == nil {
 						store.touch(body.Key)
 					}
