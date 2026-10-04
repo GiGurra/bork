@@ -94,10 +94,10 @@ without changing the interpolation syntax or compiler protocol.
 
 - A Value is a bound parameter, including String. No value becomes SQL text.
 - An Identifier is a quoted identifier component. Construct one using
-  `sql.Identifier.new(name)` returning `Identifier | Error`; reject empty names
+  `sql.Name(name)` returning `Identifier | Error`; reject empty names
   and NUL, and double embedded double quotes when rendering. Quoting, not an
   allowlist of letters, provides injection safety. A dot belongs to a single
-  name: `${schema}.${table}` composes two components; Identifier("a.b") denotes
+  name: `${schema}.${table}` composes two components; sql.Name("a.b") denotes
   one name. Table and column wrappers can follow if they add useful guarantees.
 - A Statement is a composed fragment. Statements store structured literal,
   identifier, and bound-value parts, so nested parameters are flattened in
@@ -105,8 +105,8 @@ without changing the interpolation syntax or compiler protocol.
   there is no second representation to convert or accidentally stringify.
 
 ```bork
-table = sql.Identifier.new(tableName)?
-column = sql.Identifier.new(columnName)?
+table = sql.Name(tableName)?
+column = sql.Name(columnName)?
 filter = sql.SQL"$column = $name"
 statement = sql.SQL"SELECT * FROM $table WHERE $filter"
 ```
