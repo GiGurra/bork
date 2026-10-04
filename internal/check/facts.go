@@ -381,9 +381,12 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 	switch x := x.(type) {
 	case *Block:
 		e = f.stmts(x.Stmts, e)
+		if !f.statementsComplete(x.Stmts) {
+			return
+		}
 		if x.Tail != nil {
 			f.tail(x.Tail, e, result)
-		} else if completes(x) {
+		} else if f.completes(x) {
 			result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e)
 		}
 	case *ScopeBlock:
@@ -393,14 +396,18 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		f.tail(x.Body, e, result)
 	case *If:
 		f.walk(x.Cond, e)
-		if !completes(x.Cond) {
+		if !f.completes(x.Cond) {
 			return
 		}
-		f.tail(x.Then, e.with(f.conditionFacts(x.Cond, true)...), result)
+		value, known := f.knownCondition(x.Cond)
+		if !known || value {
+			f.tail(x.Then, e.with(f.conditionFacts(x.Cond, true)...), result)
+		}
+		if known && value {
+			return
+		}
 		if x.Else == nil {
-			if v := constOf(x.Cond); v == nil || v.Kind() != constant.Bool || !constant.BoolVal(v) {
-				result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e.with(f.conditionFacts(x.Cond, false)...))
-			}
+			result(&Block{expr: expr{pos: x.Pos(), typ: Ok}}, e.with(f.conditionFacts(x.Cond, false)...))
 			return
 		}
 		f.tail(x.Else, e.with(f.conditionFacts(x.Cond, false)...), result)
@@ -420,53 +427,52 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 // completes reports whether control may reach an expression's normal end.
 // Some conditionals retain type Ok even when their condition or chosen arm
 // cannot finish, so Type alone cannot identify an implicit Ok result.
-func completes(x Expr) bool {
+func (f *factChecker) completes(x Expr) bool {
 	x = debugValue(x)
 	if x.Type() == Never {
 		return false
 	}
 	switch x := x.(type) {
 	case *Block:
-		for _, stmt := range x.Stmts {
-			switch s := stmt.(type) {
-			case *ExprStmt:
-				if !completes(s.X) {
-					return false
-				}
-			case *Let:
-				if s.AsyncScope != nil && !completes(s.AsyncScope) {
-					return false
-				}
-				if s.Initializer == nil && !completes(s.Value) {
-					return false
-				}
-			}
-		}
-		return x.Tail == nil || completes(x.Tail)
+		return f.statementsComplete(x.Stmts) && (x.Tail == nil || f.completes(x.Tail))
 	case *ScopeBlock:
 		for _, p := range x.Policies {
-			if !completes(p) {
+			if !f.completes(p) {
 				return false
 			}
 		}
-		return completes(x.Body)
+		return f.completes(x.Body)
 	case *If:
-		if !completes(x.Cond) {
+		if !f.completes(x.Cond) {
 			return false
 		}
-		if v := constOf(x.Cond); v != nil && v.Kind() == constant.Bool {
-			if constant.BoolVal(v) {
-				return completes(x.Then)
+		if value, known := f.knownCondition(x.Cond); known {
+			if value {
+				return f.completes(x.Then)
 			}
-			return x.Else == nil || completes(x.Else)
+			return x.Else == nil || f.completes(x.Else)
 		}
-		return completes(x.Then) || x.Else == nil || completes(x.Else)
+		return f.completes(x.Then) || x.Else == nil || f.completes(x.Else)
+	case *Binary:
+		if !f.completes(x.X) {
+			return false
+		}
+		if x.Op == syntax.AndAnd || x.Op == syntax.OrOr {
+			if value, known := f.knownCondition(x.X); known {
+				if value == (x.Op == syntax.OrOr) {
+					return true
+				}
+				return f.completes(x.Y)
+			}
+			return true
+		}
+		return f.completes(x.Y)
 	case *Match:
-		if !completes(x.X) {
+		if !f.completes(x.X) {
 			return false
 		}
 		for _, arm := range x.Arms {
-			if completes(arm.Body) {
+			if f.completes(arm.Body) {
 				return true
 			}
 		}
@@ -517,6 +523,9 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 				f.diags.AddCode(trustSubjectPos(s), "facts.error", "trust needs a value with a name (bind it first: x = ...), or the fact could not be used")
 			}
 			e = e.with(facts...)
+		}
+		if !f.statementCompletes(s) {
+			break
 		}
 	}
 	return e
@@ -631,6 +640,12 @@ func (f *factChecker) walk(x Expr, e env) {
 		f.walk(x.X, e)
 	case *Binary:
 		f.walk(x.X, e)
+		if !f.completes(x.X) {
+			return
+		}
+		if value, known := f.knownCondition(x.X); known && (x.Op == syntax.AndAnd && !value || x.Op == syntax.OrOr && value) {
+			return
+		}
 		switch x.Op {
 		case syntax.AndAnd:
 			f.walk(x.Y, e.with(f.conditionFacts(x.X, true)...))
@@ -641,12 +656,21 @@ func (f *factChecker) walk(x Expr, e env) {
 		}
 	case *If:
 		f.walk(x.Cond, e)
-		f.walk(x.Then, e.with(f.conditionFacts(x.Cond, true)...))
-		if x.Else != nil {
+		if !f.completes(x.Cond) {
+			return
+		}
+		value, known := f.knownCondition(x.Cond)
+		if !known || value {
+			f.walk(x.Then, e.with(f.conditionFacts(x.Cond, true)...))
+		}
+		if x.Else != nil && (!known || !value) {
 			f.walk(x.Else, e.with(f.conditionFacts(x.Cond, false)...))
 		}
 	case *Block:
 		e = f.stmts(x.Stmts, e)
+		if !f.statementsComplete(x.Stmts) {
+			return
+		}
 		if x.Tail != nil {
 			f.walk(x.Tail, e)
 		}
@@ -1491,6 +1515,15 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 			return true, nil
 		}
 	case *If:
+		if value, known := f.knownCondition(x.Cond); known {
+			chosen := Expr(x.Then)
+			if !value {
+				chosen = x.Else
+			}
+			if chosen != nil {
+				return f.prove(chosen, ob, e.with(f.conditionFacts(x.Cond, value)...), depth+1)
+			}
+		}
 		if x.Else != nil {
 			if cs.take(f.all(ob, depth,
 				branch{x.Then, e.with(f.conditionFacts(x.Cond, true)...)},
@@ -2202,6 +2235,15 @@ func (f *factChecker) proveMember(x Expr, m Type, ob obligation, e env, depth in
 	case *ScopeBlock:
 		return f.proveMember(x.Body, m, ob, e, depth+1)
 	case *If:
+		if value, known := f.knownCondition(x.Cond); known {
+			chosen := Expr(x.Then)
+			if !value {
+				chosen = x.Else
+			}
+			if chosen != nil {
+				return f.proveMember(chosen, m, ob, e.with(f.conditionFacts(x.Cond, value)...), depth+1)
+			}
+		}
 		if x.Else != nil {
 			ok, pending := f.proveMember(x.Then, m, ob, e.with(f.conditionFacts(x.Cond, true)...), depth+1)
 			if !ok {
