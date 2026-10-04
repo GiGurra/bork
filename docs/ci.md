@@ -14,6 +14,12 @@ sanitization or deduplication silently changing coverage. If `TestCases`'
 directory-selection rules change, update the runner
 and its fixture-discovery regression test together.
 
+The seven concurrency runtime tests in `internal/gen` run their assertions in
+both modes. Their child Go tests use `-race` when the parent binary has race
+instrumentation; normal parents run ordinary children. Independent runtime roots
+run in parallel. Map and snapshot children retain their existing ordinary Go
+test commands. The race `core` shard includes `internal/gen`.
+
 The four HTTP `*Race` integration tests build and execute generated programs
 with the Go race detector. They skip before parallel scheduling in ordinary
 test binaries and run when the parent binary is built with `-race`. Their parent
