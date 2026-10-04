@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,13 +26,13 @@ func TestStableGoStageReplacesCompleteInputs(t *testing.T) {
 	base := t.TempDir()
 	module := &goModuleInputs{mod: []byte("module example.com/old\ngo 1.26\n"), sum: []byte("old checksum\n")}
 	embeds := []*check.Embedded{{Files: []check.EmbeddedFile{{StagePath: "assets/old", Data: []byte("old asset")}}}}
-	first, _, release, err := stageGoStable(base, "entry", []byte("old source"), module, embeds)
+	first, _, release, err := stageGoStable(base, fmt.Sprintf("%x", sha256.Sum256([]byte("entry"))), []byte("old source"), module, embeds, goStageMetadata{Schema: 2, Program: t.TempDir(), Mode: "test"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	release()
 	module = &goModuleInputs{mod: []byte("module example.com/new\ngo 1.26\n")}
-	second, _, release, err := stageGoStable(base, "entry", []byte("new source"), module, nil)
+	second, _, release, err := stageGoStable(base, fmt.Sprintf("%x", sha256.Sum256([]byte("entry"))), []byte("new source"), module, nil, goStageMetadata{Schema: 2, Program: t.TempDir(), Mode: "test"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +126,7 @@ func TestStableGoStageConcurrentProcesses(t *testing.T) {
 			t.Fatalf("child %d: %v\n%s", index, err, outputs[index])
 		}
 	}
-	entries, err := os.ReadDir(filepath.Join(cacheBase, "bork", "stage", "v1"))
+	entries, err := os.ReadDir(filepath.Join(cacheBase, "bork", "stage", "v2"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestGoStageLockPoolBounded(t *testing.T) {
 	slots := map[string]bool{}
 	for index := range 4096 {
 		path := goStageLockPath(base, fmt.Sprint(index))
-		if filepath.Dir(path) != filepath.Join(base, "locks") {
+		if filepath.Dir(path) != filepath.Join(base, "locks", "stage-v2") {
 			t.Fatal("lock lives inside an evicted tree")
 		}
 		slots[path] = true

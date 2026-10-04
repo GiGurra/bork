@@ -241,3 +241,22 @@ directory records cause publication to skip rather than overshoot. A validated h
 updates its last-use hint with nonblocking SLOT/MUTATION acquisition. Hints affect
 only eviction, never receipt validity. Staging-v2 accounting, deleted-target cleanup
 and explicit clean commands remain prerequisites before automatic use.
+
+Staging version 2 uses the same cache root and MUTATION lock as results, with a
+separate permanent 256-slot pool in `locks/stage-v2`. Its versioned metadata records
+the canonical program directory, mode and pinned Go-context namespace. Publishers
+hold SLOT through Go execution; publication takes MUTATION only while accounting,
+evicting inactive entries and replacing complete trees. Retained stage limits are
+256 MiB/1,024 entries. Admission also reserves file/directory scanner nodes (65,536
+across the layer), including module files, unique parents, tree/entry directories
+and metadata, so legal small-file trees cannot exhaust inventory capacity. Account
+actual existing tree nodes/bytes and old/new generations conservatively. Busy slots
+or insufficient capacity use temporary staging.
+
+Maintenance prioritizes conclusively deleted program directories, then oldest
+inactive entries. It never follows entry symlinks; contained aliases are rejected
+before abandonment cleanup or publication because confinement alone would not prove
+which entry lock protects the tree. An entry's abandoned `new-*`/`previous` trees are
+removed while its SLOT and MUTATION are held. Unsupported or unavailable caches keep
+temporary staging. Version 1 publishers are retired without compatibility shims;
+`clean --all` will recognize and remove their entries while preserving old lock files.
