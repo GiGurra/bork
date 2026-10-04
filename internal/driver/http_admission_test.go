@@ -11,6 +11,9 @@ import (
 // Exercise FIFO transfer, canceled waiters, rejection before body reads, and
 // shutdown using the actual generated HTTP admission implementation.
 func TestHTTPAdmissionRace(t *testing.T) {
+	if !testRaceEnabled {
+		t.Skip("generated race executable is covered by go test -race")
+	}
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds and runs a Go race executable")

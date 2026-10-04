@@ -169,6 +169,9 @@ func markerMethod(t *check.Sealed) string { return "is" + typeName(t.Name, t.Pkg
 // syntax. Prelude types are only declared if the program uses them.
 func (g *gen) typeDecls() []ast.Decl {
 	needed := func(t check.Type) bool {
+		if g.artifactMode && !g.usedTypes[baseOf(t)] {
+			return false
+		}
 		switch t := t.(type) {
 		case *check.Record:
 			if t.MockCall {
