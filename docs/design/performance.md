@@ -1,5 +1,10 @@
 # Compiler performance (bork-e3r166)
 
+The [Go package output experiment](go-package-output.md) records isolated Go
+build and end-to-end edit measurements. Its scalar prototype wins on a synthetic
+multi-package workload; existing real examples require the flat fallback, so
+production output remains unchanged.
+
 Phase 1 establishes measurements before changing compiler behavior. The baseline
 is main `b12e509`, Go 1.27.1, Linux amd64, AMD Ryzen 7 5700G, October 3, 2026.
 These measurements came from a shared development host; latency is illustrative,
