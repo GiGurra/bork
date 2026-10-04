@@ -14,6 +14,8 @@ bork compiles through Go, so [Go](https://go.dev/dl/) 1.26 or later must be inst
 go install github.com/GiGurra/bork/cmd/bork@latest
 ```
 
+Update explicitly with `bork upgrade`, or choose a release with `bork upgrade v0.4.0`. This runs `go install` into `BORKBIN` (shown by `bork env BORKBIN`) and reports the old and installed versions. Add that directory to `PATH`. See [upgrades](docs/cli.md#upgrades).
+
 ## Start a project
 
 ```sh

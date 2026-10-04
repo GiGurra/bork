@@ -19,6 +19,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | [`bork clean`](#the-compile-cache) | Remove the compiler's caches |
 | [`bork deps`](#deps) | Manage Go dependencies of a module |
 | `bork version` | Print the version |
+| [`bork upgrade`](#upgrades) | Install the latest or requested compiler version |
 | `bork completion` | Print a completion script for bash, zsh, fish, or PowerShell |
 
 `bork <command> --help` lists a command's flags.
@@ -112,6 +113,19 @@ bork emit .    # print the generated Go
 
 bork compiles by generating Go. `emit` shows that code, which is useful when you want to see what a feature costs at run time.
 
+## Upgrades
+
+```sh
+bork upgrade                  # install the latest release
+bork upgrade v0.4.0           # install a specific release
+```
+
+Upgrades run `go install github.com/GiGurra/bork/cmd/bork@<version>` in a temporary directory inside `BORKBIN`, then replace the installed executable after a successful build and version check. Publication is an atomic rename on Unix. Windows requires moving the previous executable aside first, and restores it if publication fails; a running compiler can leave a `.bork-old-*.exe` backup that you can remove after it exits. The command reports the running and newly installed compiler versions; the running compiler keeps its original version. Updates only happen when you request them.
+
+Go must be on `PATH`. Downloading a release needs network access to your Go module proxy; offline installs work only when Go already has the required modules cached. Go's output explains install failures.
+
+If `BORKBIN` is absent from `PATH`, the command warns you to add it. If you are running bork from another location, the command prints both locations: run the executable in `BORKBIN` to use the upgrade. A different bork earlier on `PATH` may still take precedence.
+
 ## Settings
 
 Three settings control where the compiler keeps things:
@@ -119,7 +133,7 @@ Three settings control where the compiler keeps things:
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `BORKCACHE` | the user cache directory plus `bork` (`~/.cache/bork` on Linux) | Where compiler results and staged builds are kept |
-| `BORKBIN` | Go's `GOBIN`, or else `GOPATH/bin` (normally `~/go/bin`) | Where `bork install` puts executables |
+| `BORKBIN` | Go's `GOBIN`, or else `GOPATH/bin` (normally `~/go/bin`) | Where `bork install` and `bork upgrade` put executables |
 | `BORK_CACHE` | `on` | Set to `off` to turn off the compile cache |
 
 ```sh
