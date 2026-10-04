@@ -21,6 +21,7 @@ type EditorAnalysis struct {
 	usage    *goUsage
 	overlays map[string]string
 	warnings []diag.Diagnostic
+	semantic map[string][]check.SemanticToken
 }
 
 // Analyze checks a package using absolute-path unsaved source overlays. Returned

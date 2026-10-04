@@ -63,7 +63,8 @@
         "editor.defaultFormatter": "gigurra.bork",
         "editor.tabSize": 2,
         "editor.insertSpaces": true,
-        "editor.detectIndentation": false
+        "editor.detectIndentation": false,
+        "editor.semanticHighlighting.enabled": true
       }
     },
     "commands": [
@@ -141,6 +142,45 @@
             }
           }
         ]
+      }
+    ],
+    "semanticTokenModifiers": [
+      {
+        "id": "predicate",
+        "description": "A compiler-resolved validation predicate."
+      },
+      {
+        "id": "effect",
+        "description": "A compiler-resolved effect name."
+      },
+      {
+        "id": "goBinding",
+        "description": "A declaration or name bound to Go."
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "bork",
+        "scopes": {
+          "function.predicate": [
+            "entity.name.function.predicate.bork"
+          ],
+          "keyword.effect": [
+            "storage.modifier.effect.bork"
+          ],
+          "function.goBinding": [
+            "support.function.go.bork"
+          ],
+          "method.goBinding": [
+            "support.function.go.bork"
+          ],
+          "type.goBinding": [
+            "support.type.go.bork"
+          ],
+          "variable.readonly.static": [
+            "variable.other.constant.bork"
+          ]
+        }
       }
     ]
   },

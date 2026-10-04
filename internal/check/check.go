@@ -214,6 +214,9 @@ type InterpolationSource struct {
 }
 
 type Info struct {
+	// predicateRefs retains checked where-clause identities for editor queries.
+	predicateRefs map[diag.Pos]*Constraint
+
 	Interpolations       map[Expr]*InterpolationSource
 	InterpolationBatches []*InterpolationBatch
 
@@ -401,7 +404,8 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 // observe is called before lowering and contract checks; checking starts in the caller.
 func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes, observe func(string)) *Info {
 	c := &checker{
-		diags: diags,
+		recordPredicateRefs: true,
+		diags:               diags,
 		info: &Info{
 			GoBindings:             map[*Func]*GoBinding{},
 			GoImportNames:          checkGoImports(files, diags, goTypes),
@@ -741,7 +745,9 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
-	packagePath []*PackageBinding
+	// Only compilation retains source identities; read-only queries do not.
+	recordPredicateRefs bool
+	packagePath         []*PackageBinding
 
 	mapKeyChecks []func()
 
