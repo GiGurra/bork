@@ -2577,6 +2577,17 @@ Unsupported module directives and conflicting checksums are errors.
 create and maintain the pinned user manifests using Go module tools. See
 [the dependency manifest format](std-go.md#user-go-dependencies).
 
+Bork libraries are source-containing Go modules with matching root `bork.mod`
+and generated `go.mod` declarations. The Go command selects and downloads their
+complete graph; bork expands source-only requirements hidden by Go pruning.
+Loading, bindings, evaluations and generated builds share that selection.
+Package visibility and import cycles are checked across module boundaries;
+ambiguous package providers are errors. Extracted library sources, markers and
+assets must match pinned hashes on cold and warm compiler caches. Dependency
+unsafe grants authorize only their own packages, are trusted by consumers, and
+are reported for newly selected releases by `bork deps get/download` without
+an approval step. See [library dependencies](language/packages.md#library-dependencies).
+
 ### Opaque Go types
 
 `type Request = go "*net/http.Request"` makes `Request` a bork type whose values are Go values of that type.

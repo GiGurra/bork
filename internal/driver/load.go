@@ -124,6 +124,8 @@ func (m module) importPath(dir string) string {
 type loader struct {
 	scriptPath string
 	mod        module
+	graph      *libraryGraph
+	owners     map[string]module
 	diags      *diag.List
 	inputs     sourceReader
 	// files holds the parsed files: the prelude, the root package, and
@@ -186,20 +188,34 @@ func loadFrom(path string, reader sourceReader) ([]*syntax.File, string, *diag.L
 	if err != nil {
 		return nil, "", nil, err
 	}
-	l := &loader{mod: mod, diags: diags, state: map[string]int{}, inputs: reader}
-	if script {
-		l.scriptPath = paths[0]
-	}
-	l.files = append(l.files, prelude.Parse(diags)...)
 	absoluteDir, err := reader.absolute(dir)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	root := mod.importPath(absoluteDir)
-	if err := l.loadPackage(root, paths); err != nil {
-		return nil, "", nil, err
+	var graph *libraryGraph
+	for range 128 {
+		l := &loader{mod: mod, graph: graph, owners: map[string]module{}, diags: diags, state: map[string]int{}, inputs: reader}
+		if script {
+			l.scriptPath = paths[0]
+		}
+		l.files = append(l.files, prelude.Parse(diags)...)
+		if err := l.loadPackage(root, paths); err != nil {
+			return nil, "", nil, err
+		}
+		if l.graph == nil || diags.Len() != 0 {
+			return l.files, root, diags, nil
+		}
+		selected, err := compileLibraryGraph(l.files, reader)
+		if err != nil {
+			return nil, "", nil, err
+		}
+		if sameLibraryVersions(l.graph, selected) {
+			return l.files, root, diags, nil
+		}
+		graph = selected
 	}
-	return l.files, root, diags, nil
+	return nil, "", nil, fmt.Errorf("library source and dependency graphs did not converge")
 }
 
 func (l *loader) sourceReader() sourceReader {
@@ -235,19 +251,23 @@ func (l *loader) loadSources(importPath string, paths []string, srcs [][]byte) e
 	}
 	l.files = append(l.files, files...)
 	if !strings.HasPrefix(importPath, std.Prefix) {
+		owner := l.mod
+		if own, ok := l.owners[importPath]; ok {
+			owner = own
+		}
 		for _, file := range files {
-			header := readScriptHeader(file, l.mod.path != "", l.diags)
+			header := readScriptHeader(file, owner.path != "", l.diags)
 			if file.Script && (len(paths) != 1 || len(l.stack) != 1) {
 				l.diags.AddCode(diag.Pos{File: file.Path, Line: 1, Col: 1}, "script.single-file", "scripts must be compiled as a single root file; scripts cannot be imported as packages")
 			}
 			if header.unsafe {
-				if l.mod.unsafe == nil {
-					l.mod.unsafe = map[string]bool{}
+				if owner.unsafe == nil {
+					owner.unsafe = map[string]bool{}
 				}
-				l.mod.unsafe[importPath] = true
+				owner.unsafe[importPath] = true
 			}
 		}
-		l.checkUnsafe(importPath, files)
+		l.checkUnsafeIn(owner, importPath, files)
 	}
 	for _, f := range files {
 		for _, imp := range f.Imports {
@@ -281,16 +301,38 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 		}
 		return l.loadSources(imp.Path, paths, srcs)
 	}
-	if l.mod.path == "" {
+	if l.mod.path == "" && l.scriptPath == "" {
 		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: imports need a module (add a %s file to the module's root directory, with a line `module example.com/name`)", imp.Path, ModFile)
 		return nil
 	}
-	rel, ok := strings.CutPrefix(imp.Path, l.mod.path+"/")
-	if !ok {
-		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: only packages of module %s can be imported", imp.Path, l.mod.path)
-		return nil
+	owner := l.mod
+	rel, local := strings.CutPrefix(imp.Path, l.mod.path+"/")
+	dir := ""
+	if local {
+		if rel == "" || strings.Contains(rel, "\\") || filepath.IsAbs(rel) || filepath.ToSlash(filepath.Clean(rel)) != rel || strings.HasPrefix(rel, "../") {
+			l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: invalid package path", imp.Path)
+			return nil
+		}
+		dir = filepath.Join(l.mod.root, filepath.FromSlash(rel))
+	} else {
+		if l.graph == nil {
+			graph, err := compileLibraryGraph(l.files, l.sourceReader())
+			if err != nil {
+				return err
+			}
+			l.graph = graph
+		}
+		var err error
+		owner, dir, err = l.graph.packageDirectory(imp.Path, l.sourceReader())
+		if err != nil {
+			l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: %v", imp.Path, err)
+			return nil
+		}
 	}
-	dir := filepath.Join(l.mod.root, filepath.FromSlash(rel))
+	if l.owners == nil {
+		l.owners = map[string]module{}
+	}
+	l.owners[imp.Path] = owner
 	// Paths in messages are relative to the working directory, if it can.
 	if wd, err := l.sourceReader().workingDirectory(); err == nil {
 		if r, err := filepath.Rel(wd, dir); err == nil {
@@ -310,10 +352,8 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 	return l.loadPackage(imp.Path, paths)
 }
 
-// checkUnsafe reports unsafe go in a package that bork.mod does not
-// allow to have it.
-func (l *loader) checkUnsafe(importPath string, files []*syntax.File) {
-	if l.mod.unsafe[importPath] {
+func (l *loader) checkUnsafeIn(owner module, importPath string, files []*syntax.File) {
+	if owner.unsafe[importPath] {
 		return
 	}
 	for _, f := range files {
@@ -321,7 +361,7 @@ func (l *loader) checkUnsafe(importPath string, files []*syntax.File) {
 			if !fd.IsGo() {
 				continue
 			}
-			if l.mod.path == "" {
+			if owner.path == "" {
 				l.diags.AddCode(fd.Pos, "unsafe.not-allowed", "%s is implemented in unsafe go, which needs a %s that allows it: a file at the module's root with the lines `module <path>` and `unsafe \"<path>\"`", fd.Name, ModFile)
 			} else {
 				l.diags.AddCode(fd.Pos, "unsafe.not-allowed", "package %s has unsafe go (%s), but %s does not allow it; if it is meant to, add the line: unsafe %q", importPath, fd.Name, ModFile, importPath)

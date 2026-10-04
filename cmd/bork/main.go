@@ -293,32 +293,32 @@ func main() {
 				SubCmds: boa.SubCmds(
 					boa.CmdT[depsParams]{
 						Use: "init", Short: "initialize bork.sum and generated go.mod",
-						RunFunc: func(p *depsParams, _ *cobra.Command, args []string) {
-							if err := driver.Deps(p.Path, "init", args); err != nil {
+						RunFunc: func(p *depsParams, cmd *cobra.Command, args []string) {
+							if err := driver.DepsWithOutput(p.Path, "init", args, cmd.OutOrStdout()); err != nil {
 								fail(err)
 							}
 						},
 					},
 					boa.CmdT[depsGetParams]{
 						Use: "get", Short: "add, update, or remove dependencies",
-						RunFunc: func(p *depsGetParams, _ *cobra.Command, _ []string) {
-							if err := driver.Deps(p.Path, "get", p.Packages); err != nil {
+						RunFunc: func(p *depsGetParams, cmd *cobra.Command, _ []string) {
+							if err := driver.DepsWithOutput(p.Path, "get", p.Packages, cmd.OutOrStdout()); err != nil {
 								fail(err)
 							}
 						},
 					},
 					boa.CmdT[depsParams]{
 						Use: "migrate", Short: "move legacy go-deps manifests into bork.mod and bork.sum",
-						RunFunc: func(p *depsParams, _ *cobra.Command, args []string) {
-							if err := driver.Deps(p.Path, "migrate", args); err != nil {
+						RunFunc: func(p *depsParams, cmd *cobra.Command, args []string) {
+							if err := driver.DepsWithOutput(p.Path, "migrate", args, cmd.OutOrStdout()); err != nil {
 								fail(err)
 							}
 						},
 					},
 					boa.CmdT[depsParams]{
 						Use: "download", Short: "download pinned dependencies and fill in checksums",
-						RunFunc: func(p *depsParams, _ *cobra.Command, args []string) {
-							if err := driver.Deps(p.Path, "download", args); err != nil {
+						RunFunc: func(p *depsParams, cmd *cobra.Command, args []string) {
+							if err := driver.DepsWithOutput(p.Path, "download", args, cmd.OutOrStdout()); err != nil {
 								fail(err)
 							}
 						},

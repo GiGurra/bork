@@ -50,6 +50,61 @@ fn main() {
 
 [Standard packages](../std/README.md) are imported as `bork/name` and need no `bork.mod`.
 
+## Library dependencies
+
+A bork library is a Go module containing `bork.mod` and `.bork` packages.
+Use the same dependency command for Go and bork libraries:
+
+```sh
+bork deps get github.com/acme/greeting@v1.0.0
+```
+
+Specify the library's module path, not a directory containing only `.bork`
+files: Go does not recognize that directory as a Go package. Import its packages
+by module path plus directory, just as for local packages:
+
+```bork fragment
+import "github.com/acme/greeting/text"
+
+fn main() uses io {
+  println(text.Greeting())
+}
+```
+
+The helper records pinned `require` lines in `bork.mod`, checksums in
+`bork.sum`, and a generated `go.mod`. Commit all three. Upgrade with the same
+command and a newer version or `@latest`; remove a requirement with `@none`.
+Go selects one version of each module path using minimum version selection.
+A diamond picks the higher required version. Major version 2 and later use
+`/v2`, `/v3`, and so on; different major paths can coexist in one program.
+Visibility rules and package import-cycle checks apply across libraries too.
+Downloaded sources stay in Go's module cache and are checked against pinned
+content hashes before use. A warm cache supports `GOPROXY=off`.
+
+A library author starts with a module and exported functions, without a
+`main` entrypoint. `bork deps init` creates generated `go.mod` and empty
+`bork.sum`. Use `bork deps get` for its dependencies, and `bork deps download`
+before tagging to record dependencies of every authored package, including
+imported std packages. Check/test the library, commit its files with a
+redistributable license, and push a version tag such as `v1.0.0`. Its generated
+Go manifest lets the module proxy and consumers discover transitive requirements.
+The `module` and `require` declarations must agree in `bork.mod` and `go.mod`.
+Do not edit generated `go.mod` or run `go mod tidy`: Go cannot see bork imports.
+
+Library-owned `unsafe` grants apply to that library's packages. Consumers trust
+its implementation without repeating those grants. `bork deps get/download`
+prints newly selected library releases containing unsafe Go packages, including
+transitive ones; there is no approval prompt. Checksums establish integrity, not
+correctness or effect honesty. Unsafe library code can violate guarantees and
+can run during compiler evaluation; it is not sandboxed.
+
+Go's normal `GOPROXY` and `GOSUMDB` configuration applies. Use a corporate
+proxy if desired, and set `GOPRIVATE` before requesting private module paths.
+The published official-service rules contain no Go-only file requirement;
+using valid public bork modules is a sensible-use reading, rather than an
+explicit Google permission grant. See the [service analysis](../design/library-dependencies.md#official-proxy-feasibility-permission-and-privacy)
+and [dependency commands](../cli.md#deps).
+
 ## Type classes
 
 A type class describes operations that a type supports. Generic code can then require it.
