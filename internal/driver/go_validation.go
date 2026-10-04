@@ -17,6 +17,7 @@ import (
 // launchers, switched toolchains, overlays and workspaces keep full reloads.
 // They are not export-data or execution dependency manifests.
 type goContextValidation struct {
+	installedSDK               *installedSDKIdentity
 	inputs                     *sourceSnapshot
 	root, version              string
 	cache, tmp                 string
@@ -358,6 +359,9 @@ func (v *goNameValidation) current() bool {
 // currentMetadata validates the SDK inventory. Its owner validates configuration
 // separately, avoiding a full launcher hash per metadata receipt.
 func (v *goNameValidation) currentMetadata() bool {
+	if v.context.installedSDK != nil {
+		return v.context.installedSDK.current(v.context.launcher, v.context.root, v.context.version)
+	}
 	if !v.directories.current() {
 		return false
 	}

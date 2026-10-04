@@ -183,6 +183,8 @@ force after `-w` or `-u`; `-w` warns when the shell overrides a saved assignment
 | `BORKBIN` | Effective `go env GOBIN`, else the first `go env GOPATH` entry plus `/bin` (normally `~/go/bin`) | Destination for `bork install`. |
 | `BORK_CACHE` | `on` | Set `off` to disable compiler result reuse and persistent staging. Go's build cache remains independent. |
 
+Compiler caching, like Go's build cache, assumes installed Go toolchains are immutable. In-place edits of GOROOT or the Go launcher are unsupported; replace or upgrade the toolchain instead.
+
 `BORKCACHE` and `BORKBIN` accept absolute paths. Existing directories and saved
 settings are never moved automatically. `bork install [path]` defaults to `.` and
 uses the source file or directory name, adding `.exe` for a Windows target. It
