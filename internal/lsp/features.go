@@ -37,6 +37,9 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		return s.codeActions(path, p), nil
 	}
 	pkg := s.state(path)
+	if method == "textDocument/completion" {
+		return s.completion(pkg, path, src, p.Position), nil
+	}
 	if pkg == nil || pkg.analysis == nil {
 		return nil, nil
 	}
@@ -45,9 +48,6 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 	snapshot, ok := sources[path]
 	if !ok {
 		return nil, nil
-	}
-	if method == "textDocument/completion" {
-		return s.completion(pkg, path, src, p.Position), nil
 	}
 	pos, err := compilerPosition(path, snapshot, p.Position)
 	if err != nil {
@@ -243,66 +243,6 @@ func symbols(path, src string) []any {
 	}
 	for _, bundle := range file.Providers {
 		add(bundle.Name, 13, bundle.NamePos)
-	}
-	return out
-}
-func (s *server) completion(pkg *packageState, path, src string, p position) []any {
-	out := []any{}
-	add := func(name, detail string, kind int) {
-		if pkg.stale {
-			detail = "Stale: last successful check. " + detail
-		}
-		out = append(out, map[string]any{"label": name, "detail": detail, "kind": kind})
-	}
-	offset, err := byteOffset(src, p)
-	if err != nil {
-		return out
-	}
-	if offset > 0 && src[offset-1] == '.' {
-		pos, err := compilerPosition(path, src, position{p.Line, max(0, p.Character-2)})
-		if err == nil {
-			result, err := pkg.analysis.Describe(pos)
-			if err == nil {
-				for _, m := range result.Methods {
-					if m.Name != "" && m.Ambiguity == "" {
-						add(m.Name, m.Type, 2)
-					}
-				}
-			}
-		}
-		return out
-	}
-	seen := map[string]bool{}
-	for file, text := range pkg.analysis.Sources() {
-		if filepath.Dir(file) != filepath.Dir(path) {
-			continue
-		}
-		files := syntax.ParseFiles([]string{file}, [][]byte{[]byte(text)}, false, &diag.List{})
-		if len(files) == 0 {
-			continue
-		}
-		f := files[0]
-		for _, fn := range f.Funcs {
-			if fn.ScriptMain {
-				continue
-			}
-			if !seen[fn.Name] {
-				add(fn.Name, "function", 3)
-				seen[fn.Name] = true
-			}
-		}
-		for _, typ := range f.Types {
-			if !seen[typ.Name] {
-				add(typ.Name, "type", 7)
-				seen[typ.Name] = true
-			}
-		}
-		for _, b := range f.Bindings {
-			if !seen[b.Name] {
-				add(b.Name, "package value", 6)
-				seen[b.Name] = true
-			}
-		}
 	}
 	return out
 }

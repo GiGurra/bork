@@ -33,6 +33,7 @@ type server struct {
 	packages              map[string]*packageState
 	diagnostics           map[string][]diag.Diagnostic
 	initialized, shutdown bool
+	snippets              bool
 }
 type documentParams struct {
 	TextDocument struct {
@@ -160,6 +161,23 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 		if s.initialized {
 			return nil, &rpcError{-32600, "already initialized"}, false
 		}
+		var init struct {
+			Capabilities struct {
+				TextDocument struct {
+					Completion struct {
+						CompletionItem struct {
+							SnippetSupport bool `json:"snippetSupport"`
+						} `json:"completionItem"`
+					} `json:"completion"`
+				} `json:"textDocument"`
+			} `json:"capabilities"`
+		}
+		if len(m.Params) > 0 {
+			if err := json.Unmarshal(m.Params, &init); err != nil {
+				return nil, &rpcError{-32602, "invalid initialize parameters"}, false
+			}
+		}
+		s.snippets = init.Capabilities.TextDocument.Completion.CompletionItem.SnippetSupport
 		s.initialized = true
 		return map[string]any{"capabilities": map[string]any{
 			"positionEncoding": "utf-16", "textDocumentSync": map[string]any{"openClose": true, "change": 1, "save": map[string]any{"includeText": false}},

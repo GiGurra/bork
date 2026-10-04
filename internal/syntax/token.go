@@ -1,7 +1,10 @@
 // Package syntax contains bork's lexer, syntax tree, and parser.
 package syntax
 
-import "github.com/GiGurra/bork/internal/diag"
+import (
+	"github.com/GiGurra/bork/internal/diag"
+	"slices"
+)
 
 // Kind is the kind of a token.
 type Kind int
@@ -131,4 +134,14 @@ type Comment struct {
 	Text string
 	Pos  diag.Pos
 	End  diag.Pos // position immediately after the token
+}
+
+// Keywords returns the reserved words recognized by the lexer.
+func Keywords() []string {
+	out := make([]string, 0, len(keywords))
+	for word := range keywords {
+		out = append(out, word)
+	}
+	slices.Sort(out)
+	return out
 }

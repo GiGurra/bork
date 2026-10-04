@@ -23,6 +23,8 @@ These use the compiler packages directly, so they follow automatically. Still ch
 
 | Component | Where | What to check |
 | --- | --- | --- |
+| Completion metadata and context recovery | `internal/driver/editor_completion*.go`, `internal/driver/editor_imports.go`, `internal/check/queries.go` | Compiler-owned symbol, field, variant and callable queries; token-based recovery of unfinished edits |
+| LSP completion presentation | `internal/lsp/completion.go` | Declaration snippets (`fn`, `match`, `type`, `test`); reserved keywords come directly from `syntax.Keywords()` |
 | Language server | `internal/lsp/` | Construct-specific features: completion snippets and keywords, rename rules, code actions, inlay hints, semantic token classes, navigation |
 | Browser playground | `internal/playground/`, `web/playground/`, `cmd/bork-playground/` | Compiles the real checker to WebAssembly; rebuild and run `internal/playground` parity tests |
 | `bork new` templates | `internal/project/templates/` | Templates must still check, test and fmt-check (CI covers this) |
@@ -31,7 +33,7 @@ These use the compiler packages directly, so they follow automatically. Still ch
 
 | Editor | Where | What to update |
 | --- | --- | --- |
-| VS Code, and GitHub/Sublime via TextMate | `editors/vscode/syntaxes/bork.tmLanguage.json` | Patterns for the new keyword or construct; tests in `editors/vscode/test/grammar.test.cjs` (CI job "TextMate grammar") |
+| VS Code, and GitHub/Sublime via TextMate | `editors/vscode/syntaxes/bork.tmLanguage.json` | Patterns for the new keyword or construct; every reserved keyword in the compiler map must receive a highlighting scope; tests in `editors/vscode/test/grammar.test.cjs` (CI job "TextMate grammar") |
 | VS Code editing behavior | `editors/vscode/language-configuration.json` | Brackets, comments, auto-closing, indentation rules |
 | Tree-sitter (Neovim, Helix, Zed, Emacs 29+) | the tree-sitter grammar under `editors/` (once added) | `grammar.js`, regenerate the parser, and update `queries/` (highlights, indents, folds, injections); CI parses every `.bork` file in `examples/` and `testdata/cases/` |
 | Vim and Emacs syntax files | the Vim and Emacs packages under `editors/` (once added) | Keyword lists and regex patterns |

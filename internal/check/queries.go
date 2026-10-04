@@ -448,3 +448,45 @@ func writtenTypeAtomText(t *syntax.TypeExpr) string {
 	}
 	return t.Name + "[" + strings.Join(parts, ", ") + "]"
 }
+
+// EditorType resolves written type syntax with the compiler's normal package,
+// alias and generic rules. Invalid or inaccessible types return Invalid.
+func EditorType(info *Info, from *Package, typ *syntax.TypeExpr) Type {
+	c := queryChecker(info, from)
+	t := c.resolveType(typ)
+	if c.diags.Len() != 0 {
+		return Invalid
+	}
+	return t
+}
+
+// EditorCallable resolves a declaration with ordinary package lookup rules.
+func EditorCallable(info *Info, from *Package, name string) *CallableDescription {
+	fn, ok := queryChecker(info, from).funcNamed(name)
+	if !ok {
+		return nil
+	}
+	return DescribeCallable(fn, fn.Params, from, false)
+}
+
+// EditorVariantFields uses the same variant lookup and visibility as a
+// specialized constructor. It returns declaration fields for an unresolved
+// generic head and substituted fields for an explicitly specialized one.
+func EditorVariantFields(info *Info, from *Package, owner *syntax.TypeExpr, name string) []*Field {
+	c := queryChecker(info, from)
+	var typ Type
+	if len(owner.Args) == 0 {
+		typ = c.typeNamed(owner.Name)
+	} else {
+		typ = c.resolveType(owner)
+	}
+	sealed, ok := typ.(*Sealed)
+	if !ok {
+		return nil
+	}
+	variant := c.specializedVariant(owner.Pos, sealed, name)
+	if variant == nil || c.diags.Len() != 0 {
+		return nil
+	}
+	return variant.Fields
+}

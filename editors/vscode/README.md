@@ -22,7 +22,7 @@ VS Code 1.82 or later is required. The extension does not bundle a compiler. Set
 
 The extension highlights `.bork` files, including embedded Go, and launches
 `bork lsp` for diagnostics, types and proven facts on hover, go-to-definition,
-references, conservative completion, document symbols, formatting and suggested
+references, completion, document symbols, formatting and suggested
 compiler fixes. Install a current `bork` binary on PATH or set `bork.serverPath`
 to its absolute path. Run **bork: Restart Language Server** after changing that setting.
 
@@ -43,8 +43,13 @@ Rename currently supports local variables and package-private functions, require
 successful current checks, and refuses names already present in affected packages. Proposed edits are
 checked in memory; unsupported references, such as some named where predicates,
 can cause rename to be rejected.
-It does not rename exported names, types or fields. Completion offers package
-functions/types/values and visible methods after a dot. Standard-library and
+It does not rename exported names, types or fields. Completion ranks visible locals before package symbols, keywords, and imports.
+It offers checked fields and methods after a dot, exported names after a package
+qualifier, record fields in literals and destructuring patterns, named arguments,
+and match-arm patterns. Clients supporting LSP snippets also receive `fn`,
+`match`, `type`, and `test` templates. Starting an exported name with two or more
+characters offers auto-imports from standard packages, the current module, and resolved library dependencies;
+accepting one adds the import and inserts a qualified name. Completion never downloads libraries; run `bork deps download` to resolve missing dependencies. Standard-library and
 prelude definitions use virtual compiler paths and are not opened as disk files.
 
 Scripts with a first-line shebang such as `#!/usr/bin/env -S bork script` are

@@ -199,3 +199,17 @@ test('script shebang and dependency headers are comments', () => {
   has(ls, 2, 'bork:unsafe', 'comment.line.double-slash.bork');
   has(ls, 3, 'x', 'variable.other.readwrite.bork');
 });
+
+
+test('every reserved compiler keyword is covered by the highlighting grammar', () => {
+  const root = path.resolve(__dirname, '../../..');
+  const source = fs.readFileSync(path.join(root, 'internal/syntax/token.go'), 'utf8');
+  const keywords = source.match(/var keywords = map\[string\]Kind\{([\s\S]*?)\n\}/)[1];
+  const words = [...keywords.matchAll(/"([a-z]+)"\s*:/g)].map(match => match[1]);
+  assert.ok(words.length > 0, 'compiler keyword map was not found');
+  for (const word of words) {
+    const tokens = tokenize(word)[0].tokens;
+    assert.ok(tokens.some(token => token.scopes.some(scope => /^(keyword|storage|constant)\./.test(scope))),
+      `compiler keyword ${word} has no highlighting rule`);
+  }
+});
