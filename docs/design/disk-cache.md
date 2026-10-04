@@ -243,6 +243,12 @@ and cleanup land. Tests opt into an explicit completion pipe and optional barrie
 they wait for publication or process exit without sleep-based polling. These pipes
 are never inherited by Go subprocesses.
 
+## Landed budget lifecycle (to be replaced)
+
+The following records the currently landed result-v1/stage-v2 implementation.
+The age-based design above replaces its admission accounting and eviction;
+its existing explicit cleanup and coordination safeguards remain relevant.
+
 The first lifecycle slice applies a 256 MiB/1,024-entry policy to result artifacts
 across all compiler namespaces. Publication inventories recognized artifacts under
 MUTATION, removes abandoned result temporaries, and evicts oldest inactive entries
@@ -251,7 +257,8 @@ new temporary must fit during replacement. Busy entries or a scan beyond 4,096
 directory records cause publication to skip rather than overshoot. A validated hit
 updates its last-use hint with nonblocking SLOT/MUTATION acquisition. Hints affect
 only eviction, never receipt validity. Staging-v2 accounting, deleted-target cleanup
-and explicit clean commands remain prerequisites before automatic use.
+and explicit clean commands have landed; age-based retention and the larger
+population acceptance measurements now precede automatic use.
 
 Staging version 2 uses the same cache root and MUTATION lock as results, with a
 separate permanent 256-slot pool in `locks/stage-v2`. Its versioned metadata records
