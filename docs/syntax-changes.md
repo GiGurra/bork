@@ -36,8 +36,11 @@ These use the compiler packages directly, so they follow automatically. Still ch
 | --- | --- | --- |
 | VS Code, and GitHub/Sublime via TextMate | `editors/vscode/syntaxes/bork.tmLanguage.json` | Patterns for the new keyword or construct; every reserved keyword in the compiler map must receive a highlighting scope; tests in `editors/vscode/test/grammar.test.cjs` (CI job "TextMate grammar") |
 | VS Code editing behavior | `editors/vscode/language-configuration.json` | Brackets, comments, auto-closing, indentation rules |
-| Tree-sitter (Neovim, Helix, Zed, Emacs 29+) | the tree-sitter grammar under `editors/` (once added) | `grammar.js`, regenerate the parser, and update `queries/` (highlights, indents, folds, injections); CI parses every `.bork` file in `examples/` and `testdata/cases/` |
+| Tree-sitter (Neovim, Helix, Zed, Emacs 29+) | `editors/tree-sitter-bork/` | `grammar.js`, `src/scanner.c`; regenerate `src/` with the pinned CLI and update `queries/` (highlights, locals, indents, folds, injections); CI parses every `.bork` file in `examples/` and `testdata/cases/` with an explicit checked recovery allowlist |
 | Vim and Emacs syntax files | the Vim and Emacs packages under `editors/` (once added) | Keyword lists and regex patterns |
+
+Compiler keyword coverage for each highlighting grammar is checked by
+`scripts/check-editor-keywords.cjs` in CI. Register new grammars there.
 
 ## 4. Documentation and examples
 

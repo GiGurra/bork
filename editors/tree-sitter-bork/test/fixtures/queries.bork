@@ -1,0 +1,27 @@
+type User = { name: String }
+fn describe(user: User): String {
+  result = match (user) {
+    User { name } => s"hello $name"
+  }
+  result
+}
+fn raw(): String unsafe go {
+  value := "}"
+  if true { value += `{` }
+  return value
+}
+fn (self: User) rename(): User {
+  scope app {
+    xs = [1, 2].map(value => value + 1)
+    for (item in xs) { println(item) }
+    mock println(message) { message }
+    match (xs) {
+      [first, ...rest] => println(first, rest)
+      [] => Ok
+    }
+    match (self) { User { name } => println(name) }
+  }
+  self
+}
+type Kind = sealed { caseName }
+fn variant(state: Kind) { match (state) { Kind.caseName => Ok } }

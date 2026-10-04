@@ -414,3 +414,11 @@ Advisory lint suppression uses ordinary comments, not a new grammar production:
 `// lint:ignore lint.unused-binding reason` suppresses that rule on the same or
 following line. Comma-separated rule codes and `all` are supported. The compiler's
 syntax and safety errors remain errors.
+
+## Editor grammar
+
+The [tree-sitter grammar](../editors/tree-sitter-bork/README.md) describes source
+structure for editor highlighting, indentation, folds and Go injection. CI parses
+every example and compiler case; deliberately malformed syntax cases form an
+explicit, checked recovery allowlist. Compiler syntax and validation remain the
+authority. Keyword drift is checked against `internal/syntax/token.go`.

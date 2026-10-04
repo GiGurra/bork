@@ -198,6 +198,8 @@ with `bork lsp`: diagnostics for unsaved edits, types and facts on hover,
 navigation, completion, formatting and compiler fixes. Install it with
 `bork editor install vscode` (use `--editor cursor` or `--editor codium` for
 those editors). See [editor setup](docs/editors.md) for other LSP clients.
+The shared [tree-sitter grammar](editors/tree-sitter-bork/README.md) provides
+highlighting, indentation, folds and embedded Go queries.
 
 ## Learn more
 

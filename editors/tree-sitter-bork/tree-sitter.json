@@ -1,0 +1,19 @@
+{
+  "grammars": [{
+    "name": "bork",
+    "camelcase": "Bork",
+    "scope": "source.bork",
+    "path": ".",
+    "file-types": ["bork"],
+    "highlights": "queries/highlights.scm",
+    "injection-regex": "^bork$"
+  }],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Editor grammar for bork",
+    "authors": [{ "name": "bork contributors" }],
+    "links": { "repository": "https://github.com/GiGurra/bork" }
+  },
+  "bindings": { "c": true }
+}
