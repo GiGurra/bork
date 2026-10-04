@@ -259,14 +259,21 @@ func emitProgramObserved(path string, observe func(string)) (*compiledProgram, [
 		return nil, nil, err
 	}
 	files, info := program.files, program.info
-	if _, ok := info.Funcs["main"]; !ok {
-		diags := &diag.List{}
-		diags.AddCode(packagePos(files), "package.no-main", "package has no main function (add `fn main() { ... }`)")
-		return nil, nil, &DiagError{Diags: diags}
+	if err := program.requireMain(); err != nil {
+		return nil, nil, err
 	}
 	phase(observe, "generate")
 	goSrc, err := gen.Package(files, info)
 	return program, goSrc, err
+}
+
+func (program *compiledProgram) requireMain() error {
+	if _, ok := program.info.Funcs["main"]; ok {
+		return nil
+	}
+	diags := &diag.List{}
+	diags.AddCode(packagePos(program.files), "package.no-main", "package has no main function (add `fn main() { ... }`)")
+	return &DiagError{Diags: diags}
 }
 
 // Build compiles the package at path into an executable at out.
