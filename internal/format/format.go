@@ -26,6 +26,11 @@ type item struct {
 	with bool
 }
 
+type delimiter struct {
+	line  int
+	chain bool
+}
+
 // Source formats one file. Existing line breaks are retained, blank-line runs
 // become one blank line, and nested delimiters use two spaces. Comments, literals,
 // interpolations and unsafe Go bodies retain their exact text, except CRLF line
@@ -83,7 +88,8 @@ func Source(path string, src []byte) ([]byte, error) {
 	}
 	slices.SortFunc(items, func(a, b item) int { return a.start - b.start })
 	var out strings.Builder
-	var delimiterLines []int
+	var delimiters []delimiter
+	chainLine := false
 	for i, it := range items {
 		gapStart := 0
 		if i > 0 {
@@ -98,7 +104,7 @@ func Source(path string, src []byte) ([]byte, error) {
 					out.WriteByte('\n')
 				}
 			}
-			remaining := len(delimiterLines)
+			remaining := len(delimiters)
 			// All leading closing delimiters dedent the line, including }).
 			for j := i; j < len(items) && closing(items[j].kind) && !items[j].comment; j++ {
 				remaining = max(0, remaining-1)
@@ -106,8 +112,19 @@ func Source(path string, src []byte) ([]byte, error) {
 					break
 				}
 			}
-			indent := levels(delimiterLines[:remaining])
-			if !it.comment && (it.kind == syntax.PipeGt || it.chain) {
+			chainLine = !it.comment && it.chain
+			if remaining < len(delimiters) {
+				chainLine = chainLine || delimiters[remaining].chain
+				// Split closers share the opening line's indentation baseline.
+				if delimiters[remaining].chain {
+					line := delimiters[remaining].line
+					for remaining > 0 && delimiters[remaining-1].line == line {
+						remaining--
+					}
+				}
+			}
+			indent := levels(delimiters[:remaining])
+			if chainLine || !it.comment && it.kind == syntax.PipeGt {
 				indent++
 			}
 			out.WriteString(strings.Repeat("  ", max(0, indent)))
@@ -122,9 +139,9 @@ func Source(path string, src []byte) ([]byte, error) {
 		if !it.comment {
 			switch it.kind {
 			case syntax.LBrace, syntax.LParen, syntax.LBrack:
-				delimiterLines = append(delimiterLines, it.line)
+				delimiters = append(delimiters, delimiter{line: it.line, chain: chainLine})
 			case syntax.RBrace, syntax.RParen, syntax.RBrack:
-				delimiterLines = delimiterLines[:max(0, len(delimiterLines)-1)]
+				delimiters = delimiters[:max(0, len(delimiters)-1)]
 			}
 		}
 	}
@@ -136,11 +153,14 @@ func Source(path string, src []byte) ([]byte, error) {
 
 // Delimiters opened on the same line contribute one indentation level, so a
 // lambda or match inside a call has the same indentation as an ordinary block.
-func levels(lines []int) int {
+func levels(delimiters []delimiter) int {
 	n := 0
-	for i, line := range lines {
-		if i == 0 || line != lines[i-1] {
+	for i, d := range delimiters {
+		if i == 0 || d.line != delimiters[i-1].line {
 			n++
+			if d.chain {
+				n++
+			}
 		}
 	}
 	return n
