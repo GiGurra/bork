@@ -4,13 +4,21 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/GiGurra/bork/internal/toolenv"
 )
 
 func TestConfiguredCacheRoot(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	switch runtime.GOOS {
+	case "darwin":
+		t.Setenv("HOME", t.TempDir())
+	case "windows":
+		t.Setenv("APPDATA", t.TempDir())
+	default:
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	}
 	t.Setenv("BORKCACHE", "")
 	t.Setenv("BORK_CACHE", "")
 	saved := filepath.Join(t.TempDir(), "saved")
@@ -32,22 +40,24 @@ func TestConfiguredCacheRoot(t *testing.T) {
 	if cacheDisabled() {
 		t.Fatal("environment cache toggle ignored")
 	}
-	// Clean must select the same root without creating a second bork subdirectory.
-	if err := os.MkdirAll(explicit, 0700); err != nil {
-		t.Fatal(err)
-	}
-	note := filepath.Join(explicit, "keep.txt")
-	if err := os.WriteFile(note, []byte("keep"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Clean(context.Background(), true); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(note); err != nil {
-		t.Fatalf("clean removed unowned file: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(explicit, "bork")); !os.IsNotExist(err) {
-		t.Fatalf("nested cache: %v", err)
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		// Clean must select the same root without creating a second bork subdirectory.
+		if err := os.MkdirAll(explicit, 0700); err != nil {
+			t.Fatal(err)
+		}
+		note := filepath.Join(explicit, "keep.txt")
+		if err := os.WriteFile(note, []byte("keep"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Clean(context.Background(), true); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(note); err != nil {
+			t.Fatalf("clean removed unowned file: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(explicit, "bork")); !os.IsNotExist(err) {
+			t.Fatalf("nested cache: %v", err)
+		}
 	}
 	t.Setenv("BORKCACHE", "relative")
 	if _, err := Clean(context.Background(), true); err == nil {

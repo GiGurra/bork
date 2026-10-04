@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,12 +14,34 @@ import (
 
 func TestEnvAndInstallCLI(t *testing.T) {
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "bork")
+	suffix := ""
+	if runtime.GOOS == "windows" {
+		suffix = ".exe"
+	}
+	exe := filepath.Join(dir, "bork"+suffix)
 	if out, err := exec.Command("go", "build", "-o", exe, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build CLI: %v\n%s", err, out)
 	}
-	// Keep Go's cache and HOME intact while isolating only bork settings.
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	// UserConfigDir uses different platform variables. Preserve Go's effective
+	// cache/module paths when macOS requires changing HOME to isolate bork.
+	switch runtime.GOOS {
+	case "darwin":
+		output, err := exec.Command("go", "env", "-json", "GOCACHE", "GOPATH").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var goSettings map[string]string
+		if err := json.Unmarshal(output, &goSettings); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("GOCACHE", goSettings["GOCACHE"])
+		t.Setenv("GOPATH", goSettings["GOPATH"])
+		t.Setenv("HOME", dir)
+	case "windows":
+		t.Setenv("APPDATA", dir)
+	default:
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	}
 	for _, name := range toolenv.Names() {
 		t.Setenv(name, "")
 	}
@@ -54,7 +77,7 @@ func TestEnvAndInstallCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	run(true, "install", program)
-	installed := filepath.Join(bin, "hello")
+	installed := filepath.Join(bin, "hello"+suffix)
 	output, err := exec.Command(installed).CombinedOutput()
 	if err != nil || string(output) != "installed\n" {
 		t.Fatalf("installed binary: %v %s", err, output)
@@ -76,24 +99,26 @@ func TestEnvAndInstallCLI(t *testing.T) {
 	if output, err := defaultInstall.CombinedOutput(); err != nil {
 		t.Fatalf("install default path: %v %s", err, output)
 	}
-	if output, err := exec.Command(filepath.Join(bin, "directory-app")).CombinedOutput(); err != nil || string(output) != "installed\n" {
+	if output, err := exec.Command(filepath.Join(bin, "directory-app"+suffix)).CombinedOutput(); err != nil || string(output) != "installed\n" {
 		t.Fatalf("installed directory: %v %s", err, output)
 	}
-	if err := os.Remove(filepath.Join(bin, "directory-app")); err != nil {
+	if err := os.Remove(filepath.Join(bin, "directory-app"+suffix)); err != nil {
 		t.Fatal(err)
 	}
 
-	// A saved root must be used by clean even while cache reuse is off.
-	legacy := filepath.Join(cache, "stage", "v1", strings.Repeat("a", 64), "tree", "main.go")
-	if err := os.MkdirAll(filepath.Dir(legacy), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(legacy, []byte("legacy"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	run(true, "clean", "--all")
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatalf("clean ignored saved BORKCACHE: %v", err)
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		// A saved root must be used by clean even while cache reuse is off.
+		legacy := filepath.Join(cache, "stage", "v1", strings.Repeat("a", 64), "tree", "main.go")
+		if err := os.MkdirAll(filepath.Dir(legacy), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(legacy, []byte("legacy"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		run(true, "clean", "--all")
+		if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+			t.Fatalf("clean ignored saved BORKCACHE: %v", err)
+		}
 	}
 	before, err := os.ReadFile(installed)
 	if err != nil {
