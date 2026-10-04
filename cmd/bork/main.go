@@ -356,19 +356,19 @@ func main() {
 						}
 						return
 					}
-					_, info, err := driver.Check(p.Path)
+					warnings, err := driver.CheckWarnings(p.Path)
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stdout)
 					}
-					warnings := check.DebugWarnings(info)
-					warnings.Append(check.LazyWarnings(info))
-					warnings.Append(check.MigrationWarnings(info))
 					if p.JSON {
-						if err := warnings.WriteJSON(os.Stdout); err != nil {
-							fail(err)
+						encoder := json.NewEncoder(os.Stdout)
+						for _, warning := range warnings {
+							if err := encoder.Encode(warning); err != nil {
+								fail(err)
+							}
 						}
 					} else {
-						for _, warning := range warnings.Sorted() {
+						for _, warning := range warnings {
 							fmt.Println(warning)
 						}
 					}

@@ -246,9 +246,12 @@ func (v *goContextValidation) accepts(ctx *goContext) bool {
 }
 
 func (v *goContextValidation) current() bool {
-	if !v.toolCurrent() {
-		return false
-	}
+	return v.toolCurrent() && v.currentConfiguration()
+}
+
+// currentConfiguration checks the non-content launcher and configuration inputs.
+// Callers that use it directly must separately certify the launcher bytes.
+func (v *goContextValidation) currentConfiguration() bool {
 	if launcher, err := filepath.EvalSymlinks(v.launcher); err != nil || launcher != v.resolvedLauncher {
 		return false
 	}
@@ -349,7 +352,13 @@ func goFileDigest(name string, buffer []byte) ([sha256.Size]byte, error) {
 }
 
 func (v *goNameValidation) current() bool {
-	if !v.context.current() || !v.directories.current() {
+	return v.context.current() && v.currentMetadata()
+}
+
+// currentMetadata validates the SDK inventory. Its owner validates configuration
+// separately, avoiding a full launcher hash per metadata receipt.
+func (v *goNameValidation) currentMetadata() bool {
+	if !v.directories.current() {
 		return false
 	}
 	buffer := make([]byte, 32*1024)

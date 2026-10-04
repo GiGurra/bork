@@ -118,3 +118,45 @@ func TestCacheValidationMetadataInventory(t *testing.T) {
 		t.Fatal("changed metadata digest accepted")
 	}
 }
+
+func TestCacheValidationRejectsLauncherChangedAfterStartup(t *testing.T) {
+	t.Setenv("GOENV", "off")
+	initial := receiptGoContext(t)
+	bin := t.TempDir()
+	launcher := filepath.Join(bin, "go")
+	bytes, err := os.ReadFile(initial.tool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(launcher, bytes, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GOROOT", initial.values["GOROOT"])
+	body, _ := cacheArtifactFixture(t)
+	digest, evidence, err := captureGoToolEvidence(launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(launcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restore := func(receipt *goContextReceipt) (*goContext, error) {
+		ctx, err := receipt.restoreWithToolEvidence(resolveGoContext(), digest, evidence)
+		if err != nil {
+			return nil, err
+		}
+		bytes[len(bytes)-1] ^= 1
+		if err := os.WriteFile(launcher, bytes, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(launcher, before.ModTime(), before.ModTime()); err != nil {
+			t.Fatal(err)
+		}
+		return ctx, nil
+	}
+	if _, err := body.validateWithContext(body.Request, body.Namespace, restore); err == nil {
+		t.Fatal("post-startup equal-mtime launcher edit accepted")
+	}
+}
