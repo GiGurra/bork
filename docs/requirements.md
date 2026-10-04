@@ -4004,6 +4004,7 @@ checks, retain their enforcement and cannot be suppressed.
   dependency commands. Explicit `GOTOOLCHAIN=local` and pinned older SDKs
   report the minimum version error. Selected SDK settings appear in `bork env`;
   compilation identity follows the selected SDK. See [Go toolchains](cli.md#go-toolchains).
+
 ### Checked package documentation (bork-khnvl1)
 
 `bork doc [package]` renders the checker-owned public API as Markdown;
