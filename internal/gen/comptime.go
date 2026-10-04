@@ -88,7 +88,7 @@ func comptimeProgram(files []*syntax.File, info *check.Info, nodes []*check.Comp
 		}
 		var recipe ast.Expr = &ast.CallExpr{Fun: g.ComptimeLambda(node)}
 		var statements []ast.Stmt
-		var value ast.Expr = recipe
+		value := recipe
 		if batch {
 			memo := ast.NewIdent(fmt.Sprintf("_ctMemo%d", i))
 			if node.Type() == check.Ok {
