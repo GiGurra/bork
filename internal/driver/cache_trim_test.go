@@ -50,8 +50,11 @@ func trimStage(t *testing.T, base string, index int, when time.Time, files int) 
 	}
 	return entry
 }
+
+// Sequential: exact progress and daily-gate assertions require immediate
+// nonblocking lock reacquisition. Parallel subprocess launches can inherit held
+// lock descriptors until exec, briefly retaining locks after the parent closes.
 func TestCacheTrimShardProgressAndDailyGate(t *testing.T) {
-	t.Parallel()
 	requireStageLock(t)
 	base := t.TempDir()
 	now := time.Unix(1700000000, 0)
