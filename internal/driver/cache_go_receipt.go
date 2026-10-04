@@ -119,7 +119,7 @@ func (r *goContextReceipt) restoreResolved(resolved *goContext, digest [sha256.S
 	if err != nil || bridge != r.BridgeDigest || selfFile.Mode() != r.BridgeMode {
 		return nil, errUnsupportedGoReceipt
 	}
-	ctx := &goContext{processEnv: slices.Clone(r.ProcessEnv), env: slices.Clone(r.ProcessEnv), values: maps.Clone(r.Values), tool: r.Tool, driver: r.Driver, self: r.Self, toolDigest: digest}
+	ctx := &goContext{moduleHook: resolved.moduleHook, processEnv: slices.Clone(r.ProcessEnv), env: slices.Clone(r.ProcessEnv), values: maps.Clone(r.Values), tool: r.Tool, driver: r.Driver, self: r.Self, toolDigest: digest}
 	ctx.pinSettings()
 	ctx.namesCache = ctx.values["GO111MODULE"] != "off" && ctx.driver == "off"
 	v := &goContextValidation{inputs: inputs, root: r.Root, version: r.Version, cache: r.Cache, tmp: r.Tmp, compilers: maps.Clone(r.Compilers), directoryModes: maps.Clone(r.DirectoryModes), launcher: r.Tool, resolvedLauncher: r.ResolvedLauncher, toolDigest: digest, toolEvidence: evidence, self: r.Self, selfMode: r.BridgeMode, selfDigest: bridge}

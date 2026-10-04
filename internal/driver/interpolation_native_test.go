@@ -11,17 +11,16 @@ import (
 )
 
 func TestStandardInterpolationArtifactBinding(t *testing.T) {
-	savedHook := goModuleHook
-	goModuleHook = nil
-	t.Cleanup(func() { goModuleHook = savedHook })
+	t.Parallel()
 	dir := validatorFixture(t, `import "bork/sql"
  fn main(){println(sql.SQL"SELECT ${42}")}`)
-	files, info, err := Check(dir)
+	ctx := captureGoContextWithOptions(goContextOptions{})
+	program, err := checkInterpolationFixture(dir, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	files, info := program.files, program.info
 	node := info.InterpolationBatches[0].Recipe
-	ctx := captureGoContext()
 	plan, ok := prepareNativeInterpolation(files, info, node, ctx)
 	if !ok {
 		t.Fatal("standard validator did not select compiler artifact")
@@ -71,16 +70,14 @@ func TestStandardInterpolationArtifactBinding(t *testing.T) {
 }
 
 func TestStandardInterpolationAvoidsGoBuild(t *testing.T) {
-	savedHook := goModuleHook
-	goModuleHook = nil
-	t.Cleanup(func() { goModuleHook = savedHook })
+	t.Parallel()
 	dir := validatorFixture(t, `import "bork/sql"
  fn main(){a=sql.SQL"SELECT ${42}";b=sql.SQL"SELECT ${43}";println(a,b)}`)
 	loaded, module, err := loadCompilationInputs(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := captureGoContext()
+	ctx := captureGoContextWithOptions(goContextOptions{})
 	launcher := filepath.Join(t.TempDir(), "go")
 	if err := os.WriteFile(launcher, []byte("#!/bin/sh\nexit 99\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -92,12 +89,18 @@ func TestStandardInterpolationAvoidsGoBuild(t *testing.T) {
 }
 
 func TestStandardInterpolationBudgetFallback(t *testing.T) {
-	savedHook := goModuleHook
-	goModuleHook = nil
-	t.Cleanup(func() { goModuleHook = savedHook })
+	t.Parallel()
 	dir := validatorFixture(t, `import "bork/sql"
  fn main(){println(sql.SQL"SELECT `+strings.Repeat(" ", 700_000)+`${42}")}`)
-	if _, _, err := Check(dir); err != nil {
+	if _, err := checkInterpolationFixture(dir, captureGoContextWithOptions(goContextOptions{})); err != nil {
 		t.Fatalf("intrinsic budget changed valid SQL behavior: %v", err)
 	}
+}
+
+func checkInterpolationFixture(path string, ctx *goContext) (*compiledProgram, error) {
+	loaded, module, err := loadCompilationInputs(path, nil)
+	if err != nil {
+		return nil, err
+	}
+	return checkLoadedProgramObserved(loaded, module, ctx, captureEmbedsSnapshot, nil)
 }

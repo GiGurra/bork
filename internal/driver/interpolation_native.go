@@ -22,7 +22,7 @@ type nativeInterpolationPlan struct {
 // This mode executes compiler-owned intrinsic code. It makes no live-SDK or
 // evaluated-result freshness claim, and remains evaluator-bearing for Session.
 func prepareNativeInterpolation(files []*syntax.File, info *check.Info, node *check.Comptime, ctx *goContext) (*nativeInterpolationPlan, bool) {
-	if ctx.err != nil || ctx.driverErr != nil || ctx.driver != "off" || ctx.values["GOOS"] != runtime.GOOS || ctx.values["GOARCH"] != runtime.GOARCH || ctx.values["GOFLAGS"] != "" || ctx.values["GOEXPERIMENT"] != "" || ctx.values["GODEBUG"] != "" || ctx.values["GOFIPS140"] != "off" || (runtime.GOARCH == "amd64" && ctx.values["GOAMD64"] != "v1") || ctx.values["GOVERSION"] != runtime.Version() || ctx.processValue("GOCACHEPROG") != "" || goModuleHook != nil {
+	if ctx.err != nil || ctx.driverErr != nil || ctx.driver != "off" || ctx.values["GOOS"] != runtime.GOOS || ctx.values["GOARCH"] != runtime.GOARCH || ctx.values["GOFLAGS"] != "" || ctx.values["GOEXPERIMENT"] != "" || ctx.values["GODEBUG"] != "" || ctx.values["GOFIPS140"] != "off" || (runtime.GOARCH == "amd64" && ctx.values["GOAMD64"] != "v1") || ctx.values["GOVERSION"] != runtime.Version() || ctx.processValue("GOCACHEPROG") != "" || ctx.moduleHook != nil {
 		return nil, false
 	}
 	values, ok := node.Body.Tail.(*check.ListLit)

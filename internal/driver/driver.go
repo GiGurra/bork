@@ -436,12 +436,15 @@ func writeGoModule(dir string, files []*syntax.File) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return module.write(dir)
+	return module.write(dir, goModuleHook)
 }
 
 // goModuleHook lets tests change the go.mod of generated programs, to
 // add a local Go module for bindings to call.
-var goModuleHook func(goMod []byte) []byte
+type goModuleHookFunc func(goMod []byte) []byte
+
+// Assigned once by TestMain; individual fixtures use goContextOptions instead.
+var goModuleHook goModuleHookFunc
 
 // Run builds the package at path into a temporary executable and runs
 // it with the given arguments. It returns the program's exit code.

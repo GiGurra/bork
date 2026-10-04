@@ -28,7 +28,7 @@ func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, contex
 	if base, err := cacheRootDir(); err == nil && cacheTrimSupported() && !cacheDisabled() {
 		if root, err := goStageProgramRoot(files); err == nil {
 			key := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%x", root, mode, context.namespace)))
-			if dir, pinned, release, err := stageGoStable(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: goStageSchema, Program: root, Mode: mode, Namespace: context.namespace}); err == nil {
+			if dir, pinned, release, err := stageGoStableWithHook(base, fmt.Sprintf("%x", key), source, module, embeds, goStageMetadata{Schema: goStageSchema, Program: root, Mode: mode, Namespace: context.namespace}, context.moduleHook); err == nil {
 				return dir, pinned, func() { release(); _ = scheduleCacheTrim(base) }, nil
 			}
 		}
@@ -38,7 +38,7 @@ func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, contex
 		return "", false, nil, err
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
-	pinned, err := writeGoStage(dir, source, module, embeds)
+	pinned, err := writeGoStage(dir, source, module, embeds, context.moduleHook)
 	if err != nil {
 		cleanup()
 		return "", false, nil, err
@@ -69,14 +69,14 @@ func goStageRootSource(files []*syntax.File) string {
 	return ""
 }
 
-func writeGoStage(dir string, source []byte, module *goModuleInputs, embeds []*check.Embedded) (bool, error) {
+func writeGoStage(dir string, source []byte, module *goModuleInputs, embeds []*check.Embedded, hook goModuleHookFunc) (bool, error) {
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), source, 0o644); err != nil {
 		return false, err
 	}
 	if err := stageEmbeds(dir, embeds); err != nil {
 		return false, err
 	}
-	return module.write(dir)
+	return module.write(dir, hook)
 }
 
 // The mapping is part of staging schema v3 and remains stable across clients.

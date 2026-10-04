@@ -80,10 +80,10 @@ func captureGoModule(files []*syntax.File, reader sourceReader) (*goModuleInputs
 	return &goModuleInputs{slices.Clone(mod), slices.Clone(sum)}, nil
 }
 
-func (inputs *goModuleInputs) write(dir string) (bool, error) {
+func (inputs *goModuleInputs) write(dir string, hook goModuleHookFunc) (bool, error) {
 	mod := slices.Clone(inputs.mod)
-	if goModuleHook != nil {
-		mod = goModuleHook(mod)
+	if hook != nil {
+		mod = hook(mod)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), mod, 0o644); err != nil {
 		return false, err
