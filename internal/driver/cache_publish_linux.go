@@ -49,7 +49,7 @@ func init() {
 }
 
 func queueCachePublication(directory string, artifact *sessionArtifact) bool {
-	if os.Getenv("BORK_CACHE") == "off" {
+	if cacheDisabled() {
 		return false
 	}
 	job, err := newCachePublishJob(directory, artifact)
@@ -168,7 +168,7 @@ func runCachePublisher() bool {
 		return false
 	}
 	// Admission FD5 remains open until process exit, including completion hooks.
-	if cacheTestState == nil || job.Root != cacheTestState.root || os.Getenv("BORK_CACHE") == "off" {
+	if cacheTestState == nil || job.Root != cacheTestState.root || cacheDisabled() {
 		return false
 	}
 	if descriptor, err := strconv.Atoi(os.Args[3]); err == nil && descriptor >= 6 && descriptor <= 7 {

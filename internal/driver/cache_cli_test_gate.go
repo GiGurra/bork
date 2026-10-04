@@ -33,7 +33,7 @@ type cacheTestStartup struct {
 }
 
 func startCacheTestState() *cacheTestStartup {
-	if cacheTestGate != "enabled" || os.Getenv("BORK_CACHE") == "off" {
+	if cacheTestGate != "enabled" || cacheDisabled() {
 		return nil
 	}
 	root := os.Getenv("BORK_TEST_DISK_CACHE_DIRECTORY")

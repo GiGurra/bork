@@ -39,6 +39,11 @@ type fmtParams struct {
 	Check bool     `optional:"true" descr:"report files needing formatting without writing them"`
 }
 
+type installParams struct {
+	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	JSON bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
+}
+
 type buildParams struct {
 	JSON   bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
 	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
@@ -230,7 +235,14 @@ func version() string {
 }
 
 func main() {
-	boa.CmdT[boa.NoParams]{
+	if len(os.Args) > 1 && os.Args[1] == "env" {
+		for i := 2; i < len(os.Args); i++ {
+			if os.Args[i] == "-json" {
+				os.Args[i] = "--json"
+			}
+		}
+	}
+	command := boa.CmdT[boa.NoParams]{
 		Use:   "bork",
 		Short: "the bork compiler: a pragmatic backend language of guarantees",
 		SubCmds: boa.SubCmds(
@@ -325,6 +337,18 @@ func main() {
 					}
 				},
 			},
+			boa.CmdT[installParams]{
+				Use:   "install",
+				Short: "compile and install a program in BORKBIN",
+				ValidArgsFunc: func(p *installParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+					return completeBorkPaths(p, cmd, args, toComplete)
+				},
+				RunFunc: func(p *installParams, _ *cobra.Command, _ []string) {
+					if err := driver.Install(p.Path); err != nil {
+						failDiagnostics(err, p.JSON, os.Stderr)
+					}
+				},
+			},
 			boa.CmdT[runParams]{
 				Use:   "run",
 				Short: "compile and run a bork program",
@@ -413,5 +437,7 @@ func main() {
 				},
 			},
 		),
-	}.Run()
+	}
+	command.SubCmds = append(command.SubCmds, envCommand())
+	command.Run()
 }

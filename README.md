@@ -143,6 +143,7 @@ go install github.com/GiGurra/bork/cmd/bork@latest
 
 bork run examples/hello      # compile and run
 bork build examples/hello    # compile to an executable
+bork install examples/hello  # install the executable in BORKBIN
 bork check examples/hello    # type-check only
 bork check --watch examples/hello # check again when tracked inputs change
 bork describe main.bork:3:9 --where notEmpty  # query a type and prove a fact
@@ -166,7 +167,35 @@ staging versions. Cleanup preserves project outputs and Go's own cache; it waits
 for active builds, and Ctrl-C cancels the wait.
 
 
-For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
+`bork env [VAR...]` shows effective compiler settings and their source;
+`bork env -json` (or `--json`) returns an object of `{ "value", "source" }`
+entries. `bork env -w VAR=value...` saves settings, and `bork env -u VAR...`
+removes saved settings. Environment variables take precedence over saved settings,
+then platform defaults. Empty values fall through to the next source. Settings live
+in `os.UserConfigDir()/bork/env.json` (normally `$XDG_CONFIG_HOME/bork/env.json`
+or `~/.config/bork/env.json` on Linux). Reads never create or migrate settings;
+explicit writes replace the file atomically. An environment override remains in
+force after `-w` or `-u`; `-w` warns when the shell overrides a saved assignment.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `BORKCACHE` | `os.UserCacheDir()/bork` | Compiler results, staging, and permanent cache locks; also used by `bork clean`. |
+| `BORKBIN` | Effective `go env GOBIN`, else the first `go env GOPATH` entry plus `/bin` (normally `~/go/bin`) | Destination for `bork install`. |
+| `BORK_CACHE` | `on` | Set `off` to disable compiler result reuse and persistent staging. Go's build cache remains independent. |
+
+`BORKCACHE` and `BORKBIN` accept absolute paths. Existing directories and saved
+settings are never moved automatically. `bork install [path]` defaults to `.` and
+uses the source file or directory name, adding `.exe` for a Windows target. It
+creates `BORKBIN` when necessary and replaces an existing executable only after
+a successful build. Add `BORKBIN` to your shell's `PATH` to run installed commands.
+
+These three settings are the supported compiler environment API. `BORK_SEED`,
+`BORK_CASES`, `BORK_PARALLEL`, `BORK_SNAPSHOTS`, and `BORK_UPDATE_SNAPSHOTS`
+are generated test-runner protocol values: use `bork test` flags instead.
+`BORK_INTERNAL_*`, `BORK_TEST_*`, and benchmark/helper variables are internal,
+unsupported controls; `bork env` cannot persist them.
+
+For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json`, `bork install --json`, and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
 
 `bork/cli` supports typed subcommands with command-specific decoded options, generated help, and scoped handlers. See [the subcommand API](docs/std/cli.md#subcommands).
 
