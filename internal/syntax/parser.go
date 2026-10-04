@@ -18,9 +18,20 @@ func Parse(path string, src []byte, diags *diag.List) *File {
 	return parse(path, string(src), toks, comments, diags, false)
 }
 
+// ParseScript parses top-level statements as the body of an implicit main.
+func ParseScript(path string, src []byte, diags *diag.List) *File {
+	toks, comments := Lex(path, src, diags)
+	return parseMode(path, string(src), toks, comments, diags, false, true)
+}
+
 func parse(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler bool) *File {
+	return parseMode(path, src, toks, comments, diags, compiler, strings.HasPrefix(src, "#!"))
+}
+
+func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
 	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler}
-	f := &File{Path: path, Source: src, Comments: comments}
+	f := &File{Path: path, Source: src, Comments: comments, Script: script}
+	var statements []Stmt
 	// Imports come first.
 	for {
 		p.skipSemis()
@@ -91,21 +102,35 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 			if td := p.testDecl(); td != nil {
 				f.Tests = append(f.Tests, td)
 			}
-		case p.atAsyncBinding():
+		case !script && p.atAsyncBinding():
 			p.errorf(p.tok().Pos, "package async bindings are not supported; use an async local binding inside a function")
 			p.syncTopLevel()
 		case p.at(TIdent) && p.tok().Text == "lazy" && (p.peekKind() == TIdent || p.peekKind() == Underscore):
 			if binding := p.packageLazyBinding(); binding != nil {
 				f.Bindings = append(f.Bindings, binding)
 			}
-		case p.at(TIdent) && (p.peekKind() == Assign || p.peekKind() == Colon):
+		case !script && p.at(TIdent) && (p.peekKind() == Assign || p.peekKind() == Colon):
 			if binding := p.packageBinding(); binding != nil {
 				f.Bindings = append(f.Bindings, binding)
+			}
+		case script:
+			if stmt := p.scriptStatement(); stmt != nil {
+				statements = append(statements, stmt)
 			}
 		default:
 			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', 'ambient', 'class', 'instance', or 'test'), found %s", p.tok().Kind)
 			p.syncTopLevel()
 		}
+	}
+	if script {
+		for _, fn := range f.Funcs {
+			if fn.Name == "main" && !fn.IsMethod {
+				p.errorf(fn.Pos, "a script has an implicit main; remove fn main and write its statements at the top level")
+			}
+		}
+		pos := diag.Pos{File: path, Line: 1, Col: 1}
+		body := &Block{Pos: pos, End: p.tok().Pos, Stmts: statements}
+		f.Funcs = append(f.Funcs, &FuncDecl{Pos: pos, Name: "main", Body: body, ScriptMain: true})
 	}
 	return f
 }
@@ -974,56 +999,7 @@ func (p *parser) block() *Block {
 			p.errorf(b.Pos, "block is not closed (missing '}')")
 			panic(bailout{})
 		}
-		var stmt Stmt
-		switch {
-		case p.atAsyncBinding():
-			pos := p.next().Pos
-			p.next() // '('
-			scope := p.expr()
-			p.expect(RParen, "after the async scope")
-			name := p.expect(TIdent, "after async(scope) (a single binding name)")
-			binding := &Binding{Pos: name.Pos, Name: name.Text, AsyncScope: scope, AsyncPos: pos}
-			if p.at(Colon) {
-				p.next()
-				binding.Type = p.typeExpr()
-			}
-			p.expect(Assign, "after the async binding's name or type")
-			binding.Value = p.expr()
-			stmt = binding
-		case p.at(TIdent) && p.tok().Text == "lazy" && (p.peekKind() == TIdent || p.peekKind() == Underscore):
-			stmt = p.lazyBinding()
-		case p.atMock():
-			stmt = p.mockStmt(p.tok().Pos, "")
-		case p.at(TIdent) && p.peekKind() == Assign && p.toks[min(p.i+2, len(p.toks)-1)].Text == "mock" && p.toks[min(p.i+3, len(p.toks)-1)].Kind == TIdent:
-			name := p.next()
-			p.next() // '='
-			stmt = p.mockStmt(name.Pos, name.Text)
-		case (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == Assign:
-			// `_ = f()` evaluates f() and drops its value.
-			name := p.next()
-			if name.Kind == Underscore {
-				name.Text = "_"
-			}
-			p.next() // '='
-			stmt = &Binding{Pos: name.Pos, Name: name.Text, Value: p.expr()}
-		case p.at(KwTrust):
-			pos := p.next().Pos
-			x := p.expr()
-			call, ok := x.(*Call)
-			if !ok {
-				p.errorf(x.Position(), "trust needs a predicate call, as in trust positive(x)")
-				panic(bailout{})
-			}
-			stmt = &TrustStmt{Pos: pos, Call: call}
-		case p.at(TIdent) && p.peekKind() == Colon:
-			name := p.next()
-			p.next() // ':'
-			typ := p.typeExpr()
-			p.expect(Assign, "after the binding's type")
-			stmt = &Binding{Pos: name.Pos, Name: name.Text, Type: typ, Value: p.expr()}
-		default:
-			stmt = &ExprStmt{X: p.expr()}
-		}
+		stmt := p.statement()
 		if p.at(RBrace) {
 			b.End = p.next().Pos
 			if es, ok := stmt.(*ExprStmt); ok {
@@ -1051,6 +1027,70 @@ func (p *parser) block() *Block {
 		}
 		p.i = save
 	}
+}
+
+func (p *parser) scriptStatement() (stmt Stmt) {
+	defer p.recoverDecl(func() { stmt = nil })
+	stmt = p.statement()
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after the script statement, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return stmt
+}
+
+func (p *parser) statement() Stmt {
+	var stmt Stmt
+	switch {
+	case p.atAsyncBinding():
+		pos := p.next().Pos
+		p.next() // '('
+		scope := p.expr()
+		p.expect(RParen, "after the async scope")
+		name := p.expect(TIdent, "after async(scope) (a single binding name)")
+		binding := &Binding{Pos: name.Pos, Name: name.Text, AsyncScope: scope, AsyncPos: pos}
+		if p.at(Colon) {
+			p.next()
+			binding.Type = p.typeExpr()
+		}
+		p.expect(Assign, "after the async binding's name or type")
+		binding.Value = p.expr()
+		stmt = binding
+	case p.at(TIdent) && p.tok().Text == "lazy" && (p.peekKind() == TIdent || p.peekKind() == Underscore):
+		stmt = p.lazyBinding()
+	case p.atMock():
+		stmt = p.mockStmt(p.tok().Pos, "")
+	case p.at(TIdent) && p.peekKind() == Assign && p.toks[min(p.i+2, len(p.toks)-1)].Text == "mock" && p.toks[min(p.i+3, len(p.toks)-1)].Kind == TIdent:
+		name := p.next()
+		p.next() // '='
+		stmt = p.mockStmt(name.Pos, name.Text)
+	case (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == Assign:
+		// `_ = f()` evaluates f() and drops its value.
+		name := p.next()
+		if name.Kind == Underscore {
+			name.Text = "_"
+		}
+		p.next() // '='
+		stmt = &Binding{Pos: name.Pos, Name: name.Text, Value: p.expr()}
+	case p.at(KwTrust):
+		pos := p.next().Pos
+		x := p.expr()
+		call, ok := x.(*Call)
+		if !ok {
+			p.errorf(x.Position(), "trust needs a predicate call, as in trust positive(x)")
+			panic(bailout{})
+		}
+		stmt = &TrustStmt{Pos: pos, Call: call}
+	case p.at(TIdent) && p.peekKind() == Colon:
+		name := p.next()
+		p.next() // ':'
+		typ := p.typeExpr()
+		p.expect(Assign, "after the binding's type")
+		stmt = &Binding{Pos: name.Pos, Name: name.Text, Type: typ, Value: p.expr()}
+	default:
+		stmt = &ExprStmt{X: p.expr()}
+	}
+	return stmt
 }
 
 // atMock reports whether a mock statement starts here: `mock` followed

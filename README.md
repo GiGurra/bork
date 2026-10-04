@@ -29,7 +29,7 @@ bork run hello.bork      # compile and run
 bork build hello.bork    # compile to an executable
 ```
 
-The [tour](docs/tour.md) continues from here.
+The [tour](docs/tour.md) continues from here. For a single file with top-level statements, use `bork script hello.bork`; see [scripts](docs/language/scripts.md).
 
 Package values such as `MaxRetries = 3` are immutable and pure, computed once on first read. See [bindings and package values](docs/language/basics.md).
 

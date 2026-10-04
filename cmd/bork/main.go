@@ -373,6 +373,16 @@ func main() {
 					os.Exit(code)
 				},
 			},
+			boa.CmdT[runParams]{
+				Use: "script", Short: "compile and run a single .bork script with an implicit main",
+				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
+					code, err := driver.RunScript(p.Path, p.Args)
+					if err != nil {
+						fail(err)
+					}
+					os.Exit(code)
+				},
+			},
 			boa.CmdT[testParams]{
 				Use:         "test",
 				Short:       "run a bork program's tests, checking trusted facts as they run",

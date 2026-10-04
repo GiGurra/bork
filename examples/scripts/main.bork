@@ -1,0 +1,9 @@
+#!/usr/bin/env -S bork script
+import "bork/process"
+
+lazy Greeting = "hello"
+
+fn greet(name: String): String { s"$Greeting, $name!" }
+args = process.Args()
+name = if (notEmpty(args)) { args.first() } else { "world" }
+println(greet(name))

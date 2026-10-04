@@ -4,7 +4,9 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
-	Path string
+	// Script marks a single executable file with an implicit main.
+	Script bool
+	Path   string
 	// Source retains the original text for compile-time debug probes.
 	Source string
 	// Package is the import path of the file's package (set by the
@@ -124,6 +126,8 @@ type VariantDecl struct {
 // the function returns Ok. A function implemented in Go has GoBody
 // instead of Body.
 type FuncDecl struct {
+	// ScriptMain is the synthetic entrypoint of a script.
+	ScriptMain bool
 	// Constructor names the owning record in `fn New = Config.new`.
 	Constructor *TypeExpr
 	Pos         diag.Pos

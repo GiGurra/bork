@@ -115,6 +115,8 @@ func (lx *lexer) run() {
 			lx.advance()
 		case c == ' ' || c == '\t' || c == '\r':
 			lx.advance()
+		case lx.off == 0 && lx.line == 1 && c == '#' && lx.peek(1) == '!':
+			lx.lineComment(pos)
 		case c == '/' && lx.peek(1) == '/':
 			lx.lineComment(pos)
 		case c == '/' && lx.peek(1) == '*':

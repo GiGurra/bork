@@ -106,9 +106,10 @@ func (m module) importPath(dir string) string {
 
 // loader loads a package and the packages it imports.
 type loader struct {
-	mod    module
-	diags  *diag.List
-	inputs sourceReader
+	scriptPath string
+	mod        module
+	diags      *diag.List
+	inputs     sourceReader
 	// files holds the parsed files: the prelude, the root package, and
 	// then the packages it imports.
 	files []*syntax.File
@@ -154,12 +155,15 @@ func loadStableSources(path string, capture func() *sourceSnapshot) (*loadedSour
 
 func loadFrom(path string, reader sourceReader) ([]*syntax.File, string, *diag.List, error) {
 	diags := &diag.List{}
+	path, script := strings.CutPrefix(path, scriptRequestPrefix)
 	paths, err := sourceFiles(path, reader)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	dir := path
-	if isDir, err := reader.isDirectory(path); err == nil && !isDir {
+	if isDir, err := reader.isDirectory(path); script && err == nil && isDir {
+		return nil, "", nil, fmt.Errorf("bork script needs a single .bork file, not a directory")
+	} else if err == nil && !isDir {
 		dir = filepath.Dir(path)
 	}
 	mod, err := findModuleFrom(dir, reader)
@@ -167,6 +171,9 @@ func loadFrom(path string, reader sourceReader) ([]*syntax.File, string, *diag.L
 		return nil, "", nil, err
 	}
 	l := &loader{mod: mod, diags: diags, state: map[string]int{}, inputs: reader}
+	if script {
+		l.scriptPath = paths[0]
+	}
 	l.files = append(l.files, prelude.Parse(diags)...)
 	absoluteDir, err := reader.absolute(dir)
 	if err != nil {
@@ -201,12 +208,29 @@ func (l *loader) loadPackage(importPath string, paths []string) error {
 func (l *loader) loadSources(importPath string, paths []string, srcs [][]byte) error {
 	l.state[importPath] = 1
 	l.stack = append(l.stack, importPath)
-	files := syntax.ParseFiles(paths, srcs, strings.HasPrefix(importPath, std.Prefix), l.diags)
+	var files []*syntax.File
+	if len(paths) == 1 && paths[0] == l.scriptPath {
+		files = []*syntax.File{syntax.ParseScript(paths[0], srcs[0], l.diags)}
+	} else {
+		files = syntax.ParseFiles(paths, srcs, strings.HasPrefix(importPath, std.Prefix), l.diags)
+	}
 	for _, f := range files {
 		f.Package = importPath
 	}
 	l.files = append(l.files, files...)
 	if !strings.HasPrefix(importPath, std.Prefix) {
+		for _, file := range files {
+			header := readScriptHeader(file, l.mod.path != "", l.diags)
+			if file.Script && (len(paths) != 1 || len(l.stack) != 1) {
+				l.diags.AddCode(diag.Pos{File: file.Path, Line: 1, Col: 1}, "script.single-file", "scripts must be compiled as a single root file; scripts cannot be imported as packages")
+			}
+			if header.unsafe {
+				if l.mod.unsafe == nil {
+					l.mod.unsafe = map[string]bool{}
+				}
+				l.mod.unsafe[importPath] = true
+			}
+		}
 		l.checkUnsafe(importPath, files)
 	}
 	for _, f := range files {

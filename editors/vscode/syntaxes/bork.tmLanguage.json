@@ -62,6 +62,10 @@
     "comments": {
       "patterns": [
         {
+          "name": "comment.line.shebang.bork",
+          "match": "^#!.*$"
+        },
+        {
           "name": "comment.line.double-slash.bork",
           "begin": "//",
           "end": "$"
@@ -323,5 +327,6 @@
         }
       ]
     }
-  }
+  },
+  "firstLineMatch": "^#!.*\\bbork\\b"
 }

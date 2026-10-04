@@ -13,6 +13,7 @@ Each page covers one area in plain terms, with code you can run.
 
 | Page | What it covers |
 | --- | --- |
+| [Scripts](language/scripts.md) | Executable single files, top-level statements, shebangs, and inline Go dependencies |
 | [Basics](language/basics.md) | Names, functions, expressions, numbers, strings, runes, lambdas, and methods |
 | [Types](language/types.md) | Records, sealed types, unions, `Option`, `Ok`, and generics |
 | [Matching and errors](language/matching.md) | `match`, patterns, exhaustiveness, and `?` |

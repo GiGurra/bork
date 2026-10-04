@@ -191,3 +191,11 @@ test('package values use binding scopes rather than type scopes', () => {
   has(ls, 1, 'Limit', 'variable.other.readwrite.bork');
   has(ls, 2, 'Other', 'variable.other.readwrite.bork');
 });
+
+test('script shebang and dependency headers are comments', () => {
+  const ls = tokenize('#!/usr/bin/env -S bork script\n// bork:require github.com/google/uuid v1.6.0\n// bork:unsafe\nx = 42');
+  has(ls, 0, '#!', 'comment.line.shebang.bork');
+  has(ls, 1, 'bork:require', 'comment.line.double-slash.bork');
+  has(ls, 2, 'bork:unsafe', 'comment.line.double-slash.bork');
+  has(ls, 3, 'x', 'variable.other.readwrite.bork');
+});
