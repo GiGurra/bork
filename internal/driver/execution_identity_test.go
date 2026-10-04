@@ -97,6 +97,16 @@ func TestExecutionCandidatePriorReservesMetadataBudget(t *testing.T) {
 		t.Fatal("constructed boundary exceeds receipt budget")
 	}
 	data.Prior = []executionPriorIdentity{{Site: "prior", Type: "Int", Codec: 2, Policy: 1}}
+	priorSize := 8 + len(data.Prior[0].Site) + 8 + len(data.Prior[0].Type) + 8 + 2*sha256.Size
+	data.Descriptor = data.Descriptor[:len(data.Descriptor)-priorSize]
+	withPrior, err := newExecutionCandidate(data)
+	if err != nil {
+		t.Fatalf("exact prior boundary rejected: %v", err)
+	}
+	if !testExecutionReceipt(withPrior, "42").validIdentity() {
+		t.Fatal("prior boundary exceeds receipt budget")
+	}
+	data.Descriptor = append(data.Descriptor, 0)
 	if _, err := newExecutionCandidate(data); err == nil {
 		t.Fatal("prior consumed reserved metadata budget")
 	}
