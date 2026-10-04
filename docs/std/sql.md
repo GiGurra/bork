@@ -72,6 +72,11 @@ are described in [the grammar](../grammar.md) and [design](../design/interpolato
 
 ## Examples
 
+[examples/sql_interpolation](../../examples/sql_interpolation/README.md) prints
+separate query text and parameters, quotes names with `sql.Name`, composes a
+fragment, proves hostile input leaves the table intact, and streams decoded rows.
+Its commented quoted-hole example explains the rendering error.
+
 `bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](../../examples/sql/main.bork).
 
 `Rows[T: Decode](connection, query, params): Seq[T | Error | DecodeError] uses io + net` decodes one row at a time. `RowsJson` yields `Json | Error`. Construction performs no query; each traversal executes it afresh using the connection or transaction context. Stopping closes active rows. Returned values copy driver buffers, and the sequence retains the connection/transaction lifetime. Handle errors per element.

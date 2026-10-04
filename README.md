@@ -197,7 +197,7 @@ fn main() {
 }
 ```
 
-More examples: [config](examples/config/README.md) (defaults, named overrides, TLS variants, and package-owned validation), [http_server](examples/http_server/main.bork) (a REST API with JSON, an atom of persistent maps for state, and logging), [signup_api](examples/signup_api/main.bork) (an endpoint whose requests decode into proven values), [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
+More examples: [sql_interpolation](examples/sql_interpolation/main.bork) (bound values, quoted identifiers, composed fragments, and streaming with hostile input), [config](examples/config/README.md) (defaults, named overrides, TLS variants, and package-owned validation), [http_server](examples/http_server/main.bork) (a REST API with JSON, an atom of persistent maps for state, and logging), [signup_api](examples/signup_api/main.bork) (an endpoint whose requests decode into proven values), [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
 
 ```
 type Address = { city: String }
