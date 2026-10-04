@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/diag"
 )
 
@@ -124,5 +125,60 @@ func TestLintPatternBindings(t *testing.T) {
 		if w.Code != "lint.unused-binding" {
 			t.Fatalf("pattern: %+v", w)
 		}
+	}
+}
+
+func TestLintRecursiveDeclarationsAndComparisonFix(t *testing.T) {
+	source := `fn spare(n: Int): Int { if (n > 0) { spare(n - 1) } else { 0 } }
+fn F(n: Int): Bool { (n > 0) && true }
+fn main() {}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := Lint(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unused, simplify bool
+	for _, w := range warnings {
+		if w.Code == "lint.unused-declaration" && w.Pos.Line == 1 {
+			unused = true
+		}
+		if w.Code == "lint.simplify" {
+			simplify = true
+			if len(w.Fixes) != 1 {
+				t.Fatal("missing comparison fix")
+			}
+			fixed := applyLintEdits(t, source, w.Fixes[0].Edits)
+			if err := os.WriteFile(path, []byte(fixed), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := Check(path); err != nil {
+				t.Fatalf("invalid comparison fix: %v\n%s", err, fixed)
+			}
+		}
+	}
+	if !unused || !simplify {
+		t.Fatalf("regressions: %+v", warnings)
+	}
+}
+
+func BenchmarkLintManyExpressions(b *testing.B) {
+	source := "fn main() {\n" + strings.Repeat(" _ = true && true\n", 2000) + "}\n"
+	dir := b.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		b.Fatal(err)
+	}
+	files, info, err := Check(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = check.LintWarnings(files, info)
 	}
 }
