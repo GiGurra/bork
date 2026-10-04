@@ -41,8 +41,9 @@ bork doc example.com/greeting
 bork doc bork/http
 ```
 
-The optional argument defaults to `.`. An existing directory or `.bork` source
-file selects its package, matching checking commands. Otherwise the argument
+The optional argument defaults to `.`. An existing directory selects its
+package. A `.bork` source file selects its containing package, including sibling
+sources; documentation describes a complete package rather than one file. Otherwise the argument
 names a standard package or a Bork package in the current project's selected
 module graph. There is no implicit `@latest` lookup or dependency installation;
 missing downloads explain `bork deps download`. A library author can document
@@ -63,16 +64,18 @@ and a nonzero exit status. The command needs no executable `main`.
 
 ## Public API
 
-Visibility must come from the checker, including its special rules for methods
-and class methods. Capitalization alone is insufficient for receiver methods.
+Visibility must come from the checker. Ordinary imported receiver methods
+require uppercase names; lowercase class methods can be exposed with an
+exported class. These are distinct rules, so a single capitalization filter
+for every declaration is insufficient.
 An API snapshot contains declarations owned by the requested package:
 
 - Exported record, sealed, alias, resource and Go-bound types, with parameters,
   fields, variants, constraints, defaults, and construction visibility.
 - Exported functions, predicates and named constructors, with parameter/result
   types, generic constraints, `requires`, `uses`, `needs`, and unsafe Go markers.
-- Methods available to an importer, including lowercase receiver methods and
-  the methods of exported classes. Group receiver methods with their types;
+- Methods available to an importer: exported receiver methods and the methods
+  of exported classes, including their lowercase class methods. Group receiver methods with their types;
   distinguish extension methods on another package's types.
 - Exported classes, named instances, instance bundles, providers, provider
   bundles, interpolators, and package bindings, with their checked signatures
@@ -87,12 +90,14 @@ signature is rendered as the checker names it; this command introduces no new
 export restrictions. Private record construction is labeled explicitly rather
 than implying a caller can build that record. Visible fields remain documented.
 
-Effects and constraints are useful API facts, not implementation notes. Show
+Effects and constraints are useful API facts. Show
 Bork signatures and short descriptions, with stable anchors by package, kind,
 receiver, and name. Order packages and declarations deterministically. Report
 the selected module path and version when available, and whether a package
-contains unsafe Go. Keep local source links relative; do not embed absolute
-home directories, temporary staging paths, or guessed VCS URLs.
+contains unsafe Go. Label sources with relative filenames and line numbers. Initially omit source
+hyperlinks rather than guessing VCS URLs or generating broken links to files
+absent from a hosted page. Do not embed absolute home directories or temporary
+staging paths.
 
 ## Comments
 
@@ -101,9 +106,10 @@ source positions. A comment separated by a blank line is not attached to the
 next declaration. Preserve ordinary prose and examples without requiring a
 new documentation syntax or repeating the declaration's name.
 
-For a package description, use a leading comment group in its source files
-before any import or declaration, excluding shebang/directive headers. Collect
-such groups in stable filename order. Avoid guessing a summary from arbitrary
+For a package description, use a leading comment group before imports, or
+one separated by a blank line from the first declaration, excluding shebang
+and directive headers. A group adjacent to the first declaration belongs only
+to that declaration. Collect package groups in stable filename order. Avoid guessing a summary from arbitrary
 comments within a function. Existing field documentation participates too.
 
 Markdown output uses fenced Bork signatures and prose descriptions. HTML uses
@@ -152,7 +158,8 @@ A search service can be evaluated later against actual usage.
 
 ## Validation and rollout
 
-Cover public/private visibility; lowercase methods; classes/instances/bundles;
+Cover public/private visibility; private lowercase receiver methods versus
+public lowercase class methods; classes/instances/bundles;
 private record construction and checked constructors; effects, ambient needs,
 constraints and generic signatures; source comments and HTML escaping; imported
 versus owned declarations; deterministic module-wide ordering and nested module
