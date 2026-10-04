@@ -76,7 +76,7 @@ fn main(){n:Int where positive=comptime{identity(3)};println(n)}`, "3\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
+			dir := fixtureDir(t)
 			path := filepath.Join(dir, "main.bork")
 			if err := os.WriteFile(filepath.Join(dir, ModFile), []byte("module example.com/comptime\nunsafe \"example.com/comptime\"\n"), 0o644); err != nil {
 				t.Fatal(err)
