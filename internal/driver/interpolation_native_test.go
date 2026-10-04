@@ -15,7 +15,7 @@ func TestStandardInterpolationArtifactBinding(t *testing.T) {
 	dir := validatorFixture(t, `import "bork/sql"
  fn main(){println(sql.SQL"SELECT ${42}")}`)
 	ctx := captureGoContextWithOptions(goContextOptions{})
-	program, err := checkInterpolationFixture(dir, ctx)
+	program, err := checkGoContextFixture(dir, ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,12 +92,12 @@ func TestStandardInterpolationBudgetFallback(t *testing.T) {
 	t.Parallel()
 	dir := validatorFixture(t, `import "bork/sql"
  fn main(){println(sql.SQL"SELECT `+strings.Repeat(" ", 700_000)+`${42}")}`)
-	if _, err := checkInterpolationFixture(dir, captureGoContextWithOptions(goContextOptions{})); err != nil {
+	if _, err := checkGoContextFixture(dir, captureGoContextWithOptions(goContextOptions{})); err != nil {
 		t.Fatalf("intrinsic budget changed valid SQL behavior: %v", err)
 	}
 }
 
-func checkInterpolationFixture(path string, ctx *goContext) (*compiledProgram, error) {
+func checkGoContextFixture(path string, ctx *goContext) (*compiledProgram, error) {
 	loaded, module, err := loadCompilationInputs(path, nil)
 	if err != nil {
 		return nil, err
