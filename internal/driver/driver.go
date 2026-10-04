@@ -204,6 +204,10 @@ func evaluatorWithContext(files []*syntax.File, info *check.Info, module *goModu
 }
 
 func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext, timeout time.Duration) check.Evaluator {
+	return evaluatorWithTimeoutMemo(files, info, module, context, timeout, nil)
+}
+
+func evaluatorWithTimeoutMemo(files []*syntax.File, info *check.Info, module *goModuleInputs, context *goContext, timeout time.Duration, memo *predicateMemo) check.Evaluator {
 	return func(queries []check.Query) ([]bool, error) {
 		var goSrc []byte
 		var err error
@@ -215,13 +219,46 @@ func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModu
 		if err != nil {
 			return nil, err
 		}
+		var key [32]byte
+		var reusable bool
+		var stagedDir string
+		var pinned bool
+		var release func()
+		if memo != nil && timeout > 0 && context.err == nil && check.AuditExecutionQueries(info, queries).Decline == "" && predicateMemoSupport(goSrc) {
+			stagedDir, pinned, release, err = stageGo(files, goSrc, module, context, "predicate", info.Embeds)
+			if err != nil {
+				return nil, err
+			}
+			defer func() {
+				if release != nil {
+					release()
+				}
+			}()
+			key, reusable = predicateMemoKey(stagedDir, context, timeout, info.Embeds)
+			if reusable {
+				if result, ok := memo.get(key); ok {
+					return result, nil
+				}
+			}
+		}
 		dir, err := os.MkdirTemp("", "bork-eval-*")
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = os.RemoveAll(dir) }()
 		exe := filepath.Join(dir, "eval")
-		if err := buildGoWithMode(files, goSrc, exe, module, context, "predicate", info.Embeds...); err != nil {
+		if stagedDir != "" {
+			var absExe string
+			absExe, err = filepath.Abs(exe)
+			if err == nil {
+				err = buildStagedGo(files, absExe, stagedDir, pinned, context)
+			}
+			release()
+			release = nil
+		} else {
+			err = buildGoWithMode(files, goSrc, exe, module, context, "predicate", info.Embeds...)
+		}
+		if err != nil {
 			return nil, err
 		}
 		stderr := &boundedOutput{limit: 64 << 10}
@@ -251,8 +288,13 @@ func evaluatorWithTimeout(files []*syntax.File, info *check.Info, module *goModu
 			return nil, fmt.Errorf("expected %d results, got %q", len(queries), out)
 		}
 		results := make([]bool, len(lines))
+		wellFormed := true
 		for i, l := range lines {
 			results[i] = l == "true"
+			wellFormed = wellFormed && (l == "true" || l == "false")
+		}
+		if reusable && wellFormed {
+			memo.put(key, results)
 		}
 		return results, nil
 	}
