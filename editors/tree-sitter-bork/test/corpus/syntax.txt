@@ -345,6 +345,10 @@ Bare control statements end before leading dots
 fn main() {
   return // A following dot starts a new expression.
   .Foo
+  return /* Block comments preserve the boundary. */
+  .Foo
+  return /* A newline inside
+             a block comment ends return too. */ .Foo
   break
   .Bar
   continue
@@ -359,6 +363,14 @@ fn main() {
     (identifier)
     (parameters)
     (block
+      (bare_return)
+      (comment)
+      (selector_expression
+        (identifier))
+      (bare_return)
+      (comment)
+      (selector_expression
+        (identifier))
       (bare_return)
       (comment)
       (selector_expression

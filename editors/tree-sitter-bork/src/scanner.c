@@ -62,13 +62,26 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
     while (*word && lexer->lookahead == *word) { lexer->advance(lexer, false); word++; }
     if (*word) return false;
     lexer->mark_end(lexer);
-    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, false);
-    if (lexer->lookahead == '/') {
+    bool ends_line = false;
+    for (;;) {
+      while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r') lexer->advance(lexer, false);
+      if (lexer->lookahead == '\n' || lexer->eof(lexer)) { ends_line = true; break; }
+      if (lexer->lookahead != '/') break;
       lexer->advance(lexer, false);
-      if (lexer->lookahead != '/') return false;
-      while (!lexer->eof(lexer) && lexer->lookahead != '\n') lexer->advance(lexer, false);
+      if (lexer->lookahead == '/') { ends_line = true; break; }
+      if (lexer->lookahead != '*') break;
+      lexer->advance(lexer, false);
+      int previous = 0;
+      while (!lexer->eof(lexer)) {
+        int c = lexer->lookahead;
+        if (c == '\n') ends_line = true;
+        lexer->advance(lexer, false);
+        if (previous == '*' && c == '/') break;
+        previous = c;
+      }
+      if (ends_line) break;
     }
-    if (lexer->lookahead != '\n' && !lexer->eof(lexer)) return false;
+    if (!ends_line) return false;
     lexer->result_symbol = i + 3;
     return true;
   }
