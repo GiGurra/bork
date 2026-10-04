@@ -76,6 +76,7 @@ func BenchmarkCachePopulation(b *testing.B) {
 				b.Fatal(err)
 			}
 			release()
+			nextResult, nextStage := 0, 0
 			cases := []struct {
 				name string
 				run  func(int) error
@@ -100,6 +101,8 @@ func BenchmarkCachePopulation(b *testing.B) {
 					return err
 				}},
 				{"result-new-key-publication", func(i int) error {
+					i = nextResult
+					nextResult++
 					fresh := *body
 					fresh.Request.Path = filepath.Join(sourceRoot, fmt.Sprintf("new%d.bork", i))
 					fresh.Key, _ = fresh.Request.key()
@@ -114,6 +117,8 @@ func BenchmarkCachePopulation(b *testing.B) {
 					return err
 				}},
 				{"stage-new-key-publication", func(i int) error {
+					i = nextStage
+					nextStage++
 					key := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("new-stage%d", i))))
 					_, _, release, err := stageGoStable(base, key, source, session.last.module, nil, meta)
 					if err == nil {
