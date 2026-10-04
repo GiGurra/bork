@@ -226,7 +226,7 @@ Source spans follow the lexer's token ends, independently of printed token text.
   `slice(from, to)` (exclusive end, `Bytes | OutOfRange`), and `concat(other)`.
   Equality compares contents; empty sequences are equal. Bytes prints as
   `Bytes(00ff)`, lower-case hex, including in records, lists, and maps.
-Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. A user module can also declare these manifests beside `bork.mod`; requirements merge with imported std dependencies by Go minimum version selection. `bork deps init/get/download` maintains user manifests with Go module tools. See [std Go dependencies](std-go.md).
+Standard packages may ship `go-deps.mod` and `go-deps.sum` files using Go module syntax for pinned dependencies. User modules declare `require <module> <canonical version>` lines in `bork.mod`, with Go-format checksums in `bork.sum` and a generated `go.mod`. Check/build diagnoses requirement drift from the generated manifest. Requirements merge with imported std dependencies by Go minimum version selection. `bork deps init/get/download` maintains them with Go module tools; `bork deps migrate` converts legacy `go-deps.mod`/`go-deps.sum` projects, which remain readable. See [std Go dependencies](std-go.md).
 
 
 ## Internal helper locations

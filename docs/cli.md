@@ -138,16 +138,21 @@ To turn the cache off, set `BORK_CACHE=off` for one command, or save it with `bo
 
 ## Deps
 
-A module that calls Go libraries pins them in `go-deps.mod` and `go-deps.sum`, next to its `bork.mod`:
+A module pins dependencies with `require <module> <version>` lines in `bork.mod`
+and checksums in `bork.sum`. The helper also writes generated `go.mod` so Go
+module tools can discover its requirements. Commit all three files:
 
 ```sh
-bork deps init                                   # create empty manifests
+bork deps init                                   # initialize checksums and generated go.mod
 bork deps get github.com/google/uuid@v1.6.0      # add or pin a dependency
 bork deps get github.com/google/uuid@none        # remove it
-bork deps download                               # download pinned dependencies and fill in checksums
+bork deps download                               # download, fill checksums, and repair generated go.mod
+bork deps migrate                                # convert legacy go-deps.mod/go-deps.sum
 ```
 
-Most programs never need this. See [calling Go](language/go-interop.md).
+`bork.mod` is authoritative. Check/build diagnoses manual changes to generated
+requirements with a hint to run `bork deps download`. Existing `go-deps.*`
+projects remain supported; `migrate` converts them explicitly. See [calling Go](language/go-interop.md).
 
 ## Editor support
 

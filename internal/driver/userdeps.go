@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,20 +36,7 @@ func userGoDependenciesFrom(files []*syntax.File, reader sourceReader) ([]std.Go
 			}
 			continue
 		}
-		manifestPath := filepath.Join(mod.root, "go-deps.mod")
-		data, err := reader.readFile(manifestPath)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", manifestPath, err)
-		}
-		sumPath := filepath.Join(mod.root, "go-deps.sum")
-		sum, err := reader.readFile(sumPath)
-		if err != nil {
-			return nil, fmt.Errorf("%s: read pinned Go checksums: %w", sumPath, err)
-		}
-		return []std.GoDependencyManifest{{Name: mod.root, Mod: data, Sum: sum}}, nil
+		return moduleDependencies(mod, reader)
 	}
 	return nil, nil
 }

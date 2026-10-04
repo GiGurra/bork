@@ -273,10 +273,10 @@ func main() {
 			},
 			boa.CmdT[boa.NoParams]{
 				Use:   "deps",
-				Short: "manage pinned user Go dependencies beside bork.mod",
+				Short: "manage pinned Go and bork dependencies",
 				SubCmds: boa.SubCmds(
 					boa.CmdT[depsParams]{
-						Use: "init", Short: "create empty go-deps.mod and go-deps.sum manifests",
+						Use: "init", Short: "initialize bork.sum and generated go.mod",
 						RunFunc: func(p *depsParams, _ *cobra.Command, args []string) {
 							if err := driver.Deps(p.Path, "init", args); err != nil {
 								fail(err)
@@ -284,9 +284,17 @@ func main() {
 						},
 					},
 					boa.CmdT[depsGetParams]{
-						Use: "get", Short: "add, update, or remove Go package dependencies",
+						Use: "get", Short: "add, update, or remove dependencies",
 						RunFunc: func(p *depsGetParams, _ *cobra.Command, _ []string) {
 							if err := driver.Deps(p.Path, "get", p.Packages); err != nil {
+								fail(err)
+							}
+						},
+					},
+					boa.CmdT[depsParams]{
+						Use: "migrate", Short: "move legacy go-deps manifests into bork.mod and bork.sum",
+						RunFunc: func(p *depsParams, _ *cobra.Command, args []string) {
+							if err := driver.Deps(p.Path, "migrate", args); err != nil {
 								fail(err)
 							}
 						},

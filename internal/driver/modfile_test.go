@@ -18,7 +18,7 @@ func TestParseModFile(t *testing.T) {
 		"":                                     "expected `module <path>`",
 		"unsafe \"a\"\nmodule m\n":             "expected `module <path>`, found",
 		"module m\nunsafe a\n":                 "expected `unsafe \"<package path>\"`",
-		"module m\nrequire example.com/x v1\n": "expected `unsafe \"<package path>\"`",
+		"module m\nrequire example.com/x v1\n": "canonical pinned version",
 		"module bork/app\n":                    "reserved for the standard library",
 	} {
 		if _, err := parseModFile(text); err == nil || !strings.Contains(err.Error(), want) {

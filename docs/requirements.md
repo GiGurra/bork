@@ -2563,9 +2563,12 @@ The string after `go` is a Go type or function written with its full import path
 
 Only exported, non-generic package-level functions, methods, and named types can be bound. A field path such as `(*net/http.Request).Header.Get` is not a function and is rejected: write an `unsafe go` body. Bindings take no type parameters, since the Go function has none. Generic Go functions and types are an open question.
 
-A third-party Go package must be declared in `go-deps.mod` and `go-deps.sum`
-beside the user's `bork.mod`, or in an imported standard package's embedded
-manifests. The compiler merges requirements using Go's minimum version
+A third-party Go package must be declared with a canonical pinned `require`
+line in `bork.mod`, with checksums in `bork.sum`, or in an imported standard
+package's embedded manifests. `bork deps` also writes a generated `go.mod` with
+the same module and requirements for Go module consumers; check/build diagnoses
+drift and suggests `bork deps download`. Legacy `go-deps.mod`/`go-deps.sum`
+projects remain supported and can be converted with `bork deps migrate`. The compiler merges requirements using Go's minimum version
 selection; user requirements can raise a standard package's pinned version.
 Unsupported module directives and conflicting checksums are errors.
 `bork deps init`, `bork deps get <package@version>`, and `bork deps download`
