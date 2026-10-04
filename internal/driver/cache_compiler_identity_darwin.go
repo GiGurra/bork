@@ -13,9 +13,9 @@ import (
 )
 
 // Darwin's public proc_regionwithpathinfo ABI is 96 bytes of region metadata,
-// 136 bytes of vnode metadata, then a 1024-byte path on amd64 and arm64.
+// 152 bytes of vnode metadata, then a 1024-byte path on amd64 and arm64.
 // https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h
-const darwinImageRegionBytes = 1256
+const darwinImageRegionBytes = 1272
 
 type darwinMappedImage struct {
 	device uint32
@@ -29,7 +29,7 @@ func decodeDarwinMappedImage(data []byte, address uint64) (darwinMappedImage, bo
 	}
 	order := binary.LittleEndian
 	start, size := order.Uint64(data[80:88]), order.Uint64(data[88:96])
-	if address < start || address-start >= size || order.Uint32(data[:4])&4 == 0 || order.Uint16(data[100:102])&syscall.S_IFMT != syscall.S_IFREG || order.Uint32(data[216:220]) != 1 {
+	if address < start || address-start >= size || order.Uint32(data[:4])&4 == 0 || order.Uint16(data[100:102])&syscall.S_IFMT != syscall.S_IFREG || order.Uint32(data[232:236]) != 1 {
 		return darwinMappedImage{}, false
 	}
 	image := darwinMappedImage{device: order.Uint32(data[96:100]), inode: order.Uint64(data[104:112]), size: int64(order.Uint64(data[184:192]))}

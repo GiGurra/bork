@@ -22,7 +22,7 @@ func TestDarwinCompilerRegionDecoder(t *testing.T) {
 	order.PutUint16(data[100:102], 0100000|0755)
 	order.PutUint64(data[104:112], 99)
 	order.PutUint64(data[184:192], 12345)
-	order.PutUint32(data[216:220], 1)
+	order.PutUint32(data[232:236], 1)
 	image, ok := decodeDarwinMappedImage(data, 0x1001)
 	if !ok || image.device != 17 || image.inode != 99 || image.size != 12345 {
 		t.Fatalf("invalid ABI decode: %+v %v", image, ok)
@@ -32,7 +32,7 @@ func TestDarwinCompilerRegionDecoder(t *testing.T) {
 			t.Fatal("address outside returned mapping accepted")
 		}
 	}
-	for _, offset := range []int{0, 100, 104, 184, 216} {
+	for _, offset := range []int{0, 100, 104, 184, 232} {
 		changed := append([]byte(nil), data...)
 		clear(changed[offset : offset+8])
 		if _, ok := decodeDarwinMappedImage(changed, 0x1001); ok {
@@ -122,5 +122,34 @@ func TestDarwinCompilerPathReplacementDeclines(t *testing.T) {
 	_ = input.Close()
 	if err := command.Wait(); err != nil {
 		t.Fatalf("helper: %v %s", err, output.String())
+	}
+}
+
+func TestDarwinCompilerSDKLayout(t *testing.T) {
+	cc, err := exec.LookPath("cc")
+	if err != nil {
+		t.Skip("native SDK compiler unavailable; kernel identity tests still apply")
+	}
+	root := t.TempDir()
+	path := filepath.Join(root, "layout.c")
+	code := `#include <stddef.h>
+#include <sys/proc_info.h>
+_Static_assert(sizeof(struct proc_regioninfo) == 96, "region metadata size");
+_Static_assert(sizeof(struct proc_regionwithpathinfo) == 1272, "region with vnode size");
+_Static_assert(offsetof(struct proc_regionwithpathinfo, prp_prinfo.pri_address) == 80, "region address");
+_Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_stat.vst_dev) == 96, "vnode device");
+_Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_stat.vst_ino) == 104, "vnode inode");
+_Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_stat.vst_size) == 184, "vnode size");
+_Static_assert(offsetof(struct proc_regionwithpathinfo, prp_vip.vip_vi.vi_type) == 232, "vnode type");
+`
+	if err := os.WriteFile(path, []byte(code), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, cc, "-std=c11", "-c", path, "-o", filepath.Join(root, "layout.o"))
+	command.WaitDelay = time.Second
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("unsupported SDK ABI: %v %s", err, output)
 	}
 }
