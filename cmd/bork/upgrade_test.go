@@ -21,7 +21,7 @@ func TestUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\n/usr/bin/printf '%s\\n' \"$@\" \"$GOBIN\" \"$GOOS\" \"$GOARCH\" > \"$UPGRADE_LOG\"\nif [ \"$UPGRADE_FAIL\" = 1 ]; then echo 'proxy unavailable' >&2; exit 1; fi\n/bin/mkdir -p \"$GOBIN\"\n/bin/cp \"$UPGRADE_FIXTURE\" \"$GOBIN/bork\"\n"
+	script := "#!/bin/sh\n/usr/bin/printf '%s\\n' \"$@\" \"$GOBIN\" \"$GOOS\" \"$GOARCH\" > \"$UPGRADE_LOG\"\nif [ \"$UPGRADE_FAIL\" = 1 ]; then echo 'proxy unavailable' >&2; exit 1; fi\n/bin/mkdir -p \"$GOBIN\"\nif [ \"$UPGRADE_INVALID\" = 1 ]; then echo invalid > \"$GOBIN/bork\"; exit 0; fi\n/bin/cp \"$UPGRADE_FIXTURE\" \"$GOBIN/bork\"\n"
 	if err := os.WriteFile(fakeGo, []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +83,15 @@ func TestUpgrade(t *testing.T) {
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatalf("failed install changed existing binary: %v", err)
 	}
+	t.Setenv("UPGRADE_FAIL", "")
+	t.Setenv("UPGRADE_INVALID", "1")
+	if _, err := run(); err == nil || !strings.Contains(err.Error(), "staged compiler version") {
+		t.Fatalf("invalid staged executable: %v", err)
+	}
+	after, err = os.ReadFile(filepath.Join(bin, "bork"))
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("invalid staged binary changed existing compiler: %v", err)
+	}
 	t.Setenv("PATH", bin)
 	if _, err := run(); err == nil || !strings.Contains(err.Error(), "requires Go on PATH") {
 		t.Fatalf("missing Go: %v", err)
@@ -100,5 +109,28 @@ func TestSamePath(t *testing.T) {
 	}
 	if !samePath(dir, link) {
 		t.Fatal("symlink should refer to the same location")
+	}
+}
+
+func TestPublishUpgrade(t *testing.T) {
+	dir := t.TempDir()
+	target, staged := filepath.Join(dir, "bork"), filepath.Join(dir, "staged")
+	if err := os.WriteFile(target, []byte("old"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := publishUpgrade(staged, target); err == nil {
+		t.Fatal("missing stage must fail")
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "old" {
+		t.Fatalf("failed publication lost old compiler: %q (%v)", data, err)
+	}
+	if err := os.WriteFile(staged, []byte("new"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := publishUpgrade(staged, target); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "new" {
+		t.Fatalf("publication: %q (%v)", data, err)
 	}
 }

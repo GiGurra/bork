@@ -88,13 +88,47 @@ func upgradeCommand() *cobra.Command {
 			// Go can copy directly over GOBIN rather than rename (for example
 			// from its build cache). Stage on the destination filesystem so
 			// publishing never exposes a partial executable.
-			if err := os.Rename(stagedBinary, target); err != nil {
+			if err := publishUpgrade(stagedBinary, target); err != nil {
 				return fmt.Errorf("upgrade cannot replace %s: %w", target, err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "bork %s -> %s (%s)\n", version(), newVersion, target)
 			return err
 		},
 	}
+}
+
+func publishUpgrade(staged, target string) error {
+	if runtime.GOOS != "windows" {
+		return os.Rename(staged, target)
+	}
+	// Windows permits renaming a running executable, but not overwriting it.
+	// Keep the old image aside until publication succeeds, restoring it on
+	// failure. A running old image may prevent deleting its backup until exit.
+	backup, err := os.CreateTemp(filepath.Dir(target), ".bork-old-*.exe")
+	if err != nil {
+		return err
+	}
+	name := backup.Name()
+	if err := backup.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(name); err != nil {
+		return err
+	}
+	if err := os.Rename(target, name); err != nil {
+		if os.IsNotExist(err) {
+			return os.Rename(staged, target)
+		}
+		return err
+	}
+	if err := os.Rename(staged, target); err != nil {
+		if restoreErr := os.Rename(name, target); restoreErr != nil {
+			return fmt.Errorf("%w (previous compiler remains at %s; restoring it failed: %v)", err, name, restoreErr)
+		}
+		return err
+	}
+	_ = os.Remove(name)
+	return nil
 }
 
 func samePath(a, b string) bool {
