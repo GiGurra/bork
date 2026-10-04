@@ -223,6 +223,7 @@ func (c *checker) resolveType(t *syntax.TypeExpr) Type {
 	if t != nil {
 		c.noteDefaultTypeUse(out, t.Pos)
 		c.info.writtenTypes[t] = out
+		c.noteSourceType(t.Pos, t.Name)
 	}
 	return out
 }

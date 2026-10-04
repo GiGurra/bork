@@ -17,6 +17,8 @@ func (c *checker) expandConstructor(source *syntax.FuncDecl) *syntax.FuncDecl {
 		c.diags.AddCode(target.Pos, "construction.constructor_owner", "only package %s can declare a generated constructor for %s", entry.pkg.Path, target.Name)
 		return nil
 	}
+	c.info.sourceDefinitions[target.Pos] = entry.decl.Pos
+	c.info.sourceNames[target.Pos] = target.Name
 	td := entry.decl
 	fd.TypeParams = td.TypeParams
 	fd.Params = nil
