@@ -146,8 +146,8 @@ when profiles on larger real package graphs show unchanged-package Bork checking
 dominating edit latency after cheaper discovery/proof reuse, and a small edit can
 avoid substantial checking work. Any implementation must first demonstrate a
 net win and clean-versus-incremental parity for public types, predicates/defaults,
-bodies, imported dependencies and test/mock overlays. CLI disk proof reuse remains
-separate deferred work, tracked as bork-44yvg8.
+bodies, imported dependencies and test/mock overlays. The separate CLI disk proof
+reuse follow-up, bork-44yvg8, is implemented below.
 
 ## Persistent CLI proof batches (bork-44yvg8)
 
