@@ -221,7 +221,7 @@ func symbols(path, src string) []any {
 	}
 	file := files[0]
 	for _, fn := range file.Funcs {
-		if strings.HasPrefix(src, "#!") && fn.Name == "main" {
+		if fn.ScriptMain {
 			continue
 		}
 		add(fn.Name, 12, fn.Pos)
@@ -274,6 +274,9 @@ func (s *server) completion(pkg *packageState, path, src string, p position) []a
 		}
 		f := files[0]
 		for _, fn := range f.Funcs {
+			if fn.ScriptMain {
+				continue
+			}
 			if !seen[fn.Name] {
 				add(fn.Name, "function", 3)
 				seen[fn.Name] = true

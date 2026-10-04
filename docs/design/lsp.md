@@ -76,4 +76,8 @@ as partial edits. No proposed edits are written to disk.
 
 Shebang scripts select their own file as the analysis root; ordinary documents
 select the containing directory. This keeps script roots independent of adjacent
-package files. Script parsing itself follows the compiler's syntax support.
+package files. Shebang scripts are parsed into an implicit main body, so top-level statement
+positions participate in ordinary typed queries. Synthetic main is omitted from
+symbols, completion and declaration identities. Adjacent open scripts have
+independent Sessions, and rename validation uses the same selected-file root.
+Scripts without shebangs remain ordinary package documents in the editor.
