@@ -528,6 +528,10 @@ func Run(path string, args []string) (int, error) {
 
 // TestOptions are the options of bork test.
 type TestOptions struct {
+	// JSON emits result JSON Lines, keeping program output on stderr.
+	JSON bool
+	// Filter selects tests by their exact declaration name.
+	Filter string
 	// Update writes the snapshots that assertSnapshot finds missing or
 	// different, instead of failing.
 	Update bool
@@ -590,6 +594,14 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	}
 	cmd := exec.Command(exe)
 	cmd.Stdout, cmd.Stderr = stdout, os.Stderr
+	report := ""
+	if opts.JSON {
+		report = filepath.Join(dir, "results.jsonl")
+		if err := os.WriteFile(report, nil, 0600); err != nil {
+			return 1, err
+		}
+		cmd.Stdout = os.Stderr
+	}
 	update := ""
 	if opts.Update {
 		update = "1"
@@ -605,13 +617,25 @@ func Test(path string, stdout io.Writer, opts TestOptions) (int, error) {
 	if opts.Parallel > 1 {
 		parallel = strconv.Itoa(opts.Parallel)
 	}
-	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update, "BORK_SEED="+seed, "BORK_CASES="+cases, "BORK_PARALLEL="+parallel)
-	if err := cmd.Run(); err != nil {
+	cmd.Env = append(os.Environ(), "BORK_SNAPSHOTS="+SnapshotDir(path), "BORK_UPDATE_SNAPSHOTS="+update, "BORK_SEED="+seed, "BORK_CASES="+cases, "BORK_PARALLEL="+parallel, "BORK_TEST_REPORT="+report, "BORK_TEST_FILTER="+opts.Filter)
+	runErr := cmd.Run()
+	if report != "" {
+		f, err := os.Open(report)
+		if err != nil {
+			return 1, err
+		}
+		_, copyErr := io.Copy(stdout, f)
+		closeErr := f.Close()
+		if err := errors.Join(copyErr, closeErr); err != nil {
+			return 1, err
+		}
+	}
+	if runErr != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if errors.As(runErr, &exitErr) {
 			return exitErr.ExitCode(), nil
 		}
-		return 1, err
+		return 1, runErr
 	}
 	return 0, nil
 }

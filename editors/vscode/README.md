@@ -68,6 +68,25 @@ outside the editor. Suppress an advisory rule with
 Exported APIs may intentionally reserve extra effects; suppress that warning when
 keeping this headroom. Compiler errors are never suppressed.
 
+## Run and test
+
+Click **▶ run** above `main` to run its package with `bork run`, or at the top of
+shebang scripts to use `bork script`. The program runs in a terminal with normal
+stdin and output. **▶ run test** above a test block runs that test through the CLI.
+Files are saved before execution, including unsaved dependencies.
+
+The Test Explorer discovers test blocks through `bork lsp` when you open or edit
+a file. Expand or refresh the explorer to discover all workspace `.bork` files.
+Run individual tests, files, or all discovered tests; passing, failing and skipped
+results appear beside their declarations. Compilation errors and program output
+appear in the test output panel. Cancellation stops the running CLI process.
+
+The extension uses `bork test --json --filter "test name" <package>` for execution.
+Discovery uses the compiler parser and current editor buffers, including broken
+edits; the extension does not parse bork or compile programs itself. Inference-rule
+and opt-in automatic property tests remain available through the CLI. This wiring
+uses the [VS Code Testing API](https://code.visualstudio.com/api/extension-guides/testing).
+
 ## Develop and package
 
 Install dependencies and open an extension development window from the repo root:

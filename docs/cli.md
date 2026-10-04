@@ -78,6 +78,8 @@ It also warns about leftover development markers: `dbg(...)` calls and `todo()` 
 
 ```sh
 bork test .                    # run every test in the package
+bork test --json .             # JSON Lines results on stdout; program output on stderr
+bork test --filter "adds" .    # run the test with this exact name
 bork test --update .           # write new or changed snapshots instead of failing
 bork test --parallel 8 .       # run up to 8 tests at a time
 bork test --hermetic .         # fail tests that could reach the network without a mock
@@ -85,6 +87,8 @@ bork test --cases 500 .        # cases per property test (default 100)
 bork test --seed 42 .          # repeat property tests with a given seed
 bork test --auto-properties .  # also call trusted functions on generated arguments
 ```
+
+With `--json`, each result has `action` (`pass`, `fail`, or `skip`), `name`, `file`, and `line`, plus `message` for failures or skipped tests with a reason. Results appear after execution; compiler diagnostics remain JSON Lines on stderr. `--filter` selects an exact declaration name and exits with status 1 if it matches nothing.
 
 The command exits with status 1 if a test fails. [Testing](language/testing.md) describes what tests can do.
 

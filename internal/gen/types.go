@@ -345,6 +345,7 @@ const testRuntime = `package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime/pprof"
@@ -357,6 +358,9 @@ type _test struct {
 	name string
 	snap string // the base name of the test's snapshot files
 	run  func() // nil for a test that cannot run; name says why
+	selector string
+	file string
+	line int
 }
 
 // _skip is the panic of a test that finds it cannot run.
@@ -397,6 +401,22 @@ func _testCurrent() *_testRun {
 // _runTests runs the tests, each until it fails (panics), and reports
 // them in order. $BORK_PARALLEL tests run at a time (default 1).
 func _runTests(tests []_test) {
+	if filter := os.Getenv("BORK_TEST_FILTER"); filter != "" {
+		selected := tests[:0]
+		for _, t := range tests {
+			if t.selector == filter { selected = append(selected, t) }
+		}
+		tests = selected
+		if len(tests) == 0 { fmt.Fprintln(os.Stderr, "no test matches --filter"); os.Exit(1) }
+	}
+	var report *os.File
+	if path := os.Getenv("BORK_TEST_REPORT"); path != "" {
+		var err error
+		report, err = os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0600)
+		if err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
+		defer report.Close()
+	}
+
 	n, _ := strconv.Atoi(os.Getenv("BORK_PARALLEL"))
 	if n < 1 {
 		n = 1
@@ -453,6 +473,18 @@ func _runTests(tests []_test) {
 			fmt.Fprintf(out, "FAIL  %s\n      %s\n", t.name, _indent(r.msg))
 		default:
 			fmt.Fprintf(out, "ok    %s\n", t.name)
+		}
+		if report != nil {
+			action := "pass"
+			if t.run == nil || r.skip { action = "skip" } else if r.msg != "" { action = "fail" }
+			err := json.NewEncoder(report).Encode(struct {
+				Action string ` + "`" + `json:"action"` + "`" + `
+				Name string ` + "`" + `json:"name"` + "`" + `
+				File string ` + "`" + `json:"file"` + "`" + `
+				Line int ` + "`" + `json:"line"` + "`" + `
+				Message string ` + "`" + `json:"message,omitempty"` + "`" + `
+			}{action, t.selector, t.file, t.line, func() string { if t.run == nil { return t.name }; return r.msg }()})
+			if err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
 		}
 		r.mu.Lock()
 		for _, path := range r.written {

@@ -72,6 +72,14 @@
       {
         "command": "bork.showOutput",
         "title": "bork: Show Language Server Output"
+      },
+      {
+        "command": "bork.run",
+        "title": "bork: Run"
+      },
+      {
+        "command": "bork.runTest",
+        "title": "bork: Run Test"
       }
     ]
   },
