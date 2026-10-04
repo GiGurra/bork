@@ -159,6 +159,9 @@ func (a *EditorAnalysis) Definition(pos diag.Pos) (*diag.Pos, error) {
 			// Declaration positions point at fn/type keywords. Resolve their
 			// identifier tokens before using them as editor identities.
 			for _, fn := range file.Funcs {
+				if fn.ScriptMain {
+					continue
+				}
 				namePos := editorDeclarationName(file, fn.Pos, fn.Name)
 				if pos.Line == namePos.Line && pos.Col >= namePos.Col && pos.Col < namePos.Col+len(fn.Name) {
 					namePos.File = path
@@ -176,6 +179,9 @@ func (a *EditorAnalysis) Definition(pos diag.Pos) (*diag.Pos, error) {
 			for _, target := range a.program.files {
 				if target.Path == result.File && !target.Prelude && !strings.HasPrefix(target.Package, std.Prefix) {
 					for _, fn := range target.Funcs {
+						if fn.ScriptMain {
+							continue
+						}
 						if result == fn.Pos {
 							result = editorDeclarationName(target, fn.Pos, fn.Name)
 							break

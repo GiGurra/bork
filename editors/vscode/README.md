@@ -21,6 +21,12 @@ It does not rename exported names, types or fields. Completion offers package
 functions/types/values and visible methods after a dot. Standard-library and
 prelude definitions use virtual compiler paths and are not opened as disk files.
 
+Scripts with a first-line shebang such as `#!/usr/bin/env -S bork script` are
+checked as individual files, independently of neighboring `.bork` files. Top-level
+statements support the same diagnostics, hover, definitions and rename as function
+bodies. Synthetic `main` is hidden from symbols and completion. For automatic
+editor script mode, include the shebang even when invoking `bork script` directly.
+
 Language-server activation requires a trusted workspace because checking may
 execute compile-time code or Go tools. Highlighting remains lexical and works
 without a compiler. Files in virtual workspaces are not supported by the client.
