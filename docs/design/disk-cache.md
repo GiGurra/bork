@@ -157,36 +157,40 @@ maintenance skips rather than falling back to a synchronous scan.
 
 A huge cache must not require an unbounded child or directory materialization.
 Stream sharded inventories in bounded batches, persist cycle progress, and cap
-entries, traversal nodes and wall time per worker. Partial cycles resume without
+shards and wall time per worker. Partial cycles resume without
 starting another daily cycle; only a completed cycle advances completion state.
 Treat cursor/progress records as best-effort maintenance state, never lookup
 indexes or semantic evidence. Tests must exercise interrupted/resumed progress,
 invalid cursors, bounded traversal and concurrent directory changes. Large entry
 removal also respects the per-run traversal/time budget.
 
-The private first engine supports Linux amd64 and uses `getdents64` directory
-cookies to resume without rereading an unbounded prefix. Concurrent directory
-changes may defer entries to a later cycle; removal retries an exhausted cookie
-when remaining names prevent deleting a directory. Cookies never authorize
-semantic cache hits. Each call charges at most 4,096 traversal/removal steps,
-checks cancellation between steps, and applies a cooperative 250 ms deadline.
-The detached process supplies the separate hard runtime limit when integrated.
+The portable engine streams whole two-hex-digit shards with `os.File.ReadDir`
+in batches of 128 names, persisting only the next layer and shard number. Result
+shards are request-key prefixes across compiler namespaces, so a single compiler
+namespace cannot turn one resume unit into the whole result cache. Interrupted
+workers revisit their current shard; completed shards advance the cursor.
+Concurrent directory changes may defer entries to another cycle. At 100,000
+uniform keys a shard contains about 400 entries; at 10 million about 40,000.
+If a shard becomes too large for bounded workers, another fan-out level must be
+introduced. A worker processes at most 256 shards, checks cancellation between
+batches/entries, and applies a cooperative five-second deadline. Detached
+scheduling supplies the separate hard timeout for blocking filesystem work.
 
-Progress is a bounded 256 KiB JSON record under a permanent nonblocking trim
-lock. Removal stores hex-encoded basename components once, preserving filenames
-without quadratic full-path stacks. Canonical component validation binds every
-removal frame to the candidate's SLOT. Stage age is rechecked between workers;
-a fresh publication stops partial deletion. A missing historical `used` marker
-can be migrated from the newest recognizable entry/metadata/tree timestamp under
-SLOT and MUTATION. Corrupt or future-cutoff progress resets conservatively.
+Progress is a bounded 4 KiB JSON record under a permanent nonblocking trim lock.
+No directory cookies, full-path stacks or entry inventories are persisted.
+Corrupt or future-cutoff progress resets conservatively. A missing historical
+`used` marker can be migrated from the newest recognizable publication timestamp
+under SLOT and MUTATION.
 
-Current generated stage trees are flat: main/module files plus rewritten
-`_bork_embed/e%df%d.bin` files. Engine limits of 2,048 removal frames and 4,096
-relative-path bytes cover this production shape. Manually malformed or future
-unsupported deeper trees are skipped without restarting the cycle and remain
-removable through explicit clean; revisit these bounds before expanding staged
-output layouts. The engine is private and unscheduled in this slice. Detached
-scheduling, unsupported-platform behavior and the population matrix follow.
+An unused entry is renamed atomically into `trash/v1/<prefix>/<digest>` while
+holding its SLOT and MUTATION. Both locks are released before deleting a large
+tree. A fresh publication then uses the original stable path independently;
+an interrupted worker leaves recognizable detached trash for later maintenance
+or explicit clean. Trash is streamed first in each cycle and also deleted after
+detachment. Explicit clean drains maintenance admission/worker locks before
+selecting trash. Unknown paths and aliases remain untouched. The engine is
+portable and private/unscheduled in this slice; detached scheduling and the
+population matrix follow.
 
 Trim acquires candidate SLOT and MUTATION locks only nonblocking, skips busy
 entries, then rechecks age and path identity before deletion. It never removes
