@@ -41,7 +41,10 @@ func TestMain(m *testing.M) {
 //   - expected_errors.txt: compilation must fail with exactly these diagnostics.
 //     (Errors in unsafe go code come from building the generated Go.)
 func TestCases(t *testing.T) {
-	t.Parallel()
+	// Other integration tests read these goldens; finish updates before they run.
+	if !*update {
+		t.Parallel()
+	}
 	root := filepath.Join("..", "..", "testdata", "cases")
 	entries, err := os.ReadDir(root)
 	if err != nil {
