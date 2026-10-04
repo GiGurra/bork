@@ -21,7 +21,7 @@ type Instance struct {
 	// bound, in order.
 	Dicts []*Dict
 	// ArgFacts holds, per type parameter, the constraints of an explicit
-	// type argument (decodeJson[Port]): arguments of that type must
+	// type argument (json.Decode[Port]): arguments of that type must
 	// satisfy them, and results of it do (see callFunc).
 	ArgFacts [][]*Constraint
 }

@@ -1,3 +1,4 @@
+import "bork/json"
 import "example.com/private-records/settings"
 use settings.*
 type Alias = settings.Config
@@ -17,12 +18,12 @@ fn GoBad[T: GoStruct](): List[GoValueError] unsafe go {
   return errors
 }
 fn main() {
-  println(encodeJson(settings.MakeBox(7)))
+  println(json.Encode(settings.MakeBox(7)))
   c = settings.New(9000)
   println(GoRound(c), GoBad[settings.Config]())
   println(c.port, read(c), c.WithPort(9001).port, settings.MakeBox("value").value)
   o = Outer { config: c, name: "outer" }
   println(o.copy(config: settings.New(8000)).config.port, o.copy(name: "renamed").name)
-  println(decodeJson[Envelope]("{\"config\":{\"port\":42}}"))
-  println(decodeJson[settings.Config]("{\"port\":0}"))
+  println(json.Decode[Envelope]("{\"config\":{\"port\":42}}"))
+  println(json.Decode[settings.Config]("{\"port\":0}"))
 }

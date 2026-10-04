@@ -1,3 +1,5 @@
+import "bork/time"
+import "bork/json"
 import "bork/http"
 use http.AdmissionDecode
 fn mustServer(value: http.Server | IoError): http.Server {
@@ -12,19 +14,19 @@ fn load(server: http.Server) uses state: http.AdmissionLoad {
     Option.None => panic("admission disabled")
   }
 }
-fn waitQueued(server: http.Server, count: Int, attempts: Int = 5000) uses clock + state {
+fn waitQueued(s: Scope, server: http.Server, count: Int, attempts: Int = 5000) uses clock + state {
   if (load(server).queued == count) {} else {
     if (attempts == 0) { panic("queue count did not settle") }
-    sleep(1)
-    waitQueued(server, count, attempts - 1)
+    _ = time.Sleep(s, time.Nanoseconds((1) * 1000000))
+    waitQueued(s, server, count, attempts - 1)
   }
 }
-fn waitIdle(server: http.Server, attempts: Int = 5000) uses clock + state {
+fn waitIdle(s: Scope, server: http.Server, attempts: Int = 5000) uses clock + state {
   snapshot = load(server)
   if (snapshot.inFlight == 0 && snapshot.queued == 0) {} else {
     if (attempts == 0) { panic("admission permits did not settle") }
-    sleep(1)
-    waitIdle(server, attempts - 1)
+    _ = time.Sleep(s, time.Nanoseconds((1) * 1000000))
+    waitIdle(s, server, attempts - 1)
   }
 }
 fn showRejected(value: http.Result) uses io {
@@ -88,20 +90,20 @@ fn raceTransfer(server: http.Server in app, entered: Channel[Bool] in app, permi
   _ = receive(entered)
   scope request {
     queued = spawn(request, () => http.Get(url, request))
-    waitQueued(server, 1)
+    waitQueued(app, server, 1)
     release = spawn(app, () => send(permits, true))
     cancel(request)
     _ = await(queued)
     _ = await(release)
   }
   _ = await(active)
-  waitIdle(server)
+  waitIdle(app, server)
   if (status(http.Get(url, app)) != 200) { panic("admission did not recover") }
   raceTransfer(server, entered, permits, app, remaining - 1)
 }
 fn main() {
-  println(decodeJson[http.Admission]("{\"maxInFlight\":2}"))
-  println("invalid decoded capacity", match (decodeJson[http.Admission]("{\"maxInFlight\":0}")) { error: DecodeError => true, _ => false })
+  println(json.Decode[http.Admission]("{\"maxInFlight\":2}"))
+  println("invalid decoded capacity", match (json.Decode[http.Admission]("{\"maxInFlight\":0}")) { error: DecodeError => true, _ => false })
 
   scope app {
     entered = channel[String](app, 10)
@@ -117,9 +119,9 @@ fn main() {
     first = spawn(app, () => http.Get(s"$url/first", app))
     println(receive(entered))
     second = spawn(app, () => http.Get(s"$url/second", app))
-    waitQueued(server, 1)
+    waitQueued(app, server, 1)
     third = spawn(app, () => http.Get(s"$url/third", app))
-    waitQueued(server, 2)
+    waitQueued(app, server, 2)
     println("bounded", load(server))
     showRejected(http.Get(s"$url/rejected", app))
     println("unread body", incompleteBody(http.Address(server)))
@@ -133,10 +135,10 @@ fn main() {
     _ = receive(entered)
     scope request {
       queued = spawn(request, () => http.Get(s"$url/cancelled", request))
-      waitQueued(server, 1)
+      waitQueued(app, server, 1)
       cancel(request)
       println("queued cancellation", match (await(queued)) { error: Cancelled => true, _ => false })
-      waitQueued(server, 0)
+      waitQueued(app, server, 0)
     }
     println("after cancellation", load(server))
     _ = send(permits, true)
@@ -181,7 +183,7 @@ fn main() {
     active = spawn(app, () => http.Get(url, app))
     _ = receive(entered)
     queued = spawn(app, () => http.Get(url, app))
-    waitQueued(server, 1)
+    waitQueued(app, server, 1)
     closeScope(owner)
     _ = await(active)
     _ = await(queued)
@@ -221,11 +223,11 @@ fn main() {
     _ = receive(entered)
     rawOwner = openScope(app)
     _ = openUnread(http.Address(server), rawOwner.scope)
-    waitQueued(server, 1)
+    waitQueued(app, server, 1)
     closeScope(rawOwner)
     println("unread disconnect", load(server))
     showRejected(http.Get(url, app))
-    waitQueued(server, 0)
+    waitQueued(app, server, 0)
     println("unread bounded timeout", load(server))
     _ = send(permits, true)
     _ = await(active)

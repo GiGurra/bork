@@ -1,3 +1,4 @@
+import "bork/process"
 // bork run examples/http_routes
 // curl 'localhost:8080/users/42'
 import "bork/http"
@@ -24,12 +25,12 @@ fn waitForStop(s: Scope) uses clock + state {
 }
 fn main() {
   scope app with cleanupTimeout(5000) {
-    match (http.ListenRoutes(if (args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
+    match (http.ListenRoutes(if (process.Args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
       .{ pattern: "GET /users/{id}", handler: logged(user) },
       .{ pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },
     ])) {
       server: http.Server => {
-        if (args() == ["demo"]) {
+        if (process.Args() == ["demo"]) {
           match (http.Get("http://" + http.Address(server) + "/users/42", app)) {
             response: http.Response => println(response.status, response.body)
             error => println(toString(error))

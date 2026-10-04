@@ -1,3 +1,4 @@
+import "bork/json"
 import "bork/env"
 import "bork/cli"
 
@@ -24,18 +25,18 @@ fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
 }
 fn main() {
   println(readGo[OptionalItems]("{\"Low\":5,\"Xs\":[6,2]}"))
-  println(decodeJson[Pair]("{\"first\":\"x\",\"second\":\"x\"}"))
-  println(decodeJson[OptionalItems]("{\"low\":5,\"xs\":[6,2]}"))
-  println(decodeJson[Items]("{\"low\":5,\"xs\":[6,2]}"))
+  println(json.Decode[Pair]("{\"first\":\"x\",\"second\":\"x\"}"))
+  println(json.Decode[OptionalItems]("{\"low\":5,\"xs\":[6,2]}"))
+  println(json.Decode[Items]("{\"low\":5,\"xs\":[6,2]}"))
   println(readGo[Items]("{\"Low\":5,\"Xs\":[6,2]}"))
-  println(decodeJson[Config]("{\"limit\":512}"))
-  println(decodeJson[Config]("{\"low\":5,\"limit\":512}"))
-  println(decodeJson[Envelope]("{\"config\":{\"limit\":512}}"))
-  println(decodeJson[Port]("{\"port\":70000}"))
-  println(decodeJson[Sibling]("{\"low\":5,\"high\":2}"))
-  println(decodeJson[Box[String]]("{\"value\":\"x\",\"low\":1,\"high\":3,\"limit\":512}"))
-  println(decodeJson[Opaque]("{\"n\":0}"))
-  println(decodeJson[Either]("{\"low\":1,\"high\":-1}"))
+  println(json.Decode[Config]("{\"limit\":512}"))
+  println(json.Decode[Config]("{\"low\":5,\"limit\":512}"))
+  println(json.Decode[Envelope]("{\"config\":{\"limit\":512}}"))
+  println(json.Decode[Port]("{\"port\":70000}"))
+  println(json.Decode[Sibling]("{\"low\":5,\"high\":2}"))
+  println(json.Decode[Box[String]]("{\"value\":\"x\",\"low\":1,\"high\":3,\"limit\":512}"))
+  println(json.Decode[Opaque]("{\"n\":0}"))
+  println(json.Decode[Either]("{\"low\":1,\"high\":-1}"))
   println(readGo[Config]("{\"Low\":1,\"High\":3,\"Limit\":512}"))
   println(readGo[Sibling]("{\"Low\":5,\"High\":2}"))
   println(readGo[Phantom[String]]("{\"Low\":1,\"High\":3,\"Limit\":512}"))

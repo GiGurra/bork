@@ -1,3 +1,4 @@
+import "bork/time"
 // A connection that says when it opens and closes.
 type Conn = resource
 
@@ -20,7 +21,7 @@ fn main() {
       // app closes too.
       shared = attach(conn, app)
       launch(app, () => {
-        sleep(10)
+        _ = time.Sleep(app, time.Nanoseconds((10) * 1000000))
         println(query(shared, "in a task of app"))
       })
       println("job ends")

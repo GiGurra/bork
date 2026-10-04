@@ -1,6 +1,6 @@
 got Cancelled { reason: "the scope ended" }
 FAIL  a failing test with a task waiting in a mock fails, and does not hang
-      main.bork:18:5: expected 2, got 1
+      main.bork:19:5: expected 2, got 1
 ok    the next test sees no mocks
 1 passed, 1 failed
 exit code 1

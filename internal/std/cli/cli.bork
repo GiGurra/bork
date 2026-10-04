@@ -1,3 +1,5 @@
+import "bork/process"
+import codecs "bork/json"
 // Package cli builds command-line interfaces with boa and decodes proven options.
 type Flag = {
   field: String
@@ -16,7 +18,7 @@ type Help = { text: String }
 // right, below env/flags and above defaults. A configFile flag selects an extra
 // file. All final field failures are collected; help does not read files.
 fn Parse[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = []) uses io: T | Error | Help {
-  prepare[T](name, description, args, flags, configFiles, parseJson, flagName)
+  prepare[T](name, description, args, flags, configFiles, codecs.Parse, flagName)
 }
 fn prepare[T: Decode](name: String, description: String, args: List[String], flags: List[Flag], configFiles: List[String], parse: (String) => Json | JsonError, makeName: (String) => String) uses io: T | Error | Help unsafe go {
   import "bytes"
@@ -197,7 +199,7 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], fla
 // Run reads process arguments and invokes the handler in a scope after validation.
 // Help is printed; errors remain values for the application to render and exit.
 fn Run[T: Decode](name: String, description: String, run: (T, Scope) => Ok, flags: List[Flag] = [], configFiles: List[String] = []) uses io: Ok | Error {
-  match (Parse[T](name, description, args(), flags, configFiles)) {
+  match (Parse[T](name, description, process.Args(), flags, configFiles)) {
     help: Help => { print(help.text) }
     error: Error => error
     options: T => { scope s { run(options, s) } }
