@@ -218,6 +218,7 @@ type Info struct {
 	InterpolationBatches []*InterpolationBatch
 
 	PackageBindings []*PackageBinding
+	packageGraph    map[*Func]packageDependencies
 
 	// GoImportNames resolves unsafe Go imports without mutating source syntax.
 	GoImportNames map[*syntax.GoCode]map[string]string

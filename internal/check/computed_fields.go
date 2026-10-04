@@ -189,6 +189,11 @@ func transformComputedDefault(info *Info, value Expr, replace func(*VarRef) Expr
 					return reflect.ValueOf(replacement)
 				}
 			}
+			// Closed compile-time recipes have no sibling references to replace.
+			// Preserve their identity so every instantiation sees the baked result.
+			if _, ok := v.Interface().(*Comptime); ok {
+				return v
+			}
 			if old, ok := copies[v.Interface()]; ok {
 				return old
 			}

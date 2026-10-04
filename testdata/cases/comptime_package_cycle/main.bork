@@ -1,0 +1,4 @@
+A: Int = comptime { readB() }
+B: Int = comptime { A + 1 }
+fn readB(): Int { B }
+fn main() { println(A) }

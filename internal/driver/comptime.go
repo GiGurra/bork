@@ -38,6 +38,8 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		diags.AddCode(info.Comptimes[0].Pos(), "comptime.target", "comptime requires native target %s/%s, got %s/%s", runtime.GOOS, runtime.GOARCH, goctx.values["GOOS"], goctx.values["GOARCH"])
 		return nil
 	}
+	batch := planComptimeBatch(info)
+	defer batch.close()
 	states := map[*check.Comptime]int{}
 	proofStates := map[*check.Func]int{}
 	activeQueries := map[string]bool{}
@@ -57,12 +59,23 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 			usage.evaluator = true
 		}
 		helpers := gen.ComptimeFunctions(files, info, node)
-		dependencies := func(x check.Expr) bool {
+		if batch != nil {
+			for _, binding := range check.ComptimePackageBindings(info, node) {
+				evaluate(batch.packages[binding])
+			}
+		}
+		fields := map[*check.Field]bool{}
+		var dependencies func(check.Expr) bool
+		dependencies = func(x check.Expr) bool {
 			if dep, ok := x.(*check.Comptime); ok {
 				if dep.Value == nil {
 					evaluate(dep)
 				}
 				return false
+			}
+			if selected, ok := x.(*check.Select); ok && selected.Field != nil && selected.Field.Computed && !fields[selected.Field] {
+				fields[selected.Field] = true
+				check.WalkComptime(selected.Field.Default, dependencies)
 			}
 			return true
 		}
@@ -155,7 +168,7 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		var err error
 		fallbackCtx := goctx
 		handled := false
-		if native, ok := prepareNativeInterpolation(files, info, node, goctx); ok {
+		if native, ok := prepareNativeInterpolation(files, info, node, goctx); ok && batch == nil {
 			start := time.Now()
 			value, err = runNativeInterpolation(native, goctx, usage)
 			handled = true
@@ -169,6 +182,10 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 					handled = false
 				}
 			}
+		}
+		if batch != nil {
+			value, err = batch.evaluate(node, files, info, module, goctx, usage)
+			handled = true
 		}
 		if !handled {
 			source, generationError := gen.ComptimeProgram(files, info, node)
@@ -199,6 +216,13 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		check.ComptimeResult(node, info, diags, prove)
 		if diags.Len() > 0 {
 			return
+		}
+		if batch != nil && batch.bindings[node] != nil {
+			check.ComptimePackageResult(batch.bindings[node], node, info, diags, prove)
+			if diags.Len() > 0 {
+				return
+			}
+			check.BakePackageComptime(batch.bindings[node], node)
 		}
 		states[node] = 2
 	}

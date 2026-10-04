@@ -1,0 +1,2 @@
+Last = 6
+Unused: Int = panic("unused imported value stays lazy")

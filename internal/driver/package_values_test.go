@@ -19,7 +19,7 @@ func TestPackageValueChecks(t *testing.T) {
 		{"promise", "pred positive(n:Int){n>0}\nValue:Int where positive=1\nfn main(){n:Int where positive=Value;println(n)}", ""},
 		{"bad promise", "pred positive(n:Int){n>0}\nValue:Int where positive=-1\nfn main(){}", "positive"},
 		{"early return promise", "pred positive(n:Int){n>0}\nValue:Int where positive={if(true){return -1};1}\nfn main(){}", "positive"},
-		{"comptime capture", "Value=42\nfn main(){println(comptime{Value})}", "comptime cannot read runtime package value"},
+		{"comptime capture", "Value=42\nfn main(){println(comptime{Value})}", ""},
 		{"comptime initializer", "Value=comptime{21*2}\nfn main(){println(Value)}", ""},
 		{"duplicate mixed", "Value=1\nlazy Value=2\nfn main(){}", "already declared"},
 		{"function value", "Add:(Int)=>Int=n=>n+1\nfn main(){println(Add(2))}", ""},
