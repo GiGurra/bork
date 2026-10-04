@@ -136,6 +136,9 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 	warningData := warnings.Sorted()
 	var src []byte
 	if emit {
+		if err := program.requireMain(); err != nil {
+			return nil, nil, err
+		}
 		phase(s.observe, "generate")
 		src, err = gen.Package(program.files, program.info)
 		if err != nil {
