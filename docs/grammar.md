@@ -395,5 +395,5 @@ bork install [path]
 Settings are `BORKCACHE`, `BORKBIN`, and `BORK_CACHE` (`on` or `off`).
 Environment variables override saved values in `os.UserConfigDir()/bork/env.json`,
 which override defaults. Directory settings require absolute paths; empty values
-fall through. See [the compiler settings reference](../README.md#getting-started)
+fall through. See [the compiler settings reference](cli.md#settings)
 for defaults and installation behavior.
