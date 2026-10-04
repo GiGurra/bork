@@ -53,6 +53,7 @@ fn main() {
   accepts("comment placeholders", sql.SQL"SELECT $value /* ? $$1 */", sqlite)
   accepts("escaped quote literal", sql.SQL"SELECT E'escaped\\' quote', $value", postgres)
   accepts("ordinary sqlite backslash", sql.SQL"SELECT 'back\\slash', $value", sqlite)
+  accepts("pg array constructor", sql.SQL"SELECT ARRAY[$value]", postgres)
   accepts("pg cast after hole", sql.SQL"SELECT $value::text", postgres)
   accepts("pg identifier dollar tag", sql.SQL"SELECT a$$tag$$ FROM t", postgres)
   accepts("pg identifier dollar digit", sql.SQL"SELECT a$$1 FROM t", postgres)

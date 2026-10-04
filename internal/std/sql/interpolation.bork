@@ -65,7 +65,7 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
           if postgres && (j == i+1 && j+1 < len(text) && text[j+1] == ':' || j == i-1 && j > 0 && text[j-1] == ':') { return false }
           return true
         }
-        return word(c) || c == 0 || c == '\'' || c == '"' || c == '`' || c == '[' || c == ']' || c == '@' || c == '.' && !identifier
+        return word(c) || c == 0 || c == '\'' || c == '"' || c == '`' || !postgres && (c == '[' || c == ']') || c == '@' || c == '.' && !identifier
       }
       if adjacent(i-1) || adjacent(i+1) { return fail(fmt.Sprintf("SQL hole %d is inside or adjacent to a partial token", hole+1)) }
       switch part := part.(type) {

@@ -33,6 +33,7 @@ quoted manual placeholders true
 comment placeholders true
 escaped quote literal true
 ordinary sqlite backslash true
+pg array constructor true
 pg cast after hole true
 pg identifier dollar tag true
 pg identifier dollar digit true
