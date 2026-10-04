@@ -217,10 +217,12 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		defer observation.finish()
 		var goSrc []byte
 		var err error
+		var closed bool
 		if timeout > 0 {
 			goSrc, err = gen.EvalComptimeProgram(files, info, queries)
 		} else {
 			goSrc, err = gen.ClosedProofProgram(files, info, queries)
+			closed = err == nil
 			if err != nil {
 				goSrc, err = gen.EvalProgram(files, info, queries)
 			}
@@ -228,12 +230,28 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		if err != nil {
 			return nil, err
 		}
+		var proofs *sessionProofCache
+		if timeout == 0 && usage != nil && usage.proofs != nil {
+			proofs = usage.proofs
+			memo = nil
+			if closed && context.validation != nil && context.validation.accepts(context) {
+				memo = proofs.memo
+			}
+		}
 		var key [32]byte
 		var reusable bool
 		var stagedDir string
 		var pinned bool
 		var release func()
-		if memo != nil && timeout > 0 && context.err == nil && check.AuditExecutionQueries(info, queries).Decline == "" && predicateMemoSupport(goSrc) {
+		audited := closed
+		if memo != nil && timeout > 0 {
+			audited = check.AuditExecutionQueries(info, queries).Decline == ""
+		}
+		eligible := memo != nil && (timeout > 0 || (closed && proofs != nil)) && context.err == nil && audited && predicateMemoSupport(goSrc)
+		if proofs != nil && !eligible {
+			proofs.declines++
+		}
+		if eligible {
 			stagedDir, pinned, release, err = stageGo(files, goSrc, module, context, "predicate", info.Embeds)
 			if err != nil {
 				return nil, err
@@ -244,10 +262,23 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 				}
 			}()
 			key, reusable = predicateMemoKey(stagedDir, context, timeout, info.Embeds)
+			if reusable && proofs != nil {
+				reusable = sessionProofStage(stagedDir, context)
+			}
 			if reusable {
 				if result, ok := memo.get(key); ok {
+					if proofs != nil {
+						proofs.hits++
+					}
 					observation.memoHit()
 					return result, nil
+				}
+			}
+			if proofs != nil {
+				if reusable {
+					proofs.misses++
+				} else {
+					proofs.declines++
 				}
 			}
 		}

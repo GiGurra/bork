@@ -8,6 +8,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"go/version"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,15 +17,21 @@ import (
 	"time"
 
 	"github.com/GiGurra/bork/internal/check"
+	"golang.org/x/mod/modfile"
 )
 
 const predicateMemoEntries = 256
 const predicateMemoResultBytes = 64 << 10
 const predicateMemoInputBytes = 4 << 20
 
-// predicateMemo belongs to one evaluateComptimes call, including its final
-// Facts evaluator. It is not a Session receipt or a persistent execution cache.
-// The checker invokes its evaluators sequentially; no state escapes this owner.
+type sessionProofCache struct {
+	memo                   *predicateMemo
+	hits, misses, declines uint64
+}
+
+// predicateMemo stores owned bounded results. Its owner is either one
+// evaluateComptimes call or the separately guarded Session proof cache. It is
+// never persisted. All accesses occur serially within the owner.
 type predicateMemo struct {
 	results map[[sha256.Size]byte][]bool
 	bytes   int
@@ -174,4 +181,15 @@ func predicateSupportText(node ast.Node) string {
 		return ""
 	}
 	return out.String()
+}
+
+// Metadata validation establishes a supported native launcher. Its generated
+// module must also stay on that installed toolchain rather than auto-switching.
+func sessionProofStage(dir string, ctx *goContext) bool {
+	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil || len(data) > predicateMemoInputBytes {
+		return false
+	}
+	module, err := modfile.Parse("go.mod", data, nil)
+	return err == nil && module.Toolchain == nil && module.Go != nil && version.IsValid("go"+module.Go.Version) && version.Compare("go"+module.Go.Version, ctx.values["GOVERSION"]) <= 0
 }

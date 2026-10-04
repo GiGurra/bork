@@ -17,6 +17,7 @@ type goNameInput struct {
 	inputs   *goNameValidation
 }
 type goUsage struct {
+	proofs           *sessionProofCache
 	deferInputs      bool
 	names            []goNameInput
 	types, evaluator bool
@@ -30,13 +31,15 @@ type goUsage struct {
 // retain no compiler graph and return independent data. Analyze separately
 // retains an editor query snapshot, used serially by the language server.
 // Go type/export metadata, custom drivers and compile-time evaluation bypass
-// reuse until their dependencies can be validated.
+// complete-program reuse. Audited pure predicate batches have a separate bounded
+// Session cache.
 type Session struct {
 	editor        *EditorAnalysis
 	editorPath    string
 	editorContext *goContext
 	mu            sync.Mutex
 	last          *sessionArtifact
+	proofs        *sessionProofCache
 	stats         SessionStats
 	watch         bool
 	attempt       *watchAttempt
@@ -47,9 +50,11 @@ type Session struct {
 }
 
 // SessionStats counts requests and explains the most recent hit or miss.
+// Proof counters count native predicate batches, separately from program hits.
 type SessionStats struct {
-	Hits, Misses, Bypasses uint64
-	Reason                 string
+	Hits, Misses, Bypasses                uint64
+	ProofHits, ProofMisses, ProofDeclines uint64
+	Reason                                string
 }
 
 type sessionArtifact struct {
@@ -75,8 +80,8 @@ func (s *Session) Check(path string) ([]diag.Diagnostic, error) {
 	return warnings, err
 }
 
-// Emit returns an owned copy of generated Go source. It never reuses program
-// execution, predicate results, Go binaries, or a mutable checker graph.
+// Emit returns an owned copy of generated Go source. Predicate checking may
+// reuse Session-owned audited boolean batches.
 func (s *Session) Emit(path string) ([]byte, error) {
 	src, _, err := s.compile(path, true)
 	return src, err
@@ -85,7 +90,11 @@ func (s *Session) Emit(path string) ([]byte, error) {
 func (s *Session) Stats() SessionStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.stats
+	stats := s.stats
+	if s.proofs != nil {
+		stats.ProofHits, stats.ProofMisses, stats.ProofDeclines = s.proofs.hits, s.proofs.misses, s.proofs.declines
+	}
+	return stats
 }
 
 func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
@@ -126,7 +135,7 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 	if err != nil {
 		return nil, nil, err
 	}
-	usage := &goUsage{}
+	usage := &goUsage{proofs: s.proofCache()}
 	captureAssets := captureEmbedsSnapshot
 	if s.watch {
 		defer func() { s.attempt.names = slices.Clone(usage.names) }()
@@ -238,4 +247,12 @@ func cloneSessionDiagnostics(items []diag.Diagnostic) []diag.Diagnostic {
 		}
 	}
 	return out
+}
+
+// Called only while the Session mutex is held, including editor requests.
+func (s *Session) proofCache() *sessionProofCache {
+	if s.proofs == nil {
+		s.proofs = &sessionProofCache{memo: newPredicateMemo()}
+	}
+	return s.proofs
 }

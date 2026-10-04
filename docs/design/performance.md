@@ -871,5 +871,5 @@ certification when the cache or detached process facilities are unavailable.
 
 The [closed predicate evaluator measurements](proof-evaluator.md) isolate the
 cost of unrelated generated evaluator declarations, and include a fresh-CLI
-edit comparison. This optimization executes proofs afresh; Session and disk
-proof-result reuse remain separate work.
+edit comparison, plus the separate Session proof-cache editor comparison.
+Persisted proof-result reuse remains deferred.
