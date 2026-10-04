@@ -5,6 +5,8 @@
 
 ## Scope of v0.1
 
+The toolchain includes `bork new <directory>` with `default`, `cli`, `http`, and `lib` templates, selected with `--template`. Each creates a module, source, a test, `.gitignore`, and a README; libraries include dependency manifests and no main. `--module` selects the import path; it defaults to `example.com/<directory name>`. Existing destinations are refused. Every template is checked, tested, and format-checked in CI.
+
 The toolchain includes `bork fmt [paths...]`: one canonical whitespace format,
 with two spaces for indentation and normalized spacing and blank-line grouping.
 Existing line breaks, comment text, and raw Go bodies are retained. CRLF line

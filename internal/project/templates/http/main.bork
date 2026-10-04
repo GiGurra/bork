@@ -1,0 +1,24 @@
+import "bork/http"
+import "bork/process"
+
+fn handler(req: http.Request, requestScope: Scope): http.Response {
+  match (req.path) {
+    "/health" => http.Text(200, "ok")
+    _ => http.Text(404, "not found")
+  }
+}
+
+fn main() {
+  scope app {
+    match (http.Listen("localhost:8080", app, handler: handler)) {
+      server: http.Server => {
+        println(s"Listening on http://${http.Address(server)}")
+        http.Wait(server)
+      }
+      error: IoError => {
+        eprintln(error.message)
+        process.Exit(1)
+      }
+    }
+  }
+}

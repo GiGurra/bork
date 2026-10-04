@@ -1,0 +1,7 @@
+fn greeting(name: String): String {
+  s"Hello, $name!"
+}
+
+fn main() {
+  println(greeting("bork"))
+}

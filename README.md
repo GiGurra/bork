@@ -14,6 +14,17 @@ bork compiles through Go, so [Go](https://go.dev/dl/) 1.26 or later must be inst
 go install github.com/GiGurra/bork/cmd/bork@latest
 ```
 
+## Start a project
+
+```sh
+bork new hello
+cd hello
+bork run .
+bork test .
+```
+
+Choose `--template cli`, `--template http`, or `--template lib` for other starting points. See [creating projects](docs/cli.md#new).
+
 ## Hello, world
 
 Put this in `hello.bork`:

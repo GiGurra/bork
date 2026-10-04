@@ -1,0 +1,13 @@
+import "bork/process"
+
+fn greeting(args: List[String]): String {
+  match (args) {
+    [name] => s"Hello, $name!"
+    [] => "Hello, bork!"
+    _ => "usage: pass one name"
+  }
+}
+
+fn main() {
+  println(greeting(process.Args()))
+}

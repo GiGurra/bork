@@ -1,0 +1,3 @@
+test "exported greeting" {
+  assertEqual(Greeting("Ada"), "Hello, Ada!")
+}

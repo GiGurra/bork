@@ -18,8 +18,15 @@ import (
 	"github.com/GiGurra/bork/internal/driver"
 	borkformat "github.com/GiGurra/bork/internal/format"
 	"github.com/GiGurra/bork/internal/lsp"
+	"github.com/GiGurra/bork/internal/project"
 	"github.com/spf13/cobra"
 )
+
+type newParams struct {
+	Name     string `positional:"true" descr:"new project directory"`
+	Template string `optional:"true" default:"default" descr:"project template: default, cli, http, or lib"`
+	Module   string `optional:"true" descr:"module import path (default: example.com/<directory name>)"`
+}
 
 type cleanParams struct {
 	All bool `optional:"true" descr:"remove artifacts from all compiler and staging versions"`
@@ -248,6 +255,15 @@ func main() {
 		Use:   "bork",
 		Short: "the bork compiler: a pragmatic backend language of guarantees",
 		SubCmds: boa.SubCmds(
+			boa.CmdT[newParams]{
+				Use: "new", Short: "create a project from a bundled template",
+				RunFunc: func(p *newParams, _ *cobra.Command, _ []string) {
+					if err := project.New(p.Name, p.Template, p.Module); err != nil {
+						fail(err)
+					}
+					fmt.Printf("Created %s (%s).\n\nNext steps:\n%s", p.Name, p.Template, project.NextSteps(p.Name, p.Template))
+				},
+			},
 			boa.CmdT[boa.NoParams]{
 				Use: "lsp", Short: "serve the Language Server Protocol over stdio",
 				RunFunc: func(_ *boa.NoParams, _ *cobra.Command, _ []string) {

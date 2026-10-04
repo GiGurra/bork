@@ -4,6 +4,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 
 | Command | What it does |
 | --- | --- |
+| [`bork new`](#new) | Create a project from a template |
 | [`bork script`](#scripts) | Run one file with an implicit main |
 | [`bork run`](#run-build-and-install) | Compile and run a program |
 | [`bork build`](#run-build-and-install) | Compile a program to an executable |
@@ -21,6 +22,20 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | `bork completion` | Print a completion script for bash, zsh, fish, or PowerShell |
 
 `bork <command> --help` lists a command's flags.
+
+## New
+
+```sh
+bork new hello                              # a program and its first test
+bork new --template cli greeter              # a program that reads arguments
+bork new --template http service             # HTTP service and handler test
+bork new --template lib library              # exported library function and test
+bork new --module github.com/you/hello hello  # choose the module import path
+```
+
+`new` creates a fresh directory, including parents as needed, and refuses to replace an existing file or directory. The default module path is `example.com/<directory name>`; use `--module` for a publishable import path. No network access or Git initialization is needed. Every template includes `bork.mod`, a test, `.gitignore`, and a README with commands. Libraries have no `main` function and also include `go.mod` and `bork.sum` for dependency management.
+
+The command prints the next steps. Run `bork check .`, `bork test .`, and `bork fmt --check .` inside the project. The HTTP service listens on `localhost:8080` and answers `/health`; its test calls the handler directly without opening a socket.
 
 ## Run, build, and install
 

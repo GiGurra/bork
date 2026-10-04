@@ -13,7 +13,18 @@ bork version
 
 ## A first program
 
-A program is a file, or a directory of files, with a `main` function. Save this as `main.bork` in an empty directory:
+Create a project, then run its program and first test:
+
+```sh
+bork new expenses
+cd expenses
+bork run .
+bork test .
+```
+
+The project includes `bork.mod`, `main.bork`, `main_test.bork`, `.gitignore`, and a short README. Other starting points are `bork new --template cli greeter`, `bork new --template http service`, and `bork new --template lib library`. See [creating projects](cli.md#new) for module names and templates.
+
+A program is a file, or a directory of files, with a `main` function. Delete the generated `main_test.bork` (it tests the generated `greeting` function), then replace `main.bork` with:
 
 ```bork
 fn main() {
