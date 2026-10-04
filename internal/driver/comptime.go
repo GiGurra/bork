@@ -39,6 +39,7 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 	states := map[*check.Comptime]int{}
 	proofStates := map[*check.Func]int{}
 	activeQueries := map[string]bool{}
+	memo := newPredicateMemo()
 	var proofEvaluator check.Evaluator
 	var evaluate func(*check.Comptime)
 	evaluate = func(node *check.Comptime) {
@@ -74,7 +75,7 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		if diags.Len() > 0 {
 			return
 		}
-		eval := evaluatorWithTimeout(files, info, module, goctx, goctx.comptimeLimit())
+		eval := evaluatorWithTimeoutMemo(files, info, module, goctx, goctx.comptimeLimit(), memo)
 		// Proof predicates can have their own computed dependencies too.
 		var prove check.Evaluator
 		prove = func(queries []check.Query) ([]bool, error) {
