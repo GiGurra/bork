@@ -165,7 +165,7 @@ Compiler installations live in `BORKCACHE/toolchains/<os>-<arch>/<version>`. Lat
 
 The nearest `bork.mod` to the command's file or directory supplies the requirement. `bork env`, `bork version`, and `bork lsp` use the current directory; `bork describe` uses the source file in its position argument. `bork env BORKVERSION` and `bork version` show the selected compiler and its reason. Updating settings (`env -w` or `env -u`), formatting, cleaning, project creation and compiler upgrades use the local executable so you can repair settings without downloading a compiler.
 
-Switching needs Go on `PATH` to install an uncached compiler. Download failures report how to check network and module-proxy access. The installed executable in `BORKBIN` stays unchanged, and different compiler images use separate compile-cache namespaces. `bork clean` keeps downloaded compilers; `bork clean --all` also removes them, waiting for an active installation to finish.
+Switching needs Go on `PATH` to install an uncached compiler. Download failures report how to check network and module-proxy access. The installed executable in `BORKBIN` stays unchanged, and different compiler images use separate compile-cache namespaces. `bork clean` keeps downloaded compilers; `bork clean --all` also removes them, waiting for active installations and selected compiler processes to finish.
 
 ## The compile cache
 

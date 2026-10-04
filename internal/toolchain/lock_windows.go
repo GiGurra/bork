@@ -9,9 +9,13 @@ import (
 
 var lockFileEx = syscall.NewLazyDLL("kernel32.dll").NewProc("LockFileEx")
 
-func tryLock(file *os.File) error {
+func tryLock(file *os.File, exclusive bool) error {
 	var overlapped syscall.Overlapped
-	result, _, err := lockFileEx.Call(file.Fd(), 3, 0, 1, 0, uintptr(unsafe.Pointer(&overlapped)))
+	flags := uintptr(1)
+	if exclusive {
+		flags |= 2
+	}
+	result, _, err := lockFileEx.Call(file.Fd(), flags, 0, 1, 0, uintptr(unsafe.Pointer(&overlapped)))
 	if result == 0 {
 		return err
 	}

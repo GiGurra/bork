@@ -59,12 +59,9 @@ func selectToolchain(cmd *cobra.Command, path string) error {
 		child = exec.CommandContext(ctx, binary, os.Args[1:]...)
 		child.Env = append(os.Environ(), toolchain.SelectedEnv+"="+selected, toolchain.ReasonEnv+"="+compilerSelection.Reason)
 		child.Stdin, child.Stdout, child.Stderr = os.Stdin, os.Stdout, os.Stderr
-		return child.Start()
+		return child.Run()
 	})
 	if err != nil {
-		return err
-	}
-	if err := child.Wait(); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() >= 0 {
 			os.Exit(exit.ExitCode())
 		}
@@ -104,10 +101,21 @@ func earlyToolchainTarget(root *cobra.Command, raw []string) (string, bool) {
 			return "", false
 		}
 		flag := cmd.Flags().Lookup(name)
-		if !strings.HasPrefix(arg, "--") && len(name) != 0 {
-			flag = cmd.Flags().ShorthandLookup(name[:1])
-			if len(name) > 1 {
-				value, hasValue = name[1:], true
+		if !strings.HasPrefix(arg, "--") {
+			for index := 0; index < len(name); index++ {
+				flag = cmd.Flags().ShorthandLookup(name[index : index+1])
+				if flag == nil {
+					break
+				}
+				if cmd.Name() == "env" && (flag.Name == "write" || flag.Name == "unset") {
+					return "", false
+				}
+				if flag.NoOptDefVal == "" {
+					if index+1 < len(name) {
+						value, hasValue = name[index+1:], true
+					}
+					break
+				}
 			}
 		}
 		if flag != nil && flag.NoOptDefVal == "" && !hasValue && i+1 < len(args) {
