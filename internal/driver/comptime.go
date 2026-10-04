@@ -38,7 +38,7 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		diags.AddCode(info.Comptimes[0].Pos(), "comptime.target", "comptime requires native target %s/%s, got %s/%s", runtime.GOOS, runtime.GOARCH, goctx.values["GOOS"], goctx.values["GOARCH"])
 		return nil
 	}
-	batch := planComptimeBatch(info)
+	batch := planComptimeBatch(info, !goctx.comptimeStandalone)
 	defer batch.close()
 	states := map[*check.Comptime]int{}
 	proofStates := map[*check.Func]int{}

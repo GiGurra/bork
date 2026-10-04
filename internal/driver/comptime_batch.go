@@ -35,7 +35,7 @@ type comptimeBatch struct {
 	waited      bool
 }
 
-func planComptimeBatch(info *check.Info) *comptimeBatch {
+func planComptimeBatch(info *check.Info, ordinary bool) *comptimeBatch {
 	batch := &comptimeBatch{nodes: slices.Clone(info.Comptimes), packages: map[*check.PackageBinding]*check.Comptime{}, bindings: map[*check.Comptime]*check.PackageBinding{}}
 	var include func(*check.PackageBinding)
 	include = func(binding *check.PackageBinding) {
@@ -54,7 +54,9 @@ func planComptimeBatch(info *check.Info) *comptimeBatch {
 			include(binding)
 		}
 	}
-	if len(batch.packages) == 0 {
+	// Keep single ordinary recipes on their standalone/native fast path.
+	// Package dependencies need shared getters even with one explicit block.
+	if len(batch.packages) == 0 && (!ordinary || len(batch.nodes) < 2) {
 		return nil
 	}
 	return batch

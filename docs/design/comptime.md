@@ -240,9 +240,21 @@ and batching are optimizations. Do not execute unrelated package initializers,
 particularly future lazy/async package bindings. Emitter roots and required
 dictionaries must be limited to the computation's reachable code.
 
+Multiple ordinary blocks share one built value evaluator within a compilation,
+as package-backed computations already do. The driver sends one recipe only after
+its dependencies and preflight obligations pass, decodes its bounded result and
+checks its nominal/field constraints before authorizing a dependent request.
+Contextual result constraints remain with the enclosing Facts pass. Getter slots
+hold the same typed values throughout this compilation; their results are never
+persisted. Each request resets the encoder budgets and receives a fresh deadline.
+Single ordinary recipes retain their standalone path, including the reviewed
+native interpolation-validator shortcut. Predicate requests remain separate:
+their argument values and proof prerequisites can become available between value
+requests. See the [measured batching checkpoint](proof-evaluator.md#ordinary-comptime-batching-bork-vwsr41).
+
 ## Limits, diagnostics and target semantics
 
-Initial execution limit: ten seconds per evaluator batch; cap each captured
+Initial execution limit: ten seconds per recipe or predicate request; cap each captured
 file at 16 MiB, aggregate build files at 64 MiB and serialized results at 16 MiB.
 Decode at most one million nodes and depth 256. The schema parser checks these
 budgets before consuming each value node, rejects duplicate fields and validates

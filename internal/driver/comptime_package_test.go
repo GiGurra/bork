@@ -107,6 +107,7 @@ func TestComptimePackageBatchBuildCount(t *testing.T) {
 		t.Skip("shell launcher")
 	}
 	for _, tc := range []struct{ name, source string }{
+		{"ordinary chain", `fn main(){a=comptime{range(1,5).map(n=>n*n)};b=comptime{a.fold(0,(s,n)=>s+n)};c=comptime{b+1};d=comptime{c+1};println(d)}`},
 		{"single", `fn main(){println(comptime{range(1,6).map(n=>n*n).fold(0,(s,n)=>s+n)})}`},
 		{"chain", `Squares=comptime{range(1,6).map(n=>n*n)}
 Total=comptime{Squares.fold(0,(s,n)=>s+n)}

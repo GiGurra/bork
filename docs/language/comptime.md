@@ -96,6 +96,8 @@ The executable carries the decoded `Config`. It does not read or parse `config.j
 
 The [comptime example](../../examples/comptime/README.md) is a runnable version of this, with facts on the decoded record.
 
+Multiple blocks share the compiler's evaluation program to reduce build time. Each block still runs after its dependencies have passed their checks, with its own time and result limits.
+
 ## Limits
 
 An evaluation may take at most ten seconds and produce at most 16 MiB of data. A file read at build time may be at most 16 MiB.
