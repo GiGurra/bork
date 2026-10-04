@@ -98,6 +98,10 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 			if binding := p.packageLazyBinding(); binding != nil {
 				f.Bindings = append(f.Bindings, binding)
 			}
+		case p.at(TIdent) && (p.peekKind() == Assign || p.peekKind() == Colon):
+			if binding := p.packageBinding(); binding != nil {
+				f.Bindings = append(f.Bindings, binding)
+			}
 		default:
 			p.errorf(p.tok().Pos, "expected a declaration ('fn', 'pred', 'rule', 'type', 'ambient', 'class', 'instance', or 'test'), found %s", p.tok().Kind)
 			p.syncTopLevel()
@@ -108,7 +112,26 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 
 func (p *parser) packageLazyBinding() (binding *Binding) {
 	defer p.recoverDecl(func() { binding = nil })
-	return p.lazyBinding()
+	binding = p.lazyBinding()
+	binding.Package = true
+	return binding
+}
+
+func (p *parser) packageBinding() (binding *Binding) {
+	defer p.recoverDecl(func() { binding = nil })
+	name := p.next()
+	binding = &Binding{Pos: name.Pos, Name: name.Text, Package: true}
+	if p.at(Colon) {
+		p.next()
+		binding.Type = p.typeExpr()
+	}
+	p.expect(Assign, "after the package binding's name or type")
+	binding.Value = p.expr()
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after the package binding, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return binding
 }
 
 func (p *parser) lazyBinding() *Binding {

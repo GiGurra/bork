@@ -6,7 +6,7 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// PackageBinding is a transparent, process-lifetime lazy value.
+// PackageBinding is a transparent immutable value, memoized on first read.
 type PackageBinding struct {
 	Decl         *syntax.Binding
 	Pkg          *Package
@@ -16,6 +16,13 @@ type PackageBinding struct {
 	Boundary     *Func
 	Dependencies []*PackageBinding
 	state        int
+}
+
+func (binding *PackageBinding) description() string {
+	if binding.Decl.Lazy {
+		return "package lazy"
+	}
+	return "package value"
 }
 
 func (c *checker) declarePackageBindings(files []*syntax.File) {
@@ -93,7 +100,7 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 	}
 	actual := c.valueInitializer(binding.Decl, wanted, "package lazy initializer")
 	if actual == Ok || actual == Never {
-		c.errorf(binding.Decl.Pos, "package lazy %s must produce a value", binding.Decl.Name)
+		c.errorf(binding.Decl.Pos, "%s %s must produce a value", binding.description(), binding.Decl.Name)
 		actual = Invalid
 	}
 	if wanted != nil {
@@ -111,17 +118,17 @@ func (c *checker) ensurePackageBinding(binding *PackageBinding) Type {
 	metadata := c.info.lazyBindings[binding.Decl]
 	metadata.Kind = "package binding"
 	if metadata.Effects != "nothing" {
-		c.errorf(binding.Decl.Pos, "package lazy %s requires a pure initializer, found uses %s", binding.Decl.Name, metadata.Effects)
+		c.errorf(binding.Decl.Pos, "%s %s requires a pure initializer, found uses %s", binding.description(), binding.Decl.Name, metadata.Effects)
 	}
 	if len(boundary.Needs) != 0 {
-		c.errorf(binding.Decl.Pos, "package lazy %s cannot require ambient values", binding.Decl.Name)
+		c.errorf(binding.Decl.Pos, "%s %s cannot require ambient values", binding.description(), binding.Decl.Name)
 	}
 	return actual
 }
 
 func (c *checker) packageBindingRead(node *syntax.Ident, binding *PackageBinding) Type {
 	if c.comptimeContext != nil {
-		c.diags.AddCode(node.Pos, "comptime.capture", "comptime cannot read runtime package lazy value %s", node.Name)
+		c.diags.AddCode(node.Pos, "comptime.capture", "comptime cannot read runtime %s value %s", binding.description(), node.Name)
 	}
 	typ := c.ensurePackageBinding(binding)
 	c.info.defs[node] = binding.Decl

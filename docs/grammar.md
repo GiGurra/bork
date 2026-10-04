@@ -22,8 +22,8 @@
 
 ```ebnf
 Package    = { File } .
-File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | Instances | Providers | PackageLazy ) EOL } .
-PackageLazy = "lazy" Ident [ ":" Type ] "=" Expr . (* pure runtime memo; uppercase names are exported *)
+File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | Instances | Providers | PackageBinding ) EOL } .
+PackageBinding = [ "lazy" ] Ident [ ":" Type ] "=" Expr . (* pure runtime memo; uppercase names are exported *)
 AmbientDecl = { "logged" | "propagated" "(" String ")" } "ambient" Ident ":" Type .     (* ambient traceId: String: a value functions read with needs, bound by with *)
 Use        = "use" UseItem .                (* use money.DecodeAmount, use money.*, use api.Json *)
 UseItem    = Ident | Ident "." ( Ident | "*" ) .

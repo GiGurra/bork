@@ -1,0 +1,6 @@
+MaxRetries = 3
+Greeting: String = "hello"
+
+fn main() {
+  println(s"$Greeting: $MaxRetries retries")
+}

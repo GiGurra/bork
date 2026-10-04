@@ -31,6 +31,8 @@ bork build hello.bork    # compile to an executable
 
 The [tour](docs/tour.md) continues from here.
 
+Package values such as `MaxRetries = 3` are immutable and pure, computed once on first read. See [bindings and package values](docs/language/basics.md).
+
 ## A taste of the language
 
 ### Records, unions, and exhaustive matching

@@ -194,9 +194,12 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 			global.Let = let
 			let.Var = global
 		}
-		if s.Lazy || s.AsyncScope != nil {
+		if s.Lazy || s.Package || s.AsyncScope != nil {
 			let.Deferred = LazyBinding
 			pos := s.LazyPos
+			if s.Package && !s.Lazy {
+				pos = s.Pos
+			}
 			metadata := l.info.lazyBindings[s]
 			if s.AsyncScope != nil {
 				let.Deferred = AsyncBinding

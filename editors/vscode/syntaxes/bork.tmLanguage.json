@@ -201,6 +201,17 @@
               "name": "entity.name.type.bork"
             }
           }
+        },
+        {
+          "match": "^\\s*(?:(lazy)\\s+)?([A-Za-z][A-Za-z0-9_]*)(?=\\s*(?::|=(?!=)))",
+          "captures": {
+            "1": {
+              "name": "keyword.control.bork"
+            },
+            "2": {
+              "name": "variable.other.readwrite.bork"
+            }
+          }
         }
       ]
     },
