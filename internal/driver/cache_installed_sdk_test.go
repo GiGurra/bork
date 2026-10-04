@@ -62,9 +62,10 @@ func TestCacheInstalledSDKReplacementInvalidates(t *testing.T) {
 }
 
 func TestCacheInstalledSDKHitStillValidatesSources(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	restore := func(receipt *goContextReceipt) (*goContext, error) {
-		return receipt.restoreInstalledSDK(resolveGoContext())
+		return receipt.restoreInstalledSDK(resolveOwnedReceiptGoContext())
 	}
 	restored, err := body.validateWithContext(body.Request, body.Namespace, restore)
 	if err != nil {

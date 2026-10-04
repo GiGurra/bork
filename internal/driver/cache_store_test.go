@@ -14,6 +14,7 @@ import (
 )
 
 func TestCacheStoreRoundtripAndMisses(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	store := cacheStore{root: filepath.Join(t.TempDir(), "results"), namespace: body.Namespace}
 	if store.read(body.Request) != nil {
@@ -62,6 +63,7 @@ func TestCacheStoreRoundtripAndMisses(t *testing.T) {
 }
 
 func TestCacheStoreConcurrentReplacement(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	store := cacheStore{root: t.TempDir(), namespace: body.Namespace}
 	if err := store.write(body); err != nil {
@@ -119,6 +121,7 @@ func TestCacheStoreConcurrentReplacement(t *testing.T) {
 }
 
 func TestCacheStoreDeclinesSymlinkEscape(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	outside := t.TempDir()
 	root := t.TempDir()
@@ -171,6 +174,7 @@ func TestCacheStoreLockPoolBounded(t *testing.T) {
 }
 
 func TestCacheStoreCrossProcess(t *testing.T) {
+	t.Parallel()
 	if input := os.Getenv("BORK_CACHE_STORE_HELPER_BODY"); input != "" {
 		data, err := os.ReadFile(input)
 		if err != nil {
@@ -239,6 +243,7 @@ func TestCacheStoreCrossProcess(t *testing.T) {
 }
 
 func TestCacheFindSkipsStaleNamespaces(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	root := t.TempDir()
 	old := *body

@@ -19,13 +19,13 @@ import (
 
 func cacheArtifactFixture(t *testing.T) (*cacheArtifactBody, *sessionArtifact) {
 	t.Helper()
-	_ = receiptGoContext(t)
+	_ = ownedReceiptGoContext(t)
 	root := t.TempDir()
 	path := filepath.Join(root, "main.bork")
 	if err := os.WriteFile(path, []byte("fn main() {}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	session := NewSession()
+	session := newOwnedFixtureSession("GOPACKAGESDRIVER=off", "GOTOOLCHAIN=local")
 	if _, err := session.Emit(path); err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +44,7 @@ func cacheArtifactFixture(t *testing.T) (*cacheArtifactBody, *sessionArtifact) {
 }
 
 func TestCacheArtifactRoundtrip(t *testing.T) {
+	t.Parallel()
 	body, original := cacheArtifactFixture(t)
 	body.Warnings = []cacheArtifactWarning{{Pos: diag.Pos{File: body.Request.Path, Line: 1, Col: 2}, Message: "warn", Severity: "warning", Fixes: []diag.Fix{{Message: "fix", Edits: []diag.TextEdit{{Start: diag.Pos{File: body.Request.Path, Line: 1, Col: 2}, Replacement: "new"}}}}}}
 	encoded, err := encodeCacheArtifact(body)
@@ -92,6 +93,7 @@ func rechecksumArtifact(t *testing.T, encoded []byte, mutate func([]byte) []byte
 }
 
 func TestCacheArtifactRejectsCorruption(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	encoded, err := encodeCacheArtifact(body)
 	if err != nil {
@@ -144,6 +146,7 @@ func TestCacheArtifactRejectsCorruption(t *testing.T) {
 }
 
 func TestCacheArtifactChecksumCoversReceipt(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	encoded, err := encodeCacheArtifact(body)
 	if err != nil {
@@ -174,6 +177,7 @@ func TestCacheArtifactChecksumCoversReceipt(t *testing.T) {
 }
 
 func TestCacheArtifactEncodingBudgets(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	body.GoSource = make([]byte, cacheArtifactMaxBytes)
 	if _, err := encodeCacheArtifact(body); !errors.Is(err, errCacheArtifactBudget) {
@@ -208,6 +212,7 @@ func (r *cacheCountingReader) Read(data []byte) (int, error) {
 }
 
 func TestCacheArtifactDeclinesAssetsAndLossyStrings(t *testing.T) {
+	t.Parallel()
 	body, artifact := cacheArtifactFixture(t)
 	body.Warnings = []cacheArtifactWarning{{Severity: "warning", Message: string([]byte{0xff})}}
 	if _, err := encodeCacheArtifact(body); !errors.Is(err, errInvalidCacheArtifact) {
@@ -223,6 +228,7 @@ func TestCacheArtifactDeclinesAssetsAndLossyStrings(t *testing.T) {
 }
 
 func TestCacheArtifactCompositeCertification(t *testing.T) {
+	t.Parallel()
 	for _, change := range []string{"source", "metadata"} {
 		t.Run(change, func(t *testing.T) {
 			body, artifact := cacheArtifactFixture(t)

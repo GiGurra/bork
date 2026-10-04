@@ -253,3 +253,33 @@ func TestGoNameReceiptDetectsSDKChanges(t *testing.T) {
 		})
 	}
 }
+
+// Owned cache fixtures select the same controls as receiptGoContext without
+// changing process state. Launcher discovery still uses the current PATH.
+func ownedReceiptGoContext(t *testing.T) *goContext {
+	t.Helper()
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("running image persistence needs Linux or macOS")
+	}
+	ctx := captureSessionGoContextWithSettings(nil, []string{"GOPACKAGESDRIVER=off", "GOTOOLCHAIN=local"})
+	if ctx.err != nil {
+		t.Fatal(ctx.err)
+	}
+	if !supportedGoVersion(ctx.values["GOVERSION"]) {
+		t.Skip("unsupported Go inventory version")
+	}
+	if ctx.validation == nil {
+		t.Fatal("missing supported configuration inventory")
+	}
+	return ctx
+}
+
+func resolveOwnedReceiptGoContext() *goContext {
+	return resolveGoContextWithOptions(goContextOptions{settings: []string{"GOPACKAGESDRIVER=off", "GOTOOLCHAIN=local"}, moduleHook: goModuleHook})
+}
+
+func validateOwnedCacheFixture(body *cacheArtifactBody, request cacheArtifactRequest, namespace [32]byte) (*cachedCompilation, error) {
+	return body.validateWithContext(request, namespace, func(receipt *goContextReceipt) (*goContext, error) {
+		return receipt.restore(resolveOwnedReceiptGoContext())
+	})
+}

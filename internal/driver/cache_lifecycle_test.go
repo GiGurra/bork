@@ -11,6 +11,7 @@ import (
 )
 
 func TestCacheResultPublicationDoesNotScanOrEvict(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	store := cacheStore{root: t.TempDir(), namespace: body.Namespace}
 	if err := store.write(body); err != nil {
@@ -42,6 +43,7 @@ func TestCacheResultPublicationDoesNotScanOrEvict(t *testing.T) {
 	}
 }
 func TestCacheResultLocatorAlternatingCompilers(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	other := *body
 	other.Namespace = sha256.Sum256([]byte("other compiler"))
@@ -68,6 +70,7 @@ func TestCacheResultLocatorAlternatingCompilers(t *testing.T) {
 	}
 }
 func TestCacheResultLocatorFailurePreservesArtifact(t *testing.T) {
+	t.Parallel()
 	body, _ := cacheArtifactFixture(t)
 	base := t.TempDir()
 	if err := os.WriteFile(filepath.Join(base, "indexes"), nil, 0600); err != nil {
@@ -103,6 +106,9 @@ func TestCacheResultLocatorFailurePreservesArtifact(t *testing.T) {
 	}
 }
 func TestCacheResultTouch(t *testing.T) {
+	// Nonblocking touch admission is asserted immediately after lock release.
+	// Keep this root sequential: its exact admission assertions require
+	// isolation from concurrent subprocess launches.
 	body, _ := cacheArtifactFixture(t)
 	store := cacheStore{root: t.TempDir(), namespace: body.Namespace}
 	if err := store.write(body); err != nil {
@@ -132,6 +138,9 @@ func TestCacheResultTouch(t *testing.T) {
 }
 
 func TestCacheResultHourlyUse(t *testing.T) {
+	// Nonblocking touch admission is asserted immediately after lock release.
+	// Keep this root sequential: its exact admission assertions require
+	// isolation from concurrent subprocess launches.
 	body, _ := cacheArtifactFixture(t)
 	store := cacheStore{root: t.TempDir(), namespace: body.Namespace}
 	if err := store.write(body); err != nil {
