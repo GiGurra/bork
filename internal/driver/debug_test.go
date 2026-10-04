@@ -14,6 +14,7 @@ import (
 )
 
 func TestDebugRemovalFixes(t *testing.T) {
+	t.Parallel()
 	for _, expression := range []string{
 		"2 * dbg(3 + 4)",
 		"2 * dbg(dbg(3 + 4))",
@@ -25,6 +26,7 @@ func TestDebugRemovalFixes(t *testing.T) {
 		"2 * (dbg(3 + 4) |> dbg)",
 	} {
 		t.Run(expression, func(t *testing.T) {
+			t.Parallel()
 			source := "fn main() { println(\"å\"); println(" + expression + ") }\n"
 			path := filepath.Join(t.TempDir(), "main.bork")
 			if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
@@ -74,8 +76,10 @@ func TestDebugRemovalFixes(t *testing.T) {
 }
 
 func TestTodoRuntime(t *testing.T) {
+	t.Parallel()
 	for _, call := range []string{"todo()", "todo(\"implement it\")"} {
 		t.Run(call, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "main.bork")
 			source := "fn missing(): Int {\n " + call + "\n}\nfn main() { println(missing()) }\n"
 			if err := os.WriteFile(path, []byte(source), 0o644); err != nil {

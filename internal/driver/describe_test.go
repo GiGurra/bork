@@ -36,6 +36,7 @@ type descriptionResult struct {
 }
 
 func TestDescribeProofs(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(n: Int) { n > 0 }
 pred small(n: Int) { n < 10 }
 fn bounded(n: Int where positive): Int where positive { n }
@@ -64,6 +65,7 @@ fn scenario(xs: List[Int], n: Int) uses io {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := describeAt(t, source, tc.fragment, tc.where)
 			if result.typ != tc.typ || result.proven != tc.proven || result.reason == tc.proven || result.defined != tc.defined || result.facts != tc.facts {
 				t.Fatalf("unexpected description: %+v", result)
@@ -73,6 +75,7 @@ fn scenario(xs: List[Int], n: Int) uses io {
 }
 
 func TestDescribeBoundPatternFacts(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(n: Int) { n > 0 }
 fn identity(n: Int): Int { n }
 fn scenario(n: Int): Int {
@@ -93,6 +96,7 @@ fn scenario(n: Int): Int {
 }
 
 func TestDescribeMethodsAndDefinitions(t *testing.T) {
+	t.Parallel()
 	source := `type User = { age: Int }
 fn (u: User) ageText(): String { toString(u.age) }
 fn add(x: Int, y: Int = 2): Int { x + y }
@@ -114,6 +118,7 @@ fn scenario(xs: List[Int], u: User) uses io {
 		{"log(1)", "(Int) uses io => Ok"},
 	} {
 		t.Run(tc.fragment, func(t *testing.T) {
+			t.Parallel()
 			result := describeAt(t, source, tc.fragment, "")
 			if result.typ != tc.typ || !result.defined {
 				t.Fatalf("unexpected description: %+v", result)
@@ -144,6 +149,7 @@ fn scenario(xs: List[Int], u: User) uses io {
 }
 
 func TestDescribeFoldedExpressions(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
 	source := "pred positive(x: Int8) { x > 0 }\nfn example() uses io {\n  n: Int8 = 128 - 1\n  println(n)\n}\n"
@@ -175,6 +181,7 @@ func TestDescribeFoldedExpressions(t *testing.T) {
 }
 
 func TestDescribeInterpolationCallees(t *testing.T) {
+	t.Parallel()
 	source := `type User = { n: Int }
 fn add(x: Int): Int { x + 1 }
 fn (u: User) number(): Int { u.n }
@@ -201,6 +208,7 @@ fn example(u: User) uses io {
 }
 
 func TestDescribeFunctionFieldResult(t *testing.T) {
+	t.Parallel()
 	source := "type Holder = { f: (Int) => Int }\nfn example(h: Holder) uses io { println(h.f(1)) }\n"
 	result := describeAt(t, source, "(1))", "")
 	if result.typ != "Int" {
@@ -209,6 +217,7 @@ func TestDescribeFunctionFieldResult(t *testing.T) {
 }
 
 func TestDescribeFoldedInterpolation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
 	source := "fn example() uses io { println(s\"value ${(1 + 2) * 3}\") }\n"
@@ -225,6 +234,7 @@ func TestDescribeFoldedInterpolation(t *testing.T) {
 }
 
 func TestDescribeRulesAndConstraintArguments(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(x: Int) { x > 0 }
 pred nonNegative(x: Int) { x >= 0 }
 pred atLeast(x: Int, minimum: Int) { x >= minimum }
@@ -248,6 +258,7 @@ fn example(n: Int where positive, m: Int where atLeast(n)) uses io {
 }
 
 func TestDescribeComparisonGuards(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(n: Int) { n > 0 }
 pred ordered(n: Int, bound: Int) { n <= bound }
 fn example(n: Int, bound: Int) uses io {
@@ -271,6 +282,7 @@ fn example(n: Int, bound: Int) uses io {
 }
 
 func TestDescribeGolden(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join("..", "..", "testdata", "cases", "describe_queries")
 	data, err := os.ReadFile(filepath.Join(dir, "queries.json"))
 	if err != nil {
@@ -301,6 +313,7 @@ func TestDescribeGolden(t *testing.T) {
 }
 
 func TestDescribeMethodVisibility(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	files := map[string]string{
 		"bork.mod": "module example.com/query\n",
@@ -362,6 +375,7 @@ fn main() {
 }
 
 func TestDescribeInvalidQueries(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
 	if err := os.WriteFile(path, []byte("fn example(n: Int) uses io { println(n) }\npred positive(n: Int) { n > 0 }\n"), 0o644); err != nil {
@@ -380,6 +394,7 @@ func TestDescribeInvalidQueries(t *testing.T) {
 		{path + ":1:38", "(", "invalid where query"},
 	} {
 		t.Run(tc.position+tc.where, func(t *testing.T) {
+			t.Parallel()
 			_, err := Describe(tc.position, tc.where)
 			if err == nil || !strings.Contains(err.Error(), tc.message) {
 				t.Fatalf("expected %q, got %v", tc.message, err)
@@ -389,6 +404,7 @@ func TestDescribeInvalidQueries(t *testing.T) {
 }
 
 func TestDescribeBytePositionsAndDeclarations(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(n: Int) { n > 0 }
 fn example(n: Int where positive) uses io {
 	println("å"); println(n) // utf8
@@ -404,6 +420,7 @@ fn example(n: Int where positive) uses io {
 		{"n}", "positive"},
 	} {
 		t.Run(tc.fragment, func(t *testing.T) {
+			t.Parallel()
 			// The parameter fragment appears first in the predicate; select
 			// the constrained function parameter by its more specific text.
 			result := describeAt(t, source, tc.fragment, tc.where)
@@ -415,6 +432,7 @@ fn example(n: Int where positive) uses io {
 }
 
 func TestDescribeMethodReferences(t *testing.T) {
+	t.Parallel()
 	source := "fn main() {\n f: (List[Int]) => Int = List.length\n println(f([1]))\n println(List.length([1]))\n}\n"
 	for _, fragment := range []string{"List.length", "length\n", "List.length([", "length(["} {
 		result := describeAt(t, source, fragment, "")
@@ -425,6 +443,7 @@ func TestDescribeMethodReferences(t *testing.T) {
 }
 
 func TestDescribeNamedArguments(t *testing.T) {
+	t.Parallel()
 	source := `fn config(host: String, port: Int = 8080): String { host }
 fn scenario() { _ = config(port: 9000, host: "local") }
 `
@@ -458,6 +477,7 @@ fn scenario() { _ = config(port: 9000, host: "local") }
 }
 
 func TestDescribeOwnedScopeLifetimes(t *testing.T) {
+	t.Parallel()
 	source := `fn roll(prev: OwnedScope in app, task: Task[Int] in prev, app: Scope) uses state {
   next = openScope(app)
   fresh = spawn(next.scope, () => 1)
@@ -493,6 +513,7 @@ func TestDescribeOwnedScopeLifetimes(t *testing.T) {
 }
 
 func TestDescribeContextConstructors(t *testing.T) {
+	t.Parallel()
 	source := `type Config = { port: Int }
 type State = sealed { Ready, Value { value: Int } }
 fn main() {
@@ -508,6 +529,7 @@ fn main() {
 		{".Value {", "State"}, {"Value { value: 1", "State"}, {".Some", "Option[Int]"},
 	} {
 		t.Run(tc.fragment, func(t *testing.T) {
+			t.Parallel()
 			result := describeAt(t, source, tc.fragment, "")
 			if result.typ != tc.typ || !result.defined {
 				t.Fatalf("unexpected context constructor description: %+v", result)
@@ -517,6 +539,7 @@ fn main() {
 }
 
 func TestDescribeMocks(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(n: Int) { n > 0 }
 fn Clamp(n: Int where positive) uses io: Int where positive { n }
 fn main() { println(Clamp(1)) }
@@ -537,6 +560,7 @@ test "mocked" {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			got := describeAt(t, source, c.fragment, c.where)
 			if got.typ != c.typ || got.proven != c.proven || got.defined != c.defined {
 				t.Fatalf("got %+v, want type %s, proven %v, defined %v", got, c.typ, c.proven, c.defined)
@@ -546,6 +570,7 @@ test "mocked" {
 }
 
 func TestDescribeNeeds(t *testing.T) {
+	t.Parallel()
 	source := `ambient traceId: String
 ambient locale: String
 
@@ -575,6 +600,7 @@ fn use() needs traceId: String {
 }
 
 func TestDescribeSpecializedConstructors(t *testing.T) {
+	t.Parallel()
 	source := `type Duration = go "time.Duration"
 type Handle = resource
 type Box[T] = { values: List[T] }
@@ -604,6 +630,7 @@ fn main() {
 		{"Empty\n", "State[Int]", true},
 	} {
 		t.Run(tc.fragment, func(t *testing.T) {
+			t.Parallel()
 			r := describeAt(t, source, tc.fragment, "")
 			if r.typ != tc.typ || r.defined != tc.defined {
 				t.Fatalf("want %s (definition %v), got %+v", tc.typ, tc.defined, r)
@@ -613,6 +640,7 @@ fn main() {
 }
 
 func TestDescribeSpecializedDefaults(t *testing.T) {
+	t.Parallel()
 	source := `pred positive(x: Int) { x > 0 }
 fn take(x: Option[(Int) uses io => Int] = Option[(Int) uses io => Int].None,
  y: Option[Int] = Option[Int where positive].Some { value: 1 }, z: Option[Seq[Int] uses io] = Option[Seq[Int] uses io].None) uses io { println(x); println(y); println(z) }
@@ -637,6 +665,7 @@ fn main() { take() }
 }
 
 func TestDescribeRecordConversion(t *testing.T) {
+	t.Parallel()
 	source := `type A = { n: Int }
 type B = { n: Int, text: String }
 type Err = { reason: String }
@@ -657,6 +686,7 @@ fn main() {}
 }
 
 func TestDescribeFunctionRequirementProof(t *testing.T) {
+	t.Parallel()
 	source := "pred positive(n: Int) { n > 0 }\nfn value(n: Int) where positive(n): Int { n }\n"
 	result := describeAt(t, source, "n }", "positive")
 	if !result.proven || result.facts != 1 {
