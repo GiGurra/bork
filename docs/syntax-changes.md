@@ -24,6 +24,7 @@ These use the compiler packages directly, so they follow automatically. Still ch
 | Component | Where | What to check |
 | --- | --- | --- |
 | Language server | `internal/lsp/` | Construct-specific features: completion snippets and keywords, rename rules, code actions, inlay hints, semantic token classes, navigation |
+| Lint warnings and suppression | `internal/check/lint.go`, `internal/check/facts.go`, `internal/driver/lint.go` | Compiler-backed rules and source ranges; `// lint:ignore` comment handling; JSON diagnostic and LSP fix parity |
 | Browser playground | `internal/playground/`, `web/playground/`, `cmd/bork-playground/` | Compiles the real checker to WebAssembly; rebuild and run `internal/playground` parity tests |
 | `bork new` templates | `internal/project/templates/` | Templates must still check, test and fmt-check (CI covers this) |
 

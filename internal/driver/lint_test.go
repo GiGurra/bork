@@ -105,7 +105,7 @@ fn UnusedParameter(ignored: Int) {}
 
 func TestLintPatternBindings(t *testing.T) {
 	source := `fn main() {
- _ = match [1, 2] { [first, ...rest] => 0, _ => 1 }
+ _ = match ([1, 2]) { [first, ...rest] => 0, _ => 1 }
 }
 `
 	dir := t.TempDir()
