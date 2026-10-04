@@ -37,6 +37,9 @@ type goContext struct {
 	toolDigest   [sha256.Size]byte
 	toolEvidence *goToolEvidence
 	validation   *goContextValidation
+
+	// Tests retain the standalone ordinary recipe path for clean parity.
+	comptimeStandalone bool
 }
 
 // goContextOptions owns per-call Go settings. Overrides affect Go subprocesses;

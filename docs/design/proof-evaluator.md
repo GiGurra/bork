@@ -228,3 +228,49 @@ builds 134/110 ms). Persisting explicit values would need substantially more
 certification and reconstruction machinery; it remains deferred. The narrow proof
 cache is justified by saving more than 100 ms and over half of check time on the
 two ordinary backend fixtures, without adding flags or language concepts.
+
+
+## Ordinary comptime batching (bork-vwsr41)
+
+A warm `examples/comptime` check built six evaluators: four value programs and
+two distinct predicate programs. A `go build -x` timing probe found no compile
+commands with warm Go objects. Of 900–964 ms spent in Go builds, 603–654 ms was
+linking, 277–290 ms action/package setup, and about 20 ms finishing/copying.
+The six child executions totaled about 11.5 ms; four result reads plus JSON
+decodes totaled 0.22 ms, and rooted build-input capture about 0.18 ms. A source
+closure-trimming probe reduced program sizes substantially without improving
+latency. Repeated links, rather than computation or input reads, were the cost.
+
+Ordinary blocks now use the existing per-compilation package-value batch when
+there are at least two checked recipes. The example's four value builds become
+one; the two predicate builds remain. Dependency recursion, preflight, value
+validation and contextual Facts keep their existing admission order. Results
+and deadlines are bounded per request; explicit values still execute afresh.
+
+Go 1.27.1/Linux, `GOMAXPROCS=2`, `CGO_ENABLED=0`, warm SDK objects, private source
+copies and independent cache roots. Before is main after #291; five paired
+samples followed two warmups, alternating arm order and appending one comment
+per edit. Existing test-only CLI phase timing supplied the internal figures.
+
+| Example/request | Before median (min–max) | Batched median (min–max) | Net saving |
+| --- | ---: | ---: | ---: |
+| comptime check | 1103.58 (1097.52–1136.51) ms | 610.97 (606.31–614.17) ms | 492.61 ms (45%) |
+| comptime build | 1173.47 (1159.35–1188.29) ms | 665.25 (657.57–667.66) ms | 508.22 ms (43%) |
+
+Comptime phase medians fell from 1014/1016 ms to 521/512 ms for check/build;
+final Facts stayed around 32 ms. Both arms emitted byte-identical Go, and built
+executables produced identical output. Clean-versus-batched tests cover capture
+chains, nested/helper/computed-field dependencies, contextual facts, preflight
+and result rejection, cycles, deadlines, result budgets and changed build reads.
+
+Predicate builds could also share a long-lived evaluator, but the existing
+query generator embeds each typed argument as Go source. Queries include freshly
+decoded composite values, instantiated predicates and dictionaries, and arrive
+between recipe requests after their proof prerequisites pass. Collecting them
+all up front or postponing their checks would change admission semantics.
+A further reduction from three evaluator builds to one therefore needs a typed,
+bounded predicate request protocol with exact selection/dictionary dispatch,
+short-circuit behavior, dependency getters and per-request deadlines. It is a
+separate design change, not a safe extension of the recipe-index protocol.
+Keep the current predicate path and consider that follow-up if the remaining
+roughly half-second check cost justifies the added machinery.
