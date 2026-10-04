@@ -108,7 +108,7 @@ func (gp goPackages) Names(paths []string) map[string]string {
 	standard := map[string]bool{}
 	ctx := gp.goContext()
 	var nameInputs *goNameValidation
-	if gp.usage != nil {
+	if gp.usage != nil && !gp.usage.deferInputs {
 		nameInputs = captureStandardNameInputs(ctx, paths)
 	}
 	if gp.usage != nil {
@@ -126,11 +126,12 @@ func (gp goPackages) Names(paths []string) map[string]string {
 	if ctx.err != nil || ctx.driverErr != nil {
 		return names
 	}
-	cache := ctx.namesCache && gp.usage == nil
+	cache := ctx.namesCache && (gp.usage == nil || gp.usage.deferInputs)
 	var missing []string
 	for _, path := range paths {
 		if name, ok := standardGoNames.Load(standardGoNameKey{ctx.namespace, path}); cache && ok {
 			names[path] = name.(string)
+			standard[path] = true
 		} else {
 			missing = append(missing, path)
 		}

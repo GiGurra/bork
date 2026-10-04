@@ -581,3 +581,26 @@ Go cache; they are not the writable stable-staging measurements above. Both run
 proof evaluators, so neither publishes a result nor produces a disk hit. Proven
 execution receipts are prerequisite to gains on these programs. Keep evaluator
 bypass until the complete closure and external-input contract is established.
+
+The follow-up miss path compiles through the ordinary pipeline with deferred
+usage observations. Evaluator/export/custom-driver/foreign-name/asset bypasses
+stop before SDK/configuration inventories or compiler-identity hashing. Candidate
+lookup is bounded and untrusted until actual compiler identity is checked; no
+candidate on a known-bypass program causes no cache hashing. Eligible misses
+capture fresh configuration and independently re-query metadata names between SDK
+observations, compare them with names used by checking, and certify current source
+inputs before publication. Capturing SDK bytes after checking without re-querying
+would not prove the earlier result.
+
+Seven fresh processes per row on the same host, within this follow-up experiment:
+
+| Emission | Ordinary median (min–max), ms | Gated bypass median (min–max), ms |
+| --- | ---: | ---: |
+| config | 313.07 (310.86–314.63) | 311.90 (308.32–314.86) |
+| http_server | 459.10 (453.05–496.42) | 459.51 (455.84–478.41) |
+
+These paired results remove the inventory penalty on bypasses within observed
+variation. They do not claim evaluator result hits. Compiler and launcher hashing
+is now lazy: overlap it with candidate validation or eligible publication, while
+skipping it entirely on known-bypass misses. This takes precedence over unconditional
+startup hashing because unknown programs must not pay extra cache inventory costs.
