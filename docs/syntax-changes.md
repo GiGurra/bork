@@ -45,9 +45,6 @@ These use the compiler packages directly, so they follow automatically. Still ch
 Compiler keyword coverage for each highlighting grammar is checked by
 `scripts/check-editor-keywords.cjs` in CI. Register new grammars there.
 
-Compiler keyword coverage for each highlighting grammar is checked by
-`scripts/check-editor-keywords.cjs` in CI. Register new grammars there.
-
 ## 4. Documentation and examples
 
 | What | Where |
