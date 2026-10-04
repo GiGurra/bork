@@ -10,7 +10,8 @@ import (
 )
 
 // Each hit uses fresh receipt restoration, as a fresh CLI process does. Compiler
-// and launcher startup hashing are measured separately; the CLI overlaps them.
+// hashing is measured separately. The launcher-overlap arm describes the
+// historical content-certified CLI; installed-SDK hits no longer hash it.
 func BenchmarkCacheHitBreakdown(b *testing.B) {
 	b.Setenv("GOPACKAGESDRIVER", "off")
 	b.Setenv("GOTOOLCHAIN", "local")

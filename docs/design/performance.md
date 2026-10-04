@@ -813,7 +813,7 @@ Whole-cycle fresh-entry trim is measured separately, including streaming, age
 checks and cursor publication. At 1/1k/10k entries, N=3 three-iteration samples
 were approximately 0.067/0.52/3.9 seconds; a separate 100k single-cycle probe took
 39.65 seconds, resuming across five-second worker deadlines. That final probe is
-a single observation, not a median. These are total maintenance CPU/wall work
+a single observation, not a median. These are total maintenance wall time
 without detached low-priority scheduling, not parent build latency. Streaming
 allocations are cumulative over the cycle, not retained inventories. Busy entries
 and age-based deletion are covered by trim regressions; these timing fixtures
