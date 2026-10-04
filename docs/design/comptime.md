@@ -9,6 +9,9 @@ incremental cache layer. The cache contract below describes those remaining
 requirements, not enabled reuse. User-defined derive, structural constraints
 and source/declaration generation are outside this ticket.
 
+See [the runnable comptime example](../../examples/comptime/README.md) for a baked
+lookup table, validated module-file configuration and dependent computations.
+
 ## Contract and syntax
 
 A `comptime` block computes a closed, typed value during checking. The generated

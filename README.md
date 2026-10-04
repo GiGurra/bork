@@ -203,7 +203,7 @@ fn main() {
 }
 ```
 
-More examples: [config](examples/config/README.md) (defaults, named overrides, TLS variants, and package-owned validation), [http_server](examples/http_server/main.bork) (a REST API with JSON, an atom of persistent maps for state, and logging), [signup_api](examples/signup_api/main.bork) (an endpoint whose requests decode into proven values), [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
+More examples: [comptime](examples/comptime/README.md) (a baked lookup table and validated build-time configuration), [config](examples/config/README.md) (defaults, named overrides, TLS variants, and package-owned validation), [http_server](examples/http_server/main.bork) (a REST API with JSON, an atom of persistent maps for state, and logging), [signup_api](examples/signup_api/main.bork) (an endpoint whose requests decode into proven values), [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
 
 ```
 type Address = { city: String }
@@ -349,7 +349,8 @@ scalar, list, record, sealed, union and insertion-ordered Map data into the
 program. Its own return boundary and preflight checks keep recipe promises
 separate from runtime guards. Direct `bork/build.ReadString` and `ReadBytes` calls
 capture constant module-relative files under the `build` effect. Result caching
-remains planned in the
+remains planned. See [the runnable comptime example](examples/comptime/README.md)
+and the
 [comptime design](docs/design/comptime.md).
 
 Contributor test shards, timing refresh and Go cache behavior are documented in
