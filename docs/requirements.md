@@ -825,7 +825,7 @@ bork needs compile-time evaluation, in the spirit of [q's `AtCompileTime`](https
 
 - **Predicates on compile-time-known values are evaluated during compilation.** `connect("db", 5432)` is accepted because `between(1, 65535)(5432)` is computed at build time. `connect("db", 0)` fails the build. Unlike proven, this works for *any* predicate, not just a built-in set.
 - **Constants and named constrained values.** `defaultPort: Port = 8080` is checked once, when compiled.
-- **Explicit compile-time computation:** `comptime { ... }` evaluates pure code with closed captures and concrete types at compilation, with its own return boundary. Scalars, lists, records, sealed variants, unions and insertion-ordered Maps become typed literals and ordinary facts. Internal promises check before execution; result constraints check afterward. Native-target execution is bounded by ten seconds and a 16 MiB result limit. Runtime behavior and lazy cells cannot be baked; sorted maps require explicit `.inOrder()` export. Result caching follows the [comptime design](design/comptime.md).
+- **Explicit compile-time computation:** `comptime { ... }` evaluates pure code with closed captures and concrete types at compilation, with its own return boundary. Scalars, lists, records, sealed variants, unions and insertion-ordered Maps become typed literals and ordinary facts. Internal promises check before execution; result constraints check afterward. Native-target execution is bounded by ten seconds and a 16 MiB result limit. Runtime behavior and lazy cells cannot be baked; sorted maps require explicit `.inOrder()` export. See [the runnable comptime example](../examples/comptime/README.md) for a lookup table and validated build configuration. Result caching follows the [comptime design](design/comptime.md).
 - **Explicit build inputs:** `bork/build.ReadString` and `ReadBytes` supply frozen module-relative files within comptime blocks and helpers declaring `uses build`. Calls require constant String paths; guarded sites are captured before execution. Runtime entrypoints, file escapes, operand symlinks, special files and invalid UTF-8 Strings are rejected. Established root symlinks retain tracked identities. Capture limits are 16 MiB per file and 64 MiB total; successful captures include content, negative lookup and component identity evidence. Existing predicate evaluation still trusts pure `unsafe go` signatures (see purity below).
 
 ### Facts, purity, and the outside world
@@ -2784,7 +2784,7 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **Conditions are parenthesized:** `if (cond) { ... } else { ... }`. `else` goes on the same line as the closing `}`, as in Go.
 - **No shadowing.** A name cannot be bound again while it is visible, in the same or an enclosing scope (including function names). Sibling blocks can reuse names.
 - **Scala-style string interpolation, not printf:** `s"Hello, $name! Next year: ${age + 1}"`. Any value can be interpolated, rendered as `toString` renders it. Plain `"..."` strings never interpolate, so `$` needs no escaping there.
-- **Typed library interpolators (implemented):** `Prefix"... $value ..."` and imported `sql.SQL"... $value ..."` call a prefix factory with a compiler-created private `StaticParts`, then typed Interpolate methods and Finish. Runtime Strings cannot become literal parts; holes retain ordinary types, effects, generic bounds, and resource lifetimes. Evaluation is eager, once per hole, in source order. `$$` stays a literal dollar. SQL returns a private Statement: scalar/Bytes/Null values bind, validated Identifier values quote, and nested Statements compose. SQLite/Postgres rendering numbers structured parameters at execution, rejects literal placeholders and holes inside quotes/comments/partial tokens, and preserves scoped execution and streaming errors. Ordinary Postgres strings with backslashes are rejected to avoid session-dependent escape rules; explicit E strings are supported. See [the design](design/interpolators.md) and [SQL API](std/sql.md).
+- **Typed library interpolators (implemented):** `Prefix"... $value ..."` and imported `sql.SQL"... $value ..."` call a prefix factory with a compiler-created private `StaticParts`, then typed Interpolate methods and Finish. Runtime Strings cannot become literal parts; holes retain ordinary types, effects, generic bounds, and resource lifetimes. Evaluation is eager, once per hole, in source order. `$$` stays a literal dollar. Raw execution and stream functions require an explicit `sql.Unsafe(text): UnsafeQuery`; ordinary Strings cannot become driver query text through those APIs. SQL returns a private Statement: scalar/Bytes/Null values bind, validated Identifier values quote, and nested Statements compose. SQLite/Postgres rendering numbers structured parameters at execution, rejects literal placeholders and holes inside quotes/comments/partial tokens, and preserves scoped execution and streaming errors. Ordinary Postgres strings with backslashes are rejected to avoid session-dependent escape rules; explicit E strings are supported. See [the design](design/interpolators.md) and [SQL API](std/sql.md).
 - **Comments** are `// ...` and `/* ... */`. **String literals** use double quotes with Go's escape sequences.
 - **Identifiers cannot start with `_`.** That prefix is reserved for the compiler.
 - **Records have named fields:** `type User = { name: String, age: Int }`, built as `User { name: "Ada", age: 36 }`. There are no positional constructors.
@@ -2809,7 +2809,7 @@ cli.Run[Options]("greet", "A proven command-line configuration", (options, s) =>
 }, flags: [cli.Flag { field: "port", short: "p" }])
 
 // internal/std/sql/sql.bork: required parameters can be named too.
-sql.Query[Row](connection, query: "select name from users where id = ?", params: [id])
+sql.Query[Row](connection, query: sql.Unsafe("select name from users where id = ?"), params: [id])
 process.Run(s, "tool", directory: "/tmp", arguments: ["--version"])
 ```
 
@@ -2845,7 +2845,7 @@ process.Run(s, "tool", directory: "/tmp", arguments: ["--version"])
 - **The method receiver cannot be named.** `items.take(n: 3)` labels an
   ordinary method parameter; the receiver remains `items`. A pipeline's input
   fills the first positional parameter before labels are resolved:
-  `connection |> sql.Query[Row](query: text, params: [])`. Explicitly naming
+  `connection |> sql.Query[Row](query: sql.Unsafe(text), params: [])`. Explicitly naming
   that same parameter is a duplicate. Existing restrictions on pipeline
   targets remain in force.
   A directly invoked method reference, `List.take(items, n: 3)`, still selects
@@ -3503,7 +3503,7 @@ as an ordinary function value and dropping its metadata. Iterators must call
 yield synchronously, stop at false, and not retain yield for later invocation.
 Mappings that cannot prove the element representation or lifetime are rejected.
 Standard-library producers include `fs.Lines(path)`, `fs.Entries(path)`,
-`sql.Rows[T](connection, query, params)` and `sql.RowsJson(connection, query, params)`. Each traversal reopens the file/directory or executes a fresh query. Directory entries follow filesystem order; file lines have no scanner token-size limit and strip LF/CRLF. SQL sequences retain the connection/transaction lifetime. Errors are explicit final elements. Row buffers must be
+`sql.Rows[T](connection, sql.Unsafe(query), params)` and `sql.RowsJson(connection, sql.Unsafe(query), params)`. Each traversal reopens the file/directory or executes a fresh query. Directory entries follow filesystem order; file lines have no scanner token-size limit and strip LF/CRLF. SQL sequences retain the connection/transaction lifetime. Errors are explicit final elements. Row buffers must be
 copied/decoded before yielding; no borrowed Go scanner buffer may escape as an
 immutable bork value. APIs must state whether repeat traversal reopens an input
 or continues a captured cursor. Scope-bound operations never silently open a

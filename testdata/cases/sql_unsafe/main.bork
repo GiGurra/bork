@@ -1,0 +1,22 @@
+import "bork/sql"
+type Row = { name: String } derive (Decode)
+fn demo(text: String) uses io + net: Ok | sql.Error | DecodeError {
+  scope app {
+    db = sql.OpenSqlite(":memory:", app)?
+    created = sql.Exec(db, sql.Unsafe(text), [])?
+    inserted = sql.Exec(db, sql.Unsafe("INSERT INTO users VALUES (?)"), ["O'Reilly"])?
+    query = sql.Unsafe("SELECT name FROM users")
+    println(sql.Query[Row](db, query, [])?)
+    println(sql.QueryJson(db, query, [])?)
+    println(sql.Rows[Row](db, query, []).toList())
+    println(sql.RowsJson(db, query, []).toList())
+    println(sql.Rows[Row](db, query, []).toList())
+  }
+}
+fn main() {
+  match (demo("CREATE TABLE users (name TEXT)")) {
+    error: sql.Error => println(error.operation, error.message)
+    error: DecodeError => println(error.message)
+    _ => {}
+  }
+}

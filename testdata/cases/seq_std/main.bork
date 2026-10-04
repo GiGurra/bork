@@ -14,11 +14,11 @@ fn demo() uses io + net: Ok | fs.Error | sql.Error {
       error: fs.Error => "error"
       }).toList())
     db = sql.OpenSqlite(":memory:", app)?
-    rows = sql.Rows[Row](db, "SELECT 1 AS n UNION ALL SELECT 2 AS n", [])
+    rows = sql.SQL"SELECT 1 AS n UNION ALL SELECT 2 AS n".Rows[Row](db)
     println(rows.take(1).toList())
     println(rows.toList())
-    println(sql.RowsJson(db, "SELECT 3 AS n", []).toList())
-    println(sql.RowsJson(db, "SELECT missing FROM missing", []).map(value => match (value) {
+    println(sql.SQL"SELECT 3 AS n".RowsJson(db).toList())
+    println(sql.SQL"SELECT missing FROM missing".RowsJson(db).map(value => match (value) {
       error: sql.Error => error.operation
       json: Json => codecs.Render(json)
       }).toList())

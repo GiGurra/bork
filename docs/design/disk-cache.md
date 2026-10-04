@@ -231,3 +231,54 @@ publication. Automatic persistent use remains disabled until accounting, evictio
 and cleanup land. Tests opt into an explicit completion pipe and optional barrier;
 they wait for publication or process exit without sleep-based polling. These pipes
 are never inherited by Go subprocesses.
+
+The first lifecycle slice applies a 256 MiB/1,024-entry policy to result artifacts
+across all compiler namespaces. Publication inventories recognized artifacts under
+MUTATION, removes abandoned result temporaries, and evicts oldest inactive entries
+using nonblocking result-slot acquisition. Both the old generation and the entire
+new temporary must fit during replacement. Busy entries or a scan beyond 4,096
+directory records cause publication to skip rather than overshoot. A validated hit
+updates its last-use hint with nonblocking SLOT/MUTATION acquisition. Hints affect
+only eviction, never receipt validity. Staging-v2 accounting, deleted-target cleanup
+and explicit clean commands remain prerequisites before automatic use.
+
+Staging version 2 uses the same cache root and MUTATION lock as results, with a
+separate permanent 256-slot pool in `locks/stage-v2`. Its versioned metadata records
+the canonical program directory, mode and pinned Go-context namespace. Publishers
+hold SLOT through Go execution; publication takes MUTATION only while accounting,
+evicting inactive entries and replacing complete trees. Retained stage limits are
+256 MiB/1,024 entries. Admission also reserves file/directory scanner nodes (65,536
+across the layer), including module files, unique parents, tree/entry directories
+and metadata, so legal small-file trees cannot exhaust inventory capacity. Account
+actual existing tree nodes/bytes and old/new generations conservatively. Busy slots
+or insufficient capacity use temporary staging.
+
+Maintenance prioritizes conclusively deleted program directories, then oldest
+inactive entries. It never follows entry symlinks; contained aliases are rejected
+before abandonment cleanup or publication because confinement alone would not prove
+which entry lock protects the tree. An entry's abandoned `new-*`/`previous` trees are
+removed while its SLOT and MUTATION are held. Unsupported or unavailable caches keep
+temporary staging. Version 1 publishers are retired without compatibility shims;
+`clean --all` will recognize and remove their entries while preserving old lock files.
+
+The cleanup slice exposes `bork clean` and `bork clean --all`. It first drains the
+eight publisher admission slots, retaining them through cleanup so a queued child
+cannot repopulate selected entries. Select under MUTATION, release it before waiting
+for each entry slot, then reacquire MUTATION and recheck the selected identity before
+removal. All waits are cancellable; an interrupted operation may have removed earlier
+selected entries. Cleanup recognizes current result schema namespaces, staging-v2,
+and (with --all) legacy staging-v1 with its original lock mapping. Lock files remain.
+A missing cache succeeds; inaccessible storage or unsupported locking reports errors.
+On platforms without current-result image identity, default cleanup covers staging;
+--all selects all recognized result namespaces without that identity prerequisite.
+
+Abandoned result temporaries and zero-byte job names left before descriptor unlink
+are also selected; draining admission protects parent-side handoff creation. Cleanup
+uses bounded no-follow traversal and can remove malformed entry symlinks without
+following their targets. Unrecognized cache paths, project outputs and Go's cache
+are preserved. Result maintenance additionally reads a bounded canonical request
+header to prioritize conclusively absent selected targets (including standalone
+files). This is an eviction hint only: hit validation still certifies the complete
+checksummed artifact and every semantic receipt. Unsupported/truncated headers retain
+ordinary LRU eligibility. Empty result namespace directories are removed under
+MUTATION so failed publication does not accumulate directory records.

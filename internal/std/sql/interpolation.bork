@@ -164,15 +164,15 @@ fn dialectOf(connection: Connection | Transaction): Dialect | Error unsafe go {
 }
 fn (statement: Statement) Exec(connection: Connection | Transaction) uses io + net: Result | Error {
   rendered = statement.Render(dialectOf(connection)?)?
-  Exec(connection, rendered.query, rendered.params)
+  Exec(connection, Unsafe(rendered.query), rendered.params)
 }
 fn (statement: Statement) Query[T: Decode](connection: Connection | Transaction) uses io + net: List[T] | Error | DecodeError {
   rendered = statement.Render(dialectOf(connection)?)?
-  Query[T](connection, rendered.query, rendered.params)
+  Query[T](connection, Unsafe(rendered.query), rendered.params)
 }
 fn (statement: Statement) QueryJson(connection: Connection | Transaction) uses io + net: Json | Error {
   rendered = statement.Render(dialectOf(connection)?)?
-  QueryJson(connection, rendered.query, rendered.params)
+  QueryJson(connection, Unsafe(rendered.query), rendered.params)
 }
 fn (statement: Statement) Rows[T: Decode](connection: Connection | Transaction): Seq[T | Error | DecodeError] uses io + net {
   statement.RowsJson(connection).map(value => decodeRow[T](value))
@@ -181,7 +181,7 @@ fn (statement: Statement) RowsJson(connection: Connection | Transaction): Seq[Js
   generate[Json | Error] {
     match (dialectOf(connection)) {
       dialect: Dialect => match (statement.Render(dialect)) {
-        rendered: Rendered => { for (row in RowsJson(connection, rendered.query, rendered.params)) { yield row } }
+        rendered: Rendered => { for (row in RowsJson(connection, Unsafe(rendered.query), rendered.params)) { yield row } }
         error: Error => yield error
       }
       error: Error => yield error

@@ -1,0 +1,7 @@
+main.bork:4:23: argument 2 to sql.Exec must be sql.UnsafeQuery, found String
+main.bork:5:29: argument 2 to sql.Query must be sql.UnsafeQuery, found String
+main.bork:6:28: argument 2 to sql.QueryJson must be sql.UnsafeQuery, found String
+main.bork:7:30: argument 2 to sql.Rows must be sql.UnsafeQuery, found String
+main.bork:8:33: argument 2 to sql.RowsJson must be sql.UnsafeQuery, found String
+main.bork:10:24: argument 2 must be sql.UnsafeQuery, found String
+main.bork:11:12: cannot construct UnsafeQuery: package bork/sql controls its construction; use an exported constructor or update method from that package

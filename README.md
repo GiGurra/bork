@@ -160,6 +160,12 @@ bork deps download          # download pinned dependencies and fill checksums
 
 Use `bork check --watch path` for ongoing diagnostics, or add `--json` for complete result objects. See [watch mode](docs/watch.md) for tracked inputs, manual retriggers, and the streaming format.
 
+Use `bork clean` to remove current compiler cache artifacts and staged Go sources.
+`bork clean --all` also removes other compiler namespaces and older recognized
+staging versions. Cleanup preserves project outputs and Go's own cache; it waits
+for active builds, and Ctrl-C cancels the wait.
+
+
 For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
 
 `bork/cli` supports typed subcommands with command-specific decoded options, generated help, and scoped handlers. See [the subcommand API](docs/std/cli.md#subcommands).
@@ -197,7 +203,7 @@ fn main() {
 }
 ```
 
-More examples: [sql_interpolation](examples/sql_interpolation/main.bork) (bound values, quoted identifiers, composed fragments, and streaming with hostile input), [config](examples/config/README.md) (defaults, named overrides, TLS variants, and package-owned validation), [http_server](examples/http_server/main.bork) (a REST API with JSON, an atom of persistent maps for state, and logging), [signup_api](examples/signup_api/main.bork) (an endpoint whose requests decode into proven values), [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
+More examples: [sql_interpolation](examples/sql_interpolation/main.bork) (bound values, quoted identifiers, composed fragments, and streaming with hostile input), [comptime](examples/comptime/README.md) (a baked lookup table and validated build-time configuration), [config](examples/config/README.md) (defaults, named overrides, TLS variants, and package-owned validation), [http_server](examples/http_server/main.bork) (a REST API with JSON, an atom of persistent maps for state, and logging), [signup_api](examples/signup_api/main.bork) (an endpoint whose requests decode into proven values), [calculator](examples/calculator/main.bork) (a parser and evaluator), [orders](examples/orders/main.bork) (validation and pricing), and [accounts](examples/accounts/main.bork) (a state machine). A short one, from [examples/users](examples/users/main.bork):
 
 ```
 type Address = { city: String }
@@ -296,7 +302,7 @@ output experiment.
 
 [MIT](LICENSE)
 
-Typed interpolators retain values separately from literal text: `sql.SQL"SELECT name FROM users WHERE id = $id".Query[User](db)` binds `id` and returns decoded rows. `sql.Name(text)` creates a checked, quoted identifier; nested SQL Statements compose without losing parameters. Libraries can define their own `Prefix"..."` using a typed builder and compiler-created `StaticParts`, which ordinary code cannot construct from runtime Strings. See [bork/sql](docs/std/sql.md) and [the interpolation protocol](docs/grammar.md).
+Typed interpolators retain values separately from literal text: `sql.SQL"SELECT name FROM users WHERE id = $id".Query[User](db)` binds `id` and returns decoded rows. `sql.Name(text)` creates a checked, quoted identifier; nested SQL Statements compose without losing parameters. Raw execution/stream APIs require an explicit `sql.Unsafe(text)` value instead of accepting plain Strings. Libraries can define their own `Prefix"..."` using a typed builder and compiler-created `StaticParts`, which ordinary code cannot construct from runtime Strings. See [bork/sql](docs/std/sql.md) and [the interpolation protocol](docs/grammar.md).
 
 Sequences keep ordered work lazy: `generate[Int] { for (n in Seq.range(0, 10)) { yield n * n } }.take(3).toList()` produces `[0, 1, 4]`. Constructing a `Seq[T]` runs no producer code; each traversal invokes it again. `List.toSeq()`, `map`, `filter`, `flatMap`, `take` and `drop` defer work until `for`, `forEach`, `fold`, `first` or `toList` consumes it. `Seq.unfold(seed, step)` uses a pure step returning `Option[SeqStep[T, S]]`. `Seq[T] uses io` carries effects that consumption must declare. Consumers can `break`, `continue`, `return` or use `?`; stopping closes active producer scopes. `fs.Lines`, `fs.Entries`, `sql.Rows[T]` and `sql.RowsJson` reopen their input on each traversal and yield errors as explicit elements.
 
@@ -343,7 +349,8 @@ scalar, list, record, sealed, union and insertion-ordered Map data into the
 program. Its own return boundary and preflight checks keep recipe promises
 separate from runtime guards. Direct `bork/build.ReadString` and `ReadBytes` calls
 capture constant module-relative files under the `build` effect. Result caching
-remains planned in the
+remains planned. See [the runnable comptime example](examples/comptime/README.md)
+and the
 [comptime design](docs/design/comptime.md).
 
 Contributor test shards, timing refresh and Go cache behavior are documented in

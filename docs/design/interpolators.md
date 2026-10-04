@@ -112,8 +112,8 @@ statement = sql.SQL"SELECT * FROM $table WHERE $filter"
 ```
 
 There is no raw hole escape hatch in the first version. Runtime SQL text remains
-possible through the existing explicit string/parameter API; that legacy API is
-outside the safe Statement construction guarantee. Statement internals are
+possible only through the explicit `sql.Unsafe(text)` conversion for the raw
+query/parameter APIs, outside the safe Statement construction guarantee. Statement internals are
 private, and there is no public constructor taking arbitrary SQL text.
 `StaticParts` is a private prelude record with read-only `values: List[String]`.
 Only the compiler creates it at prefixed literal sites; there is no public
@@ -122,10 +122,10 @@ Reading its segments does not confer permission to reconstruct it. The existing
 private-construction checks also cover copy, nested update, decoding, derivation,
 and into conversions. The compiler marks only its generated construction as
 trusted; source record literals never receive that exemption. Unsafe Go remains
-an explicitly authorized escape from the language's guarantees. A library may
-provide an explicit, greppable `sql.Unsafe(text)` to opt into runtime raw SQL;
-the initial implementation does not need that escape hatch because legacy APIs
-remain available. The SQL factory accepts StaticParts, so an agent cannot
+an explicitly authorized escape from the language's guarantees. The SQL library
+provides an explicit, greppable `sql.Unsafe(text): UnsafeQuery` to opt into
+runtime raw SQL. Every raw execution/stream entry point requires this opaque
+wrapper; a plain String cannot reach the driver through those entry points. The SQL factory accepts StaticParts, so an agent cannot
 accidentally call it with a list of untrusted runtime strings.
 
 ## SQL boundaries, dialects, and execution
@@ -168,8 +168,9 @@ and stop without executing a query; each traversal remains fresh.
 Provide `statement.Render(dialect)` returning a public rendered query/params
 record or Error for testing and inspection. Rendering is pure; execution and
 stream traversal retain their current effects and scope ownership.
-The legacy `sql.Exec/Query/QueryJson/Rows/RowsJson(query, params)` entry points
-remain compatible. Migrate examples/sql to Statement methods and use actual
+The raw `sql.Exec/Query/QueryJson/Rows/RowsJson(connection, query, params)`
+entry points require `query: UnsafeQuery`, constructed with `sql.Unsafe(text)`.
+Their old String signatures are removed; parameters remain bound by the driver. Migrate examples/sql to Statement methods and use actual
 value holes for inserts and predicates.
 
 ## Diagnostics and tooling
@@ -180,8 +181,16 @@ Unknown prefixes report at the prefix; malformed protocols report the missing
 method or wrong signature at the prefix; unsupported types and unsatisfied
 class bounds report at the originating hole. A failure from SQL rendering is a
 normal sql.Error containing the operation and a useful boundary description.
-Compile-time SQL lexical validation is a possible later optimization; it must
-agree with the runtime renderer and cannot be required for runtime composition.
+Follow-up **bork-hstt36 (P2)** adds a general optional validation protocol:
+an interpolator declares a pure validator over compiler-created StaticParts and
+hole kinds. The compiler runs it with bounded pure/predicate evaluation and
+reports structural errors at source holes, without SQL rules in the compiler
+or evaluating effectful hole values. SQL can then reject quoted/comment holes,
+partial tokens and manual placeholders while compiling literals. Validator
+signatures, hole-kind metadata and failure/limit diagnostics need a separate
+design. Runtime rendering stays mandatory for composed runtime fragments and
+dialect-dependent checks; compile-time checks must agree with it whenever the
+available inputs suffice.
 
 The formatter preserves the prefix/quote adjacency and the literal's bytes,
 including nested interpolation expressions, just as for s"...". Update editor
@@ -230,7 +239,7 @@ methods, inaccessible methods, unsupported holes, and resource-lifetime failures
 SQL tests cover scalar/Bytes/Null bindings, hostile String and Identifier values,
 identifier dots/quotes, nested fragments and parameter ordering, SQLite execution,
 Postgres rendering and numbering, transaction dialect retention, repeated render,
-legacy compatibility, and every quote/comment/placeholder boundary above.
+explicit Unsafe opt-in, and every quote/comment/placeholder boundary above.
 Negative capability tests cover direct literals, defaults, generated constructors,
 copy/into, decode/GoStruct derivation, aliases, and generic reconstruction;
 reading StaticParts.values must not make reconstruction possible.

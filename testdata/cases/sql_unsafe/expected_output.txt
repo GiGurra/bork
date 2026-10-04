@@ -1,0 +1,5 @@
+[Row { name: "O'Reilly" }]
+Json.Array { items: [Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "O'Reilly" } }] }] }
+[Row { name: "O'Reilly" }]
+[Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "O'Reilly" } }] }]
+[Row { name: "O'Reilly" }]
