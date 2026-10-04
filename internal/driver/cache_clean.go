@@ -75,6 +75,15 @@ func cleanCache(ctx context.Context, directory string, namespace [sha256.Size]by
 		}
 		admissions = append(admissions, file)
 	}
+	// Drain maintenance before selecting detached trash. Ordering matches the
+	// worker admission -> trim -> SLOT -> MUTATION protocol.
+	for _, name := range []string{"trim-admission.lock", "trim.lock"} {
+		file, err := store.lockWithContext(ctx, root, name)
+		if err != nil {
+			return report, err
+		}
+		admissions = append(admissions, file)
+	}
 	mutation, err := store.lockWithContext(ctx, root, "mutation.lock")
 	if err != nil {
 		return report, err
@@ -367,6 +376,26 @@ func selectCleanEntries(ctx context.Context, root *os.Root, namespace [sha256.Si
 				selected.namespace = namespace
 			}
 			entries = append(entries, selected)
+		}
+	}
+
+	trashShards, err := cleanDirectoryEntries(ctx, root, "trash/v1")
+	if err != nil {
+		return nil, err
+	}
+	for _, shard := range trashShards {
+		if !cacheShard(shard.Name()) || !shard.IsDir() {
+			continue
+		}
+		dir := filepath.Join("trash", "v1", shard.Name())
+		garbage, err := cleanDirectoryEntries(ctx, root, dir)
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range garbage {
+			if _, ok := cacheHexDigest(entry.Name()); ok && entry.Name()[:2] == shard.Name() {
+				entries = append(entries, cacheCleanEntry{path: filepath.Join(dir, entry.Name()), layer: "temporary"})
+			}
 		}
 	}
 
