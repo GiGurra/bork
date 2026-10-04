@@ -27,7 +27,7 @@ func TestCacheCleanNamespacesVersionsAndPreservation(t *testing.T) {
 	if err := otherStore.write(&other); err != nil {
 		t.Fatal(err)
 	}
-	metadata := stageMetadataForTest(t, nil)
+	metadata := stageMetadataForTest(t)
 	module := &goModuleInputs{mod: []byte("module stage\n")}
 	stage, _, release, err := stageGoStable(base, stageLifecycleKey(1), []byte("source"), module, nil, metadata)
 	if err != nil {
@@ -39,6 +39,20 @@ func TestCacheCleanNamespacesVersionsAndPreservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(legacy, "main.go"), []byte("legacy"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacyV2 := filepath.Join(base, "stage", "v2", stageLifecycleKey(3), "tree")
+	if err := os.MkdirAll(legacyV2, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyV2, "main.go"), []byte("legacy v2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	legacyResult := filepath.Join(base, "results", "v1", fmt.Sprintf("%x", body.Namespace), cacheArtifactFilename(body.Key))
+	if err := os.MkdirAll(filepath.Dir(legacyResult), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyResult, []byte("legacy result"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	job := filepath.Join(base, "jobs", "v1", ".job-abandoned")
@@ -71,11 +85,16 @@ func TestCacheCleanNamespacesVersionsAndPreservation(t *testing.T) {
 		}
 	}
 	report, err = cleanCache(context.Background(), base, body.Namespace, true)
-	if err != nil || report.Results != 1 || report.Stages != 1 {
+	if err != nil || report.Results != 2 || report.Stages != 2 {
 		t.Fatalf("all clean: %+v %v", report, err)
 	}
 	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
 		t.Fatal("legacy retained with --all")
+	}
+	for _, path := range []string{legacyV2, legacyResult} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatal("legacy layout retained", path, err)
+		}
 	}
 	if data, err := os.ReadFile(output); err != nil || string(data) != "preserve" {
 		t.Fatal("project output changed")
@@ -101,7 +120,7 @@ func TestCacheCleanWaitsForStageAndCancellation(t *testing.T) {
 	for _, cancelled := range []bool{false, true} {
 		t.Run(map[bool]string{false: "release", true: "cancel"}[cancelled], func(t *testing.T) {
 			base := t.TempDir()
-			metadata := stageMetadataForTest(t, nil)
+			metadata := stageMetadataForTest(t)
 			module := &goModuleInputs{mod: []byte("module stage\n")}
 			stage, _, release, err := stageGoStable(base, stageLifecycleKey(1), []byte("source"), module, nil, metadata)
 			if err != nil {
@@ -200,32 +219,109 @@ func TestCacheCleanMissingUnavailableAndSymlink(t *testing.T) {
 		t.Fatal("followed entry symlink")
 	}
 }
-func TestCacheResultDeletedTargetCleanup(t *testing.T) {
-	original, _ := cacheArtifactFixture(t)
+
+func TestCacheCleanLocatorTemporaries(t *testing.T) {
+	requireStageLock(t)
 	base := t.TempDir()
-	store := cacheStore{root: base, namespace: original.Namespace}
-	first := lifecycleBody(t, original, 1)
-	if err := store.write(first); err != nil {
+	namespace := sha256.Sum256([]byte("compiler"))
+	other := sha256.Sum256([]byte("other compiler"))
+	key := sha256.Sum256([]byte("request"))
+	index := filepath.Join(base, cacheIndexPath(key))
+	if err := os.MkdirAll(filepath.Dir(index), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(first.Request.Path); err != nil {
+	current, foreign, partial := index+".tmp-current", index+".tmp-foreign", index+".tmp-partial"
+	for path, data := range map[string]string{current: fmt.Sprintf("%x", namespace), foreign: fmt.Sprintf("%x", other), partial: "partial"} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := cleanCache(context.Background(), base, namespace, false)
+	if err != nil || report.Temporaries != 1 {
+		t.Fatalf("current locator cleanup: %+v %v", report, err)
+	}
+	if _, err := os.Stat(current); !os.IsNotExist(err) {
+		t.Fatal("current locator temporary survived", err)
+	}
+	for _, path := range []string{foreign, partial} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatal("foreign/unknown namespace temporary removed", err)
+		}
+	}
+	report, err = cleanCache(context.Background(), base, namespace, true)
+	if err != nil || report.Temporaries != 2 {
+		t.Fatalf("all locator cleanup: %+v %v", report, err)
+	}
+}
+
+type batchCancelContext struct {
+	context.Context
+	calls int
+}
+
+func (c *batchCancelContext) Err() error {
+	c.calls++
+	if c.calls > 2 {
+		return context.Canceled
+	}
+	return nil
+}
+
+func TestCacheCleanDirectoryBatchesCancel(t *testing.T) {
+	base := t.TempDir()
+	for index := range 700 {
+		if err := os.WriteFile(filepath.Join(base, fmt.Sprint(index)), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
 		t.Fatal(err)
 	}
-	second := lifecycleBody(t, original, 2)
-	for index := 3; store.lockName(first.Key) == store.lockName(second.Key); index++ {
-		second = lifecycleBody(t, original, index)
+	defer func() { _ = root.Close() }()
+	ctx := &batchCancelContext{Context: context.Background()}
+	if _, err := cleanDirectoryEntries(ctx, root, "."); !errors.Is(err, context.Canceled) {
+		t.Fatalf("batch cancellation: %v", err)
 	}
-	if err := store.write(second); err != nil {
+}
+
+func TestCacheRemovalSupportsLargeTree(t *testing.T) {
+	requireStageLock(t)
+	base := t.TempDir()
+	if err := os.Mkdir(filepath.Join(base, "entry"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if store.read(first.Request) != nil || store.read(second.Request) == nil {
-		t.Fatal("deleted target did not retire before LRU pressure")
+	payload := filepath.Join(base, "payload")
+	if err := os.WriteFile(payload, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Valid staged trees can exceed the old node cap through files plus parent
+	// directories. Cleanup also needs to remove interrupted/malformed large trees.
+	for index := range goStageInventoryLimit + 1 {
+		if index%16384 == 0 {
+			payload = filepath.Join(base, fmt.Sprintf("payload-%d", index))
+			if err := os.WriteFile(payload, []byte("x"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Link(payload, filepath.Join(base, "entry", fmt.Sprint(index))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	size, err := cacheRemovalBytes(context.Background(), root, "entry")
+	if err != nil || size != int64(goStageInventoryLimit+1) {
+		t.Fatalf("large tree accounting: %d %v", size, err)
 	}
 }
 
 func TestCacheCleanRejectsAliasedLayersAndLocks(t *testing.T) {
 	requireStageLock(t)
-	for _, alias := range []string{"stage/v2", "results/v1", "jobs/v1", "locks/publish-v1", "locks/stage-v2", "stage/v1/locks"} {
+	for _, alias := range []string{"stage/v3", "results/v2", "jobs/v1", "locks/publish-v1", "locks/stage-v3", "stage/v1/locks"} {
 		t.Run(alias, func(t *testing.T) {
 			base := t.TempDir()
 			legacyKey := stageLifecycleKey(1)
@@ -267,8 +363,8 @@ func TestCacheCleanRejectsAliasedLayersAndLocks(t *testing.T) {
 			if err := os.Symlink(target, link); err != nil {
 				t.Fatal(err)
 			}
-			if alias == "locks/stage-v2" {
-				stage := filepath.Join(base, "stage", "v2", stageLifecycleKey(2), "tree")
+			if alias == "locks/stage-v3" {
+				stage := filepath.Join(base, goStageEntryPath(stageLifecycleKey(2)), "tree")
 				if err := os.MkdirAll(stage, 0700); err != nil {
 					t.Fatal(err)
 				}

@@ -43,7 +43,7 @@ func BenchmarkGoStageAccounting(b *testing.B) {
 					// The measured target is the final entry after priming.
 					for index := range count - 1 {
 						key := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprint(index))))
-						entry := filepath.Join(base, "stage", "v2", key)
+						entry := filepath.Join(base, goStageEntryPath(key))
 						if err := os.MkdirAll(filepath.Join(entry, "tree"), 0700); err != nil {
 							b.Fatal(err)
 						}

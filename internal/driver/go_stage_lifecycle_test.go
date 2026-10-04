@@ -12,174 +12,116 @@ import (
 func stageLifecycleKey(index int) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("stage-%d", index))))
 }
-func stageMetadataForTest(t *testing.T, policy *cacheLimits) goStageMetadata {
+func stageMetadataForTest(t *testing.T) goStageMetadata {
 	t.Helper()
-	return goStageMetadata{Schema: goStageSchema, Program: t.TempDir(), Mode: "build", policy: policy}
+	return goStageMetadata{Schema: goStageSchema, Program: t.TempDir(), Mode: "build"}
 }
-func stageInventoryForTest(t *testing.T, base string) []goStageEntry {
-	t.Helper()
-	root, err := os.OpenRoot(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = root.Close() }()
-	entries, err := stageInventory(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return entries
-}
-func TestGoStageBudgetSkipsBusyEntries(t *testing.T) {
+func TestGoStagePublicationDoesNotScanOrEvict(t *testing.T) {
 	requireStageLock(t)
 	base := t.TempDir()
-	policy := cacheLimits{stageBytes: 1 << 20, entries: 1}
-	metadata := stageMetadataForTest(t, &policy)
+	metadata := stageMetadataForTest(t)
 	module := &goModuleInputs{mod: []byte("module stage\n")}
 	first, _, release, err := stageGoStable(base, stageLifecycleKey(1), []byte("first"), module, nil, metadata)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer release()
 	secondKey := stageLifecycleKey(2)
 	for index := 3; goStageLockPath(base, secondKey) == goStageLockPath(base, stageLifecycleKey(1)); index++ {
 		secondKey = stageLifecycleKey(index)
 	}
-	if _, _, _, err := stageGoStable(base, secondKey, []byte("second"), module, nil, metadata); err == nil {
-		t.Fatal("active tree evicted or budget exceeded")
-	}
-	if data, err := os.ReadFile(filepath.Join(first, "main.go")); err != nil || string(data) != "first" {
-		t.Fatal("busy tree changed")
-	}
-	release()
-	_, _, release, err = stageGoStable(base, secondKey, []byte("second"), module, nil, metadata)
-	if err != nil {
+	dir := filepath.Join(base, "stage", "v3", secondKey[:2])
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	release()
-	if _, err := os.Stat(first); !os.IsNotExist(err) {
-		t.Fatalf("released old tree retained: %v", err)
-	}
-	if _, err := os.Stat(goStageLockPath(base, stageLifecycleKey(1))); err != nil {
-		t.Fatal("coordination lock removed")
-	}
-}
-func TestGoStageByteBudgetAndAbandonedGenerations(t *testing.T) {
-	requireStageLock(t)
-	base := t.TempDir()
-	policy := cacheLimits{stageBytes: 4096, entries: 100}
-	metadata := stageMetadataForTest(t, &policy)
-	module := &goModuleInputs{mod: []byte("module stage\n")}
-	source := make([]byte, 1024)
-	var first string
-	for index := 0; index < 5; index++ {
-		dir, _, release, err := stageGoStable(base, stageLifecycleKey(index), source, module, nil, metadata)
-		if err != nil {
+	for index := range 4097 {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("unknown-%d", index)), nil, 0600); err != nil {
 			t.Fatal(err)
 		}
-		release()
-		first = dir
 	}
-	var bytes int64
-	for _, entry := range stageInventoryForTest(t, base) {
-		bytes += entry.bytes
-	}
-	if bytes > policy.stageBytes {
-		t.Fatalf("stage bytes %d > %d", bytes, policy.stageBytes)
-	}
-	pending := filepath.Join(filepath.Dir(first), "new-abandoned")
-	if err := os.Mkdir(pending, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pending, "payload"), make([]byte, 8192), 0600); err != nil {
-		t.Fatal(err)
-	}
-	_, _, release, err := stageGoStable(base, stageLifecycleKey(4), source, module, nil, metadata)
+	second, _, done, err := stageGoStable(base, secondKey, []byte("second"), module, nil, metadata)
 	if err != nil {
 		t.Fatal(err)
 	}
-	release()
-	if _, err := os.Stat(pending); !os.IsNotExist(err) {
-		t.Fatalf("abandoned generation remains: %v", err)
+	done()
+	if data, err := os.ReadFile(filepath.Join(first, "main.go")); err != nil || string(data) != "first" {
+		t.Fatal("busy unrelated stage changed")
 	}
-	if _, _, _, err := stageGoStable(base, stageLifecycleKey(6), make([]byte, 8192), module, nil, metadata); err == nil {
-		t.Fatal("oversized stage persisted")
+	if data, err := os.ReadFile(filepath.Join(second, "main.go")); err != nil || string(data) != "second" {
+		t.Fatal("new stage unavailable")
 	}
 }
-func TestGoStageDeletedProgramAndMetadata(t *testing.T) {
+func TestGoStageFixedPendingAndMetadata(t *testing.T) {
 	requireStageLock(t)
 	base := t.TempDir()
-	metadata := stageMetadataForTest(t, nil)
+	metadata := stageMetadataForTest(t)
 	module := &goModuleInputs{mod: []byte("module stage\n")}
-	first, _, release, err := stageGoStable(base, stageLifecycleKey(1), []byte("first"), module, nil, metadata)
+	key := stageLifecycleKey(1)
+	first, _, release, err := stageGoStable(base, key, []byte("first"), module, nil, metadata)
 	if err != nil {
 		t.Fatal(err)
 	}
 	release()
-	raw, err := os.ReadFile(filepath.Join(filepath.Dir(first), "metadata.json"))
+	entry := filepath.Dir(first)
+	for _, name := range []string{"next", "previous"} {
+		dir := filepath.Join(entry, name)
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "abandoned"), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _, release, err = stageGoStable(base, key, []byte("second"), module, nil, metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	for _, name := range []string{"next", "previous"} {
+		if _, err := os.Stat(filepath.Join(entry, name)); !os.IsNotExist(err) {
+			t.Fatal("abandoned generation retained", err)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(entry, "metadata.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var persisted goStageMetadata
-	if err := json.Unmarshal(raw, &persisted); err != nil {
+	if err := json.Unmarshal(data, &persisted); err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Program != metadata.Program || persisted.Mode != "build" || persisted.Schema != 2 {
+	if persisted.Schema != 3 || persisted.Program != metadata.Program || persisted.Mode != "build" {
 		t.Fatalf("metadata: %+v", persisted)
 	}
+	// Deletion is maintenance work; a new build must not inspect/retire other roots.
 	if err := os.Remove(metadata.Program); err != nil {
 		t.Fatal(err)
 	}
-	second := stageMetadataForTest(t, nil)
-	_, _, release, err = stageGoStable(base, stageLifecycleKey(2), []byte("second"), module, nil, second)
+	other := stageMetadataForTest(t)
+	_, _, release, err = stageGoStable(base, stageLifecycleKey(2), []byte("other"), module, nil, other)
 	if err != nil {
 		t.Fatal(err)
 	}
 	release()
-	if _, err := os.Stat(first); !os.IsNotExist(err) {
-		t.Fatalf("deleted-program stage retained: %v", err)
+	if _, err := os.Stat(first); err != nil {
+		t.Fatal("build evicted deleted-root stage", err)
 	}
 }
-func TestGoStageInventoryRejectsSymlinks(t *testing.T) {
-	requireStageLock(t)
-	base := t.TempDir()
-	metadata := stageMetadataForTest(t, nil)
-	module := &goModuleInputs{mod: []byte("module stage\n")}
-	dir, _, release, err := stageGoStable(base, stageLifecycleKey(1), []byte("first"), module, nil, metadata)
-	if err != nil {
-		t.Fatal(err)
-	}
-	release()
-	outside := filepath.Join(t.TempDir(), "outside")
-	if err := os.WriteFile(outside, []byte("preserve"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(outside, filepath.Join(dir, "link")); err != nil {
-		t.Fatal(err)
-	}
-	root, err := os.OpenRoot(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = root.Close() }()
-	if _, err := stageInventory(root); err == nil {
-		t.Fatal("entry symlink accepted")
-	}
-	if data, err := os.ReadFile(outside); err != nil || string(data) != "preserve" {
-		t.Fatal("outside target changed")
-	}
-}
-
 func TestGoStageDeclinesContainedEntryAlias(t *testing.T) {
 	requireStageLock(t)
 	base := t.TempDir()
-	metadata := stageMetadataForTest(t, nil)
+	metadata := stageMetadataForTest(t)
 	module := &goModuleInputs{mod: []byte("module stage\n")}
 	dir, _, release, err := stageGoStable(base, stageLifecycleKey(1), []byte("first"), module, nil, metadata)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer release()
-	alias := filepath.Join(base, "stage", "v2", stageLifecycleKey(2))
-	if err := os.Symlink(filepath.Base(filepath.Dir(dir)), alias); err != nil {
+	alias := filepath.Join(base, goStageEntryPath(stageLifecycleKey(2)))
+	if err := os.MkdirAll(filepath.Dir(alias), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Dir(dir), alias); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, _, err := stageGoStable(base, stageLifecycleKey(2), []byte("second"), module, nil, metadata); err == nil {
@@ -187,35 +129,5 @@ func TestGoStageDeclinesContainedEntryAlias(t *testing.T) {
 	}
 	if data, err := os.ReadFile(filepath.Join(dir, "main.go")); err != nil || string(data) != "first" {
 		t.Fatal("aliased tree was overwritten")
-	}
-}
-
-func TestGoStageReservesInventoryNodes(t *testing.T) {
-	requireStageLock(t)
-	base := t.TempDir()
-	policy := cacheLimits{stageBytes: 1 << 20, stageNodes: 14, entries: 100}
-	metadata := stageMetadataForTest(t, &policy)
-	module := &goModuleInputs{mod: []byte("module stage\n")}
-	for index := 0; index < 12; index++ {
-		_, _, release, err := stageGoStable(base, stageLifecycleKey(index), []byte("source"), module, nil, metadata)
-		if err != nil {
-			t.Fatal(err)
-		}
-		release()
-		entries := stageInventoryForTest(t, base)
-		nodes := 0
-		for _, entry := range entries {
-			nodes += entry.nodes
-		}
-		if nodes > policy.stageNodes {
-			t.Fatalf("scanner nodes %d > %d", nodes, policy.stageNodes)
-		}
-	}
-	files := map[string][]byte{}
-	for index := 0; index < goStageInventoryLimit/2; index++ {
-		files[fmt.Sprintf("asset-%d/file", index)] = nil
-	}
-	if _, err := goStageNodes(files); err == nil {
-		t.Fatal("module/parent/metadata nodes were not counted")
 	}
 }

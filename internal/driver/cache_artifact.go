@@ -18,7 +18,7 @@ import (
 
 const (
 	cacheArtifactSchema   = 1
-	cacheArtifactLayout   = "complete-graph-v1"
+	cacheArtifactLayout   = "complete-graph-v2"
 	cacheArtifactMaxBytes = 64 << 20
 	cacheArtifactMaxNodes = 1 << 20
 	cacheArtifactMaxDepth = 32
