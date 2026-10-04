@@ -2,6 +2,7 @@ package driver
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -102,22 +103,44 @@ func scriptGoDependencies(file *syntax.File, requirements []gomodule.Version, re
 	}
 	key := sha256.Sum256([]byte(identity.String()))
 	dir := filepath.Join(root, "scripts", "deps", fmt.Sprintf("%x", key))
-	read := func() ([]std.GoDependencyManifest, error) {
-		mod, err := reader.readFile(filepath.Join(dir, "go-deps.mod"))
+	read := func(inputs sourceReader) ([]std.GoDependencyManifest, error) {
+		mod, err := inputs.readFile(filepath.Join(dir, "go-deps.mod"))
 		if err != nil {
 			return nil, err
 		}
-		sum, err := reader.readFile(filepath.Join(dir, "go-deps.sum"))
+		sum, err := inputs.readFile(filepath.Join(dir, "go-deps.sum"))
 		if err != nil {
 			return nil, err
 		}
-		return []std.GoDependencyManifest{{Name: file.Path, Mod: mod, Sum: sum}}, nil
+		manifests := []std.GoDependencyManifest{{Name: file.Path, Mod: mod, Sum: sum}}
+		if _, _, err := std.GoModuleFiles(nil, manifests...); err != nil {
+			return nil, err
+		}
+		return manifests, nil
 	}
-	if manifests, err := read(); err == nil {
+	if manifests, err := read(reader); err == nil {
 		return manifests, nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 		return nil, err
+	}
+	if cacheTrimSupported() {
+		owned, err := os.OpenRoot(root)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = owned.Close() }()
+		if err := ensureStageDirectory(owned, filepath.Join("locks", "script-deps"), 0700); err != nil {
+			return nil, err
+		}
+		lock, err := (cacheStore{root: root}).lock(owned, filepath.Join("locks", "script-deps", fmt.Sprintf("%x.lock", key)))
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = lock.Close() }()
+		if _, err := read(diskSources{}); err == nil {
+			return read(reader)
+		}
 	}
 	temp, err := os.MkdirTemp(filepath.Dir(dir), "resolve-*")
 	if err != nil {
@@ -174,9 +197,19 @@ func scriptGoDependencies(file *syntax.File, requirements []gomodule.Version, re
 		return nil, err
 	}
 	if err := os.Rename(temp, dir); err != nil {
-		if _, statErr := os.Stat(dir); statErr != nil {
-			return nil, err
+		// Accept a concurrent resolver only if its complete output validates.
+		if _, winnerErr := read(diskSources{}); winnerErr != nil {
+			stale := temp + "-stale"
+			if moveErr := os.Rename(dir, stale); moveErr != nil && !errors.Is(moveErr, os.ErrNotExist) {
+				return nil, moveErr
+			}
+			defer func() { _ = os.RemoveAll(stale) }()
+			if publishErr := os.Rename(temp, dir); publishErr != nil {
+				if _, winnerErr := read(diskSources{}); winnerErr != nil {
+					return nil, publishErr
+				}
+			}
 		}
 	}
-	return read()
+	return read(reader)
 }

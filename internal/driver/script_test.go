@@ -2,6 +2,8 @@ package driver
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -86,6 +88,9 @@ func TestScriptBuildArgsAndDescribe(t *testing.T) {
 	output, err := exec.Command(exe, "hello", "--flag").CombinedOutput()
 	if err != nil || string(output) != "42\n[\"hello\", \"--flag\"]\n" {
 		t.Fatalf("%s: %v", output, err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "other.bork"), []byte("#!/usr/bin/env -S bork script\nprintln(99)"), 0600); err != nil {
+		t.Fatal(err)
 	}
 	description, err := Describe(path+":4:1", "")
 	if err != nil || description == nil || description.Type != "Int" {
@@ -204,10 +209,71 @@ func TestScriptGoDependencies(t *testing.T) {
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("script directory was changed: %v: %v", entries, err)
 	}
+	if err := os.Remove(filepath.Join(filepath.Dir(manifest), "go-deps.sum")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Check(path); err != nil {
+		t.Fatalf("incomplete dependency cache did not recover: %v", err)
+	}
+	if err := os.WriteFile(manifest, []byte("broken manifest"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Check(path); err != nil {
+		t.Fatalf("corrupt dependency cache did not recover: %v", err)
+	}
 	if err := os.WriteFile(manifest, append(module.mod, []byte("// changed\n")...), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if loaded.Inputs.current() {
 		t.Fatal("resolved manifest edit was missed")
+	}
+	cache, err := cacheRootDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := cleanCache(context.Background(), cache, sha256.Sum256([]byte("fixture")), false)
+	if err != nil || report.Dependencies != 0 {
+		t.Fatalf("namespace clean: %+v: %v", report, err)
+	}
+	if _, err := os.Stat(manifest); err != nil {
+		t.Fatal("namespace clean removed shared dependency graph")
+	}
+	report, err = cleanCache(context.Background(), cache, [sha256.Size]byte{}, true)
+	if err != nil || report.Dependencies != 1 {
+		t.Fatalf("all clean: %+v: %v", report, err)
+	}
+	if _, err := os.Stat(manifest); !os.IsNotExist(err) {
+		t.Fatalf("all clean retained script dependencies: %v", err)
+	}
+	// A resolver for another graph may be waiting on its own graph lock after
+	// creating this shared parent. Cleaning must leave it available afterward.
+	if info, err := os.Stat(filepath.Dir(filepath.Dir(manifest))); err != nil || !info.IsDir() {
+		t.Fatalf("all clean removed parent needed by pending resolvers: %v", err)
+	}
+}
+
+func TestScriptConcurrentDependencyResolution(t *testing.T) {
+	t.Setenv("BORKCACHE", t.TempDir())
+	path := filepath.Join(t.TempDir(), "script.bork")
+	source := "#!/usr/bin/env -S bork script\n// bork:require github.com/google/uuid v1.6.0\nprintln(1)\n"
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		module *goModuleInputs
+		err    error
+	}
+	results := make(chan result, 2)
+	start := make(chan struct{})
+	for range 2 {
+		go func() { <-start; _, module, err := loadCompilationInputs(path, nil); results <- result{module, err} }()
+	}
+	close(start)
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil {
+		t.Fatalf("concurrent resolution: %v; %v", first.err, second.err)
+	}
+	if !bytes.Equal(first.module.mod, second.module.mod) || !bytes.Equal(first.module.sum, second.module.sum) {
+		t.Fatal("concurrent resolvers published different graphs")
 	}
 }

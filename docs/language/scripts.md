@@ -61,7 +61,7 @@ fn valid(text: String): Ok | GoError unsafe go "github.com/google/uuid.Validate"
 println(valid("00000000-0000-0000-0000-000000000001"))
 ```
 
-Each `bork:require` names a Go module and a canonical pinned version, including pseudo-versions. Version queries such as `latest` are rejected. The first compile resolves the module graph through Go and records its manifest and verified checksums in the compiler cache. Later compiles reuse those files. Go's usual minimum version selection applies to transitive requirements. The script stays self-contained; no manifest or checksum file is written beside it. The first resolution may need network access, while later runs can use Go's populated module cache.
+Each `bork:require` names a Go module and a canonical pinned version, including pseudo-versions. Version queries such as `latest` are rejected. The first compile resolves the module graph through Go and records its manifest and verified checksums in the compiler cache. Later compiles reuse those files. `bork clean --all` removes resolved script dependency graphs too; ordinary namespace cleaning preserves them. Go's usual minimum version selection applies to transitive requirements. The script stays self-contained; no manifest or checksum file is written beside it. The first resolution may need network access, while later runs can use Go's populated module cache.
 
 `bork:unsafe` allows unsafe Go only in this script. It does not grant effects: a helper doing I/O must still declare `uses io`.
 

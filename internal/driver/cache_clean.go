@@ -15,8 +15,8 @@ import (
 )
 
 type CacheCleanReport struct {
-	Results, Stages, Temporaries int
-	Bytes                        int64
+	Results, Stages, Temporaries, Dependencies int
+	Bytes                                      int64
 }
 
 // Clean removes compiler-owned artifacts, preserving project outputs, Go's
@@ -132,6 +132,8 @@ func cleanCache(ctx context.Context, directory string, namespace [sha256.Size]by
 		case "stage":
 			report.Stages++
 		case "index":
+		case "script-deps":
+			report.Dependencies++
 		default:
 			report.Temporaries++
 		}
@@ -405,6 +407,17 @@ func selectCleanEntries(ctx context.Context, root *os.Root, namespace [sha256.Si
 		}
 	}
 
+	if all {
+		deps, err := cleanDirectoryEntries(ctx, root, filepath.Join("scripts", "deps"))
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range deps {
+			if _, ok := cacheHexDigest(entry.Name()); ok && entry.IsDir() {
+				entries = append(entries, cacheCleanEntry{path: filepath.Join("scripts", "deps", entry.Name()), slot: filepath.Join("locks", "script-deps", entry.Name()+".lock"), layer: "script-deps"})
+			}
+		}
+	}
 	return entries, nil
 }
 func legacyResultLockName(namespace, key [sha256.Size]byte) string {
@@ -437,7 +450,7 @@ func removeCleanEntry(ctx context.Context, root *os.Root, entry cacheCleanEntry)
 	if err := root.RemoveAll(entry.path); err != nil {
 		return 0, err
 	}
-	if entry.layer != "stage" {
+	if entry.layer != "stage" && entry.layer != "script-deps" {
 		_ = root.Remove(filepath.Dir(entry.path))
 	}
 	return bytes, nil
