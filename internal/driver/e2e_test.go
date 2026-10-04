@@ -18,6 +18,9 @@ var update = flag.Bool("update", false, "rewrite expected files with actual resu
 // with the shapes Go's standard library does not have.
 func TestMain(m *testing.M) {
 	configureTestStageCache()
+	// Detached trim workers outlive the test that staged; only the trim tests
+	// start them, directly and with their own barriers.
+	scheduleCacheTrim = func(string) bool { return false }
 
 	// Parallel cases each start Go tools; keep their GC/build workers bounded
 	// without changing this process's runtime or an explicit caller setting.
