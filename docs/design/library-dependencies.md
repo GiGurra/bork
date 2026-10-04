@@ -300,8 +300,8 @@ The service FAQ says:
 It recommends `GOPRIVATE` for private modules and documents license-sensitive
 retention: a module without a detectable suitable license may be served only
 temporarily, while recorded checksums persist. Publish an identifiable
-redistributable license and keep the upstream repository available. Retraction
-and a new release are the way to supersede a bad version; moving an existing
+redistributable license and keep the upstream repository available. The proxy supports retraction, but bork retraction authoring is deferred.
+Publish a new release to supersede a bad version initially; moving an existing
 tag is not an update strategy. [Proxy FAQ](https://proxy.golang.org/).
 
 Both [proxy privacy](https://proxy.golang.org/privacy) and
@@ -331,7 +331,7 @@ greeting/
   bork.sum
   text/text.bork      # fn Greeting(): String { "hello" }
 consumer/
-  bork.mod            # module example.com/consumer; require greeting v1.0.0
+  bork.mod            # module example.com/consumer; require example.com/greeting v1.0.0
   go.mod              # generated; require example.com/greeting v1.0.0
   bork.sum
   main.bork           # import "example.com/greeting/text"
