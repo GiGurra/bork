@@ -150,6 +150,9 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 	st := c.expr(m.X)
 	if len(m.Arms) == 0 {
 		c.errorf(m.Pos, "match needs at least one arm")
+		if st != Invalid {
+			c.diags.Suggest(m.Pos, "type.error", m.Close, c.missingMatchFix(m, nil, st))
+		}
 		return Invalid
 	}
 	if !isValue(st) {
@@ -217,6 +220,7 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 	if ok {
 		if missing := missingCases(valid, st); len(missing) > 0 {
 			c.errorf(m.Pos, "match is not exhaustive: missing %s", strings.Join(missing, ", "))
+			c.diags.Suggest(m.Pos, "type.error", m.Close, c.missingMatchFix(m, valid, st))
 		}
 	}
 	return c.unify(m.Pos, "match arms have", armTypes, want)

@@ -1379,6 +1379,10 @@ func (p *parser) matchExpr() Expr {
 		p.skipNewlines()
 		m.Arms = append(m.Arms, &Arm{Pattern: pat, Body: p.expr()})
 	})
+	m.Close = p.toks[p.i-1].Pos
+	if p.i >= 2 {
+		m.TrailingSeparator = p.toks[p.i-2].Kind == Comma || p.toks[p.i-2].Kind == Semi
+	}
 	return m
 }
 
