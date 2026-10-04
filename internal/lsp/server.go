@@ -28,6 +28,7 @@ type packageState struct {
 }
 type server struct {
 	out                   io.Writer
+	version               string
 	docs                  map[string]document
 	packages              map[string]*packageState
 	diagnostics           map[string][]diag.Diagnostic
@@ -55,7 +56,12 @@ type documentParams struct {
 // Serve runs a serialized compiler behind a responsive framing reader. Changes
 // are coalesced; a semantic request immediately checks the latest buffers.
 func Serve(in io.Reader, out io.Writer) error {
-	s := &server{out: out, docs: map[string]document{}, packages: map[string]*packageState{}, diagnostics: map[string][]diag.Diagnostic{}}
+	return ServeWithVersion(in, out, "")
+}
+
+// ServeWithVersion includes the running compiler version in LSP initialization.
+func ServeWithVersion(in io.Reader, out io.Writer, version string) error {
+	s := &server{out: out, version: version, docs: map[string]document{}, packages: map[string]*packageState{}, diagnostics: map[string][]diag.Diagnostic{}}
 	type incoming struct {
 		m   message
 		err error
@@ -161,7 +167,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			"referencesProvider": true, "renameProvider": map[string]any{"prepareProvider": true},
 			"documentSymbolProvider": true, "completionProvider": map[string]any{"triggerCharacters": []string{"."}},
 			"codeActionProvider": map[string]any{"codeActionKinds": []string{"quickfix"}},
-		}, "serverInfo": map[string]any{"name": "bork"}}, nil, false
+		}, "serverInfo": map[string]any{"name": "bork", "version": s.version}}, nil, false
 	}
 	if !s.initialized {
 		return nil, &rpcError{-32002, "server not initialized"}, false

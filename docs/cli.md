@@ -218,7 +218,10 @@ projects remain supported; `migrate` converts them explicitly. See [calling Go](
 client to launch that command; stdout contains protocol messages. The
 [VS Code extension](../editors/vscode/README.md) starts it automatically and
 provides highlighting, diagnostics, hover, definitions, references, completion,
-symbols, formatting and compiler quick fixes.
+symbols, formatting and compiler quick fixes. Bork files format on save with
+two-space indentation by default; `[bork]` editor settings can override these
+defaults. The status bar shows the compiler version and server state. Click it
+to restart the language server or show its output.
 
 Open documents are checked as packages with unsaved-buffer overlays. LSP
 positions use zero-based lines and UTF-16 columns. Broken edits retain the last

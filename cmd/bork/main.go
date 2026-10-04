@@ -274,7 +274,7 @@ func main() {
 			boa.CmdT[boa.NoParams]{
 				Use: "lsp", Short: "serve the Language Server Protocol over stdio",
 				RunFunc: func(_ *boa.NoParams, _ *cobra.Command, _ []string) {
-					if err := lsp.Serve(os.Stdin, os.Stdout); err != nil {
+					if err := lsp.ServeWithVersion(os.Stdin, os.Stdout, version()); err != nil {
 						fail(err)
 					}
 				},
