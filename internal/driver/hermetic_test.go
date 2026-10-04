@@ -11,6 +11,7 @@ import (
 // tests that can reach the network with no mock in force fail without
 // running, and say how.
 func TestHermetic(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join("..", "..", "testdata", "hermetic")
 	var out strings.Builder
 	code, err := Test(dir, &out, TestOptions{Hermetic: true})

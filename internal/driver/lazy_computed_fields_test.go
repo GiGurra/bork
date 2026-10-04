@@ -9,6 +9,7 @@ import (
 )
 
 func TestComputedFieldChecks(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"computed function equality", "type C={n:Int,lazy action:()=>Int=()=>n}\nfn f(a:C,b:C):Bool{a==b}", ""},
 		{"computed function keys", "type C={n:Int,lazy action:()=>Int=()=>n}\nfn f(c:C):Map[C,Int]{{c:1}}", ""},
@@ -41,6 +42,7 @@ func TestComputedFieldChecks(t *testing.T) {
 		{"guarded default call", "pred positive(n:Int){n>0}\nfn require(n:Int where positive):Int{n}\ntype C={n:Int where positive,lazy value:Int=require(n)}\nfn f():C{C{n:1}}", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
@@ -60,6 +62,7 @@ func TestComputedFieldChecks(t *testing.T) {
 }
 
 func TestDescribeComputedFieldNeverForces(t *testing.T) {
+	t.Parallel()
 	source := "type C={n:Int,lazy value:Int=if(n==0){panic(\"must not run\")}else{n}}\nfn main(){c=C{n:0};println(c.value)}"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")

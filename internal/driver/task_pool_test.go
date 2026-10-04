@@ -11,6 +11,7 @@ import (
 // Run the real generated pool code under the race detector, including the
 // concurrent submitter burst and cancellation that retains occupied slots.
 func TestTaskPoolRace(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds and runs a Go race executable")
 	}

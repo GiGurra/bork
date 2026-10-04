@@ -13,6 +13,7 @@ import (
 )
 
 func TestNoTestsPosition(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	if err := os.WriteFile(path, []byte("fn main() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -29,6 +30,7 @@ func TestNoTestsPosition(t *testing.T) {
 }
 
 func TestSuggestedEdits(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, source string
 	}{
@@ -70,6 +72,7 @@ func TestSuggestedEdits(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "main.bork")
 			if err := os.WriteFile(path, []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
@@ -120,6 +123,7 @@ func TestSuggestedEdits(t *testing.T) {
 }
 
 func TestPipeMethodResultContext(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	source := "fn main() { ys: List[List[Int]] = [1] |> map(x => []); println(ys) }\n"
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
@@ -137,8 +141,10 @@ func TestPipeMethodResultContext(t *testing.T) {
 }
 
 func TestPipeMethodFieldPrecedence(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"length: Int", "length: () => Int"} {
 		t.Run(field, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "main.bork")
 			value := "1"
 			if strings.Contains(field, "=>") {
@@ -163,6 +169,7 @@ func TestPipeMethodFieldPrecedence(t *testing.T) {
 
 // Ambiguity fixes are alternatives: apply each independently, not together.
 func TestContextConstructorAlternatives(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, source, code string
 		count              int
@@ -181,6 +188,7 @@ func TestContextConstructorAlternatives(t *testing.T) {
 		{"specializations", "type Box[T] = { values: List[T] }\nfn main() { x: Box[Int] | Box[String] = .{ values: [] }; println(x) }\n", "type.context_ambiguous", 2, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "main.bork")
 			if err := os.WriteFile(path, []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
@@ -243,6 +251,7 @@ func TestContextConstructorAlternatives(t *testing.T) {
 }
 
 func TestDebugContextInference(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "main.bork")
 	source := `type A = { value: Int }
 fn pair[T](first: T, second: T): List[T] { [first, second] }

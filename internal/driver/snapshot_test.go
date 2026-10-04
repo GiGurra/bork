@@ -12,6 +12,7 @@ import (
 // case: it writes the missing and different snapshots, leaves the
 // others alone, and then the tests pass.
 func TestSnapshotUpdate(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := filepath.Join("..", "..", "testdata", "cases", "snapshots")
 	if err := os.CopyFS(dir, os.DirFS(src)); err != nil {
@@ -60,6 +61,7 @@ func TestSnapshotUpdate(t *testing.T) {
 // TestSnapshotOutsideTests checks that assertSnapshot, reached in a
 // program rather than a test, panics.
 func TestSnapshotOutsideTests(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := "fn main() {\n  assertSnapshot(1)\n}\n"
 	if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(src), 0o644); err != nil {

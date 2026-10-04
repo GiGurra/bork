@@ -10,6 +10,7 @@ import (
 
 // Exercise propagated labels and concurrent request isolation using generated HTTP code.
 func TestHTTPTracePropagationRace(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds and runs a Go race executable")
 	}

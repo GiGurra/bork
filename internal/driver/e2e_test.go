@@ -17,6 +17,13 @@ var update = flag.Bool("update", false, "rewrite expected files with actual resu
 // TestMain lets test cases bind example.com/bindtest, a local Go module
 // with the shapes Go's standard library does not have.
 func TestMain(m *testing.M) {
+	// Parallel cases each start Go tools; keep their GC/build workers bounded
+	// without changing this process's runtime or an explicit caller setting.
+	if os.Getenv("GOMAXPROCS") == "" {
+		if err := os.Setenv("GOMAXPROCS", "2"); err != nil {
+			panic(err)
+		}
+	}
 	dir, err := filepath.Abs(filepath.Join("..", "..", "testdata", "gomod", "bindtest"))
 	if err != nil {
 		panic(err)
@@ -34,6 +41,10 @@ func TestMain(m *testing.M) {
 //   - expected_errors.txt: compilation must fail with exactly these diagnostics.
 //     (Errors in unsafe go code come from building the generated Go.)
 func TestCases(t *testing.T) {
+	// Other integration tests read these goldens; finish updates before they run.
+	if !*update {
+		t.Parallel()
+	}
 	root := filepath.Join("..", "..", "testdata", "cases")
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -140,6 +151,7 @@ func compare(t *testing.T, expectedPath, got string) {
 // has one. Its output includes standard error, and how it exited if it
 // failed.
 func TestExamples(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("..", "..", "examples")
 	entries, err := os.ReadDir(root)
 	if err != nil {

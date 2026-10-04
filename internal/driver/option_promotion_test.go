@@ -8,6 +8,7 @@ import (
 )
 
 func TestOptionPromotion(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"positions", `type C = { value: Option[Int] = 1 }
 fn take(x: Option[Int]): Option[Int] { x }
@@ -137,6 +138,7 @@ fn run(x:Int) uses io {if (x>0) {take(x)}}
 fn main() {run(1)}`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "main.bork")
 			if err := os.WriteFile(path, []byte(tc.source+"\n"), 0644); err != nil {
 				t.Fatal(err)
@@ -154,6 +156,7 @@ fn main() {run(1)}`, ""},
 }
 
 func TestDescribeOptionPromotion(t *testing.T) {
+	t.Parallel()
 	source := `type C = { value: Int }
 fn main() {
  value = 2
@@ -177,6 +180,7 @@ fn main() {
 }
 
 func TestOptionPromotionPrivatePayload(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ source, want string }{
 		{`fn main(){x:Option[api.Config]=.{value:1};println(x)}`, "controls its construction"},
 		{`fn main(){x:Option[api.Config]=api.New(1);println(x)}`, ""},

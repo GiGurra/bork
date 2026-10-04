@@ -8,6 +8,7 @@ import (
 )
 
 func TestKnownResultBranches(t *testing.T) {
+	t.Parallel()
 	const positive = "pred positive(n:Int){n>0}\n"
 	for _, tc := range []struct{ name, source, want string }{
 		{"computed field", "type C={n:Int,lazy value:Int where positive={if(n==1){return -1};2}}\nfn main(){println(C{n:0}.value)}", ""},
@@ -44,6 +45,7 @@ func TestKnownResultBranches(t *testing.T) {
 		{"short circuit try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,f:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if(n==1&&{_=x?;true}){return -1};2}", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(positive+tc.source), 0o644); err != nil {
 				t.Fatal(err)

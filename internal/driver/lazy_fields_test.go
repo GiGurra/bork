@@ -9,6 +9,7 @@ import (
 )
 
 func TestLazyFieldChecks(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"computed default", "type C={first:Int,lazy doubled:Int=first*2}\nfn main(){}", ""},
 		{"positive generic argument", "pred positive(x:Int){x>0}\ntype Lazy[T]={lazy value:T}\nfn one(x:Int):Int where positive{1}\nfn f(flag:Bool):Lazy[Int]{Lazy[Int where positive]{value:one({if(flag){return 2};0})}}", ""},
@@ -40,6 +41,7 @@ func TestLazyFieldChecks(t *testing.T) {
 		{"validator exclusion", "type C={lazy value:Int} where Valid\ntype D={lazy value:Int}\npred Valid(c:C){x=D{value:trusted(c)};true}\nfn trusted(c:C where Valid):Int{1}\nfn main(){println(C{value:1})}", "invariant is unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
@@ -57,6 +59,7 @@ func TestLazyFieldChecks(t *testing.T) {
 }
 
 func TestDescribeLazyFieldNeverForces(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
 	source := "type C={lazy value:Int}\nfn work(n:Int)uses io:Int{println(n);n}\nfn main(){n=7;c=C{value:work(n)};println(c.value)}"

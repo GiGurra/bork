@@ -11,6 +11,7 @@ import (
 // Exercise deadline propagation, body-read interruption, redirect refresh, and
 // cancellation-hook completion using the actual generated HTTP admission implementation.
 func TestHTTPDeadlinePropagationRace(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds and runs a Go race executable")
 	}

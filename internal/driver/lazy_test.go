@@ -13,6 +13,7 @@ import (
 )
 
 func TestLazyBindingChecks(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"unused effects", "fn work() uses io: Int { println(1);1 }\nfn f(){ lazy ignored=work() }", "uses io"},
 		{"typed proof", "pred positive(x:Int){x>0}\nfn f(flag:Bool):Int{lazy x:Int where positive={if(flag){return -1};1};x}", "is false"},
@@ -42,6 +43,7 @@ func TestLazyBindingChecks(t *testing.T) {
 		{"binding keyword name", "fn lazy(x:Int):Int{x}\nfn main(){lazy x=lazy(1);println(x)}", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			if err := os.WriteFile(filepath.Join(dir, "bork.mod"), []byte("module example.com/lazytest\nunsafe \"example.com/lazytest\"\n"), 0o644); err != nil {
 				t.Fatal(err)
@@ -62,6 +64,7 @@ func TestLazyBindingChecks(t *testing.T) {
 }
 
 func TestDescribeLazyNeverForces(t *testing.T) {
+	t.Parallel()
 	source := "fn work(n:Int) uses io:Int{println(n);n}\nfn main(){n=7\n lazy x=work(n)\n println(x)}"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
@@ -87,6 +90,7 @@ func TestDescribeLazyNeverForces(t *testing.T) {
 }
 
 func TestImmediateLazyWarning(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		source string
 		warn   bool
