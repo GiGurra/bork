@@ -60,10 +60,11 @@ fn Rollback(transaction: Transaction) uses io + net: Ok | Error unsafe go {
   return _borkOk()
 }
 
-// Exec binds params to the driver's placeholders (? for SQLite, $1 for
-// Postgres), uses the owner's cancellation context, and returns the changed row count and optional generated ID.
-fn Exec(connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: Result | Error {
-  match (run(connection, query, params, read: false)) {
+// Exec requires explicitly unsafe query text and binds driver parameters
+// (? for SQLite, $1 for Postgres). It uses the owner's cancellation context
+// and returns the changed row count and optional generated ID.
+fn Exec(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: Result | Error {
+  match (run(connection, query.text, params, read: false)) {
     outcome.Changed { result } => result
     outcome.Rows { values } => panic("sql: unexpected query result")
     error: Error => error
@@ -72,7 +73,7 @@ fn Exec(connection: Connection | Transaction, query: String, params: List[Value]
 
 // Query materializes rows as records decoded from column-name JSON objects.
 // SQL NULL maps to Option.None; facts are checked before any rows are returned.
-fn Query[T: Decode](connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: List[T] | Error | DecodeError {
+fn Query[T: Decode](connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: List[T] | Error | DecodeError {
   json = QueryJson(connection, query, params)?
   decode[List[T]](json)
 }
@@ -82,8 +83,8 @@ fn Query[T: Decode](connection: Connection | Transaction, query: String, params:
 // and binary columns are arrays of byte integers. Alias columns to record fields.
 // Postgres NUMERIC values remain strings; JSON/JSONB driver bytes remain arrays.
 // Cast columns or decode QueryJson explicitly when another mapping is needed.
-fn QueryJson(connection: Connection | Transaction, query: String, params: List[Value]) uses io + net: Json | Error {
-  match (run(connection, query, params, read: true)) {
+fn QueryJson(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: Json | Error {
+  match (run(connection, query.text, params, read: true)) {
     outcome.Rows { values } => Json.Array { items: values }
     outcome.Changed { result } => panic("sql: unexpected exec result")
     error: Error => error

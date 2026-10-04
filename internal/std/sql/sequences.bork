@@ -1,6 +1,7 @@
-// Rows decodes each row while traversing, keeping errors as explicit elements.
+// Rows requires explicitly unsafe query text and decodes each row while
+// traversing, keeping errors as explicit elements.
 // Every traversal executes a fresh query; stopping closes its active rows.
-fn Rows[T: Decode](connection: Connection | Transaction, query: String, params: List[Value]): Seq[T | Error | DecodeError] uses io + net {
+fn Rows[T: Decode](connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]): Seq[T | Error | DecodeError] uses io + net {
   RowsJson(connection, query, params).map(value => decodeRow[T](value))
 }
 fn decodeRow[T: Decode](value: Json | Error): T | Error | DecodeError {
@@ -8,7 +9,7 @@ fn decodeRow[T: Decode](value: Json | Error): T | Error | DecodeError {
 }
 
 // RowsJson converts one row at a time, copying all borrowed driver buffers.
-fn RowsJson(connection: Connection | Transaction, query: String, params: List[Value]): Seq[Json | Error] uses io + net unsafe go {
+fn RowsJson(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]): Seq[Json | Error] uses io + net unsafe go {
   import "database/sql"
   import "context"
   import "fmt"
@@ -40,7 +41,7 @@ fn RowsJson(connection: Connection | Transaction, query: String, params: List[Va
     default: args[i] = param
     }
   }
-  rows, err := db.QueryContext(ctx, query, args...)
+  rows, err := db.QueryContext(ctx, query.text, args...)
   if err != nil { yield(Error{operation: "query", message: err.Error()}); return }
   defer rows.Close()
   columns, err := rows.Columns()
