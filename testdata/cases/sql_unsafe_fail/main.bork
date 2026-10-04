@@ -8,5 +8,6 @@ fn raw(db: sql.Connection, text: String) uses io + net {
   streamJson = sql.RowsJson(db, text, [])
   query = sql.QueryJson
   indirect = query(db, text, [])
+  forged = sql.UnsafeQuery { text: text }
 }
 fn main() {}
