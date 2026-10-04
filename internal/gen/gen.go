@@ -61,10 +61,71 @@ func EvalComptimeProgram(files []*syntax.File, info *check.Info, queries []check
 	return evalProgram(files, info, queries, true)
 }
 
+// ClosedProofProgram emits only statically audited predicate selections. It
+// excludes unrelated instances, package initializers and foreign types; callers
+// must also certify the emitted runtime support before reusing any result.
+func ClosedProofProgram(files []*syntax.File, info *check.Info, queries []check.Query) ([]byte, error) {
+	audit := check.AuditExecutionQueries(info, queries)
+	if audit.Decline != "" {
+		return nil, fmt.Errorf("proof closure unavailable: %s", audit.Decline)
+	}
+	// Calls can retain dependencies from already evaluated comptime bodies.
+	// Decline rather than emitting helpers outside the audited typed closure.
+	allowed := map[check.ExecutionDeclaration]bool{}
+	for _, declaration := range audit.Declarations {
+		declaration.Signature = ""
+		allowed[declaration] = true
+	}
+	var roots []*check.Func
+	var collect func(check.Query)
+	collect = func(query check.Query) {
+		if query.Pred != nil {
+			roots = append(roots, query.Pred)
+		}
+		for _, part := range query.And {
+			collect(part)
+		}
+		for _, part := range query.Or {
+			collect(part)
+		}
+	}
+	for _, query := range queries {
+		collect(query)
+	}
+	g := newGen(info)
+	g.proofMode = true
+	for fn := range g.reachable(roots) {
+		pkg := ""
+		if fn.Pkg != nil {
+			pkg = fn.Pkg.Path
+		}
+		if fn.Decl == nil || info.FuncOf[fn.Decl] != fn || !allowed[check.ExecutionDeclaration{Package: pkg, Name: fn.Decl.Name, Position: fn.Decl.Pos}] {
+			return nil, fmt.Errorf("proof generator dependency outside audited closure")
+		}
+	}
+	selected := *info
+	selected.ClassInstances = nil
+	selected.PackageBindings = nil
+	selected.Ambients = nil
+	selected.Classes = nil
+	for _, class := range info.Classes {
+		if check.IsEq(class) {
+			selected.Classes = append(selected.Classes, class)
+		}
+	}
+	return evalProgramMode(files, &selected, queries, false, true)
+}
+
 func evalProgram(files []*syntax.File, info *check.Info, queries []check.Query, comptime bool) ([]byte, error) {
+	return evalProgramMode(files, info, queries, comptime, false)
+}
+
+func evalProgramMode(files []*syntax.File, info *check.Info, queries []check.Query, comptime, proof bool) ([]byte, error) {
 	g := newGen(info)
 	g.evalMode = true
 	g.comptimeMode = comptime
+	g.proofMode = proof
+	g.artifactMode = proof
 	var roots []*check.Func
 	body := &ast.BlockStmt{}
 	for _, q := range queries {
@@ -277,23 +338,25 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	// Types come last, once it is known which prelude types are used.
 	decls := append(g.typeDecls(), funcs...)
 	decls = append(decls, g.extraFuncs...)
-	for _, f := range files {
-		for _, td := range f.Types {
-			if td.GoName == nil {
-				continue
-			}
-			for _, pkg := range info.Packages {
-				if pkg.Path != f.Package {
+	if !g.proofMode {
+		for _, f := range files {
+			for _, td := range f.Types {
+				if td.GoName == nil {
 					continue
 				}
-				t := pkg.TypeNamed(td.Name)
-				if t == nil || check.GoTypeOf(t) == nil {
-					continue
-				}
-				canonical := g.goType(t)
-				alias := typeName(td.Name, pkg)
-				if alias.Name != canonical.(*ast.Ident).Name {
-					decls = append(decls, &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{Name: alias, Assign: 1, Type: canonical}}})
+				for _, pkg := range info.Packages {
+					if pkg.Path != f.Package {
+						continue
+					}
+					t := pkg.TypeNamed(td.Name)
+					if t == nil || check.GoTypeOf(t) == nil {
+						continue
+					}
+					canonical := g.goType(t)
+					alias := typeName(td.Name, pkg)
+					if alias.Name != canonical.(*ast.Ident).Name {
+						decls = append(decls, &ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{Name: alias, Assign: 1, Type: canonical}}})
+					}
 				}
 			}
 		}
@@ -379,6 +442,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 
 type gen struct {
 	artifactMode   bool
+	proofMode      bool
 	candidateNames map[*check.Var]*ast.Ident
 	info           *check.Info
 	tmp            int
@@ -520,6 +584,11 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 	}
 	for _, fn := range roots {
 		visit(fn)
+	}
+	// The audited proof selection excludes lazy/default helper execution and
+	// foreign mirrors. Do not pull unrelated type declarations into its closure.
+	if g.proofMode {
+		return emit
 	}
 	// Mirror helpers are generated for declarations, including helpers used
 	// inside unsafe Go bodies, so their field predicates must be available.

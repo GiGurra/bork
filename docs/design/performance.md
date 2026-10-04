@@ -866,3 +866,10 @@ The previously recorded 1/1k/10k/100k matrix remains the population-cost gate:
 lookup, validated hit and publication use direct sharded paths; only bounded
 background trim enumerates. Automatic misses never fall back to inline
 certification when the cache or detached process facilities are unavailable.
+
+## Predicate evaluator trimming
+
+The [closed predicate evaluator measurements](proof-evaluator.md) isolate the
+cost of unrelated generated evaluator declarations, and include a fresh-CLI
+edit comparison. This optimization executes proofs afresh; Session and disk
+proof-result reuse remain separate work.

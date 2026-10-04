@@ -220,7 +220,10 @@ func evaluatorWithTimeoutObserved(files []*syntax.File, info *check.Info, module
 		if timeout > 0 {
 			goSrc, err = gen.EvalComptimeProgram(files, info, queries)
 		} else {
-			goSrc, err = gen.EvalProgram(files, info, queries)
+			goSrc, err = gen.ClosedProofProgram(files, info, queries)
+			if err != nil {
+				goSrc, err = gen.EvalProgram(files, info, queries)
+			}
 		}
 		if err != nil {
 			return nil, err
