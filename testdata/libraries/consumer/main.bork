@@ -1,0 +1,3 @@
+import "example.com/greeting"
+
+fn main() uses io { println(greeting.Greet("Ada")) }

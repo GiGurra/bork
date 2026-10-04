@@ -14,6 +14,7 @@ import (
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/driver"
+	"github.com/GiGurra/bork/internal/modcache"
 )
 
 type document struct {
@@ -234,13 +235,28 @@ func (s *server) source(path string) string {
 	return string(src)
 }
 func (s *server) state(path string) *packageState {
-	return s.packages[analysisPath(path, s.source(path))]
+	if pkg := s.packages[analysisPath(path, s.source(path))]; pkg != nil && pkg.analysis != nil {
+		return pkg
+	}
+	for _, dir := range sortedKeys(s.packages) {
+		pkg := s.packages[dir]
+		if pkg.analysis != nil {
+			if _, ok := pkg.analysis.Sources()[path]; ok {
+				return pkg
+			}
+		}
+	}
+	return nil
 }
 
 func (s *server) check() error {
 	overlays := map[string]string{}
 	dirs := map[string]bool{}
+	cache := modcache.Root()
 	for path, doc := range s.docs {
+		if modcache.Contains(cache, path) {
+			continue
+		}
 		overlays[path] = doc.text
 		dirs[analysisPath(path, doc.text)] = true
 	}

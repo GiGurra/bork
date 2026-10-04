@@ -64,12 +64,13 @@ type sourceRead struct {
 // copies so it cannot mutate recorded bytes or membership. Missing module files
 // and failed lookups are records too, not just successful source reads.
 type sourceSnapshot struct {
-	mu           sync.Mutex
-	disk         sourceReader
-	cwd          string
-	cwdErr       error
-	driveContext bool
-	reads        map[sourceReadKey]sourceRead
+	mu                sync.Mutex
+	disk              sourceReader
+	cwd               string
+	cwdErr            error
+	driveContext      bool
+	localDependencies bool
+	reads             map[sourceReadKey]sourceRead
 	// rooted keeps build-file observations separate from loader reads while
 	// making them part of the loaded input bundle's validation inventory.
 	rooted *buildSnapshot

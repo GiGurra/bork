@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/GiGurra/bork/internal/modcache"
 )
 
 // Files formats .bork files and recursively visits directories. An empty path
@@ -18,10 +20,14 @@ func Files(paths []string, check bool) ([]string, error) {
 	if len(paths) == 0 {
 		paths = []string{"."}
 	}
+	cache := modcache.Root()
 	seen := map[string]bool{}
 	var files []string
 	explicitFiles := map[string]bool{}
 	for _, path := range paths {
+		if !check && modcache.Contains(cache, path) {
+			return nil, fmt.Errorf("%s: dependency sources are read-only; edit the original repository and publish a new version", path)
+		}
 		info, err := os.Lstat(path)
 		if err != nil {
 			return nil, err
@@ -68,6 +74,9 @@ func Files(paths []string, check bool) ([]string, error) {
 		abs, err := filepath.Abs(path)
 		if err != nil {
 			return nil, err
+		}
+		if !check && modcache.Contains(cache, path) {
+			return nil, fmt.Errorf("%s: dependency sources are read-only; edit the original repository and publish a new version", path)
 		}
 		if seen[abs] {
 			continue

@@ -2,12 +2,16 @@ package driver
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	gomodule "golang.org/x/mod/module"
@@ -404,5 +408,174 @@ func TestLibraryRootImportAlias(t *testing.T) {
 	}
 	if err := Build(root, filepath.Join(t.TempDir(), "consumer")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLibraryScriptDependencies(t *testing.T) {
+	proxy := newLibraryProxy(t)
+	t.Setenv("BORKCACHE", t.TempDir())
+	proxy.publish("example.com/script-base", "v1.0.0", "module example.com/script-base\nunsafe \"example.com/script-base\"\n", map[string]string{"lib.bork": "fn Value(): Int unsafe go { return 23 }\n"})
+	proxy.publish("example.com/script-middle", "v1.0.0", "module example.com/script-middle\nrequire example.com/script-base v1.0.0\n", map[string]string{"lib.bork": "import base \"example.com/script-base\"\nfn Value(): Int { base.Value() }\n"})
+	proxy.publish("example.com/script-lib", "v1.0.0", "module example.com/script-lib\nrequire example.com/script-middle v1.0.0\n", map[string]string{"lib.bork": "import middle \"example.com/script-middle\"\nfn Value(): Int { middle.Value() }\n"})
+	root := t.TempDir()
+	path := filepath.Join(root, "script.bork")
+	writeFixtureFile(t, root, "script.bork", "#!/usr/bin/env -S bork script\n// bork:require example.com/script-lib v1.0.0\nimport lib \"example.com/script-lib\"\nprintln(lib.Value())\n")
+	if _, err := NewSession().Analyze(path, nil); err == nil || !strings.Contains(err.Error(), "script dependencies are not cached") {
+		t.Fatalf("editor installed script dependency: %v", err)
+	}
+	if _, _, err := Check(path); err != nil {
+		t.Fatal(err)
+	}
+	// Keep the effective proxy setting unchanged: the script resolution key includes it.
+	if err := os.RemoveAll(proxy.root); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(t.TempDir(), "script")
+	if err := Build(path, exe); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil || string(out) != "23\n" {
+		t.Fatalf("script libraries: %q, %v", out, err)
+	}
+	if _, err := NewSession().Analyze(path, nil); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("script directory mutated: %v, %v", entries, err)
+	}
+	if _, err := Clean(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(proxy.cache, "example.com/script-lib@v1.0.0/lib.bork")); err != nil {
+		t.Fatalf("clean removed shared modules: %v", err)
+	}
+	if _, err := NewSession().Analyze(path, nil); err == nil {
+		t.Fatal("clean --all retained the resolved script graph")
+	}
+	if _, _, err := Check(path); err != nil {
+		t.Fatalf("could not resolve again from shared Go cache: %v", err)
+	}
+}
+
+func TestLibraryEditorUsesCachedSources(t *testing.T) {
+	proxy := newLibraryProxy(t)
+	proxy.publish("example.com/editor-lib", "v1.0.0", "module example.com/editor-lib\n", map[string]string{"lib.bork": "fn Value(): Int { 31 }\n"})
+	root := t.TempDir()
+	writeFixtureFile(t, root, ModFile, "module example.com/editor-app\n")
+	writeFixtureFile(t, root, "main.bork", "import lib \"example.com/editor-lib\"\nfn main() uses io { println(lib.Value()) }\n")
+	if err := Deps(root, "get", []string{"example.com/editor-lib@v1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		http.Error(w, "unexpected network", 500)
+	}))
+	defer server.Close()
+	t.Setenv("GOPROXY", server.URL)
+	t.Setenv("GOPRIVATE", "example.com")
+	t.Setenv("GONOPROXY", "example.com")
+	session := NewSession()
+	analysis, err := session.Analyze(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for path := range analysis.Sources() {
+		if strings.Contains(path, "editor-lib@v1.0.0") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("dependency source absent from editor snapshot")
+	}
+	if _, err := session.Analyze(root, nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOMODCACHE", t.TempDir())
+	if _, err := session.Analyze(root, nil); err == nil || !strings.Contains(err.Error(), "run bork deps download") || !strings.Contains(err.Error(), "GOPROXY=off") {
+		t.Fatalf("missing dependency cache: %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("editor made %d network requests", requests.Load())
+	}
+}
+
+func TestLibraryOfflineExample(t *testing.T) {
+	proxy := newLibraryProxy(t)
+	t.Setenv("BORKCACHE", t.TempDir())
+	library := filepath.Join("..", "..", "testdata", "libraries", "greeting")
+	read := func(dir, name string) string {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	proxy.publishFiles("example.com/greeting", "v1.0.0", read(library, "go.mod"), read(library, ModFile), map[string]string{"lib.bork": read(library, "lib.bork"), "lib_test.bork": read(library, "lib_test.bork"), "bork.sum": read(library, "bork.sum")})
+	fixture := filepath.Join("..", "..", "testdata", "libraries", "consumer")
+	root := t.TempDir()
+	before := map[string]string{}
+	for _, name := range []string{ModFile, "go.mod", "bork.sum", "main.bork"} {
+		before[name] = read(fixture, name)
+		writeFixtureFile(t, root, name, before[name])
+	}
+	if err := Deps(root, "download", nil); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range before {
+		if got := read(root, name); got != text {
+			t.Fatalf("example drift in %s: %q", name, got)
+		}
+	}
+	t.Setenv("GOPROXY", "off")
+	if _, _, err := Check(root); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(t.TempDir(), "greeting-app")
+	if err := Build(root, exe); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil || string(out) != "Hello, Ada!\n" {
+		t.Fatalf("example result: %q, %v", out, err)
+	}
+	if _, err := Clean(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Check(root); err != nil {
+		t.Fatalf("offline after clean: %v", err)
+	}
+}
+
+func TestLibraryAuthorLocalGoHelpers(t *testing.T) {
+	newLibraryProxy(t)
+	root := t.TempDir()
+	writeFixtureFile(t, root, ModFile, "module example.com/author/v2\nunsafe \"example.com/author/v2\"\n")
+	writeFixtureFile(t, root, "lib.bork", "fn Value(): Int unsafe go \"example.com/author/v2/ffi.Value\"\n")
+	writeFixtureFile(t, root, "lib_test.bork", "test \"value\" { assertEqual(Value(), 19) }\n")
+	writeFixtureFile(t, root, "ffi/value.go", "package ffi\nfunc Value() int64 { return 19 }\n")
+	if err := Deps(root, "download", nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOPROXY", "off")
+	if _, _, err := Check(root); err != nil {
+		t.Fatal(err)
+	}
+	var report bytes.Buffer
+	if code, err := Test(root, &report, TestOptions{}); err != nil || code != 0 {
+		t.Fatalf("local library helpers: %d, %v, %s", code, err, report.String())
+	}
+	for _, name := range []string{ModFile, "go.mod"} {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "replace") || strings.Contains(string(data), root) {
+			t.Fatalf("temporary replacement escaped to %s", name)
+		}
 	}
 }

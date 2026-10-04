@@ -89,7 +89,7 @@ type depsParams struct {
 }
 
 type depsGetParams struct {
-	Packages []string `positional:"true" descr:"Go package or module queries (path@version, path@latest, or path@none)"`
+	Packages []string `positional:"true" descr:"Go package or Go/Bork module queries (path@version, path@latest, or path@none)"`
 	Path     string   `optional:"true" default:"." descr:"directory in the bork module"`
 }
 

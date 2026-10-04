@@ -8,6 +8,9 @@ async function activate(context) {
   const watchers = [
     vscode.workspace.createFileSystemWatcher('**/*.bork'),
     vscode.workspace.createFileSystemWatcher('**/bork.mod'),
+    vscode.workspace.createFileSystemWatcher('**/bork.sum'),
+    vscode.workspace.createFileSystemWatcher('**/go-deps.mod'),
+    vscode.workspace.createFileSystemWatcher('**/go-deps.sum'),
     vscode.workspace.createFileSystemWatcher('**/go.mod'),
     vscode.workspace.createFileSystemWatcher('**/go.sum'),
   ];

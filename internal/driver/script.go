@@ -55,7 +55,7 @@ func readScriptHeader(file *syntax.File, project bool, diags *diag.List) scriptH
 			continue
 		}
 		if project {
-			diags.AddCode(comment.Pos, "script.directive-in-project", "inline script directives are not allowed in bork.mod projects; declare Go dependencies in go-deps.mod and unsafe opt-ins in bork.mod")
+			diags.AddCode(comment.Pos, "script.directive-in-project", "inline script directives are not allowed in bork.mod projects; declare dependencies in bork.mod and unsafe opt-ins in bork.mod")
 			continue
 		}
 		if !file.Script || comment.Pos.Line >= firstLine {
@@ -94,7 +94,7 @@ func scriptGoDependencies(file *syntax.File, requirements []gomodule.Version, re
 		return nil, err
 	}
 	var identity strings.Builder
-	identity.WriteString("script-deps-v1\n")
+	identity.WriteString("script-deps-v2\n")
 	for _, dep := range requirements {
 		fmt.Fprintf(&identity, "%s@%s\n", dep.Path, dep.Version)
 	}
@@ -120,6 +120,9 @@ func scriptGoDependencies(file *syntax.File, requirements []gomodule.Version, re
 	}
 	if manifests, err := read(reader); err == nil {
 		return manifests, nil
+	}
+	if dependenciesLocalOnly(reader) {
+		return nil, fmt.Errorf("script dependencies are not cached; run bork script %s to download them", file.Path)
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 		return nil, err
@@ -169,10 +172,11 @@ func scriptGoDependencies(file *syntax.File, requirements []gomodule.Version, re
 	if err := run("mod", "download", "all"); err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(temp, "go.mod"))
+	graph, err := resolveLibraryGraph(temp, diskSources{}, nil, false)
 	if err != nil {
 		return nil, err
 	}
+	data := graph.mod
 	parsed, err := modfile.Parse("go.mod", data, nil)
 	if err != nil {
 		return nil, err
@@ -182,10 +186,7 @@ func scriptGoDependencies(file *syntax.File, requirements []gomodule.Version, re
 	if err != nil {
 		return nil, err
 	}
-	sum, err := os.ReadFile(filepath.Join(temp, "go.sum"))
-	if err != nil {
-		return nil, err
-	}
+	sum := graph.sum
 	// Validate before publishing; malformed/unpinned results never enter the cache.
 	if _, _, err := std.GoModuleFiles(nil, std.GoDependencyManifest{Name: file.Path, Mod: data, Sum: sum}); err != nil {
 		return nil, err

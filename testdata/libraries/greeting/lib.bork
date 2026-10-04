@@ -1,0 +1,1 @@
+fn Greet(name: String): String { s"Hello, $name!" }
