@@ -392,3 +392,17 @@ func TestLibraryNestedConsumerModule(t *testing.T) {
 		t.Fatalf("local/library ambiguity: %v", err)
 	}
 }
+
+func TestLibraryRootImportAlias(t *testing.T) {
+	proxy := newLibraryProxy(t)
+	proxy.publish("example.com/my-library", "v1.0.0", "module example.com/my-library\n", map[string]string{"lib.bork": "fn Value(): Int { 7 }\n"})
+	root := t.TempDir()
+	writeFixtureFile(t, root, ModFile, "module example.com/app\n")
+	writeFixtureFile(t, root, "main.bork", "import lib \"example.com/my-library\"\nfn main() uses io { println(lib.Value()) }\n")
+	if err := Deps(root, "get", []string{"example.com/my-library@v1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Check(root); err != nil {
+		t.Fatal(err)
+	}
+}

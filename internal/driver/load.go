@@ -248,6 +248,9 @@ func (l *loader) loadSources(importPath string, paths []string, srcs [][]byte) e
 	}
 	for _, f := range files {
 		f.Package = importPath
+		if f.Script && len(paths) == 1 && len(l.stack) == 1 {
+			l.scriptPath = paths[0]
+		}
 	}
 	l.files = append(l.files, files...)
 	if !strings.HasPrefix(importPath, std.Prefix) {
@@ -363,9 +366,9 @@ func (l *loader) loadImport(imp *syntax.Import) error {
 		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: %v", imp.Path, err)
 		return nil
 	}
-	name := imp.Path[strings.LastIndex(imp.Path, "/")+1:]
+	name := imp.Name
 	if !validName(name) {
-		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: a package's directory name must be a valid name, like money or http_util", imp.Path)
+		l.diags.AddCode(imp.Pos, "import.error", "cannot import %s: the import name must be a valid name, like money or http_util; use an explicit import alias", imp.Path)
 		return nil
 	}
 	return l.loadPackage(imp.Path, paths)
