@@ -156,7 +156,13 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 		if usage != nil {
 			usage.evaluator = true
 		}
-		value, err := runComptime(files, source, module, goctx, info.Embeds...)
+		var value []byte
+		if usage == nil {
+			value, err = runComptime(files, source, module, goctx, info.Embeds...)
+		} else {
+			audit := check.AuditComptimeExecution(info, node)
+			value, err = runComptimeObserved(files, source, module, goctx, usage, audit, info.Embeds...)
+		}
 		if err != nil {
 			diags.AddCode(node.Pos(), "comptime.evaluate", "comptime failed: %v", err)
 			return
@@ -181,15 +187,31 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 }
 
 func runComptime(files []*syntax.File, source []byte, module *goModuleInputs, goctx *goContext, embeds ...*check.Embedded) ([]byte, error) {
+	return runComptimeObserved(files, source, module, goctx, nil, check.ExecutionAudit{}, embeds...)
+}
+
+func runComptimeObserved(files []*syntax.File, source []byte, module *goModuleInputs, goctx *goContext, usage *goUsage, audit check.ExecutionAudit, embeds ...*check.Embedded) ([]byte, error) {
+	if usage != nil {
+		usage.evaluator = true
+		if usage.execution == nil {
+			usage.execution = &executionTracker{}
+		}
+		// Bind a logical attempt before execution. Go-only observations cannot
+		// prepare a complete candidate; all outcomes therefore remain declines.
+		token := usage.execution.begin(nil)
+		defer usage.execution.decline(token, executionClosureUnavailable)
+	}
 	dir, err := os.MkdirTemp("", "bork-comptime-*")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	exe := filepath.Join(dir, "eval")
-	if err := buildGoWithMode(files, source, exe, module, goctx, "comptime", embeds...); err != nil {
+	finish, err := buildObservedComptime(files, source, exe, module, goctx, usage, audit, embeds)
+	if err != nil {
 		return nil, err
 	}
+	defer finish()
 	result := filepath.Join(dir, "result.json")
 	deadline, cancel := context.WithTimeout(context.Background(), goctx.comptimeLimit())
 	defer cancel()

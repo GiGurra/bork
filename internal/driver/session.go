@@ -20,6 +20,10 @@ type goUsage struct {
 	deferInputs      bool
 	names            []goNameInput
 	types, evaluator bool
+	// Request-local observations never qualify an execution receipt or escape
+	// into the retained Session artifact.
+	executions executionObservations
+	execution  *executionTracker
 }
 
 // Session reuses the last successful complete-program result. It owns no parsed
