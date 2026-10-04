@@ -7,7 +7,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 # Reader pages use inline links, enforced by TestDocLinks. Protect inline code
 # and fenced blocks so examples of Markdown are never changed by the site build.
-TOKEN = re.compile(r"(?P<code>`+[^`]*`+)|\[(?P<label>[^\]\n]+)\]\((?P<url>[^\s)]+)(?:\s+\"[^\"]*\")?\)")
+TOKEN = re.compile(r"(?P<code>`+[^`]*`+)|\[(?P<label>[^\]\n]+)\]\(\s*<?(?P<url>[^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 

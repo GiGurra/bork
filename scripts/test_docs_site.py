@@ -35,6 +35,16 @@ class SiteTests(unittest.TestCase):
         want = '[source](https://github.com/GiGurra/bork/blob/main/README.md "title")\n`[example](../README.md)`\n```bork\n[source](../README.md)\n```\n'
         self.assertEqual(docs_site.rewrite_links(source, "README.md", root, "https://github.com/GiGurra/bork", "main"), want)
 
+    def test_source_checker_link_spellings(self):
+        root = Path(__file__).resolve().parent.parent
+        for source, want in [
+            ('[source](<../README.md>)', '[source](<https://github.com/GiGurra/bork/blob/main/README.md>)'),
+            ('[source]( ../README.md )', '[source]( https://github.com/GiGurra/bork/blob/main/README.md )'),
+            ('[source]( <../README.md> "title" )', '[source]( <https://github.com/GiGurra/bork/blob/main/README.md> "title" )'),
+        ]:
+            self.assertEqual(docs_site.rewrite_links(source, "README.md", root,
+                             "https://github.com/GiGurra/bork", "main"), want)
+
     def test_snippet_modes_render_as_code(self):
         root = Path(__file__).resolve().parent.parent
         for mode in ("fragment", "fails"):
