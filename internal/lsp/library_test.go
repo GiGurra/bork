@@ -82,7 +82,7 @@ func TestLibraryNavigationAndReadOnlyEdits(t *testing.T) {
 			t.Fatalf("%s cache edit: %v", method, err)
 		}
 	}
-	if err := s.validateRename(map[string][]textEdit{def.URI: {{NewText: "changed"}}}); err == nil {
+	if err := s.validateWorkspaceEdit(map[string][]textEdit{def.URI: {{NewText: "changed"}}}); err == nil {
 		t.Fatal("rename validation accepted cache edits")
 	}
 }

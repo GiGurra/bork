@@ -14,6 +14,23 @@ import (
 	borkformat "github.com/GiGurra/bork/internal/format"
 )
 
+// Each fixture owns its files and server. Bound parallel compiler work to two
+// fixtures, retaining full protocol, formatting and semantic checks per case.
+var protocolFixtureSessions = func() chan *driver.Session {
+	sessions := make(chan *driver.Session, 2)
+	sessions <- driver.NewSession()
+	sessions <- driver.NewSession()
+	return sessions
+}()
+
+func parallelProtocolFixture(t *testing.T) *driver.Session {
+	t.Helper()
+	t.Parallel()
+	session := <-protocolFixtureSessions
+	t.Cleanup(func() { protocolFixtureSessions <- session })
+	return session
+}
+
 func TestDiagnosticActionsCheckAndFormat(t *testing.T) {
 	for _, tc := range []struct{ name, source, title, want string }{
 		{"boolean", "fn choose(x: Bool): Int { match (x) { true => 1 } }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
@@ -32,6 +49,7 @@ func TestDiagnosticActionsCheckAndFormat(t *testing.T) {
 		{"private variant", "import \"example.com/review/model\"\nfn choose(x: model.Hidden): Int { match (x) { model.Hidden.Public => 1 } }\nfn main() {}\n", "Add missing match arms", "_ => todo()"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			session := parallelProtocolFixture(t)
 			dir := t.TempDir()
 			if strings.HasPrefix(tc.name, "transitive") || tc.name == "private variant" {
 				files := map[string]string{
@@ -95,7 +113,7 @@ func TestDiagnosticActionsCheckAndFormat(t *testing.T) {
 			if err != nil || string(formatted) != changed {
 				t.Fatalf("action is not formatted: %s (%v)", changed, err)
 			}
-			if _, err := driver.NewSession().Analyze(dir, map[string]string{path: changed}); err != nil {
+			if _, err := session.Analyze(dir, map[string]string{path: changed}); err != nil {
 				t.Fatalf("action does not check: %v\n%s", err, changed)
 			}
 		})

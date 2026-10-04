@@ -29,8 +29,8 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 }
 
 func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
-	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler}
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
+	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
 	// Imports come first.
 	for {
@@ -176,6 +176,8 @@ func (p *parser) lazyBinding() *Binding {
 type bailout struct{}
 
 type parser struct {
+	spans    *[]ExpressionSpan
+	spanSeen map[Expr][]SourceSpan
 	compiler bool
 	comments []Comment
 	toks     []Token
@@ -1153,10 +1155,12 @@ var precedence = map[Kind]int{
 
 func (p *parser) expr() Expr { return p.binary(1) }
 
-func (p *parser) binary(minPrec int) Expr {
+func (p *parser) binary(minPrec int) (out Expr) {
 	start := p.tok().Pos
+	defer func() { p.rememberSpan(out, start) }()
 	x := p.unary()
 	for {
+		p.rememberSpan(x, start)
 		op := p.tok()
 		prec, ok := precedence[op.Kind]
 		if !ok || prec < minPrec {
@@ -1194,17 +1198,34 @@ func pipe(op Token, x, y Expr, start, end, targetEnd diag.Pos) Expr {
 	return call
 }
 
-func (p *parser) unary() Expr {
+func (p *parser) unary() (out Expr) {
+	start := p.tok().Pos
+	defer func() { p.rememberSpan(out, start) }()
 	if p.at(Minus) || p.at(Not) {
 		op := p.next()
 		return &Unary{Pos: op.Pos, Op: op.Kind, X: p.unary()}
 	}
-	start := p.tok().Pos
 	return p.postfix(p.primary(), start)
+}
+
+func (p *parser) rememberSpan(x Expr, start diag.Pos) {
+	if x == nil || p.spans == nil || p.i == 0 {
+		return
+	}
+	span := SourceSpan{start, p.toks[p.i-1].End}
+	spans := p.spanSeen[x]
+	for _, old := range spans {
+		if old == span {
+			return
+		}
+	}
+	p.spanSeen[x] = append(spans, span)
+	*p.spans = append(*p.spans, ExpressionSpan{x, span})
 }
 
 func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 	for {
+		p.rememberSpan(x, start)
 		funEnd := p.toks[p.i-1].End
 		var typeArgs []*TypeExpr
 		_, isID := x.(*Ident)
@@ -1879,7 +1900,7 @@ func matchingBrace(s string, from int) int {
 // subExpr parses the expression inside ${...}, starting at pos.
 func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
 	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags, p.compiler)
-	sub := &parser{toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler}
+	sub := &parser{toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler, spans: p.spans, spanSeen: p.spanSeen}
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(bailout); !ok {

@@ -47,6 +47,9 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		if action := s.organizeImports(path, p); action != nil {
 			out = append(out, action)
 		}
+		if action := s.extractFunction(path, p); action != nil {
+			out = append(out, action)
+		}
 		return out, nil
 	}
 	pkg := s.state(path)
@@ -158,7 +161,7 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		for _, ref := range refs {
 			changes[ref.URI] = append(changes[ref.URI], textEdit{ref.Range, p.NewName})
 		}
-		if err := s.validateRename(changes); err != nil {
+		if err := s.validateWorkspaceEdit(changes); err != nil {
 			return nil, err
 		}
 		return map[string]any{"changes": changes}, nil
@@ -373,7 +376,7 @@ func identifierStart(b byte) bool { return b >= 'a' && b <= 'z' || b >= 'A' && b
 
 // Recheck proposed edits in memory before returning them. This catches syntax
 // references outside the query index (for example named where predicates).
-func (s *server) validateRename(changes map[string][]textEdit) error {
+func (s *server) validateWorkspaceEdit(changes map[string][]textEdit) error {
 	overlays := map[string]string{}
 	for path, doc := range s.docs {
 		overlays[path] = doc.text
@@ -402,7 +405,7 @@ func (s *server) validateRename(changes map[string][]textEdit) error {
 			}
 			end, err := byteOffset(text, edit.Range.End)
 			if err != nil || end < start {
-				return fmt.Errorf("invalid rename range")
+				return fmt.Errorf("invalid edit range")
 			}
 			text = text[:start] + edit.NewText + text[end:]
 		}
@@ -411,7 +414,7 @@ func (s *server) validateRename(changes map[string][]textEdit) error {
 	}
 	for dir := range dirs {
 		if _, err := driver.NewSession().Analyze(dir, overlays); err != nil {
-			return fmt.Errorf("proposed rename does not check; some references may be unsupported: %w", err)
+			return fmt.Errorf("proposed edit does not check; some references may be unsupported: %w", err)
 		}
 	}
 	return nil

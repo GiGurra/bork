@@ -25,6 +25,7 @@ These use the compiler packages directly, so they follow automatically. Still ch
 | --- | --- | --- |
 | Completion metadata and context recovery | `internal/driver/editor_completion*.go`, `internal/driver/editor_imports.go`, `internal/check/queries.go` | Compiler-owned symbol, field, variant and callable queries; token-based recovery of unfinished edits |
 | Import organization | `internal/driver/editor_organize.go`, `internal/lsp/organize_imports.go` | Parsed import source ranges, compiler unused-import diagnostics, comment preservation and validated workspace edits |
+| Function extraction | `internal/syntax/parser.go`, `internal/check/editor_extract.go`, `internal/driver/editor_extract.go`, `internal/lsp/extract_function.go` | Parser-owned expression spans, checked capture identities and effects, control-flow boundaries, generic bounds and validated formatted workspace edits |
 | LSP completion presentation | `internal/lsp/completion.go` | Declaration snippets (`fn`, `match`, `type`, `test`); reserved keywords come directly from `syntax.Keywords()` |
 | Semantic classifications and client legend | `internal/check/semantic.go`, `internal/driver/editor_semantic.go`, `internal/lsp/semantic_tokens.go`, `editors/vscode/package.json` | Resolved declaration/reference kinds, source ranges, lexical fallback, semantic legend/modifiers and theme scope mappings |
 | Language server | `internal/lsp/` | Construct-specific features: completion snippets and keywords, rename rules, code actions, inlay hints, semantic token classes, navigation |

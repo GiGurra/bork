@@ -4,6 +4,9 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
+	// ExpressionSpans retains parser ranges, including grouping, for compiler
+	// source queries and refactorings. One node can have several grouped spans.
+	ExpressionSpans []ExpressionSpan
 	// Script marks a single executable file with an implicit main.
 	Script bool
 	Path   string
@@ -29,6 +32,12 @@ type File struct {
 	Bindings []*Binding
 	Tests    []*TestDecl
 	Comments []Comment
+}
+
+type SourceSpan struct{ Start, End diag.Pos }
+type ExpressionSpan struct {
+	Expr Expr
+	SourceSpan
 }
 
 // ProviderBundle is a compile-time named provider list.

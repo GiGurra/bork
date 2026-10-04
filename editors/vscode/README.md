@@ -48,6 +48,15 @@ remaining imports by path, and preserves comments. It formats the result and
 uses current compiler diagnostics to remove only unused imports. The action
 requires valid syntax and no remaining errors other than unused imports.
 
+Select a complete expression or self-contained statements and choose **Extract
+function** to create a private helper. The compiler identifies captured locals,
+parameter types, generic bounds and effects, then checks the complete proposed
+edit before offering it. Extraction requires a current successful check and
+preserves declared type constraints where available. Selections that contain
+outward returns, `?` propagation or loop control, create resource scopes, capture deferred locals, or declare
+locals used afterward,
+or occur inside a mock body, are not offered; neither are edits whose contracts or lifetimes cannot be proved.
+
 References search the compiler graphs for open packages and their imports.
 Rename currently supports local variables and package-private functions, requires
 successful current checks, and refuses names already present in affected packages. Proposed edits are
