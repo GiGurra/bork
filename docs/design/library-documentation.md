@@ -52,8 +52,11 @@ its own unpublished repository, including its local Go helpers.
 `--all` visits packages below the chosen directory, within the same module. For
 an installed library module path it visits that library's packages. It excludes
 hidden directories, `vendor`, and nested modules, and never includes other
-selected modules just because they are dependencies. Every package with Bork
-sources is considered; there is no new special meaning for an `internal`
+selected modules just because they are dependencies. Resolve a library module
+root for `--all` before requiring package sources there: a module containing
+only subpackages, with no root `.bork` files, is a valid target. Skip directories
+without Bork sources; report a clear empty-module result when none exist.
+Every package with Bork sources is considered; there is no new special meaning for an `internal`
 directory. Standard-package arguments document just that package initially;
 `--all bork/http` fails with a precise usage message.
 
@@ -80,6 +83,9 @@ An API snapshot contains declarations owned by the requested package:
 - Exported classes, named instances, instance bundles, providers, provider
   bundles, interpolators, and package bindings, with their checked signatures
   and the information needed to use them.
+- Exported ambient declarations, separately from immutable package bindings,
+  with their types, constraints, and logged/propagated markers so importers can
+  bind the values required by callable `needs` declarations.
 - Checked constructors or other public declarations synthesized by the
   compiler when those are part of the package's callable API.
 
@@ -159,11 +165,13 @@ A search service can be evaluated later against actual usage.
 ## Validation and rollout
 
 Cover public/private visibility; private lowercase receiver methods versus
-public lowercase class methods; classes/instances/bundles;
+public lowercase class methods; classes/instances/bundles; exported constrained
+ambients and optional cross-package needs;
 private record construction and checked constructors; effects, ambient needs,
 constraints and generic signatures; source comments and HTML escaping; imported
 versus owned declarations; deterministic module-wide ordering and nested module
-boundaries. Use the existing offline library/consumer fixture to document a
+boundaries, including a library with no root package. Use the existing offline
+library/consumer fixture to document a
 pinned dependency with `GOPROXY=off`. Check empty API packages, scripts, ambiguous
 providers, absent downloads, and failures without partial output.
 
