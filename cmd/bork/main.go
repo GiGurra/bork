@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"strings"
+	"syscall"
 
 	"github.com/GiGurra/boa/pkg/boa"
 	"github.com/GiGurra/bork/internal/check"
@@ -63,6 +64,11 @@ type buildParams struct {
 	JSON   bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
 	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	Output string `short:"o" optional:"true" descr:"output executable (default: the file or directory name)"`
+}
+
+type debugDAPParams struct {
+	Listen string `optional:"true" default:"127.0.0.1:0" descr:"loopback DAP listener (port 0 selects a free port)"`
+	Delve  string `optional:"true" descr:"path to an optional debugger executable"`
 }
 
 // testParams pins its short flags (no automatic ones, so they don't
@@ -291,7 +297,7 @@ func main() {
 			boa.CmdT[cleanParams]{
 				Use: "clean", Short: "remove bork compiler caches",
 				RunFunc: func(p *cleanParams, cmd *cobra.Command, _ []string) {
-					ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+					ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 					defer stop()
 					if p.All {
 						cache, err := toolenv.Value("BORKCACHE")
@@ -382,6 +388,43 @@ func main() {
 						printDescription(result)
 					}
 				},
+			},
+			boa.CmdT[boa.NoParams]{
+				Use: "debug", Short: "build and debug bork programs",
+				SubCmds: boa.SubCmds(
+					boa.CmdT[buildParams]{
+						Use: "build", Short: "build with bork source locations and inspectable variables",
+						RunFunc: func(p *buildParams, _ *cobra.Command, _ []string) {
+							out := p.Output
+							if out == "" {
+								out = driver.DefaultOutput(p.Path)
+							}
+							if err := driver.BuildDebug(p.Path, out); err != nil {
+								failDiagnostics(err, p.JSON, os.Stderr)
+							}
+						},
+					},
+					boa.CmdT[boa.NoParams]{
+						Use: "setup", Short: "install the pinned optional debugger into BORKCACHE",
+						RunFunc: func(_ *boa.NoParams, cmd *cobra.Command, _ []string) {
+							ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+							defer stop()
+							if err := driver.SetupDelve(ctx, cmd.OutOrStdout()); err != nil {
+								fail(err)
+							}
+						},
+					},
+					boa.CmdT[debugDAPParams]{
+						Use: "dap", Short: "serve a debug adapter on loopback TCP",
+						RunFunc: func(p *debugDAPParams, cmd *cobra.Command, _ []string) {
+							ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+							defer stop()
+							if err := driver.DebugDAP(ctx, p.Delve, p.Listen, cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
+								fail(err)
+							}
+						},
+					},
+				),
 			},
 			boa.CmdT[buildParams]{
 				Use:   "build",

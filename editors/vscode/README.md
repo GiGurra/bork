@@ -133,3 +133,7 @@ interpolation boundaries, embedded Go nesting, and all cases and examples.
 To check integration with a real Go grammar, set `BORK_GO_GRAMMAR` to its absolute
 path; JSON and plist grammars are supported. Client tests check launch and cleanup
 without requiring a graphical VS Code process.
+
+## Debugging
+
+Choose **Run and Debug → Debug bork** to launch the current package. Breakpoints, stepping and locals use compiler source mappings. If the optional debugger is missing, the extension offers to install its pinned version through `bork debug setup`. See [debugging](https://github.com/GiGurra/bork/blob/main/docs/debugging.md) for launch configurations and current limits, including native Go representations for unions and options.
