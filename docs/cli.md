@@ -120,7 +120,7 @@ bork upgrade                  # install the latest release
 bork upgrade v0.4.0           # install a specific release
 ```
 
-Upgrades run `go install github.com/GiGurra/bork/cmd/bork@<version>` into `BORKBIN` and report the running and newly installed compiler versions. Go replaces the installed executable after a successful build; the running compiler keeps its original version. Updates only happen when you request them.
+Upgrades run `go install github.com/GiGurra/bork/cmd/bork@<version>` in a temporary directory inside `BORKBIN`, then atomically replace the installed executable after a successful build and version check. The command reports the running and newly installed compiler versions; the running compiler keeps its original version. Updates only happen when you request them.
 
 Go must be on `PATH`. Downloading a release needs network access to your Go module proxy; offline installs work only when Go already has the required modules cached. Go's output explains install failures.
 

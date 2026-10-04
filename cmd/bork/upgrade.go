@@ -23,7 +23,7 @@ func upgradeCommand() *cobra.Command {
 			if len(args) != 0 {
 				requested = args[0]
 			}
-			if requested != "latest" && (!semver.IsValid(requested) || semver.Canonical(requested) == "") {
+			if requested != "latest" && (!semver.IsValid(requested) || semver.Canonical(requested) != requested) {
 				return fmt.Errorf("upgrade: expected latest or a version such as v0.4.0, got %q", requested)
 			}
 			goPath, err := exec.LookPath("go")
@@ -60,21 +60,36 @@ func upgradeCommand() *cobra.Command {
 					return err
 				}
 			}
+			if err := os.MkdirAll(bin, 0755); err != nil {
+				return err
+			}
+			stage, err := os.MkdirTemp(bin, ".bork-upgrade-")
+			if err != nil {
+				return err
+			}
+			defer func() { _ = os.RemoveAll(stage) }()
 			install := exec.CommandContext(cmd.Context(), goPath, "install", "github.com/GiGurra/bork/cmd/bork@"+requested)
 			// An upgrade always builds a runnable host compiler, even when the
 			// caller's Go environment is configured for cross compilation.
-			install.Env = append(os.Environ(), "GOBIN="+bin, "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
+			install.Env = append(os.Environ(), "GOBIN="+stage, "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
 			install.Stdout, install.Stderr = cmd.OutOrStdout(), cmd.ErrOrStderr()
 			if err := install.Run(); err != nil {
 				return fmt.Errorf("upgrade to %s failed: %w; check the Go output above and network/module proxy access (offline installs require cached modules)", requested, err)
 			}
-			info, err := buildinfo.ReadFile(target)
+			stagedBinary := filepath.Join(stage, "bork"+suffix)
+			info, err := buildinfo.ReadFile(stagedBinary)
 			if err != nil {
-				return fmt.Errorf("upgrade installed %s but cannot read its version: %w", target, err)
+				return fmt.Errorf("upgrade cannot read the staged compiler version: %w", err)
 			}
 			newVersion := info.Main.Version
 			if newVersion == "" || newVersion == "(devel)" {
 				newVersion = "dev"
+			}
+			// Go can copy directly over GOBIN rather than rename (for example
+			// from its build cache). Stage on the destination filesystem so
+			// publishing never exposes a partial executable.
+			if err := os.Rename(stagedBinary, target); err != nil {
+				return fmt.Errorf("upgrade cannot replace %s: %w", target, err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "bork %s -> %s (%s)\n", version(), newVersion, target)
 			return err

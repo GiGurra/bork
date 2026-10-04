@@ -53,15 +53,22 @@ func TestUpgrade(t *testing.T) {
 			t.Fatalf("upgrade: %v\n%s", err, out)
 		}
 		data, err := os.ReadFile(log)
-		want := "install\ngithub.com/GiGurra/bork/cmd/bork@" + requested + "\n" + bin + "\n" + runtime.GOOS + "\n" + runtime.GOARCH + "\n"
-		if err != nil || string(data) != want {
-			t.Fatalf("go invocation: %q, want %q (%v)", data, want, err)
+		lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+		if err != nil || len(lines) != 5 || lines[0] != "install" || lines[1] != "github.com/GiGurra/bork/cmd/bork@"+requested || filepath.Dir(lines[2]) != bin || !strings.HasPrefix(filepath.Base(lines[2]), ".bork-upgrade-") || lines[3] != runtime.GOOS || lines[4] != runtime.GOARCH {
+			t.Fatalf("unexpected go invocation: %q (%v)", data, err)
+		}
+		if _, err := os.Stat(lines[2]); !os.IsNotExist(err) {
+			t.Fatalf("staging directory was not removed: %v", err)
 		}
 	}
-	for _, args := range [][]string{{"nonsense"}, {"v0.4.0", "extra"}} {
+	for _, args := range [][]string{{"nonsense"}, {"v0.4"}, {"v0.4.0", "extra"}} {
 		if out, err := run(args...); err == nil {
 			t.Fatalf("invalid arguments succeeded: %v: %s", args, out)
 		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+bin)
+	if out, err := run(); err != nil || strings.Contains(out, "not on PATH") {
+		t.Fatalf("BORKBIN on PATH: %v\n%s", err, out)
 	}
 	t.Setenv("UPGRADE_FAIL", "1")
 	before, err := os.ReadFile(filepath.Join(bin, "bork"))
