@@ -19,6 +19,11 @@ See [installation details](cli.md#editor-install-vscode) and the
 
 ## Neovim
 
+The [Neovim package](../editors/nvim/README.md) adds file and shebang detection,
+shared tree-sitter highlighting and Go injection, plus native LSP setup.
+Its README includes parser installation and configuration. The minimal LSP-only
+setup below also works without installing the package.
+
 For Neovim 0.11 or newer, add this to `init.lua`, open a `.bork` file, and use
 `:checkhealth vim.lsp` to check the server. This uses Neovim's
 [built-in LSP configuration](https://neovim.io/doc/user/lsp.html).
@@ -35,6 +40,11 @@ vim.lsp.enable('bork')
 ```
 
 ## Helix
+
+The [Helix package](../editors/helix/README.md) supplies a pinned grammar,
+highlighting, indentation and Go injection. Follow its README to merge the
+language configuration and install the queries. The minimal LSP-only setup below
+works without the grammar.
 
 Add this to `~/.config/helix/languages.toml` (or the project's
 `.helix/languages.toml`). Use `hx --health bork` to check the configuration.
@@ -53,10 +63,21 @@ file-types = ["bork"]
 roots = ["bork.mod", ".git"]
 language-servers = ["bork"]
 comment-token = "//"
-indent = { tab-width = 4, unit = "    " }
+indent = { tab-width = 2, unit = "  " }
 ```
 
+## Vim
+
+The [Vim package](../editors/vim/README.md) includes syntax highlighting, embedded
+Go, file and shebang detection, comments and indentation. Its README provides
+vim-lsp, coc.nvim and ALE connection examples.
+
 ## Emacs
+
+The [Emacs package](../editors/emacs/README.md) provides `bork-mode`, optional
+`bork-ts-mode` with the shared parser, project discovery, and Eglot registration.
+Follow its README for installation and lsp-mode setup. The basic mode below is
+an alternative when you only need Eglot.
 
 With Emacs 29 or newer, this defines a basic major mode and connects Eglot.
 Open a `.bork` file and run `M-x eglot`. This mode provides comment handling;
@@ -75,8 +96,9 @@ Eglot provides the compiler features. See
 
 ## Zed
 
-Bork support is coming with the Zed extension, which registers the Bork
-language, Tree-sitter grammar and `bork lsp` server together. Zed needs that
-extension before a language server can attach to `.bork` files; settings alone
-cannot register a new language. Package installation instructions will live
-under `editors/zed/` when that extension lands.
+The [Zed development extension](../editors/zed/README.md) registers the language,
+shared tree-sitter grammar, Go injection and `bork lsp`. Install `bork` on PATH,
+clone this repository, run **zed: install dev extension** from Zed's command
+palette, and select `editors/zed`. Rust and a C compiler are required to build
+the development extension. Its README covers compiler path overrides and
+building the WASM artifact. Registry publication is a separate step.

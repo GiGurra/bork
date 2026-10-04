@@ -1,0 +1,16 @@
+id = "bork"
+name = "bork"
+version = "0.1.0"
+schema_version = 1
+authors = ["bork contributors"]
+description = "bork highlighting and compiler language server"
+repository = "https://github.com/GiGurra/bork"
+
+[language_servers.bork]
+name = "bork"
+languages = ["bork"]
+
+[grammars.bork]
+repository = "https://github.com/GiGurra/bork"
+rev = "d882ca6cf5107ede0ada5ed201f1b6298e93d150"
+path = "editors/tree-sitter-bork"

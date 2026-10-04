@@ -1,0 +1,19 @@
+[language-server.bork]
+command = "bork"
+args = ["lsp"]
+
+[[language]]
+name = "bork"
+scope = "source.bork"
+file-types = ["bork"]
+shebangs = ["bork"]
+roots = ["bork.mod"]
+comment-token = "//"
+block-comment-tokens = { start = "/*", end = "*/" }
+language-servers = ["bork"]
+auto-format = true
+indent = { tab-width = 2, unit = "  " }
+
+[[grammar]]
+name = "bork"
+source = { git = "https://github.com/GiGurra/bork", rev = "d882ca6cf5107ede0ada5ed201f1b6298e93d150", subpath = "editors/tree-sitter-bork" }
