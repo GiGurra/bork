@@ -368,6 +368,16 @@ func BenchmarkNavigationHTTPServer(b *testing.B) {
 	}
 	a := s.state(path).analysis
 	_ = a.EditorCalls()
+	offset := strings.Index(src, "fn emptyStore") + len("fn ")
+	prefix := src[:offset]
+	pos := diag.Pos{File: path, Line: strings.Count(prefix, "\n") + 1, Col: offset - strings.LastIndexByte(prefix, '\n')}
+	b.Run("prepare", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			if _, err := a.EditorCallHierarchy(pos); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 	b.Run("calls", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			if len(a.EditorCalls()) == 0 {
