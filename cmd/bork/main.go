@@ -68,7 +68,8 @@ type buildParams struct {
 // testParams pins its short flags (no automatic ones, so they don't
 // shift as flags are added); --auto-properties has none on purpose.
 type testParams struct {
-	JSON           bool   `short:"j" optional:"true" descr:"report diagnostics as JSON Lines"`
+	JSON           bool   `short:"j" optional:"true" descr:"report test results as JSON Lines; diagnostics go to stderr"`
+	Filter         string `optional:"true" descr:"run tests with this exact declaration name"`
 	Path           string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	Update         bool   `short:"u" optional:"true" descr:"write the snapshots assertSnapshot finds missing or different, instead of failing"`
 	AutoProperties bool   `optional:"true" descr:"also property-test the functions whose promises are trusted (unsafe go, or trust), on generated arguments"`
@@ -438,14 +439,14 @@ func main() {
 				ValidArgsFunc: func(p *testParams, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
-				RunFunc: func(p *testParams, _ *cobra.Command, _ []string) {
+				RunFunc: func(p *testParams, cmd *cobra.Command, _ []string) {
 					if p.Cases < 0 {
 						fail(errors.New("--cases must be positive"))
 					}
 					if p.Parallel < 0 {
 						fail(errors.New("--parallel must be positive"))
 					}
-					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases, Parallel: p.Parallel, Hermetic: p.Hermetic})
+					code, err := driver.Test(p.Path, os.Stdout, driver.TestOptions{JSON: p.JSON, Filter: p.Filter, FilterSet: cmd.Flags().Changed("filter"), Update: p.Update, AutoProperties: p.AutoProperties, Seed: p.Seed, Cases: p.Cases, Parallel: p.Parallel, Hermetic: p.Hermetic})
 					if err != nil {
 						failDiagnostics(err, p.JSON, os.Stderr)
 					}

@@ -55,7 +55,7 @@ function loadExtension(startError) {
   };
   const sandbox = {
     module: { exports: {} },
-    require: name => name === 'vscode' ? vscode : { LanguageClient, State, TransportKind: { stdio: 0 } },
+    require: name => name === './testing.cjs' ? { registerTesting() { calls.testing = true; } } : name === 'vscode' ? vscode : { LanguageClient, State, TransportKind: { stdio: 0 } },
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../extension.cjs'), 'utf8'), sandbox);
   return { extension: sandbox.module.exports, calls, vscode, State, clearStartError() { startError = undefined; } };
@@ -64,6 +64,7 @@ function loadExtension(startError) {
 test('client launches configured binary over stdio and disposes on deactivation', async () => {
   const { extension, calls } = loadExtension();
   await extension.activate({ subscriptions: [] });
+  assert.equal(calls.testing, true);
   assert.equal(calls.server.command, '/tools/bork');
   assert.equal(calls.server.args.join(' '), 'lsp');
   assert.equal(calls.server.transport, 0);

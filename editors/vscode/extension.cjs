@@ -111,6 +111,9 @@ async function activate(context) {
   );
   starting = start();
   await starting;
+  require("./testing.cjs").registerTesting(context, {
+    sendRequest(...args) { return client.sendRequest(...args); },
+  });
 }
 
 async function deactivate() {

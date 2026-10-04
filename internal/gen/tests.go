@@ -154,6 +154,19 @@ func TestsWith(files []*syntax.File, info *check.Info, opts TestOptions) ([]byte
 			}
 		}
 	}
+	// Keep declaration identities separate from display names (which can include
+	// a reason a property test cannot generate values).
+	for i, elt := range list.Elts {
+		entry := elt.(*ast.CompositeLit)
+		selector, file, line := "", "", 0
+		if i < len(info.Tests) {
+			test := info.Tests[i].Test
+			selector, file, line = test.Name, test.Pos.File, test.Pos.Line
+		}
+		// Generated rule and automatic property tests are not named test
+		// declarations; their display labels must not match --filter.
+		entry.Elts = append(entry.Elts, strLit(selector), strLit(file), &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(line)}, ast.NewIdent(strconv.FormatBool(i < len(info.Tests))))
+	}
 	roots = append(roots, g.propRoots...)
 	if g.mockErrors.Len() > 0 {
 		return nil, &g.mockErrors

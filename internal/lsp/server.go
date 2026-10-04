@@ -115,7 +115,7 @@ func ServeWithVersion(in io.Reader, out io.Writer, version string) error {
 				}
 				return fmt.Errorf("client exited without shutdown")
 			}
-			if len(m.ID) > 0 && m.Method != "initialize" && m.Method != "shutdown" {
+			if len(m.ID) > 0 && m.Method != "initialize" && m.Method != "shutdown" && m.Method != "textDocument/codeLens" && m.Method != "bork/tests" {
 				if err := flush(); err != nil {
 					return err
 				}
@@ -184,6 +184,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 			"hoverProvider": true, "definitionProvider": true, "documentFormattingProvider": true,
 			"referencesProvider": true, "renameProvider": map[string]any{"prepareProvider": true},
 			"documentSymbolProvider": true, "completionProvider": map[string]any{"triggerCharacters": []string{"."}},
+			"codeLensProvider":   map[string]any{"resolveProvider": false},
 			"codeActionProvider": map[string]any{"codeActionKinds": []string{"quickfix"}},
 		}, "serverInfo": map[string]any{"name": "bork", "version": s.version}}, nil, false
 	}
@@ -206,7 +207,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 	switch m.Method {
 	case "textDocument/didOpen", "textDocument/didChange", "textDocument/didSave", "textDocument/didClose",
 		"textDocument/hover", "textDocument/definition", "textDocument/completion", "textDocument/references",
-		"textDocument/rename", "textDocument/prepareRename", "textDocument/formatting", "textDocument/documentSymbol", "textDocument/codeAction":
+		"textDocument/rename", "textDocument/prepareRename", "textDocument/formatting", "textDocument/documentSymbol", "textDocument/codeAction", "textDocument/codeLens", "bork/tests":
 	default:
 		return nil, &rpcError{-32601, "method not found"}, false
 	}
