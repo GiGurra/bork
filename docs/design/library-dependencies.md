@@ -1,6 +1,7 @@
 # Library dependencies
 
-Status: proposal for review (bork-hxtpmo). Implementation waits for approval.
+Status: approved direction (bork-hxtpmo), updated after human review of #290.
+Implementation proceeds in focused PRs.
 Service documentation and terms checked on 2026-10-04.
 
 ## Decision
@@ -10,25 +11,26 @@ The Go command downloads and verifies it. Bork loads and checks its source just
 like local packages, then compiles the whole program to Go. There is no separate
 registry, binary library format, package-kind flag, or dependency solver.
 
-Use `bork deps get <module>@<version>` for Go and bork libraries. For new
-projects, use native `go.mod` and `go.sum` beside `bork.mod` as the single
-dependency manifest and checksum file. Keep reading and maintaining existing
-`go-deps.mod` / `go-deps.sum` projects for compatibility. Do not add `require`
-to `bork.mod`; it continues to name the bork module and its unsafe packages.
+Use `bork deps get <module>@<version>` for Go and bork libraries. Use `require <module> <version>` lines in `bork.mod` alongside `module` and
+`unsafe`, with Go-format checksums in `bork.sum`. This is the source of truth.
+The helper also writes a generated `go.mod` with the same module and
+requirements so Go and the proxy see published transitive requirements.
+Commit both manifests and `bork.sum`. Keep reading existing `go-deps.mod` /
+`go-deps.sum` projects and offer `bork deps migrate` to convert them.
 
-The two module declarations must match for new native-manifest projects and
+The two module declarations and requirements must match for new projects and
 published libraries. A library's `unsafe` entries authorize only its own
 packages; consumers do not repeat those entries. Requiring and importing a
 library is a decision to trust its implementation, including its unsafe code.
 
 ## User workflow
 
-Publish: create `bork.mod`, run `bork deps init` to create `go.mod` and `go.sum`,
+Publish: create `bork.mod`, run `bork deps init` to create generated `go.mod` and `bork.sum`,
 write and test library packages, commit the manifests and sources to a public
 repository with a redistributable license, and push a version tag.
 
 Depend: run `bork deps get github.com/acme/greeting@v1.0.0`, then
-`import "github.com/acme/greeting/text"`. Commit `go.mod` and `go.sum`.
+`import "github.com/acme/greeting/text"`. Commit `bork.mod`, generated `go.mod`, and `bork.sum`.
 
 Upgrade: run `bork deps get github.com/acme/greeting@v1.1.0` (or `@latest`),
 review the manifest/checksum diff, and run the consumer's checks and tests.
@@ -39,37 +41,43 @@ These commands describe the proposed behavior, not the current release.
 
 ## Manifests and publication
 
-Native `go.mod` avoids a second published dependency graph. Extending
-`go-deps.mod` alone would require publishing a synchronized `go.mod` too:
-Go cannot discover transitive requirements in a file named `go-deps.mod`.
-Adding requirements to `bork.mod` has the same problem and adds another parser
-and synchronization rule. Native Go files already describe both dependency
-kinds; bork does not need to distinguish them in a requirement.
+`bork.mod` is the one user-edited manifest. It carries canonical pinned
+requirements for both Go and bork libraries. `bork.sum` uses Go's checksum
+format; bork copies it into its temporary resolution module as `go.sum`.
+No repository `go.sum` is required by bork. Ordinary Go tools may create one
+when working with Go packages in a mixed library.
 
 `bork deps init/get/download` retain their current meanings and transactional
-resolution: run Go in a temporary directory, validate the result, stage both
-output files, and publish checksums before requirements. Resolution and
-validation failures leave source manifests untouched. A filesystem failure
-during the final replacements can leave extra checksums with the old manifest,
-as today; this is not a promise of an atomic two-file transaction.
+resolution: run Go in a temporary directory, validate the result, stage the
+outputs, and publish checksums before requirements. Resolution and validation
+failures leave source manifests untouched. A filesystem failure during final
+replacements can leave extra checksums or a manifest pair needing repair;
+this is not a promise of an atomic multi-file transaction.
 
-For a new project the helper creates `go.mod` / `go.sum`. For a legacy project
-with only `go-deps.mod`, it continues to use that pair. Migration before
-publication is a one-time rename of the pair and, if needed, correction of
-the descriptive legacy module line to match `bork.mod`. If both manifest names
-exist at the bork root, fail with instructions to keep one pair; do not silently
-merge or overwrite an existing Go project's manifest. A parent repository's
-`go.mod` is not a bork project's manifest. Empty dependency sets may have an
-empty checksum file. Embedded std manifests keep their existing names.
+The generated `go.mod` starts with
+`// Code generated by bork deps. DO NOT EDIT.` and contains the same module and
+selected requirements as `bork.mod`, plus Go's minimum supported version.
+`bork check/build` compares the declarations semantically and diagnoses drift
+(for example, after a manual `go get`) with `run bork deps download`.
+The helper regenerates it from `bork.mod`, never imports manual changes to it.
+A handwritten conflicting `go.mod` must not be silently overwritten: require
+the user to resolve that conflict or explicitly migrate the project.
 
-For native bork manifests retain the supported `module`, `go`, and pinned
-`require` directives. Permit `retract` in an author's native `go.mod` for
-publication; do not propagate it to generated programs. `replace`, `exclude`,
-`toolchain`, `godebug`, `tool`, and `ignore` remain unsupported as bork project
-configuration initially. Go controls the semantics of arbitrary Go
+Existing projects with only `go-deps.mod` retain the legacy read/update path.
+`bork deps migrate` imports their requirements and checksums, generates the Go
+manifest, and removes legacy files only after successful publication. Projects
+mixing legacy requirements with new authoritative requirements are diagnosed,
+not silently merged. A parent repository's `go.mod` is not a bork project's
+manifest. Empty dependency sets may have an empty checksum file. Embedded std
+manifests keep their existing names.
+
+Native generated manifests support `module`, `go`, and pinned `require`.
+`replace`, `exclude`, `toolchain`, `godebug`, `tool`, and `ignore` remain
+unsupported as bork project configuration initially. Go controls arbitrary Go
 dependencies' own manifests; their replacements are ignored by Go as usual.
-Published bork libraries must obey the native bork manifest subset. A helper may
-discard Go's automatically added toolchain suggestion as it does today.
+Retraction authoring is deferred rather than introducing an editable directive
+into the generated manifest. An automatically added toolchain suggestion is
+omitted; the helper retains the supported Go-version floor.
 
 A downloaded module is a bork library when it has a valid root `bork.mod`
 whose module path exactly equals the selected Go module path. Absence means
@@ -87,7 +95,7 @@ module path. Successful classification does not require executing library code.
 
 Do not run `go mod tidy` on a bork library: it cannot see bork imports and may
 remove their requirements. `bork deps` owns dependency updates. Libraries
-declare all their Go and bork requirements in their published `go.mod`, including
+declare all their Go and bork requirements in `bork.mod` and generated `go.mod`, including
 the Go requirements of imported bork std packages. `deps get/download` must
 inspect the project's package import closure and merge those std requirements
 before finishing the graph. This uses a syntactic import inventory, not a
@@ -150,13 +158,13 @@ For published bork dependencies, a required std version missing from the
 published graph is an actionable library-publication error, not an excuse to
 select a private second graph for that library.
 
-Root checksums must cover every selected external module's content and
+`bork.sum` checksums must cover every selected external module's content and
 `go.mod`, including bork and transitive dependencies. The helper downloads the
 complete selected graph and commits those hashes. Compilation resolves in an
 isolated temporary module, permits downloading missing cache content under
 existing Go policy, but rejects missing root hashes with guidance to run
 `bork deps download`. A dependency's own `go.sum` is not the consumer's lock
-file and cannot authorize a hash absent from the root's pinned input. Conflicting
+file and cannot authorize a hash absent from the root's pinned `bork.sum` input. Conflicting
 hashes and failed Go verification fail the compilation. A warm cache supports
 `GOPROXY=off`; an empty offline cache reports the missing module.
 
@@ -168,8 +176,10 @@ consumer, another dependency, or a reserved `bork/` package. The consumer's
 existing grants still apply to its own bodies and bindings. The standard
 library retains its compiler-owned authorization.
 
-Consumers do not approve a second list of foreign grants, and dependency
-updates do not trigger a new interactive approval flow. Repeating every
+`bork deps get/download` prints newly added dependencies, including transitive
+ones, containing unsafe Go packages. It lists the module/version and unsafe
+package paths so consumers can review the change. Consumers do not approve a
+second list of foreign grants, and updates have no interactive approval flow. Repeating every
 transitive package grant would turn ordinary use of a library into maintaining
 its implementation inventory. This is the same trust decision as using Go
 dependencies or std's unsafe implementations. It must be described plainly:
@@ -318,12 +328,12 @@ greeting/
   LICENSE
   bork.mod            # module example.com/greeting
   go.mod              # module example.com/greeting; go 1.26
-  go.sum
+  bork.sum
   text/text.bork      # fn Greeting(): String { "hello" }
 consumer/
-  bork.mod            # module example.com/consumer
-  go.mod              # require example.com/greeting v1.0.0
-  go.sum
+  bork.mod            # module example.com/consumer; require greeting v1.0.0
+  go.mod              # generated; require example.com/greeting v1.0.0
+  bork.sum
   main.bork           # import "example.com/greeting/text"
 ```
 
@@ -350,7 +360,7 @@ and cleaning without touching `GOMODCACHE`. Update reader-facing CLI, packages,
 Go interop and script documentation, grammar, requirements, and README during
 implementation. Local checks remain focused; GitHub CI runs full suites.
 
-The review decisions are the native manifest name with legacy compatibility,
-trusting dependency-owned unsafe grants, and the documented limits of the
-official-proxy permission inference. No compiler or CLI behavior changes in
-this design PR.
+The human approved `bork.mod`/`bork.sum` with a generated Go manifest, trusted
+dependency-owned unsafe grants with informational reporting, and the documented
+limits of the official-proxy permission inference. This design PR changes no
+compiler or CLI behavior; implementation follows in separate PRs.
