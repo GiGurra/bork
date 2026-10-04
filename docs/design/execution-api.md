@@ -47,7 +47,10 @@ It derives the computation descriptor from its concrete checked result type and
 selection. Callers cannot authorize eligibility by supplying text or a digest.
 `executionPrior` contains a validated owned receipt, its canonical typed-value
 identity, and the declaration/site identity. The collector clones and validates
-all priors and preserves their order; missing/uncertified prior execution declines.
+all priors and preserves their order. Each prior's site, concrete type and typed
+value identity must match the receipt's canonical result under its declared codec
+and policy, not just independently validate. Missing/uncertified prior execution,
+site/type/result mismatches and swapped prior values decline.
 The request policy records protocol/closure/intrinsic/argument/value-policy
 versions, effective per-context deadline and native target. Unsupported modes or
 policies decline.
@@ -59,7 +62,11 @@ contracts, selected Go context/tool/package/file/membership/search evidence and
 policy. They contain no AST, checker graph, caller-owned byte slices or callbacks.
 Candidate validation retains no successful result. Receipt certification adds
 canonical result bytes/digest and validates endpoints after successful decoding,
-current-type reconstruction and all current obligations. Result decoding remains
+current-type reconstruction and evaluation-level result/type/field obligations.
+A false decoded proof remains a valid evaluation result and can be certified;
+its consuming Facts may subsequently reject the compilation. Comptime recipe
+and result-type obligations are distinct from narrower consuming-context Facts.
+Certification does not wait for the entire surrounding Facts pass. Result decoding remains
 separate: the value/proof layer must validate output before calling `certify`.
 An invalid/corrupt persisted result is a miss, while invalid fresh output remains
 an ordinary compilation failure.
@@ -72,22 +79,33 @@ no Go build ID, Query.Text, pointer identity or stat-only tuple is a key.
 The candidate input identity remains available in the receipt for lookup.
 The result digest never substitutes for validating source or execution closure.
 
+Candidate/prior/result receipt cloning and decoding are bounded before allocation,
+using versioned manifest/result limits as well as value node/depth limits. Reject
+over-budget caller data before copying it. Certification retains owned receipt
+copies; summary methods return independent bounded clones. No caller mutation of
+an input candidate/prior or a returned receipt may change tracker certification.
+Tests cover mismatched candidate receipts, duplicate/foreign/unbound tokens,
+prior site/type/result swaps, budgets and mutations of returned data.
+
 The tracker boundary is separate from `goUsage.evaluator`:
 
 ```go
-func (tracker *executionTracker) begin() executionInvocation
+func (tracker *executionTracker) begin(candidate *executionCandidate) executionInvocation
 func (tracker *executionTracker) certify(invocation executionInvocation, receipt *executionReceipt) error
 func (tracker *executionTracker) decline(invocation executionInvocation, reason executionDecline)
 func (tracker *executionTracker) receipts() ([]*executionReceipt, bool)
 ```
 
-Tokens are owned by one tracker, issued before each actual evaluation, unresolved
-by default and completed once. The summary preserves invocation order and returns
+Tokens are owned by one tracker and issued before every logical evaluator call,
+including future cache hits. `begin` stores an owned expected input identity from
+the candidate. Nil candidates remain unbound and can never qualify; certification
+requires receipt input identity to equal the token's expected identity. Tokens
+start unresolved and are completed once. The summary preserves invocation order and returns
 false for unresolved, declined, duplicate, foreign or invalid tokens/receipts.
 It revalidates every receipt; one eligible invocation never certifies a phase.
 The foundation does not integrate hits or clear `usage.evaluator`. Later enclosing
 artifact accounting may qualify only after all invocations are certified, current
-Facts succeed and no unrelated bypass remains.
+enclosing Facts/checking succeeds and no unrelated bypass remains.
 
 Roll out in reviewable slices: owned identity/tracker primitives with no eligible
 candidates; exhaustive typed/static eligibility and audited intrinsic contracts;
