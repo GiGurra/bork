@@ -1,0 +1,190 @@
+// SQL literals keep trusted text separate from bound values and quoted names.
+type Identifier = private { value: String }
+type Dialect = sealed { Sqlite, Postgres }
+type Rendered = { query: String, params: List[Value] }
+type segment = sealed { text { value: String }, bound { value: Value }, name { value: String } }
+type Statement = private { segments: List[segment] }
+type Builder = private { parts: StaticParts, index: Int, segments: List[segment] }
+
+// Name quotes one identifier component. Dots remain part of that component.
+fn Name(value: String): Identifier | Error {
+  if (value.byteLength() == 0 || value.contains("\u0000")) {
+    Error { operation: "identifier", message: "SQL identifiers must be nonempty and contain no NUL" }
+  } else { Identifier { value: value } }
+}
+fn SQL(parts: StaticParts): Builder {
+  Builder { parts: parts, index: 0, segments: [segment.text { value: parts.values.get(0).getOr("") }] }
+}
+fn (builder: Builder) Interpolate(value: Value | Identifier | Statement): Builder {
+  segments = match (value) {
+    identifier: Identifier => [segment.name { value: identifier.value }]
+    statement: Statement => statement.segments
+    scalar: Value => [segment.bound { value: scalar }]
+  }
+  index = builder.index + 1
+  Builder { parts: builder.parts, index: index, segments: builder.segments.concat(segments).append(segment.text { value: builder.parts.values.get(index).getOr("") }) }
+}
+fn (builder: Builder) Finish(): Statement { Statement { segments: builder.segments } }
+
+// Render rejects unsafe lexical boundaries before any query reaches a driver.
+fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
+  import "fmt"
+  import "strconv"
+  import "strings"
+  postgres := false
+  switch dialect.(type) { case Dialect_Postgres: postgres = true; case Dialect_Sqlite: default: return Error{operation: "interpolate", message: "unsupported SQL dialect"} }
+  var source strings.Builder
+  holes := []any{}
+  for _, part := range statement.segments {
+    switch part := part.(type) {
+    case segment_text:
+      if strings.ContainsRune(part.value, 0) { return Error{operation: "interpolate", message: "SQL literal text contains NUL"} }
+      source.WriteString(part.value)
+    case segment_bound, segment_name:
+      source.WriteByte(0)
+      holes = append(holes, part)
+    default: panic("sql: invalid statement segment")
+    }
+  }
+  text := source.String()
+  var query strings.Builder
+  params := []any{}
+  hole := 0
+  word := func(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '$' || c >= 128 }
+  fail := func(message string) Error { return Error{operation: "interpolate", message: message} }
+  // A zero byte represents a structural hole, never caller-supplied SQL bytes.
+  for i := 0; i < len(text); {
+    c := text[i]
+    if c == 0 {
+      part := holes[hole]
+      _, identifier := part.(segment_name)
+      adjacent := func(j int) bool {
+        if j < 0 || j >= len(text) { return false }
+        c := text[j]
+        if c == ':' {
+          if postgres && (j == i+1 && j+1 < len(text) && text[j+1] == ':' || j == i-1 && j > 0 && text[j-1] == ':') { return false }
+          return true
+        }
+        return word(c) || c == 0 || c == '\'' || c == '"' || c == '`' || !postgres && (c == '[' || c == ']') || c == '@' || c == '.' && !identifier
+      }
+      if adjacent(i-1) || adjacent(i+1) { return fail(fmt.Sprintf("SQL hole %d is inside or adjacent to a partial token", hole+1)) }
+      switch part := part.(type) {
+      case segment_name:
+        query.WriteByte('"')
+        query.WriteString(strings.ReplaceAll(part.value, "\"", "\"\""))
+        query.WriteByte('"')
+      case segment_bound:
+        params = append(params, part.value)
+        if postgres { query.WriteByte('$'); query.WriteString(strconv.Itoa(len(params))) } else { query.WriteByte('?') }
+      }
+      hole++
+      i++
+      continue
+    }
+    start := i
+    if c == '\'' || c == '"' || !postgres && (c == '`' || c == '[') {
+      end := c
+      if c == '[' { end = ']' }
+      escape := postgres && c == '\'' && i > 0 && (text[i-1] == 'E' || text[i-1] == 'e') && (i < 2 || !word(text[i-2]))
+      i++
+      closed := false
+      for i < len(text) {
+        if text[i] == 0 { return fail("SQL hole is inside quoted text or an identifier") }
+        if postgres && c == '\'' && text[i] == '\\' {
+          if !escape { return fail("Postgres ordinary strings with backslashes are ambiguous; use E-prefixed strings") }
+          i++
+          if i < len(text) && text[i] == 0 { return fail("SQL hole is inside an escape string") }
+          if i < len(text) { i++ }
+          continue
+        }
+        if text[i] == end {
+          i++
+          if i < len(text) && text[i] == end && c != '[' { i++; continue }
+          closed = true
+          break
+        }
+        i++
+      }
+      if !closed { return fail("SQL quoted text is not terminated") }
+    } else if c == '-' && i+1 < len(text) && text[i+1] == '-' {
+      i += 2
+      for i < len(text) && text[i] != '\n' && (!postgres || text[i] != '\r') {
+        if text[i] == 0 { return fail("SQL hole is inside a line comment") }
+        i++
+      }
+    } else if c == '/' && i+1 < len(text) && text[i+1] == '*' {
+      i += 2
+      depth := 1
+      for i < len(text) && depth > 0 {
+        if text[i] == 0 { return fail("SQL hole is inside a block comment") }
+        if i+1 < len(text) && text[i] == '*' && text[i+1] == '/' { depth--; i += 2
+        } else if postgres && i+1 < len(text) && text[i] == '/' && text[i+1] == '*' { depth++; i += 2
+        } else { i++ }
+      }
+      if depth > 0 { return fail("SQL block comment is not terminated") }
+    } else if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c >= 128 {
+      // Dollar signs inside unquoted identifiers are not parameters or quotes.
+      i++
+      for i < len(text) && word(text[i]) { i++ }
+    } else if postgres && c == '$' {
+      j := i+1
+      if j < len(text) && text[j] >= '0' && text[j] <= '9' { return fail("write a SQL value hole instead of a literal parameter placeholder") }
+      for j < len(text) && (text[j] >= 'a' && text[j] <= 'z' || text[j] >= 'A' && text[j] <= 'Z' || text[j] == '_' || text[j] >= 128 || j > i+1 && text[j] >= '0' && text[j] <= '9') { j++ }
+      if j < len(text) && text[j] == '$' {
+        delimiter := text[i:j+1]
+        i = j+1
+        end := strings.Index(text[i:], delimiter)
+        if end < 0 { return fail("Postgres dollar quote is not terminated") }
+        if strings.ContainsRune(text[i:i+end], 0) { return fail("SQL hole is inside a dollar quote") }
+        i += end+len(delimiter)
+      } else { i++ }
+    } else if !postgres && (c == '?' || (c == ':' || c == '@' || c == '$') && i+1 < len(text) && word(text[i+1])) {
+      return fail("write a SQL value hole instead of a literal parameter placeholder")
+    } else { i++ }
+    query.WriteString(text[start:i])
+  }
+  return Rendered{query: query.String(), params: params}
+}
+
+fn dialectOf(connection: Connection | Transaction): Dialect | Error unsafe go {
+  import "database/sql"
+  var value any
+  switch connection := connection.(type) {
+  case Connection: value = connection.handle.(*_borkResourceHandle).Value
+  case Transaction: value = connection.handle.(*_borkResourceHandle).Value
+  }
+  var driver string
+  switch value := value.(type) {
+  case struct { *sql.DB; driver string }: driver = value.driver
+  case struct { *sql.Tx; driver string }: driver = value.driver
+  default: return Error{operation: "interpolate", message: "connection has no SQL dialect"}
+  }
+  switch driver { case "sqlite": return Dialect_Sqlite{}; case "pgx": return Dialect_Postgres{} }
+  return Error{operation: "interpolate", message: "unsupported SQL driver: " + driver}
+}
+fn (statement: Statement) Exec(connection: Connection | Transaction) uses io + net: Result | Error {
+  rendered = statement.Render(dialectOf(connection)?)?
+  Exec(connection, rendered.query, rendered.params)
+}
+fn (statement: Statement) Query[T: Decode](connection: Connection | Transaction) uses io + net: List[T] | Error | DecodeError {
+  rendered = statement.Render(dialectOf(connection)?)?
+  Query[T](connection, rendered.query, rendered.params)
+}
+fn (statement: Statement) QueryJson(connection: Connection | Transaction) uses io + net: Json | Error {
+  rendered = statement.Render(dialectOf(connection)?)?
+  QueryJson(connection, rendered.query, rendered.params)
+}
+fn (statement: Statement) Rows[T: Decode](connection: Connection | Transaction): Seq[T | Error | DecodeError] uses io + net {
+  statement.RowsJson(connection).map(value => decodeRow[T](value))
+}
+fn (statement: Statement) RowsJson(connection: Connection | Transaction): Seq[Json | Error] uses io + net {
+  generate[Json | Error] {
+    match (dialectOf(connection)) {
+      dialect: Dialect => match (statement.Render(dialect)) {
+        rendered: Rendered => { for (row in RowsJson(connection, rendered.query, rendered.params)) { yield row } }
+        error: Error => yield error
+      }
+      error: Error => yield error
+    }
+  }
+}

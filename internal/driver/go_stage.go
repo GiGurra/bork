@@ -13,11 +13,15 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
+// goStageCacheDir lets the test harness select writable staging without changing
+// the captured subprocess environment or Go build cache. Set it before tests run.
+var goStageCacheDir = os.UserCacheDir
+
 // stageGo gives Go a stable package directory without reusing semantic results.
 // The lock remains held until the caller has finished running Go. Unsupported
 // platforms, unavailable caches and failed publication use temporary staging.
 func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, context *goContext, mode string, embeds []*check.Embedded) (string, bool, func(), error) {
-	if base, err := os.UserCacheDir(); err == nil {
+	if base, err := goStageCacheDir(); err == nil {
 		if root, err := goStageProgramRoot(files); err == nil {
 			key := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%x", root, mode, context.namespace)))
 			if dir, pinned, release, err := stageGoStable(filepath.Join(base, "bork", "stage", "v1"), fmt.Sprintf("%x", key), source, module, embeds); err == nil {

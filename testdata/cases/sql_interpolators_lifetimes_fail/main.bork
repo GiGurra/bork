@@ -1,0 +1,10 @@
+import "bork/sql"
+fn leak() uses io + net: Seq[Json | sql.Error] uses io + net {
+  scope app {
+    match (sql.OpenSqlite(":memory:", app)) {
+      db: sql.Connection => sql.SQL"SELECT 1".RowsJson(db)
+      error: sql.Error => generate[Json | sql.Error] { yield error }
+    }
+  }
+}
+fn main() {}

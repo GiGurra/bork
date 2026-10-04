@@ -324,3 +324,38 @@ func TestPackageLazyBindings(t *testing.T) {
 		t.Fatalf("unexpected functions: %+v", file.Funcs)
 	}
 }
+
+func TestNamedInterpolators(t *testing.T) {
+	for _, source := range []string{
+		`fn f() { Tag"$${literal} ${'}'} ${1 /* } */ + 2}" }`,
+		`fn f() { Tag"${Tag"${"}"}"}" }`,
+		"import q \"bork/sql\"\nfn f() { q.SQL\"x $value ${value + 1}\" }",
+	} {
+		diags := &diag.List{}
+		file := Parse("t.bork", []byte(source), diags)
+		if diags.Len() != 0 {
+			t.Fatalf("%s: %s", source, diags.Error())
+		}
+		literal, ok := file.Funcs[0].Body.Tail.(*Interp)
+		if !ok || literal.Prefix == nil || len(literal.Parts) != len(literal.Exprs)+1 {
+			t.Fatalf("invalid named interpolation: %#v", file.Funcs[0].Body.Tail)
+		}
+		if len(file.Imports) != 0 {
+			if literal.Prefix.(*Ident).Name != "q.SQL" {
+				t.Fatalf("lost qualified prefix: %#v", literal.Prefix)
+			}
+			line := strings.Split(source, "\n")[1]
+			if literal.Exprs[0].Position().Col != strings.Index(line, "value")+1 {
+				t.Fatalf("incorrect hole position: %v", literal.Exprs[0].Position())
+			}
+		}
+	}
+}
+
+func TestNamedInterpolatorRequiresAdjacency(t *testing.T) {
+	diags := &diag.List{}
+	Parse("t.bork", []byte(`fn f() { Tag s"text" }`), diags)
+	if diags.Len() == 0 {
+		t.Fatal("accepted a separated prefix")
+	}
+}

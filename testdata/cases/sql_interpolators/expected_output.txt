@@ -1,0 +1,15 @@
+SELECT name, note FROM "users" WHERE "name" = ? OR name = ? ["Ada'); DROP TABLE users; --", "other"]
+SELECT name, note FROM "users" WHERE "name" = $1 OR name = $2 ["Ada'); DROP TABLE users; --", "other"]
+SELECT name, note FROM "users" WHERE "name" = $1 OR name = $2 ["Ada'); DROP TABLE users; --", "other"]
+SELECT "a""; DROP TABLE users; --" FROM "users" []
+SELECT * FROM "public.users" []
+SELECT * FROM "public"."users" []
+SELECT $1, $2, $3, $4 [true, 1.25, Bytes(68656c6c6f), Null {}]
+Json.Array { items: [Json.Object { fields: [JsonField { name: "active", value: Json.Number { text: "1" } }, JsonField { name: "score", value: Json.Number { text: "1.25" } }, JsonField { name: "data", value: Json.Array { items: [Json.Number { text: "104" }, Json.Number { text: "105" }] } }, JsonField { name: "note", value: Json.Null }] }] }
+[Row { name: "Ada'); DROP TABLE users; --", note: Option.None }]
+Json.Array { items: [Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "Ada'); DROP TABLE users; --" } }, JsonField { name: "note", value: Json.Null }] }] }
+[Row { name: "Ada'); DROP TABLE users; --", note: Option.None }]
+[Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "Ada'); DROP TABLE users; --" } }, JsonField { name: "note", value: Json.Null }] }]
+[Error { operation: "interpolate", message: "SQL hole is inside quoted text or an identifier" }]
+[Error { operation: "interpolate", message: "SQL hole is inside quoted text or an identifier" }]
+[Error { operation: "interpolate", message: "SQL hole is inside quoted text or an identifier" }]
