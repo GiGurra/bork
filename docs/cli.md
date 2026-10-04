@@ -1,6 +1,6 @@
 # The bork command
 
-One binary does everything: `bork <command> [path]`. The path is a `.bork` file or a directory, and defaults to the current directory. A directory is one package.
+One binary does everything: `bork <command>`. Most commands take a path, which is a `.bork` file or a directory and defaults to the current directory. A directory is one package.
 
 | Command | What it does |
 | --- | --- |
@@ -113,7 +113,7 @@ Saved settings live in `bork/env.json` under the user configuration directory (`
 
 On Linux and macOS, `check`, `emit`, `build`, and `run` reuse earlier compiler results from `BORKCACHE` when nothing they depend on has changed. There is nothing to set up. A build still runs the Go compiler, which has its own cache, and `run` still runs the program each time.
 
-Some programs are compiled afresh every time for now: those that use `comptime`, embedded files, facts proven by running predicates at compile time, or their own Go bindings and Go dependencies. On other platforms the cache is not used.
+Some programs are compiled afresh every time for now: those that use `comptime`, typed literals that are checked at compile time such as `sql.SQL`, embedded files, facts proven by running predicates at compile time, or their own Go bindings and Go dependencies. On other platforms the cache is not used.
 
 The cache looks after itself. Entries that have not been used for five days are removed in the background. If the cache cannot be read or written, compilation carries on without it.
 

@@ -1,6 +1,13 @@
 # Examples
 
-The [examples directory](../examples) holds complete programs. Run one from the repository root with `bork run examples/<name>`. Those with tests also run with `bork test examples/<name>`.
+The [examples directory](../examples) holds complete programs. Run one with `bork run examples/<name>`, and its tests, if it has any, with `bork test examples/<name>`.
+
+Some examples take arguments or read files that sit next to them. Those have an `args.txt`, and are run from their own directory with the arguments it lists:
+
+```sh
+cd examples/wc
+bork run . -- sample.txt missing.txt poem.txt
+```
 
 Each example's expected output is kept in [testdata/examples](../testdata/examples) and checked on every change, so the examples always work with the current compiler.
 

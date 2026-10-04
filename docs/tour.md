@@ -1,10 +1,10 @@
 # A tour of bork
 
-This tour builds a small program that reads a file of expenses and adds them up. Each step introduces one part of the language. Every code block is a complete file that you can run.
+This tour builds a small program that reads a file of expenses and adds them up. Each step introduces one part of the language. Every block of bork code is a complete file that you can run, except the one marked as not compiling.
 
 ## Install
 
-bork compiles through Go, so install [Go](https://go.dev/dl/) first. Then:
+bork compiles through Go, so install [Go](https://go.dev/dl/) 1.26 or later first. Then:
 
 ```sh
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -25,7 +25,7 @@ fn main() {
 bork run .
 ```
 
-`bork run` compiles and runs it. `bork build` leaves an executable instead.
+`bork run` compiles and runs it. `bork build` leaves an executable instead. Both take a directory, as here, or a single file such as `bork run main.bork`.
 
 ## Values and functions
 
@@ -51,12 +51,14 @@ A few things to notice:
 - A function's value is the last expression in its body. There is a `return`, but it is rarely needed.
 - `if` is an expression, so it gives a value.
 - `prices = ...` names a value. A name keeps its value: it cannot be assigned again or reused for something else.
-- Lists have methods such as `map`, `filter`, and `fold`. `n => n * 2` is a small function written in place.
+- Lists have methods such as `map` and `fold`. `map` is given the function `double` by name. `(sum, n) => sum + n` is a small function written in place, called a lambda.
 - `s"..."` inserts values into a string, with `$name` or `${expression}`.
 
 ## Your own types
 
-A record groups named fields. A function that can fail says so in its result type, with `|` between the outcomes.
+A record groups named fields. A function that can fail says so in its result type, with `|` between the outcomes: `parseExpense` below returns an `Expense` or a `BadLine`.
+
+To find out which one it got, a caller uses `match`. Each arm has a pattern on the left of `=>` and a result on the right, and the first pattern that fits is taken.
 
 ```bork
 type Expense = { label: String, cents: Int }
@@ -83,13 +85,15 @@ Expense { label: "coffee", cents: 450 }
 BadLine { line: "coffee", reason: "expected a label and an amount" }
 ```
 
-`line.fields()` splits the line at spaces. The outer `match` looks at the shape of that list: exactly two items, or anything else (`_`). The inner one looks at what `parseInt` returned, which is `Int | ParseError`.
+- `line.fields()` splits the line at spaces and gives a list.
+- The outer `match` looks at the shape of that list. `[label, amount]` fits a list of exactly two items and names them. `_` fits anything else.
+- The built-in `parseInt` returns `Int | ParseError`. The inner `match` looks at which it is: `n: Int` fits an `Int` and names it `n`.
 
 A `match` must cover every case. Remove the `ParseError` arm and the compiler says `match is not exhaustive: missing ParseError`. That is how bork handles failure: there are no exceptions and no null, only values that you have to look at.
 
 ## Facts
 
-An expense of zero or less makes no sense. A predicate names that rule, and `where` attaches it to the field:
+An expense of zero or less makes no sense. A predicate, declared with `pred`, names that rule, and `where` attaches it to the field. From then on the compiler tracks where the rule is known to hold. Such a piece of knowledge is called a fact.
 
 ```bork
 pred positive(x: Int) { x > 0 }
@@ -123,6 +127,10 @@ fn unchecked(label: String, n: Int): Expense {
 }
 ```
 
+```text
+Expense requires cents to be positive, but that is not proven for n
+```
+
 The check happens once, where the data comes in. Every function that later receives an `Expense` knows the amount is positive without checking again.
 
 ## Files and effects
@@ -153,6 +161,8 @@ Three new things appear here:
 - **`?`** keeps the successful value and returns the failure to the caller. `fs.Open(path, s)?` gives the file, or makes `readLines` return the `fs.Error`.
 
 `import "bork/fs"` brings in a [standard package](std/README.md). Its functions are called with the package name in front.
+
+Run it before `expenses.txt` exists and it prints `no such file or directory`. The next step creates the file.
 
 ## The whole program
 
@@ -221,7 +231,13 @@ test "rejects an amount that is not positive" {
 }
 ```
 
-`report` returns `Ok | fs.Error`: it either finishes, or fails with the file error. `Ok` is the success value of a function that has nothing else to return.
+A few things here are new:
+
+- `report` returns `Ok | fs.Error`: it either finishes, or fails with the file error. `Ok` is the success value of a function that has nothing else to return, and a body that ends without a value gives it.
+- `process.Args()` gives the command-line arguments as a list.
+- `flatMap` builds a list from the lists its function returns, which here keeps the expenses and drops the bad lines. `forEach` calls a function for each element.
+- `eprintln` prints to standard error.
+- `_ => {}` is an arm that fits anything and does nothing.
 
 With this `expenses.txt`:
 

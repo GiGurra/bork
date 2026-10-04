@@ -2195,7 +2195,7 @@ AmbientDecl = { "logged" | "propagated" "(" String ")" } "ambient" Ident ":" Typ
 - **Its type must be data:** no `Scope`, `OwnedScope`, resource, task, atom,
   channel, or function type, nor a type that contains one. An ambient value
   describes the request; capabilities (a database, a clock, a client) stay
-  parameters, or come from [assembly](#compile-time-dependency-assembly-proposal).
+  parameters, or come from [assembly](#compile-time-dependency-assembly).
   This also keeps ambient values out of the lifetime check: a binding can be
   captured by tasks that outlive its `with` block (below), which is only safe
   for values that hold no lifetime.
@@ -2416,7 +2416,7 @@ fix).
 - **Mocking** ([bork-53lit4](#mocking-in-tests-design-bork-53lit4)). A mock's
   body is checked as the target's body, so it may read the target's needs;
   a test binds values with `with` rather than mocking where they come from.
-- **Assembly** ([bork-25nywe](#compile-time-dependency-assembly-proposal)).
+- **Assembly** ([bork-25nywe](#compile-time-dependency-assembly)).
   A provider may need ambient values; an `assemble` call then needs the union
   of its providers' needs, as it uses the union of their effects. Ambient
   values are never products: they are not resolved by type.

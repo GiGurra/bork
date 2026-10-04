@@ -8,7 +8,7 @@
 
 ## Install
 
-bork compiles through Go, so [Go](https://go.dev/dl/) must be installed.
+bork compiles through Go, so [Go](https://go.dev/dl/) 1.26 or later must be installed.
 
 ```sh
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -35,7 +35,7 @@ The [tour](docs/tour.md) continues from here.
 
 ### Records, unions, and exhaustive matching
 
-Values are immutable. A function that can fail returns a union of its outcomes, and `match` must handle every one of them. There is no null and there are no exceptions.
+Values are immutable. A function that can fail returns a union of its outcomes, written with `|`, and `match` must handle every one of them. A value that may be missing is an `Option`. There is no null and there are no exceptions.
 
 ```bork
 type User = { name: String, email: Option[String] }
@@ -62,7 +62,7 @@ Without the last arm, the program does not compile: `match is not exhaustive: mi
 
 ### Facts
 
-A predicate is an ordinary function that returns a Bool. A parameter can require one with `where`, and then every caller has to show that it holds.
+A fact is something the compiler has proven about a value. A predicate, declared with `pred`, is a function that returns a Bool. A parameter can require one with `where`, and then every caller has to show that it holds.
 
 ```bork
 pred positive(x: Int) { x > 0 }
@@ -72,7 +72,7 @@ fn transfer(amount: Int where positive): String {
 }
 
 fn payOut(amount: Int): String {
-  if (amount > 0) { transfer(amount) } else { "nothing to send" }
+  if (positive(amount)) { transfer(amount) } else { "nothing to send" }
 }
 ```
 
@@ -85,7 +85,7 @@ transfer requires amount to be positive, but positive(0) is false
 
 ### Effects
 
-A function's signature says what it does to the outside world: `uses io`, `net`, `clock`, `random`, or `state`. A function that declares nothing is pure, and the compiler holds it to that.
+A function's signature says what it does to the outside world: `uses io`, `net`, `clock`, `random`, or `state`. A function that declares nothing is pure, and the compiler holds it to that. Only `main` may do anything without saying so.
 
 ```bork
 fn greeting(name: String): String {
@@ -101,7 +101,7 @@ Printing inside `greeting` would be an error: `greeting uses io (it calls printl
 
 ### Scopes and tasks
 
-Files, connections, and tasks belong to a scope. When the scope ends, its files are closed and its tasks have finished, whether the work succeeded or not. Using a file after its scope has ended is a compile error.
+Files, connections, and tasks belong to a scope. A task is a piece of work that runs concurrently, started with `spawn`. When the scope ends, its files are closed and its tasks have finished, whether the work succeeded or not. Using a file after its scope has ended is a compile error.
 
 ```bork
 import "bork/fs"
@@ -140,7 +140,7 @@ fn main() {
 
 ### Typed string interpolation
 
-`s"..."` builds a String. A library can define its own prefix that keeps the inserted values apart from the literal text. `sql.SQL` sends them to the database as bound parameters, so input can never become SQL.
+`s"..."` builds a String. A library can define its own prefix that keeps the inserted values apart from the literal text. `sql.SQL` sends them to the database as bound parameters, so they are never spliced into the SQL text.
 
 ```bork
 import "bork/sql"
@@ -156,7 +156,7 @@ The library also checks the literal while compiling. Writing `'$name'` in quotes
 
 ## Learn more
 
-- [Documentation](docs/README.md): the tour, a page for each part of the language, and the command-line reference.
+- [Documentation](docs/README.md): the tour and the command-line reference.
 - [Standard packages](docs/std/README.md): files, HTTP, JSON, SQL, time, and more.
 - [Examples](docs/examples.md): runnable programs, from `wc` to an HTTP service.
 - [Contributing and design notes](docs/contributing.md): the grammar, requirements, and design documents.
