@@ -110,3 +110,25 @@ func TestArtifactBindsSeparateAliasSource(t *testing.T) {
 		t.Fatalf("alias closure: %v", bound)
 	}
 }
+
+func TestArtifactAliasUsesPackageImports(t *testing.T) {
+	diags := &diag.List{}
+	files := syntax.ParseFiles([]string{"payload.bork", "imports.bork", "units.bork"}, [][]byte{[]byte(`import units "bork/units"
+type Payload={amount:units.Amount}`), []byte(`import units "bork/units"`), []byte(`type Amount=Int`)}, false, diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags)
+	}
+	// Keep the parsed qualified type while placing the import in another file,
+	// matching the checker's package-wide import scope.
+	files[0].Imports = nil
+	files[0].Package = "bork/money"
+	files[1].Package = "bork/money"
+	files[2].Package = "bork/units"
+	bound := map[string]bool{"payload.bork": true}
+	if err := artifactAliasSources(files, bound, nil, nil, []*syntax.TypeDecl{files[0].Types[0]}); err != nil {
+		t.Fatal(err)
+	}
+	if !bound["units.bork"] || !bound["imports.bork"] {
+		t.Fatalf("split import alias omitted: %v", bound)
+	}
+}

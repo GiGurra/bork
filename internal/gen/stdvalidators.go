@@ -736,8 +736,24 @@ func artifactAliasSources(files []*syntax.File, bound map[string]bool, helpers [
 	}
 	definitions := map[string]map[string]declaredType{}
 	selected := map[*syntax.TypeDecl]*syntax.File{}
+	type scopedImport struct {
+		path string
+		file *syntax.File
+	}
+	importsByGroup := map[string]map[string]scopedImport{}
 	for _, file := range files {
+
 		byPath[file.Path] = file
+		if importsByGroup[group(file)] == nil {
+			importsByGroup[group(file)] = map[string]scopedImport{}
+		}
+		for _, imp := range file.Imports {
+			name := imp.Name
+			if name == "" {
+				name = imp.Path[strings.LastIndex(imp.Path, "/")+1:]
+			}
+			importsByGroup[group(file)][name] = scopedImport{imp.Path, file}
+		}
 		if definitions[group(file)] == nil {
 			definitions[group(file)] = map[string]declaredType{}
 		}
@@ -748,18 +764,13 @@ func artifactAliasSources(files []*syntax.File, bound map[string]bool, helpers [
 	addName := func(file *syntax.File, name string) {
 		owner := group(file)
 		if prefix, rest, ok := strings.Cut(name, "."); ok {
-			for _, imp := range file.Imports {
-				alias := imp.Name
-				if alias == "" {
-					alias = imp.Path[strings.LastIndex(imp.Path, "/")+1:]
-				}
-				if alias == prefix {
-					owner = imp.Path
-					name = rest
-					break
-				}
+			if imported := importsByGroup[owner][prefix]; imported.path != "" {
+				bound[imported.file.Path] = true
+				owner = imported.path
+				name = rest
 			}
 		}
+
 		declaration := definitions[owner][name]
 		if declaration.file == nil {
 			declaration = definitions["$prelude"][name]
