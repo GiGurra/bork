@@ -46,7 +46,7 @@ func (s *Session) Analyze(path string, overlays map[string]string) (*EditorAnaly
 	if err != nil {
 		return nil, err
 	}
-	usage := &goUsage{}
+	usage := &goUsage{proofs: s.proofCache()}
 	program, err := checkLoadedProgramTracked(loaded, module, context, captureEmbedsSnapshot, usage, s.observe)
 	if err != nil {
 		return nil, err

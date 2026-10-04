@@ -2,8 +2,8 @@
 
 Ordinary fact checking used to compile unrelated user types, derived instances,
 foreign aliases and field helpers into every native predicate evaluator. The
-first incremental-checking slice trims that program, while still executing every
-selection afresh. It applies to fresh CLI requests and Session/editor requests.
+first incremental-checking slice trims that program, while executing each selection afresh unless the separate Session cache below
+qualifies. The trim applies to fresh CLI requests and Session/editor requests.
 
 `gen.ClosedProofProgram` requires the existing typed `AuditExecutionQueries`
 audit to accept every query, including And/Or leaves, argument expressions,
@@ -56,16 +56,56 @@ tests exercise fallback for direct/transitive unsafe code, unsafe callbacks,
 generics, lazy state and replaced comptime dependencies. Real config/HTTP
 fixtures also compare full and reduced native proof output.
 
-## Subsequent proof reuse
+## Session proof reuse
 
-Session-owned reuse should key a proof result on the checked selection and its
-complete audited dependency closure, emitted runtime support, evaluator module
-inputs, Go toolchain/configuration and execution policy. Unknown inventories
-must execute afresh. Clean-versus-reuse tests must cover dependency edits and
-rejected closures. This is separate from the trim and is not enabled here.
+`Session.Check`, `Emit` and `Analyze` retain a separate cache of successful closed
+boolean batches, including false results. They still recheck edited sources and
+recompute diagnostics. Programs requiring evaluation still bypass complete-program reuse;
+no checked graph or native executable is stored in the proof cache.
 
-A Session cache helps editors and watch processes, but cannot accelerate proof
-execution in a fresh CLI process. CLI reuse additionally needs independently
-certified execution artifacts in the disk cache, including support/import
-initialization, the Go build closure and native/policy inputs. The existing
-static audit alone is insufficient evidence for an execution cache hit.
+Every request regenerates and audits the selection. Its ordered queries,
+arguments, reachable helpers and compiler runtime appear in the generated Go
+bytes, which serve as the closure identity. The key also binds actual staged
+module/assets, stage path, native Go launcher digest, build/process environment
+and execution settings. Unknown startup/support imports decline. Native Go
+context validation excludes wrappers, unsupported flags/workspaces and switched
+metadata toolchains. Parsing the actual staged module additionally rejects
+newer Go requirements and toolchain directives that could auto-switch the build.
+The installed compiler and Go installation stay immutable while running, as in
+Go's own object-cache contract. No SDK directory scan is added.
+
+Staging still happens on hits, preserving module-hook observations. Results are
+owned copies, capped at 256 entries and 64 KiB, with a 4 MiB input budget. Native
+failures and malformed output are never stored. The bounded-comptime invocation
+memo remains separate; explicit comptime values execute afresh.
+
+Linux/Go 1.27.1, three five-iteration samples, alternating newline overlays after
+one priming request. Both arms use the trim and warm Go context/object caches.
+The fresh arm discards only the proof cache before each request. Sample medians:
+
+| Editor fixture | Fresh proofs | Session proofs | Facts fresh / reuse |
+| --- | ---: | ---: | ---: |
+| config | 184.34 ms | 94.77 ms | 115.82 / 26.58 ms |
+| http_server | 233.28 ms | 122.72 ms | 112.89 / 1.90 ms |
+
+Config retained one additional miss in two samples; a third sample was 72.41 ms
+with facts at 4.34 ms. A subsequent ten-iteration reuse probe reported 0.9–1.0
+hits/request and 72.69–83.20 ms total. The benchmark exposes batch-hit/miss metrics
+so residual misses stay visible. These are full editor rechecks; source checking
+still costs approximately 55 ms for config and 105 ms for HTTP.
+
+```sh
+go test ./internal/driver -run '^$' -bench '^BenchmarkSessionProofEdits$' -benchtime=5x -count=3
+```
+
+Clean-versus-reuse tests cover imported helper edits, query argument edits,
+failed proofs and recovery, emitted bytes and editor snapshots. Separate tests
+cover result ownership, Session isolation, execution environment and actual
+staged-module changes, native failure nonretention, wrapper bypass and staged
+Go toolchain selection. Existing key/support/budget regressions remain applicable.
+
+A Session cache helps editors and watch processes but cannot accelerate proof
+execution in a fresh CLI process. CLI reuse still needs independently certified
+execution artifacts in the disk cache, including support/import initialization,
+the Go build closure and native/policy inputs. The static audit alone is
+insufficient evidence for a persisted execution cache hit.

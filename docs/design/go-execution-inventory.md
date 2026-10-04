@@ -1,8 +1,10 @@
 # Execution observation and installed SDK identity
 
 Status: request-owned accounting is integrated for comptime and predicate calls,
-including invocation-local predicate memo hits. Every attempt still declines an
-execution receipt. Session and disk evaluated-value reuse remain deferred; the
+including invocation-local and Session predicate memo hits. Every attempt still
+declines an execution receipt. Narrow [Session proof batches](proof-evaluator.md)
+reuse owned booleans under a validated native Go installation contract; persisted
+and enclosing evaluated-value reuse remain deferred. The complete-program
 compile-time evaluator bypass is unchanged.
 
 The driver uses the shared `captureInstalledSDK` / `installedSDKIdentity.current`
@@ -37,7 +39,7 @@ These measurements justify deferring cross-request certification and value reuse
 They are an eligibility/cost probe, not a claim of cache hits or a performance
 prediction for other machines or programs.
 
-The remaining work described in [evaluation-cache.md](evaluation-cache.md) and
+Persisted and enclosing hits described in [evaluation-cache.md](evaluation-cache.md) and
 [execution-api.md](execution-api.md) requires all of the following before hits:
 
 - Bind actual ordered query/comptime selections, canonical closed arguments,

@@ -1,11 +1,13 @@
 # Cached compiler evaluations
 
-Status: deferred design for reuse across compiler calls. See the measured
-[observation checkpoint and remaining prerequisites](go-execution-inventory.md). Explicit comptime values still
-run fresh, and existing Session/result-cache bypass markers remain enabled.
-This design supplies the shared execution-receipt boundary needed before either
-kind of result can be reused. It extends the input/result layers described in
-[disk-cache.md](disk-cache.md) and the value contract in [comptime.md](comptime.md).
+Status: persisted execution receipts and explicit comptime-value reuse remain
+deferred. [Session predicate reuse](proof-evaluator.md) is implemented as a
+narrower, nonpersistent owner of successful closed boolean batches. It requires
+the supported native Go installation contract; wrappers and switched generated
+toolchains execute afresh. Existing enclosing Session/result-cache evaluation
+bypass markers remain enabled. This design supplies the shared execution-receipt
+boundary needed for persisted or enclosing reuse, extending [disk-cache.md](disk-cache.md)
+and [comptime.md](comptime.md).
 
 Within one compiler call, bounded comptime proof evaluators and final Facts share
 a private memo of successful boolean vectors, including false results. Eligibility
@@ -17,8 +19,10 @@ and effective timeout. Staging still happens on hits, so module hooks run once p
 logical evaluation and their published bytes remain observable. Returned vectors
 are copied; failed, panicked, timed-out and malformed evaluations are not retained.
 The memo holds at most 256 entries and 64 KiB of result payload, with a 4 MiB input
-budget. It ends with that compiler call; direct/unbounded predicate APIs and
-explicit comptime value execution do not use it. Request-owned observation
+budget. The bounded-comptime memo ends with that compiler call; standalone
+unbounded predicate APIs and explicit comptime value execution do not use it.
+The separate Session owner uses these same bounds, support contracts and staged
+identity after successful closed evaluator generation and native-toolchain checks. Request-owned observation
 accounts for each logical predicate attempt before memo lookup; this memo
 does not supply a Session receipt or certify an enclosing compilation hit.
 
