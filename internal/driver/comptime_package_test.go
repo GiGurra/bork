@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/GiGurra/bork/internal/check"
 )
 
 func TestComptimePackageValues(t *testing.T) {
@@ -170,5 +173,47 @@ fn main(){println(comptime{_=Base;{"a":1}.unordered().keys()})}`, "comptime cann
 				t.Fatalf("want %q; got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+// Malformed protocol output must cancel the process before waiting for it.
+// The outer deadline contains the test if that cancellation regresses.
+func TestComptimeBatchInvalidResponseCleanup(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell subprocess")
+	}
+	watchdog, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	ctx, cancel := context.WithCancel(watchdog)
+	defer cancel()
+	node := &check.Comptime{}
+	cmd := exec.CommandContext(ctx, "sh", "-c", "printf '\\002'; sleep 30")
+	cmd.WaitDelay = time.Second
+	configureEvaluationProcess(cmd)
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr := &boundedOutput{limit: 64 << 10}
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	batch := &comptimeBatch{nodes: []*check.Comptime{node}, cmd: cmd, input: input, output: output, stderr: stderr, cancel: cancel}
+	defer batch.close()
+	_, err = batch.evaluate(node, nil, nil, nil, &goContext{evalLimit: 150 * time.Millisecond}, nil)
+	if err == nil || !strings.Contains(err.Error(), "invalid comptime response") {
+		t.Fatalf("want invalid response, got %v", err)
+	}
+	if watchdog.Err() != nil {
+		t.Fatal("response error waited for the watchdog instead of canceling evaluator")
+	}
+	if !batch.waited || cmd.ProcessState == nil {
+		t.Fatal("evaluator was not reaped")
 	}
 }

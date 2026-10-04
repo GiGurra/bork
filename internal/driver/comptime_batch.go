@@ -154,6 +154,7 @@ func (batch *comptimeBatch) evaluate(node *check.Comptime, files []*syntax.File,
 	select {
 	case err := <-completed:
 		if err != nil {
+			batch.cancel()
 			// Wait drains stderr before exposing the panic diagnostic.
 			_ = batch.cmd.Wait()
 			batch.waited = true
