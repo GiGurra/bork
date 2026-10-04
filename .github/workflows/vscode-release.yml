@@ -1,0 +1,93 @@
+name: VS Code extension release
+
+on:
+  push:
+    tags: ['vscode-v*']
+  workflow_dispatch:
+    inputs:
+      registry:
+        description: Registry to publish (choose the release tag as the workflow ref)
+        type: choice
+        options: [both, marketplace, open-vsx]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vscode-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Validate and package VSIX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - name: Require a matching extension tag on main
+        run: |
+          node editors/vscode/scripts/release.cjs
+          git merge-base --is-ancestor HEAD origin/main
+      - run: npm ci --prefix editors/vscode
+      - run: npm test --prefix editors/vscode
+      - run: npm run package --prefix editors/vscode -- --out bork.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bork-vscode
+          path: editors/vscode/bork.vsix
+          if-no-files-found: error
+  marketplace:
+    name: Publish to VS Code Marketplace
+    if: github.event_name == 'push' || inputs.registry == 'both' || inputs.registry == 'marketplace'
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - run: npm ci --prefix editors/vscode
+      - uses: actions/download-artifact@v4
+        with:
+          name: bork-vscode
+          path: editors/vscode
+      - name: Publish the packaged extension
+        working-directory: editors/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          test -n "$VSCE_PAT" || { echo 'Create the VSCE_PAT repository secret'; exit 1; }
+          npx --no-install vsce publish --packagePath bork.vsix --skip-duplicate
+  open-vsx:
+    name: Publish to Open VSX
+    if: github.event_name == 'push' || inputs.registry == 'both' || inputs.registry == 'open-vsx'
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - run: npm ci --prefix editors/vscode
+      - uses: actions/download-artifact@v4
+        with:
+          name: bork-vscode
+          path: editors/vscode
+      - name: Publish the packaged extension
+        working-directory: editors/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          test -n "$OVSX_PAT" || { echo 'Create the OVSX_PAT repository secret'; exit 1; }
+          npx --no-install ovsx publish bork.vsix --skip-duplicate

@@ -1,5 +1,23 @@
 # bork for VS Code
 
+Language support for [bork](https://github.com/GiGurra/bork), a backend language that compiles to Go. The compiler checks immutable values, validation facts, effects, and resource lifetimes.
+
+## Install
+
+Find **bork** (`gigurra.bork`) in the Extensions view, or open its [Marketplace page](https://marketplace.visualstudio.com/items?itemName=gigurra.bork). VSCodium and editors using Open VSX can use the [Open VSX page](https://open-vsx.org/extension/gigurra/bork). Registry listings become available after the first release.
+
+Install [Go](https://go.dev/dl/) 1.26 or later, then the compiler:
+
+```sh
+go install github.com/GiGurra/bork/cmd/bork@latest
+bork new hello
+code hello
+```
+
+VS Code 1.82 or later is required. The extension does not bundle a compiler. Set `bork.serverPath` if bork is not on the editor's PATH; restart the extension after changing it. For SSH, containers, and other remote workspaces, install the compiler and Go on the remote host.
+
+## Features
+
 The extension highlights `.bork` files, including embedded Go, and launches
 `bork lsp` for diagnostics, types and proven facts on hover, go-to-definition,
 references, conservative completion, document symbols, formatting and suggested
@@ -31,6 +49,8 @@ Language-server activation requires a trusted workspace because checking may
 execute compile-time code or Go tools. Highlighting remains lexical and works
 without a compiler. Files in virtual workspaces are not supported by the client.
 
+## Develop and package
+
 Install dependencies and open an extension development window from the repo root:
 
 ```sh
@@ -46,8 +66,7 @@ code --install-extension editors/vscode/bork-0.1.0.vsix
 ```
 
 The package contains the language client; it locates the separately installed
-compiler rather than bundling platform binaries. This does not publish to the
-Marketplace. The client follows the official [VS Code language server guide](https://code.visualstudio.com/api/language-extensions/language-server-extension-guide),
+compiler rather than bundling platform binaries. Publishing is separate; maintainers use the [release guide](PUBLISHING.md). The client follows the official [VS Code language server guide](https://code.visualstudio.com/api/language-extensions/language-server-extension-guide),
 and packaging uses [vsce](https://code.visualstudio.com/api/working-with-extensions/publishing-extension).
 
 Other TextMate-compatible editors can use
@@ -55,7 +74,7 @@ Other TextMate-compatible editors can use
 `source.bork` scope for `.bork`, and provide a `source.go` grammar for embedded Go.
 Any LSP client can launch `bork lsp` over stdio with full-document synchronization.
 
-Run the grammar and client tests:
+Run the grammar, client, and release-guard tests:
 
 ```sh
 npm test --prefix editors/vscode

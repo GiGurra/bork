@@ -4,3 +4,8 @@ node_modules/vscode-oniguruma/**
 node_modules/vscode-textmate/**
 package-lock.json
 *.vsix
+scripts/**
+images/*.svg
+PUBLISHING.md
+.gitignore
+.vscodeignore
