@@ -1,0 +1,33 @@
+name: Run test shard
+description: Run and measure a discovered normal or race shard with shared Go caching.
+inputs:
+  mode:
+    description: normal or race
+    required: true
+  shard:
+    description: Shard name from scripts/ci.py matrix.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-go
+      id: go-cache
+      with:
+        cache-name: ${{ inputs.mode }}-${{ inputs.shard }}
+    - name: Run shard
+      shell: bash
+      env:
+        GOTOOLCHAIN: local
+        MODE: ${{ inputs.mode }}
+        SHARD: ${{ inputs.shard }}
+      run: python3 scripts/ci.py run --mode "$MODE" "$SHARD" --report "$RUNNER_TEMP/ci-$MODE-$SHARD.json"
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ci-${{ inputs.mode }}-${{ inputs.shard }}
+        path: ${{ runner.temp }}/ci-${{ inputs.mode }}-${{ inputs.shard }}.json
+    - uses: actions/cache/save@v4
+      if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
+      with:
+        path: ${{ steps.go-cache.outputs.cache-paths }}
+        key: ${{ steps.go-cache.outputs.cache-key }}

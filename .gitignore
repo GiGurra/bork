@@ -1,3 +1,4 @@
 # Binaries built by bork build
 /hello
 /bork
+__pycache__/
