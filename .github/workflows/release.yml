@@ -63,24 +63,10 @@ jobs:
             version=${SOURCE_REF#refs/tags/}
             python3 -c 'import sys; sys.path.insert(0, "scripts"); import release; release.version_tuple(sys.argv[1])' "$version"
           else
-            version=$(git tag --points-at "$SOURCE_SHA" | python3 -c '
-          import sys
-          sys.path.insert(0, "scripts")
-          import release
-          tags = [tag.strip() for tag in sys.stdin if release.VERSION.fullmatch(tag.strip())]
-          print(max(tags, key=release.version_tuple) if tags else "")')
-            if [ -z "$version" ]; then
-              version=$(python3 scripts/release.py version $(git tag --list))
-              latest=$(git tag --list | python3 -c '
-          import sys
-          sys.path.insert(0, "scripts")
-          import release
-          tags = [tag.strip() for tag in sys.stdin if release.VERSION.fullmatch(tag.strip())]
-          print(max(tags, key=release.version_tuple) if tags else "")')
-              if [ -n "$latest" ]; then
-                git merge-base --is-ancestor "$latest" "$SOURCE_SHA"
-              fi
-            fi
+            version=$(python3 scripts/release.py commit-version --sha "$SOURCE_SHA")
+          fi
+          if git rev-parse "refs/tags/$version" >/dev/null 2>&1; then
+            test "$(git rev-list -n 1 "$version")" = "$SOURCE_SHA"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"

@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 import tarfile
 import tempfile
+import subprocess
 import unittest
 import zipfile
 
@@ -35,6 +36,45 @@ class ReleaseTests(unittest.TestCase):
                         self.assertEqual(set(archive.getnames()), {"bork", "LICENSE", "README.md"})
                         self.assertEqual(archive.extractfile("bork").read(), b"fixture")
                         self.assertEqual(archive.getmember("bork").mode & 0o111, 0o111)
+
+    def test_versions_remain_ordered_when_newer_ci_finishes_first(self):
+        history = ["legacy", "release-start", "A", "B"]
+        tags = {"v0.4.8": "legacy", "v0.4.11": "B"}
+        self.assertEqual(release.version_for_source(history[:2], tags, "release-start"), "v0.4.9")
+        self.assertEqual(release.version_for_source(history[:3], tags, "release-start"), "v0.4.10")
+        self.assertEqual(release.version_for_source(history, tags, "release-start"), "v0.4.11")
+        self.assertEqual(release.version_for_source(history, {}, "release-start"), "v0.0.3")
+        tags["v0.5.0"] = "A"
+        del tags["v0.4.11"]
+        self.assertEqual(release.version_for_source(history, tags, "release-start"), "v0.5.1")
+
+    def test_git_version_discovery_handles_annotated_and_lightweight_tags(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=root, text=True, stderr=subprocess.DEVNULL).strip()
+            git("init")
+            git("config", "user.name", "Release fixture")
+            git("config", "user.email", "fixture@example.com")
+            (root / "README").write_text("legacy")
+            git("add", ".")
+            git("commit", "-m", "legacy")
+            git("tag", "-a", "v0.4.8", "-m", "legacy")
+            (root / "scripts").mkdir()
+            (root / "scripts/release.py").write_text("pass")
+            git("add", ".")
+            git("commit", "-m", "automation")
+            first = git("rev-parse", "HEAD")
+            (root / "README").write_text("A")
+            git("commit", "-am", "A")
+            earlier = git("rev-parse", "HEAD")
+            (root / "README").write_text("B")
+            git("commit", "-am", "B")
+            later = git("rev-parse", "HEAD")
+            git("tag", "v0.4.11")
+            self.assertEqual(release.commit_version(first, root), "v0.4.9")
+            self.assertEqual(release.commit_version(earlier, root), "v0.4.10")
+            self.assertEqual(release.commit_version(later, root), "v0.4.11")
 
     def test_checksums_require_every_platform_and_one_vsix(self):
         with tempfile.TemporaryDirectory() as temporary:
