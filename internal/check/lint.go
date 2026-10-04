@@ -11,18 +11,20 @@ import (
 // changes type checking, inferred contracts, or the generated program.
 func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 	warnings := &diag.List{}
+	sources := map[string]*lintSource{}
 	proven := lintProvenChecks(info)
 	roots := map[string]*syntax.File{}
 	for _, file := range files {
 		for _, pkg := range info.Packages {
 			if pkg.Root && pkg.Path == file.Package && !file.Prelude {
 				roots[file.Path] = file
+				sources[file.Path] = newLintSource(file)
 			}
 		}
 	}
 	warn := func(pos diag.Pos, code, message string, end diag.Pos, fixes ...diag.Fix) {
 		file := roots[pos.File]
-		if file == nil || lintIgnored(file, pos.Line, code) {
+		if file == nil || sources[file.Path].ignored[pos.Line][code] || sources[file.Path].ignored[pos.Line]["all"] {
 			return
 		}
 		warnings.Warn(pos, code, message)
@@ -104,13 +106,20 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 		warn(parameter.Pos, "lint.unused-parameter", "parameter "+parameter.Name+" is never read", end)
 	}
 	referenced := map[*Func]bool{}
+	selfReferences := map[*Func]int{}
 	for call, fn := range info.callFuncs {
 		if info.exprOwners[call] != fn {
 			referenced[fn] = true
+		} else {
+			selfReferences[fn]++
 		}
 	}
-	for _, inst := range info.funcRefs {
-		referenced[inst.Func] = true
+	for expr, inst := range info.funcRefs {
+		if info.exprOwners[expr] != inst.Func {
+			referenced[inst.Func] = true
+		} else {
+			selfReferences[inst.Func]++
+		}
 	}
 	// Raw Go may refer to private Go declarations by name. Keep those packages
 	// out of declaration linting rather than guessing about embedded Go code.
@@ -127,8 +136,7 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 		if nameUses[file.Package] == nil {
 			nameUses[file.Package] = map[string]int{}
 		}
-		tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
-		for _, token := range tokens {
+		for _, token := range sources[file.Path].tokens {
 			if token.Kind == syntax.TIdent {
 				nameUses[file.Package][token.Text]++
 			}
@@ -150,7 +158,7 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 			if fn == nil || fn.Prelude || fd.ScriptMain || fd.IsMethod || fn.Of != nil || fn.Class != nil {
 				continue
 			}
-			if !opaque[file.Package] && !Exported(fd.Name) && fd.Name != "main" && !referenced[fn] && nameUses[file.Package][fd.Name] <= 1 {
+			if !opaque[file.Package] && !Exported(fd.Name) && fd.Name != "main" && !referenced[fn] && nameUses[file.Package][fd.Name] <= 1+selfReferences[fn] {
 				warn(fd.Pos, "lint.unused-declaration", "private function "+fd.Name+" is never used", fd.ParamsEnd)
 			}
 			if fd.Uses != nil && fn.Body != nil {
@@ -218,12 +226,12 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 				}
 			}
 			if keep != nil {
-				start, end := lintExprRange(file, binary)
-				lo, hi := lintExprRange(file, keep)
+				start, end := sources[file.Path].exprRange(binary)
+				lo, hi := sources[file.Path].exprRange(keep)
 				if start.File == "" || end.File == "" || lo.File == "" || hi.File == "" {
 					continue
 				}
-				replacement := "(" + sourceText(file, lo, hi) + ")"
+				replacement := "(" + sources[file.Path].text(lo, hi) + ")"
 				warn(start, "lint.simplify", "boolean expression can be simplified", end,
 					diag.Fix{Message: "remove the redundant boolean literal", Edits: []diag.TextEdit{{Start: start, End: end, Replacement: replacement}}})
 			}
@@ -232,29 +240,73 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 	return warnings
 }
 
-func lintIgnored(file *syntax.File, line int, code string) bool {
-	for _, comment := range file.Comments {
-		if comment.Pos.Line != line && comment.Pos.Line != line-1 {
-			continue
-		}
-		text := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//"))
-		fields := strings.Fields(text)
-		if len(fields) >= 2 && fields[0] == "lint:ignore" {
-			for _, rule := range strings.Split(fields[1], ",") {
-				if rule == code || rule == "all" {
-					return true
-				}
+type lintSource struct {
+	file      *syntax.File
+	tokens    []syntax.Token
+	positions map[diag.Pos]int
+	ends      map[diag.Pos]int
+	pairs     map[int]int
+	offsets   []int
+	ignored   map[int]map[string]bool
+}
+
+func newLintSource(file *syntax.File) *lintSource {
+	tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
+	source := &lintSource{file: file, tokens: tokens, positions: map[diag.Pos]int{}, ends: map[diag.Pos]int{}, pairs: map[int]int{}, offsets: []int{0}, ignored: map[int]map[string]bool{}}
+	var stack []int
+	for i, token := range tokens {
+		source.positions[token.Pos] = i
+		source.ends[token.End] = i
+		switch token.Kind {
+		case syntax.LParen, syntax.LBrace, syntax.LBrack:
+			stack = append(stack, i)
+		case syntax.RParen, syntax.RBrace, syntax.RBrack:
+			if len(stack) > 0 {
+				j := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				source.pairs[i] = j
+				source.pairs[j] = i
 			}
 		}
 	}
-	return false
+	for i, c := range file.Source {
+		if c == '\n' {
+			source.offsets = append(source.offsets, i+1)
+		}
+	}
+	for _, comment := range file.Comments {
+		fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(comment.Text, "//")))
+		if len(fields) < 2 || fields[0] != "lint:ignore" {
+			continue
+		}
+		for _, line := range []int{comment.Pos.Line, comment.Pos.Line + 1} {
+			if source.ignored[line] == nil {
+				source.ignored[line] = map[string]bool{}
+			}
+			for _, code := range strings.Split(fields[1], ",") {
+				source.ignored[line][code] = true
+			}
+		}
+	}
+	return source
 }
 
-// Lexer token pairs restore grouping parentheses omitted from the AST. This
-// keeps edits balanced without reimplementing expression parsing.
-func lintExprRange(file *syntax.File, expression syntax.Expr) (diag.Pos, diag.Pos) {
-	tokens, _ := syntax.Lex(file.Path, []byte(file.Source), &diag.List{})
+func (s *lintSource) text(start, end diag.Pos) string {
+	lo := s.offsets[start.Line-1] + start.Col - 1
+	hi := s.offsets[end.Line-1] + end.Col - 1
+	return s.file.Source[lo:hi]
+}
+
+// Token pairs restore grouping parentheses omitted from the AST. The index is
+// built once per source, and each edit examines only its expression's tokens.
+func (s *lintSource) exprRange(expression syntax.Expr) (diag.Pos, diag.Pos) {
 	var bounds func(syntax.Expr) (diag.Pos, diag.Pos)
+	leaf := func(pos diag.Pos) diag.Pos {
+		if i, ok := s.positions[pos]; ok {
+			return s.tokens[i].End
+		}
+		return pos
+	}
 	bounds = func(expr syntax.Expr) (diag.Pos, diag.Pos) {
 		switch expr := expr.(type) {
 		case *syntax.Binary:
@@ -266,12 +318,22 @@ func lintExprRange(file *syntax.File, expression syntax.Expr) (diag.Pos, diag.Po
 			return expr.Pos, end
 		case *syntax.Call:
 			return expr.Start, expr.End
-		case *syntax.Ident, *syntax.BoolLit:
-			for _, tok := range tokens {
-				if tok.Pos == expr.Position() {
-					return tok.Pos, tok.End
-				}
+		case *syntax.Selector:
+			start, _ := bounds(expr.X)
+			return start, leaf(expr.Pos)
+		case *syntax.RecordLit:
+			start, _ := bounds(expr.Type)
+			return start, leaf(expr.End)
+		case *syntax.Block:
+			return expr.Pos, leaf(expr.End)
+		case *syntax.If:
+			_, end := bounds(expr.Then)
+			if expr.Else != nil {
+				_, end = bounds(expr.Else)
 			}
+			return expr.Pos, end
+		case *syntax.Ident, *syntax.BoolLit, *syntax.IntLit, *syntax.FloatLit, *syntax.StringLit, *syntax.RuneLit, *syntax.Interp, *syntax.ContextName:
+			return expr.Position(), leaf(expr.Position())
 		}
 		return diag.Pos{}, diag.Pos{}
 	}
@@ -279,37 +341,26 @@ func lintExprRange(file *syntax.File, expression syntax.Expr) (diag.Pos, diag.Po
 	if start.File == "" || end.File == "" {
 		return diag.Pos{}, diag.Pos{}
 	}
-	pairs := map[int]int{}
-	var stack []int
-	for i, tok := range tokens {
-		if tok.Kind == syntax.LParen {
-			stack = append(stack, i)
-		}
-		if tok.Kind == syntax.RParen && len(stack) > 0 {
-			j := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			pairs[i] = j
-			pairs[j] = i
-		}
+	lo, ok := s.positions[start]
+	if !ok {
+		return diag.Pos{}, diag.Pos{}
 	}
-	before := func(a, b diag.Pos) bool { return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col }
-	for changed := true; changed; {
-		changed = false
-		for i, j := range pairs {
-			tok, other := tokens[i], tokens[j]
-			if !before(tok.Pos, start) && before(tok.Pos, end) {
-				if before(other.Pos, start) {
-					start = other.Pos
-					changed = true
-				}
-				if before(end, other.End) {
-					end = other.End
-					changed = true
-				}
+	hi, ok := s.ends[end]
+	if !ok {
+		return diag.Pos{}, diag.Pos{}
+	}
+	for i := lo; i <= hi; i++ {
+		if j, ok := s.pairs[i]; ok {
+			if j < lo {
+				lo = j
+				i = lo - 1
+			}
+			if j > hi {
+				hi = j
 			}
 		}
 	}
-	return start, end
+	return s.tokens[lo].Pos, s.tokens[hi].End
 }
 
 // Reuse the facts walk without evaluating its pending constant queries. Lint
