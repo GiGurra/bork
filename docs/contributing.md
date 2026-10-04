@@ -37,6 +37,28 @@ python3 -m unittest discover -s scripts -p 'test_docs_site.py'
 
 `serve` previews the site at `http://127.0.0.1:8000/bork/`; `build` writes `site/`. Neither changes the Markdown sources. The Documentation workflow validates pull requests and publishes main through GitHub Pages. A repository administrator must select **Settings → Pages → Build and deployment → Source: GitHub Actions** once. The workflow needs no publishing token or extra secret; its deploy job uses GitHub's Pages permissions. See [GitHub's custom workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
+## Building the browser playground
+
+After building the docs, add the Wasm playground and serve the generated site:
+
+```sh
+python3 scripts/build_playground.py
+python3 -m http.server 8000 --directory site
+```
+
+Open `http://127.0.0.1:8000/try/`. The build uses the selected Go SDK and copies its matching `wasm_exec.js` with the Wasm module and worker into a content-hashed directory. It prints raw/gzip download sizes. Browser source lives under `web/playground`; generated assets remain in ignored `site/`.
+
+```sh
+go test ./internal/playground
+npm ci --prefix web/playground
+npm test --prefix web/playground
+cd web/playground
+npx playwright install chromium
+npm run test:browser
+```
+
+The Documentation workflow builds these assets and runs the browser smoke tests before publishing. The [playground design](design/playground.md) describes its scope and the local-compiler fallback for unsupported operations.
+
 ## Design notes
 
 | Note | Subject |

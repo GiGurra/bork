@@ -5,6 +5,7 @@ bork is a programming language for backend services. These pages describe the la
 ## Start
 
 - [A tour of bork](tour.md): install the compiler and build a small program step by step.
+- [Browser playground](playground.md): check code, inspect types, and format a file without installing anything.
 - [Examples](examples.md): complete programs to read and run.
 
 ## The language
