@@ -240,16 +240,18 @@ You declare a method by putting a receiver in parentheses before the name: `fn (
 
 `Type.method` names a method as a function value, as in `String.byteLength` above.
 
-A newline ends a statement, so a chain that continues on the next line must show that it is not finished. End the line with the dot:
+Continue a chain on the next line by starting with a dot. The formatter indents continuation lines one level:
 
 ```bork
 fn main() {
-  names = ["tim", "ada"].
-  sorted().
-  map(n => n.toUpper())
+  names = ["tim", "ada"]
+    .sorted()
+    .map(n => n.toUpper())
   println(names)
 }
 ```
+
+Ending a line with the dot, then writing the method name on the next line, also works. Blank lines and comments between chain links do not end the chain. A semicolon explicitly ends a statement.
 
 Inside parentheses and brackets, newlines are ignored.
 

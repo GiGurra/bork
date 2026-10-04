@@ -391,3 +391,24 @@ func TestParsePackageValueRecovery(t *testing.T) {
 		t.Fatalf("%s; bindings=%+v", d.Error(), file.Bindings)
 	}
 }
+
+func TestMethodChainContinuation(t *testing.T) {
+	for _, source := range []string{
+		"fn main(){xs=[1]\nys=xs\n.map(n=>n+1)\n.filter(n=>n>0)\nprintln(ys)}",
+		"fn main(){println(\" padded \"\n// trim first\n/* then uppercase */\n.trim()\n.toUpper())}",
+		"fn main(){xs=[1]\nys=xs.\nmap(n=>n+1).\nfilter(n=>n>0)\nprintln(ys)}",
+		"fn main(){xs=[1]\nys=xs /* comment\nend */ .map(n=>n+1)\nprintln(ys)}",
+	} {
+		d := &diag.List{}
+		Parse("chain.bork", []byte(source), d)
+		if d.Len() != 0 {
+			t.Fatalf("%s: %s", source, d.Error())
+		}
+	}
+	if got := kinds("return\n.None"); !strings.Contains(got, "'return' newline or ';' '.'") {
+		t.Fatalf("return lost its newline: %s", got)
+	}
+	if got := kinds("value;\n.Some"); !strings.Contains(got, "identifier newline or ';' '.'") {
+		t.Fatalf("explicit semicolon lost: %s", got)
+	}
+}

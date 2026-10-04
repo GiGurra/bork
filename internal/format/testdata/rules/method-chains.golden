@@ -1,0 +1,51 @@
+fn main() {
+  names = ["tim", "ada"]
+    .sorted()
+  // uppercase names
+    .map(n => n.toUpper())
+  println(names)
+  old = ["tim", "ada"].
+    sorted().
+    map(n => n.toUpper())
+  println(old)
+  x: Option[Int] = .Some { value: 1 }
+  println(x)
+}
+fn multiline() {
+  xs = [1]
+    .map(n => {
+      n + 1
+    })
+    .filter(
+      n => n > 0
+    )
+  println(xs)
+  ys = [1].
+    map(n => {
+      n + 1
+    }).
+    filter(
+      n => n > 0
+    )
+  println(ys)
+  zs = [1]
+    .map(n => {
+      [2]
+        .map(m => {
+          m + n
+        })
+        .length()
+    })
+  println(zs)
+}
+fn split() {
+  xs = [1]
+    .map(n => {
+      n + 1
+    }
+    )
+    .map(n => {
+      n + 1
+    } /* end lambda */ )
+  println(xs)
+}

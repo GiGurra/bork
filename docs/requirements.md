@@ -3929,3 +3929,7 @@ configured or PATH-installed compiler. Packaging does not publish it.
 A `.bork` file beginning with a shebang is a script; `bork script <file>` also selects script mode without a shebang. Top-level ordinary bindings and executable statements run eagerly, in order, as locals in an implicit main with entrypoint effects. Helper functions cannot capture these locals; they take parameters or read explicit pure `lazy` package values. An explicit main and importing scripts as packages are rejected. Source positions, formatter output and describe queries retain the original file.
 
 Standalone script header comments `// bork:require <Go module> <canonical pinned version>` and `// bork:unsafe` resolve a cached manifest/checksum graph and allow this script's unsafe Go, respectively. Effects remain checked. Inline directives are compile errors in bork.mod projects, where manifests govern dependencies and unsafe grants; no allowlist is defined. Scripts reuse the default Linux/macOS compile cache and normal executable staging. Runtime arguments and effects are never cached. See [scripts](language/scripts.md).
+
+### Method-chain continuation (bork-e6seng)
+
+Method and field selectors can continue an expression on a following line with a leading dot, across whitespace and comments. Trailing-dot continuations remain accepted. The formatter indents continuation lines one level and distinguishes contextual variant dots from receiver selectors (bork-e6seng).
