@@ -235,6 +235,7 @@ func version() string {
 }
 
 func main() {
+	driver.EnableCLICache()
 	if len(os.Args) > 1 && os.Args[1] == "env" {
 		for i := 2; i < len(os.Args); i++ {
 			if os.Args[i] == "-json" {

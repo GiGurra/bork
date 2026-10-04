@@ -22,7 +22,7 @@ func cacheTrimSupported() bool { return true }
 // queueCacheTrim does bounded direct-path work only. The inherited admission
 // descriptor permits one detached worker per root, without a growing job queue.
 func queueCacheTrim(base string) bool {
-	if cacheDisabled() {
+	if cacheDisabled() || cacheTestGate != "" && os.Getenv("BORK_TEST_CACHE_TRIM") != "on" {
 		return false
 	}
 	root, err := os.OpenRoot(base)

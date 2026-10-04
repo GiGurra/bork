@@ -26,6 +26,12 @@ func compileCacheMiss(path string, emit bool, observe func(string)) ([]byte, []d
 // compileCacheMissUncaptured keeps expensive certification out of ordinary
 // compilation. Only an eligible owned result reaches the publisher.
 func compileCacheMissUncaptured(path string, emit bool, observe func(string)) ([]byte, []diag.Diagnostic, *sessionArtifact, error) {
+	return compileCacheMissWithBuild(path, emit, observe, nil)
+}
+
+// The optional consumer uses the same fresh program for Go work, including
+// bypass programs. It must not retain the checked graph.
+func compileCacheMissWithBuild(path string, emit bool, observe func(string), build func(*compiledProgram, []byte) error) ([]byte, []diag.Diagnostic, *sessionArtifact, error) {
 	defer phase(observe, "")
 	loaded, module, err := loadCompilationInputs(path, observe)
 	if err != nil {
@@ -54,6 +60,12 @@ func compileCacheMissUncaptured(path string, emit bool, observe func(string)) ([
 			return nil, nil, nil, err
 		}
 	}
+	if build != nil {
+		phase(observe, "go-build")
+		if err := build(program, src); err != nil {
+			return nil, warningData, nil, err
+		}
+	}
 	// These paths stop before any cache configuration/SDK inventory capture.
 	if sessionBypassReason(context, usage) != "" || !supportedCacheMissSettings(context) || program.inputs.usesDriveContext() {
 		return src, warningData, nil, nil
@@ -65,7 +77,7 @@ func compileCacheMissUncaptured(path string, emit bool, observe func(string)) ([
 		return src, warningData, nil, nil
 	}
 
-	return src, warningData, &sessionArtifact{path: path, emit: emit, inputs: program.inputs, module: module, assets: program.assets, context: context, names: usage.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData), sourcePaths: sourcePaths(program.files)}, nil
+	return src, warningData, &sessionArtifact{path: path, emit: emit, inputs: program.inputs, module: module, assets: program.assets, context: context, names: usage.names, goSrc: slices.Clone(src), warnings: cloneSessionDiagnostics(warningData), rootSource: goStageRootSource(program.files), sourcePaths: sourcePaths(program.files)}, nil
 }
 
 // captureCacheMiss independently re-proves late metadata against names actually

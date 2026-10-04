@@ -47,19 +47,26 @@ func stageGo(files []*syntax.File, source []byte, module *goModuleInputs, contex
 }
 
 func goStageProgramRoot(files []*syntax.File) (string, error) {
-	// Loading puts root-package files before imported packages. Use its directory
-	// even for a module subpackage, so distinct programs do not contend unnecessarily.
-	for _, file := range files {
-		if file.Prelude || file.Path == "" || strings.HasPrefix(file.Package, std.Prefix) {
-			continue
-		}
-		root, err := filepath.Abs(filepath.Dir(file.Path))
-		if err != nil {
-			return "", err
-		}
-		return filepath.EvalSymlinks(root)
+	path := goStageRootSource(files)
+	if path == "" {
+		return "", errors.New("no root source directory")
 	}
-	return "", errors.New("no root source directory")
+	root, err := filepath.Abs(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(root)
+}
+
+func goStageRootSource(files []*syntax.File) string {
+	// Preserve declaration origin: virtual prelude paths can collide with disk
+	// source names, so their spelling cannot identify the staging root.
+	for _, file := range files {
+		if !file.Prelude && file.Path != "" && !strings.HasPrefix(file.Package, std.Prefix) {
+			return file.Path
+		}
+	}
+	return ""
 }
 
 func writeGoStage(dir string, source []byte, module *goModuleInputs, embeds []*check.Embedded) (bool, error) {

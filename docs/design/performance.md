@@ -827,3 +827,37 @@ source/configuration inputs. The matrix does not claim evaluator reuse.
 go test ./internal/driver -run '^$' -bench '^BenchmarkCachePopulation/entries(1|1000|10000|100000)$/(result|stage|trim-mid)' -benchtime=10x -count=3
 go test ./internal/driver -run '^$' -bench '^BenchmarkCachePopulation/entries100000$/trim-fresh-whole-cycle$' -benchtime=1x -count=1
 ```
+
+## Automatic CLI cache rollout
+
+Linux automatic reuse was measured with fresh ungated CLI processes on Go 1.27.1,
+using `fn main(){println(42)}` (22 source bytes), seven paired observations per
+mode. Eligible miss publication completed before the subsequent hit measurement,
+using the publisher admission lock as a completion barrier outside timed work.
+These are parent wall medians; background certification CPU is excluded.
+
+| Mode | `BORK_CACHE=off` | Automatic miss | Automatic hit |
+| --- | ---: | ---: | ---: |
+| check | 52.07 ms | 54.02 ms | 20.63 ms |
+| emit | 62.08 ms | 62.72 ms | 20.02 ms |
+| build | 282.78 ms | 287.41 ms | 62.91 ms |
+| run | 273.55 ms | 289.70 ms | 130.68 ms |
+
+`off` disables stable staging too, so build/run differences include Go's cache
+benefit from stable paths and are not isolated Bork result-cache speedups. Go
+still builds on each build/run, and run still executes. The check/emit miss
+increments remain below the ordinary-plus-10–15 ms rollout bar. Host load and
+Go subprocess variation limit interpretation of the build/run miss deltas.
+
+Known-bypass checks were compared separately with persistent staging enabled in
+both arms: an ordinary test-marked CLI (result reuse disabled), and the ungated
+automatic CLI. With CGO disabled, one initial pair excluded and six measured
+pairs, config medians were 199.44 vs 198.71 ms; http_server medians were 213.04
+vs 216.97 ms. Both produced a `bypass` eligibility probe in a separate enabled
+test image. Neither captures execution observations or SDK inventories for
+publication. This comparison keeps staging available, unlike `BORK_CACHE=off`.
+
+The previously recorded 1/1k/10k/100k matrix remains the population-cost gate:
+lookup, validated hit and publication use direct sharded paths; only bounded
+background trim enumerates. Automatic misses never fall back to inline
+certification when the cache or detached process facilities are unavailable.

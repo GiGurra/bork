@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/syntax"
 )
 
 func cacheArtifactFixture(t *testing.T) (*cacheArtifactBody, *sessionArtifact) {
@@ -55,6 +56,9 @@ func TestCacheArtifactRoundtrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(body, restored) {
 		t.Fatal("artifact changed during roundtrip")
+	}
+	if restored.RootSource != original.rootSource || restored.RootSource == "" {
+		t.Fatal("staging origin missing from owned artifact")
 	}
 	// The public diagnostic JSON normalizes these empty fields; cache JSON must not.
 	if restored.Warnings[0].End.File != "" || restored.Warnings[0].Code != "" {
@@ -241,5 +245,22 @@ func TestCacheArtifactCompositeCertification(t *testing.T) {
 				t.Fatal("composite certification accepted changed input")
 			}
 		})
+	}
+}
+
+func TestCachedBuildPreservesRootWithPreludePathCollision(t *testing.T) {
+	root := t.TempDir()
+	main := filepath.Join(root, "main.bork")
+	// The embedded prelude's relative path also names an imported disk file.
+	collision := "prelude/prelude.bork"
+	files := []*syntax.File{{Path: collision, Prelude: true}, {Path: main}, {Path: collision, Package: "example.com/prelude"}}
+	fresh, err := goStageProgramRoot(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := &cachedCompilation{rootSource: goStageRootSource(files), sourcePaths: sourcePaths(files)}
+	cached, err := goStageProgramRoot(cachedBuildFiles(result))
+	if err != nil || cached != fresh {
+		t.Fatalf("staging root changed: fresh=%q cached=%q error=%v", fresh, cached, err)
 	}
 }
