@@ -26,6 +26,20 @@ evaluation hit, enclosing result hit and end-to-end build separately. Retain
 byte-for-byte clean/cached emission and identical diagnostics. Never claim
 execution reuse merely because the staging directory or Go object cache is warm.
 
+## Staleness model
+
+This cache protects against accidental staleness: source edits, SDK upgrades,
+switched toolchains, directory membership changes and equal-mtime rewrites.
+It does not defend against an adversary modifying build inputs only while the
+Go build runs and restoring them before validation. Build-closure certification
+uses complete content observations before and after the build; it assumes an
+accidental input change remains observable at a validation boundary. A complete
+change-and-restore between both observations is outside that contract. This is
+not a claim that endpoint hashing proves every byte read by an adversarial build.
+Keep the existing frozen Bork source/module/generated inputs; there is no planned
+copy of the entire SDK/toolchain. Permission errors or unstable observations
+always decline reuse.
+
 ## Shared eligibility boundary
 
 Analyze checked, resolved declarations, starting from every actual query in the
@@ -81,27 +95,44 @@ An execution receipt owns canonical data, not syntax/checker pointers. It record
   transitive SDK source/assembly/embedded inputs and file/directory membership.
 
 Existing name/config receipts only certify metadata used during checking. They
-are not execution receipts. The closure collector must prove every input read by
-Go compilation/linking for the accepted native, non-cgo subset; incomplete or
-unsupported toolchain behavior declines reuse. Capture dependency discovery from
-the pinned context and staged program, freeze its module inputs, and inventory
-all relevant source/tool/config bytes and membership. Any changed input forces
-fresh discovery/evaluation. A directory-stat match or launcher SHA cannot replace
+are not execution receipts. The closure collector must identify and inventory the
+complete inputs needed by Go compilation/linking for the accepted native, non-cgo subset; incomplete or
+unsupported toolchain behavior declines reuse. Capture `go list -deps` dependency
+discovery from the pinned context and staged program, freeze its module inputs,
+and inventory all relevant source/tool/config bytes and membership. Any changed
+input forces fresh discovery/evaluation. A directory-stat match or launcher SHA cannot replace
 SDK content validation. Measure the collector before promising fresh-CLI wins.
 
-Discovery, capture and actual execution must be coherent. The actual Go build
-must consume the captured generated/staged files, module inputs and SDK/tool
-closure, or an equally strong mechanism must prove precisely those bytes were
-used. Before/after content matches alone cannot exclude an input changing during
-the build and being restored. The existing frozen module/source paths establish
-only part of this invariant. The initial Go backend should execute from an owned,
-content-addressed frozen closure, including selected tools and SDK inputs, with
-no hard links back to mutable originals, no toolchain autodownload and no
-unrecorded search paths. Unsupported modes decline. Such a closure needs its own
-bounded lifecycle/clean policy if persisted; it is not silently added to current
-staging/result budgets. Measure capture, copying, validation and cold/warm build
-costs before enabling reuse; a collector that inventories live files while the
-builder still rereads them does not qualify.
+Dependency discovery also needs endpoint coherence. After initial `go list -deps`
+and content/membership capture, validate that inventory, rediscover the complete
+package-resolution set using the same pinned staged inputs, and validate the
+inventory again. Require the two resolved dependency sets, selected files and
+selection/search evidence to match; otherwise retry capture or decline. This
+catches a persistent SDK edit adding an import between initial discovery and its
+first content capture, which could otherwise record new source bytes while
+omitting the newly linked package. Any missing or newly discovered input declines
+until captured and rechecked. This guard needs no SDK copy and is part of the
+collector cost measurement. Hits validate the fully established receipt rather
+than trusting a single earlier discovery result.
+
+Capture and execution use the same pinned Go context, staged generated program
+and frozen module inputs. The key includes generated source bytes, the selected
+launcher and Go compiler/linker/assembler tool identities, and content digests of
+the SDK/module packages actually linked, including support/init code and embedded
+or assembly inputs. Record package-file membership and relevant selection/search
+inputs as well as file bytes; a transitive package set alone does not certify
+resolution after membership/configuration changes. Disable toolchain autodownload
+for the pinned build. Validate the complete captured closure before and after
+execution; any mismatch discards certification. Unknown tools/modes/inputs decline.
+
+Under the accidental-staleness model above, these endpoint content checks suffice
+without copying and managing an SDK/tool closure. Ordinary upgrades, edited
+package files and switched tools that remain changed fail validation, including
+equal-mtime changes. If an actual accidental change-and-restore scenario becomes
+material, reproduce it and measure stronger coherence protection before extending
+this contract. Measure dependency discovery and content validation before enabling
+fresh-process reuse; SDK cost is a performance prerequisite, not permission to
+replace content proof with launcher/directory stat matches.
 
 A compiled executable SHA may serve as a witness in tests, but rebuilding that
 executable to discover the key on every hit would retain most of the cost this
