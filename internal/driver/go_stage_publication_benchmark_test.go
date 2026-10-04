@@ -11,10 +11,10 @@ import (
 	"github.com/GiGurra/bork/internal/gen"
 )
 
-// BenchmarkGoStageAccounting isolates cache inventory and stage publication
+// BenchmarkGoStagePublication measures stage publication separately
 // from Bork checking and Go subprocesses. Other entries contain small published
-// trees so the entry count measures inventory work rather than payload size.
-func BenchmarkGoStageAccounting(b *testing.B) {
+// trees so the entry count exposes global work without changing the target payload.
+func BenchmarkGoStagePublication(b *testing.B) {
 	for _, item := range []struct{ name, path string }{
 		{"config", "../../examples/config"},
 		{"http_server", "../../examples/http_server"},
@@ -32,7 +32,7 @@ func BenchmarkGoStageAccounting(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			metadata := goStageMetadata{Schema: goStageSchema, Program: programRoot, Mode: "accounting-benchmark", Namespace: program.context.namespace}
+			metadata := goStageMetadata{Schema: goStageSchema, Program: programRoot, Mode: "publication-benchmark", Namespace: program.context.namespace}
 			meta, err := json.Marshal(metadata)
 			if err != nil {
 				b.Fatal(err)

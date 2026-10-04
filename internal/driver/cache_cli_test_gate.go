@@ -14,7 +14,7 @@ import (
 
 // Set only by integration tests through -ldflags=-X. Environment variables alone
 // cannot enable disk result reuse in an ordinary compiler. Remove this gate once
-// bounded admission, eviction and clean support permit automatic use.
+// age-based retention and population-independent performance permit automatic use.
 var cacheTestGate string
 
 var cacheTestState = startCacheTestState()

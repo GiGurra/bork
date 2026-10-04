@@ -11,7 +11,7 @@ import (
 )
 
 // cacheStore currently has no production callers. Its explicit root is used by
-// tests only; automatic reads/writes wait for eviction and clean support.
+// tests only; automatic reads/writes wait for age-based trim and acceptance checks.
 // The root is the shared bork cache directory, so staging can coordinate on
 // mutation.lock while keeping its own fixed slot pool.
 type cacheStore struct {
