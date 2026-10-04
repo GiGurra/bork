@@ -22,6 +22,8 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 		}
 	}
 	switch method {
+	case "textDocument/signatureHelp":
+		return s.signatureHelp(path, src, p.Position)
 	case "textDocument/semanticTokens/full":
 		return s.semanticTokens(path, src, nil)
 	case "textDocument/semanticTokens/range":
