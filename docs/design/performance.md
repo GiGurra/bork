@@ -507,3 +507,13 @@ need not sum to the combined median. Concurrency reduces wall time, not CPU work
 When persisted reads are enabled, start image and resolved-launcher hashing beside
 source loading/receipt validation, and join before accepting any result. Keep
 ordinary uncached startup free of this work while disk reads remain disabled.
+
+The following Go receipt slice restores only supported metadata-name configuration
+and positively standard package inventories. It re-establishes launcher and
+bridge evidence from the current process and never imports persisted stat tuples
+or elapsed-time guards. Configuration restoration uses captured effective settings
+without `go env`, but retains content, membership, directory-mode and compiler
+availability checks. Standard-name restoration requires every recorded package's
+complete immediate-file inventory, including ignored and test files. These private
+primitives do not enable result hits; fresh-CLI timing must include their validation
+and outcome decoding when the storage path is wired.
