@@ -14,6 +14,12 @@ sanitization or deduplication silently changing coverage. If `TestCases`'
 directory-selection rules change, update the runner
 and its fixture-discovery regression test together.
 
+The four HTTP `*Race` integration tests build and execute generated programs
+with the Go race detector. They skip before parallel scheduling in ordinary
+test binaries and run when the parent binary is built with `-race`. Their parent
+names remain discoverable in both modes; race shards retain all four tests.
+Ordinary HTTP golden cases still run in normal shards.
+
 The integration partition assigns the longest measured parents first to the
 least loaded shard, breaking ties by name. `scripts/ci-timings.json` contains
 separate normal/race weights. A new parent receives a five-second provisional
