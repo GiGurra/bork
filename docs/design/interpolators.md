@@ -181,16 +181,13 @@ Unknown prefixes report at the prefix; malformed protocols report the missing
 method or wrong signature at the prefix; unsupported types and unsatisfied
 class bounds report at the originating hole. A failure from SQL rendering is a
 normal sql.Error containing the operation and a useful boundary description.
-Follow-up **bork-hstt36 (P2)** adds a general optional validation protocol:
-an interpolator declares a pure validator over compiler-created StaticParts and
-hole kinds. The compiler runs it with bounded pure/predicate evaluation and
-reports structural errors at source holes, without SQL rules in the compiler
-or evaluating effectful hole values. SQL can then reject quoted/comment holes,
-partial tokens and manual placeholders while compiling literals. Validator
-signatures, hole-kind metadata and failure/limit diagnostics need a separate
-design. Runtime rendering stays mandatory for composed runtime fragments and
-dialect-dependent checks; compile-time checks must agree with it whenever the
-available inputs suffice.
+The optional owner-declared `InterpolationValidator[Builder]` protocol validates
+compiler-created StaticParts and hole kinds with bounded pure evaluation, without
+SQL rules in the compiler or evaluating runtime holes. SQL rejects definite
+component-local boundary errors during checking; runtime rendering remains
+mandatory for composition and dialect-dependent checks. See the
+[validator design](interpolator-validation.md) for metadata, batching, diagnostics,
+and the component-local SQL contract.
 
 The formatter preserves the prefix/quote adjacency and the literal's bytes,
 including nested interpolation expressions, just as for s"...". Update editor

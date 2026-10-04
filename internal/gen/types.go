@@ -72,6 +72,9 @@ func (g *gen) goType(t check.Type) ast.Expr {
 		g.usesOk = true
 		return ast.NewIdent("_Ok")
 	}
+	if t == check.Rune {
+		g.usesShow = true
+	}
 	if n, ok := basicGoNames[t]; ok {
 		return ast.NewIdent(n)
 	}
@@ -99,7 +102,7 @@ var basicGoNames = map[check.Type]string{
 	check.Int: "int64", check.Int8: "int8", check.Int16: "int16", check.Int32: "int32",
 	check.Uint8: "uint8", check.Uint16: "uint16", check.Uint32: "uint32", check.Uint64: "uint64",
 	check.Float32: "float32", check.Float: "float64",
-	check.Bool: "bool", check.String: "string",
+	check.Bool: "bool", check.String: "string", check.Rune: "_Rune",
 }
 
 // baseOf is the declared type t is an instance of (t itself if it is
@@ -1206,6 +1209,10 @@ import (
 	"strconv"
 	"strings"
 )
+
+type _Rune int32
+
+func (r _Rune) String() string { return string(r) }
 
 // _show renders a field value for String methods: strings are quoted,
 // everything else is printed as by _str.

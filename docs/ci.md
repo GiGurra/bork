@@ -66,3 +66,27 @@ mode/shard; PR runs reuse main's caches. Restore fallbacks can borrow another
 shard's content-addressed build entries. Tests use `-count=1`, so Go build caching
 never replaces test execution. Cache effectiveness also depends on generated
 Go test programs retaining stable build paths.
+
+Linux golden output cases and examples retain one native output slot per test
+identity under the test stage root's `bork/test-outputs-v1` directory. Every test
+still calls public `Build` (plain `go build`) and starts a fresh application
+process. Go's build action identity decides whether an existing target is fresh;
+source, module, environment and toolchain changes reuse the same slot. Its
+exclusive lock stays held through build and execution. Source fixtures keep
+their normal full cleanup. Failed builds/tests discard the target, and targets
+without readable Go build metadata are removed before rebuilding. Unavailable or unsafe
+cache directories and other platforms use temporary outputs.
+
+Successful outputs survive test invocations; fixture identities do not create
+additional copies for changed inputs or tool versions. With tests stopped,
+remove the pool to wipe outputs, including slots for deleted/renamed fixtures.
+For the default Linux test stage root:
+
+```sh
+rm -rf "${TMPDIR:-/tmp}/bork-driver-tests-$(id -u)/bork/test-outputs-v1"
+```
+
+With an explicit `XDG_CACHE_HOME`, remove its `bork/test-outputs-v1` directory
+instead. Production `bork clean` owns compiler artifacts and does not remove
+this test-only layer. CI persists `GOCACHE`, not these native targets, so the
+main benefit is repeated local runs; a cold hosted run may see little change.

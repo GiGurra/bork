@@ -1,3 +1,17 @@
 // StaticParts preserves literal provenance for named interpolators. Only the
 // compiler constructs it at a prefix site; runtime Strings cannot become parts.
 type StaticParts = private { values: List[String] }
+
+// Kind descriptors contain types, never hole values. Union holes list all kinds.
+type InterpolationKind = sealed {
+  Builtin { name: String }
+  Named { packagePath: String, name: String }
+  Unknown
+}
+type InterpolationHole = { kinds: List[InterpolationKind] }
+// Some(index) selects a zero-based hole; None selects the literal prefix.
+type InterpolationIssue = { hole: Option[Int], message: String }
+// The builder's owner may declare one pure validator; callers cannot replace it.
+class InterpolationValidator[B] {
+  fn validateInterpolation(parts: StaticParts, holes: List[InterpolationHole]): List[InterpolationIssue]
+}

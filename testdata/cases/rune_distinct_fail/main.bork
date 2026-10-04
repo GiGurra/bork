@@ -1,0 +1,11 @@
+fn main() {
+  numeric: Int32 = 'a'
+  character: Rune = 97
+  println('a' + 1)
+  println('a' + 'b')
+  println(toInt32('a'))
+  println(97.isLetter())
+  println(runeToString('a'))
+  println('\ud800', '\U00110000')
+  println(numeric, character)
+}

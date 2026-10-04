@@ -120,7 +120,11 @@ func (c *checker) checkComptimeTypes() {
 	for _, node := range c.info.comptimeSyntax {
 		c.checkComptimeRecipe(reflect.ValueOf(node.Body))
 	}
-	for _, node := range c.info.Comptimes {
+	nodes := append([]*Comptime(nil), c.info.Comptimes...)
+	for _, batch := range c.info.InterpolationBatches {
+		nodes = append(nodes, batch.Recipe)
+	}
+	for _, node := range nodes {
 		if len(c.info.PackageBindings) != 0 && packageRuntimeReads(c.info, node.Body) {
 			c.diags.AddCode(node.Pos(), "comptime.capture", "comptime cannot read runtime package lazy values, including through helper calls")
 		}
@@ -140,7 +144,7 @@ func unsupportedComptimeType(t Type, seen map[Type]bool) string {
 	seen[t] = true
 	switch t := t.(type) {
 	case *Basic:
-		if t == Bool || t == String || t == Ok || IsNumeric(t) {
+		if t == Bool || t == String || t == Rune || t == Ok || IsNumeric(t) {
 			return ""
 		}
 	case *List:

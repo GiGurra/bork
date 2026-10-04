@@ -62,9 +62,25 @@ can change their meaning. SQLite line comments end only at LF, while Postgres
 also accepts CR. Unterminated quoted text/comments and NUL literal text fail.
 Literal driver placeholders are rejected outside quotes/comments so they cannot
 capture bound values; the PostgreSQL `?` JSON operator remains permitted.
-This validates interpolation boundaries, not SQL grammar or schema. All such
-failures are sql.Error with operation `interpolate`; SQL syntax/schema errors
-still come from the driver.
+The SQL library also validates literal parts and hole kinds at compile time.
+It rejects a boundary only when both SQLite and Postgres reject it. Every
+component starts in an unquoted context: wrapping a locally rejected component
+in another fragment cannot make its construction legal. Checking stops before
+an unknown/Statement hole and defers the remaining tail. Unterminated literal
+fragments can be completed by composition and remain render-time checks.
+
+| Check | Compile time | Render time |
+| --- | --- | --- |
+| Known holes in ordinary quotes/comments or partial tokens | Reject definite errors in a literal component | Check all flattened boundaries |
+| NUL literal text or unambiguous manual `$1` placeholders | Reject | Reject |
+| SQLite `?` placeholders, Postgres dollar quotes, arrays, escapes | Defer dialect-dependent errors | Check actual dialect |
+| Runtime Statement fragments and open hole kinds | Defer from the first unknown boundary | Check actual flattened text |
+| Unterminated quoted/comment fragments | Defer EOF-only errors | Reject unfinished text |
+
+These checks validate interpolation boundaries, not SQL grammar or schema.
+Compile errors name the library validator and point at the hole (or prefix for
+literal-only errors). Rendering failures are sql.Error with operation
+`interpolate`; SQL syntax/schema errors still come from the driver.
 
 The syntax, eager evaluation, typed builder protocol, and capability guarantees
 are described in [the grammar](../grammar.md) and [design](../design/interpolators.md).
@@ -98,7 +114,7 @@ text before calling the shared execution implementation.
 [examples/sql_interpolation](../../examples/sql_interpolation/README.md) prints
 separate query text and parameters, quotes names with `sql.Name`, composes a
 fragment, proves hostile input leaves the table intact, and streams decoded rows.
-Its commented quoted-hole example explains the rendering error.
+Its commented quoted-hole example explains the compile error.
 
 `bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](../../examples/sql/main.bork).
 

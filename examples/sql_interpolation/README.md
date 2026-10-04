@@ -8,10 +8,10 @@ the rendered query and separate parameter list, then verifies that the input
 matches exactly one row and that the table still contains both inserted rows.
 Finally, it streams the matching name while the connection's scope is open.
 
-A commented-out quoted-hole example explains the rendering error: write
-`name = $value` with no SQL quotes around the hole. Rendering rejects holes
-inside quoted text before executing any query. This check currently happens at
-rendering; library-defined compile-time validators are tracked in bork-hstt36.
+A commented-out quoted-hole example explains the compile error: write
+`name = $value` with no SQL quotes around the hole. The library validator rejects
+a known value hole inside quoted text during checking. Rendering also checks
+all boundaries after composing runtime fragments, before executing any query.
 
 For SQL assembled as runtime text, the raw execution/stream APIs require the
 explicit `sql.Unsafe(text)` opt-in. This example uses typed literals throughout.

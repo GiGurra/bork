@@ -1,6 +1,6 @@
 12 10 4
-Option.Some { value: 252 } Option.None
+Option.Some { value: ü } Option.None
 Grüße OutOfRange { value: "3 to 2", target: "a String of 10 runes" }
-252 253 ý 65
+ü Option.Some { value: ý } Option.Some { value: ý } A
 the letter a a newline upper Q other å
 true true false

@@ -293,7 +293,7 @@ Process helpers require `import "bork/process"` (`process.Args()`,
 (`json.Parse`, `json.Render`, `json.Decode[T]`, `json.Encode`); the Json types and
 Decode/Encode classes remain available for derive. Use `time.Sleep(s, duration)` from `bork/time` for cancellable pauses and Rune
 methods such as `r.isDigit()` for Unicode tests. These replace the former prelude globals in a pre-1.0 clean break;
-`runeToString(r)` still gives a character while Rune aliases numeric Int32.
+`toString(r)` renders its character, including in generic and nested values. Use `r.code(): Int32` for its numeric code point and `n.rune(): Option[Rune]` for checked conversion (surrogates and invalid code points return None). JSON represents a Rune as a single-scalar string.
 
 | Package | Description |
 | --- | --- |
@@ -331,7 +331,7 @@ output experiment.
 
 [MIT](LICENSE)
 
-Typed interpolators retain values separately from literal text: `sql.SQL"SELECT name FROM users WHERE id = $id".Query[User](db)` binds `id` and returns decoded rows. `sql.Name(text)` creates a checked, quoted identifier; nested SQL Statements compose without losing parameters. Raw execution/stream APIs require an explicit `sql.Unsafe(text)` value instead of accepting plain Strings. Libraries can define their own `Prefix"..."` using a typed builder and compiler-created `StaticParts`, which ordinary code cannot construct from runtime Strings. See [bork/sql](docs/std/sql.md) and [the interpolation protocol](docs/grammar.md).
+Typed interpolators retain values separately from literal text: `sql.SQL"SELECT name FROM users WHERE id = $id".Query[User](db)` binds `id` and returns decoded rows. `sql.Name(text)` creates a checked, quoted identifier; nested SQL Statements compose without losing parameters. Raw execution/stream APIs require an explicit `sql.Unsafe(text)` value instead of accepting plain Strings. Libraries can define their own `Prefix"..."` using a typed builder and compiler-created `StaticParts`, which ordinary code cannot construct from runtime Strings. An optional owner-declared pure validator checks literal parts and hole kinds during compilation; SQL uses it for definite quote/comment/token boundary errors. See [bork/sql](docs/std/sql.md) and [the interpolation protocol](docs/grammar.md).
 
 Sequences keep ordered work lazy: `generate[Int] { for (n in Seq.range(0, 10)) { yield n * n } }.take(3).toList()` produces `[0, 1, 4]`. Constructing a `Seq[T]` runs no producer code; each traversal invokes it again. `List.toSeq()`, `map`, `filter`, `flatMap`, `take` and `drop` defer work until `for`, `forEach`, `fold`, `first` or `toList` consumes it. `Seq.unfold(seed, step)` uses a pure step returning `Option[SeqStep[T, S]]`. `Seq[T] uses io` carries effects that consumption must declare. Consumers can `break`, `continue`, `return` or use `?`; stopping closes active producer scopes. `fs.Lines`, `fs.Entries`, `sql.Rows[T]` and `sql.RowsJson` reopen their input on each traversal and yield errors as explicit elements.
 

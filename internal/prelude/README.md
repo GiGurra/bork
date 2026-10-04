@@ -10,7 +10,7 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [options.bork](options.bork) | `Option` and its methods |
 | [parallel.bork](parallel.bork) | Ordered, bounded pure and scoped parallel list operations |
 | [lists.bork](lists.bork) | List constructors, `notEmpty`, and list methods |
-| [interpolation.bork](interpolation.bork) | Compiler-created `StaticParts` for typed interpolator factories |
+| [interpolation.bork](interpolation.bork) | Compiler-created `StaticParts`, hole metadata, and optional `InterpolationValidator` |
 | [strings.bork](strings.bork) | Number and Boolean parsing, and string methods |
 | [runes.bork](runes.bork) | Unicode rune methods |
 | [maps.bork](maps.bork) | `Entry` and persistent map methods |
@@ -66,7 +66,7 @@ Prelude audit (pre-1.0 clean break): process arguments and exit belong to
 `bork/process` (`Args`, `Exit`); JSON text belongs to `bork/json` (`Parse`,
 `Render`, `Decode`, `Encode`). Sleeping belongs to `bork/time.Sleep`, with a
 scope and a Duration; cancellation is observable as `Cancelled`. There are no
-deprecated aliases. Unicode tests are Rune methods; `runeToString(r)` stays until Rune is distinct from numeric Int32.
+deprecated aliases. Unicode tests are Rune methods; `toString(r)` renders the character, `r.code()` gives its Int32 code point, and `n.rune()` checks an Int32 into Option[Rune].
 
 The JSON type family and Decode/Encode classes remain here because derived
 instances and user instances need a shared vocabulary without imports. Their

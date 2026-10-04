@@ -1,0 +1,9 @@
+main.bork:2:20: numeric must be Int32, found Rune
+main.bork:3:21: character must be Rune, found Int
+main.bork:4:15: operator + needs two numbers of the same type or two Strings, found Rune and Int
+main.bork:5:15: operator + needs two numbers of the same type or two Strings, found Rune and Rune
+main.bork:6:19: toInt32 needs a number, found Rune
+main.bork:7:14: Int has no method isLetter
+main.bork:8:11: undefined function: runeToString
+main.bork:9:11: invalid rune literal '\ud800'
+main.bork:9:21: invalid rune literal '\U00110000'

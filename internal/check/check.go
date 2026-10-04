@@ -5,6 +5,7 @@ import (
 	"go/constant"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -212,7 +213,8 @@ type InterpolationSource struct {
 }
 
 type Info struct {
-	Interpolations map[Expr]*InterpolationSource
+	Interpolations       map[Expr]*InterpolationSource
+	InterpolationBatches []*InterpolationBatch
 
 	PackageBindings []*PackageBinding
 
@@ -266,19 +268,21 @@ type Info struct {
 	comptimeSyntax       []*syntax.Comptime
 	comptimeCaptureDecls map[*syntax.Comptime][]any
 	// Embeds lists compile-time asset requests in source order.
-	Embeds             []*Embedded
-	embedCalls         map[*syntax.Call]*Embedded
-	BuildReads         []*BuildRead
-	buildCalls         map[*syntax.Call]*BuildRead
-	assemblyCalls      map[*syntax.Call]*assemblyExpansion
-	assemblyTypes      map[*syntax.TypeExpr]Type
-	assemblyNames      map[any]string
-	ProviderBundles    []*ProviderBundle
-	providerBundleUses []*providerBundleUse
-	interpolatorCalls  map[*syntax.Interp]*syntax.Call
-	conversionCalls    map[*syntax.Call]*syntax.Block
-	conversionRecords  map[*syntax.RecordLit]*Record
-	conversionInputs   map[syntax.Expr]bool
+	Embeds                 []*Embedded
+	embedCalls             map[*syntax.Call]*Embedded
+	BuildReads             []*BuildRead
+	buildCalls             map[*syntax.Call]*BuildRead
+	assemblyCalls          map[*syntax.Call]*assemblyExpansion
+	assemblyTypes          map[*syntax.TypeExpr]Type
+	assemblyNames          map[any]string
+	ProviderBundles        []*ProviderBundle
+	providerBundleUses     []*providerBundleUse
+	interpolatorCalls      map[*syntax.Interp]*syntax.Call
+	interpolatorValidators map[*syntax.Interp]*Dict
+	interpolatorFactories  map[*syntax.Interp]*syntax.Call
+	conversionCalls        map[*syntax.Call]*syntax.Block
+	conversionRecords      map[*syntax.RecordLit]*Record
+	conversionInputs       map[syntax.Expr]bool
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -401,6 +405,8 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			GoImportNames:          checkGoImports(files, diags, goTypes),
 			assemblyCalls:          map[*syntax.Call]*assemblyExpansion{},
 			interpolatorCalls:      map[*syntax.Interp]*syntax.Call{},
+			interpolatorValidators: map[*syntax.Interp]*Dict{},
+			interpolatorFactories:  map[*syntax.Interp]*syntax.Call{},
 			conversionCalls:        map[*syntax.Call]*syntax.Block{},
 			conversionRecords:      map[*syntax.RecordLit]*Record{},
 			conversionInputs:       map[syntax.Expr]bool{},
@@ -601,6 +607,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	// program checks.
 	if c.diags.Len() == 0 {
 		c.zonkInfo()
+		c.checkInterpolationValidators()
 		c.checkOpaqueFields()
 		c.checkOpaqueGenericUses()
 		if c.diags.Len() == 0 {
@@ -1244,6 +1251,13 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		c.errorf(e.Pos, "invalid float literal %s", e.Text)
 		return c.record(e, Invalid)
 	case *syntax.RuneLit:
+		if len(e.Text) >= 2 {
+			r, _, tail, err := strconv.UnquoteChar(e.Text[1:len(e.Text)-1], '\'')
+			if err == nil && tail == "" && utf8.ValidRune(r) {
+				c.info.consts[e] = constant.MakeInt64(int64(r))
+				return c.record(e, Rune)
+			}
+		}
 		c.errorf(e.Pos, "invalid rune literal %s", e.Text)
 		return c.record(e, Invalid)
 	case *syntax.StringLit:
@@ -1445,7 +1459,7 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 		}
 		return x
 	case syntax.Lt, syntax.LtEq, syntax.Gt, syntax.GtEq:
-		if sameNumbers || (x == String && y == String) {
+		if sameNumbers || (x == String && y == String) || (x == Rune && y == Rune) {
 			return Bool
 		}
 		c.errorf(e.Pos, "operator %s needs two numbers of the same type or two Strings, found %s and %s", op, x, y)

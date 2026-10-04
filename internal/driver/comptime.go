@@ -50,10 +50,15 @@ func evaluateComptimes(files []*syntax.File, info *check.Info, diags *diag.List,
 			return
 		}
 		states[node] = 1
+		if usage != nil {
+			usage.evaluator = true
+		}
 		helpers := gen.ComptimeFunctions(files, info, node)
 		dependencies := func(x check.Expr) bool {
 			if dep, ok := x.(*check.Comptime); ok {
-				evaluate(dep)
+				if dep.Value == nil {
+					evaluate(dep)
+				}
 				return false
 			}
 			return true

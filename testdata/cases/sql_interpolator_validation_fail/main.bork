@@ -1,0 +1,15 @@
+import "bork/sql"
+fn main() {
+  value = "hostile"
+  _ = sql.SQL"SELECT '$value'"
+  _ = sql.SQL"SELECT \"$value\""
+  _ = sql.SQL"SELECT 1 -- $value"
+  _ = sql.SQL"SELECT 1 /* $value */"
+  _ = sql.SQL"SELECT prefix$value"
+  _ = sql.SQL"SELECT ${value}suffix"
+  _ = sql.SQL"SELECT $value$value"
+  _ = sql.SQL"SELECT x.$value"
+  _ = sql.SQL"SELECT $$1, $value"
+  _ = sql.SQL"SELECT \u0000, $value"
+  _ = sql.SQL"SELECT $$$$ $value"
+}

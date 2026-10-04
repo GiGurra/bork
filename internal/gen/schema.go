@@ -52,7 +52,7 @@ func (g *gen) decodeKind(typ check.Type) string {
 		return strconv.Quote("json")
 	}
 	switch typ {
-	case check.String:
+	case check.String, check.Rune:
 		return strconv.Quote("string")
 	case check.Int, check.Int8, check.Int16, check.Int32, check.Uint8, check.Uint16, check.Uint32, check.Uint64, check.Float32, check.Float:
 		return strconv.Quote("number")
@@ -64,6 +64,7 @@ func (g *gen) decodeKind(typ check.Type) string {
 
 func (g *gen) fieldDefault(field *check.Field) string {
 	setup, value := g.value(field.Default)
+	value = g.typed(value, field.Type)
 	if len(setup) == 0 {
 		return g.text(value)
 	}

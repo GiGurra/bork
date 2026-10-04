@@ -197,7 +197,7 @@ func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 			return constant.MakeBool(constant.BoolVal(a) || constant.BoolVal(b))
 		}
 		if cmp, ok := compareOps[x.Op]; ok {
-			if !identical(x.X.Type(), x.Y.Type()) || (!IsNumeric(x.X.Type()) && x.X.Type() != String && x.X.Type() != Bool) {
+			if !identical(x.X.Type(), x.Y.Type()) || (!IsNumeric(x.X.Type()) && x.X.Type() != String && x.X.Type() != Rune && x.X.Type() != Bool) {
 				return nil
 			}
 			return constant.MakeBool(constant.Compare(a, cmp, b))
