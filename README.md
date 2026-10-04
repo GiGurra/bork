@@ -8,7 +8,12 @@
 
 ## Install
 
-bork compiles through Go, so [Go](https://go.dev/dl/) 1.26 or later must be installed.
+bork compiles through Go. Install [Go](https://go.dev/dl/) 1.21 or later with
+automatic toolchain switching enabled (the Go default). Bork needs Go 1.26+
+and asks Go to download a suitable toolchain when your installed Go is older.
+The first install or build may need network access; cached toolchains work offline.
+With `GOTOOLCHAIN=local`, install Go 1.26+ yourself. See
+[Go toolchains](docs/cli.md#go-toolchains).
 
 ```sh
 go install github.com/GiGurra/bork/cmd/bork@latest

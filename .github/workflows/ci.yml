@@ -15,6 +15,25 @@ concurrency:
   queue: ${{ github.ref == 'refs/heads/main' && 'max' || 'single' }}
 
 jobs:
+  go-switching:
+    name: Go toolchain switching
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.21.x'
+          cache: false
+      - name: Keep the older launcher for regression coverage
+        run: echo "BORK_TEST_GO_LAUNCHER=$(GOTOOLCHAIN=local GO111MODULE=off GOWORK=off go env GOROOT)/bin/go" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Cache the minimum SDK for offline analysis
+        run: GOTOOLCHAIN=go1.26.0 go version
+      - name: Verify actual SDK selection, identity and offline editor use
+        run: go test ./internal/driver -run '^TestGoContextActualSwitch$' -count=1
   grammar:
     name: TextMate grammar
     runs-on: ubuntu-latest
@@ -202,7 +221,7 @@ jobs:
   ci-ok:
     name: CI ok
     if: always()
-    needs: [grammar, tree-sitter, editors, shards, lint, examples, suite, replay, cache-maintenance]
+    needs: [grammar, tree-sitter, editors, shards, lint, examples, suite, replay, cache-maintenance, go-switching]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed

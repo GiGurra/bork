@@ -2,12 +2,15 @@ package driver
 
 import (
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/json"
 	"fmt"
+	"github.com/GiGurra/bork/internal/gotoolchain"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -35,6 +38,7 @@ type goContext struct {
 	namesCache   bool
 	namespace    [sha256.Size]byte
 	toolDigest   [sha256.Size]byte
+	sdkDigest    [sha256.Size]byte
 	toolEvidence *goToolEvidence
 	validation   *goContextValidation
 
@@ -100,17 +104,31 @@ func loadGoContext(ctx *goContext) *goContext {
 	if ctx.err != nil {
 		return ctx
 	}
-	cmd := exec.Command(ctx.tool, "env", "-json")
-	cmd.Env = ctx.processEnv
-	output, err := cmd.Output()
+	values, env, err := gotoolchain.Query(ctx.tool, "", ctx.processEnv)
 	if err != nil {
 		ctx.err = err
 		return ctx
 	}
-	if err := json.Unmarshal(output, &ctx.values); err != nil {
-		ctx.err = err
-		return ctx
+	ctx.values = values
+	ctx.env = slices.Clone(env)
+	// A real Go launcher may have switched to another installed SDK. Hash and
+	// invoke that SDK's executable so cache identity reflects the selected Go.
+	ctx.tool = gotoolchain.SelectedTool(ctx.tool, values)
+	// Wrappers retain their behavior, but compilation identity also includes
+	// the selected SDK executable rather than only the wrapper's bytes.
+	name := "go"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
 	}
+	selected := filepath.Join(values["GOROOT"], "bin", name)
+	if info, readErr := buildinfo.ReadFile(ctx.tool); readErr != nil || info.Path != "cmd/go" {
+		ctx.sdkDigest, err = goToolDigest(selected)
+		if err != nil {
+			ctx.err = err
+			return ctx
+		}
+	}
+
 	// Include launcher bytes, not just its path/version. A full toolchain/input
 	// inventory is still required before compilation-result reuse.
 	ctx.toolDigest, ctx.toolEvidence, err = captureGoToolEvidence(ctx.tool)
@@ -143,7 +161,7 @@ func (ctx *goContext) pinSettings() {
 		}
 	}
 	ctx.env = append(ctx.env, "GOENV=off")
-	identity = append(identity, ctx.tool, ctx.driver, fmt.Sprintf("%x", ctx.toolDigest))
+	identity = append(identity, ctx.tool, ctx.driver, fmt.Sprintf("%x", ctx.toolDigest), fmt.Sprintf("%x", ctx.sdkDigest))
 	encoded, _ := json.Marshal(identity)
 	ctx.namespace = sha256.Sum256(encoded)
 }
