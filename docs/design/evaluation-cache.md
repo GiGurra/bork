@@ -1,6 +1,7 @@
 # Cached compiler evaluations
 
-Status: proposal for reuse across compiler calls. Explicit comptime values still
+Status: deferred design for reuse across compiler calls. See the measured
+[observation checkpoint and remaining prerequisites](go-execution-inventory.md). Explicit comptime values still
 run fresh, and existing Session/result-cache bypass markers remain enabled.
 This design supplies the shared execution-receipt boundary needed before either
 kind of result can be reused. It extends the input/result layers described in
@@ -17,8 +18,8 @@ logical evaluation and their published bytes remain observable. Returned vectors
 are copied; failed, panicked, timed-out and malformed evaluations are not retained.
 The memo holds at most 256 entries and 64 KiB of result payload, with a 4 MiB input
 budget. It ends with that compiler call; direct/unbounded predicate APIs and
-explicit comptime value execution do not use it. Future execution certification
-must account for each logical predicate attempt before memo lookup; this memo
+explicit comptime value execution do not use it. Request-owned observation
+accounts for each logical predicate attempt before memo lookup; this memo
 does not supply a Session receipt or certify an enclosing compilation hit.
 
 ## Outcome and acceptance cases
