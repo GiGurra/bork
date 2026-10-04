@@ -408,3 +408,9 @@ for defaults and installation behavior.
 Script `bork:require` headers use the same Go module paths and canonical versions
 for both Go and Bork libraries. A module-root import may use an explicit valid
 Bork alias when its final path component contains punctuation.
+
+
+Advisory lint suppression uses ordinary comments, not a new grammar production:
+`// lint:ignore lint.unused-binding reason` suppresses that rule on the same or
+following line. Comma-separated rule codes and `all` are supported. The compiler's
+syntax and safety errors remain errors.

@@ -38,6 +38,11 @@ type pathParams struct {
 	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 }
 
+type pathJSONParams struct {
+	Path string `positional:"true" optional:"true" default:"." descr:"a .bork file or package directory"`
+	JSON bool   `short:"j" optional:"true" descr:"report diagnostics as JSON Lines"`
+}
+
 type checkParams struct {
 	Path  string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	JSON  bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
@@ -445,6 +450,24 @@ func main() {
 						failDiagnostics(err, p.JSON, os.Stderr)
 					}
 					os.Exit(code)
+				},
+			},
+			boa.CmdT[pathJSONParams]{
+				Use: "lint", Short: "check a package for unused code and needless expressions",
+				RunFunc: func(p *pathJSONParams, _ *cobra.Command, _ []string) {
+					warnings, err := driver.Lint(p.Path)
+					if err != nil {
+						failDiagnostics(err, p.JSON, os.Stdout)
+					}
+					for _, warning := range warnings {
+						if p.JSON {
+							if err := json.NewEncoder(os.Stdout).Encode(warning); err != nil {
+								fail(err)
+							}
+						} else {
+							fmt.Println(warning)
+						}
+					}
 				},
 			},
 			boa.CmdT[checkParams]{

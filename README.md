@@ -37,6 +37,8 @@ bork run .
 bork test .
 ```
 
+Run `bork lint .` for advisory warnings and safe editor fixes; the language server shows the same warnings. See [lint](docs/cli.md#lint).
+
 Choose `--template cli`, `--template http`, or `--template lib` for other starting points. See [creating projects](docs/cli.md#new).
 
 ## Hello, world
