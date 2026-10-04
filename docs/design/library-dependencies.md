@@ -90,7 +90,9 @@ remove their requirements. `bork deps` owns dependency updates. Libraries
 declare all their Go and bork requirements in their published `go.mod`, including
 the Go requirements of imported bork std packages. `deps get/download` must
 inspect the project's package import closure and merge those std requirements
-before finishing the graph. `deps init` still needs no valid source. Before
+before finishing the graph. This uses a syntactic import inventory, not a
+successful type check, so a type error does not prevent updating dependencies.
+`deps init` still needs no valid source. Before
 tagging, the author runs `deps download` followed by `bork check` and tests;
 compilation diagnoses a missing publication requirement rather than silently
 repairing the author's manifest. Libraries are source releases checked by the
@@ -114,8 +116,17 @@ the imported std manifests, with `GOWORK=off`, `GO111MODULE=on`, and empty
 and toolchain configuration. Use Go's selected build list (`go list -m -json
 all`) and download metadata (`go mod download -json`); do not reproduce MVS
 by taking the maximum of only the requirements immediately visible to bork.
-Walk the complete required graph so source-only modules' transitive dependencies
-are available even though no Go import reaches them.
+Go's graph pruning can omit deep dependencies when there are no Go imports.
+For each loaded bork module, add that module at its currently selected version
+to the temporary root's requirements, even if it already appears in the build
+list. Before resolving that module's outgoing imports, rerun Go's graph
+selection to expose its requirements. Repeat promotion and loading as the bork
+import closure grows. Helpers persist the resulting selected requirements and
+checksums, including newly exposed transitive modules; ordinary compilation
+changes only the temporary manifest. This forces graph expansion without
+inventing dummy Go packages. Downloading the initial pruned build list alone
+is insufficient. The expanded selected graph also supplies every generated
+binding, build, and evaluator manifest.
 
 Resolve bork imports against that selected graph. A root-local package stays
 local. An external package comes from a selected module whose path is a
@@ -173,7 +184,20 @@ merely because it came from a checksum-verified module.
 
 Keep dependency sources in `GOMODCACHE`, using the paths returned by Go, not
 hand-built cache paths. Identify a selected release by module path, canonical
-version, and verified content checksum. Capture the selected graph, root
+version, and verified content checksum. Before loading a bork dependency,
+validate its actual extracted contents against the root's pinned content hash
+using Go's module hashing rules (`golang.org/x/mod/sumdb/dirhash`), including
+on a cold compiler cache. Do not authenticate files by a previously recorded
+`.ziphash` alone: ordinary downloads can trust previously extracted cache
+content. Reject a mismatch, including an edited `bork.mod` grant or asset, with
+instructions to restore the module cache. Snapshot source reads and confirm
+they still belong to the validated contents before accepting compilation.
+This addresses accidental changes, not an attacker changing and restoring
+files around validation boundaries. Compilation receipt invalidation is a
+separate requirement: it causes fresh checking but does not authenticate the
+changed source. [Go module verification](https://go.dev/ref/mod#go-mod-verify).
+
+Capture the selected graph, root
 manifest/checksum bytes, dependency `bork.mod` bytes, source membership, source
 bytes, and embedded assets as compiler inputs. A changed selected release
 invalidates compilation reuse. Cache eviction, missing files, or modification
@@ -313,12 +337,15 @@ would not test release download/checksum behavior.
 
 Acceptance covers bork-only and mixed libraries; Go dependencies called by
 library unsafe code; std dependencies declared by publishers; transitive and
-diamond selection; upgrades and `/v2` coexistence; ambiguity and path mismatch;
+diamond selection; at least three levels of source-only dependencies with a
+version conflict at the deepest level (covering Go graph pruning); upgrades
+and `/v2` coexistence; ambiguity and path mismatch;
 malformed markers and missing packages; cross-module cycles; scoped unsafe
 grants; rejected unsupported manifests; failed resolution leaving manifests
 intact; scripts; binding/evaluator/build graph parity; warm and empty offline
 caches; missing/conflicting/tampered checksums; cache invalidation on dependency
-changes, deletion, or content edits; read-only formatting and LSP navigation;
+changes or deletion; extracted-source, asset, and unsafe-marker tampering with
+both cold and warm compiler caches; read-only formatting and LSP navigation;
 and cleaning without touching `GOMODCACHE`. Update reader-facing CLI, packages,
 Go interop and script documentation, grammar, requirements, and README during
 implementation. Local checks remain focused; GitHub CI runs full suites.
