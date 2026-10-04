@@ -1,0 +1,125 @@
+diff --git a/languages.toml b/languages.toml
+index a5403e6..e69a200 100644
+--- a/languages.toml
++++ b/languages.toml
+@@ -19,6 +19,7 @@ beancount-language-server = { command = "beancount-language-server" }
+ bicep-langserver = { command = "bicep-langserver" }
+ biome-lsp-proxy = { command = "biome", args = ["lsp-proxy"] }
+ bitbake-language-server = { command = "bitbake-language-server" }
++bork = { command = "bork", args = ["lsp"] }
+ buck2 = { command = "buck2", args = ["lsp"] }
+ buf = { command = "buf", args = ["lsp", "serve", "--timeout", "0"] }
+ c3-lsp = { command = "c3-lsp" }
+@@ -5655,3 +5656,19 @@ comment-tokens = ["REM", "::"]
+ [[grammar]]
+ name = "batch"
+ source = { git = "https://github.com/wharflab/tree-sitter-batch", rev = "5fc5f54267ef9a78e7a5319b80e092194252aabf" }
++
++[[language]]
++name = "bork"
++scope = "source.bork"
++file-types = ["bork"]
++shebangs = ["bork"]
++roots = ["bork.mod"]
++comment-token = "//"
++block-comment-tokens = { start = "/*", end = "*/" }
++language-servers = ["bork"]
++auto-format = true
++indent = { tab-width = 2, unit = "  " }
++
++[[grammar]]
++name = "bork"
++source = { git = "https://github.com/GiGurra/bork", rev = "e9c1cc0d096656cb824d9ee3ddfd47b04f9f76fc", subpath = "editors/tree-sitter-bork" }
+diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
+new file mode 100644
+index 0000000..b1713d1
+--- /dev/null
++++ b/runtime/queries/bork/folds.scm
+@@ -0,0 +1,3 @@
++[(block) (record_type) (record_literal) (match_expression) (class_declaration)
++ (instance_declaration) (providers_declaration) (instances_declaration)
++ (list_literal) (map_literal) (go_body) (comment)] @fold
+diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
+new file mode 100644
+index 0000000..716cce7
+--- /dev/null
++++ b/runtime/queries/bork/highlights.scm
+@@ -0,0 +1,32 @@
++(comment) @comment
++(shebang) @comment
++[(bare_return) (bare_break) (bare_continue)] @keyword
++(identifier) @variable
++(number) @constant.numeric
++(rune) @constant.character
++(string) @string
++(interpolated_string) @string
++(escape_sequence) @constant.character.escape
++(interpolation) @embedded
++["true" "false"] @constant.builtin.boolean
++(type (qualified_name (identifier) @type))
++(type_declaration name: (identifier) @type.definition)
++(variant name: (identifier) @type.enum.variant)
++(function_declaration name: (identifier) @function)
++(method_signature name: (identifier) @function.method)
++(predicate_declaration name: (identifier) @function)
++(rule_declaration name: (identifier) @function)
++(parameter name: (identifier) @variable.parameter)
++(field_declaration name: (identifier) @variable.other.member)
++(record_literal name: (identifier) @variable.other.member)
++(selector_expression field: (identifier) @variable.other.member)
++(call_expression function: (qualified_name (identifier) @function.call))
++(interpolated_string prefix: (qualified_name (identifier) @function.call))
++["fn" "pred" "type" "sealed" "unsafe" "where" "and" "or" "trust" "rule"
++ "generate" "yield" "for" "break" "continue" "if" "else" "return" "match"
++ "import" "use" "class" "instance" "instances" "providers" "test" "private"
++ "derive" "uses" "needs" "ambient" "logged" "propagated" "lazy" "async"
++ "scope" "with" "in" "resource" "go" "comptime" "mock"] @keyword
++["+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator
++["(" ")" "[" "]" "{" "}"] @punctuation.bracket
++["," ";" ":" "."] @punctuation.delimiter
+diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
+new file mode 100644
+index 0000000..686bfac
+--- /dev/null
++++ b/runtime/queries/bork/indents.scm
+@@ -0,0 +1,6 @@
++[(block) (record_literal) (record_type) (list_literal) (map_literal)
++ (parameters) (type_arguments) (match_expression) (class_declaration)
++ (instance_declaration) (providers_declaration) (instances_declaration)] @indent
++["}" ")" "]"] @outdent
++(comment) @ignore
++(go_content) @ignore
+diff --git a/runtime/queries/bork/injections.scm b/runtime/queries/bork/injections.scm
+new file mode 100644
+index 0000000..5bc64d4
+--- /dev/null
++++ b/runtime/queries/bork/injections.scm
+@@ -0,0 +1,2 @@
++((go_content) @injection.content
++ (#set! injection.language "go"))
+diff --git a/runtime/queries/bork/locals.scm b/runtime/queries/bork/locals.scm
+new file mode 100644
+index 0000000..109350d
+--- /dev/null
++++ b/runtime/queries/bork/locals.scm
+@@ -0,0 +1,20 @@
++(block) @local.scope
++(function_declaration) @local.scope
++(parameter name: (identifier) @local.definition)
++(binding name: (identifier) @local.definition)
++(lambda_parameter (identifier) @local.definition)
++(identifier) @local.reference
++(lambda_expression) @local.scope
++(for_expression) @local.scope
++(scope_expression) @local.scope
++(mock_expression) @local.scope
++(match_arm) @local.scope
++(receiver name: (identifier) @local.definition)
++(lambda_expression parameter: (identifier) @local.definition)
++(for_expression name: (identifier) @local.definition)
++(scope_expression name: (identifier) @local.definition)
++(mock_parameters name: (identifier) @local.definition)
++(pattern name: (identifier) @local.definition)
++(field_pattern name: (identifier) @local.definition !pattern)
++((pattern . (qualified_name . (identifier) @local.definition .) .)
++ (#match? @local.definition "^[a-z]"))

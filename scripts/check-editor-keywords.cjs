@@ -11,6 +11,11 @@ const grammars = [
   'editors/vscode/syntaxes/bork.tmLanguage.json',
   'editors/tree-sitter-bork/grammar.js',
   'editors/tree-sitter-bork/queries/highlights.scm',
+  'editors/vim/syntax/bork.vim',
+  'editors/emacs/bork-mode.el',
+  'editors/nvim/queries/bork/highlights.scm',
+  'editors/helix/queries/bork/highlights.scm',
+  'editors/zed/languages/bork/highlights.scm',
 ];
 for (const grammar of grammars) {
   const source = fs.readFileSync(path.join(root, grammar), 'utf8');
@@ -18,4 +23,4 @@ for (const grammar of grammars) {
     assert.ok(new RegExp(`\\b${keyword}\\b`).test(source), `${grammar} omits compiler keyword ${keyword}`);
   }
 }
-console.log(`All ${keywords.length} compiler keywords occur in ${grammars.length} editor grammars.`);
+console.log(`All ${keywords.length} compiler keywords occur in ${grammars.length} editor syntax sources.`);

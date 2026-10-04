@@ -1,0 +1,8 @@
+name = "bork"
+grammar = "bork"
+path_suffixes = ["bork"]
+first_line_pattern = '^#!.*\bbork\b'
+line_comments = ["// "]
+block_comment = ["/*", "*/"]
+tab_size = 2
+hard_tabs = false

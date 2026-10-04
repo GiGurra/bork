@@ -1,0 +1,22 @@
+diff --git a/lsp/bork.lua b/lsp/bork.lua
+new file mode 100644
+index 0000000..a839928
+--- /dev/null
++++ b/lsp/bork.lua
+@@ -0,0 +1,16 @@
++---@brief
++---
++--- https://github.com/GiGurra/bork
++---
++--- bork's compiler provides its language server via `bork lsp`.
++--- Install bork and Go and make bork available on PATH.
++--- The server provides compiler diagnostics, types and facts on hover,
++--- completion, navigation, formatting and code actions.
++
++---@type vim.lsp.Config
++return {
++  cmd = { 'bork', 'lsp' },
++  filetypes = { 'bork' },
++  root_markers = { 'bork.mod', '.git' },
++  workspace_required = false,
++}

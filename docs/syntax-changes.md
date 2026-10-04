@@ -37,7 +37,11 @@ These use the compiler packages directly, so they follow automatically. Still ch
 | VS Code, and GitHub/Sublime via TextMate | `editors/vscode/syntaxes/bork.tmLanguage.json` | Patterns for the new keyword or construct; every reserved keyword in the compiler map must receive a highlighting scope; tests in `editors/vscode/test/grammar.test.cjs` (CI job "TextMate grammar") |
 | VS Code editing behavior | `editors/vscode/language-configuration.json` | Brackets, comments, auto-closing, indentation rules |
 | Tree-sitter (Neovim, Helix, Zed, Emacs 29+) | `editors/tree-sitter-bork/` | `grammar.js`, `src/scanner.c`; regenerate `src/` with the pinned CLI and update `queries/` (highlights, locals, indents, folds, injections); CI parses every `.bork` file in `examples/` and `testdata/cases/` with an explicit checked recovery allowlist |
-| Vim and Emacs syntax files | the Vim and Emacs packages under `editors/` (once added) | Keyword lists and regex patterns |
+| Vim and Neovim lexical highlighting | `editors/vim/syntax/bork.vim` (sourced by Neovim) | Keywords, literal patterns, interpolation and Go regions; `editors/tests/vim.vim` loads every example/case |
+| Emacs highlighting and editing | `editors/emacs/bork-mode.el` | Keyword list, font-lock patterns, tree-sitter captures, indentation, imenu; `editors/tests/emacs.el` highlights every example/case in both modes |
+| Editor tree-sitter snapshots | `editors/{nvim,helix}/queries/bork/`, `editors/zed/languages/bork/*.scm`, `editors/sync-queries.py` | Update shared queries, run the adapter, then compile all snapshots and highlight every example/case in `editors/tests/nvim.lua` |
+| Grammar source pins | `editors/helix/languages.toml`, `editors/zed/extension.toml` | Pin both consumers and upstream drafts to a commit containing the updated grammar; `editors/tests/check-grammar-pin.py` compares fetched sources with the shared grammar |
+| Upstream integration drafts | `editors/upstream/*.patch` | Refresh copied queries and grammar revisions; `editors/tests/check-upstream.py` checks query drift |
 
 Compiler keyword coverage for each highlighting grammar is checked by
 `scripts/check-editor-keywords.cjs` in CI. Register new grammars there.
@@ -56,5 +60,5 @@ Compiler keyword coverage for each highlighting grammar is checked by
 
 - `go test ./internal/syntax ./internal/format ./internal/check ./internal/lsp` and the affected driver cases pass locally; CI runs the rest.
 - `bork fmt --check` is clean on `examples/` and `testdata/cases/`.
-- The TextMate and tree-sitter grammar tests pass, so every `.bork` file in the repository still highlights without errors.
+- The TextMate, tree-sitter and native editor package tests pass, so every `.bork` file in the repository still highlights without errors.
 - If the change breaks existing programs, say so in the PR description, and migrate the examples, docs, std, and prelude in the same PR.
