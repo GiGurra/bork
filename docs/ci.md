@@ -110,3 +110,8 @@ holds these native executables and is removed after the run; no executable is
 retained between invocations. CLI commands still start fresh processes, cache
 fixtures remain isolated, and tests requiring different compiler images retain
 their distinct builds.
+
+Both shared CLI compilers carry a linker-only test marker so automatic detached
+cache workers can require explicit test opt-ins. The ordinary compiler uses
+`cacheTestGate=test`, which enables neither cache probes nor test callbacks;
+the cache fixture compiler retains `cacheTestGate=enabled`.
