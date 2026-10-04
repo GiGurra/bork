@@ -91,7 +91,7 @@ func TestDebugBuild(t *testing.T) {
 			}
 		}
 	}
-	for _, line := range []int{2, 3, 4} {
+	for _, line := range []int{1, 2, 3, 4} {
 		if !found[line] {
 			t.Errorf("DWARF missing bork line %d", line)
 		}

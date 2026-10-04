@@ -1647,6 +1647,8 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 			out = append(out, g.debugLine(statement.X.Pos())...)
 		case *check.Trust:
 			out = append(out, g.debugLine(statement.Pos)...)
+		case *check.Mock:
+			out = append(out, g.debugLine(statement.Pos)...)
 		}
 		switch s := s.(type) {
 		case *check.Let:

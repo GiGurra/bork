@@ -63,7 +63,25 @@ func (g *gen) mapDebugSource(source []byte) ([]byte, error) {
 	var edits []edit
 	for _, decl := range file.Decls {
 		offset := fset.PositionFor(decl.Pos(), false).Offset
-		edits = append(edits, edit{offset, offset, "//bork-debug-generated\n"})
+		directive := "//bork-debug-generated\n"
+		// Map the function prologue too, so stopOnEntry and function frames
+		// open the bork declaration rather than the generated Go signature.
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil && len(fn.Body.List) > 0 {
+			if statement, ok := fn.Body.List[0].(*ast.ExprStmt); ok {
+				if call, ok := statement.X.(*ast.CallExpr); ok && len(call.Args) == 2 {
+					if name, ok := call.Fun.(*ast.Ident); ok && name.Name == "_borkDebugLineMarker" {
+						path := call.Args[0].(*ast.BasicLit)
+						line := call.Args[1].(*ast.BasicLit)
+						decoded, err := strconv.Unquote(path.Value)
+						if err != nil {
+							return nil, err
+						}
+						directive += "//line " + decoded + ":" + line.Value + "\n"
+					}
+				}
+			}
+		}
+		edits = append(edits, edit{offset, offset, directive})
 	}
 	var mappingErr error
 	ast.Inspect(file, func(node ast.Node) bool {
