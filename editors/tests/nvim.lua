@@ -7,18 +7,33 @@ require('bork').setup({ cmd = { assert(vim.env.BORK_TEST_BINARY), 'lsp' } })
 
 -- Compile every adapted query against the shared parser, then highlight the
 -- entire example/case corpus through Neovim's actual query engine.
+local highlight_queries = {}
 for _, editor in ipairs({ 'nvim', 'helix', 'zed' }) do
   local query_dir = editor == 'zed' and '/languages/bork' or '/queries/bork'
   for _, file in ipairs(vim.fn.glob(root .. '/editors/' .. editor .. query_dir .. '/*.scm', false, true)) do
-    vim.treesitter.query.parse('bork', table.concat(vim.fn.readfile(file), '\n'))
+    local query = vim.treesitter.query.parse('bork', table.concat(vim.fn.readfile(file), '\n'))
+    if file:match('/highlights%.scm$') then highlight_queries[editor] = query end
   end
 end
-local highlights = vim.treesitter.query.get('bork', 'highlights')
+local literal_source = "fn main() { x = 1; y = true; z = 'x' }"
+local literal_tree = vim.treesitter.get_string_parser(literal_source, 'bork'):parse()[1]
+for editor, expected in pairs({
+  nvim = { 'number', 'boolean', 'character' },
+  helix = { 'constant.numeric', 'constant.builtin.boolean', 'constant.character' },
+  zed = { 'number', 'boolean', 'string' },
+}) do
+  local captures = {}
+  local query = highlight_queries[editor]
+  for id in query:iter_captures(literal_tree:root(), literal_source) do captures[query.captures[id]] = true end
+  for _, name in ipairs(expected) do assert(captures[name], editor .. ' omits literal capture ' .. name) end
+end
 for _, directory_name in ipairs({ 'examples', 'testdata/cases' }) do
   for _, file in ipairs(vim.fn.glob(root .. '/' .. directory_name .. '/**/*.bork', false, true)) do
     local source = table.concat(vim.fn.readfile(file), '\n')
     local parser = vim.treesitter.get_string_parser(source, 'bork')
-    for _ in highlights:iter_captures(parser:parse()[1]:root(), source) do end
+    for _, query in pairs(highlight_queries) do
+      for _ in query:iter_captures(parser:parse()[1]:root(), source) do end
+    end
   end
 end
 

@@ -41,7 +41,7 @@ index 0000000..b1713d1
 + (list_literal) (map_literal) (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..8e36081
+index 0000000..716cce7
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
 @@ -0,0 +1,32 @@
@@ -49,13 +49,13 @@ index 0000000..8e36081
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
 +(identifier) @variable
-+(number) @number
-+(rune) @character
++(number) @constant.numeric
++(rune) @constant.character
 +(string) @string
 +(interpolated_string) @string
-+(escape_sequence) @string.escape
++(escape_sequence) @constant.character.escape
 +(interpolation) @embedded
-+["true" "false"] @boolean
++["true" "false"] @constant.builtin.boolean
 +(type (qualified_name (identifier) @type))
 +(type_declaration name: (identifier) @type.definition)
 +(variant name: (identifier) @type.enum.variant)

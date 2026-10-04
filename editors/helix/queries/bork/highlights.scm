@@ -2,13 +2,13 @@
 (shebang) @comment
 [(bare_return) (bare_break) (bare_continue)] @keyword
 (identifier) @variable
-(number) @number
-(rune) @character
+(number) @constant.numeric
+(rune) @constant.character
 (string) @string
 (interpolated_string) @string
-(escape_sequence) @string.escape
+(escape_sequence) @constant.character.escape
 (interpolation) @embedded
-["true" "false"] @boolean
+["true" "false"] @constant.builtin.boolean
 (type (qualified_name (identifier) @type))
 (type_declaration name: (identifier) @type.definition)
 (variant name: (identifier) @type.enum.variant)

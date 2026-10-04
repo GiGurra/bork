@@ -15,7 +15,11 @@ zed_names = {
     "@type.definition": "@type", "@type.enum.variant": "@variant",
     "@variable.member": "@property", "@character": "@string",
 }
-for editor, names in [("nvim", {"@indent": "@indent.begin", "@outdent": "@indent.end", "@ignore": "@indent.ignore"}), ("helix", {"@variable.member": "@variable.other.member"}), ("zed", zed_names)]:
+for editor, names in [("nvim", {"@indent": "@indent.begin", "@outdent": "@indent.end", "@ignore": "@indent.ignore"}), ("helix", {
+    "@variable.member": "@variable.other.member", "@number": "@constant.numeric",
+    "@boolean": "@constant.builtin.boolean", "@character": "@constant.character",
+    "@string.escape": "@constant.character.escape",
+}), ("zed", zed_names)]:
     target = root / editor / ("languages/bork" if editor == "zed" else "queries/bork")
     target.mkdir(parents=True, exist_ok=True)
     for query in source.glob("*.scm"):
