@@ -40,6 +40,7 @@ These use the compiler packages directly, so they follow automatically. Still ch
 | Vim and Neovim lexical highlighting | `editors/vim/syntax/bork.vim` (sourced by Neovim) | Keywords, literal patterns, interpolation and Go regions; `editors/tests/vim.vim` loads every example/case |
 | Emacs highlighting and editing | `editors/emacs/bork-mode.el` | Keyword list, font-lock patterns, tree-sitter captures, indentation, imenu; `editors/tests/emacs.el` highlights every example/case in both modes |
 | Editor tree-sitter snapshots | `editors/{nvim,helix}/queries/bork/`, `editors/zed/languages/bork/*.scm`, `editors/sync-queries.py` | Update shared queries, run the adapter, then compile all snapshots and highlight every example/case in `editors/tests/nvim.lua` |
+| Grammar source pins | `editors/helix/languages.toml`, `editors/zed/extension.toml` | Pin both consumers and upstream drafts to a commit containing the updated grammar; `editors/tests/check-grammar-pin.py` compares fetched sources with the shared grammar |
 | Upstream integration drafts | `editors/upstream/*.patch` | Refresh copied queries and grammar revisions; `editors/tests/check-upstream.py` checks query drift |
 
 Compiler keyword coverage for each highlighting grammar is checked by

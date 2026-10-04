@@ -92,6 +92,7 @@ jobs:
           { echo 'use-grammars = { only = ["bork"] }'; cat editors/helix/languages.toml; } > "$XDG_CONFIG_HOME/helix/languages.toml"
           cp editors/helix/queries/bork/*.scm "$HELIX_RUNTIME/queries/bork/"
           hx --grammar fetch
+          python3 editors/tests/check-grammar-pin.py "$XDG_CONFIG_HOME/helix/runtime/grammars/sources/bork"
           hx --grammar build
           PATH="$RUNNER_TEMP:$PATH" hx --health bork
       - name: Zed WASM extension
