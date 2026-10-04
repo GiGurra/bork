@@ -16,18 +16,14 @@ func TestAutomaticCacheCLI(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("result publication image evidence currently Linux-only")
 	}
-	root := t.TempDir()
-	exe := filepath.Join(root, "bork")
-	if output, err := exec.Command("go", "build", "-ldflags=-X github.com/GiGurra/bork/internal/driver.cacheTestGate=enabled", "-o", exe, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, output)
-	}
+	exe := cliExecutable(t, true)
 	t.Setenv("BORK_TEST_CACHE_PRODUCTION", "1")
 	t.Setenv("BORK_TEST_CACHE_PUBLISH", "on")
 	t.Setenv("BORK_TEST_DISK_CACHE_DIRECTORY", "")
 	t.Setenv("BORK_TEST_DISK_CACHE_BACKGROUND", "")
 	t.Setenv("GOTOOLCHAIN", "local")
 	t.Setenv("GOPACKAGESDRIVER", "off")
-	for _, mode := range []string{"check", "emit", "build", "off"} {
+	for _, mode := range []string{"check", "emit", "build", "run", "off"} {
 		t.Run(mode, func(t *testing.T) {
 			sourceRoot := t.TempDir()
 			source := filepath.Join(sourceRoot, "main.bork")

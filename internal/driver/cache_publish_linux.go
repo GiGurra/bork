@@ -18,7 +18,7 @@ const cachePublishArgument = "--bork-internal-cache-publish-v1"
 const cachePublisherTimeout = 15 * time.Second
 
 func init() {
-	if cacheTestGate != "enabled" || len(os.Args) != 4 || os.Args[1] != cachePublishArgument {
+	if len(os.Args) != 4 || os.Args[1] != cachePublishArgument {
 		return
 	}
 	// A publisher is its own session/process-group leader. Its timeout terminates
@@ -28,7 +28,7 @@ func init() {
 		os.Exit(0)
 	}
 	timeout := cachePublisherTimeout
-	if text := os.Getenv("BORK_TEST_CACHE_PUBLISH_TIMEOUT_MS"); text != "" {
+	if text := os.Getenv("BORK_TEST_CACHE_PUBLISH_TIMEOUT_MS"); cacheTestGate == "enabled" && text != "" {
 		if n, err := strconv.Atoi(text); err == nil && n > 0 && n <= 15000 {
 			timeout = time.Duration(n) * time.Millisecond
 		}
@@ -118,6 +118,9 @@ func queueCachePublication(directory string, artifact *sessionArtifact) bool {
 		env    string
 		target *int
 	}{{"BORK_TEST_CACHE_PUBLISH_NOTIFY_FD", &notification}, {"BORK_TEST_CACHE_PUBLISH_BARRIER_FD", &barrier}} {
+		if cacheTestGate != "enabled" {
+			continue
+		}
 		descriptor, err := strconv.Atoi(os.Getenv(hook.env))
 		if err != nil || descriptor < 3 || descriptor > 64 {
 			continue

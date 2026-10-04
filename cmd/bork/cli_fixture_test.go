@@ -76,10 +76,13 @@ func cliExecutable(t *testing.T, gated bool) string {
 			name += ".exe"
 		}
 		build.path = filepath.Join(cliFixture.dir, name)
-		args := []string{"build"}
+		// Mark every test compiler so automatic detached workers stay isolated.
+		// Only enabled activates cache probes and test callbacks.
+		gate := "test"
 		if gated {
-			args = append(args, "-ldflags=-X github.com/GiGurra/bork/internal/driver.cacheTestGate=enabled")
+			gate = "enabled"
 		}
+		args := []string{"build", "-ldflags=-X github.com/GiGurra/bork/internal/driver.cacheTestGate=" + gate}
 		args = append(args, "-o", build.path, ".")
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()

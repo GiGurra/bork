@@ -3,7 +3,6 @@ package driver
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/GiGurra/bork/internal/syntax"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,11 +11,11 @@ import (
 	"time"
 
 	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// Set only by integration tests through -ldflags=-X. Environment variables alone
-// cannot enable disk result reuse in an ordinary compiler. Remove this gate once
-// age-based retention and population-independent performance permit automatic use.
+// Set by integration tests through -ldflags=-X. Test images require explicit
+// result-cache and detached-worker opt-ins; ordinary CLI images enable caching.
 var cacheTestGate string
 
 var cacheCLIState = startCacheTestState()

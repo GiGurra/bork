@@ -161,6 +161,18 @@ bork deps download          # download pinned dependencies and fill checksums
 
 Use `bork check --watch path` for ongoing diagnostics, or add `--json` for complete result objects. See [watch mode](docs/watch.md) for tracked inputs, manual retriggers, and the streaming format.
 
+On Linux, `check`, `emit`, `build`, and `run` automatically reuse validated
+compiler results in `BORKCACHE` (by default `os.UserCacheDir()/bork`). Builds
+still invoke Go, and runs execute the program each time. Set `BORK_CACHE=off`
+to disable reuse and persistent staging. Eligible misses publish in a bounded
+background process; an unavailable cache never prevents compilation.
+
+Programs using proof or compile-time evaluators, Go type/export loading,
+custom Go drivers, or embedded assets currently bypass result reuse. Other
+platforms retain persistent staging, with automatic result reuse planned next
+for macOS. Entries unused for five days are removed by bounded daily background
+maintenance; active entries are skipped.
+
 Use `bork clean` to remove current compiler cache artifacts and staged Go sources.
 `bork clean --all` also removes other compiler namespaces and older recognized
 staging versions. Cleanup preserves project outputs and Go's own cache; it waits
