@@ -138,7 +138,7 @@ func (r *goContextReceipt) restoreResolved(resolved *goContext, digest [sha256.S
 }
 
 func (r *goContextReceipt) valid() bool {
-	if r == nil || r.Schema != goReceiptSchema || runtime.GOOS != "linux" || r.Driver != "off" || !supportedGoVersion(r.Version) || r.Inputs == nil {
+	if r == nil || r.Schema != goReceiptSchema || (runtime.GOOS != "linux" && runtime.GOOS != "darwin") || r.Driver != "off" || !supportedGoVersion(r.Version) || r.Inputs == nil {
 		return false
 	}
 	for _, path := range []string{r.Tool, r.Self, r.Root, r.Cache, r.Tmp, r.ResolvedLauncher} {
@@ -178,11 +178,6 @@ func (r *goContextReceipt) valid() bool {
 		}
 	}
 	return true
-}
-
-func sameRunningImage(file os.FileInfo) bool {
-	running, err := os.Stat("/proc/self/exe")
-	return err == nil && os.SameFile(file, running)
 }
 
 func freshBridgeEvidence(path string) ([sha256.Size]byte, os.FileInfo, error) {

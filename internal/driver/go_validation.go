@@ -157,19 +157,15 @@ func captureGoContextValidation(ctx *goContext) *goContextValidation {
 	if err != nil {
 		return nil
 	}
-	// Linux keeps the running executable inode immutable (ETXTBSY). Its
-	// identity proves byte stability without re-hashing this large binary on
-	// every request. Replacements and permission changes still invalidate.
+	// Kernel mapped-image identity and the immutable installed-compiler policy
+	// avoid rehashing a large self bridge on each validation.
 	selfFile, err := os.Stat(ctx.self)
 	if err != nil {
 		return nil
 	}
 	validation.selfMode = selfFile.Mode()
-	if runtime.GOOS == "linux" {
-		runningFile, runningErr := os.Stat("/proc/self/exe")
-		if runningErr == nil && os.SameFile(selfFile, runningFile) {
-			validation.selfFile = selfFile
-		}
+	if sameRunningImage(selfFile) {
+		validation.selfFile = selfFile
 	}
 	if validation.selfFile == nil {
 		validation.selfDigest, err = goToolDigest(ctx.self)

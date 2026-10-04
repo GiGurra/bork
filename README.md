@@ -161,15 +161,14 @@ bork deps download          # download pinned dependencies and fill checksums
 
 Use `bork check --watch path` for ongoing diagnostics, or add `--json` for complete result objects. See [watch mode](docs/watch.md) for tracked inputs, manual retriggers, and the streaming format.
 
-On Linux, `check`, `emit`, `build`, and `run` automatically reuse validated
+On Linux and macOS, `check`, `emit`, `build`, and `run` automatically reuse validated
 compiler results in `BORKCACHE` (by default `os.UserCacheDir()/bork`). Builds
 still invoke Go, and runs execute the program each time. Set `BORK_CACHE=off`
 to disable reuse and persistent staging. Eligible misses publish in a bounded
 background process; an unavailable cache never prevents compilation.
 
 Programs using proof or compile-time evaluators, Go type/export loading,
-custom Go drivers, or embedded assets currently bypass result reuse. macOS
-retains persistent staging, with automatic result reuse planned next. Other
+custom Go drivers, or embedded assets currently bypass result reuse. Other
 platforms use temporary staging. Entries unused for five days are removed by
 bounded daily background maintenance; active entries are skipped.
 
@@ -196,6 +195,7 @@ force after `-w` or `-u`; `-w` warns when the shell overrides a saved assignment
 | `BORK_CACHE` | `on` | Set `off` to disable compiler result reuse and persistent staging. Go's build cache remains independent. |
 
 Compiler caching, like Go's build cache, assumes installed Go toolchains are immutable. In-place edits of GOROOT or the Go launcher are unsupported; replace or upgrade the toolchain instead.
+Installed bork compiler images must also remain immutable while running; upgrades replace their pathname atomically.
 
 `BORKCACHE` and `BORKBIN` accept absolute paths. Existing directories and saved
 settings are never moved automatically. `bork install [path]` defaults to `.` and

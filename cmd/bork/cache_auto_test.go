@@ -13,8 +13,8 @@ import (
 )
 
 func TestAutomaticCacheCLI(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("result publication image evidence currently Linux-only")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("result publication needs Linux or macOS")
 	}
 	exe := cliExecutable(t, true)
 	t.Setenv("BORK_TEST_CACHE_PRODUCTION", "1")

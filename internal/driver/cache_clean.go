@@ -32,7 +32,7 @@ func Clean(ctx context.Context, all bool) (CacheCleanReport, error) {
 		return CacheCleanReport{}, err
 	}
 	var namespace [sha256.Size]byte
-	if !all && runtime.GOOS == "linux" {
+	if !all && (runtime.GOOS == "linux" || runtime.GOOS == "darwin") {
 		namespace, err = compilerArtifactNamespace(strconv.Itoa(cacheArtifactSchema), cacheArtifactLayout)
 		if err != nil {
 			return CacheCleanReport{}, fmt.Errorf("identify current compiler cache: %w; use clean --all for every namespace", err)

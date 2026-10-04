@@ -31,3 +31,11 @@ func hashCompilerImage() ([sha256.Size]byte, error) {
 	copy(digest[:], hash.Sum(nil))
 	return digest, nil
 }
+
+func sameRunningImage(file os.FileInfo) bool {
+	running, err := os.Stat("/proc/self/exe")
+	return err == nil && os.SameFile(file, running)
+}
+
+func openCachePublisherImage() (*os.File, error) { return os.Open("/proc/self/exe") }
+func cachePublisherExecutable(*os.File) string   { return "/proc/self/fd/3" }

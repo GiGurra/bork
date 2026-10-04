@@ -35,8 +35,11 @@ artifact/configuration schema and output-layout versions, as the artifact
 namespace. Do not use a version string, build ID or executable mtime as the
 compiler digest. Hash once per process; Linux may read `/proc/self/exe` to
 identify the running image, while child-bridge executable identity is validated
-separately. On other platforms, persist only when a supported OS mechanism
-proves that the opened bytes are the running image. Reopening os.Executable()
+separately. macOS queries PROC_PIDREGIONPATHINFO for a known Go code address
+and matches its mapped vnode dev/inode/size with the opened image descriptor
+before hashing. Installed compiler images remain immutable while running;
+upgrades replace pathnames atomically. Kernel query failures decline. On other
+platforms, persist only when a supported OS mechanism identifies the running image. Reopening os.Executable()
 after a replacement does not prove this; absent that evidence, bypass persistent
 results while retaining Session and temporary/stable Go staging behavior.
 Compiler replacement, local development builds and embedded standard
@@ -148,7 +151,7 @@ scans from result and staging publication. The next slice coalesces use marking
 at one hour: validated result hits mark the artifact and only a still-matching
 namespace locator; stages keep an independent `used` marker across tree swaps.
 Busy result lifecycle locks skip marking, and marker failures never fail a build.
-Bounded daily trim and the population matrix are implemented. Automatic Linux
+Bounded daily trim and the population matrix are implemented. Automatic Linux/macOS
 CLI result reuse now follows the validated rollout described below.
 
 Mark successful result hits and stage use with approximate last-use mtimes,
@@ -210,10 +213,12 @@ terminal or user streams. BORK_CACHE=off disables scheduling. Other platforms
 use temporary staging until a bounded detached launcher is available.
 
 Linux executes the inherited compiler image descriptor. macOS executes its
-pathname and verifies that it still names the inherited image identity before
-maintenance. Both retain a directory descriptor for the queued cache root, so
-root replacement cannot redirect the worker. These are maintenance-only
-launchers; macOS does not gain semantic result publication through this path.
+pathname and verifies the inherited file descriptor against the executable
+path before maintenance. Result publication additionally binds the inherited
+image to the child's kernel mapped vnode; query errors skip result reuse without
+disabling the already-supported maintenance launcher. Both retain a directory descriptor for the queued cache root, so
+root replacement cannot redirect the worker. The same platform image launchers also support bounded eligible-result
+publication; pathname races cause a skipped publication.
 Test-gated pipe barriers and completion notifications verify detachment,
 opt-out and the hard timeout without timing-based publication waits. Native
 macOS CI exercises the launcher as well as portable trim. The population
@@ -374,7 +379,7 @@ ordinary LRU eligibility. Empty result namespace directories are removed under
 MUTATION so failed publication does not accumulate directory records.
 
 
-## Automatic Linux CLI rollout
+## Automatic Linux/macOS CLI rollout
 
 `bork check`, `emit`, `build`, and `run` now enable validated complete-result
 reuse at CLI startup. Library AST APIs, install, test and watch retain their
@@ -384,13 +389,13 @@ validated module and context data. Build misses pass their fresh checked graph
 directly to generation and Go work once. Run executes the resulting program on
 every invocation. No native executable or evaluation result is retained here.
 
-Eligible misses always use bounded detached publication on Linux. Failed
+Eligible misses always use bounded detached publication on Linux and macOS. Failed
 admission, an unwritable root, or unavailable image/process facilities skip
 publication; there is no inline certification fallback. Source loading and
 eligibility precede expensive inventories. Deferred requests do not collect
 comptime/predicate observations. Proof/evaluator execution, Go export loading,
-custom drivers and assets remain bypasses. macOS staging/trim remains supported;
-automatic result reuse awaits its compiler-image identity implementation.
+custom drivers and assets remain bypasses. macOS now uses mapped-vnode compiler
+identity and the pathname launcher for the same result and maintenance paths.
 
 Every test CLI has a linker-only marker. Detached trim and publication are off
 in marked images unless `BORK_TEST_CACHE_TRIM=on` or
