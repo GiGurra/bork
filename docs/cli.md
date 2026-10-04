@@ -13,6 +13,7 @@ One binary does everything: `bork <command>`. Most commands take a path, which i
 | [`bork test`](#test) | Run a package's tests |
 | [`bork fmt`](#fmt) | Format source files |
 | [`bork lsp`](#lsp) | Serve editor features over stdio |
+| [`bork editor install vscode`](#editor-install-vscode) | Install the verified release extension |
 | [`bork describe`](#describe) | Ask the compiler about the code at a position |
 | [`bork emit`](#emit) | Print the Go code generated for a program |
 | [`bork env`](#settings) | Show or save compiler settings |
@@ -211,6 +212,29 @@ requirements with a hint to run `bork deps download`. Existing `go-deps.*`
 projects remain supported; `migrate` converts them explicitly. See [calling Go](language/go-interop.md).
 
 ## Editor support
+
+## editor install vscode
+
+```sh
+bork editor install vscode
+bork editor install vscode --editor cursor
+bork editor install vscode --editor codium
+```
+
+Install the VSIX from the GitHub Release matching the running compiler, falling
+back to the latest release when that tag or its VSIX is absent. Development
+builds use the latest release. The installer checks the release's SHA-256
+checksum before invoking the editor and reports the release and editor used.
+A failed checksum stops installation. Internet access is required.
+
+The default CLI is the first available `code`, `cursor`, or `codium` on PATH.
+`--editor` accepts a command or executable path. Enable your editor's shell
+command if it is missing. Installation uses `--force` to refresh the extension
+even when its package version has not changed between compiler releases.
+After `bork upgrade`, an installed Bork extension produces a refresh command;
+run that command explicitly to update it. The extension launches `bork lsp`.
+
+See [other editors](editors.md) for Neovim, Helix, Emacs and Zed integration.
 
 ## lsp
 
