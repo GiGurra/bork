@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -19,6 +20,7 @@ var cacheTestGate string
 var cacheTestState = startCacheTestState()
 
 type cacheTestStartup struct {
+	start        sync.Once
 	toolDone     chan struct{}
 	toolContext  *goContext
 	toolDigest   [sha256.Size]byte
@@ -38,64 +40,92 @@ func startCacheTestState() *cacheTestStartup {
 	if root == "" || !filepath.IsAbs(root) || !validReceiptPath(root) {
 		return nil
 	}
-	state := &cacheTestStartup{root: root, done: make(chan struct{}), toolDone: make(chan struct{}), toolContext: resolveGoContext()}
-	// Hash the actual running image alongside startup and CLI argument parsing.
-	go func() {
-		state.namespace, state.err = compilerArtifactNamespace(strconv.Itoa(cacheArtifactSchema), cacheArtifactLayout)
-		close(state.done)
-	}()
 
-	go func() {
-		state.toolDigest, state.toolEvidence, state.toolErr = captureGoToolEvidence(state.toolContext.tool)
-		close(state.toolDone)
-	}()
-	return state
+	return &cacheTestStartup{root: root}
+}
+
+func (state *cacheTestStartup) startIdentity() {
+	state.start.Do(func() {
+		state.done = make(chan struct{})
+		state.toolDone = make(chan struct{})
+		state.toolContext = resolveGoContext()
+		go func() {
+			state.namespace, state.err = compilerArtifactNamespace(strconv.Itoa(cacheArtifactSchema), cacheArtifactLayout)
+			close(state.done)
+		}()
+		go func() {
+			state.toolDigest, state.toolEvidence, state.toolErr = captureGoToolEvidence(state.toolContext.tool)
+			close(state.toolDone)
+		}()
+	})
 }
 
 func testCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
 	state := cacheTestState
 	cwd, err := os.Getwd()
 	if err != nil {
-		return freshTestCachedCompile(path, emit, nil)
+		return freshTestCachedCompile(path, emit)
 	}
 	request := cacheArtifactRequest{Path: path, Cwd: cwd, Emit: emit}
-	<-state.done
-	if state.err != nil {
-		return freshTestCachedCompile(path, emit, nil)
-	}
-	store := cacheStore{root: state.root, namespace: state.namespace}
-	if body := store.read(request); body != nil {
-		<-state.toolDone
-		restore := func(receipt *goContextReceipt) (*goContext, error) {
-			if state.toolErr != nil {
-				return nil, errUnsupportedGoReceipt
+
+	// Locate a bounded candidate before identity work. Programs with no candidate
+	// and known-bypass misses never hash compiler/launcher for cache purposes.
+	if body := findCacheArtifact(state.root, request); body != nil {
+		inputs, err := body.Source.snapshot()
+		if err == nil && inputs.current() {
+			state.startIdentity()
+			<-state.done
+			if state.err != nil {
+				return freshTestCachedCompile(path, emit)
 			}
-			return receipt.restoreWithToolEvidence(resolveGoContext(), state.toolDigest, state.toolEvidence)
-		}
-		if result, err := body.validateWithContext(request, state.namespace, restore); err == nil {
-			testCacheProbe("hit")
-			return result.goSource, result.warnings, nil
+			if body.Namespace != state.namespace {
+				body = (cacheStore{root: state.root, namespace: state.namespace}).read(request)
+				if body == nil {
+					return freshTestCachedCompile(path, emit)
+				}
+			}
+			<-state.toolDone
+			restore := func(receipt *goContextReceipt) (*goContext, error) {
+				if state.toolErr != nil {
+					return nil, errUnsupportedGoReceipt
+				}
+				return receipt.restoreWithToolEvidence(resolveGoContext(), state.toolDigest, state.toolEvidence)
+			}
+			result, err := body.validateWithContext(request, body.Namespace, restore)
+			<-state.done
+			if err == nil && state.err == nil && state.namespace == body.Namespace {
+				testCacheProbe("hit")
+				return result.goSource, result.warnings, nil
+			}
 		}
 	}
-	return freshTestCachedCompile(path, emit, &store)
+	return freshTestCachedCompile(path, emit)
 }
 
-func freshTestCachedCompile(path string, emit bool, store *cacheStore) ([]byte, []diag.Diagnostic, error) {
+func freshTestCachedCompile(path string, emit bool) ([]byte, []diag.Diagnostic, error) {
 
 	timings := newCacheTestTimings()
 	defer timings.finish()
-	session := NewSession()
-	session.observe = timings.observer("compile/")
-	src, warnings, err := session.compile(path, emit)
+
+	src, warnings, artifact, err := compileCacheMiss(path, emit, timings.observer("compile/"))
 	if err != nil {
 		testCacheProbe("error")
 		return src, warnings, err
 	}
-	if store == nil || session.last == nil {
+	if artifact == nil {
 		testCacheProbe("bypass")
 		return src, warnings, nil
 	}
-	body, artifactErr := cacheArtifactFromObserved(session.last, session.last.sourcePaths, store.namespace, timings.observer("publication/"))
+	state := cacheTestState
+	state.startIdentity()
+	<-state.done
+	if state.err != nil {
+		testCacheProbe("bypass")
+		return src, warnings, nil
+	}
+	ownedStore := cacheStore{root: state.root, namespace: state.namespace}
+	store := &ownedStore
+	body, artifactErr := cacheArtifactFromObserved(artifact, artifact.sourcePaths, store.namespace, timings.observer("publication/"))
 	if artifactErr != nil {
 		testCacheProbe("bypass")
 		return src, warnings, nil

@@ -236,3 +236,39 @@ func TestCacheStoreCrossProcess(t *testing.T) {
 	}
 	t.Fatal("unexpected child output")
 }
+
+func TestCacheFindSkipsStaleNamespaces(t *testing.T) {
+	body, _ := cacheArtifactFixture(t)
+	root := t.TempDir()
+	old := *body
+	old.Namespace = [32]byte{}
+	if err := (cacheStore{root: root, namespace: old.Namespace}).write(&old); err != nil {
+		t.Fatal(err)
+	}
+	// The old compiler's entry retains an earlier source observation.
+	data, err := os.ReadFile(body.Request.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(body.Request.Path, append(data, []byte("// edit\n")...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if candidate := findCacheArtifact(root, body.Request); candidate != nil {
+		t.Fatal("stale old namespace selected")
+	}
+	session := NewSession()
+	if _, err := session.Emit(body.Request.Path); err != nil {
+		t.Fatal(err)
+	}
+	current, err := cacheArtifactFrom(session.last, body.SourcePaths, body.Namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (cacheStore{root: root, namespace: current.Namespace}).write(current); err != nil {
+		t.Fatal(err)
+	}
+	candidate := findCacheArtifact(root, current.Request)
+	if candidate == nil || candidate.Namespace != current.Namespace {
+		t.Fatal("old namespace hides valid current entry")
+	}
+}

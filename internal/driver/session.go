@@ -17,6 +17,7 @@ type goNameInput struct {
 	inputs   *goNameValidation
 }
 type goUsage struct {
+	deferInputs      bool
 	names            []goNameInput
 	types, evaluator bool
 }

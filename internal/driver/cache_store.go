@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -131,4 +132,46 @@ func (s cacheStore) lock(root *os.Root, name string) (*os.File, error) {
 		return nil, err
 	}
 	return file, nil
+}
+
+// findCacheArtifact locates an untrusted candidate without hashing the running
+// compiler first. The caller must certify its actual namespace before serving.
+// Namespace enumeration is bounded; excessive or malformed cache trees miss.
+func findCacheArtifact(directory string, request cacheArtifactRequest) *cacheArtifactBody {
+	if _, err := request.key(); err != nil {
+		return nil
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = root.Close() }()
+	namespaces, err := root.Open(filepath.Join("results", "v1"))
+	if err != nil {
+		return nil
+	}
+	entries, readErr := namespaces.ReadDir(1025)
+	_ = namespaces.Close()
+	if readErr != nil && readErr != io.EOF || len(entries) > 1024 {
+		return nil
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		bytes, err := hex.DecodeString(entry.Name())
+		if err != nil || len(bytes) != sha256.Size {
+			continue
+		}
+		var namespace [sha256.Size]byte
+		copy(namespace[:], bytes)
+		store := cacheStore{root: directory, namespace: namespace}
+		if body := store.read(request); body != nil {
+			inputs, err := body.Source.snapshot()
+			if err == nil && inputs.current() {
+				return body
+			}
+		}
+	}
+	return nil
 }
