@@ -203,7 +203,17 @@ type TryInfo struct {
 // and the packages it imports. Later passes (lifetimes, facts, and code
 // generation) read it, and the typed tree of each function body
 // (Func.Body), instead of re-deriving types.
+// InterpolationSource retains source expressions hidden by named interpolation lowering.
+// Holes refer to the expressions already lowered for execution.
+type InterpolationSource struct {
+	Prefix  SourceSpan
+	Factory Expr
+	Holes   []Expr
+}
+
 type Info struct {
+	Interpolations map[Expr]*InterpolationSource
+
 	PackageBindings []*PackageBinding
 
 	// GoImportNames resolves unsafe Go imports without mutating source syntax.
@@ -265,6 +275,7 @@ type Info struct {
 	assemblyNames      map[any]string
 	ProviderBundles    []*ProviderBundle
 	providerBundleUses []*providerBundleUse
+	interpolatorCalls  map[*syntax.Interp]*syntax.Call
 	conversionCalls    map[*syntax.Call]*syntax.Block
 	conversionRecords  map[*syntax.RecordLit]*Record
 	conversionInputs   map[syntax.Expr]bool
@@ -389,6 +400,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			GoBindings:             map[*Func]*GoBinding{},
 			GoImportNames:          checkGoImports(files, diags, goTypes),
 			assemblyCalls:          map[*syntax.Call]*assemblyExpansion{},
+			interpolatorCalls:      map[*syntax.Interp]*syntax.Call{},
 			conversionCalls:        map[*syntax.Call]*syntax.Block{},
 			conversionRecords:      map[*syntax.RecordLit]*Record{},
 			conversionInputs:       map[syntax.Expr]bool{},
@@ -1236,7 +1248,12 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		return c.record(e, Invalid)
 	case *syntax.StringLit:
 		return c.record(e, String)
+	case *syntax.StaticPartsLit:
+		return c.record(e, c.preludePkg.types["StaticParts"].typ)
 	case *syntax.Interp:
+		if e.Prefix != nil {
+			return c.record(e, c.interpolator(e, want))
+		}
 		for _, x := range e.Exprs {
 			if t := c.expr(x); t != Invalid && !isValue(t) {
 				c.errorf(x.Position(), "cannot put a value of type %s in a string", t)

@@ -1,0 +1,12 @@
+Hello [Ada] and [3]!
+literal $
+[nested [Ada]]
+${literal} [125] [3]
+[[}]]
+prefix
+first
+interpolate 1
+second
+interpolate 1
+finish
+2

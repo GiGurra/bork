@@ -278,7 +278,7 @@ methods such as `r.isDigit()` for Unicode tests. These replace the former prelud
 | [bork/process](docs/std/process.md) | Argv processes, captured output and scope cancellation |
 | [bork/rand](docs/std/rand.md) | Random draws and immutable seeded generators |
 | [bork/regex](docs/std/regex.md) | Compiled RE2 patterns, captures and String facts |
-| [bork/sql](docs/std/sql.md) | Scoped SQLite/Postgres connections and transactions |
+| [bork/sql](docs/std/sql.md) | Scoped SQLite/Postgres connections, transactions, and typed SQL literals |
 | [bork/tasks](docs/std/tasks.md) | Shared bounded task pools with typed nonblocking admission |
 | [bork/time](docs/std/time.md) | Instants, durations and injectable clocks |
 | [bork/url](docs/std/url.md) | Immutable URLs, repeated query parameters and escaping |
@@ -295,6 +295,8 @@ output experiment.
 ## License
 
 [MIT](LICENSE)
+
+Typed interpolators retain values separately from literal text: `sql.SQL"SELECT name FROM users WHERE id = $id".Query[User](db)` binds `id` and returns decoded rows. `sql.Name(text)` creates a checked, quoted identifier; nested SQL Statements compose without losing parameters. Libraries can define their own `Prefix"..."` using a typed builder and compiler-created `StaticParts`, which ordinary code cannot construct from runtime Strings. See [bork/sql](docs/std/sql.md) and [the interpolation protocol](docs/grammar.md).
 
 Sequences keep ordered work lazy: `generate[Int] { for (n in Seq.range(0, 10)) { yield n * n } }.take(3).toList()` produces `[0, 1, 4]`. Constructing a `Seq[T]` runs no producer code; each traversal invokes it again. `List.toSeq()`, `map`, `filter`, `flatMap`, `take` and `drop` defer work until `for`, `forEach`, `fold`, `first` or `toList` consumes it. `Seq.unfold(seed, step)` uses a pure step returning `Option[SeqStep[T, S]]`. `Seq[T] uses io` carries effects that consumption must declare. Consumers can `break`, `continue`, `return` or use `?`; stopping closes active producer scopes. `fs.Lines`, `fs.Entries`, `sql.Rows[T]` and `sql.RowsJson` reopen their input on each traversal and yield errors as explicit elements.
 

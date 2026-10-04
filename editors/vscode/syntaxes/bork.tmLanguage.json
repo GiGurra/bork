@@ -99,7 +99,7 @@
     },
     "interpolated-string": {
       "name": "string.interpolated.bork",
-      "begin": "\\bs\"",
+      "begin": "\\b[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)?\"",
       "end": "\"|$",
       "patterns": [
         {
