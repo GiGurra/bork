@@ -15,9 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: ./.github/actions/setup-go
+        id: go-cache
         with:
-          go-version-file: go.mod
+          cache-name: benchmark
       - name: Compiler phases and allocations
         shell: bash
         run: go test ./internal/driver -run '^$' -bench '^BenchmarkCompilerPhases/(hello|synthetic1000)/' -benchtime=3x -count=3 | tee phases.txt
@@ -31,3 +32,8 @@ jobs:
           path: |
             phases.txt
             latency.json
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.go-cache.outputs.cache-paths }}
+          key: ${{ steps.go-cache.outputs.cache-key }}
