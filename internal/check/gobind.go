@@ -506,6 +506,9 @@ func (c *checker) fromGoSeen(g types.Type, t Type, seen map[goConvPair]bool) con
 	}
 	switch u := g.Underlying().(type) {
 	case *types.Basic:
+		if t == Rune {
+			return convResult{ok: u.Kind() == types.Int32, fallible: true}
+		}
 		if n := goNumber(u); n != nil {
 			switch {
 			case IsFloat(n) || IsFloat(t):
@@ -598,6 +601,9 @@ func (c *checker) toGoSeen(t Type, g types.Type, seen map[goConvPair]bool) bool 
 	}
 	switch u := g.Underlying().(type) {
 	case *types.Basic:
+		if t == Rune {
+			return u.Kind() == types.Int32
+		}
 		if n := goNumber(u); n != nil {
 			if IsFloat(n) || IsFloat(t) {
 				return IsFloat(n) && IsFloat(t) && bitsOf(t) <= bitsOf(n)
@@ -652,7 +658,7 @@ func isGoByte(t types.Type) bool { return types.Identical(t, types.Typ[types.Byt
 // isKeyType reports whether a map key converts one to one at the
 // boundary: integers, String, and Bool. (Not floats: NaN keys are
 // never equal, so a Go map can hold several.)
-func isKeyType(t Type) bool { return IsInteger(t) || t == String || t == Bool }
+func isKeyType(t Type) bool { return IsInteger(t) || t == Rune || t == String || t == Bool }
 
 // isGoKeyType is isKeyType for the Go side: an integer, string, or bool
 // type, so that two different Go keys never become one bork key.

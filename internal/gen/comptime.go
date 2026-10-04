@@ -107,7 +107,7 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 				bits = "uint64(math.Float32bits(value))"
 			}
 			scalar("strconv.FormatUint(" + bits + ",16)")
-		case check.IsNumeric(t):
+		case check.IsNumeric(t) || t == check.Rune:
 			e.g.imports["strconv"] = true
 			if t == check.Uint8 || t == check.Uint16 || t == check.Uint32 || t == check.Uint64 {
 				scalar("strconv.FormatUint(uint64(value),10)")

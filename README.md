@@ -264,7 +264,7 @@ Process helpers require `import "bork/process"` (`process.Args()`,
 (`json.Parse`, `json.Render`, `json.Decode[T]`, `json.Encode`); the Json types and
 Decode/Encode classes remain available for derive. Use `time.Sleep(s, duration)` from `bork/time` for cancellable pauses and Rune
 methods such as `r.isDigit()` for Unicode tests. These replace the former prelude globals in a pre-1.0 clean break;
-`runeToString(r)` still gives a character while Rune aliases numeric Int32.
+`toString(r)` renders its character, including in generic and nested values. Use `r.code(): Int32` for its numeric code point and `n.rune(): Option[Rune]` for checked conversion (surrogates and invalid code points return None). JSON represents a Rune as a single-scalar string.
 
 | Package | Description |
 | --- | --- |

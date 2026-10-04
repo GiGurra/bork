@@ -66,7 +66,7 @@ Prelude audit (pre-1.0 clean break): process arguments and exit belong to
 `bork/process` (`Args`, `Exit`); JSON text belongs to `bork/json` (`Parse`,
 `Render`, `Decode`, `Encode`). Sleeping belongs to `bork/time.Sleep`, with a
 scope and a Duration; cancellation is observable as `Cancelled`. There are no
-deprecated aliases. Unicode tests are Rune methods; `runeToString(r)` stays until Rune is distinct from numeric Int32.
+deprecated aliases. Unicode tests are Rune methods; `toString(r)` renders the character, `r.code()` gives its Int32 code point, and `n.rune()` checks an Int32 into Option[Rune].
 
 The JSON type family and Decode/Encode classes remain here because derived
 instances and user instances need a shared vocabulary without imports. Their

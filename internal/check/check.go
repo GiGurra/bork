@@ -5,6 +5,7 @@ import (
 	"go/constant"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -1244,6 +1245,13 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		c.errorf(e.Pos, "invalid float literal %s", e.Text)
 		return c.record(e, Invalid)
 	case *syntax.RuneLit:
+		if len(e.Text) >= 2 {
+			r, _, tail, err := strconv.UnquoteChar(e.Text[1:len(e.Text)-1], '\'')
+			if err == nil && tail == "" && utf8.ValidRune(r) {
+				c.info.consts[e] = constant.MakeInt64(int64(r))
+				return c.record(e, Rune)
+			}
+		}
 		c.errorf(e.Pos, "invalid rune literal %s", e.Text)
 		return c.record(e, Invalid)
 	case *syntax.StringLit:
@@ -1445,7 +1453,7 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 		}
 		return x
 	case syntax.Lt, syntax.LtEq, syntax.Gt, syntax.GtEq:
-		if sameNumbers || (x == String && y == String) {
+		if sameNumbers || (x == String && y == String) || (x == Rune && y == Rune) {
 			return Bool
 		}
 		c.errorf(e.Pos, "operator %s needs two numbers of the same type or two Strings, found %s and %s", op, x, y)

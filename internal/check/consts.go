@@ -4,18 +4,16 @@ import (
 	"go/constant"
 	"go/token"
 	"math"
-	"strconv"
-	"unicode/utf8"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
-// Number and rune literals, and arithmetic on them, are constants: they
+// Number literals, and arithmetic on them, are constants: they
 // are computed exactly at compile time, and take their type from where
 // they are used (`x: Int8 = 100 + 27`). Without a context, a constant
-// with a float literal in it is a Float, one with a rune literal is a
-// Rune, and any other is an Int. A constant is computed as its type
+// with a float literal in it is a Float, and any other is an Int. A
+// constant is computed as its type
 // computes: `/` divides integers as integers (`7 / 2` is 3 as an Int)
 // and floats exactly (`1 / 3` is 0.333... as a Float). A constant that
 // does not fit its type is a compile error.
@@ -39,10 +37,7 @@ func constValueAs(e syntax.Expr, asFloat bool) constant.Value {
 	case *syntax.FloatLit:
 		v = constant.MakeFromLiteral(e.Text, token.FLOAT, 0)
 	case *syntax.RuneLit:
-		// MakeFromLiteral ignores anything after the first rune.
-		if s, err := strconv.Unquote(e.Text); err == nil && utf8.RuneCountInString(s) == 1 {
-			v = constant.MakeFromLiteral(e.Text, token.CHAR, 0)
-		}
+		return nil
 	case *syntax.Unary:
 		if e.Op != syntax.Minus {
 			return nil
@@ -170,17 +165,14 @@ func intRange(t Type) (lo, hi constant.Value) {
 }
 
 // defaultConstType is the type of a constant expression used without a
-// context: Float if it has a float literal, Rune if it has a rune
-// literal, and Int otherwise.
+// context: Float if it has a float literal, and Int otherwise.
 func defaultConstType(e syntax.Expr) Type {
-	hasFloat, hasRune := false, false
+	hasFloat := false
 	var walk func(e syntax.Expr)
 	walk = func(e syntax.Expr) {
 		switch e := e.(type) {
 		case *syntax.FloatLit:
 			hasFloat = true
-		case *syntax.RuneLit:
-			hasRune = true
 		case *syntax.Unary:
 			walk(e.X)
 		case *syntax.Binary:
@@ -192,8 +184,6 @@ func defaultConstType(e syntax.Expr) Type {
 	switch {
 	case hasFloat:
 		return Float
-	case hasRune:
-		return Int32
 	}
 	return Int
 }

@@ -206,3 +206,27 @@ fn _jsonFieldsOf [V](m: Map[String, V]): List[Entry[String, V]] unsafe go {
 instance encodeJson: Encode[Json] {
   fn encode(x: Json): Json { x }
 }
+
+// A Rune encodes as one Unicode scalar in a JSON string.
+instance encodeRune: Encode[Rune] {
+  fn encode(x: Rune): Json { Json.String { value: toString(x) } }
+}
+
+instance decodeRune: Decode[Rune] {
+  fn decode(json: Json): Rune | DecodeError {
+    match (json) {
+      Json.String { value } => if ( _validRuneString (value)) {
+        match (value.runeAt(0)) {
+          Option.Some { value: r } => r
+          Option.None => DecodeError { path: "", message: "expected one Unicode scalar" }
+        }
+      } else { DecodeError { path: "", message: "expected one Unicode scalar" } }
+      other => _decodeMismatch ("one Unicode scalar", other)
+    }
+  }
+}
+
+fn _validRuneString (value: String): Bool unsafe go {
+  import "unicode/utf8"
+  return utf8.ValidString(value) && utf8.RuneCountInString(value) == 1
+}
