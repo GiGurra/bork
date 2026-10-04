@@ -629,3 +629,19 @@ device/inode/mtime/ctime unchanged. SDK content proof remains required. The next
 experiment moves owned receipt verification/publication to a bounded, low-priority
 detached child, retaining ordinary-cost bypasses and explicit opt-out. Automatic
 use waits for measured parent overhead and lifecycle integration.
+
+The detached-publication experiment retains SDK content proof in a child instead
+of charging certification to the edit/compile loop. Nine paired fresh processes
+per row on hello, warm Go cache, with a separate empty result cache for every miss:
+
+| Operation | Ordinary median (min–max), ms | Detached parent median (min–max), ms | Publication completion median (min–max), ms |
+| --- | ---: | ---: | ---: |
+| check | 48.42 (47.70–50.15) | 49.35 (48.08–49.72) | 169.48 (167.29–207.61) |
+| emit | 56.94 (55.46–58.48) | 58.76 (56.89–80.88) | 179.92 (177.93–204.52) |
+
+The parent pays about 0.9–1.8 ms in this experiment, within the ordinary-plus-10–15
+ms miss target. Certification work still happens, at low priority and bounded
+runtime. This measures return latency separately from receipt availability; an
+immediate repeat while publication is in flight may compile again. Large jobs and
+busy/unwritable caches skip publication. Automatic use remains off pending lifecycle
+integration; proof-evaluator programs continue to bypass at ordinary cost.

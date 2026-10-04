@@ -1,0 +1,2 @@
+main.bork:1:18: cannot derive GoStruct for Wrapper: field parts has type StaticParts, which cannot convert to a Go struct field
+main.bork:1:39: cannot derive Decode for Wrapper: package  controls construction of StaticParts; use an instance provided by that package

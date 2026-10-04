@@ -1,0 +1,6 @@
+main.bork:5:12: cannot construct StaticParts: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:6:11: cannot construct StaticParts: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:7:18: cannot copy StaticParts: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:8:25: cannot update fields of StaticParts: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:9:56: cannot convert into StaticParts: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:10:32: no instance of Decode for StaticParts is in scope (declare one: instance name: Decode[StaticParts] { ... })

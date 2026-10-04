@@ -1,0 +1,9 @@
+type Builder = {}
+fn Tag(parts: StaticParts): Builder { Builder {} }
+fn (builder: Builder) Interpolate(value: Int): Builder { builder }
+fn (builder: Builder) Finish(): Int { 1 }
+fn main() {
+  wrongHole = Tag"${"untrusted"}"
+  wrongParts = Tag(["untrusted"])
+  missingPrefix = Unknown"abc"
+}

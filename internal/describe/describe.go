@@ -75,7 +75,7 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 		return &Selection{ProviderBundle: bundle, Package: pkg, Type: check.Invalid, Definition: &bundle.Definition, Expression: bundle.Name}, nil
 	}
 	tokens, _ := syntax.Lex(pos.File, src, &diag.List{})
-	index := &sourceIndex{pos: pos, tokens: tokens, lines: lines}
+	index := &sourceIndex{pos: pos, tokens: tokens, lines: lines, info: info}
 	for _, file := range files {
 		if file.Path != pos.File {
 			continue
@@ -124,6 +124,7 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 }
 
 type sourceIndex struct {
+	info     *check.Info
 	pos      diag.Pos
 	tokens   []syntax.Token
 	lines    []string
@@ -177,6 +178,14 @@ func (s *sourceIndex) selectVar(v *check.Var, site diag.Pos) {
 }
 
 func (s *sourceIndex) walk(x check.Expr) {
+	if source := s.info.Interpolations[x]; source != nil {
+		start, end := source.Prefix.Start, source.Prefix.End
+		if start.File == s.pos.File && (s.pos.Line > start.Line || s.pos.Line == start.Line && s.pos.Col >= start.Col) && (s.pos.Line < end.Line || s.pos.Line == end.Line && s.pos.Col < end.Col) {
+			s.choose(x, x.Type(), definition(source.Factory))
+		}
+		s.walkInterpolationHoles(source.Holes)
+		return
+	}
 	if lit, ok := x.(*check.RecordLit); ok && lit.Promoted {
 		payload := lit.Fields[0].Value
 		s.walk(payload)
@@ -336,27 +345,7 @@ func (s *sourceIndex) walk(x check.Expr) {
 	case *check.Try:
 		s.walk(x.X)
 	case *check.Interp:
-		for _, part := range x.Exprs {
-			// Interpolation expressions are nested inside one lexer token.
-			// Re-index their source so call names and parentheses work too.
-			outer := s.tokens
-			at := part.Pos()
-			if at.File == s.pos.File && at.Line > 0 && at.Line <= len(s.lines) {
-				line := s.lines[at.Line-1]
-				start := at.Col - 1
-				// Grouping parentheses have no typed nodes of their own.
-				for start > 0 && strings.ContainsRune("( \t", rune(line[start-1])) {
-					start--
-				}
-				s.tokens, _ = syntax.Lex(at.File, []byte(line[start:]), &diag.List{})
-				for i := range s.tokens {
-					s.tokens[i].Pos.Line += at.Line - 1
-					s.tokens[i].Pos.Col += start
-				}
-			}
-			s.walk(part)
-			s.tokens = outer
-		}
+		s.walkInterpolationHoles(x.Exprs)
 	case *check.Lambda:
 		for _, param := range x.Params {
 			if s.contains(param.Pos, len(param.Name)) {
@@ -382,6 +371,30 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.walk(key)
 			s.walk(x.Values[i])
 		}
+	}
+}
+
+func (s *sourceIndex) walkInterpolationHoles(holes []check.Expr) {
+	for _, part := range holes {
+		// Interpolation expressions are nested inside one lexer token.
+		// Re-index their source so call names and parentheses work too.
+		outer := s.tokens
+		at := part.Pos()
+		if at.File == s.pos.File && at.Line > 0 && at.Line <= len(s.lines) {
+			line := s.lines[at.Line-1]
+			start := at.Col - 1
+			// Grouping parentheses have no typed nodes of their own.
+			for start > 0 && strings.ContainsRune("( \t", rune(line[start-1])) {
+				start--
+			}
+			s.tokens, _ = syntax.Lex(at.File, []byte(line[start:]), &diag.List{})
+			for i := range s.tokens {
+				s.tokens[i].Pos.Line += at.Line - 1
+				s.tokens[i].Pos.Col += start
+			}
+		}
+		s.walk(part)
+		s.tokens = outer
 	}
 }
 

@@ -59,7 +59,7 @@ func Source(path string, src []byte) ([]byte, error) {
 			text = strings.Trim(t.Kind.String(), "'")
 		}
 		if t.Kind == syntax.TInterp {
-			text = "s" + text
+			text = string(src[offset(t.Pos):offset(t.End)])
 		}
 		if t.Kind == syntax.TGoCode {
 			text = "{" + text + "}"
@@ -152,7 +152,11 @@ func joinsTokens(a, b item) bool {
 		return true
 	}
 	d := &diag.List{}
-	ts, _ := syntax.Lex("", []byte(a.text+b.text), d)
+	left := a.text
+	if a.kind == syntax.TInterp && strings.HasPrefix(left, `"`) {
+		left = "s" + left // a custom prefix is in the preceding formatter item
+	}
+	ts, _ := syntax.Lex("", []byte(left+b.text), d)
 	var kinds []syntax.Kind
 	for _, t := range ts {
 		if t.Kind != syntax.EOF && (t.Kind != syntax.Semi || t.Text == ";") {
@@ -176,6 +180,9 @@ func endsExpr(k syntax.Kind) bool {
 }
 
 func space(a, b item) bool {
+	if a.kind == syntax.TIdent && b.kind == syntax.TInterp && a.end == b.start {
+		return false
+	}
 	if a.comment || b.comment {
 		return true
 	}
