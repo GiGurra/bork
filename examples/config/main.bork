@@ -1,3 +1,4 @@
+import "bork/json"
 // Run with: bork run examples/config
 // No server is started and certificate names are data; the output is deterministic.
 import "example.com/config/settings"
@@ -24,10 +25,10 @@ fn main() {
   println(staging)
   println(production)
   println(configuredHost(production))
-  println(encodeJson(production))
+  println(json.Encode(production))
   // Decoding completes defaults and checks the same field/type invariants.
-  println(decodeJson[settings.Config]("{\"host\":\"decoded.example\",\"connectTimeoutMs\":100,\"readTimeoutMs\":500,\"bodyLimitBytes\":4096}"))
-  println(decodeJson[settings.Config]("{\"host\":\"invalid.example\",\"bodyLimitBytes\":512}"))
+  println(json.Decode[settings.Config]("{\"host\":\"decoded.example\",\"connectTimeoutMs\":100,\"readTimeoutMs\":500,\"bodyLimitBytes\":4096}"))
+  println(json.Decode[settings.Config]("{\"host\":\"invalid.example\",\"bodyLimitBytes\":512}"))
 
   deployment: Deployment = .{ name: "staging", config: staging }
   // Replacing the whole private-valued field with a valid Config is allowed.

@@ -17,7 +17,7 @@ type DivisionByZero = { expr: Expr }
 
 fn skipSpaces(src: String, i: Int): Int {
   match (src.runeAt(i)) {
-    Option.Some { value: r } => if (isSpace(r)) { skipSpaces(src, i + 1) } else { i }
+    Option.Some { value: r } => if (r.isSpace()) { skipSpaces(src, i + 1) } else { i }
     Option.None => i
   }
 }
@@ -81,7 +81,7 @@ fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
         Option.Some { value: ')' } => Parsed { expr: inner.expr, next: close + 1 }
         _ => SyntaxError { at: close, message: "expected )" }
       }
-    } else if (isDigit(r)) {
+    } else if (r.isDigit()) {
       parseNumber(src, at)
     } else {
       SyntaxError { at: at, message: s"unexpected ${runeToString(r)}" }
@@ -92,7 +92,7 @@ fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
 
 fn digitsEnd(src: String, i: Int): Int {
   match (src.runeAt(i)) {
-    Option.Some { value: r } => if (isDigit(r)) { digitsEnd(src, i + 1) } else { i }
+    Option.Some { value: r } => if (r.isDigit()) { digitsEnd(src, i + 1) } else { i }
     Option.None => i
   }
 }

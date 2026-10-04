@@ -1,8 +1,9 @@
+import "bork/time"
 import "bork/tasks"
 fn pure(pool: tasks.Pool, s: Scope): Task[Int] | tasks.TaskLimitReached | Cancelled {
   tasks.TrySpawn(pool, s, () => 1)
 }
 fn badCallback(pool: tasks.Pool, s: Scope) uses state: Task[Int] | tasks.TaskLimitReached | Cancelled {
-  tasks.TrySpawn(pool, s, () => { sleep(1); 1 })
+  tasks.TrySpawn(pool, s, () => { _ = time.Sleep(s, time.Nanoseconds((1) * 1000000)); 1 })
 }
 fn main() {}

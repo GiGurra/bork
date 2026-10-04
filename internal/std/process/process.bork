@@ -2,9 +2,18 @@
 type Process = resource
 type Result = { code: Int, stdout: Bytes, stderr: Bytes }
 
-// Args and Exit are aliases for the prelude's process helpers.
-fn Args() uses io: List[String] { args() }
-fn Exit(code: Int) uses io: Never { exit(code) }
+// Args is the program's command-line arguments (without its name).
+fn Args() uses io: List[String] unsafe go {
+  import "os"
+  return os.Args[1:]
+}
+
+// Exit ends the program with the given status code, without closing
+// scopes.
+fn Exit(code: Int) uses io: Never unsafe go {
+  import "os"
+  os.Exit(int(code))
+}
 
 // Run captures stdout/stderr. A nonzero exit is a Result, not an I/O error.
 // None environment inherits the parent environment; Some([]) clears it.

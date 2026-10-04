@@ -1,3 +1,4 @@
+import codecs "bork/json"
 // CsvError locates a failure. Rows are one-based (header is row 1).
 // For syntax errors column is a byte position; for records it is a field name.
 type CsvError = { row: Int, column: String, message: String }
@@ -55,7 +56,7 @@ fn DecodeCsv[T: Decode](text: String): List[T] | CsvError | CsvErrors {
 fn csvValue(raw: String, kind: String, optional: Bool): Json | JsonError {
   if (optional && raw == "") { return Json.Null }
   if (kind == "string") { return Json.String { value: raw } }
-  parsed = parseJson(raw)?
+  parsed = codecs.Parse(raw)?
   match (parsed) {
     Json.Null => if (optional) {
       JsonError { message: "nonempty optional cell cannot be null; use an empty cell for None" }
@@ -132,7 +133,7 @@ fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bo
 // EncodeCsv writes records in schema field order. None and Some("") both
 // write empty cells, which decode as None. Empty input gives empty text.
 fn EncodeCsv[T: Encode + Decode](values: List[T]): String | CsvError {
-  rows = encodeCsvRows[T](values, value => encode[T](value), renderJson)?
+  rows = encodeCsvRows[T](values, value => encode[T](value), codecs.Render)?
   Csv(rows)
 }
 

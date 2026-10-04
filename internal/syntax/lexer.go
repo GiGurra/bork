@@ -11,18 +11,24 @@ import (
 // `return`, `)`, or `}`); the lexer then emits a Semi token. Comments are
 // returned separately.
 func Lex(file string, src []byte, diags *diag.List) ([]Token, []Comment) {
-	return lexAt(file, src, 1, 1, diags)
+	return lexAt(file, src, 1, 1, diags, false)
 }
 
 // lexAt lexes src as if it started at line:col of file (used for the
 // expressions inside interpolated strings).
-func lexAt(file string, src []byte, line, col int, diags *diag.List) ([]Token, []Comment) {
-	lx := &lexer{file: file, src: src, line: line, col: col, diags: diags}
+func lexAt(file string, src []byte, line, col int, diags *diag.List, compiler bool) ([]Token, []Comment) {
+	lx := &lexer{file: file, src: src, line: line, col: col, diags: diags, compiler: compiler}
 	lx.run()
 	return lx.toks, lx.comments
 }
 
+// LexCompiler permits reserved names in compiler-owned sources and formatting.
+func LexCompiler(file string, src []byte, diags *diag.List) ([]Token, []Comment) {
+	return lexAt(file, src, 1, 1, diags, true)
+}
+
 type lexer struct {
+	compiler bool
 	file     string
 	src      []byte
 	off      int
@@ -184,7 +190,7 @@ func (lx *lexer) ident(pos diag.Pos) {
 		lx.emit(Underscore, text, pos)
 		return
 	}
-	if text[0] == '_' {
+	if text[0] == '_' && !lx.compiler {
 		lx.diags.AddCode(pos, "syntax.error", "identifiers cannot start with '_' (reserved for the compiler)")
 	}
 	lx.emit(TIdent, text, pos)

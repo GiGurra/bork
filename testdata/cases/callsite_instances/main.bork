@@ -1,3 +1,4 @@
+import codecs "bork/json"
 pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
 
 type Port = Int where between(1, 65535)
@@ -22,14 +23,14 @@ fn connect(port: Port): String { s"connecting to port $port" }
 
 fn main() {
   // The constrained instance decodes, and the result is proven a Port.
-  match (decodeJson[Port]("8080")) {
+  match (codecs.Decode[Port]("8080")) {
     p: Int => println(connect(p))
     e: JsonError => println(e)
     e: DecodeError => println(e)
   }
-  println(decodeJson[Port]("70000"))
+  println(codecs.Decode[Port]("70000"))
   // A value known to be a Port encodes with the Port instance.
   p: Port = 443
-  println(encodeJson(p))
-  println(encodeJson(443))
+  println(codecs.Encode(p))
+  println(codecs.Encode(443))
 }

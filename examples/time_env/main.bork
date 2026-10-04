@@ -1,3 +1,4 @@
+import "bork/process"
 // APP_HOST=localhost APP_PORT=8080 bork run examples/time_env -- live
 // The default demo injects both the environment and clock.
 import "bork/env"
@@ -12,7 +13,7 @@ fn report(result: Config | env.ConfigError, clock: time.Clock) uses io + clock {
   }
 }
 fn main() {
-  if (args().includes("live")) {
+  if (process.Args().includes("live")) {
     report(env.Load[Config]("APP"), time.SystemClock())
   } else {
     values = { "APP_HOST": "localhost", "APP_PORT": "8080" }

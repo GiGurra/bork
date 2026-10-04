@@ -47,20 +47,24 @@ func TestPackageLazyChecks(t *testing.T) {
 		{"ambient", "ambient label:String\nfn read()needs label:String{label}\nlazy Value=read()\nfn main(){}", "ambient"},
 		{"fresh comptime initializer", "lazy Value=comptime{21*2}\nfn main(){println(Value)}", ""},
 		{"generic plain renderer", "type C={}\ninstance Render:Show[C]{fn show(c:C):String{Value}}\nfn render[T](value:T):String{s\"$value\"}\nlazy Value:String=render(1)\nfn main(){}", ""},
-		{"decoder invariant cycle", "type C={n:Int} where Valid derive(Decode)\npred Valid(c:C){Value>0}\nlazy Value:Int={_=decodeJson[C](\"{\\\"n\\\":1}\");1}\nfn main(){}", "dependency cycle"},
-		{"derived encoder cycle", "type Child={}\ninstance ChildEncode:Encode[Child]{fn encode(c:Child):Json{Json.String{value:Value}}}\ntype Outer={child:Child} derive(Encode)\nlazy Value:String=encodeJson(Outer{child:Child{}})\nfn main(){}", "dependency cycle"},
-		{"derived decoder cycle", "type Child={}\ninstance ChildDecode:Decode[Child]{fn decode(j:Json):Child|DecodeError{_=Value;Child{}}}\ntype Outer={child:Child} derive(Decode)\nlazy Value:Int={_=decodeJson[Outer](\"{\\\"child\\\":null}\");1}\nfn main(){}", "dependency cycle"},
-		{"derived encoder comptime", "type Child={}\ninstance ChildEncode:Encode[Child]{fn encode(c:Child):Json{Json.String{value:Value}}}\ntype Outer={child:Child} derive(Encode)\nlazy Value:String=\"package\"\nfn main(){println(comptime{encodeJson(Outer{child:Child{}})})}", "comptime cannot read runtime package lazy"},
+		{"decoder invariant cycle", "type C={n:Int} where Valid derive(Decode)\npred Valid(c:C){Value>0}\nlazy Value:Int={_=json.Decode[C](\"{\\\"n\\\":1}\");1}\nfn main(){}", "dependency cycle"},
+		{"derived encoder cycle", "type Child={}\ninstance ChildEncode:Encode[Child]{fn encode(c:Child):Json{Json.String{value:Value}}}\ntype Outer={child:Child} derive(Encode)\nlazy Value:String=json.Encode(Outer{child:Child{}})\nfn main(){}", "dependency cycle"},
+		{"derived decoder cycle", "type Child={}\ninstance ChildDecode:Decode[Child]{fn decode(j:Json):Child|DecodeError{_=Value;Child{}}}\ntype Outer={child:Child} derive(Decode)\nlazy Value:Int={_=json.Decode[Outer](\"{\\\"child\\\":null}\");1}\nfn main(){}", "dependency cycle"},
+		{"derived encoder comptime", "type Child={}\ninstance ChildEncode:Encode[Child]{fn encode(c:Child):Json{Json.String{value:Value}}}\ntype Outer={child:Child} derive(Encode)\nlazy Value:String=\"package\"\nfn main(){println(comptime{json.Encode(Outer{child:Child{}})})}", "comptime cannot read runtime package lazy"},
 		{"generic computed renderer comptime", "type C={}\ninstance Render:Show[C]{fn show(c:C):String{Value}}\nlazy Value:String=\"package\"\ntype Holder[T]={n:T,lazy text:String=s\"$n\"}\nfn main(){println(comptime{Holder[C]{n:C{}}.text})}", "comptime cannot read runtime package lazy"},
-		{"decoder predicate dictionary cycle", "class Bound[T]{fn bound(n:T):Bool}\ninstance Limit:Bound[Int]{fn bound(n:Int):Bool{Value>0}}\npred valid[T:Bound](n:T){bound(n)}\ntype C={n:Int where valid} derive(Decode)\nlazy Value:Int={_=decodeJson[C](\"{\\\"n\\\":1}\");1}\nfn main(){}", "dependency cycle"},
-		{"decoder element predicate cycle", "class Bound[T]{fn bound(n:T):Bool}\ninstance Limit:Bound[Int]{fn bound(n:Int):Bool{Value>0}}\npred valid[T:Bound](n:T){bound(n)}\ntype C={ns:List[Int where valid]} derive(Decode)\nlazy Value:Int={_=decodeJson[C](\"{\\\"ns\\\":[1]}\");1}\nfn main(){}", "dependency cycle"},
+		{"decoder predicate dictionary cycle", "class Bound[T]{fn bound(n:T):Bool}\ninstance Limit:Bound[Int]{fn bound(n:Int):Bool{Value>0}}\npred valid[T:Bound](n:T){bound(n)}\ntype C={n:Int where valid} derive(Decode)\nlazy Value:Int={_=json.Decode[C](\"{\\\"n\\\":1}\");1}\nfn main(){}", "dependency cycle"},
+		{"decoder element predicate cycle", "class Bound[T]{fn bound(n:T):Bool}\ninstance Limit:Bound[Int]{fn bound(n:Int):Bool{Value>0}}\npred valid[T:Bound](n:T){bound(n)}\ntype C={ns:List[Int where valid]} derive(Decode)\nlazy Value:Int={_=json.Decode[C](\"{\\\"ns\\\":[1]}\");1}\nfn main(){}", "dependency cycle"},
 		{"instance predicate", "class Bound[T]{fn bound(n:T):Bool}\ninstance Limit:Bound[Int]{fn bound(n:Int):Bool{n>Value}}\nlazy Value=1\npred good[T:Bound](n:T){bound(n)}\nfn main(){n:Int where good=3;println(n)}", "not proven"},
 		{"computed helper cycle", "lazy Value:Int=read()\ntype C={n:Int,lazy value:Int=n+Value}\nfn read():Int{C{n:0}.value}\nfn main(){}", "dependency cycle"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(tc.source), 0o644); err != nil {
+			source := tc.source
+			if strings.Contains(source, "json.") {
+				source = "import \"bork/json\"\n" + source
+			}
+			if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(source), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			_, _, err := Check(dir)

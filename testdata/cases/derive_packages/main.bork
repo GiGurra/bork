@@ -1,3 +1,4 @@
+import "bork/json"
 import "example.com/tc/api"
 
 // Derived instances are used like any other package's instances.
@@ -6,11 +7,11 @@ use api.StatusDecode
 use api.StatusEncode
 
 fn main() {
-  r: api.Item | JsonError | DecodeError = decodeJson("{\"name\": \"pen\", \"qty\": 0}")
+  r: api.Item | JsonError | DecodeError = json.Decode("{\"name\": \"pen\", \"qty\": 0}")
   println(r)
-  s: api.Status | JsonError | DecodeError = decodeJson("{\"type\": \"Closed\", \"reason\": \"done\"}")
+  s: api.Status | JsonError | DecodeError = json.Decode("{\"type\": \"Closed\", \"reason\": \"done\"}")
   match (s) {
-    st: api.Status => println(encodeJson(st))
+    st: api.Status => println(json.Encode(st))
     e: JsonError => println(e)
     e: DecodeError => println(e)
   }

@@ -15,11 +15,11 @@ import (
 // returned file holds whatever could be parsed.
 func Parse(path string, src []byte, diags *diag.List) *File {
 	toks, comments := Lex(path, src, diags)
-	return parse(path, string(src), toks, comments, diags)
+	return parse(path, string(src), toks, comments, diags, false)
 }
 
-func parse(path, src string, toks []Token, comments []Comment, diags *diag.List) *File {
-	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}}
+func parse(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler bool) *File {
+	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler}
 	f := &File{Path: path, Source: src, Comments: comments}
 	// Imports come first.
 	for {
@@ -128,6 +128,7 @@ func (p *parser) lazyBinding() *Binding {
 type bailout struct{}
 
 type parser struct {
+	compiler bool
 	comments []Comment
 	toks     []Token
 	i        int
@@ -1813,8 +1814,8 @@ func matchingBrace(s string, from int) int {
 
 // subExpr parses the expression inside ${...}, starting at pos.
 func (p *parser) subExpr(src string, pos diag.Pos) (x Expr) {
-	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags)
-	sub := &parser{toks: toks, diags: p.diags, imports: p.imports}
+	toks, _ := lexAt(pos.File, []byte(src), pos.Line, pos.Col, p.diags, p.compiler)
+	sub := &parser{toks: toks, diags: p.diags, imports: p.imports, compiler: p.compiler}
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(bailout); !ok {
