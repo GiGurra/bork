@@ -1,0 +1,34 @@
+type Builder = { parts: List[String], values: List[String] }
+type Output = { text: String }
+fn Tag(parts: StaticParts): Builder { Builder { parts: parts.values, values: [] } }
+fn (builder: Builder) Interpolate[T: Show](value: T): Builder {
+  Builder { parts: builder.parts, values: builder.values.append(show(value)) }
+}
+fn (builder: Builder) Finish(): Output {
+  text = range(0, builder.values.length()).map(i => builder.parts.get(i).getOr("") + "[" + builder.values.get(i).getOr("") + "]").join("")
+  Output { text: text + builder.parts.get(builder.values.length()).getOr("") }
+}
+type TraceBuilder = {}
+fn Trace(parts: StaticParts) uses io: TraceBuilder { println("prefix"); TraceBuilder {} }
+fn nextValue(label: String) uses io: Int { println(label); 1 }
+fn (builder: TraceBuilder) Interpolate(value: Int) uses io: TraceBuilder { println("interpolate", value); builder }
+fn (builder: TraceBuilder) Finish() uses io: Int { println("finish"); 2 }
+instance tagValidator: InterpolationValidator[Builder] {
+  fn validateInterpolation(parts: StaticParts, holes: List[InterpolationHole]): List[InterpolationIssue] {
+    if (parts.values.length() != holes.length() + 1) {
+      [InterpolationIssue { hole: Option.None, message: "invalid parts" }]
+    } else { [] }
+  }
+}
+instance traceValidator: InterpolationValidator[TraceBuilder] {
+  fn validateInterpolation(parts: StaticParts, holes: List[InterpolationHole]): List[InterpolationIssue] { [] }
+}
+fn main() {
+  name = "Ada"
+  println(Tag"Hello $name and ${1 + 2}!".text)
+  println(Tag"literal $$".text)
+  println(Tag"${Tag"nested $name".text}".text)
+  println(Tag"$${literal} ${'}'} ${1 /* } */ + 2}".text)
+  println(Tag"${Tag"${"}"}".text}".text)
+  println(Trace"${nextValue("first")} ${nextValue("second")}")
+}

@@ -32,7 +32,7 @@ fn demo() uses io + net: Ok | sql.Error | DecodeError {
     }
     // Do not put quotes around a hole: the library rejects it during rendering.
     // rejected = sql.SQL"SELECT '$hostile'".Render(sql.Dialect.Sqlite)
-    // This returns sql.Error with operation "interpolate", before any query runs.
+    // This is a compile error: the value hole is inside SQL quotes.
   }
 }
 fn main() {

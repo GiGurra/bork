@@ -23,6 +23,8 @@ type lowerer struct {
 	// withs counts the with bindings, to name them apart.
 	withs                int
 	interpolationSources map[syntax.Expr]Expr
+	interpolationSites   []*InterpolationSite
+	currentFunc          *Func
 }
 
 // needs is what the call or reference x passes for its callee's needs.
@@ -116,9 +118,13 @@ func (c *checker) lower(files []*syntax.File) {
 	for _, r := range c.info.Rules {
 		l.rule(r)
 	}
+	l.interpolationBatches()
 }
 
 func (l *lowerer) function(fn *Func) {
+	previous := l.currentFunc
+	l.currentFunc = fn
+	defer func() { l.currentFunc = previous }()
 	for i, p := range fn.Decl.Params {
 		v := &Var{Name: p.Name, Pos: p.Pos, Type: fn.Params[i], Kind: VarParam, Index: i}
 		if fn.Decl.Constructor != nil {
@@ -338,6 +344,16 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 				l.info.Interpolations = map[Expr]*InterpolationSource{}
 			}
 			l.info.Interpolations[result] = source
+			if dict := l.info.interpolatorValidators[x]; dict != nil {
+				var parts Expr
+				switch call := capture[factory].(type) {
+				case *Call:
+					parts = call.Args[0]
+				case *CallValue:
+					parts = call.Args[0]
+				}
+				l.interpolationSite(x, dict, parts)
+			}
 			return result
 		}
 		return &Interp{expr: at, Parts: x.Parts, Exprs: l.exprs(x.Exprs)}

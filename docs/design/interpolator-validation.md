@@ -9,7 +9,7 @@ class InterpolationValidator[B] {
 type InterpolationHole = { kinds: List[InterpolationKind] }
 type InterpolationKind = sealed {
   Builtin { name: String }
-  Named { package: String, name: String }
+  Named { packagePath: String, name: String }
   Unknown
 }
 type InterpolationIssue = { hole: Option[Int], message: String }
@@ -36,10 +36,10 @@ runtime evaluation and permits effectful holes and factories. Validators and
 helper calls must be pure under existing effects/comptime checks.
 
 Batch distinct validator calls per source package into one execution, preserving
-source order in the result mapping. Deduplicate repeated (validator identity,
-parts, hole kinds) calls and cache their bounded results with the compiler,
-validator/helper closure, Go/module and effective evaluation policy identities;
-batch only cache misses. Files with no validator-bearing interpolation pay zero
+source order in the result mapping. Memoize repeated (resolved validator identity,
+parts, hole kinds) calls within the build and batch only distinct calls.
+Cross-build reuse waits for comptime's certified execution receipts; no separate
+persistent evaluator cache is introduced. Files with no validator-bearing interpolation pay zero
 extra execution cost. Measure check time for a file with about 50 SQL sites
 against main, including warm reuse and a changed-site miss.
 

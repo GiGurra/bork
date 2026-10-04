@@ -26,19 +26,20 @@ fn (builder: Builder) Interpolate(value: Value | Identifier | Statement): Builde
 }
 fn (builder: Builder) Finish(): Statement { Statement { segments: builder.segments } }
 
-// Render rejects unsafe lexical boundaries before any query reaches a driver.
-fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
+type scanError = private { detail: Error, hole: Int, incomplete: Bool }
+// The runtime and compile-time gates share the dialect-aware lexical scanner.
+fn scanStatement(statement: Statement, dialect: Dialect): Rendered | scanError unsafe go {
   import "fmt"
   import "strconv"
   import "strings"
   postgres := false
-  switch dialect.(type) { case Dialect_Postgres: postgres = true; case Dialect_Sqlite: default: return Error{operation: "interpolate", message: "unsupported SQL dialect"} }
+  switch dialect.(type) { case Dialect_Postgres: postgres = true; case Dialect_Sqlite: default: return scanError{detail: Error{operation: "interpolate", message: "unsupported SQL dialect"}, hole: -1} }
   var source strings.Builder
   holes := []any{}
   for _, part := range statement.segments {
     switch part := part.(type) {
     case segment_text:
-      if strings.ContainsRune(part.value, 0) { return Error{operation: "interpolate", message: "SQL literal text contains NUL"} }
+      if strings.ContainsRune(part.value, 0) { return scanError{detail: Error{operation: "interpolate", message: "SQL literal text contains NUL"}, hole: -1} }
       source.WriteString(part.value)
     case segment_bound, segment_name:
       source.WriteByte(0)
@@ -51,7 +52,9 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
   params := []any{}
   hole := 0
   word := func(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '$' || c >= 128 }
-  fail := func(message string) Error { return Error{operation: "interpolate", message: message} }
+  fail := func(message string) scanError { return scanError{detail: Error{operation: "interpolate", message: message}, hole: -1} }
+  failHole := func(message string) scanError { result := fail(message); result.hole = int64(hole); return result }
+  failEnd := func(message string) scanError { result := fail(message); result.incomplete = true; return result }
   // A zero byte represents a structural hole, never caller-supplied SQL bytes.
   for i := 0; i < len(text); {
     c := text[i]
@@ -67,7 +70,7 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
         }
         return word(c) || c == 0 || c == '\'' || c == '"' || c == '`' || !postgres && (c == '[' || c == ']') || c == '@' || c == '.' && !identifier
       }
-      if adjacent(i-1) || adjacent(i+1) { return fail(fmt.Sprintf("SQL hole %d is inside or adjacent to a partial token", hole+1)) }
+      if adjacent(i-1) || adjacent(i+1) { return failHole(fmt.Sprintf("SQL hole %d is inside or adjacent to a partial token", hole+1)) }
       switch part := part.(type) {
       case segment_name:
         query.WriteByte('"')
@@ -89,11 +92,11 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
       i++
       closed := false
       for i < len(text) {
-        if text[i] == 0 { return fail("SQL hole is inside quoted text or an identifier") }
+        if text[i] == 0 { return failHole("SQL hole is inside quoted text or an identifier") }
         if postgres && c == '\'' && text[i] == '\\' {
           if !escape { return fail("Postgres ordinary strings with backslashes are ambiguous; use E-prefixed strings") }
           i++
-          if i < len(text) && text[i] == 0 { return fail("SQL hole is inside an escape string") }
+          if i < len(text) && text[i] == 0 { return failHole("SQL hole is inside an escape string") }
           if i < len(text) { i++ }
           continue
         }
@@ -105,23 +108,23 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
         }
         i++
       }
-      if !closed { return fail("SQL quoted text is not terminated") }
+      if !closed { return failEnd("SQL quoted text is not terminated") }
     } else if c == '-' && i+1 < len(text) && text[i+1] == '-' {
       i += 2
       for i < len(text) && text[i] != '\n' && (!postgres || text[i] != '\r') {
-        if text[i] == 0 { return fail("SQL hole is inside a line comment") }
+        if text[i] == 0 { return failHole("SQL hole is inside a line comment") }
         i++
       }
     } else if c == '/' && i+1 < len(text) && text[i+1] == '*' {
       i += 2
       depth := 1
       for i < len(text) && depth > 0 {
-        if text[i] == 0 { return fail("SQL hole is inside a block comment") }
+        if text[i] == 0 { return failHole("SQL hole is inside a block comment") }
         if i+1 < len(text) && text[i] == '*' && text[i+1] == '/' { depth--; i += 2
         } else if postgres && i+1 < len(text) && text[i] == '/' && text[i+1] == '*' { depth++; i += 2
         } else { i++ }
       }
-      if depth > 0 { return fail("SQL block comment is not terminated") }
+      if depth > 0 { return failEnd("SQL block comment is not terminated") }
     } else if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c >= 128 {
       // Dollar signs inside unquoted identifiers are not parameters or quotes.
       i++
@@ -134,8 +137,8 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
         delimiter := text[i:j+1]
         i = j+1
         end := strings.Index(text[i:], delimiter)
-        if end < 0 { return fail("Postgres dollar quote is not terminated") }
-        if strings.ContainsRune(text[i:i+end], 0) { return fail("SQL hole is inside a dollar quote") }
+        if end < 0 { return failEnd("Postgres dollar quote is not terminated") }
+        if strings.ContainsRune(text[i:i+end], 0) { return failHole("SQL hole is inside a dollar quote") }
         i += end+len(delimiter)
       } else { i++ }
     } else if !postgres && (c == '?' || (c == ':' || c == '@' || c == '$') && i+1 < len(text) && word(text[i+1])) {
@@ -144,6 +147,48 @@ fn (statement: Statement) Render(dialect: Dialect): Rendered | Error unsafe go {
     query.WriteString(text[start:i])
   }
   return Rendered{query: query.String(), params: params}
+}
+
+// Render rejects unsafe lexical boundaries before any query reaches a driver.
+fn (statement: Statement) Render(dialect: Dialect): Rendered | Error {
+  match (scanStatement(statement, dialect)) {
+    value: Rendered => value
+    failure: scanError => failure.detail
+  }
+}
+instance sqlInterpolationValidator: InterpolationValidator[Builder] {
+  fn validateInterpolation(parts: StaticParts, holes: List[InterpolationHole]): List[InterpolationIssue] {
+    validateSQL(parts, holes)
+  }
+}
+fn validateSQL(parts: StaticParts, holes: List[InterpolationHole]): List[InterpolationIssue] unsafe go {
+  segments := []segment{segment_text{value: parts.values[0]}}
+  for i, hole := range holes {
+    identifier := false
+    scalar := false
+    unknown := false
+    for _, kind := range hole.kinds {
+      switch kind := kind.(type) {
+      case InterpolationKind_Builtin: scalar = true
+      case InterpolationKind_Named:
+        if kind.packagePath == "bork/sql" && kind.name == "Identifier" { identifier = true
+        } else if kind.packagePath == "bork/sql" && kind.name == "Null" { scalar = true
+        } else { unknown = true }
+      default: unknown = true
+      }
+    }
+    if unknown || identifier && scalar { break }
+    if identifier { segments = append(segments, segment_name{value: "_validation"})
+    } else { segments = append(segments, segment_bound{value: int64(0)}) }
+    segments = append(segments, segment_text{value: parts.values[i+1]})
+  }
+  statement := Statement{segments: segments}
+  sqlite, left := scanStatement(statement, Dialect_Sqlite{}).(scanError)
+  postgres, right := scanStatement(statement, Dialect_Postgres{}).(scanError)
+  if !left || !right || sqlite.incomplete || postgres.incomplete { return []InterpolationIssue{} }
+  var hole Option[int64] = Option_None[int64]{}
+  if sqlite.hole >= 0 && sqlite.hole == postgres.hole { hole = Option_Some[int64]{value: sqlite.hole} }
+  return []InterpolationIssue{{hole: hole, message: sqlite.detail.message}}
 }
 
 fn dialectOf(connection: Connection | Transaction): Dialect | Error unsafe go {

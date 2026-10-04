@@ -348,6 +348,37 @@ captures every read site before execution, including guarded sites, and gives
 evaluators frozen bytes. Files are limited to 16 MiB each and 64 MiB together.
 Result caching remains planned in the [comptime design](design/comptime.md).
 
+### Writing an interpolation validator
+
+The builder's own package may declare an optional pure
+`InterpolationValidator[Builder]` instance. No caller `use` is required:
+
+```bork
+instance tagValidator: InterpolationValidator[Builder] {
+  fn validateInterpolation(parts: StaticParts, holes: List[InterpolationHole]): List[InterpolationIssue] {
+    if (parts.values.get(0).getOr("").contains("forbidden")) {
+      [InterpolationIssue { hole: Option.None, message: "forbidden literal text" }]
+    } else { [] }
+  }
+}
+```
+
+The compiler supplies literal parts and type metadata, never hole values or a
+runtime builder. Each hole lists `InterpolationKind.Builtin { name }`,
+`Named { packagePath, name }`, or `Unknown`; unions list all possible kinds.
+Return `[]` to accept, `Option.Some { value: index }` to report at a zero-based
+hole, or `Option.None` at the prefix. Messages include the validator's name.
+Use Unknown conservatively when the property depends on runtime data.
+
+Validators and their helpers must be pure. Concrete generic instances resolve
+all dictionaries in the builder owner's scope; constrained heads and unresolved
+runtime dictionaries are rejected. The compiler batches distinct calls per
+package, evaluates them with the bounded native comptime evaluator, and memoizes
+identical parts/kinds within a build. Panics, invalid indices and timeouts fail
+checking. Runtime hole/factory evaluation remains once-only in source order.
+Libraries must keep runtime checks for properties metadata cannot prove; see
+[SQL's compile-time and render-time checks](std/sql.md).
+
 ## Compiler command settings
 
 These are CLI forms, independent of source syntax:
