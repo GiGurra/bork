@@ -143,7 +143,12 @@ class MeasurementTests(unittest.TestCase):
                 pid = int(pid_file.read_text())
                 state = Path(f"/proc/{pid}/stat")
                 deadline = time.monotonic() + 1
-                while state.exists() and state.read_text().split()[2] != "Z":
+                while True:
+                    try:
+                        if state.read_text().split()[2] == "Z":
+                            break
+                    except FileNotFoundError:
+                        break
                     self.assertLess(time.monotonic(), deadline, "descendant survived timeout")
                     time.sleep(0.01)
             finally:
