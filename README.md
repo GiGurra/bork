@@ -160,6 +160,12 @@ bork deps download          # download pinned dependencies and fill checksums
 
 Use `bork check --watch path` for ongoing diagnostics, or add `--json` for complete result objects. See [watch mode](docs/watch.md) for tracked inputs, manual retriggers, and the streaming format.
 
+Use `bork clean` to remove current compiler cache artifacts and staged Go sources.
+`bork clean --all` also removes other compiler namespaces and older recognized
+staging versions. Cleanup preserves project outputs and Go's own cache; it waits
+for active builds, and Ctrl-C cancels the wait.
+
+
 For tools and agents, `bork check --json path | jq` emits one diagnostic per line on stdout. `bork build --json` and `bork test --json` emit the same JSON Lines on stderr, leaving stdout for test reports. Successful compilation emits no diagnostics; compilation errors still exit with status 1. See [the diagnostic format](docs/diagnostics.md) for codes, positions, and suggested text edits.
 
 `bork/cli` supports typed subcommands with command-specific decoded options, generated help, and scoped handlers. See [the subcommand API](docs/std/cli.md#subcommands).
