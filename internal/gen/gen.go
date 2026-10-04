@@ -378,6 +378,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 }
 
 type gen struct {
+	artifactMode   bool
 	candidateNames map[*check.Var]*ast.Ident
 	info           *check.Info
 	tmp            int
