@@ -25,6 +25,21 @@ func lifecycleBody(t *testing.T, original *cacheArtifactBody, index int) *cacheA
 	}
 	return &body
 }
+func distinctLifecycleBodies(t *testing.T, store cacheStore, original *cacheArtifactBody, count int) []*cacheArtifactBody {
+	t.Helper()
+	slots := map[string]bool{}
+	var bodies []*cacheArtifactBody
+	for index := 1; len(bodies) < count; index++ {
+		body := lifecycleBody(t, original, index)
+		slot := store.lockName(body.Key)
+		if slots[slot] {
+			continue
+		}
+		slots[slot] = true
+		bodies = append(bodies, body)
+	}
+	return bodies
+}
 func inventoryForTest(t *testing.T, store cacheStore) []cacheResultEntry {
 	t.Helper()
 	root, err := os.OpenRoot(store.root)
@@ -42,7 +57,8 @@ func TestCacheResultBudgetAcrossNamespaces(t *testing.T) {
 	original, _ := cacheArtifactFixture(t)
 	policy := cacheLimits{resultBytes: 1 << 20, entries: 2}
 	store := cacheStore{root: t.TempDir(), namespace: original.Namespace, policy: &policy}
-	first := lifecycleBody(t, original, 1)
+	bodies := distinctLifecycleBodies(t, store, original, 3)
+	first := bodies[0]
 	if err := store.write(first); err != nil {
 		t.Fatal(err)
 	}
@@ -51,14 +67,14 @@ func TestCacheResultBudgetAcrossNamespaces(t *testing.T) {
 	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
-	second := lifecycleBody(t, original, 2)
+	second := bodies[1]
 	second.Namespace = sha256.Sum256([]byte("other compiler"))
 	other := store
 	other.namespace = second.Namespace
 	if err := other.write(second); err != nil {
 		t.Fatal(err)
 	}
-	third := lifecycleBody(t, original, 3)
+	third := bodies[2]
 	if err := store.write(third); err != nil {
 		t.Fatal(err)
 	}
@@ -85,8 +101,9 @@ func TestCacheResultByteBudgetAndCrashTemporary(t *testing.T) {
 	}
 	policy := cacheLimits{resultBytes: int64(len(encoded)) * 2, entries: 10}
 	store := cacheStore{root: t.TempDir(), namespace: body.Namespace, policy: &policy}
-	for i := 1; i <= 4; i++ {
-		if err := store.write(lifecycleBody(t, original, i)); err != nil {
+	bodies := distinctLifecycleBodies(t, store, original, 6)
+	for _, body := range bodies[:4] {
+		if err := store.write(body); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -101,14 +118,14 @@ func TestCacheResultByteBudgetAndCrashTemporary(t *testing.T) {
 	if err := os.WriteFile(temporary, make([]byte, 100), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.write(lifecycleBody(t, original, 5)); err != nil {
+	if err := store.write(bodies[4]); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(temporary); !os.IsNotExist(err) {
 		t.Fatalf("abandoned payload survived: %v", err)
 	}
 	policy.resultBytes = 1
-	if err := store.write(lifecycleBody(t, original, 6)); err == nil {
+	if err := store.write(bodies[5]); err == nil {
 		t.Fatal("oversized publication accepted")
 	}
 }
