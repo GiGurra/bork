@@ -332,7 +332,13 @@ func (s *lintSource) exprRange(expression syntax.Expr) (diag.Pos, diag.Pos) {
 				_, end = bounds(expr.Else)
 			}
 			return expr.Pos, end
-		case *syntax.Ident, *syntax.BoolLit, *syntax.IntLit, *syntax.FloatLit, *syntax.StringLit, *syntax.RuneLit, *syntax.Interp, *syntax.ContextName:
+		case *syntax.Interp:
+			if expr.Prefix != nil {
+				start, _ := bounds(expr.Prefix)
+				return start, leaf(expr.PrefixEnd)
+			}
+			return expr.Pos, leaf(expr.Pos)
+		case *syntax.Ident, *syntax.BoolLit, *syntax.IntLit, *syntax.FloatLit, *syntax.StringLit, *syntax.RuneLit, *syntax.ContextName:
 			return expr.Position(), leaf(expr.Position())
 		}
 		return diag.Pos{}, diag.Pos{}

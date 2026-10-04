@@ -182,3 +182,40 @@ func BenchmarkLintManyExpressions(b *testing.B) {
 		_ = check.LintWarnings(files, info)
 	}
 }
+
+func TestLintNamedInterpolationFixPreservesCalls(t *testing.T) {
+	source := `type Builder = {}
+fn Tag(parts: StaticParts): Builder { Builder{} }
+fn (b: Builder) Finish(): Bool { true }
+fn main() { _ = Tag"abc" && true }
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := Lint(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range warnings {
+		if w.Code != "lint.simplify" {
+			continue
+		}
+		found = true
+		fixed := applyLintEdits(t, source, w.Fixes[0].Edits)
+		if !strings.Contains(fixed, `(Tag"abc")`) {
+			t.Fatalf("interpolator dropped: %s", fixed)
+		}
+		if err := os.WriteFile(path, []byte(fixed), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := Check(path); err != nil {
+			t.Fatalf("invalid interpolation fix: %v\n%s", err, fixed)
+		}
+	}
+	if !found {
+		t.Fatal("missing interpolation simplification")
+	}
+}
