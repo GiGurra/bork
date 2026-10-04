@@ -640,10 +640,11 @@ type CopyUpdate struct {
 
 // Match is `match (x) { pattern => value, ... }`.
 type Match struct {
-	Pos   diag.Pos
-	Close diag.Pos // the closing brace, before which new arms can be inserted
-	X     Expr
-	Arms  []*Arm
+	Pos               diag.Pos
+	Close             diag.Pos // the closing brace, before which new arms can be inserted
+	TrailingSeparator bool     // the final arm already has a comma or newline
+	X                 Expr
+	Arms              []*Arm
 }
 
 type Arm struct {

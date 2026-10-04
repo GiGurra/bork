@@ -2,7 +2,6 @@ package lsp
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -21,9 +20,13 @@ func TestLintWarningsAndQuickFix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, _ := json.Marshal(actions)
-	if !strings.Contains(string(body), `"newText":"_"`) {
-		t.Fatalf("quick fix: %s", body)
+	items := actions.([]any)
+	if len(items) != 1 {
+		t.Fatalf("quick fixes: %+v", items)
+	}
+	changes := items[0].(map[string]any)["edit"].(map[string]any)["changes"].(map[string][]textEdit)
+	if edits := changes[fileURI(path)]; len(edits) != 1 || edits[0].NewText != "fn main() {\n  _ = 42\n}\n" {
+		t.Fatalf("quick fix: %+v", changes)
 	}
 	s.docs[path] = document{"fn main() {\n // lint:ignore lint.unused-binding intentional\n unused = 42\n}\n", 2}
 	if err := s.check(); err != nil {

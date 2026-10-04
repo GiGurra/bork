@@ -18,15 +18,37 @@ func TestDiagnosticActionsCheckAndFormat(t *testing.T) {
 	for _, tc := range []struct{ name, source, title, want string }{
 		{"boolean", "fn choose(x: Bool): Int { match (x) { true => 1 } }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
 		{"empty", "fn choose(x: Bool): Int { match (x) {} }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
-		{"union", "fn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "value: String => todo()"},
+		{"union", "fn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "missingValue: String => todo()"},
+		{"binding collision", "fn choose(missingValue: Int | String): Int { match (missingValue) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "missingValue2: String => todo()"},
+		{"function collision", "fn missingValue() {}\nfn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "missingValue2: String => todo()"},
+		{"interpolation", "fn choose(x: Bool): String { s\"${match (x) { true => 1 }}\" }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
 		{"payload", "type Choice = sealed { Yes { value: Bool }, No }\nfn choose(x: Choice): Int { match (x) { Choice.No => 1 } }\nfn main() {}\n", "Add missing match arms", "Choice.Yes { value: _ } => todo()"},
 		{"partial payload", "type Choice = sealed { Yes { value: Bool }, No }\nfn choose(x: Choice): Int { match (x) { Choice.Yes { value: true } => 1, Choice.No => 2 } }\nfn main() {}\n", "Add missing match arms", "value: _"},
 		{"infinite", "fn choose(x: Int): Int { match (x) { 1 => 1 } }\nfn main() {}\n", "Add missing match arms", "_ => todo()"},
 		{"list", "fn choose(x: List[Int]): Int { match (x) { [] => 0 } }\nfn main() {}\n", "Add missing match arms", "[_, ...] => todo()"},
 		{"effect", "fn print() { println(1) }\nfn main() {}\n", "declare uses io", "fn print() uses io"},
+		{"transitive alias", "import \"example.com/review/api\"\nfn choose(x: api.Choice): Int { match (x) { api.Choice.No => 1 } }\nfn main() {}\n", "Add missing match arms", "_ => todo()"},
+		{"transitive sequence alias", "import \"example.com/review/api\"\nfn choose(x: Int | api.Items): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "_ => todo()"},
+		{"private variant", "import \"example.com/review/model\"\nfn choose(x: model.Hidden): Int { match (x) { model.Hidden.Public => 1 } }\nfn main() {}\n", "Add missing match arms", "_ => todo()"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
+			if strings.HasPrefix(tc.name, "transitive") || tc.name == "private variant" {
+				files := map[string]string{
+					"bork.mod":         "module example.com/review\n",
+					"model/model.bork": "type Choice[T] = sealed { Yes { Value: T }, No }\ntype Hidden = sealed { Public, hidden }\ntype Item = { Value: Int }\n",
+					"api/api.bork":     "import \"example.com/review/model\"\ntype Choice = model.Choice[Int]\ntype Items = Seq[model.Item]\n",
+				}
+				for name, source := range files {
+					file := filepath.Join(dir, name)
+					if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(file, []byte(source), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
 			path := filepath.Join(dir, "main.bork")
 			if err := os.WriteFile(path, []byte(tc.source), 0o644); err != nil {
 				t.Fatal(err)
