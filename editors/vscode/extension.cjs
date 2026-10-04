@@ -3,6 +3,21 @@ const { LanguageClient, TransportKind, State } = require('vscode-languageclient/
 
 let client;
 let stateListener;
+let starting;
+
+async function disposeClient() {
+  const previous = client;
+  client = undefined;
+  stateListener?.dispose();
+  if (!previous) return;
+  const running = previous.isRunning();
+  try {
+    await previous.dispose();
+  } catch (error) {
+    // LanguageClient 9 rejects shutdown after a failed connection attempt.
+    if (running) throw error;
+  }
+}
 
 async function activate(context) {
   const watchers = [
@@ -69,13 +84,10 @@ async function activate(context) {
     if (restarting) return restarting;
     restarting = (async () => {
       try {
-        if (client) {
-          const previous = client;
-          client = undefined;
-          stateListener.dispose();
-          await previous.dispose();
-        }
-        await start();
+        await starting;
+        await disposeClient();
+        starting = start();
+        await starting;
       } catch (error) {
         state = 'Failed';
         updateStatus();
@@ -97,15 +109,13 @@ async function activate(context) {
     }),
     { dispose() { stateListener?.dispose(); } },
   );
-  await start();
+  starting = start();
+  await starting;
 }
 
 async function deactivate() {
-  if (client) {
-    stateListener?.dispose();
-    await client.dispose();
-    client = undefined;
-  }
+  await starting;
+  await disposeClient();
 }
 
 module.exports = { activate, deactivate };

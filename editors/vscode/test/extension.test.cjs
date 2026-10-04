@@ -20,11 +20,17 @@ function loadExtension(startError) {
     }
     async start() {
       calls.started = true;
+      this.running = false;
       this.changeState(State.Starting);
-      if (startError) throw startError;
+      if (startError) { this.failed = true; throw startError; }
+      this.running = true;
       this.changeState(State.Running);
     }
-    async dispose() { calls.stopped = true; this.disposed = true; }
+    isRunning() { return this.running; }
+    async dispose() {
+      calls.stopped = true; this.disposed = true;
+      if (this.failed) throw new Error("Client is not running and cannot be stopped");
+    }
   }
   const status = { show() { calls.visible = true; }, hide() { calls.visible = false; }, dispose() {} };
   calls.status = status;
@@ -52,7 +58,7 @@ function loadExtension(startError) {
     require: name => name === 'vscode' ? vscode : { LanguageClient, State, TransportKind: { stdio: 0 } },
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../extension.cjs'), 'utf8'), sandbox);
-  return { extension: sandbox.module.exports, calls, vscode, State };
+  return { extension: sandbox.module.exports, calls, vscode, State, clearStartError() { startError = undefined; } };
 }
 
 test('client launches configured binary over stdio and disposes on deactivation', async () => {
@@ -123,7 +129,20 @@ test('language defaults use formatter indentation and balanced bracket rules', (
   const config = require('../language-configuration.json');
   const increase = new RegExp(config.indentationRules.increaseIndentPattern);
   const decrease = new RegExp(config.indentationRules.decreaseIndentPattern);
-  for (const line of ['fn main() {', 'values = [', 'call(']) assert.equal(increase.test(line), true, line);
-  for (const line of ['// comment {', 'fn main() {}', 'call()']) assert.equal(increase.test(line), false, line);
+  for (const line of ['fn main() {', 'values = [', 'call(', 'call(other(),', 'fn main() { // call()']) assert.equal(increase.test(line), true, line);
+  for (const line of ['// comment {', 'fn main() {}', 'call()', 'message = "{"']) assert.equal(increase.test(line), false, line);
   for (const line of ['  }', ']', ')']) assert.equal(decrease.test(line), true, line);
+});
+
+test('restart recovers immediately after a failed connection attempt', async () => {
+  const { extension, calls, clearStartError } = loadExtension(new Error('ENOENT'));
+  await extension.activate({ subscriptions: [] });
+  clearStartError();
+  calls.serverPath = '/fixed/bork';
+  await calls.commands['bork.restartServer']();
+  assert.equal(calls.clients.length, 2);
+  assert.equal(calls.clients[0].disposed, true);
+  assert.equal(calls.server.command, '/fixed/bork');
+  assert.equal(calls.status.text, 'bork v0.4.2: Running');
+  await extension.deactivate();
 });
