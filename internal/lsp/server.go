@@ -182,6 +182,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 		s.initialized = true
 		return map[string]any{"capabilities": map[string]any{
 			"positionEncoding": "utf-16", "textDocumentSync": map[string]any{"openClose": true, "change": 1, "save": map[string]any{"includeText": false}},
+			"signatureHelpProvider":  map[string]any{"triggerCharacters": []string{"(", ",", ":"}, "retriggerCharacters": []string{","}},
 			"semanticTokensProvider": semanticTokensCapability(),
 			"hoverProvider":          true, "definitionProvider": true, "documentFormattingProvider": true,
 			"referencesProvider": true, "renameProvider": map[string]any{"prepareProvider": true},
@@ -208,7 +209,7 @@ func (s *server) handle(m message) (any, *rpcError, bool) {
 	}
 	switch m.Method {
 	case "textDocument/didOpen", "textDocument/didChange", "textDocument/didSave", "textDocument/didClose",
-		"textDocument/semanticTokens/full", "textDocument/semanticTokens/range",
+		"textDocument/signatureHelp", "textDocument/semanticTokens/full", "textDocument/semanticTokens/range",
 		"textDocument/hover", "textDocument/definition", "textDocument/completion", "textDocument/references",
 		"textDocument/rename", "textDocument/prepareRename", "textDocument/formatting", "textDocument/documentSymbol", "textDocument/codeAction", "textDocument/codeLens", "bork/tests":
 	default:

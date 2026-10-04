@@ -102,6 +102,22 @@ strings and operators with the compiler lexer. It does not apply old symbol
 positions to changed text. Local highlighting grammars continue to highlight
 identifiers, interpolation and embedded Go until checking succeeds again.
 
+## Signature help
+
+Typing a call shows its parameter list, default values, result, effects and
+adjacent declaration documentation. The active parameter follows positional or
+named arguments, including reversed named order. Bound methods omit their
+receiver; unbound methods include it. Explicit generic arguments and checked
+call instantiations specialize the displayed types. Function values show their
+parameter types without inventing declaration names.
+
+The server triggers help on `(`, `,` and `:`. After a broken edit it recovers the
+call from current compiler tokens and uses the last checked declarations,
+marking the documentation **Stale**. Existing expression receivers remain
+available while their arguments are edited. Newly introduced complex receivers
+need a successful check before their types are available. Unsolved generic
+parameters retain their names, and unknown calls have no signature help.
+
 ## Lint warnings
 
 Unused bindings, parameters and private declarations, proved predicate checks,
