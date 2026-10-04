@@ -336,3 +336,6 @@ separate from runtime guards. Direct `bork/build.ReadString` and `ReadBytes` cal
 capture constant module-relative files under the `build` effect. Result caching
 remains planned in the
 [comptime design](docs/design/comptime.md).
+
+Contributor test shards, timing refresh and Go cache behavior are documented in
+[the CI guide](docs/ci.md).
