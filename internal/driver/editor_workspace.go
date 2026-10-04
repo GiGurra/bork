@@ -68,7 +68,6 @@ func (w *EditorWorkspace) References(def diag.Pos) []check.SourceReference {
 // are excluded unless supplied as explicit workspace roots.
 func WorkspacePackages(path string, roots []string, overlays map[string]string) ([]string, error) {
 	reader := overlaySources{files: overlays}
-	cache := modcache.Root()
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -89,6 +88,7 @@ func WorkspacePackages(path string, roots []string, overlays map[string]string) 
 		}
 		return []string{dir}, nil
 	}
+	cache := modcache.Root()
 	roots = append(slices.Clone(roots), owner.root)
 	packages := map[string]bool{}
 	visited := map[string]bool{}
@@ -359,7 +359,12 @@ func AnalyzeNavigationWorkspace(path string, roots []string, overlays map[string
 	candidates := append(slices.Clone(roots), path)
 	owned := map[string]bool{}
 	reader := overlaySources{files: overlays}
+	seen := map[string]bool{}
 	for _, candidate := range candidates {
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
 		paths, err := WorkspacePackages(candidate, roots, overlays)
 		if err != nil {
 			return nil, err

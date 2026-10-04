@@ -17,6 +17,7 @@ type EditorNavigationItem struct {
 type EditorCallEdge struct {
 	Caller, Callee EditorNavigationItem
 	Start, End     diag.Pos
+	Reference      diag.Pos
 }
 
 func (a *EditorAnalysis) navigationItem(item check.EditorNavigationItem) EditorNavigationItem {
@@ -164,20 +165,27 @@ func (a *EditorAnalysis) EditorCalls() []EditorCallEdge {
 		if caller.SelectionStart.Line == 0 || callee.SelectionStart.Line == 0 {
 			continue
 		}
-		out = append(out, EditorCallEdge{Caller: caller, Callee: callee, Start: start, End: end})
+		out = append(out, EditorCallEdge{Caller: caller, Callee: callee, Reference: item(edge.SourceCallee).SelectionStart, Start: start, End: end})
 	}
 	a.navigationCalls = out
 	return slices.Clone(out)
 }
 
 func (a *EditorAnalysis) EditorCallHierarchy(pos diag.Pos) (*EditorNavigationItem, error) {
+	definition, _ := a.Definition(pos)
+	var selected *EditorCallEdge
 	for _, edge := range a.EditorCalls() {
-		if pos.File == edge.Start.File && pos.Line == edge.Start.Line && pos.Col >= edge.Start.Col && (pos.Line < edge.End.Line || pos.Col < edge.End.Col) {
-			item := edge.Callee
-			return &item, nil
+		if (definition == nil || edge.Reference == *definition) && pos.File == edge.Start.File && pos.Line == edge.Start.Line && pos.Col >= edge.Start.Col && (pos.Line < edge.End.Line || pos.Col < edge.End.Col) {
+			if selected == nil || edge.End.Line < selected.End.Line || edge.End.Line == selected.End.Line && edge.End.Col < selected.End.Col {
+				copy := edge
+				selected = &copy
+			}
 		}
 	}
-	definition, _ := a.Definition(pos)
+	if selected != nil {
+		item := selected.Callee
+		return &item, nil
+	}
 	functions := make([]*check.Func, 0, len(a.program.info.FuncOf)+len(a.program.info.Tests))
 	for _, fn := range a.program.info.FuncOf {
 		functions = append(functions, fn)

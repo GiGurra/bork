@@ -284,3 +284,106 @@ func TestNavigationMultiRoot(t *testing.T) {
 		t.Fatalf("second workspace root lost: %s", results[2])
 	}
 }
+
+func TestNavigationMethodReceiver(t *testing.T) {
+	dir, path, main, api := navigationFixture(t)
+	apiPath := filepath.Join(dir, "api/api.bork")
+	api += "fn (box: Box) ValueOf(): Int { box.Value }\n"
+	main += "fn chained(): Int { api.Make().ValueOf() }\n"
+	if err := os.WriteFile(apiPath, []byte(api), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(main), 0600); err != nil {
+		t.Fatal(err)
+	}
+	results := navigationResponses(t, []map[string]any{
+		{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{"rootUri": fileURI(dir)}},
+		{"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": map[string]any{"textDocument": map[string]any{"uri": fileURI(path), "version": 1, "text": main}}},
+		navigationMessage(2, "textDocument/prepareCallHierarchy", path, navigationPosition(t, main, "api.Make().ValueOf")),
+		navigationMessage(3, "textDocument/prepareCallHierarchy", path, navigationPosition(t, main, "ValueOf()")),
+	})
+	var items []hierarchyItem
+	if err := json.Unmarshal(results[2], &items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Name != "Make" {
+		t.Fatalf("wrong nested call target %s", results[2])
+	}
+	if err := json.Unmarshal(results[3], &items); err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Name != "ValueOf" {
+		t.Fatalf("wrong method target %s", results[3])
+	}
+}
+
+func TestNavigationWorkspaceCacheValidatesDiskAndOverlays(t *testing.T) {
+	dir, path, main, _ := navigationFixture(t)
+	s := &server{docs: map[string]document{}, workspaceRoots: []string{dir}}
+	query := func(name string) []byte {
+		t.Helper()
+		result, err := s.navigationRequest("workspace/symbol", json.RawMessage(fmt.Sprintf(`{"query":%q}`, name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	if !bytes.Contains(query("Worker"), []byte(`"Worker"`)) {
+		t.Fatal("missing initial closed symbol")
+	}
+	workerPath := filepath.Join(dir, "worker/worker.bork")
+	if err := os.WriteFile(workerPath, []byte("fn Changed(): Int { 1 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(query("Changed"), []byte(`"Changed"`)) || string(query("Worker")) != "[]" {
+		t.Fatal("disk change reused stale symbols")
+	}
+	s.docs[path] = document{text: main + "fn OverlayOnly(): Int { 1 }\n", version: 2}
+	if !bytes.Contains(query("OverlayOnly"), []byte(`"OverlayOnly"`)) {
+		t.Fatal("unsaved symbol omitted")
+	}
+	s.docs[path] = document{text: main, version: 3}
+	if string(query("OverlayOnly")) != "[]" {
+		t.Fatal("overlay change reused stale symbols")
+	}
+}
+
+func BenchmarkNavigationHTTPServer(b *testing.B) {
+	path, err := filepath.Abs("../../examples/http_server/main.bork")
+	if err != nil {
+		b.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	src := string(raw)
+	s := &server{out: &bytes.Buffer{}, initialized: true, docs: map[string]document{path: {src, 1}}, packages: map[string]*packageState{}, diagnostics: map[string][]diag.Diagnostic{}, workspaceRoots: []string{filepath.Dir(path)}}
+	if err := s.check(); err != nil {
+		b.Fatal(err)
+	}
+	a := s.state(path).analysis
+	_ = a.EditorCalls()
+	b.Run("calls", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			if len(a.EditorCalls()) == 0 {
+				b.Fatal("missing calls")
+			}
+		}
+	})
+	b.Run("symbols", func(b *testing.B) {
+		if _, err := s.navigationRequest("workspace/symbol", json.RawMessage(`{"query":"Store"}`)); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if _, err := s.navigationRequest("workspace/symbol", json.RawMessage(`{"query":"Store"}`)); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}

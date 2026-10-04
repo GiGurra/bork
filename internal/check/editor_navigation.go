@@ -16,8 +16,8 @@ type EditorNavigationItem struct {
 	Container string
 }
 type EditorCallEdge struct {
-	Caller, Callee EditorNavigationItem
-	Start, End     diag.Pos
+	Caller, Callee, SourceCallee EditorNavigationItem
+	Start, End                   diag.Pos
 }
 
 // EditorTypeDefinitions follows checked types, including generic/container and
@@ -178,6 +178,7 @@ func EditorCalls(info *Info) []EditorCallEdge {
 		if caller == nil || target == nil {
 			continue
 		}
+		sourceCallee := navigationFunction(target)
 		if instance := info.instances[call]; target.Class != nil && instance != nil {
 			for _, dict := range instance.Dicts {
 				if dict.Class == target.Class && dict.Inst != nil {
@@ -197,7 +198,7 @@ func EditorCalls(info *Info) []EditorCallEdge {
 		if end.Line == 0 {
 			end = call.Pos
 		}
-		out = append(out, EditorCallEdge{Caller: navigationFunction(caller), Callee: navigationFunction(target), Start: start, End: end})
+		out = append(out, EditorCallEdge{Caller: navigationFunction(caller), Callee: navigationFunction(target), SourceCallee: sourceCallee, Start: start, End: end})
 	}
 	slices.SortFunc(out, func(a, b EditorCallEdge) int {
 		if n := strings.Compare(a.Start.File, b.Start.File); n != 0 {
