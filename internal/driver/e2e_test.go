@@ -73,8 +73,8 @@ func TestCases(t *testing.T) {
 }
 
 func runOutputCase(t *testing.T, dir string) {
-	exe := filepath.Join(t.TempDir(), "program")
-	if err := Build(dir, exe); err != nil {
+	exe, err := buildFixtureOutput(t, dir)
+	if err != nil {
 		t.Fatalf("build failed:\n%v", err)
 	}
 	cmd := exec.Command(exe)
@@ -166,8 +166,8 @@ func TestExamples(t *testing.T) {
 		name := e.Name()
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			exe := filepath.Join(t.TempDir(), "program")
-			if err := Build(filepath.Join(root, name), exe); err != nil {
+			exe, err := buildFixtureOutput(t, filepath.Join(root, name))
+			if err != nil {
 				t.Fatalf("build failed:\n%v", err)
 			}
 			var args []string
