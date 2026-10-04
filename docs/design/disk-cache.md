@@ -105,57 +105,68 @@ errors are misses; cache write errors never replace successful compilation
 with an error. Remove abandoned temporary files during maintenance. Verify all
 compiler-produced payloads against clean compilation in the parity tests.
 
-## Shared cache budget and staging lifecycle
+## Age-based lifecycle and direct lookup
 
-Default to a combined 512 MiB budget: 256 MiB for result artifacts and 256 MiB
-for staged source trees, with at most 1,024 entries per layer. Track actual
-stored bytes, not only source bytes. A result over its per-entry bound, or a
-stage tree over the staging budget, still builds through the uncached path.
-Budget limits may become explicit options after behavior is measured. Limits
-apply to retained published entries. Replacement temporaries are bounded per
-request and may transiently coexist with the old tree; account their maximum
-separately. Before publication, evict eligible inactive entries and recheck
-admission under the mutation lock. If busy entries prevent fitting the new
-entry within byte/count limits, do not publish: return the fresh result without
-persistence, or build Go in temporary staging. No unbounded retained overshoot
-is allowed merely because maintenance skipped busy entries.
+The next lifecycle slice replaces aggregate size/count budgets and build-time
+inventory/eviction with Go's build-cache retention policy. There is no retained
+byte or entry-count limit, accounting ledger, admission scan, or eviction during
+a build. Artifact decoder and receipt bounds still apply to individual results;
+they protect decoding and do not measure total disk use.
 
-Track last use on both layers, including reused stage trees. Add a small
-versioned staging metadata record with canonical program directory, mode,
-pinned-context identity and last-use evidence; a hashed directory name cannot
-reveal whether its program was deleted. Standalone-file result entries also
-record the selected target, so maintenance can recognize a deleted file even
-when its parent remains.
+Use direct hash-derived paths with two-hex-digit fan-out at every potentially
+large directory level. New layouts are `results/v2/<compiler-prefix>/<compiler>/
+<key-prefix>/<key>.json` and `stage/v3/<key-prefix>/<key>/tree`. Result keys retain
+compiler/request identity and receipt validation. Stage keys retain canonical
+program root, mode and pinned Go context, so ordinary edits keep stable absolute
+package paths for Go's cache and future multi-package output. No directory list
+or global scan belongs to lookup, hit validation, use marking or publication.
+Older layouts remain recognizable by explicit cleanup; new publishers use only
+new layouts and matching permanent lock mappings.
 
-Maintenance removes entries whose recorded program/target is conclusively
-absent, then least-recently-used entries until budget/count limits hold. A
-permission error is not proof of absence. Corrupt metadata is a cache miss and
-eligible for removal, with bounded traversal and no following entry symlinks.
-All maintenance paths are restricted to compiler-owned entries; Go's own build
-cache and project outputs are outside this policy.
+Mark successful result hits and stage use with approximate last-use mtimes,
+writing at most once per hour. Publications naturally mark new entries used.
+Stages keep a separate use marker so replacing their tree does not defeat the
+hourly touch rule. Future timestamps retain entries conservatively. Mtime is
+only retention evidence; semantic receipts still validate contents/membership.
 
-Stage eviction acquires its existing per-entry lock without blocking background
-maintenance: skip busy entries, never remove a Go subprocess's input tree.
-The next maintenance pass revisits skipped entries. Stage metadata/publication
-updates happen under the same lock. A cache mutation lock serializes result
-publication, accounting and deletion. Publishers and explicit cleaners acquire
-a stage slot before the mutation lock. Background eviction may inspect under
-the mutation lock but must acquire stage slots nonblocking and skip busy ones;
-it never waits for a slot while holding the mutation lock. Explicit cleanup
-selects candidates under the mutation lock, releases it, waits for the slot,
-then reacquires the mutation lock and rechecks the candidate before deleting.
-This order prevents an eviction/build deadlock while allowing publication to
-account bytes under both locks before releasing the mutation lock for Go build.
+A small `trim.txt`-style record gates maintenance to one daily trim cycle. Trim
+removes entries unused for five days, with an additional one-hour margin for
+coarse use marking, as Go does. Missing/corrupt/far-future trim state starts a
+new cycle. A separate nonblocking maintenance lock prevents duplicate workers.
+Trim runs in the detached publisher or a bounded detached maintenance child,
+after useful command work, never on the request's critical path. Existing child
+runtime/priority/terminal/platform restrictions apply; unsupported or unavailable
+maintenance skips rather than falling back to a synchronous scan.
 
-Use a fixed pool of 256 hashed staging lock slots outside evicted entries and
-never unlink their files while clients may use them. Hash collisions only
-serialize unrelated builds. This bounds coordination records without unsafe
-lock-file reclamation: unlinking a live lock can let two processes lock distinct
-inodes for the same logical key. Byte budgets exclude these fixed small records.
-Legacy per-entry locks, if any were published by an older schema, must remain
-until a separate process-coordination protocol can prove they are unused;
-mtime is not such a proof. Cache permission/platform/locking failure keeps
-temporary Go staging and fresh compilation available.
+A huge cache must not require an unbounded child or directory materialization.
+Stream sharded inventories in bounded batches, persist cycle progress, and cap
+entries, traversal nodes and wall time per worker. Partial cycles resume without
+starting another daily cycle; only a completed cycle advances completion state.
+Treat cursor/progress records as best-effort maintenance state, never lookup
+indexes or semantic evidence. Tests must exercise interrupted/resumed progress,
+invalid cursors, bounded traversal and concurrent directory changes. Large entry
+removal also respects the per-run traversal/time budget.
+
+Trim acquires candidate SLOT and MUTATION locks only nonblocking, skips busy
+entries, then rechecks age and path identity before deletion. It never removes
+a Go subprocess's staged inputs or waits behind an active build. Deleted program
+roots/targets may be removed during this same daily pass when their versioned
+metadata conclusively proves absence; permission failures are not absence.
+Only compiler-owned recognizable entries are eligible. Unknown paths, Go's own
+build cache and project outputs remain outside maintenance.
+
+Explicit clean retains its cancellable wait protocol: select under MUTATION,
+release it before waiting for SLOT, then reacquire MUTATION and recheck paths.
+Permanent bounded lock pools stay outside deletable trees and are never unlinked.
+Cache permission/platform/locking failure preserves fresh compilation and
+temporary Go staging. Clean recognizes current layouts; clean --all also handles
+legacy result/staging layouts with their original lock mappings.
+
+Before auto-on, benchmark ordinary lookup/hit/publication at 1, 1,000, 10,000 and
+100,000 entries for both layers. Costs must remain flat in total entry count,
+including new-key publication into a large already-populated cache. Measure trim
+separately at the same populations: total cycle cost and bounded worker cost.
+Synthetic entries are acceptable with their shape/size and measured work stated.
 
 ## `bork clean` and `bork clean --all`
 
@@ -183,10 +194,9 @@ pretending it was emptied. Report entry counts and bytes removed concisely.
 2. Add bounded atomic result storage and supported receipt validation; prepare
    a real CLI check/emission path behind an internal opt-in test gate. Keep
    AST-returning APIs fresh. Automatic reads/writes remain disabled.
-3. Add stage metadata, shared accounting/LRU, deleted-root cleanup and clean
-   commands, then enable the CLI cache. Automatic persistent reads/writes must
-   not become available before this lifecycle work lands; growth is bounded
-   from its first enabled release.
+3. Replace the initial budget lifecycle with direct sharded lookup, hourly use
+   marking and bounded daily age-based trim; retain clean commands. Enable the
+   CLI cache only after flat per-build cost and separate trim measurements pass.
 4. Extend artifact modes/assets only after their identity and output tests pass;
    measure first CLI request, subsequent fresh-process hits, warm Session hits
    and realistic full builds separately.
@@ -195,7 +205,8 @@ Every slice retains clean-versus-cached ordered diagnostic/Go-byte comparisons.
 Tests must cover equal-mtime edits, negative appearance, directory/component
 replacement, saved-env and launcher changes, compiler/schema invalidation,
 corrupt/truncated/oversized entries, concurrent processes, unavailable cache,
-budget/count eviction, deleted roots and clean during active build/publication.
+hourly marking, five-day trim, busy-entry skips, resumable bounded maintenance,
+deleted roots and clean during active build/publication.
 Comptime/external-file tests must still execute freshly and record bypasses.
 Publish before/after medians and min/max ranges; a hit slower than an uncached
 repeat is a profiling issue to resolve before treating the cache as successful.
@@ -227,10 +238,16 @@ admission slots when selecting pending publications and preserve their lock inod
 `BORK_CACHE=off` explicitly disables result-cache lookup and publication. An
 unwritable cache, oversized job or unavailable process/locking facility skips
 publication and returns ordinary output. Other platforms currently skip detached
-publication. Automatic persistent use remains disabled until accounting, eviction
+publication. Automatic persistent use remains disabled until age-based retention
 and cleanup land. Tests opt into an explicit completion pipe and optional barrier;
 they wait for publication or process exit without sleep-based polling. These pipes
 are never inherited by Go subprocesses.
+
+## Landed budget lifecycle (to be replaced)
+
+The following records the currently landed result-v1/stage-v2 implementation.
+The age-based design above replaces its admission accounting and eviction;
+its existing explicit cleanup and coordination safeguards remain relevant.
 
 The first lifecycle slice applies a 256 MiB/1,024-entry policy to result artifacts
 across all compiler namespaces. Publication inventories recognized artifacts under
@@ -240,7 +257,8 @@ new temporary must fit during replacement. Busy entries or a scan beyond 4,096
 directory records cause publication to skip rather than overshoot. A validated hit
 updates its last-use hint with nonblocking SLOT/MUTATION acquisition. Hints affect
 only eviction, never receipt validity. Staging-v2 accounting, deleted-target cleanup
-and explicit clean commands remain prerequisites before automatic use.
+and explicit clean commands have landed; age-based retention and the larger
+population acceptance measurements now precede automatic use.
 
 Staging version 2 uses the same cache root and MUTATION lock as results, with a
 separate permanent 256-slot pool in `locks/stage-v2`. Its versioned metadata records
