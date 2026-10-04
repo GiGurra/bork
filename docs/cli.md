@@ -152,7 +152,8 @@ package. Standard packages take one package argument without `--all`.
 
 The compiler checks each package before writing any output. Signatures retain
 facts and `where` clauses, effects (`uses`), ambient requirements (`needs`),
-generic bounds, defaults, and construction privacy. Private declarations,
+generic bounds, defaults, and construction privacy. Computed defaults show `<computed>` without exposing implementation code.
+Private declarations,
 private variants, tests, and implementation bodies are omitted. Adjacent
 whole-line `//` comments document declarations; leading comments separated
 from the first declaration by a blank line document the package. Comments

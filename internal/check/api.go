@@ -194,7 +194,7 @@ func apiFunction(fn *Func) string {
 			value += " in " + p.In
 		}
 		if p.Default != nil {
-			value += " = " + defaultText(p.Default)
+			value += " = " + apiDefault(p.Default)
 		}
 		return value
 	}
@@ -234,6 +234,50 @@ func apiFunction(fn *Func) string {
 	return text
 }
 
+// Computed defaults expose their presence, without rendering implementation code.
+func apiDefault(expr syntax.Expr) string {
+	if text := defaultText(expr); apiDefaultSupported(expr) && text != "" {
+		return text
+	}
+	return "<computed>"
+}
+
+func apiDefaultSupported(expr syntax.Expr) bool {
+	switch x := expr.(type) {
+	case *syntax.IntLit, *syntax.FloatLit, *syntax.RuneLit, *syntax.StringLit, *syntax.BoolLit, *syntax.Ident, *syntax.TypeHead, *syntax.ContextName:
+		return true
+	case *syntax.Unary:
+		return apiDefaultSupported(x.X)
+	case *syntax.Selector:
+		return apiDefaultSupported(x.X)
+	case *syntax.ListLit:
+		for _, e := range x.Elems {
+			if !apiDefaultSupported(e) {
+				return false
+			}
+		}
+		return true
+	case *syntax.MapLit:
+		for i, key := range x.Keys {
+			if !apiDefaultSupported(key) || !apiDefaultSupported(x.Values[i]) {
+				return false
+			}
+		}
+		return true
+	case *syntax.RecordLit:
+		if !apiDefaultSupported(x.Type) {
+			return false
+		}
+		for _, field := range x.Fields {
+			if !apiDefaultSupported(field.Value) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func apiFields(fields []*syntax.FieldDecl, sources []*syntax.File) string {
 	var parts []string
 	for _, f := range fields {
@@ -242,7 +286,7 @@ func apiFields(fields []*syntax.FieldDecl, sources []*syntax.File) string {
 			text = "lazy " + text
 		}
 		if f.Default != nil {
-			text += " = " + defaultText(f.Default)
+			text += " = " + apiDefault(f.Default)
 		}
 		if doc := apiComment(sources, f.Pos); doc != "" {
 			text = "// " + strings.ReplaceAll(doc, "\n", "\n  // ") + "\n  " + text

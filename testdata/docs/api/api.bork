@@ -3,6 +3,9 @@
 // Positive is the promise used by Count.
 pred Positive(n: Int) { n > 0 }
 type Count = Int where Positive
+pred Above(value: Int, floor: Int) { value > floor }
+type Bounded = Int where Above(1 + 1)
+fn BoundedValue(value: Int where Above(1 + 1)): Int where Above(1 + 1) { value }
 
 // Item has package-owned construction.
 type Item = private {
@@ -12,6 +15,9 @@ type Item = private {
   lazy computed: Int = 2,
 }
 fn NewItem = Item.new
+
+type Computed = { n: Int, lazy doubled: Int = n * 2, lazy values: List[Int] = [n * 2], lazy nested: Nested = Nested { value: n * 2 } }
+type Nested = { value: Int }
 
 pred Ordered(r: Range) { r.lo <= r.hi }
 type Range = { lo: Int, hi: Int } where Ordered
