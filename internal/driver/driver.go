@@ -90,6 +90,7 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 	if err != nil {
 		return nil, err
 	}
+	phase(observe, "configuration")
 	return checkLoadedProgramObserved(loaded, module, captureGoContext(), captureEmbedsSnapshot, observe)
 }
 

@@ -340,3 +340,87 @@ validation is 0.31 ms (0.30–0.33), source/assets 0.05 ms (0.05–0.07), and na
 0.91 MB. Earlier #206 hits were about 19 ms. The new stable path saves launcher
 hashing, while startup/warm-up adds descriptor and repeated hashing work.
 Ordinary one-shot APIs are unchanged; the #194 CLI issue remains separate.
+
+## Realistic emission and Go staging experiment
+
+The parent-process CPU profile accounted for only 19% of elapsed time in a
+74-second phase sample. Facts/proof evaluation waited for freshly built Go
+executables: config facts took 282.82 ms (256.43–294.54), HTTP facts 411.90 ms
+(411.48–436.80). Checking itself took 2.37 and 5.63 ms respectively after
+metadata priming. These are three one-request samples; child-process CPU is
+outside the parent profile. Go's build action hashes the package directory
+without `-trimpath`, so a fresh `bork-build-*` directory defeats compilation
+cache reuse even when the emitted source is identical.
+
+A prototype compared ordinary random staging, random staging with `-trimpath`,
+and a stable directory. Seven rounds alternated the modes in that order on the
+same source tree, with identical emitted Go bytes and captured module/context.
+Each mode primed its Go cache before timing. The machine also ran other workers;
+large upper tails are reported rather than removed. Milliseconds, median
+(min–max):
+
+| Program / stage | Random | Trimpath | Stable |
+| --- | ---: | ---: | ---: |
+| config Bork emission | 301.65 (284.61–1091.64) | 171.53 (165.52–652.45) | 174.83 (162.68–432.04) |
+| config Go build | 302.31 (281.86–1243.43) | 39.40 (38.32–373.27) | 39.96 (37.79–84.64) |
+| HTTP Bork emission | 477.22 (423.81–1486.84) | 232.03 (209.13–883.29) | 241.34 (206.91–263.27) |
+| HTTP Go build | 767.49 (710.71–2575.64) | 57.29 (54.79–413.51) | 59.92 (55.27–88.31) |
+
+Config emitted 63,722 bytes; HTTP 166,669 bytes. Bork emission includes proof
+builds and fresh evaluation execution. This experiment reuses Go's compilation
+cache, never predicate results. The Go stage includes staging/linking and
+excludes Bork emission/execution. `BenchmarkGoStaging` reproduces the isolated
+Go-stage comparison without changing production staging:
+
+```sh
+go test ./internal/driver -run '^$' -bench '^BenchmarkGoStaging$' -benchmem -benchtime=1x -count=7
+```
+
+The experimental modes passed exact mock caller-location, test-failure and dbg
+fixtures. Absolute `.bork` mappings survived runtime.Caller, panic stacks and
+ELF DWARF line tables in all modes. Caller-location strings are emitted directly
+by Bork. Trimpath changes unmapped generated frames to `borkprogram/main.go`
+and SDK frames to package-relative paths; stable staging preserves absolute
+paths and does not introduce a separate trimpath SDK cache variant. Delve was
+not installed: DWARF line-table inspection is evidence for source mapping,
+not an interactive debugger test. Prefer stable staging.
+
+For the first Session request, three hello phase samples gave configuration
+39.94 ms (39.28–40.48), checking/name inventory 50.37 ms (50.29–51.09),
+generation 8.04 ms (7.85–8.13), and artifact retention 0.102 ms
+(0.102–0.108). Launcher hashing appears during both initial inventories;
+retaining compiler results is negligible. These are separate phase samples,
+not an additive single-request trace. Preserve the established ~9 ms hit path
+while revisiting repeated seed hashes and configuration subprocess work:
+
+```sh
+go test ./internal/driver -run '^$' -bench '^BenchmarkSessionFirstPhases/(hello|config|http_server)/(configuration|check|facts|generate|retain)$' -benchmem -benchtime=1x -count=3
+```
+
+### Stable staging layout
+
+Use a stable directory for each canonical program/module root, output mode and
+pinned Go configuration, with a fixed `tree` subdirectory containing generated
+packages. Do **not** put the complete graph content digest in the pathname:
+when multi-package output arrives, editing one package must leave unchanged
+packages at the same absolute directory so Go can reuse their cache entries.
+Go's own action keys still incorporate changed source/module/toolchain inputs.
+Compiler-version namespaces may change between compiler versions; they must
+not change for ordinary source edits.
+
+Serialize staging and the entire Go build under a cross-process lock for that
+entry. Write a complete replacement tree from captured Go/module/asset bytes
+before publishing it at the fixed path; publication and rollback happen while
+the lock is held. Readers that invoke Go participate in the same lock. This
+avoids mixing two requests' modules or assets and removes stale files when a
+package disappears. Keep user binaries/evaluators outside the mutable tree.
+A cache/locking failure falls back to the current temporary-directory build.
+The implementation must cover concurrent processes, changed files/modules/
+assets, cache failure, source-location parity and fresh evaluator execution.
+Persistent checked-result artifacts remain a separate later cache layer;
+this layout reuses Go compilation without certifying Bork semantic hits.
+
+`BenchmarkSessionFirstPhases` reports the selected phase as `phase-ns/op`;
+ordinary `ns/op` and allocation columns describe the complete first request.
+Calibration uses whole requests so very short phases cannot accidentally
+schedule millions of full compilations. Unexecuted phases are skipped.
