@@ -69,3 +69,36 @@ func TestEditorTuples(t *testing.T) {
 		t.Fatal("destructured name has no declaration semantic token")
 	}
 }
+
+func TestEditorTupleRebindingIdentities(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	source := "fn main() {\n  (first, second) = (1, 2)\n  println(first, second)\n  (first, second) = (s\"$second\", first == 1)\n  println(first, second)\n}\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	analysis, err := NewSession().Analyze(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := func(line int, name string) diag.Pos {
+		return diag.Pos{File: path, Line: line, Col: strings.Index(strings.Split(source, "\n")[line-1], name) + 1}
+	}
+	for _, tc := range []struct{ name, typ string }{{"first", "String"}, {"second", "Bool"}} {
+		old, current := pos(2, tc.name), pos(4, tc.name)
+		reference := analysis.ReferenceAt(pos(5, tc.name))
+		if reference == nil || reference.Definition != current {
+			t.Fatalf("new tuple reference: %+v", reference)
+		}
+		if refs := analysis.References(old); len(refs) != 3 {
+			t.Fatalf("original tuple references: %+v", refs)
+		}
+		if refs := analysis.References(current); len(refs) != 2 {
+			t.Fatalf("new tuple references: %+v", refs)
+		}
+		description, err := analysis.Describe(current)
+		if err != nil || description.Type != tc.typ || description.Rebinds == nil || *description.Rebinds != old {
+			t.Fatalf("tuple rebinding hover: %+v, %v", description, err)
+		}
+	}
+}

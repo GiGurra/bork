@@ -1498,7 +1498,7 @@ func (p *parser) pattern() Pattern {
 		p.next()
 		if p.at(Colon) {
 			p.next()
-			return &TypePat{Pos: t.Pos, Name: "_", Type: p.typeExpr()}
+			return &TypePat{Pos: t.Pos, Name: "_", Type: p.patternType()}
 		}
 		return &WildcardPat{Pos: t.Pos}
 	case TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:

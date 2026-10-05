@@ -125,7 +125,10 @@ func (c *checker) tupleBinding(s *syntax.TupleBinding) Type {
 	if !valid(s.Pattern, t) {
 		return Ok
 	}
+	saved := c.tupleBindingMode
+	c.tupleBindingMode = true
 	pat := c.pattern(s.Pattern, t)
+	c.tupleBindingMode = saved
 	c.info.tuplePats[s] = pat
 	return Ok
 }
@@ -142,6 +145,7 @@ func (l *lowerer) tupleBinding(s *syntax.TupleBinding) []Stmt {
 	bind = func(p *Pat, value Expr) {
 		if p.Bind != "" {
 			v := &Var{Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarLet, Unused: l.info.unused[p.bindNode]}
+			l.nameRebinding(v, p.bindNode)
 			binding := &Let{Pos: v.Pos, Var: v, Value: value}
 			v.Let = binding
 			p.Var = v

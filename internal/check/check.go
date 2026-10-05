@@ -758,8 +758,9 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
-	files        []*syntax.File
-	tupleDerives []*ClassInstance
+	files            []*syntax.File
+	tupleDerives     []*ClassInstance
+	tupleBindingMode bool
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File

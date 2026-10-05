@@ -1,0 +1,10 @@
+fn main() {
+  (a, b) = (1, 2)
+  capture = () => a
+  (a, b) = (b, a)
+  println(capture(), a, b)
+  ((a, _), b) = ((3, 4), 5)
+  println(a, b)
+  (a, b) = ("six", true)
+  println(a, b)
+}

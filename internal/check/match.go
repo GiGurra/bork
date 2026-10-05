@@ -569,7 +569,11 @@ func (c *checker) bindPat(pat *Pat, name string, pos diag.Pos, node any) {
 	if pat.Kind == PatType {
 		pat.BindType = pat.Narrowed()
 	}
-	c.bind(name, pos, pat.BindType, node)
+	if c.tupleBindingMode {
+		c.bindRebinding(name, pos, pat.BindType, node)
+	} else {
+		c.bind(name, pos, pat.BindType, node)
+	}
 }
 
 // namePattern checks a pattern written as a name: `Shape.Circle { r }`,
