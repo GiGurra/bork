@@ -186,8 +186,8 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	}
 	var receiverWant Type
 	// A concrete list receiver supplies context for literals such as
-	// [].toBytes(), just as a declared function parameter does.
-	if _, ok := sel.X.(*syntax.ListLit); ok {
+	// [].toBytes(), including conditional results, just as a parameter does.
+	if listReceiverLiteral(sel.X) {
 		if fn, _ := c.methodNamed(&List{Elem: Invalid}, sel.Name); fn != nil && len(fn.TypeParams) == 0 {
 			receiverWant = fn.Params[0]
 		}
@@ -401,4 +401,25 @@ func (c *checker) methodReferenceOwner(e syntax.Expr) Type {
 		return nil
 	}
 	return t
+}
+
+// listReceiverLiteral finds list literals in the receiver's result positions.
+func listReceiverLiteral(expr syntax.Expr) bool {
+	switch expr := expr.(type) {
+	case *syntax.ListLit:
+		return true
+	case *syntax.Block:
+		return listReceiverLiteral(expr.Tail)
+	case *syntax.WithExpr:
+		return listReceiverLiteral(expr.Body)
+	case *syntax.If:
+		return listReceiverLiteral(expr.Then) || listReceiverLiteral(expr.Else)
+	case *syntax.Match:
+		for _, arm := range expr.Arms {
+			if listReceiverLiteral(arm.Body) {
+				return true
+			}
+		}
+	}
+	return false
 }

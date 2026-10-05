@@ -2,11 +2,14 @@ package check
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
 )
+
+var migrationIdentifiers = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
 
 // removedBytesCall only handles unresolved names; local and declared functions
 // with these spellings keep their ordinary meaning.
@@ -64,7 +67,22 @@ func (c *checker) removedBytesCall(call *syntax.Call, id *syntax.Ident) bool {
 			}
 		}
 		if !imported {
+			// Import names cannot be rebound anywhere in the package, even
+			// inside an interpolation or after this call. Conservatively
+			// reserve source words, including comments and strings.
+			reserved := map[string]bool{}
+			for _, source := range c.files {
+				if source.Prelude || source.Package != file.Package {
+					continue
+				}
+				for _, name := range migrationIdentifiers.FindAllString(source.Source, -1) {
+					reserved[name] = true
+				}
+			}
 			used := func(name string) bool {
+				if reserved[name] {
+					return true
+				}
 				if c.lookup(name) != nil || c.pkg.imports[name] != nil || c.packageBindingNamed(name) != nil || c.isTypeName(name) {
 					return true
 				}
