@@ -70,9 +70,11 @@ and underscores, with no leading digit. Duplicate resulting long/short/env
 names, duplicate Flag metadata, invalid names and unknown fields return errors
 before environment/config access. Unknown fields include a closest-name hint.
 
-There is currently at most one positional field; mark it with `positional: true`.
-A List positional collects remaining arguments. It does not register a long or
-short flag. Explicit long/short mappings on a positional are metadata errors.
+Use `positional: true` as the single-field shorthand, or `position: Option.Some
+{ value: 0 }` and subsequent indices for ordered positional fields. A final List
+collects remaining arguments. Positional fields do not register long or short
+flags; explicit long/short mappings on them are metadata errors. See
+[ordered positionals](#ordered-positional-arguments) for layout rules.
 See [the flag mapping example](../../examples/cli_mapping/main.bork) and
 [the environment example](../../examples/cli_env/main.bork).
 
@@ -101,7 +103,7 @@ its output feeds the next function. Enrichers may override explicit mappings,
 but must preserve the field identity. Final names are validated after enrichment.
 
 FieldSpec contains field, long, short, env, description, positional, configFile,
-config, hidden, deprecated, choices, strictChoices, files, directories and keepOrder. Built-in policies preserve Disabled; a custom
+config, position, hidden, deprecated, choices, strictChoices, files, directories and keepOrder. Built-in policies preserve Disabled; a custom
 function may deliberately enable it again. Auto returned by a custom function
 is resolved under settings after the chain. Prefixes apply only to automatic
 names, once. Enrichers cannot change record defaults, requiredness or facts.
@@ -228,7 +230,16 @@ Use `cli.Group(name, description, children)` to build nested routing branches.
 Groups have no option record or handler. Leaves retain their own flags, env
 mappings and config files. Set aliases, longDescription, examples or hidden
 with `Command.copy(...)`; aliases work in dispatch, help and completion. Hidden
-commands remain callable. Root and persistent flags are not exposed.
+commands remain callable. `deprecated: "use replacement"` also omits a command
+from help and name completion, while accepting it and warning to stderr before
+its typed handler. Selecting the command with `old --help` returns the warning
+in diagnostics; `help old` only displays its help and does not invoke that
+command or emit its warning. Failures retain warnings in the
+error list. The warning belongs to the selected command, including a group
+selected for help; ancestor groups do not warn during a child invocation. Manual
+execute callbacks preserve warnings in Help/Error and print successful warnings
+after the callback returns; their parsing and handler are stored in one legacy
+callback, so warning timing differs from typed Subcommand handlers. Root and persistent flags are not exposed.
 
 Names and aliases contain letters, digits, hyphens or underscores, cannot start
 with a hyphen, and must be unique among siblings. `help`, `completion`,
@@ -380,4 +391,34 @@ namespace flags, env and JSON config with resource suggestions:
 bork run examples/cli_dynamic -- --namespace team --resource team-web
 bork run examples/cli_dynamic -- __complete --config examples/cli_dynamic/settings.json --resource team-w
 bork run examples/cli_dynamic -- completion bash
+```
+
+## Ordered positional arguments
+
+Set `Flag.position` to Some with a zero-based index for each positional field.
+Indices must be unique and contiguous, and do not depend on record declaration
+order. Positional display names use kebab-case and must be unique; collisions
+such as fooBar/fooBAR return metadata errors. Do not mix indexed positions with the single-field `positional: true`
+shorthand, including on the same field. At most one List is allowed, in the final
+slot. Optional/default scalar fields cannot precede required scalar fields.
+These layout failures return metadata errors before reading config or env.
+
+Scalar positionals use the same literal String/JSON conversion as flags; a List
+uses one original command-line word per element. Commas, whitespace, quotes and
+empty String words retain their literal meaning. Non-String List elements use
+JSON, so a List[List[Int]] can consume shell-quoted `[1,2]` and `[]` as two
+elements. Mapped env and JSON config can fill omitted positions under ordinary
+precedence; provided words always occupy their indexed slots.
+
+Static and dynamic completion target the current positional index. Scalar
+completion advances after a supplied word and stops after the final scalar;
+a final List keeps completing additional elements. Dynamic completers can read
+already supplied scalar positions through Partial.Get. `--` stops flag parsing
+while preserving positional completion and conversion.
+
+See [the positional example](../../examples/cli_positionals/main.bork):
+
+```sh
+bork run examples/cli_positionals -- copy 2 first.txt second.txt
+bork run examples/cli_positionals -- __completeNoDesc copy ''
 ```

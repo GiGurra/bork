@@ -12,6 +12,7 @@ type Command = {
   longDescription: String = ""
   examples: String = ""
   hidden: Bool = false
+  deprecated: String = ""
   children: List[Command] = []
   group: Bool = false
   factory: Option[(String, Scope) uses nothing => adapter | Error] = Option.None
@@ -72,10 +73,10 @@ fn Group(name: String, description: String, children: List[Command]): Command {
 // Dispatch accepts explicit arguments without the executable name. Completion
 // settings belong to this entrypoint, and apply to the entire command tree.
 fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command], settings: Settings = .{}) uses io + net + clock + random + state: Ok | Error | Help {
-  scope s { dispatch(name, description, arguments, commands, s, settings.completion, configureCompletion) }
+  scope s { dispatch(name, description, arguments, commands, s, settings.completion, configureCompletion, printError) }
 }
 
-fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope, completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok) uses io + net + clock + random + state: Ok | Error | Help unsafe go {
+fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope, completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok, warn: (String) uses io => Ok) uses io + net + clock + random + state: Ok | Error | Help unsafe go {
   import "bytes"
   import "fmt"
   import "strings"
@@ -116,6 +117,15 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     for _, line := range strings.Split(strings.TrimSpace(diagnostics.String()), "\n") { if line != "" { lines = append(lines, line) } }
     return lines
   }
+  routeDeprecation := func(cmd *cobra.Command) {
+    if cmd == nil || cmd.Deprecated == "" { return }
+    warning := fmt.Sprintf("Command %q is deprecated, %s\n", cmd.Name(), cmd.Deprecated)
+    if !strings.HasPrefix(output.String(), warning) { return }
+    text := strings.TrimPrefix(output.String(), warning)
+    output.Reset()
+    _, _ = output.WriteString(text)
+    _, _ = diagnostics.WriteString(warning)
+  }
   var attach func(*cobra.Command, []Command) error
   attach = func(parent *cobra.Command, commands []Command) error {
     for _, command := range commands {
@@ -130,6 +140,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
         child = prepared.native.handle.(*cobra.Command)
         collect := child.RunE
         child.RunE = func(cmd *cobra.Command, args []string) error {
+          routeDeprecation(cmd)
           if err := collect(cmd, args); err != nil { return err }
           ran = true
           value := prepared.result()
@@ -147,7 +158,14 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
       } else {
         // Preserve manually constructed execute callbacks without schema completion.
         child = &cobra.Command{Use: command.name, DisableFlagParsing: true}
-        child.Run = func(cmd *cobra.Command, args []string) { ran = true; result = command.execute(cmd.CommandPath(), args, s) }
+        child.Run = func(cmd *cobra.Command, args []string) {
+          routeDeprecation(cmd)
+          ran = true
+          result = command.execute(cmd.CommandPath(), args, s)
+          if help, ok := result.(Help); ok { help.diagnostics = diagnostics.String()+help.diagnostics; result = help; diagnostics.Reset() }
+          if failure, ok := result.(Error); ok { for _, warning := range warnings() { failure.errors = append(failure.errors, codec.DecodeError{path: cmd.CommandPath(), message: warning}) }; result = failure; diagnostics.Reset() }
+          if _, ok := result.(_Ok); ok { warn(diagnostics.String()); diagnostics.Reset() }
+        }
         child.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
           value := command.execute(cmd.CommandPath(), []string{"--help"}, s)
           if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text); _, _ = fmt.Fprint(cmd.ErrOrStderr(), help.diagnostics) } else { ran = true; result = value }
@@ -155,6 +173,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
       }
       child.Short, child.Long, child.Example = command.description, command.longDescription, command.examples
       child.Aliases, child.Hidden = append([]string{}, command.aliases...), command.hidden
+      child.Deprecated = command.deprecated
       child.SilenceUsage, child.SilenceErrors = true, true
       child.Flags().SetOutput(&diagnostics)
       parent.AddCommand(child)
@@ -178,9 +197,13 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
   root.InitDefaultHelpCmd()
   if failure, bad := configure(nativeCommand{handle: root, owner: s.Own(func() {})}, arguments, completion).(Error); bad { return failure }
   root.SetArgs(append([]string{}, arguments...))
-  if err := root.Execute(); err != nil {
-    failures := []codec.DecodeError{{path: name, message: err.Error()}}
-    for _, warning := range warnings() { failures = append(failures, codec.DecodeError{path: name, message: warning}) }
+  executed, err := root.ExecuteC()
+  routeDeprecation(executed)
+  if err != nil {
+    path := name
+    if executed != nil { path = executed.CommandPath() }
+    failures := []codec.DecodeError{{path: path, message: err.Error()}}
+    for _, warning := range warnings() { failures = append(failures, codec.DecodeError{path: path, message: warning}) }
     return Error{errors: failures}
   }
   if !ran { return Help{text: output.String(), diagnostics: diagnostics.String()} }

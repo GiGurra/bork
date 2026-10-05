@@ -21,6 +21,7 @@ type FieldSpec = {
   env: Mapping
   description: String
   positional: Bool
+  position: Option[Int] = Option.None
   configFile: Bool
   config: Bool
   hidden: Bool
@@ -91,6 +92,11 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
   specs := []FieldSpec{}
   names, shorts, envs := map[string]string{}, map[string]string{}, map[string]string{}
   positional, configField := "", ""
+  positions := map[int64]string{}
+  positionalNames := map[string]string{}
+  schemaIndex := map[string]int{}
+  for i, field := range schema { schemaIndex[field.Name] = i }
+  isPositional := func(spec FieldSpec) bool { _, positioned := spec.position.(Option_Some[int64]); return spec.positional || positioned }
   validLong := func(name string) bool {
     return name != "" && !strings.HasPrefix(name, "-") && strings.IndexFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) < 0
   }
@@ -101,25 +107,25 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
   }
   for _, field := range schema {
     flag, exists := metadata[field.Name]
-    if !exists { flag = Flag{field: field.Name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true} }
+    if !exists { flag = Flag{field: field.Name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true, position: Option_None[int64]{}} }
     doc := field.Doc
     if description, ok := flag.description.(Option_Some[string]); ok { doc = description.value }
-    spec := FieldSpec{field: field.Name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
+    spec := FieldSpec{field: field.Name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, position: flag.position, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
         spec.long = Mapping_Disabled{}
-        if settings.autoLong && !spec.positional { spec.long = Mapping_Named{name: prefix(settings.flagPrefix, "-", makeName(spec.field))} }
+        if settings.autoLong && !isPositional(spec) { spec.long = Mapping_Named{name: prefix(settings.flagPrefix, "-", makeName(spec.field))} }
       }
       long := nameOf(spec.long)
       if _, auto := spec.short.(Mapping_Auto); auto {
         spec.short = Mapping_Disabled{}
-        if settings.autoShort && long != "" && !spec.positional && long[0] < 128 && unicode.IsLetter(rune(long[0])) && !occupied[long[:1]] {
+        if settings.autoShort && long != "" && !isPositional(spec) && long[0] < 128 && unicode.IsLetter(rune(long[0])) && !occupied[long[:1]] {
           spec.short = Mapping_Named{name: long[:1]}
         }
       }
       if _, auto := spec.env.(Mapping_Auto); auto {
         spec.env = Mapping_Disabled{}
-        if settings.autoEnv && !spec.positional {
+        if settings.autoEnv && !isPositional(spec) {
           base := long
           if base == "" { base = makeName(spec.field) }
           spec.env = Mapping_Named{name: prefix(settings.envPrefix, "_", strings.ToUpper(strings.ReplaceAll(base, "-", "_")))}
@@ -135,14 +141,14 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
     if _, named := spec.long.(Mapping_Named); named {
       if !validLong(long) { fail(field.Name, "long flag must contain letters, digits, hyphens, or underscores and not start with a hyphen") }
       if long == "help" { fail(field.Name, "flag name is reserved for help") }
-      if spec.positional { fail(field.Name, "positional field cannot have a long flag") }
+      if isPositional(spec) { fail(field.Name, "positional field cannot have a long flag") }
       if previous, duplicate := names[long]; duplicate { fail(field.Name, "flag name duplicates " + previous) }
       names[long] = field.Name
     }
     if _, named := spec.short.(Mapping_Named); named {
       if len(short) != 1 || short[0] > 127 { fail(field.Name, "short flag must be one ASCII character") }
       if short == "h" { fail(field.Name, "short flag h is reserved for help") }
-      if long == "" || spec.positional { fail(field.Name, "short flag requires an enabled long flag") }
+      if long == "" || isPositional(spec) { fail(field.Name, "short flag requires an enabled long flag") }
       if previous, duplicate := shorts[short]; duplicate { fail(field.Name, "short flag duplicates " + previous) }
       shorts[short] = field.Name
       occupied[short] = true
@@ -152,9 +158,21 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
       if previous, duplicate := envs[env]; duplicate { fail(field.Name, "environment variable duplicates " + previous) }
       envs[env] = field.Name
     }
+    if isPositional(spec) {
+      display := makeName(field.Name)
+      if previous, duplicate := positionalNames[display]; duplicate { fail(field.Name, "positional name duplicates " + previous) }
+      positionalNames[display] = field.Name
+    }
     if spec.positional {
       if positional != "" { fail(field.Name, "positional field duplicates " + positional) }
       positional = field.Name
+    }
+    if position, positioned := spec.position.(Option_Some[int64]); positioned {
+      if spec.positional { fail(field.Name, "position and positional cannot both be specified") }
+      if position.value < 0 { fail(field.Name, "position must be nonnegative") }
+      if previous, duplicate := positions[position.value]; duplicate { fail(field.Name, "position duplicates " + previous) }
+      positions[position.value] = field.Name
+      spec.positional = true
     }
     if spec.configFile {
       if configField != "" { fail(field.Name, "config-file field duplicates " + configField) }
@@ -182,6 +200,19 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
       }
     }
     specs = append(specs, spec)
+  }
+  if len(positions) != 0 {
+    if positional != "" { fail(positional, "cannot mix positional shorthand with indexed positions") }
+    earlierOptional := ""
+    for i := 0; i < len(positions); i++ {
+      name, found := positions[int64(i)]
+      if !found { fail("position", "positions must be contiguous starting at zero"); continue }
+      field := schema[schemaIndex[name]]
+      list := strings.HasPrefix(field.Kind, "list:")
+      if list && i != len(positions)-1 { fail(name, "a List positional must be last") }
+      if !list && !field.Optional && !field.HasDefault && earlierOptional != "" { fail(name, "required positional cannot follow optional/default positional " + earlierOptional) }
+      if !list && (field.Optional || field.HasDefault) { earlierOptional = name }
+    }
   }
   if len(errors) != 0 { return Error{errors: errors} }
   return specs

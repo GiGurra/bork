@@ -1,0 +1,45 @@
+import "bork/codec"
+import "bork/cli"
+import "bork/process"
+use codec.Defaults
+pred positive(n: Int) { n > 0 }
+type Options = {
+  // Files to process; each command-line word stays a literal element.
+  files: List[String] = []
+  // Number of workers.
+  workers: Int where positive
+  // Processing action.
+  action: String
+} derive (codec.Decode)
+fn flags(): List[cli.Flag] {
+  [.{ field: "action", position: Option.Some { value: 0 }, choices: [.{ value: "copy" }, .{ value: "inspect" }] },
+    .{ field: "workers", position: Option.Some { value: 1 }, choices: [.{ value: "1" }, .{ value: "2" }, .{ value: "4" }] },
+    .{ field: "files", position: Option.Some { value: 2 }, files: true }]
+}
+fn main() {
+  match (cli.Run[Options]("files", "Process files with an ordered positional layout", (options, s) => {
+    println(s"${options.action} with ${options.workers} workers: ${options.files}")
+    }, flags: flags())) {
+    error: cli.Error => { println(error); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "indices determine argument order independently of record fields" {
+  match (cli.Parse[Options]("files", "", ["copy", "2", "one,two", " spaced ", ""], flags: flags())) {
+    options: Options => { assert(options.action == "copy"); assert(options.workers == 2); assert(options.files == ["one,two", " spaced ", ""]) }
+    other => { panic(s"Expected options, got ${other}") }
+  }
+}
+test "completion advances through positional slots" {
+  match (cli.Parse[Options]("files", "", ["__completeNoDesc", "copy", ""], flags: flags())) {
+    help: cli.Help => { assert(help.text == "1\n2\n4\n:4\n") }
+    other => { panic(s"Expected completion, got ${other}") }
+  }
+}
+test "command deprecation stays in diagnostic output" {
+  command = cli.Subcommand[Options]("old", "Legacy processing", (options, s) => {}, flags: flags()).copy(deprecated: "use files")
+  match (cli.Dispatch("app", "", ["old", "--help"], [command])) {
+    help: cli.Help => { assert(!help.text.contains("deprecated")); assert(help.diagnostics.contains("use files")) }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}
