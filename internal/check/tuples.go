@@ -109,7 +109,7 @@ func (c *checker) tupleBinding(s *syntax.TupleBinding) Type {
 			}
 			return true
 		case *syntax.VariantPat:
-			if len(p.Path) == 1 && !p.Braces && c.typeNamed(p.Path[0]) == nil {
+			if len(p.Path) == 1 && !p.Context && !p.Braces && c.typeNamed(p.Path[0]) == nil {
 				name := p.Path[0]
 				if names[name] {
 					c.errorf(p.Pos, "tuple binding repeats name %s", name)
