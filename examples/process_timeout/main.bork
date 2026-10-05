@@ -1,0 +1,46 @@
+// A timeout is a scope with a deadline: when it passes, the child is
+// stopped and Run gives Cancelled. Stop ends a child on demand.
+import "bork/process"
+import "bork/time"
+
+fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
+  slow = scope limited {
+    cancelAfter(limited, 200)
+    process.Run(limited, "sleep", ["10"])
+  }
+  println(match (slow) {
+    _: process.Result => "finished in time"
+    error: IoError => error.message
+    stopped: Cancelled => s"timed out: ${stopped.reason}"
+  })
+  // cancelGrace sends SIGTERM first, so the child can clean up before SIGKILL.
+  // fd 3 keeps the real stderr for the trap; the loop's own stderr is
+  // silenced so the shell does not report the killed sleep.
+  script = "exec 3>&2; trap 'echo cleaning up >&3; exit 1' TERM; echo ready; while true; do sleep 0.05; done 2>/dev/null"
+  graceful = scope limited {
+    child = process.Start(limited, "/bin/sh", ["-c", script], stdout: .Pipe, stderr: .Inherit, cancelGrace: time.Duration { nanos: 2_000_000_000 })?
+    // Wait until the child has set its trap, then cancel its scope, as a
+    // deadline would.
+    _ = child.Stdout().NextLine()?
+    cancel(limited)
+    child.Wait()
+  }
+  println(match (graceful) {
+    _: process.Result => "finished in time"
+    error: IoError => error.message
+    _: Cancelled => "stopped after a graceful shutdown"
+  })
+  // Stop sends SIGTERM to a running child, then SIGKILL after its grace.
+  server = process.Start(s, "sleep", ["10"])?
+  server.Stop()
+  println(s"server: ${server.Wait()?.status}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    _: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+    _: Closed => eprintln("the child closed its output early")
+  }
+}

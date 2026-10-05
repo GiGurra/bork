@@ -1,0 +1,6 @@
+true: exited with code 0, success: true
+exit 3: exited with code 3, success: false, code: 3
+kill -9: killed by SIGKILL, code: -1
+version 1.4.2
+checked run failed: exit status 2: fatal: no version file
+could not start /no/such/program

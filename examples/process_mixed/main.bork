@@ -1,0 +1,31 @@
+// Each stream is configured on its own: forward one, capture or drop another.
+import "bork/encoding"
+import "bork/fs"
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled | fs.Error {
+  script = "echo noisy progress; echo 'error: config missing' >&2"
+  // Hide the normal output, show errors as they happen.
+  _ = process.Run(s, "/bin/sh", ["-c", script], stdout: .Discard, stderr: .Inherit)?
+  // Show the normal output, keep the errors for later.
+  quiet = process.Run(s, "/bin/sh", ["-c", script], stdout: .Inherit, stderr: .Capture)?
+  println(s"errors kept for the report: ${quiet.StderrText().trim()}")
+  // Silence everything; only the exit code matters.
+  silent = process.Run(s, "/bin/sh", ["-c", script], stdout: .Discard, stderr: .Discard)?
+  println(s"silent run exited with ${silent.code}")
+  // Write output to files: File truncates, Append adds to the end.
+  directory = fs.DirectoryPath(fs.TempDir(s)?)
+  log = fs.Join([directory, "build.log"])
+  _ = process.Run(s, "/bin/sh", ["-c", "echo first build"], stdout: .File { path: log })?
+  _ = process.Run(s, "/bin/sh", ["-c", script], stdout: .Append { path: log }, stderr: .Stdout)?
+  println(encoding.ParseUtf8(fs.Read(log)?))
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    _: Ok => {}
+    stopped: Cancelled => eprintln(stopped.reason)
+    // fs.Error includes IoError.
+    failure: fs.Error => eprintln(s"$failure")
+  }
+}

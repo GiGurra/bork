@@ -1,0 +1,21 @@
+// Forward a child's stdin, stdout and stderr to this program's own, as a
+// shell does: the child's output appears directly, nothing is captured.
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  println("running the child:")
+  // With stdin inherited, the child reads this program's input: a terminal
+  // prompt works as usual. Here stdin is empty, so read gets nothing.
+  script = "read -r answer || echo no input; echo hello from the child; echo a warning from the child >&2"
+  result = process.Run(s, "/bin/sh", ["-c", script],
+    stdin: .Inherit, stdout: .Inherit, stderr: .Inherit)?
+  println(s"the child exited with ${result.code}; captured ${result.stdout.length()} bytes")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    _: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

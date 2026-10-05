@@ -273,6 +273,20 @@ Scope-aware waits and checkpoints observe it, and cleanup runs as scopes end,
 which also stops their children. Code that does not reach a cancellation point
 continues running. See [bork/signal](signal.md) to change this policy.
 
-See [the process example](../../examples/process/main.bork).
+## Examples
+
+Each runs as is and is tested:
+
+- [process](../../examples/process/main.bork): running a subprocess
+- [process_capture](../../examples/process_capture/main.bork): capturing stdout and stderr separately
+- [process_combined](../../examples/process_combined/main.bork): capturing stdout and stderr together, in order (2>&1)
+- [process_forward](../../examples/process_forward/main.bork): forwarding a child's stdin, stdout and stderr
+- [process_mixed](../../examples/process_mixed/main.bork): forwarding, capturing, discarding or writing each stream to a file
+- [process_exit_codes](../../examples/process_exit_codes/main.bork): exit codes, signal deaths and checked runs
+- [process_stdin](../../examples/process_stdin/main.bork): feeding stdin from text, bytes, a file or a pipe
+- [process_streaming](../../examples/process_streaming/main.bork): reading output line by line while it runs, and two pipes at once
+- [process_concurrent](../../examples/process_concurrent/main.bork): several processes at once, monitored and collected
+- [process_timeout](../../examples/process_timeout/main.bork): timeouts, graceful cancellation and Stop
+- [process_pipeline](../../examples/process_pipeline/main.bork): a pipeline of processes connected by OS pipes
 
 [All standard packages](README.md)

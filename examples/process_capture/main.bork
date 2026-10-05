@@ -1,0 +1,19 @@
+// Capture a command's stdout and stderr separately (the default).
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  result = process.Run(s, "/bin/sh", ["-c", "echo report ready; echo 'warning: disk 91% full' >&2"])?
+  println(s"exit code: ${result.code}")
+  println(s"stdout: ${result.StdoutText().trim()}")
+  println(s"stderr: ${result.StderrText().trim()}")
+  // The raw Bytes are there too, for binary output.
+  println(s"stdout bytes: ${result.stdout.length()}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    _: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

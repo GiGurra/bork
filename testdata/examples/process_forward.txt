@@ -1,0 +1,5 @@
+running the child:
+no input
+hello from the child
+a warning from the child
+the child exited with 0; captured 0 bytes

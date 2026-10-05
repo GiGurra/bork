@@ -1,0 +1,4 @@
+exit code: 0
+stdout: report ready
+stderr: warning: disk 91% full
+stdout bytes: 13

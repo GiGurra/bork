@@ -1,0 +1,4 @@
+timed out: context deadline exceeded
+cleaning up
+stopped after a graceful shutdown
+server: ExitStatus.Signaled { number: 15, name: "SIGTERM" }

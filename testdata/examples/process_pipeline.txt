@@ -1,0 +1,4 @@
+APPLE
+BANANA
+CHERRY
+printf: 0, sort: 0, tr: 0
