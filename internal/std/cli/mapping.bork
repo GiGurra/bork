@@ -93,6 +93,7 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
   names, shorts, envs := map[string]string{}, map[string]string{}, map[string]string{}
   positional, configField := "", ""
   positions := map[int64]string{}
+  positionalNames := map[string]string{}
   schemaIndex := map[string]int{}
   for i, field := range schema { schemaIndex[field.Name] = i }
   isPositional := func(spec FieldSpec) bool { _, positioned := spec.position.(Option_Some[int64]); return spec.positional || positioned }
@@ -156,6 +157,11 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
       if !validEnv(env) { fail(field.Name, "environment variable must be an identifier") }
       if previous, duplicate := envs[env]; duplicate { fail(field.Name, "environment variable duplicates " + previous) }
       envs[env] = field.Name
+    }
+    if isPositional(spec) {
+      display := makeName(field.Name)
+      if previous, duplicate := positionalNames[display]; duplicate { fail(field.Name, "positional name duplicates " + previous) }
+      positionalNames[display] = field.Name
     }
     if spec.positional {
       if positional != "" { fail(field.Name, "positional field duplicates " + positional) }

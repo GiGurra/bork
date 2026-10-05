@@ -108,7 +108,9 @@ func TestCLIPositionalMetadata(t *testing.T) {
 type Scalars = { a: String, b: String } derive (Decode)
 type Optional = { a: String = "default", b: String } derive (Decode)
 type Lists = { a: List[String], b: List[String] } derive (Decode)
+type Collision = { fooBar: String, fooBAR: String } derive (Decode)
 fn main() {
+ println(cli.Parse[Collision]("app", "", ["first", "second"], flags: [.{ field: "fooBar", position: Option.Some { value: 0 } }, .{ field: "fooBAR", position: Option.Some { value: 1 } }], configFiles: ["missing.json"]))
  println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: -1 } }]))
  println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: 1 } }]))
  println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: 0 } }, .{ field: "b", position: Option.Some { value: 0 } }]))
@@ -130,10 +132,13 @@ fn main() {
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
-	for _, want := range []string{"position must be nonnegative", "positions must be contiguous", "position duplicates a", "position and positional cannot both", "cannot mix positional shorthand", "short flag requires an enabled long flag", "required positional cannot follow optional/default", "a List positional must be last"} {
+	for _, want := range []string{"positional name duplicates fooBar", "position must be nonnegative", "positions must be contiguous", "position duplicates a", "position and positional cannot both", "cannot mix positional shorthand", "short flag requires an enabled long flag", "required positional cannot follow optional/default", "a List positional must be last"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
+	}
+	if strings.Contains(string(out), "missing.json") {
+		t.Errorf("positional collision must precede config access:\n%s", out)
 	}
 	if strings.Contains(string(out), "Help {") {
 		t.Errorf("metadata errors should precede help:\n%s", out)
@@ -176,6 +181,7 @@ fn main() {
 		{name: "root-help", args: []string{"--help"}, want: []string{"Current leaf"}, absent: []string{"Obsolete"}},
 		{name: "root-completion", args: []string{"__completeNoDesc", ""}, want: []string{"current\n"}, absent: []string{"old\n", "manual\n", "legacy\n"}, diagnostics: "Completion ended with directive: ShellCompDirectiveNoFileComp\n"},
 		{name: "native-success", args: []string{"old"}, want: []string{"handler\nclosed\n"}, absent: []string{"deprecated"}, diagnostics: "Command \"old\" is deprecated, choose current\n"},
+		{name: "help-command", args: []string{"help", "old"}, want: []string{"Obsolete leaf"}, absent: []string{"deprecated", "handler", "closed"}},
 		{name: "native-help", args: []string{"old", "--help"}, want: []string{"Obsolete leaf"}, absent: []string{"deprecated", "handler", "closed"}, diagnostics: "Command \"old\" is deprecated, choose current\n"},
 		{name: "native-error", args: []string{"old", "--bad"}, want: []string{"unknown flag", "choose current"}, absent: []string{"handler", "closed"}, failure: true},
 		{name: "group-help", args: []string{"legacy", "--help"}, want: []string{"Obsolete group"}, absent: []string{"deprecated"}, diagnostics: "Command \"legacy\" is deprecated, choose current\n"},
@@ -215,5 +221,30 @@ fn main() {
 	}
 	if string(out) != "Command \"old\" is deprecated, choose current\nhandler\nclosed\n" {
 		t.Fatalf("warning must precede handler and cleanup: %s", out)
+	}
+}
+
+func TestCLIManualDeprecationOrder(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	source := `import "bork/cli"
+fn main() {
+ command = cli.Command { name: "manual", description: "", deprecated: "use typed command", execute: (name, arguments, s) => { println("manual-handler") } }
+ _ = cli.RunCommands("app", "", [command])
+}
+`
+	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(t.TempDir(), "app")
+	if err := Build(root, exe); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe, "manual").CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+	if string(out) != "manual-handler\nCommand \"manual\" is deprecated, use typed command\n" {
+		t.Fatalf("manual callback warning order: %s", out)
 	}
 }

@@ -232,10 +232,14 @@ mappings and config files. Set aliases, longDescription, examples or hidden
 with `Command.copy(...)`; aliases work in dispatch, help and completion. Hidden
 commands remain callable. `deprecated: "use replacement"` also omits a command
 from help and name completion, while accepting it and warning to stderr before
-its handler. Help returns the warning in diagnostics; failures retain it in the
+its typed handler. Selecting the command with `old --help` returns the warning
+in diagnostics; `help old` only displays its help and does not invoke that
+command or emit its warning. Failures retain warnings in the
 error list. The warning belongs to the selected command, including a group
 selected for help; ancestor groups do not warn during a child invocation. Manual
-execute callbacks use the same warning transport. Root and persistent flags are not exposed.
+execute callbacks preserve warnings in Help/Error and print successful warnings
+after the callback returns; their parsing and handler are stored in one legacy
+callback, so warning timing differs from typed Subcommand handlers. Root and persistent flags are not exposed.
 
 Names and aliases contain letters, digits, hyphens or underscores, cannot start
 with a hyphen, and must be unique among siblings. `help`, `completion`,
@@ -393,7 +397,8 @@ bork run examples/cli_dynamic -- completion bash
 
 Set `Flag.position` to Some with a zero-based index for each positional field.
 Indices must be unique and contiguous, and do not depend on record declaration
-order. Do not mix indexed positions with the single-field `positional: true`
+order. Positional display names use kebab-case and must be unique; collisions
+such as fooBar/fooBAR return metadata errors. Do not mix indexed positions with the single-field `positional: true`
 shorthand, including on the same field. At most one List is allowed, in the final
 slot. Optional/default scalar fields cannot precede required scalar fields.
 These layout failures return metadata errors before reading config or env.
