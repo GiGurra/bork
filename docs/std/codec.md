@@ -24,4 +24,4 @@ fn main() {
 
 Records encode as objects. A named sealed variant encodes with a `"type"` discriminator and its fields; a fieldless variant can also decode from its name. `Option` retains its null/value representation, and missing optional record fields decode as `None`.
 
-[bork/json](json.md) parses and renders this tree and supplies typed text adapters. JSON syntax errors are `json.JsonError`; typed conversion errors are `codec.DecodeError`. The old prelude `Json`, `JsonField`, `DecodeError`, `JsonError`, `Encode`, and `Decode` names have no compatibility aliases.
+[bork/json](json.md) parses and renders this tree and supplies typed text adapters. [bork/yaml](yaml.md) does the same for YAML (`yaml.Decode[T]`, `yaml.Encode`), so a type that derives `codec.Decode` and `codec.Encode` reads and writes both formats. JSON syntax errors are `json.JsonError`; typed conversion errors are `codec.DecodeError`. The old prelude `Json`, `JsonField`, `DecodeError`, `JsonError`, `Encode`, and `Decode` names have no compatibility aliases.

@@ -1,0 +1,85 @@
+import codec "bork/codec"
+import "bork/fs"
+import "bork/math"
+import "bork/yaml"
+use codec.Defaults
+
+pred ValidPort(port: Int) { port >= 1 && port <= 65535 }
+
+type Shape = sealed {
+  Circle { radius: Float }
+  Square { side: Float }
+  Free
+} derive (codec.Decode, codec.Encode)
+
+type Server = {
+  host: String,
+  port: Int where ValidPort,
+  replicas: Option[Int],
+  labels: Map[String, String],
+  shapes: List[Shape],
+} derive (codec.Decode, codec.Encode)
+
+fn trimmed(result: String | yaml.Error): String | yaml.Error {
+  match (result) {
+    text: String => text.trim()
+    error: yaml.Error => error
+  }
+}
+
+fn files(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | yaml.Error | codec.DecodeError {
+  path = fs.Join([fs.DirectoryPath(fs.TempDir(s)?), "server.yaml"])
+  yaml.EncodeFile(path, Server { host: "file", port: 1, replicas: Option.None, labels: {:}, shapes: [] })?
+  println(yaml.DecodeFile[Server](path)?)
+  match (yaml.DecodeFile[Server](fs.Join([fs.DirectoryPath(fs.TempDir(s)?), "missing.yaml"]))) {
+    IoError => println("missing file is an IoError")
+    _ => println("unexpected")
+  }
+  yaml.WriteFile(path, codec.Value.String { value: "x" })?
+  println(yaml.DecodeFile[Server](path))
+  // WriteFile writes codec values.
+  yaml.WriteFile(path, codec.Value.Array { items: [codec.Value.Bool { value: true }] })?
+  println(yaml.DecodeFile[List[Bool]](path)?)
+}
+
+fn main() {
+  text = "host: example.com\nport: 8080\nlabels:\n  team: core\n  tier: \"1\"\nshapes:\n  - type: Circle\n    radius: 1.5\n  - type: Square\n    side: 3\n  - {type: Square, side: 2}\n"
+  println(yaml.Decode[Server](text))
+  match (yaml.Decode[Server](text)) {
+    server: Server => {
+      // Typed values round-trip: render, then decode the result.
+      match (yaml.Encode(server)) {
+        rendered: String => {
+          println(rendered.trim())
+          println(yaml.Decode[Server](rendered))
+        }
+        error: yaml.Error => println(error)
+      }
+    }
+    error: yaml.Error | codec.DecodeError => println(error)
+  }
+  // Field invariants are checked on decode.
+  println(yaml.Decode[Server]("host: x\nport: 70000\nlabels: {}\nshapes: []\n"))
+  println(yaml.Decode[Server]("host: x\nport: [1]\nlabels: {}\nshapes: []\n"))
+  println(yaml.Decode[Server]("host: [x\n"))
+  // Multi-document streams.
+  println(yaml.DecodeAll[Int]("1\n---\n2\n"))
+  println(yaml.DecodeAll[Int]("1\n---\ntwo\n"))
+  println(trimmed(yaml.Encode([1, 2])))
+  println(trimmed(yaml.Encode(Option.Some { value: "yes" })))
+  // Empty text is Null; a later document can fail to parse.
+  println(yaml.Decode[Option[Int]]("# nothing\n"))
+  println(yaml.Decode[Server](""))
+  println(yaml.DecodeAll[Int]("1\n---\n[2\n"))
+  // Fieldless variants, scalar-looking map keys, YAML 1.1 booleans as text.
+  println(yaml.Decode[List[Shape]]("- Free\n- type: Free\n"))
+  println(trimmed(yaml.Encode([Shape.Free])))
+  labels: Map[String, String] = { "1": "yes", "true": "no", "": "on", "plain": "off" }
+  println(trimmed(yaml.Encode(labels, 4)))
+  println(yaml.Decode[Map[String, String]](match (yaml.Encode(labels)) { rendered: String => rendered; yaml.Error => "" }))
+  // A merge key decodes into a record.
+  println(yaml.Decode[Server]("base: &b {host: h, port: 1}\n<<: *b\nport: 2\nlabels: {}\nshapes: []\n"))
+  // NaN has no YAML number.
+  println(yaml.Encode([math.NaN()]))
+  scope s { println(files(s)) }
+}

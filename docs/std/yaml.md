@@ -2,8 +2,8 @@
 
 `bork/yaml` reads and writes YAML. A parsed document is a
 [bork/codec](codec.md) `codec.Value`, so the same queries and the same
-`codec.Decode` and `codec.Encode` instances work for YAML and JSON. The package wraps
-[go.yaml.in/yaml/v4](https://github.com/yaml/go-yaml), the YAML
+`codec.Decode` and `codec.Encode` instances work for YAML and JSON. The
+package wraps [go.yaml.in/yaml/v4](https://github.com/yaml/go-yaml), the YAML
 organization's continuation of gopkg.in/yaml.
 
 ```bork
@@ -11,12 +11,13 @@ import codec "bork/codec"
 import "bork/yaml"
 use codec.Defaults
 
-type Server = { host: String, port: Int } derive (codec.Decode)
+type Server = { host: String, port: Int } derive (codec.Decode, codec.Encode)
 
 fn main() {
-  match (yaml.Parse("host: localhost\nport: 8080\n")) {
-    value: codec.Value => println(codec.decode[Server](value))
+  match (yaml.Decode[Server]("host: localhost\nport: 8080\n")) {
+    server: Server => println(yaml.Encode(Server { host: server.host, port: 9090 }))
     error: yaml.Error => println(s"line ${error.line}, column ${error.column}: ${error.message}")
+    error: codec.DecodeError => println(s"${error.path}: ${error.message}")
   }
 }
 ```
@@ -65,6 +66,29 @@ Some YAML is rejected rather than guessed at:
   Aliases may add at most 10,000 values to a document, or ten times the
   document's own node count if that is larger.
 
+## Typed values
+
+| Function | Result |
+| --- | --- |
+| `Decode[T](text)` | `T \| yaml.Error \| codec.DecodeError`: Parse, then T's Decode instance. |
+| `DecodeAll[T](text)` | `List[T] \| yaml.Error \| codec.DecodeError`: every document. A DecodeError path starts with the document's index (`[1].port`). |
+| `DecodeFile[T](path)` | `T \| yaml.Error \| IoError \| codec.DecodeError`: ReadFile, then decode. Uses io. |
+| `Encode(value, spaces = 2)` | `String \| yaml.Error`: T's Encode instance, then Render. |
+| `EncodeFile(path, value, spaces = 2)` | `Ok \| yaml.Error \| IoError`: Encode, then WriteFile. Uses io. |
+
+These use the same `codec.Decode` and `codec.Encode` instances as
+[bork/json](json.md), so `derive (codec.Decode, codec.Encode)` records, sealed
+types, `Option`, `List`, and `Map[String, V]` work the same way, and decoding
+checks where clauses. A `codec.DecodeError` has the path of the value
+(`.servers[2].port`), but not its line or file. Text with no document decodes
+as `Null`, so it is `None` for an `Option` and an error for a record. A
+trailing `---` starts another, empty document, which DecodeAll decodes as
+`Null` too.
+
+Unlike `json.Encode`, `yaml.Encode` can fail: a Float that is NaN or infinite
+has no YAML number, so it gives `yaml.Error`. Its text ends with a newline, as
+Render's does.
+
 ## Writing
 
 | Function | Result |
@@ -76,12 +100,13 @@ Some YAML is rejected rather than guessed at:
 `spaces` is the indent, 2 through 9. List items under a field start at the
 field's own indent (`tags:` then `- a`). Objects keep their field order and
 numbers their exact text. Strings that would read back as another kind are
-quoted (`'true'`, `'1.5'`), and strings with line breaks use literal blocks.
+quoted (`'true'`, `'1.5'`), and so are `yes`, `no`, `on` and `off`, which
+YAML 1.1 readers take as booleans. Strings with line breaks use literal blocks.
 A manually built number with invalid or non-finite text, or an object with a
 repeated field name, gives `yaml.Error`. Its message names the value's
 location (`invalid number text "1,2" at .items[0]`). Its `path` is the file
-for WriteFile and `""` otherwise, and line and column are 0. Comments and the
-original formatting are not kept.
+for WriteFile and EncodeFile and `""` otherwise, and line and column are 0.
+Comments and the original formatting are not kept.
 
 ## Queries
 
@@ -92,5 +117,5 @@ original formatting are not kept.
 ## Examples
 
 [examples/yaml_config](../../examples/yaml_config/main.bork) loads a
-configuration file that uses anchors and merge keys, decodes environments into
-a record with checked fields, and writes one back out.
+configuration file that uses anchors and merge keys with `DecodeFile`, checks
+its fields, and writes one environment back out with `Encode`.
