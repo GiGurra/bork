@@ -130,6 +130,22 @@ func (c *checker) tupleBinding(s *syntax.TupleBinding) Type {
 	pat := c.pattern(s.Pattern, t)
 	c.tupleBindingMode = saved
 	c.info.tuplePats[s] = pat
+	if c.info.tupleBindingValues == nil {
+		c.info.tupleBindingValues = map[any]syntax.Expr{}
+	}
+	var source func(*Pat, syntax.Expr)
+	source = func(p *Pat, value syntax.Expr) {
+		if p == nil {
+			return
+		}
+		if p.bindNode != nil {
+			c.info.tupleBindingValues[p.bindNode] = value
+		}
+		for _, field := range p.Fields {
+			source(field.Pat, &syntax.Selector{Pos: s.Pos, X: value, Name: field.Name})
+		}
+	}
+	source(pat, s.Value)
 	return Ok
 }
 

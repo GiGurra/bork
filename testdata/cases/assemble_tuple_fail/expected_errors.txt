@@ -1,0 +1,36 @@
+main.bork:5:24: missing provider for Int, needed by target
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 ((number,),).0 -> invalid (unused)
+main.bork:5:29: provider #1 ((number,),).0 must be a function with a concrete signature
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 ((number,),).0 -> invalid (unused)
+main.bork:6:29: provider #1 (1, number).0 must be a function with a concrete signature
+assembly assemble[Int]:
+  Int <- #2 (1, number).1 (main.bork:6:32)
+supplied:
+  #1 (1, number).0 -> invalid (unused)
+  #2 (1, number).1 -> Int
+main.bork:7:24: missing provider for Int, needed by target
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 ... -> invalid (unused)
+main.bork:7:28: provider #1 must be a function with a concrete signature
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 ... -> invalid (unused)
+main.bork:9:24: missing provider for Int, needed by target
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 mixed -> invalid (unused)
+main.bork:9:28: provider #1 must be a function with a concrete signature
+assembly assemble[Int]:
+  Int ?? missing provider
+supplied:
+  #1 mixed -> invalid (unused)

@@ -18,7 +18,7 @@
 (defconst bork-keywords
   '("fn" "pred" "type" "sealed" "match" "if" "else" "return" "unsafe" "where"
     "and" "or" "trust" "rule" "generate" "yield" "for" "break" "continue"
-    "import" "use" "class" "instance" "instances" "providers" "test" "private"
+    "import" "use" "class" "instance" "instances" "test" "private"
     "derive" "uses" "needs" "nothing" "ambient" "logged" "propagated" "lazy"
     "async" "scope" "with" "in" "resource" "go" "comptime" "mock" "select"))
 (defvar bork-mode-syntax-table

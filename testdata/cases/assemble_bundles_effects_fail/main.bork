@@ -1,5 +1,5 @@
 type Label = { name: String }
 fn label() uses io: Label { println("real provider"); Label { name: "real" } }
-providers Wiring = { label: label }
+Wiring = (label,)
 fn pure(s: Scope): Label { assemble[Label](s, Wiring) }
 fn main() {}

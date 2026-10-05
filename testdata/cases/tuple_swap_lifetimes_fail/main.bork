@@ -1,0 +1,11 @@
+import "bork/test"
+import "bork/fs"
+fn safe() uses io: Int { println("safe"); 2 }
+fn escaped(path: String) uses io: (() uses io => Int, () uses io => Int) | fs.Error {
+  scope s {
+    file = fs.Open(path, s)?
+    borrowed = () => { _ = fs.ReadAllText(file); 1 }
+    test.SwapAt((safe, safe), 0, borrowed)
+  }
+}
+fn main() {}

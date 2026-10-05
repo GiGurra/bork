@@ -1,0 +1,45 @@
+import "bork/test"
+type A = { value: Int }
+type B = { value: Int }
+fn ioValue() uses io: Int { println("io"); 1 }
+fn plain(): Int { 1 }
+fn effect() uses io: Int { 1 }
+fn index() uses io: Int { println("index"); 0 }
+fn failure(): Int | B { 1 }
+fn one(i: Int): Int { i }
+fn generic[T](x: T): T { x }
+fn main() {
+  println(test.Swap((1, 2), 3))
+  println(test.Swap((1, "a"), true))
+  println(test.SwapAt((1, "a"), -1, 2))
+  println(test.SwapAt((1, "a"), 2, 2))
+  println(test.SwapAt((1, "a"), "0", 2))
+  println(test.SwapAt((1, "a"), index(), 2))
+  println(test.SwapAt((1, "a"), 0, "bad"))
+  println(test.Swap((plain,), effect))
+  println(test.Swap((plain,), failure))
+  println(test.Swap((plain,), one))
+  println(test.Swap((A { value: 1 },), B { value: 1 }))
+  println(test.Swap(1, 2))
+  println(test.Swap([1], 2))
+  println(test.Swap((1,), 2, 3))
+  println(test.Swap[Int, Int]((1,), 2))
+  println(test.Swap(tuple: (1,), replacement: 2))
+  saved = test.Swap
+  println(saved)
+  println(test.SwapAt((1,), ioValue(), 2))
+  println(test.Swap((generic, plain), plain))
+}
+fn optional(): (Option[Int], String) { (Option.Some { value: 1 }, "a") }
+fn union(): (Int | String, Bool) { (1, false) }
+fn mismatched() {
+  println(test.SwapAt(optional(), 0, 2))
+  println(test.SwapAt(union(), 0, 2))
+}
+
+fn overflow() {
+  max: Int = 9223372036854775807
+  one: Int = 1
+  index = (max + one) / max
+  println(test.SwapAt((1, "a"), index, "bad"))
+}

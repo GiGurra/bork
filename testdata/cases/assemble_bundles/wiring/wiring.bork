@@ -6,20 +6,21 @@ fn config(): Config { Config { name: "real" } }
 fn database(c: Config): Database { Database { name: c.name } }
 fn worker(db: Database): Worker { Worker { name: db.name } }
 fn extra(): Worker { Worker { name: "extra" } }
-providers Wiring = { config: config, database: database, worker: worker }
-providers Infrastructure = { config: config, database: database }
-providers Workers = { worker: worker }
-providers Extra = { worker: extra }
+Wiring = (config, database, worker)
+Infrastructure = (config, database)
+Workers = (worker,)
+Extra = (extra,)
 
 type Secret = private { value: Int }
 fn secret(): Secret { Secret { value: 7 } }
-providers Secrets = { secret: secret }
-providers privateWiring = { config: config }
+Secrets = (secret,)
+privateWiring = (config,)
 
 pred positive(n: Int) { n > 0 }
 type Good = { value: Int where positive }
 fn number(): Int where positive { 7 }
 fn good(value: Int where positive): Good { Good { value: value } }
-providers Facts = { number: number, good: good }
+fn factProduct(): Good { good(number()) }
+Facts = (factProduct,)
 fn secondExtra(): Worker { Worker { name: "second" } }
-providers RepeatedWorkers = { first: extra, second: secondExtra }
+RepeatedWorkers = (extra, secondExtra)

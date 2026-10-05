@@ -2,10 +2,10 @@ import "example.com/assemble-bundles-scopes/wiring"
 fn main() {
   scope root {
     child = openScope(root)
-    first = assemble[wiring.App](child.scope, wiring.Wiring)
+    first = assemble[wiring.App](child.scope, wiring.Wiring, wiring.Application)
     println(first)
     closeScope(child)
-    second = assemble[wiring.App](root, wiring.Wiring)
+    second = assemble[wiring.App](root, wiring.Wiring, wiring.Application)
     println(second)
   }
 }

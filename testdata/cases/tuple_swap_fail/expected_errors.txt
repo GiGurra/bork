@@ -1,0 +1,25 @@
+main.bork:12:29: test.Swap matches indices [0 1]; use test.SwapAt to select one position
+main.bork:13:31: test.Swap has no element of exact type Bool in (Int, String); build a tuple literal to change element types
+main.bork:14:33: test.SwapAt index must be in [0, 2), found -1
+main.bork:15:33: test.SwapAt index must be in [0, 2), found 2
+main.bork:16:33: test.SwapAt index must be a pure compile-time Int constant
+main.bork:17:33: test.SwapAt index must be a pure compile-time Int constant
+main.bork:18:36: test.SwapAt slot 0 requires exact type Int, found String
+main.bork:19:31: test.Swap has no element of exact type () uses io => Int in (() => Int,); build a tuple literal to change element types
+main.bork:20:31: test.Swap has no element of exact type () => (Int | B) in (() => Int,); build a tuple literal to change element types
+main.bork:21:31: test.Swap has no element of exact type (Int) => Int in (() => Int,); build a tuple literal to change element types
+main.bork:22:40: test.Swap has no element of exact type B in (A,); build a tuple literal to change element types
+main.bork:23:21: test.Swap requires a nonempty tuple, found Int
+main.bork:24:21: test.Swap requires a nonempty tuple, found List[Int]
+main.bork:25:20: test.Swap takes 2 arguments, but 3 were given
+main.bork:26:30: test.Swap takes no explicit type arguments
+main.bork:27:21: named arguments require a direct call to a declared function or method: tuple replacement helpers require positional arguments
+main.bork:27:34: named arguments require a direct call to a declared function or method: tuple replacement helpers require positional arguments
+main.bork:28:11: test.Swap must be called directly
+main.bork:30:29: test.SwapAt index must be a pure compile-time Int constant
+main.bork:31:22: cannot tell what T is for generic here; use it where a function type is expected, or call it in a lambda
+main.bork:36:38: test.SwapAt slot 0 requires exact type Option[Int], found Int
+main.bork:37:35: test.SwapAt slot 0 requires exact type Int | String, found Int
+main.bork:42:3: one is already the name of a function (bork does not allow shadowing)
+main.bork:43:3: index is already the name of a function (bork does not allow shadowing)
+main.bork:44:33: test.SwapAt index must be a pure compile-time Int constant

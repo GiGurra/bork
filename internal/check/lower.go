@@ -468,7 +468,7 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			return call
 		}
 		at.token = x.Pos
-		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args)}
+		return &CallValue{expr: at, Fun: l.expr(x.Fun), Args: l.exprs(x.Args), Provider: l.info.assemblyValueCalls[x]}
 	case *syntax.Lambda:
 		ft := at.typ.(*FuncType)
 		out := &Lambda{expr: at}
@@ -751,6 +751,16 @@ func writtenText(x syntax.Expr) string {
 		return defaultText(x)
 	case *syntax.Selector:
 		return writtenText(x.X) + "." + x.Name
+	case *syntax.TupleLit:
+		elems := make([]string, len(x.Elems))
+		for i, elem := range x.Elems {
+			elems[i] = writtenText(elem)
+		}
+		text := strings.Join(elems, ", ")
+		if len(elems) == 1 {
+			text += ","
+		}
+		return "(" + text + ")"
 	case *syntax.Call:
 		args := make([]string, len(x.Args))
 		for i, a := range x.Args {

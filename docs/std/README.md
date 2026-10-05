@@ -37,3 +37,5 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`.
 
 For contributors: when adding a package, add its page and a row to this table. The [Go helper API](../std-go.md) documents the contracts that standard-package implementations share.
+
+- [test](test.md): exact tuple replacements with Swap and SwapAt.

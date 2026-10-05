@@ -46,7 +46,8 @@ instance ItemRender: Render[Item] { fn render(value: Item): String { toString(va
 instances Default { ItemRender }
 
 fn provide(n: Int = 7) where n > 0 uses io needs Trace?: Int { _ = Trace; println(n); n }
-providers Wiring = { number: provide }
+fn provider() uses io: Int { provide() }
+Wiring = (provider,)
 
 fn Identity[T: Show](value: T): T { value }
 Version = 1

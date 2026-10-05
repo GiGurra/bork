@@ -40,8 +40,7 @@ type Package struct {
 	// bundles holds the package's named sets of instances.
 	bundles map[string]*bundle
 	// ambients holds the package's ambient values by name.
-	ambients  map[string]*Ambient
-	providers map[string]*ProviderBundle
+	ambients map[string]*Ambient
 }
 
 // TypeNamed is the record, sealed, or resource type the package
@@ -307,14 +306,14 @@ type Info struct {
 	selectMatches          map[*syntax.Match]bool
 	assemblyTypes          map[*syntax.TypeExpr]Type
 	assemblyNames          map[any]string
-	ProviderBundles        []*ProviderBundle
-	providerBundleUses     []*providerBundleUse
 	interpolatorCalls      map[*syntax.Interp]*syntax.Call
 	interpolatorValidators map[*syntax.Interp]*Dict
 	interpolatorFactories  map[*syntax.Interp]*syntax.Call
 	conversionCalls        map[*syntax.Call]*syntax.Block
 	conversionRecords      map[*syntax.RecordLit]*Record
 	conversionInputs       map[syntax.Expr]bool
+	assemblyValueCalls     map[*syntax.Call]*Instance
+	tupleBindingValues     map[any]syntax.Expr
 
 	// What the checker records about the syntax as it checks it, which
 	// the typed tree is built from (see lower.go).
@@ -584,7 +583,6 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.declareInstances(files)
 	c.declareDerived()
 	c.resolveUses(files)
-	c.declareProviderBundles(files)
 	for name, fn := range c.preludePkg.Funcs {
 		c.info.Funcs[name] = fn
 	}
@@ -633,7 +631,6 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	}
 	c.ensureAllFieldDefaults()
 	c.checkBindings(files, c.goTypes)
-	c.resolveProviderBundles()
 	c.checkFunctionRequirements()
 	for _, binding := range c.info.PackageBindings {
 		c.ensurePackageBinding(binding)
@@ -958,7 +955,7 @@ func (c *checker) notFound(name string) string {
 	if isFunc && fn.Class != nil && !Exported(fn.Class.Name) {
 		return fmt.Sprintf("%s is a method of class %s, which package %s does not export", n, fn.Class.Name, pkg.Path)
 	}
-	if (isFunc || isType || pkg.providers[n] != nil || pkg.bindings[n] != nil) && !Exported(n) {
+	if (isFunc || isType || pkg.bindings[n] != nil) && !Exported(n) {
 		return fmt.Sprintf("%s is not exported by package %s (only names starting with an upper-case letter are)", n, pkg.Path)
 	}
 	return fmt.Sprintf("package %s has no %s", pkg.Path, n)
@@ -1124,10 +1121,7 @@ func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 		c.diags.AddCode(pos, "binding.shadow", "%s is a built-in function (bork does not allow shadowing)", name)
 		return true
 	}
-	if c.providerBundleNamed(name) != nil {
-		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of a provider bundle", name)
-		return true
-	}
+
 	if c.isTypeName(name) {
 		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of a type", name)
 		return true
@@ -1529,11 +1523,12 @@ func (c *checker) ident(e *syntax.Ident, want Type) Type {
 	if a := c.ambientNamed(e.Name); a != nil {
 		return c.ambientIdent(e, a)
 	}
-	if c.providerBundleNamed(e.Name) != nil {
-		c.bundleError(e.Pos, "provider bundle %s can only be used in an assembly provider list", e.Name)
-		return Invalid
-	}
+
 	if fn, ok := c.funcNamed(e.Name); ok {
+		if swapIntrinsic(fn) {
+			c.diags.AddCode(e.Pos, "test.swap", "test.%s must be called directly", fn.Decl.Name)
+			return Invalid
+		}
 		return c.funcValue(e, e.Name, fn, want)
 	}
 	if _, ok := builtins[e.Name]; ok {
@@ -1770,13 +1765,15 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	if id, ok := e.Fun.(*syntax.Ident); ok && assemblyName(id.Name) && c.lookup(id.Name) == nil {
 		return c.assemble(e, id.Name)
 	}
+	if id, ok := e.Fun.(*syntax.Ident); ok && c.lookup(id.Name) == nil && c.packageBindingNamed(id.Name) == nil {
+		if fn, found := c.funcNamed(id.Name); found && swapIntrinsic(fn) {
+			return c.tupleSwap(e, fn)
+		}
+	}
 	if t, ok := c.seqStatic(e); ok {
 		return t
 	}
-	if id, ok := e.Fun.(*syntax.Ident); ok && c.lookup(id.Name) == nil && c.providerBundleNamed(id.Name) != nil {
-		c.bundleError(id.Pos, "provider bundle %s can only be specialized in an assembly provider list", id.Name)
-		return Invalid
-	}
+
 	if t, ok := c.methodCallOf(e, want); ok {
 		return t
 	}

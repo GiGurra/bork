@@ -102,9 +102,7 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 	if methods == nil {
 		methods = []check.MethodDescription{}
 	}
-	if selected.ProviderBundle != nil {
-		return &describe.Result{Rebinds: rebinds, Documentation: documentation, SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
-	}
+
 	var async *check.AsyncDescription
 	lazy := info.LazyFieldDescription(selected.Expr)
 	if v, ok := selected.Expr.(*check.VarRef); ok && v.Var.Let != nil {

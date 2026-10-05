@@ -2464,6 +2464,11 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 				}
 			}
 		}
+	case *CallValue:
+		if x.Provider != nil {
+			call := &Call{expr: x.expr, Func: x.Provider.Func, Inst: x.Provider, Args: x.Args}
+			out = append(out, f.declared(call, e, depth+1)...)
+		}
 	case *Call:
 		fn := x.Func
 		for _, mc := range fn.ResultConstraints {
@@ -2530,6 +2535,11 @@ func (f *factChecker) declaredMember(x Expr, m Type) []known {
 		}
 	}
 	switch x := x.(type) {
+	case *CallValue:
+		if x.Provider != nil {
+			call := &Call{expr: x.expr, Func: x.Provider.Func, Inst: x.Provider, Args: x.Args}
+			out = append(out, f.declaredMember(call, m)...)
+		}
 	case *Call:
 		for _, mc := range x.Func.ResultConstraints {
 			if identical(mc.Type, m) {

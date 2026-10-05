@@ -68,7 +68,7 @@ Source: `api.bork:8`.
 fn Identity[T: Show](value: T): T
 ```
 
-Source: `api.bork:51`.
+Source: `api.bork:52`.
 
 <a id="api-e69df2014d84919627bbc710"></a>
 
@@ -154,18 +154,6 @@ pred Positive(n: Int)
 Positive is the promise used by Count.
 
 Source: `api.bork:4`.
-
-<a id="api-871de18a80b580a144a8e16d"></a>
-
-### Wiring
-
-```bork
-providers Wiring {
-  number(n: Int = 7) where (n > 0) uses io needs Trace?: Int
-}
-```
-
-Source: `api.bork:49`.
 
 <a id="api-078bdd1077b8d1cddd762cd6"></a>
 
@@ -267,4 +255,14 @@ Source: `api.bork:26`.
 Version: Int
 ```
 
-Source: `api.bork:52`.
+Source: `api.bork:53`.
+
+<a id="api-04d45a43f7a0d3856a31bc20"></a>
+
+### Wiring
+
+```bork
+Wiring: (() uses io => Int,)
+```
+
+Source: `api.bork:50`.

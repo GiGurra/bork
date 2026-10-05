@@ -126,6 +126,7 @@ type lifeChecker struct {
 	// env holds the lifetime of each variable (a scope's lives as long
 	// as its scope block).
 	env              map[*Var]lifetime
+	tupleFields      map[Expr]map[string]lifetime
 	deferredCaptures map[*Var]lifetime
 	// open lists the scope blocks around the current point.
 	open []*ScopeBlock
@@ -681,9 +682,22 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		if !l.carriesLife(x.Type()) {
 			return nil
 		}
+		if tuple, ok := x.X.Type().(*Record); ok && tuple.Tuple {
+			if selected, known := l.tupleFieldLife(x.X, x.Name, map[Expr]bool{}); known {
+				return selected
+			}
+		}
 		return life
 	case *RecordLit:
 		var life lifetime
+		var fields map[string]lifetime
+		if x.Record != nil && x.Record.Tuple {
+			fields = map[string]lifetime{}
+			if l.tupleFields == nil {
+				l.tupleFields = map[Expr]map[string]lifetime{}
+			}
+			l.tupleFields[x] = fields
+		}
 		for _, f := range x.Fields {
 			if f.Field.Computed {
 				continue
@@ -691,7 +705,11 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 			if f.Thunk != nil {
 				life = life.union(l.lambda(f.Thunk))
 			} else {
-				life = life.union(l.expr(f.Value))
+				fieldLife := l.expr(f.Value)
+				if fields != nil {
+					fields[f.Name] = fieldLife
+				}
+				life = life.union(fieldLife)
 			}
 		}
 		if x.Candidate != nil {
@@ -1388,4 +1406,61 @@ func (l *lifeChecker) joins(js []*Join) {
 	for _, j := range js {
 		l.joined(j.Var)
 	}
+}
+
+// Tuple projections preserve independent element lifetimes after evaluating the
+// source. Cache literal fields when walked; following immutable aliases does
+// not re-run calls or closure capture analysis.
+func (l *lifeChecker) tupleFieldLife(x Expr, name string, seen map[Expr]bool) (lifetime, bool) {
+	if seen[x] {
+		return nil, false
+	}
+	seen[x] = true
+	if fields, ok := l.tupleFields[x]; ok {
+		value, found := fields[name]
+		return value, found
+	}
+	switch x := debugValue(x).(type) {
+	case *VarRef:
+		if x.Var.Let != nil && x.Var.Let.Initializer == nil {
+			return l.tupleFieldLife(x.Var.Let.Value, name, seen)
+		}
+	case *Select:
+		if field := tupleFieldValue(x.X, x.Name, map[Expr]bool{}); field != nil {
+			return l.tupleFieldLife(field, name, seen)
+		}
+	case *Block:
+		if x.Tail != nil {
+			return l.tupleFieldLife(x.Tail, name, seen)
+		}
+	}
+	return nil, false
+}
+
+func tupleFieldValue(x Expr, name string, seen map[Expr]bool) Expr {
+	if seen[x] {
+		return nil
+	}
+	seen[x] = true
+	switch x := debugValue(x).(type) {
+	case *RecordLit:
+		for _, field := range x.Fields {
+			if field.Name == name && field.Thunk == nil {
+				return field.Value
+			}
+		}
+	case *VarRef:
+		if x.Var.Let != nil && x.Var.Let.Initializer == nil {
+			return tupleFieldValue(x.Var.Let.Value, name, seen)
+		}
+	case *Block:
+		if x.Tail != nil {
+			return tupleFieldValue(x.Tail, name, seen)
+		}
+	case *Select:
+		if field := tupleFieldValue(x.X, x.Name, seen); field != nil {
+			return tupleFieldValue(field, name, seen)
+		}
+	}
+	return nil
 }

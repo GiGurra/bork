@@ -251,14 +251,37 @@ Each function is a **provider**: it makes the type it returns from the types it 
 
 The wiring is checked while compiling. A missing provider, two providers for the same type, a cycle, or a provider nothing needs is a compile error. Providers can have effects and can fail, and the `assemble` expression then has those effects and that failure union. Providers that open resources receive the scope given to `assemble`.
 
-A `providers` declaration names a reusable list, and a test can replace one entry:
+Ordinary tuples hold reusable provider functions. Assembly splices each tuple one
+level, in positional order, then checks the complete graph:
 
 ```bork fragment
-providers Services = { config: newConfig, database: openDb, server: newServer }
+import "bork/test"
+Services = (newConfig, openDb, newServer)
 
 server = assemble[Server](s, Services)
-testServer = assemble[Server](s, Services(database: fakeDb))
+testServer = assemble[Server](s, test.Swap(Services, fakeDb))
 ```
+
+The tuple stores functions; each assembly constructs fresh products. Tuple
+expressions evaluate once in written order, before providers run in dependency
+order. Package values follow ordinary visibility and may expose private functions.
+Computed tuples and local aliases work too; nested tuples are not spliced.
+
+`test.Swap` replaces the unique element with the replacement's exact type.
+`test.SwapAt(Services, 1, fakeDb)` selects a zero-based position with a pure
+compile-time Int index and also requires its exact type. Function types include
+parameters, result/failure union and effects. Repeated matching element types
+require SwapAt. A changed signature needs an explicit tuple instead.
+
+Migration: replace `providers Services = { config: newConfig, database: openDb }`
+with `Services = (newConfig, openDb)`, and a singleton with `(newConfig,)`.
+The compiler offers a comment-preserving fix for safe declarations. Replace
+`Services(database: fakeDb)` with Swap/SwapAt or an explicit tuple; Swap requires
+the exact element type, unlike the old changed-signature specialization.
+Functions with uncaptured ambient needs must stay inline assembly providers or
+take explicit parameters: `assemble[Server](s, newServer)`. Other existing
+function-value restrictions also apply; providers with parameter facts or
+retaining scope contracts can remain inline or use checked adapters.
 
 See the [assemble example](../../examples/assemble/main.bork).
 

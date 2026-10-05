@@ -44,7 +44,7 @@ fn demo() uses io + net + clock + state: Ok | sql.Error | IoError | http.Overloa
   }
 }
 
-providers ServiceProviders = { service: newService, database: openDb, config: newConfig }
+ServiceProviders = (newService, openDb, newConfig)
 
 fn main() {
   match (demo()) {
@@ -60,7 +60,7 @@ fn main() {
 test "a fixture can replace configuration" {
   scope app {
     fixture = Config { database: ":memory:", address: "127.0.0.1:0" }
-    assembled = assemble[Service](app, ServiceProviders(config: () => fixture))
+    assembled = assemble[Service](app, (ServiceProviders.0, ServiceProviders.1, () => fixture))
     match (assembled) {
       service: Service => match (http.Get(s"http://${http.Address(service.server)}/", app)) {
         response: http.Response => assertEqual(response.body, "hello from assembled bork")

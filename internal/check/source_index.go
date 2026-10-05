@@ -112,15 +112,8 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 		}
 		b.referenceNamed(ident.Pos, ident.Name, pos)
 	}
-	// Unused bundles and mocks still contain source references. They need not
-	// produce lowered calls, so consume their resolved declarations directly.
-	for _, bundle := range info.ProviderBundles {
-		for _, entry := range bundle.Entries {
-			if entry.Func != nil {
-				b.function(entry.Decl.Provider, entry.Func)
-			}
-		}
-	}
+	// Unused mocks still contain source references without lowered calls.
+
 	for statement, fn := range info.mocks {
 		b.function(statement.Target, fn.MockOf)
 	}
@@ -419,9 +412,7 @@ func (b *sourceIndexBuilder) declarations(file *syntax.File, info *Info) {
 	for _, bundle := range file.Bundles {
 		add(bundle.Pos, bundle.Name, "instances", "")
 	}
-	for _, bundle := range file.Providers {
-		add(bundle.Pos, bundle.Name, "providers", "")
-	}
+
 	sourceWalk(reflect.ValueOf(file), func(node any) {
 		switch n := node.(type) {
 		case *syntax.Param:

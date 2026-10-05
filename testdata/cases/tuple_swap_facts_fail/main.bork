@@ -1,0 +1,7 @@
+import "bork/test"
+pred positive(n: Int) { n > 0 }
+fn main() {
+  values: (Int where positive, String) = (1, "ok")
+  result: (Int where positive, String) = test.SwapAt(values, 0, -1)
+  println(result)
+}

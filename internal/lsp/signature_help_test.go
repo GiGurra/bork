@@ -343,3 +343,14 @@ fn Example(input: Int | String): Int { checks.AssertIs[Int where positive](input
 		t.Fatalf("instantiated assertion: %+v", help)
 	}
 }
+
+func TestSignatureHelpTupleReplacement(t *testing.T) {
+	source := `import "bork/test"
+fn main() { println(test.SwapAt((1, "label"), 0, 2)) }
+`
+	s, path := newTestServer(t, source)
+	help := signatureAt(t, s, path, strings.Replace(source, ", 0, 2)", ", 0, ¦2)", 1))
+	if help == nil || len(help.Signatures) != 1 || !strings.Contains(help.Signatures[0].Label, "tuple: (Int, String)") || !strings.Contains(help.Signatures[0].Label, "replacement: Int") || help.ActiveParameter == nil || *help.ActiveParameter != 2 {
+		t.Fatalf("replacement signature: %+v", help)
+	}
+}

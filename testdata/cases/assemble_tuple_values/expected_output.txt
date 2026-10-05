@@ -1,0 +1,21 @@
+tuple
+replacement
+ready
+invoke
+6
+tuple
+replacement
+ready
+invoke
+6
+(4, "a")
+(5,)
+(2,)
+(3,)
+5
+5
+3
+9
+12
+construct
+3

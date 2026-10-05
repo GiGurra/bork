@@ -73,9 +73,7 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 				f.Funcs = append(f.Funcs, id.Methods...)
 			}
 		case p.at(TIdent) && p.tok().Text == "providers" && p.peekKind() == TIdent:
-			if b := p.providerBundleDecl(); b != nil {
-				f.Providers = append(f.Providers, b)
-			}
+			p.legacyProviders()
 		case p.at(TIdent) && p.tok().Text == "instances" && p.peekKind() == TIdent:
 			if b := p.bundleDecl(); b != nil {
 				f.Bundles = append(f.Bundles, b)
@@ -326,19 +324,51 @@ func (p *parser) list(closing Kind, what string, item func()) {
 	p.next()
 }
 
-func (p *parser) providerBundleDecl() (b *ProviderBundle) {
-	defer p.recoverDecl(func() { b = nil })
-	pos := p.next().Pos
-	name := p.expect(TIdent, "for provider bundle name")
-	b = &ProviderBundle{Pos: pos, NamePos: name.Pos, Name: name.Text}
-	p.expect(Assign, "after provider bundle name")
-	p.expect(LBrace, "before provider entries")
-	p.list(RBrace, "provider entry", func() {
-		entry := p.expect(TIdent, "for provider entry name")
-		p.expect(Colon, "after provider entry name")
-		b.Entries = append(b.Entries, &ProviderEntry{Pos: entry.Pos, Name: entry.Text, Provider: p.expr()})
+// legacyProviders recognizes only the removed declaration for migration. It
+// produces no AST declaration, exported symbol or assembly contract.
+func (p *parser) legacyProviders() {
+	defer p.recoverDecl(func() {})
+	keyword := p.next()
+	name := p.expect(TIdent, "for legacy provider bundle name")
+	p.expect(Assign, "after legacy provider bundle name")
+	open := p.expect(LBrace, "before legacy provider entries")
+	edits := []diag.TextEdit{{Start: keyword.Pos, End: keyword.End, Replacement: ""}, {Start: open.Pos, End: open.End, Replacement: "("}}
+	safe, count := true, 0
+	names := map[string]bool{}
+	for i := p.i; i < len(p.toks) && p.toks[i].Kind == Semi; i++ {
+		if p.toks[i].Text == ";" {
+			edits = append(edits, diag.TextEdit{Start: p.toks[i].Pos, End: p.toks[i].End, Replacement: ""})
+		}
+	}
+	p.list(RBrace, "legacy provider entry", func() {
+		label := p.expect(TIdent, "for legacy provider entry name")
+		colon := p.expect(Colon, "after legacy provider entry name")
+		provider := p.expr()
+		if p.at(Semi) && p.tok().Text == ";" {
+			semi := p.tok()
+			edits = append(edits, diag.TextEdit{Start: semi.Pos, End: semi.End, Replacement: ","})
+		} else if !p.at(Comma) {
+			end := p.toks[p.i-1].End
+			edits = append(edits, diag.TextEdit{Start: end, End: end, Replacement: ","})
+		}
+		for i := p.i; i < len(p.toks) && (p.toks[i].Kind == Comma || p.toks[i].Kind == Semi); i++ {
+			if p.toks[i].Kind == Semi && p.toks[i].Text == ";" && (i != p.i || !p.at(Semi)) {
+				edits = append(edits, diag.TextEdit{Start: p.toks[i].Pos, End: p.toks[i].End, Replacement: ""})
+			}
+		}
+		_, plain := provider.(*Ident)
+		safe = safe && plain && !names[label.Text]
+		names[label.Text] = true
+		count++
+		edits = append(edits, diag.TextEdit{Start: label.Pos, End: label.End, Replacement: ""}, diag.TextEdit{Start: colon.Pos, End: colon.End, Replacement: ""})
 	})
-	return b
+	close := p.toks[p.i-1]
+	edits = append(edits, diag.TextEdit{Start: close.Pos, End: close.End, Replacement: ")"})
+	code := "migration.providers"
+	p.diags.AddCode(keyword.Pos, code, "providers declarations were removed; use an ordinary tuple package value, for example %s = (newService,). Functions with uncaptured ambient needs must stay inline assembly providers or take explicit parameters: assemble[Service](s, newService). Use test.Swap/SwapAt or a tuple literal for replacements; Swap requires the exact element type, unlike changed-signature specialization. See docs/language/packages.md", name.Text)
+	if safe && count > 0 {
+		p.diags.Suggest(keyword.Pos, code, close.End, diag.Fix{Message: "replace provider declaration with tuple package value", Edits: edits})
+	}
 }
 
 func (p *parser) typeDecl() (td *TypeDecl) {

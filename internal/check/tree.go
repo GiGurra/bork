@@ -249,8 +249,11 @@ type CallBuiltin struct {
 // CallValue is a call of a function value: `f(x)`, `r.handler(x)`.
 type CallValue struct {
 	expr
-	Fun  Expr
-	Args []Expr
+	// Provider is proof-only declaration metadata for a statically known tuple
+	// assembly entry. Invocation still uses Fun, including captured needs.
+	Provider *Instance
+	Fun      Expr
+	Args     []Expr
 }
 
 // Lambda is a function value written in place. Its type is a

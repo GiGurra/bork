@@ -8,7 +8,7 @@
 - **Shebang:** a first-line `#!...` is retained as a comment and selects script mode; other lines cannot contain a shebang.
 - **Comments:** `// to end of line` and `/* block */`. They are kept by the lexer and formatter; consecutive `//` lines directly above a field also become its doc comment.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs`, and `providers` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list or declaration, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `is` is contextual between a value and a pattern, at comparison precedence; declarations, calls and selectors named `is` remain valid. `select` is a keyword only where an expression starts and `{` follows. `comptime` is contextual only before `{` where an expression starts. `lazy` is contextual before a local or package binding name, and before a record field name. `async` is a keyword only at a local binding head, `async(scopeExpression) name = expr`; ordinary calls and names `async` remain legal. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list or declaration, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `is` is contextual between a value and a pattern, at comparison precedence; declarations, calls and selectors named `is` remain valid. `select` is a keyword only where an expression starts and `{` follows. `comptime` is contextual only before `{` where an expression starts. `lazy` is contextual before a local or package binding name, and before a record field name. `async` is a keyword only at a local binding head, `async(scopeExpression) name = expr`; ordinary calls and names `async` remain legal. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -25,13 +25,11 @@
 Package    = { File } .
 Script     = [ Shebang EOL ] { HeaderDirective EOL } { Import EOL } { Use EOL } { ( Decl | Binding | Expr ) EOL } . (* statements become implicit-main locals; explicit lazy remains package-level *)
 HeaderDirective = "// bork:require" ModulePath PinnedVersion | "// bork:unsafe" . (* standalone script header only *)
-File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | DeriveDecl | Instances | Providers | PackageBinding ) EOL } .
+File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | DeriveDecl | Instances | PackageBinding ) EOL } .
 PackageBinding = [ "lazy" ] Ident [ ":" Type ] "=" Expr . (* pure memo; comptime reads bake data; uppercase names are exported *)
 AmbientDecl = { "logged" | "propagated" "(" String ")" } "ambient" Ident ":" Type .     (* ambient traceId: String: a value functions read with needs, bound by with *)
 Use        = "use" UseItem .                (* use money.DecodeAmount, use money.*, use api.Json *)
 UseItem    = Ident | Ident "." ( Ident | "*" ) .
-Providers  = "providers" Ident "=" "{" [ ProviderEntry { Sep ProviderEntry } [ Sep ] ] "}" .
-ProviderEntry = Ident ":" ( Ident | QualIdent ) . (* monomorphic declared function *)
 Instances  = "instances" Ident "{" [ UseItem { Sep UseItem } [ Sep ] ] "}" .
                                              (* instances Json { ItemDecode, ItemEncode, money.Defaults } *)
 ClassDecl  = "class" Ident "[" Ident "]" "{" { MethodSig EOL } "}" .  (* class Show[T] { fn show(x: T): String } *)
@@ -274,7 +272,7 @@ assembleRecord[Application](app, newConfig, openDb, newServer, newWorker)
 ```
 
 Supply one explicit concrete target type, a live Scope, then positional provider
-functions. Direct declared providers preserve their parameter/result facts;
+functions. Direct declared preserve their parameter/result facts;
 function values and typed lambdas are also providers. Generic functions require
 monomorphic adapters. Inject an existing value with `() => value`.
 
@@ -282,15 +280,15 @@ Resolution uses exact Bork type identity; wrapper records distinguish brands,
 while aliases retain their base identity. Providers run once per call, after
 their dependencies, and shared dependencies reuse the same value. Every Scope
 parameter receives the target scope. Every provider must be needed. Missing,
-duplicate, cyclic, invalid and unused providers produce compile errors with the
+duplicate, cyclic, invalid and unused produce compile errors with the
 full dependency tree.
 
 The expression returns the target followed by its providers' failure union;
-`?` and `match` work normally. Its effects combine invoked providers and argument
+`?` and `match` work normally. Its effects combine invoked and argument
 evaluation. Partial acquisitions remain owned by the target scope until it
 closes. There is no implicit rollback, cleanup callback or cross-call cache.
 
-`assembleAll[T]` collects all T providers into a List in provider-list order;
+`assembleAll[T]` collects all T into a List in provider-list order;
 there must be at least one. Singular dependencies must still be unambiguous.
 `assembleRecord[R]` resolves each record field separately, sharing repeated
 field types and checking ordinary literal facts and construction visibility.
@@ -299,25 +297,23 @@ automatically. `bork describe` on an assembly name or opening parenthesis shows
 the graph, invocation order, result union and effects, also available as JSON.
 See [assembly requirements](requirements.md#compile-time-dependency-assembly).
 
-Provider bundles are static package declarations:
+Provider bundles are ordinary tuple values:
 
-```bork
-providers Services = { config: newConfig, database: openDb, server: newServer }
+```bork fragment
+import "bork/test"
+Services = (newConfig, openDb, newServer)
 assemble[Server](app, Services)
-assemble[Server](app, Services(database: fakeDb))
+assemble[Server](app, test.SwapAt(Services, 1, fakeDb))
 ```
 
-Entries name monomorphic declared functions, and uppercase bundle names are
-exported. A bundle can only appear in an assembly provider list, where it expands
-in declaration order. Bundle specializations take only named entry replacements;
-each replacement is an ordinary provider expression with the original exact
-success product. Its dependency signature, effects and failures can differ.
-Replacement expressions evaluate in written argument order; graph slots and
-collection roots retain declaration order. Multiple bundles and ordinary providers
-can be mixed at a call. Ordinary duplicate rules (including collection roots) and
-unused-provider checks apply after expansion. Bundle declarations are flat and do
-not include other bundles. Providers construct fresh products on each assembly;
-bundles carry no runtime values or cached products.
+Assembly splices one level of statically known tuple shape in positional order.
+Tuple expressions evaluate once in written order, then execute in graph
+order and construct fresh products. Nested tuples are invalid provider elements.
+Ordinary function-value capture and contract restrictions apply to tuple entries.
+`test.Swap` uses a unique exact element type; `test.SwapAt` uses a pure constant
+zero-based Int position and requires the same exact element type. Neither adapts
+changed dependencies, failures or effects. See [package migration](language/packages.md)
+for removed `providers` declarations and specialization calls.
 
 ## Standard packages
 
