@@ -990,7 +990,7 @@ registrations, with newest-live configuration restoration and subscription >
 ignore > cancellation precedence. Grace is an optional nonnegative
 `bork/time.Duration`, latched on first cancellation and never extended. Event
 subscriptions have bounded 16-event buffers, stop on owner cancellation, and
-remain registered until final release. MockSubscription and Render inject events
+remain registered until final release. MockSubscription and Emit inject events
 without OS effects and support function-mocked Subscribe calls. Real operations
 use io + state; mock injection uses state. Windows Ctrl+C/Break map to SIGINT,
 console close/logoff/shutdown map to SIGTERM cleanup notifications subject to

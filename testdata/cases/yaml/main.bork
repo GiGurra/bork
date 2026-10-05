@@ -28,6 +28,10 @@ fn files(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | f
     error: IoError => println("missing file is an IoError")
     _ => println("unexpected")
   }
+  match (yaml.WriteFile(path, Json.Number { text: "x" })) {
+    error: yaml.Error => println(error.path == path && error.message == "invalid number text \"x\"")
+    _ => println("unexpected")
+  }
   bad = fs.Join([root, "bad.yaml"])
   fs.Write(bad, encoding.Utf8("a: [1\n"))?
   match (yaml.ReadFile(bad)) {
@@ -68,6 +72,33 @@ fn main() {
   show(yaml.Parse("? [1]\n: x\n"))
   show(yaml.Parse("&a [*a]\n"))
   show(yaml.Parse("a: &a [x, x, x, x, x, x, x, x, x, x]\nb: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]\nc: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]\nd: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c, *c]\ne: [*d, *d, *d, *d, *d, *d, *d, *d, *d, *d]\n"))
+  // Merges through a sequence alias count toward the alias bound.
+  show(yaml.Parse("&s [{<<: *s}]\n"))
+  show(yaml.Parse(range(1, 40).map(k => s"s$k: &s$k [{<<: *s${k - 1}}, {<<: *s${k - 1}}]").fold("s0: &s0 [{a: 1}]", (text, line) => text + "\n" + line)))
+  // Merge precedence: own keys, then earlier merges.
+  show(yaml.Parse("a: &a {x: 1, y: 1}\nb: &b {x: 2, z: 2}\nc: &c [*a, *b]\nd:\n  y: 3\n  <<: *c\n"))
+  show(yaml.Parse("a: &a {x: 1}\nb:\n  <<: *a\n  <<: *a\n"))
+  show(yaml.Parse("a: &a [1]\nb:\n  <<: *a\n"))
+  show(yaml.Parse("k: &k name\n*k : 1\n"))
+  // Integer and float forms.
+  show(yaml.Parse("[0o17, 0b101, 1_000, -0x1F, 017, -.5, 1., -0, 1e-400, 1_0.5, +0x1F]\n"))
+  show(yaml.Parse("0x10: a\n16: b\n.inf: c\n"))
+  show(yaml.Parse("!!float 1e400\n"))
+  show(yaml.Parse("!!int 0x-1\n"))
+  show(yaml.Parse(".NaN\n"))
+  show(yaml.Parse("# only a comment\n"))
+  show(yaml.Parse("---\n"))
+  match (yaml.ParseAll("a: 1\n---\nb: [\n")) {
+    values: List[Json] => println(values)
+    error: yaml.Error => println(s"error ${error.line}:${error.column}: ${error.message}")
+  }
+  // Rendered numbers read back unchanged.
+  numbers = Json.Array { items: ["1e5", "-0", "1E+5", "-1.5e-300", "12345678901234567890", "0.1"].map(text => Json.Number { text: text }) }
+  match (yaml.Render(numbers)) {
+    text: String => show(yaml.Parse(text))
+    error: yaml.Error => println(error)
+  }
+  render(yaml.Render(Json.Number { text: "1e400" }))
   // Strings that look like other scalars are quoted on output.
   render(yaml.Render(Json.Array { items: [Json.String { value: "true" }, Json.String { value: "1.5" }, Json.String { value: "" }, Json.String { value: "line\nbreak\n" }, Json.Object { fields: [] }] }))
   render(yaml.Render(Json.Object { fields: [JsonField { name: "n", value: Json.Array { items: [Json.Number { text: "1,2" }] } }] }))

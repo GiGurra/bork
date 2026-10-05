@@ -41,8 +41,8 @@ fn readText(path: String) uses io: String | IoError unsafe go {
 }
 
 // Render writes one block-style document. Objects keep their field order and
-// numbers their exact text. Invalid manually constructed number text and
-// repeated field names give Error.
+// numbers their exact text. Invalid or non-finite manually constructed number
+// text and repeated field names give Error, located in its message.
 fn Render(value: Json, spaces: Indent = 2): String | Error { dump([value], spaces) }
 
 // RenderAll writes each value as a document, separated by "---" lines.
@@ -50,8 +50,10 @@ fn RenderAll(values: List[Json], spaces: Indent = 2): String | Error { dump(valu
 
 // WriteFile replaces the file with one rendered document.
 fn WriteFile(path: String, value: Json, spaces: Indent = 2) uses io: Ok | Error | IoError {
-  text = Render(value, spaces)?
-  writeText(path, text)
+  match (Render(value, spaces)) {
+    text: String => writeText(path, text)
+    error: Error => Error { path: path, line: 0, column: 0, message: error.message }
+  }
 }
 fn writeText(path: String, text: String) uses io: Ok | IoError unsafe go {
   import "os"
@@ -77,6 +79,7 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
   import "errors"
   import "fmt"
   import "io"
+  import "math"
   import "math/big"
   import "regexp"
   import "strconv"
@@ -128,7 +131,7 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
         }
       }
       var number big.Int
-      if _, ok := number.SetString(digits, base); !ok {
+      if _, ok := number.SetString(digits, base); !ok || strings.HasPrefix(digits, "-") || strings.HasPrefix(digits, "+") {
         panic(at(n, "invalid !!int value %q", n.Value))
       }
       if negative {
@@ -136,16 +139,20 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
       }
       return Json_Number{text: number.String()}
     case "!!float":
+      text := strings.ReplaceAll(n.Value, "_", "")
+      switch strings.ToLower(strings.TrimLeft(text, "+-")) {
+      case ".inf", ".nan":
+        text = strings.Replace(text, ".", "", 1) // spelled the way Go parses
+      }
+      value, err := strconv.ParseFloat(text, 64)
+      if err != nil && !errors.Is(err, strconv.ErrRange) {
+        panic(at(n, "invalid !!float value %q", n.Value))
+      }
+      if math.IsInf(value, 0) || math.IsNaN(value) {
+        panic(at(n, "%s is not a finite number, which Json cannot hold", n.Value))
+      }
       if jsonNumber.MatchString(n.Value) {
         return Json_Number{text: n.Value}
-      }
-      value, err := strconv.ParseFloat(strings.ReplaceAll(n.Value, "_", ""), 64)
-      if err != nil {
-        lower := strings.ToLower(n.Value)
-        if strings.Contains(lower, "inf") || strings.Contains(lower, "nan") {
-          panic(at(n, "%s is not a finite number, which Json cannot hold", n.Value))
-        }
-        panic(at(n, "invalid !!float value %q", n.Value))
       }
       return Json_Number{text: strconv.FormatFloat(value, 'g', -1, 64)}
     case "!!str", "!!timestamp":
@@ -157,6 +164,8 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
       panic(at(n, "unsupported tag %s", tag))
     }
   }
+  // Keys are compared and named by their text, whatever they resolve to.
+  keyTags := map[string]bool{"!!null": true, "!!bool": true, "!!int": true, "!!float": true, "!!str": true, "!!timestamp": true, "!!merge": true}
   var value func(n *yaml.Node, aliased bool) Json
   var fields func(n *yaml.Node, aliased bool) []JsonField
   value = func(n *yaml.Node, aliased bool) Json {
@@ -210,14 +219,17 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
       if key.Kind != yaml.ScalarNode {
         panic(at(n.Content[i], "mapping keys must be scalars"))
       }
-      if key.ShortTag() == "!!merge" {
-        continue
+      if !keyTags[key.ShortTag()] {
+        panic(at(key, "unsupported tag %s", key.ShortTag()))
       }
-      scalar(key)
-      if previous, seen := explicit[key.Value]; seen {
+      name := key.Value
+      if key.ShortTag() == "!!merge" {
+        name = "\x00merge" // apart from a quoted "<<" key
+      }
+      if previous, seen := explicit[name]; seen {
         panic(at(n.Content[i], "duplicate key %q (first at line %d, column %d)", key.Value, previous.Line, previous.Column))
       }
-      explicit[key.Value] = n.Content[i]
+      explicit[name] = n.Content[i]
     }
     out := []JsonField{}
     merged := map[string]bool{}
@@ -227,14 +239,22 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
         out = append(out, JsonField{name: resolve(key).Value, value: value(child, aliased)})
         continue
       }
-      sources := []*yaml.Node{child}
-      if resolve(child).Kind == yaml.SequenceNode {
-        sources = resolve(child).Content
+      // Converting the whole value first keeps alias accounting and the
+      // recursion check in one place.
+      var sources []Json
+      switch merge := value(child, aliased).(type) {
+      case Json_Object:
+        sources = []Json{merge}
+      case Json_Array:
+        sources = merge.items
+      }
+      if len(sources) == 0 {
+        panic(at(child, "a merge key needs a mapping or a list of mappings"))
       }
       for _, source := range sources {
-        object, ok := value(source, aliased).(Json_Object)
+        object, ok := source.(Json_Object)
         if !ok {
-          panic(at(source, "a merge key needs a mapping or a list of mappings"))
+          panic(at(child, "a merge key needs a mapping or a list of mappings"))
         }
         for _, field := range object.fields {
           if explicit[field.name] == nil && !merged[field.name] {
@@ -302,6 +322,8 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
 // dump converts each value to a node tree and emits it with go.yaml.in/yaml/v4.
 fn dump(values: List[Json], spaces: Indent): String | Error unsafe go {
   import "fmt"
+  import "math"
+  import "strconv"
   import "regexp"
   import "strings"
   import "go.yaml.in/yaml/v4"
@@ -328,6 +350,9 @@ fn dump(values: List[Json], spaces: Indent): String | Error unsafe go {
       tag := "!!int"
       if strings.ContainsAny(value.text, ".eE") {
         tag = "!!float"
+        if number, _ := strconv.ParseFloat(value.text, 64); math.IsInf(number, 0) {
+          return fail("number %s is not finite as a float", value.text)
+        }
       }
       return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value.text}, nil
     case Json_String:

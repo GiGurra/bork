@@ -33,17 +33,22 @@ fn main() {
 
 YAML values become Json values like this:
 
-- Mappings become objects that keep their key order. Keys must be scalars and
-  use their text, so `1: x` has the key `"1"`. A key that appears twice is an
-  error, even when spelled differently (`1` and `"1"`).
-- Integers become numbers in decimal, so `0x1F` is `31`, `0o17` is `15` and
-  large integers stay exact. Floats keep their text when it is valid JSON
-  number text, and are rewritten otherwise (`.5` is `0.5`). `.inf` and `.nan`
-  are errors, since Json numbers are finite.
+- Mappings become objects that keep their key order. Keys must be scalars, and
+  a key's name is its text as written: `1: x` has the key `"1"`, and `0x10`
+  stays `"0x10"`. Keys are compared by that text, so `1` and `"1"` are the same
+  key, while `0x10` and `16` are different ones. A key that appears twice is an
+  error.
+- Integers become numbers in decimal, so `0x1F` is `31`, `0o17` is `15`, `017`
+  is `17` and large integers stay exact. Floats keep their text when it is
+  valid JSON number text. Other spellings are rewritten through a 64-bit float,
+  so `.5` is `0.5` and `1.` is `1`. `.inf`, `.nan` and floats too large for 64
+  bits are errors, since Json numbers are finite.
 - `true`/`false` are booleans, `null`, `~` and empty values are `Null`, and
   timestamps stay strings. YAML 1.2 rules apply, so `yes` and `on` are strings.
-- Aliases are copies of their anchored value. Merge keys (`<<: *defaults`) are
-  supported: the mapping's own keys win, then earlier merged mappings.
+- Aliases are copies of their anchored value. Merge keys (`<<: *defaults` or
+  `<<: [*a, *b]`) are supported: the mapping's own keys win, then earlier
+  merged mappings. Merged fields appear where the `<<` key is, and a mapping
+  may have only one `<<` key.
 
 Some YAML is rejected rather than guessed at:
 
@@ -63,12 +68,15 @@ Some YAML is rejected rather than guessed at:
 | `RenderAll(values, spaces = 2)` | `String \| yaml.Error`: documents separated by `---` lines. |
 | `WriteFile(path, value, spaces = 2)` | `Ok \| yaml.Error \| IoError`: replaces the file with one document. Uses io. |
 
-`spaces` is the indent, 2 through 9. Objects keep their field order and numbers
-their exact text. Strings that would read back as another kind are quoted
-(`'true'`, `'1.5'`), and strings with line breaks use literal blocks. A
-manually built number with invalid text, or an object with a repeated field
-name, gives `yaml.Error` with the path of the value (`.items[0]`). Comments and
-the original formatting are not kept.
+`spaces` is the indent, 2 through 9. List items under a field start at the
+field's own indent (`tags:` then `- a`). Objects keep their field order and
+numbers their exact text. Strings that would read back as another kind are
+quoted (`'true'`, `'1.5'`), and strings with line breaks use literal blocks.
+A manually built number with invalid or non-finite text, or an object with a
+repeated field name, gives `yaml.Error`. Its message names the value's
+location (`invalid number text "1,2" at .items[0]`). Its `path` is the file
+for WriteFile and `""` otherwise, and line and column are 0. Comments and the
+original formatting are not kept.
 
 ## Queries
 
