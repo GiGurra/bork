@@ -80,12 +80,21 @@ fn main() {
   show(yaml.Parse("a: &a {x: 1}\nb:\n  <<: *a\n  <<: *a\n"))
   show(yaml.Parse("a: &a [1]\nb:\n  <<: *a\n"))
   show(yaml.Parse("k: &k name\n*k : 1\n"))
+  show(yaml.Parse("&s {<<: *s}\n"))
+  show(yaml.Parse("b:\n  <<: {a: 1}\n  \"\\0merge\": 2\n  \"<<\": 3\n"))
+  show(yaml.Parse("a: {<<: {}}\n"))
+  show(yaml.Parse("a: {<<: []}\n"))
+  show(yaml.Parse("!!int abc: 1\n"))
   // Integer and float forms.
   show(yaml.Parse("[0o17, 0b101, 1_000, -0x1F, 017, -.5, 1., -0, 1e-400, 1_0.5, +0x1F]\n"))
   show(yaml.Parse("0x10: a\n16: b\n.inf: c\n"))
   show(yaml.Parse("!!float 1e400\n"))
   show(yaml.Parse("!!int 0x-1\n"))
   show(yaml.Parse(".NaN\n"))
+  show(yaml.Parse("[!!int -0, !!float .5e-400]\n"))
+  show(yaml.Parse("!!float 0x1p3\n"))
+  show(yaml.Parse("!!int _1\n"))
+  show(yaml.Parse("!!float 1__0\n"))
   show(yaml.Parse("# only a comment\n"))
   show(yaml.Parse("---\n"))
   match (yaml.ParseAll("a: 1\n---\nb: [\n")) {
@@ -98,7 +107,7 @@ fn main() {
     text: String => show(yaml.Parse(text))
     error: yaml.Error => println(error)
   }
-  render(yaml.Render(Json.Number { text: "1e400" }))
+  render(yaml.Render(Json.Number { text: "-1e400" }))
   // Strings that look like other scalars are quoted on output.
   render(yaml.Render(Json.Array { items: [Json.String { value: "true" }, Json.String { value: "1.5" }, Json.String { value: "" }, Json.String { value: "line\nbreak\n" }, Json.Object { fields: [] }] }))
   render(yaml.Render(Json.Object { fields: [JsonField { name: "n", value: Json.Array { items: [Json.Number { text: "1,2" }] } }] }))

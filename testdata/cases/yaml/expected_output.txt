@@ -44,16 +44,25 @@ Json.Object { fields: [JsonField { name: "a", value: Json.Object { fields: [Json
 error 4:3: duplicate key "<<" (first at line 3, column 3)
 error 3:7: a merge key needs a mapping or a list of mappings
 Json.Object { fields: [JsonField { name: "k", value: Json.String { value: "name" } }, JsonField { name: "name", value: Json.Number { text: "1" } }] }
+error 1:9: alias *s refers to a value that contains it
+Json.Object { fields: [JsonField { name: "b", value: Json.Object { fields: [JsonField { name: "a", value: Json.Number { text: "1" } }, JsonField { name: "\x00merge", value: Json.Number { text: "2" } }, JsonField { name: "<<", value: Json.Number { text: "3" } }] } }] }
+Json.Object { fields: [JsonField { name: "a", value: Json.Object { fields: [] } }] }
+error 1:9: a merge key needs a mapping or a list of mappings
+Json.Object { fields: [JsonField { name: "abc", value: Json.Number { text: "1" } }] }
 Json.Array { items: [Json.Number { text: "15" }, Json.Number { text: "5" }, Json.Number { text: "1000" }, Json.Number { text: "-31" }, Json.Number { text: "17" }, Json.Number { text: "-0.5" }, Json.Number { text: "1" }, Json.Number { text: "-0" }, Json.Number { text: "1e-400" }, Json.Number { text: "10.5" }, Json.Number { text: "31" }] }
 Json.Object { fields: [JsonField { name: "0x10", value: Json.String { value: "a" } }, JsonField { name: "16", value: Json.String { value: "b" } }, JsonField { name: ".inf", value: Json.String { value: "c" } }] }
 error 1:1: 1e400 is not a finite number, which Json cannot hold
 error 1:1: invalid !!int value "0x-1"
 error 1:1: .NaN is not a finite number, which Json cannot hold
+Json.Array { items: [Json.Number { text: "0" }, Json.Number { text: "0" }] }
+error 1:1: invalid !!float value "0x1p3"
+error 1:1: invalid !!int value "_1"
+error 1:1: invalid !!float value "1__0"
 Json.Null
 Json.Null
 error 4:1: did not find expected node content (while parsing a flow node that starts at line 4, column 1)
 Json.Array { items: [Json.Number { text: "1e5" }, Json.Number { text: "-0" }, Json.Number { text: "1E+5" }, Json.Number { text: "-1.5e-300" }, Json.Number { text: "12345678901234567890" }, Json.Number { text: "0.1" }] }
-error: number 1e400 is not finite as a float
+error: number -1e400 is not finite as a float
 - 'true'
 - '1.5'
 - ''

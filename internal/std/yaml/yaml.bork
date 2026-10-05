@@ -101,6 +101,15 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
     }
     return total
   }
+  yamlFloat := regexp.MustCompile(`^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$`)
+  // separators accepts underscores only between digits, then drops them.
+  separators := func(n *yaml.Node) string {
+    text := strings.TrimLeft(n.Value, "+-")
+    if strings.HasPrefix(text, "_") || strings.HasSuffix(text, "_") || strings.Contains(text, "__") {
+      panic(at(n, "invalid %s value %q", n.ShortTag(), n.Value))
+    }
+    return strings.ReplaceAll(n.Value, "_", "")
+  }
   scalar := func(n *yaml.Node) Json {
     switch tag := n.ShortTag(); tag {
     case "!!null":
@@ -112,7 +121,7 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
       }
       return Json_Bool{value: value}
     case "!!int":
-      digits, negative := strings.ReplaceAll(n.Value, "_", ""), false
+      digits, negative := separators(n), false
       if strings.HasPrefix(digits, "-") || strings.HasPrefix(digits, "+") {
         digits, negative = digits[1:], digits[0] == '-'
       }
@@ -139,10 +148,14 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
       }
       return Json_Number{text: number.String()}
     case "!!float":
-      text := strings.ReplaceAll(n.Value, "_", "")
+      text := separators(n)
       switch strings.ToLower(strings.TrimLeft(text, "+-")) {
       case ".inf", ".nan":
         text = strings.Replace(text, ".", "", 1) // spelled the way Go parses
+      default:
+        if !yamlFloat.MatchString(text) {
+          panic(at(n, "invalid !!float value %q", n.Value))
+        }
       }
       value, err := strconv.ParseFloat(text, 64)
       if err != nil && !errors.Is(err, strconv.ErrRange) {
@@ -214,6 +227,7 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
   // key is, unless the mapping names them itself or an earlier merge did.
   fields = func(n *yaml.Node, aliased bool) []JsonField {
     explicit := map[string]*yaml.Node{}
+    var mergeKey *yaml.Node
     for i := 0; i < len(n.Content); i += 2 {
       key := resolve(n.Content[i])
       if key.Kind != yaml.ScalarNode {
@@ -222,14 +236,18 @@ fn load(text: String, path: String, single: Bool): List[Json] | Error unsafe go 
       if !keyTags[key.ShortTag()] {
         panic(at(key, "unsupported tag %s", key.ShortTag()))
       }
-      name := key.Value
+      previous, seen := explicit[key.Value]
       if key.ShortTag() == "!!merge" {
-        name = "\x00merge" // apart from a quoted "<<" key
+        previous, seen = mergeKey, mergeKey != nil
       }
-      if previous, seen := explicit[name]; seen {
+      if seen {
         panic(at(n.Content[i], "duplicate key %q (first at line %d, column %d)", key.Value, previous.Line, previous.Column))
       }
-      explicit[name] = n.Content[i]
+      if key.ShortTag() == "!!merge" {
+        mergeKey = n.Content[i]
+      } else {
+        explicit[key.Value] = n.Content[i]
+      }
     }
     out := []JsonField{}
     merged := map[string]bool{}

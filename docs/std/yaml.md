@@ -36,19 +36,22 @@ YAML values become Json values like this:
 - Mappings become objects that keep their key order. Keys must be scalars, and
   a key's name is its text as written: `1: x` has the key `"1"`, and `0x10`
   stays `"0x10"`. Keys are compared by that text, so `1` and `"1"` are the same
-  key, while `0x10` and `16` are different ones. A key that appears twice is an
-  error.
+  key, while `0x10` and `16` are different ones. A key's tag is checked but
+  not its value, so `!!int abc: 1` is the key `"abc"`. A key that appears
+  twice is an error.
 - Integers become numbers in decimal, so `0x1F` is `31`, `0o17` is `15`, `017`
-  is `17` and large integers stay exact. Floats keep their text when it is
+  is `17` and large integers stay exact. Underscores between digits are
+  ignored (`1_000`). Floats keep their text when it is
   valid JSON number text. Other spellings are rewritten through a 64-bit float,
-  so `.5` is `0.5` and `1.` is `1`. `.inf`, `.nan` and floats too large for 64
+  so `.5` is `0.5`, `1.` is `1`, and a value too small for 64 bits is `0`
+  unless its text is valid JSON. `.inf`, `.nan` and floats too large for 64
   bits are errors, since Json numbers are finite.
 - `true`/`false` are booleans, `null`, `~` and empty values are `Null`, and
   timestamps stay strings. YAML 1.2 rules apply, so `yes` and `on` are strings.
 - Aliases are copies of their anchored value. Merge keys (`<<: *defaults` or
   `<<: [*a, *b]`) are supported: the mapping's own keys win, then earlier
   merged mappings. Merged fields appear where the `<<` key is, and a mapping
-  may have only one `<<` key.
+  may have only one `<<` key. `<<: {}` merges nothing; `<<: []` is an error.
 
 Some YAML is rejected rather than guessed at:
 
