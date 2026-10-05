@@ -71,7 +71,7 @@ func Source(path string, src []byte) ([]byte, error) {
 			text = "{" + text + "}"
 		}
 		start := offset(t.Pos)
-		u := t.Kind == syntax.Not || t.Kind == syntax.Minus && !endsExpr(prev)
+		u := t.Kind == syntax.Not || (t.Kind == syntax.Minus || t.Kind == syntax.Caret) && !endsExpr(prev)
 		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && items[len(items)-1].kind == syntax.TIdent && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
 		chain := t.Kind == syntax.Dot && endsExpr(prev) || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot
@@ -240,7 +240,7 @@ func space(a, b item) bool {
 		return false
 	case syntax.LBrace:
 		return b.kind != syntax.Colon
-	case syntax.Not, syntax.Minus:
+	case syntax.Not, syntax.Minus, syntax.Caret:
 		return !a.unary
 	}
 	return true

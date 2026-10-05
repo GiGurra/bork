@@ -1150,8 +1150,8 @@ var precedence = map[Kind]int{
 	OrOr:   2,
 	AndAnd: 3,
 	Eq:     4, NotEq: 4, Lt: 4, LtEq: 4, Gt: 4, GtEq: 4,
-	Plus: 5, Minus: 5,
-	Star: 6, Slash: 6, Pct: 6,
+	Plus: 5, Minus: 5, Pipe: 5, Caret: 5,
+	Star: 6, Slash: 6, Pct: 6, Amp: 6, Shl: 6, Shr: 6,
 }
 
 func (p *parser) expr() Expr { return p.binary(1) }
@@ -1202,7 +1202,7 @@ func pipe(op Token, x, y Expr, start, end, targetEnd diag.Pos) Expr {
 func (p *parser) unary() (out Expr) {
 	start := p.tok().Pos
 	defer func() { p.rememberSpan(out, start) }()
-	if p.at(Minus) || p.at(Not) {
+	if p.at(Minus) || p.at(Not) || p.at(Caret) {
 		op := p.next()
 		return &Unary{Pos: op.Pos, Op: op.Kind, X: p.unary()}
 	}

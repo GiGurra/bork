@@ -101,9 +101,9 @@ PipeExpr   = OrExpr { "|>" OrExpr } .        (* x |> f(a) is f(x, a); x |> f is 
 OrExpr     = AndExpr { "||" AndExpr } .
 AndExpr    = CmpExpr { "&&" CmpExpr } .
 CmpExpr    = AddExpr { ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) AddExpr } .
-AddExpr    = MulExpr { ( "+" | "-" ) MulExpr } .
-MulExpr    = Unary { ( "*" | "/" | "%" ) Unary } .
-Unary      = ( "-" | "!" ) Unary | Postfix .
+AddExpr    = MulExpr { ( "+" | "-" | "|" | "^" ) MulExpr } .
+MulExpr    = Unary { ( "*" | "/" | "%" | "&" | "<<" | ">>" ) Unary } .
+Unary      = ( "-" | "!" | "^" ) Unary | Postfix .
 Postfix    = Primary { [ "[" Type { "," Type } "]" ] "(" [ Args ] ")"
                      | "[" Type { "," Type } "]" (* only on a constructor owner, followed by RecordLit or .Variant *)
                      | "." Ident
@@ -167,6 +167,7 @@ Source spans follow the lexer's token ends, independently of printed token text.
 - **A value that is computed but never used is a compile error** (e.g. calling a function that returns `Int` as a statement).
 - **Numbers:** `Int8`, `Int16`, `Int32`, `Int` (= `Int64`), `Uint8` (= `Byte`), `Uint16`, `Uint32`, `Uint64`, `Float32`, `Float` (= `Float64`). Integers wrap on overflow, like Go.
 - **Operators:** `+ - * /` on two numbers of the same type, `%` on two integers of the same type; `+` also concatenates `String`s; `< <= > >=` on numbers or `String`s; `== !=` on two values of the same type, or a union and a value of one of its members; unary `-` on signed numbers; `&& || !` on `Bool`, with short-circuiting. Types never mix implicitly. Dividing by a constant zero is a compile error.
+- **Bitwise integers:** `&`, `|`, and `^` require two integers of the same type. Unary `^x` complements the bits within x's width; `~x` is an error with a replacement fix. `<<` and `>>` retain the left operand's type. The count can be any unsigned integer or a signed integer proven nonnegative by a constant, guard, or predicate. Left shifts discard overflowing bits at runtime; right shifts fill with the sign bit for signed integers and zero for unsigned integers. Counts at least the width give zero, or -1 for a negative signed right shift. Shifts and `&` have multiplication precedence; `|` and binary `^` have addition precedence. Bool values use `&&`, `||`, and `!=`.
 - **Constants:** number literals, and `+ - * / %` on them, are computed exactly at compile time (`0.1 + 0.2` is exactly `0.3`). A constant takes its type from where it is used (`x: Uint8 = 255`, `small + 1`); otherwise it is a `Float` if it contains a float literal, an `Int` otherwise. It is computed as its type computes: `7 / 2` is `3` as an `Int`, and `x: Float = 1 / 3` is `0.333...`. It must fit its type.
 - **Radix conversion:** importing `bork/strconv` adds integer `Hex`, `Binary`, `Octal`, and `Format` methods returning `String`, with proven width (0..4096) and base (2..36). String `ParseInt`, sized `ParseIntN`/`ParseUintN`, and `ParseByte` methods return the integer or `ParseError`; a proven base is 0 or 2..36, with 0 detecting explicit prefixes. See [the package API](std/strconv.md).
 - **Conversions:** `toInt8(x)`, `toInt16`, `toInt32`, `toInt` (`toInt64`), `toUint8` (`toByte`), `toUint16`, `toUint32`, `toUint64`, `toFloat32`, `toFloat` (`toFloat64`), from any number type. If every value of x's type fits, the result is the target type; otherwise it is `Target | OutOfRange` (float to integer drops the fraction, and NaN or infinities never fit). A constant argument is converted at compile time and must fit.

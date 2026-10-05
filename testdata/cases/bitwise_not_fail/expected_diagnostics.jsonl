@@ -1,0 +1,1 @@
+{"schema_version":1,"file":"main.bork","line":1,"column":28,"end_line":1,"end_column":29,"message":"bitwise NOT is written ^x, not ~x","code":"syntax.bitwise-not","fixes":[{"message":"replace ~ with ^","edits":[{"start":{"file":"main.bork","line":1,"column":28},"end":{"file":"main.bork","line":1,"column":29},"replacement":"^"}]}]}

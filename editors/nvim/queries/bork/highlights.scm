@@ -27,7 +27,7 @@
  "import" "use" "class" "instance" "instances" "providers" "test" "private"
  "derive" "uses" "needs" "ambient" "logged" "propagated" "lazy" "async"
  "scope" "with" "in" "resource" "go" "comptime" "mock"] @keyword
-["+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator
+["&" "^" "<<" ">>" "+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator
 ["(" ")" "[" "]" "{" "}"] @punctuation.bracket
 ["," ";" ":" "."] @punctuation.delimiter
 

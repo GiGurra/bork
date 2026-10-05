@@ -6,6 +6,8 @@
 
 *Bork bork bork!* The name comes from the [Swedish Chef](https://en.wikipedia.org/wiki/Swedish_Chef). Strict recipes, cheerfully enforced.
 
+Fixed-width integers support bitwise `&`, `|`, `^`, Go-style complement `^x`, and shifts with checked nonnegative counts; see [numbers](docs/language/basics.md).
+
 ## Install
 
 bork compiles through Go. Install [Go](https://go.dev/dl/) 1.21 or later with

@@ -1,2 +1,1 @@
-main.bork:1:26: unexpected character '&' (did you mean '&&'?)
-main.bork:1:28: expected ')' to end the argument list, found 'false'
+main.bork:1:26: operator & needs integers; use && for Bool operands

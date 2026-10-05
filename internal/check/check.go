@@ -3,6 +3,7 @@ package check
 import (
 	"fmt"
 	"go/constant"
+	"go/token"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -1334,7 +1335,7 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	case *syntax.Ident:
 		return c.record(e, c.ident(e, want))
 	case *syntax.Unary:
-		return c.record(e, c.unary(e))
+		return c.record(e, c.unary(e, want))
 	case *syntax.Binary:
 		return c.record(e, c.binary(e, want))
 	case *syntax.Call:
@@ -1431,12 +1432,25 @@ func (c *checker) scriptLocalError(pos diag.Pos, name string) bool {
 	return true
 }
 
-func (c *checker) unary(e *syntax.Unary) Type {
-	t := c.expr(e.X)
+func (c *checker) unary(e *syntax.Unary, want Type) Type {
+	t := c.exprWant(e.X, want)
 	if t == Invalid {
 		return Invalid
 	}
 	switch e.Op {
+	case syntax.Caret:
+		if !IsInteger(t) {
+			c.errorf(e.Pos, "operator ^ needs an integer, found %s", t)
+			return Invalid
+		}
+		if v := c.info.consts[e.X]; v != nil {
+			precision := uint(0)
+			if isUnsigned(t) {
+				precision = uint(bitsOf(t))
+			}
+			c.info.consts[e] = constant.UnaryOp(token.XOR, v, precision)
+		}
+		return t
 	case syntax.Minus:
 		if isUnsigned(t) {
 			c.errorf(e.Pos, "operator - cannot be used on the unsigned type %s", t)
@@ -1470,7 +1484,10 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 		xWant = want
 	}
 	var x, y Type
-	if constValue(e.X) != nil && constValue(e.Y) == nil {
+	if e.Op == syntax.Shl || e.Op == syntax.Shr {
+		x = c.exprWant(e.X, want)
+		y = c.expr(e.Y)
+	} else if constValue(e.X) != nil && constValue(e.Y) == nil {
 		y = c.exprWant(e.Y, xWant)
 		x = c.exprWant(e.X, y)
 	} else {
@@ -1516,6 +1533,38 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 	case syntax.Minus, syntax.Star, syntax.Slash:
 		if !sameNumbers {
 			c.errorf(e.Pos, "operator %s needs two numbers of the same type, found %s and %s", op, x, y)
+			return Invalid
+		}
+		return x
+	case syntax.Shl, syntax.Shr:
+		if !IsInteger(x) || !IsInteger(y) {
+			c.errorf(e.Pos, "operator %s needs integer operands, found %s and %s", op, x, y)
+			return Invalid
+		}
+		if a, b := c.info.consts[e.X], c.info.consts[e.Y]; a != nil && b != nil && constant.Sign(b) >= 0 {
+			v := shiftConstant(a, b, e.Op)
+			if v == nil {
+				c.errorf(e.Pos, "constant shift result does not fit %s", x)
+				return Invalid
+			}
+			v, ok := c.fits(e.Pos, v, x)
+			if !ok {
+				return Invalid
+			}
+			c.info.consts[e] = v
+		}
+		return x
+	case syntax.Amp, syntax.Pipe, syntax.Caret:
+		if !sameNumbers || !IsInteger(x) {
+			if x == Bool && y == Bool {
+				replacement := map[syntax.Kind]string{syntax.Amp: "&&", syntax.Pipe: "||", syntax.Caret: "!="}[e.Op]
+				c.errorf(e.Pos, "operator %s needs integers; use %s for Bool operands", op, replacement)
+				end := e.Pos
+				end.Col += len(op)
+				c.diags.Suggest(e.Pos, "type.error", end, diag.Fix{Message: "replace " + op + " with " + replacement, Edits: []diag.TextEdit{{Start: e.Pos, End: end, Replacement: replacement}}})
+			} else {
+				c.errorf(e.Pos, "operator %s needs two integers of the same type, found %s and %s", op, x, y)
+			}
 			return Invalid
 		}
 		return x

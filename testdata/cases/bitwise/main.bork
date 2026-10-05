@@ -1,0 +1,29 @@
+fn signed(x: Int8, n: Uint64) uses io {
+  println(x & 15, x | 15, x ^ 15, ^x, x << n, x >> n)
+}
+fn unsigned(x: Byte, n: Uint64) uses io {
+  println(x & 15, x | 15, x ^ 15, ^x, x << n, x >> n)
+}
+fn main() {
+  signed(-2, 1)
+  signed(-2, 64)
+  unsigned(254, 1)
+  unsigned(254, 64)
+  a: Uint16 = 4660
+  b: Uint32 = 305419896
+  c: Uint64 = 18446744073709551615
+  d: Int16 = -2
+  e: Int32 = -2
+  f: Int = -2
+  println(a & 255, b & 255, c ^ 255, d >> 4, e >> 4, f >> 4)
+  println(1 | 2 & 4, 1 << 2 + 1, 7 ^ 3, ^0)
+  all: Byte = ^0
+  one: Byte = 1 << 7
+  println(all, one)
+  println(((1 << 1024) * (1 << 1024)) >> 2048)
+  println((-((1 << 1024) * (1 << 1024))) >> 2047)
+  count = 2
+  println(f << count)
+  comptimeBits = comptime { n: Byte = 240; n ^ 15 }
+  println(comptimeBits)
+}

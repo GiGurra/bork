@@ -21,6 +21,7 @@ import (
 var constOps = map[syntax.Kind]token.Token{
 	syntax.Plus: token.ADD, syntax.Minus: token.SUB, syntax.Star: token.MUL,
 	syntax.Slash: token.QUO, syntax.Pct: token.REM,
+	syntax.Amp: token.AND, syntax.Pipe: token.OR, syntax.Caret: token.XOR,
 }
 
 // constValue computes e if it is a constant expression of an integer
@@ -30,6 +31,10 @@ var constOps = map[syntax.Kind]token.Token{
 func constValue(e syntax.Expr) constant.Value { return constValueAs(e, false) }
 
 func constValueAs(e syntax.Expr, asFloat bool) constant.Value {
+	return constValueWidth(e, asFloat, 0)
+}
+
+func constValueWidth(e syntax.Expr, asFloat bool, precision uint) constant.Value {
 	var v constant.Value
 	switch e := e.(type) {
 	case *syntax.IntLit:
@@ -39,24 +44,43 @@ func constValueAs(e syntax.Expr, asFloat bool) constant.Value {
 	case *syntax.RuneLit:
 		return nil
 	case *syntax.Unary:
-		if e.Op != syntax.Minus {
+		if e.Op != syntax.Minus && e.Op != syntax.Caret {
 			return nil
 		}
-		if x := constValueAs(e.X, asFloat); x != nil {
-			v = constant.UnaryOp(token.SUB, x, 0)
+		if x := constValueWidth(e.X, asFloat, precision); x != nil {
+			if e.Op == syntax.Caret {
+				if asFloat || x.Kind() != constant.Int {
+					return nil
+				}
+				v = constant.UnaryOp(token.XOR, x, precision)
+			} else {
+				v = constant.UnaryOp(token.SUB, x, 0)
+			}
 		}
 	case *syntax.Binary:
+		if e.Op == syntax.Shl || e.Op == syntax.Shr {
+			if asFloat {
+				return nil
+			}
+			x, y := constValueWidth(e.X, false, precision), constValueWidth(e.Y, false, 0)
+			if x == nil || y == nil || x.Kind() != constant.Int || y.Kind() != constant.Int {
+				return nil
+			}
+			return shiftConstant(x, y, e.Op)
+		}
 		op, ok := constOps[e.Op]
 		if !ok {
 			return nil
 		}
-		x, y := constValueAs(e.X, asFloat), constValueAs(e.Y, asFloat)
+		x, y := constValueWidth(e.X, asFloat, precision), constValueWidth(e.Y, asFloat, precision)
 		if x == nil || y == nil {
 			return nil
 		}
 		ints := x.Kind() == constant.Int && y.Kind() == constant.Int
 		switch {
 		case (op == token.QUO || op == token.REM) && constant.Sign(y) == 0:
+			return nil
+		case (op == token.AND || op == token.OR || op == token.XOR) && (!ints || asFloat):
 			return nil
 		case op == token.REM && (!ints || asFloat):
 			return nil
@@ -78,11 +102,25 @@ func (c *checker) constant(e syntax.Expr, v constant.Value, want Type) Type {
 	if w := numericWant(want, t); w != nil {
 		t = w
 	}
+	if isUnsigned(t) {
+		v = constValueWidth(e, false, uint(bitsOf(t)))
+		if v == nil {
+			c.errorf(e.Position(), "invalid integer constant")
+			return c.record(e, Invalid)
+		}
+	}
 	if IsFloat(t) {
 		v = constValueAs(e, true)
 		if v == nil {
 			// The only operation integers allow and floats do not.
-			c.errorf(e.Position(), "operator %% needs integers, but this constant is a %s", t)
+			op := "%"
+			if binary, ok := e.(*syntax.Binary); ok && binary.Op != syntax.Pct {
+				op = opSymbol(binary.Op)
+			}
+			if unary, ok := e.(*syntax.Unary); ok {
+				op = opSymbol(unary.Op)
+			}
+			c.errorf(e.Position(), "operator %s needs integers, but this constant is a %s", op, t)
 			return c.record(e, Invalid)
 		}
 	}

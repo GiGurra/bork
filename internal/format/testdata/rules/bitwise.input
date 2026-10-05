@@ -1,0 +1,1 @@
+fn f(x:Byte,n:Uint64):Byte {x<<n|^x&15^1}

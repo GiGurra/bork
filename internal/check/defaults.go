@@ -110,7 +110,7 @@ func isClosed(x syntax.Expr) bool {
 		}
 		return true
 	case *syntax.Unary:
-		return x.Op == syntax.Minus && isClosed(x.X)
+		return (x.Op == syntax.Minus || x.Op == syntax.Caret) && isClosed(x.X)
 	case *syntax.ListLit:
 		for _, el := range x.Elems {
 			if !isClosed(el) {
@@ -186,7 +186,7 @@ func isLiteral(x syntax.Expr) bool {
 	case *syntax.IntLit, *syntax.FloatLit, *syntax.RuneLit, *syntax.StringLit, *syntax.BoolLit:
 		return true
 	case *syntax.Unary:
-		return x.Op == syntax.Minus && isLiteral(x.X)
+		return (x.Op == syntax.Minus || x.Op == syntax.Caret) && isLiteral(x.X)
 	case *syntax.ListLit:
 		for _, el := range x.Elems {
 			if !isLiteral(el) {
