@@ -81,3 +81,24 @@ fn Sleep(s: Scope, duration: Duration) uses clock + state: Ok | Cancelled unsafe
   case <-timer.C: return _borkOk()
   }
 }
+
+// After gives a channel of s that receives the Instant d has passed, once,
+// and is then closed: a deadline made once stays expired for every later
+// receive. Closing the channel, or the end of s, stops its timer.
+fn After(s: Scope, d: Duration) uses clock + state: Channel[Instant] unsafe go {
+  import "time"
+  return _borkChanTimer(s, time.Duration(d.nanos), 0, func(t time.Time) Instant { return Instant{unixNanos: t.UnixNano()} })
+}
+
+// Tick gives a channel of s that receives an Instant every period, until
+// it is closed or s ends. A tick that finds the last one not yet received
+// is dropped, so a slow receiver gets the latest, not a backlog. The
+// period must be positive: Tick panics otherwise, as Go's NewTicker does.
+fn Tick(s: Scope, every: Duration) uses clock + state: Channel[Instant] unsafe go {
+  import "time"
+  period := time.Duration(every.nanos)
+  if period <= 0 {
+    panic("time.Tick: the period must be positive")
+  }
+  return _borkChanTimer(s, period, period, func(t time.Time) Instant { return Instant{unixNanos: t.UnixNano()} })
+}

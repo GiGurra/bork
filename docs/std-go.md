@@ -19,6 +19,14 @@ The generated union member is an empty struct whose printed spelling is `Ok`.
 The old `_Unit` Go type spelling remains an alias for one release, alongside
 the deprecated bork `Unit` type alias. Prefer the helper for new Go bodies.
 
+## Channels
+
+| Helper | Behavior |
+| --- | --- |
+| `_borkChanTimer[T](s *_Scope, first, every time.Duration, value func(time.Time) T) Channel[T]` | Makes a channel of `s` that receives `value(now)` after `first`, then every `every` if positive (dropping ticks not yet received), or is closed after the one value. Closing the channel or the end of `s` stops the timer. |
+
+`bork/time`'s `After` and `Tick` are built on it.
+
 ## I/O errors
 
 | Helper | Behavior |

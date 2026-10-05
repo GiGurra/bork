@@ -14,6 +14,7 @@ import (
  "slices"
  "sync"
  "sync/atomic"
+ "time"
 )
 
 // The outcomes of a channel operation.
@@ -357,5 +358,46 @@ func _borkChanReceive(scope *_Scope, c *_borkChan) (any, bool) {
   return value, false
  }
  return value, true
+}
+
+// _borkChanTimer makes a channel of s that is given value(now) after
+// first, and then, if every is positive, every period after that, keeping
+// to the cadence and dropping ticks a receiver has not taken; otherwise it
+// is closed after the one value. Closing the channel, or the end of s,
+// stops the timer.
+func _borkChanTimer[T any](s *_Scope, first, every time.Duration, value func(time.Time) T) Channel[T] {
+ c := _borkNewChan(s, 1)
+ var mu sync.Mutex
+ var timer *time.Timer
+ stopped := false
+ next := time.Now().Add(max(first, 0))
+ fire := func() {
+  c.offer(value(time.Now()))
+  if every <= 0 {
+   c.close()
+   return
+  }
+  mu.Lock()
+  defer mu.Unlock()
+  if stopped {
+   return
+  }
+  for now := time.Now(); !next.After(now); {
+   next = next.Add(every)
+  }
+  timer.Reset(time.Until(next))
+ }
+ c.onClose = func() {
+  mu.Lock()
+  defer mu.Unlock()
+  stopped = true
+  if timer != nil {
+   timer.Stop()
+  }
+ }
+ mu.Lock()
+ timer = time.AfterFunc(time.Until(next), fire)
+ mu.Unlock()
+ return Channel[T]{native: ChannelHandle{handle: c, owner: s.Own(c.release)}}
 }
 `
