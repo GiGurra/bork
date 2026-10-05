@@ -45,6 +45,11 @@ import (
 type Cancelled struct{ reason string }
 type Closed struct{}
 type _Ok struct{}
+type ChannelHandle struct {
+ handle any
+ owner *_Owner
+}
+type Channel[T any] struct{ native ChannelHandle }
 
 func _borkOk() _Ok { return _Ok{} }
 
@@ -272,5 +277,35 @@ func TestFixedBufferGrowsLazily(t *testing.T) {
  for i := 0; i < 3; i++ { _borkChanSend(s, d, i) }
  if len(d.ring) != 3 { t.Fatal("grew past its capacity", len(d.ring)) }
  if _, status, _ := _borkChanSelect([]_borkChanArm{{ch: d, send: true, value: 9}}, false); status != _borkChanNotReady { t.Fatal("full channel accepted a value") }
+}
+
+func TestAfterDeliversOnceThenCloses(t *testing.T) {
+ s := scope(); defer s.close()
+ c := _borkChanTimer(s, time.Millisecond, 0, func(time.Time) int { return 1 }).native.handle.(*_borkChan)
+ if v, ok := _borkChanReceive(s, c); !ok || v != 1 { t.Fatal(v) }
+ if v, _ := _borkChanReceive(s, c); v != (Closed{}) { t.Fatal("not closed after firing", v) }
+ now := _borkChanTimer(s, -time.Second, 0, func(time.Time) int { return 2 }).native.handle.(*_borkChan)
+ if v, _ := _borkChanReceive(s, now); v != 2 { t.Fatal("nonpositive delay", v) }
+}
+
+// A ticker stops when its channel is closed, or its scope ends, and
+// drops ticks a receiver has not taken.
+func TestTickerStops(t *testing.T) {
+ var fired atomic.Int64
+ count := func(time.Time) int { return int(fired.Add(1)) }
+ s := scope()
+ c := _borkChanTimer(s, time.Millisecond, time.Millisecond, count).native.handle.(*_borkChan)
+ time.Sleep(20 * time.Millisecond)
+ if c.length() != 1 { t.Fatal("ticks not dropped", c.length()) }
+ c.close()
+ after := fired.Load()
+ time.Sleep(20 * time.Millisecond)
+ if fired.Load() > after+1 { t.Fatal("ticker kept running after close") }
+ d := _borkChanTimer(s, time.Millisecond, time.Millisecond, count).native.handle.(*_borkChan)
+ _borkChanReceive(s, d)
+ s.close()
+ after = fired.Load()
+ time.Sleep(20 * time.Millisecond)
+ if fired.Load() > after+1 { t.Fatal("ticker kept running after its scope ended") }
 }
 `
