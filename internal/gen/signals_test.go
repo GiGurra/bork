@@ -73,6 +73,21 @@ func TestPolicyRestorationAndEmptySet(t *testing.T) {
  b.remove(newer);if !b.installed[int(syscall.SIGTERM)] {t.Fatal("default not restored")}
  b.add(older);b.add(newer);b.remove(newer);if !b.installed[hup] {t.Fatal("prior configuration not restored")}
 }
+func TestThirdInterruptAlwaysExits(t *testing.T) {
+ for _,kind:=range []string{"subscribe","ignore"} {
+  b,now,_,exits:=fakeBroker();n:=int(syscall.SIGINT)
+  r:=registration(kind,n);b.add(r)
+  press:=func(){b.deliver(n);b.deliver(n);*now=now.Add(time.Second)}
+  press();press()
+  if len(*exits)!=0 {t.Fatal(kind+": two presses exited")}
+  press()
+  if len(*exits)!=1 || (*exits)[0]!=128+n {t.Fatal(kind+": third press did not exit")}
+ }
+ b,now,_,exits:=fakeBroker();n:=int(syscall.SIGINT)
+ b.add(registration("subscribe",n))
+ for i:=0;i<5;i++ {b.deliver(n);*now=now.Add(3*time.Second)}
+ if len(*exits)!=0 {t.Fatal("presses spread over more than 5s exited")}
+}
 func TestSubscriptionsAndIgnore(t *testing.T) {
  b,_,_,_:=fakeBroker();n:=int(syscall.SIGTERM)
  ignore:=registration("ignore",n);first:=registration("subscribe",n);second:=registration("subscribe",n)

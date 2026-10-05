@@ -27,6 +27,7 @@ type _signalBroker struct {
  system bool
  code int
  first time.Time
+ presses []time.Time
  released bool
  now func() time.Time
  after func(time.Duration,func())
@@ -124,8 +125,20 @@ func (b *_signalBroker) remove(r *_signalRegistration) {
  b.refresh()
 }
 
+// Three Ctrl+C presses within 5 seconds always exit, even when the program
+// subscribes to or ignores Interrupt, so the keyboard can stop any program.
+// Copies within 500ms of a counted press are the same press.
 func (b *_signalBroker) deliver(n int) {
  b.mu.Lock()
+ if n==int(syscall.SIGINT) {
+  now:=b.now()
+  if len(b.presses)==0 || now.Sub(b.presses[len(b.presses)-1])>=500*time.Millisecond {
+   kept:=b.presses[:0]
+   for _,press:=range b.presses {if now.Sub(press)<5*time.Second {kept=append(kept,press)}}
+   b.presses=append(kept,now)
+   if len(b.presses)>=3 {b.mu.Unlock();b.exit(128+n);return}
+  }
+ }
  subscribed,ignored:=false,false
  for _,r:=range b.registrations {
   if !r.signals[n] {continue}

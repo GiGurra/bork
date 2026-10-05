@@ -6,7 +6,9 @@ tasks through their parents. Cleanup finishes before a normal return exits with
 130 or 143. An explicit `process.Exit(code)` keeps its chosen code. Copies within
 500 ms count as one cancellation; another cancelling signal after that window
 terminates immediately. Other signals keep their Go/OS defaults, and there is no
-default grace deadline.
+default grace deadline. Three Ctrl+C presses within 5 seconds always exit with
+130, even if the program subscribes to or ignores `Interrupt`, so the keyboard
+can stop any program.
 
 **A registration's scope owns its lifetime, not an isolated signal disposition.**
 Signal disposition affects the whole process. Register policies in your
