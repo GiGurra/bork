@@ -243,6 +243,7 @@ Most programs need only `scope` blocks.
 ## More
 
 - [wc](../../examples/wc/main.bork) reads files concurrently, one task and one scope per file.
+- [handoff](../../examples/handoff/main.bork) dials connections in the application's scope and moves each into a short session scope, which closes it.
 - [bork/tasks](../std/tasks.md) has bounded task pools for limiting how much work runs at once.
 - [bork/http](../std/http.md), [bork/sql](../std/sql.md), [bork/fs](../std/fs.md), and [bork/net](../std/net.md) all hand out resources that belong to scopes.
 

@@ -1,0 +1,56 @@
+// Handing a connection over to another scope with move.
+//
+// The application dials each connection in its own long-lived scope and
+// warms it up there. Then it moves the connection into a short session
+// scope: the application no longer keeps it open, so it closes as soon as
+// the session ends, not when the application does. (attach would keep it
+// open until both had ended.) The echo server reports each connection
+// closing, so the program can wait for it.
+import "bork/net"
+
+// serve echoes lines back until the client closes, then reports it.
+fn serve(conn: net.Connection, s: Scope, closed: Channel[String]) uses net + state + clock: Ok | IoError | Cancelled {
+  match (net.ReadLine(conn, 1000)) {
+    line: String => {
+      _ = net.WriteLine(conn, "echo " + line, 1000)?
+      serve(conn, s, closed)
+    }
+    end: net.Eof => {
+      _ = send(closed, "server: a client closed its connection")
+      checkpoint(s)
+    }
+    stopped: Cancelled => stopped
+    failure: IoError | ParseError => checkpoint(s)
+  }
+}
+
+fn roundTrip(conn: net.Connection, line: String) uses net + state + clock: String | IoError | Cancelled {
+  _ = net.WriteLine(conn, line, 1000)?
+  match (net.ReadLine(conn, 1000)) {
+    reply: String => reply
+    other: net.Eof | IoError | ParseError | Cancelled => toString(other)
+  }
+}
+
+fn handOff(n: Int, address: String, app: Scope, closed: Channel[String]) uses io + net + state + clock: Ok | IoError | Cancelled {
+  conn = net.Dial(address, app, 1000)?
+  println(roundTrip(conn, s"warm-up ${n}")?)
+  scope session {
+    mine = move(conn, session)
+    println(roundTrip(mine, s"work ${n}")?)
+    // conn cannot be used here any more: it was moved to session.
+  }
+  // The session has ended, and closed the connection with it.
+  println(receive(closed))
+}
+
+fn run(app: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
+  closed = channel[String](app, 4)
+  server = net.Listen("127.0.0.1:0", app, (conn, s) => serve(conn, s, closed))?
+  handOff(1, net.Address(server), app, closed)?
+  handOff(2, net.Address(server), app, closed)
+}
+
+fn main() {
+  println(scope app { run(app) })
+}
