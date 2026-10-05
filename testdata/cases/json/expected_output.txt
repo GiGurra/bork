@@ -1,4 +1,4 @@
-Json.Object { fields: [JsonField { name: "a", value: Json.Array { items: [Json.Number { text: "1" }, Json.Number { text: "2.5" }, Json.Bool { value: true }, Json.Null, Json.String { value: "x" }] } }, JsonField { name: "b", value: Json.Object { fields: [] } }] }
+Value.Object { fields: [Field { name: "a", value: Value.Array { items: [Value.Number { text: "1" }, Value.Number { text: "2.5" }, Value.Bool { value: true }, Value.Null, Value.String { value: "x" }] } }, Field { name: "b", value: Value.Object { fields: [] } }] }
 {"a":[1,2.5,true,null,"x"],"b":{}}
 JsonError { message: "invalid JSON at line 1, column 2: expected a field name" }
 [1, 2, 3]

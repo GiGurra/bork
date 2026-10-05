@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // SQL literals keep trusted text separate from bound values and quoted names.
 type Identifier = private { value: String }
 type Dialect = sealed { Sqlite, Postgres }
@@ -214,19 +217,19 @@ fn (statement: Statement) Exec(connection: Connection | Transaction) uses io + n
   rendered = statement.Render(dialectOf(connection)?)?
   Exec(connection, Unsafe(rendered.query), rendered.params)
 }
-fn (statement: Statement) Query[T: Decode](connection: Connection | Transaction) uses io + net: List[T] | Error | DecodeError {
+fn (statement: Statement) Query[T: codec.Decode](connection: Connection | Transaction) uses io + net: List[T] | Error | codec.DecodeError {
   rendered = statement.Render(dialectOf(connection)?)?
   Query[T](connection, Unsafe(rendered.query), rendered.params)
 }
-fn (statement: Statement) QueryJson(connection: Connection | Transaction) uses io + net: Json | Error {
+fn (statement: Statement) QueryJson(connection: Connection | Transaction) uses io + net: codec.Value | Error {
   rendered = statement.Render(dialectOf(connection)?)?
   QueryJson(connection, Unsafe(rendered.query), rendered.params)
 }
-fn (statement: Statement) Rows[T: Decode](connection: Connection | Transaction): Seq[T | Error | DecodeError] uses io + net {
+fn (statement: Statement) Rows[T: codec.Decode](connection: Connection | Transaction): Seq[T | Error | codec.DecodeError] uses io + net {
   statement.RowsJson(connection).map(value => decodeRow[T](value))
 }
-fn (statement: Statement) RowsJson(connection: Connection | Transaction): Seq[Json | Error] uses io + net {
-  generate[Json | Error] {
+fn (statement: Statement) RowsJson(connection: Connection | Transaction): Seq[codec.Value | Error] uses io + net {
+  generate[codec.Value | Error] {
     match (dialectOf(connection)) {
       dialect: Dialect => match (statement.Render(dialect)) {
         rendered: Rendered => { for (row in RowsJson(connection, Unsafe(rendered.query), rendered.params)) { yield row } }

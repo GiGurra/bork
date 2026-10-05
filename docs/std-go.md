@@ -174,7 +174,7 @@ order and have these stable members:
 - `Default`: a `func() any` producing that value, or nil when absent.
 - `Kind`: `string`, `number`, `bool`, `json`, or `list:<element kind>` recursively; Option uses its element's kind. Generic element kinds come from their decoder dictionary.
 - `Optional`: whether the field is an Option. `HasDefault` independently permits an absent field.
-- `Decode`: a `func(Json) any` that returns the field's decoded value or a
+- `Decode`: a `func(codec.Value) any` that returns the field's decoded value or a
   `DecodeError`, checking its facts just as the derived record decoder does.
 
 Schemas are fresh immutable snapshots; callers must not change their slices.

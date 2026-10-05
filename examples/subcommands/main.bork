@@ -1,13 +1,16 @@
+import codec "bork/codec"
+
 import "bork/process"
 import "bork/cli"
+use codec.Defaults
 pred validPort(n: Int) { n > 0 && n < 65536 }
 type Serve = {
   // Host to serve.
   host: String
   // Listening port.
   port: Int where validPort = 8080
-} derive (Decode)
-type Echo = { words: List[String] } derive (Decode)
+} derive (codec.Decode)
+type Echo = { words: List[String] } derive (codec.Decode)
 fn main() {
   commands = [
     cli.Subcommand[Serve]("serve", "Serve a host", (options, s) => {

@@ -1,7 +1,10 @@
+import codec "bork/codec"
+
 import "bork/json"
-type Empty = {} derive (Decode, Encode)
-type Box = { empty: Empty } derive (Decode, Encode)
-type EmptyGeneric[T] = {} derive (Decode, Encode)
+use codec.Defaults
+type Empty = {} derive (codec.Decode, codec.Encode)
+type Box = { empty: Empty } derive (codec.Decode, codec.Encode)
+type EmptyGeneric[T] = {} derive (codec.Decode, codec.Encode)
 
 fn main() {
   println(json.Decode[Empty]("{}"))

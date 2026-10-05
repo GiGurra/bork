@@ -1,3 +1,5 @@
+import codec "bork/codec"
+
 import "bork/process"
 import "bork/json"
 // http_server is a small REST API for a todo list, kept in memory:
@@ -21,17 +23,18 @@ import "bork/json"
 
 import "bork/http"
 import "bork/log"
+use codec.Defaults
 
 pred nonEmpty(s: String) { s.byteLength() > 0 }
 pred maxBytes(s: String, n: Int) { s.byteLength() <= n }
 
 type Title = String where nonEmpty and maxBytes(100)
 
-type Todo = { id: Int, title: Title, done: Bool } derive (Encode)
+type Todo = { id: Int, title: Title, done: Bool } derive (codec.Encode)
 
-type NewTodo = { title: Title } derive (Decode)
+type NewTodo = { title: Title } derive (codec.Decode)
 
-type Problem = { path: String, message: String } derive (Encode)
+type Problem = { path: String, message: String } derive (codec.Encode)
 
 // Store is the server's state: the todos by id (sorted, so they list in
 // id order), and the next id to give out.
@@ -51,7 +54,7 @@ fn list(store: Atom[Store]) uses state: http.Response {
 }
 
 fn create(store: Atom[Store], body: String) uses state: http.Response {
-  r: NewTodo | JsonError | DecodeError = json.Decode(body)
+  r: NewTodo | json.JsonError | codec.DecodeError = json.Decode(body)
   match (r) {
     req: NewTodo => {
       // The id is the one this update gave out: s is the state it made.
@@ -66,8 +69,8 @@ fn create(store: Atom[Store], body: String) uses state: http.Response {
         Option.None => notFound(id)
       }
     }
-    e: JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: e.message }))
-    e: DecodeError => http.JsonReply(422, json.Encode(Problem { path: e.path, message: e.message }))
+    e: json.JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: e.message }))
+    e: codec.DecodeError => http.JsonReply(422, json.Encode(Problem { path: e.path, message: e.message }))
   }
 }
 

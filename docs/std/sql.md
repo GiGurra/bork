@@ -52,7 +52,7 @@ plain Strings cannot reach those APIs. Explicit unsafe Go remains outside these 
 
 Statement methods `Exec`, `Query[T: Decode]`, and `QueryJson` take a Connection or
 Transaction and preserve the existing results, errors, effects, cancellation,
-and scope lifetimes. `Rows[T: Decode]` and `RowsJson` remain lazy sequences:
+and scope lifetimes. `Rows[T: codec.Decode]` and `RowsJson` remain lazy sequences:
 each traversal renders and queries afresh. Rendering failures yield one Error
 and stop without executing SQL. Reusing a Statement never consumes its values.
 
@@ -132,4 +132,4 @@ Its commented quoted-hole example explains the compile error.
 
 `bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](../../examples/sql/main.bork).
 
-`Rows[T: Decode](connection, unsafeQuery, params): Seq[T | Error | DecodeError] uses io + net` decodes one row at a time. `RowsJson` yields `Json | Error`. Construction performs no query; each traversal executes it afresh using the connection or transaction context. Stopping closes active rows. Returned values copy driver buffers, and the sequence retains the connection/transaction lifetime. Handle errors per element.
+`Rows[T: codec.Decode](connection, unsafeQuery, params): Seq[T | Error | codec.DecodeError] uses io + net` decodes one row at a time. `RowsJson` yields `codec.Value | Error`. Construction performs no query; each traversal executes it afresh using the connection or transaction context. Stopping closes active rows. Returned values copy driver buffers, and the sequence retains the connection/transaction lifetime. Handle errors per element.

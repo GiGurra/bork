@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Package uuid provides canonical immutable UUIDs, encoded as JSON strings.
 pred Canonical(text: String) { canonical(text) }
 type Uuid = { value: String where Canonical }
@@ -39,17 +42,17 @@ fn Version(id: Uuid): Int unsafe go {
 instance ShowUuid: Show[Uuid] {
   fn show(id: Uuid): String { id.value }
 }
-instance EncodeUuid: Encode[Uuid] {
-  fn encode(id: Uuid): Json { Json.String { value: id.value } }
+instance EncodeUuid: codec.Encode[Uuid] {
+  fn encode(id: Uuid): codec.Value { codec.Value.String { value: id.value } }
 }
-instance DecodeUuid: Decode[Uuid] {
-  fn decode(json: Json): Uuid | DecodeError {
+instance DecodeUuid: codec.Decode[Uuid] {
+  fn decode(json: codec.Value): Uuid | codec.DecodeError {
     match (json) {
-      Json.String { value } => match (Parse(value)) {
+      codec.Value.String { value } => match (Parse(value)) {
         id: Uuid => id
-        error: ParseError => DecodeError { path: "", message: error.message }
+        error: ParseError => codec.DecodeError { path: "", message: error.message }
       }
-      _ => DecodeError { path: "", message: "expected a UUID string" }
+      _ => codec.DecodeError { path: "", message: "expected a UUID string" }
     }
   }
 }

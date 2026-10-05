@@ -1,7 +1,10 @@
+import codec "bork/codec"
+
 import "bork/encoding"
+use codec.Defaults
 
 pred positive(n: Int) { n > 0 }
-type Stock = { code: String, quantity: Int where positive, note: Option[String] } derive (Decode, Encode)
+type Stock = { code: String, quantity: Int where positive, note: Option[String] } derive (codec.Decode, codec.Encode)
 
 fn main() {
   // Field types decide parsing. The code remains "007".

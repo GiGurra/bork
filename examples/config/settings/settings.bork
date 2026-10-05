@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Package settings owns construction and updates of validated configurations.
 pred NonEmpty(value: String) { value.byteLength() > 0 }
 pred ValidPort(value: Int) { value > 0 && value < 65536 }
@@ -7,7 +10,7 @@ pred AtLeast(value: Int, minimum: Int) { value >= minimum }
 type TlsMode = sealed {
   Disabled,
   Files { cert: String where NonEmpty, key: String where NonEmpty },
-} derive (Decode, Encode)
+} derive (codec.Decode, codec.Encode)
 
 // Clients can read Config's fields, encode it, and pass it around. Only this
 // package can build or copy it. Defaults complete the value before validation.
@@ -19,7 +22,7 @@ type Config = private {
   bodyLimitBytes: Int where Positive = 1048576
   tls: TlsMode = .Disabled
   debug: Option[String] = .None
-} where Configured derive (Decode, Encode)
+} where Configured derive (codec.Decode, codec.Encode)
 
 // A type-level predicate is true for every valid Config, including decoded
 // values. The budget requirement goes beyond the individual positive fields.

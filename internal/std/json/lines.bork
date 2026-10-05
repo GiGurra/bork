@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Reader and Writer own open files until their scope closes. Operations stream
 // one line at a time without a scanner token limit and serialize concurrent use.
 type Reader = resource
@@ -17,7 +20,7 @@ fn OpenLines(path: String, s: Scope) uses io: Reader | IoError unsafe go {
 // Next consumes exactly one line, accepts CRLF and a final unterminated line,
 // and returns None at EOF. Blank or malformed lines return LineError; the next
 // call continues with the following line. Other read errors return IoError.
-fn Next(reader: Reader) uses io: Option[Json] | LineError | IoError unsafe go {
+fn Next(reader: Reader) uses io: Option[codec.Value] | LineError | IoError unsafe go {
   import "os"
   import "bufio"
   import "io"
@@ -28,12 +31,12 @@ fn Next(reader: Reader) uses io: Option[Json] | LineError | IoError unsafe go {
   defer state.mu.Unlock()
   line, err := state.reader.ReadString('\n')
   if err != nil && err != io.EOF { return IoError{path: state.file.Name(), message: err.Error()} }
-  if line == "" && err == io.EOF { return _borkNone[Json]() }
+  if line == "" && err == io.EOF { return _borkNone[codec.Value]() }
   *state.line++
   if strings.HasSuffix(line, "\n") { line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r") }
   parsed := Parse(line)
   if failure, failed := parsed.(JsonError); failed { return LineError{path: state.file.Name(), line: *state.line, message: failure.message} }
-  return _borkSome(parsed.(Json))
+  return _borkSome(parsed.(codec.Value))
 }
 
 // CreateLines truncates the destination. Write emits one compact JSON value
@@ -44,8 +47,8 @@ fn CreateLines(path: String, s: Scope) uses io: Writer | IoError unsafe go {
   if err != nil { return IoError{path: path, message: err.Error()} }
   return Writer{handle: file, owner: s.Own(func() { file.Close() })}
 }
-fn Write[T: Encode](writer: Writer, value: T) uses io: Ok | JsonError | IoError {
-  encoded = encode[T](value)
+fn Write[T: codec.Encode](writer: Writer, value: T) uses io: Ok | JsonError | IoError {
+  encoded = codec.encode[T](value)
   validateNumbers(encoded)?
   parsed = Parse(Render(encoded))?
   writeLine(writer, Render(parsed))

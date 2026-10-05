@@ -29,8 +29,8 @@ func (g *gen) derivedFunc(fn *check.Func) string {
 	g.tmp = 0
 	g.fnResult = fn.Result
 	g.usesDerive = true
-	g.goType(g.info.Named["Json"])
-	g.goType(g.info.Named["JsonField"])
+	g.goType(g.codecType("Value"))
+	g.goType(g.codecType("Field"))
 	var sig bytes.Buffer
 	_ = printer.Fprint(&sig, token.NewFileSet(), g.signature(fn.Decl))
 	var body string
@@ -53,13 +53,13 @@ func (g *gen) typeText(t check.Type) string { return g.text(g.goType(t)) }
 
 // decodeError is Go code returning a DecodeError.
 func (g *gen) decodeError(path, message string) string {
-	return fmt.Sprintf("return %s{path: %s, message: %s}\n", g.typeText(g.info.Named["DecodeError"]), path, message)
+	return fmt.Sprintf("return %s{path: %s, message: %s}\n", g.typeText(g.codecType("DecodeError")), path, message)
 }
 
 func (g *gen) deriveDecode(fn *check.Func) string {
 	var b strings.Builder
 	jsonVariant := func(name string) string {
-		return g.text(g.variantType(g.info.Named["Json"].(*check.Sealed).Variant(name)))
+		return g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant(name)))
 	}
 	fmt.Fprintf(&b, "_obj, _isObj := json.(%s)\n", jsonVariant("Object"))
 	switch t := fn.Of.Type.(type) {
@@ -120,7 +120,7 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 		fun, ds := g.dictMethod(dicts[i], "decode")
 		args := append(ds, ast.NewIdent("_v"))
 		fmt.Fprintf(&b, "_r := %s\n", g.text(&ast.CallExpr{Fun: fun, Args: args}))
-		fmt.Fprintf(&b, "if _e, _isErr := _r.(%s); _isErr {\n", g.typeText(g.info.Named["DecodeError"]))
+		fmt.Fprintf(&b, "if _e, _isErr := _r.(%s); _isErr {\n", g.typeText(g.codecType("DecodeError")))
 		b.WriteString(g.decodeError(path+" + _e.path", "_e.message") + "}\n")
 		fmt.Fprintf(&b, "%s = _r.(%s)\n", v, g.typeText(f.Type))
 
@@ -165,7 +165,7 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 						return nil
 					}
 					setup, failurePath, message := g.constraintFailure(runtime, x, t, path, con)
-					ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.info.Named["DecodeError"]), Elts: []ast.Expr{
+					ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.codecType("DecodeError")), Elts: []ast.Expr{
 						&ast.KeyValueExpr{Key: ast.NewIdent("path"), Value: failurePath},
 						&ast.KeyValueExpr{Key: ast.NewIdent("message"), Value: message},
 					}}}}
@@ -196,9 +196,9 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 
 func (g *gen) deriveEncode(fn *check.Func) string {
 	var b strings.Builder
-	obj := g.text(g.variantType(g.info.Named["Json"].(*check.Sealed).Variant("Object")))
-	str := g.text(g.variantType(g.info.Named["Json"].(*check.Sealed).Variant("String")))
-	field := g.typeText(g.info.Named["JsonField"])
+	obj := g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Object")))
+	str := g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("String")))
+	field := g.typeText(g.codecType("Field"))
 	fields := func(x string, fs []*check.Field, dicts []*check.Dict, tag string) string {
 		var parts []string
 		if tag != "" {

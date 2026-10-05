@@ -158,12 +158,15 @@ overridden by a valid flag. Only the resulting immutable proven record reaches
 the handler. Help does not read files or invoke the handler.
 
 ```bork
+import codec "bork/codec"
+
 import "bork/cli"
+use codec.Defaults
 
 type Options = {
   config: Option[String]
   port: Int = 8080
-} derive (Decode)
+} derive (codec.Decode)
 
 fn main() {
   result = cli.Run[Options]("app", "Example", (options, s) => println(options.port), flags: [cli.Flag { field: "config", configFile: true }], configFiles: ["settings.json"])

@@ -1,10 +1,10 @@
-Option.Some { value: Json.String { value: "bork" } }
-Option.Some { value: Json.Null }
+Option.Some { value: Value.String { value: "bork" } }
+Option.Some { value: Value.Null }
 Option.None
 Option.None
 Option.None
 Option.None
-Option.Some { value: Json.Object { fields: [JsonField { name: "items", value: Json.Array { items: [Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "bork" } }, JsonField { name: "nothing", value: Json.Null }] }] } }, JsonField { name: "exact", value: Json.Number { text: "12345678901234567890" } }] } }
+Option.Some { value: Value.Object { fields: [Field { name: "items", value: Value.Array { items: [Value.Object { fields: [Field { name: "name", value: Value.String { value: "bork" } }, Field { name: "nothing", value: Value.Null }] }] } }, Field { name: "exact", value: Value.Number { text: "12345678901234567890" } }] } }
 {
   "items": [
     {
@@ -20,4 +20,4 @@ true
 true
 true
 true
-Option.Some { value: Json.Null }
+Option.Some { value: Value.Null }

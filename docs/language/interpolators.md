@@ -25,11 +25,14 @@ fn main() {
 The `sql.SQL` prefix from [bork/sql](../std/sql.md) builds a `Statement` instead of a `String`. The literal text is the query, and each inserted value is sent to the database separately, as a bound parameter.
 
 ```bork
+import codec "bork/codec"
+
 import "bork/sql"
+use codec.Defaults
 
-type User = { id: Int, name: String } derive (Decode)
+type User = { id: Int, name: String } derive (codec.Decode)
 
-fn byName(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error | DecodeError {
+fn byName(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error | codec.DecodeError {
   sql.SQL"SELECT id, name FROM users WHERE name = $name".Query[User](db)
 }
 ```

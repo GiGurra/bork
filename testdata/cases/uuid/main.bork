@@ -1,9 +1,12 @@
+import codec "bork/codec"
+
 import "bork/json"
 import "bork/uuid"
 import "bork/env"
+use codec.Defaults
 use uuid.Codecs
 
-type Settings = { id: uuid.Uuid } derive (Encode, Decode)
+type Settings = { id: uuid.Uuid } derive (codec.Encode, codec.Decode)
 fn fixed(): uuid.Uuid | ParseError { uuid.Parse("F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6") }
 fn setup() uses io unsafe go {
   import "os"

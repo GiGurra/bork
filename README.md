@@ -191,12 +191,15 @@ More on [compile-time evaluation](docs/language/comptime.md).
 `s"..."` builds a String. A library can define its own prefix that keeps the inserted values apart from the literal text. `sql.SQL` sends them to the database as bound parameters, so they are never spliced into the SQL text.
 
 ```bork
+import codec "bork/codec"
+
 import "bork/sql"
+use codec.Defaults
 
 type User = { name: String }
-derive Decode for User
+derive codec.Decode for User
 
-fn find(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error | DecodeError {
+fn find(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error | codec.DecodeError {
   sql.SQL"SELECT name FROM users WHERE name = $name".Query[User](db)
 }
 ```

@@ -1,6 +1,9 @@
+import codec "bork/codec"
+
 import "bork/process"
 import "bork/json"
 import "bork/fs"
+use codec.Defaults
 
 // signup validates sign-up requests, one JSON object per line:
 //
@@ -19,15 +22,15 @@ type UserName = String where nonEmpty and maxBytes(20)
 type Plan = sealed {
   Free,
   Paid { seats: Int where between(1, 500) },
-} derive (Decode, Encode)
+} derive (codec.Decode, codec.Encode)
 
 type SignUp = {
   name: UserName,
   age: Option[Int where between(13, 150)],
   plan: Plan,
-} derive (Decode, Encode)
+} derive (codec.Decode, codec.Encode)
 
-type Account = { id: Int, name: UserName, seats: Int } derive (Encode)
+type Account = { id: Int, name: UserName, seats: Int } derive (codec.Encode)
 
 fn seatsOf(plan: Plan): Int {
   match (plan) {
@@ -42,11 +45,11 @@ fn register(id: Int, req: SignUp): Account {
 }
 
 fn handle(id: Int, line: String): String {
-  r: SignUp | JsonError | DecodeError = json.Decode(line)
+  r: SignUp | json.JsonError | codec.DecodeError = json.Decode(line)
   match (r) {
     req: SignUp => s"ok    ${json.Encode(register(id, req))}"
-    e: JsonError => s"bad   line ${toString(id)}: not JSON: ${e.message}"
-    e: DecodeError => s"bad   line ${toString(id)}: ${e.path}: ${e.message}"
+    e: json.JsonError => s"bad   line ${toString(id)}: not JSON: ${e.message}"
+    e: codec.DecodeError => s"bad   line ${toString(id)}: ${e.path}: ${e.message}"
   }
 }
 

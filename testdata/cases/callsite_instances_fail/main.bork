@@ -1,4 +1,6 @@
+import codec "bork/codec"
 import "bork/json"
+use codec.Defaults
 pred positive(x: Int) { x > 0 }
 
 type Pos = Int where positive

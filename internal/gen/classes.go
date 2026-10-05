@@ -43,7 +43,7 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 			Type:  g.funcType(&check.FuncType{Params: m.Params, Result: m.Result}, nil),
 		})
 	}
-	if class.Prelude && class.Name == "Decode" {
+	if check.IsCodec(class, "Decode") {
 		g.usesDecodeSchema = true
 		callback, _ := parser.ParseExpr("func() []_borkDecodeField")
 		st.Fields.List = append(st.Fields.List,
@@ -139,13 +139,13 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 		}
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(method.Decl.Name), Value: fn})
 	}
-	if ci.Class.Prelude && ci.Class.Name == "Decode" {
+	if check.IsCodec(ci.Class, "Decode") {
 		kind, _ := parser.ParseExpr(g.decodeKind(ci.Type))
 		lit.Elts = append(lit.Elts,
 			&ast.KeyValueExpr{Key: ast.NewIdent("kind"), Value: kind},
 			&ast.KeyValueExpr{Key: ast.NewIdent("optional"), Value: ast.NewIdent(fmt.Sprintf("%t", check.IsOption(ci.Type)))})
 	}
-	if ci.Class.Prelude && ci.Class.Name == "Decode" && len(ci.Methods) > 0 && ci.Methods[0].Derived != nil {
+	if check.IsCodec(ci.Class, "Decode") && len(ci.Methods) > 0 && ci.Methods[0].Derived != nil {
 		if record, ok := ci.Type.(*check.Record); ok {
 			callback, err := parser.ParseExpr(g.decodeSchema(ci, record))
 			if err != nil {

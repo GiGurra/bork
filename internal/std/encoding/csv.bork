@@ -1,4 +1,7 @@
+import codec "bork/codec"
+
 import codecs "bork/json"
+use codec.Defaults
 // CsvError locates a failure. Rows are one-based (header is row 1).
 // For syntax errors column is a byte position; for records it is a field name.
 type CsvError = { row: Int, column: String, message: String }
@@ -43,29 +46,29 @@ fn Csv(rows: List[List[String]]): String unsafe go {
   return text.String()
 }
 
-// DecodeCsv reads header-named fields using a derived record's Decode schema.
+// DecodeCsv reads header-named fields using a derived record's codec.Decode schema.
 // Strings are literal; other fields use JSON syntax. Empty optional cells
 // and missing optional columns become None; nonempty cells become Some.
 // Nonempty null cells are rejected for optional non-String fields.
 // Every bad field is collected, with no partial records returned.
-fn DecodeCsv[T: Decode](text: String): List[T] | CsvError | CsvErrors {
+fn DecodeCsv[T: codec.Decode](text: String): List[T] | CsvError | CsvErrors {
   rows = CsvRows(text)?
-  decodeCsvRows[T](rows, csvValue, json => decode[T](json))
+  decodeCsvRows[T](rows, csvValue, json => codec.decode[T](json))
 }
 
-fn csvValue(raw: String, kind: String, optional: Bool): Json | JsonError {
-  if (optional && raw == "") { return Json.Null }
-  if (kind == "string") { return Json.String { value: raw } }
+fn csvValue(raw: String, kind: String, optional: Bool): codec.Value | codecs.JsonError {
+  if (optional && raw == "") { return codec.Value.Null }
+  if (kind == "string") { return codec.Value.String { value: raw } }
   parsed = codecs.Parse(raw)?
   match (parsed) {
-    Json.Null => if (optional) {
-      JsonError { message: "nonempty optional cell cannot be null; use an empty cell for None" }
+    codec.Value.Null => if (optional) {
+      codecs.JsonError { message: "nonempty optional cell cannot be null; use an empty cell for None" }
     } else { parsed }
     _ => parsed
   }
 }
 
-fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bool) => (Json | JsonError), decodeRow: (Json) => (T | DecodeError)): List[T] | CsvErrors unsafe go {
+fn decodeCsvRows[T: codec.Decode](rows: List[List[String]], parse: (String, String, Bool) => (codec.Value | codecs.JsonError), decodeRow: (codec.Value) => (T | codec.DecodeError)): List[T] | CsvErrors unsafe go {
   import "fmt"
   import "strings"
   schema, supported := _borkDecodeFields(_d_T_Decode)
@@ -98,29 +101,29 @@ fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bo
       failures = append(failures, CsvError{row: number, column: "", message: fmt.Sprintf("expected %d columns, found %d", len(rows[0]), len(row))})
       continue
     }
-    fields := []JsonField{}
+    fields := []codec.Field{}
     bad := false
     for _, field := range schema {
-      var json Json = Json_Null{}
+      var json codec.Value = codec.Value_Null{}
       if column, found := headers[field.Name]; found {
         parsed := parse(row[column], field.Kind, field.Optional)
-        if failure, failed := parsed.(JsonError); failed {
+        if failure, failed := parsed.(codecs.JsonError); failed {
           failures = append(failures, CsvError{row: number, column: field.Name, message: failure.message})
           bad = true
           continue
         }
-        json = parsed.(Json)
+        json = parsed.(codec.Value)
       } else if field.HasDefault { continue }
-      if failure, failed := field.Decode(json).(DecodeError); failed {
+      if failure, failed := field.Decode(json).(codec.DecodeError); failed {
         failures = append(failures, CsvError{row: number, column: field.Name + strings.TrimPrefix(failure.path, "." + field.Name), message: failure.message})
         bad = true
         continue
       }
-      fields = append(fields, JsonField{name: field.Name, value: json})
+      fields = append(fields, codec.Field{name: field.Name, value: json})
     }
     if bad { continue }
-    decoded := decodeRow(Json_Object{fields: fields})
-    if failure, failed := decoded.(DecodeError); failed {
+    decoded := decodeRow(codec.Value_Object{fields: fields})
+    if failure, failed := decoded.(codec.DecodeError); failed {
       failures = append(failures, CsvError{row: number, column: strings.TrimPrefix(failure.path, "."), message: failure.message})
       continue
     }
@@ -132,12 +135,12 @@ fn decodeCsvRows[T: Decode](rows: List[List[String]], parse: (String, String, Bo
 
 // EncodeCsv writes records in schema field order. None and Some("") both
 // write empty cells, which decode as None. Empty input gives empty text.
-fn EncodeCsv[T: Encode + Decode](values: List[T]): String | CsvError {
-  rows = encodeCsvRows[T](values, value => encode[T](value), codecs.Render)?
+fn EncodeCsv[T: codec.Encode + codec.Decode](values: List[T]): String | CsvError {
+  rows = encodeCsvRows[T](values, value => codec.encode[T](value), codecs.Render)?
   Csv(rows)
 }
 
-fn encodeCsvRows[T: Decode](values: List[T], encodeRow: (T) => Json, render: (Json) => String): List[List[String]] | CsvError unsafe go {
+fn encodeCsvRows[T: codec.Decode](values: List[T], encodeRow: (T) => codec.Value, render: (codec.Value) => String): List[List[String]] | CsvError unsafe go {
   schema, supported := _borkDecodeFields(_d_T_Decode)
   if !supported { return CsvError{row: 1, column: "", message: "expected a derived record decoder"} }
   if len(schema) == 0 { return CsvError{row: 1, column: "", message: "expected a record with at least one field"} }
@@ -146,9 +149,9 @@ fn encodeCsvRows[T: Decode](values: List[T], encodeRow: (T) => Json, render: (Js
   for _, field := range schema { headers = append(headers, field.Name) }
   rows := [][]string{headers}
   for index, value := range values {
-    object, supported := encodeRow(value).(Json_Object)
+    object, supported := encodeRow(value).(codec.Value_Object)
     if !supported { return CsvError{row: int64(index + 2), column: "", message: "expected an encoded record object"} }
-    fields := map[string]Json{}
+    fields := map[string]codec.Value{}
     for _, field := range object.fields {
       if _, duplicate := fields[field.name]; duplicate {
         return CsvError{row: int64(index + 2), column: field.name, message: "duplicate encoded field"}
@@ -160,10 +163,10 @@ fn encodeCsvRows[T: Decode](values: List[T], encodeRow: (T) => Json, render: (Js
     for _, field := range schema {
       json, found := fields[field.Name]
       if !found { return CsvError{row: int64(index + 2), column: field.Name, message: "encoded field is missing"} }
-      if _, absent := json.(Json_Null); field.Optional && absent {
+      if _, absent := json.(codec.Value_Null); field.Optional && absent {
         row = append(row, "")
       } else if field.Kind == "string" {
-        text, valid := json.(Json_String)
+        text, valid := json.(codec.Value_String)
         if !valid { return CsvError{row: int64(index + 2), column: field.Name, message: "expected an encoded string"} }
         row = append(row, text.value)
       } else {

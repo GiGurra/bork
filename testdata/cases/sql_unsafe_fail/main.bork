@@ -1,5 +1,8 @@
+import codec "bork/codec"
+
 import "bork/sql"
-type Row = { n: Int } derive (Decode)
+use codec.Defaults
+type Row = { n: Int } derive (codec.Decode)
 fn raw(db: sql.Connection, text: String) uses io + net {
   _ = sql.Exec(db, text, [])
   _ = sql.Query[Row](db, text, [])

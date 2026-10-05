@@ -1,1 +1,1 @@
-main.bork:6:40: Encode cannot apply to Box[Duration], which holds an opaque Go value
+main.bork:9:53: Encode cannot apply to Box[Duration], which holds an opaque Go value

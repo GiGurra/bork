@@ -1,1 +1,1 @@
-main.bork:4:58: decode promises a result that is small, but small(500) is false
+main.bork:7:71: decode promises a result that is small, but small(500) is false

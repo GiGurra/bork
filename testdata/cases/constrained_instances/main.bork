@@ -1,27 +1,30 @@
+import codec "bork/codec"
+
 import codecs "bork/json"
+use codec.Defaults
 pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
 
 type Port = Int where between(1, 65535)
 
 // Ports decode from numbers or strings, with a message of their own.
-instance decodePort: Decode[Port] {
-  fn decode(json: Json): Port | DecodeError {
+instance decodePort: codec.Decode[Port] {
+  fn decode(json: codec.Value): Port | codec.DecodeError {
     n = match (json) {
-      Json.Number { text } => parseInt(text)
-      Json.String { value } => parseInt(value)
+      codec.Value.Number { text } => parseInt(text)
+      codec.Value.String { value } => parseInt(value)
       _ => ParseError { input: "", message: "" }
     }
     match (n) {
-      p: Int => if (between(p, 1, 65535)) { p } else { DecodeError { path: "", message: s"$p is not a port (1 to 65535)" } }
-      _: ParseError => DecodeError { path: "", message: "expected a port number" }
+      p: Int => if (between(p, 1, 65535)) { p } else { codec.DecodeError { path: "", message: s"$p is not a port (1 to 65535)" } }
+      _: ParseError => codec.DecodeError { path: "", message: "expected a port number" }
     }
   }
 }
 
-type Config = { host: String, port: Port, retries: Int } derive (Decode)
+type Config = { host: String, port: Port, retries: Int } derive (codec.Decode)
 
 fn show(text: String) uses io {
-  r: Config | JsonError | DecodeError = codecs.Decode(text)
+  r: Config | codecs.JsonError | codec.DecodeError = codecs.Decode(text)
   println(r)
 }
 

@@ -1,17 +1,20 @@
+import codec "bork/codec"
+
 import "bork/json"
+use codec.Defaults
 fn main() {
   j = json.Parse("{\"a\": [1, 2.5, true, null, \"x\"], \"b\": {}}")
   println(j)
   match (j) {
-    v: Json => println(json.Render(v))
-    e: JsonError => println(e)
+    v: codec.Value => println(json.Render(v))
+    e: json.JsonError => println(e)
   }
   println(json.Parse("{bad"))
-  xs: List[Int] | JsonError | DecodeError = json.Decode("[1, 2, 3]")
+  xs: List[Int] | json.JsonError | codec.DecodeError = json.Decode("[1, 2, 3]")
   println(xs)
-  ys: List[Int] | JsonError | DecodeError = json.Decode("[1, \"two\", 3]")
+  ys: List[Int] | json.JsonError | codec.DecodeError = json.Decode("[1, \"two\", 3]")
   println(ys)
-  zs: List[Option[String]] | JsonError | DecodeError = json.Decode("[\"a\", null]")
+  zs: List[Option[String]] | json.JsonError | codec.DecodeError = json.Decode("[\"a\", null]")
   println(zs)
   println(json.Encode([Option.Some { value: 1 }, Option.None]))
   escapes()
@@ -19,15 +22,15 @@ fn main() {
 
 fn escapes() uses io {
   match (json.Parse("{\"s\": \"a\\\"b\\n\\u00e9\", \"n\": -1.5e3, \"z\": 0}")) {
-    v: Json => println(json.Render(v))
-    e: JsonError => println(e)
+    v: codec.Value => println(json.Render(v))
+    e: json.JsonError => println(e)
   }
   println(json.Parse("[1,"))
   println(json.Parse("1 2"))
   println(json.Parse("{\"a\": 01}"))
   println(json.Parse("[1,\n  tru]"))
-  b: Bool | JsonError | DecodeError = json.Decode("1")
+  b: Bool | json.JsonError | codec.DecodeError = json.Decode("1")
   println(b)
-  i: Int | JsonError | DecodeError = json.Decode("1.5")
+  i: Int | json.JsonError | codec.DecodeError = json.Decode("1.5")
   println(i)
 }

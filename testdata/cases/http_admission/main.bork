@@ -1,6 +1,9 @@
+import codec "bork/codec"
+
 import "bork/time"
 import "bork/json"
 import "bork/http"
+use codec.Defaults
 use http.AdmissionDecode
 fn mustServer(value: http.Server | IoError): http.Server {
   match (value) { server: http.Server => server, error: IoError => panic(toString(error)) }
@@ -103,7 +106,7 @@ fn raceTransfer(server: http.Server in app, entered: Channel[Bool] in app, permi
 }
 fn main() {
   println(json.Decode[http.Admission]("{\"maxInFlight\":2}"))
-  println("invalid decoded capacity", match (json.Decode[http.Admission]("{\"maxInFlight\":0}")) { _: DecodeError => true, _ => false })
+  println("invalid decoded capacity", match (json.Decode[http.Admission]("{\"maxInFlight\":0}")) { _: codec.DecodeError => true, _ => false })
 
   scope app {
     entered = channel[String](app, 10)

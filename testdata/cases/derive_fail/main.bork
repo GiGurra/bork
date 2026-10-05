@@ -1,6 +1,9 @@
+import codec "bork/codec"
+
 import "bork/json"
-type Handler = { name: String, run: (Int) => Int } derive (Decode)
-type Wrapper = { inner: Handler } derive (Encode)
+use codec.Defaults
+type Handler = { name: String, run: (Int) => Int } derive (codec.Decode)
+type Wrapper = { inner: Handler } derive (codec.Encode)
 type Bad = { x: Int } derive (Show)
 type Unknown = { x: Int } derive (Nope)
 
@@ -9,7 +12,7 @@ class Show[T] { fn show(x: T): String }
 type Plain = { x: Int }
 
 fn main() {
-  // Plain has no Decode instance: the hint says how to derive one.
-  p: Plain | JsonError | DecodeError = json.Decode("{}")
+  // Plain has no codec.Decode instance: the hint says how to derive one.
+  p: Plain | json.JsonError | codec.DecodeError = json.Decode("{}")
   println(p)
 }

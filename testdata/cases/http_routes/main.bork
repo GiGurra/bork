@@ -1,17 +1,20 @@
+import codec "bork/codec"
+
 import "bork/http"
+use codec.Defaults
 
 pred positive(n: Int) { n > 0 }
-type Path = { id: Int where positive } derive (Decode)
-type Search = { name: String, count: Int where positive, optional: Option[String] } derive (Decode)
+type Path = { id: Int where positive } derive (codec.Decode)
+type Search = { name: String, count: Int where positive, optional: Option[String] } derive (codec.Decode)
 fn endpoint(index: Int, request: http.Request, rs: Scope): http.Response {
   match (index) {
     0 => match (http.PathAs[Path](request)) {
       path: Path => http.Text(200, toString(path.id))
-      error: DecodeError => http.Text(422, error.path)
+      error: codec.DecodeError => http.Text(422, error.path)
     }
     1 => match (http.QueryAs[Search](request)) {
       value: Search => http.Text(200, value.name + ":" + toString(value.count) + ":" + toString(value.optional))
-      error: DecodeError => http.Text(422, error.path)
+      error: codec.DecodeError => http.Text(422, error.path)
       _: IoError => http.Text(400, "bad query")
     }
     2 => match (http.Form(request)) {

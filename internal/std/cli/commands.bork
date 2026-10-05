@@ -1,5 +1,7 @@
+import "bork/codec"
 import "bork/process"
 import codecs "bork/json"
+use codec.Defaults
 // Command keeps typed handlers behind a closed effect bound. Construct leaves
 // with Subcommand and branches with Group; metadata can be changed with copy.
 type Command = {
@@ -17,7 +19,7 @@ type Command = {
 }
 
 // Subcommand keeps the handler typed; only validated options reach it.
-fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
+fn Subcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
   resolved = resolve[T](flags, settings, name)
   schema = inputFields[T](name)
   completionEnabled = settings.completion
@@ -29,7 +31,7 @@ fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses
     }
   }
   apply: (parsedInput, Scope) uses io + net + clock + random + state => Ok | Error = (input, s) => match (decode[T](input.value)) {
-    error: DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+    error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
     options: T => {
       for (warning in input.warnings) { printError(s"${warning}\n") }
       run(options, s)
@@ -74,13 +76,13 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
   import "strings"
   import "unicode"
   import "github.com/spf13/cobra"
-  failures := []DecodeError{}
+  failures := []codec.DecodeError{}
   validName := func(name string) bool {
     return name != "" && !strings.HasPrefix(name, "-") && strings.IndexFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) < 0
   }
   var validate func([]Command, string)
   validate = func(commands []Command, path string) {
-    if len(commands) == 0 { failures = append(failures, DecodeError{path: path, message: "CLI needs at least one subcommand"}) }
+    if len(commands) == 0 { failures = append(failures, codec.DecodeError{path: path, message: "CLI needs at least one subcommand"}) }
     seen := map[string]bool{}
     for i, command := range commands {
       at := fmt.Sprintf("%s[%d]", path, i)
@@ -88,12 +90,12 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
       for j, name := range names {
         field := at+".name"
         if j > 0 { field = fmt.Sprintf("%s.aliases[%d]", at, j-1) }
-        if !validName(name) { failures = append(failures, DecodeError{path: field, message: "subcommand name must contain only letters, digits, hyphens, or underscores and not start with a hyphen"}) }
-        if name == "help" || name == "completion" || name == "__complete" || name == "__completeNoDesc" { failures = append(failures, DecodeError{path: field, message: "subcommand name " + name + " is reserved"}) }
-        if seen[name] { failures = append(failures, DecodeError{path: field, message: "duplicate subcommand name " + name}) }
+        if !validName(name) { failures = append(failures, codec.DecodeError{path: field, message: "subcommand name must contain only letters, digits, hyphens, or underscores and not start with a hyphen"}) }
+        if name == "help" || name == "completion" || name == "__complete" || name == "__completeNoDesc" { failures = append(failures, codec.DecodeError{path: field, message: "subcommand name " + name + " is reserved"}) }
+        if seen[name] { failures = append(failures, codec.DecodeError{path: field, message: "duplicate subcommand name " + name}) }
         seen[name] = true
       }
-      if command.group { validate(command.children, at+".children") } else if len(command.children) != 0 { failures = append(failures, DecodeError{path: at+".children", message: "only a Group can have children"}) }
+      if command.group { validate(command.children, at+".children") } else if len(command.children) != 0 { failures = append(failures, codec.DecodeError{path: at+".children", message: "only a Group can have children"}) }
     }
   }
   validate(commands, "commands")
@@ -127,13 +129,13 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
           ran = true
           value := prepared.result()
           if failure, bad := value.(Error); bad {
-            for _, warning := range warnings() { failure.errors = append(failure.errors, DecodeError{path: cmd.CommandPath(), message: warning}) }
+            for _, warning := range warnings() { failure.errors = append(failure.errors, codec.DecodeError{path: cmd.CommandPath(), message: warning}) }
             result = failure
             return nil
           }
           apply, supplied := _borkOptionGet(command.apply)
-          if !supplied { result = Error{errors: []DecodeError{{path: cmd.CommandPath(), message: "native command has no typed handler"}}}; return nil }
-          result = apply(parsedInput{value: value.(Json), warnings: warnings(), path: cmd.CommandPath()}, s)
+          if !supplied { result = Error{errors: []codec.DecodeError{{path: cmd.CommandPath(), message: "native command has no typed handler"}}}; return nil }
+          result = apply(parsedInput{value: value.(codec.Value), warnings: warnings(), path: cmd.CommandPath()}, s)
           diagnostics.Reset()
           return nil
         }
@@ -156,7 +158,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
   }
   if err := attach(root, commands); err != nil {
     if failure, ok := result.(Error); ok { return failure }
-    return Error{errors: []DecodeError{{path: name, message: err.Error()}}}
+    return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}}
   }
   root.SetHelpCommand(&cobra.Command{
     Use: "help [command...]", Short: "Help about any command",
@@ -172,8 +174,8 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
   if failure, bad := configure(nativeCommand{handle: root, owner: s.Own(func() {})}, arguments, completion).(Error); bad { return failure }
   root.SetArgs(append([]string{}, arguments...))
   if err := root.Execute(); err != nil {
-    failures := []DecodeError{{path: name, message: err.Error()}}
-    for _, warning := range warnings() { failures = append(failures, DecodeError{path: name, message: warning}) }
+    failures := []codec.DecodeError{{path: name, message: err.Error()}}
+    for _, warning := range warnings() { failures = append(failures, codec.DecodeError{path: name, message: warning}) }
     return Error{errors: failures}
   }
   if !ran { return Help{text: output.String(), diagnostics: diagnostics.String()} }

@@ -1,5 +1,7 @@
+import codec "bork/codec"
 import "bork/json"
 import "example.com/defaults/api"
+use codec.Defaults
 use api.ItemDecode
 use api.BoxDecode
 fn main() uses io {

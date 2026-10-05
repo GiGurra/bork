@@ -26,10 +26,10 @@ func (g *gen) decodeSchema(ci *check.ClassInstance, record *check.Record) string
 		if field.Default != nil {
 			defaultValue = "func() any { return " + g.fieldDefault(field) + " }"
 		}
-		fmt.Fprintf(&b, "{Name: %q, Type: %q, Doc: %q, HasDefault: %t, Default: %s, Constraints: []string{%s}, Kind: (%s).kind, Optional: (%s).optional, Decode: func(value Json) any {\n", field.Name, field.Type.String(), field.Doc, field.Default != nil, defaultValue, strings.Join(constraints, ", "), dict, dict)
-		b.WriteString("_result := func() any {\n_obj := Json_Object{fields: []JsonField{{name: " + fmt.Sprintf("%q", field.Name) + ", value: value}}}\n")
+		fmt.Fprintf(&b, "{Name: %q, Type: %q, Doc: %q, HasDefault: %t, Default: %s, Constraints: []string{%s}, Kind: (%s).kind, Optional: (%s).optional, Decode: func(value %s) any {\n", field.Name, field.Type.String(), field.Doc, field.Default != nil, defaultValue, strings.Join(constraints, ", "), dict, dict, g.typeText(g.codecType("Value")))
+		fmt.Fprintf(&b, "_result := func() any {\n_obj := %s{fields: []%s{{name: %q, value: value}}}\n", g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Object"))), g.typeText(g.codecType("Field")), field.Name)
 		b.WriteString(g.decodeFields([]*check.Field{independentField(field)}, []*check.Dict{ci.Methods[0].Derived.FieldDicts[0][i]}, g.typeText(record)))
-		fmt.Fprintf(&b, "}()\nif err, ok := _result.(DecodeError); ok { return err }\nreturn _result.(%s).%s\n}},\n", g.typeText(record), g.fieldReadSuffix(field))
+		fmt.Fprintf(&b, "}()\nif err, ok := _result.(%s); ok { return err }\nreturn _result.(%s).%s\n}},\n", g.typeText(g.codecType("DecodeError")), g.typeText(record), g.fieldReadSuffix(field))
 	}
 	b.WriteString("} }")
 	return b.String()
@@ -45,7 +45,7 @@ func (g *gen) decodeKind(typ check.Type) string {
 	}
 	if param, ok := typ.(*check.TypeParam); ok {
 		for _, bound := range param.Bounds {
-			if bound.Prelude && bound.Name == "Decode" {
+			if check.IsCodec(bound, "Decode") {
 				return dictParam(param, bound).Name + ".kind"
 			}
 		}

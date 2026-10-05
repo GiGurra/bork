@@ -1,18 +1,21 @@
+import codec "bork/codec"
+
 import "bork/json"
 import "example.com/tc/api"
 import "example.com/tc/money"
+use codec.Defaults
 
 // One line brings in everything api suggests.
 use api.Json
 
 fn main() {
-  r: api.Item | JsonError | DecodeError = json.Decode("{\"name\": \"pen\", \"price\": {\"amount\": 250}}")
+  r: api.Item | json.JsonError | codec.DecodeError = json.Decode("{\"name\": \"pen\", \"price\": {\"amount\": 250}}")
   match (r) {
     i: api.Item => {
       println(json.Encode(i))
       println(money.show(i.price))
     }
-    e: JsonError => println(e)
-    e: DecodeError => println(e)
+    e: json.JsonError => println(e)
+    e: codec.DecodeError => println(e)
   }
 }

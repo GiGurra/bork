@@ -152,7 +152,7 @@ func stdValidatorArtifact(files []*syntax.File, info *check.Info, runtimeSource 
 				}
 			}
 		}
-		for _, callee := range append(append([]*check.Func(nil), fn.Calls...), goBodyFunctions(fn)...) {
+		for _, callee := range append(append([]*check.Func(nil), fn.Calls...), goBodyFunctions(fn, g.info.GoImportNames[fn.Decl.GoBody])...) {
 			if err := visit(callee); err != nil {
 				return err
 			}

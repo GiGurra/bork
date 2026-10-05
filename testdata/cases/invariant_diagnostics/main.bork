@@ -1,21 +1,24 @@
+import codec "bork/codec"
+
 import "bork/json"
 import "bork/env"
 import "bork/cli"
+use codec.Defaults
 
 pred configured(c: Config) { c.low <= c.high && c.limit >= 1024 }
-type Config = { low: Int = 1, high: Int = 3, limit: Int = 1024 } where configured derive (Decode, GoStruct)
-type Envelope = { config: Config } derive (Decode)
+type Config = { low: Int = 1, high: Int = 3, limit: Int = 1024 } where configured derive (codec.Decode, GoStruct)
+type Envelope = { config: Config } derive (codec.Decode)
 pred portRange(p: Int) { p > 0 && p < 65536 }
-type Port = { port: Int where portRange } derive (Decode)
+type Port = { port: Int where portRange } derive (codec.Decode)
 pred atLeast(n: Int, minimum: Int) { n >= minimum }
-type Sibling = { low: Int, high: Int where atLeast(low) } derive (Decode, GoStruct)
+type Sibling = { low: Int, high: Int where atLeast(low) } derive (codec.Decode, GoStruct)
 pred boxValid[T](b: Box[T]) { b.low <= b.high && b.limit >= 1024 }
-type Box[T] = { value: T, low: Int, high: Int, limit: Int } where boxValid derive (Decode)
+type Box[T] = { value: T, low: Int, high: Int, limit: Int } where boxValid derive (codec.Decode)
 fn hiddenBody(n: Int): Bool { n > 0 }
 pred hidden(c: Opaque) { hiddenBody(c.n) }
-type Opaque = { n: Int } where hidden derive (Decode)
+type Opaque = { n: Int } where hidden derive (codec.Decode)
 pred either(c: Either) { c.low < 0 || c.high > 0 }
-type Either = { low: Int, high: Int } where either derive (Decode)
+type Either = { low: Int, high: Int } where either derive (codec.Decode)
 fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
  import "encoding/json"
  value := _d_T_GoStruct.New()
@@ -48,9 +51,9 @@ fn main() {
 pred phantomValid[T](b: Phantom[T]) { b.low <= b.high && b.limit >= 1024 }
 type Phantom[T] = { low: Int, high: Int, limit: Int } where phantomValid derive (GoStruct)
 
-type Items = { low: Int, xs: List[Int where atLeast(low)] } derive (Decode, GoStruct)
+type Items = { low: Int, xs: List[Int where atLeast(low)] } derive (codec.Decode, GoStruct)
 
-type OptionalItems = { low: Int, xs: List[Option[Int where atLeast(low)]] } derive (Decode, GoStruct)
+type OptionalItems = { low: Int, xs: List[Option[Int where atLeast(low)]] } derive (codec.Decode, GoStruct)
 
 pred different[T: Eq](value: T, other: T) { value != other }
-type Pair = { first: String, second: String where different(first) } derive (Decode)
+type Pair = { first: String, second: String where different(first) } derive (codec.Decode)

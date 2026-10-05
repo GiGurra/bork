@@ -1,12 +1,15 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Package sql owns database pools and transactions in scopes, and decodes rows
-// through Decode. SQL-prefixed literals bind values and quote Identifier holes.
+// through codec.Decode. SQL-prefixed literals bind values and quote Identifier holes.
 type Connection = resource
 type Transaction = resource
 type Error = { operation: String, message: String }
 type Null = {}
 type Value = String | Int | Float | Bool | Bytes | Null
 type Result = { rowsAffected: Int, lastInsertId: Option[Int] }
-type outcome = sealed { Rows { values: List[Json] }, Changed { result: Result } }
+type outcome = sealed { Rows { values: List[codec.Value] }, Changed { result: Result } }
 
 // Open connects using "sqlite" or "pgx" (Postgres), and pings with s's context.
 // SQLite pools use one connection, preserving :memory: databases and serializing
@@ -73,9 +76,9 @@ fn Exec(connection: Connection | Transaction, query: UnsafeQuery, params: List[V
 
 // Query materializes rows as records decoded from column-name JSON objects.
 // SQL NULL maps to Option.None; facts are checked before any rows are returned.
-fn Query[T: Decode](connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: List[T] | Error | DecodeError {
+fn Query[T: codec.Decode](connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: List[T] | Error | codec.DecodeError {
   json = QueryJson(connection, query, params)?
-  decode[List[T]](json)
+  codec.decode[List[T]](json)
 }
 
 // QueryJson returns the first result set as a JSON array of column-name objects.
@@ -83,9 +86,9 @@ fn Query[T: Decode](connection: Connection | Transaction, query: UnsafeQuery, pa
 // and binary columns are arrays of byte integers. Alias columns to record fields.
 // Postgres NUMERIC values remain strings; JSON/JSONB driver bytes remain arrays.
 // Cast columns or decode QueryJson explicitly when another mapping is needed.
-fn QueryJson(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: Json | Error {
+fn QueryJson(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: codec.Value | Error {
   match (run(connection, query.text, params, read: true)) {
-    outcome.Rows { values } => Json.Array { items: values }
+    outcome.Rows { values } => codec.Value.Array { items: values }
     outcome.Changed { result: _ } => panic("sql: unexpected exec result")
     error: Error => error
   }
@@ -143,38 +146,38 @@ fn run(connection: Connection | Transaction, query: String, params: List[Value],
     if seen[name] { return Error{operation: "query", message: "duplicate column name: " + name} }
     seen[name] = true
   }
-  output := []Json{}
+  output := []codec.Value{}
   for rows.Next() {
     values := make([]any, len(columns))
     targets := make([]any, len(columns))
     for i := range values { targets[i] = &values[i] }
     if err := rows.Scan(targets...); err != nil { return Error{operation: "query", message: err.Error()} }
-    fields := make([]JsonField, len(columns))
+    fields := make([]codec.Field, len(columns))
     for i, value := range values {
-      var json Json
+      var json codec.Value
       switch value := value.(type) {
-      case nil: json = Json_Null{}
-      case string: json = Json_String{value: value}
+      case nil: json = codec.Value_Null{}
+      case string: json = codec.Value_String{value: value}
       case int64:
         kind := strings.ToUpper(types[i].DatabaseTypeName())
         if kind == "BOOL" || kind == "BOOLEAN" {
           if value != 0 && value != 1 { return Error{operation: "query", message: "invalid boolean in column " + columns[i]} }
-          json = Json_Bool{value: value == 1}
-        } else { json = Json_Number{text: strconv.FormatInt(value, 10)} }
+          json = codec.Value_Bool{value: value == 1}
+        } else { json = codec.Value_Number{text: strconv.FormatInt(value, 10)} }
       case float64:
         if math.IsNaN(value) || math.IsInf(value, 0) { return Error{operation: "query", message: "non-finite number in column " + columns[i]} }
-        json = Json_Number{text: strconv.FormatFloat(value, 'g', -1, 64)}
-      case bool: json = Json_Bool{value: value}
+        json = codec.Value_Number{text: strconv.FormatFloat(value, 'g', -1, 64)}
+      case bool: json = codec.Value_Bool{value: value}
       case []byte:
-        items := make([]Json, len(value))
-        for i, b := range value { items[i] = Json_Number{text: strconv.Itoa(int(b))} }
-        json = Json_Array{items: items}
-      case time.Time: json = Json_String{value: value.Format(time.RFC3339Nano)}
+        items := make([]codec.Value, len(value))
+        for i, b := range value { items[i] = codec.Value_Number{text: strconv.Itoa(int(b))} }
+        json = codec.Value_Array{items: items}
+      case time.Time: json = codec.Value_String{value: value.Format(time.RFC3339Nano)}
       default: return Error{operation: "query", message: fmt.Sprintf("unsupported value in column %s: %T", columns[i], value)}
       }
-      fields[i] = JsonField{name: columns[i], value: json}
+      fields[i] = codec.Field{name: columns[i], value: json}
     }
-    output = append(output, Json_Object{fields: fields})
+    output = append(output, codec.Value_Object{fields: fields})
   }
   if err := rows.Err(); err != nil { return Error{operation: "query", message: err.Error()} }
   if err := rows.Close(); err != nil { return Error{operation: "query", message: err.Error()} }

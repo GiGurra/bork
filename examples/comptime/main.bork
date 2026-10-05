@@ -1,5 +1,8 @@
+import codec "bork/codec"
+
 import "bork/build"
 import "bork/json"
+use codec.Defaults
 
 pred positive(value: Int) { value > 0 }
 pred nonEmpty(value: String) { value.byteLength() > 0 }
@@ -8,7 +11,7 @@ pred supported(config: Config) { config.limit <= 4 }
 type Config = {
   name: String where nonEmpty
   limit: Int where positive
-} where supported derive (Decode)
+} where supported derive (codec.Decode)
 
 // The decoded record carries its whole-value invariant into ordinary calls.
 fn configuredName(config: Config where supported): String { config.name }

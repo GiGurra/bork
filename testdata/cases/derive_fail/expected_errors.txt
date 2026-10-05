@@ -1,5 +1,5 @@
-main.bork:2:52: cannot derive Decode for Handler: field run has type (Int) => Int, which has no Decode instance in scope (declare one: instance name: Decode[(Int) => Int] { ... })
-main.bork:3:35: cannot derive Encode for Wrapper: field inner has type Handler, which has no Encode instance in scope (add `derive (Encode)` to type Handler, or declare one: instance name: Encode[Handler] { ... })
-main.bork:4:23: Show cannot be derived; only Decode, Encode and GoStruct can (yet)
-main.bork:5:27: unknown class Nope
-main.bork:13:51: no instance of Decode for Plain is in scope (add `derive (Decode)` to type Plain, or declare one: instance name: Decode[Plain] { ... })
+main.bork:5:52: cannot derive Decode for Handler: field run has type (Int) => Int, which has no Decode instance in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... })
+main.bork:6:35: cannot derive Encode for Wrapper: field inner has type Handler, which has no Encode instance in scope (add `derive (codec.Encode)` to type Handler, or declare one: instance name: codec.Encode[Handler] { ... })
+main.bork:7:23: Show cannot be derived; only Decode, Encode and GoStruct can (yet)
+main.bork:8:27: unknown class Nope
+main.bork:16:62: no instance of Decode for Plain is in scope (add `derive (codec.Decode)` to type Plain, or declare one: instance name: codec.Decode[Plain] { ... })

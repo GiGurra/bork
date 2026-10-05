@@ -1,8 +1,11 @@
+import codec "bork/codec"
+
 import "bork/json"
 import "example.com/rune_values/values"
+use codec.Defaults
 
 type Box[T] = { value: T }
-type Glyph = { character: Rune } derive (Encode, Decode, GoStruct)
+type Glyph = { character: Rune } derive (codec.Encode, codec.Decode, GoStruct)
 
 fn render[T](value: T): String { toString(value) }
 fn renderBound[T: Show](value: T): String { show(value) }

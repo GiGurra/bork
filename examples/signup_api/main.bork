@@ -1,3 +1,5 @@
+import codec "bork/codec"
+
 import "bork/process"
 import "bork/json"
 // signup_api is a JSON-over-HTTP endpoint with constrained request
@@ -13,6 +15,7 @@ import "bork/json"
 // a request that decodes is proven, and register relies on its facts.
 
 import "bork/http"
+use codec.Defaults
 
 pred nonEmpty(s: String) { s.byteLength() > 0 }
 pred maxBytes(s: String, n: Int) { s.byteLength() <= n }
@@ -23,17 +26,17 @@ type UserName = String where nonEmpty and maxBytes(20)
 type Plan = sealed {
   Free,
   Paid { seats: Int where between(1, 500) },
-} derive (Decode, Encode)
+} derive (codec.Decode, codec.Encode)
 
 type SignUp = {
   name: UserName,
   age: Option[Int where between(13, 150)],
   plan: Plan,
-} derive (Decode, Encode)
+} derive (codec.Decode, codec.Encode)
 
-type Account = { name: UserName, seats: Int } derive (Encode)
+type Account = { name: UserName, seats: Int } derive (codec.Encode)
 
-type Problem = { path: String, message: String } derive (Encode)
+type Problem = { path: String, message: String } derive (codec.Encode)
 
 fn seatsOf(plan: Plan): Int {
   match (plan) {
@@ -48,11 +51,11 @@ fn register(req: SignUp): Account {
 }
 
 fn signup(body: String): http.Response {
-  r: SignUp | JsonError | DecodeError = json.Decode(body)
+  r: SignUp | json.JsonError | codec.DecodeError = json.Decode(body)
   match (r) {
     req: SignUp => http.JsonReply(201, json.Encode(register(req)))
-    e: JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: e.message }))
-    e: DecodeError => http.JsonReply(422, json.Encode(Problem { path: e.path, message: e.message }))
+    e: json.JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: e.message }))
+    e: codec.DecodeError => http.JsonReply(422, json.Encode(Problem { path: e.path, message: e.message }))
   }
 }
 

@@ -1,2 +1,2 @@
-main.bork:7:3: default of xs must be nonempty (default declared at main.bork:3:27), but nonempty([]) is false
-main.bork:8:23: default of xs must be nonempty (default declared at main.bork:3:27), but nonempty([]) is false
+main.bork:10:3: default of xs must be nonempty (default declared at main.bork:6:27), but nonempty([]) is false
+main.bork:11:23: default of xs must be nonempty (default declared at main.bork:6:27), but nonempty([]) is false

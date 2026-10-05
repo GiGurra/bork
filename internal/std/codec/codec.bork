@@ -1,53 +1,50 @@
-// JSON.
+// Format-independent codecs and an ordered value tree.
 
-// Json is a JSON value. A number keeps its text, so that whole numbers
+// Value is a format-independent value tree. A number keeps its text, so that whole numbers
 // of any size decode exactly.
-type Json = sealed {
+type Value = sealed {
   Null
   Bool { value: Bool }
   Number { text: String }
   String { value: String }
-  Array { items: List[Json] }
-  Object { fields: List[JsonField] }
+  Array { items: List[Value] }
+  Object { fields: List[Field] }
 }
 
-type JsonField = { name: String, value: Json }
-
-// JsonError is returned for text that is not valid JSON.
-type JsonError = { message: String }
+type Field = { name: String, value: Value }
 
 // _jsonKind names the kind of a JSON value, for messages.
-fn _jsonKind (j: Json): String {
+fn _jsonKind (j: Value): String {
   match (j) {
-    Json.Null => "null"
-    Json.Bool { value: _ } => "a boolean"
-    Json.Number { text: _ } => "a number"
-    Json.String { value: _ } => "a string"
-    Json.Array { items: _ } => "an array"
-    Json.Object { fields: _ } => "an object"
+    Value.Null => "null"
+    Value.Bool { value: _ } => "a boolean"
+    Value.Number { text: _ } => "a number"
+    Value.String { value: _ } => "a string"
+    Value.Array { items: _ } => "an array"
+    Value.Object { fields: _ } => "an object"
   }
 }
 
-// DecodeError says where in a JSON value decoding failed (a path like
+// DecodeError says where in a value decoding failed (a path like
 // ".items[2].name", "" for the whole value), and why. Transparent invariant
 // comparisons name the first failed condition and its primary field path;
 // other fields read by that condition appear in the message.
 type DecodeError = { path: String, message: String }
 
-// Decode reads values of a type from JSON. `derive (Decode)` on a record
+// Decode reads typed values from the value tree. `derive (Decode)` on a record
 // or sealed type gives it an instance that also checks every field's
 // where clause, so decoded values arrive already proven.
 class Decode[T] {
-  fn decode(json: Json): T | DecodeError
+  fn decode(json: Value): T | DecodeError
 }
 
-// Encode writes values of a type as JSON; `derive (Encode)` gives
+// Encode writes typed values to the value tree; `derive (Encode)` gives
 // records and sealed types an instance.
 class Encode[T] {
-  fn encode(x: T): Json
+  fn encode(x: T): Value
 }
 
-fn _decodeMismatch (expected: String, json: Json): DecodeError {
+fn _decodeMismatch (expected: String, json: Value): DecodeError {
   DecodeError { path: "", message: s"expected $expected, found ${_jsonKind(json)}" }
 }
 
@@ -58,9 +55,9 @@ fn _atPath (e: DecodeError, step: String): DecodeError {
 }
 
 instance decodeInt: Decode[Int] {
-  fn decode(json: Json): Int | DecodeError {
+  fn decode(json: Value): Int | DecodeError {
     match (json) {
-      Json.Number { text } => match (parseInt(text)) {
+      Value.Number { text } => match (parseInt(text)) {
         n: Int => n
         ParseError => DecodeError { path: "", message: s"expected a whole number, found $text" }
       }
@@ -70,9 +67,9 @@ instance decodeInt: Decode[Int] {
 }
 
 instance decodeFloat: Decode[Float] {
-  fn decode(json: Json): Float | DecodeError {
+  fn decode(json: Value): Float | DecodeError {
     match (json) {
-      Json.Number { text } => match (parseFloat(text)) {
+      Value.Number { text } => match (parseFloat(text)) {
         f: Float => f
         ParseError => DecodeError { path: "", message: s"expected a number, found $text" }
       }
@@ -82,18 +79,18 @@ instance decodeFloat: Decode[Float] {
 }
 
 instance decodeString: Decode[String] {
-  fn decode(json: Json): String | DecodeError {
+  fn decode(json: Value): String | DecodeError {
     match (json) {
-      Json.String { value } => value
+      Value.String { value } => value
       other => _decodeMismatch ("a string", other)
     }
   }
 }
 
 instance decodeBool: Decode[Bool] {
-  fn decode(json: Json): Bool | DecodeError {
+  fn decode(json: Value): Bool | DecodeError {
     match (json) {
-      Json.Bool { value } => value
+      Value.Bool { value } => value
       other => _decodeMismatch ("a boolean", other)
     }
   }
@@ -101,9 +98,9 @@ instance decodeBool: Decode[Bool] {
 
 // An Option is null (or a missing field) for None.
 instance decodeOption[T: Decode]: Decode[Option[T]] {
-  fn decode(json: Json): Option[T] | DecodeError {
+  fn decode(json: Value): Option[T] | DecodeError {
     match (json) {
-      Json.Null => Option.None
+      Value.Null => Option.None
       other => {
         value = decode[T](other)?
         Option.Some { value: value }
@@ -113,15 +110,15 @@ instance decodeOption[T: Decode]: Decode[Option[T]] {
 }
 
 instance decodeList[T: Decode]: Decode[List[T]] {
-  fn decode(json: Json): List[T] | DecodeError {
+  fn decode(json: Value): List[T] | DecodeError {
     match (json) {
-      Json.Array { items } => _decodeItems (items, 0, [])
+      Value.Array { items } => _decodeItems (items, 0, [])
       other => _decodeMismatch ("an array", other)
     }
   }
 }
 
-fn _decodeItems [T: Decode](items: List[Json], index: Int, done: List[T]): List[T] | DecodeError {
+fn _decodeItems [T: Decode](items: List[Value], index: Int, done: List[T]): List[T] | DecodeError {
   match (items.head()) {
     Option.None => done.reverse()
     Option.Some { value: item } => match (decode[T](item)) {
@@ -133,15 +130,15 @@ fn _decodeItems [T: Decode](items: List[Json], index: Int, done: List[T]): List[
 
 // A Map with String keys is a JSON object; its fields keep their order.
 instance decodeMap[V: Decode]: Decode[Map[String, V]] {
-  fn decode(json: Json): Map[String, V] | DecodeError {
+  fn decode(json: Value): Map[String, V] | DecodeError {
     match (json) {
-      Json.Object { fields } => _decodeFields (fields, {:})
+      Value.Object { fields } => _decodeFields (fields, {:})
       other => _decodeMismatch ("an object", other)
     }
   }
 }
 
-fn _decodeFields [V: Decode](fields: List[JsonField], done: Map[String, V]): Map[String, V] | DecodeError {
+fn _decodeFields [V: Decode](fields: List[Field], done: Map[String, V]): Map[String, V] | DecodeError {
   match (fields.head()) {
     Option.None => done
     Option.Some { value: field } => match (decode[V](field.value)) {
@@ -155,42 +152,42 @@ fn _jsonFieldPut [V](m: Map[String, V], name: String, value: V): Map[String, V] 
   return m.put(name, value)
 }
 
-instance decodeJson: Decode[Json] {
-  fn decode(json: Json): Json | DecodeError { json }
+instance decodeValue: Decode[Value] {
+  fn decode(json: Value): Value | DecodeError { json }
 }
 
 instance encodeInt: Encode[Int] {
-  fn encode(x: Int): Json { Json.Number { text: toString(x) } }
+  fn encode(x: Int): Value { Value.Number { text: toString(x) } }
 }
 
 instance encodeFloat: Encode[Float] {
-  fn encode(x: Float): Json { Json.Number { text: toString(x) } }
+  fn encode(x: Float): Value { Value.Number { text: toString(x) } }
 }
 
 instance encodeString: Encode[String] {
-  fn encode(x: String): Json { Json.String { value: x } }
+  fn encode(x: String): Value { Value.String { value: x } }
 }
 
 instance encodeBool: Encode[Bool] {
-  fn encode(x: Bool): Json { Json.Bool { value: x } }
+  fn encode(x: Bool): Value { Value.Bool { value: x } }
 }
 
 instance encodeOption[T: Encode]: Encode[Option[T]] {
-  fn encode(x: Option[T]): Json {
+  fn encode(x: Option[T]): Value {
     match (x) {
-      Option.None => Json.Null
+      Option.None => Value.Null
       Option.Some { value } => encode(value)
     }
   }
 }
 
 instance encodeList[T: Encode]: Encode[List[T]] {
-  fn encode(xs: List[T]): Json { Json.Array { items: xs.map(encode) } }
+  fn encode(xs: List[T]): Value { Value.Array { items: xs.map(encode) } }
 }
 
 instance encodeMap[V: Encode]: Encode[Map[String, V]] {
-  fn encode(m: Map[String, V]): Json {
-    Json.Object { fields: _jsonFieldsOf (m).map(e => JsonField { name: e.key, value: encode(e.value) }) }
+  fn encode(m: Map[String, V]): Value {
+    Value.Object { fields: _jsonFieldsOf (m).map(e => Field { name: e.key, value: encode(e.value) }) }
   }
 }
 
@@ -203,19 +200,19 @@ fn _jsonFieldsOf [V](m: Map[String, V]): List[Entry[String, V]] unsafe go {
   return out
 }
 
-instance encodeJson: Encode[Json] {
-  fn encode(x: Json): Json { x }
+instance encodeValue: Encode[Value] {
+  fn encode(x: Value): Value { x }
 }
 
 // A Rune encodes as one Unicode scalar in a JSON string.
 instance encodeRune: Encode[Rune] {
-  fn encode(x: Rune): Json { Json.String { value: toString(x) } }
+  fn encode(x: Rune): Value { Value.String { value: toString(x) } }
 }
 
 instance decodeRune: Decode[Rune] {
-  fn decode(json: Json): Rune | DecodeError {
+  fn decode(json: Value): Rune | DecodeError {
     match (json) {
-      Json.String { value } => if ( _validRuneString (value)) {
+      Value.String { value } => if ( _validRuneString (value)) {
         match (value.runeAt(0)) {
           Option.Some { value: r } => r
           Option.None => DecodeError { path: "", message: "expected one Unicode scalar" }
@@ -230,3 +227,6 @@ fn _validRuneString (value: String): Bool unsafe go {
   import "unicode/utf8"
   return utf8.ValidString(value) && utf8.RuneCountInString(value) == 1
 }
+
+// Defaults selects the standard primitive and container codecs.
+instances Defaults { decodeInt8, encodeInt8, decodeInt16, encodeInt16, decodeInt32, encodeInt32, decodeUint8, encodeUint8, decodeUint16, encodeUint16, decodeUint32, encodeUint32, decodeUint64, encodeUint64, decodeFloat32, encodeFloat32, decodeInt, decodeFloat, decodeString, decodeBool, decodeOption, decodeList, decodeMap, decodeValue, encodeInt, encodeFloat, encodeString, encodeBool, encodeOption, encodeList, encodeMap, encodeValue, encodeRune, decodeRune }

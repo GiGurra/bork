@@ -1,6 +1,9 @@
+import codec "bork/codec"
+
 import "bork/json"
+use codec.Defaults
 pred nonempty[T](xs: List[T]) { xs.length() > 0 }
-type Box[T] = { value: T, xs: List[T] where nonempty = [] } derive (Decode, Encode)
+type Box[T] = { value: T, xs: List[T] where nonempty = [] } derive (codec.Decode, codec.Encode)
 fn Hidden[T: Show](value: T) uses io { println(Box { value: value }) }
 fn Wrapper[T: Show](value: T) uses io { Hidden(value) }
 fn main() uses io {

@@ -1,7 +1,10 @@
+import codec "bork/codec"
+
 import "bork/json"
+use codec.Defaults
 fn main() {
   match (json.Parse("{\"items\":[{\"name\":\"bork\",\"nothing\":null}],\"exact\":12345678901234567890}")) {
-    value: Json => {
+    value: codec.Value => {
       println(json.At(value, ["items", 0, "name"]))
       println(json.At(value, ["items", 0, "nothing"]))
       println(json.At(value, ["items", -1]))
@@ -10,12 +13,12 @@ fn main() {
       println(json.At(value, ["exact", "x"]))
       println(json.At(value, []))
       println(json.Pretty(value))
-      println(json.Pretty(Json.Array { items: [Json.Bool { value: true }] }, 0))
+      println(json.Pretty(codec.Value.Array { items: [codec.Value.Bool { value: true }] }, 0))
     }
-    error: JsonError => println(error.message)
+    error: json.JsonError => println(error.message)
   }
-  println(match (json.Pretty(Json.Number { text: "invalid" })) { _: JsonError => true; _ => false })
-  println(match (json.Pretty(Json.Array { items: [Json.Number { text: "1,2" }] })) { _: JsonError => true; _ => false })
-  println(match (json.Pretty(Json.Number { text: "true" })) { _: JsonError => true; _ => false })
-  println(json.Field(Json.Object { fields: [JsonField { name: "x", value: Json.Null }, JsonField { name: "x", value: Json.Bool { value: true } }] }, "x"))
+  println(match (json.Pretty(codec.Value.Number { text: "invalid" })) { _: json.JsonError => true; _ => false })
+  println(match (json.Pretty(codec.Value.Array { items: [codec.Value.Number { text: "1,2" }] })) { _: json.JsonError => true; _ => false })
+  println(match (json.Pretty(codec.Value.Number { text: "true" })) { _: json.JsonError => true; _ => false })
+  println(json.Field(codec.Value.Object { fields: [codec.Field { name: "x", value: codec.Value.Null }, codec.Field { name: "x", value: codec.Value.Bool { value: true } }] }, "x"))
 }

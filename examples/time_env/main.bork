@@ -1,12 +1,15 @@
+import codec "bork/codec"
+
 import "bork/process"
 import "bork/test"
 // APP_HOST=localhost APP_PORT=8080 bork run examples/time_env -- live
 // The default demo injects both the environment and clock.
 import "bork/env"
 import "bork/time"
+use codec.Defaults
 
 pred validPort(n: Int) { n > 0 && n <= 65535 }
-type Config = { host: String, port: Int where validPort } derive (Decode)
+type Config = { host: String, port: Int where validPort } derive (codec.Decode)
 fn report(result: Config | env.ConfigError, clock: time.Clock) uses io + clock {
   match (result) {
     config: Config => println(s"${time.Format(time.Read(clock), time.RFC3339())}: ${config.host}:${config.port}")
@@ -39,7 +42,7 @@ test "invalid duration and instant text is rejected" {
   assert(time.ParseDuration("nope") is ParseError)
   assert(time.Parse("nope", time.RFC3339()) is ParseError)
 }
-type Pair[A, B] = { first: A, second: B } derive (Decode)
+type Pair[A, B] = { first: A, second: B } derive (codec.Decode)
 test "generic fields use instantiated decoder parsing kinds" {
   values = { "APP_FIRST": "hello", "APP_SECOND": "42" }
   result: Pair[String, Int] | env.ConfigError = env.LoadWith("APP", name => values.get(name))
@@ -56,7 +59,7 @@ type RequiredOptions = {
   first: Option[String] where present,
   second: Option[String] where present,
   port: Int,
-} derive (Decode)
+} derive (codec.Decode)
 test "absent options still check every field fact" {
   result: RequiredOptions | env.ConfigError = env.LoadWith("APP", name => Option.None)
   match (result) {

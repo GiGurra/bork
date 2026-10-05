@@ -1,11 +1,14 @@
+import codec "bork/codec"
+
 // bork run examples/assemble: a scope-owned database and HTTP service.
 import "bork/http"
 import "bork/sql"
+use codec.Defaults
 
 type Config = { database: String, address: String }
 type Database = { connection: sql.Connection }
 type Service = { server: http.Server }
-type Greeting = { message: String } derive (Decode)
+type Greeting = { message: String } derive (codec.Decode)
 
 fn newConfig(): Config { Config { database: ":memory:", address: "127.0.0.1:0" } }
 

@@ -391,7 +391,7 @@ func (c *checker) packageDependencyGraph() {
 				dependencies.instance(&Instance{Dicts: dictionaries})
 			}
 		}
-		if function.Derived != nil && function.Of.Class.Name == "Decode" {
+		if function.Derived != nil && IsCodec(function.Of.Class, "Decode") {
 			for _, constraint := range TypeConstraints(function.Of.Type) {
 				dependencies.constraint(constraint, function.Of.Type)
 			}

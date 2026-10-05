@@ -1,8 +1,11 @@
+import codec "bork/codec"
+
 import "example.com/tc/money"
+use codec.Defaults
 
 use money.Defaults
 
-type Item = { name: String, price: money.Cents } derive (Decode, Encode)
+type Item = { name: String, price: money.Cents } derive (codec.Decode, codec.Encode)
 
 // A package can suggest other packages' instances too, and sets can
 // include sets.

@@ -1,18 +1,21 @@
+import codec "bork/codec"
+
 import "bork/encoding"
 import "bork/http"
-instance bytesEncode: Encode[Bytes] {
-  fn encode(value: Bytes): Json { Json.String { value: "secret" } }
+use codec.Defaults
+instance bytesEncode: codec.Encode[Bytes] {
+  fn encode(value: Bytes): codec.Value { codec.Value.String { value: "secret" } }
 }
-instance bytesDecode: Decode[Bytes] {
-  fn decode(json: Json): Bytes | DecodeError { encoding.Utf8("invalid-secret") }
+instance bytesDecode: codec.Decode[Bytes] {
+  fn decode(json: codec.Value): Bytes | codec.DecodeError { encoding.Utf8("invalid-secret") }
 }
-type Serialized = http.Certificate derive (Encode)
-type Forged = http.Certificate derive (Decode)
-type WrappedEncode = { certificate: http.Certificate } derive (Encode)
-type WrappedDecode = { certificate: http.Certificate } derive (Decode)
-type Box[T] = { value: T } derive (Encode, Decode)
-type BoxEncode = Box[http.Certificate] derive (Encode)
-type BoxDecode = Box[http.Certificate] derive (Decode)
-type Container = { certificates: List[Option[http.Certificate]] } derive (Decode, Encode)
-type WrappedBox = { box: Box[http.Certificate] } derive (Encode, Decode)
+type Serialized = http.Certificate derive (codec.Encode)
+type Forged = http.Certificate derive (codec.Decode)
+type WrappedEncode = { certificate: http.Certificate } derive (codec.Encode)
+type WrappedDecode = { certificate: http.Certificate } derive (codec.Decode)
+type Box[T] = { value: T } derive (codec.Encode, codec.Decode)
+type BoxEncode = Box[http.Certificate] derive (codec.Encode)
+type BoxDecode = Box[http.Certificate] derive (codec.Decode)
+type Container = { certificates: List[Option[http.Certificate]] } derive (codec.Decode, codec.Encode)
+type WrappedBox = { box: Box[http.Certificate] } derive (codec.Encode, codec.Decode)
 fn main() {}

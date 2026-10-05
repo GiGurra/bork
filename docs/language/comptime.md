@@ -72,10 +72,13 @@ fn main() {
 The `bork/build` package reads a file during compilation. Together with `comptime`, this parses and validates a configuration file once, at build time:
 
 ```bork fragment
+import codec "bork/codec"
+
 import "bork/build"
 import "bork/json"
+use codec.Defaults
 
-type Config = { name: String, limit: Int } derive (Decode)
+type Config = { name: String, limit: Int } derive (codec.Decode)
 
 fn main() {
   config = comptime {

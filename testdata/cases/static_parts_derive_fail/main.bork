@@ -1,2 +1,5 @@
-type Wrapper = { parts: StaticParts } derive (Decode, GoStruct)
+import codec "bork/codec"
+use codec.Defaults
+
+type Wrapper = { parts: StaticParts } derive (codec.Decode, GoStruct)
 fn main() {}

@@ -1,5 +1,8 @@
+import codec "bork/codec"
+use codec.Defaults
+
 pred positive(n: Int) { n > 0 }
-type Config = private { port: Int where positive = 8080, name: String = "server" } derive (Decode, Encode, GoStruct)
+type Config = private { port: Int where positive = 8080, name: String = "server" } derive (codec.Decode, codec.Encode, GoStruct)
 type Box[T] = private { value: T }
 fn New(port: Int where positive): Config { .{ port: port } }
 fn (c: Config) WithPort(port: Int where positive): Config { c.copy(port: port) }

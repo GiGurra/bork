@@ -1,5 +1,8 @@
+import codec "bork/codec"
+
 import "bork/encoding"
 import "bork/http"
+use codec.Defaults
 
 type Fixture = resource
 fn fixture(s: Scope) uses io + clock + random: Fixture unsafe go {
@@ -63,5 +66,5 @@ fn more(s: Scope) uses io + net + clock + random + state {
   }
   println(match (http.Multipart(makeRequest(body, "multipart/form-data; boundary=boundary"), 0)) { _: IoError => true; _ => false })
   println(match (http.Multipart(makeRequest("bad", "multipart/form-data"))) { _: IoError => true; _ => false })
-  println(match (http.Body[Path](makeRequest("{\"id\":0}", "application/json"))) { _: DecodeError => true; _ => false })
+  println(match (http.Body[Path](makeRequest("{\"id\":0}", "application/json"))) { _: codec.DecodeError => true; _ => false })
 }

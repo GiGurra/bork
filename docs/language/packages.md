@@ -190,14 +190,17 @@ fn main() {
 
 ## Derived instances
 
-`derive` asks the compiler to write an instance. `Decode` and `Encode` turn records and sealed types into and out of JSON, CSV rows, command-line options, environment variables, and SQL rows.
+`derive` asks the compiler to write an instance. `codec.Decode` and `codec.Encode` from [bork/codec](../std/codec.md) turn records and sealed types into and out of JSON, CSV rows, command-line options, environment variables, and SQL rows. Select `use codec.Defaults` for standard primitive and container instances.
 
 ```bork
+import codec "bork/codec"
+
 import "bork/json"
+use codec.Defaults
 
 pred validPort(n: Int) { n > 0 && n < 65536 }
 
-type Server = { host: String, port: Int where validPort = 8080, tags: List[String] = [] } derive (Decode, Encode)
+type Server = { host: String, port: Int where validPort = 8080, tags: List[String] = [] } derive (codec.Decode, codec.Encode)
 
 fn main() {
   println(json.Decode[Server]("{\"host\": \"example.com\"}"))

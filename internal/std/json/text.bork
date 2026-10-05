@@ -1,7 +1,10 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // JSON text parsing, rendering, and typed codecs.
 
 // Parse reads a JSON value; object fields keep their order.
-fn Parse(text: String): Json | JsonError unsafe go {
+fn Parse(text: String): codec.Value | JsonError unsafe go {
   import "encoding/json"
   import "fmt"
   import "strings"
@@ -50,14 +53,14 @@ fn Parse(text: String): Json | JsonError unsafe go {
     }
     return s, nil
   }
-  var value func() (Json, *JsonError)
-  value = func() (Json, *JsonError) {
+  var value func() (codec.Value, *JsonError)
+  value = func() (codec.Value, *JsonError) {
     space()
     if pos >= len(text) {
       e := fail("a value")
       return nil, &e
     }
-    for word, j := range map[string]Json{"null": Json_Null{}, "true": Json_Bool{value: true}, "false": Json_Bool{value: false}} {
+    for word, j := range map[string]codec.Value{"null": codec.Value_Null{}, "true": codec.Value_Bool{value: true}, "false": codec.Value_Bool{value: false}} {
       if strings.HasPrefix(text[pos:], word) {
         pos += len(word)
         return j, nil
@@ -66,7 +69,7 @@ fn Parse(text: String): Json | JsonError unsafe go {
     switch c := text[pos]; {
     case c == '"':
       s, e := str()
-      return Json_String{value: s}, e
+      return codec.Value_String{value: s}, e
     case c == '-' || c >= '0' && c <= '9':
       start := pos
       if c == '-' {
@@ -94,14 +97,14 @@ fn Parse(text: String): Json | JsonError unsafe go {
           return nil, &e
         }
       }
-      return Json_Number{text: text[start:pos]}, nil
+      return codec.Value_Number{text: text[start:pos]}, nil
     case c == '[':
       pos++
-      items := []Json{}
+      items := []codec.Value{}
       space()
       if pos < len(text) && text[pos] == ']' {
         pos++
-        return Json_Array{items: items}, nil
+        return codec.Value_Array{items: items}, nil
       }
       for {
         item, e := value()
@@ -116,18 +119,18 @@ fn Parse(text: String): Json | JsonError unsafe go {
         }
         if pos < len(text) && text[pos] == ']' {
           pos++
-          return Json_Array{items: items}, nil
+          return codec.Value_Array{items: items}, nil
         }
         e2 := fail("',' or ']'")
         return nil, &e2
       }
     case c == '{':
       pos++
-      fields := []JsonField{}
+      fields := []codec.Field{}
       space()
       if pos < len(text) && text[pos] == '}' {
         pos++
-        return Json_Object{fields: fields}, nil
+        return codec.Value_Object{fields: fields}, nil
       }
       for {
         space()
@@ -149,7 +152,7 @@ fn Parse(text: String): Json | JsonError unsafe go {
         if e != nil {
           return nil, e
         }
-        fields = append(fields, JsonField{name: name, value: v})
+        fields = append(fields, codec.Field{name: name, value: v})
         space()
         if pos < len(text) && text[pos] == ',' {
           pos++
@@ -157,7 +160,7 @@ fn Parse(text: String): Json | JsonError unsafe go {
         }
         if pos < len(text) && text[pos] == '}' {
           pos++
-          return Json_Object{fields: fields}, nil
+          return codec.Value_Object{fields: fields}, nil
         }
         e2 := fail("',' or '}'")
         return nil, &e2
@@ -178,27 +181,27 @@ fn Parse(text: String): Json | JsonError unsafe go {
 }
 
 // Render writes a JSON value as compact text.
-fn Render(j: Json): String unsafe go {
+fn Render(j: codec.Value): String unsafe go {
   import "encoding/json"
   import "strings"
   var b strings.Builder
-  var render func(j Json)
-  render = func(j Json) {
+  var render func(j codec.Value)
+  render = func(j codec.Value) {
     switch j := j.(type) {
-    case Json_Null:
+    case codec.Value_Null:
       b.WriteString("null")
-    case Json_Bool:
+    case codec.Value_Bool:
       if j.value {
         b.WriteString("true")
       } else {
         b.WriteString("false")
       }
-    case Json_Number:
+    case codec.Value_Number:
       b.WriteString(j.text)
-    case Json_String:
+    case codec.Value_String:
       s, _ := json.Marshal(j.value)
       b.Write(s)
-    case Json_Array:
+    case codec.Value_Array:
       b.WriteString("[")
       for i, item := range j.items {
         if i > 0 {
@@ -207,7 +210,7 @@ fn Render(j: Json): String unsafe go {
         render(item)
       }
       b.WriteString("]")
-    case Json_Object:
+    case codec.Value_Object:
       b.WriteString("{")
       for i, f := range j.fields {
         if i > 0 {
@@ -225,13 +228,13 @@ fn Render(j: Json): String unsafe go {
   return b.String()
 }
 
-// Decode parses text and decodes it.
-fn Decode[T: Decode](text: String): T | JsonError | DecodeError {
+// codec.Decode parses text and decodes it.
+fn Decode[T: codec.Decode](text: String): T | JsonError | codec.DecodeError {
   json = Parse(text)?
-  decode[T](json)
+  codec.decode[T](json)
 }
 
-// Encode encodes a value and renders it as compact JSON text.
-fn Encode[T: Encode](x: T): String {
-  Render(encode(x))
+// codec.Encode encodes a value and renders it as compact JSON text.
+fn Encode[T: codec.Encode](x: T): String {
+  Render(codec.encode(x))
 }

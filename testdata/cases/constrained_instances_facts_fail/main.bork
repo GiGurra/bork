@@ -1,7 +1,10 @@
+import codec "bork/codec"
+use codec.Defaults
+
 pred small(x: Int) { x < 100 }
 
-instance decodeSmall: Decode[Int where small] {
-  fn decode(json: Json): Int where small | DecodeError { 500 }
+instance decodeSmall: codec.Decode[Int where small] {
+  fn decode(json: codec.Value): Int where small | codec.DecodeError { 500 }
 }
 
 fn main() {}

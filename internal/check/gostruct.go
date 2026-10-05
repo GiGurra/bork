@@ -224,7 +224,10 @@ func (c *checker) resolveGoStructDecoders(ci *ClassInstance) {
 				c.have = append(c.have, con)
 			}
 		}
-		d := c.dict(c.preludePkg.classes["Decode"], f.Type, ci.Decl.Pos, 0)
+		var d *Dict
+		if codec := c.info.PackageNamed("bork/codec"); codec != nil {
+			d = c.dict(codec.ClassNamed("Decode"), f.Type, ci.Decl.Pos, 0)
+		}
 		c.diags = saved
 		c.have = nil
 		ci.GoFieldDecoders = append(ci.GoFieldDecoders, d)

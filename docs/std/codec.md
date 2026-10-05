@@ -1,0 +1,27 @@
+# bork/codec
+
+`bork/codec` separates typed values from text formats. `codec.Value` contains `Null`, `Bool`, `Number`, `String`, `Array`, and `Object`; an object stores an ordered list of `codec.Field { name, value }`. Numbers retain their text so integers can decode exactly.
+
+`codec.Encode[T]` provides `codec.encode(value): codec.Value`. `codec.Decode[T]` provides `codec.decode(value): T | codec.DecodeError`. Errors carry a field/index path and a message. Derived decoders check field facts and record invariants before returning a value.
+
+Import the classes and select the standard instances explicitly:
+
+```bork
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+type User = { name: String, age: Int } derive(codec.Decode, codec.Encode)
+
+fn main() {
+  user = User { name: "Ada", age: 37 }
+  println(codec.encode(user))
+  println(json.Decode[User](json.Encode(user)))
+}
+```
+
+`codec.Defaults` contains instances for `Int`, `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Float`, `Float32`, `Bool`, `String`, `Rune`, `Option`, `List`, `Map[String, V]`, and `codec.Value`. Numeric-width decoders reject values outside the type’s decimal range. Container instances require the corresponding element instances. Custom codecs remain ordinary selectable instances; another package imports them with `use` or an exported instance bundle.
+
+Records encode as objects. A named sealed variant encodes with a `"type"` discriminator and its fields; a fieldless variant can also decode from its name. `Option` retains its null/value representation, and missing optional record fields decode as `None`.
+
+[bork/json](json.md) parses and renders this tree and supplies typed text adapters. JSON syntax errors are `json.JsonError`; typed conversion errors are `codec.DecodeError`. The old prelude `Json`, `JsonField`, `DecodeError`, `JsonError`, `Encode`, and `Decode` names have no compatibility aliases.

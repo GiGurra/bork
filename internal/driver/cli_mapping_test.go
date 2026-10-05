@@ -12,7 +12,10 @@ import (
 func TestCLIMapping(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import codec "bork/codec"
+
+import "bork/cli"
+use codec.Defaults
 // Short flags must reserve explicit names on later fields.
 type Options = {
  // Original host documentation.
@@ -24,7 +27,7 @@ type Options = {
  envOnly: String = "env-default"
  noConfig: String = "config-default"
  httpPort: Int = 8080
-} derive (Decode)
+} derive (codec.Decode)
 fn main() {
  println(cli.Run[Options]("app", "Mapping example", (options, s) => { println(options) }, flags: [
   .{ field: "serverHost", description: Option.Some { value: "Custom host documentation." } },
@@ -104,14 +107,17 @@ fn main() {
 func TestCLIMappingMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
-type Options = { alpha: String = "a", another: String = "b", beta: String = "c" } derive (Decode)
+	source := `import codec "bork/codec"
+
+import "bork/cli"
+use codec.Defaults
+type Options = { alpha: String = "a", another: String = "b", beta: String = "c" } derive (codec.Decode)
 type Docs = {
  // Inherited alpha documentation.
  alpha: String = "a"
-} derive (Decode)
-type ScalarPositional = { inputFile: String = "input.txt" } derive (Decode)
-type ListPositional = { inputFiles: List[String] = [] } derive (Decode)
+} derive (codec.Decode)
+type ScalarPositional = { inputFile: String = "input.txt" } derive (codec.Decode)
+type ListPositional = { inputFiles: List[String] = [] } derive (codec.Decode)
 fn describe(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec {
  field.copy(description: s"${field.field}: previous=${previous.length()}")
 }
@@ -193,8 +199,11 @@ fn main() { settings: cli.Settings = .{ enrichers: [noisy] } }
 func TestCLISubcommandWarnings(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
-type Options = { oldPort: Int = 80 } derive (Decode)
+	source := `import codec "bork/codec"
+
+import "bork/cli"
+use codec.Defaults
+type Options = { oldPort: Int = 80 } derive (codec.Decode)
 fn main() {
  println(cli.RunCommands("app", "", [cli.Subcommand[Options]("serve", "", (options, s) => { println(s"handler ${options.oldPort}") }, flags: [.{ field: "oldPort", deprecated: "use the new port" }])]))
 }

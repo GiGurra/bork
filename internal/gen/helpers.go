@@ -114,7 +114,7 @@ type _borkDecodeField struct {
  Optional bool
  Decode func(Json) any
 }
-func _borkDecodeFields[T any](dict Decode[T]) ([]_borkDecodeField, bool) {
+func _borkDecodeFields[T any](dict @Decode@[T]) ([]_borkDecodeField, bool) {
  if dict.fields == nil { return nil, false }
  return dict.fields(), true
 }

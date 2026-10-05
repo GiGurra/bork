@@ -1,5 +1,8 @@
+import codec "bork/codec"
+
 import "bork/json"
-type Prices = { currency: String, items: Map[String, Int] } derive (Decode, Encode)
+use codec.Defaults
+type Prices = { currency: String, items: Map[String, Int] } derive (codec.Decode, codec.Encode)
 
 fn main() {
   p = Prices { currency: "SEK", items: { "apple": 5, "pear": 7 } }

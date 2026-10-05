@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 type Node = { value: Int = 1, next: Option[Node] = Option.None } derive (GoStruct)
 fn Cycle[T: GoStruct](): List[GoValueError] unsafe go {
  import "reflect"
@@ -19,7 +22,7 @@ fn Wrong[T: GoStruct](): List[GoValueError] unsafe go {
 }
 fn DecodeField[T: GoStruct](): String unsafe go {
  fields:=_d_T_GoStruct.Fields()
- return _show(fields[0].Decode(Json_Number{text:"3"}))
+ return _show(fields[0].Decode(codec.Value_Number{text:"3"}))
 }
 type Keywords = { map: Int = 2, func: String = "keyword" } derive (GoStruct)
 fn Round[T: GoStruct](value: T): T | GoValueError unsafe go {

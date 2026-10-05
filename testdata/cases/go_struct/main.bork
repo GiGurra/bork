@@ -1,12 +1,15 @@
+import codec "bork/codec"
+use codec.Defaults
+
 pred positive(n: Int) { n > 0 }
-type Child = { name: String = "child" } derive (GoStruct, Decode, Encode)
+type Child = { name: String = "child" } derive (GoStruct, codec.Decode, codec.Encode)
 type Options = {
   // Port to listen on.
   port: Int where positive = 8080 go { json: "port", short: "p" }
   names: List[String] = [] go { json: "names" }
   child: Child = Child {} go { json: "child" }
   optional: Option[Int] = Option.None go { json: "optional" }
-} derive (GoStruct, Decode, Encode)
+} derive (GoStruct, codec.Decode, codec.Encode)
 type Phantom[T] = { value: Int = 7 } derive (GoStruct)
 type Url = go "net/url.URL" { scheme: String = "https", host: String = "example.com" } derive (GoStruct)
 type Duration = go "time.Duration"

@@ -340,7 +340,17 @@ func (c *checker) checkOpaqueInstance(inst *Instance, pos diag.Pos, args []synta
 // Generic bodies are checked once, with their parameters still abstract.
 // Propagate uses that require immutable bork data through specialization,
 // including calls through generic wrappers and constrained record fields.
-func (c *checker) checkOpaqueGenericUses() {
+func (c *checker) checkOpaqueGenericUses(files []*syntax.File) {
+	originalPackage := c.pkg
+	defer func() { c.pkg = originalPackage }()
+	sourcePackages := map[string]*Package{}
+	for _, file := range files {
+		pkg := c.pkgs[file.Package]
+		if file.Prelude {
+			pkg = c.preludePkg
+		}
+		sourcePackages[file.Path] = pkg
+	}
 	restricted := map[*TypeParam]string{}
 	var mark func(Type, string, map[Type]bool)
 	mark = func(t Type, why string, seen map[Type]bool) {
@@ -394,12 +404,12 @@ func (c *checker) checkOpaqueGenericUses() {
 				markType(p, "predicate "+fn.Decl.Name)
 			}
 		}
-		if fn.Class != nil && fn.Class.Prelude && (fn.Class.Name == "Encode" || fn.Class.Name == "Decode") {
+		if IsCodec(fn.Class, "Encode") || IsCodec(fn.Class, "Decode") {
 			for _, tp := range fn.TypeParams {
 				markType(tp, fn.Class.Name)
 			}
 		}
-		if fn.Of != nil && fn.Of.Class.Prelude && (fn.Of.Class.Name == "Encode" || fn.Of.Class.Name == "Decode") {
+		if fn.Of != nil && (IsCodec(fn.Of.Class, "Encode") || IsCodec(fn.Of.Class, "Decode")) {
 			markType(fn.Of.Type, fn.Of.Class.Name)
 		}
 		if fn.Decl.Requires != nil {
@@ -517,6 +527,7 @@ func (c *checker) checkOpaqueGenericUses() {
 		}
 	}
 	for _, u := range uses {
+		c.pkg = sourcePackages[u.pos.File]
 		for i, tp := range u.inst.Func.TypeParams {
 			if why := restricted[tp]; why != "" && containsOpaque(u.inst.TypeArgs[i], map[Type]bool{}) {
 				c.bindErr(u.pos, "%s of %s cannot be %s: its generic implementation uses %s, which cannot depend on opaque Go values", tp.Name, u.inst.Func.Decl.Name, u.inst.TypeArgs[i], why)

@@ -5,7 +5,9 @@ import (
 	"go/parser"
 	"go/token"
 	"slices"
+	"strings"
 
+	"github.com/GiGurra/bork/internal/check"
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
@@ -15,9 +17,6 @@ import (
 func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 	body := fd.GoBody.Body
 	imports := g.info.GoImportNames[fd.GoBody]
-	if len(imports) == 0 {
-		return body
-	}
 	const prefix = "package p\nfunc _() {"
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", prefix+body+"}\n", 0)
@@ -47,6 +46,35 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 		}
 		if path, ok := imports[name.Name]; ok {
 			edits = append(edits, edit{fset.Position(name.Pos()).Offset - len(prefix), name.Name, g.goImport(path)})
+			return true
+		}
+		pkg := g.info.FuncOf[fd].Pkg.Imported(name.Name)
+		if pkg == nil || !check.Exported(selector.Sel.Name) {
+			return true
+		}
+		member := selector.Sel.Name
+		var generated string
+		if typ := pkg.TypeNamed(member); typ != nil {
+			g.goType(typ)
+			generated = typeName(member, pkg).Name
+		} else if class := pkg.ClassNamed(member); class != nil {
+			generated = className(class).Name
+		} else if fn := pkg.Funcs[member]; fn != nil {
+			generated = g.funcName(fn).Name
+		} else if base, variant, ok := strings.Cut(member, "_"); ok {
+			if sealed, ok := pkg.TypeNamed(base).(*check.Sealed); ok {
+				for _, v := range sealed.Variants {
+					if v.Name == variant {
+						g.goType(sealed)
+						generated = typeName(member, pkg).Name
+						break
+					}
+				}
+			}
+		}
+		if generated != "" {
+			original := name.Name + "." + member
+			edits = append(edits, edit{fset.Position(name.Pos()).Offset - len(prefix), original, generated})
 		}
 		return true
 	})

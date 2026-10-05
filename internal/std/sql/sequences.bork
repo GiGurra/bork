@@ -1,15 +1,18 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Rows requires explicitly unsafe query text and decodes each row while
 // traversing, keeping errors as explicit elements.
 // Every traversal executes a fresh query; stopping closes its active rows.
-fn Rows[T: Decode](connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]): Seq[T | Error | DecodeError] uses io + net {
+fn Rows[T: codec.Decode](connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]): Seq[T | Error | codec.DecodeError] uses io + net {
   RowsJson(connection, query, params).map(value => decodeRow[T](value))
 }
-fn decodeRow[T: Decode](value: Json | Error): T | Error | DecodeError {
-  match (value) { json: Json => decode[T](json), error: Error => error }
+fn decodeRow[T: codec.Decode](value: codec.Value | Error): T | Error | codec.DecodeError {
+  match (value) { json: codec.Value => codec.decode[T](json), error: Error => error }
 }
 
 // RowsJson converts one row at a time, copying all borrowed driver buffers.
-fn RowsJson(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]): Seq[Json | Error] uses io + net unsafe go {
+fn RowsJson(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]): Seq[codec.Value | Error] uses io + net unsafe go {
   import "database/sql"
   import "context"
   import "fmt"
@@ -58,32 +61,32 @@ fn RowsJson(connection: Connection | Transaction, query: UnsafeQuery, params: Li
     targets := make([]any, len(columns))
     for i := range values { targets[i] = &values[i] }
     if err := rows.Scan(targets...); err != nil { yield(Error{operation: "query", message: err.Error()}); return }
-    fields := make([]JsonField, len(columns))
+    fields := make([]codec.Field, len(columns))
     for i, value := range values {
-      var json Json
+      var json codec.Value
       switch value := value.(type) {
-      case nil: json = Json_Null{}
-      case string: json = Json_String{value: value}
+      case nil: json = codec.Value_Null{}
+      case string: json = codec.Value_String{value: value}
       case int64:
         kind := strings.ToUpper(types[i].DatabaseTypeName())
         if kind == "BOOL" || kind == "BOOLEAN" {
           if value != 0 && value != 1 { yield(Error{operation: "query", message: "invalid boolean in column " + columns[i]}); return }
-          json = Json_Bool{value: value == 1}
-        } else { json = Json_Number{text: strconv.FormatInt(value, 10)} }
+          json = codec.Value_Bool{value: value == 1}
+        } else { json = codec.Value_Number{text: strconv.FormatInt(value, 10)} }
       case float64:
         if math.IsNaN(value) || math.IsInf(value, 0) { yield(Error{operation: "query", message: "non-finite number in column " + columns[i]}); return }
-        json = Json_Number{text: strconv.FormatFloat(value, 'g', -1, 64)}
-      case bool: json = Json_Bool{value: value}
+        json = codec.Value_Number{text: strconv.FormatFloat(value, 'g', -1, 64)}
+      case bool: json = codec.Value_Bool{value: value}
       case []byte:
-        items := make([]Json, len(value))
-        for i, b := range value { items[i] = Json_Number{text: strconv.Itoa(int(b))} }
-        json = Json_Array{items: items}
-      case time.Time: json = Json_String{value: value.Format(time.RFC3339Nano)}
+        items := make([]codec.Value, len(value))
+        for i, b := range value { items[i] = codec.Value_Number{text: strconv.Itoa(int(b))} }
+        json = codec.Value_Array{items: items}
+      case time.Time: json = codec.Value_String{value: value.Format(time.RFC3339Nano)}
       default: yield(Error{operation: "query", message: fmt.Sprintf("unsupported value in column %s: %T", columns[i], value)}); return
       }
-      fields[i] = JsonField{name: columns[i], value: json}
+      fields[i] = codec.Field{name: columns[i], value: json}
     }
-    if !yield(Json_Object{fields: fields}) { return }
+    if !yield(codec.Value_Object{fields: fields}) { return }
   }
   if err := rows.Err(); err != nil { yield(Error{operation: "query", message: err.Error()}); return }
   if err := rows.Close(); err != nil { yield(Error{operation: "query", message: err.Error()}); return }

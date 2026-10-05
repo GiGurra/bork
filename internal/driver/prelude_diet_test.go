@@ -10,9 +10,12 @@ import (
 func TestPreludeDiet(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
-		{"json codecs", `import "bork/json"
-type Config = { count: Int } derive (Decode, Encode)
-fn main() { println(json.Decode[Config](json.Encode(Config { count: 2 })), json.Render(Json.Null), json.Parse("null")) }`, ""},
+		{"json codecs", `import codec "bork/codec"
+
+import "bork/json"
+use codec.Defaults
+type Config = { count: Int } derive (codec.Decode, codec.Encode)
+fn main() { println(json.Decode[Config](json.Encode(Config { count: 2 })), json.Render(codec.Value.Null), json.Parse("null")) }`, ""},
 		{"byte conversion methods", `import "bork/encoding"
 fn main() { println([].toBytes(), [toByte(65)].toBytes().toList(), encoding.ParseUtf8(encoding.Utf8("hé"))) }`, ""},
 		{"user byte functions", `fn bytes(n: Int): Int { n }

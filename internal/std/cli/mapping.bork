@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Mapping separates automatic policy, source disabling, and exact names.
 type Mapping = sealed { Auto, Disabled, Named { name: String } }
 type Choice = { value: String, description: String = "" }
@@ -30,17 +33,17 @@ type FieldSpec = {
 }
 type Enricher = (List[FieldSpec], FieldSpec) uses nothing => FieldSpec
 
-fn resolve[T: Decode](flags: List[Flag], settings: Settings, name: String): List[FieldSpec] | Error {
+fn resolve[T: codec.Decode](flags: List[Flag], settings: Settings, name: String): List[FieldSpec] | Error {
   resolveFields[T](flags, settings, name, flagName)
 }
-fn resolveFields[T: Decode](flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error unsafe go {
+fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error unsafe go {
   import "fmt"
   import "strings"
   import "unicode"
   schema, supported := _borkDecodeFields(_d_T_Decode)
-  if !supported { return Error{errors: []DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
-  errors := []DecodeError{}
-  fail := func(field, message string) { errors = append(errors, DecodeError{path: field, message: message}) }
+  if !supported { return Error{errors: []codec.DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
+  errors := []codec.DecodeError{}
+  fail := func(field, message string) { errors = append(errors, codec.DecodeError{path: field, message: message}) }
   metadata := map[string]Flag{}
   for _, flag := range flags {
     found := false
