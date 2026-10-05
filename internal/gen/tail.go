@@ -41,7 +41,17 @@ type tailFrame struct {
 // tailJump reports whether call is a self call compiled as a jump.
 func (g *gen) tailJump(call *check.Call) bool {
 	tc := g.info.TailCalls[call]
-	return tc != nil && tc.Jump && g.tail != nil && g.tail.fn == call.Func
+	if tc == nil || !tc.Jump || g.tail == nil || g.tail.fn != call.Func {
+		return false
+	}
+	// Only in the function's own code: lambdas and thunks start
+	// without its loops.
+	for _, frame := range g.loops {
+		if frame.tail {
+			return true
+		}
+	}
+	panic("compiler bug: a tail call outside its function's loop")
 }
 
 // tailFuncDecl gives fn's declaration (decl, its signature) a body
@@ -90,6 +100,10 @@ func (g *gen) tailFuncDecl(fn *check.Func, decl *ast.FuncDecl) *ast.FuncDecl {
 			stmts = append(stmts, typedVar(root.name, ast.NewIdent("_loopCleanup"), &ast.CompositeLit{Type: ast.NewIdent("_loopCleanup")}), &ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("close")}}})
 		}
 		stmts = append(stmts, g.exitVars(root, exit)...)
+		if exit.used {
+			// Only a return leaves the loop, so nothing tests the flag.
+			stmts = append(stmts, assign(ast.NewIdent("_"), exit.flag))
+		}
 		stmts = append(stmts, &ast.LabeledStmt{Label: label, Stmt: &ast.ForStmt{Body: &ast.BlockStmt{List: inner}}})
 		if exit.used {
 			// Only a return leaves the loop.
@@ -112,9 +126,16 @@ func (g *gen) jump(call *check.Call) []ast.Stmt {
 		return stmts
 	}
 	if call.ArgOrder != nil {
+		// Named arguments run in the order written, as for a call.
 		ordered := make([]ast.Expr, len(xs))
 		for i, param := range call.ArgOrder {
-			ordered[param] = xs[i]
+			x := xs[i]
+			if !stable(x) {
+				var save []ast.Stmt
+				save, x = g.save(x, call.Args[param].Type())
+				stmts = append(stmts, save...)
+			}
+			ordered[param] = x
 		}
 		xs = ordered
 	}

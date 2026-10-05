@@ -35,6 +35,8 @@ fn small() uses io {
 
 type NotFound = { key: Int }
 
+type Later[T] = { lazy value: T }
+
 ambient depth: Int
 
 fn rounds(n: Int) uses io + state + tailrec: Ok | Cancelled {
@@ -96,6 +98,7 @@ fn checked(n: Int) uses tailrec: Int | NotFound {
 
 fn main() uses io + state {
   small()
+  more()
   scope s {
     _ = rounds(1000000)
   }
@@ -107,4 +110,56 @@ fn main() uses io + state {
     println(deep(1000000))
   }
   println(checked(0), checked(9))
+}
+
+// A return inside a scope block leaves the function's loop through its
+// exit.
+fn early(n: Int) uses state: Int {
+  scope s {
+    if (n > 100) {
+      return n
+    }
+  }
+  if (n == 0) { 0 } else { early(n - 1) }
+}
+
+fn owner(s: Scope, n: Int): OwnedScope {
+  if (n == 0) {
+    return openScope(s)
+  }
+  owner(s, n - 1)
+}
+
+fn reopen(s: Scope, n: Int) uses state: Int {
+  b = openScope(s)
+  closeScope(b)
+  if (n == 0) { 0 } else { reopen(s, n - 1) }
+}
+
+fn side(x: Int) uses io: Int {
+  println(x)
+  x
+}
+
+// Named arguments run in the order written.
+fn order(n: Int, a: Int, b: Int) uses io: Int {
+  if (n == 0) { a + b } else { order(b: side(n * 10), a: side(n), n: n - 1) }
+}
+
+// A lazy field's initializer is a function of its own: its self call is
+// an ordinary call.
+fn lazily(n: Int): Int {
+  l = Later[Int] { value: { if (n > 0) { return lazily(n - 1) }; 5 } }
+  l.value + 1
+}
+
+fn more() uses io + state {
+  println(early(1000), early(10))
+  scope s {
+    b = owner(s, 100000)
+    closeScope(b)
+    println(reopen(s, 1000))
+  }
+  println(order(2, 0, 0))
+  println(lazily(3))
 }

@@ -170,6 +170,17 @@ func (s *tailScan) walk(x Expr, c tailCtx) {
 		s.walk(x.Items, c.inner(tailUsed))
 		s.walk(x.Body, c.inner("the loop continues after it returns"))
 		return
+	case *RecordLit:
+		for _, field := range x.Fields {
+			s.walk(field.Value, s.fieldCtx(c, field.Thunk != nil || field.Lazy != nil))
+		}
+		return
+	case *Copy:
+		s.walk(x.X, c.inner(tailUsed))
+		for _, update := range x.Updates {
+			s.walk(update.Value, s.fieldCtx(c, update.Thunk != nil || update.Lazy != nil))
+		}
+		return
 	}
 	// Anything else uses its parts' values.
 	WalkComptime(x, func(y Expr) bool {
@@ -179,6 +190,15 @@ func (s *tailScan) walk(x Expr, c tailCtx) {
 		s.walk(y, c.inner(tailUsed))
 		return false
 	})
+}
+
+// fieldCtx is where a field's value is: a lazy field's runs later, in
+// a function of its own.
+func (s *tailScan) fieldCtx(c tailCtx, lazy bool) tailCtx {
+	if lazy {
+		return c.block("it is inside a lazy field's initializer, which runs as a function of its own")
+	}
+	return c.inner(tailUsed)
 }
 
 // blockStmts walks a block: its statements are never in tail position,
@@ -230,7 +250,7 @@ func (s *tailScan) selfCall(call *Call, c tailCtx) {
 	case !s.sameInstance(call):
 		tc.Reason = "it calls " + s.fn.Decl.Name + " with other type arguments"
 	case !s.sameNeeds(call):
-		tc.Reason = "it passes other ambient values"
+		tc.Reason = "it does not pass its own ambient values on unchanged"
 	default:
 		tc.Jump = true
 		s.info.tailJumps[s.fn] = true

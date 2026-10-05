@@ -104,7 +104,7 @@ func (c *checker) effectsAndMarker(u *syntax.Uses, marker bool) Effects {
 	for _, e := range u.Effects {
 		if e.Name == "tailrec" {
 			if !marker {
-				c.diags.AddCode(e.Pos, "tailrec.position", "tailrec marks a declared function whose recursive calls must be tail calls; it is not an effect, and only a function or method declaration can have it")
+				c.diags.AddCode(e.Pos, "tailrec.position", "tailrec marks a declared function whose recursive calls must be tail calls; it is not an effect, and only a function or method declaration with a bork body can have it, not a class or instance method")
 			}
 			continue
 		}
