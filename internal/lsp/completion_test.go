@@ -195,7 +195,7 @@ func TestCompletionPatternAndValueContexts(t *testing.T) {
 }
 
 func TestCompletionImportedPackageAndScope(t *testing.T) {
-	src := "import \"bork/json\"\nfn main() uses io {\n  { hidden = 1; println(hidden) }\n  println(json.Encode(42))\n}\n"
+	src := "import \"bork/codec\"\nimport \"bork/json\"\nuse codec.Defaults\nfn main() uses io {\n  { hidden = 1; println(hidden) }\n  println(json.Encode(42))\n}\n"
 	s, path := newTestServer(t, src)
 	items := completeAt(t, s, path, strings.Replace(src, "json.Encode(42)", "json.En|", 1))
 	if completionItem(items, "Encode") == nil {
@@ -374,7 +374,7 @@ func TestCompletionAllBinderScopes(t *testing.T) {
 	}
 }
 func TestCompletionVisibilityAndCompoundMatch(t *testing.T) {
-	src := "import \"bork/json\"\nfn main() uses io { println(json.Encode(42)) }\n"
+	src := "import \"bork/codec\"\nimport \"bork/json\"\nuse codec.Defaults\nfn main() uses io { println(json.Encode(42)) }\n"
 	s, path := newTestServer(t, src)
 	items := completeAt(t, s, path, strings.Replace(src, "42", "In|t", 1))
 	if item := completionItem(items, "Indent"); item != nil && item["textEdit"].(textEdit).NewText == "Indent" {

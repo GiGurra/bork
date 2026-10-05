@@ -168,7 +168,7 @@ fn main() uses io { box = [1]; _ = box; holder = Holder { box: Box { value: 1 } 
 }
 
 func TestSignatureHelpQualifiedPackageRecovery(t *testing.T) {
-	src := "import \"bork/json\"\nfn main() { encoded = json.Encode(42); _ = encoded }\n"
+	src := "import \"bork/codec\"\nimport \"bork/json\"\nuse codec.Defaults\nfn main() { encoded = json.Encode(42); _ = encoded }\n"
 	s, path := newTestServer(t, src)
 	help := signatureAt(t, s, path, src+"fn other() { json.Encode[Int](|) }")
 	if help == nil || help.Signatures[0].Label != "Encode(x: Int): String" || help.ActiveParameter == nil || *help.ActiveParameter != 0 {
