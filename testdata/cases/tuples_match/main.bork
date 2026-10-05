@@ -1,0 +1,47 @@
+type Left = sealed { L }
+type Right = sealed { R }
+fn identifyContext(value: (Left,) | (Right,)): String { match (value) { (.L,) => "left"; (.R,) => "right" } }
+fn identify(value: (Left,) | (Right,)): String { match (value) { (Left.L,) => "left"; (Right.R,) => "right" } }
+type Failure = { message: String }
+fn read(ok: Bool): (Int, String) | Failure {
+  if (ok) { (1, "ok") } else { Failure { message: "failed" } }
+}
+fn genericRead[T](value: T): (T,) | Failure { (value,) }
+fn genericTake[T](value: (T,) | Failure): String {
+  match (value) { (item: T,) => s"$item"; error: Failure => error.message }
+}
+fn unwrap(ok: Bool): (Int, String) | Failure {
+  pair = read(ok)?
+  pair
+}
+fn main() {
+  println(identify((Left.L,)), identify((Right.R,)))
+  println(identifyContext((Left.L,)), identifyContext((Right.R,)))
+  match (read(true)) {
+    pair: (Int, String) => println(pair.0)
+    error: Failure => println(error)
+  }
+  match (read(false)) {
+    pair: (Int, String) => { println(pair.1) }
+    error: Failure => println(error)
+  }
+  match (read(true)) {
+    (value: Int, text: String) => println(value, text)
+    error: Failure => println(error)
+  }
+  match (read(false)) {
+    (value, text) => println(value, text)
+    error: Failure => println(error)
+  }
+  println(unwrap(true), unwrap(false))
+  println(match (genericRead(3)) { pair: (Int,) => pair.0; Failure => 0 })
+  println(genericTake[Int](genericRead(4)))
+  inside: (Int,) | Bool = (19,)
+  nested: ((Int,) | Bool,) | (String,) = (inside,)
+  println(match (nested) { ((number: Int,),) => number; (value: Bool,) => if (value) { 1 } else { 0 }; (text: String,) => { println(text); 0 } })
+  choice: (Int, String) | (Bool, String) = (true, "flag")
+  println(match (choice) {
+    (value: Int, text: String) => s"$value $text"
+    (value: Bool, text: String) => s"$value $text"
+  })
+}

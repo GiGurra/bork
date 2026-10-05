@@ -43,6 +43,11 @@ func EditorTypeDefinitions(typ Type) []EditorNavigationItem {
 		switch typ := typ.(type) {
 		case *Record:
 			add(typ.Decl, typ.Pkg)
+			if typ.Tuple {
+				for _, field := range typ.Fields {
+					visit(field.Type)
+				}
+			}
 		case *Sealed:
 			add(typ.Decl, typ.Pkg)
 		case *Resource:

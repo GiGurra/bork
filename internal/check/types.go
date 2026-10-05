@@ -205,6 +205,7 @@ type Field struct {
 // TypeParams; its instances (`Pair[Int, String]`) have Base set to it,
 // Args, and Fields with the arguments filled in.
 type Record struct {
+	Tuple        bool // structural positional record; never a named declaration
 	GoGenerated  bool
 	GoStruct     bool
 	GoTo, GoFrom bool
@@ -230,6 +231,9 @@ func (r *Record) String() string { return TypeText(r, nil) }
 
 // Instance is the generic record r with the given type arguments.
 func (r *Record) Instance(args []Type) *Record {
+	if r.Tuple {
+		return tupleType(args)
+	}
 	if sameParams(r.TypeParams, args) {
 		return r
 	}
@@ -289,6 +293,17 @@ func TypeText(t Type, from *Package) string {
 	}
 	switch t := t.(type) {
 	case *Record:
+		if t.Tuple {
+			parts := make([]string, len(t.Fields))
+			for i, f := range t.Fields {
+				parts[i] = TypeText(f.Type, from)
+			}
+			text := strings.Join(parts, ", ")
+			if len(parts) == 1 {
+				text += ","
+			}
+			return "(" + text + ")"
+		}
 		return named(t.Name, t.Pkg, t.Args)
 	case *Sealed:
 		return named(t.Name, t.Pkg, t.Args)

@@ -136,6 +136,20 @@ In priority order. When two values conflict, the higher one wins.
 - **No hidden resolution magic.** Type class instances are resolved implicitly, but only from an explicitly imported, bounded set of places (see type classes below). Nothing like Scala 2's implicit conversions or whole-program implicit search.
 - **Performance target:** roughly Go-level performance, traded away for guarantees where needed.
 
+### Positional tuples (bork-ys21yg)
+
+Tuples are general immutable heterogeneous values, with structural ordered types,
+independent positional inference, zero-based constant `.0` selectors, singleton
+trailing commas, irrefutable binding destructuring and exhaustive match patterns.
+Parentheses retain grouping and function syntax; there is no empty tuple or named
+builtin tuple type. Generic substitution and expected-type inference recurse into
+elements. Equality/hash and Show are structural; Encode/Decode require codecs for
+every element and use exact-length JSON arrays with index paths. Derived containers
+may contain tuples; tuple aliases may request Encode/Decode, but not GoStruct.
+Element constraints must be checked at construction/boundaries and decoding, and
+tuples must preserve effects and scope lifetimes. Tuples lower to a single anonymous
+Go struct value with positional E0/E1 fields. See [design](design/tuples.md).
+
 ## 2. Type system
 
 ### Decided

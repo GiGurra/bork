@@ -21,7 +21,7 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = '9825250b511041767936e0937ce28de13709fe79',
++      revision = 'c00425c13bb90d83b974bed5d3353679f982d059',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
@@ -34,21 +34,23 @@ new file mode 100644
 index 0000000..b1713d1
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
-@@ -0,0 +1,3 @@
+@@ -0,0 +1,4 @@
 +[(block) (record_type) (record_literal) (match_expression) (class_declaration)
 + (instance_declaration) (providers_declaration) (instances_declaration)
-+ (list_literal) (map_literal) (go_body) (comment)] @fold
++ (list_literal) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
++ (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
 index 0000000..218cc7a
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,35 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
 +(identifier) @variable
 +(number) @number
++(tuple_index) @variable.member
 +(rune) @character
 +(string) @string
 +(interpolated_string) @string
@@ -83,8 +85,9 @@ new file mode 100644
 index 0000000..b64b10a
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
-@@ -0,0 +1,6 @@
+@@ -0,0 +1,7 @@
 +[(block) (record_literal) (record_type) (list_literal) (map_literal)
++ (tuple_literal) (tuple_type) (tuple_pattern)
 + (parameters) (type_arguments) (match_expression) (class_declaration)
 + (instance_declaration) (providers_declaration) (instances_declaration)] @indent.begin
 +["}" ")" "]"] @indent.end @indent.branch

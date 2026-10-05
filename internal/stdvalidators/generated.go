@@ -1233,7 +1233,7 @@ func artifactCall(index int, request Request) []InterpolationIssue {
 }
 
 func init() {
-	descriptors = []Descriptor{{Package: "bork/sql", Instance: "sqlInterpolationValidator", Builder: "Builder", Signature: "(StaticParts,List[InterpolationHole])->List[InterpolationIssue]", Identity: "ff3c026fe02e1bc42af9100a46a5bd2dac0f6286f0c83b01e6538071e377d547", Sources: []Source{{Path: "prelude/classes.bork", Digest: "303b8b27423bddad847f15f6965e6ceb9acf0a8fb5f881b59a92c4f8cd865896"}, {Path: "prelude/interpolation.bork", Digest: "3bcb0d676886a4f05ecb2889ae0883690f3c9e3597e2faf9fac5b7339d88fba5"}, {Path: "prelude/options.bork", Digest: "19d8b82007ae3cab025a7f6e92f28165481d2f10ac1b711bb4faa35e1949f0e1"}, {Path: "bork/sql/interpolation.bork", Digest: "454ecf6e30a879710a9981730ab63fd71f91342352d25c805bea81d99a206c02"}, {Path: "bork/sql/sql.bork", Digest: "ad3706821c11741e9e5a0e33381fd23f8d326e71ca5642e9b161dc34b7893782"}}, Definitions: []Source{{Path: "bork/sql/interpolation.bork:163:3", Digest: "58dbd582e594e7d9f80faf72d81fd6897e45dcd0aa95d5097ea1caa19449524d"}, {Path: "bork/sql/interpolation.bork:167:1", Digest: "feccc2dcffb7a04d9248843b8736079afc5e4aafd9028685df0ef5e46dc617bc"}, {Path: "bork/sql/interpolation.bork:31:1", Digest: "eae307e04f634ad58a2c050000caba2def2bb5cbeeb21bb3c9d4a957323ed9f5"}}}}
+	descriptors = []Descriptor{{Package: "bork/sql", Instance: "sqlInterpolationValidator", Builder: "Builder", Signature: "(StaticParts,List[InterpolationHole])->List[InterpolationIssue]", Identity: "ff3c026fe02e1bc42af9100a46a5bd2dac0f6286f0c83b01e6538071e377d547", Sources: []Source{{Path: "prelude/classes.bork", Digest: "303b8b27423bddad847f15f6965e6ceb9acf0a8fb5f881b59a92c4f8cd865896"}, {Path: "prelude/interpolation.bork", Digest: "3bcb0d676886a4f05ecb2889ae0883690f3c9e3597e2faf9fac5b7339d88fba5"}, {Path: "prelude/options.bork", Digest: "19d8b82007ae3cab025a7f6e92f28165481d2f10ac1b711bb4faa35e1949f0e1"}, {Path: "bork/sql/interpolation.bork", Digest: "454ecf6e30a879710a9981730ab63fd71f91342352d25c805bea81d99a206c02"}, {Path: "bork/sql/sql.bork", Digest: "ad3706821c11741e9e5a0e33381fd23f8d326e71ca5642e9b161dc34b7893782"}}, Definitions: []Source{{Path: "bork/sql/interpolation.bork:163:3", Digest: "81e673f4f3f71ebc310fe1b91c9a7820c070490578dc3e4d4e07b716c764e920"}, {Path: "bork/sql/interpolation.bork:167:1", Digest: "85d3292161404d76b3ba62d99f3472225767f0568808d263c3bf80cbcbe85157"}, {Path: "bork/sql/interpolation.bork:31:1", Digest: "dedf637fab3e8bed8bfce214e3aa5b68aaa5c7488f279e9e683655bc3aebac89"}}}}
 	nativeEvaluation = func(calls []Call) []byte {
 		nativeEnter()
 		defer nativeLeave()
@@ -1724,6 +1724,51 @@ func _str(x any) string {
 		return x
 	}
 	switch v := func() reflect.Value { nativeStep(); return reflect.ValueOf(x) }(); func() reflect.Kind { nativeStep(); return v.Kind() }() {
+	case reflect.Struct:
+		if func() string {
+			nativeStep()
+			return func() reflect.Type { nativeStep(); return v.Type() }().
+				Name()
+		}() ==
+			"" &&
+			func() int { nativeStep(); return v.NumField() }() >
+				0 {
+			parts := func() []string {
+				nativeStep()
+				return make([]string, func() int { nativeStep(); return v.NumField() }())
+			}()
+
+			for i := range parts {
+				nativeStep()
+				if func() reflect.StructField {
+					nativeStep()
+					return func() reflect.Type { nativeStep(); return v.Type() }().
+						Field(i)
+				}().
+					Name != "E"+
+					func() string { nativeStep(); return strconv.Itoa(i) }() {
+					return func() string { nativeStep(); return fmt.Sprint(x) }()
+
+				}
+				parts[i] = func() string {
+					nativeStep()
+					return _show(func() any {
+						nativeStep()
+						return func() reflect.Value { nativeStep(); return v.Field(i) }().
+							Interface()
+					}(),
+					)
+				}()
+
+			}
+			text := func() string { nativeStep(); return strings.Join(parts, ", ") }()
+
+			if func() int { nativeStep(); return len(parts) }() ==
+				1 {
+				text += ","
+			}
+			return "(" + text + ")"
+		}
 	case reflect.Slice:
 		parts := func() []string {
 			nativeStep()

@@ -250,6 +250,13 @@ func apiDefaultSupported(expr syntax.Expr) bool {
 		return apiDefaultSupported(x.X)
 	case *syntax.Selector:
 		return apiDefaultSupported(x.X)
+	case *syntax.TupleLit:
+		for _, e := range x.Elems {
+			if !apiDefaultSupported(e) {
+				return false
+			}
+		}
+		return true
 	case *syntax.ListLit:
 		for _, e := range x.Elems {
 			if !apiDefaultSupported(e) {

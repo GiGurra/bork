@@ -111,6 +111,13 @@ func isClosed(x syntax.Expr) bool {
 		return true
 	case *syntax.Unary:
 		return (x.Op == syntax.Minus || x.Op == syntax.Caret) && isClosed(x.X)
+	case *syntax.TupleLit:
+		for _, elem := range x.Elems {
+			if !isClosed(elem) {
+				return false
+			}
+		}
+		return true
 	case *syntax.ListLit:
 		for _, el := range x.Elems {
 			if !isClosed(el) {

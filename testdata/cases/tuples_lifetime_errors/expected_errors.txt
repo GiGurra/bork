@@ -1,0 +1,3 @@
+main.bork:5:18: pair may be released: it belongs to scope s, which ended on line 4
+main.bork:11:13: a value of type (OwnedScope,) cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
+main.bork:12:3: owned scope child is still open at the end of its block: close it with closeScope(child), pass it on, or return it

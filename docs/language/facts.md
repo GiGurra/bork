@@ -279,3 +279,8 @@ The [payments example](../../examples/payments/main.bork) uses facts end to end.
 ---
 
 Previous: [Collections](collections.md) · Next: [Effects](effects.md) · [All pages](../README.md#the-language)
+
+Tuple element facts are checked like record field facts. A parameter of type
+`(Int where positive, String)` requires the first element to satisfy positive;
+`.0` access and tuple destructuring preserve the proof. Decode validates constrained
+elements before returning success and reports JSON index paths.

@@ -232,6 +232,17 @@ func subst(t Type, bound map[*TypeParam]Type) Type {
 		}
 		return ft
 	case *Record, *Sealed:
+		if tuple, ok := t.(*Record); ok && tuple.Tuple {
+			elems := make([]Type, len(tuple.Fields))
+			for i, f := range tuple.Fields {
+				elems[i] = subst(f.Type, bound)
+			}
+			out := tupleType(elems)
+			for i, f := range tuple.Fields {
+				out.Fields[i].Constraints = substConstraints(f.Constraints, bound)
+			}
+			return out
+		}
 		if base := genericBase(t); base != nil {
 			args := TypeArgs(t)
 			out := make([]Type, len(args))
@@ -428,7 +439,8 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			c.bindUnknown(unknowns[i], t)
 			var cons []*Constraint
 			for _, con := range c.constraintsOf(ta, t, c.paramScope()) {
-				if con.Path != "" {
+				tuple, isRecord := t.(*Record)
+				if con.Path != "" && (!isRecord || !tuple.Tuple) {
 					c.errorf(ta.Pos, "facts inside a type argument (on the parts of %s) are not supported yet, so they would not be checked; only facts on the whole type argument are", t)
 					break
 				}
@@ -472,6 +484,9 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 	}
 	later := func(a syntax.Expr) bool {
 		a = debugSyntaxValue(a)
+		if _, tuple := a.(*syntax.TupleLit); tuple {
+			return c.needsContext(a)
+		}
 		_, isLambda := a.(*syntax.Lambda)
 		return isLambda || c.genericFuncRef(a)
 	}
@@ -676,6 +691,13 @@ func (c *checker) needsContext(x syntax.Expr) bool {
 	switch x := x.(type) {
 	case *syntax.Lambda:
 		return true
+	case *syntax.TupleLit:
+		for _, e := range x.Elems {
+			if c.needsContext(e) {
+				return true
+			}
+		}
+		return false
 	case *syntax.ListLit:
 		return len(x.Elems) == 0
 	case *syntax.MapLit:

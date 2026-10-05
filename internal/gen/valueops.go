@@ -48,6 +48,9 @@ func (g *gen) equalValue(a, b ast.Expr, t check.Type) ast.Expr {
 	if _, ok := basicGoNames[t]; ok {
 		return &ast.BinaryExpr{X: a, Op: token.EQL, Y: b}
 	}
+	if r, ok := t.(*check.Record); ok && r.Tuple {
+		return &ast.CallExpr{Fun: ast.NewIdent("_equal"), Args: []ast.Expr{a, b}}
+	}
 	switch t.(type) {
 	case *check.Record, *check.Map:
 		return &ast.CallExpr{Fun: &ast.SelectorExpr{X: a, Sel: ast.NewIdent("_equals")}, Args: []ast.Expr{b}}
@@ -62,6 +65,9 @@ func (g *gen) hashValue(x ast.Expr, t check.Type) ast.Expr {
 	}
 	if _, ok := basicGoNames[t]; ok {
 		return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_hashOf"), Index: g.goType(t)}, Args: []ast.Expr{x}}
+	}
+	if r, ok := t.(*check.Record); ok && r.Tuple {
+		return &ast.CallExpr{Fun: ast.NewIdent("_hash"), Args: []ast.Expr{x}}
 	}
 	switch t.(type) {
 	case *check.Record, *check.Map:

@@ -1,0 +1,31 @@
+Status.Active
+3
+5
+(2, "parameter")
+(3,) (4,)
+Config { pair: (1, "default") }
+1
+2
+A B
+1
+(4,)
+5
+[(6,)]
+Option.Some { value: "entry" }
+(8,)
+(9,)
+(10,)
+3
+reordered
+(3,)
+(11,) (12,)
+(13,) (14,)
+(15,)
+(2, 1)
+20
+[21]
+16
+(18,)
+16
+pure io
+wrapped A wrapped B

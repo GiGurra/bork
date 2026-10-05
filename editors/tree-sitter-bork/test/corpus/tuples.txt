@@ -1,0 +1,183 @@
+==================
+Tuples, singleton and destructuring
+==================
+fn pair(n: Int): (Int, String) { (n, "ok") }
+fn first[A, B](p: (A, B)): A { p.0 }
+fn main() {
+  p = ((1,), "hello")
+  (_, word) = p
+  println(p.0.0)
+  println(match ((true, word)) { (true, text) => text, (false, _) => "" })
+}
+
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier)))))
+    (type
+      (tuple_type
+        (type
+          (qualified_name
+            (identifier)))
+        (type
+          (qualified_name
+            (identifier)))))
+    (block
+      (tuple_literal
+        (qualified_name
+          (identifier))
+        (string))))
+  (function_declaration
+    (identifier)
+    (type_parameters
+      (identifier)
+      (identifier))
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (tuple_type
+            (type
+              (qualified_name
+                (identifier)))
+            (type
+              (qualified_name
+                (identifier)))))))
+    (type
+      (qualified_name
+        (identifier)))
+    (block
+      (selector_expression
+        (qualified_name
+          (identifier))
+        (tuple_index))))
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (identifier)
+        (tuple_literal
+          (tuple_literal
+            (number))
+          (string)))
+      (binding
+        (tuple_pattern
+          (pattern)
+          (pattern
+            (qualified_name
+              (identifier))))
+        (qualified_name
+          (identifier)))
+      (call_expression
+        (qualified_name
+          (identifier))
+        (argument
+          (selector_expression
+            (selector_expression
+              (qualified_name
+                (identifier))
+              (tuple_index))
+            (tuple_index))))
+      (call_expression
+        (qualified_name
+          (identifier))
+        (argument
+          (match_expression
+            (tuple_literal
+              (boolean)
+              (qualified_name
+                (identifier)))
+            (match_arm
+              (pattern
+                (tuple_pattern
+                  (pattern
+                    (boolean))
+                  (pattern
+                    (qualified_name
+                      (identifier)))))
+              (qualified_name
+                (identifier)))
+            (match_arm
+              (pattern
+                (tuple_pattern
+                  (pattern
+                    (boolean))
+                  (pattern)))
+              (string))))))))
+
+==================
+Typed tuple arms and grouped function annotation
+==================
+fn main() {
+  match (value) {
+    pair: (Int, String) => pair.0
+    callback: ((Int) => Int) => callback(1)
+    ungrouped: (Int) => Int => ungrouped(1)
+  }
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (identifier)
+            (type
+              (tuple_type
+                (type
+                  (qualified_name
+                    (identifier)))
+                (type
+                  (qualified_name
+                    (identifier))))))
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (tuple_index)))
+        (match_arm
+          (pattern
+            (identifier)
+            (type
+              (type
+                (function_type
+                  (type
+                    (qualified_name
+                      (identifier)))
+                  (type
+                    (qualified_name
+                      (identifier)))))))
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (number))))
+        (match_arm
+          (pattern
+            (identifier)
+            (type
+              (function_type
+                (type
+                  (qualified_name
+                    (identifier)))
+                (type
+                  (qualified_name
+                    (identifier))))))
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (number))))))))

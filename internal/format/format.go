@@ -128,7 +128,8 @@ func Source(path string, src []byte) ([]byte, error) {
 				indent++
 			}
 			out.WriteString(strings.Repeat("  ", max(0, indent)))
-		} else if space(items[i-1], it) || joinsTokens(items[i-1], it) {
+		} else if space(items[i-1], it) || joinsTokens(items[i-1], it) ||
+			i >= 2 && items[i-1].kind == syntax.Dot && it.kind == syntax.TInt && items[i-2].kind == syntax.TInt && !items[i-2].chain {
 			out.WriteByte(' ')
 		}
 		// The lexer consumes the word "go" as part of TGoCode.
@@ -170,7 +171,7 @@ func levels(delimiters []delimiter) int {
 // different token if joined. A dot followed by a number also needs a boundary
 // because the preceding token could be a number (1 . 2 must not become 1.2).
 func joinsTokens(a, b item) bool {
-	if a.kind == syntax.Dot && (b.kind == syntax.Dot || b.kind == syntax.TInt || b.kind == syntax.TFloat) {
+	if a.kind == syntax.Dot && (b.kind == syntax.Dot || b.kind == syntax.TFloat || b.kind == syntax.TInt && !a.chain) {
 		return true
 	}
 	d := &diag.List{}

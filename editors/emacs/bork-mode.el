@@ -94,7 +94,8 @@
     :language 'bork :feature 'definition
     '([(function_declaration name: (identifier) @font-lock-function-name-face)
        (predicate_declaration name: (identifier) @font-lock-function-name-face)])
-    :language 'bork :feature 'number '((number) @font-lock-number-face)
+    :language 'bork :feature 'number '([(number) @font-lock-number-face
+                                (tuple_index) @font-lock-variable-name-face])
     :language 'bork :feature 'constant '(["true" "false"] @font-lock-constant-face))
    treesit-font-lock-feature-list '((comment keyword) (string type definition) (number constant))
    treesit-simple-indent-rules
@@ -104,6 +105,9 @@
            ((parent-is "block") parent-bol ,bork-indent-offset)
            ((parent-is "record_type") parent-bol ,bork-indent-offset)
            ((parent-is "record_literal") parent-bol ,bork-indent-offset)
+           ((parent-is "tuple_literal") parent-bol ,bork-indent-offset)
+           ((parent-is "tuple_pattern") parent-bol ,bork-indent-offset)
+           ((parent-is "tuple_type") parent-bol ,bork-indent-offset)
            ((parent-is "match_expression") parent-bol ,bork-indent-offset)
            (no-node parent-bol 0))))
   (treesit-major-mode-setup))

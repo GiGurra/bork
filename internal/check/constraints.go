@@ -296,6 +296,13 @@ func (c *checker) constraintsOf(t *syntax.TypeExpr, typ Type, scope map[string]T
 			out = append(out, &cp)
 		}
 	}
+	if tuple, ok := typ.(*Record); ok && tuple.Tuple && len(t.Tuple) == len(tuple.Fields) {
+		for i, elem := range t.Tuple {
+			cons := c.constraintsOf(elem, tuple.Fields[i].Type, scope)
+			tuple.Fields[i].Constraints = cons
+			inner(cons, "."+tuple.Fields[i].Name)
+		}
+	}
 	if tt, ok := typ.(*Seq); ok && len(t.Args) == 1 {
 		inner(c.constraintsOf(t.Args[0], tt.Elem, scope), ".[]")
 	}

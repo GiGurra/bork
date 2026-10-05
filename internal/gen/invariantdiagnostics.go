@@ -225,5 +225,8 @@ func diagnosticFieldPath(path ast.Expr, typ check.Type, field string) ast.Expr {
 	if check.IsOption(typ) && field == "value" {
 		return path
 	}
+	if tuple, ok := typ.(*check.Record); ok && tuple.Tuple {
+		return &ast.BinaryExpr{X: path, Op: token.ADD, Y: stringLit("[" + field + "]")}
+	}
 	return &ast.BinaryExpr{X: path, Op: token.ADD, Y: stringLit("." + field)}
 }

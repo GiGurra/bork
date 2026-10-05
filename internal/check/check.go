@@ -345,7 +345,8 @@ type Info struct {
 	ownerScopes     map[*syntax.Selector]*Func
 	contextVariants map[*syntax.ContextName]*Variant
 	// armPats holds the checked pattern of every match arm.
-	armPats map[*syntax.Arm]*Pat
+	armPats   map[*syntax.Arm]*Pat
+	tuplePats map[*syntax.TupleBinding]*Pat
 	// tries describes every `?`.
 	tries map[*syntax.Try]*TryInfo
 	// unused holds bindings whose value is never read: *syntax.Binding,
@@ -450,6 +451,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			ownerScopes:            map[*syntax.Selector]*Func{},
 			contextVariants:        map[*syntax.ContextName]*Variant{},
 			armPats:                map[*syntax.Arm]*Pat{},
+			tuplePats:              map[*syntax.TupleBinding]*Pat{},
 			tries:                  map[*syntax.Try]*TryInfo{},
 			unused:                 map[any]bool{},
 			rebindings:             map[any]any{},
@@ -756,7 +758,9 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
-	files []*syntax.File
+	files            []*syntax.File
+	tupleDerives     []*ClassInstance
+	tupleBindingMode bool
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File
@@ -1164,6 +1168,8 @@ func (c *checker) scopeExpr(e *syntax.ScopeExpr, want Type) Type {
 
 func stmtPos(s syntax.Stmt) diag.Pos {
 	switch s := s.(type) {
+	case *syntax.TupleBinding:
+		return s.Pos
 	case *syntax.Binding:
 		return s.Pos
 	case *syntax.ExprStmt:
@@ -1179,6 +1185,8 @@ func stmtPos(s syntax.Stmt) diag.Pos {
 // stmt checks a statement and returns Never if it never finishes.
 func (c *checker) stmt(s syntax.Stmt) Type {
 	switch s := s.(type) {
+	case *syntax.TupleBinding:
+		return c.tupleBinding(s)
 	case *syntax.Binding:
 		var declared Type
 		if s.Type != nil {
@@ -1342,6 +1350,8 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		return c.record(e, c.call(e, want))
 	case *syntax.Lambda:
 		return c.record(e, c.lambda(e, want))
+	case *syntax.TupleLit:
+		return c.record(e, c.tupleLit(e, want))
 	case *syntax.ListLit:
 		return c.record(e, c.listLit(e, want))
 	case *syntax.MapLit:

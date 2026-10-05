@@ -76,6 +76,13 @@ func (c *checker) closedComptimeSyntax(x syntax.Expr, seen map[any]bool) bool {
 		return c.info.contextVariants[x] != nil
 	case *syntax.Ident:
 		return c.closedComptimeDeclaration(c.info.defs[x], seen)
+	case *syntax.TupleLit:
+		for _, e := range x.Elems {
+			if !c.closedComptimeSyntax(e, seen) {
+				return false
+			}
+		}
+		return true
 	case *syntax.ListLit:
 		for _, value := range x.Elems {
 			if !c.closedComptimeSyntax(value, seen) {

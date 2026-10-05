@@ -144,6 +144,17 @@ func (c *checker) zonk(t Type) Type {
 		}
 		return ft
 	case *Record, *Sealed:
+		if tuple, ok := t.(*Record); ok && tuple.Tuple {
+			elems := make([]Type, len(tuple.Fields))
+			for i, field := range tuple.Fields {
+				elems[i] = c.zonk(field.Type)
+			}
+			out := tupleType(elems)
+			for i, field := range tuple.Fields {
+				out.Fields[i].Constraints = substConstraints(field.Constraints, c.solved)
+			}
+			return out
+		}
 		args := TypeArgs(t)
 		out := make([]Type, len(args))
 		for i, a := range args {

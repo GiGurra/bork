@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 )
@@ -129,7 +130,14 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 			}
 			fn = &ast.FuncLit{Type: g.funcType(ft, names), Body: &ast.BlockStmt{List: body}}
 		}
-		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(ci.Class.Methods[i].Decl.Name), Value: fn})
+		method := ci.Class.Methods[i]
+		actual := &check.FuncType{Params: m.Params, Result: m.Result}
+		declared := &check.FuncType{Params: method.Params, Result: method.Result}
+		if hasTupleRepresentation(actual) {
+			params, args := []*check.TypeParam{ci.Class.Param}, []check.Type{ci.Type}
+			fn = g.representationConversion(fn, actual, declared, g.goType(actual), g.parameterGoType(declared, params, args), params, args, true)
+		}
+		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(method.Decl.Name), Value: fn})
 	}
 	if ci.Class.Prelude && ci.Class.Name == "Decode" {
 		kind, _ := parser.ParseExpr(g.decodeKind(ci.Type))
@@ -164,6 +172,11 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+			method := strings.ToLower(d.Class.Name)
+			fun, _ := g.dictMethod(d, method)
+			return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun}}}
+		}
 		// Built-in equality and rendering dispatch through universal helpers.
 		method := "equals"
 		if check.IsShow(d.Class) {
@@ -200,9 +213,18 @@ func (g *gen) methodFunc(inst *check.Instance) (fun ast.Expr, dicts []ast.Expr) 
 // instances to pass it first.
 func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []ast.Expr) {
 	if d.Param != nil {
-		return &ast.SelectorExpr{X: dictParam(d.Param, d.Class), Sel: name(method)}, nil
+		fun := &ast.SelectorExpr{X: dictParam(d.Param, d.Class), Sel: name(method)}
+		for _, source := range d.Class.Methods {
+			if source.Decl.Name == method {
+				return g.tupleMethod(d, source, []check.Type{d.Type}, fun, nil)
+			}
+		}
+		return fun, nil
 	}
 	if d.Builtin {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+			return g.tupleCodec(d, tuple), nil
+		}
 		if check.IsShow(d.Class) {
 			g.usesShow = true
 			return &ast.IndexExpr{X: ast.NewIdent("_strOf"), Index: g.goType(d.Type)}, nil
@@ -227,7 +249,37 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 	for _, a := range d.Args {
 		dicts = append(dicts, g.dict(a))
 	}
-	return fun, dicts
+	return g.tupleMethod(d, impl, d.TypeArgs, fun, dicts)
+}
+
+func (g *gen) tupleMethod(d *check.Dict, source *check.Func, typeArgs []check.Type, fun ast.Expr, dicts []ast.Expr) (ast.Expr, []ast.Expr) {
+	var method *check.Func
+	for _, candidate := range d.Class.Methods {
+		if candidate.Decl.Name == source.Decl.Name {
+			method = candidate
+		}
+	}
+	declared := &check.FuncType{Params: method.Params, Result: method.Result}
+	if !hasTupleRepresentation(declared) {
+		return fun, dicts
+	}
+	want := check.SubstituteType(declared, []*check.TypeParam{d.Class.Param}, []check.Type{d.Type}).(*check.FuncType)
+	copy := *source
+	copy.Class = nil
+	inst := &check.Instance{Func: &copy, TypeArgs: typeArgs, Params: want.Params, Result: want.Result}
+	var names []*ast.Ident
+	args := append([]ast.Expr(nil), dicts...)
+	for i := range want.Params {
+		n := ast.NewIdent(fmt.Sprintf("_p%d", i))
+		names = append(names, n)
+		args = append(args, g.instanceArgument(inst, i, n))
+	}
+	call := &ast.CallExpr{Fun: fun, Args: args}
+	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.instanceResult(inst, call)}}}
+	if want.Result == check.Ok || want.Result == check.Never {
+		body = []ast.Stmt{&ast.ExprStmt{X: call}}
+	}
+	return &ast.FuncLit{Type: g.funcType(want, names), Body: &ast.BlockStmt{List: body}}, nil
 }
 
 // funcRef is the Go value of a function used as a value (inst), when it
@@ -244,7 +296,10 @@ func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 			dicts = append(dicts, g.dict(d))
 		}
 	}
-	if len(dicts) == 0 && len(needs) == 0 && !collapsedUnion(inst) {
+	if len(dicts) == 0 && len(needs) == 0 && !collapsedUnion(inst) && (len(inst.TypeArgs) == 0 || !hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result})) {
+		if hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
+			return &ast.CallExpr{Fun: g.funcType(&check.FuncType{Params: inst.Params, Result: inst.Result}, nil), Args: []ast.Expr{fun}}
+		}
 		return fun
 	}
 	ft := &check.FuncType{Params: inst.Params, Result: inst.Result}
@@ -252,7 +307,7 @@ func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 	args := dicts
 	for j := range inst.Params {
 		names = append(names, ast.NewIdent(fmt.Sprintf("_p%d", j)))
-		args = append(args, names[j])
+		args = append(args, g.instanceArgument(inst, j, names[j]))
 	}
 	args = append(args, needs...)
 	call := &ast.CallExpr{Fun: fun, Args: args}

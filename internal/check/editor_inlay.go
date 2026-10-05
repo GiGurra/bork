@@ -38,6 +38,24 @@ func EditorInlays(info *Info, file *syntax.File, from *Package, options EditorIn
 			addBinding(binding.Pos, binding.Name, ": "+TypeText(typ, from))
 		}
 	}
+	if options.Types {
+		var addPattern func(*Pat)
+		addPattern = func(p *Pat) {
+			if p == nil {
+				return
+			}
+			pos := bindPos(p.bindNode)
+			if p.Bind != "" && pos.File == file.Path {
+				addBinding(pos, p.Bind, ": "+TypeText(p.BindType, from))
+			}
+			for _, field := range p.Fields {
+				addPattern(field.Pat)
+			}
+		}
+		for _, pat := range info.tuplePats {
+			addPattern(pat)
+		}
+	}
 	if options.Parameters {
 		for call, instance := range info.instances {
 			if call.Pos.File != file.Path || call.Pipe.Line != 0 || instance.Func == nil || instance.Func.Decl == nil {

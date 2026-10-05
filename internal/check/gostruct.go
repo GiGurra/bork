@@ -174,6 +174,9 @@ func (c *checker) generatedGoType(t Type) types.Type {
 			return types.NewMap(k, v)
 		}
 	case *Record:
+		if t.Tuple {
+			return nil
+		}
 		if t.Base != nil {
 			t = t.Base
 		}

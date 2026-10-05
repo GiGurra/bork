@@ -1,6 +1,44 @@
 # Types
 
-Programs describe their data with records, sealed types, and unions. All values are immutable.
+Programs describe their data with tuples, records, sealed types, and unions. All values are immutable.
+
+## Tuples
+
+A tuple groups values by position, with a separate type for each element:
+
+```bork
+import "bork/json"
+
+fn labeled(n: Int): (Int, String) { (n, "count") }
+
+fn main() {
+  pair = labeled(3)
+  (number, label) = pair
+  println(number, label, pair.0)
+  singleton = (true,)
+  println(singleton.0)
+  println(json.Encode(pair))
+}
+```
+
+`(Int, String)` is a tuple type. Positions start at zero, and an out-of-range
+selector is a compile error. `(value,)` and `(Type,)` are singleton tuples;
+`(value)` and `(Type)` keep their grouping meaning. There is no empty tuple.
+`() => value` still creates a function with no parameters.
+
+Tuples evaluate their elements once, from left to right, and are immutable.
+Their shape and ordered element types determine their type; no declaration is
+needed. Generic functions can take or return tuples, and an expected tuple type
+helps infer each element's type. Destructuring binds names or `_` and may nest;
+refutable patterns belong in [match](matching.md).
+
+Equality and map keys work when every element supports equality. Rendering uses
+tuple syntax. Encode and Decode use JSON arrays of exactly the tuple's length,
+when every element has the corresponding codec; decode errors use index paths
+such as `[1]`. Named tuple aliases may request `derive (Encode, Decode)` under
+the same requirements, and derived records may contain tuples. GoStruct does
+not derive for tuples. Element facts and scope lifetimes follow their values
+through tuple construction, selection and destructuring.
 
 ## Records
 

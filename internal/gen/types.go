@@ -36,6 +36,9 @@ func (g *gen) goType(t check.Type) ast.Expr {
 func (g *gen) lowerGoType(t check.Type) ast.Expr {
 	switch t := t.(type) {
 	case *check.TypeParam:
+		if typ := g.typeParamGoTypes[t]; typ != nil {
+			return typ
+		}
 		if n, ok := g.typeParamNames[t]; ok {
 			return ast.NewIdent(n)
 		}
@@ -51,6 +54,17 @@ func (g *gen) lowerGoType(t check.Type) ast.Expr {
 	case *check.FuncType:
 		return g.funcType(t, nil)
 	case *check.Record:
+		if t.Tuple {
+			fields := &ast.FieldList{}
+			for _, f := range t.Fields {
+				field := &ast.Field{Names: []*ast.Ident{name(f.Name)}, Type: g.goType(f.Type)}
+				if len(fields.List) == 0 {
+					field.Tag = &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote("bork:" + strconv.Quote(tupleShapeKey(t)))}
+				}
+				fields.List = append(fields.List, field)
+			}
+			return &ast.StructType{Fields: fields}
+		}
 		g.usedTypes[baseOf(t)] = true
 		return g.instantiated(typeName(t.Name, t.Pkg), t)
 	case *check.Sealed:
@@ -1295,6 +1309,17 @@ func _str(x any) string {
 		return x
 	}
 	switch v := reflect.ValueOf(x); v.Kind() {
+	case reflect.Struct:
+		if v.Type().Name() == "" && v.NumField() > 0 {
+			parts := make([]string, v.NumField())
+			for i := range parts {
+				if v.Type().Field(i).Name != "E" + strconv.Itoa(i) { return fmt.Sprint(x) }
+				parts[i] = _show(v.Field(i).Interface())
+			}
+			text := strings.Join(parts, ", ")
+			if len(parts) == 1 { text += "," }
+			return "(" + text + ")"
+		}
 	case reflect.Slice:
 		parts := make([]string, v.Len())
 		for i := range parts {

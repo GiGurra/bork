@@ -56,7 +56,7 @@ func (g *gen) patternFieldRead(root ast.Expr, typ check.Type, variant *check.Var
 	}
 	for _, field := range fields {
 		if field.Name == fieldName {
-			return g.fieldRead(root, field)
+			return g.tupleFieldRead(root, typ, field)
 		}
 	}
 	return &ast.SelectorExpr{X: root, Sel: name(fieldName)}
@@ -79,7 +79,7 @@ func (g *gen) computedCells(root *ast.Ident, fields []*check.Field, typ check.Ty
 			continue
 		}
 		recipe := check.ComputedFieldInitializer(field, root.Name, typ)
-		cell := g.fieldCell(recipe, &check.LazyDescription{Kind: "computed field", Effects: "nothing"})
+		cell := g.tupleFieldCell(recipe, &check.LazyDescription{Kind: "computed field", Effects: "nothing"}, typ, field)
 		stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{&ast.SelectorExpr{X: root, Sel: name(field.Name)}}, Tok: token.ASSIGN, Rhs: []ast.Expr{cell}})
 	}
 	return stmts

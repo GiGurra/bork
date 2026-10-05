@@ -231,6 +231,20 @@ func (c *checker) resolveTypeInner(t *syntax.TypeExpr) Type {
 	if t == nil {
 		return Ok
 	}
+	if t.Tuple != nil {
+		elems := make([]Type, len(t.Tuple))
+		for i, elem := range t.Tuple {
+			elems[i] = c.resolveType(elem)
+			if elems[i] == Invalid {
+				return Invalid
+			}
+			if !isValue(elems[i]) {
+				c.errorf(elem.Pos, "a tuple cannot hold %s", elems[i])
+				return Invalid
+			}
+		}
+		return tupleType(elems)
+	}
 	if t.Union != nil {
 		members := make([]Type, 0, len(t.Union))
 		for _, m := range t.Union {

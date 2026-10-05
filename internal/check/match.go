@@ -293,6 +293,40 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		}
 		return pat
 
+	case *syntax.TuplePat:
+		if union, ok := st.(*Union); ok {
+			var candidates []*Record
+			for _, member := range union.Members {
+				if rec, ok := member.(*Record); ok && rec.Tuple && len(rec.Fields) == len(p.Elems) && c.tuplePatternCompatible(p, rec) {
+					candidates = append(candidates, rec)
+				}
+			}
+			if len(candidates) == 1 {
+				inner := c.pattern(p, candidates[0])
+				if inner == nil {
+					return nil
+				}
+				return &Pat{Kind: PatType, Type: st, Members: []Type{candidates[0]}, Sub: inner}
+			}
+			if len(candidates) > 1 {
+				c.errorf(p.Pos, "tuple pattern matches several tuple types in %s; annotate its elements to select one", st)
+				return nil
+			}
+		}
+		rec, ok := st.(*Record)
+		if !ok || !rec.Tuple || len(rec.Fields) != len(p.Elems) {
+			c.errorf(p.Pos, "cannot match a %d-element tuple pattern against %s", len(p.Elems), st)
+			return nil
+		}
+		out := &Pat{Kind: PatRecord, Type: rec}
+		for i, elem := range p.Elems {
+			pat := c.pattern(elem, rec.Fields[i].Type)
+			if pat == nil {
+				return nil
+			}
+			out.Fields = append(out.Fields, &PatField{Name: rec.Fields[i].Name, Pat: pat})
+		}
+		return out
 	case *syntax.VariantPat:
 		return c.namePattern(p, st)
 
@@ -338,6 +372,80 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 	return nil
 }
 
+func (c *checker) tuplePatternCompatible(p *syntax.TuplePat, rec *Record) bool {
+	for i, elem := range p.Elems {
+		if !c.tupleElementCompatible(elem, rec.Fields[i].Type) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *checker) tupleElementCompatible(elem syntax.Pattern, field Type) bool {
+	if typed, ok := elem.(*syntax.TypePat); ok {
+		return assignable(c.resolveType(typed.Type), field)
+	}
+	if union, ok := field.(*Union); ok {
+		for _, member := range union.Members {
+			if c.tupleElementCompatible(elem, member) {
+				return true
+			}
+		}
+		return false
+	}
+	switch elem := elem.(type) {
+	case *syntax.LitPat:
+		return tupleLiteralCompatible(elem.Value, field)
+	case *syntax.TuplePat:
+		nested, ok := field.(*Record)
+		return ok && nested.Tuple && len(nested.Fields) == len(elem.Elems) && c.tuplePatternCompatible(elem, nested)
+	case *syntax.VariantPat:
+		if elem.Context {
+			if owner, ok := field.(*Sealed); ok {
+				return owner.Variant(elem.Path[0]) != nil
+			}
+			_, open := field.(*TypeParam)
+			return open
+		}
+		if len(elem.Path) > 0 {
+			owner := c.typeNamed(elem.Path[0])
+			if owner != nil {
+				if base := genericBase(owner); base == owner {
+					return instanceIn(field, base) != nil
+				}
+				return assignable(owner, field)
+			}
+		}
+	}
+	return true
+}
+
+func tupleLiteralCompatible(value syntax.Expr, typ Type) bool {
+	if union, ok := typ.(*Union); ok {
+		for _, member := range union.Members {
+			if tupleLiteralCompatible(value, member) {
+				return true
+			}
+		}
+		return false
+	}
+	switch value := value.(type) {
+	case *syntax.BoolLit:
+		return typ == Bool
+	case *syntax.StringLit:
+		return typ == String
+	case *syntax.RuneLit:
+		return typ == Rune
+	case *syntax.IntLit:
+		return IsInteger(typ)
+	case *syntax.FloatLit:
+		return IsFloat(typ)
+	case *syntax.Unary:
+		return tupleLiteralCompatible(value.X, typ)
+	}
+	return false
+}
+
 // nestedPatternFacts checks the written arguments too: a phantom generic
 // argument has no field path, so constraintsOf cannot identify it later.
 func (c *checker) nestedPatternFacts(t *syntax.TypeExpr) bool {
@@ -349,7 +457,7 @@ func (c *checker) nestedPatternFacts(t *syntax.TypeExpr) bool {
 				return true
 			}
 		}
-		for _, a := range t.Args {
+		for _, a := range append(append([]*syntax.TypeExpr{}, t.Args...), t.Tuple...) {
 			if c.hasFacts(a) {
 				return true
 			}
@@ -461,7 +569,11 @@ func (c *checker) bindPat(pat *Pat, name string, pos diag.Pos, node any) {
 	if pat.Kind == PatType {
 		pat.BindType = pat.Narrowed()
 	}
-	c.bind(name, pos, pat.BindType, node)
+	if c.tupleBindingMode {
+		c.bindRebinding(name, pos, pat.BindType, node)
+	} else {
+		c.bind(name, pos, pat.BindType, node)
+	}
 }
 
 // namePattern checks a pattern written as a name: `Shape.Circle { r }`,

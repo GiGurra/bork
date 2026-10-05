@@ -1,0 +1,2 @@
+fn pair(): (Int, String) { (1, "one") }
+fn main() { (n, (only,)) = (1, (true,)); println(n, only, ((2,), "two").0.0) }

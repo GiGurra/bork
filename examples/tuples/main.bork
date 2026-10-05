@@ -1,0 +1,12 @@
+import "bork/json"
+
+fn labeledCount(): (Int, String) { (3, "items") }
+
+fn main() {
+  pair = labeledCount()
+  (count, label) = pair
+  println(count, label, pair.0)
+  nested = (pair, (true,))
+  println(nested.0.1, nested.1.0)
+  println(json.Encode(nested))
+}

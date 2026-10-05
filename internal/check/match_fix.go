@@ -48,6 +48,17 @@ func (c *checker) missingMatchPattern(w *witness) string {
 		}
 		return "[_, ...]"
 	}
+	if h.record != nil && h.record.Tuple {
+		parts := make([]string, len(h.args))
+		for i := range parts {
+			parts[i] = "_"
+		}
+		text := strings.Join(parts, ", ")
+		if len(parts) == 1 {
+			text += ","
+		}
+		return "(" + text + ")"
+	}
 	var name string
 	var fields []*Field
 	var owner *Package

@@ -1,0 +1,16 @@
+fn needsPair(p: (Int, String)) {}
+fn main() {
+  pair = (1, "one")
+  println(pair.2)
+  needsPair((1,))
+  (a, a) = pair
+  (false, _) = (true, 1)
+  (x, y, z) = pair
+  maybe: (Int, String) | Bool = pair
+  (value, text) = maybe
+  nested: ((Int, String) | Bool, Int) = (pair, 0)
+  ((inner, _), _) = nested
+  println((() => 1, 2) == (() => 1, 2))
+}
+
+fn ambiguous(value: (Int,) | (Bool,)) { match (value) { (_,) => 0 } }

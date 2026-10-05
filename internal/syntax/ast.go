@@ -266,6 +266,7 @@ type TypeExpr struct {
 	Pos   diag.Pos
 	Name  string
 	Args  []*TypeExpr
+	Tuple []*TypeExpr // non-nil for a positional tuple type
 	Union []*TypeExpr // non-nil for a union; Name and Args are then unused
 	// Func is set for a function type `(A, B) => C`; Name and Args are
 	// then unused.
@@ -426,6 +427,14 @@ type Binding struct {
 }
 
 // ExprStmt is an expression evaluated for its effect.
+type TupleBinding struct {
+	Pos     diag.Pos
+	Pattern *TuplePat
+	Value   Expr
+}
+
+func (*TupleBinding) stmtNode() {}
+
 type ExprStmt struct {
 	X Expr
 }
@@ -480,6 +489,22 @@ func (e *Generate) Position() diag.Pos    { return e.Pos }
 func (e *Yield) Position() diag.Pos       { return e.Pos }
 func (e *For) Position() diag.Pos         { return e.Pos }
 func (e *LoopControl) Position() diag.Pos { return e.Pos }
+
+type TupleLit struct {
+	Pos, End diag.Pos
+	Elems    []Expr
+}
+
+func (*TupleLit) exprNode()            {}
+func (e *TupleLit) Position() diag.Pos { return e.Pos }
+
+type TuplePat struct {
+	Pos, End diag.Pos
+	Elems    []Pattern
+}
+
+func (*TuplePat) patternNode()         {}
+func (p *TuplePat) Position() diag.Pos { return p.Pos }
 
 type IntLit struct {
 	Pos  diag.Pos

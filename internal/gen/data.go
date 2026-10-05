@@ -14,7 +14,7 @@ func (g *gen) selector(e *check.Select) ([]ast.Stmt, ast.Expr) {
 	if x == nil {
 		return stmts, nil
 	}
-	return stmts, g.fieldRead(paren(x), e.Field)
+	return stmts, g.tupleFieldRead(paren(x), e.X.Type(), e.Field)
 }
 
 func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
@@ -36,6 +36,12 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 		return stmts, nil
 	}
 	lit := &ast.CompositeLit{Type: typ}
+	var owner check.Type
+	if e.Record != nil {
+		owner = e.Record
+	} else {
+		owner = e.Variant.Parent
+	}
 	var computed []*check.FieldValue
 	i := 0
 	for _, field := range e.Fields {
@@ -45,10 +51,15 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 		}
 		var value ast.Expr
 		if field.Thunk != nil {
-			value = g.fieldCell(field.Thunk, field.Lazy)
+			value = g.tupleFieldCell(field.Thunk, field.Lazy, owner, field.Field)
 		} else {
 			value = g.convert(xs[i], field.Value.Type(), field.Field.Type)
 			i++
+		}
+		if hasTupleRepresentation(field.Field.Type) && field.Thunk == nil {
+			if original, params, args := tupleFieldDeclaration(owner, field.Field); original != nil {
+				value = g.representationConversion(value, field.Field.Type, original.Type, g.goType(field.Field.Type), g.parameterGoType(original.Type, params, args), params, args, true)
+			}
 		}
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: value})
 	}
@@ -57,7 +68,7 @@ func (g *gen) recordLit(e *check.RecordLit) ([]ast.Stmt, ast.Expr) {
 		g.nameCandidate(e.Candidate, root)
 		stmts = append(stmts, define(root, lit))
 		for _, field := range computed {
-			stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{&ast.SelectorExpr{X: root, Sel: name(field.Name)}}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.fieldCell(field.Thunk, field.Lazy)}})
+			stmts = append(stmts, &ast.AssignStmt{Lhs: []ast.Expr{&ast.SelectorExpr{X: root, Sel: name(field.Name)}}, Tok: token.ASSIGN, Rhs: []ast.Expr{g.tupleFieldCell(field.Thunk, field.Lazy, owner, field.Field)}})
 		}
 		return stmts, root
 	}
@@ -85,7 +96,11 @@ func (g *gen) copyExpr(e *check.Copy) ([]ast.Stmt, ast.Expr) {
 	for _, update := range e.Updates {
 		var value ast.Expr
 		if update.Thunk != nil {
-			value = g.fieldCell(update.Thunk, update.Lazy)
+			owner := rec
+			for _, part := range update.Path[:len(update.Path)-1] {
+				owner = owner.Field(part).Type.(*check.Record)
+			}
+			value = g.tupleFieldCell(update.Thunk, update.Lazy, owner, update.Field)
 		} else {
 			value = g.convert(xs[i], update.Value.Type(), update.Field.Type)
 			i++
@@ -100,6 +115,11 @@ func (g *gen) copyField(root ast.Expr, rec *check.Record, path []string, value a
 	field := rec.Field(path[0])
 	lhs := &ast.SelectorExpr{X: root, Sel: name(field.Name)}
 	if len(path) == 1 {
+		if !field.Lazy && hasTupleRepresentation(field.Type) {
+			if original, params, args := tupleFieldDeclaration(rec, field); original != nil {
+				value = g.representationConversion(value, field.Type, original.Type, g.goType(field.Type), g.parameterGoType(original.Type, params, args), params, args, true)
+			}
+		}
 		return []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{lhs}, Tok: token.ASSIGN, Rhs: []ast.Expr{value}}}
 	}
 	child := g.newTmp()
