@@ -193,7 +193,9 @@ starting that evaluator.
 A list expression may contain one compile-time comprehension:
 `[comptime for (field in fields) expression]`. Each expansion contributes one
 element, and the completed expression is an ordinary homogeneous List whose
-element type is inferred as usual. An optional `comptime if (condition)` guard
+element type is inferred as usual. A zero-output comprehension requires a
+contextual element type, like an ordinary empty list; template examples annotate
+local results that may have no stored fields. An optional `comptime if (condition)` guard
 before the element expression omits that iteration when false. The guard is
 metadata-known and is evaluated before checking the element body, so omitted
 computed fields require no codec dictionaries. This is filtering within the
@@ -232,7 +234,7 @@ example, the Encode template's sealed branch has this structure:
 comptime for (variant in shape.variants[T]()) {
   match (variant.project(x)) {
     Option.Some { value: payload } => {
-      fields = [comptime for (field in variant.fields)
+      fields: List[codec.Field] = [comptime for (field in variant.fields)
         comptime if (!field.computed)
           codec.Field { name: field.name,
             value: codec.encode[field.Type](field.read(payload)) }]
@@ -458,7 +460,8 @@ Focused tests cover both spellings and cross-file order, qualified classes,
 alias ownership, private delegation, concrete/universal generics, duplicate
 and ambiguous requests, recursive targets, constrained dictionaries, defaults,
 computed/sibling/type/variant facts, positional arity and paths, opaque/foreign
-values, metadata selection, schema partial-value safety, layout conversion,
+values, metadata selection, empty/filtered comprehension typing, schema partial-value
+safety, layout conversion,
 and template/cache failure/invalidation limits. Test clean versus cache-hit
 output and diagnostics and that checking leaves parsed ASTs unchanged.
 Run the touched packages/cases plus lint/gofmt locally; let GitHub CI run the
