@@ -1,0 +1,110 @@
+// Self tail calls compile to jumps: deep recursion runs in constant stack.
+fn gcd(a: Int, b: Int) uses tailrec: Int {
+  if (b == 0) { a } else { gcd(b, a % b) }
+}
+
+fn count(n: Int, acc: Int): Int {
+  if (n == 0) {
+    return acc
+  }
+  count(n - 1, acc + 1)
+}
+
+fn countdown(n: Int) uses io + tailrec {
+  if (n % 2500000 == 0) {
+    println(n)
+  }
+  if (n > 0) {
+    countdown(n - 1)
+  }
+}
+
+fn closures(n: Int, fs: List[() uses nothing => Int]): List[() uses nothing => Int] {
+  match (n) {
+    0 => fs
+    _ => closures(n - 1, fs.append(() => n))
+  }
+}
+
+fn small() uses io {
+  println(gcd(48, 18))
+  println(count(10000000, 0))
+  countdown(10000000)
+  println(closures(3, []).map(f => f()))
+}
+
+type NotFound = { key: Int }
+
+ambient depth: Int
+
+fn rounds(n: Int) uses io + state + tailrec: Ok | Cancelled {
+  scope s {
+    t = spawn(s, () => n * 2)
+    if (n % 250000 == 0) {
+      println(s"round $n: ${await(t)}")
+    }
+  }
+  if (n == 0) {
+    return Ok
+  }
+  rounds(n - 1)
+}
+
+fn find(xs: List[Int], key: Int, tries: Int) uses tailrec: Int | NotFound {
+  for (x in xs) {
+    if (x == key) {
+      return tries
+    }
+    if (x > key) {
+      return find(xs, key - 1, tries + 1)
+    }
+  }
+  NotFound { key: key }
+}
+
+fn findSeq(n: Int, key: Int) uses tailrec: Int {
+  for (x in Seq.range(0, 10)) {
+    if (x == key) {
+      return n
+    }
+  }
+  findSeq(n + 1, key - 1)
+}
+
+fn last[T](xs: List[T]) uses tailrec: Option[T] {
+  match (xs) {
+    [] => Option.None
+    [x] => Option.Some { value: x }
+    [_, ...rest] => last(rest)
+  }
+}
+
+fn (n: Int) collatz(steps: Int) uses tailrec: Int {
+  if (n == 1) { steps } else if (n % 2 == 0) { (n / 2).collatz(steps + 1) } else { (3 * n + 1).collatz(steps + 1) }
+}
+
+fn deep(n: Int) uses tailrec needs depth: Int {
+  if (n == 0) { depth } else { deep(n - 1) }
+}
+
+fn checked(n: Int) uses tailrec: Int | NotFound {
+  if (n > 5) {
+    return NotFound { key: n }
+  }
+  if (n == 5) { n } else { checked(n + 1) }
+}
+
+fn main() uses io + state {
+  small()
+  scope s {
+    _ = rounds(1000000)
+  }
+  println(find([1, 5, 9], 7, 0))
+  println(findSeq(0, 1000000))
+  println(last(range(0, 100000)))
+  println(27.collatz(0))
+  with (depth: 42) {
+    println(deep(1000000))
+  }
+  println(checked(0), checked(9))
+}

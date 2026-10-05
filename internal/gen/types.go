@@ -1578,6 +1578,9 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 	}
 	if g.usesMocks {
 		src = append(src, mockRuntime)
+		if g.usesMockIn {
+			src = append(src, tailMockRuntime)
+		}
 	}
 	if g.usesScopes {
 		src = append(src, scopeRuntime, scopeHelpers)

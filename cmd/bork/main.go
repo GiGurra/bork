@@ -180,6 +180,13 @@ func printDescription(result *describe.Result) {
 			fmt.Println("requires:", req)
 		}
 	}
+	if tc := result.TailCall; tc != nil {
+		if tc.Jump {
+			fmt.Println("tail call: compiled as a jump to the top of the function")
+		} else {
+			fmt.Println("recursive call, not a tail call:", tc.Reason)
+		}
+	}
 	for _, method := range result.Methods {
 		if method.Ambiguity != "" {
 			fmt.Println("method:", method.Ambiguity)

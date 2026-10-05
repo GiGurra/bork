@@ -15,12 +15,19 @@ type loopExit struct {
 	flag, result *ast.Ident
 	used         bool
 	labelUsed    bool
+	// jump is set by a tail call leaving the loop, which then jumps to
+	// the top of the function (see tail.go).
+	jump     *ast.Ident
+	jumpUsed bool
 }
 type loopFrame struct {
 	scopes, owners, mocks int
 	cleanup               *loopCleanup
 	exit                  *loopExit
 	label                 *ast.Ident
+	// tail marks the loop around the body of a function whose self
+	// calls jump to its top.
+	tail bool
 }
 
 func (g *gen) generateSeq(e *check.Generate) ast.Expr {
@@ -63,9 +70,9 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 	if !top {
 		root = g.loops[len(g.loops)-1].cleanup
 	}
-	exit := &loopExit{flag: g.newTmp(), result: g.newTmp()}
+	exit := &loopExit{flag: g.newTmp(), result: g.newTmp(), jump: g.newTmp()}
 	label := g.newTmp()
-	g.loops = append(g.loops, loopFrame{len(g.openScopes), len(g.blockOwners), len(g.openMocks), root, exit, label})
+	g.loops = append(g.loops, loopFrame{len(g.openScopes), len(g.blockOwners), len(g.openMocks), root, exit, label, false})
 	body := g.effect(e.Body)
 	g.loops = g.loops[:len(g.loops)-1]
 	if top && root.used {
@@ -73,16 +80,8 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 		g.usesScopes = true
 		stmts = append(stmts, typedVar(root.name, ast.NewIdent("_loopCleanup"), &ast.CompositeLit{Type: ast.NewIdent("_loopCleanup")}), &ast.DeferStmt{Call: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("close")}}})
 	}
-	if exit.used {
-		stmts = append(stmts, define(exit.flag, ast.NewIdent("false")))
-		if g.fnResult != check.Ok {
-			stmts = append(stmts, &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{exit.result}, Type: g.goType(g.fnResult)}}}})
-			if g.fnResult == check.OwnedScope {
-				stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("owner")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}})
-			}
-		}
-	}
-	// Keep generated iteration names used after constant folding.
+	stmts = append(stmts, g.exitVars(root, exit)...)
+	// Iteration names are always legal when unused.
 	body = append([]ast.Stmt{assign(ast.NewIdent("_"), varIdent(e.Var))}, body...)
 	loop := &ast.RangeStmt{Tok: token.DEFINE, Body: &ast.BlockStmt{List: body}}
 	if _, ok := e.Items.Type().(*check.Seq); ok {
@@ -101,21 +100,48 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 	} else {
 		stmts = append(stmts, loop)
 	}
+	if exit.jumpUsed {
+		stmts = append(stmts, &ast.IfStmt{Cond: exit.jump, Body: &ast.BlockStmt{List: g.tailContinue()}})
+	}
 	if exit.used {
 		if g.fnResult == check.OwnedScope {
 			stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("forget")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}})
 		}
-		var result []ast.Expr
-		if g.fnResult != check.Ok {
-			var value ast.Expr = exit.result
-			if g.fnResult == check.OwnedScope {
-				value = &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}
-			}
-			result = []ast.Expr{value}
-		}
-		stmts = append(stmts, &ast.IfStmt{Cond: exit.flag, Body: &ast.BlockStmt{List: g.returning(result...)}})
+		stmts = append(stmts, &ast.IfStmt{Cond: exit.flag, Body: &ast.BlockStmt{List: g.returning(g.exitResult(exit)...)}})
 	}
 	return stmts
+}
+
+// exitVars declares what a return or tail call leaving a loop sets:
+// its flag, the result, and the jump flag.
+func (g *gen) exitVars(root *loopCleanup, exit *loopExit) []ast.Stmt {
+	var stmts []ast.Stmt
+	if exit.jumpUsed {
+		stmts = append(stmts, define(exit.jump, ast.NewIdent("false")))
+	}
+	if !exit.used {
+		return stmts
+	}
+	stmts = append(stmts, define(exit.flag, ast.NewIdent("false")))
+	if g.fnResult != check.Ok {
+		stmts = append(stmts, &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{exit.result}, Type: g.goType(g.fnResult)}}}})
+		if g.fnResult == check.OwnedScope {
+			stmts = append(stmts, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("owner")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}})
+		}
+	}
+	return stmts
+}
+
+// exitResult is the result a return leaving a loop set, once the loop
+// has ended (and the cleanup root has forgotten an owner result).
+func (g *gen) exitResult(exit *loopExit) []ast.Expr {
+	if g.fnResult == check.Ok {
+		return nil
+	}
+	if g.fnResult == check.OwnedScope {
+		return []ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: exit.result}}}}
+	}
+	return []ast.Expr{exit.result}
 }
 
 func (g *gen) loopControl(e *check.LoopControl) []ast.Stmt {

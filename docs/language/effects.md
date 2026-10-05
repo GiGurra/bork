@@ -38,6 +38,8 @@ injection uses only `state`.
 
 A sixth effect, `build`, marks functions that read files during compilation. It is only allowed inside [`comptime`](comptime.md).
 
+`tailrec` may also appear in a function's list (`uses io + tailrec`). It is not an effect but a marker: it asks the compiler to guarantee that the function's calls of itself are compiled as jumps (see [recursion and tail calls](basics.md#recursion-and-tail-calls)). `uses tailrec` alone declares a pure function.
+
 ## The compiler checks the list
 
 A function may only do what it declares. That includes what the functions it calls do.

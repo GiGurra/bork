@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/GiGurra/bork/internal/check"
 )
 
 func describeAt(t *testing.T, source, fragment, where string) *descriptionResult {
@@ -858,5 +860,46 @@ fn more(s: Scope, w: Scope, v: Scope, flag: Bool) uses io: String {
 		if result.Ownership != tc.want {
 			t.Errorf("%s: ownership %q, want %q", tc.pos, result.Ownership, tc.want)
 		}
+	}
+}
+
+func TestDescribeTailCalls(t *testing.T) {
+	t.Parallel()
+	source := `fn count(n: Int): Int {
+  if (n == 0) { 0 } else { count(n - 1) }
+}
+
+fn fact(n: Int): Int {
+  if (n == 0) { 1 } else { n * fact(n - 1) }
+}
+
+fn main() {
+  println(count(3), fact(3))
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	describeAt := func(needle string) *check.TailCall {
+		t.Helper()
+		offset := strings.Index(source, needle)
+		line := strings.Count(source[:offset], "\n") + 1
+		column := offset - strings.LastIndex(source[:offset], "\n")
+		result, err := Describe(fmt.Sprintf("%s:%d:%d", path, line, column), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.TailCall
+	}
+	if tc := describeAt("count(n - 1)"); tc == nil || !tc.Jump {
+		t.Fatalf("got %+v, want a jump", tc)
+	}
+	if tc := describeAt("fact(n - 1)"); tc == nil || tc.Jump || tc.Reason != "its result is used after it returns" {
+		t.Fatalf("got %+v, want an ordinary call whose result is used", tc)
+	}
+	if tc := describeAt("count(3)"); tc != nil {
+		t.Fatalf("got %+v for a call from another function", tc)
 	}
 }

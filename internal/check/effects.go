@@ -69,11 +69,45 @@ func allowedText(e Effects) string {
 // effectsOf gives the effects of a `uses` declaration (none for nil),
 // reporting names that are not effects, and effects named twice.
 func (c *checker) effectsOf(u *syntax.Uses) Effects {
+	return c.effectsAndMarker(u, false)
+}
+
+// declEffects gives the effects a declared function's uses list
+// declares, and records its tailrec marker, which only a function or
+// method with a bork body may have.
+func (c *checker) declEffects(fn *Func) Effects {
+	fd := fn.Decl
+	pos, ok := fd.Uses.TailRec()
+	if !ok {
+		return c.effectsOf(fd.Uses)
+	}
+	switch {
+	case fd.Name == "main" && !fd.IsMethod:
+		c.diags.AddCode(pos, "tailrec.position", "main cannot declare tailrec: it cannot be called, so it cannot recur")
+	case fd.IsGo():
+		c.diags.AddCode(pos, "tailrec.position", "%s cannot declare tailrec: its body is Go, which bork does not compile", fd.Name)
+	case fd.IsPred:
+		// Reported as effects on a predicate.
+	default:
+		fn.TailRec, fn.TailRecPos = true, pos
+	}
+	return c.effectsAndMarker(fd.Uses, true)
+}
+
+// effectsAndMarker gives the effects of a uses list, skipping the
+// tailrec marker where it may appear and reporting it elsewhere.
+func (c *checker) effectsAndMarker(u *syntax.Uses, marker bool) Effects {
 	if u == nil {
 		return 0
 	}
 	var effs Effects
 	for _, e := range u.Effects {
+		if e.Name == "tailrec" {
+			if !marker {
+				c.diags.AddCode(e.Pos, "tailrec.position", "tailrec marks a declared function whose recursive calls must be tail calls; it is not an effect, and only a function or method declaration can have it")
+			}
+			continue
+		}
 		eff := effectNamed(e.Name)
 		switch {
 		case eff == 0:

@@ -203,10 +203,22 @@ func classAllows(fn *Func) (Effects, bool) {
 	return 0, false
 }
 
+// usesText is the uses list declaring effs, keeping fd's tailrec
+// marker: "uses io + tailrec", or "uses tailrec" alone.
+func usesText(fd *syntax.FuncDecl, effs Effects) string {
+	if _, ok := fd.Uses.TailRec(); ok {
+		if effs == 0 {
+			return "uses tailrec"
+		}
+		return "uses " + effs.String() + " + tailrec"
+	}
+	return "uses " + effs.String()
+}
+
 // usesFix is the edit that makes fd declare effs.
 func usesFix(fd *syntax.FuncDecl, effs Effects) diag.Fix {
-	text := "uses " + effs.String()
-	if effs == 0 {
+	text := usesText(fd, effs)
+	if effs == 0 && text == "uses nothing" {
 		text = ""
 	}
 	if fd.Uses == nil {
@@ -215,7 +227,7 @@ func usesFix(fd *syntax.FuncDecl, effs Effects) diag.Fix {
 		return diag.Fix{Message: "declare " + text, Edits: []diag.TextEdit{{Start: at, End: at, Replacement: " " + text}}}
 	}
 	start, end := fd.Uses.Pos, fd.Uses.End
-	if effs == 0 {
+	if text == "" {
 		start = fd.ParamsEnd
 		start.Col++ // just after the ')'
 		return diag.Fix{Message: "remove the effects", Edits: []diag.TextEdit{{Start: start, End: end}}}

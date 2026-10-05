@@ -1,0 +1,46 @@
+type Stop = {}
+
+ambient depth: Int
+
+fn fact(n: Int) uses tailrec: Int {
+  if (n == 0) { 1 } else { n * fact(n - 1) }
+}
+
+fn inScope(n: Int) uses state + tailrec: Int {
+  scope s {
+    if (n == 0) { 0 } else { inScope(n - 1) }
+  }
+}
+
+fn tried(n: Int) uses tailrec: Int | Stop {
+  if (n == 0) { return Stop {} }
+  x = tried(n - 1)?
+  x
+}
+
+fn plain(n: Int) uses tailrec: Int { n + 1 }
+
+fn ping(n: Int) uses tailrec: Int { if (n == 0) { 0 } else { pong(n - 1) } }
+fn pong(n: Int): Int { if (n == 0) { 1 } else { ping(n - 1) } }
+
+fn lambda(n: Int) uses tailrec: Int {
+  f = () => lambda(n - 1)
+  if (n == 0) { 0 } else { f() }
+}
+
+fn effectless(n: Int) uses tailrec {
+  if (n > 0) { effectless(n - 1) }
+}
+
+fn main() {
+  effectless(1)
+}
+
+fn rebound(n: Int) uses tailrec needs depth: Int {
+  if (n == 0) {
+    return depth
+  }
+  with (depth: depth + 1) {
+    rebound(n - 1)
+  }
+}

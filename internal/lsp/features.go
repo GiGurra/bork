@@ -103,6 +103,13 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 				text += "\n\nRequires: " + strings.Join(result.Callable.Requires, "; ")
 			}
 		}
+		if tc := result.TailCall; tc != nil {
+			if tc.Jump {
+				text += "\n\nTail call: compiled as a jump to the top of the function"
+			} else {
+				text += "\n\nRecursive call, not a tail call: " + tc.Reason
+			}
+		}
 		for _, fact := range result.Facts {
 			text += "\n\nKnown: `" + fact.Path + " " + fact.Constraint + "`"
 		}

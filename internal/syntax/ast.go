@@ -303,6 +303,21 @@ type Uses struct {
 	Effects []Effect
 }
 
+// TailRec is the position of the tailrec marker among the effects, if
+// the list has one: `uses io + tailrec`. It is not an effect (see
+// docs/design/loops.md).
+func (u *Uses) TailRec() (diag.Pos, bool) {
+	if u == nil {
+		return diag.Pos{}, false
+	}
+	for _, e := range u.Effects {
+		if e.Name == "tailrec" {
+			return e.Pos, true
+		}
+	}
+	return diag.Pos{}, false
+}
+
 // AmbientDecl declares an ambient value: `ambient traceId: String`,
 // optionally marked `logged` (its value is added to every log line
 // written while a with binds it) or `propagated("header")` (sent

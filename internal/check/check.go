@@ -101,6 +101,10 @@ type Func struct {
 	// Decl.Params are the names the mock gives the parameters, and
 	// MockIn is the test it is in.
 	MockOf, MockIn *Func
+	// TailRec is set when the function declares `uses tailrec`, at
+	// TailRecPos: its recursive calls must compile as jumps.
+	TailRec    bool
+	TailRecPos diag.Pos
 	// Calls lists the functions this function's body calls.
 	Calls []*Func
 	// ParamVars are the variables of the parameters, and Body the typed
@@ -271,6 +275,11 @@ type Info struct {
 	// Func.MockOf), and mocks them by statement.
 	Mocks []*Func
 	mocks map[*syntax.MockStmt]*Func
+	// TailCalls says how each call of a function by itself is
+	// compiled; tailJumps holds the functions with a call compiled as
+	// a jump (see CheckTailCalls).
+	TailCalls map[*Call]*TailCall
+	tailJumps map[*Func]bool
 	// MockCalls are the records of calls of the functions tests mock
 	// with a handle (see callRecord), declared only in test builds.
 	MockCalls     map[*Func]*Record
@@ -971,7 +980,7 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 	}
 	fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude}
 	fn.TypeParams = c.declareTypeParams(fd, prelude)
-	fn.Effects = c.effectsOf(fd.Uses)
+	fn.Effects = c.declEffects(fn)
 	c.needsOf(fn)
 	if fd.IsPred && fd.Uses != nil {
 		c.diags.AddCode(fd.Uses.Pos, "effect.pred", "pred %s cannot declare effects: predicates must be pure, or their facts could go stale", fd.Name)
