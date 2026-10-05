@@ -230,7 +230,7 @@ jobs:
       - run: BORK_TEST_DLV="$(go env GOPATH)/bin/dlv" go test ./internal/driver -run '^TestDebugDAPIntegration$' -count=1
   ci-ok:
     name: CI ok
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [grammar, tree-sitter, editors, shards, lint, examples, suite, replay, cache-maintenance, go-switching, debug]
     runs-on: ubuntu-latest
     steps:
