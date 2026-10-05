@@ -1,0 +1,4 @@
+--environment
+prod
+web
+worker

@@ -33,7 +33,7 @@ fn commands(): List[cli.Command] {
     println(options.words)
   }, [cli.Flag { field: "words", positional: true }])]
 }
-fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
+fn main() { println(cli.RunCommands("app", "Example commands", commands(), settings: .{ completion: false })) }
 `
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
@@ -57,8 +57,8 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands())) }
 		{name: "unknown-command", args: []string{"missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
 		{name: "unknown-help", args: []string{"help", "missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
 		{name: "prefixed-unknown-help", args: []string{"--help=false", "help", "missing"}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
-		{name: "prefixed-extra-help", args: []string{"-h=false", "help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Ok"}},
-		{name: "extra-help", args: []string{"help", "serve", "missing"}, want: []string{"help accepts at most one command name", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "prefixed-extra-help", args: []string{"-h=false", "help", "serve", "missing"}, want: []string{"unknown help target", "Error {"}, absent: []string{"closed", "Ok"}},
+		{name: "extra-help", args: []string{"help", "serve", "missing"}, want: []string{"unknown help target", "Error {"}, absent: []string{"closed", "Ok"}},
 		{name: "hidden-completion", args: []string{"__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok"}},
 		{name: "completion-after-unknown-value", args: []string{"--unknown", "value", "__complete", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok", ":0"}},
 		{name: "completion-no-desc-after-unknown-value", args: []string{"-x", "value", "__completeNoDesc", ""}, want: []string{"unknown command", "Error {"}, absent: []string{"closed", "Ok", ":0"}},

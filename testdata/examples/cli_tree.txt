@@ -1,0 +1,2 @@
+prod: ["web", "worker"]
+Deployment scope closed

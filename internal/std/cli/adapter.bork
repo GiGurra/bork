@@ -1,0 +1,256 @@
+import codecs "bork/json"
+// The private adapter shares boa registration between parsing and command trees.
+// Mutable native commands are private handles owned by the parse/dispatch scope.
+type nativeCommand = resource
+type inputField = {
+  field: String
+  kind: String
+  optional: Bool
+  hasDefault: Bool
+  defaultText: String
+  configDefault: String
+  validate: (Json) uses nothing => Ok | DecodeError
+}
+type pending = {}
+type adapter = { native: nativeCommand, result: () uses io => Json | Error | pending }
+type parsedInput = { value: Json, warnings: List[String], path: String }
+
+fn inputFields[T: Decode](name: String): List[inputField] | Error unsafe go {
+  import "fmt"
+  schema, supported := _borkDecodeFields(_d_T_Decode)
+  if !supported { return Error{errors: []DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
+  fields := []inputField{}
+  for _, field := range schema {
+    text, path := "", ""
+    if field.HasDefault {
+      value := field.Default()
+      text = fmt.Sprintf("%v", value)
+      switch value := value.(type) {
+      case string: path = value
+      case Option_Some[string]: path = value.value
+      }
+    }
+    fields = append(fields, inputField{field: field.Name, kind: field.Kind, optional: field.Optional, hasDefault: field.HasDefault, defaultText: text, configDefault: path, validate: func(value Json) any {
+      if err, bad := field.Decode(value).(DecodeError); bad { return err }
+      return _Ok{}
+    }})
+  }
+  return fields
+}
+fn parseInput(name: String, description: String, args: List[String], specs: List[FieldSpec], fields: List[inputField], configFiles: List[String], completion: Bool) uses io: parsedInput | Error | Help {
+  scope s {
+    match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, s)) {
+      error: Error => error
+      prepared: adapter => evaluate(prepared, args, completion, configureCompletion)
+    }
+  }
+}
+fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => Json | JsonError, makeName: (String) => String, s: Scope): adapter | Error unsafe go {
+  import "fmt"
+  import "reflect"
+  import "strconv"
+  import "strings"
+  import "github.com/GiGurra/boa/pkg/boa"
+  import "github.com/spf13/cobra"
+  mappingName := func(mapping Mapping) string {
+    if named, ok := mapping.(Mapping_Named); ok { return named.name }
+    return ""
+  }
+  configField := ""
+  metadata := map[string]FieldSpec{}
+  kinds := map[string]string{}
+  for _, field := range schema { kinds[field.field] = field.kind }
+  for _, spec := range specs {
+    metadata[spec.field] = spec
+    if spec.configFile { configField = spec.field }
+  }
+  fields := make([]reflect.StructField, len(schema))
+  for i, field := range schema {
+    typ := reflect.TypeFor[*string]()
+    if field.kind == "bool" { typ = reflect.TypeFor[*bool]() }
+    list := strings.HasPrefix(field.kind, "list:")
+    if list { typ = reflect.TypeFor[*[]string]() }
+    flag := metadata[field.field]
+    doc := flag.description
+    if field.hasDefault { doc += " (default " + field.defaultText + ")" } else if !field.optional { doc += " (required)" }
+    tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
+    if list { tag += " collection:\"array\"" }
+    if short := mappingName(flag.short); short != "" { tag += " short:" + strconv.Quote(short) }
+    policies := []string{}
+    if env := mappingName(flag.env); env != "" { tag += " env:" + strconv.Quote(env) } else { policies = append(policies, "noenv") }
+    if flag.positional { tag += " positional:\"true\"" }
+    // Synthetic exported fields retain the original name as an explicit boa tag.
+    long := mappingName(flag.long)
+    if long == "" {
+      if flag.positional { long = makeName(field.field) } else {
+        long = fmt.Sprintf("bork-field-%d", i)
+        policies = append(policies, "noflag")
+      }
+    }
+    if len(policies) != 0 { tag += " boa:" + strconv.Quote(strings.Join(policies, ",")) }
+    tag += " long:" + strconv.Quote(long)
+    fields[i] = reflect.StructField{Name: fmt.Sprintf("Field%d", i), Type: typ, Tag: reflect.StructTag(tag)}
+  }
+  shadow := reflect.New(reflect.StructOf(fields))
+  var result any = pending{}
+  command := boa.Cmd{
+    Use: name, Short: description, Params: shadow.Interface(),
+    ParamEnrich: boa.ParamEnricherNone,
+    RunFunc: func(cmd *cobra.Command, remaining []string) {
+      files := append([]string{}, configFiles...)
+      for i, field := range schema {
+        if field.field != configField { continue }
+        path := ""
+        value := shadow.Elem().Field(i)
+        if !value.IsNil() { path = value.Elem().String() } else { path = field.configDefault }
+        if path != "" { files = append(files, path) }
+      }
+      config := map[string]Json{}
+      err := boa.LoadConfigFiles(files, &config, func(data []byte, target any) error {
+        parsed := parse(string(data))
+        if err, bad := parsed.(JsonError); bad { return fmt.Errorf("%s", err.message) }
+        object, ok := parsed.(Json_Object)
+        if !ok { return fmt.Errorf("CLI config must be a JSON object") }
+        values := target.(*map[string]Json)
+        for _, entry := range object.fields {
+          known := false
+          for _, field := range schema { if field.field == entry.name { known = true; break } }
+          if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
+          if !metadata[entry.name].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
+          (*values)[entry.name] = entry.value
+        }
+        return nil
+      })
+      if err != nil { result = Error{errors: []DecodeError{{path: name, message: err.Error()}}}; return }
+      jsonFields := []JsonField{}
+      failures := []DecodeError{}
+      for i, field := range schema {
+        value := shadow.Elem().Field(i)
+        var json Json
+        if value.IsNil() {
+          if configured, exists := config[field.field]; exists { json = configured } else {
+            if field.hasDefault { continue }
+            if !field.optional { failures = append(failures, DecodeError{path: "." + field.field, message: "is missing"}); continue }
+            json = Json_Null{}
+          }
+        } else if strings.HasPrefix(field.kind, "list:") {
+          values := []Json{}
+          invalid := false
+          for j, raw := range value.Elem().Interface().([]string) {
+            if strings.TrimPrefix(field.kind, "list:") == "string" { values = append(values, Json_String{value: raw}); continue }
+            parsed := parse(raw)
+            if err, bad := parsed.(JsonError); bad { failures = append(failures, DecodeError{path: fmt.Sprintf(".%s[%d]", field.field, j), message: err.message}); invalid = true; continue }
+            values = append(values, parsed.(Json))
+          }
+          if invalid { continue }
+          json = Json_Array{items: values}
+        } else if field.kind == "bool" { json = Json_Bool{value: value.Elem().Bool()} } else {
+          raw := value.Elem().String()
+          if field.kind == "string" { json = Json_String{value: raw} } else {
+            parsed := parse(raw)
+            if err, bad := parsed.(JsonError); bad { failures = append(failures, DecodeError{path: "." + field.field, message: err.message}); continue }
+            json = parsed.(Json)
+          }
+        }
+        spec := metadata[field.field]
+        if spec.strictChoices {
+          allowed := map[string]bool{}
+          for _, choice := range spec.choices { allowed[choice.value] = true }
+          invalid := false
+          checkChoice := func(value Json, path string) {
+            if text, ok := value.(Json_String); ok && !allowed[text.value] { failures = append(failures, DecodeError{path: path, message: "must be one of the allowed choices"}); invalid = true }
+          }
+          if array, ok := json.(Json_Array); ok { for j, item := range array.items { checkChoice(item, fmt.Sprintf(".%s[%d]", field.field, j)) } } else { checkChoice(json, "."+field.field) }
+          if invalid { continue }
+        }
+        if err, bad := field.validate(json).(DecodeError); bad { failures = append(failures, err); continue }
+        jsonFields = append(jsonFields, JsonField{name: field.field, value: json})
+      }
+      if len(failures) != 0 { result = Error{errors: failures}; return }
+      result = Json_Object{fields: jsonFields}
+    },
+  }
+  cmd, err := command.ToCobraE()
+  if err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
+  for _, spec := range specs {
+    long := mappingName(spec.long)
+    complete := func(_ *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+      if spec.positional && len(args) > 0 && !strings.HasPrefix(kinds[spec.field], "list:") { return nil, cobra.ShellCompDirectiveNoFileComp }
+      directive := cobra.ShellCompDirectiveNoFileComp
+      if spec.files { directive = cobra.ShellCompDirectiveDefault }
+      if spec.directories { directive = cobra.ShellCompDirectiveFilterDirs }
+      if spec.keepOrder { directive |= cobra.ShellCompDirectiveKeepOrder }
+      choices := []string{}
+      seen := map[string]bool{}
+      if !spec.hidden && spec.deprecated == "" {
+        for _, choice := range spec.choices {
+          if !strings.HasPrefix(choice.value, prefix) || seen[choice.value] { continue }
+          seen[choice.value] = true
+          value := choice.value
+          if choice.description != "" { value += "\t" + choice.description }
+          choices = append(choices, value)
+        }
+      }
+      return choices, directive
+    }
+    if spec.positional { cmd.ValidArgsFunction = complete; continue }
+    if long == "" { continue }
+    if err := cmd.RegisterFlagCompletionFunc(long, complete); err != nil { return Error{errors: []DecodeError{{path: spec.field, message: err.Error()}}} }
+
+    if spec.hidden { if err := cmd.Flags().MarkHidden(long); err != nil { return Error{errors: []DecodeError{{path: spec.field, message: err.Error()}}} } }
+    if spec.deprecated != "" { if err := cmd.Flags().MarkDeprecated(long, spec.deprecated); err != nil { return Error{errors: []DecodeError{{path: spec.field, message: err.Error()}}} } }
+  }
+  return adapter{native: nativeCommand{handle: cmd, owner: s.Own(func() {})}, result: func() any { return result }}
+}
+
+fn evaluate(prepared: adapter, args: List[String], completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok) uses io: parsedInput | Error | Help unsafe go {
+  import "bytes"
+  import "strings"
+  import "github.com/spf13/cobra"
+  cmd := prepared.native.handle.(*cobra.Command)
+  var output, diagnostics bytes.Buffer
+  if failure, bad := configure(prepared.native, args, completion).(Error); bad { return failure }
+  cmd.SetArgs(append([]string{}, args...))
+  cmd.SetOut(&output)
+  cmd.SetErr(&diagnostics)
+  cmd.Flags().SetOutput(&diagnostics)
+  cmd.SilenceUsage = true
+  cmd.SilenceErrors = true
+  warningLines := func() []string {
+    lines := []string{}
+    for _, line := range strings.Split(strings.TrimSpace(diagnostics.String()), "\n") { if line != "" { lines = append(lines, line) } }
+    return lines
+  }
+  if err := cmd.Execute(); err != nil {
+    failures := []DecodeError{{path: cmd.CommandPath(), message: err.Error()}}
+    for _, warning := range warningLines() { failures = append(failures, DecodeError{path: cmd.CommandPath(), message: warning}) }
+    return Error{errors: failures}
+  }
+  result := prepared.result()
+  if _, waiting := result.(pending); waiting { return Help{text: output.String(), diagnostics: diagnostics.String()} }
+  warnings := warningLines()
+  if failure, ok := result.(Error); ok {
+    for _, warning := range warnings { failure.errors = append(failure.errors, DecodeError{path: cmd.CommandPath(), message: warning}) }
+    return failure
+  }
+  return parsedInput{value: result.(Json), warnings: warnings, path: cmd.CommandPath()}
+}
+fn withWarnings(error: Error, warnings: List[String], path: String): Error {
+  error.copy(errors: error.errors.concat(warnings.map(warning => DecodeError { path: path, message: warning })))
+}
+
+// Let Cobra recognize disabled protocol requests before it installs its endpoint.
+fn configureCompletion(native: nativeCommand, args: List[String], enabled: Bool): Error | Ok unsafe go {
+  import "fmt"
+  import "github.com/spf13/cobra"
+  cmd := native.handle.(*cobra.Command)
+  cmd.CompletionOptions.DisableDefaultCmd = !enabled
+  if enabled { return _Ok{} }
+  sentinel := &cobra.Command{Use: "__complete", Aliases: []string{"__completeNoDesc"}, Hidden: true}
+  cmd.AddCommand(sentinel)
+  selected, _, err := cmd.Find(args)
+  cmd.RemoveCommand(sentinel)
+  if err != nil { return Error{errors: []DecodeError{{path: cmd.CommandPath(), message: err.Error()}}} }
+  if selected == sentinel { return Error{errors: []DecodeError{{path: cmd.CommandPath(), message: fmt.Sprintf("unknown command %q", selected.CalledAs())}}} }
+  return _Ok{}
+}
