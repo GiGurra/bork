@@ -16,6 +16,8 @@ func TestStandaloneDeriveChecks(t *testing.T) {
 		{"duplicate alias", "type T={}\ntype Alias=T\nderive Decode for T\nderive Decode for Alias\nfn main(){}", "already derived"},
 		{"duplicate standalone", "type T={}\nderive Encode for T\nderive Encode for T\nfn main(){}", "already declared"},
 		{"unsupported type", "derive Decode for Int\nfn main(){}", "only records and sealed types"},
+		{"structural tuple", "type Pair=(Int,String)\nderive Decode for Pair\nfn main(){}", "standalone derive requires a named record or sealed target"},
+		{"inline tuple codecs", "type Pair=(Int,String) derive(Decode,Encode)\nfn main(){}", ""},
 		{"missing class", "type T={}\nderive Unknown for T\nfn main(){}", "unknown class Unknown"},
 		{"unknown target", "derive Decode for Missing\nfn main(){}", "unknown type Missing"},
 		{"free type parameter", "type T[A]={a:A}\nderive Decode for T[A]\nfn main(){}", "unknown type A"},
