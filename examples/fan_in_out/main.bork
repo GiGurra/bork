@@ -26,7 +26,8 @@ fn main() {
   scope s {
     orders = produce[Order](s, 0, out => jobs(s, out))
     // Three workers share the orders: fan out.
-    workers = range(0, 3).map(i => produce[Packed](s, 0, out => pack(s, orders, out)))
+    worker = () => produce[Packed](s, 0, out => pack(s, orders, out))
+    workers = [worker(), worker(), worker()]
     // One channel for all their results: fan in.
     packed = merge(s, workers).toList(s)
     match (packed) {
