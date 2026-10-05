@@ -1,0 +1,10 @@
+ok    Int8 bit operations preserve width
+ok    Int16 bit operations preserve width
+ok    Int32 bit operations preserve width
+ok    Int bit operations preserve width
+ok    Byte bit operations preserve width
+ok    Uint16 bit operations preserve width
+ok    Uint32 bit operations preserve width
+ok    Uint64 bit operations preserve width
+8 passed, 0 failed
+exit code 0

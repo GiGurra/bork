@@ -7,6 +7,7 @@
 *Bork bork bork!* The name comes from the [Swedish Chef](https://en.wikipedia.org/wiki/Swedish_Chef). Strict recipes, cheerfully enforced.
 
 Fixed-width integers support bitwise `&`, `|`, `^`, Go-style complement `^x`, and shifts with checked nonnegative counts; see [numbers](docs/language/basics.md).
+[bork/bits](docs/std/bits.md) adds integer bit counts, rotations, reversal, and checked bit fields.
 
 ## Install
 

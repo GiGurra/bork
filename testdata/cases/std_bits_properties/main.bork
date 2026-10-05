@@ -1,0 +1,201 @@
+import "bork/bits"
+
+test "Int8 bit operations preserve width" (value: Int8, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(8), value)
+  assert(value.Extract(0, 8) == value)
+  assert(value.Insert(0, 8, value) == value)
+  assert(value.Insert(8, 0, 0) == value)
+  assert(value.Extract(8, 0) == toInt8(0))
+  match (value.Extract(0, 4)) {
+    field: Int8 => match (value.Insert(4, 4, field)) {
+      inserted: Int8 => {
+        assert(inserted.Extract(4, 4) == field)
+        assertEqual(inserted.Extract(0, 4), value.Extract(0, 4))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(7)
+  clear = value.ClearBit(7)
+  match (set) { n: Int8 => assert(n.TestBit(7) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int8 => assert(n.TestBit(7) == false), _: OutOfRange => assert(false) }
+}
+
+test "Int16 bit operations preserve width" (value: Int16, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(16), value)
+  assert(value.Extract(0, 16) == value)
+  assert(value.Insert(0, 16, value) == value)
+  assert(value.Insert(16, 0, 0) == value)
+  assert(value.Extract(16, 0) == toInt16(0))
+  match (value.Extract(0, 8)) {
+    field: Int16 => match (value.Insert(8, 8, field)) {
+      inserted: Int16 => {
+        assert(inserted.Extract(8, 8) == field)
+        assertEqual(inserted.Extract(0, 8), value.Extract(0, 8))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(15)
+  clear = value.ClearBit(15)
+  match (set) { n: Int16 => assert(n.TestBit(15) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int16 => assert(n.TestBit(15) == false), _: OutOfRange => assert(false) }
+}
+
+test "Int32 bit operations preserve width" (value: Int32, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(32), value)
+  assert(value.Extract(0, 32) == value)
+  assert(value.Insert(0, 32, value) == value)
+  assert(value.Insert(32, 0, 0) == value)
+  assert(value.Extract(32, 0) == toInt32(0))
+  match (value.Extract(0, 16)) {
+    field: Int32 => match (value.Insert(16, 16, field)) {
+      inserted: Int32 => {
+        assert(inserted.Extract(16, 16) == field)
+        assertEqual(inserted.Extract(0, 16), value.Extract(0, 16))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(31)
+  clear = value.ClearBit(31)
+  match (set) { n: Int32 => assert(n.TestBit(31) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int32 => assert(n.TestBit(31) == false), _: OutOfRange => assert(false) }
+}
+
+test "Int bit operations preserve width" (value: Int, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(64), value)
+  assert(value.Extract(0, 64) == value)
+  assert(value.Insert(0, 64, value) == value)
+  assert(value.Insert(64, 0, 0) == value)
+  assert(value.Extract(64, 0) == toInt(0))
+  match (value.Extract(0, 32)) {
+    field: Int => match (value.Insert(32, 32, field)) {
+      inserted: Int => {
+        assert(inserted.Extract(32, 32) == field)
+        assertEqual(inserted.Extract(0, 32), value.Extract(0, 32))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(63)
+  clear = value.ClearBit(63)
+  match (set) { n: Int => assert(n.TestBit(63) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int => assert(n.TestBit(63) == false), _: OutOfRange => assert(false) }
+}
+
+test "Byte bit operations preserve width" (value: Byte, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(8), value)
+  assert(value.Extract(0, 8) == value)
+  assert(value.Insert(0, 8, value) == value)
+  assert(value.Insert(8, 0, 0) == value)
+  assert(value.Extract(8, 0) == toByte(0))
+  match (value.Extract(0, 4)) {
+    field: Byte => match (value.Insert(4, 4, field)) {
+      inserted: Byte => {
+        assert(inserted.Extract(4, 4) == field)
+        assertEqual(inserted.Extract(0, 4), value.Extract(0, 4))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(7)
+  clear = value.ClearBit(7)
+  match (set) { n: Byte => assert(n.TestBit(7) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Byte => assert(n.TestBit(7) == false), _: OutOfRange => assert(false) }
+}
+
+test "Uint16 bit operations preserve width" (value: Uint16, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(16), value)
+  assert(value.Extract(0, 16) == value)
+  assert(value.Insert(0, 16, value) == value)
+  assert(value.Insert(16, 0, 0) == value)
+  assert(value.Extract(16, 0) == toUint16(0))
+  match (value.Extract(0, 8)) {
+    field: Uint16 => match (value.Insert(8, 8, field)) {
+      inserted: Uint16 => {
+        assert(inserted.Extract(8, 8) == field)
+        assertEqual(inserted.Extract(0, 8), value.Extract(0, 8))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(15)
+  clear = value.ClearBit(15)
+  match (set) { n: Uint16 => assert(n.TestBit(15) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Uint16 => assert(n.TestBit(15) == false), _: OutOfRange => assert(false) }
+}
+
+test "Uint32 bit operations preserve width" (value: Uint32, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(32), value)
+  assert(value.Extract(0, 32) == value)
+  assert(value.Insert(0, 32, value) == value)
+  assert(value.Insert(32, 0, 0) == value)
+  assert(value.Extract(32, 0) == toUint32(0))
+  match (value.Extract(0, 16)) {
+    field: Uint32 => match (value.Insert(16, 16, field)) {
+      inserted: Uint32 => {
+        assert(inserted.Extract(16, 16) == field)
+        assertEqual(inserted.Extract(0, 16), value.Extract(0, 16))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(31)
+  clear = value.ClearBit(31)
+  match (set) { n: Uint32 => assert(n.TestBit(31) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Uint32 => assert(n.TestBit(31) == false), _: OutOfRange => assert(false) }
+}
+
+test "Uint64 bit operations preserve width" (value: Uint64, count: Int) {
+  assertEqual(value.Reverse().Reverse(), value)
+  assertEqual(value.ReverseBytes().ReverseBytes(), value)
+  assertEqual(value.RotateLeft(count).RotateLeft(-count), value)
+  assertEqual(value.RotateLeft(64), value)
+  assert(value.Extract(0, 64) == value)
+  assert(value.Insert(0, 64, value) == value)
+  assert(value.Insert(64, 0, 0) == value)
+  assert(value.Extract(64, 0) == toUint64(0))
+  match (value.Extract(0, 32)) {
+    field: Uint64 => match (value.Insert(32, 32, field)) {
+      inserted: Uint64 => {
+        assert(inserted.Extract(32, 32) == field)
+        assertEqual(inserted.Extract(0, 32), value.Extract(0, 32))
+      }
+      _: OutOfRange => assert(false)
+    }
+    _: OutOfRange => assert(false)
+  }
+  set = value.SetBit(63)
+  clear = value.ClearBit(63)
+  match (set) { n: Uint64 => assert(n.TestBit(63) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Uint64 => assert(n.TestBit(63) == false), _: OutOfRange => assert(false) }
+}

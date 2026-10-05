@@ -1,0 +1,613 @@
+// Package bits provides width-aware operations on integer bit patterns.
+// Import bork/bits to make these methods available. Signed values use their
+// fixed-width two's-complement representation; bit zero is the least significant.
+
+pred Count8(value: Int) { value >= 0 && value <= 8 }
+
+pred Count16(value: Int) { value >= 0 && value <= 16 }
+
+pred Count32(value: Int) { value >= 0 && value <= 32 }
+
+pred Count64(value: Int) { value >= 0 && value <= 64 }
+
+// Int8 operations use 8 bits.
+
+fn (value: Int8) OnesCount(): Int where Count8 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount8(uint8(value)))
+}
+
+fn (value: Int8) LeadingZeros(): Int where Count8 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros8(uint8(value)))
+}
+
+fn (value: Int8) TrailingZeros(): Int where Count8 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros8(uint8(value)))
+}
+
+fn (value: Int8) RotateLeft(count: Int): Int8 unsafe go {
+  import gobits "math/bits"
+  return int8(gobits.RotateLeft8(uint8(value), int(count % 8)))
+}
+
+fn (value: Int8) Reverse(): Int8 unsafe go {
+  import gobits "math/bits"
+  return int8(gobits.Reverse8(uint8(value)))
+}
+
+fn (value: Int8) ReverseBytes(): Int8 { value }
+
+fn (value: Int8) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 8 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,8)"}
+  }
+  return uint8(value) & (uint8(1) << uint(index)) != 0
+}
+
+fn (value: Int8) SetBit(index: Int): Int8 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 8 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,8)"}
+  }
+  return int8(uint8(value) | (uint8(1) << uint(index)))
+}
+
+fn (value: Int8) ClearBit(index: Int): Int8 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 8 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,8)"}
+  }
+  return int8(uint8(value) &^ (uint8(1) << uint(index)))
+}
+
+fn (value: Int8) Extract(offset: Int, width: Int): Int8 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 8 || width > 8 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int8 bit field"}
+  }
+  mask := (uint8(1) << uint(width)) - 1
+  return int8((uint8(value) >> uint(offset)) & mask)
+}
+fn (value: Int8) Insert(offset: Int, width: Int, field: Int8): Int8 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 8 || width > 8 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int8 bit field"}
+  }
+  mask := (uint8(1) << uint(width)) - 1
+  if uint8(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return int8((uint8(value) &^ (mask << uint(offset))) | (uint8(field) << uint(offset)))
+}
+
+// Int16 operations use 16 bits.
+
+fn (value: Int16) OnesCount(): Int where Count16 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount16(uint16(value)))
+}
+
+fn (value: Int16) LeadingZeros(): Int where Count16 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros16(uint16(value)))
+}
+
+fn (value: Int16) TrailingZeros(): Int where Count16 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros16(uint16(value)))
+}
+
+fn (value: Int16) RotateLeft(count: Int): Int16 unsafe go {
+  import gobits "math/bits"
+  return int16(gobits.RotateLeft16(uint16(value), int(count % 16)))
+}
+
+fn (value: Int16) Reverse(): Int16 unsafe go {
+  import gobits "math/bits"
+  return int16(gobits.Reverse16(uint16(value)))
+}
+
+fn (value: Int16) ReverseBytes(): Int16 unsafe go {
+  import gobits "math/bits"
+  return int16(gobits.ReverseBytes16(uint16(value)))
+}
+
+fn (value: Int16) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 16 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,16)"}
+  }
+  return uint16(value) & (uint16(1) << uint(index)) != 0
+}
+
+fn (value: Int16) SetBit(index: Int): Int16 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 16 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,16)"}
+  }
+  return int16(uint16(value) | (uint16(1) << uint(index)))
+}
+
+fn (value: Int16) ClearBit(index: Int): Int16 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 16 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,16)"}
+  }
+  return int16(uint16(value) &^ (uint16(1) << uint(index)))
+}
+
+fn (value: Int16) Extract(offset: Int, width: Int): Int16 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 16 || width > 16 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int16 bit field"}
+  }
+  mask := (uint16(1) << uint(width)) - 1
+  return int16((uint16(value) >> uint(offset)) & mask)
+}
+fn (value: Int16) Insert(offset: Int, width: Int, field: Int16): Int16 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 16 || width > 16 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int16 bit field"}
+  }
+  mask := (uint16(1) << uint(width)) - 1
+  if uint16(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return int16((uint16(value) &^ (mask << uint(offset))) | (uint16(field) << uint(offset)))
+}
+
+// Int32 operations use 32 bits.
+
+fn (value: Int32) OnesCount(): Int where Count32 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount32(uint32(value)))
+}
+
+fn (value: Int32) LeadingZeros(): Int where Count32 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros32(uint32(value)))
+}
+
+fn (value: Int32) TrailingZeros(): Int where Count32 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros32(uint32(value)))
+}
+
+fn (value: Int32) RotateLeft(count: Int): Int32 unsafe go {
+  import gobits "math/bits"
+  return int32(gobits.RotateLeft32(uint32(value), int(count % 32)))
+}
+
+fn (value: Int32) Reverse(): Int32 unsafe go {
+  import gobits "math/bits"
+  return int32(gobits.Reverse32(uint32(value)))
+}
+
+fn (value: Int32) ReverseBytes(): Int32 unsafe go {
+  import gobits "math/bits"
+  return int32(gobits.ReverseBytes32(uint32(value)))
+}
+
+fn (value: Int32) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 32 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,32)"}
+  }
+  return uint32(value) & (uint32(1) << uint(index)) != 0
+}
+
+fn (value: Int32) SetBit(index: Int): Int32 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 32 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,32)"}
+  }
+  return int32(uint32(value) | (uint32(1) << uint(index)))
+}
+
+fn (value: Int32) ClearBit(index: Int): Int32 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 32 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,32)"}
+  }
+  return int32(uint32(value) &^ (uint32(1) << uint(index)))
+}
+
+fn (value: Int32) Extract(offset: Int, width: Int): Int32 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 32 || width > 32 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int32 bit field"}
+  }
+  mask := (uint32(1) << uint(width)) - 1
+  return int32((uint32(value) >> uint(offset)) & mask)
+}
+fn (value: Int32) Insert(offset: Int, width: Int, field: Int32): Int32 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 32 || width > 32 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int32 bit field"}
+  }
+  mask := (uint32(1) << uint(width)) - 1
+  if uint32(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return int32((uint32(value) &^ (mask << uint(offset))) | (uint32(field) << uint(offset)))
+}
+
+// Int operations use 64 bits.
+
+fn (value: Int) OnesCount(): Int where Count64 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount64(uint64(value)))
+}
+
+fn (value: Int) LeadingZeros(): Int where Count64 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros64(uint64(value)))
+}
+
+fn (value: Int) TrailingZeros(): Int where Count64 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros64(uint64(value)))
+}
+
+fn (value: Int) RotateLeft(count: Int): Int unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.RotateLeft64(uint64(value), int(count % 64)))
+}
+
+fn (value: Int) Reverse(): Int unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.Reverse64(uint64(value)))
+}
+
+fn (value: Int) ReverseBytes(): Int unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.ReverseBytes64(uint64(value)))
+}
+
+fn (value: Int) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 64 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,64)"}
+  }
+  return uint64(value) & (uint64(1) << uint(index)) != 0
+}
+
+fn (value: Int) SetBit(index: Int): Int | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 64 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,64)"}
+  }
+  return int64(uint64(value) | (uint64(1) << uint(index)))
+}
+
+fn (value: Int) ClearBit(index: Int): Int | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 64 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,64)"}
+  }
+  return int64(uint64(value) &^ (uint64(1) << uint(index)))
+}
+
+fn (value: Int) Extract(offset: Int, width: Int): Int | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 64 || width > 64 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int bit field"}
+  }
+  mask := (uint64(1) << uint(width)) - 1
+  return int64((uint64(value) >> uint(offset)) & mask)
+}
+fn (value: Int) Insert(offset: Int, width: Int, field: Int): Int | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 64 || width > 64 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Int bit field"}
+  }
+  mask := (uint64(1) << uint(width)) - 1
+  if uint64(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return int64((uint64(value) &^ (mask << uint(offset))) | (uint64(field) << uint(offset)))
+}
+
+// Byte operations use 8 bits.
+
+fn (value: Byte) OnesCount(): Int where Count8 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount8(uint8(value)))
+}
+
+fn (value: Byte) LeadingZeros(): Int where Count8 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros8(uint8(value)))
+}
+
+fn (value: Byte) TrailingZeros(): Int where Count8 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros8(uint8(value)))
+}
+
+fn (value: Byte) RotateLeft(count: Int): Byte unsafe go {
+  import gobits "math/bits"
+  return uint8(gobits.RotateLeft8(uint8(value), int(count % 8)))
+}
+
+fn (value: Byte) Reverse(): Byte unsafe go {
+  import gobits "math/bits"
+  return uint8(gobits.Reverse8(uint8(value)))
+}
+
+fn (value: Byte) ReverseBytes(): Byte { value }
+
+fn (value: Byte) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 8 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,8)"}
+  }
+  return uint8(value) & (uint8(1) << uint(index)) != 0
+}
+
+fn (value: Byte) SetBit(index: Int): Byte | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 8 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,8)"}
+  }
+  return uint8(uint8(value) | (uint8(1) << uint(index)))
+}
+
+fn (value: Byte) ClearBit(index: Int): Byte | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 8 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,8)"}
+  }
+  return uint8(uint8(value) &^ (uint8(1) << uint(index)))
+}
+
+fn (value: Byte) Extract(offset: Int, width: Int): Byte | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 8 || width > 8 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Byte bit field"}
+  }
+  mask := (uint8(1) << uint(width)) - 1
+  return uint8((uint8(value) >> uint(offset)) & mask)
+}
+fn (value: Byte) Insert(offset: Int, width: Int, field: Byte): Byte | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 8 || width > 8 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Byte bit field"}
+  }
+  mask := (uint8(1) << uint(width)) - 1
+  if uint8(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return uint8((uint8(value) &^ (mask << uint(offset))) | (uint8(field) << uint(offset)))
+}
+
+// Uint16 operations use 16 bits.
+
+fn (value: Uint16) OnesCount(): Int where Count16 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount16(uint16(value)))
+}
+
+fn (value: Uint16) LeadingZeros(): Int where Count16 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros16(uint16(value)))
+}
+
+fn (value: Uint16) TrailingZeros(): Int where Count16 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros16(uint16(value)))
+}
+
+fn (value: Uint16) RotateLeft(count: Int): Uint16 unsafe go {
+  import gobits "math/bits"
+  return uint16(gobits.RotateLeft16(uint16(value), int(count % 16)))
+}
+
+fn (value: Uint16) Reverse(): Uint16 unsafe go {
+  import gobits "math/bits"
+  return uint16(gobits.Reverse16(uint16(value)))
+}
+
+fn (value: Uint16) ReverseBytes(): Uint16 unsafe go {
+  import gobits "math/bits"
+  return uint16(gobits.ReverseBytes16(uint16(value)))
+}
+
+fn (value: Uint16) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 16 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,16)"}
+  }
+  return uint16(value) & (uint16(1) << uint(index)) != 0
+}
+
+fn (value: Uint16) SetBit(index: Int): Uint16 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 16 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,16)"}
+  }
+  return uint16(uint16(value) | (uint16(1) << uint(index)))
+}
+
+fn (value: Uint16) ClearBit(index: Int): Uint16 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 16 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,16)"}
+  }
+  return uint16(uint16(value) &^ (uint16(1) << uint(index)))
+}
+
+fn (value: Uint16) Extract(offset: Int, width: Int): Uint16 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 16 || width > 16 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Uint16 bit field"}
+  }
+  mask := (uint16(1) << uint(width)) - 1
+  return uint16((uint16(value) >> uint(offset)) & mask)
+}
+fn (value: Uint16) Insert(offset: Int, width: Int, field: Uint16): Uint16 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 16 || width > 16 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Uint16 bit field"}
+  }
+  mask := (uint16(1) << uint(width)) - 1
+  if uint16(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return uint16((uint16(value) &^ (mask << uint(offset))) | (uint16(field) << uint(offset)))
+}
+
+// Uint32 operations use 32 bits.
+
+fn (value: Uint32) OnesCount(): Int where Count32 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount32(uint32(value)))
+}
+
+fn (value: Uint32) LeadingZeros(): Int where Count32 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros32(uint32(value)))
+}
+
+fn (value: Uint32) TrailingZeros(): Int where Count32 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros32(uint32(value)))
+}
+
+fn (value: Uint32) RotateLeft(count: Int): Uint32 unsafe go {
+  import gobits "math/bits"
+  return uint32(gobits.RotateLeft32(uint32(value), int(count % 32)))
+}
+
+fn (value: Uint32) Reverse(): Uint32 unsafe go {
+  import gobits "math/bits"
+  return uint32(gobits.Reverse32(uint32(value)))
+}
+
+fn (value: Uint32) ReverseBytes(): Uint32 unsafe go {
+  import gobits "math/bits"
+  return uint32(gobits.ReverseBytes32(uint32(value)))
+}
+
+fn (value: Uint32) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 32 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,32)"}
+  }
+  return uint32(value) & (uint32(1) << uint(index)) != 0
+}
+
+fn (value: Uint32) SetBit(index: Int): Uint32 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 32 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,32)"}
+  }
+  return uint32(uint32(value) | (uint32(1) << uint(index)))
+}
+
+fn (value: Uint32) ClearBit(index: Int): Uint32 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 32 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,32)"}
+  }
+  return uint32(uint32(value) &^ (uint32(1) << uint(index)))
+}
+
+fn (value: Uint32) Extract(offset: Int, width: Int): Uint32 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 32 || width > 32 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Uint32 bit field"}
+  }
+  mask := (uint32(1) << uint(width)) - 1
+  return uint32((uint32(value) >> uint(offset)) & mask)
+}
+fn (value: Uint32) Insert(offset: Int, width: Int, field: Uint32): Uint32 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 32 || width > 32 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Uint32 bit field"}
+  }
+  mask := (uint32(1) << uint(width)) - 1
+  if uint32(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return uint32((uint32(value) &^ (mask << uint(offset))) | (uint32(field) << uint(offset)))
+}
+
+// Uint64 operations use 64 bits.
+
+fn (value: Uint64) OnesCount(): Int where Count64 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.OnesCount64(uint64(value)))
+}
+
+fn (value: Uint64) LeadingZeros(): Int where Count64 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.LeadingZeros64(uint64(value)))
+}
+
+fn (value: Uint64) TrailingZeros(): Int where Count64 unsafe go {
+  import gobits "math/bits"
+  return int64(gobits.TrailingZeros64(uint64(value)))
+}
+
+fn (value: Uint64) RotateLeft(count: Int): Uint64 unsafe go {
+  import gobits "math/bits"
+  return uint64(gobits.RotateLeft64(uint64(value), int(count % 64)))
+}
+
+fn (value: Uint64) Reverse(): Uint64 unsafe go {
+  import gobits "math/bits"
+  return uint64(gobits.Reverse64(uint64(value)))
+}
+
+fn (value: Uint64) ReverseBytes(): Uint64 unsafe go {
+  import gobits "math/bits"
+  return uint64(gobits.ReverseBytes64(uint64(value)))
+}
+
+fn (value: Uint64) TestBit(index: Int): Bool | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 64 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,64)"}
+  }
+  return uint64(value) & (uint64(1) << uint(index)) != 0
+}
+
+fn (value: Uint64) SetBit(index: Int): Uint64 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 64 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,64)"}
+  }
+  return uint64(uint64(value) | (uint64(1) << uint(index)))
+}
+
+fn (value: Uint64) ClearBit(index: Int): Uint64 | OutOfRange unsafe go {
+  import "strconv"
+  if index < 0 || index >= 64 {
+    return OutOfRange{value: strconv.FormatInt(index, 10), target: "bit index [0,64)"}
+  }
+  return uint64(uint64(value) &^ (uint64(1) << uint(index)))
+}
+
+fn (value: Uint64) Extract(offset: Int, width: Int): Uint64 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 64 || width > 64 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Uint64 bit field"}
+  }
+  mask := (uint64(1) << uint(width)) - 1
+  return uint64((uint64(value) >> uint(offset)) & mask)
+}
+fn (value: Uint64) Insert(offset: Int, width: Int, field: Uint64): Uint64 | OutOfRange unsafe go {
+  import "fmt"
+  if offset < 0 || width < 0 || offset > 64 || width > 64 - offset {
+    return OutOfRange{value: fmt.Sprintf("%d:%d", offset, width), target: "Uint64 bit field"}
+  }
+  mask := (uint64(1) << uint(width)) - 1
+  if uint64(field) &^ mask != 0 {
+    return OutOfRange{value: fmt.Sprint(field), target: fmt.Sprintf("%d-bit field", width)}
+  }
+  return uint64((uint64(value) &^ (mask << uint(offset))) | (uint64(field) << uint(offset)))
+}

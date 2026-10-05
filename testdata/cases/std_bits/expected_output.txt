@@ -1,0 +1,20 @@
+4 0 4
+195 60 15 240
+true 241 112
+15 245
+0 240 255
+OutOfRange { value: "-1", target: "bit index [0,8)" } OutOfRange { value: "8", target: "bit index [0,8)" } OutOfRange { value: "9223372036854775807", target: "bit index [0,8)" }
+OutOfRange { value: "7:2", target: "Byte bit field" } OutOfRange { value: "-1:1", target: "Byte bit field" } OutOfRange { value: "0:-1", target: "Byte bit field" }
+OutOfRange { value: "16", target: "4-bit field" } OutOfRange { value: "1", target: "0-bit field" } OutOfRange { value: "9223372036854775807:1", target: "Byte bit field" }
+5 3 2 13330 13330 11336
+13 3 3 2018915346 878082066 510274632
+64 0 0 18446744073709551615 18446744073709551615 18446744073709551615
+1 0 7 -128 1 1
+15 0 1 -257 -3 32767
+31 0 1 -16777217 -3 2147483647
+63 0 1 -72057594037927937 -3 9223372036854775807
+1 -128 -1 OutOfRange { value: "-1", target: "7-bit field" }
+18446744073709551615 0 9223372036854775807 18446744073709551615 true
+8 16 32 64
+64 64 0
+120 240
