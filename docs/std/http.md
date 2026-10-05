@@ -20,7 +20,8 @@ them on localhost. Each listener serves only its own routes.
 
 `http.WaitAny(servers)` waits until any listener stops or its scope is cancelled.
 It returns `Ok` on cancellation, or `IoError { path: address, message: ... }`
-when a listener stops unexpectedly. Return from the application scope after
+when a listener stops unexpectedly. A completed Serve failure remains an error
+even if its scope is cancelled later. Return from the application scope after
 waiting to shut down and drain the remaining listeners.
 
 `http.WaitAll(servers)` waits until every listener stops or its scope is
