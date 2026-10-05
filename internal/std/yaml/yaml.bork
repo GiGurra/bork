@@ -1,0 +1,426 @@
+// Package yaml reads and writes YAML as bork/codec values, so the
+// Field/Index/At queries and the codec Decode and Encode classes work on
+// YAML as they do on JSON.
+import codec "bork/codec"
+import "bork/json"
+
+// Error says where YAML text was rejected. Line and column are one-based,
+// or 0 when no position applies; path is the file, or "" for text.
+type Error = { path: String, line: Int, column: Int, message: String }
+
+pred ValidIndent(spaces: Int) { spaces >= 2 && spaces <= 9 }
+type Indent = Int where ValidIndent
+
+// Parse reads one YAML document. Text with no document gives Null; a second
+// document is an error (use ParseAll).
+fn Parse(text: String): codec.Value | Error { first(load(text, "", true)?) }
+
+// ParseAll reads every document of a stream, in order.
+fn ParseAll(text: String): List[codec.Value] | Error { load(text, "", false) }
+
+fn first(documents: List[codec.Value]): codec.Value {
+  match (documents) {
+    [] => codec.Value.Null
+    [document, ...] => document
+  }
+}
+
+// ReadFile and ReadAllFile read a whole file as Parse and ParseAll do;
+// Error then carries the path.
+fn ReadFile(path: String) uses io: codec.Value | Error | IoError {
+  text = readText(path)?
+  first(load(text, path, true)?)
+}
+fn ReadAllFile(path: String) uses io: List[codec.Value] | Error | IoError {
+  text = readText(path)?
+  load(text, path, false)
+}
+fn readText(path: String) uses io: String | IoError unsafe go {
+  import "os"
+  data, err := os.ReadFile(path)
+  if err != nil { _, message := _borkIoFailure(err); return IoError{path: path, message: message} }
+  return string(data)
+}
+
+// Render writes one block-style document. Objects keep their field order and
+// numbers their exact text. Invalid or non-finite manually constructed number
+// text and repeated field names give Error, located in its message.
+fn Render(value: codec.Value, spaces: Indent = 2): String | Error { dump([value], spaces) }
+
+// RenderAll writes each value as a document, separated by "---" lines.
+fn RenderAll(values: List[codec.Value], spaces: Indent = 2): String | Error { dump(values, spaces) }
+
+// WriteFile replaces the file with one rendered document.
+fn WriteFile(path: String, value: codec.Value, spaces: Indent = 2) uses io: Ok | Error | IoError {
+  match (Render(value, spaces)) {
+    text: String => writeText(path, text)
+    error: Error => Error { path: path, line: 0, column: 0, message: error.message }
+  }
+}
+fn writeText(path: String, text: String) uses io: Ok | IoError unsafe go {
+  import "os"
+  if err := os.WriteFile(path, []byte(text), 0666); err != nil {
+    _, message := _borkIoFailure(err)
+    return IoError{path: path, message: message}
+  }
+  return _borkOk()
+}
+
+// Field, Index and At query a parsed document; see bork/json.
+fn Field(value: codec.Value, name: String): Option[codec.Value] { json.Field(value, name) }
+fn Index(value: codec.Value, index: Int): Option[codec.Value] { json.Index(value, index) }
+fn At(value: codec.Value, path: List[String | Int]): Option[codec.Value] { json.At(value, path) }
+
+// load parses with go.yaml.in/yaml/v4 and converts each document to codec.Value.
+// Only the core schema is accepted: null, bool, int, float, str, seq, map,
+// timestamps (kept as their text) and merge keys. Other tags, duplicate keys,
+// collection keys, non-finite floats and recursive aliases are errors.
+// Aliases expand by copying, bounded so that expansion adds at most 10,000
+// values or ten times the document's own node count, whichever is larger.
+fn load(text: String, path: String, single: Bool): List[codec.Value] | Error unsafe go {
+  import "errors"
+  import "fmt"
+  import "io"
+  import "math"
+  import "math/big"
+  import "regexp"
+  import "strconv"
+  import "strings"
+  import "go.yaml.in/yaml/v4"
+  type stop struct{ err Error }
+  at := func(n *yaml.Node, format string, args ...any) stop {
+    return stop{Error{path: path, line: int64(n.Line), column: int64(n.Column), message: fmt.Sprintf(format, args...)}}
+  }
+  jsonNumber := regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$`)
+  var expanded, budget int
+  var origin *yaml.Node // the outermost alias being expanded
+  active := map[*yaml.Node]bool{}
+  var count func(n *yaml.Node) int
+  count = func(n *yaml.Node) int {
+    total := 1
+    for _, child := range n.Content {
+      total += count(child)
+    }
+    return total
+  }
+  yamlFloat := regexp.MustCompile(`^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$`)
+  // separators accepts underscores only between digits, then drops them.
+  separators := func(n *yaml.Node) string {
+    text := strings.TrimLeft(n.Value, "+-")
+    if strings.HasPrefix(text, "_") || strings.HasSuffix(text, "_") || strings.Contains(text, "__") {
+      panic(at(n, "invalid %s value %q", n.ShortTag(), n.Value))
+    }
+    return strings.ReplaceAll(n.Value, "_", "")
+  }
+  scalar := func(n *yaml.Node) codec.Value {
+    switch tag := n.ShortTag(); tag {
+    case "!!null":
+      return codec.Value_Null{}
+    case "!!bool":
+      value, err := strconv.ParseBool(strings.ToLower(n.Value))
+      if err != nil {
+        panic(at(n, "invalid !!bool value %q", n.Value))
+      }
+      return codec.Value_Bool{value: value}
+    case "!!int":
+      digits, negative := separators(n), false
+      if strings.HasPrefix(digits, "-") || strings.HasPrefix(digits, "+") {
+        digits, negative = digits[1:], digits[0] == '-'
+      }
+      base := 10
+      if len(digits) > 2 && digits[0] == '0' {
+        switch digits[1] {
+        case 'x', 'X':
+          base = 16
+        case 'o', 'O':
+          base = 8
+        case 'b', 'B':
+          base = 2
+        }
+        if base != 10 {
+          digits = digits[2:]
+        }
+      }
+      var number big.Int
+      if _, ok := number.SetString(digits, base); !ok || strings.HasPrefix(digits, "-") || strings.HasPrefix(digits, "+") {
+        panic(at(n, "invalid !!int value %q", n.Value))
+      }
+      if negative {
+        number.Neg(&number)
+      }
+      return codec.Value_Number{text: number.String()}
+    case "!!float":
+      text := separators(n)
+      switch strings.ToLower(strings.TrimLeft(text, "+-")) {
+      case ".inf", ".nan":
+        text = strings.Replace(text, ".", "", 1) // spelled the way Go parses
+      default:
+        if !yamlFloat.MatchString(text) {
+          panic(at(n, "invalid !!float value %q", n.Value))
+        }
+      }
+      value, err := strconv.ParseFloat(text, 64)
+      if err != nil && !errors.Is(err, strconv.ErrRange) {
+        panic(at(n, "invalid !!float value %q", n.Value))
+      }
+      if math.IsInf(value, 0) || math.IsNaN(value) {
+        panic(at(n, "%s is not a finite number, which codec numbers cannot hold", n.Value))
+      }
+      if jsonNumber.MatchString(n.Value) {
+        return codec.Value_Number{text: n.Value}
+      }
+      return codec.Value_Number{text: strconv.FormatFloat(value, 'g', -1, 64)}
+    case "!!str", "!!timestamp":
+      return codec.Value_String{value: n.Value}
+    case "!!merge":
+      // "<<" is a merge only as a mapping key; as a value it is text.
+      return codec.Value_String{value: n.Value}
+    default:
+      panic(at(n, "unsupported tag %s", tag))
+    }
+  }
+  // Keys are compared and named by their text, whatever they resolve to.
+  keyTags := map[string]bool{"!!null": true, "!!bool": true, "!!int": true, "!!float": true, "!!str": true, "!!timestamp": true, "!!merge": true}
+  var value func(n *yaml.Node, aliased bool) codec.Value
+  var fields func(n *yaml.Node, aliased bool) []codec.Field
+  value = func(n *yaml.Node, aliased bool) codec.Value {
+    if aliased {
+      if expanded++; expanded > budget {
+        panic(at(origin, "aliases expand to more than %d values", budget))
+      }
+    }
+    switch n.Kind {
+    case yaml.AliasNode:
+      if active[n.Alias] {
+        panic(at(n, "alias *%s refers to a value that contains it", n.Value))
+      }
+      if !aliased {
+        origin = n
+      }
+      active[n.Alias] = true
+      defer delete(active, n.Alias)
+      return value(n.Alias, true)
+    case yaml.ScalarNode:
+      return scalar(n)
+    case yaml.SequenceNode:
+      if tag := n.ShortTag(); tag != "!!seq" {
+        panic(at(n, "unsupported tag %s", tag))
+      }
+      items := make([]codec.Value, 0, len(n.Content))
+      for _, child := range n.Content {
+        items = append(items, value(child, aliased))
+      }
+      return codec.Value_Array{items: items}
+    case yaml.MappingNode:
+      if tag := n.ShortTag(); tag != "!!map" {
+        panic(at(n, "unsupported tag %s", tag))
+      }
+      return codec.Value_Object{fields: fields(n, aliased)}
+    }
+    panic(at(n, "unexpected YAML node"))
+  }
+  resolve := func(n *yaml.Node) *yaml.Node {
+    for n.Kind == yaml.AliasNode {
+      n = n.Alias
+    }
+    return n
+  }
+  // fields keeps explicit keys in order. Merged fields appear where their "<<"
+  // key is, unless the mapping names them itself or an earlier merge did.
+  fields = func(n *yaml.Node, aliased bool) []codec.Field {
+    explicit := map[string]*yaml.Node{}
+    var mergeKey *yaml.Node
+    for i := 0; i < len(n.Content); i += 2 {
+      key := resolve(n.Content[i])
+      if key.Kind != yaml.ScalarNode {
+        panic(at(n.Content[i], "mapping keys must be scalars"))
+      }
+      if !keyTags[key.ShortTag()] {
+        panic(at(key, "unsupported tag %s", key.ShortTag()))
+      }
+      previous, seen := explicit[key.Value]
+      if key.ShortTag() == "!!merge" {
+        previous, seen = mergeKey, mergeKey != nil
+      }
+      if seen {
+        panic(at(n.Content[i], "duplicate key %q (first at line %d, column %d)", key.Value, previous.Line, previous.Column))
+      }
+      if key.ShortTag() == "!!merge" {
+        mergeKey = n.Content[i]
+      } else {
+        explicit[key.Value] = n.Content[i]
+      }
+    }
+    out := []codec.Field{}
+    merged := map[string]bool{}
+    for i := 0; i < len(n.Content); i += 2 {
+      key, child := n.Content[i], n.Content[i+1]
+      if resolve(key).ShortTag() != "!!merge" {
+        out = append(out, codec.Field{name: resolve(key).Value, value: value(child, aliased)})
+        continue
+      }
+      // Converting the whole value first keeps alias accounting and the
+      // recursion check in one place.
+      var sources []codec.Value
+      switch merge := value(child, aliased).(type) {
+      case codec.Value_Object:
+        sources = []codec.Value{merge}
+      case codec.Value_Array:
+        sources = merge.items
+      }
+      if len(sources) == 0 {
+        panic(at(child, "a merge key needs a mapping or a list of mappings"))
+      }
+      for _, source := range sources {
+        object, ok := source.(codec.Value_Object)
+        if !ok {
+          panic(at(child, "a merge key needs a mapping or a list of mappings"))
+        }
+        for _, field := range object.fields {
+          if explicit[field.name] == nil && !merged[field.name] {
+            merged[field.name] = true
+            out = append(out, field)
+          }
+        }
+      }
+    }
+    return out
+  }
+  loader, err := yaml.NewLoader(strings.NewReader(text))
+  if err != nil {
+    return Error{path: path, message: err.Error()}
+  }
+  documents := []codec.Value{}
+  for {
+    var document yaml.Node
+    err := loader.Load(&document)
+    if errors.Is(err, io.EOF) {
+      return documents
+    }
+    var failure *yaml.LoadError
+    if errors.As(err, &failure) {
+      message := failure.Message
+      if failure.ContextMsg != "" {
+        message += fmt.Sprintf(" (%s that starts at line %d, column %d)", failure.ContextMsg, failure.ContextMark.Line, failure.ContextMark.Column)
+      }
+      return Error{path: path, line: int64(failure.Mark.Line), column: int64(failure.Mark.Column), message: message}
+    }
+    if err != nil {
+      return Error{path: path, message: err.Error()}
+    }
+    if single && len(documents) == 1 {
+      return at(&document, "expected one document, found another; use ParseAll for a stream").err
+    }
+    root := &document
+    if root.Kind == yaml.DocumentNode {
+      if len(root.Content) == 0 {
+        documents = append(documents, codec.Value_Null{})
+        continue
+      }
+      root = root.Content[0]
+    }
+    expanded, budget = 0, max(10000, 10*count(root))
+    converted, failed := func() (result codec.Value, failed *stop) {
+      defer func() {
+        if r := recover(); r != nil {
+          if s, ok := r.(stop); ok {
+            failed = &s
+            return
+          }
+          panic(r)
+        }
+      }()
+      return value(root, false), nil
+    }()
+    if failed != nil {
+      return failed.err
+    }
+    documents = append(documents, converted)
+  }
+}
+
+// dump converts each value to a node tree and emits it with go.yaml.in/yaml/v4.
+fn dump(values: List[codec.Value], spaces: Indent): String | Error unsafe go {
+  import "fmt"
+  import "math"
+  import "strconv"
+  import "regexp"
+  import "strings"
+  import "go.yaml.in/yaml/v4"
+  jsonNumber := regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$`)
+  // node converts a value; at is its path (".items[2]") for messages.
+  var node func(value codec.Value, at string) (*yaml.Node, *Error)
+  node = func(value codec.Value, at string) (*yaml.Node, *Error) {
+    fail := func(format string, args ...any) (*yaml.Node, *Error) {
+      message := fmt.Sprintf(format, args...)
+      if at != "" {
+        message += " at " + at
+      }
+      return nil, &Error{message: message}
+    }
+    switch value := value.(type) {
+    case codec.Value_Null:
+      return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}, nil
+    case codec.Value_Bool:
+      return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(value.value)}, nil
+    case codec.Value_Number:
+      if !jsonNumber.MatchString(value.text) {
+        return fail("invalid number text %q", value.text)
+      }
+      tag := "!!int"
+      if strings.ContainsAny(value.text, ".eE") {
+        tag = "!!float"
+        if number, _ := strconv.ParseFloat(value.text, 64); math.IsInf(number, 0) {
+          return fail("number %s is not finite as a float", value.text)
+        }
+      }
+      return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value.text}, nil
+    case codec.Value_String:
+      return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value.value}, nil
+    case codec.Value_Array:
+      out := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+      for i, item := range value.items {
+        child, err := node(item, fmt.Sprintf("%s[%d]", at, i))
+        if err != nil {
+          return nil, err
+        }
+        out.Content = append(out.Content, child)
+      }
+      return out, nil
+    case codec.Value_Object:
+      out := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+      seen := map[string]bool{}
+      for _, field := range value.fields {
+        if seen[field.name] {
+          return fail("duplicate field %q", field.name)
+        }
+        seen[field.name] = true
+        child, err := node(field.value, at+"."+field.name)
+        if err != nil {
+          return nil, err
+        }
+        out.Content = append(out.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: field.name}, child)
+      }
+      return out, nil
+    }
+    return fail("unknown value")
+  }
+  var text strings.Builder
+  dumper, err := yaml.NewDumper(&text, yaml.WithV4Defaults(), yaml.WithIndent(int(spaces)), yaml.WithLineWidth(-1))
+  if err != nil {
+    return Error{message: err.Error()}
+  }
+  for _, value := range values {
+    root, failure := node(value, "")
+    if failure != nil {
+      return *failure
+    }
+    if err := dumper.Dump(root); err != nil {
+      return Error{message: err.Error()}
+    }
+  }
+  if err := dumper.Close(); err != nil {
+    return Error{message: err.Error()}
+  }
+  return text.String()
+}

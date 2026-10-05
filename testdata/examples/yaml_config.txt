@@ -1,0 +1,8 @@
+Option.Some { value: Value.Number { text: "4" } }
+Service { host: "staging.example", port: 8080, workers: 4, tags: ["api"] }
+Service { host: "production.example", port: 8080, workers: 16, tags: ["api"] }
+host: production.example
+port: 9090
+workers: 16
+tags:
+- api

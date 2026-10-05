@@ -1,0 +1,51 @@
+import codec "bork/codec"
+import "bork/process"
+import "bork/yaml"
+use codec.Defaults
+
+// yaml_config loads a YAML configuration file, decodes each environment into
+// a checked record, and writes one back out:
+//
+//   bork run examples/yaml_config -- config.yaml
+//
+// YAML values are bork/codec values, so derive (codec.Decode) records and
+// the Field/Index/At queries work on them unchanged.
+
+pred ValidPort(port: Int) { port >= 1 && port <= 65535 }
+pred Positive(n: Int) { n > 0 }
+
+type Service = {
+  host: String,
+  port: Int where ValidPort,
+  workers: Int where Positive,
+  tags: List[String],
+} derive (codec.Decode, codec.Encode)
+
+// environment decodes one environment; derived Decode checks the where clauses.
+fn environment(config: codec.Value, name: String): Service | codec.DecodeError {
+  match (yaml.At(config, ["environments", name])) {
+    Option.Some { value } => codec.decode[Service](value)
+    Option.None => codec.DecodeError { path: s".environments.$name", message: "missing" }
+  }
+}
+
+fn load(path: String) uses io: Ok | yaml.Error | IoError | codec.DecodeError {
+  config = yaml.ReadFile(path)?
+  println(yaml.At(config, ["environments", "staging", "workers"]))
+  println(environment(config, "staging")?)
+  production = environment(config, "production")?
+  println(production)
+  // Render writes block-style YAML; fields follow the record's order.
+  println(yaml.Render(codec.encode(Service { host: production.host, port: 9090, workers: production.workers, tags: production.tags }))?.trim())
+}
+
+fn main() {
+  match (process.Args()) {
+    [path, ...] => match (load(path)) {
+      error: yaml.Error => println(s"${error.path}:${error.line}:${error.column}: ${error.message}")
+      error: IoError | codec.DecodeError => println(error)
+      Ok => {}
+    }
+    [] => println("usage: yaml_config <file.yaml>")
+  }
+}

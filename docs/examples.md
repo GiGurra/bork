@@ -80,3 +80,4 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [time_env](../examples/time_env/main.bork) | Configuration from the environment and an injectable clock with [bork/env](std/env.md) and [bork/time](std/time.md) |
 | [url](../examples/url/main.bork) | Parsing and building URLs with [bork/url](std/url.md) |
 | [uuid](../examples/uuid/main.bork) | UUIDs with [bork/uuid](std/uuid.md) |
+| [yaml_config](../examples/yaml_config/main.bork) | A YAML configuration file decoded into records with [bork/yaml](std/yaml.md) |
