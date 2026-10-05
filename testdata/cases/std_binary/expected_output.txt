@@ -1,0 +1,32 @@
+18 -102
+4660 13330
+305419896 2018915346
+1311768467463790320 17356517385562371090
+-25924 -17254
+-1698898192 -253838182
+1311768467463790320 -1090226688147180526
+Bytes(ff3456789abcdef0) Bytes(803456789abcdef0)
+Bytes(121234789abcdef0) Bytes(123412789abcdef0)
+Bytes(1212345678bcdef0) Bytes(1278563412bcdef0)
+Bytes(ffffffffffffffff)
+Bytes(12feff789abcdef0) Bytes(12feffffffbcdef0) Bytes(feffffffffffffff)
+Bytes(123456789abcdef0)
+BinaryError { offset: -1, required: 1, length: 8 } BinaryError { offset: 7, required: 2, length: 8 } BinaryError { offset: 9223372036854775807, required: 8, length: 8 }
+BinaryError { offset: 8, required: 1, length: 8 } BinaryError { offset: -1, required: 8, length: 8 } BinaryError { offset: 9223372036854775807, required: 4, length: 8 }
+0 Bytes() 1 Bytes(ff) 32
+0 Bytes() 1 Bytes(ff) 32
+Bytes(ff80123412345678fffffffffffffffffffefffffffefffffffffffffffe1122) Bytes(ff80341278563412fffffffffffffffffefffefffffffeffffffffffffff1122)
+0 Bytes() 1 Bytes(ff) 32
+255 -128 4660 305419896 18446744073709551615 -2 -2 -2 Bytes(1122)
+0 32 32 0
+BinaryError { offset: 32, required: 1, length: 32 } BinaryError { offset: 32, required: -1, length: 32 } BinaryError { offset: 32, required: 1, length: 32 } BinaryError { offset: 32, required: -1, length: 32 }
+Bytes() 32
+(4660, Reader.reader { data: Bytes(ff80123412345678fffffffffffffffffffefffffffefffffffffffffffe1122), order: ByteOrder.BigEndian, offset: 4 }) 0 2
+32
+0 Bytes() 1 Bytes(ff) 32
+255 -128 4660 305419896 18446744073709551615 -2 -2 -2 Bytes(1122)
+0 32 32 0
+BinaryError { offset: 32, required: 1, length: 32 } BinaryError { offset: 32, required: -1, length: 32 } BinaryError { offset: 32, required: 1, length: 32 } BinaryError { offset: 32, required: -1, length: 32 }
+Bytes() 32
+(4660, Reader.reader { data: Bytes(ff80341278563412fffffffffffffffffefffefffffffeffffffffffffff1122), order: ByteOrder.LittleEndian, offset: 4 }) 0 2
+32

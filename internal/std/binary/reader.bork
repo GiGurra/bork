@@ -1,0 +1,29 @@
+// Reader is an immutable byte cursor. Failed reads and skips preserve the
+// original cursor; successful reads return their value and the next cursor.
+type Reader = sealed { reader { data: Bytes, order: ByteOrder, offset: Int } }
+pred ByteCount(value: Int) { value >= 0 }
+
+fn NewReader(data: Bytes, order: ByteOrder): Reader unsafe go {
+  return Reader_reader{data: data, order: order, offset: 0}
+}
+fn (value: Reader) Offset(): Int where ByteCount unsafe go { return value.(Reader_reader).offset }
+fn (value: Reader) Remaining(): Int where ByteCount unsafe go {
+  node := value.(Reader_reader)
+  return int64(len(node.data)) - node.offset
+}
+fn readerData(value: Reader): Bytes unsafe go { return value.(Reader_reader).data }
+fn readerOrder(value: Reader): ByteOrder unsafe go { return value.(Reader_reader).order }
+fn advanceReader(value: Reader, count: Int): Reader unsafe go {
+  node := value.(Reader_reader)
+  return Reader_reader{data: node.data, order: node.order, offset: node.offset + count}
+}
+fn (value: Reader) Skip(count: Int): Reader | BinaryError unsafe go {
+  node := value.(Reader_reader)
+  if !inBounds(node.data, node.offset, count) { return boundsError(node.data, node.offset, count) }
+  return advanceReader(value, count)
+}
+fn readerChunk(value: Reader, count: Int): Bytes | BinaryError unsafe go {
+  node := value.(Reader_reader)
+  if !inBounds(node.data, node.offset, count) { return boundsError(node.data, node.offset, count) }
+  return _borkBytesFrom(node.data[node.offset:node.offset+count])
+}

@@ -1,0 +1,117 @@
+// Package binary reads and writes immutable Bytes using explicit byte order.
+type ByteOrder = sealed { BigEndian, LittleEndian }
+type BinaryError = { offset: Int, required: Int, length: Int }
+
+fn littleEndian(order: ByteOrder): Bool { order == ByteOrder.LittleEndian }
+fn inBounds(data: Bytes, offset: Int, width: Int): Bool unsafe go {
+  return offset >= 0 && width >= 0 && offset <= int64(len(data)) && width <= int64(len(data)) - offset
+}
+fn boundsError(data: Bytes, offset: Int, width: Int): BinaryError {
+  BinaryError { offset: offset, required: width, length: data.length() }
+}
+
+fn (data: Bytes) ReadByte(offset: Int): Byte | BinaryError unsafe go {
+  if !inBounds(data, offset, 1) { return boundsError(data, offset, 1) }
+  return data[offset]
+}
+fn (data: Bytes) WriteByte(offset: Int, value: Byte): Bytes | BinaryError unsafe go {
+  if !inBounds(data, offset, 1) { return boundsError(data, offset, 1) }
+  result := _borkBytesFrom(data)
+  result[offset] = value
+  return result
+}
+
+fn (data: Bytes) ReadUint16(offset: Int, order: ByteOrder): Uint16 | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 2) { return boundsError(data, offset, 2) }
+  if littleEndian(order) { return uint16(gobinary.LittleEndian.Uint16(data[offset:])) }
+  return uint16(gobinary.BigEndian.Uint16(data[offset:]))
+}
+fn (data: Bytes) WriteUint16(offset: Int, value: Uint16, order: ByteOrder): Bytes | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 2) { return boundsError(data, offset, 2) }
+  result := _borkBytesFrom(data)
+  if littleEndian(order) { gobinary.LittleEndian.PutUint16(result[offset:], uint16(value)) } else { gobinary.BigEndian.PutUint16(result[offset:], uint16(value)) }
+  return result
+}
+
+fn (data: Bytes) ReadUint32(offset: Int, order: ByteOrder): Uint32 | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 4) { return boundsError(data, offset, 4) }
+  if littleEndian(order) { return uint32(gobinary.LittleEndian.Uint32(data[offset:])) }
+  return uint32(gobinary.BigEndian.Uint32(data[offset:]))
+}
+fn (data: Bytes) WriteUint32(offset: Int, value: Uint32, order: ByteOrder): Bytes | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 4) { return boundsError(data, offset, 4) }
+  result := _borkBytesFrom(data)
+  if littleEndian(order) { gobinary.LittleEndian.PutUint32(result[offset:], uint32(value)) } else { gobinary.BigEndian.PutUint32(result[offset:], uint32(value)) }
+  return result
+}
+
+fn (data: Bytes) ReadUint64(offset: Int, order: ByteOrder): Uint64 | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 8) { return boundsError(data, offset, 8) }
+  if littleEndian(order) { return uint64(gobinary.LittleEndian.Uint64(data[offset:])) }
+  return uint64(gobinary.BigEndian.Uint64(data[offset:]))
+}
+fn (data: Bytes) WriteUint64(offset: Int, value: Uint64, order: ByteOrder): Bytes | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 8) { return boundsError(data, offset, 8) }
+  result := _borkBytesFrom(data)
+  if littleEndian(order) { gobinary.LittleEndian.PutUint64(result[offset:], uint64(value)) } else { gobinary.BigEndian.PutUint64(result[offset:], uint64(value)) }
+  return result
+}
+
+fn (data: Bytes) ReadInt16(offset: Int, order: ByteOrder): Int16 | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 2) { return boundsError(data, offset, 2) }
+  if littleEndian(order) { return int16(gobinary.LittleEndian.Uint16(data[offset:])) }
+  return int16(gobinary.BigEndian.Uint16(data[offset:]))
+}
+fn (data: Bytes) WriteInt16(offset: Int, value: Int16, order: ByteOrder): Bytes | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 2) { return boundsError(data, offset, 2) }
+  result := _borkBytesFrom(data)
+  if littleEndian(order) { gobinary.LittleEndian.PutUint16(result[offset:], uint16(value)) } else { gobinary.BigEndian.PutUint16(result[offset:], uint16(value)) }
+  return result
+}
+
+fn (data: Bytes) ReadInt32(offset: Int, order: ByteOrder): Int32 | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 4) { return boundsError(data, offset, 4) }
+  if littleEndian(order) { return int32(gobinary.LittleEndian.Uint32(data[offset:])) }
+  return int32(gobinary.BigEndian.Uint32(data[offset:]))
+}
+fn (data: Bytes) WriteInt32(offset: Int, value: Int32, order: ByteOrder): Bytes | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 4) { return boundsError(data, offset, 4) }
+  result := _borkBytesFrom(data)
+  if littleEndian(order) { gobinary.LittleEndian.PutUint32(result[offset:], uint32(value)) } else { gobinary.BigEndian.PutUint32(result[offset:], uint32(value)) }
+  return result
+}
+
+fn (data: Bytes) ReadInt64(offset: Int, order: ByteOrder): Int | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 8) { return boundsError(data, offset, 8) }
+  if littleEndian(order) { return int64(gobinary.LittleEndian.Uint64(data[offset:])) }
+  return int64(gobinary.BigEndian.Uint64(data[offset:]))
+}
+fn (data: Bytes) WriteInt64(offset: Int, value: Int, order: ByteOrder): Bytes | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  if !inBounds(data, offset, 8) { return boundsError(data, offset, 8) }
+  result := _borkBytesFrom(data)
+  if littleEndian(order) { gobinary.LittleEndian.PutUint64(result[offset:], uint64(value)) } else { gobinary.BigEndian.PutUint64(result[offset:], uint64(value)) }
+  return result
+}
+
+fn (data: Bytes) ReadInt8(offset: Int): Int8 | BinaryError unsafe go {
+  if !inBounds(data, offset, 1) { return boundsError(data, offset, 1) }
+  return int8(data[offset])
+}
+fn (data: Bytes) WriteInt8(offset: Int, value: Int8): Bytes | BinaryError unsafe go {
+  if !inBounds(data, offset, 1) { return boundsError(data, offset, 1) }
+  result := _borkBytesFrom(data)
+  result[offset] = byte(value)
+  return result
+}
