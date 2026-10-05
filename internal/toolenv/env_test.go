@@ -188,3 +188,22 @@ func TestBorkBinUsesEffectiveGoSettings(t *testing.T) {
 		t.Fatalf("explicit setting should not need Go: %q %v", value, err)
 	}
 }
+
+func TestBinLookupDoesNotSelectGoSDK(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Go uses a shell script")
+	}
+	isolate(t)
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	t.Setenv("GOTOOLCHAIN", "go1.999.0+auto")
+	script := "#!/bin/sh\nif [ \"$GOTOOLCHAIN\" != local ]; then exit 1; fi\n/usr/bin/printf '{\"GOBIN\":\"\",\"GOPATH\":\"%s\"}' \"$TEST_GOPATH\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "go"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEST_GOPATH", dir)
+	bin, err := Value("BORKBIN")
+	if err != nil || bin != filepath.Join(dir, "bin") {
+		t.Fatalf("local storage lookup: %s, %v", bin, err)
+	}
+}

@@ -199,11 +199,18 @@ bork compiles by generating Go. `emit` shows that code, which is useful when you
 ```sh
 bork upgrade                  # install the latest release
 bork upgrade v0.4.0           # install a specific release
+bork upgrade --from-source    # build with go install instead
 ```
 
-Upgrades run `go install github.com/GiGurra/bork/cmd/bork@<version>` in a temporary directory inside `BORKBIN`, then replace the installed executable after a successful build and version check. Publication is an atomic rename on Unix. Windows requires moving the previous executable aside first, and restores it if publication fails; a running compiler can leave a `.bork-old-*.exe` backup that you can remove after it exits. The command reports the running and newly installed compiler versions; the running compiler keeps its original version. Updates only happen when you request them.
+Upgrades first query GitHub Releases and download the archive for your operating system and architecture. The archive must match its SHA-256 entry in the release's `checksums.txt`; missing or invalid checksums fail without replacing your compiler. If the selected version matches the running compiler, the command reports that it is already up to date without downloading an archive.
 
-Go must be on `PATH`. Downloading a release needs network access to your Go module proxy; offline installs work only when Go already has the required modules cached. Go's output explains install failures.
+The executable is staged in a temporary directory inside `BORKBIN`, then published with an atomic rename on Unix. Windows requires moving the previous executable aside first, and restores it if publication fails; a running compiler can leave a `.bork-old-*.exe` backup that you can remove after it exits. The command reports the running and newly installed compiler versions; the running compiler keeps its original version. Updates only happen when you request them. Homebrew installations are detected through their Cellar path (including symlinks and `HOMEBREW_PREFIX`); use `brew upgrade bork` for those installations.
+
+Each step prints immediately. A terminal shows a spinner, elapsed time, and downloaded bytes; redirected output and CI use plain lines. Default `BORKBIN` resolution queries local Go storage settings with `GOTOOLCHAIN=local`, so it cannot select or download an SDK before reporting progress.
+
+When no matching release/archive exists, or the release lookup cannot reach GitHub, the command falls back to `go install github.com/GiGurra/bork/cmd/bork@<version>`. `--from-source` selects this path directly. Go must be on `PATH` for source builds and for resolving the default `BORKBIN`; an explicit `BORKBIN` permits a prebuilt upgrade without Go. The source progress line covers Go's module/version resolution, any SDK download and compilation, and Go's own output remains visible. Offline source installs require cached modules. A downloaded archive's integrity or extraction failure never falls back to source.
+
+The manually dispatched **Upgrade benchmark** GitHub workflow measures time to first output and total upgrade time on macOS for the original source installer and the new prebuilt path. It records both transcripts and timings as an artifact and in the workflow summary.
 
 If `BORKBIN` is absent from `PATH`, the command warns you to add it. If you are running bork from another location, the command prints both locations: run the executable in `BORKBIN` to use the upgrade. A different bork earlier on `PATH` may still take precedence.
 
