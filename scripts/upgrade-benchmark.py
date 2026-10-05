@@ -12,7 +12,7 @@ def measure(label, executable, version):
     root = Path("benchmark-results").resolve()
     root.mkdir(exist_ok=True)
     environment = dict(os.environ, GOBIN=str(root / label / "bin"),
-                       BORKUPDATECHECK="off", CI="true",
+                       BORKUPDATECHECK="off", CI="true", GOTOOLCHAIN="auto",
                        GOCACHE=str(root / label / "build-cache"),
                        GOMODCACHE=str(root / label / "module-cache"))
     environment.pop("BORKBIN", None)
