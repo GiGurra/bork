@@ -1,16 +1,18 @@
 type Failure = { message: String }
 
-fn opening(s: Scope, x: Int): Channel[Int] | Failure { channel[Int](s, x) }
+fn opening(s: Scope, x: Int): Channel[Int] | Failure {
+  if (validCapacity(x)) { channel[Int](s, x) } else { Failure { message: "negative capacity" } }
+}
 
 fn risky(child: Scope, x: Int, started: Channel[Int], finished: Atom[Bool]) uses clock + state: Int | Failure {
   if (x == 0) {
-    signal = receive(started)
+    signal = started.receive(child)
     match (signal) {
       _: Int => Failure { message: "first failure" }
       _ => Failure { message: "channel stopped" }
     }
   } else {
-    sent = send(started, 1)
+    sent = started.send(child, 1)
     assertEqual(sent, {})
     waited = delay(child, 10000)
     assertEqual(update(finished, old => true), true)
@@ -36,7 +38,7 @@ test "successful callback resources remain open in the caller scope" {
   scope s {
     result = [1].parMapUntilIn[Channel[Int], Failure](s, opening)
     match (result) {
-      channels: List[Channel[Int]] => channels.forEach(ch => assertEqual(send(ch, 7), {}))
+      channels: List[Channel[Int]] => channels.forEach(ch => assertEqual(ch.send(s, 7), {}))
       _ => panic("expected channels")
     }
   }
@@ -53,7 +55,7 @@ test "cancelling the callback scope returns cancellation, not partial results" {
 }
 
 fn waiting(child: Scope, x: Int, started: Channel[Int]) uses clock + state: Int | Cancelled {
-  match (send(started, x)) { _: Ok => {}; c: Cancelled => return c; _ => panic("start channel closed") }
+  match (started.send(child, x)) { _: Ok => {}; c: Cancelled => return c; _ => panic("start channel closed") }
   delay(child, 10000)?
   x
 }
@@ -62,7 +64,7 @@ test "external cancellation interrupts callbacks already running" {
   scope s {
     started = channel[Int](s, 2)
     stopper = spawn(s, () => {
-      signal = receive(started)
+      signal = started.receive(s)
       match (signal) { _: Int => cancel(s); _ => panic("expected start signal") }
       true
     })

@@ -11,8 +11,8 @@ fn nameOf(c: Conn): String unsafe go {
 }
 
 // put stores c in ch, which it declares c belongs to.
-fn put(ch: Channel[Conn], c: Conn in ch) uses state {
-  _ = send(ch, c)
+fn put(s: Scope, ch: Channel[Conn], c: Conn in ch) uses state {
+  _ = ch.send(s, c)
 }
 
 // handOver opens the next connection in a new owned scope, hands it to
@@ -21,7 +21,7 @@ fn put(ch: Channel[Conn], c: Conn in ch) uses state {
 fn handOver(prev: OwnedScope, ch: Channel[Conn], app: Scope in ch, n: Int) uses io + state {
   next = openScope(app)
   c = connect(s"gen$n", next.scope)
-  put(ch, attach(c, app))
+  put(app, ch, attach(c, app))
   closeScope(prev)
   if (n > 1) {
     handOver(next, ch, app, n - 1)
@@ -31,11 +31,11 @@ fn handOver(prev: OwnedScope, ch: Channel[Conn], app: Scope in ch, n: Int) uses 
 }
 
 // Generic helpers can store what is declared in the channel.
-fn sendAll[T](ch: Channel[T], xs: List[T] in ch) uses state {
+fn sendAll[T](s: Scope, ch: Channel[T], xs: List[T] in ch) uses state {
   match (xs) {
     [x, ...rest] => {
-      _ = send(ch, x)
-      sendAll(ch, rest)
+      _ = ch.send(s, x)
+      sendAll(s, ch, rest)
     }
     _ => {}
   }
@@ -50,9 +50,9 @@ fn main() uses io + state {
     ch = channel[Conn](app, 3)
     first = openScope(app)
     handOver(first, ch, app, 3)
-    closeChannel(ch)
+    ch.close()
     println("channel gives:")
-    names = received(ch).map(nameOf)
+    names = ch.values(app).toList().map(nameOf)
     println(names)
     // An atom lives as long as its first value: one of app keeps
     // values of app.
@@ -66,11 +66,11 @@ fn main() uses io + state {
     }
     // A channel of channels of the same scope.
     chs = channel[Channel[Conn]](app, 1)
-    _ = send(chs, ch)
+    _ = chs.send(app, ch)
     pending = channel[Conn](app, 2)
-    sendAll(pending, [connect("x", app), connect("y", app)])
-    closeChannel(pending)
-    println(received(pending).map(nameOf))
+    sendAll(app, pending, [connect("x", app), connect("y", app)])
+    pending.close()
+    println(pending.values(app).toList().map(nameOf))
     // update can be a function value where nothing can escape.
     counter = atom(1)
     println(apply(update, counter, n => n + 1))

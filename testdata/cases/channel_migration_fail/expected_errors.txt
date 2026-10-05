@@ -1,0 +1,4 @@
+main.bork:3:11: send was removed; use ch.send(s, x), giving the scope to wait in
+main.bork:4:11: receive was removed; use ch.receive(s), giving the scope to wait in
+main.bork:5:3: closeChannel was removed; use ch.close()
+main.bork:6:11: received was removed; use ch.toList(s), or for (x in ch.values(s)) { ... }

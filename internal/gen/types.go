@@ -1445,6 +1445,9 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 	if g.usesFanIn {
 		src = append(src, fanInRuntime)
 	}
+	if g.usesChannels {
+		src = append(src, channelRuntime)
+	}
 	if g.usesIoFailure {
 		src = append(src, ioFailureHelpers)
 	}

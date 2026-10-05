@@ -16,9 +16,9 @@ fn main() {
     println(withTimeout(s, 0, child => 10))
     numbers = channel[Int](s, 1)
     texts = channel[String](s, 1)
-    assertEqual(send(numbers, 42), {})
+    assertEqual(numbers.send(s, 42), {})
     println([numbers.receiveCase(numberEvent), texts.receiveCase(textEvent)].select(s))
-    assertEqual(send(texts, "hello"), {})
+    assertEqual(texts.send(s, "hello"), {})
     println([numbers.receiveCase(numberEvent), texts.receiveCase(textEvent)].select(s))
   }
 }

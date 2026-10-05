@@ -1,46 +1,89 @@
 // A pipeline: a producer sends numbers, a worker squares them, and the
 // main routine collects the results.
-fn produce(ch: Channel[Int], n: Int, last: Int) uses state: Ok | Cancelled | Closed {
+fn count(s: Scope, ch: Channel[Int], n: Int, last: Int) uses state: Ok | Cancelled | Closed {
   if (n <= last) {
-    send(ch, n)?
-    produce(ch, n + 1, last)
+    ch.send(s, n)?
+    count(s, ch, n + 1, last)
   } else {
-    closeChannel(ch)
+    ch.close()
   }
 }
 
-fn square(input: Channel[Int], output: Channel[Int]) uses state: Ok | Cancelled | Closed {
-  match (receive(input)) {
-    n: Int => {
-      send(output, n * n)?
-      square(input, output)
-    }
-    _ => closeChannel(output)
+fn square(s: Scope, input: Channel[Int], output: Channel[Int]) uses state: Ok | Cancelled | Closed {
+  for (n in input.values(s)) {
+    output.send(s, n * n)?
   }
+  output.close()
+}
+
+// multiples sends the first n multiples of k, from k * from.
+fn multiples(s: Scope, out: Channel[Int], k: Int, from: Int, n: Int) uses state: Ok | Closed | Cancelled {
+  for (i in Seq.range(from, from + n)) {
+    out.send(s, i * k)?
+  }
+  Ok
+}
+
+fn total(s: Scope, ch: Channel[Int]) uses state: Int | Cancelled {
+  ch.toList(s)?.fold(0, (a, b) => a + b)
 }
 
 fn main() {
   results = scope s {
-    numbers: Channel[Int] = channel(s, 0)
-    squares: Channel[Int] = channel(s, 2)
-    launch(s, () => produce(numbers, 1, 5))
-    launch(s, () => square(numbers, squares))
-    received(squares)
+    numbers = channel[Int](s)
+    squares = channel[Int](s, 2)
+    launch(s, () => { _ = count(s, numbers, 1, 5) })
+    launch(s, () => { _ = square(s, numbers, squares) })
+    squares.toList(s)
   }
   println(results)
   // Receiving from a closed, drained channel; sending to it.
   scope s {
-    ch: Channel[String] = channel(s, 1)
-    println(send(ch, "a"))
-    closeChannel(ch)
-    println(send(ch, "b"))
-    println(receive(ch))
-    println(receive(ch))
+    ch = channel[String](s, 1)
+    println(ch.send(s, "a"))
+    ch.close()
+    ch.close()
+    println(ch.send(s, "b"))
+    println(ch.receive(s))
+    println(ch.receive(s))
+    println(ch.receive(s))
   }
-  // A receive that waits is stopped by cancellation.
+  // A receive that waits is stopped by cancellation of the scope it
+  // waits in, even when the channel belongs to an outer one.
   scope s {
-    ch: Channel[Int] = channel(s, 0)
+    ch = channel[Int](s)
+    println(withTimeout(s, 10, c => ch.receive(c)))
     cancelAfter(s, 10)
-    println(receive(ch))
+    println(ch.receive(s))
+  }
+  // Operations that do not wait.
+  scope s {
+    ch = channel[Int](s, 1)
+    println(ch.tryReceive())
+    println(ch.trySend(1))
+    println(ch.trySend(2))
+    println(ch.length(), ch.capacity())
+    println(ch.tryReceive())
+    ch.close()
+    println(ch.tryReceive(), ch.trySend(3))
+  }
+  // An unbounded channel never makes a sender wait.
+  scope s {
+    queue = unboundedChannel[Int](s)
+    range(0, 1000).forEach(i => { _ = queue.send(s, i) })
+    queue.close()
+    println(queue.length(), queue.capacity())
+    println(total(s, queue))
+  }
+  // A producer closes its channel when it returns; merge fans in.
+  scope s {
+    tens = produce[Int](s, 2, out => multiples(s, out, 10, 1, 5))
+    hundreds = produce[Int](s, 0, out => multiples(s, out, 100, 1, 5))
+    println(total(s, merge(s, [tens, hundreds])))
+    println(merge[Int](s, []).toList(s))
+    // A producer stops when its consumer closes the channel.
+    endless = produce[Int](s, 0, out => multiples(s, out, 1, 0, 1000000000))
+    println(endless.receive(s), endless.receive(s))
+    endless.close()
   }
 }

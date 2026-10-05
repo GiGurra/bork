@@ -34,8 +34,8 @@ fn main() {
     listener = http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       count = update(active, n => n + 1)
       _ = update(peak, n => if (count > n) { count } else { n })
-      _ = send(started, true)
-      _ = receive(finish)
+      _ = started.send(app, true)
+      _ = finish.receive(app)
       _ = update(active, n => n - 1)
       http.Text(200, "finished")
       }, admission: .Some { value: http.Admission { maxInFlight: 2, maxQueued: 2, queueTimeoutMs: 60000, retryAfterMs: 0 } })
@@ -50,23 +50,23 @@ fn main() {
             _ = update(calls, n => n + 1)
             http.Get(url, attempt)
             }, maxAttempts: 10, baseDelayMs: 0, maxDelayMs: 0))
-          _ = send(completed, value)
+          _ = completed.send(app, value)
           value
         })))
         // Accepted requests are gated, so the first completions are overloads.
-        first = got(receive(completed))
-        second = got(receive(completed))
+        first = got(completed.receive(app))
+        second = got(completed.receive(app))
         // Admission reserves slots before handler bodies run. Wait for both
         // handlers to enter before observing their peak or opening the gates.
-        _ = receive(started)
-        _ = receive(started)
+        _ = started.receive(app)
+        _ = started.receive(app)
         println("shed", first, second)
         match (http.AdmissionState(server)) {
           Option.Some { value } => println("bounded downstream", value.inFlight, "active", value.queued, "queued")
           Option.None => panic("admission not enabled")
         }
-        range(0, 4).forEach(i => { _ = send(finish, true) })
-        _ = range(0, 4).map(i => got(receive(completed)))
+        range(0, 4).forEach(i => { _ = finish.send(app, true) })
+        _ = range(0, 4).map(i => got(completed.receive(app)))
         results = callers.map(await)
         println("finished", results.count(value => value == "ok"), "overloaded", results.count(value => value == "overloaded"))
         println("attempts", current(calls), "initial", 6, "retries", current(calls) - 6)

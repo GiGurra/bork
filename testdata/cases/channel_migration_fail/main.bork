@@ -1,0 +1,9 @@
+// The channel functions that became methods.
+fn old(ch: Channel[Int]) uses io + state {
+  println(send(ch, 1))
+  println(receive(ch))
+  closeChannel(ch)
+  println(received(ch))
+}
+
+fn main() {}

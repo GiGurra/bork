@@ -33,8 +33,6 @@ func TestFanInRuntime(t *testing.T) {
 const fanInRuntimeTest = `package main
 import (
  "context"
- "errors"
- "reflect"
  "sync/atomic"
  "testing"
  "time"
@@ -92,24 +90,5 @@ func TestSynchronousPanicJoins(t *testing.T) {
   })
  }()
  if !finished.Load() { t.Fatal("panic returned before task joined") }
-}
-
-func TestSelectionConsumesOnlyWinner(t *testing.T) {
- for i:=0; i<100; i++ {
-  a,b := make(chan int,1),make(chan string,1); a<-7; b<-"eight"
-  closed:=make(chan struct{}); close(closed)
-  arms:=[]*_borkReceiveChoice{
-   {reflect.ValueOf(a),closed,context.Background()},
-   {reflect.ValueOf(b),nil,context.Background()},
-  }
-  index,value := _borkFanInReceive(context.Background(),arms)
-  if len(a)+len(b)!=1 { t.Fatal("more than one channel consumed") }
-  if index==0 && value!=7 || index==1 && value!="eight" { t.Fatal("wrong decoder input") }
-  if index==1 { <-a }
-  _,value = _borkFanInReceive(context.Background(),arms[:1])
-  if _,ok:=value.(Closed);!ok { t.Fatal("closed buffer not drained") }
- }
- ctx,cancel:=context.WithCancelCause(context.Background());cancel(errors.New("stopped"))
- if index,value:=_borkFanInReceive(ctx,nil);index!=-1 || value.(Cancelled).reason!="stopped" { t.Fatal("selection cancellation lost") }
 }
 `

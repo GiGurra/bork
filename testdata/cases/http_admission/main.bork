@@ -71,18 +71,18 @@ fn immediate(policy: http.Admission) uses io + net + clock + state {
     entered = channel[Bool](app, 1)
     permits = channel[Bool](app, 0)
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
-      _ = send(entered, true)
-      _ = receive(permits)
+      _ = entered.send(app, true)
+      _ = permits.receive(app)
       http.Text(200, "ok")
       }, admission: Option.Some { value: policy }))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
-    _ = receive(entered)
+    _ = entered.receive(app)
     showRejected(http.Get(url, app))
     println("no waiting", load(server))
     other = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => http.Text(200, "independent"), admission: Option.Some { value: policy }))
     println("independent", status(http.Get(s"http://${http.Address(other)}", app)))
-    _ = send(permits, true)
+    _ = permits.send(app, true)
     _ = await(active)
   }
 }
@@ -90,11 +90,11 @@ fn raceTransfer(server: http.Server in app, entered: Channel[Bool] in app, permi
   if (remaining == 0) { return }
   url = s"http://${http.Address(server)}"
   active = spawn(app, () => http.Get(s"$url/held", app))
-  _ = receive(entered)
+  _ = entered.receive(app)
   scope request {
     queued = spawn(request, () => http.Get(url, request))
     waitQueued(app, server, 1)
-    release = spawn(app, () => send(permits, true))
+    release = spawn(app, () => permits.send(app, true))
     cancel(request)
     _ = await(queued)
     _ = await(release)
@@ -112,15 +112,15 @@ fn main() {
     entered = channel[String](app, 10)
     permits = channel[Bool](app, 0)
     handler: http.Handler = (request, s) => {
-      _ = send(entered, request.path)
-      _ = receive(permits)
+      _ = entered.send(app, request.path)
+      _ = permits.receive(app)
       http.Text(200, request.path)
     }
     policy = http.Admission { maxInFlight: 1, maxQueued: 2, queueTimeoutMs: 5000, retryAfterMs: 1 }
     server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some { value: policy }))
     url = s"http://${http.Address(server)}"
     first = spawn(app, () => http.Get(s"$url/first", app))
-    println(receive(entered))
+    println(entered.receive(app))
     second = spawn(app, () => http.Get(s"$url/second", app))
     waitQueued(app, server, 1)
     third = spawn(app, () => http.Get(s"$url/third", app))
@@ -128,14 +128,14 @@ fn main() {
     println("bounded", load(server))
     showRejected(http.Get(s"$url/rejected", app))
     println("unread body", incompleteBody(http.Address(server)))
-    _ = send(permits, true)
-    println(receive(entered))
-    _ = send(permits, true)
-    println(receive(entered))
-    _ = send(permits, true)
+    _ = permits.send(app, true)
+    println(entered.receive(app))
+    _ = permits.send(app, true)
+    println(entered.receive(app))
+    _ = permits.send(app, true)
     println(status(await(first)), status(await(second)), status(await(third)), load(server))
     active = spawn(app, () => http.Get(s"$url/active", app))
-    _ = receive(entered)
+    _ = entered.receive(app)
     scope request {
       queued = spawn(request, () => http.Get(s"$url/cancelled", request))
       waitQueued(app, server, 1)
@@ -144,22 +144,22 @@ fn main() {
       waitQueued(app, server, 0)
     }
     println("after cancellation", load(server))
-    _ = send(permits, true)
+    _ = permits.send(app, true)
     println(status(await(active)))
   }
   scope app {
     entered = channel[Bool](app, 1)
     permits = channel[Bool](app, 0)
-    handler: http.Handler = (request, s) => { _ = send(entered, true); _ = receive(permits); http.Text(200, "ok") }
+    handler: http.Handler = (request, s) => { _ = entered.send(app, true); _ = permits.receive(app); http.Text(200, "ok") }
     server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some {
       value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5, status: 429 }
     }))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
-    _ = receive(entered)
+    _ = entered.receive(app)
     showRejected(http.Get(url, app))
     println("after timeout", load(server))
-    _ = send(permits, true)
+    _ = permits.send(app, true)
     println(status(await(active)))
   }
   immediate(http.Admission { maxInFlight: 1, maxQueued: 0, queueTimeoutMs: 5000 })
@@ -178,13 +178,13 @@ fn main() {
     entered = channel[Bool](app, 1)
     owner = openScope(app)
     server = mustServer(http.Listen("127.0.0.1:0", owner.scope, (request, s) => {
-      _ = send(entered, true)
+      _ = entered.send(app, true)
       _ = delay(s, 5000)
       http.Text(200, "stopped")
       }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 } }))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
-    _ = receive(entered)
+    _ = entered.receive(app)
     queued = spawn(app, () => http.Get(url, app))
     waitQueued(app, server, 1)
     closeScope(owner)
@@ -205,7 +205,7 @@ fn main() {
     entered = channel[Bool](app, 1)
     permits = channel[Bool](app, 0)
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
-      if (request.path == "/held") { _ = send(entered, true); _ = receive(permits) }
+      if (request.path == "/held") { _ = entered.send(app, true); _ = permits.receive(app) }
       http.Text(200, "ok")
       }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 } }))
     raceTransfer(server, entered, permits, app, 30)
@@ -215,15 +215,15 @@ fn main() {
     entered = channel[Bool](app, 1)
     permits = channel[Bool](app, 0)
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
-      _ = send(entered, true)
-      _ = receive(permits)
+      _ = entered.send(app, true)
+      _ = permits.receive(app)
       http.Text(200, "ok")
       }, admission: Option.Some { value: http.Admission {
         maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000, retryAfterMs: 9223372036854,
     } }))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
-    _ = receive(entered)
+    _ = entered.receive(app)
     rawOwner = openScope(app)
     _ = openUnread(http.Address(server), rawOwner.scope)
     waitQueued(app, server, 1)
@@ -232,7 +232,7 @@ fn main() {
     showRejected(http.Get(url, app))
     waitQueued(app, server, 0)
     println("unread bounded timeout", load(server))
-    _ = send(permits, true)
+    _ = permits.send(app, true)
     _ = await(active)
   }
   scope app {

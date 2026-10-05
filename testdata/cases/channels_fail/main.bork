@@ -10,7 +10,9 @@ fn late() uses io + state {
     c: Channel[Int] = channel(s, 1)
     c
   }
-  println(receive(ch))
+  scope s {
+    println(ch.receive(s))
+  }
 }
 
 fn main() {}

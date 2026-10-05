@@ -1690,6 +1690,12 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	}
 	fn, ok := c.funcNamed(id.Name)
 	if !ok {
+		if c.removedChannelCall(e, id) {
+			for _, arg := range e.Args {
+				c.exprWant(arg, nil)
+			}
+			return Invalid
+		}
 		if c.removedBytesCall(e, id) {
 			for _, arg := range e.Args {
 				var context Type
