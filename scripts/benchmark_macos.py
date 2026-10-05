@@ -28,6 +28,26 @@ def main():
     with tempfile.TemporaryDirectory(prefix="bork-macos-") as work:
         root = Path(work)
         env = dict(os.environ, BORKCACHE=str(root / "cache"), BORKTOOLCHAIN="local")
+        script = root / "hello.bork"
+        script.write_text('#!/usr/bin/env -S bork script\nprintln("Hello, world!")\n')
+        script_deps = root / "deps.bork"
+        script_deps.write_text(
+            '#!/usr/bin/env -S bork script\n'
+            '// bork:require github.com/GiGurra/boa v1.0.31\n'
+            'println("Hello, dependencies!")\n'
+        )
+        for name, path in (("hello", script), ("inline-deps", script_deps)):
+            shutil.rmtree(root / "cache", ignore_errors=True)
+            command = [bork, "script", str(path)]
+            cold = measure(command, env)
+            for _ in range(3):
+                measure(command, env)
+            warm = [measure(command, env) for _ in range(args.samples)]
+            results[name + "/script"] = {
+                "cold_ms": cold,
+                "warm_ms": warm,
+                "warm_median_ms": statistics.median(warm),
+            }
         for program in ("hello", "http_server"):
             source = "examples/" + program
             output = root / program
