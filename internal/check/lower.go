@@ -234,7 +234,7 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 		m := &Mock{Pos: s.MockPos, Target: fn.MockOf, Text: writtenText(s.Target), TargetPos: mockTargetPos(s.Target), Func: fn}
 		l.function(fn)
 		if s.Name != "" {
-			m.Var = &Var{Name: s.Name, Pos: s.Pos, Type: l.info.mockHandles[s], Kind: VarLet, Unused: l.info.unused[s]}
+			m.Var = &Var{Name: s.Name, Pos: s.Pos, Type: l.info.mockHandles[s], Kind: VarMockHandle, Unused: l.info.unused[s]}
 			l.nameRebinding(m.Var, s)
 			l.vars[s] = m.Var
 		}

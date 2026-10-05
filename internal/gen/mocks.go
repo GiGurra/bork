@@ -424,7 +424,7 @@ func (g *gen) captured(v *check.Var, borrowed bool) {
 		(p.Line < c.to.Line || p.Line == c.to.Line && p.Col <= c.to.Col)
 	n, t := varIdent(v), ast.Expr(nil)
 	if borrowed {
-		n, t = borrowedName(v.Name), &ast.StarExpr{X: ast.NewIdent("_Scope")}
+		n, t = borrowedName(varIdent(v).Name), &ast.StarExpr{X: ast.NewIdent("_Scope")}
 	}
 	if inside || c.seen[n.Name] {
 		return

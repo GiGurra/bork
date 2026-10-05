@@ -94,7 +94,7 @@ Stmt       = Binding | Trust | Mock | Expr .
 Mock       = [ Ident "=" ] "mock" ( Ident | QualIdent ) [ "." Ident ] "(" [ ( Ident | "_" ) { "," ( Ident | "_" ) } ] ")" Block .
                                              (* in tests: mock payments.Charge(card, amount) { ... }, calls = mock Store.save(s, x) { ... } *)
 Trust      = "trust" Call .                  (* trust positive(x) *)
-Binding    = [ "lazy" | "async" "(" Expr ")" ] ( Ident | "_" ) [ ":" Type ] "=" Expr .   (* x = 1, x: Int8 = 1, or _ = write(f, s)? to drop a value *)
+Binding    = ( [ "lazy" ] ( Ident | "_" ) | "async" "(" Expr ")" Ident ) [ ":" Type ] "=" Expr .   (* x = 1, x: Int8 = 1, or _ = write(f, s)? to drop a value *)
 
 Expr       = PipeExpr .
 PipeExpr   = OrExpr { "|>" OrExpr } .        (* x |> f(a) is f(x, a); x |> f is f(x) *)

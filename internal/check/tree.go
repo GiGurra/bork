@@ -89,6 +89,7 @@ const (
 	VarScope                       // the scope of `scope s { ... }`
 	VarAmbient                     // an ambient value a function needs
 	VarDefaultField                // a computed default's synthetic sibling parameter
+	VarMockHandle                  // a mock's call inspection handle
 )
 
 // Var is a variable: a parameter, a binding, a name bound by a pattern,

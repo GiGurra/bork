@@ -1,0 +1,15 @@
+fn Load[T](key: String, fallback: T) uses io: T { panic("no store") }
+fn main() {}
+test "rebound owner capture" {
+  scope app {
+    b = openScope(app)
+    closeScope(b)
+    b = openScope(app)
+    mock Load(key, fallback) {
+      println(cancelled(b.scope))
+      fallback
+    }
+    assertEqual(Load("k", 1), 1)
+    closeScope(b)
+  }
+}

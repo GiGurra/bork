@@ -215,6 +215,9 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 		s.pattern(pattern)
 		s.patternNames(arm.Pattern, pattern)
 	}
+	for mock := range info.mockHandles {
+		s.name(mock.Pos, mock.Name, SemanticToken{Kind: "variable", Declaration: true, Readonly: true, Rebinding: info.rebindings[mock] != nil})
+	}
 	for _, mock := range info.Mocks {
 		for _, param := range mock.Decl.Params {
 			s.name(param.Pos, param.Name, SemanticToken{Kind: "parameter", Declaration: true, Readonly: true})
