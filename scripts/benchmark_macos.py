@@ -18,10 +18,52 @@ def measure(command, env):
     return (time.perf_counter() - start) * 1000
 
 
+def diagnose(command, bork, root, env):
+    probe = root / "go-commands.txt"
+    phases = root / "phases.json"
+    cache = root / "profile-cache"
+    profile_env = dict(
+        env,
+        BORKCACHE=str(cache),
+        BORK_TEST_CACHE_PRODUCTION="1",
+        BORK_TEST_GO_COMMAND_PROBE=str(probe),
+        BORK_TEST_DISK_CACHE_TIMINGS=str(phases),
+    )
+    command = [str(Path(bork).resolve()), *command[1:]]
+    output = None
+    if "-o" in command:
+        index = command.index("-o") + 1
+        output = root / ("profile-" + Path(command[index]).name)
+        command[index] = str(output)
+    for _ in range(3):
+        measure(command, profile_env)
+
+    def binaries():
+        paths = list(cache.glob("stage/v3/*/*/program"))
+        if output is not None:
+            paths.append(output)
+        return {
+            str(path): (path.stat().st_dev, path.stat().st_ino, path.stat().st_mtime_ns)
+            for path in paths
+        }
+
+    before = binaries()
+    probe.write_text("")
+    measure(command, profile_env)
+    commands = probe.read_text().splitlines()
+    return {
+        "unchanged_inode_and_mtime": bool(before) and before == binaries(),
+        "warm_go_commands": commands,
+        "warm_go_command_count": len(commands),
+        "warm_phases_ms": json.loads(phases.read_text()) if phases.exists() else {},
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bork", required=True)
     parser.add_argument("--samples", type=int, default=5)
+    parser.add_argument("--probe-bork", help="CLI built with the test cache gate")
     args = parser.parse_args()
     bork = str(Path(args.bork).resolve())
     results = {}
@@ -48,6 +90,10 @@ def main():
                 "warm_ms": warm,
                 "warm_median_ms": statistics.median(warm),
             }
+            if args.probe_bork:
+                results[name + "/script"]["diagnostics"] = diagnose(
+                    command, args.probe_bork, root, env
+                )
         for program in ("hello", "http_server"):
             source = "examples/" + program
             output = root / program
@@ -68,6 +114,10 @@ def main():
                     "warm_ms": warm,
                     "warm_median_ms": statistics.median(warm),
                 }
+                if args.probe_bork:
+                    results[program + "/" + operation]["diagnostics"] = diagnose(
+                        command, args.probe_bork, root, env
+                    )
             if program == "hello":
                 measure(operations["build"], env)
                 first, repeat = [], []

@@ -23,11 +23,17 @@ jobs:
         run: |
           uname -m
           go build -o "$RUNNER_TEMP/bork" ./cmd/bork
-          python3 scripts/benchmark_macos.py --bork "$RUNNER_TEMP/bork" | tee macos-latency.json
+          go build -ldflags='-X github.com/GiGurra/bork/internal/driver.cacheTestGate=enabled' -o "$RUNNER_TEMP/bork-profile" ./cmd/bork
+          python3 scripts/benchmark_macos.py --bork "$RUNNER_TEMP/bork" --probe-bork "$RUNNER_TEMP/bork-profile" | tee macos-latency.json
+      - name: Measure pure Go HTTP builds
+        run: |
+          CGO_ENABLED=0 python3 scripts/benchmark_macos.py --bork "$RUNNER_TEMP/bork" --probe-bork "$RUNNER_TEMP/bork-profile" | tee macos-purego-latency.json
       - uses: actions/upload-artifact@v4
         with:
           name: macos-latency
-          path: macos-latency.json
+          path: |
+            macos-latency.json
+            macos-purego-latency.json
   benchmark:
     runs-on: ubuntu-latest
     steps:

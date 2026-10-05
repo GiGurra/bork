@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"debug/buildinfo"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,11 @@ import (
 // An empty output selects the program executable next to its stable Go stage.
 // The stage lock serializes builders; execution itself never holds that lock.
 func buildOutput(path, out string) (executable string, cleanup func(), stable bool, err error) {
+	timings := newCacheTestTimings()
+	defer timings.finish()
+	timings.phase("compile-or-lookup")
 	build := func(program *compiledProgram, source []byte) error {
+		timings.phase("stage")
 		if program.context.err != nil {
 			return fmt.Errorf("determining Go build configuration (is Go installed?): %w", program.context.err)
 		}
@@ -52,7 +57,14 @@ func buildOutput(path, out string) (executable string, cleanup func(), stable bo
 		} else {
 			cleanup = release
 		}
-		return buildAtomicOutput(program, executable, dir, pinned)
+		files, _, stageErr := goStageFiles(source, program.module, embeds, program.context.moduleHook)
+		if stageErr != nil {
+			return stageErr
+		}
+		timings.phase("executable")
+		buildErr := buildWithReceipt(program, executable, dir, pinned, stable, files)
+		timings.phase("publish-compiler-result")
+		return buildErr
 	}
 	if cacheCLIState != nil && !cacheDisabled() {
 		err = compileBuild(path, build)
@@ -79,6 +91,14 @@ func buildAtomicOutput(program *compiledProgram, out, dir string, pinned bool) e
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		return buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
 	}
+	if info, err := os.Stat(out); err == nil && !info.Mode().IsRegular() {
+		// Preserve Go's handling of output directories and devices such as
+		// /dev/null; an atomic rename must never replace a device node.
+		return buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
+	}
+	if err := os.MkdirAll(filepath.Dir(out), 0755); err != nil {
+		return err
+	}
 	file, err := os.CreateTemp(filepath.Dir(out), ".bork-build-*")
 	if err != nil {
 		return err
@@ -87,7 +107,7 @@ func buildAtomicOutput(program *compiledProgram, out, dir string, pinned bool) e
 	_ = file.Close()
 	_ = os.Remove(pending)
 	defer func() { _ = os.Remove(pending) }()
-	if info, err := os.Stat(out); err == nil && info.Mode().IsRegular() {
+	if _, err := buildinfo.ReadFile(out); err == nil {
 		if err := os.Symlink(out, pending); err != nil {
 			return err
 		}
