@@ -90,11 +90,12 @@ provenance from the retained elements and replacement.
 
 A checked tuple lowers to a structural Go anonymous struct with exported generated
 fields `E0`, `E1`, etc., whose field types are the lowered element types. Identical
-bork tuple shapes share the same Go representation. A structural tag preserves identity when Go
-erases union members or function effects, with union alternatives in canonical
+bork tuple shapes share the same Go representation. A structural tag preserves
+identity when Go erases union members or function effects, with union alternatives in canonical
 order. Generic call and record boundaries convert between the declared Go layout
 and the checked specialization, retagging tuple values and converting elements
-when a generic union collapses. The tag has no runtime value. Tuple results remain a single Go result value. Literals
+when a generic union collapses. The tag has no runtime value. Tuple results remain
+a single Go result value. Literals
 and destructuring use temporaries where necessary to preserve evaluation order
 and avoid duplicate execution. Projections lower to `.E0`, etc. Match lowering
 reuses record/variant pattern machinery with positional fields, and debug source
