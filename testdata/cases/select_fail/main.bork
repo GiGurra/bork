@@ -27,7 +27,7 @@ fn types(s: Scope, ch: Channel[Int], n: Int) uses state {
 // A select's value includes Cancelled.
 fn value(s: Scope, ch: Channel[Int]) uses state: Int {
   select {
-    x = ch.receive(s) => 1
+    ch.receive(s) => 1
   }
 }
 
@@ -35,6 +35,6 @@ fn main() {}
 
 fn scopes(ch: Channel[Int]) uses state {
   _ = select {
-    x = ch.receive(1) => 1
+    ch.receive(1) => 1
   }
 }

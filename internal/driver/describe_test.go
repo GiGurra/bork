@@ -741,10 +741,10 @@ fn example(value: Int) {
 // written instead.
 func TestDescribeSelect(t *testing.T) {
 	t.Parallel()
-	source := `fn f(s: Scope, ch: Channel[Int], out: Channel[Int]) uses state: Int | Cancelled {
+	source := `fn f(s: Scope, ch: Channel[Int], out: Channel[Int]) uses state: String | Cancelled {
   select {
-    x = ch.receive(s) => 1
-    y = out.send(s, 2) => 2
+    x = ch.receive(s) => s"$x"
+    y = out.send(s, 2) => s"$y"
   }
 }
 fn main() {}
@@ -753,7 +753,7 @@ fn main() {}
 	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for at, want := range map[string]string{"2:3": "Int | Cancelled", "3:5": "Int | Closed", "3:9": "Channel[Int]", "4:5": "Ok | Closed", "4:9": "Channel[Int]"} {
+	for at, want := range map[string]string{"2:3": "String | Cancelled", "3:5": "Int | Closed", "3:9": "Channel[Int]", "4:5": "Ok | Closed", "4:9": "Channel[Int]"} {
 		result, err := Describe(path+":"+at, "")
 		if err != nil {
 			t.Fatal(err)

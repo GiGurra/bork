@@ -6,4 +6,4 @@ main.bork:14:19: a select arm's operation takes its arguments by position
 main.bork:20:16: the value sent must be Int, found String
 main.bork:23:9: a select arm's operation must be a channel's receive or send, but this is Int
 main.bork:29:3: function value returns Int, but its body produces Int | Cancelled
-main.bork:38:20: the scope a select arm waits in must be a Scope, found Int
+main.bork:38:16: the scope a select arm waits in must be a Scope, found Int
