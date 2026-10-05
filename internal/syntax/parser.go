@@ -1272,10 +1272,17 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 			p.skipNewlines()
 			for !p.at(RParen) {
 				arg := Argument{Pos: p.tok().Pos}
-				if p.at(TIdent) && p.peekKind() == Colon {
+				if p.at(TIdent) && (p.peekKind() == Colon || p.peekKind() == Assign) {
 					label := p.next()
 					arg.Name, arg.NameEnd = label.Text, label.End
-					p.next()
+					if t := p.next(); t.Kind == Assign {
+						// Assignment is a statement, so `name = value` here can only be
+						// a named argument written the way Python and Kotlin spell it.
+						p.diags.AddCode(t.Pos, "syntax.named_argument_separator", "named arguments use ':'; write `%s: value`", label.Text)
+						p.diags.Suggest(t.Pos, "syntax.named_argument_separator", t.End, diag.Fix{
+							Message: "replace '=' with ':'", Edits: []diag.TextEdit{{Start: t.Pos, End: t.End, Replacement: ":"}},
+						})
+					}
 					p.skipNewlines()
 				}
 				arg.ValueStart = p.tok().Pos

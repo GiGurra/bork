@@ -1,0 +1,2 @@
+main.bork:6:39: named arguments use ':'; write `port: value`
+main.bork:7:24: named arguments use ':'; write `host: value`

@@ -1,0 +1,8 @@
+fn connect(host: String, port: Int = 443, tls: Bool = true): String {
+  s"$host:$port tls=$tls"
+}
+
+fn main() uses io {
+  println(connect("example.com", port = 8080, tls: false))
+  println(connect(host = "example.com"))
+}
