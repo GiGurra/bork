@@ -316,6 +316,9 @@ func (r *dapRelay) rewrite(msg map[string]any) bool {
 }
 
 func (r *dapRelay) hidden(name string) bool {
+	if strings.HasPrefix(name, "(") && strings.HasSuffix(name, ")") {
+		name = name[1 : len(name)-1]
+	}
 	for _, prefix := range r.metadata.HiddenPrefixes {
 		if strings.HasPrefix(name, prefix) {
 			return true

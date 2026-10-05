@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -55,6 +56,7 @@ func TestDebugRelayPresentation(t *testing.T) {
 	r.pending[1] = 10
 	msg := map[string]any{"type": "response", "success": true, "command": "variables", "request_seq": float64(1), "body": map[string]any{"variables": []any{
 		map[string]any{"name": "_t1", "value": "4"},
+		map[string]any{"name": "(_scope)", "value": "generated"},
 		map[string]any{"name": "type_", "type": "string", "value": `"hello"`, "evaluateName": "record.type_", "variablesReference": float64(0)},
 		map[string]any{"name": "data", "type": "main.Record", "value": `main.Record {type_: "x"}`, "variablesReference": float64(11)},
 	}}}
@@ -151,5 +153,27 @@ func TestDebugAdapterEarlyExit(t *testing.T) {
 	err := debugDAPRelay(ctx, path, "127.0.0.1:0", io.Discard, io.Discard)
 	if err == nil || ctx.Err() != nil {
 		t.Fatalf("adapter exit did not terminate relay: %v, context %v", err, ctx.Err())
+	}
+}
+
+func TestDebugDAPPassthrough(t *testing.T) {
+	for _, payload := range []string{
+		`{"seq":1,"type":"response","command":"variables","success":true,"body":{"variables":[{"name":"_t1","value":"main.Shape_Circle {radius: 2}"}]}}`,
+		`{"seq":2,"type":"event","event":"output","body":{"output":"main.Shape_Circle {radius: 2}"}}`,
+		`{"seq":3,"type":"response","command":"custom","success":true,"body":{"unknown":9007199254740993}}`,
+		`{"seq":4,"type":"response","command":"evaluate","success":false,"message":"failure"}`,
+	} {
+		frame := fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(payload), payload)
+		for _, metadata := range []*gen.DebugMap{nil, presentationFixture().metadata} {
+			if metadata != nil && strings.Contains(payload, `"command":"variables"`) {
+				continue
+			}
+			r := dapRelay{metadata: metadata}
+			var output bytes.Buffer
+			err := r.copy(&output, strings.NewReader(frame), false, io.Discard)
+			if err != io.EOF || output.String() != frame {
+				t.Fatalf("passthrough changed message: %s; error %v", output.String(), err)
+			}
+		}
 	}
 }
