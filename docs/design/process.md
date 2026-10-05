@@ -179,8 +179,10 @@ fn (p: Process) Stderr(): Reader
 ```
 
 - `Wait` is repeatable and returns the same immutable result each time
-  (today's `Await`). It closes a still-open piped stdin first, like Rust, so a
-  child reading until EOF cannot deadlock against it.
+  (today's `Await`). Unlike Rust it does not close a piped stdin: a monitor
+  task waiting while another task writes input is the normal async shape, and
+  closing stdin under that writer would cut it off. Callers close stdin when
+  done; scope cleanup closes it otherwise.
 - `TryWait` never blocks: `None` while running. It is the polling primitive for
   monitoring loops; a task calling `Wait` is the blocking one.
 - `Signal` sends one of bork/signal's signals to the process group, reusing the
@@ -208,7 +210,8 @@ process's scope:
 fn (r: Reader) NextLine() uses io + state: String | Closed | Cancelled | IoError
 fn (r: Reader) NextChunk(max: Int = 32768) uses io + state: Bytes | Closed | Cancelled | IoError
 fn (r: Reader) ReadAll() uses io + state: Bytes | Cancelled | IoError
-fn (r: Reader) Lines(s: Scope, capacity: Int = 64) uses io + state: Channel[String | IoError]
+fn (r: Reader) Lines() uses io + state: Seq[String | Cancelled | IoError]
+fn (r: Reader) LinesChannel(s: Scope, capacity: Int = 64) uses io + state: Channel[String | IoError]
 ```
 
 `NextLine` strips `\n` and `\r\n`, returns a final unterminated line, then
@@ -219,7 +222,8 @@ cancellation returns `Cancelled` and unblocks a pending read.
 The pull Reader is the primitive because it maps to all three references
 (`bufio.Scanner`, `BufRead::lines`, `readline`), gives natural backpressure (a
 slow reader stalls the child at the OS pipe buffer instead of growing memory)
-and needs no callback effects. `Lines` adapts it to the channels world: it
+and needs no callback effects. `Lines` is a sequence for `for` loops, like `fs.Lines`. `LinesChannel` adapts
+the Reader to the channels world: it
 starts a task in `s` that pumps lines into a bounded `Channel` and closes the
 channel at end of stream, so process output can take part in select alongside
 timers and other channels (bork-73dn9h). The element type carries `IoError` so
@@ -265,7 +269,11 @@ _ = producer.Wait()?
 ```
 
 Handing a Reader to another process transfers it: further reads on it return
-`Closed`. Both processes stay owned by their scopes.
+`Closed`, and bytes it had buffered are passed on first. Both processes stay
+owned by their scopes. Because `Input` can now hold a Reader, `stdin` is
+declared `stdin: Input in s` on Run and Start: the Reader belongs to the
+starting scope. Run, which has no handle, treats a piped stdin as empty and
+piped output as captured.
 
 ## Effects and types
 
