@@ -736,3 +736,30 @@ fn example(value: Int) {
 		}
 	}
 }
+
+// A select's lowered code calls prelude helpers; describe shows what was
+// written instead.
+func TestDescribeSelect(t *testing.T) {
+	t.Parallel()
+	source := `fn f(s: Scope, ch: Channel[Int], out: Channel[Int]) uses state: Int | Cancelled {
+  select {
+    x = ch.receive(s) => 1
+    y = out.send(s, 2) => 2
+  }
+}
+fn main() {}
+`
+	path := filepath.Join(t.TempDir(), "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for at, want := range map[string]string{"2:3": "Int | Cancelled", "3:5": "Int | Closed", "3:9": "Channel[Int]", "4:5": "Ok | Closed", "4:9": "Channel[Int]"} {
+		result, err := Describe(path+":"+at, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Type != want || result.Definition != nil && strings.Contains(result.Definition.File, "prelude") {
+			t.Errorf("%s: type %s, defined at %v; want %s in the source", at, result.Type, result.Definition, want)
+		}
+	}
+}

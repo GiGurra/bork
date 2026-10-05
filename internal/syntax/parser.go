@@ -1719,8 +1719,9 @@ func (p *parser) primary() Expr {
 		if t.Text == "with" && p.peekKind() == LParen {
 			return p.withExpr()
 		}
-		// `select` is a keyword where an expression starts and '{' follows.
-		if t.Text == "select" && p.peekKind() == LBrace {
+		// `select` is a keyword where an expression starts and '{' follows,
+		// except in a scope's policy, where the '{' starts the scope's body.
+		if t.Text == "select" && p.peekKind() == LBrace && !p.noRecordLit {
 			return p.selectExpr()
 		}
 		// `scope` is a keyword only where a scope block starts.

@@ -1,0 +1,8 @@
+// Effects name the select, not its lowered code.
+fn pure(s: Scope, ch: Channel[Int]): Int | Cancelled {
+  select {
+    x = ch.receive(s) => 1
+  }
+}
+
+fn main() {}

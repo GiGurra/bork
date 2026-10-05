@@ -179,6 +179,15 @@ func TestSelectIsStillAName(t *testing.T) {
 	if len(f.Funcs) != 1 || f.Funcs[0].Name != "select" {
 		t.Fatalf("unexpected functions: %+v", f.Funcs)
 	}
+	// In a scope's policy, the '{' after select is the scope's body.
+	diags = &diag.List{}
+	f = Parse("t.bork", []byte("fn f() { scope s with select { g() } }"), diags)
+	if diags.Len() != 0 {
+		t.Fatalf("unexpected errors: %s", diags.Error())
+	}
+	if _, ok := f.Funcs[0].Body.Tail.(*ScopeExpr); !ok {
+		t.Fatalf("body is %T, want a scope", f.Funcs[0].Body.Tail)
+	}
 }
 
 func TestParseUsesErrors(t *testing.T) {

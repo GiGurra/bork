@@ -6,6 +6,10 @@ fn compilerSelectReceive[T](ch: Channel[T], s: Scope): SelectHandle unsafe go {
   return SelectHandle{handle: _borkChanArm{ch: ch.native.handle.(*_borkChan), scope: s.ctx}}
 }
 
+// compilerSelectValue gives x, checked as a value of ch's type, so a
+// context literal sent in a select knows its type.
+fn compilerSelectValue[T](ch: Channel[T], x: T): T { x }
+
 fn compilerSelectSend[T](ch: Channel[T], s: Scope, x: T): SelectHandle unsafe go {
   return SelectHandle{handle: _borkChanArm{ch: ch.native.handle.(*_borkChan), send: true, value: x, scope: s.ctx}}
 }

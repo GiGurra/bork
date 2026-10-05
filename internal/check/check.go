@@ -865,9 +865,6 @@ func (c *checker) funcNamed(name string) (*Func, bool) {
 	if fn := c.assemblyFuncs[name]; fn != nil {
 		return fn, true
 	}
-	if !c.inPrelude && strings.HasPrefix(name, "compilerSelect") {
-		return nil, false
-	}
 	if c.inPrelude {
 		fn, ok := c.preludePkg.Funcs[name]
 		return fn, ok
@@ -879,6 +876,10 @@ func (c *checker) funcNamed(name string) (*Func, bool) {
 	}
 	if fn, ok := c.pkg.Funcs[name]; ok {
 		return fn, true
+	}
+	// The prelude's select helpers are for the select expression only.
+	if strings.HasPrefix(name, "compilerSelect") {
+		return nil, false
 	}
 	fn, ok := c.preludePkg.Funcs[name]
 	return fn, ok

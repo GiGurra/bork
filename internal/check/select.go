@@ -122,7 +122,7 @@ func (c *checker) selectExpr(e *syntax.Select, want Type) Type {
 		bind("ch"+n, receiver)
 		bind("s"+n, o.call.Args[0])
 		if o.send {
-			bind("x"+n, o.call.Args[1])
+			bind("x"+n, helper("compilerSelectValue", o.call.Args[1], id("ch"+n, receiver), o.call.Args[1]))
 			arms.Elems = append(arms.Elems, helper("compilerSelectSend", o.arm.Op, id("ch"+n, receiver), id("s"+n, o.call.Args[0]), id("x"+n, o.call.Args[1])))
 		} else {
 			arms.Elems = append(arms.Elems, helper("compilerSelectReceive", o.arm.Op, id("ch"+n, receiver), id("s"+n, o.call.Args[0])))
@@ -173,6 +173,11 @@ func selectDiagnostic(d *diag.Diagnostic) bool {
 		switch {
 		case fn == "compilerSelectReceived" || fn == "compilerSelectSent":
 			return false
+		case fn == "compilerSelectValue" && index == "1":
+			// compilerSelectSend reports the receiver too.
+			return false
+		case fn == "compilerSelectValue":
+			d.Msg = "the value sent must be " + expected + ", found " + found
 		case index == "1":
 			d.Msg = "a select arm's operation must be a channel's receive or send, but this is " + found
 		case index == "2":

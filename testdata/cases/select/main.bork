@@ -43,6 +43,24 @@ fn peek(s: Scope, numbers: Channel[Int]) uses state: Option[Int] | Closed | Canc
   }
 }
 
+type Point = { x: Int, y: Int }
+
+// A value sent in an arm is checked as the channel's type, so context
+// literals and empty lists know theirs.
+fn contextSends(s: Scope) uses state: List[String | Cancelled] {
+  options = channel[Option[Int]](s, 1)
+  lists = channel[List[Int]](s, 1)
+  points = channel[Point](s, 1)
+  [
+    select { options.send(s, .None {}) => "option" },
+    select { lists.send(s, []) => "list" },
+    select { points.send(s, .{ x: 1, y: 2 }) => "point" },
+  ]
+}
+
+// Only the prelude's helpers are hidden, not a function of the same prefix.
+fn compilerSelectLike(): Int { 3 }
+
 // break and continue in an arm control the loop around the select.
 fn sum(s: Scope, numbers: Channel[Int], stop: Channel[Bool]) uses state: Int {
   total = atom(0)
@@ -68,6 +86,8 @@ fn main() {
     _ = numbers.send(s, 7)
     println(firstWord(s, words, numbers))
     println(peek(s, numbers))
+    println(contextSends(s))
+    println(compilerSelectLike())
     _ = words.send(s, "hello")
     println(firstWord(s, words, numbers))
     words.close()
