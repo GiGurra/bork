@@ -19,6 +19,7 @@ fn read[T](value: Payload[T]): T | String {
     .Empty => "empty"
   }
 }
+fn explicitOption(value: Option[Int]): Int { match(value) { Option[Int].Some(n) => n, Option[Int].None => 0 } }
 fn optional(): Option[Int] { n = Option.Some(7)?; .Some(n + 1) }
 fn once(n: Int) uses io: Int { println(s"once $n"); n }
 fn checked(n: Positive): Int { match (n) { .Value(value) => needsPositive(value), .Empty => 1 } }
@@ -37,6 +38,7 @@ fn main() {
   println(Payload.Pair(once(4), { println("second"); "effect" }))
   println(comptime { Payload.One((5, "constant")) })
   println(optional(), Option[Int].Some(6), Option[Int].None, Option.Some(3).map(n => n + 1))
+  println(explicitOption(Option[Int].Some(12)), explicitOption(Option[Int].None), Option[Int].None is Option[Int].None)
   println(inspectBits(.Pair(false, true)), checked(.Value(1)))
   println(json.Encode(value), json.Encode(tuple), json.Encode(Payload[Int].Named { value: 6 }))
   println(json.Decode[Payload[Int]]("{\"type\":\"Pair\",\"values\":[2,\"ok\"]}"))

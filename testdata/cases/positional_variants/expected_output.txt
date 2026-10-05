@@ -8,6 +8,7 @@ second
 Payload.Pair(4, "effect")
 Payload.One((5, "constant"))
 Option.Some(8) Option.Some(6) Option.None Option.Some(4)
+12 0 true
 true 1
 {"type":"Pair","values":[2,"ok"]} {"type":"One","values":[[3,"tuple"]]} {"type":"Named","value":6}
 Payload.Pair(2, "ok")
