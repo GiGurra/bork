@@ -468,7 +468,7 @@ fn WaitAll(servers: List[Server]) uses net: Ok | IoError unsafe go {
 
 // _borkWaitServers waits until count servers have stopped or been cancelled,
 // and returns IoErrors for those that stopped on their own, in list order.
-fn _borkWaitServers(servers: List[Server], count: Int): List[IoError] unsafe go {
+fn _borkWaitServers (servers: List[Server], count: Int): List[IoError] unsafe go {
   if len(servers) == 0 { return nil }
   type serverState = struct {
     addr string
