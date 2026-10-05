@@ -3,8 +3,9 @@
 Normal and race tests use `scripts/ci.py`. Each mode discovers all packages with
 `go list` and all driver Test, Example and Fuzz parents with `go test -list`,
 using the same race build tags as the actual run. `core` covers every package
-except `internal/driver`. Golden cases use three shards, examples one, and the
-remaining driver parents four integration shards. Anchored parent patterns retain
+except `internal/driver` and `internal/lsp`. LSP parents use three shards,
+golden cases three, examples one, and the remaining driver parents six
+integration shards. Anchored parent patterns retain
 every subtest. Golden case children are discovered from `testdata/cases` using
 the same directory rules as `TestCases`: hidden entries and symlinks are excluded.
 Each discovered fixture directory runs in exactly one case shard, including new
