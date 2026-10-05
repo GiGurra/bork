@@ -29,3 +29,5 @@ fn genericTarget[A, B](x: A): B { test.AssertIs[B](x) }
 fn genericPattern[T](x: Int | String): Bool { x is T }
 
 fn nestedUnion[T](x: List[T]): List[Int | String] { test.AssertIs[List[Int | String]](x) }
+
+fn tupleBinding(value: (Int, String)): Bool { value is (name: Int, _) }

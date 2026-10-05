@@ -8,3 +8,4 @@ main.bork:15:41: small requires n to be positive, but that is not proven for n (
 main.bork:16:69: small requires n to be positive, but that is not proven for n (check it first with if (positive(n)) { ... })
 main.bork:18:44: small requires n to be positive, but that is not proven for n[0] (check it first with if (positive(n[0])) { ... })
 main.bork:20:67: small requires n to be positive, but that is not proven for n.value (check it first with if (positive(n.value)) { ... })
+main.bork:22:45: small requires n to be positive, but that is not proven for n[0] (check it first with if (positive(n[0])) { ... })

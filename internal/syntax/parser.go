@@ -1493,7 +1493,12 @@ func (p *parser) pattern() Pattern {
 	case LParen:
 		p.next()
 		p.skipNewlines()
-		first := p.pattern()
+		var first Pattern
+		if p.testingPattern {
+			first = p.testPattern()
+		} else {
+			first = p.pattern()
+		}
 		p.skipNewlines()
 		if !p.at(Comma) {
 			p.expect(RParen, "to close the pattern")
@@ -1506,7 +1511,11 @@ func (p *parser) pattern() Pattern {
 			if p.at(RParen) {
 				break
 			}
-			tuple.Elems = append(tuple.Elems, p.pattern())
+			if p.testingPattern {
+				tuple.Elems = append(tuple.Elems, p.testPattern())
+			} else {
+				tuple.Elems = append(tuple.Elems, p.pattern())
+			}
 			p.skipNewlines()
 		}
 		tuple.End = p.expect(RParen, "to close the tuple pattern").End
@@ -2220,9 +2229,29 @@ func (p *parser) testPattern() Pattern {
 			return &TypePat{Pos: t.Pos, Type: t}
 		}
 	}
-	if p.at(LParen) {
+	if p.at(LParen) && p.patternTestTypeAhead() {
 		t := p.typeExpr()
 		return &TypePat{Pos: t.Pos, Type: t}
 	}
 	return p.pattern()
+}
+
+// Parentheses introduce tuple/parenthesized patterns except when followed by
+// type annotation syntax. Nested arrows remain inside their own parentheses.
+func (p *parser) patternTestTypeAhead() bool {
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case LParen:
+			depth++
+		case RParen:
+			depth--
+			if depth == 0 {
+				return i+1 < len(p.toks) && ((p.toks[i+1].Kind == TIdent && p.toks[i+1].Text == "uses") || p.toks[i+1].Kind == Arrow || p.toks[i+1].Kind == KwWhere || p.toks[i+1].Kind == Pipe)
+			}
+		case EOF:
+			return false
+		}
+	}
+	return false
 }

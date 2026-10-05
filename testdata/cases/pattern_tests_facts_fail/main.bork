@@ -18,3 +18,5 @@ fn impossibleAssert(n: String): Int { test.AssertIs[Int where small](n) }
 fn impossibleList(n: String): Bool { n is [Int where small] }
 type Choice = sealed { Some { value: Int } }
 fn impossibleVariant(n: String): Bool { n is Choice.Some { value: Int where small } }
+
+fn impossibleTuple(n: String): Bool { n is (Int where small, _) }

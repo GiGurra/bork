@@ -32,7 +32,7 @@ index a5403e6..e69a200 100644
 +source = { git = "https://github.com/GiGurra/bork", rev = "c00425c13bb90d83b974bed5d3353679f982d059", subpath = "editors/tree-sitter-bork" }
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
-index 0000000..b1713d1
+index 0000000..dac97f6
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
 @@ -0,0 +1,4 @@
@@ -42,10 +42,10 @@ index 0000000..b1713d1
 + (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..87b9909
+index 0000000..8a090d4
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,39 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -87,7 +87,7 @@ index 0000000..87b9909
 +(test_field_pattern name: (identifier) @variable.other.member)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
-index 0000000..686bfac
+index 0000000..1eb2d67
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
 @@ -0,0 +1,7 @@

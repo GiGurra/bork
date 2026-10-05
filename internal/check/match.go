@@ -267,7 +267,7 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		return &Pat{Kind: PatLit, Type: st, Lit: c.literalValue(p.Value)}
 
 	case *syntax.TypePat:
-		if c.patternTest && p.Name != "" {
+		if c.patternTest && p.Name != "" && p.Name != "_" {
 			c.errorf(p.Pos, "is patterns cannot bind names; write the type without a binding")
 			return nil
 		}
@@ -358,6 +358,17 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		}
 		rec, ok := st.(*Record)
 		if !ok || !rec.Tuple || len(rec.Fields) != len(p.Elems) {
+			if c.patternTest {
+				out := &Pat{Kind: PatNever, Type: st}
+				for _, elem := range p.Elems {
+					child := c.disjointPattern(elem)
+					if child == nil {
+						return nil
+					}
+					out.Elems = append(out.Elems, child)
+				}
+				return out
+			}
 			c.errorf(p.Pos, "cannot match a %d-element tuple pattern against %s", len(p.Elems), st)
 			return nil
 		}
@@ -460,7 +471,19 @@ func (c *checker) tuplePatternCompatible(p *syntax.TuplePat, rec *Record) bool {
 
 func (c *checker) tupleElementCompatible(elem syntax.Pattern, field Type) bool {
 	if typed, ok := elem.(*syntax.TypePat); ok {
-		return assignable(c.resolveType(typed.Type), field)
+		var target Type
+		if c.patternTest && typed.Type.Name != "" && len(typed.Type.Args) == 0 {
+			if base := c.typeNamed(typed.Type.Name); base != nil && genericBase(base) == base {
+				target = instanceIn(field, base)
+			}
+		}
+		if target == nil {
+			target = c.resolveType(typed.Type)
+		}
+		if c.patternTest {
+			return patternTypesOverlap(field, target)
+		}
+		return assignable(target, field)
 	}
 	if union, ok := field.(*Union); ok {
 		for _, member := range union.Members {
@@ -918,4 +941,29 @@ func patternSameRepresentation(a, b Type) bool {
 		return ok && patternSameRepresentation(am.Key, bm.Key) && patternSameRepresentation(am.Value, bm.Value)
 	}
 	return parallelSameRepresentation(a, b)
+}
+
+// Candidate selection must keep tuple members that a broader type test can
+// accept. The checked pattern subsequently validates erased distinctions.
+func patternTypesOverlap(source, target Type) bool {
+	if target == Invalid {
+		return false
+	}
+	if u, ok := source.(*Union); ok {
+		for _, m := range u.Members {
+			if patternTypesOverlap(m, target) {
+				return true
+			}
+		}
+		return false
+	}
+	if u, ok := target.(*Union); ok {
+		for _, m := range u.Members {
+			if patternTypesOverlap(source, m) {
+				return true
+			}
+		}
+		return false
+	}
+	return hasTypeParam(source) || hasTypeParam(target) || patternTypeAccepts(source, target) || patternSameRepresentation(source, target)
 }

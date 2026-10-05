@@ -13,5 +13,9 @@ true
 true true true
 false false true 4
 3 3 3 3
+true true false false
+true
+true true
+(3, "ok")
 3
 true true

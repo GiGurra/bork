@@ -15,3 +15,4 @@ main.bork:26:38: test.AssertIs must be called directly with an explicit target t
 main.bork:28:51: pattern target B must have concrete type arguments; runtime tests cannot recover generic unions or effect annotations
 main.bork:29:52: pattern target T must have concrete type arguments; runtime tests cannot recover generic unions or effect annotations
 main.bork:31:86: pattern test cannot check erased effects or nested unions through a type parameter
+main.bork:33:57: is patterns cannot bind names; write the type without a binding

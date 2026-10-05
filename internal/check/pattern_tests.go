@@ -76,7 +76,7 @@ func (c *checker) bindingFreePattern(p syntax.Pattern) bool {
 	ok := true
 	switch p := p.(type) {
 	case *syntax.TypePat:
-		if p.Name != "" {
+		if p.Name != "" && p.Name != "_" {
 			c.errorf(p.Pos, "is patterns cannot bind names; write the type without a binding")
 			return false
 		}
@@ -88,6 +88,10 @@ func (c *checker) bindingFreePattern(p syntax.Pattern) bool {
 			} else {
 				ok = c.bindingFreePattern(field.Pattern) && ok
 			}
+		}
+	case *syntax.TuplePat:
+		for _, elem := range p.Elems {
+			ok = c.bindingFreePattern(elem) && ok
 		}
 	case *syntax.ListPat:
 		if p.Rest != "" {
@@ -123,6 +127,16 @@ func (c *checker) disjointPattern(p syntax.Pattern) *Pat {
 	switch p := p.(type) {
 	case *syntax.WildcardPat:
 		return &Pat{Kind: PatWild, Type: Invalid}
+	case *syntax.TuplePat:
+		checked := &Pat{Kind: PatNever, Type: Invalid}
+		for _, elem := range p.Elems {
+			child := c.disjointPattern(elem)
+			if child == nil {
+				return nil
+			}
+			checked.Elems = append(checked.Elems, child)
+		}
+		return checked
 	case *syntax.ListPat:
 		checked := &Pat{Kind: PatNever, Type: Invalid}
 		for _, elem := range p.Elems {
