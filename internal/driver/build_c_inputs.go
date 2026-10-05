@@ -331,6 +331,9 @@ func systemBuildHeader(path string) bool {
 			return true
 		}
 	}
+	if strings.HasPrefix(path, "/Applications/Xcode") && strings.Contains(path, "/Contents/Developer/") {
+		return true
+	}
 	return strings.HasPrefix(path, "/usr/lib/") && strings.Contains(path, "/lib/clang/")
 }
 

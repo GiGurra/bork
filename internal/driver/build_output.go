@@ -101,8 +101,12 @@ func buildOutput(path, out string, supplied ...BuildOptions) (executable string,
 	}
 	var program *compiledProgram
 	var source []byte
-	program, source, err = emitProgramObserved(path, nil)
+	program, source, err = emitProgramObservedWithOptions(path, nil, goContextOptions{moduleHook: goModuleHook, forceBuild: true})
+	// A recipe miss must refresh evaluator objects before compile-time values
+	// are emitted: Go does not track every project C or assembly include.
+	// The final build applies its own inventory policy below.
 	if err == nil {
+		program.context.forceBuild = options.Rebuild
 		err = build(program, source)
 	}
 	if err != nil && cleanup != nil {

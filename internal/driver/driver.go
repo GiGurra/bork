@@ -105,12 +105,15 @@ func checkObserved(path string, observe func(string)) ([]*syntax.File, *check.In
 }
 
 func checkProgramObserved(path string, observe func(string)) (*compiledProgram, error) {
+	return checkProgramObservedWithOptions(path, observe, goContextOptions{moduleHook: goModuleHook})
+}
+func checkProgramObservedWithOptions(path string, observe func(string), options goContextOptions) (*compiledProgram, error) {
 	loaded, module, err := loadCompilationInputs(path, observe)
 	if err != nil {
 		return nil, err
 	}
 	phase(observe, "configuration")
-	return checkLoadedProgramObserved(loaded, module, captureGoContext(), captureEmbedsSnapshot, observe)
+	return checkLoadedProgramObserved(loaded, module, captureGoContextWithOptions(options), captureEmbedsSnapshot, observe)
 }
 
 // Rebuild semantic state from independently parsed captured inputs. Callers own
@@ -403,7 +406,10 @@ func emitObserved(path string, observe func(string)) ([]*syntax.File, *check.Inf
 }
 
 func emitProgramObserved(path string, observe func(string)) (*compiledProgram, []byte, error) {
-	program, err := checkProgramObserved(path, observe)
+	return emitProgramObservedWithOptions(path, observe, goContextOptions{moduleHook: goModuleHook})
+}
+func emitProgramObservedWithOptions(path string, observe func(string), options goContextOptions) (*compiledProgram, []byte, error) {
+	program, err := checkProgramObservedWithOptions(path, observe, options)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -479,6 +485,9 @@ func buildStagedGoObserved(files []*syntax.File, absOut, dir string, pinned bool
 }
 
 func buildStagedGoOptions(files []*syntax.File, absOut, dir string, pinned bool, context *goContext, observation *executionObservation, options ...string) error {
+	if context.forceBuild && !slices.Contains(options, "-a") {
+		options = append(options, "-a")
+	}
 	args := append([]string{"build", "-mod=readonly", "-buildvcs=false", "-o", absOut}, options...)
 	cmd := context.command(append(args, ".")...)
 	cmd.Dir = dir

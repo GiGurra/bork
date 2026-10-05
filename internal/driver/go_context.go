@@ -22,6 +22,7 @@ import (
 // work retain their existing behavior. This is not a complete reuse key for
 // external package metadata, toolchain contents or evaluator effects.
 type goContext struct {
+	forceBuild     bool
 	savedSettings  *sourceSnapshot
 	launcher       string
 	launcherDigest [sha256.Size]byte
@@ -53,6 +54,7 @@ type goContext struct {
 // launcher discovery still uses the caller's PATH. Defaults are assigned once
 // before compilation starts, and a captured context never rereads the hook.
 type goContextOptions struct {
+	forceBuild bool
 	settings   []string
 	moduleHook goModuleHookFunc
 }
@@ -70,7 +72,7 @@ func resolveGoContext() *goContext {
 }
 
 func resolveGoContextWithOptions(options goContextOptions) *goContext {
-	ctx := &goContext{processEnv: append(slices.Clone(os.Environ()), options.settings...), moduleHook: options.moduleHook}
+	ctx := &goContext{forceBuild: options.forceBuild, processEnv: append(slices.Clone(os.Environ()), options.settings...), moduleHook: options.moduleHook}
 	ctx.env = slices.Clone(ctx.processEnv)
 	ctx.self, _ = os.Executable()
 	ctx.driver = ctx.processValue("GOPACKAGESDRIVER")
