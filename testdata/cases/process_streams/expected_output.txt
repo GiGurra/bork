@@ -1,0 +1,39 @@
+true
+true
+forwarded out
+merged err
+true
+true
+true
+first
+second
+third
+
+true
+logged
+
+true
+true
+3
+ExitStatus.Exited { code: 3 }
+false
+exit status 3: bad input
+fine
+
+-1
+ExitStatus.Signaled { number: 9, name: "SIGKILL" }
+killed by SIGKILL
+true
+ExitStatus.Signaled { number: 9, name: "SIGKILL" }
+true
+4
+got usr1
+
+cleaned up
+
+true
+context deadline exceeded
+true
+graceful exit
+
+ok

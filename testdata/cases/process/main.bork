@@ -53,8 +53,8 @@ fn signalTest(s: Scope, interrupt: Bool) uses io + state + clock: Ok | IoError |
   path = marker(s)
   child = process.Start(s, executable(), ["signal-server", path])?
   waitReady(path)
-  signalChild(process.Pid(child), interrupt)
-  output = process.Await(child)?
+  signalChild(child.Pid(), interrupt)
+  output = child.Wait()?
   expected = if (interrupt) { 130 } else { 143 }
   println(output.code == expected)
   println(encoding.ParseUtf8(output.stdout))
@@ -88,7 +88,7 @@ fn gone(pid: Int) uses io: Bool unsafe go {
 fn abandoned() uses io + state: Int | IoError | Cancelled {
   scope child {
     proc = process.Start(child, executable(), ["sleep"])?
-    process.Pid(proc)
+    proc.Pid()
   }
 }
 fn attached(s: Scope) uses io + state: process.Process | IoError | Cancelled {
@@ -106,9 +106,9 @@ fn inheritedPipes(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   child = process.Start(s, "/bin/sh", ["-c", "sleep 3 & echo ready > \"$1\"; wait", "bork-test", path])?
   waitReady(path)
   start = millis()
-  process.Stop(child)
-  println(match (process.Await(child)) {
-    stopped: Cancelled => true
+  child.Stop()
+  println(match (child.Wait()) {
+    result: process.Result => !result.Success()
     _ => false
   })
   println(millis() - start < 2500)
@@ -157,8 +157,8 @@ fn groupCancellation(s: Scope) uses io + state + clock: Ok | IoError | Cancelled
   child = process.Start(s, "/bin/sh", ["-c", "sleep 60 & echo $! > \"$1\"; wait", "bork-test", path])?
   waitReady(path)
   pid = descendantPid(path)
-  process.Stop(child)
-  _ = process.Await(child)
+  child.Stop()
+  _ = child.Wait()
   println(descendantGone(pid))
   path2 = marker(s)
   pid2 = scope owner {
@@ -174,15 +174,15 @@ fn parentEnv() uses io unsafe go {
 }
 fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   parentEnv()
-  output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: encoding.Utf8("input") })?
+  output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", .Data { data: encoding.Utf8("input") })?
   println(output.code)
   println(encoding.ParseUtf8(output.stdout))
   println(encoding.ParseUtf8(output.stderr))
   child = process.Start(s, executable(), ["child"], Option.Some { value: [] })?
-  first = process.Await(child)?
-  second = process.Await(child)?
+  first = child.Wait()?
+  second = child.Wait()?
   println(first == second)
-  println(process.Pid(child) > 0)
+  println(child.Pid() > 0)
   directory = markerDir(marker(s))
   located = process.Run(s, executable(), ["cwd"], Option.None, directory)?
   println(encoding.ParseUtf8(located.stdout) == directory + "\n")
@@ -192,23 +192,23 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   abandonedPid = abandoned()?
   println(gone(abandonedPid))
   shared = attached(s)?
-  println(!gone(process.Pid(shared)))
-  process.Stop(shared)
-  println(match (process.Await(shared)) {
-    result: process.Result => false
+  println(!gone(shared.Pid()))
+  shared.Stop()
+  println(match (shared.Wait()) {
+    result: process.Result => result.status == process.ExitStatus.Signaled { number: 15, name: "SIGTERM" } && result.code == -1
     error: IoError => false
-    stopped: Cancelled => true
+    stopped: Cancelled => false
   })
   inheritedPipes(s)?
   groupCancellation(s)?
   signalTest(s, false)?
   signalTest(s, true)?
   stopped = process.Start(s, executable(), ["sleep"])?
-  process.Stop(stopped)
-  println(match (process.Await(stopped)) {
-    result: process.Result => false
+  stopped.Kill()
+  println(match (stopped.Wait()) {
+    result: process.Result => result.status == process.ExitStatus.Signaled { number: 9, name: "SIGKILL" }
     error: IoError => false
-    cancelled: Cancelled => true
+    cancelled: Cancelled => false
   })
   println(match (process.Run(s, "/definitely/no/bork-executable")) {
     result: process.Result => false

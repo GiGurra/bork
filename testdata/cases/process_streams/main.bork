@@ -1,0 +1,142 @@
+import "bork/encoding"
+import "bork/fs"
+import "bork/process"
+import "bork/time"
+
+fn shell(s: Scope, script: String, stdin: process.Input = .Empty, stdout: process.Output = .Capture, stderr: process.ErrorOutput = .Capture) uses io + state: process.Result | IoError | Cancelled {
+  process.Run(s, "/bin/sh", ["-c", script], stdin: stdin, stdout: stdout, stderr: stderr)
+}
+
+fn waitReady(path: String) uses io + clock unsafe go {
+  import "os"
+  import "time"
+  for i := 0; i < 500; i++ {
+    if data, _ := os.ReadFile(path); len(data) > 0 { return }
+    time.Sleep(10*time.Millisecond)
+  }
+  panic("child readiness timeout")
+}
+
+fn streams(s: Scope, directory: String) uses io + state: Ok | IoError | Cancelled | fs.Error {
+  separate = shell(s, "echo out; echo err >&2; echo out2")?
+  println(separate.StdoutText() == "out\nout2\n" && separate.StderrText() == "err\n")
+  combined = shell(s, "echo one; echo two >&2; echo three; echo four >&2", stderr: .Stdout)?
+  println(combined.StdoutText() == "one\ntwo\nthree\nfour\n" && combined.StderrText() == "")
+  // Forwarded output goes straight to this program's stdout and stderr.
+  _ = shell(s, "echo forwarded out; echo forwarded err >&2", stdin: .Inherit, stdout: .Inherit, stderr: .Inherit)?
+  _ = shell(s, "echo merged err >&2", stdout: .Inherit, stderr: .Stdout)?
+  quiet = shell(s, "echo hidden; echo shown >&2", stdout: .Discard, stderr: .Inherit)?
+  println(quiet.StdoutText() == "" && quiet.StderrText() == "")
+  sorted = process.Run(s, "sort", stdin: .Text { text: "b\nc\na\n" })?
+  println(sorted.StdoutText() == "a\nb\nc\n")
+  counted = process.Run(s, "wc", ["-c"], stdin: .Data { data: encoding.Utf8("12345") })?
+  println(counted.StdoutText().trim() == "5")
+  path = fs.Join([directory, "log.txt"])
+  _ = shell(s, "echo first", stdout: .File { path: path })?
+  _ = shell(s, "echo second; echo third >&2", stdout: .Append { path: path }, stderr: .Stdout)?
+  println(encoding.ParseUtf8(fs.Read(path)?))
+  copied = process.Run(s, "cat", stdin: .File { path: path })?
+  println(copied.StdoutText() == "first\nsecond\nthird\n")
+  errors = fs.Join([directory, "errors.txt"])
+  _ = shell(s, "echo kept; echo logged >&2", stderr: .File { path: errors })?
+  println(encoding.ParseUtf8(fs.Read(errors)?))
+  println(match (shell(s, "true", stdin: .File { path: fs.Join([directory, "missing"]) })) {
+    error: IoError => error.path.endsWith("missing")
+    _ => false
+  })
+  println(match (shell(s, "true", stdout: .File { path: fs.Join([directory, "no", "such", "dir"]) })) {
+    error: IoError => error.path.endsWith("dir")
+    _ => false
+  })
+}
+
+fn statuses(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  failed = shell(s, "echo partial; echo first problem >&2; echo bad input >&2; exit 3")?
+  println(failed.code)
+  println(failed.status)
+  println(failed.Success())
+  println(match (failed.Check()) {
+    error: process.ExitError => error.message
+    result: process.Result => "unexpected"
+  })
+  ok = shell(s, "echo fine")?.Check()
+  println(match (ok) {
+    result: process.Result => result.StdoutText()
+    error: process.ExitError => error.message
+  })
+  killed = shell(s, "kill -9 $$")?
+  println(killed.code)
+  println(killed.status)
+  println(match (killed.Check()) {
+    error: process.ExitError => error.message
+    result: process.Result => "unexpected"
+  })
+}
+
+fn handles(s: Scope, directory: String) uses io + state + clock: Ok | IoError | Cancelled {
+  slow = process.Start(s, "/bin/sh", ["-c", "sleep 5"])?
+  println(slow.TryWait() == .None)
+  slow.Kill()
+  println(slow.Wait()?.status)
+  println(match (slow.TryWait()) {
+    Option.Some { value } => true
+    Option.None => false
+  })
+  ready = fs.Join([directory, "ready"])
+  trapped = process.Start(s, "/bin/sh", ["-c", "trap 'echo got usr1; exit 4' USR1; echo ready > \"$1\"; while true; do sleep 0.05; done", "sh", ready])?
+  waitReady(ready)
+  trapped.Signal(.User1)?
+  done = trapped.Wait()?
+  println(done.code)
+  println(done.StdoutText())
+  graceful = fs.Join([directory, "graceful"])
+  terminated = process.Start(s, "/bin/sh", ["-c", "trap 'echo cleaned up; exit 0' TERM; echo ready > \"$1\"; while true; do sleep 0.05; done", "sh", graceful])?
+  waitReady(graceful)
+  terminated.Stop()
+  println(terminated.Wait()?.StdoutText())
+  // Signals after exit do nothing.
+  println(match (terminated.Signal(.User1)) {
+    sent: Ok => true
+    error: IoError => false
+  })
+}
+
+fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cancelled {
+  limited = scope limited {
+    cancelAfter(limited, 100)
+    process.Run(limited, "sleep", ["5"])
+  }
+  println(match (limited) {
+    stopped: Cancelled => stopped.reason
+    _ => "unexpected"
+  })
+  path = fs.Join([directory, "grace.txt"])
+  graced = scope patient {
+    cancelAfter(patient, 300)
+    process.Run(patient, "/bin/sh", ["-c", "trap 'echo graceful exit; exit 3' TERM; while true; do sleep 0.05; done"], stdout: .File { path: path }, cancelGrace: time.Duration { nanos: 2_000_000_000 })
+  }
+  println(match (graced) {
+    stopped: Cancelled => true
+    _ => false
+  })
+  println(match (fs.Read(path)) {
+    data: Bytes => encoding.ParseUtf8(data)
+    _ => "missing"
+  })
+}
+
+fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | fs.Error {
+  directory = fs.DirectoryPath(fs.TempDir(s)?)
+  streams(s, directory)?
+  statuses(s)?
+  handles(s, directory)?
+  cancellation(directory)?
+}
+
+fn main() {
+  result = scope s { exercise(s) }
+  match (result) {
+    done: Ok => println("ok")
+    other => println(other)
+  }
+}
