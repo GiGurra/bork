@@ -241,11 +241,15 @@ A pin records its keeper's lifetime and is released once every scope of that
 lifetime has ended:
 
 - **Inner scope blocks.** A task of an inner scope block stops pinning when
-  that block ends. Not if the block has a `taskTimeout` policy, though: an
-  orphaned task may still run, so its pins stay for the rest of the frame.
+  that block ends, if its policies are all known not to orphan tasks
+  (`cleanupTimeout`, `logFailures`). Any other policy (`taskTimeout`, or one
+  computed by a function) may leave a task running, so its pins stay.
+  `setScopePolicy` cannot be called directly, so every policy is visible
+  where the scope starts.
 - **Owned children.** An owned child releases its pins only when it is closed
   with `closeScope`, not when its owner is passed on or returned: the child's
-  tasks keep running under the new owner.
+  tasks keep running under the new owner. It must also have been opened here
+  with safe policies (an owner parameter's child may have any).
 - **Branches.** Pins join across branches like moves do: pinned on any path is
   pinned.
 
