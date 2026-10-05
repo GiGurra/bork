@@ -1,0 +1,87 @@
+import "bork/codec"
+use codec.Defaults
+import "bork/process"
+import codecs "bork/json"
+// Partial is an immutable input snapshot, never a complete options record.
+// Omitted fields remain Missing even when their record declares a default.
+type Partial = private { read: (String) uses nothing => partialEntry | Missing | codec.DecodeError }
+type Missing = { field: String }
+type partialEntry = { value: codec.Value, validate: (codec.Value) uses nothing => Ok | codec.DecodeError }
+type CompletionRequest = { field: String, prefix: String, arguments: List[String], partial: Partial }
+type Suggestions = { choices: List[Choice], files: Bool = false, directories: Bool = false, keepOrder: Bool = false }
+type Completer = (CompletionRequest, Scope) uses io + net + clock + random + state => Suggestions | Error
+type Completion = { field: String, suggest: Completer }
+
+// Get checks the original field's independent constraints, then decodes U.
+// It does not establish sibling-dependent constraints on a partial record.
+fn (input: Partial) Get[U: codec.Decode](field: String): U | Missing | codec.DecodeError {
+  match (readPartial(input, field)) {
+    missing: Missing => missing
+    error: codec.DecodeError => error
+    entry: partialEntry => match (entry.validate(entry.value)) {
+      error: codec.DecodeError => error
+      Ok => match (codec.decode[U](entry.value)) {
+        error: codec.DecodeError => error.copy(path: s".${field}${error.path}")
+        value: U => value
+      }
+    }
+  }
+}
+fn readPartial(input: Partial, field: String): partialEntry | Missing | codec.DecodeError { input.read(field) }
+fn invokeCompletion(completion: Completion, request: CompletionRequest) uses io + net + clock + random + state: Suggestions | Error {
+  scope s { completion.suggest(request, s) }
+}
+
+// ParseWith opts into effectful completion while retaining proven normal input.
+fn ParseWith[T: codec.Decode](name: String, description: String, args: List[String], completions: List[Completion] = [], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io + net + clock + random + state: T | Error | Help {
+  match (ParseDetailedWith[T](name, description, args, completions, flags, configFiles, settings)) {
+    input: Parsed[T] => input.options
+    error: Error => error
+    help: Help => help
+  }
+}
+// ParseDetailedWith also preserves warnings from successfully accepted flags.
+fn ParseDetailedWith[T: codec.Decode](name: String, description: String, args: List[String], completions: List[Completion] = [], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io + net + clock + random + state: Parsed[T] | Error | Help {
+  scope owner {
+  match (resolve[T](flags, settings, name)) {
+    error: Error => error
+    specs: List[FieldSpec] => match (inputFields[T](name)) {
+      error: Error => error
+      fields: List[inputField] => match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, completions, invokeCompletion, owner)) {
+        error: Error => error
+        prepared: adapter => match (evaluateWith(() => evaluate(prepared, args, settings.completion, configureCompletion))) {
+          error: Error => error
+          help: Help => help
+          input: parsedInput => match (codec.decode[T](input.value)) {
+            error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+            options: T => Parsed[T] { options: options, warnings: input.warnings }
+          }
+        }
+      }
+    }
+  }
+  }
+}
+
+// RunWith reads process arguments; only complete valid options reach its handler.
+fn RunWith[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, completions: List[Completion] = [], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io + net + clock + random + state: Ok | Error {
+  match (ParseDetailedWith[T](name, description, process.Args(), completions, flags, configFiles, settings)) {
+    help: Help => { print(help.text); printError(help.diagnostics) }
+    error: Error => error
+    parsed: Parsed[T] => {
+      for (warning in parsed.warnings) { printError(s"${warning}\n") }
+      scope s { run(parsed.options, s) }
+    }
+  }
+}
+
+// SubcommandWith stores dynamic completers alongside the typed leaf handler.
+fn SubcommandWith[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, completions: List[Completion] = [], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
+  makeSubcommand[T](name, description, run, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions)
+}
+
+// Native Cobra callbacks hold their closed effects behind the private adapter.
+// Only the With APIs construct such adapters and cross this execution boundary.
+fn evaluateWith(execute: () uses io => parsedInput | Error | Help) uses io + net + clock + random + state: parsedInput | Error | Help unsafe go {
+  return execute()
+}

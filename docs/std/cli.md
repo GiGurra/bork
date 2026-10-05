@@ -269,8 +269,8 @@ bork build examples/cli_completion -o deploy
 Source deploy.bash in Bash, put _deploy on your zsh fpath, install deploy.fish
 under your fish completions directory, or dot-source deploy.ps1 in PowerShell.
 The native Cobra generators handle shell quoting and descriptions. Generating a
-script, requesting help, or completing never reads config files or runs a
-handler or its finalizers. Completion does not require a complete valid options
+script or requesting help never reads config files or runs a handler or its
+finalizers. Static value completion also skips configuration and handlers. Completion does not require a complete valid options
 record; required fields may be omitted while choosing a value.
 
 A Flag's `choices: List[cli.Choice]` supplies value/description pairs for long
@@ -303,3 +303,76 @@ and both hidden endpoints. For a tree, pass these settings to Dispatch or
 RunCommands: the entrypoint controls the whole tree. Subcommand settings govern
 field mappings, and its completion setting applies when calling Command.execute
 directly. Disabled completion leaves ordinary flags and positionals available.
+
+## Dynamic completion from partial inputs
+
+Use `ParseWith`, `RunWith` or `SubcommandWith` to register effectful value
+completers. Their ordinary parsing behavior matches Parse/Run/Subcommand, while
+the With APIs charge the closed `io + net + clock + random + state` bound.
+Ordinary Parse and Run keep their existing effect behavior. Each completer has
+type `(cli.CompletionRequest, Scope) uses io + net + clock + random + state =>
+cli.Suggestions | cli.Error`. Pure functions with that result union can also be
+used as completers.
+
+```bork
+import "bork/cli"
+type Options = { namespace: String = "dev", resource: String } derive (Decode)
+fn resources(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
+  namespace = match (request.partial.Get[String]("namespace")) {
+    value: String => value
+    missing: cli.Missing => "dev"
+    error: DecodeError => { return cli.Error { errors: [error] } }
+  }
+  cli.Suggestions { choices: [.{ value: s"${namespace}-web", description: "Web service" }] }
+}
+fn main() {
+  println(cli.ParseWith[Options]("deploy", "", ["__complete", "--namespace", "team", "--resource", ""],
+    completions: [.{ field: "resource", suggest: resources }]))
+}
+```
+
+CompletionRequest contains the exact record field name, current prefix, prior
+positional words in arguments, and an opaque Partial snapshot. Partial includes
+supplied CLI flags/positionals, mapped env and overlaid config inputs under normal
+precedence, excluding the word being completed. Config-file selectors can use
+their ordinary declared path default. Each query creates fresh state and reads
+its sources once. Help and shell-script generation invoke no completer and read
+no config files.
+
+`partial.Get[U: Decode](field)` returns `U | cli.Missing | DecodeError`. It first
+checks the original field decoder's independent constraints, then decodes U;
+unknown fields, malformed input and a requested type mismatch retain field paths.
+U can be a derived user record. Get does not prove relations between sibling
+fields or claim that the whole options record is valid. Normal dispatch still
+checks all fields and the complete record before running its typed handler.
+
+Omitted inputs remain Missing even when their record declares defaults. Match
+Missing to choose an explicit fallback, as above. A supplied null is an input,
+so Get[Option[String]] returns None for config null rather than Missing. Invalid
+unrelated fields remain errors on their own Get calls and do not block completion
+of another field. Syntax/binding failures that prevent collecting raw inputs
+return a completion error before the callback runs.
+
+Each callback runs in a fresh Scope; its cleanup completes before completion
+returns. The command handler and its finalizers never run during completion.
+Return unescaped Choice values and descriptions in Suggestions. The library
+filters by prefix, deduplicates by value and applies files/directories/keepOrder
+using the same policy as static choices. Dynamic suggestions replace static
+choices for that field. Unknown/duplicate callback fields and fields without an
+enabled flag or positional are metadata errors. Tabs/newlines in returned choices
+and conflicting file/directory policy return an error directive.
+
+Our config/binding/callback failures return Help with `:1` on stdout and errors in
+diagnostics for stderr. ParseWith/Dispatch return these streams; RunWith and
+RunCommands print them. Cobra's own flag/routing syntax failures retain the
+native behavior described above. Completers should keep their own stdout clear
+for the shell protocol.
+
+See [the dynamic example](../../examples/cli_dynamic/main.bork), which combines
+namespace flags, env and JSON config with resource suggestions:
+
+```sh
+bork run examples/cli_dynamic -- --namespace team --resource team-web
+bork run examples/cli_dynamic -- __complete --config examples/cli_dynamic/settings.json --resource team-w
+bork run examples/cli_dynamic -- completion bash
+```

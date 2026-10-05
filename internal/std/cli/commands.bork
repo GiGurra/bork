@@ -1,7 +1,7 @@
 import "bork/codec"
+use codec.Defaults
 import "bork/process"
 import codecs "bork/json"
-use codec.Defaults
 // Command keeps typed handlers behind a closed effect bound. Construct leaves
 // with Subcommand and branches with Group; metadata can be changed with copy.
 type Command = {
@@ -20,14 +20,14 @@ type Command = {
 
 // Subcommand keeps the handler typed; only validated options reach it.
 fn Subcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
-  resolved = resolve[T](flags, settings, name)
-  schema = inputFields[T](name)
-  completionEnabled = settings.completion
+  makeSubcommand[T](name, description, run, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, [])
+}
+fn makeSubcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, configFiles: List[String], resolved: List[FieldSpec] | Error, schema: List[inputField] | Error, completionEnabled: Bool, completions: List[Completion]): Command {
   factory: (String, Scope) uses nothing => adapter | Error = (displayName, owner) => match (resolved) {
     error: Error => error
     fields: List[FieldSpec] => match (schema) {
       error: Error => error
-      inputs: List[inputField] => buildAdapter(displayName, description, fields, inputs, configFiles, codecs.Parse, flagName, owner)
+      inputs: List[inputField] => buildAdapter(displayName, description, fields, inputs, configFiles, codecs.Parse, flagName, completions, invokeCompletion, owner)
     }
   }
   apply: (parsedInput, Scope) uses io + net + clock + random + state => Ok | Error = (input, s) => match (codec.decode[T](input.value)) {

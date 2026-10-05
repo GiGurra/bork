@@ -236,7 +236,11 @@ A configFile field's existing default can still select the file, as in normal
 parsing. An explicit Option null is a supplied value, not an omitted input.
 Partial exposes input errors per field, so an invalid unrelated port need not
 prevent completing a namespace. Syntax errors that prevent Cobra from resolving
-flags produce an empty/error completion directive and no handler.
+flags produce empty native Cobra completion output and no handler. Native
+routing/flag syntax errors retain Cobra v1.10.2's `:0` directive and direct
+process-stderr debug messages (which bypass SetErr); the lead accepted this
+upstream limit to avoid a parser copy or dependency fork. Our source/callback
+errors return `:1` and captured diagnostics.
 
 Each invocation creates fresh partial state. Snapshot env/config once per query;
 JSON files use bork/json and the same overlay helper used by normal Parse. Missing
