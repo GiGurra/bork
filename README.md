@@ -193,7 +193,8 @@ More on [compile-time evaluation](docs/language/comptime.md).
 ```bork
 import "bork/sql"
 
-type User = { name: String } derive (Decode)
+type User = { name: String }
+derive Decode for User
 
 fn find(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error | DecodeError {
   sql.SQL"SELECT name FROM users WHERE name = $name".Query[User](db)

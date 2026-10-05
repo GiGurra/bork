@@ -68,7 +68,7 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 			b.WriteString("_ = _obj\n")
 		}
 		b.WriteString("if !_isObj {\n" + g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
-		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t), decodeInvariant{t, t.Constraints}))
+		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t), decodeInvariant{t, append(append([]*check.Constraint{}, t.Constraints...), fn.Of.Constraints...)}))
 	case *check.Sealed:
 		b.WriteString("var _tag string\n")
 		fmt.Fprintf(&b, "if _s, _isStr := json.(%s); _isStr {\n_tag = _s.value\n} else if _isObj {\n", jsonVariant("String"))
@@ -81,6 +81,7 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 		for i, v := range t.Variants {
 			fmt.Fprintf(&b, "case %q:\n", v.Name)
 			cons := append(append([]*check.Constraint{}, t.Constraints...), v.Constraints...)
+			cons = append(cons, fn.Of.Constraints...)
 			b.WriteString(g.decodeFields(v.Fields, fn.Derived.FieldDicts[i], g.text(g.variantType(v)), decodeInvariant{t, cons}))
 		}
 		b.WriteString("}\n")

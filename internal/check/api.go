@@ -96,6 +96,12 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 	for _, instance := range pkg.instances {
 		if Exported(instance.Name) && instance.Decl != nil {
 			sig := "instance " + instance.Name + apiParams(instance.Decl.TypeParams) + ": " + qualify(instance.Class.Name, instance.Class.Pkg, pkg) + "[" + writtenTypeText(instance.Decl.Type) + "]"
+			if instance.Derived != "" {
+				sig = "instance " + instance.Name + apiParams(instance.Decl.TypeParams) + ": " + qualify(instance.Class.Name, instance.Class.Pkg, pkg) + "[" + TypeText(instance.Type, pkg) + "]"
+				if len(instance.Constraints) > 0 {
+					sig = strings.TrimSuffix(sig, "]") + " where " + constraintsText(instance.Constraints, pkg) + "]"
+				}
+			}
 			add("instance", instance.Name, "", sig, instance.Decl.Pos)
 		}
 	}

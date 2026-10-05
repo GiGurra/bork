@@ -38,6 +38,7 @@ func (c *Class) Method(name string) *Func {
 // (`instance showList[T: Show]: Show[List[T]]`) has type parameters,
 // which may need instances themselves.
 type ClassInstance struct {
+	Derived         string // target name requested by derive; empty for written instances
 	GoFieldDecoders []*Dict
 	Name            string
 	Decl            *syntax.InstanceDecl
@@ -227,6 +228,10 @@ func (c *checker) instanceConstraints() {
 				}
 			}
 			if !mentionsMember(cm.Result, param) {
+				continue
+			}
+			if ci.Derived != "" {
+				m.ResultConstraints = append(m.ResultConstraints, MemberConstraints{Type: ci.Type, Constraints: cons})
 				continue
 			}
 			var promised []*Constraint
@@ -955,96 +960,6 @@ func derivable(class *Class) bool {
 	return class.Prelude && (class.Name == "Decode" || class.Name == "Encode" || IsGoStruct(class))
 }
 
-// declareDerived declares the instances that `derive (...)` asks for.
-func (c *checker) declareDerived(files []*syntax.File) {
-	for _, f := range files {
-		c.inFile(f)
-		for _, td := range f.Types {
-			if len(td.Derive) == 0 {
-				continue
-			}
-			e := c.pkg.types[td.Name]
-			if e == nil || e.decl != td {
-				continue
-			}
-			switch e.typ.(type) {
-			case *Record, *Sealed:
-			default:
-				c.errorf(td.DerivePos, "only records and sealed types can derive instances")
-				continue
-			}
-			for _, name := range td.Derive {
-				cl := c.lookupClass(name)
-				switch {
-				case cl == nil && name == "Show":
-					c.errorf(td.DerivePos, "Show is not needed: toString shows every value")
-					continue
-				case cl == nil:
-					c.errorf(td.DerivePos, "unknown class %s", name)
-					continue
-				case IsEq(cl):
-					c.errorf(td.DerivePos, "Eq is built in: every type whose values can be compared has it, with no derive needed")
-					continue
-				case !derivable(cl):
-					c.errorf(td.DerivePos, "%s cannot be derived; only Decode, Encode and GoStruct can (yet)", name)
-					continue
-				}
-				if tuple, ok := e.typ.(*Record); ok && tuple.Tuple {
-					if IsGoStruct(cl) {
-						c.errorf(td.DerivePos, "GoStruct cannot be derived for a tuple")
-					} else {
-						c.tupleDerives = append(c.tupleDerives, &ClassInstance{Type: tuple, Class: cl, Pkg: c.pkg, Decl: &syntax.InstanceDecl{Pos: td.DerivePos}})
-					}
-					continue
-				}
-				if IsGoStruct(cl) {
-					if r, ok := e.typ.(*Record); ok && r.Decl != nil && r.Decl.Private && r.Pkg != c.pkg {
-						continue
-					}
-					if r, ok := e.typ.(*Record); !ok || !r.GoStruct {
-						continue
-					}
-				}
-				c.deriveInstance(td, e.typ, cl, f.Prelude)
-			}
-		}
-	}
-}
-
-func (c *checker) deriveInstance(td *syntax.TypeDecl, t Type, cl *Class, prelude bool) {
-	// A generic type's instance is generic too: Pair[A, B] can be decoded
-	// if A and B can.
-	var tps []*TypeParam
-	var args []Type
-	for _, p := range typeParamsOf(t) {
-		tp := &TypeParam{Name: p.Name, Decl: p.Decl}
-		if !IsGoStruct(cl) {
-			tp.Bounds = []*Class{cl}
-		}
-		tps = append(tps, tp)
-		args = append(args, tp)
-	}
-	head := t
-	if len(tps) > 0 {
-		head = instantiate(t, args)
-	}
-	name := td.Name + cl.Name
-	decl := &syntax.InstanceDecl{Pos: td.DerivePos, Name: name}
-	ci := &ClassInstance{Name: name, Decl: decl, Pkg: c.pkg, Prelude: prelude, Class: cl, TypeParams: tps, Type: head}
-	bound := map[*TypeParam]Type{cl.Param: head}
-	for _, m := range cl.Methods {
-		fd := &syntax.FuncDecl{Pos: td.DerivePos, Name: m.Decl.Name, Params: m.Decl.Params}
-		fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: prelude, Of: ci, TypeParams: tps, Result: subst(m.Result, bound), Effects: m.Effects, Derived: &Derived{}}
-		for _, p := range m.Params {
-			fn.Params = append(fn.Params, subst(p, bound))
-		}
-		ci.Methods = append(ci.Methods, fn)
-		c.info.FuncOf[fd] = fn
-	}
-	c.pkg.instances = append(c.pkg.instances, ci)
-	c.info.ClassInstances = append(c.info.ClassInstances, ci)
-}
-
 // A provisional derivation is available while defaults are checked, but a
 // rejected one must not participate in delegation or instance selection.
 func (c *checker) discardDerived(ci *ClassInstance) {
@@ -1088,7 +1003,7 @@ func (c *checker) resolveDerived() {
 		}
 		c.pkg, c.inPrelude = ci.Pkg, ci.Prelude
 		if private := c.foreignPrivateRepresentation(ci.Type, ci.Class, ci.Pkg, map[Type]bool{}, false); private != nil {
-			owner := strings.TrimSuffix(ci.Name, ci.Class.Name)
+			owner := ci.Derived
 			switch t := private.(type) {
 			case *Sealed:
 				c.errorf(ci.Decl.Pos, "cannot derive %s for %s: %s has private variants in package %s; use an instance provided by that package", ci.Class.Name, owner, t.Name, t.Pkg.Path)
@@ -1177,28 +1092,6 @@ func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Packa
 			owner = t.Pkg
 		case *Sealed:
 			owner = t.Pkg
-		}
-		// Owner-derived codecs may be declared later in the file traversal.
-		// Their dictionaries are resolved after all derivations are declared.
-		if record, ok := t.(*Record); ok && record.Decl != nil {
-			for _, derived := range record.Decl.Derive {
-				if derived != class.Name {
-					continue
-				}
-				delegates := true
-				for _, arg := range TypeArgs(record) {
-					trial := map[Type]bool{}
-					for typ, value := range seen {
-						trial[typ] = value
-					}
-					if c.foreignPrivateRepresentation(arg, class, from, trial, true) != nil {
-						delegates = false
-					}
-				}
-				if delegates {
-					return nil
-				}
-			}
 		}
 		for _, ci := range c.info.ClassInstances {
 			if owner == nil || ci.Pkg != owner || ci.Class != class {

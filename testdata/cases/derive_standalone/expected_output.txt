@@ -1,0 +1,7 @@
+Config { port: 8080 }
+DecodeError { path: ".port", message: "must be positive" }
+{"port":42}
+Box { value: "ok" }
+{"value":3}
+Special { value: 9 }
+Mode.Slow { delay: 2 }

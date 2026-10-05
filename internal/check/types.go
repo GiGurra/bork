@@ -208,6 +208,7 @@ type Record struct {
 	Tuple        bool // structural positional record; never a named declaration
 	GoGenerated  bool
 	GoStruct     bool
+	GoStructPos  diag.Pos
 	GoTo, GoFrom bool
 	GoMirror     types.Type
 	GoFields     []GoField

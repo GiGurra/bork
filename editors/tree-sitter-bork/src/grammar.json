@@ -357,6 +357,10 @@
           },
           {
             "type": "SYMBOL",
+            "name": "derive_declaration"
+          },
+          {
+            "type": "SYMBOL",
             "name": "function_declaration"
           },
           {
@@ -709,6 +713,39 @@
           "name": "string"
         }
       ]
+    },
+    "derive_declaration": {
+      "type": "PREC_DYNAMIC",
+      "value": 10,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "derive"
+          },
+          {
+            "type": "FIELD",
+            "name": "class",
+            "content": {
+              "type": "SYMBOL",
+              "name": "qualified_name"
+            }
+          },
+          {
+            "type": "STRING",
+            "value": "for"
+          },
+          {
+            "type": "FIELD",
+            "name": "target",
+            "content": {
+              "type": "SYMBOL",
+              "name": "type"
+            }
+          }
+        ]
+      }
     },
     "derive_clause": {
       "type": "PREC_DYNAMIC",
@@ -6554,6 +6591,10 @@
     [
       "_identifier",
       "type_declaration"
+    ],
+    [
+      "_identifier",
+      "derive_declaration"
     ],
     [
       "_identifier",

@@ -429,3 +429,41 @@ fn main() {
         (list_literal
           (number))
         (block)))))
+
+==================
+Standalone derivation
+==================
+type Box[T] = { value: T }
+derive codec.Decode for Box
+derive codec.Encode for Box[Int]
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (type_parameters
+      (identifier))
+    (record_type
+      (field_declaration
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))))))
+  (derive_declaration
+    (qualified_name
+      (identifier)
+      (identifier))
+    (type
+      (qualified_name
+        (identifier))))
+  (derive_declaration
+    (qualified_name
+      (identifier)
+      (identifier))
+    (type
+      (qualified_name
+        (identifier))
+      (type_arguments
+        (type
+          (qualified_name
+            (identifier)))))))

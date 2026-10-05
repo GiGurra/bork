@@ -102,6 +102,10 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 		s.declaration(class.Pos, class.Name, "class", false)
 		s.typeParams(class.TypeParams)
 	}
+	for _, derive := range file.Derives {
+		s.name(derive.Pos, "derive", SemanticToken{Kind: "keyword"})
+		s.name(derive.ClassPos, derive.Class, SemanticToken{Kind: "class", Readonly: true})
+	}
 	for declaration, fn := range info.FuncOf {
 		if declaration.Pos.File != file.Path || declaration.ScriptMain {
 			continue

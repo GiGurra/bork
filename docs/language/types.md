@@ -139,6 +139,35 @@ Variants are written with the type's name in front: `Shape.Circle { radius: 1.0 
 
 Because the list of variants is closed, `match` knows when every one has been handled. Add a variant and the compiler points at every `match` that needs a new arm. See [matching](matching.md).
 
+## Deriving instances
+
+Records and sealed types can derive codecs with an inline list, or with one
+package declaration per class:
+
+```bork
+import "bork/json"
+
+type Settings = { name: String, retries: Int = 3 }
+derive Decode for Settings
+derive Encode for Settings
+
+fn main() {
+  println(json.Encode(Settings { name: "worker" }))
+}
+```
+
+The declarations may live in a different file of the same package. They must
+be in the package defining the underlying type or the class; an alias does not
+change that owner. Private fields and variants remain private. Each stored
+field needs the requested class's instance in scope. Defaults and facts are
+checked by derived Decode before it returns a value.
+
+For a generic type, `derive Decode for Box` derives an instance for all supported
+element types. `derive Decode for Box[Int]` requests just that specialization.
+Requesting the same class and head twice, including once inline and once
+standalone, is an error. Instances use the existing explicit `use` rules in
+other packages. GoStruct supports standalone declarations for the record itself.
+
 ## Unions
 
 A union type is written with `|` and holds a value of any one of its members. Unlike a sealed type, it needs no declaration: it combines types that already exist.

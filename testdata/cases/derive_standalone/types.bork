@@ -1,0 +1,6 @@
+type Config = { port: Int where positive = 8080 }
+type Box[T] = { value: T }
+type Special[T] = { value: T }
+type Mode = sealed { Fast, Slow { delay: Int } }
+type Alias = Config
+pred positive(n: Int) { n > 0 }
