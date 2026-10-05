@@ -452,7 +452,7 @@ fn Wait(server: Server) uses net unsafe go {
 // naming the address when a server stops on its own. Closing the scope then
 // shuts the remaining servers down. An empty list returns Ok at once.
 fn WaitAny(servers: List[Server]) uses net: Ok | IoError unsafe go {
-  failures := _borkWaitServers(servers, 1)
+  failures := waitServers(servers, 1)
   if len(failures) > 0 { return failures[0] }
   return _borkOk()
 }
@@ -461,14 +461,14 @@ fn WaitAny(servers: List[Server]) uses net: Ok | IoError unsafe go {
 // It returns the first IoError among servers that stopped on their own, in
 // list order, or Ok. An empty list returns Ok at once.
 fn WaitAll(servers: List[Server]) uses net: Ok | IoError unsafe go {
-  failures := _borkWaitServers(servers, int64(len(servers)))
+  failures := waitServers(servers, int64(len(servers)))
   if len(failures) > 0 { return failures[0] }
   return _borkOk()
 }
 
-// _borkWaitServers waits until count servers have stopped or been cancelled,
+// waitServers waits until count servers have stopped or been cancelled,
 // and returns IoErrors for those that stopped on their own, in list order.
-fn _borkWaitServers (servers: List[Server], count: Int): List[IoError] unsafe go {
+fn waitServers(servers: List[Server], count: Int): List[IoError] unsafe go {
   if len(servers) == 0 { return nil }
   type serverState = struct {
     addr string
