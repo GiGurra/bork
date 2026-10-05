@@ -99,3 +99,28 @@ func TestStandaloneDeriveTooling(t *testing.T) {
 		t.Fatalf("API: %s, %v", doc, err)
 	}
 }
+
+func TestStandaloneDeriveGoStructConstrainedAlias(t *testing.T) {
+	t.Parallel()
+	source := `type T={n:Int}
+pred positive(t:T){t.n>0}
+type Positive=T where positive
+derive GoStruct for Positive
+fn Read[A:GoStruct]():A|GoValueError unsafe go {
+ out,errs:=_d_A_GoStruct.FromGo(_d_A_GoStruct.New())
+ if len(errs)>0 {return errs[0]}
+ return out
+}
+fn main(){println(Read[Positive]())}`
+	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := exec.Command(exe).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, data)
+	}
+	if !strings.Contains(string(data), "GoValueError") || !strings.Contains(string(data), "positive") {
+		t.Fatalf("conversion: %s", data)
+	}
+}

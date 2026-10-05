@@ -226,6 +226,11 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	// Instances are used through their dictionaries, so all are emitted.
 	for _, ci := range info.ClassInstances {
 		roots = append(roots, ci.Methods...)
+		if ci.Derived != "" {
+			for _, con := range ci.Constraints {
+				roots = append(roots, constraintPreds(con)...)
+			}
+		}
 	}
 	for _, binding := range info.PackageBindings {
 		roots = append(roots, binding.Boundary.Calls...)
