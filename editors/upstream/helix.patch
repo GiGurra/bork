@@ -29,7 +29,7 @@ index a5403e6..e69a200 100644
 +
 +[[grammar]]
 +name = "bork"
-+source = { git = "https://github.com/GiGurra/bork", rev = "60fee5f8f2002697033ab5a30f23c5255a00e18a", subpath = "editors/tree-sitter-bork" }
++source = { git = "https://github.com/GiGurra/bork", rev = "9cf9ba8784976e8a5be11bd7a126412ef29ea065", subpath = "editors/tree-sitter-bork" }
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
 index 0000000..b1713d1
