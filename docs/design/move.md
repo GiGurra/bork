@@ -1,8 +1,9 @@
 # Moving resources between scopes
 
-Design for bork-u8ndmy. Nothing here is implemented yet. The plan is three
-PRs: the checker and runtime, then task, owned-scope and channel integration
-with the editor support, then examples and reader docs.
+Design for bork-u8ndmy. Nothing here is implemented yet. The plan is four
+PRs: the cancellation fix for attached resources, the checker and runtime, then
+task and owned-scope integration with the editor support, then examples and
+reader docs.
 
 ## The problem
 
@@ -400,7 +401,7 @@ library registers every resource with `Own`.
   receiver borrows it and can `attach` it. A consuming send
   (`handOver(ch, conn)`: move into the channel's scope, end the sender's
   handle, give the receiver a handle in the channel's scope, which it may move
-  again) is proposed for PR 2, in coordination with the channels worker. Each
+  again) is a follow-up, after the channels runtime rewrite. Each
   value is received once, so the receiver's handle is unique.
 - **Server handlers.** `net.Listen` gives its handler a borrowed connection (a
   lambda parameter), which cannot be moved. The handler's scope closes when it
@@ -466,11 +467,12 @@ library registers every resource with `Own`.
 
 ## Plan
 
+0. **Cancellation** (its own PR first): resource handles follow every active
+   registration, with an attach-only regression test.
 1. **Checker and runtime** (PR 1): handles in lifetimes, origins, acquisition
    summaries, the move rules, pins, branch and loop states, the call re-check,
    `_Owner` registrations, `tryDefer` (also used by `attach`), tombstones,
-   cancellation from the set of active registrations, codegen of the source
-   scope, `move` in the prelude. Tests:
+   codegen of the source scope, `move` in the prelude. Tests:
    `testdata/cases/move` (hand-off, prompt release, attach mixes, owned child
    in and out, branches with a non-moving path, rebinding once available) and
    `move_fail` (use after move, holders, possibly moved, loops, lambdas,
@@ -480,21 +482,21 @@ library registers every resource with `Own`.
    inside a call's own arguments). Runtime tests for failed moves leaving
    ownership unchanged, and for the race with an orphaned task. Update
    `requirements.md`, `docs/language/scopes.md` and `std-go.md`.
-2. **Integration** (PR 2): hover and describe states, the `attach` fix, the
-   consuming channel hand-over if the channels design agrees, and owned-scope
-   rolling with move.
+2. **Integration** (PR 2): hover and describe states, the `attach` fix, and
+   owned-scope rolling with move. The consuming channel hand-over is a
+   follow-up ticket.
 3. **Examples and docs** (PR 3): an `examples/` program, a connection manager
    handing sessions to workers with prompt release, plus the tour and scopes
    page.
 
-## Questions for the lead
+## Decisions (lead, 2026-10-05)
 
-1. The consuming channel send (`handOver`) in PR 2, or defer it until the
-   channels redesign lands?
-2. Is rejecting moves of all parameters (even `in` an owned scope) acceptable
-   for v1?
-3. Are conservative pins from synchronous scope-taking prelude functions
-   (`withTimeout`) acceptable for v1, without a `keeps nothing` marker?
-4. Cancellation following all active registrations changes `attach`'s
-   documented "latest attachment selects the cancellation source". It fixes a
-   latent bug, but it is a behavior change. OK to make it in PR 1?
+1. The consuming channel send is deferred to bork-u9vlg7, which depends on
+   the channels runtime rewrite (bork-73dn9h, PR 1). `send` stays a keep.
+2. No parameter is movable in v1. Future work: pins in signatures. A function
+   would declare which parameters it does not keep, and an `in`-owned-scope
+   parameter whose caller has no pins on it could then be moved by the callee.
+3. Pins stay conservative. A "keeps nothing" marker for synchronous
+   scope-taking functions comes later if real code needs it.
+4. Cancellation following all active registrations lands first as its own PR,
+   with an attach-only regression test. The move PR follows it.
