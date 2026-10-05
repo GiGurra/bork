@@ -1,12 +1,25 @@
 import "bork/regex"
 
+// A String proven to match re: the compiler only lets a value in after a
+// regex.Matches check, so email can rely on it.
 fn email(re: regex.Regex, value: String where regex.Matches(re)): String { value }
 fn main() {
+  // Compile takes a pattern the compiler can check: a literal is validated
+  // at compile time (its parameter is String where ValidPattern), so this
+  // cannot fail at runtime. Use Parse for patterns only known at runtime.
   re = regex.Compile("^[^@ ]+@[^@ ]+\\.[^@ ]+$")
   value = "hello@example.com"
+  // Checking Matches proves the fact email requires.
   if (regex.Matches(value, re)) { println(email(re, value)) }
+  // (?P<word>...) is a named capture group.
   words = regex.Compile("(?P<word>[a-z]+)")
   println(words.Find("123 hello"))
+  // "${word}!" is a plain string, not bork interpolation (that needs the s
+  // prefix: s"..."). Replace expands ${word} to the named group, and the !
+  // is a literal exclamation mark: "hello world" becomes "hello! world!".
+  // ReplaceLiteral inserts the replacement text unchanged.
   println(words.Replace("hello world", "${word}!"))
+  // Parse is for dynamic patterns: it returns Regex | ParseError instead of
+  // requiring a proven pattern, so this prints the syntax error.
   println(regex.Parse("["))
 }
