@@ -1,5 +1,7 @@
+import "bork/codec"
 import "bork/cli"
 import "bork/process"
+use codec.Defaults
 pred positive(n: Int) { n > 0 }
 type Options = {
   // Files to process; each command-line word stays a literal element.
@@ -8,7 +10,7 @@ type Options = {
   workers: Int where positive
   // Processing action.
   action: String
-} derive (Decode)
+} derive (codec.Decode)
 fn flags(): List[cli.Flag] {
   [.{ field: "action", position: Option.Some { value: 0 }, choices: [.{ value: "copy" }, .{ value: "inspect" }] },
     .{ field: "workers", position: Option.Some { value: 1 }, choices: [.{ value: "1" }, .{ value: "2" }, .{ value: "4" }] },

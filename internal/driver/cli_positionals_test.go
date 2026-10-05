@@ -12,22 +12,24 @@ import (
 func TestCLIIndexedPositionals(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import "bork/codec"
+import "bork/cli"
 import "bork/process"
+use codec.Defaults
 pred positive(n: Int) { n > 0 }
-type Options = { targets: List[String] = [], count: Int where positive, region: String } derive (Decode)
-type Numbers = { values: List[List[Int]], head: Int } derive (Decode)
-type Scalars = { second: String, first: String } derive (Decode)
+type Options = { targets: List[String] = [], count: Int where positive, region: String } derive (codec.Decode)
+type Numbers = { values: List[List[Int]], head: Int } derive (codec.Decode)
+type Scalars = { second: String, first: String } derive (codec.Decode)
 fn targets(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
  region = match (request.partial.Get[String]("region")) {
   value: String => value
-  missing: cli.Missing => "default"
-  error: DecodeError => { return cli.Error { errors: [error] } }
+  _: cli.Missing => "default"
+  error: codec.DecodeError => { return cli.Error { errors: [error] } }
  }
  count = match (request.partial.Get[Int]("count")) {
   value: Int => value
-  missing: cli.Missing => 1
-  error: DecodeError => { return cli.Error { errors: [error] } }
+  _: cli.Missing => 1
+  error: codec.DecodeError => { return cli.Error { errors: [error] } }
  }
  cli.Suggestions { choices: [.{ value: s"${region}-${count}-web" }, .{ value: s"${region}-${count}-worker" }] }
 }
@@ -104,11 +106,13 @@ fn main() {
 func TestCLIPositionalMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
-type Scalars = { a: String, b: String } derive (Decode)
-type Optional = { a: String = "default", b: String } derive (Decode)
-type Lists = { a: List[String], b: List[String] } derive (Decode)
-type Collision = { fooBar: String, fooBAR: String } derive (Decode)
+	source := `import "bork/codec"
+import "bork/cli"
+use codec.Defaults
+type Scalars = { a: String, b: String } derive (codec.Decode)
+type Optional = { a: String = "default", b: String } derive (codec.Decode)
+type Lists = { a: List[String], b: List[String] } derive (codec.Decode)
+type Collision = { fooBar: String, fooBAR: String } derive (codec.Decode)
 fn main() {
  println(cli.Parse[Collision]("app", "", ["first", "second"], flags: [.{ field: "fooBar", position: Option.Some { value: 0 } }, .{ field: "fooBAR", position: Option.Some { value: 1 } }], configFiles: ["missing.json"]))
  println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: -1 } }]))
@@ -148,14 +152,16 @@ fn main() {
 func TestCLICommandDeprecation(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import "bork/codec"
+import "bork/cli"
 import "bork/process"
-type Options = { value: String = "default" } derive (Decode)
+use codec.Defaults
+type Options = { value: String = "default" } derive (codec.Decode)
 fn main() {
  old = cli.Subcommand[Options]("old", "Obsolete leaf", (options, s) => { onClose(s, () => { println("closed") }); println("handler") }).copy(deprecated: "choose current")
  current = cli.Subcommand[Options]("current", "Current leaf", (options, s) => {})
  manual = cli.Command { name: "manual", description: "Obsolete manual leaf", deprecated: "choose current", execute: (name, arguments, s) => {
-  if (arguments.filter(argument => argument == "--help").length() > 0) { cli.Help { text: "Manual help\n", diagnostics: "Manual diagnostic\n" } } else if (arguments.filter(argument => argument == "--bad").length() > 0) { cli.Error { errors: [DecodeError { path: name, message: "manual error" }] } } else { println("manual-handler") }
+  if (arguments.filter(argument => argument == "--help").length() > 0) { cli.Help { text: "Manual help\n", diagnostics: "Manual diagnostic\n" } } else if (arguments.filter(argument => argument == "--bad").length() > 0) { cli.Error { errors: [codec.DecodeError { path: name, message: "manual error" }] } } else { println("manual-handler") }
  } }
  legacy = cli.Group("legacy", "Obsolete group", [current]).copy(deprecated: "choose current")
  match (cli.RunCommands("app", "", [old, current, manual, legacy])) {
