@@ -1,19 +1,21 @@
 # bork/yaml
 
-`bork/yaml` reads and writes YAML. A parsed document is the prelude's `Json`
-value, so the same queries and the same `Decode` and `Encode` instances work
-for YAML and JSON. The package wraps
+`bork/yaml` reads and writes YAML. A parsed document is a
+[bork/codec](codec.md) `codec.Value`, so the same queries and the same
+`codec.Decode` and `codec.Encode` instances work for YAML and JSON. The package wraps
 [go.yaml.in/yaml/v4](https://github.com/yaml/go-yaml), the YAML
 organization's continuation of gopkg.in/yaml.
 
 ```bork
+import codec "bork/codec"
 import "bork/yaml"
+use codec.Defaults
 
-type Server = { host: String, port: Int } derive (Decode)
+type Server = { host: String, port: Int } derive (codec.Decode)
 
 fn main() {
   match (yaml.Parse("host: localhost\nport: 8080\n")) {
-    value: Json => println(decode[Server](value))
+    value: codec.Value => println(codec.decode[Server](value))
     error: yaml.Error => println(s"line ${error.line}, column ${error.column}: ${error.message}")
   }
 }
@@ -23,15 +25,15 @@ fn main() {
 
 | Function | Result |
 | --- | --- |
-| `Parse(text)` | `Json \| yaml.Error`: one document. Text with no document is `Null`; a second document is an error. |
-| `ParseAll(text)` | `List[Json] \| yaml.Error`: every document of a stream, in order. |
-| `ReadFile(path)` | `Json \| yaml.Error \| IoError`, as Parse. Uses io. |
-| `ReadAllFile(path)` | `List[Json] \| yaml.Error \| IoError`, as ParseAll. Uses io. |
+| `Parse(text)` | `codec.Value \| yaml.Error`: one document. Text with no document is `Null`; a second document is an error. |
+| `ParseAll(text)` | `List[codec.Value] \| yaml.Error`: every document of a stream, in order. |
+| `ReadFile(path)` | `codec.Value \| yaml.Error \| IoError`, as Parse. Uses io. |
+| `ReadAllFile(path)` | `List[codec.Value] \| yaml.Error \| IoError`, as ParseAll. Uses io. |
 
 `yaml.Error` has `path` (the file, or `""` for text), one-based `line` and
 `column` (0 when no position applies), and `message`.
 
-YAML values become Json values like this:
+YAML values become codec values like this:
 
 - Mappings become objects that keep their key order. Keys must be scalars, and
   a key's name is its text as written: `1: x` has the key `"1"`, and `0x10`
@@ -45,7 +47,7 @@ YAML values become Json values like this:
   valid JSON number text. Other spellings are rewritten through a 64-bit float,
   so `.5` is `0.5`, `1.` is `1`, and a value too small for 64 bits is `0`
   unless its text is valid JSON. `.inf`, `.nan` and floats too large for 64
-  bits are errors, since Json numbers are finite.
+  bits are errors, since codec numbers are finite.
 - `true`/`false` are booleans, `null`, `~` and empty values are `Null`, and
   timestamps stay strings. YAML 1.2 rules apply, so `yes` and `on` are strings.
 - Aliases are copies of their anchored value. Merge keys (`<<: *defaults` or
@@ -85,7 +87,7 @@ original formatting are not kept.
 
 `Field(value, name)`, `Index(value, index)` and `At(value, path)` are the
 [bork/json](json.md) queries: `At(config, ["servers", 0, "host"])` gives
-`Option[Json]`, with `None` for a missing path.
+`Option[codec.Value]`, with `None` for a missing path.
 
 ## Examples
 

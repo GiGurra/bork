@@ -31,7 +31,7 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 | [bork/time](time.md) | Instants, durations, and clocks that tests can replace |
 | [bork/url](url.md) | Parsing, building, and escaping URLs |
 | [bork/uuid](uuid.md) | Parsing and generating UUIDs |
-| [bork/yaml](yaml.md) | Parsing and writing YAML as Json values |
+| [bork/yaml](yaml.md) | Parsing and writing YAML as codec values |
 
 Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`.
 

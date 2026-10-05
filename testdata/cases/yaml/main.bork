@@ -1,12 +1,14 @@
+import codec "bork/codec"
 import "bork/encoding"
 import "bork/fs"
 import "bork/yaml"
+use codec.Defaults
 
-type Server = { name: String, port: Int, tags: List[String] } derive (Decode)
+type Server = { name: String, port: Int, tags: List[String] } derive (codec.Decode)
 
-fn show(result: Json | yaml.Error) uses io {
+fn show(result: codec.Value | yaml.Error) uses io {
   match (result) {
-    value: Json => println(value)
+    value: codec.Value => println(value)
     error: yaml.Error => println(s"error ${error.line}:${error.column}: ${error.message}")
   }
 }
@@ -21,14 +23,14 @@ fn render(result: String | yaml.Error) uses io {
 fn files(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | yaml.Error {
   root = fs.DirectoryPath(fs.TempDir(s)?)
   path = fs.Join([root, "config.yaml"])
-  yaml.WriteFile(path, Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "bork" } }, JsonField { name: "port", value: Json.Number { text: "8080" } }, JsonField { name: "tags", value: Json.Array { items: [] } }] })?
+  yaml.WriteFile(path, codec.Value.Object { fields: [codec.Field { name: "name", value: codec.Value.String { value: "bork" } }, codec.Field { name: "port", value: codec.Value.Number { text: "8080" } }, codec.Field { name: "tags", value: codec.Value.Array { items: [] } }] })?
   value = yaml.ReadFile(path)?
-  println(decode[Server](value))
+  println(codec.decode[Server](value))
   match (yaml.ReadAllFile(fs.Join([root, "missing.yaml"]))) {
-    error: IoError => println("missing file is an IoError")
+    IoError => println("missing file is an IoError")
     _ => println("unexpected")
   }
-  match (yaml.WriteFile(path, Json.Number { text: "x" })) {
+  match (yaml.WriteFile(path, codec.Value.Number { text: "x" })) {
     error: yaml.Error => println(error.path == path && error.message == "invalid number text \"x\"")
     _ => println("unexpected")
   }
@@ -44,7 +46,7 @@ fn main() {
   config = "name: bork\nport: 0x1F90\nratio: .5\ntags: [a, 'b']\nenabled: true\nnothing: ~\nwhen: 2026-10-05\nbig: 12345678901234567890\n"
   show(yaml.Parse(config))
   match (yaml.Parse(config)) {
-    value: Json => {
+    value: codec.Value => {
       println(yaml.At(value, ["tags", 1]))
       println(yaml.Field(value, "missing"))
       render(yaml.Render(value))
@@ -55,7 +57,7 @@ fn main() {
   // Aliases, merge keys and multiple documents.
   show(yaml.Parse("base: &b {x: 1, y: 2}\nderived:\n  <<: *b\n  y: 3\n  z: *b\n"))
   match (yaml.ParseAll("a: 1\n---\n- 2\n---\n")) {
-    values: List[Json] => {
+    values: List[codec.Value] => {
       println(values)
       render(yaml.RenderAll(values))
     }
@@ -98,19 +100,19 @@ fn main() {
   show(yaml.Parse("# only a comment\n"))
   show(yaml.Parse("---\n"))
   match (yaml.ParseAll("a: 1\n---\nb: [\n")) {
-    values: List[Json] => println(values)
+    values: List[codec.Value] => println(values)
     error: yaml.Error => println(s"error ${error.line}:${error.column}: ${error.message}")
   }
   // Rendered numbers read back unchanged.
-  numbers = Json.Array { items: ["1e5", "-0", "1E+5", "-1.5e-300", "12345678901234567890", "0.1"].map(text => Json.Number { text: text }) }
+  numbers = codec.Value.Array { items: ["1e5", "-0", "1E+5", "-1.5e-300", "12345678901234567890", "0.1"].map(text => codec.Value.Number { text: text }) }
   match (yaml.Render(numbers)) {
     text: String => show(yaml.Parse(text))
     error: yaml.Error => println(error)
   }
-  render(yaml.Render(Json.Number { text: "-1e400" }))
+  render(yaml.Render(codec.Value.Number { text: "-1e400" }))
   // Strings that look like other scalars are quoted on output.
-  render(yaml.Render(Json.Array { items: [Json.String { value: "true" }, Json.String { value: "1.5" }, Json.String { value: "" }, Json.String { value: "line\nbreak\n" }, Json.Object { fields: [] }] }))
-  render(yaml.Render(Json.Object { fields: [JsonField { name: "n", value: Json.Array { items: [Json.Number { text: "1,2" }] } }] }))
-  render(yaml.Render(Json.Object { fields: [JsonField { name: "x", value: Json.Null }, JsonField { name: "x", value: Json.Null }] }))
+  render(yaml.Render(codec.Value.Array { items: [codec.Value.String { value: "true" }, codec.Value.String { value: "1.5" }, codec.Value.String { value: "" }, codec.Value.String { value: "line\nbreak\n" }, codec.Value.Object { fields: [] }] }))
+  render(yaml.Render(codec.Value.Object { fields: [codec.Field { name: "n", value: codec.Value.Array { items: [codec.Value.Number { text: "1,2" }] } }] }))
+  render(yaml.Render(codec.Value.Object { fields: [codec.Field { name: "x", value: codec.Value.Null }, codec.Field { name: "x", value: codec.Value.Null }] }))
   scope s { println(files(s)) }
 }
