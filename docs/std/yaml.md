@@ -74,14 +74,16 @@ Some YAML is rejected rather than guessed at:
 | `DecodeAll[T](text)` | `List[T] \| yaml.Error \| codec.DecodeError`: every document. A DecodeError path starts with the document's index (`[1].port`). |
 | `DecodeFile[T](path)` | `T \| yaml.Error \| IoError \| codec.DecodeError`: ReadFile, then decode. Uses io. |
 | `Encode(value, spaces = 2)` | `String \| yaml.Error`: T's Encode instance, then Render. |
+| `EncodeFile(path, value, spaces = 2)` | `Ok \| yaml.Error \| IoError`: Encode, then WriteFile. Uses io. |
 
 These use the same `codec.Decode` and `codec.Encode` instances as
 [bork/json](json.md), so `derive (codec.Decode, codec.Encode)` records, sealed
 types, `Option`, `List`, and `Map[String, V]` work the same way, and decoding
 checks where clauses. A `codec.DecodeError` has the path of the value
-(`.servers[2].port`), but not its line or file. Text with no document decodes as `Null`, so it is `None` for an
-`Option` and an error for a record. A trailing `---` starts another, empty
-document, which DecodeAll decodes as `Null` too.
+(`.servers[2].port`), but not its line or file. Text with no document decodes
+as `Null`, so it is `None` for an `Option` and an error for a record. A
+trailing `---` starts another, empty document, which DecodeAll decodes as
+`Null` too.
 
 Unlike `json.Encode`, `yaml.Encode` can fail: a Float that is NaN or infinite
 has no YAML number, so it gives `yaml.Error`. Its text ends with a newline, as
@@ -93,7 +95,7 @@ Render's does.
 | --- | --- |
 | `Render(value, spaces = 2)` | `String \| yaml.Error`: one block-style document. |
 | `RenderAll(values, spaces = 2)` | `String \| yaml.Error`: documents separated by `---` lines. |
-| `WriteFile(path, value, spaces = 2)` | `Ok \| yaml.Error \| IoError`: encodes any `codec.Encode` value (a `codec.Value` as itself) and replaces the file with one document. Uses io. |
+| `WriteFile(path, value, spaces = 2)` | `Ok \| yaml.Error \| IoError`: replaces the file with one document. Uses io. |
 
 `spaces` is the indent, 2 through 9. List items under a field start at the
 field's own indent (`tags:` then `- a`). Objects keep their field order and
@@ -103,8 +105,8 @@ YAML 1.1 readers take as booleans. Strings with line breaks use literal blocks.
 A manually built number with invalid or non-finite text, or an object with a
 repeated field name, gives `yaml.Error`. Its message names the value's
 location (`invalid number text "1,2" at .items[0]`). Its `path` is the file
-for WriteFile and `""` otherwise, and line and column are 0. Comments and the
-original formatting are not kept.
+for WriteFile and EncodeFile and `""` otherwise, and line and column are 0.
+Comments and the original formatting are not kept.
 
 ## Queries
 

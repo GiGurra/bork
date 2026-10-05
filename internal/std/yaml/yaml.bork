@@ -74,13 +74,16 @@ fn DecodeFile[T: codec.Decode](path: String) uses io: T | Error | IoError | code
   codec.decode[T](value)
 }
 
-// WriteFile replaces the file with one rendered document. A codec.Value encodes
-// as itself, so it writes dynamic and typed values alike.
-fn WriteFile[T: codec.Encode](path: String, value: T, spaces: Indent = 2) uses io: Ok | Error | IoError {
-  match (Encode(value, spaces)) {
+// WriteFile replaces the file with one rendered document.
+fn WriteFile(path: String, value: codec.Value, spaces: Indent = 2) uses io: Ok | Error | IoError {
+  match (Render(value, spaces)) {
     text: String => writeText(path, text)
     error: Error => Error { path: path, line: 0, column: 0, message: error.message }
   }
+}
+// EncodeFile writes a typed value as WriteFile writes a codec.Value.
+fn EncodeFile[T: codec.Encode](path: String, value: T, spaces: Indent = 2) uses io: Ok | Error | IoError {
+  WriteFile(path, codec.encode(value), spaces)
 }
 fn writeText(path: String, text: String) uses io: Ok | IoError unsafe go {
   import "os"

@@ -29,7 +29,7 @@ fn trimmed(result: String | yaml.Error): String | yaml.Error {
 
 fn files(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | yaml.Error | codec.DecodeError {
   path = fs.Join([fs.DirectoryPath(fs.TempDir(s)?), "server.yaml"])
-  yaml.WriteFile(path, Server { host: "file", port: 1, replicas: Option.None, labels: {:}, shapes: [] })?
+  yaml.EncodeFile(path, Server { host: "file", port: 1, replicas: Option.None, labels: {:}, shapes: [] })?
   println(yaml.DecodeFile[Server](path)?)
   match (yaml.DecodeFile[Server](fs.Join([fs.DirectoryPath(fs.TempDir(s)?), "missing.yaml"]))) {
     IoError => println("missing file is an IoError")
@@ -37,7 +37,7 @@ fn files(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | f
   }
   yaml.WriteFile(path, codec.Value.String { value: "x" })?
   println(yaml.DecodeFile[Server](path))
-  // Json values still write as themselves.
+  // WriteFile writes codec values.
   yaml.WriteFile(path, codec.Value.Array { items: [codec.Value.Bool { value: true }] })?
   println(yaml.DecodeFile[List[Bool]](path)?)
 }
