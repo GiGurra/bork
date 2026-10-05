@@ -29,6 +29,17 @@ type carryNode struct {
 	name string
 	pos  diag.Pos
 	kind string // "head", "latch", "after" or "join"
+	// origin is the name's first binding, which editors show as its
+	// definition.
+	origin any
+}
+
+// carryOrigin is the first binding of the name whose value decl is.
+func carryOrigin(decl any) any {
+	if n, ok := decl.(*carryNode); ok {
+		return n.origin
+	}
+	return decl
 }
 
 // carryLoop is a loop's carried names: its header names, then the names
@@ -249,7 +260,17 @@ func (c *checker) carry(e *syntax.For, outer []*local, outerNames []string) *car
 	loop := &carryLoop{pos: e.Pos, base: len(c.scopes) - 1, byName: map[string]*carrySlot{}}
 	scope := c.scopes[len(c.scopes)-1]
 	add := func(slot *carrySlot) {
-		slot.latch = &carryNode{name: slot.name, pos: e.Pos, kind: "latch"}
+		origin := any(slot.header)
+		if slot.outer != nil {
+			origin = carryOrigin(slot.outer.decl)
+		}
+		slot.latch = &carryNode{name: slot.name, pos: e.Pos, kind: "latch", origin: origin}
+		if n, ok := slot.head.(*carryNode); ok {
+			n.origin = origin
+		}
+		if slot.after != nil {
+			slot.after.origin = origin
+		}
 		loop.slots = append(loop.slots, slot)
 		loop.byName[slot.name] = slot
 	}
@@ -445,7 +466,7 @@ func (c *checker) endJoin(j *joining, x syntax.Expr, n int) {
 		if !changed {
 			continue
 		}
-		node := &carryNode{name: slot.name, pos: x.Position(), kind: "join"}
+		node := &carryNode{name: slot.name, pos: x.Position(), kind: "join", origin: carryOrigin(prior.decl)}
 		c.info.joins[x] = append(c.info.joins[x], &joinCarry{slot: slot, node: node, prior: prior.decl, in: in})
 		c.setCarried(slot.name, &local{typ: slot.typ, decl: node, used: true, carry: j.loop})
 	}

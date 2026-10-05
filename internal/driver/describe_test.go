@@ -935,3 +935,40 @@ fn main() {
 		t.Fatalf("got %s with facts %v, want Int known nonNegative", result.Type, facts)
 	}
 }
+
+// A carried name's values that no binding gives are defined where the
+// name was first bound, and keep its declared facts after the loop.
+func TestDescribeCarried(t *testing.T) {
+	t.Parallel()
+	source := `pred nonNegative(n: Int) { n >= 0 }
+
+fn main() {
+  total: Int where nonNegative = 0
+  for (x in [1, 2]) {
+    if (nonNegative(x)) {
+      total = x
+    }
+  }
+  println(total)
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	offset := strings.Index(source, "println(total)") + len("println(")
+	line := strings.Count(source[:offset], "\n") + 1
+	column := offset - strings.LastIndex(source[:offset], "\n")
+	result, err := Describe(fmt.Sprintf("%s:%d:%d", path, line, column), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var facts []string
+	for _, fact := range result.Facts {
+		facts = append(facts, fact.Constraint)
+	}
+	if result.Definition == nil || result.Definition.Line != 4 || !slices.Contains(facts, "nonNegative") {
+		t.Fatalf("got definition %v with facts %v, want line 4 known nonNegative", result.Definition, facts)
+	}
+}

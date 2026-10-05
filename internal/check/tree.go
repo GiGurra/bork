@@ -129,6 +129,10 @@ type Var struct {
 	// Joins are the values a VarJoin may have: one for each path that
 	// reaches it (see docs/design/loops.md).
 	Joins []*Var
+	// Origin is, for a carried name's value that no binding gives (a
+	// VarJoin, or a loop's head of a name from outside it), where the
+	// name was first bound: its definition, for editors.
+	Origin diag.Pos
 }
 
 func (v *Var) displayName() string {

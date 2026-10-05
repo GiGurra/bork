@@ -20,7 +20,7 @@ func (l *lowerer) carryVar(n *carryNode, t Type) *Var {
 	if n.kind == "head" {
 		kind = VarLoop
 	}
-	v := &Var{Name: n.name, GoName: fmt.Sprintf("_%s_%d_%d_%s", n.kind, n.pos.Line, n.pos.Col, n.name), Pos: n.pos, Type: t, Kind: kind}
+	v := &Var{Name: n.name, GoName: fmt.Sprintf("_%s_%d_%d_%s", n.kind, n.pos.Line, n.pos.Col, n.name), Pos: n.pos, Type: t, Kind: kind, Origin: sourceNodePosition(n.origin)}
 	l.vars[n] = v
 	return v
 }

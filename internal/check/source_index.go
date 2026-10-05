@@ -275,6 +275,8 @@ func sourceNodePosition(node any) diag.Pos {
 		return n.Pos
 	case *syntax.For:
 		return n.NamePos
+	case *carryNode:
+		return sourceNodePosition(n.origin)
 	}
 	return diag.Pos{}
 }
