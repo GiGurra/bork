@@ -11,6 +11,7 @@ fn listen(s: Scope) uses net + clock + state: http.Server {
 // listeners have no stop operation independent of scope cancellation.
 fn stopped[T](server: http.Server, message: String, wasCancelled: Bool) uses net: http.Server unsafe go {
   import "errors"
+  import "net/http"
   state := server.handle.(struct {
     addr string
     done chan struct{}
@@ -23,6 +24,7 @@ fn stopped[T](server: http.Server, message: String, wasCancelled: Bool) uses net
   state.cancelled = cancelled
   state.failure = new(error)
   if message != "" { *state.failure = errors.New(message) }
+  if message == "server closed" { *state.failure = http.ErrServerClosed }
   if wasCancelled { close(cancelled) }
   close(state.done)
   server.handle = state
@@ -48,6 +50,8 @@ fn main() {
     println("all list order", failure(http.WaitAll([first, second]), http.Address(live), "first failure"))
     cancelled = stopped[http.AdmissionLoad](live, "server closed", true)
     println("cancelled completion", http.WaitAny([cancelled]) == Ok, http.WaitAll([cancelled]) == Ok)
+    laterCancel = stopped[http.AdmissionLoad](live, "earlier failure", true)
+    println("failure before cancellation", failure(http.WaitAny([laterCancel]), http.Address(live), "earlier failure"), failure(http.WaitAll([laterCancel]), http.Address(live), "earlier failure"))
     println("mixed completion", failure(http.WaitAll([cancelled, second]), http.Address(live), "second failure"))
   }
   scope app {
@@ -62,6 +66,8 @@ fn main() {
       _ = delay(second.scope, 50)
       cancel(second.scope)
     })
+    failed = stopped[http.AdmissionLoad](a, "accept failed", false)
+    println("all waits after failure", failure(http.WaitAll([failed, b]), http.Address(a), "accept failed"), cancelled(second.scope))
     println("all cancellation", http.WaitAll([a, b]) == Ok, cancelled(second.scope))
     http.Wait(a)
     http.Wait(b)

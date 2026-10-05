@@ -486,12 +486,13 @@ fn _borkWaitServers(servers: List[Server], count: Int): List[IoError] unsafe go 
     go func() {
       select {
       case <-state.done:
-        select {
-        case <-state.cancelled: results <- ended{index, false}
-        default: results <- ended{index, true}
-        }
+        results <- ended{index, *state.failure != http.ErrServerClosed}
       case <-state.cancelled:
-        results <- ended{index, false}
+        // Preserve a completed Serve failure even if cancellation came later.
+        select {
+        case <-state.done: results <- ended{index, *state.failure != http.ErrServerClosed}
+        default: results <- ended{index, false}
+        }
       case <-stop:
       }
     }()
