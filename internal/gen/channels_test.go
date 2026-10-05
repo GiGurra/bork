@@ -234,4 +234,43 @@ func TestOfferDropsWhenFull(t *testing.T) {
  c.close()
  if c.offer(3) { t.Fatal("offer after close") }
 }
+
+// Once a waiting operation's scope is cancelled, it gives Cancelled, even
+// if a value arrives before the cancellation's callback has run.
+func TestCancellationWinsWhileWaiting(t *testing.T) {
+ for round := 0; round < 500; round++ {
+  s := scope()
+  c := _borkNewChan(s, 0)
+  inner := _scopeWith(s.ctx)
+  got := make(chan any, 1)
+  go func() { v, _ := _borkChanReceive(inner, c); got <- v }()
+  for c.waiting() < 1 { runtime.Gosched() }
+  inner.cancel(errors.New("stop"))
+  _, status, _ := _borkChanSelect([]_borkChanArm{{ch: c, send: true, value: 1}}, false)
+  if v := <-got; v != (Cancelled{reason: "stop"}) { t.Fatal("receiver got", v) }
+  if status == _borkChanValue { t.Fatal("a cancelled receiver took the value") }
+  d := _borkNewChan(s, 0)
+  sent := make(chan any, 1)
+  sender := _scopeWith(s.ctx)
+  go func() { sent <- _borkChanSend(sender, d, 2) }()
+  for d.waiting() < 1 { runtime.Gosched() }
+  sender.cancel(errors.New("stop"))
+  if _, status, _ := _borkChanSelect([]_borkChanArm{{ch: d}}, false); status == _borkChanValue { t.Fatal("took a cancelled sender's value") }
+  d.close()
+  if v := <-sent; v != (Cancelled{reason: "stop"}) { t.Fatal("sender got", v) }
+  inner.close(); sender.close(); s.close()
+ }
+}
+
+func TestFixedBufferGrowsLazily(t *testing.T) {
+ s := scope(); defer s.close()
+ c := _borkNewChan(s, 1<<40)
+ if len(c.ring) != 0 { t.Fatal("allocated up front") }
+ for i := 0; i < 20; i++ { _borkChanSend(s, c, i) }
+ if len(c.ring) > 32 { t.Fatal("grew too much", len(c.ring)) }
+ d := _borkNewChan(s, 3)
+ for i := 0; i < 3; i++ { _borkChanSend(s, d, i) }
+ if len(d.ring) != 3 { t.Fatal("grew past its capacity", len(d.ring)) }
+ if _, status, _ := _borkChanSelect([]_borkChanArm{{ch: d, send: true, value: 9}}, false); status != _borkChanNotReady { t.Fatal("full channel accepted a value") }
+}
 `

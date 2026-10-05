@@ -258,8 +258,9 @@ fn (ch: Channel[T]) toList[T](s: Scope) uses state: List[T] | Cancelled unsafe g
 
 // produce makes a channel in s and runs work with it as a task of s,
 // closing the channel when work returns, so receivers' loops end. (If
-// work panics, s is cancelled.) Inside work, out.send(s, x)? stops the
-// producer when the channel is closed or s is cancelled.
+// work panics, s is cancelled, which stops them too.) A producer written
+// as a named function can stop with out.send(s, x)? when the channel is
+// closed or s is cancelled.
 fn produce[T](s: Scope, capacity: Int where validCapacity, work: (Channel[T]) => Ok | Closed | Cancelled in s) uses state: Channel[T] {
   out = channel[T](s, capacity)
   launch(s, () => {
@@ -271,7 +272,8 @@ fn produce[T](s: Scope, capacity: Int where validCapacity, work: (Channel[T]) =>
 
 // merge receives from every source and passes the values on to one
 // unbuffered channel, which is closed when every source is closed: the
-// fan-in of a list of channels.
+// fan-in of a list of channels. If the merged channel is closed or s is
+// cancelled, each source loses at most the one value it was passing on.
 fn merge[T](s: Scope, sources: List[Channel[T]] in s) uses state: Channel[T] unsafe go {
   import "sync/atomic"
   out := _borkNewChan(s, 0)

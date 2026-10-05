@@ -948,7 +948,13 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	// A channel's methods only wait in the scope they are given: what
 	// they give is a value of the channel's lifetime.
 	if channelMethod(fn) {
-		return args[0]
+		switch fn.Decl.Name {
+		case "send", "receive", "trySend", "tryReceive", "close", "length", "capacity", "toList":
+			return args[0]
+		case "values":
+			// The sequence waits in s each time it is traversed.
+			return args[0].union(args[1])
+		}
 	}
 	// Go code given a scope may keep its other arguments until the scope
 	// closes (as a finalizer, say). So may a function value, which could

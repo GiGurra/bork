@@ -44,6 +44,8 @@ type _borkChan struct {
 // _borkSel is a waiting select. Whoever claims it first completes it.
 type _borkSel struct {
  claimed atomic.Bool
+ // ctxs are the scopes whose cancellation stops the select.
+ ctxs []context.Context
  wake chan struct{}
  arm int
  status int
@@ -66,16 +68,18 @@ type _borkWaiter struct {
 }
 
 func _borkNewChan(owner *_Scope, limit int) *_borkChan {
- c := &_borkChan{id: _borkChanIDs.Add(1), limit: limit, owner: owner.ctx}
- if limit > 0 {
-  c.ring = make([]any, limit)
- }
- return c
+ return &_borkChan{id: _borkChanIDs.Add(1), limit: limit, owner: owner.ctx}
 }
 
+// push buffers v. The buffer grows as needed, up to a fixed capacity, so a
+// large capacity costs nothing until it is used.
 func (c *_borkChan) push(v any) {
  if c.n == len(c.ring) {
-  c.resize(max(8, 2*len(c.ring)))
+  size := max(8, 2*len(c.ring))
+  if c.limit > 0 {
+   size = min(size, c.limit)
+  }
+  c.resize(size)
  }
  c.ring[(c.head+c.n)%len(c.ring)] = v
  c.n++
@@ -102,17 +106,29 @@ func (c *_borkChan) resize(size int) {
 }
 
 // dequeue gives the first waiter in q whose select it could claim,
-// dropping those that another channel or a cancellation completed.
+// dropping those that another channel or a cancellation completed. A
+// waiter whose scope is cancelled already gets Cancelled, even before
+// the cancellation's own callback has run: cancellation wins.
 func _borkDequeue(q *[]*_borkWaiter) *_borkWaiter {
  for len(*q) > 0 {
   w := (*q)[0]
   (*q)[0] = nil
   *q = (*q)[1:]
-  if w.sel.claim() {
+  if w.sel.claim() && !w.sel.cancelled() {
    return w
   }
  }
  return nil
+}
+
+// cancelled completes a claimed select with Cancelled if one of its
+// scopes is cancelled, and reports whether it did.
+func (sel *_borkSel) cancelled() bool {
+ if ctx := _borkCancelledIn(sel.ctxs); ctx != nil {
+  sel.complete(-1, _borkChanCancelled, _borkCancelledBy(ctx))
+  return true
+ }
+ return false
 }
 
 // tryRecv receives without waiting, with c locked.
@@ -164,7 +180,7 @@ func (c *_borkChan) close() {
  c.closed = true
  for _, q := range [][]*_borkWaiter{c.recvq, c.sendq} {
   for _, w := range q {
-   if w.sel.claim() {
+   if w.sel.claim() && !w.sel.cancelled() {
     w.sel.complete(w.arm, _borkChanClosed, nil)
    }
   }
@@ -285,7 +301,7 @@ func _borkChanSelect(arms []_borkChanArm, block bool) (int, int, any) {
   unlock()
   return -1, _borkChanNotReady, nil
  }
- sel := &_borkSel{wake: make(chan struct{}, 1)}
+ sel := &_borkSel{wake: make(chan struct{}, 1), ctxs: ctxs}
  for i, a := range arms {
   w := &_borkWaiter{sel: sel, arm: i, value: a.value}
   if a.send {
