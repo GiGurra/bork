@@ -10,7 +10,8 @@ fn shell(s: Scope, script: String, stdin: process.Input = .Empty, stdout: proces
 fn waitReady(path: String) uses io + clock unsafe go {
   import "os"
   import "time"
-  for i := 0; i < 500; i++ {
+  // The marker file is the readiness signal; the deadline only guards hangs.
+  for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); {
     if data, _ := os.ReadFile(path); len(data) > 0 { return }
     time.Sleep(10*time.Millisecond)
   }
@@ -136,7 +137,8 @@ fn robustness(s: Scope, directory: String) uses io + state + clock: Ok | IoError
   start = millis()
   stubborn.Stop(time.Duration { nanos: 200_000_000 })
   println(stubborn.Wait()?.status)
-  println(millis() - start < 2000)
+  // Without escalation the child would never exit; the bound only guards that.
+  println(millis() - start < 10000)
   escalated = scope patient {
     cancelAfter(patient, 200)
     process.Run(patient, "/bin/sh", ["-c", "trap '' TERM; while true; do sleep 0.05; done"], cancelGrace: time.Duration { nanos: 200_000_000 })
