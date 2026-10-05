@@ -154,6 +154,8 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 			walk(reflect.ValueOf(method.Result), references)
 			walk(reflect.ValueOf(method.Requires), references)
 			walk(reflect.ValueOf(method.Body), references)
+			c.checkDeriveScopes(method, locals, typeNames)
+			c.checkDeriveLiteralTypes(method, typeNames)
 		}
 	}
 }

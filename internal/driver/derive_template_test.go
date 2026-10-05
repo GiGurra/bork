@@ -794,7 +794,7 @@ func TestDeriveTemplateMetadataBlockScopes(t *testing.T) {
 class C[T] { fn c(x: T): String }
 derive instance c[T]: C[T] { fn c(x: T): String { bad() } }
 type Item = {} derive(C)
-fn main() {}`, "undefined: hidden")
+fn main() {}`, "undefined local in derive definition: hidden")
 }
 
 func TestDeriveTemplateHelperDocumentation(t *testing.T) {
@@ -811,5 +811,60 @@ fn main() {}`)
 	}
 	if strings.Contains(string(output), "_derive_") {
 		t.Fatalf("generated helper API leaked: %s", output)
+	}
+}
+
+func TestDeriveTemplateUnrequestedScopes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused(): String {
+  result = comptime match (true) { true => { hidden = "x"; hidden }, _ => "no" }
+  hidden
+ }
+fn main() {}`, "undefined local in derive definition: hidden")
+	checkPreludeSource(t, `derive fn unused(): Int { x = x; x }
+fn main() {}`, "undefined local in derive definition: x")
+	checkPreludeSource(t, `derive fn unused(x: Int): Int { x = 1; x }
+fn main() {}`, "x is already defined in an enclosing derive scope")
+	checkPreludeSource(t, `derive fn unused(): String {
+ comptime match (true) { true => { local = "yes"; local }, _ => { local = "no"; local } }
+}
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedLiteralTypes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn unused(): String { 1 }
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `derive fn unused(): String { bad: Bool = "wrong"; "ok" }
+fn main() {}`, "derive expression must be Bool, found String")
+	checkPreludeSource(t, `class C[T] { fn c(x: T): String }
+derive instance c[T]: C[T] { fn c(x: T): String { comptime if (true) { "yes" } else { 1 } } }
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `derive fn unused(): Int32 { 1 }
+derive fn generic[T](x: T): T { x }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateNoNativeEvaluation(t *testing.T) {
+	t.Parallel()
+	dir := validatorFixture(t, `import "bork/shape"
+class Labels[T] { fn labels(x: T): List[String] }
+derive instance labels[T]: Labels[T] {
+ fn labels(x: T): List[String] { [comptime for (f in shape.fields[T]()) f.name] }
+}
+type Item = { name: String, count: Int = 1 } derive(Labels)
+fn main() {}`)
+	loaded, module, err := loadCompilationInputs(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := captureGoContext()
+	launcher := filepath.Join(t.TempDir(), "go")
+	if err := os.WriteFile(launcher, []byte("#!/bin/sh\nexit 83\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	ctx.tool = launcher
+	if _, err := checkLoadedProgramObserved(loaded, module, ctx, captureEmbedsSnapshot, nil); err != nil {
+		t.Fatalf("derive checking must succeed without launching the native tool: %v", err)
 	}
 }
