@@ -241,9 +241,11 @@ A pin records its keeper's lifetime and is released once every scope of that
 lifetime has ended:
 
 - **Inner scope blocks.** A task of an inner scope block stops pinning when
-  that block ends, if its policies are all known not to orphan tasks
-  (`cleanupTimeout`, `logFailures`). Any other policy (`taskTimeout`, or one
-  computed by a function) may leave a task running, so its pins stay.
+  that block ends, if its policies are all known not to orphan anything
+  (none, or `logFailures`). Any other policy may leave a task (`taskTimeout`)
+  or a finalizer (`cleanupTimeout`) running, as may one computed by a
+  function, so its pins stay. A `yield` pins for good: whoever takes the
+  sequence keeps what it yields.
   `setScopePolicy` cannot be called directly, so every policy is visible
   where the scope starts.
 - **Owned children.** An owned child releases its pins only when it is closed
@@ -296,9 +298,11 @@ the move, the common mistake.
 whatever else `r` was computed from. That is sound only if a resource stays
 usable while it has a live registration, the rule `attach` already relies on
 and the one `s.Own` documents for Go code. A resource whose Go value uses
-another resource keeps that resource itself (`sql.Begin`'s transaction keeps
-the connection's Go handle). The acquisition convention above is the one new
-obligation on Go code.
+another resource should keep that resource's registration itself. `sql.Begin`'s
+transaction does not keep its connection's, so moving (or attaching) a
+transaction past its connection's scope is unsafe today, with `move` as with
+`attach`; that is a library fix outside this design. The acquisition
+convention above is the one new obligation on Go code.
 
 ## Runtime
 
