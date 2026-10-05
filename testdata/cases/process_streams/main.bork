@@ -152,7 +152,9 @@ fn robustness(s: Scope, directory: String) uses io + state + clock: Ok | IoError
   outer = process.Start(s, "/bin/sh", ["-c", "sh -c 'trap \"\" TERM; sleep 0.5; echo survived > \"$1\"' sh \"$1\" & trap 'exit 0' TERM; echo ready > \"$2\"; wait", "sh", survivor, marker])?
   waitReady(marker)
   outer.Stop(time.Duration { nanos: 100_000_000 })
-  _ = outer.Wait()?
+  // Wait may give IoError if the descendant holds the pipe past the bound.
+  _ = outer.Wait()
+  waitReady(survivor)
   println(encoding.ParseUtf8(fs.Read(survivor)?))
 }
 
