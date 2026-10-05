@@ -15,6 +15,12 @@
         "expandable": false
       },
       {
+        "name": "listUnion",
+        "type": "",
+        "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+        "expandable": true
+      },
+      {
         "name": "nested",
         "type": "",
         "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
@@ -260,6 +266,25 @@
         "type": "",
         "value": "2.0",
         "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate listUnion",
+    "value": {
+      "type": "",
+      "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand listUnion",
+    "variables": [
+      {
+        "name": "data",
+        "type": "",
+        "value": "(loaded 64/80) []Int len: 80, cap: 80, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+        "expandable": true
       }
     ]
   }

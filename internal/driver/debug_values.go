@@ -49,7 +49,7 @@ func (r *dapRelay) pretty(text string) string {
 				dynamic := text[pos+1 : close-1]
 				if dt, ok := r.typeInfo(dynamic); ok {
 					typ, known = dt, true
-					dynamicScalar = dt.Kind == "scalar"
+					dynamicScalar = dt.Kind == "scalar" || dt.Kind == "container"
 					pos = skipSpace(text, close)
 				}
 			}

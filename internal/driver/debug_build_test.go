@@ -253,7 +253,7 @@ func testDebugDAPSession(t *testing.T, types bool) {
 		name := scope.(map[string]any)["name"].(string)
 		session = append(session, debugSnapshot{Request: "scope " + name, Variables: debugVariables(response)})
 	}
-	for _, expression := range []string{"shape", "some", "none", "nested", "recordUnion", "scalarUnion", "someFloat", "boxed"} {
+	for _, expression := range []string{"shape", "some", "none", "nested", "recordUnion", "scalarUnion", "someFloat", "boxed", "listUnion"} {
 		seq = d.send(t, "evaluate", map[string]any{"expression": expression, "frameId": frame["id"], "context": "watch"})
 		response = d.until(t, "", seq)
 		value := debugValue(response["body"].(map[string]any), "result")
@@ -263,6 +263,23 @@ func testDebugDAPSession(t *testing.T, types bool) {
 			seq = d.send(t, "variables", map[string]any{"variablesReference": ref})
 			response = d.until(t, "", seq)
 			session = append(session, debugSnapshot{Request: "expand " + expression, Variables: debugVariables(response)})
+
+			if expression == "listUnion" {
+				vars := response["body"].(map[string]any)["variables"].([]any)
+				if len(vars) != 1 {
+					t.Fatalf("list union lost its paging node: %v", vars)
+				}
+				child := vars[0].(map[string]any)
+				if child["indexedVariables"] != float64(80) {
+					t.Fatalf("list union lost element count: %v", child)
+				}
+				seq = d.send(t, "variables", map[string]any{"variablesReference": child["variablesReference"], "filter": "indexed", "start": 64, "count": 16})
+				page := d.until(t, "", seq)
+				items := page["body"].(map[string]any)["variables"].([]any)
+				if len(items) != 16 || items[0].(map[string]any)["name"] != "[64]" || items[15].(map[string]any)["name"] != "[79]" {
+					t.Fatalf("list union paging: %v", items)
+				}
+			}
 			if expression == "nested" {
 				for _, item := range response["body"].(map[string]any)["variables"].([]any) {
 					child := item.(map[string]any)

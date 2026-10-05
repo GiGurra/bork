@@ -177,3 +177,21 @@ func TestDebugDAPPassthrough(t *testing.T) {
 		}
 	}
 }
+
+func TestDebugUnionContainerPaging(t *testing.T) {
+	r := presentationFixture()
+	r.metadata.Types["[]int64"] = gen.DebugType{Name: "List[Int]", Kind: "container"}
+	var upstream bytes.Buffer
+	r.upstream = &upstream
+	r.references[10] = gen.DebugType{Kind: "union"}
+	r.pending[1] = 10
+	child := map[string]any{"name": "data", "type": "[]int64", "value": "[]int64 len: 100, cap: 100, [0, 1, ...]", "variablesReference": float64(11), "indexedVariables": float64(100)}
+	msg := map[string]any{"type": "response", "success": true, "command": "variables", "request_seq": float64(1), "body": map[string]any{"variables": []any{child}}}
+	if skip, err := r.expand(msg); skip || err != nil || upstream.Len() != 0 {
+		t.Fatalf("container paging wrapper flattened: %v %v", skip, err)
+	}
+	r.rewrite(msg)
+	if child["variablesReference"] != float64(11) || child["indexedVariables"] != float64(100) || child["type"] != "List[Int]" {
+		t.Fatalf("container paging lost: %v", child)
+	}
+}

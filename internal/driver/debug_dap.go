@@ -362,8 +362,10 @@ func (r *dapRelay) value(v map[string]any, key string) {
 		if i := strings.IndexByte(rawType, '('); i >= 0 && strings.HasSuffix(rawType, ")") {
 			if dynamic, ok := r.typeInfo(rawType[i+1 : len(rawType)-1]); ok {
 				// Interface counts describe Delve's synthetic data node, not bork fields.
-				delete(v, "namedVariables")
-				delete(v, "indexedVariables")
+				if dynamic.Kind == "scalar" || dynamic.Kind == "record" || dynamic.Kind == "variant" || dynamic.Kind == "option" {
+					delete(v, "namedVariables")
+					delete(v, "indexedVariables")
+				}
 				if dynamic.Kind == "scalar" || (dynamic.Kind == "option" || dynamic.Kind == "variant") && len(dynamic.Fields) == 0 {
 					v["variablesReference"] = float64(0)
 				}
@@ -433,7 +435,7 @@ func (r *dapRelay) expand(msg map[string]any) (bool, error) {
 		rawType = previewType(text)
 	}
 	typ, ok := r.typeInfo(rawType)
-	if !ok {
+	if !ok || (typ.Kind != "record" && typ.Kind != "variant" && typ.Kind != "option") {
 		return false, nil
 	}
 	ref, _ := child["variablesReference"].(float64)

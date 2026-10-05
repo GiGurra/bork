@@ -15,6 +15,12 @@
         "expandable": false
       },
       {
+        "name": "listUnion",
+        "type": "List[Int]",
+        "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+        "expandable": true
+      },
+      {
         "name": "nested",
         "type": "Outer",
         "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
@@ -260,6 +266,25 @@
         "type": "Float",
         "value": "2.0",
         "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate listUnion",
+    "value": {
+      "type": "List[Int]",
+      "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand listUnion",
+    "variables": [
+      {
+        "name": "data",
+        "type": "List[Int]",
+        "value": "(loaded 64/80) []Int len: 80, cap: 80, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+        "expandable": true
       }
     ]
   }

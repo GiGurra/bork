@@ -14,7 +14,8 @@ fn main() {
   nested = Outer { inner: Inner { label: "main.Shape_Circle {radius: 9}", count: 5 }, shape: shape, optional: some }
   recordUnion: Inner | Outer = nested.inner
   scalarUnion: Int | String = 8
+  listUnion: List[Int] | Int = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   chosen = match (shape) { Shape.Circle { radius } => radius, Shape.Empty => 0.0 }
   println(y)
-  println(x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes)
+  println(x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, listUnion)
 }
