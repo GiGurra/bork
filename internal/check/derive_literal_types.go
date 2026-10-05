@@ -14,66 +14,9 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	if method.Body == nil {
 		return
 	}
-	var concreteType func(*syntax.TypeExpr) bool
-	concreteType = func(typ *syntax.TypeExpr) bool {
-		if typ == nil {
-			return true
-		}
-		if typeNames[typ.Name] {
-			return false
-		}
-		if _, member, projected := strings.Cut(typ.Name, "."); projected && member == "Type" {
-			return false
-		}
-		for _, arg := range typ.Args {
-			if !concreteType(arg) {
-				return false
-			}
-		}
-		for _, member := range typ.Union {
-			if !concreteType(member) {
-				return false
-			}
-		}
-		if typ.Func != nil {
-			for _, param := range typ.Func.Params {
-				if !concreteType(param) {
-					return false
-				}
-			}
-			return concreteType(typ.Func.Result)
-		}
-		return true
-	}
-	var literal func(syntax.Expr) bool
-	literal = func(expr syntax.Expr) bool {
-		switch expr := expr.(type) {
-		case *syntax.StringLit, *syntax.BoolLit, *syntax.IntLit, *syntax.FloatLit, *syntax.RuneLit:
-			return true
-		case *syntax.Unary:
-			return literal(expr.X)
-		case *syntax.Binary:
-			return literal(expr.X) && literal(expr.Y)
-		case *syntax.ListLit:
-			for _, elem := range expr.Elems {
-				if !literal(elem) {
-					return false
-				}
-			}
-			return true
-		case *syntax.MapLit:
-			for i, key := range expr.Keys {
-				if !literal(key) || !literal(expr.Values[i]) {
-					return false
-				}
-			}
-			return true
-		}
-		return false
-	}
 	checked := map[syntax.Expr]bool{}
 	checkLiteral := func(expr syntax.Expr, want Type) {
-		if expr == nil || want == nil || want == Invalid || checked[expr] || !literal(expr) {
+		if expr == nil || want == nil || want == Invalid || checked[expr] || !deriveLiteralExpression(expr) {
 			return
 		}
 		checked[expr] = true
@@ -83,7 +26,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 		}
 	}
 	var result Type
-	if concreteType(method.Result) {
+	if deriveConcreteType(method.Result, typeNames) {
 		result = c.resolveType(method.Result)
 	}
 	var tail func(syntax.Expr, Type)
@@ -129,7 +72,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 			case *syntax.Return:
 				tail(node.Value, result)
 			case *syntax.Binding:
-				if node.Type != nil && concreteType(node.Type) {
+				if node.Type != nil && deriveConcreteType(node.Type, typeNames) {
 					checkLiteral(node.Value, c.resolveType(node.Type))
 				}
 			}
@@ -145,4 +88,63 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 		}
 	}
 	walk(reflect.ValueOf(method.Body))
+}
+
+func deriveLiteralExpression(expr syntax.Expr) bool {
+	switch expr := expr.(type) {
+	case *syntax.StringLit, *syntax.BoolLit, *syntax.IntLit, *syntax.FloatLit, *syntax.RuneLit:
+		return true
+	case *syntax.Unary:
+		return deriveLiteralExpression(expr.X)
+	case *syntax.Binary:
+		return deriveLiteralExpression(expr.X) && deriveLiteralExpression(expr.Y)
+	case *syntax.ListLit:
+		for _, elem := range expr.Elems {
+			if !deriveLiteralExpression(elem) {
+				return false
+			}
+		}
+		return true
+	case *syntax.MapLit:
+		for i, key := range expr.Keys {
+			if !deriveLiteralExpression(key) || !deriveLiteralExpression(expr.Values[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// Resolve only annotations that do not refer to a symbolic target or a
+// descriptor type projection. Their concrete meaning is independent of shape.
+func deriveConcreteType(typ *syntax.TypeExpr, typeNames map[string]bool) bool {
+	if typ == nil {
+		return true
+	}
+	if typeNames[typ.Name] {
+		return false
+	}
+	if _, member, projected := strings.Cut(typ.Name, "."); projected && member == "Type" {
+		return false
+	}
+	for _, arg := range typ.Args {
+		if !deriveConcreteType(arg, typeNames) {
+			return false
+		}
+	}
+	for _, member := range typ.Union {
+		if !deriveConcreteType(member, typeNames) {
+			return false
+		}
+	}
+	if typ.Func != nil {
+		for _, param := range typ.Func.Params {
+			if !deriveConcreteType(param, typeNames) {
+				return false
+			}
+		}
+		return deriveConcreteType(typ.Func.Result, typeNames)
+	}
+	return true
 }

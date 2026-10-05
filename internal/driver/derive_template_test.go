@@ -1290,3 +1290,30 @@ type Huge = { payload: String = "`+strings.Repeat("x", 100001)+`" }
 type Row = { child: Huge = Huge {} } derive(Defaults)
 fn main() {}`, "compile-time work limit")
 }
+
+func TestDeriveTemplateUnrequestedLiteralCallTypes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, declaration, call, want string }{
+		{"positional", "fn accept(n: Int): Int { n }", `accept("wrong")`, "argument n must be Int"},
+		{"named", "fn accept(n: Int, text: String): Int { n }", `accept(text: "ok", n: false)`, "argument n must be Int"},
+		{"generic independent parameter", "fn accept[A](x: A, n: Int): Int { n }", `accept[T](x, "wrong")`, "argument n must be Int"},
+		{"container", "fn accept(xs: List[Int]): Int { xs.length() }", `accept(["wrong"])`, "must be Int"},
+		{"derive helper", "derive fn accept(n: Int): Int { n }", `accept(false)`, "argument n must be Int"},
+		{"generic derive helper", "derive fn accept[A](x: A, n: Int): Int { n }", `accept[T](x, "wrong")`, "argument n must be Int"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkPreludeSource(t, tc.declaration+`
+class C[T] { fn c(x: T): Int }
+derive instance c[T]: C[T] { fn c(x: T): Int { `+tc.call+` } }
+fn main() {}`, tc.want)
+		})
+	}
+}
+
+func TestDeriveTemplateRuntimeLoopDiagnostic(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `class C[T] { fn c(x: T): Int }
+derive instance c[T]: C[T] { fn c(x: T): Int { for (n in 2) {}; 1 } }
+type Row = {} derive(C)
+fn main() {}`, "for requires a List or Seq")
+}

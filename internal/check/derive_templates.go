@@ -645,7 +645,10 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 		if x.Comptime {
 			return &syntax.Block{Pos: x.Pos, Stmts: p.loopStatements(x)}
 		}
-		if _, ok := p.eval(x.Items); ok {
+		if value, ok := p.eval(x.Items); ok {
+			if _, sequence := value.(shapeSequence); !sequence {
+				break
+			}
 			p.error(x.Pos, "shape metadata cannot be iterated by a runtime for; add comptime")
 			p.c.diags.Suggest(x.Pos, "type.error", x.Pos, diag.Fix{Message: "add comptime", Edits: []diag.TextEdit{{Start: x.Pos, End: x.Pos, Replacement: "comptime "}}})
 		}

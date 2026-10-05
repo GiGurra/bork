@@ -21,9 +21,19 @@ func (c *checker) checkDeriveCallShape(call *syntax.Call, localNames map[string]
 		helper = true
 		genericCount = len(decl.TypeParams)
 		fn = &Func{Decl: decl, Pkg: pkg, Params: make([]Type, len(decl.Params)), defaultsChecked: true}
+		typeNames := map[string]bool{}
+		for _, parameter := range decl.TypeParams {
+			typeNames[parameter.Name] = true
+		}
+		saved := c.pkg
+		c.pkg = pkg
 		for i := range fn.Params {
 			fn.Params[i] = Invalid
+			if deriveConcreteType(decl.Params[i].Type, typeNames) {
+				fn.Params[i] = c.resolveType(decl.Params[i].Type)
+			}
 		}
+		c.pkg = saved
 	} else {
 		if alias, member, qualified := strings.Cut(id.Name, "."); qualified {
 			if pkg := c.pkg.imports[alias]; pkg != nil && pkg.Path == "bork/shape" {
@@ -58,6 +68,7 @@ func (c *checker) checkDeriveCallShape(call *syntax.Call, localNames map[string]
 		proxy.Decl = &decl
 		proxy.defaultsChecked = true
 		c.namedArgs(call, id.Name, &proxy, call.Args)
+		c.checkDeriveLiteralArguments(call, fn)
 		return
 	}
 	required := len(fn.Params)
@@ -66,5 +77,33 @@ func (c *checker) checkDeriveCallShape(call *syntax.Call, localNames map[string]
 	}
 	if len(call.Args) < required || len(call.Args) > len(fn.Params) {
 		c.errorf(call.Pos, "derive definition call to %s takes %d to %d arguments, found %d", id.Name, required, len(fn.Params), len(call.Args))
+	}
+	c.checkDeriveLiteralArguments(call, fn)
+}
+
+// Only literal source arguments with a resolved, target-independent parameter
+// type are checked here. Dependent arguments remain expansion obligations.
+func (c *checker) checkDeriveLiteralArguments(call *syntax.Call, fn *Func) {
+	for i, arg := range call.Args {
+		parameter := i
+		if i < len(call.Arguments) && call.Arguments[i].Name != "" {
+			parameter = -1
+			for j, param := range fn.Decl.Params {
+				if param.Name == call.Arguments[i].Name {
+					parameter = j
+					break
+				}
+			}
+		}
+		if parameter < 0 || parameter >= len(fn.Params) || !deriveLiteralExpression(arg) {
+			continue
+		}
+		want := fn.Params[parameter]
+		if want == nil || want == Invalid || hasTypeParam(want) || c.open(want) {
+			continue
+		}
+		if actual := c.exprWant(arg, want); actual != Invalid && !assignable(actual, want) {
+			c.errorf(arg.Position(), "derive call argument %s must be %s, found %s", fn.Decl.Params[parameter].Name, want, actual)
+		}
 	}
 }
