@@ -1,6 +1,9 @@
+import "bork/codec"
+
 import "bork/cli"
 import "bork/process"
-type Options = { serverHost: String = "localhost", internalToken: String = "development" } derive (Decode)
+use codec.Defaults
+type Options = { serverHost: String = "localhost", internalToken: String = "development" } derive (codec.Decode)
 fn main() {
   match (cli.Run[Options]("env", "Opt into automatic environment bindings", (options, s) => {
     println(s"Connecting to ${options.serverHost}")

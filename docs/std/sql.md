@@ -11,11 +11,13 @@
 ## Typed SQL literals
 
 ```bork
+import "bork/codec"
 import "bork/sql"
+use codec.Defaults
 
-type User = { id: Int, name: String } derive (Decode)
+type User = { id: Int, name: String } derive (codec.Decode)
 
-fn usersNamed(connection: sql.Connection, name: String) uses io + net: List[User] | sql.Error | DecodeError {
+fn usersNamed(connection: sql.Connection, name: String) uses io + net: List[User] | sql.Error | codec.DecodeError {
   statement = sql.SQL"SELECT id, name FROM users WHERE name = $name"
   statement.Query[User](connection)
 }
@@ -33,9 +35,11 @@ Dots are part of a component; use `$schema.$table` to compose qualified names.
 Nested Statement holes splice structured fragments and preserve parameter order:
 
 ```bork
+import "bork/codec"
 import "bork/sql"
+use codec.Defaults
 
-fn lookup(connection: sql.Connection, tableName: String, columnName: String, name: String) uses io + net: Json | sql.Error {
+fn lookup(connection: sql.Connection, tableName: String, columnName: String, name: String) uses io + net: codec.Value | sql.Error {
   table = sql.Name(tableName)?
   column = sql.Name(columnName)?
   filter = sql.SQL"$column = $name"
@@ -99,11 +103,13 @@ Prefer typed SQL literals for application queries. Code that must execute SQL
 assembled as a runtime String opts in with `sql.Unsafe(text): sql.UnsafeQuery`:
 
 ```bork
+import "bork/codec"
 import "bork/sql"
+use codec.Defaults
 
-type User = { id: Int, name: String } derive (Decode)
+type User = { id: Int, name: String } derive (codec.Decode)
 
-fn rawUsers(connection: sql.Connection, queryText: String, params: List[sql.Value]) uses io + net: List[User] | sql.Error | DecodeError {
+fn rawUsers(connection: sql.Connection, queryText: String, params: List[sql.Value]) uses io + net: List[User] | sql.Error | codec.DecodeError {
   raw = sql.Unsafe(queryText)
   sql.Query[User](connection, raw, params)
 }

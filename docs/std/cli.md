@@ -3,7 +3,7 @@
 ## Command-line options
 
 `Parse[T]` accepts arguments without the executable name and returns a proven
-options record, `cli.Error`, or `cli.Help`. The record must derive `Decode`.
+options record, `cli.Error`, or `cli.Help`. The record must derive `codec.Decode`.
 `Run[T]` reads process arguments and invokes `(T, Scope) => Ok` only after
 successful validation. Applications render errors and choose their exit code.
 Both use `io`; Run also carries its handler's effects.
@@ -77,8 +77,10 @@ See [the flag mapping example](../../examples/cli_mapping/main.bork) and
 [the environment example](../../examples/cli_env/main.bork).
 
 ```bork
+import "bork/codec"
 import "bork/cli"
-type Options = { host: String = "localhost", port: Int = 8080 } derive (Decode)
+use codec.Defaults
+type Options = { host: String = "localhost", port: Int = 8080 } derive (codec.Decode)
 fn main() {
   println(cli.Parse[Options]("app", "Example", ["--listen", "443"],
     flags: [.{ field: "port", long: cli.Mapping.Named { name: "listen" }, short: "p" }],

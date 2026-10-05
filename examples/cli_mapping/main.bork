@@ -1,6 +1,9 @@
+import "bork/codec"
+
 import "bork/cli"
 import "bork/process"
-type Options = { serverHost: String = "localhost", port: Int = 8080 } derive (Decode)
+use codec.Defaults
+type Options = { serverHost: String = "localhost", port: Int = 8080 } derive (codec.Decode)
 fn main() {
   match (cli.Run[Options]("mapping", "Automatic and exact flag names", (options, s) => {
     println(s"${options.serverHost}:${options.port}")

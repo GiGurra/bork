@@ -661,7 +661,7 @@ func (c *checker) promisesArgFacts(inst *Instance, argFacts [][]*Constraint, nam
 			if len(argFacts[i]) == 0 || d == nil || !producesParam(b) {
 				continue
 			}
-			if d.Builtin && b.Prelude && b.Name == "Decode" {
+			if d.Builtin && IsCodec(b, "Decode") {
 				if tuple, ok := d.Type.(*Record); ok && tuple.Tuple && len(missingConstraints(tupleConstraints(tuple), argFacts[i])) == 0 {
 					continue
 				}
@@ -761,7 +761,7 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		}
 		return &Dict{Class: class, Type: t, Builtin: true}
 	}
-	if tuple, ok := t.(*Record); ok && tuple.Tuple && class.Prelude && (class.Name == "Encode" || class.Name == "Decode") {
+	if tuple, ok := t.(*Record); ok && tuple.Tuple && (IsCodec(class, "Encode") || IsCodec(class, "Decode")) {
 		d := &Dict{Class: class, Type: t, Builtin: true}
 		for _, field := range tuple.Fields {
 			element := c.dict(class, field.Type, pos, depth+1)

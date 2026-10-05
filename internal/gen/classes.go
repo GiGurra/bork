@@ -209,7 +209,7 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (check.IsCodec(d.Class, "Encode") || check.IsCodec(d.Class, "Decode")) {
 			method := strings.ToLower(d.Class.Name)
 			fun, _ := g.dictMethod(d, method)
 			return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun}}}
@@ -259,7 +259,7 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 		return fun, nil
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (check.IsCodec(d.Class, "Encode") || check.IsCodec(d.Class, "Decode")) {
 			return g.tupleCodec(d, tuple), nil
 		}
 		if check.IsShow(d.Class) {

@@ -7,7 +7,9 @@ Programs describe their data with tuples, records, sealed types, and unions. All
 A tuple groups values by position, with a separate type for each element:
 
 ```bork
+import "bork/codec"
 import "bork/json"
+use codec.Defaults
 
 fn labeled(n: Int): (Int, String) { (n, "count") }
 
@@ -33,9 +35,9 @@ helps infer each element's type. Destructuring binds names or `_` and may nest;
 refutable patterns belong in [match](matching.md).
 
 Equality and map keys work when every element supports equality. Rendering uses
-tuple syntax. Encode and Decode use JSON arrays of exactly the tuple's length,
+tuple syntax. codec.Encode and codec.Decode use JSON arrays of exactly the tuple's length,
 when every element has the corresponding codec; decode errors use index paths
-such as `[1]`. Named tuple aliases may request `derive (Encode, Decode)` under
+such as `[1]`. Named tuple aliases may request `derive (codec.Encode, codec.Decode)` under
 the same requirements, and derived records may contain tuples. GoStruct does
 not derive for tuples. Element facts and scope lifetimes follow their values
 through tuple construction, selection and destructuring.
@@ -145,11 +147,13 @@ Records and sealed types can derive codecs with an inline list, or with one
 package declaration per class:
 
 ```bork
+import "bork/codec"
 import "bork/json"
+use codec.Defaults
 
 type Settings = { name: String, retries: Int = 3 }
-derive Decode for Settings
-derive Encode for Settings
+derive codec.Decode for Settings
+derive codec.Encode for Settings
 
 fn main() {
   println(json.Encode(Settings { name: "worker" }))
@@ -160,10 +164,10 @@ The declarations may live in a different file of the same package. They must
 be in the package defining the underlying type or the class; an alias does not
 change that owner. Private fields and variants remain private. Each stored
 field needs the requested class's instance in scope. Defaults and facts are
-checked by derived Decode before it returns a value.
+checked by derived codec.Decode before it returns a value.
 
-For a generic type, `derive Decode for Box` derives an instance for all supported
-element types. `derive Decode for Box[Int]` requests just that specialization.
+For a generic type, `derive codec.Decode for Box` derives an instance for all supported
+element types. `derive codec.Decode for Box[Int]` requests just that specialization.
 Requesting the same class and head twice, including once inline and once
 standalone, is an error. Instances use the existing explicit `use` rules in
 other packages. GoStruct supports standalone declarations for the record itself.

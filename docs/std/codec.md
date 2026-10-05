@@ -11,7 +11,7 @@ import "bork/codec"
 import "bork/json"
 use codec.Defaults
 
-type User = { name: String, age: Int } derive(codec.Decode, codec.Encode)
+type User = { name: String, age: Int } derive (codec.Decode, codec.Encode)
 
 fn main() {
   user = User { name: "Ada", age: 37 }

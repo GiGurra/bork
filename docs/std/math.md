@@ -103,7 +103,7 @@ instances are `EncodeBigInt`, `DecodeBigInt`, `EncodeBigRat`, `DecodeBigRat`,
 `EncodeDecimal`, and `DecodeDecimal`. JSON strings preserve precision across
 consumers that would otherwise parse a JSON number as a binary float. Decimal
 encoding preserves scale; decoding invokes the same checked parsers. JSON number
-values and malformed strings return `DecodeError`.
+values and malformed strings return `codec.DecodeError`.
 
 See [examples/math](../../examples/math/main.bork) for invoice arithmetic.
 

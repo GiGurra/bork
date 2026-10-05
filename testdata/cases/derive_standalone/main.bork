@@ -1,12 +1,15 @@
-import "bork/json"
+import "bork/codec"
 
-derive Decode for Alias
-derive Encode for Config
-derive Decode for Box
-derive Encode for Box
-derive Decode for Special[Int]
-derive Encode for Mode
-derive Decode for Mode
+import "bork/json"
+use codec.Defaults
+
+derive codec.Decode for Alias
+derive codec.Encode for Config
+derive codec.Decode for Box
+derive codec.Encode for Box
+derive codec.Decode for Special[Int]
+derive codec.Encode for Mode
+derive codec.Decode for Mode
 
 fn main() {
   println(json.Decode[Alias]("{}"))
