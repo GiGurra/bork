@@ -12,10 +12,11 @@ This design adds two things, as decided by the human:
 1. **Go-style loops** with the existing `for` keyword: `for { ... }`,
    `for (cond) { ... }` and `for (init; cond; post) { ... }`. Loop-carried
    state uses the same-block rebinding of bork-4exlxc (PR #349).
-2. **Tail call optimization in bork's code generator**: self tail calls and
-   mutual tail calls within a package are compiled to jumps. `uses tailrec`
-   is an opt-in guarantee that fails compilation when a recursive call is not
-   compiled as a jump.
+2. **Tail call optimization in bork's code generator**: self tail calls are
+   compiled to jumps. `uses tailrec` is an opt-in guarantee that fails
+   compilation when a recursive call is not compiled as a jump. Mutual
+   recursion is not optimized. With loops and carried state, a state machine is
+   a loop over a state value (see "Mutual recursion").
 
 ```bork
 fn sum(xs: List[Int]): Int {
@@ -48,7 +49,7 @@ fn gcd(a: Int, b: Int) uses tailrec: Int {
 
 | Language | Loops | Loop-carried state | Tail calls |
 | --- | --- | --- | --- |
-| Go | `for {}`, `for cond {}`, `for init; cond; post {}`, `for range`; labels | Mutable variables. Since Go 1.22 each iteration of a three-clause loop has fresh copies of its header variables, so closures capture that iteration's value. | None. Stacks grow (segmented/copying) up to 1 GB, then the process dies. |
+| Go | `for {}`, `for cond {}`, `for init; cond; post {}`, `for range`; labels | Mutable variables. Since Go 1.22 each iteration of a three-clause or range loop has fresh copies of its header variables, so closures capture that iteration's value. Variables declared outside the loop are shared by every iteration. | None. Stacks grow (segmented/copying) up to 1 GB, then the process dies. |
 | Scala | `while`, `for` comprehensions | `var`s, or recursion | Self tail calls compiled to jumps; `@tailrec` makes it a compile error if a call isn't one. No mutual TCO on the JVM; `scala.util.control.TailCalls` is a library trampoline. |
 | Kotlin | `while`, `for (x in xs)` | `var`s | `tailrec fun` turns self tail calls into a loop; a warning (not error) if it can't. Calls inside `try`/`finally` are not tail calls. |
 | Clojure | `loop`/`recur`, `doseq` | `loop` bindings, rebound by `recur` with new values | `recur` is an explicit self jump, checked to be in tail position. `trampoline` for mutual recursion: functions return thunks. |
@@ -59,7 +60,8 @@ What bork takes:
 
 - **From Go:** the three loop forms, the one `for` keyword, and per-iteration
   values for closures. Unlike Go, closures capture *every* loop-carried
-  value per iteration, not only the header variables of a three-clause loop.
+  value per iteration, including state declared before the loop, not only
+  the loop's header variables.
 - **From Clojure:** the loop is a tail-recursive local function in disguise.
   Its carried names are the function's parameters, and each iteration rebinds
   them. bork writes `recur`'s arguments as ordinary rebindings in the body
@@ -72,8 +74,8 @@ What bork takes:
   not by hoping the backend does it. The rule matches Rust's: cleanup that must
   run after the call (bork's scope blocks, Rust's drops, Kotlin's `finally`)
   means it is not a tail call.
-- **Not taken:** trampolines (Clojure, Scala TailCalls) as the general
-  mechanism. See "Mutual recursion".
+- **Not taken:** mutual tail calls, whether by trampolines (Clojure, Scala
+  TailCalls) or by merging functions. See "Mutual recursion".
 
 ## 1. Loops
 
@@ -98,9 +100,18 @@ LoopControl = "break" | "continue" .
   `for (cond)` are the formatted forms when init and post are empty. The
   formatter rewrites `for (; cond;)` to `for (cond)` and `for (;;)` to `for`.
 - Several header names are separated by commas, which Go's syntax can't do
-  (`for (lo = 0, hi = n; lo < hi; lo = lo + 1, hi = hi - 1)`). The post
-  rebindings see the values from before the post clause, as a simultaneous
-  assignment does: `lo = hi, hi = lo` swaps them.
+  (`for (lo = 0, hi = n; lo < hi; lo = lo + 1, hi = hi - 1)`). The init
+  bindings run in order, as successive bindings do, so `lo = 0, hi = lo + n`
+  works. The post rebindings compute the next iteration's values. They all
+  see the values from before the post clause, as a simultaneous assignment
+  does: `lo = hi, hi = lo` swaps them.
+- Header names belong to the loop. They are not visible after it, as in Go.
+  A header name cannot already name a binding of an enclosing block: that
+  would be nested shadowing, which PR #349 forbids. To carry an existing
+  name, use it in a while loop. (`i = 0` before
+  `for (i < n) { ... i = i + 1 }` carries `i`, and `i` stays visible after.)
+- Post rebindings may rebind header names and the names the loop carries
+  from outside (next section).
 - `for (x in xs)` is unchanged.
 
 Parsing: after `for (`, an identifier or `_` followed by the contextual `in`
@@ -219,8 +230,10 @@ before the loop as total: Float = ...
 ```
 
 Declared facts on the first binding (`i: Int where nonNegative = 0`) are the
-loop invariant. Every carried rebinding must prove them, and they hold at the
-start of every iteration and after the loop. Flow facts the first value had
+loop invariant. The value that leaves an iteration must prove them: the value
+current at `continue`, at the end of the body, after the post clause, and at
+`break`. Intermediate rebindings within an iteration need not. The facts hold
+at the start of every iteration and after the loop. Flow facts the first value had
 (its constant identity, branch facts) are dropped at the loop head, because
 later iterations may not keep them. Inside the body, a while or three-clause
 condition is known (`i < n`), as an `if` guard is. After a loop with no
@@ -257,15 +270,27 @@ rule, with the loop's back edge counted as a use:
 - The binding before the loop is used if the loop reads it at the head, or if
   the loop may run zero times or `break` before rebinding it and the name is
   read after the loop.
-- A three-clause header name must be read in the condition, the body or the
-  post clause. `for (i = 0; ...)` with `i` never read is the usual unused
-  error. The fix replaces the header with a while form or `_`.
+- A three-clause header name follows the same rule, with the post clause as
+  part of the iteration.
+
+"Read" means *observed*. A read whose only purpose is to compute the next
+value of a carried name that is itself never observed does not count. This is
+computed as a fixpoint over the loop's carried names, so `count = count + 1`
+alone does not keep `count` alive, and neither do two names that only feed
+each other (`a = b + 1; b = a`). Conditions, `break`/`continue` guards,
+arguments of calls, and reads after the loop are observations. As a result,
+`for (i = 0; ; i = i + 1) { if (done()) { break } }` is an error (`i` is never
+observed), where Go accepts it. The fix offers `for { ... }`. This is the
+same strictness PR #349 applies to every other binding.
+
+A carried function parameter keeps #349's exemption for its value on entry.
+Its rebindings inside the loop follow the rules above.
 
 ```bork fails
 count = 0
 for (x in xs) {
-  count = count + 1   // error: count is never read: not after the loop, and
-}                     // not before it is rebound in the next iteration
+  count = count + 1   // error: count is never observed: it is only read to
+}                     // compute its own next value, and not after the loop
 ```
 
 The fix suggestions are those of PR #349. "Remove the binding" applies only
@@ -291,7 +316,8 @@ when the removed value has no effects.
 - **Generators.** `yield` works inside any loop form, and carried values
   survive across yields (they are ordinary Go variables of the producer).
 - **Comptime, predicates.** The new loops are allowed in comptime blocks (they
-  compile to Go like everything there). `pred` bodies stay loop-free, as
+  compile to Go like everything there). A `for {}` that never ends is stopped by
+  the evaluator's existing ten-second timeout, with the usual error. `pred` bodies stay loop-free, as
   today.
 - **Select.** Arm bodies of PR #370's `select` are ordinary expressions of
   the enclosing function, so `break` and `continue` in an arm refer to the
@@ -306,6 +332,7 @@ every bork binding stays a Go variable that is assigned exactly once:
 _c_total := total            // before the loop
 for _, x := range xs {
     total_1 := _c_total      // this iteration's value; closures capture this
+    _ = total_1              // legal in Go when the body rebinds before reading
     if x < 0 { _c_total = total_1; continue }
     total_2 := total_1 + x
     _c_total = total_2       // end of body
@@ -316,10 +343,12 @@ total_3 := _c_total          // after the loop
 Edges assign the binding current at that point to the state variable:
 `continue`, end of body, post clause, and `break`. The post clause and the
 three-clause header use the same state variables. The condition reads the
-iteration's copies. A Go three-clause `for` is not used: Go copies header
-variables at the start of the next iteration, *after* the body could have
-mutated the copy a closure holds. Plain variables plus `for { if !cond {
-break } ... }` keep bork's guarantee independent of Go's rules. The existing
+iteration's copies. Every loop form compiles to `for { copies; if !cond {
+break }; body; edge }` rather than Go's three-clause `for`. The reason is
+not mutation, since generated code never assigns a bork binding twice. It is
+that carried values come from several edges (`continue`, end of body),
+the post clause must run after whichever edge was taken, and the condition
+must see the iteration's copies. One flat shape serves all three forms. The existing
 loop-exit machinery (scopes opened in the body closed on `break`/`continue`,
 owners, mocks, `return` through range-over-func `Seq` loops) is reused for
 the new forms.
@@ -359,15 +388,18 @@ They are *not* tail positions, with the reason the compiler gives:
 | inside a `with` block | the ambient values, and published log labels, are restored after the call |
 | a block in which a `mock` is in force | the mock ends after the call (tests only) |
 | the operand of `?`, or inside any larger expression | the result is still inspected or used |
-| a call whose value is converted to the result type | the value changes after the call: a `T` widened into a different Go representation of the result (a self call returns exactly the result type, so this concerns calls to other functions in mutual recursion) |
 | inside a lambda, `lazy`/`async` initializer, generator, `comptime` | a different function |
+| a self call of a function with an `OwnedScope` parameter | the call's owner must be dropped when the call returns, if it was not passed on (a per-call Go `defer` today) |
 | a self call with other type arguments (polymorphic recursion) | Go needs a different instantiation |
 | an `unsafe go` body | not bork code |
 
-`return f(x)` inside a loop is a tail call: a Go `continue` to the function's
-loop label leaves any range-over-func iteration correctly, and bork's
-existing loop exit runs first (the loop cannot be inside a scope block, or it
-would not be a tail position).
+`return f(x)` inside a loop is a tail call. It leaves the loops the way
+`return` does today: it computes the arguments into the jump's parameter
+slots, sets the exit flag with a "jump" mark instead of a result, and breaks.
+At each loop level the existing post-loop code (`forget` of owners,
+re-checking the flag) runs. After the outermost loop, the function jumps
+instead of returning. No cleanup is skipped. The jump simply replaces the
+final `return`.
 
 ### Self tail calls
 
@@ -390,7 +422,8 @@ _tail:
 ```
 
 The per-call copies matter for the same reason as in loops: a closure made in
-one call must keep that call's parameters. Named and default arguments,
+one call must keep that call's parameters. Each copy is followed by `_ = x`,
+since bork parameters may be unused. Named and default arguments,
 receivers (methods are functions with the receiver first), hidden ambient
 (`needs`) parameters and generic dictionaries are parameters like any
 other. They are passed unchanged, since a self call has the same type
@@ -403,6 +436,23 @@ TCO is **automatic**. It is applied to every self tail call, with or without
 `tailrec`, as in Scala and Kotlin. It changes no result, effect or order of
 evaluation; it only stops the stack from growing.
 
+**Go defers.** A jump must not leave a per-call Go `defer` behind. That would
+make the deferred list grow with every jump, which is the growth TCO is
+meant to remove. The generator emits three function-level defers today:
+
+- the loop cleanup root of a top-level `for` (`defer root.close()`). It is
+  created once per Go function, outside the `_tail` loop, and shared by
+  every call, since its job (closing scopes and owners still open in an
+  abandoned iteration) is the same for every call;
+- the ambient label guard (`guardLabels`), also hoisted. A tail call cannot
+  be inside a `with` block, so no labels are pushed at the jump;
+- `dropOwner` for `OwnedScope` parameters. It is per call, so a self call of
+  such a function is not a tail position (table above).
+
+The internal `compilerCallerLocation` helpers (prelude and std only) take a
+hidden caller location that a self call would change. They are not
+optimized, and they cannot declare `tailrec`.
+
 **Mocks.** A test that mocks `f` sees `f`'s recursive calls today, because
 calls go through the dispatcher. In a test build, a jump in a mocked function
 first asks the dispatcher. If a mock is in force for the current test, the call
@@ -411,77 +461,55 @@ have no dispatchers, so nothing changes there.
 
 **Debugging and stack traces.** A jump reuses the frame, so a panic in a deep
 recursion shows one frame of `f` rather than a million. That is the point, and
-it is how every TCO language behaves. Stepping over a tail call in the
-debugger lands on the function's first line, as stepping into a new call
-does. The jump statement carries the call's position, so "step" stops on the
-call line first. The DAP relay's bork stack view
-(PR #340) marks a frame that has jumped. This is cheap: a hidden
-per-frame counter of jumps, shown as `gcd (tail call ×12)`. If it is not
-cheap enough, it is dropped.
+it is how every TCO language behaves. For the debugger, the jump
+carries the call's position, so stepping stops on the call line first. In
+plain Delve, "step over" a tail call then lands on the function's first line:
+step-over turns into step-into, because no new frame exists to step over. The
+DAP relay (PR #340) can make step-over at a jump run to the function's real
+return instead, using the jump positions the generator records in its debug
+map. That is a follow-up there; until then the behavior is documented in
+docs/debugging.md.
 
 ### Mutual recursion
 
-**Decision: same-package loop merging, not trampolines.**
+**Decision: not optimized. `tailrec` rejects it and points at the loop
+rewrite.** Two designs were considered:
 
-A set of functions that tail-call each other (a strongly connected component
-of the call graph restricted to tail calls) is compiled into one private Go
-function with a `switch` on which function is running. Each function keeps
-its own Go entry point, a one-line wrapper that enters the merged function at
-its case:
+- **Trampolines** (Clojure's `trampoline`, Scala's `TailCalls`). Every member
+  returns "a result or the next call", the caller bounces, and every bounce
+  allocates. It needs a second calling convention for function values and Go
+  interop, and it hides the real function in every stack trace.
+- **Same-package merging.** Packages can't be cyclic, so mutually recursive
+  functions are always in one package. Their component can be compiled into
+  one private Go function with a `switch` on which member is running, plus a
+  one-line wrapper per member (`func isOdd(n int64) bool { return
+  _tc_isEven_isOdd(1, 0, n) }`). It costs nothing at run time. But the members
+  need the same result type, the same type arguments at every call between
+  them (not just identical type-parameter lists), and the same `needs`. Mock
+  dispatch has to work per member, and Go stack traces show
+  `_tc_isEven_isOdd` and the entry wrapper rather than the member that is
+  running, since `//line` cannot rename functions.
 
-```go
-func isEven(n int64) bool { return _tc_isEven_isOdd(0, n, 0) }
-func isOdd(n int64) bool  { return _tc_isEven_isOdd(1, 0, n) }
+Both are real work for a case that loops now cover. The motivating case,
+a server or protocol state machine, is a loop over a state value with carried
+rebinding:
 
-func _tc_isEven_isOdd(which int, isEven_n_in int64, isOdd_n_in int64) bool {
-    for {
-        switch which {
-        case 0: // isEven
-            n := isEven_n_in
-            if n == 0 { return true }
-            which, isOdd_n_in = 1, n-1
-        case 1: // isOdd
-            n := isOdd_n_in
-            if n == 0 { return false }
-            which, isEven_n_in = 0, n-1
-        }
-    }
+```bork
+state: State = State.Idle
+for {
+  state = match (state) {
+    State.Idle => awaitJob(s)?
+    State.Running { job } => run(s, job)?
+    State.Done => break
+  }
 }
 ```
 
-Why merging:
-
-- **Zero cost.** No allocation per bounce, no interface call, no change to
-  any function's signature or to function values. Calls from outside the
-  component, function values and Go interop see the ordinary function. A
-  trampoline makes every member return a thunk, or a sum of "result or next
-  call", allocates on every bounce, and needs a second calling convention
-  for function values.
-- **Packages can't be cyclic,** so every component of mutually recursive bork
-  functions is already inside one package and one generated Go file set.
-  Merging never needs to see across packages.
-- **State machines are the use case.** `fn idle(...)` / `fn running(...)`
-  that call each other in tail position is the natural way to write a
-  protocol or a server's states, and the case the human's event-loop report
-  was about.
-
-A component is merged when all its members:
-
-- have the same result type;
-- are either all non-generic, or have identical type parameter lists, which
-  Go's generic function then has once;
-- have the same `needs` (hidden ambient parameters are shared slots);
-- are bork-bodied (not `unsafe go` or Go bindings).
-
-Members that call each other but don't meet these conditions are compiled
-separately, and their mutual calls stay ordinary calls. A self tail call is
-still a jump either way. Mock dispatch works as for self calls, per target.
-Stack traces show the member function's name through the wrapper and the
-`which` label, kept as the case's position mapping. The DAP relay shows the
-merged frame under the running member's name.
-
-Not supported, by design: tail calls to function values or class methods
-(the target is unknown), or across packages.
+That reads as well as `idle()`/`running()` functions calling each other, and
+its stack use is obvious. So bork optimizes self tail calls only.
+Same-package merging stays the design to use if an example ever needs
+mutual recursion. It is additive, and `tailrec`'s promise (below) would then
+widen from "self" to "the component".
 
 ### `uses tailrec`: the guarantee
 
@@ -490,24 +518,25 @@ fn serve(s: Scope, state: State) uses io + state + tailrec: Ok | Cancelled { ...
 ```
 
 `tailrec` in a function's `uses` list is a **marker, not an effect**. It
-promises that the function's recursion cannot grow the stack. Compilation fails
-unless every recursive call is compiled as a jump. A recursive call is a call
-from the function to itself, or, with mutual recursion, a call between two
-members of its component:
+promises that the function's *direct* recursion cannot grow the stack.
+Compilation fails unless:
 
-- Every self call in the body must be a tail call. Each one that is not gets
-  an error naming the call and the reason from the table above:
-  `serve(s, next) is not a tail call: it is inside the scope block at line 14,
-  which closes after the call returns`.
-- If the function is in a mutually recursive component, every call between
-  members of that component, in any member's body, must be a tail call. The
-  component must also be mergeable. Otherwise the error names the member and
-  the failed condition: `serve and drain call each other but have different
-  result types (Ok | Cancelled, Ok)`. Other members need not declare
-  `tailrec`; the promise belongs to the function that declares it, and it
-  covers every path that recursion through it can take.
-- A function declaring `tailrec` that is not recursive at all is an error
-  (the marker would promise nothing), with a fix to remove it.
+- Every direct self call in the body is a tail call, so it is compiled as a
+  jump. Each one that is not gets an error naming the call and the reason
+  from the table above: `serve(s, next) is not a tail call: it is inside the
+  scope block at line 14, which closes after the call returns`.
+- The function is not part of mutual recursion through direct calls. That is
+  a cycle in the full direct call graph that passes through another function,
+  whether or not those calls are in tail position. The error names the cycle
+  (`serve calls drain (line 9), which calls serve (line 31)`) and suggests a
+  loop over a state value.
+- The function calls itself at all. Declaring `tailrec` on a function that
+  is not recursive is an error with a fix to remove the marker, since it would
+  promise nothing.
+
+The promise covers direct calls only. Recursion through function values,
+class methods or higher-order calls (`retry(serve)`, `xs.map(f)`) is not
+visible to the compiler and not covered.
 
 Marker rules:
 
@@ -522,8 +551,9 @@ Marker rules:
   marker), not "may use every effect".
 - Mocks of a `tailrec` function are ordinary mocks. The marker is not part of
   what is mocked, and a mock in force turns the recursive call into an
-  ordinary call through it (above). The guarantee is about the program, not
-  about a test that replaces the function.
+  ordinary call through it (above). A spy mock that delegates to the real
+  function therefore grows the stack in that test. The guarantee is about the
+  program, not about a test that replaces the function.
 - It is not a word that can be used as an effect anywhere else: `tailrec` is
   contextual inside `uses` lists only and stays usable as a name.
 
@@ -532,13 +562,11 @@ recursion is shallow and fine, such as recursion over a tree's depth.
 
 ### Visibility
 
-- **LSP hover** on a call shows `tail call: compiled as a jump` (or
-  `tail call: jump to isOdd, merged with isEven`). On a recursive call that is
+- **LSP hover** on a call shows `tail call: compiled as a jump`. On a recursive call that is
   not one, it shows `recursive call, not a tail call: inside the scope block
   at line 14`. Inlay hints are left to the editor worker.
 - **`bork describe`** at a call gives the same `tailCall` fact in JSON
-  (`{"kind": "self" | "mutual" | "none", "reason": ...}`), and on a function
-  its component.
+  (`{"jump": true}` or `{"jump": false, "reason": ...}`).
 - Semantic tokens: none new.
 
 ## 3. Examples and docs
@@ -546,7 +574,7 @@ recursion is shallow and fine, such as recursion over a tree's depth.
 - Rewrite recursive loops in examples and docs as loops where a loop is what
   they mean. Candidates: `testdata/cases/ambient` `countdown`,
   `testdata/cases/scopes` `countdown`, the state machine in
-  `docs/language/matching.md` (which becomes a `tailrec` example), and the
+  `docs/language/matching.md`, and the
   channel examples the channels worker is holding for this
   (`examples/channel_select`, `unbounded_queue`, `pipeline`). I'll coordinate
   with `channels` on who rewrites them once loops land.
@@ -556,7 +584,7 @@ recursion is shallow and fine, such as recursion over a tree's depth.
   a short Recursion and tail calls section. tour.md and grammar.md get the
   forms, and requirements.md gets the full rules. diagnostics.md gets the new
   codes (`loop.carried-type`, `loop.carried-lazy`, `tailrec.not-tail`,
-  `tailrec.not-recursive`, `tailrec.unmergeable`, `tailrec.position`).
+  `tailrec.not-recursive`, `tailrec.mutual`, `tailrec.position`).
 
 ## Implementation plan
 
@@ -574,9 +602,7 @@ do not.
    too big.
 4. **Editor grammars** (tree-sitter, TextMate, Vim, Emacs, Helix, Zed) for
    the new headers and `tailrec`. Coordinated with `editors`.
-5. **Mutual tail calls**: component merging, `tailrec` over components, DAP
-   frame naming.
-6. **Examples migration** with `channels`.
+5. **Examples migration** with `channels`.
 
 ## Open questions
 
@@ -584,5 +610,7 @@ do not.
   Not needed for the motivating cases. Add when an example wants them.
 - **`break value`**, if carried names turn out to be clumsy for search loops
   (`found = Option.None` plus `break`).
+- **Mutual tail calls** by same-package merging (above), if an example needs
+  them.
 - **A lint for unbounded non-tail recursion** in long-running functions
   (`uses state` + recursion without `tailrec`). Not planned.
