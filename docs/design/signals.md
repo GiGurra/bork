@@ -1,6 +1,6 @@
 # Process signals
 
-Status: proposed for bork-pd656h; implementation waits for lead approval.
+Status: approved for bork-pd656h.
 
 ## Default
 
@@ -17,12 +17,14 @@ request. A subsequent cancelling signal terminates immediately without waiting
 for cleanup. Default cancellation signals return to their previous OS behavior
 after the duplicate window, preserving #331's second-interrupt escape hatch.
 Signals with an explicit subscription or ignore registration remain handled.
+Configured user signals also remain handled for escalation, because their
+Go/OS defaults do not terminate the process.
 No default grace deadline is imposed. Other signals retain their Go/OS defaults,
 including SIGHUP. Programs without scopes install no bork signal handler.
 
 ## API and effects
 
-Add `bork/signal`, with no syntax or prelude additions. Proposed signatures:
+Import `Duration` from `bork/time`. Add `bork/signal`, with no syntax or prelude additions. Proposed signatures:
 
 ```text
 type Signal = sealed { Interrupt, Terminate, Hangup, User1, User2 }
@@ -31,20 +33,20 @@ type Policy = resource
 type Subscription = resource
 
 fn Configure(s: Scope, cancel: List[Signal] = [.Interrupt, .Terminate],
-             graceMs: Option[Int] = .None) uses io + state: Policy | Error
+             grace: Option[Duration] = .None) uses io + state: Policy | Error
 fn Ignore(s: Scope, signals: List[Signal]) uses io + state: Policy | Error
 fn Subscribe(s: Scope, signals: List[Signal]) uses io + state: Subscription | Error
-fn (events: Subscription) next() uses io + state: Signal | Cancelled | Closed
+fn (events: Subscription) Next() uses io + state: Signal | Cancelled | Closed
 
-fn Mock(s: Scope) uses state: Subscription
-fn (events: Subscription) emit(value: Signal) uses state: Ok | Closed | Error
+fn MockSubscription(s: Scope) uses state: Subscription
+fn (events: Subscription) Emit(value: Signal) uses state: Ok | Closed | Error
 ```
 
 `io` already covers process operations (`bork/process`); `state` covers shared
-registrations and receiving events. No new effect is needed. `graceMs` describes
+registrations and receiving events. No new effect is needed. `grace` describes
 a shutdown policy rather than a caller reading a clock, like scope cleanup
-timeouts, so Configure does not require `clock`. Mock subscriptions need no OS
-access; their `next` signature remains the same as real subscriptions so callers
+timeouts, so Configure does not require `clock`. MockSubscription subscriptions need no OS
+access; their `Next` signature remains the same as real subscriptions so callers
 can use the existing function-mocking facility when isolating `io`.
 
 Names represent supported asynchronous signals, not arbitrary platform numbers.
@@ -52,8 +54,8 @@ Unsupported signals return Error; SIGKILL, SIGSTOP and runtime fault signals are
 deliberately absent. Empty cancellation lists are valid and restore ordinary OS
 behavior for signals without subscriptions or ignore registrations. Empty
 Subscribe/Ignore lists are errors. Duplicate names are deduplicated. Invalid
-negative grace periods return Error; zero means immediate forced termination,
-and positive millisecond values saturate rather than overflow.
+negative durations return Error; zero means immediate forced termination,
+and positive durations use their nanosecond value without conversion overflow.
 
 ## Ownership and process-wide rules
 
@@ -84,11 +86,14 @@ signal's status even if work or finalizers remain; normal process exit makes
 the timer moot. Explicit subscriptions still receive their signals while other
 signals are shutting the program down.
 
-Mock creates an isolated subscription owned by its scope, without altering OS
-registrations or root cancellation. `emit` accepts only Mock subscriptions,
+MockSubscription creates an isolated subscription owned by its scope, without altering OS
+registrations or root cancellation. `Emit` accepts only mock subscriptions,
 returns Error for real subscriptions, and never sends a real OS signal. It
 injects events into the same receiving path, so application reload loops can be
-tested without affecting parallel tests. Broker tests separately inject fake
+tested without affecting parallel tests. Mock the application's call to
+`signal.Subscribe` to create a subscription in its caller scope, emit from a
+task of that scope, then return it; document
+and compile a worked example of that pattern. Broker tests separately inject fake
 signal delivery, clock and termination hooks to test cancellation and escalation
 without killing the test process.
 

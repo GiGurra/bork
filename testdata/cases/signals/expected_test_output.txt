@@ -1,0 +1,7 @@
+ok    reload subscribes without OS signals
+ok    mock buffers notifications
+ok    invalid grace and empty registrations
+ok    cancelled mock receive stops
+ok    test triggers an event after the application subscribes
+5 passed, 0 failed
+exit code 0

@@ -378,6 +378,18 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 	for i := len(info.Classes) - 1; i >= 0; i-- {
 		decls = append([]ast.Decl{g.classDecl(info.Classes[i])}, decls...)
 	}
+	if g.usesScopes && !g.testMode && !g.evalMode {
+		for _, declaration := range decls {
+			if entry, ok := declaration.(*ast.FuncDecl); ok && entry.Name.Name == "main" {
+				entry.Name = ast.NewIdent("_borkMain")
+				decls = append(decls, &ast.FuncDecl{Name: ast.NewIdent("main"), Type: &ast.FuncType{Params: &ast.FieldList{}}, Body: &ast.BlockStmt{List: []ast.Stmt{
+					&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_borkMain")}},
+					&ast.ExprStmt{X: &ast.CallExpr{Fun: ast.NewIdent("_borkSignalExit")}},
+				}}})
+				break
+			}
+		}
+	}
 	embedded := g.embedDecls()
 	runtime, runtimeFset, err := g.runtimeDecls()
 	if err != nil {

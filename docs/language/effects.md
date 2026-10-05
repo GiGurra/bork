@@ -32,6 +32,10 @@ The effects are:
 | `random` | Random numbers |
 | `state` | Shared state that can change: atoms, channels, cancellation |
 
+`bork/signal` uses `io + state` for process signal registrations and event
+receiving, using the same effects as other process operations. Its mock event
+injection uses only `state`.
+
 A sixth effect, `build`, marks functions that read files during compilation. It is only allowed inside [`comptime`](comptime.md).
 
 ## The compiler checks the list

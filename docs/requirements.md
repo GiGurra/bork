@@ -956,7 +956,28 @@ and parameter relations are checked against resolved arguments, beyond erased
 type compatibility. Assembly adds no implicit `trust`. Providers remain
 responsible for their result promises and private construction boundaries.
 
-### Resources and scopes
+### Process signals
+
+Programs that open scopes cancel every root scope on SIGINT or SIGTERM, with
+signal-named cancellation reasons and normal-return exit status 128+n (130/143).
+Explicit exits remain authoritative. Copies within 500 ms count as one request;
+a subsequent cancelling signal terminates immediately. Other signals retain
+Go/OS behavior. Programs that never open scopes install no bork signal handler.
+
+`bork/signal` provides scope-owned process-wide Configure, Ignore and Subscribe
+registrations, with newest-live configuration restoration and subscription >
+ignore > cancellation precedence. Grace is an optional nonnegative
+`bork/time.Duration`, latched on first cancellation and never extended. Event
+subscriptions have bounded 16-event buffers, stop on owner cancellation, and
+remain registered until final release. MockSubscription and Emit inject events
+without OS effects and support function-mocked Subscribe calls. Real operations
+use io + state; mock injection uses state. Windows Ctrl+C/Break map to SIGINT,
+console close/logoff/shutdown map to SIGTERM cleanup notifications subject to
+Windows termination; unsupported Unix-only signals return Error.
+
+See [bork/signal](std/signal.md) for API and examples.
+
+## Resources and scopes
 
 Acquisition providers take the target Scope and use ordinary resource APIs.
 Those APIs register cleanup once. Assembly neither detects close methods nor
