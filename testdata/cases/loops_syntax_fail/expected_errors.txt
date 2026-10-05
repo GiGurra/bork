@@ -1,0 +1,2 @@
+main.bork:2:14: expected another binding after ',', found newline or ';'
+main.bork:2:32: expected end of line after the package binding, found ')'

@@ -30,6 +30,7 @@ func (c *checker) generate(e *syntax.Generate) Type {
 }
 
 func (c *checker) yieldExpr(e *syntax.Yield) Type {
+	c.inPostClause(e.Pos, "yield")
 	if c.producer == nil || c.producer.depth != c.lambdaDepth {
 		c.expr(e.Value)
 		c.errorf(e.Pos, "yield requires a generator body and cannot cross a lambda boundary")
@@ -72,13 +73,22 @@ func (c *checker) forExpr(e *syntax.For) Type {
 		c.scopes[len(c.scopes)-1][e.Name].node = nil
 	}
 	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth})
-	body := c.block(e.Body, Ok)
+	body := c.loopBody(e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
 	c.popScope()
 	if body != Ok && body != Never && body != Invalid {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}
 	return Ok
+}
+
+// loopBody checks a loop's body, which may leave the loop even when the
+// loop is in another loop's condition or post clause.
+func (c *checker) loopBody(b *syntax.Block) Type {
+	savedPost, savedCond := c.postClause, c.loopCond
+	c.postClause, c.loopCond = 0, 0
+	defer func() { c.postClause, c.loopCond = savedPost, savedCond }()
+	return c.block(b, Ok)
 }
 
 // loopExpr checks `for { }`, `for (cond) { }`, and
@@ -95,13 +105,16 @@ func (c *checker) loopExpr(e *syntax.For) Type {
 		header[b.Name] = b
 	}
 	if e.Cond != nil {
+		saved := c.loopCond
+		c.loopCond = c.lambdaDepth + 1
 		if t := c.exprWant(e.Cond, Bool); t != Bool && t != Invalid {
 			c.errorf(e.Cond.Position(), "a loop's condition must be Bool, found %s", t)
 		}
+		c.loopCond = saved
 	}
 	loop := &loopContext{depth: c.lambdaDepth}
 	c.loops = append(c.loops, loop)
-	body := c.block(e.Body, Ok)
+	body := c.loopBody(e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
 	if body != Ok && body != Never && body != Invalid {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)

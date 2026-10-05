@@ -1,0 +1,4 @@
+main.bork:14:38: a loop cannot consume owned scope o from outside its body; borrow its scope instead
+main.bork:17:3: owned scope o is still open at the end of its block: close it with closeScope(o), pass it on, or return it
+main.bork:23:19: a loop cannot consume owned scope o from outside its body; borrow its scope instead
+main.bork:26:3: owned scope o is still open at the end of its block: close it with closeScope(o), pass it on, or return it

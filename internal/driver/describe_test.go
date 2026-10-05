@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -901,5 +902,36 @@ fn main() {
 	}
 	if tc := describeAt("count(3)"); tc != nil {
 		t.Fatalf("got %+v for a call from another function", tc)
+	}
+}
+
+func TestDescribeLoops(t *testing.T) {
+	t.Parallel()
+	source := `pred nonNegative(n: Int) { n >= 0 }
+
+fn main() {
+  for (i: Int where nonNegative = 3; i > 0; i = i - 1) {
+    println(i)
+  }
+}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	offset := strings.Index(source, "println(i)") + len("println(")
+	line := strings.Count(source[:offset], "\n") + 1
+	column := offset - strings.LastIndex(source[:offset], "\n")
+	result, err := Describe(fmt.Sprintf("%s:%d:%d", path, line, column), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var facts []string
+	for _, fact := range result.Facts {
+		facts = append(facts, fact.Constraint)
+	}
+	if result.Type != "Int" || !slices.Contains(facts, "nonNegative") {
+		t.Fatalf("got %s with facts %v, want Int known nonNegative", result.Type, facts)
 	}
 }

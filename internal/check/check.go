@@ -851,7 +851,11 @@ type checker struct {
 	loops              []*loopContext
 	// postClause is one more than the lambda depth of the loop post
 	// clause being checked, or 0: it cannot leave the loop.
-	postClause       int
+	postClause int
+	// loopCond is the same for a loop condition: loop control in it
+	// would mean different loops to the checker and the generated Go.
+	loopCond int
+
 	conversionSerial int
 	// inForce lists the mocks in force at the current point of a test:
 	// their targets, and how many scopes were open when each started.
@@ -1357,6 +1361,8 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		}
 		if c.postClause == c.lambdaDepth+1 {
 			c.inPostClause(e.Pos, word)
+		} else if c.loopCond == c.lambdaDepth+1 {
+			c.errorf(e.Pos, "a loop's condition cannot use %s; test in the body instead", word)
 		} else if len(c.loops) == 0 || c.loops[len(c.loops)-1].depth != c.lambdaDepth {
 			c.errorf(e.Pos, "break and continue require a loop in the same function or producer")
 		} else if !e.Continue {

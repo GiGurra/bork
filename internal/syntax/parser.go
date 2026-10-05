@@ -1081,6 +1081,10 @@ func (p *parser) loopBindings(init bool) []*Binding {
 			break
 		}
 		p.next()
+		if !p.at(TIdent) {
+			p.errorf(p.tok().Pos, "expected another binding after ',', found %s", p.tok().Kind)
+			panic(bailout{})
+		}
 	}
 	if init && len(out) == 0 && !p.at(Semi) || !init && len(out) == 0 {
 		p.errorf(p.tok().Pos, "expected a binding, name = value, found %s", p.tok().Kind)

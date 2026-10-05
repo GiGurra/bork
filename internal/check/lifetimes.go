@@ -1324,14 +1324,23 @@ func (l *lifeChecker) loopForm(x *For) {
 	for _, v := range x.Header {
 		l.noteVar(v)
 	}
-	if x.Cond != nil {
-		l.expr(x.Cond)
-	}
+	// The condition and the post clause run every round, like the body.
 	before := copyGone(l.gone)
 	mark := len(l.bound)
 	outer := l.loop
 	l.loop = x
+	if x.Cond != nil {
+		l.expr(x.Cond)
+	}
 	l.expr(x.Body)
+	var nexts []lifetime
+	for _, post := range x.Post {
+		var life lifetime
+		if post != nil {
+			life = l.use(post, l.expr(post))
+		}
+		nexts = append(nexts, life)
+	}
 	for owner, gone := range l.gone {
 		if _, ok := before[owner]; !ok && l.bound[owner] < mark {
 			l.errorf(gone.pos, "a loop cannot consume owned scope %s from outside its body; borrow its scope instead", owner.Name)
@@ -1343,7 +1352,7 @@ func (l *lifeChecker) loopForm(x *For) {
 			continue
 		}
 		v := x.Header[i]
-		for _, scope := range l.use(post, l.expr(post)) {
+		for _, scope := range nexts[i] {
 			if !l.env[v].has(scope) {
 				l.errorf(post.Pos(), "the next value of %s belongs to a scope its first value does not, so it could outlive it; give %s a first value of that scope", v.Name, v.Name)
 				break

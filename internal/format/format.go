@@ -84,7 +84,6 @@ func Source(path string, src []byte) ([]byte, error) {
 		items = append(items, item{patternTest: patternTests[t.Pos], chain: chain, loopIn: loopIn, kind: t.Kind, text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && (!endsExpr(prev) || afterPatternTest), with: w})
 		prev = t.Kind
 	}
-	items = normalizeLoops(items)
 	for _, c := range comments {
 		start := offset(c.Pos)
 		text := c.Text
@@ -209,50 +208,6 @@ func endsExpr(k syntax.Kind) bool {
 	return false
 }
 
-// normalizeLoops writes loop headers with empty init and post clauses
-// in their short forms: `for (;;)` as `for`, and `for (; cond;)` as
-// `for (cond)`.
-func normalizeLoops(items []item) []item {
-	out := items[:0:0]
-	for i := 0; i < len(items); i++ {
-		out = append(out, items[i])
-		if items[i].kind != syntax.KwFor || i+2 >= len(items) || items[i+1].kind != syntax.LParen || items[i+2].kind != syntax.Semi {
-			continue
-		}
-		// Find the second ';' at the header's depth, and the ')'.
-		depth, second := 0, -1
-	scan:
-		for j := i + 3; j < len(items); j++ {
-			switch items[j].kind {
-			case syntax.LParen, syntax.LBrack, syntax.LBrace:
-				depth++
-			case syntax.RParen, syntax.RBrack, syntax.RBrace:
-				if depth == 0 {
-					break scan
-				}
-				depth--
-			case syntax.Semi:
-				if depth == 0 {
-					second = j
-					break scan
-				}
-			}
-		}
-		if second < 0 || second+1 >= len(items) || items[second+1].kind != syntax.RParen {
-			continue // a post clause
-		}
-		if second == i+3 {
-			i = second + 1 // for (;;): no header at all
-			continue
-		}
-		out = append(out, items[i+1])
-		out = append(out, items[i+3:second]...)
-		out = append(out, items[second+1])
-		i = second + 1
-	}
-	return out
-}
-
 func space(a, b item) bool {
 	if a.kind == syntax.TIdent && b.kind == syntax.TInterp && a.end == b.start {
 		return false
@@ -261,7 +216,8 @@ func space(a, b item) bool {
 		return true
 	}
 	if a.kind == syntax.Semi {
-		return true
+		// Empty loop clauses: for (;;), for (; cond;).
+		return b.kind != syntax.Semi && b.kind != syntax.RParen
 	}
 	if a.kind == syntax.LParen || a.kind == syntax.LBrack || a.kind == syntax.Not || a.unary {
 		return false

@@ -2,7 +2,7 @@
 type Done = {}
 
 fn firstSquareAbove(limit: Int): Int {
-  for (i = 0; ; i = i + 1) {
+  for (i = 0;; i = i + 1) {
     if (i * i > limit) {
       return i
     }
@@ -64,7 +64,16 @@ fn siblings() uses io {
   }
 }
 
+// Conditions and next values may need statements, and loops in a post
+// clause may break out of themselves.
+fn computed() uses io {
+  for (i = 0; match (i) { 3 => false, _ => true }; i = { for (j = 0; j < 2; j = j + 1) { if (j == 1) { break } }; i + 1 }) {
+    println(s"computed $i")
+  }
+}
+
 fn main() uses io + state {
+  computed()
   invariant()
   siblings()
   println(firstSquareAbove(50))

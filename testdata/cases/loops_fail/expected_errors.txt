@@ -4,3 +4,5 @@ main.bork:15:26: i is the loop's i, so its next value must be Int, found String
 main.bork:21:28: a loop's post clause cannot use return; compute the value in the body instead
 main.bork:30:3: unreachable code
 main.bork:35:30: a loop's post clause cannot use break; compute the value in the body instead
+main.bork:43:24: a loop's condition cannot use break; test in the body instead
+main.bork:51:30: a loop's post clause cannot use yield; compute the value in the body instead

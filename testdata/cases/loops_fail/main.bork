@@ -38,4 +38,20 @@ fn breakInPost() {
   }
 }
 
+fn breakInCondition() {
+  for (i = 0; i < 3; i = i + 1) {
+    for (if (i == 1) { break } else { true }) {
+      break
+    }
+  }
+}
+
+fn yieldInPost(): Seq[Int] {
+  generate[Int] {
+    for (i = 0; i < 3; i = { yield i; i + 1 }) {
+      _ = i
+    }
+  }
+}
+
 fn main() {}

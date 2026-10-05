@@ -96,9 +96,9 @@ LoopControl = "break" | "continue" .
 - `for (i = 0; i < n; i = i + 1) { ... }` binds the header names (the
   *init*), checks the condition before each iteration, and runs the *post*
   rebindings after each iteration and on `continue`. Each of the three parts
-  may be empty, as in Go: `for (; ; i = i + 1)` is legal, though `for` and
-  `for (cond)` are the formatted forms when init and post are empty. The
-  formatter rewrites `for (; cond;)` to `for (cond)` and `for (;;)` to `for`.
+  may be empty, as in Go: `for (;; i = i + 1)` is legal, though `for` and
+  `for (cond)` are the idiomatic forms when init and post are empty. The
+  formatter keeps the clauses as written, since it never changes tokens.
 - Several header names are separated by commas, which Go's syntax can't do
   (`for (lo = 0, hi = n; lo < hi; lo = lo + 1, hi = hi - 1)`). The init
   bindings run in order, as successive bindings do, so `lo = 0, hi = lo + n`
@@ -397,7 +397,7 @@ mapping. A breakpoint on the `for` line hits once per condition check.
 
 Per docs/syntax-changes.md: lexer (no new tokens), parser and AST
 (`For` gains `Init`, `Cond`, `Post` and a form tag), formatter (header spacing
-`for (i = 0; i < n; i = i + 1)`, normalizing empty clauses), checker,
+`for (i = 0; i < n; i = i + 1)`, and `for (;;)` without spaces), checker,
 lowering, facts, lifetimes, unused analysis, effects, execution audit, code
 generation, describe (carried names and their head/after bindings), LSP
 (hover on a carried rebinding: "carried to the next iteration"; semantic

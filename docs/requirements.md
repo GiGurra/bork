@@ -1806,7 +1806,7 @@ main.bork:17:26: field run of Job must be () uses io => Ok, found () => Ok (it u
 - **Facts:** a header name's declared facts are its invariant. Its first value and every next value must prove them, and they are known in the body. The condition is known in the body and the post clause.
 - **Lifetimes:** a header name lives as long as its first value; a next value belonging to another scope is an error.
 - **Types:** a loop is an `Ok` expression whose body must be `Ok`. A loop without a condition and without a `break` that leaves it has type `Never`, so code after it is unreachable.
-- **Formatting:** `for (;;)` is written `for`, and `for (; cond;)` is written `for (cond)`.
+- **Formatting:** the formatter keeps the clauses as written (it never changes tokens), so `for (;;)` stays, written without spaces between empty clauses; `for` and `for (cond)` are the idiomatic spellings.
 - **Code generation:** header names are Go loop variables of a three-clause `for`, which Go copies per iteration. A condition that needs statements is checked at the top of the body. Next values that need statements are computed in function literals, which the post-clause restrictions keep free of control flow. Loop exits reuse the for-in machinery for returns, scopes and owners.
 - **Carried rebinding** (rebinding names from outside the loop in its body, carried to the next round and after the loop) waits for same-block rebinding (bork-4exlxc).
 
