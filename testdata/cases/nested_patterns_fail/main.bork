@@ -28,7 +28,7 @@ fn d(o: Option[Int]): Int {
   match (o) {
     Option.Some(n) => n
     Option.Some(5) => 5
-    Option.Some(valu: 6) => 6
+
     Option.None => 0
   }
 }
@@ -36,3 +36,6 @@ fn d(o: Option[Int]): Int {
 fn main() {
   println(a(Option.None), b(Option.None), c(Point { x: 0, y: 0 }), d(Option.None))
 }
+
+type NamedChoice = sealed { Value { value: Int }, Empty }
+fn wrongField(o: NamedChoice): Int { match(o) { .Value { valu: 6 } => 6, _ => 0 } }

@@ -1,10 +1,11 @@
 package check
 
 import (
-	"github.com/GiGurra/bork/internal/diag"
-	"github.com/GiGurra/bork/internal/syntax"
 	"strconv"
 	"strings"
+
+	"github.com/GiGurra/bork/internal/diag"
+	"github.com/GiGurra/bork/internal/syntax"
 )
 
 // Positional constructors share field inference and validation with named
