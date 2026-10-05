@@ -91,7 +91,9 @@ func (a *EditorAnalysis) SignatureHelp(path, current string, at diag.Pos) *Edito
 						}
 					}
 					if receiver == nil {
-						name = editorSignatureName(prior[start : end+1])
+						lo, _ := editorByteOffset(current, prior[start].Pos)
+						hi, _ := editorByteOffset(current, prior[end].End)
+						name = current[lo:hi]
 					}
 				}
 				var typeArgs []*syntax.TypeExpr
