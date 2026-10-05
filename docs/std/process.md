@@ -79,18 +79,22 @@ import "bork/process"
 
 fn follow(s: Scope) uses io + state: Ok | IoError | Cancelled {
   child = process.Start(s, "ping", ["-c", "3", "localhost"], stdout: .Pipe)?
-  for (line in child.Stdout().Lines()) {
-    println(line)
+  for (item in child.Stdout().Lines()) {
+    match (item) {
+      line: String => println(line)
+      error: IoError => eprintln(error.message)
+      stopped: Cancelled => eprintln(stopped.reason)
+    }
   }
   println(child.Wait()?.code)
 }
 
 fn ask(s: Scope) uses io + state: Ok | IoError | Cancelled | Closed {
-  calculator = process.Start(s, "bc", stdin: .Pipe, stdout: .Pipe)?
-  calculator.Stdin().WriteText("6 * 7\n")?
-  println(calculator.Stdout().NextLine())
-  calculator.Stdin().Close()
-  _ = calculator.Wait()?
+  echo = process.Start(s, "cat", stdin: .Pipe, stdout: .Pipe)?
+  echo.Stdin().WriteText("ping\n")?
+  println(echo.Stdout().NextLine())
+  echo.Stdin().Close()
+  _ = echo.Wait()?
 }
 ```
 
@@ -104,7 +108,9 @@ Reader methods:
   as a final element.
 - `LinesChannel(s, capacity = 64)` pumps lines from a task of `s` into a
   bounded channel and closes it at the end, so process output can be received
-  together with other channels. A read failure is the last element.
+  together with other channels. A read failure is the last element. The
+  Reader is attached to `s`, so when `s` ends or is cancelled the Reader is
+  closed too; use the scope that should own it.
 
 Writer methods: `Write(bytes)` and `WriteText(text)` give `Ok`, or `Closed`
 once stdin is closed or the child stopped reading; `Close()` sends end of
@@ -116,6 +122,11 @@ can still be writing. Reads and writes wait for the child and give
 `Stdout()` on a stream that is not `.Pipe` gives a Reader that is already at
 its end (`Closed`), and `Stdin()` on a stdin that is not `.Pipe` gives a Writer
 whose writes give `Closed`. Every call gives the same Reader or Writer.
+
+A Reader releases its pipe at the end of the stream, and piped stdin is
+closed once the child exits. A pipe that is never read to the end stays open
+until the scope ends. One task reads a Reader at a time: a second read, or
+handing it to `From`, waits for the first to return.
 
 A pipe holds only a small OS buffer, so a child writing to a pipe nobody reads
 waits. Read each piped stream (in a task when there are two), use
@@ -139,8 +150,10 @@ fn both(s: Scope) uses io + state: Ok | IoError | Cancelled {
 
 `stdin: .From { reader }` connects one child's piped output to another's
 stdin through the OS, without copying through bork. The Reader moves to the
-new child: reading it afterwards gives `Closed`. Lines it had already
-buffered are passed on first.
+new child when that child starts: reading it afterwards gives `Closed`. Lines
+it had already buffered are passed on first. A Start that fails to open one
+of its files leaves the Reader with its owner; one whose program cannot be
+started consumes it.
 
 ```bork
 import "bork/process"

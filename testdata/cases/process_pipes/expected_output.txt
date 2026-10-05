@@ -36,6 +36,14 @@ captured
 run
 errors
 
+header
+one
+
+a
+true
+b
+true
+true
 context deadline exceeded
 <cancelled: context deadline exceeded>
 context deadline exceeded

@@ -104,6 +104,54 @@ fn unpiped(s: Scope) uses io + state: Ok | IoError | Cancelled {
   println(ran.StdoutText() + ran.StderrText())
 }
 
+fn openFiles() uses io: Int unsafe go {
+  import "os"
+  entries, err := os.ReadDir("/proc/self/fd")
+  if err != nil { return 0 }
+  return int64(len(entries))
+}
+
+fn rounds(s: Scope, left: Int) uses io + state: Ok | IoError | Cancelled {
+  if (left > 0) {
+    child = process.Start(s, "/bin/sh", ["-c", "echo round"], stdin: .Pipe, stdout: .Pipe, stderr: .Pipe)?
+    _ = child.Stdout().ReadAll()?
+    _ = child.Stderr().ReadAll()?
+    _ = child.Wait()?
+    rounds(s, left - 1)?
+  }
+}
+
+fn handovers(s: Scope, directory: String) uses io + state: Ok | IoError | Cancelled {
+  // A consumer that exits early is not held up by a quiet producer, even
+  // when the handed-over Reader had buffered bytes.
+  quiet = process.Start(s, "/bin/sh", ["-c", "echo header; echo one; sleep 5; echo two"], stdout: .Pipe)?
+  println(show(quiet.Stdout().NextLine()))
+  first = process.Run(s, "head", ["-n", "1"], stdin: .From { reader: quiet.Stdout() })?
+  println(first.StdoutText())
+  quiet.Kill()
+  _ = quiet.Wait()?
+  // A Start that fails to open a file leaves the Reader with its owner.
+  producer = process.Start(s, "/bin/sh", ["-c", "echo a; echo b"], stdout: .Pipe)?
+  println(show(producer.Stdout().NextLine()))
+  println(match (process.Start(s, "cat", stdin: .From { reader: producer.Stdout() }, stdout: .File { path: fs.Join([directory, "no", "dir"]) })) {
+    error: IoError => true
+    _ => false
+  })
+  println(show(producer.Stdout().NextLine()))
+  _ = producer.Wait()
+  // Writing to a child that exited without reading gives Closed.
+  done = process.Start(s, "true", stdin: .Pipe)?
+  _ = done.Wait()?
+  println(match (done.Stdin().Write(encoding.Utf8("x".repeat(1048576)))) {
+    end: Closed => true
+    _ => false
+  })
+  // Pipe ends are released at the end of the stream and when the child exits.
+  before = openFiles()
+  rounds(s, 20)?
+  println(openFiles() - before < 10)
+}
+
 fn cancellation() uses io + state + clock: Ok | IoError | Cancelled {
   // An unread pipe does not keep the scope from closing.
   flooded = scope limited {
@@ -139,6 +187,7 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed
   separate(s)?
   pipelines(s)?
   unpiped(s)?
+  handovers(s, directory)?
   cancellation()?
 }
 

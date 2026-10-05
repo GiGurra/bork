@@ -182,6 +182,7 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
   import "os"
   import "os/exec"
   import "reflect"
+  import "runtime"
   import "bufio"
   import "strings"
   import "sync"
@@ -236,7 +237,7 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
   if values, present := _borkOptionGet(environment); present { cmd.Env = append([]string{}, values...) }
   // files are the child's ends, closed in the parent once it has started;
   // kept are the parent's pipe ends, closed only if Start fails.
-  var files, kept, lateFiles []*os.File
+  var files, kept []*os.File
   closeFiles := func() { for _, file := range files { file.Close() } }
   fail := func(path string, err error) any {
     closeFiles()
@@ -261,21 +262,6 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     if err != nil { return fail(name, err) }
     files, kept, stdinPipe = append(files, childEnd), append(kept, parentEnd), parentEnd
     cmd.Stdin = childEnd
-  case "from":
-    // A Reader handed over keeps any bytes it already buffered.
-    if reader, present := _borkOptionGet(from); present {
-      taken := reader.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("take", 0).(struct { file *os.File; prefix []byte })
-      switch {
-      case taken.file == nil:
-      case len(taken.prefix) == 0:
-        files = append(files, taken.file)
-        cmd.Stdin = taken.file
-      default:
-        // exec copies a non-file reader, so the file stays open until Wait.
-        cmd.Stdin = io.MultiReader(bytes.NewReader(taken.prefix), taken.file)
-        lateFiles = append(lateFiles, taken.file)
-      }
-    }
   }
   var stdoutBuffer, stderrBuffer bytes.Buffer
   // A nil writer is /dev/null; a shared writer gives the child one pipe.
@@ -309,9 +295,43 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     if err != nil { return fail(stderr.path, err) }
     cmd.Stderr = errOut
   }
+  // A From Reader is taken after every open that can fail. Bytes it already
+  // buffered go first, through a pipe of our own fed by a goroutine that stops
+  // when the child is done, so exec never waits on the producer.
+  var forward func()
+  if reader, present := _borkOptionGet(from); present && stdin.kind == "from" {
+    taken := reader.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("take", 0).(struct { file *os.File; prefix []byte })
+    switch {
+    case taken.file == nil:
+    case len(taken.prefix) == 0:
+      files = append(files, taken.file)
+      cmd.Stdin = taken.file
+    default:
+      childEnd, parentEnd, err := os.Pipe()
+      if err != nil {
+        taken.file.Close()
+        return fail(name, err)
+      }
+      files, kept = append(files, childEnd), append(kept, parentEnd, taken.file)
+      cmd.Stdin = childEnd
+      forward = func() {
+        go func() {
+          if _, err := parentEnd.Write(taken.prefix); err == nil { io.Copy(parentEnd, taken.file) }
+          parentEnd.Close()
+          taken.file.Close()
+        }()
+        go func() {
+          <-done
+          taken.file.Close()
+          parentEnd.Close()
+        }()
+      }
+    }
+  }
   if err := cmd.Start(); err != nil { return fail(name, err) }
   // The child holds its own copies of file descriptors.
   closeFiles()
+  if forward != nil { forward() }
   // sigName follows the conventional SIG names; others give "signal N".
   sigName := func(sig syscall.Signal) string {
     names := map[syscall.Signal]string{syscall.SIGHUP: "SIGHUP", syscall.SIGINT: "SIGINT", syscall.SIGQUIT: "SIGQUIT", syscall.SIGILL: "SIGILL", syscall.SIGTRAP: "SIGTRAP", syscall.SIGABRT: "SIGABRT", syscall.SIGBUS: "SIGBUS", syscall.SIGFPE: "SIGFPE", syscall.SIGKILL: "SIGKILL", syscall.SIGSEGV: "SIGSEGV", syscall.SIGPIPE: "SIGPIPE", syscall.SIGALRM: "SIGALRM", syscall.SIGTERM: "SIGTERM"}
@@ -326,7 +346,8 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     defer cancelChild()
     defer close(done)
     err := cmd.Wait()
-    for _, file := range lateFiles { file.Close() }
+    // Nothing reads stdin any more; later writes give Closed.
+    if stdinPipe != nil { stdinPipe.Close() }
     if cancelled.Load() {
       // The cause names the current owner's reason, such as a deadline, also
       // after attach.
@@ -345,21 +366,28 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     result = raw
   }()
   // Readers and writers own their pipe ends; cancelling their scope closes the
-  // end, which unblocks a pending read or write.
+  // end, which unblocks a pending read or write. A Reader releases its end at
+  // the end of the stream.
   newReader := func(file *os.File) Reader {
     readerHandle := _borkNewResourceHandle(nil, s)
     var mu sync.Mutex
     var buffered *bufio.Reader
+    stopCloser := func() bool { return true }
     if file != nil {
       buffered = bufio.NewReaderSize(file, 32768)
-      context.AfterFunc(readerHandle.Context(), func() { file.Close() })
+      origin := file
+      stopCloser = context.AfterFunc(readerHandle.Context(), func() { origin.Close() })
     }
     failure := func(err error) any {
       if readerContext := readerHandle.Context(); readerContext.Err() != nil { return Cancelled{reason: context.Cause(readerContext).Error()} }
-      if errors.Is(err, io.EOF) || errors.Is(err, os.ErrClosed) { return Closed{} }
+      if errors.Is(err, os.ErrClosed) { return Closed{} }
       return IoError{path: name, message: err.Error()}
     }
-    readerHandle.Value = func(operation string, max int64) any {
+    finish := func() {
+      if stopCloser() { file.Close() }
+      file = nil
+    }
+    readerHandle.Value = func(operation string, limit int64) any {
       mu.Lock()
       defer mu.Unlock()
       if file == nil {
@@ -373,20 +401,36 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
       case "line":
         line, err := buffered.ReadString('\n')
         if len(line) > 0 { return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r") }
+        if errors.Is(err, io.EOF) {
+          finish()
+          return Closed{}
+        }
         return failure(err)
       case "chunk":
-        if max < 1 { max = 1 }
-        chunk := make([]byte, max)
+        // The buffer never holds more, so a larger chunk gains nothing.
+        limit = min(max(limit, 1), 32768)
+        chunk := make([]byte, limit)
         n, err := buffered.Read(chunk)
         if n > 0 { return _borkBytesFrom(chunk[:n]) }
+        if errors.Is(err, io.EOF) {
+          finish()
+          return Closed{}
+        }
         return failure(err)
       case "all":
         data, err := io.ReadAll(buffered)
-        if err != nil {
-          if failed := failure(err); failed != (Closed{}) { return failed }
+        if err == nil {
+          finish()
+        } else if failed := failure(err); failed != (Closed{}) {
+          return failed
         }
         return _borkBytesFrom(data)
       case "take":
+        // After cancellation has begun closing the file there is nothing to move.
+        if !stopCloser() {
+          file = nil
+          return struct { file *os.File; prefix []byte }{}
+        }
         prefix, _ := buffered.Peek(buffered.Buffered())
         taken := struct { file *os.File; prefix []byte }{file, append([]byte(nil), prefix...)}
         file = nil
@@ -402,6 +446,11 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     var closed atomic.Bool
     closeFile := func() { if file != nil && !closed.Swap(true) { file.Close() } }
     if file != nil { context.AfterFunc(writerHandle.Context(), closeFile) }
+    brokenPipe := func(err error) bool {
+      if errors.Is(err, syscall.EPIPE) || errors.Is(err, os.ErrClosed) { return true }
+      // ERROR_BROKEN_PIPE and ERROR_NO_DATA.
+      return runtime.GOOS == "windows" && (errors.Is(err, syscall.Errno(109)) || errors.Is(err, syscall.Errno(232)))
+    }
     writerHandle.Value = func(operation string, data []byte) any {
       if operation == "close" {
         closeFile()
@@ -412,14 +461,20 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
       if file == nil || closed.Load() { return Closed{} }
       if _, err := file.Write(data); err != nil {
         if writerContext := writerHandle.Context(); writerContext.Err() != nil { return Cancelled{reason: context.Cause(writerContext).Error()} }
-        if errors.Is(err, syscall.EPIPE) || errors.Is(err, os.ErrClosed) { return Closed{} }
+        if brokenPipe(err) { return Closed{} }
         return IoError{path: name, message: err.Error()}
       }
       return _borkOk()
     }
     return Writer{handle: writerHandle, owner: s.Own(func() { writerHandle.Close(); closeFile() })}
   }
-  stdinWriter, stdoutReader, stderrReader := newWriter(stdinPipe), newReader(stdoutPipe), newReader(stderrPipe)
+  // Streams that are not piped get closed stand-ins, made only when asked for.
+  var stdinOnce, stdoutOnce, stderrOnce sync.Once
+  var stdinWriter Writer
+  var stdoutReader, stderrReader Reader
+  if stdinPipe != nil { stdinOnce.Do(func() { stdinWriter = newWriter(stdinPipe) }) }
+  if stdoutPipe != nil { stdoutOnce.Do(func() { stdoutReader = newReader(stdoutPipe) }) }
+  if stderrPipe != nil { stderrOnce.Do(func() { stderrReader = newReader(stderrPipe) }) }
   pid := cmd.Process.Pid
   handle.Value = func(operation string, argument int64) any {
     switch operation {
@@ -434,10 +489,13 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     case "pid":
       return int64(pid)
     case "stdin":
+      stdinOnce.Do(func() { stdinWriter = newWriter(nil) })
       return stdinWriter
     case "stdout":
+      stdoutOnce.Do(func() { stdoutReader = newReader(nil) })
       return stdoutReader
     case "stderr":
+      stderrOnce.Do(func() { stderrReader = newReader(nil) })
       return stderrReader
     }
     select {
