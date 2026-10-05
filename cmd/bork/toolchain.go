@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GiGurra/bork/internal/childproc"
 	"github.com/GiGurra/bork/internal/toolchain"
 	"github.com/GiGurra/bork/internal/toolenv"
 	"github.com/spf13/cobra"
@@ -56,14 +57,16 @@ func selectToolchain(cmd *cobra.Command, path string) error {
 		if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "bork %s (%s)\n", selected, compilerSelection.Reason); err != nil {
 			return err
 		}
-		child = exec.CommandContext(ctx, binary, os.Args[1:]...)
+		// Not tied to ctx: the selected compiler handles Ctrl+C itself, and
+		// killing it would orphan a program it runs.
+		child = exec.Command(binary, os.Args[1:]...)
 		child.Env = append(os.Environ(), toolchain.SelectedEnv+"="+selected, toolchain.ReasonEnv+"="+compilerSelection.Reason)
 		child.Stdin, child.Stdout, child.Stderr = os.Stdin, os.Stdout, os.Stderr
-		return child.Run()
+		return childproc.Run(child)
 	})
 	if err != nil {
-		if exit, ok := err.(*exec.ExitError); ok && exit.ExitCode() >= 0 {
-			os.Exit(exit.ExitCode())
+		if exit, ok := err.(*exec.ExitError); ok {
+			os.Exit(childproc.ExitCode(exit))
 		}
 		return err
 	}

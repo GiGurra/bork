@@ -404,7 +404,7 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
     ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
   }
   srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: handler, ReadHeaderTimeout: 10*time.Second}
-  state := struct { addr string; done chan struct{}; load func() Option[AdmissionLoad] }{ln.Addr().String(), make(chan struct{}), load}
+  state := struct { addr string; done chan struct{}; cancelled <-chan struct{}; load func() Option[AdmissionLoad] }{ln.Addr().String(), make(chan struct{}), _borkScopeContext(s).Done(), load}
   go func() { srv.Serve(ln); close(state.done) }()
   return Server{handle: state, owner: s.Own(func() {
     ctx := context.Background()
@@ -419,22 +419,29 @@ fn Address(server: Server): String unsafe go {
   return server.handle.(struct {
     addr string
     done chan struct{}
+    cancelled <-chan struct{}
     load func() Option[AdmissionLoad]
   }).addr
 }
 
 // AdmissionState is a consistent counter snapshot, or None when no policy is set.
 fn AdmissionState(server: Server) uses state: Option[AdmissionLoad] unsafe go {
-  return server.handle.(struct { addr string; done chan struct{}; load func() Option[AdmissionLoad] }).load()
+  return server.handle.(struct { addr string; done chan struct{}; cancelled <-chan struct{}; load func() Option[AdmissionLoad] }).load()
 }
 
-// Wait blocks until the server stops.
+// Wait blocks until the server stops or its scope is cancelled, for
+// example by Ctrl+C. Closing the scope then shuts the server down.
 fn Wait(server: Server) uses net unsafe go {
-  <-server.handle.(struct {
+  state := server.handle.(struct {
     addr string
     done chan struct{}
+    cancelled <-chan struct{}
     load func() Option[AdmissionLoad]
-  }).done
+  })
+  select {
+  case <-state.done:
+  case <-state.cancelled:
+  }
 }
 
 // Get sends a GET request cancelled with s. timeoutMs bounds the entire request,

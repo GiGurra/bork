@@ -152,7 +152,7 @@ func predicateMemoSupport(source []byte) bool {
 					continue
 				}
 				switch predicateSupportText(spec) {
-				case `_mainContext, _ = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)`,
+				case `_mainContext = _signalContext()`,
 					`_errCancelled = errors.New("cancelled")`, `_errScopeEnded = errors.New("the scope ended")`,
 					`_mapHash = _hash`, `_mapSeed = maphash.MakeSeed()`:
 				default:
