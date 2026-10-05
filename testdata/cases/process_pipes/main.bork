@@ -1,0 +1,151 @@
+import "bork/encoding"
+import "bork/fs"
+import "bork/process"
+
+fn show(item: String | Closed | Cancelled | IoError): String {
+  match (item) {
+    line: String => line
+    end: Closed => "<closed>"
+    stopped: Cancelled => s"<cancelled: ${stopped.reason}>"
+    error: IoError => s"<error: ${error.message}>"
+  }
+}
+
+fn drain(lines: Channel[String | IoError], seen: List[String]) uses state: List[String] {
+  match (receive(lines)) {
+    line: String => drain(lines, seen.append(line))
+    error: IoError => seen.append(error.message)
+    end: Closed => seen
+    stopped: Cancelled => seen
+  }
+}
+
+fn streaming(s: Scope, directory: String) uses io + state: Ok | IoError | Cancelled | Closed | fs.Error {
+  // The second line is written only after the first was received.
+  go = fs.Join([directory, "go"])
+  child = process.Start(s, "/bin/sh", ["-c", "echo first; while [ ! -f \"$1\" ]; do sleep 0.02; done; echo second", "sh", go], stdout: .Pipe)?
+  output = child.Stdout()
+  println(show(output.NextLine()))
+  fs.Write(go, encoding.Utf8("go"))?
+  println(show(output.NextLine()))
+  println(show(output.NextLine()))
+  println(child.Wait()?.code)
+  // Each line comes back before the next is written.
+  echo = process.Start(s, "cat", stdin: .Pipe, stdout: .Pipe)?
+  input = echo.Stdin()
+  replies = echo.Stdout()
+  input.WriteText("ping\n")?
+  println(show(replies.NextLine()))
+  input.Write(encoding.Utf8("pong\n"))?
+  println(show(replies.NextLine()))
+  input.Close()
+  input.Close()
+  println(show(replies.NextLine()))
+  println(match (input.WriteText("late\n")) {
+    end: Closed => true
+    _ => false
+  })
+  println(echo.Wait()?.code)
+  // Lines as a sequence, with stderr merged in order.
+  merged = process.Start(s, "/bin/sh", ["-c", "echo a; echo b >&2; printf c"], stdout: .Pipe, stderr: .Stdout)?
+  for (item in merged.Stdout().Lines()) {
+    println(show(item))
+  }
+  println(merged.Wait()?.stdout.length())
+}
+
+fn separate(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  child = process.Start(s, "/bin/sh", ["-c", "for i in 1 2 3; do echo out $i; echo err $i >&2; done"], stdout: .Pipe, stderr: .Pipe)?
+  errors = spawn(s, () => child.Stderr().ReadAll())
+  out = child.Stdout().ReadAll()?
+  err = await(errors)?
+  println(encoding.ParseUtf8(out))
+  println(encoding.ParseUtf8(err))
+  chunks = process.Start(s, "printf", ["abcdef"], stdout: .Pipe)?
+  first = chunks.Stdout().NextChunk(limit: 4)
+  println(match (first) {
+    data: Bytes => data.length() <= 4 && data.length() > 0
+    _ => false
+  })
+  _ = chunks.Stdout().ReadAll()?
+  println(match (chunks.Stdout().NextChunk()) {
+    end: Closed => true
+    _ => false
+  })
+  _ = chunks.Wait()?
+}
+
+fn pipelines(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  producer = process.Start(s, "/bin/sh", ["-c", "for i in 1 2 3 4 5; do echo $i; done"], stdout: .Pipe)?
+  counter = process.Start(s, "wc", ["-l"], stdin: .From { reader: producer.Stdout() })?
+  println(counter.Wait()?.StdoutText().trim())
+  println(producer.Wait()?.code)
+  println(show(producer.Stdout().NextLine()))
+  // A Reader that already buffered bytes hands them over too.
+  started = process.Start(s, "/bin/sh", ["-c", "echo header; echo x; echo y"], stdout: .Pipe)?
+  println(show(started.Stdout().NextLine()))
+  rest = process.Run(s, "cat", stdin: .From { reader: started.Stdout() })?
+  println(rest.StdoutText())
+  _ = started.Wait()?
+  lines = process.Start(s, "/bin/sh", ["-c", "echo one; echo two; echo three"], stdout: .Pipe)?
+  println(drain(lines.Stdout().LinesChannel(s, capacity: 1), []))
+  _ = lines.Wait()?
+}
+
+fn unpiped(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  child = process.Start(s, "/bin/sh", ["-c", "echo captured"])?
+  println(show(child.Stdout().NextLine()))
+  println(match (child.Stdin().WriteText("ignored")) {
+    end: Closed => true
+    _ => false
+  })
+  println(child.Wait()?.StdoutText())
+  ran = process.Run(s, "/bin/sh", ["-c", "echo run; echo errors >&2"], stdin: .Pipe, stdout: .Pipe, stderr: .Pipe)?
+  println(ran.StdoutText() + ran.StderrText())
+}
+
+fn cancellation() uses io + state + clock: Ok | IoError | Cancelled {
+  // An unread pipe does not keep the scope from closing.
+  flooded = scope limited {
+    cancelAfter(limited, 100)
+    child = process.Start(limited, "/bin/sh", ["-c", "while true; do echo spam; done"], stdout: .Pipe)?
+    child.Wait()
+  }
+  println(match (flooded) {
+    stopped: Cancelled => stopped.reason
+    _ => "unexpected"
+  })
+  waiting = scope limited {
+    cancelAfter(limited, 100)
+    child = process.Start(limited, "sleep", ["5"], stdout: .Pipe)?
+    show(child.Stdout().NextLine())
+  }
+  println(waiting)
+  writing = scope limited {
+    cancelAfter(limited, 100)
+    child = process.Start(limited, "sleep", ["5"], stdin: .Pipe)?
+    big = encoding.Utf8("x".repeat(1048576))
+    match (child.Stdin().Write(big)) {
+      stopped: Cancelled => stopped.reason
+      _ => "unexpected"
+    }
+  }
+  println(writing)
+}
+
+fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed | fs.Error {
+  directory = fs.DirectoryPath(fs.TempDir(s)?)
+  streaming(s, directory)?
+  separate(s)?
+  pipelines(s)?
+  unpiped(s)?
+  cancellation()?
+}
+
+fn main() {
+  result = scope s { exercise(s) }
+  match (result) {
+    done: Ok => println("ok")
+    other => println(other)
+  }
+}
