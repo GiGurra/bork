@@ -318,7 +318,13 @@ func apiType(td *syntax.TypeDecl, sources []*syntax.File) string {
 			if doc := apiComment(sources, v.Pos); doc != "" {
 				value = "// " + strings.ReplaceAll(doc, "\n", "\n  // ") + "\n  " + value
 			}
-			if len(v.Fields) > 0 {
+			if v.Positional {
+				var slots []string
+				for _, slot := range v.Slots {
+					slots = append(slots, writtenTypeText(slot))
+				}
+				value += "(" + strings.Join(slots, ", ") + ")"
+			} else if len(v.Fields) > 0 {
 				value += " " + apiFields(v.Fields, sources)
 			}
 			if len(v.Where) > 0 {

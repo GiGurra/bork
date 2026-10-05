@@ -104,7 +104,7 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 	var inits []string
 	positional := len(invariants) > 0 && invariants[0].positional
 	if positional {
-		array := g.text(g.variantType(g.info.Named["Json"].(*check.Sealed).Variant("Array")))
+		array := g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Array")))
 		b.WriteString("if !_isObj {\n" + g.decodeError(`".values"`, `"expected an array of payload values"`) + "}\n")
 		b.WriteString("_values, _present := _jsonField(_obj, \"values\")\n")
 		fmt.Fprintf(&b, "_array, _isArray := _values.(%s)\n", array)
@@ -250,7 +250,7 @@ func (g *gen) deriveEncode(fn *check.Func) string {
 					fun, ds := g.dictMethod(fn.Derived.FieldDicts[i][slot], "encode")
 					values = append(values, g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent("_v"), f))}))
 				}
-				json := g.info.Named["Json"].(*check.Sealed)
+				json := g.codecType("Value").(*check.Sealed)
 				array := g.text(g.variantType(json.Variant("Array")))
 				fmt.Fprintf(&b, "return %s{fields: []%s{{name: \"type\", value: %s{value: %q}}, {name: \"values\", value: %s{items: []%s{%s}}}}}\n", obj, field, str, v.Name, array, g.typeText(json), strings.Join(values, ", "))
 			} else {

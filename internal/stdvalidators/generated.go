@@ -346,7 +346,7 @@ type Option[T any] interface {
 }
 
 type Option_Some[T any] struct {
-	value T
+	E0 T
 }
 
 func (Option_Some[T]) isOption(T) {
@@ -358,7 +358,7 @@ func (v Option_Some[T]) String() string {
 	nativeEnter()
 	defer nativeLeave()
 	return "Option.Some(" +
-		func() string { nativeStep(); return _show(v.value) }() +
+		func() string { nativeStep(); return _show(v.E0) }() +
 		")"
 }
 
@@ -375,7 +375,7 @@ func (v Option_Some[T]) _equals(w Option_Some[T]) bool {
 	nativeEnter()
 	defer nativeLeave()
 	return true &&
-		func() bool { nativeStep(); return _equal(v.value, w.value) }()
+		func() bool { nativeStep(); return _equal(v.E0, w.E0) }()
 
 }
 
@@ -385,7 +385,7 @@ func (v Option_Some[T]) _borkHash() uint64 {
 	h := uint64(0)
 	h = func() uint64 {
 		nativeStep()
-		return _hashMix(h, func() uint64 { nativeStep(); return _hash(v.value) }())
+		return _hashMix(h, func() uint64 { nativeStep(); return _hash(v.E0) }())
 	}()
 
 	return h
@@ -1034,7 +1034,7 @@ func _ctEncode3(value Option[int64], depth int) _ctValue {
 			)
 		}()
 
-		return _ctValue{Kind: "Option[Int]", Tag: "Some", Items: []_ctValue{func() _ctValue { nativeStep(); return _ctEncode4(value.value, depth+1) }()}}
+		return _ctValue{Kind: "Option[Int]", Tag: "Some", Items: []_ctValue{func() _ctValue { nativeStep(); return _ctEncode4(value.E0, depth+1) }()}}
 	case Option_None[int64]:
 		_ = value
 		func() {

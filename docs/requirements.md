@@ -3100,9 +3100,29 @@ Acceptance covers every expected-type position, recursive nesting, aliases,
 unique and ambiguous union candidates, shared generic inference (including
 callbacks and result context), field defaults/facts and constructor visibility.
 Include rejected no-context/all-shorthand containers, unknown/fieldless variants,
-unsupported positional Option constructors and inaccessible private variants;
+invalid payload forms and inaccessible private variants;
 test record/variant effects, lifetime checks, formatter, resolved descriptions,
 structured fixes and the config example's output.
+
+### Positional variant payloads (bork-3ic73j)
+
+A sealed variant may declare a nonempty ordered payload list: `Some(T)` or
+`Pair(A, B)`. Construction and nested patterns use parentheses, including
+context heads `.Some(x)` and specialized owners `Option[Int].Some(x)`.
+Type arguments belong to the owner; `Option[Int].None` remains bare.
+Named variants retain braces. Payload forms cannot be mixed, and positional
+payloads reject names, defaults, spread and incorrect arity. Bare variant
+patterns may ignore their payload. `One((A, B))` has one tuple-valued slot;
+`Pair(A, B)` has two slots.
+
+Each slot receives its instantiated type and facts. Constructors evaluate
+arguments once in source order; nested pattern checking and exhaustiveness
+use the ordered slots. Show prints `Owner.Variant(a, b)`. Derived codecs use
+`{"type":"Variant","values":[a,b]}` with exact array arity and error paths
+`.values[index]`. Named and fieldless wire formats retain their behavior.
+Option declares `Some(T)` and keeps its explicit null/value codec and optional
+field behavior. Legacy Some brace forms receive migration fixes; missing owner
+type arguments receive fixes preserving inferred arguments and placeholders.
 
 ### Explicit type arguments on literal heads (design: bork-idtpbx)
 
@@ -3118,7 +3138,8 @@ imported = settings.Box[String] { value: "value" }
 ```
 
 - **The brackets specialize the owner.** Support `Record[Args] { fields }`,
-  `Sealed[Args].Variant { fields }`, and fieldless `Sealed[Args].Variant`.
+  `Sealed[Args].Variant { fields }`, positional `Sealed[Args].Variant(values)`,
+  and fieldless `Sealed[Args].Variant`.
   Qualified imported owners work with the same syntax. `Sealed.Variant[Args]`
   is not a literal head. Existing generic call syntax stays unchanged; a
   bracket list followed by a call remains that call's type arguments.

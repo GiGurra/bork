@@ -1,13 +1,16 @@
+import "bork/codec"
 import "bork/json"
 import "bork/test"
+
+use codec.Defaults
 
 pred positive(n: Int) { n > 0 }
 type Payload[T] = sealed { Pair(T, String), One((T, String)), Named { value: T }, Empty }
 type Positive = sealed { Value(Int where positive), Empty }
-derive Encode for Payload
-derive Decode for Payload
-derive Encode for Positive
-derive Decode for Positive
+derive codec.Encode for Payload
+derive codec.Decode for Payload
+derive codec.Encode for Positive
+derive codec.Decode for Positive
 
 type Bits = sealed { Pair(Bool, Bool), Empty }
 
