@@ -123,6 +123,7 @@ type deriveExpansion struct {
 	failed      bool
 	helperArgs  []syntax.Expr
 	helperOrder []int
+	patternTest bool
 }
 
 func (p *deriveExpansion) error(pos diag.Pos, format string, args ...any) {
@@ -573,6 +574,13 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 		}
 		out.Tail = p.expr(x.Tail)
 		return out
+	case *syntax.Is:
+		value := p.expr(x.X)
+		saved := p.patternTest
+		p.patternTest = true
+		pattern := p.clone(reflect.ValueOf(x.Pattern)).Interface().(syntax.Pattern)
+		p.patternTest = saved
+		return &syntax.Is{Pos: x.Pos, End: x.End, X: value, Pattern: pattern}
 	case *syntax.Match:
 		if x.Comptime {
 			if selected, ok := p.chooseMatch(x); ok {
@@ -771,7 +779,11 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 		if pattern, ok := value.Interface().(*syntax.VariantPat); ok && !pattern.Context && !pattern.Braces && len(pattern.Fields) == 0 && len(pattern.Path) == 1 {
 			if _, known := p.env[pattern.Path[0]].(Type); known {
 				written := &syntax.TypeExpr{Pos: pattern.Pos, Name: pattern.Path[0]}
-				expanded := &syntax.TypePat{Pos: pattern.Pos, Name: p.generatedName("pattern", p.template.Pkg), Type: p.clone(reflect.ValueOf(written)).Interface().(*syntax.TypeExpr)}
+				name := ""
+				if !p.patternTest {
+					name = p.generatedName("pattern", p.template.Pkg)
+				}
+				expanded := &syntax.TypePat{Pos: pattern.Pos, Name: name, Type: p.clone(reflect.ValueOf(written)).Interface().(*syntax.TypeExpr)}
 				p.c.info.assemblyNames[expanded] = "derived type match"
 				return reflect.ValueOf(expanded)
 			}

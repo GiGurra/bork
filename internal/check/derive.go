@@ -101,6 +101,8 @@ func (c *checker) collectDerive(pos diag.Pos, name string, typ Type, written *sy
 			c.errorf(pos, "tuples have implicit codec instances; standalone derive requires a named record or sealed target")
 		} else if IsGoStruct(cl) {
 			c.errorf(pos, "GoStruct cannot be derived for a tuple")
+		} else if cl.Template != nil {
+			c.errorf(pos, "tuple aliases cannot derive custom classes; derive templates currently require a named record or sealed target")
 		} else {
 			c.tupleDerives = append(c.tupleDerives, &ClassInstance{Type: tuple, Class: cl, Pkg: c.pkg, Decl: &syntax.InstanceDecl{Pos: pos}})
 		}

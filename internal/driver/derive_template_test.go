@@ -1317,3 +1317,56 @@ derive instance c[T]: C[T] { fn c(x: T): Int { for (n in 2) {}; 1 } }
 type Row = {} derive(C)
 fn main() {}`, "for requires a List or Seq")
 }
+
+func TestDeriveTemplateTupleScopes(t *testing.T) {
+	t.Parallel()
+	source := `class Label[T]{fn label(x:T):String}
+derive fn pair[T](x:T):(T,String){ (x,"tuple") }
+derive fn take[T](p:(T,String)):String{ p.1 }
+derive instance labels[T]:Label[T]{
+ fn label(x:T):String{
+  (_, text) = pair[T](x)
+  selected = take[T]((x,text))
+  (_, (nested,)) = (x, (selected,))
+  match ((nested,)) { (word,) => word }
+ }
+}
+type Item={} derive(Label)
+fn main(){println(label(Item{}))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "tuple\n" {
+		t.Fatalf("tuple scope: %s, %v", output, err)
+	}
+	checkPreludeSource(t, `derive fn bad[T](x:T):String{ (text,) = (text,); text }
+fn main(){}`, "undefined local in derive definition: text")
+	checkPreludeSource(t, `derive fn bad[T](x:T):String{ match ((x,)) { (word,) => "ok" }; word }
+fn main(){}`, "undefined local in derive definition: word")
+	checkPreludeSource(t, `derive fn bad[T](x:T):(Int,String){ (1,2) }
+fn main(){}`, "found (Int, Int)")
+}
+
+func TestDeriveTemplateIsPattern(t *testing.T) {
+	t.Parallel()
+	source := `class Label[T]{fn label(x:T):String}
+derive instance labels[T]:Label[T]{
+ fn label(x:T):String{ if (x is T) { "yes" } else { "no" } }
+}
+type Item={} derive(Label)
+fn main(){println(label(Item{}))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "yes\n" {
+		t.Fatalf("is pattern: %s, %v", output, err)
+	}
+	checkPreludeSource(t, `class Label[T]{fn label(x:T):String}
+derive instance labels[T]:Label[T]{fn label(x:T):String{"x"}}
+type Pair=(Int,String) derive(Label)
+fn main(){}`, "tuple aliases cannot derive custom classes")
+}

@@ -98,6 +98,13 @@ func deriveLiteralExpression(expr syntax.Expr) bool {
 		return deriveLiteralExpression(expr.X)
 	case *syntax.Binary:
 		return deriveLiteralExpression(expr.X) && deriveLiteralExpression(expr.Y)
+	case *syntax.TupleLit:
+		for _, elem := range expr.Elems {
+			if !deriveLiteralExpression(elem) {
+				return false
+			}
+		}
+		return true
 	case *syntax.ListLit:
 		for _, elem := range expr.Elems {
 			if !deriveLiteralExpression(elem) {
@@ -127,6 +134,11 @@ func deriveConcreteType(typ *syntax.TypeExpr, typeNames map[string]bool) bool {
 	}
 	if _, member, projected := strings.Cut(typ.Name, "."); projected && member == "Type" {
 		return false
+	}
+	for _, elem := range typ.Tuple {
+		if !deriveConcreteType(elem, typeNames) {
+			return false
+		}
 	}
 	for _, arg := range typ.Args {
 		if !deriveConcreteType(arg, typeNames) {

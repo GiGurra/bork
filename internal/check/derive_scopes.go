@@ -37,6 +37,10 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 		case *syntax.TypePat:
 			walk(reflect.ValueOf(pat.Type), env)
 			bind(env, pat.Name, pat.Pos)
+		case *syntax.TuplePat:
+			for _, elem := range pat.Elems {
+				pattern(elem, env)
+			}
 		case *syntax.ListPat:
 			for _, elem := range pat.Elems {
 				pattern(elem, env)
@@ -83,6 +87,10 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 				walk(reflect.ValueOf(node.Value), env)
 				walk(reflect.ValueOf(node.AsyncScope), env)
 				bind(env, node.Name, node.Pos)
+				return
+			case *syntax.TupleBinding:
+				walk(reflect.ValueOf(node.Value), env)
+				pattern(node.Pattern, env)
 				return
 			case *syntax.For:
 				walk(reflect.ValueOf(node.Items), env)
