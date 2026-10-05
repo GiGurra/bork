@@ -13,7 +13,7 @@ import (
 func TestLintDiagnosticsAndFixes(t *testing.T) {
 	source := `type unused = { value: Int }
 pred positive(n: Int) { n > 0 }
-fn spare(n: Int) { unusedLocal = n }
+fn spare(n: Int) { _ = n }
 fn constrained(n: Int where positive): Bool { positive(n) }
 fn main() uses io {
  value = true
@@ -36,7 +36,7 @@ fn main() uses io {
 		}
 		codes[warning.Code]++
 	}
-	for _, code := range []string{"lint.unused-binding", "lint.unused-declaration", "lint.needless-effects", "lint.redundant-check", "lint.simplify"} {
+	for _, code := range []string{"lint.unused-declaration", "lint.needless-effects", "lint.redundant-check", "lint.simplify"} {
 		if codes[code] == 0 {
 			t.Errorf("missing %s: %+v", code, warnings)
 		}
@@ -75,12 +75,13 @@ func applyLintEdits(t *testing.T, source string, edits []diag.TextEdit) string {
 
 func TestLintSuppressionAndEffects(t *testing.T) {
 	source := `fn main() {
- // lint:ignore lint.unused-binding intentional
- ignored = 42
- unused = 43
+ _ = 42
+ _ = 43
  println("output")
 }
 fn callback(f: () uses io => Ok) uses io { f() }
+// lint:ignore lint.unused-parameter intentional
+fn IgnoredParameter(ignored: Int) {}
 fn UnusedParameter(ignored: Int) {}
 `
 	dir := t.TempDir()
@@ -99,7 +100,7 @@ fn UnusedParameter(ignored: Int) {}
 			t.Fatalf("false positive: %+v", w)
 		}
 	}
-	if codes["lint.unused-binding"] != 1 || codes["lint.unused-parameter"] != 1 {
+	if codes["lint.unused-binding"] != 0 || codes["lint.unused-parameter"] != 1 {
 		t.Fatalf("warnings: %+v", warnings)
 	}
 }
@@ -115,17 +116,22 @@ func TestLintPatternBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	warnings, err := Lint(path)
-	if err != nil {
-		t.Fatal(err)
+	de, ok := err.(*DiagError)
+	if !ok || len(warnings) != 0 || de.Diags.Len() != 2 {
+		t.Fatalf("patterns must be compiler errors: %+v, %v", warnings, err)
 	}
-	if len(warnings) != 2 {
-		t.Fatalf("patterns: %+v", warnings)
-	}
-	for _, w := range warnings {
-		if w.Code != "lint.unused-binding" {
-			t.Fatalf("pattern: %+v", w)
+	for _, d := range de.Diags.Sorted() {
+		if d.Code != "binding.unused" {
+			t.Fatalf("pattern: %+v", d)
 		}
 	}
+	if err := os.WriteFile(path, []byte(strings.Replace(source, "[first, ...rest]", "[_, ...]", 1)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if warnings, err := Lint(path); err != nil || len(warnings) != 0 {
+		t.Fatalf("explicit discards: %+v, %v", warnings, err)
+	}
+
 }
 
 func TestLintRecursiveDeclarationsAndComparisonFix(t *testing.T) {

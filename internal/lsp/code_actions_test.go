@@ -35,9 +35,9 @@ func TestDiagnosticActionsCheckAndFormat(t *testing.T) {
 	for _, tc := range []struct{ name, source, title, want string }{
 		{"boolean", "fn choose(x: Bool): Int { match (x) { true => 1 } }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
 		{"empty", "fn choose(x: Bool): Int { match (x) {} }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
-		{"union", "fn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "missingValue: String => todo()"},
-		{"binding collision", "fn choose(missingValue: Int | String): Int { match (missingValue) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "missingValue2: String => todo()"},
-		{"function collision", "fn missingValue() {}\nfn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "missingValue2: String => todo()"},
+		{"union", "fn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "_: String => todo()"},
+		{"binding collision", "fn choose(missingValue: Int | String): Int { match (missingValue) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "_: String => todo()"},
+		{"function collision", "fn missingValue() {}\nfn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "_: String => todo()"},
 		{"interpolation", "fn choose(x: Bool): String { s\"${match (x) { true => 1 }}\" }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
 		{"payload", "type Choice = sealed { Yes { value: Bool }, No }\nfn choose(x: Choice): Int { match (x) { Choice.No => 1 } }\nfn main() {}\n", "Add missing match arms", "Choice.Yes { value: _ } => todo()"},
 		{"partial payload", "type Choice = sealed { Yes { value: Bool }, No }\nfn choose(x: Choice): Int { match (x) { Choice.Yes { value: true } => 1, Choice.No => 2 } }\nfn main() {}\n", "Add missing match arms", "value: _"},

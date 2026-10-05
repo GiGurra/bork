@@ -2820,7 +2820,7 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **A grammar draft (EBNF) comes before the parser.** See [grammar.md](grammar.md).
 - **`fn` declares functions, and parameters are written `name: Type`.** The colon keeps the name apart from the type once constraints are attached.
 - **Conditions are parenthesized:** `if (cond) { ... } else { ... }`. `else` goes on the same line as the closing `}`, as in Go.
-- **No shadowing.** A name cannot be bound again while it is visible, in the same or an enclosing scope (including function names). Sibling blocks can reuse names.
+- **Same-block rebinding; no nested shadowing.** `x = f(x)` creates a new immutable binding, with any type; its initializer sees the preceding binding and closures retain captured values. Parameters share the function body’s top-level block and may be rebound there. Inner blocks and lambdas cannot shadow enclosing names; sibling blocks may reuse names. Package functions, imports and package values cannot be rebound locally. The existing exception for prelude free functions remains: a local may shadow them, and a call to a non-function local names its declaration in the error. Every local binding must be read, including a replaced binding and destructured names; unused locals are compiler errors (`binding.unused`). Parameters are exempt. Discard explicitly with `_ = expr`, `_: T = expr`, `_` in patterns, or `for (_ in xs)`. Safe compiler fixes replace a name with `_` or remove a binding without dropping effects. Rebinding declarations have a semantic-token modifier and hover links to the preceding declaration.
 - **Scala-style string interpolation, not printf:** `s"Hello, $name! Next year: ${age + 1}"`. Any value can be interpolated, rendered as `toString` renders it. Plain `"..."` strings never interpolate, so `$` needs no escaping there.
 - **Typed library interpolators (implemented):** `Prefix"... $value ..."` and imported `sql.SQL"... $value ..."` call a prefix factory with a compiler-created private `StaticParts`, then typed Interpolate methods and Finish. Runtime Strings cannot become literal parts; holes retain ordinary types, effects, generic bounds, and resource lifetimes. Evaluation is eager, once per hole, in source order. `$$` stays a literal dollar. Raw execution and stream functions require an explicit `sql.Unsafe(text): UnsafeQuery`; ordinary Strings cannot become driver query text through those APIs. SQL returns a private Statement: scalar/Bytes/Null values bind, validated Identifier values quote, and nested Statements compose. SQLite/Postgres rendering numbers structured parameters at execution, rejects literal placeholders and holes inside quotes/comments/partial tokens, and preserves scoped execution and streaming errors. Ordinary Postgres strings with backslashes are rejected to avoid session-dependent escape rules; explicit E strings are supported. See [the design](design/interpolators.md) and [SQL API](std/sql.md).
 - **Library interpolation validators (implemented):** a builder owner's optional pure `InterpolationValidator[Builder]` receives compiler-created StaticParts and hole-kind metadata, never runtime values. The compiler resolves owner dictionaries, batches distinct calls per package, and uses bounded native comptime execution; invalid indices, panic and timeout fail checking. Diagnostics point to a zero-based hole or the prefix and name the validator. Identical parts/kinds memoize within a build; persistent result reuse requires comptime certification. SQL checks definite component-local boundaries rejected by both supported dialects, then keeps mandatory render-time checks for dialect differences, runtime fragments and unterminated components. See [the validator design](design/interpolator-validation.md).
@@ -4035,14 +4035,14 @@ built offline with a local file proxy.
 
 ### Advisory linting
 
-`bork lint` reports compiler-backed advisory warnings for unused bindings,
+`bork lint` reports compiler-backed advisory warnings for unused
 parameters and private declarations, redundant proved predicate checks, boolean
 simplifications and needless declared effects. The LSP publishes the same warnings
 and safe fixes. `// lint:ignore <rule-code> reason` on the same or preceding line
 suppresses these warnings (comma-separated codes or `all` are allowed). Exported
 functions may deliberately reserve effects for API compatibility; this is a
 reason to suppress that advisory warning. Existing compiler errors, including
-shadowing, unreachable match arms, unused imports and private-function effect
+nested shadowing, unused locals, unreachable match arms, unused imports and private-function effect
 checks, retain their enforcement and cannot be suppressed.
 
 - **Explicit update notice (implemented).** Released compilers can check the

@@ -75,7 +75,7 @@ fn more() uses io {
   f()
   // A union of functions fits a union that allows more.
   a: (() => Ok) | Int = quiet
-  b: (() uses io => Ok) | Int = a
+  _: (() uses io => Ok) | Int = a
   // An open parameter takes a function whose result uses less.
   run(() => () => {})
 }

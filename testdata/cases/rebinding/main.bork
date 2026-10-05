@@ -1,0 +1,27 @@
+fn format(input: Int): String {
+  input = input + 1
+  input = s"number $input"
+  input
+}
+fn main() {
+  x = 1
+  earlier = () => x
+  lazy later = x + 10
+  x = x + 1
+  x = s"value $x"
+  println(earlier(), later, x, format(3))
+  [1, 2].map(n => { n = s"$n"; n }).forEach(text => println(text))
+  { value = 3; println(value) }
+  { value = "four"; println(value) }
+  scope s {
+    owner = openScope(s)
+    closeScope(owner)
+    owner = openScope(s)
+    println(cancelled(owner.scope))
+    closeScope(owner)
+    async(s) deferred = 5
+    captured = () => deferred
+    deferred = "six"
+    println(captured(), deferred)
+  }
+}

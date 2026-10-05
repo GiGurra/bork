@@ -74,7 +74,7 @@ fn getenv(key: String) needs traceId: String unsafe go "os.Getenv"
 
 // with binds only ambient values, each once, with their types.
 fn binds(): String {
-  total = 1
+  _ = 1
   a = with (total: 2) { "x" }
   b = with (traceId: "a", traceId: "b") { tag("x") }
   c = with (traceId: 3) { tag("x") }

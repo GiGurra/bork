@@ -6,7 +6,7 @@ main.bork:29:1: owned scope c is still open at the end of its block: close it wi
 main.bork:33:13: owned scope b cannot be closed or passed on in a condition that may not run
 main.bork:55:24: a lambda cannot close or pass on owned scope b; it can borrow b.scope
 main.bork:56:7: owned scope b cannot be bound again: there is one owner; use b itself
-main.bork:57:8: a value of type List[OwnedScope] cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
+main.bork:57:7: a value of type List[OwnedScope] cannot hold an OwnedScope: an owner cannot be copied into a list, record, union or function
 main.bork:58:3: an owned scope cannot be dropped: bind it and close it with closeScope, or pass it on
 main.bork:59:11: owned scope b can only be closed (closeScope(b)), passed to a parameter of type OwnedScope, or returned; b.scope borrows its Scope
 main.bork:69:7: g may be released: it belongs to owned scope b, which was closed at line 68

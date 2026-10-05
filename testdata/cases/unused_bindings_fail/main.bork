@@ -1,0 +1,8 @@
+fn main() {
+  x = 1
+  x = 2
+  println(x)
+  neverRead = 3
+  _ = match ([1]) { [first, ...rest] => 0; _ => 1 }
+  lazy deferred = 4
+}

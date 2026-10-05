@@ -1,0 +1,5 @@
+main.bork:2:3: binding x is never read; discard explicitly with _
+main.bork:5:3: binding neverRead is never read; discard explicitly with _
+main.bork:6:22: binding first is never read; discard explicitly with _
+main.bork:6:32: binding rest is never read; discard explicitly with _
+main.bork:7:8: binding deferred is never read; discard explicitly with _

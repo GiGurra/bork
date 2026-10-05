@@ -3,16 +3,16 @@ main.bork:9:13: cannot tell the constructor of .{ ... }; give the value an expec
 main.bork:10:10: cannot tell the constructor of .Ready; give the value an expected record or sealed type, or write its constructor explicitly
 main.bork:11:10: cannot tell the constructor of .{ ... }; give the value an expected record or sealed type, or write its constructor explicitly
 main.bork:11:25: cannot tell the constructor of .{ ... }; give the value an expected record or sealed type, or write its constructor explicitly
-main.bork:12:16: .{ ... } needs an expected record, found Int
-main.bork:13:41: .{ ... } has several expected constructors: Box[Int], Box[String]; write the constructor explicitly
-main.bork:13:52: cannot tell the type of an empty list; give it one, as in xs: List[Int] = []
-main.bork:14:22: .{ ... } has several expected constructors: A, B; write the constructor explicitly
-main.bork:15:30: .Ready has several expected constructors: First, Second; write the constructor explicitly
-main.bork:16:17: First has no variant Reedy
-main.bork:17:31: no expected sealed type in First | Second has variant Reedy
-main.bork:18:19: First.Fields has fields; build it with .Fields { ... }
-main.bork:19:21: First.Auto has fields; build it with .Auto { ... }
-main.bork:20:23: variants use named fields, not positional calls; write .Some { ... }
-main.bork:21:25: First.Fields is missing field(s): value
-main.bork:22:31: field value is given twice
+main.bork:12:12: .{ ... } needs an expected record, found Int
+main.bork:13:31: .{ ... } has several expected constructors: Box[Int], Box[String]; write the constructor explicitly
+main.bork:13:42: cannot tell the type of an empty list; give it one, as in xs: List[Int] = []
+main.bork:14:14: .{ ... } has several expected constructors: A, B; write the constructor explicitly
+main.bork:15:23: .Ready has several expected constructors: First, Second; write the constructor explicitly
+main.bork:16:14: First has no variant Reedy
+main.bork:17:23: no expected sealed type in First | Second has variant Reedy
+main.bork:18:14: First.Fields has fields; build it with .Fields { ... }
+main.bork:19:14: First.Auto has fields; build it with .Auto { ... }
+main.bork:20:20: variants use named fields, not positional calls; write .Some { ... }
+main.bork:21:14: First.Fields is missing field(s): value
+main.bork:22:23: field value is given twice
 main.bork:23:16: .{ ... } has several expected constructors: A, B; write the constructor explicitly

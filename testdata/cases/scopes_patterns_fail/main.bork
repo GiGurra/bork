@@ -6,7 +6,7 @@ fn fromList(): Int {
   f = scope s {
     xs = [spawn(s, () => 1)]
     match (xs) {
-      [a, ...rest] => () => await(a)
+      [a, ...] => () => await(a)
       [] => () => 0
     }
   }

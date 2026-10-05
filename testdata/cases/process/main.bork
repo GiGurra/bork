@@ -64,8 +64,8 @@ fn server(path: String) uses io + state + clock {
     onClose(child, () => println("closed"))
     ready(path)
     println(match (delay(child, 60000)) {
-      done: Ok => false
-      stopped: Cancelled => true
+      _: Ok => false
+      _: Cancelled => true
     })
   }
 }
@@ -196,8 +196,8 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   shared.Stop()
   println(match (shared.Wait()) {
     result: process.Result => result.status == process.ExitStatus.Signaled { number: 15, name: "SIGTERM" } && result.code == -1
-    error: IoError => false
-    stopped: Cancelled => false
+    _: IoError => false
+    _: Cancelled => false
   })
   inheritedPipes(s)?
   groupCancellation(s)?
@@ -207,13 +207,13 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   stopped.Kill()
   println(match (stopped.Wait()) {
     result: process.Result => result.status == process.ExitStatus.Signaled { number: 9, name: "SIGKILL" }
-    error: IoError => false
-    cancelled: Cancelled => false
+    _: IoError => false
+    _: Cancelled => false
   })
   println(match (process.Run(s, "/definitely/no/bork-executable")) {
-    result: process.Result => false
+    _: process.Result => false
     error: IoError => error.path == "/definitely/no/bork-executable"
-    cancelled: Cancelled => false
+    _: Cancelled => false
   })
 }
 fn main() {
@@ -230,7 +230,7 @@ fn main() {
     _ => {
       result = scope s { exercise(s) }
       match (result) {
-        done: Ok => println("ok")
+        _: Ok => println("ok")
         error: IoError => println(error)
         cancelled: Cancelled => println(cancelled)
       }

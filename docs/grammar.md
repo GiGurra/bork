@@ -94,7 +94,7 @@ Stmt       = Binding | Trust | Mock | Expr .
 Mock       = [ Ident "=" ] "mock" ( Ident | QualIdent ) [ "." Ident ] "(" [ ( Ident | "_" ) { "," ( Ident | "_" ) } ] ")" Block .
                                              (* in tests: mock payments.Charge(card, amount) { ... }, calls = mock Store.save(s, x) { ... } *)
 Trust      = "trust" Call .                  (* trust positive(x) *)
-Binding    = ( [ "lazy" | "async" "(" Expr ")" ] Ident [ ":" Type ] | "_" ) "=" Expr .   (* x = 1, x: Int8 = 1, or _ = write(f, s)? to drop a value *)
+Binding    = ( Ident | "_" | ( "lazy" | "async" "(" Expr ")" ) Ident ) [ ":" Type ] "=" Expr .   (* x = 1, x: Int8 = 1, or _ = write(f, s)? to drop a value *)
 
 Expr       = PipeExpr .
 PipeExpr   = OrExpr { "|>" OrExpr } .        (* x |> f(a) is f(x, a); x |> f is f(x) *)
@@ -127,7 +127,7 @@ TypedInterp = ( Ident | QualIdent ) InterpBody . (* prefix and opening quote mus
 (* InterpBody is the double-quoted body with $name, ${Expr}, $$, and string escapes. *)
 Generate   = "generate" "[" Type "]" Block .
 Yield      = "yield" Expr .
-For        = "for" "(" Ident "in" Expr ")" Block .
+For        = "for" "(" ( Ident | "_" ) "in" Expr ")" Block .
 LoopControl = "break" | "continue" .
 WithExpr   = "with" "(" WithBind { Sep WithBind } [ Sep ] ")" Block .  (* with (traceId: id, principal: p) { ... } *)
 WithBind   = ( Ident | QualIdent ) ":" Expr .
@@ -144,7 +144,7 @@ Arm        = Pattern "=>" Expr .
 Pattern    = "_"                             (* anything *)
            | Literal                         (* 1, -1, 1.5, 'a', "a", true *)
            | "[" [ ListElems ] "]"            (* [], [x], [first, ...rest], [0, ...] *)
-           | Ident ":" Type                  (* n: Int, e: NotFound | DbError *)
+           | ( Ident | "_" ) ":" Type                  (* n: Int, e: NotFound | DbError *)
            | ( "." Ident | Ident [ "." Ident ] ) [ "{" FieldPat { Sep FieldPat } [ Sep ] "}" ] .
                                              (* Shape.Circle { radius }, NotFound, User { name }, n *)
 ListElems  = ( Pattern { Sep Pattern } [ Sep "..." [ Ident ] ] | "..." [ Ident ] ) [ Sep ] .
@@ -163,7 +163,7 @@ Source spans follow the lexer's token ends, independently of printed token text.
 - **`Ok` is the no-value type and success expression.** Write `fn save(): Ok | Error { Ok }`, `() => Ok`, or omit the result type for a function that just completes. `Ok` carries no payload; it is not a generic Result constructor. It can inhabit a union, but cannot be a standalone binding, parameter, field, or generic value argument (`Task[Ok]` and `Channel[Ok]` remain invalid). `Unit` is a deprecated type alias for one release; `bork check --json` offers edits to replace its type uses with `Ok`.
 - **`if` with `else`** produces a value; both branches must have the same type. **`if` without `else`** is only run for its effect.
 - **`return`** has type `Never`, which fits wherever any type is expected, so `x = if (c) { return 0 } else { 1 }` works. Code after a `return` is a compile error.
-- **Bindings are immutable**, and names cannot be shadowed, except prelude functions: a local or package function can use their names. Methods have a separate namespace, so a free `fn find` and `xs.find(test)` can coexist.
+- **Bindings are immutable.** Same-block rebinding creates a distinct value of any type, including rebinding parameters in the function body. Nested shadowing is forbidden. Every local must be read or explicitly discarded; parameters are exempt. Prelude functions are an exception to name protection: a local or package function can use their names. Methods have a separate namespace, so a free `fn find` and `xs.find(test)` can coexist.
 - **A value that is computed but never used is a compile error** (e.g. calling a function that returns `Int` as a statement).
 - **Numbers:** `Int8`, `Int16`, `Int32`, `Int` (= `Int64`), `Uint8` (= `Byte`), `Uint16`, `Uint32`, `Uint64`, `Float32`, `Float` (= `Float64`). Integers wrap on overflow, like Go.
 - **Operators:** `+ - * /` on two numbers of the same type, `%` on two integers of the same type; `+` also concatenates `String`s; `< <= > >=` on numbers or `String`s; `== !=` on two values of the same type, or a union and a value of one of its members; unary `-` on signed numbers; `&& || !` on `Bool`, with short-circuiting. Types never mix implicitly. Dividing by a constant zero is a compile error.
@@ -412,7 +412,7 @@ Bork alias when its final path component contains punctuation.
 
 
 Advisory lint suppression uses ordinary comments, not a new grammar production:
-`// lint:ignore lint.unused-binding reason` suppresses that rule on the same or
+`// lint:ignore lint.unused-parameter reason` suppresses that rule on the same or
 following line. Comma-separated rule codes and `all` are supported. The compiler's
 syntax and safety errors remain errors.
 

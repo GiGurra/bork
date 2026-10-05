@@ -1,13 +1,13 @@
 import "bork/sql"
 type Row = { n: Int } derive (Decode)
 fn raw(db: sql.Connection, text: String) uses io + net {
-  exec = sql.Exec(db, text, [])
-  rows = sql.Query[Row](db, text, [])
-  json = sql.QueryJson(db, text, [])
-  stream = sql.Rows[Row](db, text, [])
-  streamJson = sql.RowsJson(db, text, [])
+  _ = sql.Exec(db, text, [])
+  _ = sql.Query[Row](db, text, [])
+  _ = sql.QueryJson(db, text, [])
+  _ = sql.Rows[Row](db, text, [])
+  _ = sql.RowsJson(db, text, [])
   query = sql.QueryJson
-  indirect = query(db, text, [])
+  _ = query(db, text, [])
   forged = sql.UnsafeQuery { text: text }
 }
 fn main() {}

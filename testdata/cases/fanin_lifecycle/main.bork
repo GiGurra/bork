@@ -97,7 +97,7 @@ test "selection distinguishes arm cancellation from wait cancellation" {
   scope outer {
     scope source {
       ch = channel[Int](source, 0)
-      arm = ch.receiveCase(v => match (v) { n: Int => n; c: Cancelled => 42; _ => -1 })
+      arm = ch.receiveCase(v => match (v) { n: Int => n; _: Cancelled => 42; _ => -1 })
       cancel(source)
       assertEqual([arm].select(outer), Option.Some { value: 42 })
     }

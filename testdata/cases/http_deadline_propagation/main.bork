@@ -13,8 +13,8 @@ fn budget(s: Scope) uses clock: String unsafe go {
 fn resultText(result: http.Result): String {
   match (result) {
     response: http.Response => response.body
-    error: http.DeadlineExceeded => "deadline"
-    error: Cancelled => "cancelled"
+    _: http.DeadlineExceeded => "deadline"
+    _: Cancelled => "cancelled"
     error => panic(toString(error))
   }
 }

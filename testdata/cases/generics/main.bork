@@ -22,7 +22,7 @@ fn pairUp[A, B](xs: List[A], ys: List[B], combine: (A, B) => String): List[Strin
 // A union with a type parameter: T is what remains.
 fn orElse[T](x: T | NotFound, fallback: T): T {
   match (x) {
-    n: NotFound => fallback
+    _: NotFound => fallback
     v: T => v
   }
 }

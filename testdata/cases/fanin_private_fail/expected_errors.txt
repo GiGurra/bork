@@ -1,4 +1,4 @@
-main.bork:4:26: cannot construct Task: package prelude controls its construction; use an exported constructor or update method from that package
-main.bork:5:20: cannot copy Task: package prelude controls its construction; use an exported constructor or update method from that package
-main.bork:6:24: cannot construct Channel: package prelude controls its construction; use an exported constructor or update method from that package
-main.bork:9:32: cannot construct ReceiveCase: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:4:23: cannot construct Task: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:5:14: cannot copy Task: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:6:23: cannot construct Channel: package prelude controls its construction; use an exported constructor or update method from that package
+main.bork:9:27: cannot construct ReceiveCase: package prelude controls its construction; use an exported constructor or update method from that package

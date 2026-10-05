@@ -442,9 +442,9 @@ func (g *gen) binds(p *check.Pat, x ast.Expr, narrowed bool) []ast.Stmt {
 		if p.Kind == check.PatType && !narrowed {
 			val = g.narrow(p, x)
 		}
-		out = append(out, define(name(p.Bind), val))
+		out = append(out, define(varIdent(p.Var), val))
 		if p.Var.Unused {
-			out = append(out, assign(ast.NewIdent("_"), name(p.Bind)))
+			out = append(out, assign(ast.NewIdent("_"), varIdent(p.Var)))
 		}
 	}
 	switch p.Kind {

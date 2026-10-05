@@ -1,1 +1,1 @@
-main.bork:6:31: field read of PureReader must be (String) => (Bytes | fs.NotFound | fs.PermissionDenied | fs.Exists | IoError), found (String) uses io => (Bytes | fs.NotFound | fs.PermissionDenied | fs.Exists | IoError) (it uses io, where a function that uses nothing is expected)
+main.bork:6:26: field read of PureReader must be (String) => (Bytes | fs.NotFound | fs.PermissionDenied | fs.Exists | IoError), found (String) uses io => (Bytes | fs.NotFound | fs.PermissionDenied | fs.Exists | IoError) (it uses io, where a function that uses nothing is expected)

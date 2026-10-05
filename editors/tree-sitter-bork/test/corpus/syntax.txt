@@ -391,3 +391,41 @@ fn main() {
         (record_literal
           (identifier)
           (number))))))
+
+==================
+Explicit typed and loop discards
+==================
+fn main() {
+  _: List[Int] = []
+  _ = match (1) { _: Int => 2 }
+  for (_ in [1]) {}
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (binding
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier)))))
+        (list_literal))
+      (binding
+        (match_expression
+          (number)
+          (match_arm
+            (pattern
+              (type
+                (qualified_name
+                  (identifier))))
+            (number))))
+      (for_expression
+        (list_literal
+          (number))
+        (block)))))

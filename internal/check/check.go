@@ -350,6 +350,8 @@ type Info struct {
 	// unused holds bindings whose value is never read: *syntax.Binding,
 	// or the pattern node that bound the name.
 	unused map[any]bool
+	// rebindings records the previous declaration replaced by a sequential binding.
+	rebindings map[any]any
 	// consts holds the value of every constant expression (number
 	// literals and arithmetic on them), already converted to the type
 	// recorded in types (or optionPayloads for a promoted value).
@@ -408,6 +410,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c := &checker{
 		recordPredicateRefs: true,
 		files:               files,
+		bindingFiles:        map[string]*syntax.File{},
 		diags:               diags,
 		info: &Info{
 			GoBindings:             map[*Func]*GoBinding{},
@@ -448,6 +451,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			armPats:                map[*syntax.Arm]*Pat{},
 			tries:                  map[*syntax.Try]*TryInfo{},
 			unused:                 map[any]bool{},
+			rebindings:             map[any]any{},
 			consts:                 map[syntax.Expr]constant.Value{},
 			lazyBindings:           map[*syntax.Binding]*LazyDescription{},
 			lazyFields:             map[syntax.Expr]*LazyDescription{},
@@ -473,6 +477,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	// Pass 1: declare types, then resolve their bodies, so types can
 	// refer to each other regardless of declaration order.
 	for _, f := range files {
+		c.bindingFiles[f.Path] = f
 		c.inFile(f)
 		for _, td := range f.Types {
 			c.declareType(td, f.Prelude)
@@ -753,6 +758,7 @@ type checker struct {
 	files []*syntax.File
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
+	bindingFiles        map[string]*syntax.File
 	packagePath         []*PackageBinding
 
 	mapKeyChecks []func()
@@ -957,6 +963,7 @@ func (c *checker) checkFunc(fn *Func) {
 	c.useTypeParams(fn)
 	defer c.useTypeParams(nil)
 	c.scopes = []map[string]*local{{}}
+	defer c.popScope()
 	for i, p := range fn.Decl.Params {
 		// The prelude's parameter names do not depend on user code.
 		if !fn.Prelude && fn.Decl.Constructor == nil && c.nameTaken(p.Name, p.Pos) {
@@ -982,7 +989,7 @@ func (c *checker) checkFunc(fn *Func) {
 		want = fn.Result
 	}
 	c.used = 0
-	bodyType := c.block(fn.Decl.Body, want)
+	bodyType := c.blockInScope(fn.Decl.Body, want)
 	c.unusedNeeds(fn)
 	c.suggestNeeds(fn)
 	if isOpen(fn.Result) && c.used&EffOpen != 0 {
@@ -1013,39 +1020,39 @@ func (c *checker) checkFunc(fn *Func) {
 // already visible. bork does not allow shadowing.
 func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 	if c.pkg.bindings[name] != nil {
-		c.errorf(pos, "%s is already the name of a package value (bork does not allow shadowing)", name)
+		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of a package value (bork does not allow shadowing)", name)
 		return true
 	}
 	for i := len(c.scopes) - 1; i >= 0; i-- {
 		if _, ok := c.scopes[i][name]; ok {
-			c.errorf(pos, "%s is already defined in an enclosing scope (bork does not allow shadowing)", name)
+			c.diags.AddCode(pos, "binding.shadow", "%s is already defined in an enclosing scope (bork does not allow shadowing)", name)
 			return true
 		}
 	}
 	// Prelude functions may be shadowed: their names (count, find,
 	// last, ...) are too useful to take away from locals.
 	if _, ok := c.pkg.Funcs[name]; ok && c.pkg != c.preludePkg {
-		c.errorf(pos, "%s is already the name of a function (bork does not allow shadowing)", name)
+		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of a function (bork does not allow shadowing)", name)
 		return true
 	}
 	if _, ok := c.pkg.imports[name]; ok {
-		c.errorf(pos, "%s is already the name of an imported package (bork does not allow shadowing)", name)
+		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of an imported package (bork does not allow shadowing)", name)
 		return true
 	}
 	if _, ok := builtins[name]; ok {
-		c.errorf(pos, "%s is a built-in function (bork does not allow shadowing)", name)
+		c.diags.AddCode(pos, "binding.shadow", "%s is a built-in function (bork does not allow shadowing)", name)
 		return true
 	}
 	if c.providerBundleNamed(name) != nil {
-		c.errorf(pos, "%s is already the name of a provider bundle", name)
+		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of a provider bundle", name)
 		return true
 	}
 	if c.isTypeName(name) {
-		c.errorf(pos, "%s is already the name of a type", name)
+		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of a type", name)
 		return true
 	}
 	if _, ok := c.pkg.ambients[name]; ok {
-		c.errorf(pos, "%s is already the name of an ambient value (bork does not allow shadowing)", name)
+		c.diags.AddCode(pos, "binding.shadow", "%s is already the name of an ambient value (bork does not allow shadowing)", name)
 		return true
 	}
 	return false
@@ -1055,10 +1062,10 @@ func (c *checker) nameTaken(name string, pos diag.Pos) bool {
 // taken is still bound, as Invalid, so later uses don't cause follow-up
 // errors.
 func (c *checker) bind(name string, pos diag.Pos, t Type, node any) {
-	if c.nameTaken(name, pos) {
+	if name != "_" && c.nameTaken(name, pos) {
 		t = Invalid
 	}
-	c.scopes[len(c.scopes)-1][name] = &local{typ: t, node: node, decl: node}
+	c.scopes[len(c.scopes)-1][name] = &local{typ: t, node: node, decl: node, used: name == "_"}
 }
 
 func (c *checker) lookup(name string) *local {
@@ -1075,7 +1082,7 @@ func (c *checker) pushScope() { c.scopes = append(c.scopes, map[string]*local{})
 func (c *checker) popScope() {
 	for _, l := range c.scopes[len(c.scopes)-1] {
 		if l.node != nil && !l.used {
-			c.info.unused[l.node] = true
+			c.unusedLocal(l)
 		}
 	}
 	c.scopes = c.scopes[:len(c.scopes)-1]
@@ -1099,6 +1106,11 @@ func (c *checker) record(e syntax.Expr, t Type) Type {
 func (c *checker) block(b *syntax.Block, want Type) Type {
 	c.pushScope()
 	defer c.popScope()
+	return c.blockInScope(b, want)
+}
+
+// blockInScope shares a function body with its parameters.
+func (c *checker) blockInScope(b *syntax.Block, want Type) Type {
 
 	// Statements after one that never finishes (e.g. `return`) are
 	// unreachable. Only the first one is reported.
@@ -1229,7 +1241,7 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 			c.info.bindingConstraints[s] = c.constraintsOf(s.Type, t, c.paramScope())
 		}
 		if s.Name != "_" {
-			c.bind(s.Name, s.Pos, t, s)
+			c.bindRebinding(s.Name, s.Pos, t, s)
 		}
 		return Ok
 	case *syntax.TrustStmt:

@@ -14,8 +14,8 @@ fn main() {
     }
     error: JsonError => println(error.message)
   }
-  println(match (json.Pretty(Json.Number { text: "invalid" })) { error: JsonError => true; _ => false })
-  println(match (json.Pretty(Json.Array { items: [Json.Number { text: "1,2" }] })) { error: JsonError => true; _ => false })
-  println(match (json.Pretty(Json.Number { text: "true" })) { error: JsonError => true; _ => false })
+  println(match (json.Pretty(Json.Number { text: "invalid" })) { _: JsonError => true; _ => false })
+  println(match (json.Pretty(Json.Array { items: [Json.Number { text: "1,2" }] })) { _: JsonError => true; _ => false })
+  println(match (json.Pretty(Json.Number { text: "true" })) { _: JsonError => true; _ => false })
   println(json.Field(Json.Object { fields: [JsonField { name: "x", value: Json.Null }, JsonField { name: "x", value: Json.Bool { value: true } }] }, "x"))
 }

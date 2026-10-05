@@ -14,7 +14,7 @@ fn noAttach(path: String) uses io: Ok | fs.Error {
 fn tooLate(path: String) uses io: Ok | fs.Error {
   scope app {
     f = scope job { fs.Create(path, job)? }
-    shared = attach(f, app)
+    _ = attach(f, app)
   }
 }
 

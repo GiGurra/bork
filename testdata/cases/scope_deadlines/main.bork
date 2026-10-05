@@ -16,7 +16,7 @@ fn farFuture(s: Scope) uses clock + state: Bool unsafe go {
   return ok && time.Until(deadline) > time.Hour
 }
 fn deadlineResult(result: http.Result): Bool {
-  match (result) { error: http.DeadlineExceeded => true, _ => false }
+  match (result) { _: http.DeadlineExceeded => true, _ => false }
 }
 fn main() {
   scope parent {

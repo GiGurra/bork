@@ -26,6 +26,13 @@ type lowerer struct {
 	interpolationSites   []*InterpolationSite
 }
 
+// nameRebinding keeps immutable identities distinct in generated Go.
+func (l *lowerer) nameRebinding(v *Var, node any) {
+	if l.info.rebindings[node] != nil {
+		v.GoName = fmt.Sprintf("_rebind_%d_%d_%s", v.Pos.Line, v.Pos.Col, v.Name)
+	}
+}
+
 // needs is what the call or reference x passes for its callee's needs.
 func (l *lowerer) needs(x syntax.Expr) []Expr {
 	var out []Expr
@@ -190,6 +197,7 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 		}
 		let := &Let{Pos: s.Pos, Value: l.expr(s.Value), Declared: s.Type != nil, Constraints: l.info.bindingConstraints[s]}
 		let.Var = &Var{Label: l.info.assemblyNames[s], Name: s.Name, Pos: s.Pos, Type: l.info.bindings[s], Kind: VarLet, Let: let, Unused: l.info.unused[s]}
+		l.nameRebinding(let.Var, s)
 		if global := l.vars[s]; global != nil && global.PackageBinding != nil {
 			global.Let = let
 			let.Var = global
@@ -226,7 +234,8 @@ func (l *lowerer) stmt(s syntax.Stmt) Stmt {
 		m := &Mock{Pos: s.MockPos, Target: fn.MockOf, Text: writtenText(s.Target), TargetPos: mockTargetPos(s.Target), Func: fn}
 		l.function(fn)
 		if s.Name != "" {
-			m.Var = &Var{Name: s.Name, Pos: s.Pos, Type: l.info.mockHandles[s], Kind: VarLet, Unused: l.info.unused[s]}
+			m.Var = &Var{Name: s.Name, Pos: s.Pos, Type: l.info.mockHandles[s], Kind: VarMockHandle, Unused: l.info.unused[s]}
+			l.nameRebinding(m.Var, s)
 			l.vars[s] = m.Var
 		}
 		return m
@@ -306,6 +315,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			elem = t.Elem
 		}
 		v := &Var{Name: x.Name, Pos: x.NamePos, Type: elem, Kind: VarLoop, Source: &VarSource{Subject: items, Path: ".[]"}}
+		if x.Name == "_" {
+			v.GoName = fmt.Sprintf("_discard_loop_%d_%d", x.NamePos.Line, x.NamePos.Col)
+		}
 		l.vars[x] = v
 		return &For{expr: at, Var: v, Items: items, Body: l.block(x.Body)}
 	case *syntax.LoopControl:
@@ -623,10 +635,14 @@ func (l *lowerer) patVars(p *Pat, subject Expr) {
 		return
 	}
 	if p.Bind != "" {
-		v := &Var{Label: l.info.assemblyNames[p.bindNode], Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarPattern, Unused: l.info.unused[p.bindNode]}
+		v := &Var{Label: l.info.assemblyNames[p.bindNode], Name: p.Bind, Pos: bindPos(p.bindNode), Type: p.BindType, Kind: VarPattern, Unused: l.info.unused[p.bindNode] || p.Bind == "_"}
 		if src := l.info.patSources[p.bindNode]; src != nil {
 			v.Source = &VarSource{Subject: subject, Member: src.Member, Path: src.Path, Field: src.Field}
 		}
+		if p.Bind == "_" {
+			v.GoName = fmt.Sprintf("_discard_%d_%d", v.Pos.Line, v.Pos.Col)
+		}
+		l.nameRebinding(v, p.bindNode)
 		l.vars[p.bindNode] = v
 		p.Var = v
 	}

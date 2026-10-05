@@ -2,7 +2,7 @@ type Problem = { code: Int }
 pred Approved(x: Problem) { x.code > 0 }
 pred Allowed(x: Int | Problem) { match (x) { n: Int => n > 0; p: Problem => Approved(p) } }
 fn source(flag: Bool): Int | Problem where Approved { if (flag) { Problem { code: 1 } } else { 1 } }
-pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some { value } => true; Option.None => flag } }
+pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some { value: _ } => true; Option.None => flag } }
 type Box = { lazy value: Int | Problem }
 fn fieldForward(flag: Bool): Int | Problem where Approved {
   box = Box { value: { _ = source(flag)?; 1 } }
@@ -22,7 +22,7 @@ fn fieldOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option
   box = OptionBox { value: { n = x?; Option.Some { value: n } } }
   box.value
 }
-pred AnyExit(x: Int | Ok) { match (x) { n: Int => true; unit: Ok => true } }
+pred AnyExit(x: Int | Ok) { match (x) { _: Int => true; _: Ok => true } }
 fn emptyExit(): Int | Ok {}
 type ExitBox = { lazy value: Int | Ok }
 fn fieldEmpty(): (Int | Ok) where AnyExit {

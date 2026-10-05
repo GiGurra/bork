@@ -1085,7 +1085,7 @@ func (p *parser) statement() Stmt {
 			panic(bailout{})
 		}
 		stmt = &TrustStmt{Pos: pos, Call: call}
-	case p.at(TIdent) && p.peekKind() == Colon:
+	case (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == Colon:
 		name := p.next()
 		p.next() // ':'
 		typ := p.typeExpr()
@@ -1421,6 +1421,10 @@ func (p *parser) pattern() Pattern {
 	switch t.Kind {
 	case Underscore:
 		p.next()
+		if p.at(Colon) {
+			p.next()
+			return &TypePat{Pos: t.Pos, Name: "_", Type: p.typeExpr()}
+		}
 		return &WildcardPat{Pos: t.Pos}
 	case TInt, TFloat, TRune, TString, KwTrue, KwFalse, Minus:
 		return &LitPat{Pos: t.Pos, Value: p.unary()}
@@ -1506,7 +1510,12 @@ func (p *parser) primary() Expr {
 	case KwFor:
 		p.next()
 		p.expect(LParen, "after for")
-		n := p.expect(TIdent, "(iteration variable)")
+		var n Token
+		if p.at(Underscore) {
+			n = p.next()
+		} else {
+			n = p.expect(TIdent, "(iteration variable)")
+		}
 		in := p.expect(TIdent, "in after the iteration variable")
 		if in.Text != "in" {
 			p.errorf(in.Pos, "expected in after the iteration variable")

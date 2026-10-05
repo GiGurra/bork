@@ -4,8 +4,8 @@ type Interval = { lo: Int, hi: Int where atLeast(lo) = 10 }
 type Bounded = { value: Int where positive }
 type State = sealed { Valid { value: Int where positive } }
 fn main() {
-  interval: Interval = .{ lo: 10, hi: 5 }
-  defaulted: Interval = .{ lo: 12 }
-  bounded: Bounded = .{ value: 0 }
-  state: State = .Valid { value: 0 }
+  _: Interval = .{ lo: 10, hi: 5 }
+  _: Interval = .{ lo: 12 }
+  _: Bounded = .{ value: 0 }
+  _: State = .Valid { value: 0 }
 }

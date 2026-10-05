@@ -4,8 +4,8 @@ type Packet = { data: Bytes }
 
 fn discriminate(value: Bytes | List[Byte]): String {
   match (value) {
-    data: Bytes => "bytes"
-    data: List[Byte] => "list"
+    _: Bytes => "bytes"
+    _: List[Byte] => "list"
   }
 }
 
@@ -34,7 +34,7 @@ fn main() {
   println(data.concat(encoding.Utf8("!")))
   println(match (encoding.ParseUtf8(data)) {
     text: String => text == "hé\x00"
-    error: ParseError => false
+    _: ParseError => false
   })
   println([].toBytes().isEmpty())
   println([].toBytes() == encoding.Utf8(""))

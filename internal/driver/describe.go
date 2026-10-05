@@ -81,6 +81,18 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 		}
 	}
 	absoluteDefinition(selected.Definition)
+	var rebinds *diag.Pos
+	if selected.Definition != nil {
+		definition := *selected.Definition
+		for _, file := range program.files {
+			if absolute, err := filepath.Abs(file.Path); err == nil && absolute == definition.File {
+				definition.File = file.Path
+				break
+			}
+		}
+		rebinds = check.Rebinding(info, definition)
+		absoluteDefinition(rebinds)
+	}
 	for i := range methods {
 		absoluteDefinition(methods[i].Definition)
 	}
@@ -91,7 +103,7 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 		methods = []check.MethodDescription{}
 	}
 	if selected.ProviderBundle != nil {
-		return &describe.Result{Documentation: documentation, SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
+		return &describe.Result{Rebinds: rebinds, Documentation: documentation, SchemaVersion: 1, Position: pos, Type: "provider bundle", Expression: selected.Expression, Definition: selected.Definition, ProviderBundle: selected.ProviderBundle, Methods: methods, Facts: facts}, nil
 	}
 	var async *check.AsyncDescription
 	lazy := info.LazyFieldDescription(selected.Expr)
@@ -99,7 +111,7 @@ func describeProgram(program *compiledProgram, pos diag.Pos, src []byte, where s
 		lazy = v.Var.Let.Lazy
 		async = v.Var.Let.Async
 	}
-	return &describe.Result{Documentation: documentation, Async: async, Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
+	return &describe.Result{Rebinds: rebinds, Documentation: documentation, Async: async, Lazy: lazy, SchemaVersion: 1, Position: pos, Type: check.TypeText(selected.Type, selected.Package), Expression: selected.Expression, Definition: selected.Definition, Methods: methods, Facts: facts, Proof: proof, Callable: selected.Callable, BelongsTo: belongsTo(info, selected), Assembly: selected.Assembly}, nil
 }
 
 // belongsTo names the scopes the selected value belongs to.

@@ -23,7 +23,7 @@ fn StateNew(lo: Int, hi: Int): State {
 }
 fn requiresState(s: State where stateValid): State { s }
 fn narrowed(s: State): State {
-  match (s) { State.Running { lo, hi } => requiresState(s), State.Idle => State.Idle }
+  match (s) { State.Running { lo: _, hi: _ } => requiresState(s), State.Idle => State.Idle }
 }
 fn Defaults(label: String): Range { .{ label: label } }
 fn ContextBox[T](value: T, n: Int where positive): Option[Box[T]] { .Some { value: .{ value: value, n: n } } }

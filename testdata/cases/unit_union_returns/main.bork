@@ -6,7 +6,7 @@ fn classify(f: Failure): Error { Error { message: f.message } }
 fn normalize(raw: Ok | Failure): Ok | Error {
   match (raw) {
     f: Failure => classify(f)
-    done: Ok => {}
+    _: Ok => {}
   }
 }
 fn empty(): Ok | Error {}
@@ -32,7 +32,7 @@ fn scoped(ok: Bool) uses io: Ok | Error {
 }
 fn plainUnit(ok: Bool) { match (ok) { true => {}, false => {} } }
 fn succeeded(r: Ok | Error): Bool {
-  match (r) { done: Ok => true, error: Error => false }
+  match (r) { _: Ok => true, _: Error => false }
 }
 
 fn main() {

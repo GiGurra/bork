@@ -1,2 +1,2 @@
 main.bork:9:19: the lambda may not live as long as scope app (it depends on scope job), but launch may keep it until app closes; to give a task of app a resource of a shorter scope, attach it first: r2 = attach(r, app)
-main.bork:17:21: f may be released: it belongs to scope job, which ended on line 16
+main.bork:17:16: f may be released: it belongs to scope job, which ended on line 16

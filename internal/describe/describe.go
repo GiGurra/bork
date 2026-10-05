@@ -13,6 +13,7 @@ import (
 )
 
 type Result struct {
+	Rebinds        *diag.Pos                        `json:"rebinds,omitempty"`
 	Async          *check.AsyncDescription          `json:"async,omitempty"`
 	Lazy           *check.LazyDescription           `json:"lazy,omitempty"`
 	ProviderBundle *check.ProviderBundleDescription `json:"provider_bundle,omitempty"`

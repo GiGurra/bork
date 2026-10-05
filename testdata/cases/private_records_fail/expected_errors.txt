@@ -1,8 +1,8 @@
 main.bork:5:52: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
 main.bork:6:45: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
-main.bork:8:31: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
-main.bork:9:26: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
-main.bork:10:43: cannot construct Box: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
+main.bork:8:24: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
+main.bork:9:14: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
+main.bork:10:29: cannot construct Box: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
 main.bork:12:11: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
 main.bork:12:43: cannot construct Config: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package
 main.bork:12:65: cannot construct Box: package example.com/private-records-fail/settings controls its construction; use an exported constructor or update method from that package

@@ -19,7 +19,7 @@ func navigationFixture(t *testing.T) (string, string, string, string) {
 	dir := t.TempDir()
 	main := `import "example.com/nav/api"
 fn helper(value: api.Box): api.Box { value }
-fn main() uses io { greeting = "😀"; first = api.Make(); second = helper(first); println(second.Value); _ = api.Choose(api.Choice.Yes) }
+fn main() uses io { greeting = "😀"; _ = greeting; first = api.Make(); second = helper(first); println(second.Value); _ = api.Choose(api.Choice.Yes) }
 `
 	api := `type Box = { Value: Int }
 type Choice = sealed { Yes, No }

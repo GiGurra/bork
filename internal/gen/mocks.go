@@ -385,9 +385,9 @@ func (g *gen) mockStmt(m *check.Mock) []ast.Stmt {
 			&ast.KeyValueExpr{Key: ast.NewIdent("expectFn"), Value: generic("_mockExpectFn")},
 			&ast.KeyValueExpr{Key: ast.NewIdent("waitFn"), Value: generic("_mockWaitFn")},
 		}}
-		stmts = append(stmts, define(name(m.Var.Name), handle))
+		stmts = append(stmts, define(varIdent(m.Var), handle))
 		if m.Var.Unused {
-			stmts = append(stmts, assign(ast.NewIdent("_"), name(m.Var.Name)))
+			stmts = append(stmts, assign(ast.NewIdent("_"), varIdent(m.Var)))
 		}
 	}
 	return stmts
@@ -422,9 +422,9 @@ func (g *gen) captured(v *check.Var, borrowed bool) {
 	inside := p.File == c.from.File &&
 		(p.Line > c.from.Line || p.Line == c.from.Line && p.Col >= c.from.Col) &&
 		(p.Line < c.to.Line || p.Line == c.to.Line && p.Col <= c.to.Col)
-	n, t := name(v.Name), ast.Expr(nil)
+	n, t := varIdent(v), ast.Expr(nil)
 	if borrowed {
-		n, t = borrowedName(v.Name), &ast.StarExpr{X: ast.NewIdent("_Scope")}
+		n, t = borrowedName(varIdent(v).Name), &ast.StarExpr{X: ast.NewIdent("_Scope")}
 	}
 	if inside || c.seen[n.Name] {
 		return

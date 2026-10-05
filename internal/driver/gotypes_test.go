@@ -110,7 +110,7 @@ func TestImportedDefaultsRetainUseSiteFacts(t *testing.T) {
 	for name, main := range map[string]string{
 		"explicit": "_ = api.Inner { value: 0 }",
 		"sibling":  "_ = api.Pair { upper: 0 }",
-		"generic":  "box: api.Box[Int] = api.Box {}",
+		"generic":  "_: api.Box[Int] = api.Box {}",
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()

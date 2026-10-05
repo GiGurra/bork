@@ -1,16 +1,16 @@
 main.bork:3:39: field run of Job must be () => Ok, found () => Ok (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)
 main.bork:5:47: field run of Job must be () => Ok, found () => Ok (it uses what an open parameter uses, which its caller chooses: it can only be passed to an open parameter, or returned as an open result)
 main.bork:8:3: function wrap returns () => Ok, but its body produces () uses io + open => Ok (it uses io, but an open result can only use what the open parameters use; to allow more, write the parameters' and the result's effects)
-main.bork:17:20: pure must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
+main.bork:17:17: _ must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
 main.bork:19:23: argument 2 to update must be (Int) => Int, found (Int) uses io => Int (it uses io, where a function that uses nothing is expected)
-main.bork:23:27: list element must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
-main.bork:24:23: inc must be (Int) => Int, found (Int) uses io => Int (it uses io, where a function that uses nothing is expected)
+main.bork:23:24: list element must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
+main.bork:24:21: _ must be (Int) => Int, found (Int) uses io => Int (it uses io, where a function that uses nothing is expected)
 main.bork:32:1: runThen returns an open function, so it cannot call its open parameters itself (its callers are not charged for them); give them effects, or only return them
 main.bork:42:43: T of box cannot be () uses open => Ok: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result
-main.bork:46:28: pureBox must be Box[() => Ok], found Box[() uses io => Ok]
-main.bork:49:25: viaMethod must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
-main.bork:50:24: viaValue must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
-main.bork:51:27: viaCompose must be () => Int, found () uses io => Int (it uses io, where a function that uses nothing is expected)
-main.bork:56:22: either must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
+main.bork:46:22: _ must be Box[() => Ok], found Box[() uses io => Ok]
+main.bork:49:17: _ must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
+main.bork:50:17: _ must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
+main.bork:51:18: _ must be () => Int, found () uses io => Int (it uses io, where a function that uses nothing is expected)
+main.bork:56:17: _ must be () => Ok, found () uses io => Ok (it uses io, where a function that uses nothing is expected)
 main.bork:63:45: T of id cannot be () uses open => Ok: it uses what an open parameter uses, which its caller chooses, so it can only be passed to an open parameter or returned as an open result
-main.bork:70:33: widened must be () => (Int | String), found () => Int
+main.bork:70:27: _ must be () => (Int | String), found () => Int

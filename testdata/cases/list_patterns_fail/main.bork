@@ -14,7 +14,7 @@ fn b(xs: List[Bool]): Int {
 
 fn c(xs: List[Int]): Int {
   match (xs) {
-    [...rest] => 0
+    [...] => 0
     [x] => x
   }
 }

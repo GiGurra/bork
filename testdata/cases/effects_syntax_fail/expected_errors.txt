@@ -2,5 +2,5 @@ main.bork:1:18: unknown effect disk; the effects are io, net, clock, random, sta
 main.bork:3:18: effect io is listed twice
 main.bork:5:16: pred c cannot declare effects: predicates must be pure, or their facts could go stale
 main.bork:16:20: method greet of instance greetInt uses net, but class Greeter allows only io
-main.bork:20:12: x must be Int, found ((Int) uses io => Int) => Int
-main.bork:21:12: y must be Int, found ((Int) uses nothing => Int, (Int) uses nothing => Int) => Ok
+main.bork:20:12: _ must be Int, found ((Int) uses io => Int) => Int
+main.bork:21:12: _ must be Int, found ((Int) uses nothing => Int, (Int) uses nothing => Int) => Ok

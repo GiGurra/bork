@@ -2,5 +2,5 @@ import "bork/crypto"
 fn main() {
   println(crypto.RandomBytes(-1))
   println(crypto.Token(1))
-  bad = crypto.PasswordParams { memoryKiB: 0, iterations: 0, parallelism: 0 }
+  _ = crypto.PasswordParams { memoryKiB: 0, iterations: 0, parallelism: 0 }
 }

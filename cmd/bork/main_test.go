@@ -335,7 +335,9 @@ func TestLintCLI(t *testing.T) {
 	cmd := exec.Command(exe, "lint", "--json", path)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Run(); err == nil {
+		t.Fatal("lint accepted an unused local binding")
+	} else if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 {
 		t.Fatalf("lint: %v %s", err, &stderr)
 	}
 	var result struct {
@@ -345,8 +347,22 @@ func TestLintCLI(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("JSON: %v %s", err, &stdout)
 	}
-	if result.Code != "lint.unused-binding" || result.Severity != "warning" || len(result.Fixes) != 1 || stderr.Len() != 0 {
+	if result.Code != "binding.unused" || result.Severity != "" || len(result.Fixes) != 2 || stderr.Len() != 0 {
 		t.Fatalf("result: %+v %s", result, &stderr)
+	}
+	if err := os.WriteFile(path, []byte("fn F(unused: Int) {}\nfn main() {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := exec.Command(exe, "lint", "--json", path).Output()
+	if err != nil {
+		t.Fatalf("lint warning: %v", err)
+	}
+	result.Fixes = nil
+	if err := json.Unmarshal(warnings, &result); err != nil {
+		t.Fatalf("warning JSON: %v %s", err, warnings)
+	}
+	if result.Code != "lint.unused-parameter" || result.Severity != "warning" || len(result.Fixes) != 0 {
+		t.Fatalf("warning: %+v", result)
 	}
 	if err := os.WriteFile(path, []byte("fn main() { println(missing) }\n"), 0644); err != nil {
 		t.Fatal(err)

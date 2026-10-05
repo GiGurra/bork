@@ -82,18 +82,18 @@ func (g *gen) forSeq(e *check.For) []ast.Stmt {
 			}
 		}
 	}
-	// Iteration names are always legal when unused.
-	body = append([]ast.Stmt{assign(ast.NewIdent("_"), name(e.Var.Name))}, body...)
+	// Keep generated iteration names used after constant folding.
+	body = append([]ast.Stmt{assign(ast.NewIdent("_"), varIdent(e.Var))}, body...)
 	loop := &ast.RangeStmt{Tok: token.DEFINE, Body: &ast.BlockStmt{List: body}}
 	if _, ok := e.Items.Type().(*check.Seq); ok {
-		loop.Key = name(e.Var.Name)
+		loop.Key = varIdent(e.Var)
 		if root.used {
 			source = &ast.CallExpr{Fun: ast.NewIdent("_seqLoop"), Args: []ast.Expr{source, &ast.UnaryExpr{Op: token.AND, X: root.name}}}
 		}
 		loop.X = &ast.SelectorExpr{X: source, Sel: ast.NewIdent("run")}
 	} else {
 		loop.Key = ast.NewIdent("_")
-		loop.Value = name(e.Var.Name)
+		loop.Value = varIdent(e.Var)
 		loop.X = source
 	}
 	if exit.labelUsed {

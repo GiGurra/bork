@@ -82,6 +82,13 @@ func (s *server) feature(method, path string, p documentParams) (any, error) {
 			return nil, nil
 		}
 		text := "```bork\n" + result.Type + "\n```"
+		if result.Rebinds != nil {
+			name := ""
+			if reference := pkg.analysis.ReferenceAt(pos); reference != nil {
+				name = reference.Name
+			}
+			text += fmt.Sprintf("\n\nRebinds `%s` (line %d).", name, result.Rebinds.Line)
+		}
 		if result.Documentation != "" {
 			text += "\n\n" + doccomment.Markdown(result.Documentation)
 		}

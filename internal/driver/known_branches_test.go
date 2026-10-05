@@ -26,8 +26,8 @@ func TestKnownResultBranches(t *testing.T) {
 		{"union member value", "type Problem={n:Int}\npred approved(p:Problem){p.n>0}\nfn value():Int|Problem where approved{n=0;x:Int|Problem=if(n==0){Problem{n:2}}else{2};x}", ""},
 		{"union member failure", "type Problem={n:Int}\npred approved(p:Problem){p.n>0}\nfn value():Int|Problem where approved{n=0;x:Int|Problem=if(n==0){Problem{n:-1}}else{2};x}", "approved"},
 		{"left guard return", "fn value(flag:Bool):Int where positive{if({if(flag){return -1};true}&&false){return 3};2}", "positive"},
-		{"left guard try", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,f:Failed=>false}}\nfn value(x:Bool|Failed):Int|Failed where valid{if(x?&&false){return 3};2}", "valid"},
-		{"failure after known return", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,f:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if(n==0){return 2};_=x?;2}", ""},
+		{"left guard try", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,_:Failed=>false}}\nfn value(x:Bool|Failed):Int|Failed where valid{if(x?&&false){return 3};2}", "valid"},
+		{"failure after known return", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,_:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if(n==0){return 2};_=x?;2}", ""},
 		{"unknown guard", "fn value(n:Int):Int where positive{if(n==1){return -1};2}", "positive"},
 		{"runtime lazy guard", "fn value():Int where positive{lazy n=0;if(n==1){return -1};2}", "positive"},
 		{"runtime lazy record", "type C={n:Int}\nfn value():Int where positive{lazy c=C{n:0};if(c.n==1){return -1};2}", "positive"},
@@ -39,10 +39,10 @@ func TestKnownResultBranches(t *testing.T) {
 		{"union member identity", "fn value():Int where positive{n:Int|Int8=1;small:Int8=1;if(n==small){2}else{-1}}", "positive"},
 		{"pure call unknown", "fn zero():Int{0}\nfn value():Int where positive{n=zero();if(n==1){return -1};2}", "positive"},
 		{"overflow guard", "fn value():Int where positive{n:Int8=127;if(n+1<0){return -1};2}", "positive"},
-		{"unknown try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,f:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{_=x?;n=0;if(n==1){return -1};2}", "valid"},
-		{"unreachable try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,f:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if(n==1){_=x?};2}", ""},
-		{"guard try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,f:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if({_=x?;n==1}){return 3};2}", "valid"},
-		{"short circuit try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,f:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if(n==1&&{_=x?;true}){return -1};2}", ""},
+		{"unknown try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,_:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{_=x?;n=0;if(n==1){return -1};2}", "valid"},
+		{"unreachable try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,_:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if(n==1){_=x?};2}", ""},
+		{"guard try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,_:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if({_=x?;n==1}){return 3};2}", "valid"},
+		{"short circuit try failure", "type Failed={}\npred valid(x:Int|Failed){match(x){n:Int=>n>0,_:Failed=>false}}\nfn value(x:Int|Failed):Int|Failed where valid{n=0;if(n==1&&{_=x?;true}){return -1};2}", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

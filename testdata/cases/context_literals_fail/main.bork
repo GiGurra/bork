@@ -9,16 +9,16 @@ fn main() {
   missing = .{ value: 1 }
   bare = .Ready
   all = [.{ value: 1 }, .{ value: 2 }]
-  wrong: Int = .{ value: 1 }
-  specialized: Box[Int] | Box[String] = .{ values: [] }
-  ambiguous: A | B = .{ value: 1 }
-  variants: First | Second = .Ready
-  typo: First = .Reedy
-  typoUnion: First | Second = .Reedy
-  fields: First = .Fields
-  defaults: First = .Auto
-  call: Option[Int] = .Some(1)
-  missingField: First = .Fields {}
-  duplicate: A = .{ value: 1, value: 2 }
+  _: Int = .{ value: 1 }
+  _: Box[Int] | Box[String] = .{ values: [] }
+  _: A | B = .{ value: 1 }
+  _: First | Second = .Ready
+  _: First = .Reedy
+  _: First | Second = .Reedy
+  _: First = .Fields
+  _: First = .Auto
+  _: Option[Int] = .Some(1)
+  _: First = .Fields {}
+  _: A = .{ value: 1, value: 2 }
   union(first: .{ value: 1 }, other: B { value: 2 })
 }

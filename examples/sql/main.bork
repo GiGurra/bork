@@ -7,7 +7,7 @@ type Count = { count: Int } derive (Decode)
 fn demo() uses io + net: Ok | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
-    created = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)".Exec(db)?
+    _ = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)".Exec(db)?
     scope transaction {
       tx = sql.Begin(db, transaction)?
       inserted = sql.SQL"INSERT INTO users(name, note) VALUES (${"Ada"}, ${sql.Null {}})".Exec(tx)?
@@ -16,7 +16,7 @@ fn demo() uses io + net: Ok | sql.Error | DecodeError {
     }
     scope transaction {
       tx = sql.Begin(db, transaction)?
-      discarded = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})".Exec(tx)?
+      _ = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})".Exec(tx)?
     }
     users = sql.SQL"SELECT id, name, note FROM users ORDER BY id".Query[User](db)?
     println(users)
@@ -36,13 +36,13 @@ test "commit persists and scope end rolls back" {
     opened = sql.OpenSqlite(":memory:", app)
     match (opened) {
       db: sql.Connection => {
-        created = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)".Exec(db)
+        _ = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)".Exec(db)
         scope transaction {
           begun = sql.Begin(db, transaction)
           match (begun) {
             tx: sql.Transaction => {
-              inserted = sql.SQL"INSERT INTO users(name) VALUES (${"kept"})".Exec(tx)
-              committed = sql.Commit(tx)
+              _ = sql.SQL"INSERT INTO users(name) VALUES (${"kept"})".Exec(tx)
+              _ = sql.Commit(tx)
             }
             _ => assert(false)
           }
@@ -50,7 +50,7 @@ test "commit persists and scope end rolls back" {
         scope transaction {
           begun = sql.Begin(db, transaction)
           match (begun) {
-            tx: sql.Transaction => { inserted = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})".Exec(tx) }
+            tx: sql.Transaction => { _ = sql.SQL"INSERT INTO users(name) VALUES (${"discarded"})".Exec(tx) }
             _ => assert(false)
           }
         }

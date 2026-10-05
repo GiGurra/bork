@@ -24,9 +24,9 @@ fn show(result: http.Result) uses io {
   match (result) {
     response: http.Response => println("response", response.status, response.body)
     overloaded: http.Overloaded => println("overload", overloaded.response.status, overloaded.response.body, overloaded.retryAfter, overloaded.response.headers.get("X-Reply"))
-    error: http.DeadlineExceeded => println("deadline")
-    error: Cancelled => println("cancelled")
-    error: IoError => println("transport")
+    _: http.DeadlineExceeded => println("deadline")
+    _: Cancelled => println("cancelled")
+    _: IoError => println("transport")
   }
 }
 fn expired(operation: (Scope) => http.Result, byCause: Bool = false) uses clock + state: http.Result unsafe go {

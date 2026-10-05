@@ -3,5 +3,5 @@ pred small(n: Int where positive) { n < 10 }
 fn requiresPositive(n: Int where positive): Int { n }
 fn missingPrecondition(n: Int): Int { match (n) { v: Int where small => v; _ => 0 } }
 fn fallback(n: Int): Int { match (n) { v: Int where positive => v; v: Int => requiresPositive(v) } }
-fn after(n: Int): Int { match (n) { v: Int where positive => {}; _ => {} }; requiresPositive(n) }
+fn after(n: Int): Int { match (n) { _: Int where positive => {}; _ => {} }; requiresPositive(n) }
 fn main() {}

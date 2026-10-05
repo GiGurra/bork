@@ -26,8 +26,8 @@ fn main() uses io + clock + state {
   scope s {
     println("ready")
     match (time.Sleep(s, time.Nanoseconds(3600000000000))) {
-      done: Ok => println("slept")
-      stopped: Cancelled => println("cancelled")
+      _: Ok => println("slept")
+      _: Cancelled => println("cancelled")
     }
   }
 }
@@ -262,7 +262,7 @@ func TestRunSignalKeepsExplicitExitCode(t *testing.T) {
 func TestRunSignalGraceStopsUnresponsiveProgram(t *testing.T) {
 	t.Parallel()
 	source := "import \"bork/signal\"\nimport \"bork/time\"\n" + runSignalStubborn
-	source = strings.Replace(source, "scope s {", "scope s {\n    policy = signal.Configure(s, grace: .Some { value: time.Nanoseconds(200000000) })\n", 1)
+	source = strings.Replace(source, "scope s {", "scope s {\n    _ = signal.Configure(s, grace: .Some { value: time.Nanoseconds(200000000) })\n", 1)
 	source = strings.Replace(source, "uses io + clock {", "uses io + clock + state {", 1)
 	job := startRunSignal(t, "ready", writeRunSignal(t, source, true))
 	if err := syscall.Kill(-job.group, syscall.SIGTERM); err != nil {

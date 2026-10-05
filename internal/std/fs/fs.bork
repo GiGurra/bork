@@ -26,7 +26,7 @@ fn result[T](raw: T | fileFailure): T | Error {
   match (raw) { failure: fileFailure => classify(failure), value: T => value }
 }
 fn resultOk(raw: Ok | fileFailure): Ok | Error {
-  match (raw) { failure: fileFailure => classify(failure), done: Ok => {} }
+  match (raw) { failure: fileFailure => classify(failure), _: Ok => {} }
 }
 
 // Read gives a whole file as immutable binary data.

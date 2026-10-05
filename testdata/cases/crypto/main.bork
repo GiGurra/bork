@@ -47,11 +47,11 @@ fn exercise() uses io + random + state: Ok | crypto.Error | ParseError {
   println(crypto.VerifyPassword("secret", legacy))
   println(crypto.VerifyPassword("wrong", legacy))
   println(crypto.NeedsRehash(legacy))
-  println(match (crypto.VerifyPassword("secret", "bad")) { error: crypto.Error => true; _ => false })
+  println(match (crypto.VerifyPassword("secret", "bad")) { _: crypto.Error => true; _ => false })
   oversized = hashed.replaceAll("m=19456", "m=4294967295")
-  println(match (crypto.VerifyPassword("secret", oversized)) { error: crypto.Error => true; _ => false })
+  println(match (crypto.VerifyPassword("secret", oversized)) { _: crypto.Error => true; _ => false })
   println(crypto.NeedsRehash("bad"))
-  println(entropyFailures(() => match (crypto.RandomBytes(1)) { error: crypto.Error => true; _ => false }, () => match (crypto.Token()) { error: crypto.Error => true; _ => false }, () => match (crypto.HashPassword("secret")) { error: crypto.Error => true; _ => false }))
+  println(entropyFailures(() => match (crypto.RandomBytes(1)) { _: crypto.Error => true; _ => false }, () => match (crypto.Token()) { _: crypto.Error => true; _ => false }, () => match (crypto.HashPassword("secret")) { _: crypto.Error => true; _ => false }))
   // Fixed vector produced by the reference libargon2 C implementation.
   imported = "$argon2id$v=19$m=1024,t=2,p=1$c29tZXNhbHQ$7FfsnA6vUe7qLpL/3Kqc3uR48ZJyFbUVt7jWZlf0Htk"
   println(crypto.VerifyPassword("password", imported))
@@ -59,8 +59,8 @@ fn exercise() uses io + random + state: Ok | crypto.Error | ParseError {
   println(crypto.VerifyPassword("password", imported.replaceAll("m=1024,t=2,p=1", "p=1,m=1024,t=2")))
   println(crypto.NeedsRehash(imported))
   duplicated = imported.replaceAll("m=1024,t=2,p=1", "m=1024,m=1024,p=1")
-  println(match (crypto.VerifyPassword("password", duplicated)) { error: crypto.Error => true; _ => false })
-  println(match (crypto.VerifyPassword("password", imported + "=")) { error: crypto.Error => true; _ => false })
+  println(match (crypto.VerifyPassword("password", duplicated)) { _: crypto.Error => true; _ => false })
+  println(match (crypto.VerifyPassword("password", imported + "=")) { _: crypto.Error => true; _ => false })
 
 }
 fn main() { println(exercise()) }

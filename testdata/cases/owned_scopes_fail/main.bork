@@ -25,7 +25,7 @@ fn somePaths(app: Scope, x: Bool) uses state {
   if (x) {
     closeScope(b)
   }
-  c = openScope(app)
+  c = openScope(app); _ = c.scope
 }
 
 fn guards(app: Scope, x: Bool) uses state: Bool {
@@ -52,9 +52,9 @@ fn earlyBranch(app: Scope, x: Bool) uses state: Int {
 // No copies: lambdas, rebinding, lists, dropping.
 fn copies(app: Scope) uses io + state {
   b = openScope(app)
-  f = () => closeScope(b)
-  c = b
-  xs = [b]
+  _ = () => closeScope(b)
+  c = b; _ = c.scope
+  _ = [b]
   _ = openScope(app)
   println(b)
   closeScope(b)
@@ -177,8 +177,8 @@ fn ownerParamIn(b: OwnedScope in app, app: Scope, pool: Conn in app) uses io + s
 
 fn values(app: Scope) uses state {
   b = openScope(app)
-  h = Holder { owner: b }
-  f = takes
+  _ = Holder { owner: b }
+  _ = takes
   x = if (true) { openScope(app) } else { openScope(app) }
   closeScope(x)
   closeScope(b)

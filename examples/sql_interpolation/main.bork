@@ -15,9 +15,9 @@ fn demo() uses io + net: Ok | sql.Error | DecodeError {
   println(s"parameters: ${rendered.params}")
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
-    created = sql.SQL"CREATE TABLE $table (name TEXT)".Exec(db)?
-    first = sql.SQL"INSERT INTO $table (name) VALUES (${"Ada"})".Exec(db)?
-    second = sql.SQL"INSERT INTO $table (name) VALUES ($hostile)".Exec(db)?
+    _ = sql.SQL"CREATE TABLE $table (name TEXT)".Exec(db)?
+    _ = sql.SQL"INSERT INTO $table (name) VALUES (${"Ada"})".Exec(db)?
+    _ = sql.SQL"INSERT INTO $table (name) VALUES ($hostile)".Exec(db)?
     matched = query.Query[User](db)?
     println(s"exact matches: ${matched.length()}")
     counts = sql.SQL"SELECT count(*) AS count FROM $table".Query[Count](db)?

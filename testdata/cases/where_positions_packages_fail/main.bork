@@ -20,7 +20,7 @@ instance namedString: Named[String] {
 }
 
 fn main() {
-  f = (x: values.PositiveInt) => x
+  _ = (x: values.PositiveInt) => x
   g = (x: values.PlainInt) => x
   println(g(0))
 }

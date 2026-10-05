@@ -11,7 +11,7 @@ test "reload subscribes without OS signals" {
     calls = mock signal.Subscribe(s, signals) {
       events = signal.MockSubscription(s)
       launch(s, () => {
-        assert(match (events.Emit(.Hangup)) { done: Ok => true; _ => false })
+        assert(match (events.Emit(.Hangup)) { _: Ok => true; _ => false })
       })
       events
     }
@@ -23,7 +23,7 @@ test "reload subscribes without OS signals" {
 test "mock buffers notifications" {
   scope app {
     events = signal.MockSubscription(app)
-    assert(match (events.Emit(.Interrupt)) { done: Ok => true; _ => false })
+    assert(match (events.Emit(.Interrupt)) { _: Ok => true; _ => false })
     assertEqual(events.Next(), signal.Signal.Interrupt)
   }
 }
@@ -31,8 +31,8 @@ test "mock buffers notifications" {
 test "invalid grace and empty registrations" {
   scope app {
     assert(match (signal.Configure(app, grace: .Some { value: time.Nanoseconds(-1) })) { error: signal.Error => error.message == "grace must be nonnegative"; _ => false })
-    assert(match (signal.Subscribe(app, [])) { error: signal.Error => true; _ => false })
-    assert(match (signal.Ignore(app, [])) { error: signal.Error => true; _ => false })
+    assert(match (signal.Subscribe(app, [])) { _: signal.Error => true; _ => false })
+    assert(match (signal.Ignore(app, [])) { _: signal.Error => true; _ => false })
   }
 }
 
@@ -40,7 +40,7 @@ test "cancelled mock receive stops" {
   scope app {
     events = signal.MockSubscription(app)
     cancel(app)
-    assert(match (events.Next()) { stopped: Cancelled => true; _ => false })
+    assert(match (events.Next()) { _: Cancelled => true; _ => false })
   }
 }
 

@@ -73,7 +73,7 @@ Method chains can span lines with a leading dot, such as `.map(...)`; see [metho
 
 ### Records, unions, and exhaustive matching
 
-Values are immutable. A function that can fail returns a union of its outcomes, written with `|`, and `match` must handle every one of them. A value that may be missing is an `Option`. There is no null and there are no exceptions.
+Values are immutable. Reusing a name in the same block creates a new binding; closures retain captured values, and nested shadowing is forbidden. Unused locals are compile errors: discard explicitly with `_`. A function that can fail returns a union of its outcomes, written with `|`, and `match` must handle every one of them. A value that may be missing is an `Option`. There is no null and there are no exceptions.
 
 ```bork
 type User = { name: String, email: Option[String] }

@@ -14,7 +14,7 @@ type SemanticToken struct {
 	Start, End                             diag.Pos
 	Kind                                   string
 	Declaration, Readonly, Static, Builtin bool
-	GoBinding                              bool
+	GoBinding, Rebinding                   bool
 }
 
 // LexicalSemanticTokens is the current-source fallback when checking fails.
@@ -126,7 +126,7 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 		s.declaration(ambient.Pos, ambient.Name, "variable", false)
 	}
 	for binding := range info.bindings {
-		s.name(binding.Pos, binding.Name, SemanticToken{Kind: "variable", Declaration: true, Readonly: true, Static: binding.Package})
+		s.name(binding.Pos, binding.Name, SemanticToken{Kind: "variable", Declaration: true, Readonly: true, Static: binding.Package, Rebinding: info.rebindings[binding] != nil})
 	}
 	for ident, definition := range info.defs {
 		token := SemanticToken{Kind: "variable", Readonly: true}
@@ -214,6 +214,9 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 	for arm, pattern := range info.armPats {
 		s.pattern(pattern)
 		s.patternNames(arm.Pattern, pattern)
+	}
+	for mock := range info.mockHandles {
+		s.name(mock.Pos, mock.Name, SemanticToken{Kind: "variable", Declaration: true, Readonly: true, Rebinding: info.rebindings[mock] != nil})
 	}
 	for _, mock := range info.Mocks {
 		for _, param := range mock.Decl.Params {

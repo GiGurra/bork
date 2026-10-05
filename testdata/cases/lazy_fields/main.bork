@@ -7,7 +7,7 @@ fn named() needs label: String { label }
 fn work(n: Int) uses io: Int { println(s"force $n"); n }
 fn read[T](value: Lazy[T]): T { value.value }
 fn main() {
-  unused = Lazy[Int] { value: work(99) }
+  _ = Lazy[Int] { value: work(99) }
   saved = Lazy[Int] { value: work(7) }
   alias = saved
   println("before")

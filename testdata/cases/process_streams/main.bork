@@ -57,7 +57,7 @@ fn statuses(s: Scope) uses io + state: Ok | IoError | Cancelled {
   println(failed.Success())
   println(match (failed.Check()) {
     error: process.ExitError => error.message
-    result: process.Result => "unexpected"
+    _: process.Result => "unexpected"
   })
   ok = shell(s, "echo fine")?.Check()
   println(match (ok) {
@@ -69,7 +69,7 @@ fn statuses(s: Scope) uses io + state: Ok | IoError | Cancelled {
   println(killed.status)
   println(match (killed.Check()) {
     error: process.ExitError => error.message
-    result: process.Result => "unexpected"
+    _: process.Result => "unexpected"
   })
 }
 
@@ -79,7 +79,7 @@ fn handles(s: Scope, directory: String) uses io + state + clock: Ok | IoError | 
   slow.Kill()
   println(slow.Wait()?.status)
   println(match (slow.TryWait()) {
-    Option.Some { value } => true
+    Option.Some { value: _ } => true
     Option.None => false
   })
   ready = fs.Join([directory, "ready"])
@@ -96,8 +96,8 @@ fn handles(s: Scope, directory: String) uses io + state + clock: Ok | IoError | 
   println(terminated.Wait()?.StdoutText())
   // Signals after exit do nothing.
   println(match (terminated.Signal(.User1)) {
-    sent: Ok => true
-    error: IoError => false
+    _: Ok => true
+    _: IoError => false
   })
 }
 
@@ -188,7 +188,7 @@ fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cance
     process.Run(patient, "/bin/sh", ["-c", "trap 'echo graceful exit; exit 3' TERM; while true; do sleep 0.05; done"], stdout: .File { path: path }, cancelGrace: time.Duration { nanos: 2_000_000_000 })
   }
   println(match (graced) {
-    stopped: Cancelled => true
+    _: Cancelled => true
     _ => false
   })
   println(match (fs.Read(path)) {
@@ -209,7 +209,7 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | fs.Err
 fn main() {
   result = scope s { exercise(s) }
   match (result) {
-    done: Ok => println("ok")
+    _: Ok => println("ok")
     other => println(other)
   }
 }

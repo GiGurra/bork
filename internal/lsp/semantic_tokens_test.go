@@ -217,8 +217,8 @@ fn main() uses io {
 func TestSemanticTokensPreserveTypeAndNestedPropertyMeaning(t *testing.T) {
 	src := `type Child = { n: Int }
 type Parent = { child: Child }
-fn narrow(x: Int | String): Int { match (x) { n: Int => n; s: String => 0 } }
-fn main() { parent = Parent { child: Child { n: 1 } }; updated = parent.copy(child.n: 2) }
+fn narrow(x: Int | String): Int { match (x) { n: Int => n; s: String => { _ = s; 0 } } }
+fn main() { parent = Parent { child: Child { n: 1 } }; updated = parent.copy(child.n: 2); _ = updated }
 `
 	s, path := newTestServer(t, src)
 	result, err := s.semanticTokens(path, src, nil)

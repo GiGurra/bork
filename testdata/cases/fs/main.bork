@@ -5,7 +5,7 @@ fn exercise(s: Scope) uses io: Ok | fs.Error {
   directory = fs.TempDir(s)?
   root = fs.DirectoryPath(directory)
   early = failAfterCreating(root)
-  println(match (early) { done: Ok => false, error: fs.Error => true })
+  println(match (early) { _: Ok => false, _: fs.Error => true })
   println((fs.ReadDir(root)?).length())
   println(recovered(() => panicAfterCreating(root)))
   println((fs.ReadDir(root)?).length())
@@ -14,11 +14,11 @@ fn exercise(s: Scope) uses io: Ok | fs.Error {
   fs.Append(path, encoding.Utf8("!"))?
   println(fs.Read(path)?)
   println(match (fs.CreateNew(path, s)) {
-    file: fs.File => false
-    error: fs.Exists => true
-    error: fs.NotFound => false
-    error: fs.PermissionDenied => false
-    error: IoError => false
+    _: fs.File => false
+    _: fs.Exists => true
+    _: fs.NotFound => false
+    _: fs.PermissionDenied => false
+    _: IoError => false
   })
   file = fs.Open(path, s)?
   println(fs.ReadAll(file)?)
@@ -28,11 +28,11 @@ fn exercise(s: Scope) uses io: Ok | fs.Error {
   println((fs.ReadDir(root)?).map(entry => entry.name))
   println((fs.Walk(root)?).map(entry => entry.kind))
   lines = fs.Create(fs.Join([root, "lines.txt"]), s)?
-  written = fs.WriteText(lines, "a\r\nb\nlast")?
+  _ = fs.WriteText(lines, "a\r\nb\nlast")?
   reader = fs.Open(fs.Path(lines), s)?
   fs.ForEachLine(reader, line => println(line))?
   temporary = fs.TempFile(s, root)?
-  temporaryWritten = fs.WriteTo(temporary, encoding.Utf8("temp"))?
+  _ = fs.WriteTo(temporary, encoding.Utf8("temp"))?
   println((fs.Stat(fs.Path(temporary))?).size)
   endingsPath = fs.Join([root, "endings.txt"])
   fs.Write(endingsPath, encoding.Utf8("\n\r\nlast\r"))?
@@ -47,17 +47,17 @@ fn exercise(s: Scope) uses io: Ok | fs.Error {
   println(fs.Dir(path) == root)
   println((fs.Abs(path)?).startsWith(root))
   longFile = fs.Create(fs.Join([root, "long.txt"]), s)?
-  longWritten = fs.WriteText(longFile, "x".repeat(100000))?
+  _ = fs.WriteText(longFile, "x".repeat(100000))?
   longReader = fs.Open(fs.Path(longFile), s)?
   fs.ForEachLine(longReader, line => println(line.byteLength()))?
   fs.Rename(path, fs.Join([root, "renamed.bin"]))?
   fs.Remove(fs.Join([root, "renamed.bin"]))?
   println(match (fs.Read(path)) {
-    data: Bytes => false
-    error: fs.NotFound => true
-    error: fs.PermissionDenied => false
-    error: fs.Exists => false
-    error: IoError => false
+    _: Bytes => false
+    _: fs.NotFound => true
+    _: fs.PermissionDenied => false
+    _: fs.Exists => false
+    _: IoError => false
   })
 }
 
@@ -67,16 +67,16 @@ fn main() {
   paths = scope cleanup { temporaryPaths(cleanup) }
   match (paths) {
     names: List[String] => names.forEach(name => println(match (fs.Stat(name)) {
-      info: fs.Info => false
-      error: fs.NotFound => true
-      error: fs.PermissionDenied => false
-      error: fs.Exists => false
-      error: IoError => false
+      _: fs.Info => false
+      _: fs.NotFound => true
+      _: fs.PermissionDenied => false
+      _: fs.Exists => false
+      _: IoError => false
     }))
     error: fs.Error => println(error)
   }
   match (result) {
-    done: Ok => println("ok")
+    _: Ok => println("ok")
     error: fs.Error => println(error)
   }
 }
@@ -101,12 +101,12 @@ fn errorKinds(): List[String] unsafe go {
 fn failAfterCreating(parent: String) uses io: Ok | fs.Error {
   scope s {
     directory = fs.TempDir(s, parent)?
-    ignored = fs.Read(fs.Join([fs.DirectoryPath(directory), "missing"]))?
+    _ = fs.Read(fs.Join([fs.DirectoryPath(directory), "missing"]))?
   }
 }
 fn panicAfterCreating(parent: String) uses io: Ok | fs.Error {
   scope s {
-    directory = fs.TempDir(s, parent)?
+    _ = fs.TempDir(s, parent)?
     panic("cleanup probe")
   }
 }

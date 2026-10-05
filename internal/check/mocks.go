@@ -64,7 +64,7 @@ func (c *checker) mockStmt(s *syntax.MockStmt) {
 		// force for all of the test, on every goroutine it starts.
 		// (Pure calls before it cannot start work that would run
 		// without it.)
-		whole := c.fn == test && c.lambdaDepth == 0 && len(c.scopes) == 2 && !c.testActed(test)
+		whole := c.fn == test && c.lambdaDepth == 0 && len(c.scopes) == 1 && !c.testActed(test)
 		c.inForce = append(c.inForce, mockInForce{target: target, depth: len(c.scopes), whole: whole})
 	}
 	if s.Name != "" {
@@ -73,7 +73,7 @@ func (c *checker) mockStmt(s *syntax.MockStmt) {
 			t = instantiate(mt, []Type{c.callRecord(target)})
 		}
 		c.info.mockHandles[s] = t
-		c.bind(s.Name, s.Pos, t, s)
+		c.bindRebinding(s.Name, s.Pos, t, s)
 	}
 }
 
@@ -285,7 +285,7 @@ func (c *checker) mockBody(s *syntax.MockStmt, target, test *Func) {
 	if fn.Result != Ok {
 		want = fn.Result
 	}
-	bodyType := c.block(s.Body, want)
+	bodyType := c.blockInScope(s.Body, want)
 	c.popScope()
 	c.fn, c.used, c.lambdaDepth, c.typeParams = savedFn, savedUsed, savedDepth, savedTypeParams
 	c.loops, c.producer = savedLoops, savedProducer

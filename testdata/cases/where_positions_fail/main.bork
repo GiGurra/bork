@@ -57,8 +57,8 @@ fn apply(f: (Int where positive) => Int): Int { 0 }
 rule same(x: Int where positive) { positive(x) => positive(x) }
 
 fn lambdas(): Int {
-  f = (x: Int where positive) => x
-  g = (x: PosInt) => x
+  _ = (x: Int where positive) => x
+  _ = (x: PosInt) => x
   0
 }
 
@@ -113,7 +113,7 @@ fn main() {
   println(SquareOnly.Dot)
   println(PosCircle.At { x: 0 })
   // Inside a type whose facts are dropped, the reason is the outer one.
-  f = (xs: List[PosInt]) => 0
+  _ = (xs: List[PosInt]) => 0
 }
 
 // Property test parameters, as function parameters.

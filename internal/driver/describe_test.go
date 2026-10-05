@@ -480,7 +480,7 @@ func TestDescribeOwnedScopeLifetimes(t *testing.T) {
 	t.Parallel()
 	source := `fn roll(prev: OwnedScope in app, task: Task[Int] in prev, app: Scope) uses state {
   next = openScope(app)
-  fresh = spawn(next.scope, () => 1)
+  fresh = spawn(next.scope, () => 1); _ = fresh
   closeScope(prev)
   closeScope(next)
 }
@@ -724,6 +724,7 @@ fn example(name: String) uses io {
 	qualified := `import dbsql "bork/sql"
 fn example(value: Int) {
   statement = dbsql.SQL"SELECT $value"
+  _ = statement
 }
 `
 	for _, spelling := range []string{"dbsql.SQL", "dbsql    .    SQL", "dbsql/*comment*/.SQL"} {

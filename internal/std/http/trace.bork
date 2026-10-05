@@ -40,7 +40,7 @@ fn TraceParentOf(headers: Headers): Option[TraceParent] | DecodeError {
 // An absent or invalid parent leaves state None; state errors keep the parent.
 fn TraceStateOf(headers: Headers): Option[TraceState] | DecodeError {
   match (TraceParentOf(headers)) {
-    Option.Some { value } => match (combinedHeader(headers, "tracestate")?) {
+    Option.Some { value: _ } => match (combinedHeader(headers, "tracestate")?) {
       Option.None => Option.None
       Option.Some { value: raw } => Option.Some { value: decode[TraceState](Json.String { value: raw })? }
     }

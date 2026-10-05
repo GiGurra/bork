@@ -1,10 +1,10 @@
 type Failed = { message: String }
 type Event = sealed { Number { value: Int }; Text { value: String }; End; Stopped }
 fn numberEvent(value: Int | Cancelled | Closed): Event {
-  match (value) { n: Int => Event.Number { value: n }; cancelled: Cancelled => Event.Stopped; closed: Closed => Event.End }
+  match (value) { n: Int => Event.Number { value: n }; _: Cancelled => Event.Stopped; _: Closed => Event.End }
 }
 fn textEvent(value: String | Cancelled | Closed): Event {
-  match (value) { text: String => Event.Text { value: text }; cancelled: Cancelled => Event.Stopped; closed: Closed => Event.End }
+  match (value) { text: String => Event.Text { value: text }; _: Cancelled => Event.Stopped; _: Closed => Event.End }
 }
 fn main() {
   scope s {

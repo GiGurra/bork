@@ -57,8 +57,9 @@ func (c *checker) forExpr(e *syntax.For) Type {
 		}
 	}
 	c.pushScope()
-	c.bind(e.Name, e.NamePos, elem, e)
-	c.scopes[len(c.scopes)-1][e.Name].node = nil
+	if e.Name != "_" {
+		c.bind(e.Name, e.NamePos, elem, e)
+	}
 	c.loops = append(c.loops, c.lambdaDepth)
 	body := c.block(e.Body, Ok)
 	c.loops = c.loops[:len(c.loops)-1]

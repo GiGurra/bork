@@ -9,7 +9,7 @@ fn parsed(text: String, base: Int where strconv.ValidBaseOrZero = 10): Int {
 }
 fn bad(text: String, base: Int where strconv.ValidBaseOrZero = 10): Bool {
   match (text.ParseInt(base)) {
-    value: Int => false
+    _: Int => false
     error: ParseError => error.input == text
   }
 }
@@ -118,11 +118,11 @@ test "Int8 boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-129".ParseInt8()) {
-    n: Int8 => panic("overflow accepted")
+    _: Int8 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-129")
   }
   match ("128".ParseInt8()) {
-    n: Int8 => panic("overflow accepted")
+    _: Int8 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "128")
   }
 }
@@ -147,11 +147,11 @@ test "Int16 boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-32769".ParseInt16()) {
-    n: Int16 => panic("overflow accepted")
+    _: Int16 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-32769")
   }
   match ("32768".ParseInt16()) {
-    n: Int16 => panic("overflow accepted")
+    _: Int16 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "32768")
   }
 }
@@ -176,11 +176,11 @@ test "Int32 boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-2147483649".ParseInt32()) {
-    n: Int32 => panic("overflow accepted")
+    _: Int32 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-2147483649")
   }
   match ("2147483648".ParseInt32()) {
-    n: Int32 => panic("overflow accepted")
+    _: Int32 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "2147483648")
   }
 }
@@ -205,11 +205,11 @@ test "Int boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-9223372036854775809".ParseInt()) {
-    n: Int => panic("overflow accepted")
+    _: Int => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-9223372036854775809")
   }
   match ("9223372036854775808".ParseInt()) {
-    n: Int => panic("overflow accepted")
+    _: Int => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "9223372036854775808")
   }
 }
@@ -234,11 +234,11 @@ test "Uint8 boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-1".ParseUint8()) {
-    n: Uint8 => panic("overflow accepted")
+    _: Uint8 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-1")
   }
   match ("256".ParseUint8()) {
-    n: Uint8 => panic("overflow accepted")
+    _: Uint8 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "256")
   }
   match ("+255".ParseUint8()) {
@@ -267,11 +267,11 @@ test "Uint16 boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-1".ParseUint16()) {
-    n: Uint16 => panic("overflow accepted")
+    _: Uint16 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-1")
   }
   match ("65536".ParseUint16()) {
-    n: Uint16 => panic("overflow accepted")
+    _: Uint16 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "65536")
   }
   match ("+65535".ParseUint16()) {
@@ -300,11 +300,11 @@ test "Uint32 boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-1".ParseUint32()) {
-    n: Uint32 => panic("overflow accepted")
+    _: Uint32 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-1")
   }
   match ("4294967296".ParseUint32()) {
-    n: Uint32 => panic("overflow accepted")
+    _: Uint32 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "4294967296")
   }
   match ("+4294967295".ParseUint32()) {
@@ -333,11 +333,11 @@ test "Uint64 boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-1".ParseUint64()) {
-    n: Uint64 => panic("overflow accepted")
+    _: Uint64 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-1")
   }
   match ("18446744073709551616".ParseUint64()) {
-    n: Uint64 => panic("overflow accepted")
+    _: Uint64 => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "18446744073709551616")
   }
   match ("+18446744073709551615".ParseUint64()) {
@@ -366,11 +366,11 @@ test "Byte boundaries and round trips" {
     error: ParseError => panic(error.message)
   }
   match ("-1".ParseByte()) {
-    n: Byte => panic("overflow accepted")
+    _: Byte => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "-1")
   }
   match ("256".ParseByte()) {
-    n: Byte => panic("overflow accepted")
+    _: Byte => panic("overflow accepted")
     error: ParseError => assertEqual(error.input, "256")
   }
   match ("+255".ParseByte()) {
@@ -391,19 +391,19 @@ test "unsigned arbitrary radix round trips" (value: Uint64, base: Int where strc
 
 test "unsigned parsing rejects negative zero" {
   match ("-0".ParseUint64()) {
-    value: Uint64 => panic("negative zero accepted")
+    _: Uint64 => panic("negative zero accepted")
     error: ParseError => assertEqual(error.input, "-0")
   }
   match ("-0x0".ParseUint64(0)) {
-    value: Uint64 => panic("negative zero accepted")
+    _: Uint64 => panic("negative zero accepted")
     error: ParseError => assertEqual(error.input, "-0x0")
   }
   match ("-0".ParseByte()) {
-    value: Byte => panic("negative zero accepted")
+    _: Byte => panic("negative zero accepted")
     error: ParseError => assertEqual(error.input, "-0")
   }
   match ("-0x0".ParseByte(0)) {
-    value: Byte => panic("negative zero accepted")
+    _: Byte => panic("negative zero accepted")
     error: ParseError => assertEqual(error.input, "-0x0")
   }
 }
