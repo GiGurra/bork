@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Measure first output and total upgrade time, preserving both transcripts."""
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -15,7 +16,7 @@ def measure(label, executable, version):
                        GOCACHE=str(root / label / "build-cache"),
                        GOMODCACHE=str(root / label / "module-cache"))
     environment.pop("BORKBIN", None)
-    # An isolated user config ensures the installer must resolve default BORKBIN.
+    # Linux honors XDG_CONFIG_HOME; hosted macOS runners start without bork config.
     environment["XDG_CONFIG_HOME"] = str(root / label / "config")
     environment["GOENV"] = "off"
     start = time.monotonic()
@@ -44,6 +45,10 @@ def measure(label, executable, version):
 
 
 def main():
+    if sys.platform == "darwin":
+        config = Path.home() / "Library/Application Support/bork/env.json"
+        if config.exists() and json.loads(config.read_text()).get("BORKBIN"):
+            raise RuntimeError("Benchmark requires default BORKBIN; use a clean macOS runner without a saved BORKBIN setting")
     rows = []
     statuses = []
     for label, executable in zip(("source-before", "prebuilt-after"), sys.argv[1:3]):
