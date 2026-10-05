@@ -1,0 +1,15 @@
+left A { n: 1 }
+left A { n: 1 }
+1
+left B { n: 2 }
+right B { n: 2 }
+2
+right C { n: 3 }
+right C { n: 3 }
+3
+io error
+fs NotFound { path: "missing", message: "not found" }
+ok
+4
+5
+0

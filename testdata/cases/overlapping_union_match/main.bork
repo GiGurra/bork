@@ -1,0 +1,67 @@
+import "bork/fs"
+type A = { n: Int }
+type B = { n: Int }
+type C = { n: Int }
+type Left = A | B
+type Right = B | C
+type Shape = sealed {
+  Circle { n: Int },
+  Square { n: Int },
+  Empty,
+}
+fn sealedOverlap(value: Shape): Int {
+  match (value) {
+    Shape.Circle { n } => n
+    rest: Shape => match (rest) {
+      Shape.Circle { n } => n
+      Shape.Square { n } => n
+      Shape.Empty => 0
+    }
+  }
+}
+fn forward(value: A | B | C): String {
+  match (value) {
+    left: Left => s"left $left"
+    right: Right => s"right $right"
+  }
+}
+fn backward(value: A | B | C): String {
+  match (value) {
+    right: Right => s"right $right"
+    left: Left => s"left $left"
+  }
+}
+fn partlyCovered(value: A | B | C): Int {
+  match (value) {
+    a: A => a.n
+    left: Left => match (left) { a: A => a.n, b: B => b.n }
+    c: C => c.n
+  }
+}
+fn failure(s: Scope, n: Int) uses state: Ok | IoError | fs.Error {
+  if (cancelled(s)) { return IoError { path: "scope", message: "cancelled" } }
+  match (n) {
+    0 => IoError { path: "io", message: "io error" }
+    1 => fs.NotFound { path: "missing", message: "not found" }
+    _ => Ok
+  }
+}
+fn scoped(n: Int) uses state: String {
+  match (scope s { failure(s, n) }) {
+    error: IoError => error.message
+    error: fs.Error => s"fs $error"
+    Ok => "ok"
+  }
+}
+fn main() {
+  values: List[A | B | C] = [A { n: 1 }, B { n: 2 }, C { n: 3 }]
+  values.forEach(value => {
+    println(forward(value))
+    println(backward(value))
+    println(partlyCovered(value))
+  })
+  [0, 1, 2].forEach(n => println(scoped(n)))
+  println(sealedOverlap(Shape.Circle { n: 4 }))
+  println(sealedOverlap(Shape.Square { n: 5 }))
+  println(sealedOverlap(Shape.Empty))
+}

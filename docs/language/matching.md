@@ -5,6 +5,9 @@
 ## Match
 
 A `match` tries its arms from top to bottom and gives the value of the first one that fits.
+Union type patterns may overlap: a later arm handles only values that earlier
+arms did not match. An arm whose values are all covered by earlier unguarded
+arms is an error.
 
 ```bork
 type Shape = sealed {

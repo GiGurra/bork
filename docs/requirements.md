@@ -2787,6 +2787,7 @@ keeping private representations such as HTTP certificate keys inaccessible.
 
 - **No separate error concept.** Failures are ordinary types. There is no `error` kind, no `Error` base type, and no `Result` wrapper.
 - **Functions that can fail return union types.** For example: `fn loadUser(id: UserId): User | NotFound | DbError`. Matching on a union is exhaustive, and checking a member narrows the type, just like any other fact.
+- **Union match arms follow source order.** Overlapping type patterns are allowed: the first matching arm wins. A later arm completely covered by earlier unguarded arms is a compile error.
 - **`?` keeps the leftmost member and returns the rest.** `user = loadUser(id)?` binds `User`, and returns `NotFound` or `DbError` from the enclosing function. By convention, the leftmost member is the main result. What `?` does can be read from the callee's signature alone.
 - **Returned members must fit the enclosing function's return type.** This is checked, so nothing slips through unhandled.
 - **An annotation overrides the default.** `x: B = foo()?` keeps `B` and returns everything else, including what would otherwise be the main result. That is useful for early returns that are not errors (e.g. `miss: CacheMiss = cache.get(k)?` returns a cache hit early).

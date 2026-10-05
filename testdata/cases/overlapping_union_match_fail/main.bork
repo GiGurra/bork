@@ -1,0 +1,16 @@
+type A = { n: Int }
+type B = { n: Int }
+type C = { n: Int }
+type Left = A | B
+
+fn covered(value: A | B | C): Int {
+  match (value) {
+    _: Left => 0
+    b: B => b.n
+    c: C => c.n
+  }
+}
+
+fn main() {
+  println(covered(B { n: 2 }))
+}
