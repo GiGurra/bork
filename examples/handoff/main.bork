@@ -20,7 +20,11 @@ fn serve(conn: net.Connection, s: Scope, closed: Channel[String]) uses net + sta
       checkpoint(s)
     }
     stopped: Cancelled => stopped
-    failure: IoError | ParseError => checkpoint(s)
+    failure: IoError | ParseError => {
+      // Report it too, so the client fails instead of waiting forever.
+      _ = send(closed, "server: " + toString(failure))
+      checkpoint(s)
+    }
   }
 }
 
