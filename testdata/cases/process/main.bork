@@ -34,7 +34,8 @@ fn ready(path: String) uses io unsafe go {
 fn waitReady(path: String) uses io + clock unsafe go {
   import "os"
   import "time"
-  for i := 0; i < 500; i++ {
+  // The marker file is the readiness signal; the deadline only guards hangs.
+  for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); {
     if data, _ := os.ReadFile(path); len(data) > 0 { return }
     time.Sleep(10*time.Millisecond)
   }
@@ -139,7 +140,7 @@ fn descendantGone(pid: Int) uses io + clock: Bool unsafe go {
   import "strings"
   import "syscall"
   import "time"
-  for i := 0; i < 500; i++ {
+  for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); {
     if syscall.Kill(int(pid), 0) == syscall.ESRCH { return true }
     // On Linux an orphan can remain a zombie until the host's init reaps it.
     data, err := os.ReadFile("/proc/" + strconv.FormatInt(pid, 10) + "/stat")
