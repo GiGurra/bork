@@ -159,7 +159,7 @@ derivation labels[T]: Labels[T] {
   fn labels(x: T): List[String] {
     names = generate[String] {
       static for (field in shape.fields[T]()) {
-        if (!field.computed) { yield field.name }
+        static if (!field.computed) { yield field.name }
       }
     }
     names.toList()
@@ -217,7 +217,7 @@ static for (variant in shape.variants[T]()) {
     Option.Some { value: payload } => {
       fields = generate[codec.Field] {
         static for (field in variant.fields) {
-          if (!field.computed) {
+          static if (!field.computed) {
             yield codec.Field { name: field.name,
               value: codec.encode[field.Type](field.read(payload)) }
           }
