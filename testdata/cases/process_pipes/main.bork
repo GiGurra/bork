@@ -5,7 +5,7 @@ import "bork/process"
 fn show(item: String | Closed | Cancelled | IoError): String {
   match (item) {
     line: String => line
-    end: Closed => "<closed>"
+    _: Closed => "<closed>"
     stopped: Cancelled => s"<cancelled: ${stopped.reason}>"
     error: IoError => s"<error: ${error.message}>"
   }
@@ -15,8 +15,8 @@ fn drain(lines: Channel[String | IoError], seen: List[String]) uses state: List[
   match (receive(lines)) {
     line: String => drain(lines, seen.append(line))
     error: IoError => seen.append(error.message)
-    end: Closed => seen
-    stopped: Cancelled => seen
+    _: Closed => seen
+    _: Cancelled => seen
   }
 }
 
@@ -42,7 +42,7 @@ fn streaming(s: Scope, directory: String) uses io + state: Ok | IoError | Cancel
   input.Close()
   println(show(replies.NextLine()))
   println(match (input.WriteText("late\n")) {
-    end: Closed => true
+    _: Closed => true
     _ => false
   })
   println(echo.Wait()?.code)
@@ -69,7 +69,7 @@ fn separate(s: Scope) uses io + state: Ok | IoError | Cancelled {
   })
   _ = chunks.Stdout().ReadAll()?
   println(match (chunks.Stdout().NextChunk()) {
-    end: Closed => true
+    _: Closed => true
     _ => false
   })
   _ = chunks.Wait()?
@@ -96,7 +96,7 @@ fn unpiped(s: Scope) uses io + state: Ok | IoError | Cancelled {
   child = process.Start(s, "/bin/sh", ["-c", "echo captured"])?
   println(show(child.Stdout().NextLine()))
   println(match (child.Stdin().WriteText("ignored")) {
-    end: Closed => true
+    _: Closed => true
     _ => false
   })
   println(child.Wait()?.StdoutText())
@@ -134,7 +134,7 @@ fn handovers(s: Scope, directory: String) uses io + state: Ok | IoError | Cancel
   producer = process.Start(s, "/bin/sh", ["-c", "echo a; echo b"], stdout: .Pipe)?
   println(show(producer.Stdout().NextLine()))
   println(match (process.Start(s, "cat", stdin: .From { reader: producer.Stdout() }, stdout: .File { path: fs.Join([directory, "no", "dir"]) })) {
-    error: IoError => true
+    _: IoError => true
     _ => false
   })
   println(show(producer.Stdout().NextLine()))
@@ -143,7 +143,7 @@ fn handovers(s: Scope, directory: String) uses io + state: Ok | IoError | Cancel
   done = process.Start(s, "true", stdin: .Pipe)?
   _ = done.Wait()?
   println(match (done.Stdin().Write(encoding.Utf8("x".repeat(1048576)))) {
-    end: Closed => true
+    _: Closed => true
     _ => false
   })
   // Pipe ends are released at the end of the stream and when the child exits.
@@ -194,7 +194,7 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed
 fn main() {
   result = scope s { exercise(s) }
   match (result) {
-    done: Ok => println("ok")
+    _: Ok => println("ok")
     other => println(other)
   }
 }

@@ -133,7 +133,7 @@ fn inputStream(input: Input): stream {
     Input.Text { text } => stream { kind: "text", path: "", data: noBytes(), text: text }
     Input.File { path } => stream { kind: "file", path: path, data: noBytes(), text: "" }
     Input.Pipe => named("pipe", "")
-    Input.From { reader } => named("from", "")
+    Input.From { reader: _ } => named("from", "")
   }
 }
 
@@ -661,7 +661,7 @@ fn (output: Reader) LinesChannel(s: Scope, capacity: Int = 64) uses io + state: 
       match (item) {
         line: String => {
           match (send(lines, line)) {
-            sent: Ok => {}
+            _: Ok => {}
             _ => break
           }
         }
@@ -669,7 +669,7 @@ fn (output: Reader) LinesChannel(s: Scope, capacity: Int = 64) uses io + state: 
           _ = send(lines, error)
           break
         }
-        stopped: Cancelled => break
+        _: Cancelled => break
       }
     }
     closeChannel(lines)
