@@ -8,7 +8,7 @@ use codec.Defaults
 //
 //   bork run examples/yaml_config -- config.yaml
 //
-// YAML values are the prelude's Json values, so derive (codec.Decode) records and
+// YAML values are bork/codec values, so derive (codec.Decode) records and
 // the Field/Index/At queries work on them unchanged.
 
 pred ValidPort(port: Int) { port >= 1 && port <= 65535 }
