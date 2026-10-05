@@ -380,8 +380,8 @@ func (l *lifeChecker) funcRef(x *FuncRef) {
 			// What they keep is a value of the element type.
 			keeps = len(x.Inst.TypeArgs) == 1 && l.carriesLife(x.Inst.TypeArgs[0])
 		}
-		if fn.Prelude && fn.Decl.Name == "move" {
-			l.errorf(x.Pos(), "move cannot be used as a function value: a call through a function value is not checked; call it directly")
+		if fn.Prelude && (fn.Decl.Name == "move" || fn.Decl.Name == "setScopePolicy") {
+			l.errorf(x.Pos(), "%s cannot be used as a function value: a call through a function value is not checked", fn.Decl.Name)
 			return
 		}
 		if keeps {
@@ -616,7 +616,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 	case *Generate:
 		return l.generate(x)
 	case *Yield:
-		l.result(x.Value, l.use(x.Value, l.expr(x.Value)), "the generator")
+		life := l.use(x.Value, l.expr(x.Value))
+		l.result(x.Value, life, "the generator")
+		// Whoever takes the sequence keeps what it yields.
+		l.pin(life, x.Pos(), "the generator's yield", nil, true)
 		return nil
 	case *For:
 		l.env[x.Var] = l.use(x.Items, l.expr(x.Items))

@@ -220,12 +220,15 @@ func resourceOf(t Type) *Resource {
 	return nil
 }
 
-// simpleScope reports whether x names one scope at run time: a scope
-// variable (a scope block's, or a parameter), or b.scope.
+// simpleScope reports whether x names one scope at run time, by a name
+// in Go scope wherever a value of that scope is usable: a scope block's
+// variable, a parameter of a function or lambda, or b.scope (not a local
+// binding, which a block may hide).
 func simpleScope(x Expr) bool {
 	switch x := x.(type) {
 	case *VarRef:
-		return x.Var.Type == Scope
+		k := x.Var.Kind
+		return x.Var.Type == Scope && (k == VarScope || k == VarParam || k == VarLambdaParam)
 	case *Call:
 		if x.Func.Prelude && x.Func.Decl.Name == "scopeOf" && len(x.Args) == 1 {
 			_, ok := x.Args[0].(*VarRef)
@@ -233,6 +236,20 @@ func simpleScope(x Expr) bool {
 		}
 	}
 	return false
+}
+
+// scopeVar is the variable a simple scope names: the scope's, or the
+// owner's for b.scope.
+func scopeVar(x Expr) *Var {
+	switch x := x.(type) {
+	case *VarRef:
+		return x.Var
+	case *Call:
+		if v, ok := x.Args[0].(*VarRef); ok {
+			return v.Var
+		}
+	}
+	return nil
 }
 
 // newHandle makes a handle of resource res in the scope from names, if
@@ -326,13 +343,13 @@ func (l *lifeChecker) ended(life lifetime) bool {
 }
 
 // safePolicies reports whether policies are all prelude policies that
-// leave no task running after the scope closes (cleanupTimeout,
-// logFailures). Anything else (taskTimeout, or a policy computed
-// elsewhere) may orphan tasks.
+// leave nothing running after the scope closes (logFailures). Anything
+// else may orphan tasks (taskTimeout) or finalizers (cleanupTimeout), or
+// be either (a policy computed elsewhere).
 func safePolicies(policies []Expr) bool {
 	for _, p := range policies {
 		c, ok := p.(*Call)
-		if !ok || !c.Func.Prelude || c.Func.Decl.Name != "cleanupTimeout" && c.Func.Decl.Name != "logFailures" {
+		if !ok || !c.Func.Prelude || c.Func.Decl.Name != "logFailures" {
 			return false
 		}
 	}
@@ -392,6 +409,10 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 	for _, h := range o.hs {
 		if unhandle(h.scope) != unhandle(src.scope) {
 			l.errorf(r.Pos(), "%s cannot be moved: it may belong to %s or %s", name, l.scopeText(src.scope), l.scopeText(h.scope))
+			return args[1]
+		}
+		if scopeVar(h.from) != scopeVar(src.from) {
+			l.errorf(r.Pos(), "%s cannot be moved: it may belong to scope %s or scope %s", name, scopeName(src.from), scopeName(h.from))
 			return args[1]
 		}
 		if h.res == nil {
@@ -524,9 +545,6 @@ func copyPins(m map[*handle][]pinAt) map[*handle][]pinAt {
 // joinMoves joins the moves and pins of the branches that go on: moved on
 // some is possibly moved, pinned on any is pinned.
 func joinMoves(start map[*handle]movedAt, ends []map[*handle]movedAt, startPins map[*handle][]pinAt, pinEnds []map[*handle][]pinAt) (map[*handle]movedAt, map[*handle][]pinAt) {
-	if len(ends) == 0 {
-		return start, startPins
-	}
 	moved := copyMoved(start)
 	for _, end := range ends {
 		for h, m := range end {
@@ -614,9 +632,15 @@ func mayAcquire(fn *Func) int {
 // It checks them until no more are found, with diagnostics discarded.
 func summarize(fns []*Func, info *Info) (map[*Func]int, map[*Func]bool) {
 	acquires, passes := map[*Func]int{}, map[*Func]bool{}
-	for changed := true; changed; {
-		changed = false
+	// A function is checked again only once a function it calls has a
+	// new summary.
+	fresh := map[*Func]bool{}
+	for round := 0; round == 0 || len(fresh) > 0; round++ {
+		added := map[*Func]bool{}
 		for _, fn := range fns {
+			if round > 0 && !slices.ContainsFunc(fn.Calls, func(g *Func) bool { return fresh[g] }) {
+				continue
+			}
 			if i := mayAcquire(fn); i >= 0 {
 				if _, ok := acquires[fn]; !ok {
 					l := newLifeChecker(info, &diag.List{})
@@ -626,7 +650,7 @@ func summarize(fns []*Func, info *Info) (map[*Func]int, map[*Func]bool) {
 					l.function(fn)
 					if l.acquireOK {
 						acquires[fn] = i
-						changed = true
+						added[fn] = true
 					}
 				}
 			}
@@ -646,10 +670,11 @@ func summarize(fns []*Func, info *Info) (map[*Func]int, map[*Func]bool) {
 				l.function(fn)
 				if l.passOK {
 					passes[fn] = true
-					changed = true
+					added[fn] = true
 				}
 			}
 		}
+		fresh = added
 	}
 	return acquires, passes
 }

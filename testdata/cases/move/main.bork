@@ -124,7 +124,7 @@ fn main() {
     // A task that ended with its scope block no longer pins.
     scope s {
       p = connect("p", s)
-      scope inner with cleanupTimeout(100) {
+      scope inner with logFailures() {
         launch(inner, () => println(query(p, "in a task")))
       }
       _ = move(p, app)

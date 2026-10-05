@@ -28,6 +28,8 @@ fn pumped(s: Scope) uses io: Conn {
 
 type Holder = { conn: Conn }
 
+type Scopes = { a: Scope, b: Scope }
+
 fn slow(): ScopePolicy {
   taskTimeout(10)
 }
@@ -153,6 +155,47 @@ fn main() {
       _ = move(hh, c3.scope)
       ii = connect("ii", s)
       _ = move(ii, root())
+    }
+    scope s {
+      jj = connect("jj", s)
+      scope inner with cleanupTimeout(10) {
+        onClose(inner, () => println(query(jj, "slow finalizer")))
+      }
+      _ = move(jj, app)
+      scope inner {
+        set: (Scope, ScopePolicy) => Ok = setScopePolicy
+      }
+      kk = connect("kk", s)
+      for (n in [1, 2]) {
+        if (n == 1) {
+          launch(s, () => println(query(kk, "task")))
+          break
+        }
+      }
+      _ = move(kk, app)
+      local = {
+        sc = s
+        connect("local", sc)
+      }
+      _ = move(local, app)
+    }
+    // Two scope variables of one lifetime (a record's) may be two scopes.
+    scope s {
+      both = Scopes { a: s, b: app }
+      sa = both.a
+      sb = both.b
+      x1 = connect("x1", sa)
+      x2 = connect("x2", sb)
+      xx = if (query(x1, "") != "") { x1 } else { x2 }
+      _ = move(xx, app)
+    }
+    scope s {
+      seq = generate[Conn] {
+        own = connect("own", s)
+        yield own
+        scope inner { _ = move(own, inner) }
+      }
+      println(seq.toList().length())
     }
     scope s {
       h = connect("h", s)

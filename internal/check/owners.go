@@ -575,8 +575,10 @@ func (b *branches) done(x Expr) {
 	if x == nil || x.Type() != Never {
 		b.ends = append(b.ends, b.l.gone)
 		b.movedEnds = append(b.movedEnds, b.l.moved)
-		b.pinEnds = append(b.pinEnds, b.l.pins)
 	}
+	// A branch that ends early may still go on after a loop (break,
+	// continue): keep its pins.
+	b.pinEnds = append(b.pinEnds, b.l.pins)
 	b.l.gone = copyGone(b.start)
 	b.l.moved = copyMoved(b.startMoved)
 	b.l.pins = copyPins(b.startPins)

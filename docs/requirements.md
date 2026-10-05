@@ -1590,7 +1590,7 @@ to use, and a branch that moved it leaves it possibly moved.
   a parameter declared `in` another, an async binding or a mock may still use
   cannot be moved, until the scope that keeps it has ended (a scope block, or
   an owned child opened here and closed with `closeScope`, whose policies
-  cannot orphan tasks: none, `cleanupTimeout` or `logFailures`). Policies are
+  cannot orphan tasks or finalizers: none, or `logFailures`). Policies are
   given only where a scope starts; `setScopePolicy` cannot be called
   directly.
 - **Rules.** One source scope; a different target; not inside a lambda or a
