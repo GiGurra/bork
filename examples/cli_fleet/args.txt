@@ -1,0 +1,1 @@
+k r d --config settings.json --catalog catalog.json --namespace team -r 2 apply web worker

@@ -1,0 +1,102 @@
+import "bork/codec"
+import "bork/cli"
+import "bork/fs"
+import "bork/json"
+import "bork/process"
+use codec.Defaults
+pred positive(n: Int) { n > 0 }
+type Deploy = {
+  // Optional JSON settings file.
+  config: Option[String]
+  // JSON catalog used only when completing resource names.
+  catalog: String = "catalog.json"
+  // Namespace for deployment and resource suggestions.
+  namespace: String = "dev"
+  // Number of replicas to deploy.
+  replicas: Int where positive = 1
+  // Operation to perform.
+  action: String
+  // Resource names; each word stays a separate name.
+  resources: List[String] = []
+} derive (codec.Decode)
+type Resource = { namespace: String, name: String, description: String = "" } derive (codec.Decode)
+type Catalog = { resources: List[Resource] } derive (codec.Decode)
+type Status = {} derive (codec.Decode)
+
+// Keep selector paths out of config documents, and add a reusable help hint.
+fn deploymentPolicy(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec {
+  if (field.configFile) { return field.copy(config: false) }
+  if (field.field == "replicas") { return field.copy(description: s"${field.description} Must be positive.") }
+  field
+}
+fn settings(): cli.Settings {
+  .{ autoShort: true, autoEnv: true, envPrefix: "FLEET", enrichers: [deploymentPolicy] }
+}
+fn flags(): List[cli.Flag] {
+  [.{ field: "config", configFile: true, files: true },
+    .{ field: "catalog", shortName: cli.Mapping.Disabled, files: true },
+    .{ field: "action", position: Option.Some { value: 0 }, choices: [.{ value: "apply", description: "Deploy resources" }, .{ value: "inspect", description: "Show deployment options" }], strictChoices: true },
+    .{ field: "resources", position: Option.Some { value: 1 } }]
+}
+fn partialText(request: cli.CompletionRequest, field: String, fallback: String): String | cli.Error {
+  match (request.partial.Get[String](field)) {
+    value: String => value
+    _: cli.Missing => fallback
+    error: codec.DecodeError => cli.Error { errors: [error] }
+  }
+}
+fn resourceNames(request: cli.CompletionRequest, s: Scope) uses io: cli.Suggestions | cli.Error {
+  // Partial inputs omit record defaults; fallback is the completer's decision.
+  namespace = partialText(request, "namespace", "dev")?
+  path = partialText(request, "catalog", "catalog.json")?
+  file = match (fs.Open(path, s)) {
+    value: fs.File => value
+    error: fs.Error => { return cli.Error { errors: [.{ path: "catalog", message: s"${error}" }] } }
+  }
+  text = match (fs.ReadAllText(file)) {
+    value: String => value
+    error: fs.Error => { return cli.Error { errors: [.{ path: "catalog", message: s"${error}" }] } }
+  }
+  catalog = match (json.Decode[Catalog](text)) {
+    value: Catalog => value
+    error: codec.DecodeError => { return cli.Error { errors: [error] } }
+    error: json.JsonError => { return cli.Error { errors: [.{ path: "catalog", message: s"${error}" }] } }
+  }
+  cli.Suggestions {
+    choices: catalog.resources.filter(resource => resource.namespace == namespace).map(resource => cli.Choice { value: resource.name, description: resource.description })
+    keepOrder: true
+  }
+}
+fn commands(): List[cli.Command] {
+  deploy = cli.SubcommandWith[Deploy]("deploy", "Deploy named resources", (options, s) => {
+    onClose(s, () => { println("Deployment scope closed") })
+    println(s"${options.action} ${options.namespace}: ${options.resources} (${options.replicas} replicas)")
+    }, flags: flags(), completions: [.{ field: "resources", suggest: resourceNames }], settings: settings()).copy(
+    aliases: ["d"], longDescription: "Deploy resources using CLI flags, FLEET_* environment variables, and optional JSON settings.",
+    examples: "fleet cluster resource deploy -n team -r 2 apply web worker")
+  status = cli.Subcommand[Status]("status", "Show cluster status", (options, s) => { println("Cluster ready") })
+  resources = cli.Group("resource", "Manage resources", [deploy]).copy(aliases: ["r"])
+  [cli.Group("cluster", "Manage clusters", [resources, status]).copy(aliases: ["k"])]
+}
+fn main() {
+  match (cli.RunCommands("fleet", "Manage a fleet", commands())) {
+    error: cli.Error => { println(error); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "nested aliases expose field docs and reusable policy" {
+  match (cli.Dispatch("fleet", "", ["help", "k", "r", "d"], commands())) {
+    help: cli.Help => {
+      assert(help.text.contains("FLEET_NAMESPACE"))
+      assert(help.text.contains("Must be positive."))
+      assert(help.text.contains("[action] [resources...]"))
+    }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}
+test "static positional completion needs no catalog or config" {
+  match (cli.Dispatch("fleet", "", ["__completeNoDesc", "k", "r", "d", "--catalog", "missing.json", "--config", "missing.json", ""], commands())) {
+    help: cli.Help => { assert(help.text == "apply\ninspect\n:4\n") }
+    other => { panic(s"Expected completion, got ${other}") }
+  }
+}
