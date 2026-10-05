@@ -7,7 +7,7 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 | [bork/archive](archive.md) | Reading and writing ZIP and TAR archives |
 | [bork/bits](bits.md) | Counting, rotating, reversing, and checking integer bit fields |
 | [bork/build](../language/comptime.md#reading-files-at-build-time) | Reading files while the program compiles |
-| [bork/cli](cli.md) | Command-line options and subcommands decoded into records |
+| [bork/cli](cli.md) | Command-line options and subcommands decoded into records; [application cookbook](cli-cookbook.md) |
 | [bork/compress](compress.md) | Gzip compression of bytes and files |
 | [bork/crypto](crypto.md) | Hashes, HMAC, secure random bytes, and password hashing |
 | [bork/embed](embed.md) | Files and directories built into the executable |

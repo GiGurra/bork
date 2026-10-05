@@ -1,0 +1,1 @@
+{"resources":[{"namespace":"team","name":"web","description":"Web service"},{"namespace":"team","name":"worker","description":"Background worker"},{"namespace":"dev","name":"sandbox","description":"Development sandbox"}]}

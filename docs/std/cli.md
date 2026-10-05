@@ -184,6 +184,9 @@ Run with `app --config local.json --port 9000`. `settings.json` might contain
 
 ## Examples
 
+The [application cookbook](cli-cookbook.md) combines the APIs in a runnable
+[fleet CLI](../../examples/cli_fleet/main.bork), including JSON catalog completion.
+
 `bork/cli` wraps boa to parse proven options from a record deriving `codec.Decode`.
 It generates help from field docs and defaults, supports short flags, explicit
 environment bindings, positionals, and repeated list flags, and collects field

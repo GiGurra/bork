@@ -1,0 +1,2 @@
+apply team: ["web", "worker"] (2 replicas)
+Deployment scope closed
