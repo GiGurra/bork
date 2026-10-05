@@ -1,0 +1,409 @@
+import "bork/strconv"
+import "bork/encoding"
+
+fn parsed(text: String, base: Int where strconv.ValidBaseOrZero = 10): Int {
+  match (text.ParseInt(base)) {
+    value: Int => value
+    error: ParseError => panic(error.message)
+  }
+}
+fn bad(text: String, base: Int where strconv.ValidBaseOrZero = 10): Bool {
+  match (text.ParseInt(base)) {
+    value: Int => false
+    error: ParseError => error.input == text
+  }
+}
+
+test "literal bases and separators" {
+  assertEqual(0x_fF, 255)
+  assertEqual(0b_1010_0011, 163)
+  assertEqual(0o_7_7, 63)
+  assertEqual(1_000, 1000)
+  byte: Byte = 0xFF
+  assertEqual(byte.Hex(), "ff")
+}
+
+test "formatting sign prefix case and digit width" {
+  assertEqual(255.Hex(), "ff")
+  assertEqual(255.Hex(width: 4, uppercase: true, prefix: true), "0X00FF")
+  assertEqual((-255).Hex(width: 4, prefix: true), "-0x00ff")
+  assertEqual(5.Binary(width: 8, prefix: true), "0b00000101")
+  assertEqual(63.Octal(width: 4, prefix: true), "0o0077")
+  assertEqual(0.Hex(width: 2), "00")
+  assertEqual(255.Hex(width: 1), "ff")
+  assertEqual(35.Format(36), "z")
+  assertEqual(35.Format(base: 36, width: 3, uppercase: true), "00Z")
+  assertEqual(123.Format(10), "123")
+  assertEqual((-9223372036854775808).Hex(prefix: true), "-0x8000000000000000")
+  widest: Uint64 = 18446744073709551615
+  assertEqual(widest.Hex(), "ffffffffffffffff")
+  assertEqual(widest.Format(10), "18446744073709551615")
+  assertEqual(1.Binary(width: 4096).byteLength(), 4096)
+}
+
+test "parsing bases signs prefixes and separators" {
+  assertEqual(parsed("ff", 16), 255)
+  assertEqual(parsed("0X_Ff", 16), 255)
+  assertEqual(parsed("-0x80", 0), -128)
+  assertEqual(parsed("+0b10_10", 0), 10)
+  assertEqual(parsed("0O_77", 0), 63)
+  assertEqual(parsed("077", 0), 77)
+  assertEqual(parsed("08", 0), 8)
+  assertEqual(parsed("1_000"), 1000)
+  assertEqual(parsed("+42"), 42)
+  assertEqual(parsed("z", 36), 35)
+  assertEqual(parsed("0x", 36), 33)
+  assertEqual(parsed("0b10", 16), 2832)
+  assertEqual(parsed(33.Format(36, width: 2), 36), 33)
+  assertEqual(parsed(11.Format(16, width: 2), 16), 11)
+  assertEqual(parsed("-9223372036854775808"), -9223372036854775808)
+  assert(bad("9223372036854775808"))
+  assert(bad("-9223372036854775809"))
+}
+
+test "malformed input returns original input with no partial value" {
+  assert(bad(""))
+  assert(bad("+"))
+  assert(bad(" 1"))
+  assert(bad("1 "))
+  assert(bad("1.0"))
+  assert(bad("_1"))
+  assert(bad("1_"))
+  assert(bad("1__2"))
+  assert(bad("0x", 0))
+  assert(bad("0x_", 0))
+  assert(bad("0x__ff", 0))
+  assert(bad("0b2", 0))
+  assert(bad("0o8", 0))
+  assert(bad("0x10", 2))
+  assert(bad("0xff"))
+}
+
+test "dynamic options require proofs" {
+  base = parsed("16")
+  width = parsed("4")
+  if (strconv.ValidBase(base) && strconv.ValidWidth(width)) {
+    assertEqual(255.Format(base, width), "00ff")
+  } else { panic("invalid options") }
+  if (strconv.ValidBaseOrZero(base)) { assertEqual(parsed("ff", base), 255) }
+}
+
+test "byte hex interoperability" {
+  data = [0, 255, 16].toBytes()
+  assertEqual(encoding.Hex(data), "00ff10")
+  match (encoding.ParseHex("00FF10")) {
+    bytes: Bytes => assertEqual(bytes, data)
+    error: ParseError => panic(error.message)
+  }
+  assertEqual(parsed("ff", 16).Hex(width: 2), "ff")
+}
+
+test "Int8 boundaries and round trips" {
+  match ("-128".ParseInt8()) {
+    n: Int8 => {
+      assertEqual(n.Format(10), "-128")
+      assertEqual(n.Hex(prefix: true).ParseInt8(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt8(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt8(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("127".ParseInt8()) {
+    n: Int8 => {
+      assertEqual(n.Format(10), "127")
+      assertEqual(n.Hex(prefix: true).ParseInt8(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt8(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt8(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-129".ParseInt8()) {
+    n: Int8 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-129")
+  }
+  match ("128".ParseInt8()) {
+    n: Int8 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "128")
+  }
+}
+
+test "Int16 boundaries and round trips" {
+  match ("-32768".ParseInt16()) {
+    n: Int16 => {
+      assertEqual(n.Format(10), "-32768")
+      assertEqual(n.Hex(prefix: true).ParseInt16(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt16(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt16(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("32767".ParseInt16()) {
+    n: Int16 => {
+      assertEqual(n.Format(10), "32767")
+      assertEqual(n.Hex(prefix: true).ParseInt16(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt16(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt16(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-32769".ParseInt16()) {
+    n: Int16 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-32769")
+  }
+  match ("32768".ParseInt16()) {
+    n: Int16 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "32768")
+  }
+}
+
+test "Int32 boundaries and round trips" {
+  match ("-2147483648".ParseInt32()) {
+    n: Int32 => {
+      assertEqual(n.Format(10), "-2147483648")
+      assertEqual(n.Hex(prefix: true).ParseInt32(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt32(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt32(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("2147483647".ParseInt32()) {
+    n: Int32 => {
+      assertEqual(n.Format(10), "2147483647")
+      assertEqual(n.Hex(prefix: true).ParseInt32(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt32(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt32(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-2147483649".ParseInt32()) {
+    n: Int32 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-2147483649")
+  }
+  match ("2147483648".ParseInt32()) {
+    n: Int32 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "2147483648")
+  }
+}
+
+test "Int boundaries and round trips" {
+  match ("-9223372036854775808".ParseInt()) {
+    n: Int => {
+      assertEqual(n.Format(10), "-9223372036854775808")
+      assertEqual(n.Hex(prefix: true).ParseInt(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("9223372036854775807".ParseInt()) {
+    n: Int => {
+      assertEqual(n.Format(10), "9223372036854775807")
+      assertEqual(n.Hex(prefix: true).ParseInt(0), n)
+      assertEqual(n.Binary(prefix: true).ParseInt(0), n)
+      assertEqual(n.Octal(prefix: true).ParseInt(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-9223372036854775809".ParseInt()) {
+    n: Int => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-9223372036854775809")
+  }
+  match ("9223372036854775808".ParseInt()) {
+    n: Int => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "9223372036854775808")
+  }
+}
+
+test "Uint8 boundaries and round trips" {
+  match ("0".ParseUint8()) {
+    n: Uint8 => {
+      assertEqual(n.Format(10), "0")
+      assertEqual(n.Hex(prefix: true).ParseUint8(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint8(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint8(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("255".ParseUint8()) {
+    n: Uint8 => {
+      assertEqual(n.Format(10), "255")
+      assertEqual(n.Hex(prefix: true).ParseUint8(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint8(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint8(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-1".ParseUint8()) {
+    n: Uint8 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-1")
+  }
+  match ("256".ParseUint8()) {
+    n: Uint8 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "256")
+  }
+  match ("+255".ParseUint8()) {
+    n: Uint8 => assertEqual(n.Format(10), "255")
+    error: ParseError => panic(error.message)
+  }
+}
+
+test "Uint16 boundaries and round trips" {
+  match ("0".ParseUint16()) {
+    n: Uint16 => {
+      assertEqual(n.Format(10), "0")
+      assertEqual(n.Hex(prefix: true).ParseUint16(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint16(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint16(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("65535".ParseUint16()) {
+    n: Uint16 => {
+      assertEqual(n.Format(10), "65535")
+      assertEqual(n.Hex(prefix: true).ParseUint16(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint16(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint16(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-1".ParseUint16()) {
+    n: Uint16 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-1")
+  }
+  match ("65536".ParseUint16()) {
+    n: Uint16 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "65536")
+  }
+  match ("+65535".ParseUint16()) {
+    n: Uint16 => assertEqual(n.Format(10), "65535")
+    error: ParseError => panic(error.message)
+  }
+}
+
+test "Uint32 boundaries and round trips" {
+  match ("0".ParseUint32()) {
+    n: Uint32 => {
+      assertEqual(n.Format(10), "0")
+      assertEqual(n.Hex(prefix: true).ParseUint32(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint32(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint32(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("4294967295".ParseUint32()) {
+    n: Uint32 => {
+      assertEqual(n.Format(10), "4294967295")
+      assertEqual(n.Hex(prefix: true).ParseUint32(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint32(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint32(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-1".ParseUint32()) {
+    n: Uint32 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-1")
+  }
+  match ("4294967296".ParseUint32()) {
+    n: Uint32 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "4294967296")
+  }
+  match ("+4294967295".ParseUint32()) {
+    n: Uint32 => assertEqual(n.Format(10), "4294967295")
+    error: ParseError => panic(error.message)
+  }
+}
+
+test "Uint64 boundaries and round trips" {
+  match ("0".ParseUint64()) {
+    n: Uint64 => {
+      assertEqual(n.Format(10), "0")
+      assertEqual(n.Hex(prefix: true).ParseUint64(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint64(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint64(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("18446744073709551615".ParseUint64()) {
+    n: Uint64 => {
+      assertEqual(n.Format(10), "18446744073709551615")
+      assertEqual(n.Hex(prefix: true).ParseUint64(0), n)
+      assertEqual(n.Binary(prefix: true).ParseUint64(0), n)
+      assertEqual(n.Octal(prefix: true).ParseUint64(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-1".ParseUint64()) {
+    n: Uint64 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-1")
+  }
+  match ("18446744073709551616".ParseUint64()) {
+    n: Uint64 => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "18446744073709551616")
+  }
+  match ("+18446744073709551615".ParseUint64()) {
+    n: Uint64 => assertEqual(n.Format(10), "18446744073709551615")
+    error: ParseError => panic(error.message)
+  }
+}
+
+test "Byte boundaries and round trips" {
+  match ("0".ParseByte()) {
+    n: Byte => {
+      assertEqual(n.Format(10), "0")
+      assertEqual(n.Hex(prefix: true).ParseByte(0), n)
+      assertEqual(n.Binary(prefix: true).ParseByte(0), n)
+      assertEqual(n.Octal(prefix: true).ParseByte(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("255".ParseByte()) {
+    n: Byte => {
+      assertEqual(n.Format(10), "255")
+      assertEqual(n.Hex(prefix: true).ParseByte(0), n)
+      assertEqual(n.Binary(prefix: true).ParseByte(0), n)
+      assertEqual(n.Octal(prefix: true).ParseByte(0), n)
+    }
+    error: ParseError => panic(error.message)
+  }
+  match ("-1".ParseByte()) {
+    n: Byte => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "-1")
+  }
+  match ("256".ParseByte()) {
+    n: Byte => panic("overflow accepted")
+    error: ParseError => assertEqual(error.input, "256")
+  }
+  match ("+255".ParseByte()) {
+    n: Byte => assertEqual(n.Format(10), "255")
+    error: ParseError => panic(error.message)
+  }
+}
+
+test "signed arbitrary radix round trips" (value: Int, base: Int where strconv.ValidBase, width: Int where strconv.ValidWidth) {
+  assertEqual(value.Format(base, width).ParseInt(base), value)
+  assertEqual(value.Format(base, width, uppercase: true).ParseInt(base), value)
+}
+
+test "unsigned arbitrary radix round trips" (value: Uint64, base: Int where strconv.ValidBase, width: Int where strconv.ValidWidth) {
+  assertEqual(value.Format(base, width).ParseUint64(base), value)
+  assertEqual(value.Format(base, width, uppercase: true).ParseUint64(base), value)
+}
+
+test "unsigned parsing rejects negative zero" {
+  match ("-0".ParseUint64()) {
+    value: Uint64 => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0")
+  }
+  match ("-0x0".ParseUint64(0)) {
+    value: Uint64 => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0x0")
+  }
+  match ("-0".ParseByte()) {
+    value: Byte => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0")
+  }
+  match ("-0x0".ParseByte(0)) {
+    value: Byte => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0x0")
+  }
+}

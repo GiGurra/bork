@@ -1,0 +1,9 @@
+main.bork:4:20: strconv.Format requires base to be strconv.ValidBase, but strconv.ValidBase(1) is false
+main.bork:5:20: strconv.Format requires base to be strconv.ValidBase, but strconv.ValidBase(37) is false
+main.bork:6:24: strconv.Hex requires width to be strconv.ValidWidth, but strconv.ValidWidth(-1) is false
+main.bork:7:27: strconv.Binary requires width to be strconv.ValidWidth, but strconv.ValidWidth(4097) is false
+main.bork:8:24: strconv.ParseInt requires base to be strconv.ValidBaseOrZero, but strconv.ValidBaseOrZero(1) is false
+main.bork:9:25: strconv.ParseByte requires base to be strconv.ValidBaseOrZero, but strconv.ValidBaseOrZero(37) is false
+main.bork:10:20: strconv.Format requires base to be strconv.ValidBase, but that is not proven for base (check it first with if (strconv.ValidBase(base)) { ... }, or require it: base: Int where strconv.ValidBase)
+main.bork:11:26: strconv.Octal requires width to be strconv.ValidWidth, but that is not proven for width (check it first with if (strconv.ValidWidth(width)) { ... }, or require it: width: Int where strconv.ValidWidth)
+main.bork:12:24: strconv.ParseInt requires base to be strconv.ValidBaseOrZero, but that is not proven for base (check it first with if (strconv.ValidBaseOrZero(base)) { ... }, or require it: base: Int where strconv.ValidBaseOrZero)

@@ -213,6 +213,7 @@ Vim, Neovim, Emacs, Helix and Zed are linked from [editor setup](docs/editors.md
 ## Learn more
 
 - [Documentation](docs/README.md): the tour, a page for each part of the language, and the command-line reference.
+- [Integer bases](docs/std/strconv.md): hex, binary, octal, arbitrary radix, and checked parsing.
 - [Standard packages](docs/std/README.md): files, HTTP, JSON, SQL, time, and more.
 - [Typed CLI applications](docs/std/cli.md): proven options, field docs, configurable flag/environment mappings, and reusable metadata policies.
 - [Package API documentation](docs/cli.md#doc): run `bork doc`, with `--all` for a module or `--html` for a standalone page; standard and cached pinned libraries work too.

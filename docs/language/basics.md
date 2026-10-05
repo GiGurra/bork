@@ -109,6 +109,8 @@ fn main() {
 
 This prints `1000000 255 3 0.3`. Arithmetic on number literals is exact, which is why `0.1 + 0.2` is `0.3`. That applies to literals only. Floats held in names are ordinary 64-bit floats, and adding those two gives `0.30000000000000004`.
 
+Integer literals can also use binary (`0b1010`) and octal (`0o17`) prefixes, with `_` separators. Import [bork/strconv](../std/strconv.md) for `n.Hex()`, `n.Binary()`, `n.Octal()`, and `n.Format(base)` formatting, plus String parsing methods such as `text.ParseInt(base: 16)` and `text.ParseByte(base: 0)`. Formatting returns `String`; parsing returns the number or `ParseError`, including on overflow.
+
 Number types never mix on their own. Convert with `toInt`, `toFloat`, `toInt8`, and so on. When the value might not fit, the conversion returns either the number or an `OutOfRange`, and `match` tells them apart. [Matching and errors](matching.md) explains this form.
 
 ```bork

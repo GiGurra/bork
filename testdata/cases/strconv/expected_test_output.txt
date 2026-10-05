@@ -1,0 +1,20 @@
+ok    literal bases and separators
+ok    formatting sign prefix case and digit width
+ok    parsing bases signs prefixes and separators
+ok    malformed input returns original input with no partial value
+ok    dynamic options require proofs
+ok    byte hex interoperability
+ok    Int8 boundaries and round trips
+ok    Int16 boundaries and round trips
+ok    Int32 boundaries and round trips
+ok    Int boundaries and round trips
+ok    Uint8 boundaries and round trips
+ok    Uint16 boundaries and round trips
+ok    Uint32 boundaries and round trips
+ok    Uint64 boundaries and round trips
+ok    Byte boundaries and round trips
+ok    signed arbitrary radix round trips
+ok    unsigned arbitrary radix round trips
+ok    unsigned parsing rejects negative zero
+18 passed, 0 failed
+exit code 0
