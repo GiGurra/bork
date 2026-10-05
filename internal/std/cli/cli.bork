@@ -37,10 +37,10 @@ fn Parse[T: Decode](name: String, description: String, args: List[String], flags
 fn ParseDetailed[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Parsed[T] | Error | Help {
   match (resolve[T](flags, settings, name)) {
     error: Error => error
-    fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, codecs.Parse, (options, warnings) => Parsed[T] { options: options, warnings: warnings })
+    fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, codecs.Parse, flagName, (options, warnings) => Parsed[T] { options: options, warnings: warnings })
   }
 }
-fn prepare[T: Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], parse: (String) => Json | JsonError, wrap: (T, List[String]) => Parsed[T]) uses io: Parsed[T] | Error | Help unsafe go {
+fn prepare[T: Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], parse: (String) => Json | JsonError, makeName: (String) => String, wrap: (T, List[String]) => Parsed[T]) uses io: Parsed[T] | Error | Help unsafe go {
   import "bytes"
   import "fmt"
   import "reflect"
@@ -77,8 +77,10 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], spe
     // Synthetic exported fields retain the original name as an explicit boa tag.
     long := mappingName(flag.long)
     if long == "" {
-      long = fmt.Sprintf("bork-field-%d", i)
-      if !flag.positional { policies = append(policies, "noflag") }
+      if flag.positional { long = makeName(field.Name) } else {
+        long = fmt.Sprintf("bork-field-%d", i)
+        policies = append(policies, "noflag")
+      }
     }
     if len(policies) != 0 { tag += " boa:" + strconv.Quote(strings.Join(policies, ",")) }
     tag += " long:" + strconv.Quote(long)
@@ -172,6 +174,8 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], spe
   cmd.SetArgs(append([]string{}, args...))
   cmd.SetOut(&output)
   cmd.SetErr(&diagnostics)
+  // Cobra otherwise reprints pflag warnings to its stdout writer.
+  cmd.Flags().SetOutput(&diagnostics)
   cmd.SilenceUsage = true
   cmd.SilenceErrors = true
   if err := cmd.Execute(); err != nil {

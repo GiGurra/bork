@@ -17,7 +17,7 @@ fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses
     execute: (displayName, arguments, s) => {
       result = match (resolved) {
         error: Error => error
-        fields: List[FieldSpec] => prepare[T](displayName, description, arguments, fields, configFiles, codecs.Parse, (options, warnings) => Parsed[T] { options: options, warnings: warnings })
+        fields: List[FieldSpec] => prepare[T](displayName, description, arguments, fields, configFiles, codecs.Parse, flagName, (options, warnings) => Parsed[T] { options: options, warnings: warnings })
       }
       match (result) {
         help: Help => help
