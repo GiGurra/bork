@@ -192,7 +192,7 @@ func (r *dapRelay) copy(dst io.Writer, src io.Reader, requests bool, stderr io.W
 				r.pending[seq] = ref
 			}
 		}
-		if !requests && msg["type"] == "event" && msg["event"] == "continued" {
+		if !requests && msg["type"] == "event" && (msg["event"] == "continued" || msg["event"] == "stopped") {
 			clear(r.references)
 		}
 		changed := false

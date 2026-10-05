@@ -160,6 +160,7 @@ func TestDebugDAPPassthrough(t *testing.T) {
 	for _, payload := range []string{
 		`{"seq":1,"type":"response","command":"variables","success":true,"body":{"variables":[{"name":"_t1","value":"main.Shape_Circle {radius: 2}"}]}}`,
 		`{"seq":2,"type":"event","event":"output","body":{"output":"main.Shape_Circle {radius: 2}"}}`,
+		`{"seq":5,"type":"event","event":"stopped","body":{"reason":"breakpoint","threadId":1}}`,
 		`{"seq":3,"type":"response","command":"custom","success":true,"body":{"unknown":9007199254740993}}`,
 		`{"seq":4,"type":"response","command":"evaluate","success":false,"message":"failure"}`,
 	} {
@@ -168,9 +169,12 @@ func TestDebugDAPPassthrough(t *testing.T) {
 			if metadata != nil && strings.Contains(payload, `"command":"variables"`) {
 				continue
 			}
-			r := dapRelay{metadata: metadata}
+			r := dapRelay{metadata: metadata, references: map[float64]gen.DebugType{1: {Name: "stale", Kind: "record"}}}
 			var output bytes.Buffer
 			err := r.copy(&output, strings.NewReader(frame), false, io.Discard)
+			if strings.Contains(payload, `"event":"stopped"`) && len(r.references) != 0 {
+				t.Fatal("stop left stale variable handles")
+			}
 			if err != io.EOF || output.String() != frame {
 				t.Fatalf("passthrough changed message: %s; error %v", output.String(), err)
 			}
