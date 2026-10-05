@@ -11,6 +11,23 @@ permissions:
   contents: read
 
 jobs:
+  macos-latency:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-go
+        with:
+          cache-name: macos-latency
+      - name: Measure build, run, and first execution latency
+        run: |
+          uname -m
+          go build -o "$RUNNER_TEMP/bork" ./cmd/bork
+          python3 scripts/benchmark_macos.py --bork "$RUNNER_TEMP/bork" | tee macos-latency.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-latency
+          path: macos-latency.json
   benchmark:
     runs-on: ubuntu-latest
     steps:
