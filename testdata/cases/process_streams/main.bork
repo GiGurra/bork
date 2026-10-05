@@ -139,23 +139,35 @@ fn robustness(s: Scope, directory: String) uses io + state + clock: Ok | IoError
   println(stubborn.Wait()?.status)
   // Without escalation the child would never exit; the bound only guards that.
   println(millis() - start < 10000)
+  // Cancel only once the child ignores SIGTERM, so SIGKILL is what ends it.
+  deaf = fs.Join([directory, "deaf"])
   escalated = scope patient {
-    cancelAfter(patient, 200)
-    process.Run(patient, "/bin/sh", ["-c", "trap '' TERM; while true; do sleep 0.05; done"], cancelGrace: time.Duration { nanos: 200_000_000 })
+    launch(patient, () => {
+      waitReady(deaf)
+      cancelAfter(patient, 0)
+    })
+    process.Run(patient, "/bin/sh", ["-c", "trap '' TERM; echo ready > \"$1\"; while true; do sleep 0.05; done", "sh", deaf], cancelGrace: time.Duration { nanos: 200_000_000 })
   }
   println(match (escalated) {
     stopped: Cancelled => stopped.reason
     _ => "unexpected"
   })
   // The direct child exits on SIGTERM; the SIGKILL timer must not reach a
-  // descendant that outlives it while still holding the captured pipe.
+  // descendant that outlives it while still holding the captured pipe. Stop
+  // signals the whole group, so first wait until the descendant ignores SIGTERM.
+  // The descendant gives up after a minute so a failed run leaves no orphan.
   survivor = fs.Join([directory, "survivor"])
   marker = fs.Join([directory, "outer"])
-  outer = process.Start(s, "/bin/sh", ["-c", "sh -c 'trap \"\" TERM; sleep 0.5; echo survived > \"$1\"' sh \"$1\" & trap 'exit 0' TERM; echo ready > \"$2\"; wait", "sh", survivor, marker])?
+  inner = fs.Join([directory, "inner"])
+  release = fs.Join([directory, "release"])
+  outer = process.Start(s, "/bin/sh", ["-c", "sh -c 'trap \"\" TERM; echo ready > \"$2\"; n=0; until [ -s \"$3\" ]; do n=$((n+1)); [ $n -gt 1200 ] && exit 1; sleep 0.05; done; echo survived > \"$1\"' sh \"$1\" \"$3\" \"$4\" & trap 'exit 0' TERM; echo ready > \"$2\"; wait", "sh", survivor, marker, inner, release], cancelGrace: time.Duration { nanos: 3_000_000_000 })?
   waitReady(marker)
-  outer.Stop(time.Duration { nanos: 100_000_000 })
-  // Wait may give IoError if the descendant holds the pipe past the bound.
+  waitReady(inner)
+  outer.Stop(time.Duration { nanos: 2_000_000_000 })
+  // The descendant holds the pipe, so Wait gives IoError only once the pipe
+  // bound (cancelGrace plus a second) passes, after the SIGKILL timer fired.
   _ = outer.Wait()
+  fs.Write(release, encoding.Utf8("go"))?
   waitReady(survivor)
   println(encoding.ParseUtf8(fs.Read(survivor)?))
 }
@@ -185,9 +197,14 @@ fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cance
     _ => "unexpected"
   })
   path = fs.Join([directory, "grace.txt"])
+  // Cancel only once the child's TERM trap is installed.
+  trapping = fs.Join([directory, "trapping"])
   graced = scope patient {
-    cancelAfter(patient, 300)
-    process.Run(patient, "/bin/sh", ["-c", "trap 'echo graceful exit; exit 3' TERM; while true; do sleep 0.05; done"], stdout: .File { path: path }, cancelGrace: time.Duration { nanos: 2_000_000_000 })
+    launch(patient, () => {
+      waitReady(trapping)
+      cancelAfter(patient, 0)
+    })
+    process.Run(patient, "/bin/sh", ["-c", "trap 'echo graceful exit; exit 3' TERM; echo ready > \"$1\"; while true; do sleep 0.05; done", "sh", trapping], stdout: .File { path: path }, cancelGrace: time.Duration { nanos: 2_000_000_000 })
   }
   println(match (graced) {
     _: Cancelled => true
