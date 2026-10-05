@@ -126,7 +126,7 @@ func contextCandidates(name string, want Type) ([]Type, bool) {
 		case *TypeParam:
 			unresolved = true
 		case *Record:
-			if name == "" {
+			if name == "" && !t.Tuple {
 				out = append(out, t)
 			}
 		case *Sealed:

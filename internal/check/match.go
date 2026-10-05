@@ -400,6 +400,13 @@ func (c *checker) tupleElementCompatible(elem syntax.Pattern, field Type) bool {
 		nested, ok := field.(*Record)
 		return ok && nested.Tuple && len(nested.Fields) == len(elem.Elems) && c.tuplePatternCompatible(elem, nested)
 	case *syntax.VariantPat:
+		if elem.Context {
+			if owner, ok := field.(*Sealed); ok {
+				return owner.Variant(elem.Path[0]) != nil
+			}
+			_, open := field.(*TypeParam)
+			return open
+		}
 		if len(elem.Path) > 0 {
 			owner := c.typeNamed(elem.Path[0])
 			if owner != nil {

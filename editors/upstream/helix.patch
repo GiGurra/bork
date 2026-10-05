@@ -35,21 +35,23 @@ new file mode 100644
 index 0000000..b1713d1
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
-@@ -0,0 +1,3 @@
+@@ -0,0 +1,4 @@
 +[(block) (record_type) (record_literal) (match_expression) (class_declaration)
 + (instance_declaration) (providers_declaration) (instances_declaration)
-+ (list_literal) (map_literal) (go_body) (comment)] @fold
++ (list_literal) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
++ (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
 index 0000000..716cce7
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,35 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
 +(identifier) @variable
 +(number) @constant.numeric
++(tuple_index) @variable.other.member
 +(rune) @constant.character
 +(string) @string
 +(interpolated_string) @string
@@ -84,8 +86,9 @@ new file mode 100644
 index 0000000..686bfac
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
-@@ -0,0 +1,6 @@
+@@ -0,0 +1,7 @@
 +[(block) (record_literal) (record_type) (list_literal) (map_literal)
++ (tuple_literal) (tuple_type) (tuple_pattern)
 + (parameters) (type_arguments) (match_expression) (class_declaration)
 + (instance_declaration) (providers_declaration) (instances_declaration)] @indent
 +["}" ")" "]"] @outdent

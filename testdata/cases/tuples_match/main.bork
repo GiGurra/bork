@@ -1,5 +1,6 @@
 type Left = sealed { L }
 type Right = sealed { R }
+fn identifyContext(value: (Left,) | (Right,)): String { match (value) { (.L,) => "left"; (.R,) => "right" } }
 fn identify(value: (Left,) | (Right,)): String { match (value) { (Left.L,) => "left"; (Right.R,) => "right" } }
 type Failure = { message: String }
 fn read(ok: Bool): (Int, String) | Failure {
@@ -15,6 +16,7 @@ fn unwrap(ok: Bool): (Int, String) | Failure {
 }
 fn main() {
   println(identify((Left.L,)), identify((Right.R,)))
+  println(identifyContext((Left.L,)), identifyContext((Right.R,)))
   match (read(true)) {
     pair: (Int, String) => println(pair.0)
     error: Failure => println(error)
