@@ -14,7 +14,12 @@ import (
 // Ask the selected C frontend for its project header closure on a cold build.
 // System header paths are explicitly outside the fast contract.
 // This only preprocesses inputs; it neither compiles nor links a second object.
-func (inventory *buildInventory) captureCInputs(pkg buildPackage, ctx *goContext) bool {
+func (inventory *buildInventory) captureCInputs(pkg buildPackage, ctx *goContext) (success bool) {
+	defer func() {
+		if !success {
+			testCacheProbeAt("BORK_TEST_BUILD_INVENTORY_PROBE", "C input capture declined: "+pkg.ImportPath)
+		}
+	}()
 	command := ctx.values["CC"]
 	if command == "" {
 		command = "cc"
@@ -58,6 +63,13 @@ func (inventory *buildInventory) captureCInputs(pkg buildPackage, ctx *goContext
 		cmd.Dir = pkg.Dir
 		cmd.Env = ctx.env
 		output, err := cmd.Output()
+		if err != nil {
+			var detail string
+			if exit, ok := err.(*exec.ExitError); ok {
+				detail = string(exit.Stderr)
+			}
+			testCacheProbeAt("BORK_TEST_BUILD_INVENTORY_PROBE", "C preprocessor: "+pkg.ImportPath+": "+err.Error()+": "+detail)
+		}
 		if err != nil || len(output) > buildReceiptLimit {
 			return false
 		}
@@ -128,6 +140,13 @@ func (inventory *buildInventory) captureCInputs(pkg buildPackage, ctx *goContext
 		cmd.Env = ctx.env
 		cmd.Stdin = bytes.NewReader(source)
 		output, err := cmd.Output()
+		if err != nil {
+			var detail string
+			if exit, ok := err.(*exec.ExitError); ok {
+				detail = string(exit.Stderr)
+			}
+			testCacheProbeAt("BORK_TEST_BUILD_INVENTORY_PROBE", "C preprocessor: "+pkg.ImportPath+": "+err.Error()+": "+detail)
+		}
 		if err != nil || len(output) > buildReceiptLimit {
 			return false
 		}
@@ -153,6 +172,7 @@ func (inventory *buildInventory) captureCInputs(pkg buildPackage, ctx *goContext
 			if withinBuildDirectory(ctx.values["GOROOT"], path) || systemBuildHeader(path) {
 				continue
 			}
+			inventory.RequireFreshObjects = true
 			if !inventory.captureFile(path) {
 				return false
 			}

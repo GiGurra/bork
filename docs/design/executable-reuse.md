@@ -13,7 +13,10 @@ way to observe changes outside the default recipe. It wins over `--fast`.
 ## Recorded evidence
 
 The dependency closure is captured before building and captured again afterward;
-any observed changes decline publication. The recipe is written only after a successful build. It records the request
+any observed changes decline publication. Cold/miss builds with mutable cgo
+headers or external assembly force Go to rebuild objects: Go’s own cache does
+not cover every included header, so its cached objects cannot certify this wider
+closure. Unchanged warm requests reuse the recipe without rebuilding. The recipe is written only after a successful build. It records the request
 (including working directory, script/program mode, and requested output), compiler
 image identity, executable bytes and executable permissions, and a bounded set
 of concrete input paths. The output identity comes from the private artifact

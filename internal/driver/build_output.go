@@ -85,7 +85,7 @@ func buildOutput(path, out string, supplied ...BuildOptions) (executable string,
 		}
 		var buildErr error
 		var certified buildExecutableIdentity
-		if options.Rebuild {
+		if options.Rebuild || broadBefore != nil && broadBefore.RequireFreshObjects {
 			certified, buildErr = buildAtomicOutput(program, executable, dir, pinned, nil, "-a")
 		} else {
 			buildErr = buildWithReceipt(program, executable, dir, pinned, stable, files)

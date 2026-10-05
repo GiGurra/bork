@@ -26,7 +26,11 @@ jobs:
           go build -ldflags='-X github.com/GiGurra/bork/internal/driver.cacheTestGate=enabled' -o "$RUNNER_TEMP/bork-profile" ./cmd/bork
           python3 scripts/benchmark_macos.py --bork "$RUNNER_TEMP/bork" --probe-bork "$RUNNER_TEMP/bork-profile" | tee macos-latency.json
       - name: Verify executable reuse on macOS
-        run: go test ./cmd/bork -run 'Test(BuildReceipt|BuildReceipts|RunAndScriptSkip|ScriptExec|ExecutableRecipe)' -count=1
+        run: |
+          result=0
+          BORK_TEST_BUILD_INVENTORY_PROBE="$RUNNER_TEMP/bork-inventory.log" go test ./cmd/bork -run 'Test(BuildReceipt|BuildReceipts|RunAndScriptSkip|ScriptExec|ExecutableRecipe)' -count=1 || result=$?
+          if [ -f "$RUNNER_TEMP/bork-inventory.log" ]; then cat "$RUNNER_TEMP/bork-inventory.log"; fi
+          exit "$result"
       - name: Measure pure Go HTTP builds
         run: |
           CGO_ENABLED=0 python3 scripts/benchmark_macos.py --bork "$RUNNER_TEMP/bork" --probe-bork "$RUNNER_TEMP/bork-profile" | tee macos-purego-latency.json

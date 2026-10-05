@@ -34,12 +34,13 @@ type buildExecutableIdentity struct {
 }
 
 type buildInventory struct {
-	Broad       bool
-	Missing     []string
-	Stage       string
-	Packages    []buildPackage
-	Files       map[string]buildFileInput
-	Directories map[string]buildDirectoryIdentity
+	RequireFreshObjects bool
+	Broad               bool
+	Missing             []string
+	Stage               string
+	Packages            []buildPackage
+	Files               map[string]buildFileInput
+	Directories         map[string]buildDirectoryIdentity
 }
 
 type buildPackage struct {
@@ -239,6 +240,9 @@ func captureBuildInventoryMode(dir string, ctx *goContext, broad bool) *buildInv
 			return nil
 		}
 		result.Packages = append(result.Packages, pkg)
+		if broad && !pkg.Standard && len(pkg.CgoFiles)+len(pkg.SFiles) > 0 {
+			result.RequireFreshObjects = true
+		}
 		if broad && len(pkg.FFiles) > 0 {
 			command := ctx.processValue("FC")
 			if command == "" {
@@ -512,7 +516,9 @@ func (inventory *buildInventory) captureAssemblyIncludes(pkg buildPackage, root 
 				inventory.Missing = append(inventory.Missing, candidate)
 				candidate = filepath.Join(root, "pkg", "include", include)
 				// Installed SDK headers follow the immutable SDK contract.
-				if _, err := os.Stat(candidate); err != nil {
+				if _, err := os.Stat(candidate); os.IsNotExist(err) {
+					inventory.Missing = append(inventory.Missing, candidate)
+				} else if err != nil {
 					return false
 				}
 				continue
