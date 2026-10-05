@@ -342,6 +342,20 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.walk(update.Value)
 		}
 	case *check.Match:
+		if x.Assertion != nil && x.SourceCall != nil {
+			name := x.SourceCall.Fun
+			width := 0
+			if id, ok := name.(*syntax.Ident); ok {
+				width = len(id.Name)
+			}
+			if s.contains(name.Position(), width) {
+				inst := x.Assertion
+				pos := inst.Func.Decl.Pos
+				s.choose(x, &check.FuncType{Params: inst.Params, Result: inst.Result, Effects: inst.Func.Effects}, &pos)
+				s.selected.Value = false
+				s.selected.Callable = check.DescribeCallable(inst.Func, inst.Params, s.fn.Pkg, false)
+			}
+		}
 		s.walk(x.X)
 		for _, arm := range x.Arms {
 			s.pattern(arm.Pat, arm.Body.Pos())

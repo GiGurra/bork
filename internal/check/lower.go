@@ -588,11 +588,13 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	case *syntax.Is:
 		subject := l.expr(x.X)
 		pat := l.info.patternTests[x]
+		l.patVars(pat, subject)
+		var validation []Expr
 		if pat.Kind == PatNever {
+			validation = pat.Guards()
 			pat = &Pat{Kind: PatNever, Type: subject.Type()}
 		}
-		l.patVars(pat, subject)
-		return &Match{expr: at, PatternTest: true, X: subject, Arms: []*MatchArm{
+		return &Match{expr: at, PatternTest: true, ValidationGuards: validation, X: subject, Arms: []*MatchArm{
 			{Pat: pat, Body: &Const{expr: expr{pos: x.Pos, typ: Bool}, Value: constant.MakeBool(true)}},
 			{Pat: &Pat{Kind: PatWild, Type: subject.Type()}, Body: &Const{expr: expr{pos: x.Pos, typ: Bool}, Value: constant.MakeBool(false)}},
 		}}
@@ -802,14 +804,16 @@ func (l *lowerer) constructorHead(x syntax.Expr) *ConstructorHead {
 }
 
 func (l *lowerer) assertIs(source *syntax.Call, at expr, assertion *assertIsInfo) Expr {
-	subject := l.expr(source.Args[0])
+	subject := l.expr(l.info.callArgs[source][0])
 	pat := assertion.Pattern
 	actual := &Var{Name: "_assertActual", Type: subject.Type(), Kind: VarPattern, Pos: source.Pos}
 	failure := &CallBuiltin{expr: expr{pos: source.Pos, typ: Never}, Builtin: BuiltinAssertIsFailure, Name: "test.AssertIs", Expected: assertion.Expected, Args: []Expr{&VarRef{expr: expr{pos: source.Pos, typ: subject.Type()}, Var: actual}}}
 	fallback := &MatchArm{Pat: &Pat{Kind: PatWild, Type: subject.Type(), Bind: actual.Name, BindType: actual.Type, Var: actual}, Body: failure}
-	result := &Match{expr: at, PatternTest: true, X: subject}
-	if pat.Kind != PatNever {
-		l.patVars(pat, subject)
+	result := &Match{expr: at, PatternTest: true, X: subject, Assertion: l.info.instances[source], SourceCall: source}
+	l.patVars(pat, subject)
+	if pat.Kind == PatNever {
+		result.ValidationGuards = pat.Guards()
+	} else {
 		result.Arms = append(result.Arms, &MatchArm{Pat: pat, Body: &VarRef{expr: expr{pos: source.Pos, typ: assertion.Target}, Var: pat.Var}})
 	}
 	result.Arms = append(result.Arms, fallback)

@@ -40,6 +40,7 @@ func (c *checker) assertIs(call *syntax.Call, fn *Func, args []syntax.Expr, type
 	c.patternTest = saved
 	if pat != nil {
 		c.patSources(pat, args[0], "", nil, nil)
+		c.patternTestLabels(pat, writtenText(args[0]))
 	}
 	c.popScope()
 	if pat == nil {
@@ -57,7 +58,7 @@ func (c *checker) assertIs(call *syntax.Call, fn *Func, args []syntax.Expr, type
 	c.info.patternAssertions[call] = &assertIsInfo{Pattern: pat, Target: target, Expected: expected}
 	c.info.callFuncs[call] = fn
 	c.info.callArgs[call] = args
-	c.info.instances[call] = &Instance{Func: fn, Params: []Type{source}, Result: target, TypeArgs: []Type{target, source}}
+	c.info.instances[call] = &Instance{Func: fn, Params: []Type{source}, Result: target, TypeArgs: []Type{target, source}, ArgFacts: [][]*Constraint{cons, nil}}
 	c.info.callTypeArgs[call] = typeArgs
 	return target
 }

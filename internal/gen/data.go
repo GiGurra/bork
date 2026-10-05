@@ -470,7 +470,11 @@ func (g *gen) isType(t, x ast.Expr) ast.Expr {
 // narrow is x as the type a PatType lets through.
 func (g *gen) narrow(p *check.Pat, x ast.Expr) ast.Expr {
 	if len(p.Members) == 1 {
-		return &ast.TypeAssertExpr{X: x, Type: g.goType(p.Members[0])}
+		boxed := x
+		if _, ok := p.Type.(*check.Union); !ok {
+			boxed = &ast.CallExpr{Fun: ast.NewIdent("any"), Args: []ast.Expr{x}}
+		}
+		return &ast.TypeAssertExpr{X: boxed, Type: g.goType(p.Members[0])}
 	}
 	return x
 }

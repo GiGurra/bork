@@ -42,10 +42,10 @@ index 0000000..b1713d1
 + (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..716cce7
+index 0000000..87b9909
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,38 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -81,6 +81,10 @@ index 0000000..716cce7
 +["," ";" ":" "."] @punctuation.delimiter
 +
 +(context_pattern name: (identifier) @type.enum.variant)
++
++(is_expression "is" @keyword)
++
++(test_field_pattern name: (identifier) @variable.other.member)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
 index 0000000..686bfac

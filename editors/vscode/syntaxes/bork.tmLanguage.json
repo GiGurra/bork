@@ -225,6 +225,10 @@
     "keywords": {
       "patterns": [
         {
+          "name": "keyword.control.bork",
+          "match": "\\bis\\b(?=\\s+[^\\s(:=])"
+        },
+        {
           "match": "\\basync\\b(?=\\s*\\((?:[^()]|\\([^()]*\\))*\\)\\s+[A-Za-z][A-Za-z0-9_]*\\s*(?::|=))",
           "name": "keyword.control.bork"
         },

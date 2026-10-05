@@ -4,6 +4,8 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
+	// PatternTestOperators includes contextual is positions, including unfinished edits.
+	PatternTestOperators []diag.Pos
 	// ExpressionSpans retains parser ranges, including grouping, for compiler
 	// source queries and refactorings. One node can have several grouped spans.
 	ExpressionSpans []ExpressionSpan

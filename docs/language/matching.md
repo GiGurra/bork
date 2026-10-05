@@ -230,3 +230,32 @@ For unfinished code there is `todo()`, described under [development helpers](tes
 ---
 
 Previous: [Types](types.md) · Next: [Collections](collections.md) · [All pages](../README.md#the-language)
+
+## Testing a pattern
+
+Use `is` when you need a Bool instead of extracting values:
+
+```bork
+type Reply = sealed { Found { text: String }, Missing }
+fn matches(reply: Reply): Bool {
+  reply is .Found { text: "hello" }
+}
+fn positiveNumber(value: Int | String): Bool {
+  value is Int where positive and atMost(100)
+}
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, limit: Int) { n <= limit }
+```
+
+The value is evaluated once. Use `_` for ignored fields and elements;
+`is` cannot bind names or use shorthand field bindings. It supports nested
+match patterns, bare type names, literals and constrained aliases. The erased
+type is checked before its predicates. `and` and `or` short-circuit in source
+order, and predicate panics propagate. Existing predicate preconditions still
+need proof. Predicate arguments use the ordinary constraint scope rules.
+
+`is` binds no names and adds no facts or type narrowing to an enclosing `if`.
+Use `match` to extract a value, or [test.AssertIs](testing.md#typed-assertions)
+when a test needs to keep a checked value. `is` has comparison precedence,
+above `&&` and `||`. Valid impossible tests return false; the linter warns
+when a test always succeeds or fails.

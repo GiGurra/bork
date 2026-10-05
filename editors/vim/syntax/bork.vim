@@ -41,3 +41,5 @@ highlight default link borkComment Comment
 highlight default link borkShebang Comment
 highlight default link borkTodo Todo
 let b:current_syntax = 'bork'
+
+syntax match borkContextual /\<is\>\ze\s\+[^[:space:](:=]/

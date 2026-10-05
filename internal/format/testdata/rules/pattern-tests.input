@@ -1,0 +1,7 @@
+fn is(x:Int):Int{x}
+fn check(x:Int|String):Bool{
+x is Int where positive and atMost(100)&&true
+}
+fn nested(x:Choice):Bool{
+x is .Some{value:[_,...]}
+}

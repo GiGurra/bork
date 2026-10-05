@@ -30,7 +30,7 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 
 func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
-	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
+	p := &parser{patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
 	// Imports come first.
 	for {
@@ -185,6 +185,7 @@ type parser struct {
 	i                           int
 	diags                       *diag.List
 	testingPattern              bool
+	patternTestOperators        *[]diag.Pos
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
@@ -1192,6 +1193,9 @@ func (p *parser) binary(minPrec int) (out Expr) {
 		p.next()
 		p.skipNewlines() // an operator at the end of a line continues the expression
 		if is {
+			if p.patternTestOperators != nil {
+				*p.patternTestOperators = append(*p.patternTestOperators, op.Pos)
+			}
 			saved := p.testingPattern
 			p.testingPattern = true
 			pat := p.testPattern()
@@ -1532,7 +1536,11 @@ func (p *parser) pattern() Pattern {
 				}
 				return
 			}
-			lp.Elems = append(lp.Elems, p.pattern())
+			if p.testingPattern {
+				lp.Elems = append(lp.Elems, p.testPattern())
+			} else {
+				lp.Elems = append(lp.Elems, p.pattern())
+			}
 		})
 		return lp
 	case TIdent, Dot:
@@ -1562,12 +1570,16 @@ func (p *parser) pattern() Pattern {
 				fp := &FieldPat{Pos: f.Pos, Field: f.Text}
 				if p.at(Colon) {
 					p.next()
-					fp.Pattern = p.pattern()
+					if p.testingPattern {
+						fp.Pattern = p.testPattern()
+					} else {
+						fp.Pattern = p.pattern()
+					}
 				}
 				vp.Fields = append(vp.Fields, fp)
 			})
 		}
-		if p.testingPattern && !vp.Braces && len(vp.Path) == 1 {
+		if p.testingPattern && !vp.Context && !vp.Braces && len(vp.Path) == 1 {
 			return &TypePat{Pos: vp.Pos, Type: &TypeExpr{Pos: vp.Pos, Name: vp.Path[0]}}
 		}
 		return vp

@@ -1,0 +1,31 @@
+import "bork/test"
+
+pred positive(n: Int) { n > 0 }
+pred small(n: Int where positive) { n < 10 }
+pred under(n: Int, limit: Int) { n < limit }
+type Box = { value: Int }
+type Choice = sealed { Some { value: Int }, None }
+fn invalid(n: Int, xs: List[Int], choice: Choice) {
+  _ = n is unknown
+  _ = n is value: Int
+  _ = Box { value: 1 } is Box { value }
+  _ = xs is [first, ...rest]
+  _ = n is Int where small
+  _ = n is Int where under(missing)
+  _ = n is List[Int where positive]
+  _ = choice is .Missing
+  _ = choice is .Some { absent: _ }
+  _ = test.AssertIs(n)
+  _ = test.AssertIs[Int, String](n)
+  _ = test.AssertIs[Int where small](n)
+}
+
+fn erasedFunction(x: (() uses io => Int) | (() uses nothing => Int)): Bool { x is (() uses nothing => Int) }
+fn erasedSequence(x: Seq[Int] uses io | Seq[Int] uses nothing): Bool { x is Seq[Int] uses nothing }
+fn effectfulPredicate(n: Int, keep: (Int) uses io => Bool): Bool { n is Int where keep }
+fn noFunctionValue(): (Int) => Int { test.AssertIs }
+
+fn genericTarget[A, B](x: A): B { test.AssertIs[B](x) }
+fn genericPattern[T](x: Int | String): Bool { x is T }
+
+fn nestedUnion[T](x: List[T]): List[Int | String] { test.AssertIs[List[Int | String]](x) }

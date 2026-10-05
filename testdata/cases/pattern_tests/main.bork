@@ -4,6 +4,7 @@ pred positive(n: Int) { n > 0 }
 pred atMost(n: Int, limit: Int) { n <= limit }
 pred small(n: Int where positive) { n < 10 }
 pred unexpected(n: Int) { panic(s"unexpected predicate $n") }
+type None = Int
 type Positive = Int where positive
 
 type Box = { value: Int, text: String }
@@ -16,20 +17,28 @@ fn accepted(x: Int | String): Int where positive {
 fn relation(x: Int | String, limit: Int): Int where atMost(limit) {
   test.AssertIs[Int where atMost(limit)](x)
 }
+fn genericTest[T](x: T): Bool { x is Int }
+fn genericUnionTarget[T](x: T): Int | String { test.AssertIs[Int | String](x) }
+fn genericUnion[T](x: T | String): Bool { x is Int }
+fn genericAssert[T](x: T): Int { test.AssertIs[Int](x) }
 fn once() uses io: Int { println("once"); 3 }
 fn is(x: Int): Int { x }
 fn main() {
   x: Int | String = 3
   choice: Choice = Choice.Some { value: 2 }
+  println(genericUnion[Int](3), genericUnion[Bool](true), 3 is Int | String, genericUnionTarget(3))
+  println(genericTest(3), genericTest("text"), genericAssert(4), test.AssertIs[Int](5))
   println(x is Int, x is String, x is 3, x is "hello")
+  println(test.AssertIs[Int](once()))
   println(once() is Int where positive and small)
   println(0 is Int where positive and unexpected)
   println(1 is Int where positive or unexpected)
   println(-1 is Positive, 2 is Positive)
-  println(choice is Choice.Some { value: 2 }, choice is Choice.None)
+  println(choice is .Some { value: 2 }, choice is .None)
   println(Box { value: 1, text: "ok" } is Box { value: _, text: "ok" })
-  println([1, 2] is[1, _], [1, 2] is[1, ...], ([1].filter((n) => n < 0)) is[])
+  println([1, 2] is [1, _], [1, 2] is [1, ...], ([1].filter((n) => n < 0)) is [])
   println(3 is String, "text" is 3, true is _, is(4))
   println(requiresPositive(test.AssertIs[Positive](x)), requiresLimit(test.AssertIs[Int where atMost(100)](x)), accepted(x), relation(x, 5))
+  println(3 |> test.AssertIs[Int where positive]())
   println(1 + 2 is 3 && true, false || x is Int)
 }

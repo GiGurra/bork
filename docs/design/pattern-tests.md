@@ -52,7 +52,13 @@ run the predicates, and attach those proven facts to the returned value for
 later calls and rule implications. Relational facts retain their checked
 argument identities. Facts apply only after every required predicate passes;
 failure returns no value. Reuse existing type/effect matching restrictions,
-including function and sequence types, so runtime type erasure cannot create
+including function and sequence types. A target that still contains type
+parameters must already accept the source statically; runtime tests cannot
+recover erased generic unions or effect annotations. Concrete targets support
+independently inferred generic inputs when nested unions/effects do not erase
+the target distinction. Generic failure labels use concrete names where
+recoverable and explicitly identify annotations lost at runtime. These
+restrictions ensure erasure cannot create
 an unsupported guarantee. A statically guaranteed success warns as for `is`.
 
 The compiler recognizes the helper by the standard package's resolved identity,

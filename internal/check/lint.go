@@ -31,9 +31,10 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 		warnings.Suggest(pos, code, end, fixes...)
 	}
 	for source, pat := range info.patternTests {
-		if pat.Kind == PatNever {
+		certain, decided := info.patternCertainties[source]
+		if pat.Kind == PatNever || (decided && !certain) {
 			warn(source.Pos, "lint.pattern-always-false", "pattern test always fails", source.End)
-		} else if patternProven[source.Pos] || (!pat.HasGuard() && len(missingCases([]*Pat{pat}, pat.Type)) == 0) {
+		} else if (decided && certain) || patternProven[source.Pos] || (!pat.HasGuard() && len(missingCases([]*Pat{pat}, pat.Type)) == 0) {
 			warn(source.Pos, "lint.pattern-always-true", "pattern test always succeeds", source.End)
 		}
 	}

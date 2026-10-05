@@ -383,6 +383,11 @@ type FieldUpdate struct {
 // Match is `match (x) { pattern => value, ... }`.
 type Match struct {
 	PatternTest bool
+	// ValidationGuards retain obligations from statically impossible tests.
+	// They are checked but never emitted or evaluated.
+	ValidationGuards []Expr
+	Assertion        *Instance
+	SourceCall       *syntax.Call
 	expr
 	X    Expr
 	Arms []*MatchArm

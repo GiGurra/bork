@@ -30,7 +30,8 @@
     (modify-syntax-entry ?_ "w" table)
     table))
 (defconst bork-font-lock-keywords
-  `((,(regexp-opt bork-keywords 'symbols) . font-lock-keyword-face)
+  `(("\\_<\\(is\\)\\_>[[:space:]]+[^[:space:](:=]" 1 font-lock-keyword-face)
+    (,(regexp-opt bork-keywords 'symbols) . font-lock-keyword-face)
     (,(regexp-opt '("true" "false") 'symbols) . font-lock-constant-face)
     ("\\_<[A-Z][[:alnum:]_]*\\_>" . font-lock-type-face)
     ("\\_<\\(?:fn\\|pred\\|rule\\) +\\([[:alpha:]][[:alnum:]_]*\\)" 1 font-lock-function-name-face)))
@@ -86,7 +87,8 @@
     :language 'bork :feature 'comment '([(comment) (shebang)] @font-lock-comment-face)
     :language 'bork :feature 'keyword
     `([,@(remove "nothing" bork-keywords)
-       (bare_return) (bare_break) (bare_continue)] @font-lock-keyword-face)
+       (bare_return) (bare_break) (bare_continue)] @font-lock-keyword-face
+      (is_expression "is" @font-lock-keyword-face))
     :language 'bork :feature 'string '([(string) (interpolated_string) (rune)] @font-lock-string-face)
     :language 'bork :feature 'type '( (type_declaration name: (identifier) @font-lock-type-face)
                                    (context_pattern name: (identifier) @font-lock-type-face)

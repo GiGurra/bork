@@ -431,6 +431,11 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		}
 		f.tail(x.Else, e.with(f.conditionFacts(x.Cond, false)...), result)
 	case *Match:
+		validation := e
+		for _, guard := range x.ValidationGuards {
+			f.walk(guard, validation)
+			validation = validation.with(f.conditionFacts(guard, true)...)
+		}
 		f.patternTestCertainty(x, e)
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
@@ -749,6 +754,11 @@ func (f *factChecker) walk(x Expr, e env) {
 		}
 		f.copyObligations(x, e)
 	case *Match:
+		validation := e
+		for _, guard := range x.ValidationGuards {
+			f.walk(guard, validation)
+			validation = validation.with(f.conditionFacts(guard, true)...)
+		}
 		f.patternTestCertainty(x, e)
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
@@ -2425,6 +2435,15 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 		}
 		if _, isUnion := fn.Result.(*Union); !isUnion {
 			add(f.argFactsFor(x, nil), noParams)
+		}
+	case *Match:
+		if x.Assertion != nil && len(x.Arms) > 1 && depth < maxDepth {
+			arm := x.Arms[0]
+			facts := e
+			for _, guard := range arm.Pat.Guards() {
+				facts = facts.with(f.conditionFacts(guard, true)...)
+			}
+			out = append(out, f.declared(arm.Body, facts, depth+1)...)
 		}
 	case *Try:
 		if x.Option == nil {
