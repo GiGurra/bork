@@ -168,8 +168,9 @@ fn produce[T](s: Scope, capacity: Int where nonNegative,
 ```
 
 `produce` makes a channel, launches `work` as a task of `s` with it, and
-closes the channel when `work` returns or panics, so consumers' loops end.
-It is Go's "generator goroutine that `defer close(out)`s", without the
+closes the channel when `work` returns, so consumers' loops end. If `work`
+panics, the failed task cancels `s` as any task does: consumers waiting in
+`s` get `Cancelled`, and the channel closes with `s`. It is Go's "generator goroutine that `defer close(out)`s", without the
 chance of forgetting the close:
 
 ```bork fragment
