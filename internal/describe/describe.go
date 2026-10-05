@@ -403,6 +403,12 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.walk(policy)
 		}
 		s.walk(x.Body)
+	case *check.For:
+		if x.Var != nil && s.contains(x.Var.Pos, len(x.Var.Name)) {
+			s.selectVar(x.Var, x.Body.Pos())
+		}
+		s.walk(x.Items)
+		s.walk(x.Body)
 	case *check.ListLit:
 		for _, elem := range x.Elems {
 			s.walk(elem)

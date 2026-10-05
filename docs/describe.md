@@ -31,7 +31,7 @@ Methods follow exactly the compiler's visibility and precedence rules: local pac
 
 `belongs to` (`belongs_to` in JSON) lists the scopes a value belongs to, as the lifetimes check sees them: it is usable while all of them are open. A scope is named as `scope s` (a scope block), `parameter app` (a scope the caller gave, or a parameter's own), or `owned scope b` (the child of an [owned scope](requirements.md#partially-overlapping-scopes-owned-child-scopes), which `closeScope(b)` ends). Values that cannot hold a resource, scope or function have none.
 
-`ownership` says, for a resource variable, whether it can be [moved](requirements.md#moving-resources-between-scopes) to another scope: it is owned here (acquired in this function, so `move` can hand it over), borrowed (a parameter, or a value from a channel or a call), kept by a task or a channel that may still use it, moved, or possibly moved. On the variable's definition it says how it ends up; on a use, what it is there.
+`ownership` says, for a resource variable, whether it can be [moved](requirements.md#moving-resources-between-scopes) to another scope: it is owned and acquired here (so `move` can hand it over), borrowed (a parameter, or a value from a channel, a task or a call that may give a resource held elsewhere; attach it instead), kept by a task, channel, atom, generator or Go code that may still use it, moved, or possibly moved (moved on some paths only). A use inside a lambda or loop that the variable was defined outside of cannot move it there, and says so. On a variable's definition, including a parameter or a pattern binding, it says how the variable ends up; on a use, what it is at that point. Union-typed variables show none.
 
 ## JSON format
 

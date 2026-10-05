@@ -773,3 +773,70 @@ func TestDescribeOwnership(t *testing.T) {
 fn connect(s: Scope) uses io: Conn unsafe go {
   return Conn{handle: 1, owner: s.Own(func() {})}
 }
+fn query(c: Conn): String unsafe go {
+  return ""
+}
+fn borrow(c: Conn): String { query(c) }
+fn maybe(s: Scope, flag: Bool) uses io: Conn | String {
+  if (flag) { "none" } else { connect(s) }
+}
+fn early(s: Scope, w: Scope, flag: Bool) uses io: String {
+  if (flag) {
+    a = connect(s)
+    _ = move(a, w)
+    return "moved"
+  }
+  outer = connect(s)
+  if (flag) { _ = move(outer, w) }
+  match (maybe(s, flag)) {
+    c: Conn => {
+      _ = move(c, w)
+      "matched"
+    }
+    other: String => other
+  }
+}
+fn main() {
+  scope s {
+    a = connect(s)
+    println(query(a))
+    scope w { _ = move(a, w) }
+    b = connect(s)
+    launch(s, () => println(query(b)))
+    d = connect(s)
+    f = () => query(d)
+    println(f())
+    e = connect(s)
+    for (i in [1, 2]) { println(query(e)) }
+  }
+}
+`,
+	}
+	for name, source := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(dir, "main.bork")
+	borrowed := "borrowed (not acquired here), so it cannot be moved; attach it instead"
+	for _, tc := range []struct{ pos, want string }{
+		{"8:11", borrowed},
+		{"8:36", borrowed},
+		{"14:5", "moved to scope w at line 15"},
+		{"18:3", "possibly moved to scope w at line 19"},
+		{"21:5", "moved to scope w at line 22"},
+		{"30:5", "moved to scope w at line 32"},
+		{"31:19", "owned by scope s and acquired here, so move can hand it to another scope"},
+		{"33:5", "owned by scope s, and kept by the task of s started at line 34, so it cannot be moved"},
+		{"39:39", "owned by scope s, but acquired outside this loop, so it cannot be moved here"},
+		{"36:21", "owned by scope s, but acquired outside this lambda (or lazy, async or comptime body), so it cannot be moved here"},
+	} {
+		result, err := Describe(path+":"+tc.pos, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Ownership != tc.want {
+			t.Errorf("%s: ownership %q, want %q", tc.pos, result.Ownership, tc.want)
+		}
+	}
+}

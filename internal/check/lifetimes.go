@@ -81,7 +81,9 @@ func newLifeChecker(info *Info, diags *diag.List) *lifeChecker {
 		safeChild:  map[*Var]bool{},
 		passes:     map[*Func]bool{},
 		passParams: map[*Var]*handle{},
-		lastUse:    map[*Var]string{},
+		record:     true,
+		handleVars: map[*handle][]*Var{},
+		varDepth:   map[*Var]int{},
 	}
 }
 
@@ -177,10 +179,14 @@ type lifeChecker struct {
 	passes     map[*Func]bool
 	passParams map[*Var]*handle
 	passOK     bool
-	// resVars lists the resource variables bound in the current function,
-	// whose ownership is described where it ends.
-	resVars []*Var
-	lastUse map[*Var]string
+	// record is set when describing ownership for queries (not while
+	// summarizing); handleVars lists the variables each handle may be,
+	// varDepth how deep in branches each was bound, and depth how deep
+	// the current point is (see noteVar).
+	record     bool
+	handleVars map[*handle][]*Var
+	varDepth   map[*Var]int
+	depth      int
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -195,6 +201,7 @@ func (l *lifeChecker) function(fn *Func) {
 	for _, p := range fn.ParamVars {
 		l.frame[p] = fn
 		l.env[p] = lifetime{p}
+		l.noteVar(p)
 		if p.Type == OwnedScope {
 			l.bind(p)
 		}
@@ -230,16 +237,6 @@ func (l *lifeChecker) function(fn *Func) {
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
 	l.verifyResult(fn.Body)
-	// A variable's definition shows whether it ends up moved, or else
-	// what it was at its last use (its scope may have ended since).
-	for _, v := range l.resVars {
-		text := l.ownership(&VarRef{Var: v})
-		if last := l.lastUse[v]; last != "" && !strings.Contains(text, "moved to") {
-			text = last
-		}
-		l.info.VarOwnership[v] = text
-	}
-	l.resVars = nil
 	if fn.Body.Type() != Never {
 		for _, p := range fn.ParamVars {
 			if p.Type == OwnedScope {
@@ -565,9 +562,8 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		for _, c := range l.captures {
 			*c = c.union(life)
 		}
-		if text := l.ownership(x); text != "" {
+		if text := l.ownership(x); text != "" && l.record {
 			l.info.Ownership[x] = text
-			l.lastUse[x.Var] = text
 		}
 		return l.use(x, life)
 	case *Block:
@@ -823,9 +819,7 @@ func (l *lifeChecker) stmt(s Stmt) {
 		// A possibly released value can be bound; using it is the error.
 		l.env[s.Var] = l.expr(s.Value)
 		l.origins[s.Var] = l.originOf(s.Value)
-		if _, ok := s.Var.Type.(*Resource); ok {
-			l.resVars = append(l.resVars, s.Var)
-		}
+		l.noteVar(s.Var)
 		if len(l.env[s.Var]) > 0 {
 			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
 		}
@@ -849,6 +843,7 @@ func (l *lifeChecker) bindPattern(p *Pat, life lifetime, o resOrigin) {
 	if p.Var != nil {
 		l.env[p.Var] = life
 		l.origins[p.Var] = o
+		l.noteVar(p.Var)
 	}
 	for _, f := range p.Fields {
 		l.bindPattern(f.Pat, life, resOrigin{})
@@ -868,6 +863,7 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	for _, p := range x.Params {
 		l.frame[p] = x
 		l.env[p] = lifetime{p}
+		l.noteVar(p)
 		if life, ok := l.lambdaParams[p]; ok {
 			l.env[p] = life
 			if len(life) > 0 && l.carriesLife(p.Type) {
