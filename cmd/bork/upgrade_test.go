@@ -37,7 +37,7 @@ func TestUpgrade(t *testing.T) {
 		var output bytes.Buffer
 		cmd.SetOut(&output)
 		cmd.SetErr(&output)
-		cmd.SetArgs(args)
+		cmd.SetArgs(append([]string{"--from-source"}, args...))
 		err := cmd.Execute()
 		return output.String(), err
 	}

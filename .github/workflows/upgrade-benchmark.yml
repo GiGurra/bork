@@ -1,0 +1,56 @@
+name: Upgrade benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Original source installer revision
+        default: 'be1d7bafe7067b4225f7eafe1cbc1db1c584e564'
+        required: true
+        type: string
+      version:
+        description: Published release to install (or latest)
+        default: latest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.baseline_ref }}
+          path: baseline
+      - name: Build before and after installers
+        run: |
+          go build -o "$RUNNER_TEMP/bork-after" ./cmd/bork
+          cd baseline
+          go build -o "$RUNNER_TEMP/bork-before" ./cmd/bork
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.21.x'
+          cache: false
+      - name: Measure cold source and prebuilt upgrade
+        env:
+          UPGRADE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/upgrade-benchmark.py "$RUNNER_TEMP/bork-before" "$RUNNER_TEMP/bork-after" "$UPGRADE_VERSION"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-upgrade-timings
+          path: benchmark-results/*.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-upgrade-transcripts
+          path: benchmark-results/*.log

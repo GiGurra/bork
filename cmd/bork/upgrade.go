@@ -3,11 +3,13 @@ package main
 import (
 	"debug/buildinfo"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/GiGurra/bork/internal/toolenv"
 	"github.com/spf13/cobra"
@@ -15,7 +17,12 @@ import (
 )
 
 func upgradeCommand() *cobra.Command {
-	return &cobra.Command{
+	return upgradeCommandWithClient(&http.Client{Timeout: 45 * time.Second}, "https://api.github.com/repos/GiGurra/bork/releases")
+}
+
+func upgradeCommandWithClient(client *http.Client, api string) *cobra.Command {
+	var fromSource bool
+	command := &cobra.Command{
 		Use: "upgrade [version]", Short: "install the latest or requested bork version in BORKBIN",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -26,11 +33,41 @@ func upgradeCommand() *cobra.Command {
 			if requested != "latest" && (!semver.IsValid(requested) || semver.Canonical(requested) != requested) {
 				return fmt.Errorf("upgrade: expected latest or a version such as v0.4.0, got %q", requested)
 			}
-			goPath, err := exec.LookPath("go")
+			progress := newUpgradeProgress(cmd.ErrOrStderr())
+			current, err := os.Executable()
 			if err != nil {
-				return fmt.Errorf("upgrade requires Go on PATH; install Go from https://go.dev/dl/: %w", err)
+				return err
 			}
-			bin, err := toolenv.Value("BORKBIN")
+			if homebrewInstall(current) {
+				return fmt.Errorf("upgrade: this compiler is managed by Homebrew; run brew upgrade bork")
+			}
+			var release editorRelease
+			if !fromSource {
+				err = progress.step("Checking release version (you have "+version()+")", func() error {
+					var lookupErr error
+					release, lookupErr = compilerRelease(cmd.Context(), client, api, requested)
+					return lookupErr
+				})
+				if err != nil {
+					if !releaseUnavailable(err) {
+						return err
+					}
+					progress.line("Prebuilt release unavailable: " + err.Error() + "; falling back to source")
+				} else {
+					requested = release.Tag
+					if requested == version() {
+						_, err := fmt.Fprintf(cmd.OutOrStdout(), "bork %s is already up to date\n", requested)
+						return err
+					}
+					progress.line("Selected bork " + requested)
+				}
+			}
+			var bin string
+			err = progress.step("Resolving BORKBIN (local go env; no SDK download)", func() error {
+				var lookupErr error
+				bin, lookupErr = toolenv.Value("BORKBIN")
+				return lookupErr
+			})
 			if err != nil {
 				return err
 			}
@@ -39,9 +76,8 @@ func upgradeCommand() *cobra.Command {
 				suffix = ".exe"
 			}
 			target := filepath.Join(bin, "bork"+suffix)
-			current, err := os.Executable()
-			if err != nil {
-				return err
+			if homebrewInstall(target) {
+				return fmt.Errorf("upgrade: target is managed by Homebrew; run brew upgrade bork")
 			}
 			if !samePath(current, target) {
 				if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "Running bork from %s; upgrade installs %s. Use that executable for the new version.\n", current, target); err != nil {
@@ -68,27 +104,52 @@ func upgradeCommand() *cobra.Command {
 				return err
 			}
 			defer func() { _ = os.RemoveAll(stage) }()
-			install := exec.CommandContext(cmd.Context(), goPath, "install", "github.com/GiGurra/bork/cmd/bork@"+requested)
-			// An upgrade always builds a runnable host compiler, even when the
-			// caller's Go environment is configured for cross compilation.
-			install.Env = append(os.Environ(), "GOBIN="+stage, "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
-			install.Stdout, install.Stderr = cmd.OutOrStdout(), cmd.ErrOrStderr()
-			if err := install.Run(); err != nil {
-				return fmt.Errorf("upgrade to %s failed: %w; check the Go output above and network/module proxy access (offline installs require cached modules)", requested, err)
-			}
 			stagedBinary := filepath.Join(stage, "bork"+suffix)
-			info, err := buildinfo.ReadFile(stagedBinary)
-			if err != nil {
-				return fmt.Errorf("upgrade cannot read the staged compiler version: %w", err)
+			newVersion := requested
+			installed := false
+			if !fromSource && release.Tag != "" {
+				installed, err = downloadCompiler(cmd.Context(), client, release, stage, progress)
+				if err != nil {
+					if !releaseUnavailable(err) {
+						return err
+					}
+					progress.line("Prebuilt download unavailable: " + err.Error() + "; falling back to source")
+				} else if !installed {
+					progress.line("No prebuilt archive for this platform; falling back to source")
+				}
 			}
-			newVersion := info.Main.Version
-			if newVersion == "" || newVersion == "(devel)" {
-				newVersion = "dev"
+			if !installed {
+				progress.line("Finding Go on PATH")
+				goPath, err := exec.LookPath("go")
+				if err != nil {
+					return fmt.Errorf("upgrade requires Go on PATH; install Go from https://go.dev/dl/: %w", err)
+				}
+				install := exec.CommandContext(cmd.Context(), goPath, "install", "github.com/GiGurra/bork/cmd/bork@"+requested)
+				install.Env = append(os.Environ(), "GOBIN="+stage, "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
+				install.Stdout, install.Stderr = progress.writer(cmd.OutOrStdout()), progress.writer(cmd.ErrOrStderr())
+				err = progress.step("Resolving modules and building from source with go install (this can take a minute)", install.Run)
+				if err != nil {
+					return fmt.Errorf("upgrade to %s failed: %w; check the Go output above and network/module proxy access (offline installs require cached modules)", requested, err)
+				}
+				err = progress.step("Checking staged compiler version", func() error {
+					info, err := buildinfo.ReadFile(stagedBinary)
+					if err != nil {
+						return fmt.Errorf("upgrade cannot read the staged compiler version: %w", err)
+					}
+					newVersion = info.Main.Version
+					if newVersion == "" || newVersion == "(devel)" {
+						newVersion = "dev"
+					}
+					return nil
+				})
+				if err != nil {
+					return err
+				}
 			}
 			// Go can copy directly over GOBIN rather than rename (for example
 			// from its build cache). Stage on the destination filesystem so
 			// publishing never exposes a partial executable.
-			if err := publishUpgrade(stagedBinary, target); err != nil {
+			if err := progress.step("Installing to "+target, func() error { return publishUpgrade(stagedBinary, target) }); err != nil {
 				return fmt.Errorf("upgrade cannot replace %s: %w", target, err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "bork %s -> %s (%s)\n", version(), newVersion, target)
@@ -98,6 +159,8 @@ func upgradeCommand() *cobra.Command {
 			return err
 		},
 	}
+	command.Flags().BoolVar(&fromSource, "from-source", false, "build with go install instead of downloading a release binary")
+	return command
 }
 
 func publishUpgrade(staged, target string) error {

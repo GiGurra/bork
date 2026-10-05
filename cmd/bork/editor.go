@@ -86,21 +86,21 @@ func releaseRequest(ctx context.Context, client *http.Client, url string, limit 
 	if err != nil {
 		return nil, 0, err
 	}
-	req.Header.Set("User-Agent", "bork-editor-installer")
+	req.Header.Set("User-Agent", "bork-release-installer")
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("cannot download editor release: %w; check your network connection and GitHub access", err)
+		return nil, 0, fmt.Errorf("cannot download release: %w; check your network connection and GitHub access", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, fmt.Errorf("editor release download %s: HTTP %d", url, resp.StatusCode)
+		return nil, resp.StatusCode, fmt.Errorf("release download %s: HTTP %d", url, resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
 	if int64(len(body)) > limit {
-		return nil, resp.StatusCode, fmt.Errorf("editor release download exceeds %d bytes", limit)
+		return nil, resp.StatusCode, fmt.Errorf("release download exceeds %d bytes", limit)
 	}
 	return body, resp.StatusCode, nil
 }
