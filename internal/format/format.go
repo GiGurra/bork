@@ -77,7 +77,7 @@ func Source(path string, src []byte) ([]byte, error) {
 		}
 		start := offset(t.Pos)
 		u := t.Kind == syntax.Not || (t.Kind == syntax.Minus || t.Kind == syntax.Caret) && !endsExpr(prev)
-		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && items[len(items)-1].kind == syntax.TIdent && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
+		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && (items[len(items)-1].kind == syntax.TIdent || items[len(items)-1].kind == syntax.Underscore) && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
 		afterPatternTest := len(items) > 0 && items[len(items)-1].patternTest
 		chain := t.Kind == syntax.Dot && endsExpr(prev) && !afterPatternTest || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot
