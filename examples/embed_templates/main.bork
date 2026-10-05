@@ -32,7 +32,7 @@ test "every embedded template renders" {
   for (page in pages()) {
     match (render(page)) {
       text: String => assert(text.startsWith(page))
-      error: IoError => assert(false)
+      _: IoError => assert(false)
     }
   }
 }
