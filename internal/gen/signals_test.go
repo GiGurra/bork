@@ -28,6 +28,7 @@ func TestSignalRuntime(t *testing.T) {
 const signalRuntimeTests = `package main
 import (
  "os"
+ "runtime"
  "sync"
  "context"
  "strings"
@@ -107,15 +108,19 @@ func TestConfiguredUserSignalStillEscalates(t *testing.T) {
 // This generated test process receives real signals; a disposition gap
 // terminates it and fails its parent test, without signalling the parent.
 func TestLiveDispositionUpdatesKeepSubscription(t *testing.T) {
+ if runtime.GOOS=="windows" {t.Skip("Windows cannot send SIGTERM with os.Process.Signal")}
  b:=_newSignalBroker(true)
  subscription:=registration("subscribe",int(syscall.SIGTERM));b.add(subscription)
  process,err:=os.FindProcess(os.Getpid());if err!=nil {t.Fatal(err)}
- done:=make(chan struct{});var sender sync.WaitGroup;sender.Add(1)
- go func(){defer sender.Done();for {select {case <-done:return;default:_=process.Signal(syscall.SIGTERM)}}}()
+ if err:=process.Signal(syscall.SIGTERM);err!=nil {t.Fatal(err)}
+ select {case <-subscription.events:case <-time.After(time.Second):t.Fatal("SIGTERM was not delivered")}
+ done:=make(chan struct{});sendError:=make(chan error,1);var sender sync.WaitGroup;sender.Add(1)
+ go func(){defer sender.Done();for {select {case <-done:return;default:if err:=process.Signal(syscall.SIGTERM);err!=nil {sendError<-err;return}}}}()
  for i:=0;i<2000;i++ {
   ignored:=registration("ignore",int(syscall.SIGHUP));b.add(ignored);b.remove(ignored)
  }
  close(done);sender.Wait()
+ select {case err:=<-sendError:t.Fatal(err);default:}
  b.mu.Lock();cancelled:=b.code!=0;b.mu.Unlock()
  if cancelled {t.Fatal("subscribed signals cancelled the process")}
 }

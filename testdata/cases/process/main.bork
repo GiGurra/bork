@@ -54,7 +54,8 @@ fn signalTest(s: Scope, interrupt: Bool) uses io + state + clock: Ok | IoError |
   waitReady(path)
   signalChild(process.Pid(child), interrupt)
   output = process.Await(child)?
-  println(output.code == 0)
+  expected = if (interrupt) { 130 } else { 143 }
+  println(output.code == expected)
   println(utf8String(output.stdout))
 }
 fn server(path: String) uses io + state + clock {

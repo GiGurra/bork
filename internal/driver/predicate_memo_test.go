@@ -28,6 +28,8 @@ func TestPredicateMemoSupport(t *testing.T) {
 		{"startup init", `package main; func init(){user()}; func user(){};func main(){}`, false},
 		{"compiler init", `package main; var _equalMapHook, _equalMaps func();func init(){_equalMapHook=_equalMaps};func main(){}`, true},
 		{"altered compiler init", `package main; var _equalMapHook, _equalMaps func();func init(){_equalMapHook=_equalMaps;user()};func user(){};func main(){}`, false},
+		{"lazy signal context", `package main; import "runtime"; var _mainSignals = _newSignalBroker(false); var _mainContext = _mainSignals.ctx; func main(){}`, true},
+		{"eager signal context", `package main; var _mainSignals = _newSignalBroker(true); func main(){}`, false},
 		{"compiler seed", `package main; import "hash/maphash"; var _mapSeed=maphash.MakeSeed();func main(){}`, true},
 		{"unknown seed", `package main; import "hash/maphash"; var userSeed=maphash.MakeSeed();func main(){}`, false},
 		{"linkname", "package main\n//go:linkname x foreign\nvar x int\nfunc main(){}", false},
