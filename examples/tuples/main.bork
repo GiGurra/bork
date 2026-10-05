@@ -1,4 +1,6 @@
+import "bork/codec"
 import "bork/json"
+use codec.Defaults
 
 fn labeledCount(): (Int, String) { (3, "items") }
 

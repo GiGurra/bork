@@ -1,22 +1,25 @@
+import codec "bork/codec"
+
 import codecs "bork/json"
+use codec.Defaults
 pred between(x: Int, lo: Int, hi: Int) { x >= lo && x <= hi }
 
 type Port = Int where between(1, 65535)
 
-instance decodePort: Decode[Port] {
-  fn decode(json: Json): Port | DecodeError {
+instance decodePort: codec.Decode[Port] {
+  fn decode(json: codec.Value): Port | codec.DecodeError {
     match (json) {
-      Json.Number { text } => match (parseInt(text)) {
-        p: Int => if (between(p, 1, 65535)) { p } else { DecodeError { path: "", message: s"$p is not a port" } }
-        _: ParseError => DecodeError { path: "", message: "expected a whole number" }
+      codec.Value.Number { text } => match (parseInt(text)) {
+        p: Int => if (between(p, 1, 65535)) { p } else { codec.DecodeError { path: "", message: s"$p is not a port" } }
+        _: ParseError => codec.DecodeError { path: "", message: "expected a whole number" }
       }
-      _ => DecodeError { path: "", message: "expected a port number" }
+      _ => codec.DecodeError { path: "", message: "expected a port number" }
     }
   }
 }
 
-instance encodePort: Encode[Port] {
-  fn encode(p: Port): Json { Json.String { value: s":$p" } }
+instance encodePort: codec.Encode[Port] {
+  fn encode(p: Port): codec.Value { codec.Value.String { value: s":$p" } }
 }
 
 fn connect(port: Port): String { s"connecting to port $port" }
@@ -25,8 +28,8 @@ fn main() {
   // The constrained instance decodes, and the result is proven a Port.
   match (codecs.Decode[Port]("8080")) {
     p: Int => println(connect(p))
-    e: JsonError => println(e)
-    e: DecodeError => println(e)
+    e: codecs.JsonError => println(e)
+    e: codec.DecodeError => println(e)
   }
   println(codecs.Decode[Port]("70000"))
   // A value known to be a Port encodes with the Port instance.

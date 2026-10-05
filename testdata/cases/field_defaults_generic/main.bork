@@ -1,7 +1,10 @@
+import codec "bork/codec"
+
 import "bork/json"
+use codec.Defaults
 pred short[T](xs: List[T]) { xs.length() < 2 }
 type Unused[T] = { xs: List[T] where short = [] }
-type Box[T] = { value: T, xs: List[T] where short = [] } derive (Decode, Encode)
+type Box[T] = { value: T, xs: List[T] where short = [] } derive (codec.Decode, codec.Encode)
 fn Helper[T](value: T): Box[T] { Box { value: value } }
 fn main() uses io {
   println(Helper(1))

@@ -1,5 +1,8 @@
+import codec "bork/codec"
+
 import "bork/json"
 import "example.com/tc/api"
+use codec.Defaults
 
 // Derived instances are used like any other package's instances.
 use api.ItemDecode
@@ -7,12 +10,12 @@ use api.StatusDecode
 use api.StatusEncode
 
 fn main() {
-  r: api.Item | JsonError | DecodeError = json.Decode("{\"name\": \"pen\", \"qty\": 0}")
+  r: api.Item | json.JsonError | codec.DecodeError = json.Decode("{\"name\": \"pen\", \"qty\": 0}")
   println(r)
-  s: api.Status | JsonError | DecodeError = json.Decode("{\"type\": \"Closed\", \"reason\": \"done\"}")
+  s: api.Status | json.JsonError | codec.DecodeError = json.Decode("{\"type\": \"Closed\", \"reason\": \"done\"}")
   match (s) {
     st: api.Status => println(json.Encode(st))
-    e: JsonError => println(e)
-    e: DecodeError => println(e)
+    e: json.JsonError => println(e)
+    e: codec.DecodeError => println(e)
   }
 }

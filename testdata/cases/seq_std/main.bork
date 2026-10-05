@@ -1,8 +1,11 @@
+import codec "bork/codec"
+
 import "bork/encoding"
 import codecs "bork/json"
 import "bork/fs"
 import "bork/sql"
-type Row = { n: Int } derive (Decode)
+use codec.Defaults
+type Row = { n: Int } derive (codec.Decode)
 fn demo() uses io + net: Ok | fs.Error | sql.Error {
   scope app {
     directory = fs.TempDir(app, pattern: "seq-")?
@@ -21,7 +24,7 @@ fn demo() uses io + net: Ok | fs.Error | sql.Error {
     println(sql.SQL"SELECT 3 AS n".RowsJson(db).toList())
     println(sql.SQL"SELECT missing FROM missing".RowsJson(db).map(value => match (value) {
       error: sql.Error => error.operation
-      json: Json => codecs.Render(json)
+      json: codec.Value => codecs.Render(json)
       }).toList())
   }
 }

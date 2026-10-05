@@ -16,7 +16,6 @@ use `prelude/<filename>` in diagnostics and `bork describe`.
 | [maps.bork](maps.bork) | `Entry` and persistent map methods |
 | [bytes.bork](bytes.bork) | Immutable bytes and UTF-8 conversions |
 | [classes.bork](classes.bork) | `Eq`, `Show`, `Ord`, `GoStruct`, and primitive ordering instances |
-| [json.bork](json.bork) | JSON values, `Decode`, `Encode`, their instances, and reserved internal helpers |
 | [fanin.bork](fanin.bork) | Ordered task fan-in, races, typed channel selection, and cooperative timeouts |
 | [concurrency.bork](concurrency.bork) | Tasks, cancellation, atoms, channels, and cancellable delay |
 | [scopes.bork](scopes.bork) | Resource attachment, scope policies, and finalizers |
@@ -68,12 +67,11 @@ Prelude audit (pre-1.0 clean break): process arguments and exit belong to
 scope and a Duration; cancellation is observable as `Cancelled`. There are no
 deprecated aliases. Unicode tests are Rune methods; `toString(r)` renders the character, `r.code()` gives its Int32 code point, and `n.rune()` checks an Int32 into Option[Rune].
 
-The JSON type family and Decode/Encode classes remain here because derived
-instances and user instances need a shared vocabulary without imports. Their
-implementation helpers (`_jsonKind`, `_decodeMismatch`, `_atPath`, `_decodeItems`,
-`_decodeFields`, `_jsonFieldPut`, `_jsonFieldsOf`) use compiler-reserved names;
-ordinary source cannot name them. Compiler-embedded sources may use reserved
-names, including inside interpolations.
+The format-independent value tree, Decode/Encode classes and their instances
+belong to [bork/codec](../std/codec/codec.bork). Import that package and select
+`use codec.Defaults` for standard codecs. JSON syntax errors belong to
+`bork/json`; there are no prelude compatibility aliases. Compiler-embedded
+sources may use reserved helper names, including inside interpolations.
 
 UTF-8 text conversion belongs to `bork/encoding`: `Utf8(text): Bytes` and
 `ParseUtf8(data): String | ParseError`. `List[Byte].toBytes()` mirrors

@@ -1,14 +1,17 @@
+import codec "bork/codec"
+
 import "bork/process"
 // bork run examples/http_routes
 // curl 'localhost:8080/users/42'
 import "bork/http"
+use codec.Defaults
 
 pred positive(n: Int) { n > 0 }
-type UserPath = { id: Int where positive } derive (Decode)
+type UserPath = { id: Int where positive } derive (codec.Decode)
 fn user(req: http.Request, rs: Scope): http.Response {
   match (http.PathAs[UserPath](req)) {
     path: UserPath => http.Text(200, s"user ${path.id}")
-    error: DecodeError => http.Text(422, error.path + ": " + error.message)
+    error: codec.DecodeError => http.Text(422, error.path + ": " + error.message)
   }
 }
 fn logged(handler: http.Handler): http.Handler {

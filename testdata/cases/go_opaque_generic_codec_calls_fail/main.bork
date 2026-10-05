@@ -1,8 +1,11 @@
+import codec "bork/codec"
+use codec.Defaults
+
 type Duration = go "time.Duration"
 type Box[T] = { value: T }
-instance encodeBox[T]: Encode[Box[T]] {
-  fn encode(x: Box[T]): Json { Json.Null }
+instance encodeBox[T]: codec.Encode[Box[T]] {
+  fn encode(x: Box[T]): codec.Value { codec.Value.Null }
 }
-fn Wrap[T](b: Box[T]): Json { encode(b) }
-fn Call(d: Duration): Json { Wrap(Box { value: d }) }
+fn Wrap[T](b: Box[T]): codec.Value { codec.encode(b) }
+fn Call(d: Duration): codec.Value { Wrap(Box { value: d }) }
 fn main() {}

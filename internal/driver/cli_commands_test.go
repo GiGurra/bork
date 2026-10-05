@@ -11,8 +11,11 @@ import (
 func TestCLISubcommands(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/time"
+	source := `import codec "bork/codec"
+
+import "bork/time"
 import "bork/cli"
+use codec.Defaults
 pred validPort(n: Int) { n > 0 && n < 65536 }
 type Serve = {
  config: Option[String]
@@ -20,8 +23,8 @@ type Serve = {
  host: String
  // Listening port.
  port: Int where validPort = 8080
-} derive (Decode)
-type Echo = { words: List[String] } derive (Decode)
+} derive (codec.Decode)
+type Echo = { words: List[String] } derive (codec.Decode)
 fn commands(): List[cli.Command] {
  [cli.Subcommand[Serve]("serve", "Serve a host", (options, s) => {
     _ = time.Sleep(s, time.Nanoseconds(0))
@@ -106,8 +109,11 @@ fn main() { println(cli.RunCommands("app", "Example commands", commands(), setti
 func TestCLISubcommandMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
-type Options = {} derive (Decode)
+	source := `import codec "bork/codec"
+
+import "bork/cli"
+use codec.Defaults
+type Options = {} derive (codec.Decode)
 fn command(name: String): cli.Command { cli.Subcommand[Options](name, "", (options, s) => { println("handler") }) }
 fn main() {
  println(cli.Dispatch("app", "", [], []))

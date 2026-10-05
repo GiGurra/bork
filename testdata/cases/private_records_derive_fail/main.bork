@@ -1,11 +1,14 @@
+import codec "bork/codec"
+
 import "example.com/private-records-derive-fail/settings"
-type Foreign = settings.Config derive (Decode)
+use codec.Defaults
+type Foreign = settings.Config derive (codec.Decode)
 type ForeignGo = settings.Config derive (GoStruct)
-type Plain = settings.Box[Int] derive (Decode)
-type Wrapped = { box: settings.Box[Int] } derive (Decode)
-type Container = { boxes: List[Option[settings.Box[Int]]] } derive (Decode)
-type LocalBox[T] = { value: T } derive (Decode)
-type Nested = LocalBox[settings.Box[Int]] derive (Decode)
+type Plain = settings.Box[Int] derive (codec.Decode)
+type Wrapped = { box: settings.Box[Int] } derive (codec.Decode)
+type Container = { boxes: List[Option[settings.Box[Int]]] } derive (codec.Decode)
+type LocalBox[T] = { value: T } derive (codec.Decode)
+type Nested = LocalBox[settings.Box[Int]] derive (codec.Decode)
 type GoWrapped = { secret: settings.Secret } derive (GoStruct)
 type GoContainer = { secrets: List[settings.Secret] } derive (GoStruct)
 fn main() {}

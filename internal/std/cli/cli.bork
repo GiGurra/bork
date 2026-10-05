@@ -1,4 +1,6 @@
+import "bork/codec"
 import "bork/process"
+use codec.Defaults
 // Package cli builds command-line interfaces with boa and decodes proven options.
 type Flag = {
   field: String
@@ -19,7 +21,7 @@ type Flag = {
   directories: Bool = false
   keepOrder: Bool = false
 }
-type Error = { errors: List[DecodeError] }
+type Error = { errors: List[codec.DecodeError] }
 type Help = { text: String, diagnostics: String = "" }
 type Parsed[T] = { options: T, warnings: List[String] }
 
@@ -29,7 +31,7 @@ type Parsed[T] = { options: T, warnings: List[String] }
 // Explicit env tags permit environment lookup. JSON configFiles overlay left to
 // right, below env/flags and above defaults. A configFile flag selects an extra
 // file. All final field failures are collected; help does not read files.
-fn Parse[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: T | Error | Help {
+fn Parse[T: codec.Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: T | Error | Help {
   match (ParseDetailed[T](name, description, args, flags, configFiles, settings)) {
     parsed: Parsed[T] => parsed.options
     error: Error => error
@@ -38,20 +40,20 @@ fn Parse[T: Decode](name: String, description: String, args: List[String], flags
 }
 
 // ParseDetailed also returns warnings from accepted deprecated flags.
-fn ParseDetailed[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Parsed[T] | Error | Help {
+fn ParseDetailed[T: codec.Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Parsed[T] | Error | Help {
   match (resolve[T](flags, settings, name)) {
     error: Error => error
     fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, settings.completion)
   }
 }
-fn prepare[T: Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], completion: Bool) uses io: Parsed[T] | Error | Help {
+fn prepare[T: codec.Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], completion: Bool) uses io: Parsed[T] | Error | Help {
   match (inputFields[T](name)) {
     error: Error => error
     fields: List[inputField] => match (parseInput(name, description, args, specs, fields, configFiles, completion)) {
       error: Error => error
       help: Help => help
-      input: parsedInput => match (decode[T](input.value)) {
-        error: DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+      input: parsedInput => match (codec.decode[T](input.value)) {
+        error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
         options: T => Parsed[T] { options: options, warnings: input.warnings }
       }
     }
@@ -60,7 +62,7 @@ fn prepare[T: Decode](name: String, description: String, args: List[String], spe
 
 // Run reads process arguments and invokes the handler in a scope after validation.
 // Help is printed; errors remain values for the application to render and exit.
-fn Run[T: Decode](name: String, description: String, run: (T, Scope) => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Ok | Error {
+fn Run[T: codec.Decode](name: String, description: String, run: (T, Scope) => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Ok | Error {
   match (ParseDetailed[T](name, description, process.Args(), flags, configFiles, settings)) {
     help: Help => { print(help.text); printError(help.diagnostics) }
     error: Error => error

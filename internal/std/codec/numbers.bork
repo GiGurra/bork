@@ -1,0 +1,113 @@
+// Numeric-width codecs check decimal range before returning a typed value.
+
+instance decodeInt8: Decode[Int8] {
+  fn decode(json: Value): Int8 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("an Int8 whole number", json) }
+    number, err := strconv.ParseInt(value.text, 10, 8)
+    if err != nil { return DecodeError{path: "", message: "expected an Int8 whole number, found " + value.text} }
+    return int8(number)
+  }
+}
+instance encodeInt8: Encode[Int8] {
+  fn encode(value: Int8): Value { Value.Number { text: toString(value) } }
+}
+
+instance decodeInt16: Decode[Int16] {
+  fn decode(json: Value): Int16 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("an Int16 whole number", json) }
+    number, err := strconv.ParseInt(value.text, 10, 16)
+    if err != nil { return DecodeError{path: "", message: "expected an Int16 whole number, found " + value.text} }
+    return int16(number)
+  }
+}
+instance encodeInt16: Encode[Int16] {
+  fn encode(value: Int16): Value { Value.Number { text: toString(value) } }
+}
+
+instance decodeInt32: Decode[Int32] {
+  fn decode(json: Value): Int32 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("an Int32 whole number", json) }
+    number, err := strconv.ParseInt(value.text, 10, 32)
+    if err != nil { return DecodeError{path: "", message: "expected an Int32 whole number, found " + value.text} }
+    return int32(number)
+  }
+}
+instance encodeInt32: Encode[Int32] {
+  fn encode(value: Int32): Value { Value.Number { text: toString(value) } }
+}
+
+instance decodeUint8: Decode[Uint8] {
+  fn decode(json: Value): Uint8 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("a Uint8 whole number", json) }
+    number, err := strconv.ParseUint(value.text, 10, 8)
+    if err != nil { return DecodeError{path: "", message: "expected a Uint8 whole number, found " + value.text} }
+    return uint8(number)
+  }
+}
+instance encodeUint8: Encode[Uint8] {
+  fn encode(value: Uint8): Value { Value.Number { text: toString(value) } }
+}
+
+instance decodeUint16: Decode[Uint16] {
+  fn decode(json: Value): Uint16 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("a Uint16 whole number", json) }
+    number, err := strconv.ParseUint(value.text, 10, 16)
+    if err != nil { return DecodeError{path: "", message: "expected a Uint16 whole number, found " + value.text} }
+    return uint16(number)
+  }
+}
+instance encodeUint16: Encode[Uint16] {
+  fn encode(value: Uint16): Value { Value.Number { text: toString(value) } }
+}
+
+instance decodeUint32: Decode[Uint32] {
+  fn decode(json: Value): Uint32 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("a Uint32 whole number", json) }
+    number, err := strconv.ParseUint(value.text, 10, 32)
+    if err != nil { return DecodeError{path: "", message: "expected a Uint32 whole number, found " + value.text} }
+    return uint32(number)
+  }
+}
+instance encodeUint32: Encode[Uint32] {
+  fn encode(value: Uint32): Value { Value.Number { text: toString(value) } }
+}
+
+instance decodeUint64: Decode[Uint64] {
+  fn decode(json: Value): Uint64 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("a Uint64 whole number", json) }
+    number, err := strconv.ParseUint(value.text, 10, 64)
+    if err != nil { return DecodeError{path: "", message: "expected a Uint64 whole number, found " + value.text} }
+    return uint64(number)
+  }
+}
+instance encodeUint64: Encode[Uint64] {
+  fn encode(value: Uint64): Value { Value.Number { text: toString(value) } }
+}
+
+instance decodeFloat32: Decode[Float32] {
+  fn decode(json: Value): Float32 | DecodeError unsafe go {
+    import "strconv"
+    value, ok := json.(Value_Number)
+    if !ok { return decodeMismatch("a Float32 number", json) }
+    number, err := strconv.ParseFloat(value.text, 32)
+    if err != nil { return DecodeError{path: "", message: "expected a Float32 number, found " + value.text} }
+    return float32(number)
+  }
+}
+instance encodeFloat32: Encode[Float32] {
+  fn encode(value: Float32): Value { Value.Number { text: toString(value) } }
+}

@@ -1404,7 +1404,7 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 `)
 	}
 	if g.usesDecodeSchema || g.usesGoStruct {
-		src = append(src, decodeSchemaHelpers)
+		src = append(src, g.codecRuntime(decodeSchemaHelpers))
 	}
 	if g.usesGoStruct {
 		src = append(src, strings.ReplaceAll(goStructSchemaHelpers, "@strconv@", g.goImport("strconv")))
@@ -1478,7 +1478,7 @@ func _seqfirst[T any](source _Seq[T]) Option[T] {
 		src = append(src, equalRuntime)
 	}
 	if g.usesDerive {
-		src = append(src, deriveRuntime)
+		src = append(src, g.codecRuntime(deriveRuntime))
 	}
 	if g.usesIs {
 		src = append(src, isRuntime)

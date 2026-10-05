@@ -1,10 +1,13 @@
+import codec "bork/codec"
+
 // bork run examples/sql: scope-owned SQLite and rollback unless committed.
 import "bork/sql"
+use codec.Defaults
 
 pred nonEmpty(value: String) { value.byteLength() > 0 }
-type User = { id: Int, name: String where nonEmpty, note: Option[String] } derive (Decode)
-type Count = { count: Int } derive (Decode)
-fn demo() uses io + net: Ok | sql.Error | DecodeError {
+type User = { id: Int, name: String where nonEmpty, note: Option[String] } derive (codec.Decode)
+type Count = { count: Int } derive (codec.Decode)
+fn demo() uses io + net: Ok | sql.Error | codec.DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     _ = sql.SQL"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)".Exec(db)?
@@ -27,7 +30,7 @@ fn demo() uses io + net: Ok | sql.Error | DecodeError {
 fn main() {
   match (demo()) {
     error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
-    error: DecodeError => eprintln(s"${error.path}: ${error.message}")
+    error: codec.DecodeError => eprintln(s"${error.path}: ${error.message}")
     _ => {}
   }
 }
@@ -54,7 +57,7 @@ test "commit persists and scope end rolls back" {
             _ => assert(false)
           }
         }
-        result: List[Count] | sql.Error | DecodeError = sql.SQL"SELECT count(*) AS count FROM users".Query[Count](db)
+        result: List[Count] | sql.Error | codec.DecodeError = sql.SQL"SELECT count(*) AS count FROM users".Query[Count](db)
         match (result) {
           rows: List[Count] => assertEqual(rows, [Count { count: 1 }])
           _ => assert(false)

@@ -1,2 +1,2 @@
-main.bork:10:27: json.Decode cannot promise that its Int values are positive: they may come from decodeInt, which does not promise it (declare an instance for Int where positive)
-main.bork:12:28: map cannot take a constrained type argument for B: its parameter f could give it values that are not checked (only parameters of type B itself are)
+main.bork:12:27: json.Decode cannot promise that its Int values are positive: they may come from codec.decodeInt, which does not promise it (declare an instance for Int where positive)
+main.bork:14:28: map cannot take a constrained type argument for B: its parameter f could give it values that are not checked (only parameters of type B itself are)

@@ -1,3 +1,5 @@
+import codec "bork/codec"
+
 // Package http serves and sends HTTP requests:
 //
 //   import "bork/http"
@@ -8,6 +10,7 @@
 // can change.
 
 import "bork/time"
+use codec.Defaults
 
 // ValidStatus holds for the status codes HTTP defines (100 to 599).
 pred ValidStatus(code: Int) { code >= 100 && code <= 599 }
@@ -38,7 +41,7 @@ type Admission = {
   queueTimeoutMs: TimeoutMs = 0,
   retryAfterMs: TimeoutMs = 0,
   status: AdmissionStatus = 503,
-} derive (Decode)
+} derive (codec.Decode)
 
 type Request = {
   method: String,

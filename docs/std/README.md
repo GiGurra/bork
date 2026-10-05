@@ -15,6 +15,7 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 | [bork/env](env.md) | Environment variables, and configuration decoded from them |
 | [bork/fs](fs.md) | Files, directories, and paths |
 | [bork/http](http.md) | HTTP clients and servers: routes, TLS, load limits, and shutdown |
+| [bork/codec](codec.md) | Value trees and derived encode/decode classes |
 | [bork/json](json.md) | Parsing, rendering, and streaming JSON |
 | [bork/log](log.md) | Structured logging |
 | [bork/math](math.md) | Float math, big integers, rationals, and decimal money |

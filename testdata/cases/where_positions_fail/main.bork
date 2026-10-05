@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Every position where a where clause (or a constrained alias) can be
 // written but is not checked yet is an error, never silently dropped.
 // where_positions_checked_fail has the positions that are checked.
@@ -8,7 +11,7 @@ pred nonEmpty(s: String) { s.byteLength() > 0 }
 type PosInt = Int where positive
 type Box[T] = { item: T, items: List[T] }
 type Only[T] = { items: List[T] }
-type Decoded = { values: Map[String, PosInt] } derive (Decode, Encode)
+type Decoded = { values: Map[String, PosInt] } derive (codec.Decode, codec.Encode)
 type Shape = sealed { Square, Dot }
 pred square(s: Shape) {
   match (s) {

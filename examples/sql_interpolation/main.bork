@@ -1,9 +1,12 @@
+import codec "bork/codec"
+
 // bork run examples/sql_interpolation: values bind; names quote; fragments compose.
 import "bork/sql"
+use codec.Defaults
 
-type User = { name: String } derive (Decode)
-type Count = { count: Int } derive (Decode)
-fn demo() uses io + net: Ok | sql.Error | DecodeError {
+type User = { name: String } derive (codec.Decode)
+type Count = { count: Int } derive (codec.Decode)
+fn demo() uses io + net: Ok | sql.Error | codec.DecodeError {
   // Even SQL-looking runtime input remains one value.
   hostile = "Ada'); DROP TABLE users; --"
   table = sql.Name("users")?
@@ -27,7 +30,7 @@ fn demo() uses io + net: Ok | sql.Error | DecodeError {
       match (result) {
         user: User => println(s"streamed name: ${user.name}")
         error: sql.Error => { return error }
-        error: DecodeError => { return error }
+        error: codec.DecodeError => { return error }
       }
     }
     // Do not put quotes around a hole: the library rejects it during rendering.
@@ -38,7 +41,7 @@ fn demo() uses io + net: Ok | sql.Error | DecodeError {
 fn main() {
   match (demo()) {
     error: sql.Error => eprintln(s"${error.operation}: ${error.message}")
-    error: DecodeError => eprintln(s"${error.path}: ${error.message}")
+    error: codec.DecodeError => eprintln(s"${error.path}: ${error.message}")
     _ => {}
   }
 }

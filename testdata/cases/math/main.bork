@@ -1,4 +1,7 @@
+import codec "bork/codec"
+
 import "bork/math"
+use codec.Defaults
 use math.Codecs
 
 fn calculations() uses io: Ok | ParseError | math.MathError | OutOfRange {
@@ -112,17 +115,17 @@ fn calculations() uses io: Ok | ParseError | math.MathError | OutOfRange {
   println(one.Div(math.ParseDecimal("-8")?, 2, math.Rounding.HalfAwayFromZero))
   println(one.Div(math.ParseDecimal("0.01")?, 2, math.Rounding.HalfEven))
   println(amount.Round(2, math.Rounding.HalfEven))
-  println(encode(amount))
-  println(decode[math.Decimal](Json.String { value: "0001.2300" }))
-  println(decode[math.Decimal](Json.Number { text: "123" }))
-  println(decode[math.BigInt](Json.String { value: huge.ToString() }))
-  println(decode[math.BigRat](Json.String { value: "4/6" }))
-  println(decode[math.BigInt](encode(huge)) == huge)
-  println(decode[math.BigRat](encode(ratio)) == ratio)
-  println(decode[math.Decimal](encode(amount)) == amount)
-  println(decode[math.BigInt](Json.String { value: "abc" }))
-  println(decode[math.BigRat](Json.String { value: "1/0" }))
-  println(decode[math.Decimal](Json.String { value: "1e2" }))
+  println(codec.encode(amount))
+  println(codec.decode[math.Decimal](codec.Value.String { value: "0001.2300" }))
+  println(codec.decode[math.Decimal](codec.Value.Number { text: "123" }))
+  println(codec.decode[math.BigInt](codec.Value.String { value: huge.ToString() }))
+  println(codec.decode[math.BigRat](codec.Value.String { value: "4/6" }))
+  println(codec.decode[math.BigInt](codec.encode(huge)) == huge)
+  println(codec.decode[math.BigRat](codec.encode(ratio)) == ratio)
+  println(codec.decode[math.Decimal](codec.encode(amount)) == amount)
+  println(codec.decode[math.BigInt](codec.Value.String { value: "abc" }))
+  println(codec.decode[math.BigRat](codec.Value.String { value: "1/0" }))
+  println(codec.decode[math.Decimal](codec.Value.String { value: "1e2" }))
 }
 fn main() {
   println(math.Sqrt(9.0))

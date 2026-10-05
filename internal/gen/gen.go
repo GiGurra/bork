@@ -12,6 +12,7 @@ import (
 	"go/ast"
 	"go/constant"
 	"go/format"
+	"go/parser"
 	"go/printer"
 	goscanner "go/scanner"
 	"go/token"
@@ -583,10 +584,10 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 		for _, callee := range fn.Calls {
 			visit(callee)
 		}
-		for _, callee := range goBodyFunctions(fn) {
+		for _, callee := range goBodyFunctions(fn, g.info.GoImportNames[fn.Decl.GoBody]) {
 			visit(callee)
 		}
-		if fn.Derived != nil && fn.Of.Class.Name == "Decode" {
+		if fn.Derived != nil && check.IsCodec(fn.Of.Class, "Decode") {
 			// A derived decoder checks the fields' where clauses.
 			for _, pred := range invariantPreds(fn.Of.Type, map[check.Type]bool{}) {
 				visit(pred)
@@ -646,7 +647,7 @@ func (g *gen) reachable(roots []*check.Func) map[*check.Func]bool {
 // goBodyFunctions finds package helpers mentioned by unsafe Go, using the
 // same bare-name rule as packageAliases. Tests and fact evaluation emit only
 // reachable functions, so Bork call metadata alone is insufficient.
-func goBodyFunctions(fn *check.Func) []*check.Func {
+func goBodyFunctions(fn *check.Func, goImports map[string]string) []*check.Func {
 	if fn.Decl.GoBody == nil || fn.Pkg == nil {
 		return nil
 	}
@@ -668,6 +669,32 @@ func goBodyFunctions(fn *check.Func) []*check.Func {
 		if helper := fn.Pkg.Funcs[text]; helper != nil && helper != fn && len(helper.TypeParams) == 0 {
 			out = append(out, helper)
 		}
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), "", "package p\nfunc _(){"+fn.Decl.GoBody.Body+"}", 0)
+	if err == nil {
+		params := map[string]bool{}
+		for _, parameter := range fn.Decl.Params {
+			params[parameter.Name] = true
+		}
+		for _, variable := range fn.NeedVars {
+			params[varIdent(variable).Name] = true
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			selector, ok := node.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			alias, ok := selector.X.(*ast.Ident)
+			if !ok || alias.Obj != nil || params[alias.Name] || goImports[alias.Name] != "" {
+				return true
+			}
+			if pkg := fn.Pkg.Imported(alias.Name); pkg != nil && check.Exported(selector.Sel.Name) {
+				if callee := pkg.Funcs[selector.Sel.Name]; callee != nil {
+					out = append(out, callee)
+				}
+			}
+			return true
+		})
 	}
 	return out
 }

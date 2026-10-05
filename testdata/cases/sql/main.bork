@@ -1,6 +1,9 @@
+import codec "bork/codec"
+
 import "bork/encoding"
 import "bork/json"
 import "bork/sql"
+use codec.Defaults
 
 pred named(value: String) { value.byteLength() > 0 }
 type Row = {
@@ -10,16 +13,16 @@ type Row = {
   active: Bool,
   score: Float,
   data: List[Int],
-} derive (Decode)
-type Count = { count: Int } derive (Decode)
-fn count(db: sql.Connection) uses io + net: Int | sql.Error | DecodeError {
+} derive (codec.Decode)
+type Count = { count: Int } derive (codec.Decode)
+fn count(db: sql.Connection) uses io + net: Int | sql.Error | codec.DecodeError {
   rows = sql.Query[Count](db, sql.Unsafe("SELECT count(*) AS count FROM users"), [])?
   rows.get(0).getOr(Count { count: -1 }).count
 }
-fn showError(result: Json | sql.Error) uses io {
+fn showError(result: codec.Value | sql.Error) uses io {
   match (result) {
     error: sql.Error => println(error.operation)
-    value: Json => println(json.Render(value))
+    value: codec.Value => println(json.Render(value))
   }
 }
 fn rollbackPanic(db: sql.Connection) uses io + net: Ok | sql.Error {
@@ -37,7 +40,7 @@ fn protect(work: () => Ok): Bool unsafe go {
   }()
   return recovered
 }
-fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
+fn demo() uses io + net + state: Ok | sql.Error | codec.DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     _ = sql.Exec(db, sql.Unsafe("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)"), [])?
@@ -73,9 +76,9 @@ fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
     println(protect(() => { match (rollbackPanic(db)) { error: sql.Error => println(error); _ => {} } }))
     println(count(db))
     _ = sql.Exec(db, sql.Unsafe("UPDATE users SET name = '' WHERE id = 1"), [])?
-    result: List[Row] | sql.Error | DecodeError = sql.Query(db, sql.Unsafe("SELECT id, name, note, active, score, data FROM users WHERE id = 1"), [])
+    result: List[Row] | sql.Error | codec.DecodeError = sql.Query(db, sql.Unsafe("SELECT id, name, note, active, score, data FROM users WHERE id = 1"), [])
     match (result) {
-      error: DecodeError => println(s"${error.path}: ${error.message}")
+      error: codec.DecodeError => println(s"${error.path}: ${error.message}")
       _ => println("unexpected")
     }
     scope transaction {
@@ -93,7 +96,7 @@ fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
     match (sql.Exec(db, sql.Unsafe("DELETE FROM users"), [])) { error: sql.Error => println(error.operation); _ => println("unexpected") }
   }
 }
-fn attachments() uses io + net + state: Ok | sql.Error | DecodeError {
+fn attachments() uses io + net + state: Ok | sql.Error | codec.DecodeError {
   scope outer {
     db = scope original {
       opened = sql.OpenSqlite(":memory:", original)?
@@ -131,10 +134,10 @@ fn attachments() uses io + net + state: Ok | sql.Error | DecodeError {
   }
 }
 fn main() {
-  match (attachments()) { error: sql.Error => println(error); error: DecodeError => println(error); _ => {} }
+  match (attachments()) { error: sql.Error => println(error); error: codec.DecodeError => println(error); _ => {} }
   match (demo()) {
     error: sql.Error => println(error)
-    error: DecodeError => println(error)
+    error: codec.DecodeError => println(error)
     _ => {}
   }
 }

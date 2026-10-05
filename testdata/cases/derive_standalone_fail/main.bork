@@ -1,11 +1,14 @@
-type Config = {} derive (Decode)
-derive Decode for Config
+import "bork/codec"
+use codec.Defaults
+
+type Config = {} derive (codec.Decode)
+derive codec.Decode for Config
 
 type Alias = Config
-derive Encode for Config
-derive Encode for Alias
+derive codec.Encode for Config
+derive codec.Encode for Alias
 
-derive Decode for Int
+derive codec.Decode for Int
 derive Eq for Config
 derive Missing for Config
 fn main() {}

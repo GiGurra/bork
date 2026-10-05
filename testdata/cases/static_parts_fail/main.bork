@@ -1,3 +1,6 @@
+import codec "bork/codec"
+use codec.Defaults
+
 type Alias = StaticParts
 type Wrapper = { parts: StaticParts }
 type Data = { values: List[String] }
@@ -7,6 +10,6 @@ fn bad(values: List[String], parts: StaticParts, wrapper: Wrapper) {
   _ = parts.copy(values: values)
   _ = wrapper.copy(parts.values: values)
   converted = Data { values: values }.into[StaticParts]()
-  decoded = decode[StaticParts](Json.Object { fields: [] })
+  decoded = codec.decode[StaticParts](codec.Value.Object { fields: [] })
 }
 fn main() {}

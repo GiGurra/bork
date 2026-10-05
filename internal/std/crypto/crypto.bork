@@ -1,4 +1,7 @@
+import codec "bork/codec"
+
 import "bork/encoding"
+use codec.Defaults
 
 type Error = { message: String }
 pred ValidSize(size: Int) { size >= 0 && size <= 16777216 }
@@ -63,7 +66,7 @@ type PasswordParams = {
   memoryKiB: Int where ValidMemory,
   iterations: Int where ValidIterations,
   parallelism: Int where ValidParallelism,
-} derive (Encode, Decode)
+} derive (codec.Encode, codec.Decode)
 fn DefaultPasswordParams(): PasswordParams { PasswordParams { memoryKiB: 19456, iterations: 2, parallelism: 1 } }
 
 // HashPassword uses Argon2id, a fresh 16-byte salt and a 32-byte output key.

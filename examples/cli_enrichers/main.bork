@@ -1,6 +1,9 @@
+import "bork/codec"
+
 import "bork/cli"
 import "bork/process"
-type Options = { host: String = "localhost", port: Int = 8080 } derive (Decode)
+use codec.Defaults
+type Options = { host: String = "localhost", port: Int = 8080 } derive (codec.Decode)
 fn teamNames(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec {
   field.copy(long: cli.Mapping.Named { name: s"team-${field.field}" })
 }

@@ -111,11 +111,11 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 		decoder := "nil"
 		if i < len(ci.GoFieldDecoders) && ci.GoFieldDecoders[i] != nil {
 			g.usesDerive = true
-			g.goType(g.info.Named["Json"])
-			g.goType(g.info.Named["JsonField"])
+			g.goType(g.codecType("Value"))
+			g.goType(g.codecType("Field"))
 			d := ci.GoFieldDecoders[i]
 			body := g.decodeFields([]*check.Field{independentField(f)}, []*check.Dict{d}, bt)
-			decoder = fmt.Sprintf("func(value Json) any { _result := func() any { _obj := Json_Object{fields: []JsonField{{name:%q,value:value}}}; %s }(); if err,ok:=_result.(DecodeError); ok { return err }; return _result.(%s).%s }", f.Name, body, bt, g.fieldReadSuffix(f))
+			decoder = fmt.Sprintf("func(value %s) any { _result := func() any { _obj := %s{fields: []%s{{name:%q,value:value}}}; %s }(); if err,ok:=_result.(%s); ok { return err }; return _result.(%s).%s }", g.typeText(g.codecType("Value")), g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Object"))), g.typeText(g.codecType("Field")), f.Name, body, g.typeText(g.codecType("DecodeError")), bt, g.fieldReadSuffix(f))
 		}
 		tagExpr := "[]_borkGoTag{" + strings.Join(tags, ",") + "}"
 		if !r.GoGenerated {

@@ -1,8 +1,11 @@
+import codec "bork/codec"
+
 import "bork/encoding"
 import "bork/json"
 import "bork/fs"
+use codec.Defaults
 
-type Item = { name: String, count: Int } derive (Encode)
+type Item = { name: String, count: Int } derive (codec.Encode)
 fn nextText(reader: json.Reader) uses io: String {
   match (json.Next(reader)) {
     Option.Some { value } => json.Render(value)
@@ -18,18 +21,18 @@ fn countLines(reader: json.Reader) uses io: Int {
     _ => -100
   }
 }
-fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | JsonError {
+fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | json.JsonError {
   directory = fs.TempDir(s)?
   root = fs.DirectoryPath(directory)
   path = fs.Join([root, "lines.jsonl"])
   scope writing {
     writer = json.CreateLines(path, writing)?
     json.Write(writer, Item { name: "one\ntwo", count: 2 })?
-    json.Write(writer, Json.Null)?
-    json.Write(writer, Json.Number { text: " 3\n " })?
-    println(match (json.Write(writer, Json.Number { text: "true" })) { _: JsonError => true; _ => false })
-    println(match (json.Write(writer, Json.Array { items: [Json.Number { text: "1,2" }] })) { _: JsonError => true; _ => false })
-    println(match (json.Write(writer, Json.Number { text: "1\n2" })) { _: JsonError => true; _ => false })
+    json.Write(writer, codec.Value.Null)?
+    json.Write(writer, codec.Value.Number { text: " 3\n " })?
+    println(match (json.Write(writer, codec.Value.Number { text: "true" })) { _: json.JsonError => true; _ => false })
+    println(match (json.Write(writer, codec.Value.Array { items: [codec.Value.Number { text: "1,2" }] })) { _: json.JsonError => true; _ => false })
+    println(match (json.Write(writer, codec.Value.Number { text: "1\n2" })) { _: json.JsonError => true; _ => false })
   }
   reader = json.OpenLines(path, s)?
   println(nextText(reader))
@@ -50,7 +53,7 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
   fs.Write(longPath, encoding.Utf8("\"" + "a".repeat(70000) + "\"\n"))?
   longReader = json.OpenLines(longPath, s)?
   match (json.Next(longReader)) {
-    Option.Some { value: Json.String { value } } => println(value.byteLength())
+    Option.Some { value: codec.Value.String { value } } => println(value.byteLength())
     _ => println("unexpected")
   }
   emptyPath = fs.Join([root, "empty.jsonl"])

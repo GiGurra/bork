@@ -169,7 +169,11 @@ Nothing is picked up from other packages behind your back, and if two instances 
 | `Eq` | `==` | Every type made of comparable parts has it automatically |
 | `Ord` | `compare(a, b)` | Numbers, strings, and runes. Used by `sorted()` |
 | `Show` | `show(x)` | How a value prints. Every type has a default |
-| `Decode`, `Encode` | Conversion from and to JSON-like data | Usually derived |
+
+
+Imported `codec.Decode` and `codec.Encode` convert between typed data and
+`codec.Value`. They are usually derived; import `bork/codec` and select
+`use codec.Defaults` for standard instances.
 
 To change how one of your types prints, declare a `Show` instance for it in the package that declares the type:
 
@@ -190,14 +194,17 @@ fn main() {
 
 ## Derived instances
 
-`derive` asks the compiler to write an instance. `Decode` and `Encode` turn records and sealed types into and out of JSON, CSV rows, command-line options, environment variables, and SQL rows.
+`derive` asks the compiler to write an instance. `codec.Decode` and `codec.Encode` from [bork/codec](../std/codec.md) turn records and sealed types into and out of JSON, CSV rows, command-line options, environment variables, and SQL rows. Select `use codec.Defaults` for standard primitive and container instances.
 
 ```bork
+import codec "bork/codec"
+
 import "bork/json"
+use codec.Defaults
 
 pred validPort(n: Int) { n > 0 && n < 65536 }
 
-type Server = { host: String, port: Int where validPort = 8080, tags: List[String] = [] } derive (Decode, Encode)
+type Server = { host: String, port: Int where validPort = 8080, tags: List[String] = [] } derive (codec.Decode, codec.Encode)
 
 fn main() {
   println(json.Decode[Server]("{\"host\": \"example.com\"}"))

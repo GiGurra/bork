@@ -11,11 +11,13 @@
 ## Typed SQL literals
 
 ```bork
+import "bork/codec"
 import "bork/sql"
+use codec.Defaults
 
-type User = { id: Int, name: String } derive (Decode)
+type User = { id: Int, name: String } derive (codec.Decode)
 
-fn usersNamed(connection: sql.Connection, name: String) uses io + net: List[User] | sql.Error | DecodeError {
+fn usersNamed(connection: sql.Connection, name: String) uses io + net: List[User] | sql.Error | codec.DecodeError {
   statement = sql.SQL"SELECT id, name FROM users WHERE name = $name"
   statement.Query[User](connection)
 }
@@ -33,9 +35,11 @@ Dots are part of a component; use `$schema.$table` to compose qualified names.
 Nested Statement holes splice structured fragments and preserve parameter order:
 
 ```bork
+import "bork/codec"
 import "bork/sql"
+use codec.Defaults
 
-fn lookup(connection: sql.Connection, tableName: String, columnName: String, name: String) uses io + net: Json | sql.Error {
+fn lookup(connection: sql.Connection, tableName: String, columnName: String, name: String) uses io + net: codec.Value | sql.Error {
   table = sql.Name(tableName)?
   column = sql.Name(columnName)?
   filter = sql.SQL"$column = $name"
@@ -52,7 +56,7 @@ plain Strings cannot reach those APIs. Explicit unsafe Go remains outside these 
 
 Statement methods `Exec`, `Query[T: Decode]`, and `QueryJson` take a Connection or
 Transaction and preserve the existing results, errors, effects, cancellation,
-and scope lifetimes. `Rows[T: Decode]` and `RowsJson` remain lazy sequences:
+and scope lifetimes. `Rows[T: codec.Decode]` and `RowsJson` remain lazy sequences:
 each traversal renders and queries afresh. Rendering failures yield one Error
 and stop without executing SQL. Reusing a Statement never consumes its values.
 
@@ -99,11 +103,13 @@ Prefer typed SQL literals for application queries. Code that must execute SQL
 assembled as a runtime String opts in with `sql.Unsafe(text): sql.UnsafeQuery`:
 
 ```bork
+import "bork/codec"
 import "bork/sql"
+use codec.Defaults
 
-type User = { id: Int, name: String } derive (Decode)
+type User = { id: Int, name: String } derive (codec.Decode)
 
-fn rawUsers(connection: sql.Connection, queryText: String, params: List[sql.Value]) uses io + net: List[User] | sql.Error | DecodeError {
+fn rawUsers(connection: sql.Connection, queryText: String, params: List[sql.Value]) uses io + net: List[User] | sql.Error | codec.DecodeError {
   raw = sql.Unsafe(queryText)
   sql.Query[User](connection, raw, params)
 }
@@ -132,4 +138,4 @@ Its commented quoted-hole example explains the compile error.
 
 `bork/sql` opens SQLite or Postgres connections in scopes, rolls uncommitted transactions back on scope exit, binds query parameters, and decodes rows into proven records. See [examples/sql](../../examples/sql/main.bork).
 
-`Rows[T: Decode](connection, unsafeQuery, params): Seq[T | Error | DecodeError] uses io + net` decodes one row at a time. `RowsJson` yields `Json | Error`. Construction performs no query; each traversal executes it afresh using the connection or transaction context. Stopping closes active rows. Returned values copy driver buffers, and the sequence retains the connection/transaction lifetime. Handle errors per element.
+`Rows[T: codec.Decode](connection, unsafeQuery, params): Seq[T | Error | codec.DecodeError] uses io + net` decodes one row at a time. `RowsJson` yields `codec.Value | Error`. Construction performs no query; each traversal executes it afresh using the connection or transaction context. Stopping closes active rows. Returned values copy driver buffers, and the sequence retains the connection/transaction lifetime. Handle errors per element.

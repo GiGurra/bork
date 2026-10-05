@@ -1,13 +1,16 @@
+import codec "bork/codec"
+
 import "bork/json"
 import "example.com/lazy_computed_codecs/settings"
 import "bork/env"
 import "bork/encoding"
+use codec.Defaults
 pred positive(n: Int) { n > 0 }
 fn double(n: Int where positive): Int { if (n <= 0) { panic("recipe ran before dependency validation") }; n * 2 }
-type Config = { lazy doubled: Int = double(n), n: Int where positive, tag: String = "default" } derive (Decode, Encode, GoStruct)
-type PrivateComputed = { n: Int, lazy secret: settings.Secret = settings.New(n) } derive (Decode, Encode, GoStruct)
-type Callback = { n: Int, lazy call: () => Int = () => n } derive (Decode, Encode, GoStruct)
-type Choice = sealed { Item { n: Int, lazy doubled: Int = n * 2 }, Empty } derive (Decode, Encode)
+type Config = { lazy doubled: Int = double(n), n: Int where positive, tag: String = "default" } derive (codec.Decode, codec.Encode, GoStruct)
+type PrivateComputed = { n: Int, lazy secret: settings.Secret = settings.New(n) } derive (codec.Decode, codec.Encode, GoStruct)
+type Callback = { n: Int, lazy call: () => Int = () => n } derive (codec.Decode, codec.Encode, GoStruct)
+type Choice = sealed { Item { n: Int, lazy doubled: Int = n * 2 }, Empty } derive (codec.Decode, codec.Encode)
 fn round[T: GoStruct](value: T): T | GoValueError unsafe go {
  result,errs:=_d_T_GoStruct.FromGo(_d_T_GoStruct.ToGo(value))
  if len(errs)>0{return errs[0]};return result
@@ -23,8 +26,8 @@ fn decoders[T: GoStruct](): Int unsafe go {
  return count
 }
 fn decode(text: String) uses io {
-  result: Config | JsonError | DecodeError = json.Decode(text)
-  match (result) { c: Config => { println(c.doubled); println(json.Encode(c)) }, e: JsonError => println(e), e: DecodeError => println(s"error ${e.path}: ${e.message}") }
+  result: Config | json.JsonError | codec.DecodeError = json.Decode(text)
+  match (result) { c: Config => { println(c.doubled); println(json.Encode(c)) }, e: json.JsonError => println(e), e: codec.DecodeError => println(s"error ${e.path}: ${e.message}") }
 }
 fn main() {
   c = Config { n: 3 }; println(json.Encode(c))
@@ -40,8 +43,8 @@ fn main() {
   rows = encoding.DecodeCsv[Config]("n,tag\n6,row\n")
   match (rows) { values: List[Config] => println(values.map(row => row.doubled)), e: encoding.CsvError => println(e), e: encoding.CsvErrors => println(e) }
   println(fields[Callback]())
-  cb: Callback | DecodeError | JsonError = json.Decode("{\"n\":4}")
-  match (cb) { value: Callback => { println(value.call()); println(json.Encode(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
-  privateResult: PrivateComputed | DecodeError | JsonError = json.Decode("{\"n\":7}")
-  match (privateResult) { value: PrivateComputed => { println(value.secret.value); println(json.Encode(value)) }, e: DecodeError => println(e), e: JsonError => println(e) }
+  cb: Callback | codec.DecodeError | json.JsonError = json.Decode("{\"n\":4}")
+  match (cb) { value: Callback => { println(value.call()); println(json.Encode(value)) }, e: codec.DecodeError => println(e), e: json.JsonError => println(e) }
+  privateResult: PrivateComputed | codec.DecodeError | json.JsonError = json.Decode("{\"n\":7}")
+  match (privateResult) { value: PrivateComputed => { println(value.secret.value); println(json.Encode(value)) }, e: codec.DecodeError => println(e), e: json.JsonError => println(e) }
 }

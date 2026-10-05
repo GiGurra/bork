@@ -43,7 +43,7 @@ func (g *gen) classDecl(class *check.Class) ast.Decl {
 			Type:  g.funcType(&check.FuncType{Params: m.Params, Result: m.Result}, nil),
 		})
 	}
-	if class.Prelude && class.Name == "Decode" {
+	if check.IsCodec(class, "Decode") {
 		g.usesDecodeSchema = true
 		callback, _ := parser.ParseExpr("func() []_borkDecodeField")
 		st.Fields.List = append(st.Fields.List,
@@ -83,7 +83,44 @@ func instName(ci *check.ClassInstance) string {
 // dictParam is the Go parameter holding the instance of class for the
 // type parameter tp.
 func dictParam(tp *check.TypeParam, class *check.Class) *ast.Ident {
-	return ast.NewIdent("_d_" + tp.Name + "_" + class.Name)
+	collision := false
+	if !class.Prelude && !check.IsCodec(class, "Decode") && !check.IsCodec(class, "Encode") {
+		for _, bound := range tp.Bounds {
+			collision = collision || (bound != class && bound.Name == class.Name)
+		}
+	}
+	if !collision {
+		return ast.NewIdent("_d_" + tp.Name + "_" + class.Name)
+	}
+	counts := map[string]int{}
+	reserved := map[string]bool{}
+	for _, bound := range tp.Bounds {
+		counts[bound.Name]++
+		reserved[bound.Name] = true
+	}
+	tags := map[*check.Class]string{}
+	for _, bound := range tp.Bounds {
+		tag := bound.Name
+		if counts[tag] > 1 && !bound.Prelude && !check.IsCodec(bound, "Decode") && !check.IsCodec(bound, "Encode") {
+			// Reserve every declared class name before assigning alternatives,
+			// retaining the standard codec bridge names even with collisions.
+			stem := className(bound).Name
+			if stem == bound.Name {
+				stem += "_local"
+			}
+			tag = stem
+			for serial := 2; reserved[tag]; serial++ {
+				tag = fmt.Sprintf("%s_%d", stem, serial)
+			}
+			reserved[tag] = true
+		}
+		tags[bound] = tag
+	}
+	tag := tags[class]
+	if tag == "" {
+		tag = class.Name
+	}
+	return ast.NewIdent("_d_" + tp.Name + "_" + tag)
 }
 
 // dictParams are the parameters for the bounds of type parameters.
@@ -139,13 +176,13 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 		}
 		lit.Elts = append(lit.Elts, &ast.KeyValueExpr{Key: name(method.Decl.Name), Value: fn})
 	}
-	if ci.Class.Prelude && ci.Class.Name == "Decode" {
+	if check.IsCodec(ci.Class, "Decode") {
 		kind, _ := parser.ParseExpr(g.decodeKind(ci.Type))
 		lit.Elts = append(lit.Elts,
 			&ast.KeyValueExpr{Key: ast.NewIdent("kind"), Value: kind},
 			&ast.KeyValueExpr{Key: ast.NewIdent("optional"), Value: ast.NewIdent(fmt.Sprintf("%t", check.IsOption(ci.Type)))})
 	}
-	if ci.Class.Prelude && ci.Class.Name == "Decode" && len(ci.Methods) > 0 && ci.Methods[0].Derived != nil {
+	if check.IsCodec(ci.Class, "Decode") && len(ci.Methods) > 0 && ci.Methods[0].Derived != nil {
 		if record, ok := ci.Type.(*check.Record); ok {
 			callback, err := parser.ParseExpr(g.decodeSchema(ci, record))
 			if err != nil {
@@ -172,7 +209,7 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (check.IsCodec(d.Class, "Encode") || check.IsCodec(d.Class, "Decode")) {
 			method := strings.ToLower(d.Class.Name)
 			fun, _ := g.dictMethod(d, method)
 			return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun}}}
@@ -222,7 +259,7 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 		return fun, nil
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (check.IsCodec(d.Class, "Encode") || check.IsCodec(d.Class, "Decode")) {
 			return g.tupleCodec(d, tuple), nil
 		}
 		if check.IsShow(d.Class) {

@@ -44,7 +44,7 @@ as a space. Query escaping escapes `/` and literal `+`, while path escaping keep
 `+` as a literal path character.
 
 HTTP's `Query(request)` and `QueryAs[T](request)` use this parser, preserving
-repeated values and their existing IoError/DecodeError results. Request keeps its
+repeated values and their existing IoError/codec.DecodeError results. Request keeps its
 raw query String for HTTP forwarding and form decoding. HTTP clients accept the
 formatted `value.String()`.
 

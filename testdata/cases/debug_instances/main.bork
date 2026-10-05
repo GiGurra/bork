@@ -1,9 +1,12 @@
+import codec "bork/codec"
+
 import "bork/json"
+use codec.Defaults
 pred positive(x: Int) { x > 0 }
 type Pos = Int where positive
 type Config = { port: Pos }
-instance encodePos: Encode[Pos] {
-  fn encode(x: Pos): Json { Json.String { value: s":$x" } }
+instance encodePos: codec.Encode[Pos] {
+  fn encode(x: Pos): codec.Value { codec.Value.String { value: s":$x" } }
 }
 fn encodeParam(x: Pos): String { json.Encode(dbg(x)) }
 fn main() {

@@ -1,7 +1,10 @@
+import codec "bork/codec"
+
 import "bork/math"
+use codec.Defaults
 use math.Codecs
 
-type Invoice = { subtotal: math.Decimal, tax: math.Decimal, total: math.Decimal } derive (Encode)
+type Invoice = { subtotal: math.Decimal, tax: math.Decimal, total: math.Decimal } derive (codec.Encode)
 
 // Round tax once, after exact multiplication, using the invoice's currency scale.
 fn invoice(subtotal: String, rate: String): Invoice | ParseError | OutOfRange {

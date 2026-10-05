@@ -1,22 +1,25 @@
+import codec "bork/codec"
+
 import "bork/json"
 import "bork/env"
 import "bork/encoding"
 import "bork/cli"
+use codec.Defaults
 
 pred ordered(r: Range) { r.lo <= r.hi }
-type Range = { lo: Int = 0, hi: Int = 10 } where ordered derive (Decode, GoStruct)
+type Range = { lo: Int = 0, hi: Int = 10 } where ordered derive (codec.Decode, GoStruct)
 pred stateValid(s: State) {
   match (s) { State.Idle => true, State.Running { lo, hi } => lo <= hi }
 }
-type State = sealed { Idle, Running { lo: Int, hi: Int } where stateValid } derive (Decode)
+type State = sealed { Idle, Running { lo: Int, hi: Int } where stateValid } derive (codec.Decode)
 test "generated values satisfy whole invariants" (r: Range, s: State) {
   assert(r.lo <= r.hi)
   assert(stateValid(s))
 }
 test "decoding checks completed values and defaults" {
-  match (json.Decode[Range]("{\"lo\":20}")) { Range => assert(false), e: DecodeError => assertEqual(e.path, ".lo"), JsonError => assert(false) }
+  match (json.Decode[Range]("{\"lo\":20}")) { Range => assert(false), e: codec.DecodeError => assertEqual(e.path, ".lo"), json.JsonError => assert(false) }
   match (json.Decode[Range]("{\"lo\":2,\"hi\":3}")) { r: Range => assert(r.lo <= r.hi), _ => assert(false) }
-  match (json.Decode[State]("{\"type\":\"Running\",\"lo\":9,\"hi\":2}")) { State => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (json.Decode[State]("{\"type\":\"Running\",\"lo\":9,\"hi\":2}")) { State => assert(false), codec.DecodeError => assert(true), json.JsonError => assert(false) }
 }
 fn readGo[T: GoStruct](text: String): T | GoValueError unsafe go {
   import "encoding/json"
@@ -30,16 +33,16 @@ test "Go conversions check whole invariants" {
   match (readGo[Range]("{\"Lo\":2,\"Hi\":3}")) { r: Range => assert(r.lo <= r.hi), _ => assert(false) }
 }
 pred boxValid[T](b: Box[T]) { b.n > 0 }
-type Box[T] = { value: T, n: Int } where boxValid derive (Decode)
+type Box[T] = { value: T, n: Int } where boxValid derive (codec.Decode)
 pred accepted(s: Gate) { match (s) { Gate.Accepted => true, Gate.Rejected => false } }
-type Gate = sealed { Accepted, Rejected } where accepted derive (Decode)
+type Gate = sealed { Accepted, Rejected } where accepted derive (codec.Decode)
 test "sealed-wide decoders validate fieldless variants" {
   match (json.Decode[Gate]("\"Accepted\"")) { Gate => assert(true), _ => assert(false) }
-  match (json.Decode[Gate]("\"Rejected\"")) { Gate => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (json.Decode[Gate]("\"Rejected\"")) { Gate => assert(false), codec.DecodeError => assert(true), json.JsonError => assert(false) }
 }
 test "generic invariants validate and generate" (b: Box[String]) {
   assert(b.n > 0)
-  match (json.Decode[Box[String]]("{\"value\":\"x\",\"n\":0}")) { Box => assert(false), DecodeError => assert(true), JsonError => assert(false) }
+  match (json.Decode[Box[String]]("{\"value\":\"x\",\"n\":0}")) { Box => assert(false), codec.DecodeError => assert(true), json.JsonError => assert(false) }
 }
 test "schema loaders check completed invariants" {
   lookup = (name: String) => if (name == "CFG_LO") { Option.Some { value: "20" } } else { Option.None }
@@ -54,9 +57,9 @@ test "generic phantom invariants validate Go conversion" {
 }
 pred nonzero(n: Int) { n != 0 }
 pred safeDivisor(d: Divisor) { 10 / d.n >= 0 }
-type Divisor = { n: Int where nonzero } where safeDivisor derive (Decode, GoStruct)
+type Divisor = { n: Int where nonzero } where safeDivisor derive (codec.Decode, GoStruct)
 test "invalid fields suppress whole-value checks" {
-  match (json.Decode[Divisor]("{\"n\":0}")) { Divisor => assert(false), e: DecodeError => assertEqual(e.path, ".n"), JsonError => assert(false) }
+  match (json.Decode[Divisor]("{\"n\":0}")) { Divisor => assert(false), e: codec.DecodeError => assertEqual(e.path, ".n"), json.JsonError => assert(false) }
   match (readGo[Divisor]("{\"N\":0}")) { Divisor => assert(false), e: GoValueError => assertEqual(e.path, "result.n") }
 }
 fn main() {}

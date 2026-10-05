@@ -1,4 +1,7 @@
-type Cents = { amount: Int } derive (Decode, Encode)
+import codec "bork/codec"
+use codec.Defaults
+
+type Cents = { amount: Int } derive (codec.Decode, codec.Encode)
 
 // Two ways to show an amount; Defaults suggests one of them.
 instance showDollars: Show[Cents] {

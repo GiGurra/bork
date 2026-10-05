@@ -1,3 +1,6 @@
-type State = sealed { hidden, Open } derive (Decode, Encode)
-type Item = { state: State = State.hidden, names: List[String] = ["first"] } derive (Decode, Encode)
-type Box[T] = { value: T, extras: List[T] = [] } derive (Decode, Encode)
+import codec "bork/codec"
+use codec.Defaults
+
+type State = sealed { hidden, Open } derive (codec.Decode, codec.Encode)
+type Item = { state: State = State.hidden, names: List[String] = ["first"] } derive (codec.Decode, codec.Encode)
+type Box[T] = { value: T, extras: List[T] = [] } derive (codec.Decode, codec.Encode)

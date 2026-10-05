@@ -10,7 +10,7 @@ cells become Some, parsed exactly like the required field (no JSON quotes
 for String). Encoding Some("") writes empty like None; Some("") cannot
 round-trip and decodes as None. Nonempty JSON null in optional non-String cells
 is rejected with a per-cell error; use an empty cell for None. The JSON bridge
-cannot preserve Some(Json.Null), which encodes like None. Header names match
+cannot preserve Some(codec.Value.Null), which encodes like None. Header names match
 fields exactly; unknown,
 duplicate and missing required headers are errors. Ragged typed rows are
 errors. Facts and field types are checked before constructing records, with
@@ -55,7 +55,7 @@ base64 parsers enforce zero trailing padding bits and accept CR/LF.
   Some("") both writes empty cells, which decode as None: Some("") cannot
   round-trip. Optional non-String cells containing nonempty JSON `null` are
   rejected with a cell error; None must use an empty cell. The JSON bridge
-  also cannot preserve Some(Json.Null), which encodes like None. These are
+  also cannot preserve Some(codec.Value.Null), which encodes like None. These are
   known limitations of the CSV representation.
   Headers match field names exactly; duplicate, unknown, and missing required
   columns are errors. Field types and facts are checked, collecting every

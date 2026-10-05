@@ -1,29 +1,32 @@
+import codec "bork/codec"
+
 import codecs "bork/json"
 import "bork/env"
 import "bork/encoding"
+use codec.Defaults
 pred positive(x: Int) { x > 0 }
 pred ordered(c: Config) { c.lo <= c.hi }
 type Config = {
   lazy lo: Int where positive = 1
   lazy hi: Int where positive = 8
-} where ordered derive (Decode, Encode, GoStruct)
-type Choice = sealed { Item { lazy value: Int }, Empty } derive (Decode, Encode)
+} where ordered derive (codec.Decode, codec.Encode, GoStruct)
+type Choice = sealed { Item { lazy value: Int }, Empty } derive (codec.Decode, codec.Encode)
 fn round[T: GoStruct](value: T): T | GoValueError unsafe go {
   result, errs := _d_T_GoStruct.FromGo(_d_T_GoStruct.ToGo(value))
   if len(errs)>0 { return errs[0] }; return result
 }
-fn json[T: Decode + Encode](text: String) uses io {
-  result: T | JsonError | DecodeError = codecs.Decode(text)
+fn json[T: codec.Decode + codec.Encode](text: String) uses io {
+  result: T | codecs.JsonError | codec.DecodeError = codecs.Decode(text)
   match (result) {
     value: T => println(codecs.Encode(value))
-    err: JsonError => println(err)
-    err: DecodeError => println(s"error ${err.path}: ${err.message}")
+    err: codecs.JsonError => println(err)
+    err: codec.DecodeError => println(s"error ${err.path}: ${err.message}")
   }
 }
 fn work(n: Int) uses io: Int { println(s"force $n"); n }
 fn main() {
   c = Config { lo: 2, hi: 6 }
-  println("encode")
+  println("codec.encode")
   println(codecs.Encode(c))
   println(round(c))
   json[Config]("{}")

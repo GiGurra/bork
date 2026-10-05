@@ -1,43 +1,46 @@
+import codec "bork/codec"
+use codec.Defaults
+
 // Exact values encode as JSON strings so consumers cannot lose precision.
-instance EncodeBigInt: Encode[BigInt] {
-  fn encode(value: BigInt): Json { Json.String { value: value.ToString() } }
+instance EncodeBigInt: codec.Encode[BigInt] {
+  fn encode(value: BigInt): codec.Value { codec.Value.String { value: value.ToString() } }
 }
-instance DecodeBigInt: Decode[BigInt] {
-  fn decode(json: Json): BigInt | DecodeError {
+instance DecodeBigInt: codec.Decode[BigInt] {
+  fn decode(json: codec.Value): BigInt | codec.DecodeError {
     match (json) {
-      Json.String { value } => match (ParseInteger(value)) {
+      codec.Value.String { value } => match (ParseInteger(value)) {
         parsed: BigInt => parsed
-        error: ParseError => DecodeError { path: "", message: error.message }
+        error: ParseError => codec.DecodeError { path: "", message: error.message }
       }
-      _ => DecodeError { path: "", message: "expected a BigInt string" }
+      _ => codec.DecodeError { path: "", message: "expected a BigInt string" }
     }
   }
 }
-instance EncodeBigRat: Encode[BigRat] {
-  fn encode(value: BigRat): Json { Json.String { value: value.ToString() } }
+instance EncodeBigRat: codec.Encode[BigRat] {
+  fn encode(value: BigRat): codec.Value { codec.Value.String { value: value.ToString() } }
 }
-instance DecodeBigRat: Decode[BigRat] {
-  fn decode(json: Json): BigRat | DecodeError {
+instance DecodeBigRat: codec.Decode[BigRat] {
+  fn decode(json: codec.Value): BigRat | codec.DecodeError {
     match (json) {
-      Json.String { value } => match (ParseRational(value)) {
+      codec.Value.String { value } => match (ParseRational(value)) {
         parsed: BigRat => parsed
-        error: ParseError => DecodeError { path: "", message: error.message }
+        error: ParseError => codec.DecodeError { path: "", message: error.message }
       }
-      _ => DecodeError { path: "", message: "expected a BigRat string" }
+      _ => codec.DecodeError { path: "", message: "expected a BigRat string" }
     }
   }
 }
-instance EncodeDecimal: Encode[Decimal] {
-  fn encode(value: Decimal): Json { Json.String { value: value.ToString() } }
+instance EncodeDecimal: codec.Encode[Decimal] {
+  fn encode(value: Decimal): codec.Value { codec.Value.String { value: value.ToString() } }
 }
-instance DecodeDecimal: Decode[Decimal] {
-  fn decode(json: Json): Decimal | DecodeError {
+instance DecodeDecimal: codec.Decode[Decimal] {
+  fn decode(json: codec.Value): Decimal | codec.DecodeError {
     match (json) {
-      Json.String { value } => match (ParseDecimal(value)) {
+      codec.Value.String { value } => match (ParseDecimal(value)) {
         parsed: Decimal => parsed
-        error: ParseError => DecodeError { path: "", message: error.message }
+        error: ParseError => codec.DecodeError { path: "", message: error.message }
       }
-      _ => DecodeError { path: "", message: "expected a Decimal string" }
+      _ => codec.DecodeError { path: "", message: "expected a Decimal string" }
     }
   }
 }

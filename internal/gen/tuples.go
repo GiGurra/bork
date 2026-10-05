@@ -125,7 +125,9 @@ func (g *gen) instanceArgument(inst *check.Instance, i int, value ast.Expr) ast.
 }
 
 func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {
-	json := g.info.Named["Json"].(*check.Sealed)
+	g.usesDerive = true
+	g.goType(g.codecType("Field"))
+	json := g.codecType("Value").(*check.Sealed)
 	array := g.text(g.variantType(json.Variant("Array")))
 	var source strings.Builder
 	if d.Class.Name == "Encode" {
@@ -137,7 +139,7 @@ func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {
 		}
 		source.WriteString("}} }")
 	} else {
-		errorType := g.typeText(g.info.Named["DecodeError"])
+		errorType := g.typeText(g.codecType("DecodeError"))
 		fmt.Fprintf(&source, "func(json %s) any { a, ok := json.(%s); if !ok { %s }; if len(a.items) != %d { %s }; var result %s;", g.typeText(json), array, g.decodeError(`""`, `"expected an array, found " + _jsonKind(json)`), len(tuple.Fields), g.decodeError(`""`, strconv.Quote(fmt.Sprintf("expected an array of length %d", len(tuple.Fields)))), g.typeText(tuple))
 		for i, field := range tuple.Fields {
 			fun, args := g.dictMethod(d.Args[i], "decode")
@@ -153,7 +155,7 @@ func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {
 						return nil
 					}
 					setup, failurePath, message := g.constraintFailure(con, x, t, path)
-					ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.info.Named["DecodeError"]), Elts: []ast.Expr{
+					ret := &ast.ReturnStmt{Results: []ast.Expr{&ast.CompositeLit{Type: g.goType(g.codecType("DecodeError")), Elts: []ast.Expr{
 						&ast.KeyValueExpr{Key: ast.NewIdent("path"), Value: failurePath},
 						&ast.KeyValueExpr{Key: ast.NewIdent("message"), Value: message},
 					}}}}

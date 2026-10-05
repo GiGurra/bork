@@ -1,11 +1,14 @@
+import "bork/codec"
+
 import "bork/cli"
 import "bork/process"
+use codec.Defaults
 type Options = {
   // Address of the server to contact.
   host: String = "localhost"
   // Keep the connection open after a request.
   keepAlive: Bool = false
-} derive (Decode)
+} derive (codec.Decode)
 fn main() {
   match (cli.Run[Options]("docs", "Field comments become help", (options, s) => {
     println(s"Connecting to ${options.host}; keep alive: ${options.keepAlive}")

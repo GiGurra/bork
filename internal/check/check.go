@@ -53,6 +53,12 @@ func (p *Package) TypeNamed(name string) Type {
 	return nil
 }
 
+// Imported resolves the Bork package alias visible to this package.
+func (p *Package) Imported(alias string) *Package { return p.imports[alias] }
+
+// ClassNamed returns a class declared by this package.
+func (p *Package) ClassNamed(name string) *Class { return p.classes[name] }
+
 // Exported reports whether a name is visible to other packages: it
 // starts with an upper-case letter, as in Go.
 func Exported(name string) bool {
@@ -620,6 +626,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.materializeDefaultUses()
 	c.ensureAllFieldDefaults()
 	c.unappliedWheres(files)
+	c.markUnsafeGoImports(files)
 	for _, f := range files {
 		if f.Prelude {
 			continue
@@ -638,7 +645,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 		c.zonkInfo()
 		c.checkInterpolationValidators()
 		c.checkOpaqueFields()
-		c.checkOpaqueGenericUses()
+		c.checkOpaqueGenericUses(files)
 		if c.diags.Len() == 0 {
 			c.checkEmbeds()
 			c.checkBuildReads()
@@ -2036,4 +2043,14 @@ func (c *checker) paramScope() map[string]Type {
 		}
 	}
 	return scope
+}
+
+// PackageNamed resolves a loaded package by its full import path.
+func (info *Info) PackageNamed(path string) *Package {
+	for _, pkg := range info.Packages {
+		if pkg.Path == path {
+			return pkg
+		}
+	}
+	return nil
 }

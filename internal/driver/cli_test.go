@@ -11,10 +11,13 @@ import (
 func TestCLIRun(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import codec "bork/codec"
+
+import "bork/cli"
+use codec.Defaults
 pred validPort(n: Int) { n > 0 && n < 65536 }
 pred nonempty(s: String) { s.byteLength() > 0 }
-type Options = { name: String where nonempty, port: Int where validPort = 8080, verbose: Bool = true, character: Rune = 'å' } derive (Decode)
+type Options = { name: String where nonempty, port: Int where validPort = 8080, verbose: Bool = true, character: Rune = 'å' } derive (codec.Decode)
 fn main() {
  result = cli.Run[Options]("app", "Example", (options, s) => {
    onClose(s, () => { println("closed") })
@@ -69,10 +72,13 @@ fn main() {
 func TestCLIConfigFiles(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import codec "bork/codec"
+
+import "bork/cli"
+use codec.Defaults
 pred validPort(n: Int) { n > 0 && n < 65536 }
 pred nonempty(s: String) { s.byteLength() > 0 }
-type Nested = { enabled: Bool } derive (Decode)
+type Nested = { enabled: Bool } derive (codec.Decode)
 type Options = {
  config: Option[String]
  name: String where nonempty
@@ -80,7 +86,7 @@ type Options = {
  verbose: Bool = true
  tags: List[String] = ["default"]
  nested: Nested = Nested { enabled: true }
-} derive (Decode)
+} derive (codec.Decode)
 fn main() {
  println(cli.Run[Options]("app", "Example", (options, s) => {
    onClose(s, () => { println("closed") })
@@ -154,15 +160,18 @@ fn main() {
 func TestCLIConfigSelectors(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import codec "bork/codec"
+
+import "bork/cli"
+use codec.Defaults
 pred selected(value: Option[String]) { match (value) { Option.Some { value: _ } => true, Option.None => false } }
-type Constrained = { config: Option[String] where selected, name: String } derive (Decode)
-type Defaults = { config: String = "chosen.json", name: String } derive (Decode)
-type OptionalDefaults = { config: Option[String] = Option.Some { value: "chosen.json" }, name: String } derive (Decode)
-type Bad = { config: Int = 0, other: String = "" } derive (Decode)
-type RuneSelector = { config: Rune = 'a' } derive (Decode)
-type OptionalRuneSelector = { config: Option[Rune] = Option.Some { value: 'a' } } derive (Decode)
-type NestedOption = { config: Option[Option[String]] = Option.Some { value: Option.Some { value: "chosen.json" } }, name: String = "" } derive (Decode)
+type Constrained = { config: Option[String] where selected, name: String } derive (codec.Decode)
+type Defaults = { config: String = "chosen.json", name: String } derive (codec.Decode)
+type OptionalDefaults = { config: Option[String] = Option.Some { value: "chosen.json" }, name: String } derive (codec.Decode)
+type Bad = { config: Int = 0, other: String = "" } derive (codec.Decode)
+type RuneSelector = { config: Rune = 'a' } derive (codec.Decode)
+type OptionalRuneSelector = { config: Option[Rune] = Option.Some { value: 'a' } } derive (codec.Decode)
+type NestedOption = { config: Option[Option[String]] = Option.Some { value: Option.Some { value: "chosen.json" } }, name: String = "" } derive (codec.Decode)
 fn main() uses io {
  println(cli.Parse[RuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[OptionalRuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))

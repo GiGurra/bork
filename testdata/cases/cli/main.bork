@@ -1,7 +1,10 @@
+import codec "bork/codec"
+
 import "bork/cli"
+use codec.Defaults
 pred port(n: Int) { n > 0 && n < 65536 }
-type Box[T] = { items: List[T], optional: Option[List[T]] } derive (Decode)
-type Collision = { httpPort: Int, HTTPPort: Int } derive (Decode)
+type Box[T] = { items: List[T], optional: Option[List[T]] } derive (codec.Decode)
+type Collision = { httpPort: Int, HTTPPort: Int } derive (codec.Decode)
 type Options = {
   // Your name.
   name: String
@@ -10,7 +13,7 @@ type Options = {
   verbose: Bool = false
   retries: Option[Int]
   labels: List[String] = []
-} derive (Decode)
+} derive (codec.Decode)
 fn main() {
   println(cli.Parse[Options]("app", "Demo", ["--name", "Ada"]))
   println(cli.Parse[Options]("app", "Demo", ["--name=", "--http-port", "443", "--verbose", "--retries", "0", "--labels", "a", "--labels", "b"]))

@@ -1,4 +1,7 @@
+import codec "bork/codec"
+
 import logging "bork/log"
+use codec.Defaults
 
 // TraceParent and TraceState carry checked W3C wire values, without creating
 // spans or changing sampling decisions. A declaration explicitly opts into
@@ -8,46 +11,46 @@ pred ValidTraceState(text: String) { traceStateValid(text) }
 type TraceParent = String where ValidTraceParent
 type TraceState = String where ValidTraceState
 
-instance TraceParentDecode: Decode[TraceParent] {
-  fn decode(json: Json): TraceParent | DecodeError {
+instance TraceParentDecode: codec.Decode[TraceParent] {
+  fn decode(json: codec.Value): TraceParent | codec.DecodeError {
     match (json) {
-      Json.String { value } => if (ValidTraceParent(value)) { value } else { DecodeError { path: "", message: "invalid traceparent" } }
-      _ => DecodeError { path: "", message: "expected a traceparent string" }
+      codec.Value.String { value } => if (ValidTraceParent(value)) { value } else { codec.DecodeError { path: "", message: "invalid traceparent" } }
+      _ => codec.DecodeError { path: "", message: "expected a traceparent string" }
     }
   }
 }
-instance TraceStateDecode: Decode[TraceState] {
-  fn decode(json: Json): TraceState | DecodeError {
+instance TraceStateDecode: codec.Decode[TraceState] {
+  fn decode(json: codec.Value): TraceState | codec.DecodeError {
     match (json) {
-      Json.String { value } => if (ValidTraceState(value)) { value } else { DecodeError { path: "", message: "invalid tracestate" } }
-      _ => DecodeError { path: "", message: "expected a tracestate string" }
+      codec.Value.String { value } => if (ValidTraceState(value)) { value } else { codec.DecodeError { path: "", message: "invalid tracestate" } }
+      _ => codec.DecodeError { path: "", message: "expected a tracestate string" }
     }
   }
 }
 instances TraceCodecs { TraceParentDecode, TraceStateDecode }
 
 // TraceParentOf checks a singleton field, without regard to header-name case.
-// Missing is None; repeated or invalid input is DecodeError, without raw text.
-fn TraceParentOf(headers: Headers): Option[TraceParent] | DecodeError {
+// Missing is None; repeated or invalid input is codec.DecodeError, without raw text.
+fn TraceParentOf(headers: Headers): Option[TraceParent] | codec.DecodeError {
   raw = singletonHeader(headers, "traceparent")?
   match (raw) {
     Option.None => Option.None
-    Option.Some { value } => Option.Some { value: decode[TraceParent](Json.String { value: value })? }
+    Option.Some { value } => Option.Some { value: codec.decode[TraceParent](codec.Value.String { value: value })? }
   }
 }
 
 // TraceStateOf combines repeated fields in order, but only with a valid parent.
 // An absent or invalid parent leaves state None; state errors keep the parent.
-fn TraceStateOf(headers: Headers): Option[TraceState] | DecodeError {
+fn TraceStateOf(headers: Headers): Option[TraceState] | codec.DecodeError {
   match (TraceParentOf(headers)) {
     Option.Some { value: _ } => match (combinedHeader(headers, "tracestate")?) {
       Option.None => Option.None
-      Option.Some { value: raw } => Option.Some { value: decode[TraceState](Json.String { value: raw })? }
+      Option.Some { value: raw } => Option.Some { value: codec.decode[TraceState](codec.Value.String { value: raw })? }
     }
     _ => Option.None
   }
 }
-fn singletonHeader(headers: Headers, name: String): Option[String] | DecodeError unsafe go {
+fn singletonHeader(headers: Headers, name: String): Option[String] | codec.DecodeError unsafe go {
   import "strings"
   found := false
   values := []string{}
@@ -56,10 +59,10 @@ fn singletonHeader(headers: Headers, name: String): Option[String] | DecodeError
     return true
   })
   if !found { return _borkNone[string]() }
-  if len(values) != 1 { return DecodeError{path: "", message: "expected exactly one " + name + " value"} }
+  if len(values) != 1 { return codec.DecodeError{path: "", message: "expected exactly one " + name + " value"} }
   return _borkSome(values[0])
 }
-fn combinedHeader(headers: Headers, name: String): Option[String] | DecodeError unsafe go {
+fn combinedHeader(headers: Headers, name: String): Option[String] | codec.DecodeError unsafe go {
   import "strings"
   names := 0
   values := []string{}
@@ -68,7 +71,7 @@ fn combinedHeader(headers: Headers, name: String): Option[String] | DecodeError 
     return true
   })
   if names == 0 { return _borkNone[string]() }
-  if names > 1 { return DecodeError{path: "", message: "ambiguous case variants of " + name} }
+  if names > 1 { return codec.DecodeError{path: "", message: "ambiguous case variants of " + name} }
   return _borkSome(strings.Join(values, ","))
 }
 fn traceParentValid(text: String): Bool unsafe go {

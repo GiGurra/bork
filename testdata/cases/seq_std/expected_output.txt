@@ -3,6 +3,6 @@
 ["lines.txt"]
 [Row { n: 1 }]
 [Row { n: 1 }, Row { n: 2 }]
-[Json.Object { fields: [JsonField { name: "n", value: Json.Number { text: "3" } }] }]
+[Value.Object { fields: [Field { name: "n", value: Value.Number { text: "3" } }] }]
 ["query"]
 Ok

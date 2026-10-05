@@ -210,12 +210,12 @@ use api.Json
 - **Methods can be function values** as `Type.method`, with the receiver first: `strings.map(String.byteLength)`, `lists.map(List.length)`, or `f: (List[Int]) => Int = List.length`. Generic method references infer their type arguments from the expected function type and fill class dictionaries as ordinary function values do. They retain their declared effects, close open callback parameters as pure, and reject `where` requirements. Sealed variants keep precedence over methods with the same name. An imported type's exported methods and visible exported extension methods can be referenced; a value's fields are not method references. Bound references use lambdas for now.
 - **Missing and ambiguous instances are errors,** with hints: which `use` would bring one into scope, or which bound a generic function lacks.
 - **Lowered to dictionary passing.** A call whose instance is known calls the instance's method directly; only generic code passes instances around.
-- **Standalone derivation:** `derive Decode for Config` requests one class per declaration, in any file of the package and independently of declaration order. Inline derive keeps working. A standalone request must be in the package that owns the underlying record/sealed type or the class; aliases do not change ownership, and private representation rules still apply. `derive Decode for Box` derives universally; `derive Decode for Box[Int]` derives a concrete specialization. Repeated requests, including inline plus standalone, are errors. Constrained aliases retain their result validation. Derived instance names remain `ConfigDecode`; specialized heads have deterministic suffixes shown by the package API. GoStruct is derived for the record declaration, not a specialization. Ordinary selectable instances retain their existing scopes and ownership rules.
-- **`derive (Decode, Encode)`** on a record or sealed type asks the compiler to write the instances, named after the type (`CreateUserDecode`). They follow the same rules as written instances: in scope in their own package, used elsewhere with `use api.CreateUserDecode`. Each field needs an instance in scope. Only the prelude's `Decode` and `Encode` (JSON) can be derived so far.
-- **JSON:** the prelude has a `Json` sealed type and the classes `Decode` and `Encode` with instances for the basic types, `Option`, `List`, and `Json`, while `bork/json` provides `json.Parse`/`json.Render` and `json.Decode[T]`/`json.Encode[T]`. Records are objects, including empty records: their derived decoder accepts objects and rejects other JSON kinds, and their encoder produces `{}`. A sealed value is an object whose `"type"` names the variant (a variant without fields may be just its name, `"Free"`); a missing `Option` field is `None`. A `DecodeError` says where (`.items[1].qty`) and what went wrong.
+- **Standalone derivation:** `derive codec.Decode for Config` requests one class per declaration, in any file of the package and independently of declaration order. Inline derive keeps working. A standalone request must be in the package that owns the underlying record/sealed type or the class; aliases do not change ownership, and private representation rules still apply. `derive codec.Decode for Box` derives universally; `derive codec.Decode for Box[Int]` derives a concrete specialization. Repeated requests, including inline plus standalone, are errors. Constrained aliases retain their result validation. Derived instance names remain `ConfigDecode`; specialized heads have deterministic suffixes shown by the package API. GoStruct is derived for the record declaration, not a specialization. Ordinary selectable instances retain their existing scopes and ownership rules.
+- **`derive (codec.Decode, codec.Encode)`** on a record or sealed type asks the compiler to write the instances, named after the type (`CreateUserDecode`). They follow the same rules as written instances: in scope in their own package, used elsewhere with `use api.CreateUserDecode`. Each field needs an instance in scope. The `bork/codec` classes `codec.Decode` and `codec.Encode`, plus the prelude’s `GoStruct`, can be derived.
+- **JSON:** `bork/codec` has a `codec.Value` sealed type and the classes `codec.Decode` and `codec.Encode`; select `use codec.Defaults` for instances for the basic types, `Option`, `List`, `Map[String, V]`, and `codec.Value`, while `bork/json` provides `json.Parse`/`json.Render` and `json.Decode[T]`/`json.Encode[T]`. Records are objects, including empty records: their derived decoder accepts objects and rejects other JSON kinds, and their encoder produces `{}`. A sealed value is an object whose `"type"` names the variant (a variant without fields may be just its name, `"Free"`); a missing `Option` field is `None`. A `codec.DecodeError` says where (`.items[1].qty`) and what went wrong.
 - **Dynamic JSON and JSON Lines:** see [bork/json](std/json.md).
 
-- **Instances on constrained types:** `instance decodePort: Decode[Port]`, with `type Port = Int where between(1, 65535)`, is used for values known to be ports: the fields of derived instances whose where clauses include the instance's; calls whose arguments of the type parameter are all declared ports (a parameter, binding, or field with that where clause): `json.Encode(port)`; and calls with an explicit constrained type argument: `json.Decode[Port](text)`. The most specific instance wins (`Int where positive` over `Int`). Its methods assume the constraints of parameters of the type, and must promise them of results (`fn decode(json: Json): Port | DecodeError`), which the facts checker verifies.
+- **Instances on constrained types:** `instance decodePort: codec.Decode[Port]`, with `type Port = Int where between(1, 65535)`, is used for values known to be ports: the fields of derived instances whose where clauses include the instance's; calls whose arguments of the type parameter are all declared ports (a parameter, binding, or field with that where clause): `json.Encode(port)`; and calls with an explicit constrained type argument: `json.Decode[Port](text)`. The most specific instance wins (`Int where positive` over `Int`). Its methods assume the constraints of parameters of the type, and must promise them of results (`fn decode(json: codec.Value): Port | codec.DecodeError`), which the facts checker verifies.
 - **Constrained type arguments are facts, by parametricity.** A generic function gets values of a type parameter only from its arguments of that type and from the instances of its bounds. So with `json.Decode[Port](text)`, arguments of type `T` must be ports, every instance for `T` that can produce values must promise `Port` (or it is an error), and the result's `T` member is then proven a port. Functions whose other parameters could produce `T` values (`map`'s `f: (A) => B`) cannot take a constrained type argument.
 - **A derived decoder checks the where clauses** of the fields it decodes, so a decoded value is proven, and needs no further checks:
 
@@ -598,13 +598,16 @@ its inputs first and returns a typed error when they are invalid.
 on a record's representation:
 
 ```bork
+import codec "bork/codec"
+use codec.Defaults
+
 type Config = private {
   lo: Int,
   hi: Int,
   admin: Bool = false,
   token: String = "",
   debug: Option[String] = Option.None,
-} where configured derive (Decode, Encode, GoStruct)
+} where configured derive (codec.Decode, codec.Encode, GoStruct)
 
 pred configured(c: Config) {
   c.lo <= c.hi && (c.admin == false || c.token != "")
@@ -807,7 +810,7 @@ type CreateUser = {
   age:   Option[Int where between(0, 150)],
 } derive (Decode)
 
-fn handleCreate(body: Json): User | ApiError = {
+fn handleCreate(body: codec.Value): User | ApiError = {
   req = CreateUser.decode(body)?      // every field is proven here, once
   createUser(req)                     // no re-validation downstream
 }
@@ -1667,7 +1670,7 @@ The prelude's list, `Option`, and map methods have open function parameters; `up
 - **Named functions as values** have the effects they declare: `lines.forEach(line => println(line))` uses `io`.
 - **Function types are ordered by their effects.** A function that uses less fits where more is allowed: a pure `(Int) => Int` can be passed as `(Int) uses io => Int`, but not the other way round.
 - **Methods** declare `uses` as functions do. `fn (c: Client) fetch(url: String) uses net: Response | IoError`.
-- **Class methods** may declare `uses`, and an instance's method may use at most what the class declares (an error with no automatic fix, since the fix may belong on the class). The prelude's classes (`Eq`, `Ord`, `Decode`, `Encode`) are pure, so their instances, including derived ones, must be pure.
+- **Class methods** may declare `uses`, and an instance's method may use at most what the class declares (an error with no automatic fix, since the fix may belong on the class). The prelude’s `Eq` and `Ord` classes and `codec.Decode` and `codec.Encode` are pure, so their instances, including derived ones, must be pure.
 
 ### `unsafe go`
 

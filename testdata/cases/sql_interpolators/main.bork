@@ -1,14 +1,17 @@
+import codec "bork/codec"
+
 import "bork/encoding"
 import dbsql "bork/sql"
+use codec.Defaults
 
-type Row = { name: String, note: Option[String] } derive (Decode)
+type Row = { name: String, note: Option[String] } derive (codec.Decode)
 fn inspect(statement: dbsql.Statement, dialect: dbsql.Dialect) uses io {
   match (statement.Render(dialect)) {
     rendered: dbsql.Rendered => println(rendered.query, rendered.params)
     error: dbsql.Error => println(error.operation, error.message)
   }
 }
-fn demo() uses io + net: Ok | dbsql.Error | DecodeError {
+fn demo() uses io + net: Ok | dbsql.Error | codec.DecodeError {
   hostile = "Ada'); DROP TABLE users; --"
   table = dbsql.Name("users")?
   column = dbsql.Name("name")?
@@ -45,5 +48,5 @@ fn demo() uses io + net: Ok | dbsql.Error | DecodeError {
   }
 }
 fn main() {
-  match (demo()) { error: dbsql.Error => println(error.operation, error.message), error: DecodeError => println(error.message), _ => {} }
+  match (demo()) { error: dbsql.Error => println(error.operation, error.message), error: codec.DecodeError => println(error.message), _ => {} }
 }

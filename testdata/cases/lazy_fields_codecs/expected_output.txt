@@ -1,4 +1,4 @@
-encode
+codec.encode
 {"lo":2,"hi":6}
 Config { lo: 2, hi: 6 }
 {"lo":1,"hi":8}

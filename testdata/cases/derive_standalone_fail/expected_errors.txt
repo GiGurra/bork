@@ -1,5 +1,5 @@
-main.bork:2:1: instance ConfigDecode is already declared at main.bork:1:18
-main.bork:6:1: instance AliasEncode is already derived at main.bork:5:1
-main.bork:8:1: only records and sealed types can derive instances
-main.bork:9:1: Eq is built in: every type whose values can be compared has it, with no derive needed
-main.bork:10:1: unknown class Missing
+main.bork:5:1: instance ConfigDecode is already declared at main.bork:4:18
+main.bork:9:1: instance AliasEncode is already derived at main.bork:8:1
+main.bork:11:1: only records and sealed types can derive instances
+main.bork:12:1: Eq is built in: every type whose values can be compared has it, with no derive needed
+main.bork:13:1: unknown class Missing

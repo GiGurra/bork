@@ -370,7 +370,7 @@ func (c *checker) declareInstance(id *syntax.InstanceDecl, prelude bool) {
 	if ci.Type == Invalid {
 		return
 	}
-	if cl.Prelude && (cl.Name == "Decode" || cl.Name == "Encode") && containsOpaque(ci.Type, map[Type]bool{}) {
+	if (IsCodec(cl, "Decode") || IsCodec(cl, "Encode")) && containsOpaque(ci.Type, map[Type]bool{}) {
 		c.bindErr(id.Pos, "%s cannot be defined for %s, which holds an opaque Go value", cl.Name, ci.Type)
 		return
 	}
@@ -661,7 +661,7 @@ func (c *checker) promisesArgFacts(inst *Instance, argFacts [][]*Constraint, nam
 			if len(argFacts[i]) == 0 || d == nil || !producesParam(b) {
 				continue
 			}
-			if d.Builtin && b.Prelude && b.Name == "Decode" {
+			if d.Builtin && IsCodec(b, "Decode") {
 				if tuple, ok := d.Type.(*Record); ok && tuple.Tuple && len(missingConstraints(tupleConstraints(tuple), argFacts[i])) == 0 {
 					continue
 				}
@@ -729,7 +729,7 @@ func (c *checker) declaredFacts(x syntax.Expr) []*Constraint {
 // dict finds the instance of class for type t, reporting an error at
 // pos if there is none, or more than one.
 func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
-	if class.Prelude && (class.Name == "Decode" || class.Name == "Encode") && containsOpaque(t, map[Type]bool{}) {
+	if (IsCodec(class, "Decode") || IsCodec(class, "Encode")) && containsOpaque(t, map[Type]bool{}) {
 		c.bindErr(pos, "%s cannot apply to %s, which holds an opaque Go value", class.Name, t)
 		return nil
 	}
@@ -761,7 +761,7 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		}
 		return &Dict{Class: class, Type: t, Builtin: true}
 	}
-	if tuple, ok := t.(*Record); ok && tuple.Tuple && class.Prelude && (class.Name == "Encode" || class.Name == "Decode") {
+	if tuple, ok := t.(*Record); ok && tuple.Tuple && (IsCodec(class, "Encode") || IsCodec(class, "Decode")) {
 		d := &Dict{Class: class, Type: t, Builtin: true}
 		for _, field := range tuple.Fields {
 			element := c.dict(class, field.Type, pos, depth+1)
@@ -926,10 +926,10 @@ func (c *checker) instanceHint(class *Class, t Type) string {
 			name, pkg = b.Name, b.Pkg
 		}
 		if name != "" && pkg == c.pkg {
-			return fmt.Sprintf("add `derive (%s)` to type %s, or declare one: instance name: %s[%s] { ... }", class.Name, name, class.Name, t)
+			return fmt.Sprintf("add `derive (%s)` to type %s, or declare one: instance name: %s[%s] { ... }", qualify(class.Name, class.Pkg, c.pkg), name, qualify(class.Name, class.Pkg, c.pkg), t)
 		}
 	}
-	return fmt.Sprintf("declare one: instance name: %s[%s] { ... }", class.Name, t)
+	return fmt.Sprintf("declare one: instance name: %s[%s] { ... }", qualify(class.Name, class.Pkg, c.pkg), t)
 }
 
 // inScopeParam reports whether tp is a type parameter of the code being
@@ -957,7 +957,7 @@ type Derived struct {
 
 // derivable reports whether instances of class can be derived.
 func derivable(class *Class) bool {
-	return class.Prelude && (class.Name == "Decode" || class.Name == "Encode" || IsGoStruct(class))
+	return IsCodec(class, "Decode") || IsCodec(class, "Encode") || IsGoStruct(class)
 }
 
 // A provisional derivation is available while defaults are checked, but a
@@ -1139,7 +1139,7 @@ func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Packa
 			}
 		}
 	case *Record:
-		if t.Decl != nil && t.Decl.Private && t.Pkg != from && (IsGoStruct(class) || class.Name == "Decode") {
+		if t.Decl != nil && t.Decl.Private && t.Pkg != from && (IsGoStruct(class) || IsCodec(class, "Decode")) {
 			return t
 		}
 		for _, f := range t.Fields {
@@ -1165,4 +1165,9 @@ func (c *checker) foreignPrivateRepresentation(t Type, class *Class, from *Packa
 		}
 	}
 	return nil
+}
+
+// IsCodec checks a codec class by its defining package, independent of aliases.
+func IsCodec(class *Class, name string) bool {
+	return class != nil && class.Pkg != nil && class.Pkg.Path == "bork/codec" && class.Name == name
 }

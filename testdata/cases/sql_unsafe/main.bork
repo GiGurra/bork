@@ -1,6 +1,9 @@
+import codec "bork/codec"
+
 import "bork/sql"
-type Row = { name: String } derive (Decode)
-fn demo(text: String) uses io + net: Ok | sql.Error | DecodeError {
+use codec.Defaults
+type Row = { name: String } derive (codec.Decode)
+fn demo(text: String) uses io + net: Ok | sql.Error | codec.DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     _ = sql.Exec(db, sql.Unsafe(text), [])?
@@ -16,7 +19,7 @@ fn demo(text: String) uses io + net: Ok | sql.Error | DecodeError {
 fn main() {
   match (demo("CREATE TABLE users (name TEXT)")) {
     error: sql.Error => println(error.operation, error.message)
-    error: DecodeError => println(error.message)
+    error: codec.DecodeError => println(error.message)
     _ => {}
   }
 }

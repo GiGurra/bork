@@ -1,7 +1,9 @@
+import codec "bork/codec"
 import "bork/json"
 // Run with: bork run examples/config
 // No server is started and certificate names are data; the output is deterministic.
 import "example.com/config/settings"
+use codec.Defaults
 use settings.ConfigEncode
 use settings.ConfigDecode
 

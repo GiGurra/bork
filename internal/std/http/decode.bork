@@ -1,8 +1,11 @@
+import codec "bork/codec"
+
 import codecs "bork/json"
 import urls "bork/url"
+use codec.Defaults
 
 // Body decodes JSON into a proven value, including derived field constraints.
-fn Body[T: Decode](request: Request): T | JsonError | DecodeError {
+fn Body[T: codec.Decode](request: Request): T | codecs.JsonError | codec.DecodeError {
   codecs.Decode[T](request.body)
 }
 
@@ -17,37 +20,37 @@ fn Query(request: Request): Headers | IoError {
 // QueryAs and PathAs decode derived records. Strings are literal; other fields
 // use JSON syntax. Missing Option fields become None. Repeated query fields
 // are rejected rather than silently selecting an untrusted value.
-fn QueryAs[T: Decode](request: Request): T | IoError | DecodeError {
+fn QueryAs[T: codec.Decode](request: Request): T | IoError | codec.DecodeError {
   values = Query(request)?
   fieldsAs[T](values)
 }
-fn PathAs[T: Decode](request: Request): T | DecodeError {
+fn PathAs[T: codec.Decode](request: Request): T | codec.DecodeError {
   fieldsAs[T](request.params.mapValues(value => [value]))
 }
-fn fieldsAs[T: Decode](values: Headers): T | DecodeError {
+fn fieldsAs[T: codec.Decode](values: Headers): T | codec.DecodeError {
   json = fieldsJson[T](values)?
-  decode[T](json)
+  codec.decode[T](json)
 }
-fn fieldsJson[T: Decode](values: Headers): Json | DecodeError unsafe go {
+fn fieldsJson[T: codec.Decode](values: Headers): codec.Value | codec.DecodeError unsafe go {
   schema, supported := _borkDecodeFields(_d_T_Decode)
-  if !supported { return DecodeError{path: "", message: "expected a derived record decoder"} }
-  fields := []JsonField{}
+  if !supported { return codec.DecodeError{path: "", message: "expected a derived record decoder"} }
+  fields := []codec.Field{}
   for _, field := range schema {
     raw, found := _borkMapGet(values, field.Name)
     if !found {
-      if !field.Optional { return DecodeError{path: "."+field.Name, message: "is missing"} }
+      if !field.Optional { return codec.DecodeError{path: "."+field.Name, message: "is missing"} }
       continue
     }
-    if len(raw) != 1 { return DecodeError{path: "."+field.Name, message: "expected exactly one value"} }
-    var value Json = Json_String{value: raw[0]}
+    if len(raw) != 1 { return codec.DecodeError{path: "."+field.Name, message: "expected exactly one value"} }
+    var value codec.Value = codec.Value_String{value: raw[0]}
     if field.Kind != "string" {
       parsed := parseJsonValue(raw[0])
-      if failure, failed := parsed.(JsonError); failed { return DecodeError{path: "."+field.Name, message: failure.message} }
-      value = parsed.(Json)
+      if failure, failed := parsed.(codecs.JsonError); failed { return codec.DecodeError{path: "."+field.Name, message: failure.message} }
+      value = parsed.(codec.Value)
     }
-    fields = append(fields, JsonField{name: field.Name, value: value})
+    fields = append(fields, codec.Field{name: field.Name, value: value})
   }
-  return Json_Object{fields: fields}
+  return codec.Value_Object{fields: fields}
 }
 
 // Form parses an application/x-www-form-urlencoded body, independently of
@@ -93,4 +96,4 @@ fn Multipart(request: Request, maxBodyBytes: BodyLimit = 16777216): MultipartFor
   return MultipartForm{values: _borkMapOf(keys, values), files: files}
 }
 
-fn parseJsonValue(text: String): Json | JsonError { codecs.Parse(text) }
+fn parseJsonValue(text: String): codec.Value | codecs.JsonError { codecs.Parse(text) }

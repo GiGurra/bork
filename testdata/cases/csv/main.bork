@@ -1,18 +1,21 @@
+import codec "bork/codec"
+
 import "bork/encoding"
+use codec.Defaults
 
 pred positive(n: Int) { n > 0 }
-type Item = { code: String, count: Int where positive, active: Bool, note: Option[String] } derive (Decode, Encode)
-type Group = { name: String, tags: List[Int] } derive (Decode, Encode)
+type Item = { code: String, count: Int where positive, active: Bool, note: Option[String] } derive (codec.Decode, codec.Encode)
+type Group = { name: String, tags: List[Int] } derive (codec.Decode, codec.Encode)
 
-type OptionalJson = { value: Option[Json] } derive (Decode, Encode)
+type OptionalJson = { value: Option[codec.Value] } derive (codec.Decode, codec.Encode)
 
-type OptionalNull = { count: Option[Int], active: Option[Bool] } derive (Decode, Encode)
+type OptionalNull = { count: Option[Int], active: Option[Bool] } derive (codec.Decode, codec.Encode)
 
-type OptionalSingle = { value: Option[String] } derive (Decode, Encode)
+type OptionalSingle = { value: Option[String] } derive (codec.Decode, codec.Encode)
 
-type Optional = { name: Option[String], count: Option[Int] } derive (Decode, Encode)
+type Optional = { name: Option[String], count: Option[Int] } derive (codec.Decode, codec.Encode)
 
-type Single = { value: String } derive (Decode, Encode)
+type Single = { value: String } derive (codec.Decode, codec.Encode)
 
 fn main() {
   println(encoding.CsvRows("a,b\n\"line\nnext\",\"quote\"\"here\"\n"))

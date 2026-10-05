@@ -1,4 +1,6 @@
+import "bork/codec"
 import "bork/json"
+use codec.Defaults
 
 pred positive(n: Int) { n > 0 }
 

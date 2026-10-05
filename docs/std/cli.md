@@ -3,7 +3,7 @@
 ## Command-line options
 
 `Parse[T]` accepts arguments without the executable name and returns a proven
-options record, `cli.Error`, or `cli.Help`. The record must derive `Decode`.
+options record, `cli.Error`, or `cli.Help`. The record must derive `codec.Decode`.
 `Run[T]` reads process arguments and invokes `(T, Scope) => Ok` only after
 successful validation. Applications render errors and choose their exit code.
 Both use `io`; Run also carries its handler's effects.
@@ -77,8 +77,10 @@ See [the flag mapping example](../../examples/cli_mapping/main.bork) and
 [the environment example](../../examples/cli_env/main.bork).
 
 ```bork
+import "bork/codec"
 import "bork/cli"
-type Options = { host: String = "localhost", port: Int = 8080 } derive (Decode)
+use codec.Defaults
+type Options = { host: String = "localhost", port: Int = 8080 } derive (codec.Decode)
 fn main() {
   println(cli.Parse[Options]("app", "Example", ["--listen", "443"],
     flags: [.{ field: "port", long: cli.Mapping.Named { name: "listen" }, short: "p" }],
@@ -121,7 +123,7 @@ return both without printing. Run and RunCommands print the corresponding stream
 
 ## Command-line schema adapter
 
-The stdlib builds a boa reflection shadow struct from the existing derived Decode
+The stdlib builds a boa reflection shadow struct from the existing derived codec.Decode
 field schema; no GoStruct bound is needed. Optional shadow pointers track omitted
 inputs. The adapter converts supplied values, collects missing/type/fact errors
 across fields, and then invokes the complete record decoder. Sibling-dependent
@@ -158,12 +160,15 @@ overridden by a valid flag. Only the resulting immutable proven record reaches
 the handler. Help does not read files or invoke the handler.
 
 ```bork
+import codec "bork/codec"
+
 import "bork/cli"
+use codec.Defaults
 
 type Options = {
   config: Option[String]
   port: Int = 8080
-} derive (Decode)
+} derive (codec.Decode)
 
 fn main() {
   result = cli.Run[Options]("app", "Example", (options, s) => println(options.port), flags: [cli.Flag { field: "config", configFile: true }], configFiles: ["settings.json"])
@@ -177,7 +182,7 @@ Run with `app --config local.json --port 9000`. `settings.json` might contain
 
 ## Examples
 
-`bork/cli` wraps boa to parse proven options from a record deriving `Decode`.
+`bork/cli` wraps boa to parse proven options from a record deriving `codec.Decode`.
 It generates help from field docs and defaults, supports short flags, explicit
 environment bindings, positionals, and repeated list flags, and collects field
 errors before invoking a handler. See [examples/cli](../../examples/cli/main.bork). Focused examples cover
@@ -194,7 +199,7 @@ bork run examples/cli -- --config examples/cli/config.json --port 9000
 
 ## Subcommands
 
-`Subcommand[T: Decode](name, description, handler, flags = [], configFiles = [], settings = .{})` creates a
+`Subcommand[T: codec.Decode](name, description, handler, flags = [], configFiles = [], settings = .{})` creates a
 `cli.Command`, capturing the derived decoder and a typed handler for `T`.
 Commands with different option records can share a `List[cli.Command]`; the public command stores an erased callback, while decoded options keep type
 `T` inside that callback. The handler never receives

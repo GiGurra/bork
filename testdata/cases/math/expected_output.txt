@@ -151,7 +151,7 @@ OutOfRange { value: "10001", target: "Decimal scale (0..10000)" }
 -0.13
 100.00
 10.05
-Json.String { value: "10.05" }
+Value.String { value: "10.05" }
 1.2300
 DecodeError { path: "", message: "expected a Decimal string" }
 922337203685477580812345
