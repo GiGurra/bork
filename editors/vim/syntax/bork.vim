@@ -5,7 +5,7 @@ syntax keyword borkContextual import use class instance instances providers test
 syntax keyword borkBoolean true false
 syntax match borkType '\<[A-Z][A-Za-z0-9_]*\>'
 syntax match borkNumber '\<\d[0-9A-Fa-f_xXbBoO]*\%(\.\d[0-9_]*\)\?\%([eE][+-]\=[0-9_]*\)\?\>'
-syntax match borkOperator '|>\|=>\|[+*/%!?=<>|&-]'
+syntax match borkOperator '|>\|=>\|[+*/%!?=<>|&^-]'
 syntax region borkString start=+"+ skip=+\\.+ end=+"+ contains=borkEscape
 syntax match borkEscape '\\.' contained
 syntax region borkRune start=+'+ skip=+\\.+ end=+'+ contains=borkEscape

@@ -624,14 +624,14 @@ func (a *executionAuditor) expr(x Expr, depth int, optional bool) {
 		}
 		a.instance(x.Inst, depth+1)
 	case *Unary:
-		if x.Op != syntax.Minus && x.Op != syntax.Not {
+		if x.Op != syntax.Minus && x.Op != syntax.Not && x.Op != syntax.Caret {
 			a.reject("unknown unary operator")
 			return
 		}
 		walk(x.X)
 	case *Binary:
 		switch x.Op {
-		case syntax.Plus, syntax.Minus, syntax.Star, syntax.Slash, syntax.Pct, syntax.AndAnd, syntax.OrOr, syntax.Eq, syntax.NotEq, syntax.Lt, syntax.LtEq, syntax.Gt, syntax.GtEq:
+		case syntax.Amp, syntax.Pipe, syntax.Caret, syntax.Shl, syntax.Shr, syntax.Plus, syntax.Minus, syntax.Star, syntax.Slash, syntax.Pct, syntax.AndAnd, syntax.OrOr, syntax.Eq, syntax.NotEq, syntax.Lt, syntax.LtEq, syntax.Gt, syntax.GtEq:
 		default:
 			a.reject("unknown binary operator")
 			return

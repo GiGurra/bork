@@ -1032,8 +1032,11 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			return stmts, nil
 		}
 		op := token.SUB
-		if e.Op == syntax.Not {
+		switch e.Op {
+		case syntax.Not:
 			op = token.NOT
+		case syntax.Caret:
+			op = token.XOR
 		}
 		return stmts, &ast.UnaryExpr{Op: op, X: paren(x)}
 	case *check.Binary:
@@ -1194,6 +1197,7 @@ func constLit(v constant.Value, t check.Type) ast.Expr {
 var binaryOps = map[syntax.Kind]token.Token{
 	syntax.Plus: token.ADD, syntax.Minus: token.SUB, syntax.Star: token.MUL,
 	syntax.Slash: token.QUO, syntax.Pct: token.REM,
+	syntax.Amp: token.AND, syntax.Pipe: token.OR, syntax.Caret: token.XOR, syntax.Shl: token.SHL, syntax.Shr: token.SHR,
 	syntax.Eq: token.EQL, syntax.NotEq: token.NEQ,
 	syntax.Lt: token.LSS, syntax.LtEq: token.LEQ, syntax.Gt: token.GTR, syntax.GtEq: token.GEQ,
 	syntax.AndAnd: token.LAND, syntax.OrOr: token.LOR,

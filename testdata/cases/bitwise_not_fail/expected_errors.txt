@@ -1,0 +1,1 @@
+main.bork:1:28: bitwise NOT is written ^x, not ~x

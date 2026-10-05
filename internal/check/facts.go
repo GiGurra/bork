@@ -679,6 +679,9 @@ func (f *factChecker) walk(x Expr, e env) {
 			f.walk(x.Y, e.with(f.conditionFacts(x.X, false)...))
 		default:
 			f.walk(x.Y, e)
+			if (x.Op == syntax.Shl || x.Op == syntax.Shr) && !isUnsigned(x.Y.Type()) {
+				f.shiftCount(x, e)
+			}
 		}
 	case *If:
 		f.walk(x.Cond, e)

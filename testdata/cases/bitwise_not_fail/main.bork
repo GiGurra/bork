@@ -1,0 +1,1 @@
+fn negate(x: Byte): Byte { ~x }

@@ -184,6 +184,13 @@ func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 		if x.Op == syntax.Not {
 			return constant.UnaryOp(token.NOT, v, 0)
 		}
+		if x.Op == syntax.Caret {
+			precision := uint(0)
+			if isUnsigned(x.Type()) {
+				precision = uint(bitsOf(x.Type()))
+			}
+			return constant.UnaryOp(token.XOR, v, precision)
+		}
 		return conditionArithmetic(constant.UnaryOp(token.SUB, v, 0), x.Type())
 	case *Binary:
 		a, b := evalCondition(x.X, vars), evalCondition(x.Y, vars)
@@ -201,6 +208,9 @@ func evalCondition(x Expr, vars map[string]constant.Value) constant.Value {
 				return nil
 			}
 			return constant.MakeBool(constant.Compare(a, cmp, b))
+		}
+		if x.Op == syntax.Shl || x.Op == syntax.Shr {
+			return conditionArithmeticShift(a, b, x.Op, x.Type())
 		}
 		if op, ok := constOps[x.Op]; ok {
 			if (op == token.QUO || op == token.REM) && constant.Sign(b) == 0 {

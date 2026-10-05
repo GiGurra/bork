@@ -65,6 +65,10 @@ const (
 	Star   // *
 	Slash  // /
 	Pct    // %
+	Amp    // &
+	Caret  // ^ (binary XOR or unary complement)
+	Shl    // <<
+	Shr    // >>
 	Not    // !
 	AndAnd // &&
 	OrOr   // ||
@@ -89,6 +93,7 @@ var kindNames = map[Kind]string{
 	LBrack: "'['", RBrack: "']'", Dot: "'.'", Ellipsis: "'...'", Underscore: "'_'", Pipe: "'|'", PipeGt: "'|>'", Arrow: "'=>'", Quest: "'?'",
 	LParen: "'('", RParen: "')'", LBrace: "'{'", RBrace: "'}'", Comma: "','", Colon: "':'",
 	Assign: "'='", Plus: "'+'", Minus: "'-'", Star: "'*'", Slash: "'/'", Pct: "'%'", Not: "'!'",
+	Amp: "'&'", Caret: "'^'", Shl: "'<<'", Shr: "'>>'",
 	AndAnd: "'&&'", OrOr: "'||'", Eq: "'=='", NotEq: "'!='", Lt: "'<'", LtEq: "'<='", Gt: "'>'", GtEq: "'>='",
 }
 

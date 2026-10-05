@@ -126,6 +126,20 @@ fn main() {
 This prints `1000000 255 3 0.3`. Arithmetic on number literals is exact, which is why `0.1 + 0.2` is `0.3`. That applies to literals only. Floats held in names are ordinary 64-bit floats, and adding those two gives `0.30000000000000004`.
 
 Integer literals can also use binary (`0b1010`) and octal (`0o17`) prefixes, with `_` separators. Import [bork/strconv](../std/strconv.md) for `n.Hex()`, `n.Binary()`, `n.Octal()`, and `n.Format(base)` formatting, plus String parsing methods such as `text.ParseInt(base: 16)` and `text.ParseByte(base: 0)`. Formatting returns `String`; parsing returns the number or `ParseError`, including on overflow.
+Integers support `&` (AND), `|` (OR), and `^` (XOR). **Bitwise NOT is `^x`**, following Go; `~x` is an error. Both operands of AND, OR, and XOR have the same integer type. Bool values use `&&`, `||`, and `!=` instead.
+
+`<<` and `>>` keep the left operand's width. A shift count can be unsigned, a nonnegative constant, or a signed value proven nonnegative by a guard or predicate. Runtime left shifts discard bits beyond that width. Signed right shifts preserve the sign; unsigned right shifts fill with zero. Counts at least the width give zero, except a negative signed right shift gives -1. Constants must fit, as with arithmetic.
+
+```bork
+fn main() {
+  flags: Byte = 240
+  println(flags & 15, flags | 3, flags ^ 15, ^flags)
+  count = 2
+  println(flags << count, flags >> count)
+}
+```
+
+Shifts and `&` bind like multiplication; `|` and binary `^` bind like addition. Use parentheses to make bit fields easy to read.
 
 Number types never mix on their own. Convert with `toInt`, `toFloat`, `toInt8`, and so on. When the value might not fit, the conversion returns either the number or an `OutOfRange`, and `match` tells them apart. [Matching and errors](matching.md) explains this form.
 

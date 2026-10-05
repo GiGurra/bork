@@ -27,12 +27,16 @@ func hasIntegerArithmetic(x Expr) bool {
 }
 
 func (f *factChecker) arithmeticKnown(want *comparison, facts []fact, depth int) bool {
+	return f.integerComparisonKnown(want, facts, depth, true)
+}
+
+func (f *factChecker) integerComparisonKnown(want *comparison, facts []fact, depth int, arithmeticOnly bool) bool {
 	if !want.positive || want.left.expr == nil || want.right.expr == nil {
 		return false
 	}
 	typ := want.left.expr.Type()
 	if !IsInteger(typ) || !identical(typ, want.right.expr.Type()) ||
-		(!hasIntegerArithmetic(want.left.expr) && !hasIntegerArithmetic(want.right.expr)) {
+		(arithmeticOnly && !hasIntegerArithmetic(want.left.expr) && !hasIntegerArithmetic(want.right.expr)) {
 		return false
 	}
 	facts = append([]fact{}, facts...)

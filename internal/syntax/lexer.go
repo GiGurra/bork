@@ -456,21 +456,33 @@ func (lx *lexer) operator(pos diag.Pos) {
 	case '!':
 		two('=', NotEq, Not)
 	case '<':
-		two('=', LtEq, Lt)
+		if lx.peek(0) == '<' {
+			lx.advance()
+			lx.emit(Shl, "", pos)
+		} else {
+			two('=', LtEq, Lt)
+		}
 	case '>':
-		two('=', GtEq, Gt)
+		if lx.peek(0) == '>' {
+			lx.advance()
+			lx.emit(Shr, "", pos)
+		} else {
+			two('=', GtEq, Gt)
+		}
+	case '^':
+		lx.emit(Caret, "", pos)
+	case '~':
+		lx.diags.AddCode(pos, "syntax.bitwise-not", "bitwise NOT is written ^x, not ~x")
+		end := lx.pos()
+		lx.diags.Suggest(pos, "syntax.bitwise-not", end, diag.Fix{Message: "replace ~ with ^", Edits: []diag.TextEdit{{Start: pos, End: end, Replacement: "^"}}})
+		lx.emit(Caret, "", pos)
 	case '&':
 		if lx.off < len(lx.src) && lx.peek(0) == '&' {
 			lx.advance()
 			lx.emit(AndAnd, "", pos)
 			return
 		}
-		lx.diags.AddCode(pos, "syntax.single-ampersand", "unexpected character '&' (did you mean '&&'?)")
-		end := lx.pos()
-		lx.diags.Suggest(pos, "syntax.single-ampersand", end, diag.Fix{
-			Message: "replace & with &&",
-			Edits:   []diag.TextEdit{{Start: pos, End: end, Replacement: "&&"}},
-		})
+		lx.emit(Amp, "", pos)
 	case '|':
 		if lx.off < len(lx.src) && lx.peek(0) == '|' {
 			lx.advance()

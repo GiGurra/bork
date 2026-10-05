@@ -40,7 +40,7 @@ func lexicalSemanticTokens(tokens []syntax.Token, comments []syntax.Comment) []S
 		case syntax.KwTrue, syntax.KwFalse:
 			// Leave boolean literals to the local highlighting grammar.
 		case syntax.Assign, syntax.Plus, syntax.Minus, syntax.Star, syntax.Slash, syntax.Pct,
-			syntax.Not, syntax.AndAnd, syntax.OrOr, syntax.Eq, syntax.NotEq, syntax.Lt,
+			syntax.Amp, syntax.Caret, syntax.Shl, syntax.Shr, syntax.Not, syntax.AndAnd, syntax.OrOr, syntax.Eq, syntax.NotEq, syntax.Lt,
 			syntax.LtEq, syntax.Gt, syntax.GtEq, syntax.Pipe, syntax.PipeGt, syntax.Arrow, syntax.Quest:
 			kind = "operator"
 		default:
