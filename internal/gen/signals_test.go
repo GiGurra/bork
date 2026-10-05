@@ -27,6 +27,8 @@ func TestSignalRuntime(t *testing.T) {
 
 const signalRuntimeTests = `package main
 import (
+ "os"
+ "sync"
  "context"
  "strings"
  "syscall"
@@ -101,6 +103,21 @@ func TestConfiguredUserSignalStillEscalates(t *testing.T) {
  if !b.installed[n] {t.Fatal("nonterminating OS default cannot handle escalation")}
  *now=now.Add(time.Second);b.deliver(n)
  if len(*exits)!=1 || (*exits)[0]!=128+n {t.Fatal("second user signal did not exit")}
+}
+// This generated test process receives real signals; a disposition gap
+// terminates it and fails its parent test, without signalling the parent.
+func TestLiveDispositionUpdatesKeepSubscription(t *testing.T) {
+ b:=_newSignalBroker(true)
+ subscription:=registration("subscribe",int(syscall.SIGTERM));b.add(subscription)
+ process,err:=os.FindProcess(os.Getpid());if err!=nil {t.Fatal(err)}
+ done:=make(chan struct{});var sender sync.WaitGroup;sender.Add(1)
+ go func(){defer sender.Done();for {select {case <-done:return;default:_=process.Signal(syscall.SIGTERM)}}}()
+ for i:=0;i<2000;i++ {
+  ignored:=registration("ignore",int(syscall.SIGHUP));b.add(ignored);b.remove(ignored)
+ }
+ close(done);sender.Wait()
+ b.mu.Lock();cancelled:=b.code!=0;b.mu.Unlock()
+ if cancelled {t.Fatal("subscribed signals cancelled the process")}
 }
 func TestUnusedScopeRuntimeInstallsNothing(t *testing.T) {
  if _mainSignals.system {t.Fatal("scope runtime eagerly installed handlers")}

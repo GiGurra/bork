@@ -22,7 +22,7 @@ type _signalBroker struct {
  ctx context.Context
  cancel context.CancelCauseFunc
  registrations []*_signalRegistration
- input chan os.Signal
+ watches map[int]chan os.Signal
  installed map[int]bool
  system bool
  code int
@@ -35,7 +35,7 @@ type _signalBroker struct {
 
 func _newSignalBroker(system bool) *_signalBroker {
  ctx,cancel:=context.WithCancelCause(context.Background())
- b:=&_signalBroker{ctx:ctx,cancel:cancel,input:make(chan os.Signal,32),installed:map[int]bool{},now:time.Now,after:func(d time.Duration,f func()){time.AfterFunc(d,f)},exit:os.Exit}
+ b:=&_signalBroker{ctx:ctx,cancel:cancel,watches:map[int]chan os.Signal{},installed:map[int]bool{},now:time.Now,after:func(d time.Duration,f func()){time.AfterFunc(d,f)},exit:os.Exit}
  b.refresh()
  if system { b.start() }
  return b
@@ -46,7 +46,6 @@ func _newSignalBroker(system bool) *_signalBroker {
 func (b *_signalBroker) start() {
  b.started.Do(func(){
   b.mu.Lock();b.system=true;b.installed=map[int]bool{};b.refresh();b.mu.Unlock()
-  go func(){for value:=range b.input {if n,ok:=value.(syscall.Signal);ok {b.deliver(int(n))}}}()
  })
 }
 
@@ -86,8 +85,9 @@ func (b *_signalBroker) policy() (map[int]bool,time.Duration,bool) {
  return map[int]bool{int(syscall.SIGINT):true,int(syscall.SIGTERM):true},0,false
 }
 
-// refresh is called under mu, except during construction. Stop restores the
-// disposition saved by Go, including inherited ignored signals.
+// refresh is called under mu, except during construction. Each signal keeps
+// its own notification channel so unrelated updates never restore its OS
+// default even momentarily. Stop restores Go's saved disposition on removal.
 func (b *_signalBroker) refresh() {
  wanted:=map[int]bool{}
  signals,_,_:=b.policy()
@@ -95,14 +95,19 @@ func (b *_signalBroker) refresh() {
   if !b.released || (n!=int(syscall.SIGINT) && n!=int(syscall.SIGTERM) && n!=int(syscall.SIGHUP)) {wanted[n]=true}
  }
  for _,r:=range b.registrations {if r.kind!="configure" {for n:=range r.signals {wanted[n]=true}}}
- same:=len(wanted)==len(b.installed)
- if same {for n:=range wanted {if !b.installed[n] {same=false;break}}}
- if same {return}
  if b.system {
-  signal.Stop(b.input)
-  if len(wanted)>0 {
-   values:=make([]os.Signal,0,len(wanted));for n:=range wanted {values=append(values,syscall.Signal(n))}
-   signal.Notify(b.input,values...)
+  for n:=range wanted {
+   if b.watches[n]!=nil {continue}
+   events:=make(chan os.Signal,32)
+   signal.Notify(events,syscall.Signal(n))
+   b.watches[n]=events
+   go func(){for value:=range events {if delivered,ok:=value.(syscall.Signal);ok {b.deliver(int(delivered))}}}()
+  }
+  for n,events:=range b.watches {
+   if wanted[n] {continue}
+   signal.Stop(events)
+   close(events)
+   delete(b.watches,n)
   }
  }
  b.installed=wanted
