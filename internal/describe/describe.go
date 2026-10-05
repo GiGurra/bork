@@ -82,6 +82,16 @@ func Lookup(files []*syntax.File, info *check.Info, pos diag.Pos, src []byte) (*
 		if file.Path != pos.File {
 			continue
 		}
+		for _, derive := range file.Derives {
+			if typ := check.EditorWrittenType(info, pos); typ != nil && derive.Pos.Line <= pos.Line && derive.End.Line >= pos.Line {
+				definitions := check.EditorTypeDefinitions(typ)
+				var definition *diag.Pos
+				if len(definitions) > 0 {
+					definition = &definitions[0].Pos
+				}
+				return &Selection{Type: typ, Expression: derive.Type.Name, Definition: definition, Site: pos}, nil
+			}
+		}
 		for _, binding := range info.PackageBindings {
 			if binding.Decl.Pos.File != pos.File {
 				continue

@@ -1,0 +1,19 @@
+import "bork/json"
+
+derive Decode for Alias
+derive Encode for Config
+derive Decode for Box
+derive Encode for Box
+derive Decode for Special[Int]
+derive Encode for Mode
+derive Decode for Mode
+
+fn main() {
+  println(json.Decode[Alias]("{}"))
+  println(json.Decode[Alias]("{\"port\":0}"))
+  println(json.Encode(Config { port: 42 }))
+  println(json.Decode[Box[String]]("{\"value\":\"ok\"}"))
+  println(json.Encode(Box { value: 3 }))
+  println(json.Decode[Special[Int]]("{\"value\":9}"))
+  println(json.Decode[Mode](json.Encode(Mode.Slow { delay: 2 })))
+}

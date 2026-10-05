@@ -12,6 +12,7 @@
 ["true" "false"] @boolean
 (type (qualified_name (identifier) @type))
 (type_declaration name: (identifier) @type.definition)
+(derive_declaration class: (qualified_name (identifier) @type))
 (variant name: (identifier) @type.enum.variant)
 (function_declaration name: (identifier) @function)
 (method_signature name: (identifier) @function.method)

@@ -25,6 +25,7 @@ type File struct {
 	// Classes and Instances; the instances' methods are also in Funcs.
 	Classes   []*ClassDecl
 	Instances []*InstanceDecl
+	Derives   []*DeriveDecl
 	// Prelude is set for the compiler's built-in prelude.
 	Prelude  bool
 	Types    []*TypeDecl
@@ -108,6 +109,14 @@ type TypeDecl struct {
 	// `type User = { ... } derive (Decode, Encode)`.
 	Derive    []string
 	DerivePos diag.Pos
+}
+
+// DeriveDecl requests one instance independently of a type declaration.
+type DeriveDecl struct {
+	Pos, End diag.Pos
+	ClassPos diag.Pos
+	Class    string
+	Type     *TypeExpr
 }
 
 type FieldDecl struct {

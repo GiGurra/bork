@@ -63,7 +63,19 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
 	w.line("return out")
 	add("New", "func() any {\n"+w.body.String()+"}")
 	from := g.mirrorHelperName("_fromGo_", r)
+	var facts strings.Builder
+	for _, con := range ci.Constraints {
+		if cond := g.constraintCond(con, ast.NewIdent("out"), r); cond != nil {
+			setup, path, message := g.constraintFailure(con, ast.NewIdent("out"), r, stringLit("result"))
+			fmt.Fprintf(&facts, "if len(errs)==0 && !(%s) {\n", g.text(cond))
+			for _, stmt := range setup {
+				facts.WriteString(g.text(stmt) + "\n")
+			}
+			fmt.Fprintf(&facts, "errs=append(errs,%s{path:%s,message:%s}) }\n", errType, g.text(path), g.text(message))
+		}
+	}
 	add("FromGo", fmt.Sprintf(`func(value any) (%s, []%s) {
+ convert := func(value any) (%s, []%s) {
  switch value:=value.(type) {
  case %s: return %s(value,"result",map[any]bool{})
  case *%s:
@@ -72,7 +84,12 @@ func (g *gen) goStructDictionary(ci *check.ClassInstance) *ast.CompositeLit {
  default:
   var zero %s; return zero, []%s{{path:"result",message:"has the wrong Go type"}}
  }
-}`, bt, errType, gt, from, gt, from, bt, errType, bt, errType))
+ }
+ out, errs := convert(value)
+ %s
+ if len(errs)>0 { var zero %s; return zero,errs }
+ return out,errs
+}`, bt, errType, bt, errType, gt, from, gt, from, bt, errType, bt, errType, facts.String(), bt))
 	add("ToGo", "func(value "+bt+") any { return "+g.mirrorHelperName("_toGo_", r)+"(value) }")
 	var fields strings.Builder
 	fields.WriteString("func() []_borkGoStructField { return []_borkGoStructField{\n")

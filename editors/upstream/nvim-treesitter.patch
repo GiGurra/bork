@@ -21,7 +21,7 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = '7b1587cdf5bfd2294631985675f5555f7eacf03e',
++      revision = 'adc07af5a5efbd6801f091042d31190c14e08265',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
@@ -41,10 +41,10 @@ index 0000000..dac97f6
 + (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..d174184
+index 0000000..acdea7f
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,40 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -59,6 +59,7 @@ index 0000000..d174184
 +["true" "false"] @boolean
 +(type (qualified_name (identifier) @type))
 +(type_declaration name: (identifier) @type.definition)
++(derive_declaration class: (qualified_name (identifier) @type))
 +(variant name: (identifier) @type.enum.variant)
 +(function_declaration name: (identifier) @function)
 +(method_signature name: (identifier) @function.method)

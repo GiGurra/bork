@@ -513,6 +513,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	}
 	c.declareClasses(files)
 	c.declareClassMethods()
+	c.collectDerived(files)
 	c.resolveGoStructs(files)
 	c.resolveGoMirrors(files, false)
 	c.checkRecordCycles()
@@ -542,7 +543,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	}
 	c.declarePackageBindings(files)
 	c.declareInstances(files)
-	c.declareDerived(files)
+	c.declareDerived()
 	c.resolveUses(files)
 	c.declareProviderBundles(files)
 	for name, fn := range c.preludePkg.Funcs {
@@ -568,6 +569,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 	c.resolveConstraints(files)
 	c.ambientConstraints(files)
 	c.instanceConstraints()
+	c.checkDerivedDuplicates()
 	c.ensureAllFieldDefaults()
 	for _, checkKey := range c.mapKeyChecks {
 		checkKey()
@@ -586,7 +588,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 				inst.GoStruct, inst.GoGenerated, inst.GoMirror, inst.GoFields, inst.GoTo, inst.GoFrom = r.GoStruct, r.GoGenerated, r.GoMirror, r.GoFields, r.GoTo, r.GoFrom
 			}
 			if r.GoStruct && (!r.GoTo || !r.GoFrom) {
-				c.errorf(r.Decl.DerivePos, "cannot derive GoStruct for %s: its fields must convert both to and from Go", r.Name)
+				c.errorf(r.GoStructPos, "cannot derive GoStruct for %s: its fields must convert both to and from Go", r.Name)
 			}
 		}
 	}
@@ -769,6 +771,7 @@ type checker struct {
 	tupleDerives     []*ClassInstance
 	tupleBindingMode bool
 	patternTest      bool
+	derives          []*deriveRequest
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File

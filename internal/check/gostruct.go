@@ -17,6 +17,34 @@ func IsGoStruct(cl *Class) bool { return cl != nil && cl.Prelude && cl.Name == "
 // Prepare generated named types before resolving fields, so nested and
 // recursive records refer to the same Go type regardless of declaration order.
 func (c *checker) resolveGoStructs(files []*syntax.File) {
+	for _, request := range c.derives {
+		if !IsGoStruct(request.class) {
+			continue
+		}
+		c.pkg, c.inPrelude = request.pkg, request.prelude
+		r, ok := request.typ.(*Record)
+		if !ok {
+			request.invalid = true
+			c.errorf(request.pos, "GoStruct can only be derived for a record")
+			continue
+		}
+		if r.Decl != nil && r.Decl.Private && r.Pkg != c.pkg {
+			request.invalid = true
+			c.errorf(request.pos, "cannot derive GoStruct for %s: package %s controls construction of %s; use an instance provided by that package", request.name, r.Pkg.Path, r.Name)
+			continue
+		}
+		if r.Base != nil {
+			request.invalid = true
+			c.errorf(request.pos, "cannot derive GoStruct for a specialization; derive it for the record declaration")
+			continue
+		}
+		r.GoStruct = true
+		r.GoStructPos = request.pos
+		if r.Decl.GoName == nil {
+			r.GoGenerated = true
+			r.GoMirror = types.NewNamed(types.NewTypeName(token.NoPos, nil, "_go_"+r.Pkg.GoPrefix+r.Name, nil), nil, nil)
+		}
+	}
 	for _, f := range files {
 		c.inFile(f)
 		for _, td := range f.Types {
@@ -25,24 +53,6 @@ func (c *checker) resolveGoStructs(files []*syntax.File) {
 				continue
 			}
 			r, ok := e.typ.(*Record)
-			for _, name := range td.Derive {
-				if !IsGoStruct(c.lookupClass(name)) {
-					continue
-				}
-				if !ok {
-					c.errorf(td.DerivePos, "GoStruct can only be derived for a record")
-					continue
-				}
-				if r.Decl != nil && r.Decl.Private && r.Pkg != c.pkg {
-					c.errorf(td.DerivePos, "cannot derive GoStruct for %s: package %s controls construction of %s; use an instance provided by that package", td.Name, r.Pkg.Path, r.Name)
-					continue
-				}
-				r.GoStruct = true
-				if td.GoName == nil {
-					r.GoGenerated = true
-					r.GoMirror = types.NewNamed(types.NewTypeName(token.NoPos, nil, "_go_"+r.Pkg.GoPrefix+r.Name, nil), nil, nil)
-				}
-			}
 			var groups [][]*syntax.FieldDecl
 			if td.Kind == syntax.RecordType {
 				groups = [][]*syntax.FieldDecl{td.Fields}

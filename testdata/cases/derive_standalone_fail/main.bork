@@ -1,0 +1,11 @@
+type Config = {} derive (Decode)
+derive Decode for Config
+
+type Alias = Config
+derive Encode for Config
+derive Encode for Alias
+
+derive Decode for Int
+derive Eq for Config
+derive Missing for Config
+fn main() {}

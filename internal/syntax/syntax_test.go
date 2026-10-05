@@ -412,3 +412,21 @@ func TestMethodChainContinuation(t *testing.T) {
 		t.Fatalf("explicit semicolon lost: %s", got)
 	}
 }
+
+func TestStandaloneDerive(t *testing.T) {
+	diags := &diag.List{}
+	file := Parse("derive.bork", []byte("import codecs \"bork/codec\"\nderive codecs.Decode for Box[Int]\nderive Encode for Box\nfn main() {}"), diags)
+	if diags.Len() != 0 {
+		t.Fatal(diags.Error())
+	}
+	if len(file.Derives) != 2 || file.Derives[0].Class != "codecs.Decode" || file.Derives[0].Type.Name != "Box" || len(file.Derives[0].Type.Args) != 1 || file.Derives[0].Type.Args[0].Name != "Int" {
+		t.Fatalf("derives: %+v", file.Derives)
+	}
+	for _, source := range []string{"derive Decode Box", "derive Decode for Box extra"} {
+		diags := &diag.List{}
+		file := Parse("derive.bork", []byte(source+"\nfn main() {}"), diags)
+		if diags.Len() == 0 || len(file.Funcs) != 1 {
+			t.Fatalf("recovery for %q: %s, %+v", source, diags.Error(), file.Funcs)
+		}
+	}
+}

@@ -1078,6 +1078,32 @@
     }
   },
   {
+    "type": "derive_declaration",
+    "named": true,
+    "fields": {
+      "class": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "qualified_name",
+            "named": true
+          }
+        ]
+      },
+      "target": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "field_declaration",
     "named": true,
     "fields": {
@@ -4512,6 +4538,10 @@
         },
         {
           "type": "comptime_expression",
+          "named": true
+        },
+        {
+          "type": "derive_declaration",
           "named": true
         },
         {

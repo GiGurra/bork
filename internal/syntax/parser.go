@@ -59,6 +59,10 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 			break
 		}
 		switch {
+		case p.at(TIdent) && p.tok().Text == "derive" && p.peekKind() == TIdent:
+			if d := p.deriveDecl(); d != nil {
+				f.Derives = append(f.Derives, d)
+			}
 		case p.at(TIdent) && p.tok().Text == "class" && p.peekKind() == TIdent:
 			if cd := p.classDecl(); cd != nil {
 				f.Classes = append(f.Classes, cd)
@@ -133,6 +137,21 @@ func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.L
 		f.Funcs = append(f.Funcs, &FuncDecl{Pos: pos, Name: "main", Body: body, ScriptMain: true})
 	}
 	return f
+}
+
+func (p *parser) deriveDecl() (decl *DeriveDecl) {
+	defer p.recoverDecl(func() { decl = nil })
+	pos := p.next().Pos
+	class := p.expect(TIdent, "(class name)")
+	decl = &DeriveDecl{Pos: pos, ClassPos: class.Pos, Class: p.qualify(class)}
+	p.expect(KwFor, "after the class to derive")
+	decl.Type = p.typeExpr()
+	decl.End = p.tok().Pos
+	if !p.at(Semi) && !p.at(EOF) {
+		p.errorf(p.tok().Pos, "expected end of line after derive declaration, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return decl
 }
 
 func (p *parser) packageLazyBinding() (binding *Binding) {
@@ -264,7 +283,7 @@ func (p *parser) expect(k Kind, what string) Token {
 // syncTopLevel skips ahead to the next declaration at the start of a line.
 func (p *parser) syncTopLevel() {
 	for !p.at(EOF) {
-		if (p.at(KwFn) || p.at(KwType) || p.at(TIdent) && (p.tok().Text == "providers" && p.peekKind() == TIdent || p.peekKind() == Assign || p.peekKind() == Colon || p.tok().Text == "lazy" && p.peekKind() == TIdent)) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
+		if (p.at(KwFn) || p.at(KwType) || p.at(TIdent) && (p.tok().Text == "derive" && p.peekKind() == TIdent || p.tok().Text == "providers" && p.peekKind() == TIdent || p.peekKind() == Assign || p.peekKind() == Colon || p.tok().Text == "lazy" && p.peekKind() == TIdent)) && (p.i == 0 || p.toks[p.i-1].Kind == Semi) {
 			return
 		}
 		p.next()
