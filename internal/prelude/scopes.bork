@@ -71,7 +71,9 @@ fn logFailures(): ScopePolicy {
   ScopePolicy.LogFailures
 }
 
-// setScopePolicy applies a policy to s (what `with` does).
+// setScopePolicy applies a policy to s (what `with` does). It cannot be
+// called directly: policies are given where a scope starts, so that the
+// compiler can tell whether its tasks may outlive it (see move).
 fn setScopePolicy(s: Scope, policy: ScopePolicy) unsafe go {
   import "time"
   switch p := policy.(type) {
