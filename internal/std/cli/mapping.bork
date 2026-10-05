@@ -1,6 +1,8 @@
 // Mapping separates automatic policy, source disabling, and exact names.
 type Mapping = sealed { Auto, Disabled, Named { name: String } }
+type Choice = { value: String, description: String = "" }
 type Settings = {
+  completion: Bool = true
   autoLong: Bool = true
   autoShort: Bool = false
   autoEnv: Bool = false
@@ -20,6 +22,11 @@ type FieldSpec = {
   config: Bool
   hidden: Bool
   deprecated: String
+  choices: List[Choice] = []
+  strictChoices: Bool = false
+  files: Bool = false
+  directories: Bool = false
+  keepOrder: Bool = false
 }
 type Enricher = (List[FieldSpec], FieldSpec) uses nothing => FieldSpec
 
@@ -94,7 +101,7 @@ fn resolveFields[T: Decode](flags: List[Flag], settings: Settings, name: String,
     if !exists { flag = Flag{field: field.Name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true} }
     doc := field.Doc
     if description, ok := flag.description.(Option_Some[string]); ok { doc = description.value }
-    spec := FieldSpec{field: field.Name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated}
+    spec := FieldSpec{field: field.Name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
         spec.long = Mapping_Disabled{}
@@ -150,6 +157,26 @@ fn resolveFields[T: Decode](flags: List[Flag], settings: Settings, name: String,
       if configField != "" { fail(field.Name, "config-file field duplicates " + configField) }
       if field.Kind != "string" || field.Type != "String" && field.Type != "Option[String]" { fail(field.Name, "config-file field must be String or Option[String]") }
       configField = field.Name
+    }
+    if spec.files && spec.directories { fail(field.Name, "choose files or directories, not both") }
+    for _, choice := range spec.choices {
+      if choice.value == "" || strings.ContainsAny(choice.value+choice.description, "\t\n\r") { fail(field.Name, "completion choices must be nonempty and contain no tabs or newlines") }
+    }
+    if spec.strictChoices {
+      if field.Type != "String" && field.Type != "Option[String]" && field.Type != "List[String]" && field.Type != "Option[List[String]]" { fail(field.Name, "strict choices require String or List[String], optionally wrapped in Option") }
+      if len(spec.choices) == 0 { fail(field.Name, "strict choices require at least one choice") }
+      allowed := map[string]bool{}
+      for _, choice := range spec.choices { allowed[choice.value] = true }
+      if field.HasDefault {
+        defaults := []string{}
+        switch value := field.Default().(type) {
+        case string: defaults = []string{value}
+        case []string: defaults = value
+        case Option_Some[string]: defaults = []string{value.value}
+        case Option_Some[[]string]: defaults = value.value
+        }
+        for _, value := range defaults { if !allowed[value] { fail(field.Name, "default is not one of the allowed choices"); break } }
+      }
     }
     specs = append(specs, spec)
   }

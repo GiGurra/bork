@@ -1,112 +1,188 @@
 import "bork/process"
 import codecs "bork/json"
-// Command stores a callback with a fixed effect bound, allowing heterogeneous
-// option records in one list. Subcommand captures each typed decoder/handler.
+// Command keeps typed handlers behind a closed effect bound. Construct leaves
+// with Subcommand and branches with Group; metadata can be changed with copy.
 type Command = {
   name: String
   description: String
   execute: (String, List[String], Scope) uses io + net + clock + random + state => Ok | Error | Help
+  aliases: List[String] = []
+  longDescription: String = ""
+  examples: String = ""
+  hidden: Bool = false
+  children: List[Command] = []
+  group: Bool = false
+  factory: Option[(String) uses nothing => adapter | Error] = Option.None
+  apply: Option[(parsedInput, Scope) uses io + net + clock + random + state => Ok | Error] = Option.None
 }
 
 // Subcommand keeps the handler typed; only validated options reach it.
 fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
   resolved = resolve[T](flags, settings, name)
+  schema = inputFields[T](name)
+  completionEnabled = settings.completion
+  factory: (String) uses nothing => adapter | Error = displayName => match (resolved) {
+    error: Error => error
+    fields: List[FieldSpec] => match (schema) {
+      error: Error => error
+      inputs: List[inputField] => buildAdapter(displayName, description, fields, inputs, configFiles, codecs.Parse, flagName)
+    }
+  }
+  apply: (parsedInput, Scope) uses io + net + clock + random + state => Ok | Error = (input, s) => match (decode[T](input.value)) {
+    error: DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+    options: T => {
+      for (warning in input.warnings) { printError(s"${warning}\n") }
+      run(options, s)
+    }
+  }
   Command {
     name: name
     description: description
-    execute: (displayName, arguments, s) => {
-      result = match (resolved) {
+    factory: Option.Some { value: factory }
+    apply: Option.Some { value: apply }
+    execute: (displayName, arguments, s) => match (factory(displayName)) {
+      error: Error => error
+      prepared: adapter => match (evaluate(prepared, arguments, completionEnabled, configureCompletion)) {
         error: Error => error
-        fields: List[FieldSpec] => prepare[T](displayName, description, arguments, fields, configFiles, codecs.Parse, flagName, (options, warnings) => Parsed[T] { options: options, warnings: warnings })
-      }
-      match (result) {
         help: Help => help
-        error: Error => error
-        parsed: Parsed[T] => {
-          for (warning in parsed.warnings) { printError(s"${warning}\n") }
-          run(parsed.options, s)
-        }
+        input: parsedInput => apply(input, s)
       }
     }
   }
 }
 
-// Dispatch accepts explicit arguments without the executable name. A selected
-// handler runs in a fresh scope; help and errors stay values for the caller.
-fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command]) uses io + net + clock + random + state: Ok | Error | Help {
-  scope s { dispatch(name, description, arguments, commands, s) }
+// Group is a routing branch without options or a handler.
+fn Group(name: String, description: String, children: List[Command]): Command {
+  Command {
+    name: name
+    description: description
+    group: true
+    children: children
+    execute: (displayName, arguments, s) => Dispatch(displayName, description, arguments, children)
+  }
 }
 
-fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope) uses io + net + clock + random + state: Ok | Error | Help unsafe go {
+// Dispatch accepts explicit arguments without the executable name. Completion
+// settings belong to this entrypoint, and apply to the entire command tree.
+fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command], settings: Settings = .{}) uses io + net + clock + random + state: Ok | Error | Help {
+  scope s { dispatch(name, description, arguments, commands, s, settings.completion, configureCompletion) }
+}
+
+fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope, completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok) uses io + net + clock + random + state: Ok | Error | Help unsafe go {
   import "bytes"
   import "fmt"
   import "strings"
   import "unicode"
   import "github.com/spf13/cobra"
   failures := []DecodeError{}
-  seen := map[string]bool{}
-  if len(commands) == 0 { failures = append(failures, DecodeError{path: name, message: "CLI needs at least one subcommand"}) }
-  for i, command := range commands {
-    path := fmt.Sprintf("commands[%d].name", i)
-    invalid := command.name == "" || strings.HasPrefix(command.name, "-") || strings.IndexFunc(command.name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) >= 0
-    if invalid { failures = append(failures, DecodeError{path: path, message: "subcommand name must contain only letters, digits, hyphens, or underscores and not start with a hyphen"}) }
-    if command.name == "help" || command.name == "__complete" || command.name == "__completeNoDesc" { failures = append(failures, DecodeError{path: path, message: "subcommand name " + command.name + " is reserved"}) }
-    if seen[command.name] { failures = append(failures, DecodeError{path: path, message: "duplicate subcommand name " + command.name}) }
-    seen[command.name] = true
+  validName := func(name string) bool {
+    return name != "" && !strings.HasPrefix(name, "-") && strings.IndexFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) < 0
   }
+  var validate func([]Command, string)
+  validate = func(commands []Command, path string) {
+    if len(commands) == 0 { failures = append(failures, DecodeError{path: path, message: "CLI needs at least one subcommand"}) }
+    seen := map[string]bool{}
+    for i, command := range commands {
+      at := fmt.Sprintf("%s[%d]", path, i)
+      names := append([]string{command.name}, command.aliases...)
+      for j, name := range names {
+        field := at+".name"
+        if j > 0 { field = fmt.Sprintf("%s.aliases[%d]", at, j-1) }
+        if !validName(name) { failures = append(failures, DecodeError{path: field, message: "subcommand name must contain only letters, digits, hyphens, or underscores and not start with a hyphen"}) }
+        if name == "help" || name == "completion" || name == "__complete" || name == "__completeNoDesc" { failures = append(failures, DecodeError{path: field, message: "subcommand name " + name + " is reserved"}) }
+        if seen[name] { failures = append(failures, DecodeError{path: field, message: "duplicate subcommand name " + name}) }
+        seen[name] = true
+      }
+      if command.group { validate(command.children, at+".children") } else if len(command.children) != 0 { failures = append(failures, DecodeError{path: at+".children", message: "only a Group can have children"}) }
+    }
+  }
+  validate(commands, "commands")
   if len(failures) != 0 { return Error{errors: failures} }
   var output, diagnostics bytes.Buffer
   var result any
   ran := false
   root := &cobra.Command{Use: name, Short: description, SilenceUsage: true, SilenceErrors: true}
-  root.CompletionOptions.DisableDefaultCmd = true
-  root.SetHelpCommand(&cobra.Command{
-    Use: "help [command]", Short: "Help about any command",
-    Args: func(_ *cobra.Command, args []string) error {
-      if len(args) > 1 { return fmt.Errorf("help accepts at most one command name") }
-      return nil
-    },
-    RunE: func(_ *cobra.Command, args []string) error {
-      if len(args) == 0 { return root.Help() }
-      for _, child := range root.Commands() {
-        if child.Name() == args[0] && seen[args[0]] { return child.Help() }
-      }
-      return fmt.Errorf("unknown command %q", args[0])
-    },
-  })
-  for _, command := range commands {
-    child := &cobra.Command{
-      Use: command.name, Short: command.description, DisableFlagParsing: true,
-      Run: func(cmd *cobra.Command, args []string) {
-        ran = true
-        result = command.execute(cmd.CommandPath(), args, s)
-      },
-    }
-    // Cobra's `help <command>` must use the same derived option help as
-    // `<command> --help`, rather than the flag-free routing command's help.
-    child.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
-      value := command.execute(cmd.CommandPath(), []string{"--help"}, s)
-      if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text); _, _ = fmt.Fprint(cmd.ErrOrStderr(), help.diagnostics) } else { ran = true; result = value }
-    })
-    root.AddCommand(child)
-  }
-  // Validate routing before Execute installs Cobra's hidden completion
-  // endpoints. Find uses Cobra's own root-flag/argument routing rules.
-  root.InitDefaultHelpFlag()
-  root.InitDefaultHelpCmd()
-  if _, _, err := root.Find(arguments); err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
-  root.SetArgs(append([]string{}, arguments...))
   root.SetOut(&output)
   root.SetErr(&diagnostics)
-  if err := root.Execute(); err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
+  warnings := func() []string {
+    lines := []string{}
+    for _, line := range strings.Split(strings.TrimSpace(diagnostics.String()), "\n") { if line != "" { lines = append(lines, line) } }
+    return lines
+  }
+  var attach func(*cobra.Command, []Command) error
+  attach = func(parent *cobra.Command, commands []Command) error {
+    for _, command := range commands {
+      var child *cobra.Command
+      if command.group {
+        child = &cobra.Command{Use: command.name}
+        if err := attach(child, command.children); err != nil { return err }
+      } else if factory, native := _borkOptionGet(command.factory); native {
+        built := factory(command.name)
+        if failure, bad := built.(Error); bad { result = failure; return fmt.Errorf("invalid options for %s", command.name) }
+        prepared := built.(adapter)
+        child = _borkGo(prepared.native)
+        collect := child.RunE
+        child.RunE = func(cmd *cobra.Command, args []string) error {
+          if err := collect(cmd, args); err != nil { return err }
+          ran = true
+          value := prepared.result()
+          if failure, bad := value.(Error); bad {
+            for _, warning := range warnings() { failure.errors = append(failure.errors, DecodeError{path: cmd.CommandPath(), message: warning}) }
+            result = failure
+            return nil
+          }
+          apply, supplied := _borkOptionGet(command.apply)
+          if !supplied { result = Error{errors: []DecodeError{{path: cmd.CommandPath(), message: "native command has no typed handler"}}}; return nil }
+          result = apply(parsedInput{value: value.(Json), warnings: warnings(), path: cmd.CommandPath()}, s)
+          diagnostics.Reset()
+          return nil
+        }
+      } else {
+        // Preserve manually constructed execute callbacks without schema completion.
+        child = &cobra.Command{Use: command.name, DisableFlagParsing: true}
+        child.Run = func(cmd *cobra.Command, args []string) { ran = true; result = command.execute(cmd.CommandPath(), args, s) }
+        child.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+          value := command.execute(cmd.CommandPath(), []string{"--help"}, s)
+          if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text); _, _ = fmt.Fprint(cmd.ErrOrStderr(), help.diagnostics) } else { ran = true; result = value }
+        })
+      }
+      child.Short, child.Long, child.Example = command.description, command.longDescription, command.examples
+      child.Aliases, child.Hidden = append([]string{}, command.aliases...), command.hidden
+      child.SilenceUsage, child.SilenceErrors = true, true
+      child.Flags().SetOutput(&diagnostics)
+      parent.AddCommand(child)
+    }
+    return nil
+  }
+  if err := attach(root, commands); err != nil {
+    if failure, ok := result.(Error); ok { return failure }
+    return Error{errors: []DecodeError{{path: name, message: err.Error()}}}
+  }
+  root.SetHelpCommand(&cobra.Command{
+    Use: "help [command...]", Short: "Help about any command",
+    RunE: func(_ *cobra.Command, args []string) error {
+      target, remaining, err := root.Find(args)
+      if err != nil { return err }
+      if len(remaining) != 0 { return fmt.Errorf("unknown help target %q", strings.Join(args, " ")) }
+      return target.Help()
+    },
+  })
+  root.InitDefaultHelpFlag()
+  root.InitDefaultHelpCmd()
+  if failure, bad := configure(_borkOpaque[nativeCommand](root), arguments, completion).(Error); bad { return failure }
+  root.SetArgs(append([]string{}, arguments...))
+  if err := root.Execute(); err != nil {
+    failures := []DecodeError{{path: name, message: err.Error()}}
+    for _, warning := range warnings() { failures = append(failures, DecodeError{path: name, message: warning}) }
+    return Error{errors: failures}
+  }
   if !ran { return Help{text: output.String(), diagnostics: diagnostics.String()} }
   return result
 }
 
-// RunCommands reads process arguments and prints help. Applications render
-// returned errors and choose an exit code, as with Run.
-fn RunCommands(name: String, description: String, commands: List[Command]) uses io + net + clock + random + state: Ok | Error {
-  match (Dispatch(name, description, process.Args(), commands)) {
+// RunCommands reads process arguments and prints help, scripts and protocol text.
+fn RunCommands(name: String, description: String, commands: List[Command], settings: Settings = .{}) uses io + net + clock + random + state: Ok | Error {
+  match (Dispatch(name, description, process.Args(), commands, settings)) {
     help: Help => { print(help.text); printError(help.diagnostics) }
     error: Error => error
     Ok => {}

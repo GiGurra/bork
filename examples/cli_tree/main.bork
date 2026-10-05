@@ -1,0 +1,38 @@
+import "bork/cli"
+import "bork/process"
+type Deploy = {
+  // Cluster namespace.
+  namespace: String = "dev"
+  resources: List[String] = []
+} derive (Decode)
+type Status = {} derive (Decode)
+fn commands(): List[cli.Command] {
+  deploy = cli.Subcommand[Deploy]("deploy", "Deploy resources", (options, s) => {
+    onClose(s, () => { println("Deployment scope closed") })
+    println(s"${options.namespace}: ${options.resources}")
+    }, flags: [.{ field: "namespace", short: "n", choices: [.{ value: "dev", description: "Development" }, .{ value: "prod", description: "Production" }] }, .{ field: "resources", positional: true }]).copy(aliases: ["d"], longDescription: "Deploy resources into a cluster namespace.", examples: "fleet cluster deploy --namespace prod web")
+  status = cli.Subcommand[Status]("status", "Show cluster status", (options, s) => { println("Cluster ready") })
+  [cli.Group("cluster", "Manage clusters", [deploy, status]).copy(aliases: ["k"])]
+}
+fn main() {
+  match (cli.RunCommands("fleet", "Manage a fleet", commands())) {
+    error: cli.Error => { println(error); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "help routes through group and leaf aliases" {
+  match (cli.Dispatch("fleet", "", ["help", "k", "d"], commands())) {
+    help: cli.Help => {
+      assert(help.text.contains("Deploy resources into a cluster namespace."))
+      assert(help.text.contains("fleet cluster deploy"))
+      assert(help.text.contains("--namespace"))
+    }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}
+test "nested completion reuses leaf choices" {
+  match (cli.Dispatch("fleet", "", ["__completeNoDesc", "k", "d", "-n", "p"], commands())) {
+    help: cli.Help => { assert(help.text == "prod\n:4\n") }
+    other => { panic(s"Expected completion, got ${other}") }
+  }
+}

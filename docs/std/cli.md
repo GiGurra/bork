@@ -34,6 +34,7 @@ There is no process-global registry.
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
+| completion | true | Expose completion shell generators and hidden protocol endpoints |
 | autoLong | true | Derive kebab-case long flags: httpPort becomes --http-port |
 | autoShort | false | Derive the first ASCII letter of the canonical long name |
 | autoEnv | false | Derive UPPER_SNAKE_CASE environment names |
@@ -98,7 +99,7 @@ its output feeds the next function. Enrichers may override explicit mappings,
 but must preserve the field identity. Final names are validated after enrichment.
 
 FieldSpec contains field, long, short, env, description, positional, configFile,
-config, hidden and deprecated. Built-in policies preserve Disabled; a custom
+config, hidden, deprecated, choices, strictChoices, files, directories and keepOrder. Built-in policies preserve Disabled; a custom
 function may deliberately enable it again. Auto returned by a custom function
 is resolved under settings after the chain. Prefixes apply only to automatic
 names, once. Enrichers cannot change record defaults, requiredness or facts.
@@ -199,9 +200,9 @@ Commands with different option records can share a `List[cli.Command]`; the publ
 `T` inside that callback. The handler never receives
 raw JSON or another command's options.
 
-`Dispatch(name, description, arguments, commands)` accepts explicit arguments
+`Dispatch(name, description, arguments, commands, settings = .{})` accepts explicit arguments
 without the executable name and returns `Ok | cli.Error | cli.Help`.
-`RunCommands(name, description, commands)` reads process arguments and prints
+`RunCommands(name, description, commands, settings = .{})` reads process arguments and prints
 help, returning `Ok | cli.Error`. Both use cobra to select one subcommand and
 boa to parse its own derived option record, including command-specific flags,
 environment mappings, configFiles, and config-file selectors. A selected handler runs in a fresh
@@ -218,11 +219,25 @@ is required for storing heterogeneous callbacks and follows the existing
 `http.Handler` convention. Use ordinary `Parse`/`Run` when selective callback
 effect propagation is needed.
 
-The initial API supports one level of subcommands with command-specific options;
-root/persistent flags and nested groups are not exposed. Command names contain
-letters, digits, hyphens, or underscores, cannot start with a hyphen, must be
-unique, and cannot be `help`, `__complete`, or `__completeNoDesc`. Hidden
-Cobra completion endpoints are not exposed; unknown help targets return errors.
+Use `cli.Group(name, description, children)` to build nested routing branches.
+Groups have no option record or handler. Leaves retain their own flags, env
+mappings and config files. Set aliases, longDescription, examples or hidden
+with `Command.copy(...)`; aliases work in dispatch, help and completion. Hidden
+commands remain callable. Root and persistent flags are not exposed.
+
+Names and aliases contain letters, digits, hyphens or underscores, cannot start
+with a hyphen, and must be unique among siblings. `help`, `completion`,
+`__complete` and `__completeNoDesc` are reserved. The entire tree and all leaf
+metadata are validated before execution. `help <group> <leaf>` and aliases select
+nested help. Unknown help targets return errors. Existing manually constructed
+Command.execute callbacks remain supported, with no derived flag/value completion.
+
+See [the nested command example](../../examples/cli_tree/main.bork):
+
+```sh
+bork run examples/cli_tree -- k d -n prod web worker
+bork run examples/cli_tree -- help cluster deploy
+```
 
 See [examples/subcommands](../../examples/subcommands/main.bork):
 
@@ -231,3 +246,55 @@ bork run examples/subcommands -- serve --host localhost -p 443
 bork run examples/subcommands -- echo one two
 bork run examples/subcommands -- help serve
 ```
+
+## Shell completion and static choices
+
+Completion is enabled by default for both ordinary Parse/Run and command trees.
+Build the [completion example](../../examples/cli_completion/main.bork), then
+install a script for your shell:
+
+```sh
+bork build examples/cli_completion -o deploy
+./deploy completion bash > deploy.bash
+./deploy completion zsh > _deploy
+./deploy completion fish > deploy.fish
+./deploy completion powershell > deploy.ps1
+```
+
+Source deploy.bash in Bash, put _deploy on your zsh fpath, install deploy.fish
+under your fish completions directory, or dot-source deploy.ps1 in PowerShell.
+The native Cobra generators handle shell quoting and descriptions. Generating a
+script, requesting help, or completing never reads config files or runs a
+handler or its finalizers. Completion does not require a complete valid options
+record; required fields may be omitted while choosing a value.
+
+A Flag's `choices: List[cli.Choice]` supplies value/description pairs for long
+and short flag values and the positional field. Choices are filtered by the
+current prefix and deduplicated by value, preserving the first description.
+They suggest values without restricting normal parsing. `strictChoices: true`
+also validates String, Option[String], List[String] and Option[List[String]]
+inputs, including their declared defaults. Normal CLI/env/config precedence
+applies before membership checks. Other field types, an empty strict choice set,
+empty choice values, or tabs/newlines in values/descriptions are metadata errors.
+Enrichers can change choices and completion policy in FieldSpec too.
+
+Default value completion suppresses filename suggestions. Set `files: true` to
+allow shell file completion, `directories: true` to request directory completion,
+or `keepOrder: true` to preserve the declared order in shells that support it.
+Files and directories are mutually exclusive. Hidden/deprecated flags are omitted
+from flag-name completion and return no value candidates. Command and group
+completion uses the same native tree as dispatch and help.
+
+The hidden `__complete` and `__completeNoDesc` endpoints return Cobra's candidate
+lines and final numeric directive, such as `:4` for no filename completion.
+Parse/Dispatch return this stdout in Help.text; successful protocol diagnostics
+are returned separately in Help.diagnostics. Run/RunCommands print each stream.
+Cobra's native routing/flag completion failures retain its `:0` directive and
+write error debug messages directly to process stderr, even through explicit
+Parse/Dispatch; those upstream error messages cannot be captured in Help.diagnostics.
+
+Set `settings: .{ completion: false }` to reject the visible completion command
+and both hidden endpoints. For a tree, pass these settings to Dispatch or
+RunCommands: the entrypoint controls the whole tree. Subcommand settings govern
+field mappings, and its completion setting applies when calling Command.execute
+directly. Disabled completion leaves ordinary flags and positionals available.

@@ -1,5 +1,4 @@
 import "bork/process"
-import codecs "bork/json"
 // Package cli builds command-line interfaces with boa and decodes proven options.
 type Flag = {
   field: String
@@ -14,6 +13,11 @@ type Flag = {
   config: Bool = true
   hidden: Bool = false
   deprecated: String = ""
+  choices: List[Choice] = []
+  strictChoices: Bool = false
+  files: Bool = false
+  directories: Bool = false
+  keepOrder: Bool = false
 }
 type Error = { errors: List[DecodeError] }
 type Help = { text: String, diagnostics: String = "" }
@@ -37,164 +41,21 @@ fn Parse[T: Decode](name: String, description: String, args: List[String], flags
 fn ParseDetailed[T: Decode](name: String, description: String, args: List[String], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io: Parsed[T] | Error | Help {
   match (resolve[T](flags, settings, name)) {
     error: Error => error
-    fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, codecs.Parse, flagName, (options, warnings) => Parsed[T] { options: options, warnings: warnings })
+    fields: List[FieldSpec] => prepare[T](name, description, args, fields, configFiles, settings.completion)
   }
 }
-fn prepare[T: Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], parse: (String) => Json | JsonError, makeName: (String) => String, wrap: (T, List[String]) => Parsed[T]) uses io: Parsed[T] | Error | Help unsafe go {
-  import "bytes"
-  import "fmt"
-  import "reflect"
-  import "strconv"
-  import "strings"
-  import "github.com/GiGurra/boa/pkg/boa"
-  import "github.com/spf13/cobra"
-  schema, _ := _borkDecodeFields(_d_T_Decode)
-  mappingName := func(mapping Mapping) string {
-    if named, ok := mapping.(Mapping_Named); ok { return named.name }
-    return ""
-  }
-  configField := ""
-  metadata := map[string]FieldSpec{}
-  for _, spec := range specs {
-    metadata[spec.field] = spec
-    if spec.configFile { configField = spec.field }
-  }
-  fields := make([]reflect.StructField, len(schema))
-  for i, field := range schema {
-    typ := reflect.TypeFor[*string]()
-    if field.Kind == "bool" { typ = reflect.TypeFor[*bool]() }
-    list := strings.HasPrefix(field.Kind, "list:")
-    if list { typ = reflect.TypeFor[*[]string]() }
-    flag := metadata[field.Name]
-    doc := flag.description
-    if field.HasDefault { doc += fmt.Sprintf(" (default %v)", field.Default()) } else if !field.Optional { doc += " (required)" }
-    tag := "optional:\"true\" descr:" + strconv.Quote(strings.TrimSpace(doc))
-    if list { tag += " collection:\"array\"" }
-    if short := mappingName(flag.short); short != "" { tag += " short:" + strconv.Quote(short) }
-    policies := []string{}
-    if env := mappingName(flag.env); env != "" { tag += " env:" + strconv.Quote(env) } else { policies = append(policies, "noenv") }
-    if flag.positional { tag += " positional:\"true\"" }
-    // Synthetic exported fields retain the original name as an explicit boa tag.
-    long := mappingName(flag.long)
-    if long == "" {
-      if flag.positional { long = makeName(field.Name) } else {
-        long = fmt.Sprintf("bork-field-%d", i)
-        policies = append(policies, "noflag")
+fn prepare[T: Decode](name: String, description: String, args: List[String], specs: List[FieldSpec], configFiles: List[String], completion: Bool) uses io: Parsed[T] | Error | Help {
+  match (inputFields[T](name)) {
+    error: Error => error
+    fields: List[inputField] => match (parseInput(name, description, args, specs, fields, configFiles, completion)) {
+      error: Error => error
+      help: Help => help
+      input: parsedInput => match (decode[T](input.value)) {
+        error: DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+        options: T => Parsed[T] { options: options, warnings: input.warnings }
       }
     }
-    if len(policies) != 0 { tag += " boa:" + strconv.Quote(strings.Join(policies, ",")) }
-    tag += " long:" + strconv.Quote(long)
-    fields[i] = reflect.StructField{Name: fmt.Sprintf("Field%d", i), Type: typ, Tag: reflect.StructTag(tag)}
   }
-  shadow := reflect.New(reflect.StructOf(fields))
-  var output, diagnostics bytes.Buffer
-  var result any
-  ran := false
-  command := boa.Cmd{
-    Use: name, Short: description, Params: shadow.Interface(),
-    ParamEnrich: boa.ParamEnricherNone,
-    RunFunc: func(cmd *cobra.Command, remaining []string) {
-      ran = true
-      files := append([]string{}, configFiles...)
-      for i, field := range schema {
-        if field.Name != configField { continue }
-        path := ""
-        value := shadow.Elem().Field(i)
-        if !value.IsNil() { path = value.Elem().String() } else if field.HasDefault {
-          switch value := field.Default().(type) {
-          case string: path = value
-          case Option_Some[string]: path = value.value
-          }
-        }
-        if path != "" { files = append(files, path) }
-      }
-      config := map[string]Json{}
-      err := boa.LoadConfigFiles(files, &config, func(data []byte, target any) error {
-        parsed := parse(string(data))
-        if err, bad := parsed.(JsonError); bad { return fmt.Errorf("%s", err.message) }
-        object, ok := parsed.(Json_Object)
-        if !ok { return fmt.Errorf("CLI config must be a JSON object") }
-        values := target.(*map[string]Json)
-        for _, entry := range object.fields {
-          known := false
-          for _, field := range schema { if field.Name == entry.name { known = true; break } }
-          if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
-          if !metadata[entry.name].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
-          (*values)[entry.name] = entry.value
-        }
-        return nil
-      })
-      if err != nil { result = Error{errors: []DecodeError{{path: name, message: err.Error()}}}; return }
-      jsonFields := []JsonField{}
-      failures := []DecodeError{}
-      for i, field := range schema {
-        value := shadow.Elem().Field(i)
-        var json Json
-        if value.IsNil() {
-          if configured, exists := config[field.Name]; exists { json = configured } else {
-            if field.HasDefault { continue }
-            if !field.Optional { failures = append(failures, DecodeError{path: "." + field.Name, message: "is missing"}); continue }
-            json = Json_Null{}
-          }
-        } else if strings.HasPrefix(field.Kind, "list:") {
-          values := []Json{}
-          invalid := false
-          for j, raw := range value.Elem().Interface().([]string) {
-            if strings.TrimPrefix(field.Kind, "list:") == "string" { values = append(values, Json_String{value: raw}); continue }
-            parsed := parse(raw)
-            if err, bad := parsed.(JsonError); bad { failures = append(failures, DecodeError{path: fmt.Sprintf(".%s[%d]", field.Name, j), message: err.message}); invalid = true; continue }
-            values = append(values, parsed.(Json))
-          }
-          if invalid { continue }
-          json = Json_Array{items: values}
-        } else if field.Kind == "bool" { json = Json_Bool{value: value.Elem().Bool()} } else {
-          raw := value.Elem().String()
-          if field.Kind == "string" { json = Json_String{value: raw} } else {
-            parsed := parse(raw)
-            if err, bad := parsed.(JsonError); bad { failures = append(failures, DecodeError{path: "." + field.Name, message: err.message}); continue }
-            json = parsed.(Json)
-          }
-        }
-        if err, bad := field.Decode(json).(DecodeError); bad { failures = append(failures, err); continue }
-        jsonFields = append(jsonFields, JsonField{name: field.Name, value: json})
-      }
-      if len(failures) != 0 { result = Error{errors: failures}; return }
-      decoded := _d_T_Decode.decode(Json_Object{fields: jsonFields})
-      if err, bad := decoded.(DecodeError); bad { result = Error{errors: []DecodeError{err}} } else { result = decoded }
-    },
-  }
-  cmd, err := command.ToCobraE()
-  if err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
-  for _, spec := range specs {
-    long := mappingName(spec.long)
-    if spec.positional || long == "" { continue }
-    if spec.hidden { if err := cmd.Flags().MarkHidden(long); err != nil { return Error{errors: []DecodeError{{path: spec.field, message: err.Error()}}} } }
-    if spec.deprecated != "" { if err := cmd.Flags().MarkDeprecated(long, spec.deprecated); err != nil { return Error{errors: []DecodeError{{path: spec.field, message: err.Error()}}} } }
-  }
-  cmd.SetArgs(append([]string{}, args...))
-  cmd.SetOut(&output)
-  cmd.SetErr(&diagnostics)
-  // Cobra otherwise reprints pflag warnings to its stdout writer.
-  cmd.Flags().SetOutput(&diagnostics)
-  cmd.SilenceUsage = true
-  cmd.SilenceErrors = true
-  if err := cmd.Execute(); err != nil {
-    failures := []DecodeError{{path: name, message: err.Error()}}
-    for _, line := range strings.Split(strings.TrimSpace(output.String()+diagnostics.String()), "\n") {
-      if line != "" { failures = append(failures, DecodeError{path: name, message: line}) }
-    }
-    return Error{errors: failures}
-  }
-  if !ran { return Help{text: output.String(), diagnostics: diagnostics.String()} }
-  warnings := []string{}
-  for _, line := range strings.Split(strings.TrimSpace(output.String()+diagnostics.String()), "\n") {
-    if line != "" { warnings = append(warnings, line) }
-  }
-  if failure, ok := result.(Error); ok {
-    for _, warning := range warnings { failure.errors = append(failure.errors, DecodeError{path: name, message: warning}) }
-    return failure
-  }
-  return wrap(result.(T), warnings)
 }
 
 // Run reads process arguments and invokes the handler in a scope after validation.
