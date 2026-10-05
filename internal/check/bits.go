@@ -15,17 +15,20 @@ func shiftConstant(value, count constant.Value, op syntax.Kind) constant.Value {
 		return nil
 	}
 	n, ok := constant.Uint64Val(count)
-	if !ok || n > 1024 {
-		if op == syntax.Shl {
-			if constant.Sign(value) == 0 {
-				return constant.MakeInt64(0)
+	if op == syntax.Shr {
+		// Exact intermediates may be wider than any runtime integer. Saturate
+		// only once the count reaches their actual magnitude, not our left-shift budget.
+		if !ok || n >= uint64(constant.BitLen(value)) {
+			if constant.Sign(value) < 0 {
+				return constant.MakeInt64(-1)
 			}
-			return nil
+			return constant.MakeInt64(0)
 		}
-		if constant.Sign(value) < 0 {
-			return constant.MakeInt64(-1)
+	} else if !ok || n > 1024 {
+		if constant.Sign(value) == 0 {
+			return constant.MakeInt64(0)
 		}
-		return constant.MakeInt64(0)
+		return nil
 	}
 	goOp := token.SHL
 	if op == syntax.Shr {
