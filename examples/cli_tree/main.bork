@@ -1,11 +1,13 @@
 import "bork/cli"
+import "bork/codec"
 import "bork/process"
+use codec.Defaults
 type Deploy = {
   // Cluster namespace.
   namespace: String = "dev"
   resources: List[String] = []
-} derive (Decode)
-type Status = {} derive (Decode)
+} derive (codec.Decode)
+type Status = {} derive (codec.Decode)
 fn commands(): List[cli.Command] {
   deploy = cli.Subcommand[Deploy]("deploy", "Deploy resources", (options, s) => {
     onClose(s, () => { println("Deployment scope closed") })

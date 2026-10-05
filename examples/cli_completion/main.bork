@@ -1,12 +1,14 @@
 import "bork/cli"
+import "bork/codec"
 import "bork/process"
+use codec.Defaults
 type Options = {
   // Destination environment.
   environment: String = "dev"
   // Resources to deploy.
   resources: List[String] = []
   output: Option[String]
-} derive (Decode)
+} derive (codec.Decode)
 fn flags(): List[cli.Flag] {
   [.{ field: "environment", short: "e", choices: [.{ value: "dev", description: "Development" }, .{ value: "prod", description: "Production" }], strictChoices: true },
     .{ field: "resources", positional: true, choices: [.{ value: "web", description: "Web service" }, .{ value: "worker", description: "Background worker" }], keepOrder: true },
@@ -43,7 +45,7 @@ test "completion can be disabled without disabling positionals" {
   }
 }
 
-type Scalar = { target: String } derive (Decode)
+type Scalar = { target: String } derive (codec.Decode)
 test "scalar positional completion stops after its argument" {
   scalarFlags: List[cli.Flag] = [.{ field: "target", positional: true, choices: [.{ value: "alpha" }, .{ value: "beta" }] }]
   match (cli.Parse[Scalar]("deploy", "", ["__complete", "b"], flags: scalarFlags)) {

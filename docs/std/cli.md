@@ -123,7 +123,7 @@ return both without printing. Run and RunCommands print the corresponding stream
 
 ## Command-line schema adapter
 
-The stdlib builds a boa reflection shadow struct from the existing derived Decode
+The stdlib builds a boa reflection shadow struct from the existing derived codec.Decode
 field schema; no GoStruct bound is needed. Optional shadow pointers track omitted
 inputs. The adapter converts supplied values, collects missing/type/fact errors
 across fields, and then invokes the complete record decoder. Sibling-dependent
@@ -182,7 +182,7 @@ Run with `app --config local.json --port 9000`. `settings.json` might contain
 
 ## Examples
 
-`bork/cli` wraps boa to parse proven options from a record deriving `Decode`.
+`bork/cli` wraps boa to parse proven options from a record deriving `codec.Decode`.
 It generates help from field docs and defaults, supports short flags, explicit
 environment bindings, positionals, and repeated list flags, and collects field
 errors before invoking a handler. See [examples/cli](../../examples/cli/main.bork). Focused examples cover
@@ -199,7 +199,7 @@ bork run examples/cli -- --config examples/cli/config.json --port 9000
 
 ## Subcommands
 
-`Subcommand[T: Decode](name, description, handler, flags = [], configFiles = [], settings = .{})` creates a
+`Subcommand[T: codec.Decode](name, description, handler, flags = [], configFiles = [], settings = .{})` creates a
 `cli.Command`, capturing the derived decoder and a typed handler for `T`.
 Commands with different option records can share a `List[cli.Command]`; the public command stores an erased callback, while decoded options keep type
 `T` inside that callback. The handler never receives

@@ -13,7 +13,9 @@ func TestCLIStaticCompletion(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
+import "bork/codec"
 import "bork/process"
+use codec.Defaults
 type Options = {
  config: String = "missing.json"
  namespace: String
@@ -23,7 +25,7 @@ type Options = {
  file: Option[String]
  directory: Option[String]
  targets: List[String] = []
-} derive (Decode)
+} derive (codec.Decode)
 fn main() {
  leaf = cli.Subcommand[Options]("deploy", "Deploy resources", (options, s) => {
   onClose(s, () => { println("closed") })
@@ -160,7 +162,9 @@ func TestCLICompletionMetadata(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	source := `import "bork/cli"
-type Options = { mode: String = "dev", number: Int = 1, items: List[String] = ["dev"], optional: Option[List[String]] } derive (Decode)
+import "bork/codec"
+use codec.Defaults
+type Options = { mode: String = "dev", number: Int = 1, items: List[String] = ["dev"], optional: Option[List[String]] } derive (codec.Decode)
 fn main() {
  println(cli.Parse[Options]("app", "", ["--help"], flags: [.{ field: "mode", files: true, directories: true }]))
  println(cli.Parse[Options]("app", "", ["--help"], flags: [.{ field: "mode", choices: [.{ value: "bad\nvalue" }] }]))
@@ -201,7 +205,9 @@ fn main() {
 func TestCLITypeCheckWithoutGo(t *testing.T) {
 	root := t.TempDir()
 	source := `import "bork/cli"
-type Options = { namespace: String = "dev" } derive (Decode)
+import "bork/codec"
+use codec.Defaults
+type Options = { namespace: String = "dev" } derive (codec.Decode)
 fn main() { _ = cli.Subcommand[Options]("deploy", "", (options, s) => {}) }
 `
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {
