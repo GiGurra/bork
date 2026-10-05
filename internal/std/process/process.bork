@@ -1,6 +1,59 @@
 // Package process runs argv commands without a shell, owned by a scope.
+import "bork/signal"
+import "bork/time"
+
 type Process = resource
-type Result = { code: Int, stdout: Bytes, stderr: Bytes }
+
+// Input is where a child's stdin comes from. Empty is /dev/null; Data and
+// Text are written by bork and then closed; File is opened for reading.
+type Input = sealed {
+  Empty
+  Inherit
+  Data { data: Bytes }
+  Text { text: String }
+  File { path: String }
+}
+
+// Output is where a child's stdout goes. Capture keeps it in Result;
+// Inherit forwards it to the parent's stdout; Discard is /dev/null; File
+// creates or truncates, Append creates or appends.
+type Output = sealed {
+  Capture
+  Inherit
+  Discard
+  File { path: String }
+  Append { path: String }
+}
+
+// ErrorOutput is where a child's stderr goes: an Output, or Stdout to share
+// stdout's destination (2>&1). Shared capture keeps the child's write order.
+type ErrorOutput = sealed {
+  Capture
+  Inherit
+  Discard
+  File { path: String }
+  Append { path: String }
+  Stdout
+}
+
+// ExitStatus is how a child ended: with an exit code, or killed by a signal
+// (Unix only).
+type ExitStatus = sealed {
+  Exited { code: Int }
+  Signaled { number: Int, name: String }
+}
+
+// Result is a finished child. code is the exit code, or -1 when a signal
+// killed it. Streams that were not captured are empty.
+type Result = { code: Int, status: ExitStatus, stdout: Bytes, stderr: Bytes }
+
+// ExitError is a Result that Check rejected; message describes the exit and
+// ends with the last line of captured stderr, if any.
+type ExitError = { code: Int, status: ExitStatus, stdout: Bytes, stderr: Bytes, message: String }
+
+type stream = { kind: String, path: String, data: Bytes, text: String }
+type rawResult = { code: Int, signaled: Bool, signal: Int, signalName: String, stdout: Bytes, stderr: Bytes }
+type running = {}
 
 // Args is the program's command-line arguments (without its name).
 fn Args() uses io: List[String] unsafe go {
@@ -15,65 +68,189 @@ fn Exit(code: Int) uses io: Never unsafe go {
   os.Exit(int(code))
 }
 
-// Run captures stdout/stderr. A nonzero exit is a Result, not an I/O error.
-// None environment inherits the parent environment; Some([]) clears it.
-// Inherited output pipes are bounded to one second after exit/cancellation.
-// A successful exit with open pipes is IoError; nonzero Result output may truncate.
-fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Option[Bytes] = Option.None) uses io + state: Result | IoError | Cancelled {
-  child = Start(s, name, arguments, environment, directory, stdin)?
-  Await(child)
+// Run starts a child and waits for it. A nonzero exit or a signal death is a
+// Result, not an I/O error. None environment inherits the parent environment;
+// Some([]) clears it. Inherited output pipes are bounded to one second (plus
+// cancelGrace) after exit/cancellation. A successful exit with open pipes is
+// IoError; nonzero Result output may truncate.
+fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Result | IoError | Cancelled {
+  child = Start(s, name, arguments, environment, directory, stdin, stdout, stderr, cancelGrace)?
+  child.Wait()
 }
 
-// Start starts a subprocess in its own Unix process group, killed on cancellation.
+// Start starts a subprocess in its own Unix process group, killed on
+// cancellation: at once, or after SIGTERM and cancelGrace when it is positive.
 // Group cancellation applies while the direct child is running; descendants
 // that leave the group or outlive its normal exit are outside its ownership.
-// Other targets kill only the direct child. Closing the scope
-// cancels and reaps it even if Await was never called.
-fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Option[Bytes] = Option.None) uses io + state: Process | IoError | Cancelled unsafe go {
+// Other targets kill only the direct child. Closing the scope cancels and
+// reaps it even if Wait was never called. Captured output drains in the
+// background whether or not anyone waits.
+fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Process | IoError | Cancelled {
+  start(s, name, arguments, environment, directory, inputStream(stdin), outputStream(stdout), errorStream(stderr), cancelGrace.nanos)
+}
+
+fn inputStream(input: Input): stream {
+  match (input) {
+    Input.Empty => stream { kind: "empty", path: "", data: noBytes(), text: "" }
+    Input.Inherit => stream { kind: "inherit", path: "", data: noBytes(), text: "" }
+    Input.Data { data } => stream { kind: "data", path: "", data: data, text: "" }
+    Input.Text { text } => stream { kind: "text", path: "", data: noBytes(), text: text }
+    Input.File { path } => stream { kind: "file", path: path, data: noBytes(), text: "" }
+  }
+}
+
+fn outputStream(output: Output): stream {
+  match (output) {
+    Output.Capture => named("capture", "")
+    Output.Inherit => named("inherit", "")
+    Output.Discard => named("discard", "")
+    Output.File { path } => named("file", path)
+    Output.Append { path } => named("append", path)
+  }
+}
+
+fn errorStream(output: ErrorOutput): stream {
+  match (output) {
+    ErrorOutput.Capture => named("capture", "")
+    ErrorOutput.Inherit => named("inherit", "")
+    ErrorOutput.Discard => named("discard", "")
+    ErrorOutput.File { path } => named("file", path)
+    ErrorOutput.Append { path } => named("append", path)
+    ErrorOutput.Stdout => named("stdout", "")
+  }
+}
+
+fn named(kind: String, path: String): stream { stream { kind: kind, path: path, data: noBytes(), text: "" } }
+
+fn noBytes(): Bytes unsafe go { return _borkBytesFrom(nil) }
+
+// The resource value is one dispatcher over the child's operations, so each
+// method below names a single Go type.
+fn start(s: Scope, name: String, arguments: List[String], environment: Option[List[String]], directory: String, stdin: stream, stdout: stream, stderr: stream, graceNanos: Int) uses io + state: Process | IoError | Cancelled unsafe go {
   import "bytes"
   import "context"
   import "errors"
+  import "fmt"
+  import "io"
   import "os"
   import "os/exec"
   import "reflect"
+  import "strings"
+  import "sync/atomic"
   import "syscall"
   import "time"
   handle := _borkNewResourceHandle(nil, s)
   ctx, cancelChild := context.WithCancel(handle.Context())
   cmd := exec.CommandContext(ctx, name, arguments...)
-  // Setpgid exists on Unix; other targets retain direct-child cancellation.
+  done := make(chan struct{})
+  // Setpgid exists on Unix; other targets signal only the direct child.
+  grouped := false
   attributes := &syscall.SysProcAttr{}
   if group := reflect.ValueOf(attributes).Elem().FieldByName("Setpgid"); group.IsValid() {
     group.SetBool(true)
     cmd.SysProcAttr = attributes
-    cmd.Cancel = func() error {
-      processGroup, err := os.FindProcess(-cmd.Process.Pid)
-      if err != nil { return err }
-      defer processGroup.Release()
-      return processGroup.Kill()
-    }
+    grouped = true
   }
+  // signalAll reaches the group only while the direct child is unreaped: after
+  // Process.Wait the leader probe reports done, so a reused group ID is never
+  // signalled and descendants that outlive the child are left alone.
+  signalAll := func(sig os.Signal) error {
+    if err := cmd.Process.Signal(syscall.Signal(0)); errors.Is(err, os.ErrProcessDone) { return nil }
+    if !grouped { return cmd.Process.Signal(sig) }
+    processGroup, err := os.FindProcess(-cmd.Process.Pid)
+    if err != nil { return err }
+    defer processGroup.Release()
+    return processGroup.Signal(sig)
+  }
+  // terminate sends SIGTERM, then SIGKILL after grace if the child still runs.
+  // Targets without SIGTERM are killed at once.
+  terminate := func(grace time.Duration) {
+    if grace <= 0 { signalAll(os.Kill); return }
+    if signalAll(syscall.SIGTERM) != nil { signalAll(os.Kill); return }
+    time.AfterFunc(grace, func() {
+      select {
+      case <-done:
+      default: signalAll(os.Kill)
+      }
+    })
+  }
+  grace := time.Duration(graceNanos)
+  // A child that exited on its own keeps its Result even if the scope is
+  // cancelled while its output drains; only a cancellation that reached the
+  // child reports Cancelled.
+  var cancelled atomic.Bool
+  cmd.Cancel = func() error { cancelled.Store(true); terminate(grace); return nil }
   // Bound inherited output pipes after child exit or cancellation.
   cmd.WaitDelay = time.Second
+  if grace > 0 { cmd.WaitDelay += grace }
   cmd.Dir = directory
   if values, present := _borkOptionGet(environment); present { cmd.Env = append([]string{}, values...) }
-  if data, present := _borkOptionGet(stdin); present { cmd.Stdin = bytes.NewReader(_borkBytesData(data)) }
-  var stdout, stderr bytes.Buffer
-  cmd.Stdout, cmd.Stderr = &stdout, &stderr
-  if err := cmd.Start(); err != nil {
+  var files []*os.File
+  closeFiles := func() { for _, file := range files { file.Close() } }
+  fail := func(path string, err error) any {
+    closeFiles()
     cancelChild()
     handle.Close()
-    if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
-    return IoError{path: name, message: err.Error()}
+    if scopeContext := _borkScopeContext(s); scopeContext.Err() != nil { return Cancelled{reason: context.Cause(scopeContext).Error()} }
+    return IoError{path: path, message: err.Error()}
   }
-  done := make(chan struct{})
+  switch stdin.kind {
+  case "inherit": cmd.Stdin = os.Stdin
+  case "data": cmd.Stdin = bytes.NewReader(_borkBytesData(stdin.data))
+  case "text": cmd.Stdin = strings.NewReader(stdin.text)
+  case "file":
+    file, err := os.Open(stdin.path)
+    if err != nil { return fail(stdin.path, err) }
+    files = append(files, file)
+    cmd.Stdin = file
+  }
+  var stdoutBuffer, stderrBuffer bytes.Buffer
+  // A nil writer is /dev/null; a shared writer gives the child one pipe.
+  destination := func(spec stream, buffer *bytes.Buffer, parent *os.File) (io.Writer, error) {
+    switch spec.kind {
+    case "capture": return buffer, nil
+    case "inherit": return parent, nil
+    case "file", "append":
+      flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+      if spec.kind == "append" { flags = os.O_WRONLY | os.O_CREATE | os.O_APPEND }
+      file, err := os.OpenFile(spec.path, flags, 0o666)
+      if err != nil { return nil, err }
+      files = append(files, file)
+      return file, nil
+    }
+    return nil, nil
+  }
+  out, err := destination(stdout, &stdoutBuffer, os.Stdout)
+  if err != nil { return fail(stdout.path, err) }
+  cmd.Stdout = out
+  if stderr.kind == "stdout" {
+    cmd.Stderr = cmd.Stdout
+  } else {
+    errOut, err := destination(stderr, &stderrBuffer, os.Stderr)
+    if err != nil { return fail(stderr.path, err) }
+    cmd.Stderr = errOut
+  }
+  if err := cmd.Start(); err != nil { return fail(name, err) }
+  // The child holds its own copies of file descriptors.
+  closeFiles()
+  // sigName follows the conventional SIG names; others give "signal N".
+  sigName := func(sig syscall.Signal) string {
+    names := map[syscall.Signal]string{syscall.SIGHUP: "SIGHUP", syscall.SIGINT: "SIGINT", syscall.SIGQUIT: "SIGQUIT", syscall.SIGILL: "SIGILL", syscall.SIGTRAP: "SIGTRAP", syscall.SIGABRT: "SIGABRT", syscall.SIGBUS: "SIGBUS", syscall.SIGFPE: "SIGFPE", syscall.SIGKILL: "SIGKILL", syscall.SIGSEGV: "SIGSEGV", syscall.SIGPIPE: "SIGPIPE", syscall.SIGALRM: "SIGALRM", syscall.SIGTERM: "SIGTERM"}
+    for _, user := range []string{"User1", "User2"} {
+      if number, err := _borkSignalNumber(user); err == nil { names[syscall.Signal(number)] = "SIGUSR" + user[4:] }
+    }
+    if label, known := names[sig]; known { return label }
+    return fmt.Sprintf("signal %d", int(sig))
+  }
   var result any
   go func() {
     defer cancelChild()
     defer close(done)
     err := cmd.Wait()
-    if reason := ctx.Err(); reason != nil {
-      result = Cancelled{reason: reason.Error()}
+    if cancelled.Load() {
+      // The cause names the current owner's reason, such as a deadline, also
+      // after attach.
+      result = Cancelled{reason: context.Cause(ctx).Error()}
       return
     }
     var exitError *exec.ExitError
@@ -81,24 +258,160 @@ fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Opti
       result = IoError{path: name, message: err.Error()}
       return
     }
-    result = Result{code: int64(cmd.ProcessState.ExitCode()), stdout: _borkBytesFrom(stdout.Bytes()), stderr: _borkBytesFrom(stderr.Bytes())}
+    raw := rawResult{code: int64(cmd.ProcessState.ExitCode()), stdout: _borkBytesFrom(stdoutBuffer.Bytes()), stderr: _borkBytesFrom(stderrBuffer.Bytes())}
+    if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+      raw.signaled, raw.signal, raw.signalName = true, int64(status.Signal()), sigName(status.Signal())
+    }
+    result = raw
   }()
-  handle.Value = struct { wait func() any; stop func(); pid int }{
-    wait: func() any { <-done; return result }, stop: cancelChild, pid: cmd.Process.Pid,
+  pid := cmd.Process.Pid
+  handle.Value = func(operation string, argument int64) any {
+    switch operation {
+    case "wait":
+      <-done
+      return result
+    case "poll":
+      select {
+      case <-done: return result
+      default: return running{}
+      }
+    case "pid":
+      return int64(pid)
+    }
+    select {
+    case <-done: return _borkOk()
+    default:
+    }
+    switch operation {
+    case "signal":
+      if err := signalAll(syscall.Signal(argument)); err != nil && !errors.Is(err, syscall.ESRCH) { return IoError{path: name, message: err.Error()} }
+    case "stop":
+      terminate(time.Duration(argument))
+    }
+    return _borkOk()
   }
   return Process{handle: handle, owner: s.Own(func() { cancelChild(); handle.Close(); <-done })}
 }
 
-// Await may be called repeatedly; every call returns the same immutable result.
-fn Await(child: Process) uses io + state: Result | IoError | Cancelled unsafe go {
-  return child.handle.(*_borkResourceHandle).Value.(struct { wait func() any; stop func(); pid int }).wait()
+fn operate(child: Process, operation: String, argument: Int) uses io + state: rawResult | IoError | Cancelled | running | Int | Ok unsafe go {
+  return child.handle.(*_borkResourceHandle).Value.(func(string, int64) any)(operation, argument)
 }
 
-// Stop cancels this child, without cancelling sibling tasks or its scope.
-fn Stop(child: Process) uses io + state unsafe go {
-  child.handle.(*_borkResourceHandle).Value.(struct { wait func() any; stop func(); pid int }).stop()
+fn finished(outcome: rawResult | IoError | Cancelled): Result | IoError | Cancelled {
+  match (outcome) {
+    raw: rawResult => {
+      status: ExitStatus = if (raw.signaled) { .Signaled { number: raw.signal, name: raw.signalName } } else { .Exited { code: raw.code } }
+      Result { code: raw.code, status: status, stdout: raw.stdout, stderr: raw.stderr }
+    }
+    error: IoError => error
+    stopped: Cancelled => stopped
+  }
 }
 
-fn Pid(child: Process): Int unsafe go {
-  return int64(child.handle.(*_borkResourceHandle).Value.(struct { wait func() any; stop func(); pid int }).pid)
+// Wait waits for the child to finish. It may be called repeatedly; every call
+// returns the same immutable result. Cancelled means the owning scope was
+// cancelled; Stop and Kill give a Result.
+fn (child: Process) Wait() uses io + state: Result | IoError | Cancelled {
+  match (operate(child, "wait", 0)) {
+    raw: rawResult => finished(raw)
+    error: IoError => error
+    stopped: Cancelled => stopped
+    _ => panic("process: unexpected wait outcome")
+  }
 }
+
+// TryWait is Wait without blocking: None while the child is running.
+fn (child: Process) TryWait() uses io + state: Option[Result | IoError | Cancelled] {
+  match (operate(child, "poll", 0)) {
+    raw: rawResult => .Some { value: finished(raw) }
+    error: IoError => .Some { value: error }
+    stopped: Cancelled => .Some { value: stopped }
+    _ => .None
+  }
+}
+
+// Pid is the child's process ID.
+fn (child: Process) Pid(): Int unsafe go {
+  return child.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("pid", 0).(int64)
+}
+
+// Signal sends a signal to the child's process group (the direct child on
+// targets without groups). After the child has finished it does nothing.
+// Signals the target does not support give IoError.
+fn (child: Process) Signal(value: signal.Signal) uses io + state: Ok | IoError {
+  match (signalNumber(signalName(value))) {
+    number: Int => sendSignal(child, number)
+    error: IoError => error
+  }
+}
+
+fn sendSignal(child: Process, number: Int) uses io + state: Ok | IoError unsafe go {
+  return child.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("signal", number)
+}
+
+fn signalName(value: signal.Signal): String {
+  match (value) {
+    signal.Signal.Interrupt => "Interrupt"
+    signal.Signal.Terminate => "Terminate"
+    signal.Signal.Hangup => "Hangup"
+    signal.Signal.User1 => "User1"
+    signal.Signal.User2 => "User2"
+  }
+}
+
+fn signalNumber(name: String): Int | IoError unsafe go {
+  number, err := _borkSignalNumber(name)
+  if err != nil { return IoError{path: "", message: err.Error()} }
+  return int64(number)
+}
+
+// Stop ends the child gracefully: SIGTERM to its process group, then SIGKILL
+// if it still runs after grace. Wait then gives the child's Result (Signaled,
+// or the exit code it chose on SIGTERM). Targets without SIGTERM kill at once.
+// Stop does not cancel sibling tasks or the scope.
+fn (child: Process) Stop(grace: time.Duration = time.Duration { nanos: 5_000_000_000 }) uses io + state {
+  _ = operate(child, "stop", grace.nanos)
+}
+
+// Kill ends the child and its process group at once with SIGKILL.
+fn (child: Process) Kill() uses io + state {
+  _ = operate(child, "stop", 0)
+}
+
+// Success reports whether the child exited with code 0.
+fn (result: Result) Success(): Bool { result.code == 0 }
+
+// Check gives the Result when it succeeded, and an ExitError otherwise, like
+// Python's check=True: process.Run(s, "git", ["status"])?.Check()?.
+fn (result: Result) Check(): Result | ExitError {
+  if (result.Success()) {
+    result
+  } else {
+    ExitError { code: result.code, status: result.status, stdout: result.stdout, stderr: result.stderr, message: exitMessage(result.status, result.stderr) }
+  }
+}
+
+fn exitMessage(status: ExitStatus, stderr: Bytes): String {
+  summary = match (status) {
+    ExitStatus.Exited { code } => s"exit status $code"
+    ExitStatus.Signaled { name } => s"killed by $name"
+  }
+  last = lastLine(stderr)
+  if (last == "") { summary } else { s"$summary: $last" }
+}
+
+fn lastLine(data: Bytes): String unsafe go {
+  import "strings"
+  text := strings.TrimRight(string(_borkBytesData(data)), "\r\n")
+  if i := strings.LastIndexByte(text, '\n'); i >= 0 { text = text[i+1:] }
+  return strings.TrimSpace(text)
+}
+
+// StdoutText is the captured stdout as a String, byte for byte; use
+// encoding.ParseUtf8 to validate it.
+fn (result: Result) StdoutText(): String { bytesText(result.stdout) }
+
+// StderrText is the captured stderr as a String, byte for byte.
+fn (result: Result) StderrText(): String { bytesText(result.stderr) }
+
+fn bytesText(data: Bytes): String unsafe go { return string(_borkBytesData(data)) }
