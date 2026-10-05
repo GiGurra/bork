@@ -21,7 +21,7 @@ fn main() {
   one: Byte = 1 << 7
   println(all, one)
   println(((1 << 1024) * (1 << 1024)) >> 2048)
-  println((-((1 << 1024) * (1 << 1024))) >> 2048)
+  println((-((1 << 1024) * (1 << 1024))) >> 2047)
   count = 2
   println(f << count)
   comptimeBits = comptime { n: Byte = 240; n ^ 15 }
