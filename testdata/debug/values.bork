@@ -1,15 +1,20 @@
 type Shape = sealed { Circle { radius: Float }, Empty }
 type Inner = { label: String, count: Int }
 type Outer = { inner: Inner, shape: Shape, optional: Option[Int] }
+type Box[T] = { item: T }
 fn main() {
   x = 3
   y = x + 4
   shape: Shape = .Circle { radius: 2.0 }
   some: Option[Int] = .Some { value: 3 }
+  someFloat: Option[Float] = .Some { value: 2.0 }
+  boxed = Box[Float] { item: 2.0 }
+  shapes = [shape]
   none: Option[Int] = .None
   nested = Outer { inner: Inner { label: "main.Shape_Circle {radius: 9}", count: 5 }, shape: shape, optional: some }
   recordUnion: Inner | Outer = nested.inner
+  scalarUnion: Int | String = 8
   chosen = match (shape) { Shape.Circle { radius } => radius, Shape.Empty => 0.0 }
   println(y)
-  println(x, shape, some, none, nested, recordUnion, chosen)
+  println(x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes)
 }

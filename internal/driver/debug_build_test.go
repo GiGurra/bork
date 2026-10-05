@@ -159,6 +159,11 @@ func (d *dapFixture) until(t *testing.T, event string, seq int) map[string]any {
 // CI installs the pinned debugger and exercises real DAP breakpoints, stepping,
 // inspection and disconnect. Ordinary test runs need no optional debugger.
 func TestDebugDAPIntegration(t *testing.T) {
+	for _, types := range []bool{true, false} {
+		t.Run(fmt.Sprintf("types=%t", types), func(t *testing.T) { testDebugDAPSession(t, types) })
+	}
+}
+func testDebugDAPSession(t *testing.T, types bool) {
 	dlv := os.Getenv("BORK_TEST_DLV")
 	if dlv == "" {
 		t.Skip("set BORK_TEST_DLV to run the real debugger integration")
@@ -212,7 +217,7 @@ func TestDebugDAPIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := dapFixture{conn: conn, reader: bufio.NewReader(conn)}
-	seq := d.send(t, "initialize", map[string]any{"adapterID": "bork", "linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path", "supportsVariableType": true})
+	seq := d.send(t, "initialize", map[string]any{"adapterID": "bork", "linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path", "supportsVariableType": types})
 	d.until(t, "", seq)
 	d.send(t, "launch", map[string]any{"mode": "exec", "program": exe, "cwd": root})
 	d.until(t, "initialized", 0)
@@ -248,7 +253,7 @@ func TestDebugDAPIntegration(t *testing.T) {
 		name := scope.(map[string]any)["name"].(string)
 		session = append(session, debugSnapshot{Request: "scope " + name, Variables: debugVariables(response)})
 	}
-	for _, expression := range []string{"shape", "some", "none", "nested", "recordUnion"} {
+	for _, expression := range []string{"shape", "some", "none", "nested", "recordUnion", "scalarUnion", "someFloat", "boxed"} {
 		seq = d.send(t, "evaluate", map[string]any{"expression": expression, "frameId": frame["id"], "context": "watch"})
 		response = d.until(t, "", seq)
 		value := debugValue(response["body"].(map[string]any), "result")
@@ -268,7 +273,7 @@ func TestDebugDAPIntegration(t *testing.T) {
 			}
 		}
 	}
-	checkDebugGolden(t, session)
+	checkDebugGolden(t, session, types)
 	seq = d.send(t, "next", map[string]any{"threadId": thread})
 	d.until(t, "", seq)
 	d.until(t, "stopped", 0)
@@ -340,7 +345,7 @@ func debugVariables(response map[string]any) []debugValueSnapshot {
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
-func checkDebugGolden(t *testing.T, session []debugSnapshot) {
+func checkDebugGolden(t *testing.T, session []debugSnapshot, types bool) {
 	t.Helper()
 	data, err := json.MarshalIndent(session, "", "  ")
 	if err != nil {
@@ -348,6 +353,9 @@ func checkDebugGolden(t *testing.T, session []debugSnapshot) {
 	}
 	data = append(data, '\n')
 	path := "../../testdata/debug/session.json"
+	if !types {
+		path = "../../testdata/debug/session-no-types.json"
+	}
 	if *update {
 		if err := os.WriteFile(path, data, 0644); err != nil {
 			t.Fatal(err)

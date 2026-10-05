@@ -458,6 +458,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 type gen struct {
 	debugSource    string
 	debugFiles     map[string]bool
+	debugTypes     map[check.Type]ast.Expr
 	artifactMode   bool
 	proofMode      bool
 	candidateNames map[*check.Var]*ast.Ident

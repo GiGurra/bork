@@ -1,9 +1,11 @@
 package driver
 
 import (
-	"github.com/GiGurra/bork/internal/gen"
+	"math"
 	"strconv"
 	"strings"
+
+	"github.com/GiGurra/bork/internal/gen"
 )
 
 // Delve summaries are bounded previews. Transform only complete compiler-known
@@ -34,6 +36,7 @@ func (r *dapRelay) pretty(text string) string {
 		}
 		token := text[start:end]
 		typ, known := r.typeInfo(token)
+		dynamicScalar := false
 		pos := skipSpace(text, end)
 		if !known && token == "interface" && pos+2 <= len(text) && text[pos:pos+2] == "{}" {
 			pos = skipSpace(text, pos+2)
@@ -46,9 +49,18 @@ func (r *dapRelay) pretty(text string) string {
 				dynamic := text[pos+1 : close-1]
 				if dt, ok := r.typeInfo(dynamic); ok {
 					typ, known = dt, true
+					dynamicScalar = dt.Kind == "scalar"
 					pos = skipSpace(text, close)
 				}
 			}
+		}
+		if dynamicScalar {
+			payload := r.pretty(text[pos:])
+			if typ.Name == "Float" || typ.Name == "Float32" {
+				payload = floatPreview(payload)
+			}
+			out.WriteString(payload)
+			return out.String()
 		}
 		if known && pos < len(text) && text[pos] == '{' {
 			close := balancedEnd(text, pos, '{', '}')
@@ -71,6 +83,13 @@ func (r *dapRelay) pretty(text string) string {
 				i = close
 				continue
 			}
+			out.WriteString(text[start:])
+			return out.String()
+		}
+		if known {
+			out.WriteString(r.prettyType(token))
+			i = end
+			continue
 		}
 		out.WriteString(text[start:i])
 	}
@@ -88,9 +107,7 @@ func (r *dapRelay) prettyFields(text string, typ gen.DebugType) string {
 			}
 			value := r.pretty(strings.TrimSpace(pair[1]))
 			if f, ok := typ.Fields[strings.TrimSpace(pair[0])]; ok && (f.Type == "Float" || f.Type == "Float32") {
-				if _, err := strconv.ParseFloat(value, 64); err == nil && !strings.ContainsAny(value, ".eE") {
-					value += ".0"
-				}
+				value = floatPreview(value)
 			}
 			parts[i] = field + ": " + value
 		} else {
@@ -101,6 +118,9 @@ func (r *dapRelay) prettyFields(text string, typ gen.DebugType) string {
 }
 
 func (r *dapRelay) prettyType(text string) string {
+	if t, ok := r.metadata.Types[strings.ReplaceAll(text, " ", "")]; ok {
+		return t.Name
+	}
 	var out strings.Builder
 	for i := 0; i < len(text); {
 		if !typeChar(text[i]) {
@@ -183,4 +203,44 @@ func splitTop(text string, separator byte) []string {
 		}
 	}
 	return append(parts, text[start:])
+}
+
+func floatPreview(text string) string {
+	if n, err := strconv.ParseFloat(text, 64); err == nil && !math.IsNaN(n) && !math.IsInf(n, 0) && !strings.ContainsAny(text, ".eE") {
+		return text + ".0"
+	}
+	return text
+}
+
+// The same preview prefix is available when clients do not request DAP type
+// fields. Delve always includes generated record/interface types in summaries.
+func previewType(text string) string {
+	i := 0
+	for i+2 <= len(text) && text[i:i+2] == "[]" {
+		i += 2
+	}
+	for i < len(text) && typeChar(text[i]) {
+		i++
+	}
+	if i == 0 {
+		return ""
+	}
+	if i < len(text) && text[i] == '[' {
+		end := balancedEnd(text, i, '[', ']')
+		if end < 0 {
+			return ""
+		}
+		i = end
+	}
+	next := skipSpace(text, i)
+	if text[:i] == "interface" && next+2 <= len(text) && text[next:next+2] == "{}" {
+		i = next + 2
+		next = skipSpace(text, i)
+	}
+	if next < len(text) && text[next] == '(' {
+		if end := balancedEnd(text, next, '(', ')'); end > 0 {
+			i = end
+		}
+	}
+	return text[:i]
 }

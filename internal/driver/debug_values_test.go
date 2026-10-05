@@ -3,9 +3,15 @@ package driver
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/GiGurra/bork/internal/gen"
 )
@@ -18,6 +24,7 @@ func presentationFixture() *dapRelay {
 			"main.Shape_Circle": {Name: "Shape.Circle", Kind: "variant", Fields: map[string]gen.DebugField{"radius": {Name: "radius", Type: "Float"}}},
 			"main.Option_Some":  {Name: "Some", Kind: "option", Fields: map[string]gen.DebugField{"value": {Name: "value", Type: "T"}}},
 			"main.Option_None":  {Name: "None", Kind: "option"},
+			"float64":           {Name: "Float", Kind: "scalar"},
 			"int64":             {Name: "Int", Kind: "scalar"},
 		}}, references: map[float64]gen.DebugType{}, pending: map[float64]float64{}, internal: map[float64]map[string]any{},
 	}
@@ -32,6 +39,7 @@ func TestDebugValuePreviews(t *testing.T) {
 		{`main.Record {type_: "main.Shape_Circle {radius: 2}", data: main.Record {type_: "x:y,z"}}`, `Record { type: "main.Shape_Circle {radius: 2}", data: Record { type: "x:y,z" } }`},
 		{`main.Option[int64](main.Option_Some[int64]) {value: ...}`, `Some(...)`},
 		{`main.Shape(main.Shape_Circle) {radius:`, `main.Shape(main.Shape_Circle) {radius:`},
+		{`interface {}(int64) 8`, `8`},
 		{`foreign.Shape {radius: 2}`, `foreign.Shape {radius: 2}`},
 		{`"escaped \" main.Shape_Circle {radius: 2}"`, `"escaped \" main.Shape_Circle {radius: 2}"`},
 	} {
@@ -113,5 +121,35 @@ func TestDebugDAPFraming(t *testing.T) {
 	data, err := readDAP(bufio.NewReader(strings.NewReader("Content-Type: application/json\r\nContent-Length: 2\r\n\r\n{}")))
 	if err != nil || string(data) != "{}" {
 		t.Fatalf("valid frame: %s %v", data, err)
+	}
+}
+
+func TestDebugSpecialFloats(t *testing.T) {
+	r := presentationFixture()
+	for _, value := range []string{"NaN", "+Inf", "-Inf"} {
+		body := map[string]any{"type": "float64", "result": value}
+		r.value(body, "result")
+		if body["result"] != value {
+			t.Fatalf("special float: %v", body)
+		}
+		input := "main.Shape_Circle {radius: " + value + "}"
+		if got := r.pretty(input); got != "Shape.Circle { radius: "+value+" }" {
+			t.Fatalf("special float in variant: %s", got)
+		}
+	}
+}
+func TestDebugAdapterEarlyExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses a Unix shell")
+	}
+	path := filepath.Join(t.TempDir(), "dlv")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nprintf 'DAP server listening at: 127.0.0.1:1\\n'\nexit 7\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err := debugDAPRelay(ctx, path, "127.0.0.1:0", io.Discard, io.Discard)
+	if err == nil || ctx.Err() != nil {
+		t.Fatalf("adapter exit did not terminate relay: %v, context %v", err, ctx.Err())
 	}
 }

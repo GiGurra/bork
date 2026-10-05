@@ -19,6 +19,7 @@ import (
 )
 
 func debugDAPRelay(ctx context.Context, binary, address string, stdout, stderr io.Writer) error {
+	parentCtx := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	listener, err := net.Listen("tcp", address)
@@ -37,7 +38,10 @@ func debugDAPRelay(ctx context.Context, binary, address string, stdout, stderr i
 	if err = cmd.Start(); err != nil {
 		return fmt.Errorf("debug adapter: %w", err)
 	}
-	defer func() { cancel(); _ = cmd.Wait() }()
+	exited := make(chan struct{})
+	var processErr error
+	go func() { processErr = cmd.Wait(); close(exited) }()
+	defer func() { cancel(); <-exited }()
 	ready := make(chan string, 1)
 	go func() {
 		scanner := bufio.NewScanner(output)
@@ -58,6 +62,8 @@ func debugDAPRelay(ctx context.Context, binary, address string, stdout, stderr i
 	var upstream string
 	select {
 	case upstream = <-ready:
+	case <-exited:
+		return fmt.Errorf("debug adapter exited before listening: %v", processErr)
 	case <-ctx.Done():
 		return nil
 	}
@@ -67,13 +73,28 @@ func debugDAPRelay(ctx context.Context, binary, address string, stdout, stderr i
 	if _, err = fmt.Fprintf(stdout, "DAP server listening at: %s\n", listener.Addr()); err != nil {
 		return err
 	}
-	go func() { <-ctx.Done(); _ = listener.Close() }()
+	go func() {
+		select {
+		case <-exited:
+			cancel()
+		case <-ctx.Done():
+		}
+		_ = listener.Close()
+	}()
 	client, err := listener.Accept()
 	if err != nil {
-		if ctx.Err() != nil {
+		if parentCtx.Err() != nil {
 			return nil
 		}
-		return err
+		select {
+		case <-exited:
+			if processErr != nil {
+				return fmt.Errorf("debug adapter: %w", processErr)
+			}
+			return nil
+		default:
+			return err
+		}
 	}
 	defer func() { _ = client.Close() }()
 	delve, err := net.Dial("tcp", upstream)
@@ -244,6 +265,11 @@ func (r *dapRelay) rewrite(msg map[string]any) bool {
 				continue
 			}
 			r.value(v, "value")
+			if f, ok := parent.Fields[name]; ok && (f.Type == "Float" || f.Type == "Float32") {
+				if value, ok := v["value"].(string); ok {
+					v["value"] = floatPreview(value)
+				}
+			}
 			if typ, ok := r.typeInfo(name); ok {
 				v["name"] = typ.Name
 			}
@@ -302,6 +328,9 @@ func (r *dapRelay) typeInfo(name string) (gen.DebugType, bool) {
 	if i := strings.IndexByte(name, '('); i >= 0 {
 		name = name[:i]
 	}
+	if t, ok := r.metadata.Types[strings.ReplaceAll(name, " ", "")]; ok {
+		return t, true
+	}
 	if i := strings.IndexByte(name, '['); i >= 0 {
 		name = name[:i]
 	}
@@ -310,32 +339,35 @@ func (r *dapRelay) typeInfo(name string) (gen.DebugType, bool) {
 }
 
 func (r *dapRelay) value(v map[string]any, key string) {
-	if typ, ok := v["type"].(string); ok {
-		t, known := r.typeInfo(typ)
-		if strings.HasPrefix(typ, "interface {}(") {
-			t = gen.DebugType{Kind: "union"}
-			known = true
-		}
-		if known {
-			if ref, ok := v["variablesReference"].(float64); ok && ref > 0 {
-				r.references[ref] = t
-			}
+	rawType, _ := v["type"].(string)
+	text, _ := v[key].(string)
+	if rawType == "" {
+		rawType = previewType(text)
+	}
+	t, known := r.typeInfo(rawType)
+	if strings.HasPrefix(rawType, "interface {}(") {
+		t = gen.DebugType{Kind: "union"}
+		known = true
+	}
+	if known {
+		if ref, ok := v["variablesReference"].(float64); ok && ref > 0 {
+			r.references[ref] = t
 		}
 	}
-	if text, ok := v[key].(string); ok {
+	if _, ok := v[key].(string); ok {
 		v[key] = r.pretty(text)
-		if rawType, ok := v["type"].(string); ok {
-			if i := strings.IndexByte(rawType, '('); i >= 0 && strings.HasSuffix(rawType, ")") {
-				if dynamic, ok := r.typeInfo(rawType[i+1 : len(rawType)-1]); ok && (dynamic.Kind == "option" || dynamic.Kind == "variant") && len(dynamic.Fields) == 0 {
+		if i := strings.IndexByte(rawType, '('); i >= 0 && strings.HasSuffix(rawType, ")") {
+			if dynamic, ok := r.typeInfo(rawType[i+1 : len(rawType)-1]); ok {
+				// Interface counts describe Delve's synthetic data node, not bork fields.
+				delete(v, "namedVariables")
+				delete(v, "indexedVariables")
+				if dynamic.Kind == "scalar" || (dynamic.Kind == "option" || dynamic.Kind == "variant") && len(dynamic.Fields) == 0 {
 					v["variablesReference"] = float64(0)
-					delete(v, "namedVariables")
 				}
 			}
 		}
-		if typ, ok := v["type"].(string); ok && (typ == "float64" || typ == "float32") {
-			if _, err := strconv.ParseFloat(text, 64); err == nil && !strings.ContainsAny(text, ".eE") {
-				v[key] = text + ".0"
-			}
+		if rawType == "float64" || rawType == "float32" {
+			v[key] = floatPreview(text)
 		}
 	}
 	if typ, ok := v["type"].(string); ok {
@@ -393,6 +425,10 @@ func (r *dapRelay) expand(msg map[string]any) (bool, error) {
 		return false, nil
 	}
 	rawType, _ := child["type"].(string)
+	if rawType == "" {
+		text, _ := child["value"].(string)
+		rawType = previewType(text)
+	}
 	typ, ok := r.typeInfo(rawType)
 	if !ok {
 		return false, nil
