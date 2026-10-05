@@ -264,15 +264,22 @@ func captureExecutableRecipe(request, executable, dir string, program *compiledP
 		}
 	}
 	hasCgo := false
+	var cgoPackages []string
 	hasFortran := false
 	hasCXX := false
 	for _, pkg := range inputs.Packages {
 		hasCgo = hasCgo || len(pkg.CgoFiles) > 0
+		if !pkg.Standard && len(pkg.CgoFiles) > 0 {
+			cgoPackages = append(cgoPackages, pkg.ImportPath)
+		}
 		hasFortran = hasFortran || len(pkg.FFiles) > 0
 		hasCXX = hasCXX || len(pkg.CXXFiles) > 0
 	}
+	if len(cgoPackages) > 0 {
+		sort.Strings(cgoPackages)
+		recipe.Untracked = append(recipe.Untracked, "system C headers and libraries ("+strings.Join(cgoPackages, ", ")+")")
+	}
 	if hasCgo {
-		recipe.Untracked = append(recipe.Untracked, "system C headers and libraries")
 		for _, key := range []string{"CC", "CXX", "FC", "PKG_CONFIG"} {
 			command := ctx.values[key]
 			if command == "" {
