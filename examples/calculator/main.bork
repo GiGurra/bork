@@ -15,7 +15,7 @@ type Parsed = { expr: Expr, next: Int }
 type SyntaxError = { at: Int, message: String }
 type DivisionByZero = { expr: Expr }
 
-fn skipSpaces(src: String, i: Int): Int {
+fn skipSpaces(src: String, i: Int) uses tailrec: Int {
   match (src.runeAt(i)) {
     Option.Some { value: r } => if (r.isSpace()) { skipSpaces(src, i + 1) } else { i }
     Option.None => i
@@ -90,7 +90,7 @@ fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
   }
 }
 
-fn digitsEnd(src: String, i: Int): Int {
+fn digitsEnd(src: String, i: Int) uses tailrec: Int {
   match (src.runeAt(i)) {
     Option.Some { value: r } => if (r.isDigit()) { digitsEnd(src, i + 1) } else { i }
     Option.None => i
