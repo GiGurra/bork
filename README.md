@@ -206,6 +206,7 @@ with `bork lsp`: diagnostics for unsaved edits, types and facts on hover,
 navigation, completion, formatting and compiler fixes. Install it with
 `bork editor install vscode` (use `--editor cursor` or `--editor codium` for
 those editors). See [editor setup](docs/editors.md) for other LSP clients.
+The [debugger](docs/debugging.md) supports bork source breakpoints and shows records, union variants and options as bork values.
 The shared [tree-sitter grammar](editors/tree-sitter-bork/README.md) provides
 highlighting, indentation, folds and embedded Go queries. Native packages for
 Vim, Neovim, Emacs, Helix and Zed are linked from [editor setup](docs/editors.md).

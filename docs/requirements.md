@@ -3381,6 +3381,16 @@ Build, run and test continue to accept these markers. We do not introduce a
 release build mode or marker rejection in this change: check surfaces unfinished
 code, and automated consumers can choose to enforce those warning codes.
 
+### Debugger value presentation (implemented: bork-4a53ht)
+
+`bork debug build` retains a versioned compiler debug map alongside its generated
+Go source. `bork debug dap` relays Delve's protocol and uses that map to present
+bork type and field names, sealed variants such as `Shape.Circle { radius: 2.0 }`,
+and options as `Some(3)` or `None`, including nested records. Expansion remains
+lazy; generated temporaries are hidden and helper frames are marked subtle.
+Inspection does not execute custom Show methods. Clients without the sidecar map
+retain Delve's Go views. Debug Console expressions still use Go syntax.
+
 ### Lazy bindings and record fields (implemented: bork-9zpf2t)
 
 `lazy name = expr` defers one initializer until its first read, memoizes its

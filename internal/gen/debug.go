@@ -19,6 +19,12 @@ import (
 // DebugPackage preserves runtime statement locations through Go's DWARF line
 // directives. Runtime helpers point back to the retained generated source.
 func DebugPackage(files []*syntax.File, info *check.Info, generatedPath string) ([]byte, error) {
+	source, _, err := DebugPackageMap(files, info, generatedPath)
+	return source, err
+}
+
+// DebugPackageMap emits source and the compiler's debugger presentation map.
+func DebugPackageMap(files []*syntax.File, info *check.Info, generatedPath string) ([]byte, *DebugMap, error) {
 	g := newGen(info)
 	g.debugSource = generatedPath
 	g.debugFiles = map[string]bool{}
@@ -33,7 +39,11 @@ func DebugPackage(files []*syntax.File, info *check.Info, generatedPath string) 
 			}
 		}
 	}
-	return generate(g, files, roots, nil)
+	source, err := generate(g, files, roots, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return source, g.debugMap(source), nil
 }
 
 func (g *gen) debugLine(pos diag.Pos) []ast.Stmt {
