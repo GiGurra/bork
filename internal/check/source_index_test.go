@@ -128,7 +128,7 @@ func TestContextPatternIdentitiesAndVisibility(t *testing.T) {
 		files := prelude.Parse(d)
 		model := syntax.Parse("model.bork", []byte("type Choice = sealed { Some { value: Int }, Empty, hidden }\n"), d)
 		model.Package = "example.com/context/model"
-		source := "import \"example.com/context/model\"\nfn read(x: model.Choice | String): Int { match (x) { .Some { value } => value, .Empty => 0, _ => 1 } }\n"
+		source := "import \"example.com/context/model\"\nfn read(x: model.Choice | String): Int { match (x) { . /* note */ Some { value } => value, . Empty => 0, _ => 1 } }\n"
 		if private {
 			source = "import \"example.com/context/model\"\nfn read(x: model.Choice): Int { match (x) { .hidden => 0, _ => 1 } }\n"
 		}
@@ -147,7 +147,7 @@ func TestContextPatternIdentitiesAndVisibility(t *testing.T) {
 		}
 		index := BuildSourceIndex(files, info)
 		for _, name := range []string{"Some", "Empty"} {
-			offset := strings.Index(source, "."+name) + 1
+			offset := strings.Index(source, name)
 			pos := diag.Pos{File: file.Path, Line: 2, Col: offset - strings.LastIndex(source[:offset], "\n")}
 			ref := index.At(pos)
 			if ref == nil || ref.Start != pos || ref.Name != name || ref.Definition.File != model.Path {

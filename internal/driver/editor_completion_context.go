@@ -23,8 +23,14 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 		}
 	}
 	if len(prior) > 0 && prior[len(prior)-1].Kind == syntax.Dot {
-		if arms, ok := a.editorContextPatternCompletions(file, src, prior[:len(prior)-1]); ok {
-			return arms, true
+		if arms, ok := a.editorContextPatternCompletions(file, src, prior[:len(prior)-1], prior[len(prior)-1].Pos); ok {
+			previous := prior[len(prior)-2]
+			if previous.Kind == syntax.LBrace || previous.Kind == syntax.Comma {
+				return arms, true
+			}
+			// An unfinished newline dot can start either the next arm or a
+			// continued selector. Keep both sets until syntax distinguishes them.
+			out = append(out, arms...)
 		}
 		if len(prior) > 1 {
 			receiver := prior[len(prior)-2]
@@ -174,8 +180,8 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 	return out, false
 }
 
-func (a *EditorAnalysis) editorContextPatternCompletions(file, src string, prior []syntax.Token) ([]EditorCompletion, bool) {
-	if len(prior) == 0 || prior[len(prior)-1].Kind != syntax.LBrace && prior[len(prior)-1].Kind != syntax.Comma {
+func (a *EditorAnalysis) editorContextPatternCompletions(file, src string, prior []syntax.Token, dot diag.Pos) ([]EditorCompletion, bool) {
+	if len(prior) == 0 || prior[len(prior)-1].Kind != syntax.LBrace && prior[len(prior)-1].Kind != syntax.Comma && prior[len(prior)-1].End.Line >= dot.Line {
 		return nil, false
 	}
 	depth := 0
@@ -206,23 +212,7 @@ func (a *EditorAnalysis) editorContextPatternCompletions(file, src string, prior
 				if j == 0 || prior[j-1].Kind != syntax.KwMatch {
 					return nil, false
 				}
-				arms := a.EditorMatchArms(a.editorSnapshotPosition(file, src, prior[j-1].Pos))
-				counts := map[string]int{}
-				for _, arm := range arms {
-					if arm.Kind == "enumMember" {
-						counts[arm.Name[strings.LastIndex(arm.Name, ".")+1:]]++
-					}
-				}
-				var out []EditorCompletion
-				for _, arm := range arms {
-					name := arm.Name[strings.LastIndex(arm.Name, ".")+1:]
-					if arm.Kind == "enumMember" && counts[name] == 1 {
-						arm.Text = name + strings.TrimPrefix(arm.Text, arm.Name)
-						arm.Name = name
-						out = append(out, arm)
-					}
-				}
-				return out, true
+				return a.editorMatchArms(a.editorSnapshotPosition(file, src, prior[j-1].Pos), true), true
 			}
 			return nil, false
 		}

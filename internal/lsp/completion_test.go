@@ -16,11 +16,15 @@ import (
 
 func completeAt(t *testing.T, s *server, path, src string) []any {
 	t.Helper()
-	offset := strings.Index(src, "|")
+	marker := "|"
+	if strings.Contains(src, "¦") {
+		marker = "¦" // union sources already contain '|'
+	}
+	offset := strings.Index(src, marker)
 	if offset < 0 {
 		t.Fatal("missing cursor")
 	}
-	src = strings.Replace(src, "|", "", 1)
+	src = src[:offset] + src[offset+len(marker):]
 	s.docs[path] = document{src, 2}
 	return s.completion(s.state(path), path, src, lspPosition(src, offsetPos(src, offset)))
 }
@@ -76,6 +80,41 @@ func TestCompletionGenericFieldsAndMatchArms(t *testing.T) {
 	items = completeAt(t, s, path, strings.Replace(src, "Choice.First { value } => value, Choice.Second => 0", ".Fi|", 1))
 	if c := completionItem(items, "First"); c == nil || c["textEdit"].(textEdit).NewText != "First { value } => " {
 		t.Fatalf("context match: %+v", items)
+	}
+	items = completeAt(t, s, path, strings.Replace(src, "Choice.First { value } => value, Choice.Second => 0", ".First { value } => value\n.Se|", 1))
+	if c := completionItem(items, "Second"); c == nil || c["textEdit"].(textEdit).NewText != "Second => " {
+		t.Fatalf("later context match: %+v", items)
+	}
+}
+
+func TestContextPatternCompletionUnresolvedUnion(t *testing.T) {
+	src := "type Choice = sealed { First }\nfn read[T](choice: Choice | T): Int { match (choice) { Choice.First => 1, _ => 0 } }\n"
+	s, path := newTestServer(t, src)
+	items := completeAt(t, s, path, strings.Replace(src, "Choice.First => 1, _ => 0", ".Fi¦", 1))
+	if completionItem(items, "First") != nil {
+		t.Fatalf("unresolved union offers ambiguous context variant: %+v", items)
+	}
+}
+
+func TestContextPatternCompletionAmbiguousUnion(t *testing.T) {
+	src := "type A = sealed { Ready }\ntype B = sealed { Ready }\nfn read(choice: A | B): Int { match (choice) { A.Ready => 1, B.Ready => 0 } }\n"
+	s, path := newTestServer(t, src)
+	qualified := completeAt(t, s, path, strings.Replace(src, "A.Ready => 1, B.Ready => 0", "A¦", 1))
+	if completionItem(qualified, "A.Ready") == nil {
+		t.Fatalf("checked match has no qualified candidates: %+v", qualified)
+	}
+	items := completeAt(t, s, path, strings.Replace(src, "A.Ready => 1, B.Ready => 0", ".Re¦", 1))
+	if completionItem(items, "Ready") != nil {
+		t.Fatalf("ambiguous union offers context variant: %+v", items)
+	}
+}
+
+func TestContextPatternCompletionRetainsMethodChains(t *testing.T) {
+	src := "type Choice = sealed { First, Second }\nfn read(choice: Choice): String { match (choice) { .First => \" hello \"\n.trim()\n.Second => \"\" } }\n"
+	s, path := newTestServer(t, src)
+	items := completeAt(t, s, path, strings.Replace(src, ".trim()", ".tri|", 1))
+	if completionItem(items, "trim") == nil {
+		t.Fatalf("continued match arm method unavailable: %+v", items)
 	}
 }
 func TestCompletionAutoImportEditChecks(t *testing.T) {

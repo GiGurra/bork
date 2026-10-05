@@ -610,6 +610,7 @@ type Selector struct {
 // Name is empty for a record, and End is after the dot or variant name.
 type ContextName struct {
 	Pos, End diag.Pos
+	NamePos  diag.Pos
 	Name     string
 }
 
@@ -702,6 +703,7 @@ type ListPat struct {
 
 type VariantPat struct {
 	Pos     diag.Pos
+	NamePos diag.Pos // written context variant identifier, after whitespace/comments
 	End     diag.Pos // end of a context variant name, for diagnostics and fixes
 	Context bool     // owner omitted with .Variant
 	Path    []string

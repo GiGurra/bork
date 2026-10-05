@@ -258,6 +258,10 @@ func (a *EditorAnalysis) EditorTypeFields(path, head string) []EditorCompletion 
 
 // EditorMatchArms describes patterns for the compiler-selected scrutinee type.
 func (a *EditorAnalysis) EditorMatchArms(pos diag.Pos) []EditorCompletion {
+	return a.editorMatchArms(pos, false)
+}
+
+func (a *EditorAnalysis) editorMatchArms(pos diag.Pos, context bool) []EditorCompletion {
 	file, from := a.editorFile(pos.File)
 	if file == nil {
 		return nil
@@ -281,12 +285,18 @@ func (a *EditorAnalysis) EditorMatchArms(pos diag.Pos) []EditorCompletion {
 	}
 	var out []EditorCompletion
 	var add func(check.Type)
-	add = func(typ check.Type) {
-		switch t := typ.(type) {
+	add = func(member check.Type) {
+		switch t := member.(type) {
 		case *check.Sealed:
 			owner := strings.Split(check.TypeText(t, from), "[")[0]
 			for _, v := range check.EditorVisibleVariants(a.program.info, from, t) {
+				if context && !check.EditorContextVariantUnique(typ, v.Name) {
+					continue
+				}
 				name := owner + "." + v.Name
+				if context {
+					name = v.Name
+				}
 				text := name
 				if len(v.Fields) > 0 {
 					var fields []string
@@ -302,7 +312,10 @@ func (a *EditorAnalysis) EditorMatchArms(pos diag.Pos) []EditorCompletion {
 				add(member)
 			}
 		default:
-			name := check.TypeText(typ, from)
+			if context {
+				return
+			}
+			name := check.TypeText(member, from)
 			out = append(out, EditorCompletion{Name: name, Text: fmt.Sprintf("value: %s => ", name), Detail: "match arm", Kind: "type"})
 		}
 	}

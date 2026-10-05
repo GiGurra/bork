@@ -468,7 +468,7 @@ func (c *checker) bindPat(pat *Pat, name string, pos diag.Pos, node any) {
 // `Option.None`, `NotFound`, `User { name }`, or a name to bind.
 func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 	if p.Context {
-		name := &syntax.ContextName{Pos: p.Pos, End: p.End, Name: p.Path[0]}
+		name := &syntax.ContextName{Pos: p.Pos, End: p.End, NamePos: p.NamePos, Name: p.Path[0]}
 		owner, ok := c.contextTarget(name, st, true).(*Sealed)
 		if !ok {
 			return nil

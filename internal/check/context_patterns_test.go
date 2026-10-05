@@ -14,7 +14,7 @@ func TestContextPatternFixes(t *testing.T) {
 		name, source string
 		input        bool
 	}{
-		{"typo", "type A = sealed { Ready }\nfn f(x:A):Int{match(x){.Reedy=>1}}", false},
+		{"typo", "type A = sealed { Ready }\nfn f(x:A):Int{match(x){. /* keep */ Reedy=>1}}", false},
 		{"ambiguous", "type A = sealed { Ready }\ntype B = sealed { Ready }\nfn f(x:A|B):Int{match(x){.Ready=>1,_=>0}}", false},
 		{"specializations", "fn f(x:Option[Int]|Option[String]):Int{match(x){.Some{value:_}=>1,_=>0}}", true},
 	} {
@@ -55,5 +55,24 @@ func TestContextPatternFixes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEditorContextVariantUnique(t *testing.T) {
+	a := &Sealed{Variants: []*Variant{{Name: "Ready"}, {Name: "hidden"}}}
+	b := &Sealed{Variants: []*Variant{{Name: "hidden"}}}
+	for _, tc := range []struct {
+		typ  Type
+		name string
+		want bool
+	}{
+		{a, "Ready", true},
+		{&Union{Members: []Type{a, b}}, "Ready", true},
+		{&Union{Members: []Type{a, b}}, "hidden", false},
+		{&Union{Members: []Type{a, &TypeParam{Name: "T"}}}, "Ready", false},
+	} {
+		if got := EditorContextVariantUnique(tc.typ, tc.name); got != tc.want {
+			t.Fatalf("%s: unique = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

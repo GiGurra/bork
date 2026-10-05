@@ -111,6 +111,10 @@ func contextText(e *syntax.ContextName) string {
 }
 
 func (c *checker) contextCandidates(name string, want Type) ([]Type, bool) {
+	return contextCandidates(name, c.zonk(want))
+}
+
+func contextCandidates(name string, want Type) ([]Type, bool) {
 	members := []Type{want}
 	if u, ok := want.(*Union); ok {
 		members = u.Members
@@ -118,7 +122,6 @@ func (c *checker) contextCandidates(name string, want Type) ([]Type, bool) {
 	var out, sealed []Type
 	unresolved := false
 	for _, t := range members {
-		t = c.zonk(t)
 		switch t := t.(type) {
 		case *TypeParam:
 			unresolved = true
@@ -331,8 +334,11 @@ func (c *checker) contextVariantOf(e *syntax.ContextName, s *Sealed) *Variant {
 			}
 		}
 		if name := closestParam(e.Name, params); name != "" {
-			start := e.Pos
-			start.Col++
+			start := e.NamePos
+			if start.File == "" {
+				start = e.Pos
+				start.Col++
+			}
 			c.diags.Suggest(e.Pos, "type.context_variant_unknown", e.End, diag.Fix{
 				Message: "use variant " + name, Edits: []diag.TextEdit{{Start: start, End: e.End, Replacement: name}},
 			})

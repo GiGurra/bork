@@ -1454,6 +1454,7 @@ func (p *parser) pattern() Pattern {
 			p.next()
 			name := p.expect(TIdent, "after '.' in a variant pattern")
 			vp.Context, vp.End, vp.Path = true, name.End, []string{name.Text}
+			vp.NamePos = name.Pos
 		} else {
 			vp.Path = []string{p.qualify(p.next())}
 		}
@@ -1491,6 +1492,7 @@ func (p *parser) primary() Expr {
 		}
 		name := p.expect(TIdent, "after '.' (write .Variant or .{ field: value })")
 		x.Name, x.End = name.Text, name.End
+		x.NamePos = name.Pos
 		return x
 	case KwGenerate:
 		p.next()
