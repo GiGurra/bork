@@ -16,9 +16,13 @@ import (
 
 func signatureAt(t *testing.T, s *server, path, marked string) *signatureHelpResult {
 	t.Helper()
-	offset := -1
+	offset := strings.Index(marked, "¦")
+	markerWidth := len("¦")
+	if offset < 0 {
+		markerWidth = 1
+	}
 	for i := 0; i < len(marked); i++ {
-		if marked[i] == '|' && (i+1 == len(marked) || marked[i+1] != '>') {
+		if offset < 0 && marked[i] == '|' && (i+1 == len(marked) || marked[i+1] != '>') {
 			offset = i
 			break
 		}
@@ -26,7 +30,7 @@ func signatureAt(t *testing.T, s *server, path, marked string) *signatureHelpRes
 	if offset < 0 {
 		t.Fatal("missing cursor")
 	}
-	src := marked[:offset] + marked[offset+1:]
+	src := marked[:offset] + marked[offset+markerWidth:]
 	s.docs[path] = document{src, 2}
 	result, err := s.signatureHelp(path, src, lspPosition(src, offsetPos(src, offset)))
 	if err != nil {
@@ -325,5 +329,17 @@ func BenchmarkSignatureHelpHTTPServer(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func TestSignatureHelpPatternAssertion(t *testing.T) {
+	src := `import checks "bork/test"
+pred positive(n: Int) { n > 0 }
+fn Example(input: Int | String): Int { checks.AssertIs[Int where positive](input) }
+`
+	s, path := newTestServer(t, src)
+	help := signatureAt(t, s, path, strings.Replace(src, "](input)", "](¦input)", 1))
+	if help == nil || len(help.Signatures) != 1 || help.Signatures[0].Label != "AssertIs(value: Int | String): Int where positive" {
+		t.Fatalf("instantiated assertion: %+v", help)
 	}
 }

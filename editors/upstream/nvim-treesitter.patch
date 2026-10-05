@@ -21,7 +21,7 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = 'c00425c13bb90d83b974bed5d3353679f982d059',
++      revision = '7b1587cdf5bfd2294631985675f5555f7eacf03e',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
@@ -31,7 +31,7 @@ index fca90f6..39dfeb3 100644
        revision = 'ee641d15390183d7535777947ce0f2f1fbcee69f',
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
-index 0000000..b1713d1
+index 0000000..dac97f6
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
 @@ -0,0 +1,4 @@
@@ -41,10 +41,10 @@ index 0000000..b1713d1
 + (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..218cc7a
+index 0000000..d174184
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,39 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -80,9 +80,13 @@ index 0000000..218cc7a
 +["," ";" ":" "."] @punctuation.delimiter
 +
 +(context_pattern name: (identifier) @type.enum.variant)
++
++(is_expression "is" @keyword)
++
++(test_field_pattern name: (identifier) @variable.member)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
-index 0000000..b64b10a
+index 0000000..29db71d
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
 @@ -0,0 +1,7 @@

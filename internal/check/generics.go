@@ -340,6 +340,9 @@ func (fn *Func) InstanceFor(subject Type) *Instance {
 // comes first, already checked as being of type recv (nil otherwise).
 // See infer.go for how the type arguments are inferred.
 func (c *checker) callFunc(e *syntax.Call, name string, fn *Func, args []syntax.Expr, recv Type, typeArgs []*syntax.TypeExpr, want Type) Type {
+	if assertIsIntrinsic(fn) {
+		return c.assertIs(e, fn, args, typeArgs)
+	}
 	outer := c.session == nil
 	if outer {
 		c.session = &session{}
@@ -779,6 +782,10 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 // funcValue checks a function used as a value: `xs.map(double)`. A
 // generic function takes its type arguments from the expected type.
 func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Type {
+	if assertIsIntrinsic(fn) {
+		c.errorf(e.Position(), "test.AssertIs must be called directly with an explicit target type")
+		return Invalid
+	}
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 		c.testCall(fn, e.Position(), true)

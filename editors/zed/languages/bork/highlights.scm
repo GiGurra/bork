@@ -33,3 +33,7 @@
 ["," ";" ":" "."] @punctuation.delimiter
 
 (context_pattern name: (identifier) @variant)
+
+(is_expression "is" @keyword)
+
+(test_field_pattern name: (identifier) @property)

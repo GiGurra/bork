@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/describe"
 
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -23,6 +24,14 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 		}
 	}
 	if len(prior) > 0 && prior[len(prior)-1].Kind == syntax.Dot {
+		if len(prior) > 1 && prior[len(prior)-2].Text == "is" {
+			operator := prior[len(prior)-2]
+			for _, site := range syntax.ParseScript(file, []byte(src), &diag.List{}).PatternTestOperators {
+				if site == operator.Pos {
+					return a.editorPatternTestCompletions(file, src, prior[:len(prior)-1]), true
+				}
+			}
+		}
 		if arms, ok := a.editorContextPatternCompletions(file, src, prior[:len(prior)-1], prior[len(prior)-1].Pos); ok {
 			previous := prior[len(prior)-2]
 			if previous.Kind == syntax.LBrace || previous.Kind == syntax.Comma {
@@ -268,4 +277,22 @@ func editorLabelPosition(tokens []syntax.Token) bool {
 		}
 	}
 	return label
+}
+
+func (a *EditorAnalysis) editorPatternTestCompletions(path, src string, prior []syntax.Token) []EditorCompletion {
+	operator := prior[len(prior)-1]
+	pos := a.editorSnapshotPosition(path, src, operator.Pos)
+	if choices := a.editorMatchArms(pos, true); len(choices) > 0 {
+		return choices
+	}
+	file, from := a.editorFile(path)
+	if file == nil || len(prior) < 2 {
+		return nil
+	}
+	operand := a.editorSnapshotPosition(path, src, prior[len(prior)-2].Pos)
+	selected, err := describe.Lookup(a.program.files, a.program.info, operand, []byte(file.Source))
+	if err != nil {
+		return nil
+	}
+	return a.editorTypePatterns(selected.Type, from, true, true)
 }

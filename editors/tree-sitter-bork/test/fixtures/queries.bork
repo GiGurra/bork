@@ -26,3 +26,10 @@ fn (self: User) rename(): User {
 type Kind = sealed { caseName }
 fn variant(state: Kind) { match (state) { Kind.caseName => Ok } }
 fn contextVariant(state: Kind) { match (state) { .caseName => Ok } }
+
+fn is(value: Int): Int { value }
+fn contextTest(state: Kind): Bool { state is .caseName }
+fn predicateTest(value: Int): Bool { value is Int where positive }
+
+fn tupleTestPattern(value: (Int, String)): Bool { value is (Int, _) }
+fn functionTestPattern(value: (Int) => Int): Bool { value is (Int) => Int }

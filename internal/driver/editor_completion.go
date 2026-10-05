@@ -268,6 +268,7 @@ func (a *EditorAnalysis) editorMatchArms(pos diag.Pos, context bool) []EditorCom
 	}
 	pos.File = file.Path
 	var typ check.Type
+	testPattern := false
 	for _, fn := range a.editorFunctions() {
 		if fn.Decl.Pos.File != file.Path {
 			continue
@@ -275,6 +276,7 @@ func (a *EditorAnalysis) editorMatchArms(pos diag.Pos, context bool) []EditorCom
 		check.WalkComptime(fn.Body, func(x check.Expr) bool {
 			if m, ok := x.(*check.Match); ok && m.Pos() == pos {
 				typ = m.X.Type()
+				testPattern = m.PatternTest && m.Assertion == nil
 				return false
 			}
 			return true
@@ -283,6 +285,10 @@ func (a *EditorAnalysis) editorMatchArms(pos diag.Pos, context bool) []EditorCom
 	if typ == nil {
 		return nil
 	}
+	return a.editorTypePatterns(typ, from, context, testPattern)
+}
+
+func (a *EditorAnalysis) editorTypePatterns(typ check.Type, from *check.Package, context, testPattern bool) []EditorCompletion {
 	var out []EditorCompletion
 	var add func(check.Type)
 	add = func(member check.Type) {
@@ -301,11 +307,21 @@ func (a *EditorAnalysis) editorMatchArms(pos diag.Pos, context bool) []EditorCom
 				if len(v.Fields) > 0 {
 					var fields []string
 					for _, f := range v.Fields {
-						fields = append(fields, f.Name)
+						field := f.Name
+						if testPattern {
+							field += ": _"
+						}
+						fields = append(fields, field)
 					}
 					text += " { " + strings.Join(fields, ", ") + " }"
 				}
-				out = append(out, EditorCompletion{Name: name, Text: text + " => ", Detail: "match arm", Kind: "enumMember"})
+				detail := "match arm"
+				if testPattern {
+					detail = "pattern test"
+				} else {
+					text += " => "
+				}
+				out = append(out, EditorCompletion{Name: name, Text: text, Detail: detail, Kind: "enumMember"})
 			}
 		case *check.Union:
 			for _, member := range t.Members {
@@ -316,7 +332,11 @@ func (a *EditorAnalysis) editorMatchArms(pos diag.Pos, context bool) []EditorCom
 				return
 			}
 			name := check.TypeText(member, from)
-			out = append(out, EditorCompletion{Name: name, Text: fmt.Sprintf("value: %s => ", name), Detail: "match arm", Kind: "type"})
+			if testPattern {
+				out = append(out, EditorCompletion{Name: name, Text: name, Detail: "pattern test", Kind: "type"})
+			} else {
+				out = append(out, EditorCompletion{Name: name, Text: fmt.Sprintf("value: %s => ", name), Detail: "match arm", Kind: "type"})
+			}
 		}
 	}
 	add(typ)

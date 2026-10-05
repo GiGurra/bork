@@ -1,0 +1,28 @@
+import "bork/test"
+
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, limit: Int) { n <= limit }
+pred unexpected(n: Int) { panic(s"unexpected predicate $n") }
+fn requirePositive(n: Int where positive): Int { n }
+fn render(text: Bool): Int | String { if (text) { "hi" } else { 3 } }
+fn typedHelper(value: Int | String): Int { test.AssertIs[Int](value) }
+test "success returns checked facts" {
+  n = test.AssertIs[Int where positive and atMost(100)](render(false))
+  assertEqual(requirePositive(n), 3)
+  assert(render(true) is String)
+}
+test "helper mismatch attributed to caller" {
+  _ = typedHelper(render(true))
+}
+test "predicate mismatch" {
+  _ = test.AssertIs[Int where positive](-2)
+}
+test "predicate panic propagates" {
+  _ = test.AssertIs[Int where unexpected](3)
+}
+test "always disjoint assertion" {
+  _ = test.AssertIs[String](5)
+}
+
+fn genericAssert[T](x: T): Int { test.AssertIs[Int](x) }
+test "generic mismatch reports concrete type" { _ = genericAssert("text") }

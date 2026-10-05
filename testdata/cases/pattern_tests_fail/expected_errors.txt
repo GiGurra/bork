@@ -1,0 +1,18 @@
+main.bork:9:12: unknown type unknown
+main.bork:10:12: is patterns cannot bind names; write the type without a binding
+main.bork:11:33: is patterns cannot bind fields; write value: _ to ignore the value
+main.bork:12:21: is patterns cannot bind the rest of a list; write ... without a name
+main.bork:14:28: missing is not a parameter here; predicate arguments are constants or parameter names
+main.bork:15:12: nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate
+main.bork:16:17: Choice has no variant Missing
+main.bork:17:25: Choice.Some has no field absent
+main.bork:18:20: test.AssertIs needs one explicit target type and one value
+main.bork:19:33: test.AssertIs needs one explicit target type and one value
+main.bork:23:84: pattern type () => Int cannot be distinguished from () uses io => Int at runtime
+main.bork:24:77: pattern type Seq[Int] cannot be distinguished from Seq[Int] uses io at runtime
+main.bork:25:83: predicate parameter keep in a type pattern must declare uses nothing
+main.bork:26:38: test.AssertIs must be called directly with an explicit target type
+main.bork:28:51: pattern target B must have concrete type arguments; runtime tests cannot recover generic unions or effect annotations
+main.bork:29:52: pattern target T must have concrete type arguments; runtime tests cannot recover generic unions or effect annotations
+main.bork:31:86: pattern test cannot check erased effects or nested unions through a type parameter
+main.bork:33:57: is patterns cannot bind names; write the type without a binding

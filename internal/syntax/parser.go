@@ -30,7 +30,7 @@ func parse(path, src string, toks []Token, comments []Comment, diags *diag.List,
 
 func parseMode(path, src string, toks []Token, comments []Comment, diags *diag.List, compiler, script bool) *File {
 	f := &File{Path: path, Source: src, Comments: comments, Script: script}
-	p := &parser{toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
+	p := &parser{patternTestOperators: &f.PatternTestOperators, toks: toks, comments: comments, diags: diags, imports: map[string]bool{}, compiler: compiler, spans: &f.ExpressionSpans, spanSeen: map[Expr][]SourceSpan{}}
 	var statements []Stmt
 	// Imports come first.
 	for {
@@ -184,6 +184,8 @@ type parser struct {
 	toks                        []Token
 	i                           int
 	diags                       *diag.List
+	testingPattern              bool
+	patternTestOperators        *[]diag.Pos
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
@@ -1180,12 +1182,27 @@ func (p *parser) binary(minPrec int) (out Expr) {
 		p.rememberSpan(x, start)
 		op := p.tok()
 		prec, ok := precedence[op.Kind]
+		is := op.Kind == TIdent && op.Text == "is"
+		if is {
+			prec, ok = 4, true
+		}
 		if !ok || prec < minPrec {
 			return x
 		}
 		end := p.toks[p.i-1].End
 		p.next()
 		p.skipNewlines() // an operator at the end of a line continues the expression
+		if is {
+			if p.patternTestOperators != nil {
+				*p.patternTestOperators = append(*p.patternTestOperators, op.Pos)
+			}
+			saved := p.testingPattern
+			p.testingPattern = true
+			pat := p.testPattern()
+			p.testingPattern = saved
+			x = &Is{Pos: op.Pos, X: x, Pattern: pat, End: p.toks[p.i-1].End}
+			continue
+		}
 		y := p.binary(prec + 1)
 		if op.Kind == PipeGt {
 			x = pipe(op, x, y, start, end, p.toks[p.i-1].End)
@@ -1476,7 +1493,12 @@ func (p *parser) pattern() Pattern {
 	case LParen:
 		p.next()
 		p.skipNewlines()
-		first := p.pattern()
+		var first Pattern
+		if p.testingPattern {
+			first = p.testPattern()
+		} else {
+			first = p.pattern()
+		}
 		p.skipNewlines()
 		if !p.at(Comma) {
 			p.expect(RParen, "to close the pattern")
@@ -1489,7 +1511,11 @@ func (p *parser) pattern() Pattern {
 			if p.at(RParen) {
 				break
 			}
-			tuple.Elems = append(tuple.Elems, p.pattern())
+			if p.testingPattern {
+				tuple.Elems = append(tuple.Elems, p.testPattern())
+			} else {
+				tuple.Elems = append(tuple.Elems, p.pattern())
+			}
 			p.skipNewlines()
 		}
 		tuple.End = p.expect(RParen, "to close the tuple pattern").End
@@ -1519,7 +1545,11 @@ func (p *parser) pattern() Pattern {
 				}
 				return
 			}
-			lp.Elems = append(lp.Elems, p.pattern())
+			if p.testingPattern {
+				lp.Elems = append(lp.Elems, p.testPattern())
+			} else {
+				lp.Elems = append(lp.Elems, p.pattern())
+			}
 		})
 		return lp
 	case TIdent, Dot:
@@ -1549,10 +1579,17 @@ func (p *parser) pattern() Pattern {
 				fp := &FieldPat{Pos: f.Pos, Field: f.Text}
 				if p.at(Colon) {
 					p.next()
-					fp.Pattern = p.pattern()
+					if p.testingPattern {
+						fp.Pattern = p.testPattern()
+					} else {
+						fp.Pattern = p.pattern()
+					}
 				}
 				vp.Fields = append(vp.Fields, fp)
 			})
+		}
+		if p.testingPattern && !vp.Context && !vp.Braces && len(vp.Path) == 1 {
+			return &TypePat{Pos: vp.Pos, Type: &TypeExpr{Pos: vp.Pos, Name: vp.Path[0]}}
 		}
 		return vp
 	}
@@ -2168,6 +2205,49 @@ func (p *parser) tupleBindingAhead() bool {
 			depth--
 			if depth == 0 {
 				return i+1 < len(p.toks) && p.toks[i+1].Kind == Assign
+			}
+		case EOF:
+			return false
+		}
+	}
+	return false
+}
+
+// testPattern extends match patterns with unbound fact-qualified type tests.
+func (p *parser) testPattern() Pattern {
+	if p.at(TIdent) {
+		start := p.i
+		p.next()
+		for p.at(Dot) {
+			p.next()
+			p.expect(TIdent, "after '.'")
+		}
+		typed := p.at(LBrack) || p.at(KwWhere) || p.at(Pipe)
+		p.i = start
+		if typed {
+			t := p.typeExpr()
+			return &TypePat{Pos: t.Pos, Type: t}
+		}
+	}
+	if p.at(LParen) && p.patternTestTypeAhead() {
+		t := p.typeExpr()
+		return &TypePat{Pos: t.Pos, Type: t}
+	}
+	return p.pattern()
+}
+
+// Parentheses introduce tuple/parenthesized patterns except when followed by
+// type annotation syntax. Nested arrows remain inside their own parentheses.
+func (p *parser) patternTestTypeAhead() bool {
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case LParen:
+			depth++
+		case RParen:
+			depth--
+			if depth == 0 {
+				return i+1 < len(p.toks) && ((p.toks[i+1].Kind == TIdent && p.toks[i+1].Text == "uses") || p.toks[i+1].Kind == Arrow || p.toks[i+1].Kind == KwWhere || p.toks[i+1].Kind == Pipe)
 			}
 		case EOF:
 			return false

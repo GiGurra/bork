@@ -451,3 +451,26 @@ func TestCompletionInferredGenericRecordAndPositionalArguments(t *testing.T) {
 		t.Fatalf("named label completion fails: %v\n%s", err, accepted)
 	}
 }
+
+func TestCompletionPatternTestsIntroduceNoBindings(t *testing.T) {
+	src := `type Choice = sealed { Some { value: Int }, None }
+fn matches(x: Choice): Bool { x is .Some { value: _ } }
+`
+	s, path := newTestServer(t, src)
+	marked := strings.Replace(src, ".Some { value: _ }", ".¦", 1)
+	item := completionItem(completeAt(t, s, path, marked), "Some")
+	if item == nil {
+		t.Fatal("missing contextual variant after is")
+	}
+	edit := item["textEdit"].(textEdit)
+	if edit.NewText != "Some { value: _ }" {
+		t.Fatalf("pattern completion: %q", edit.NewText)
+	}
+	current := strings.Replace(marked, "¦", "", 1)
+	lo, _ := byteOffset(current, edit.Range.Start)
+	hi, _ := byteOffset(current, edit.Range.End)
+	accepted := current[:lo] + edit.NewText + current[hi:]
+	if _, err := driver.NewSession().Analyze(filepath.Dir(path), map[string]string{path: accepted}); err != nil {
+		t.Fatal(err)
+	}
+}

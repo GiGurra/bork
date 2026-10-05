@@ -1525,6 +1525,9 @@ func (g *gen) builtinCall(e *check.CallBuiltin, args []ast.Expr) ast.Expr {
 		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{message}}
 	case check.BuiltinPanic:
 		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: args}
+	case check.BuiltinAssertIsFailure:
+		message := fmtCall("Sprintf", strLit(": expected %s, got %s (%s)"), strLit(e.Expected), g.stringOf(args[0], e.Args[0].Type()), g.assertIsTypeText(args[0], e.Args[0].Type()))
+		return &ast.CallExpr{Fun: ast.NewIdent("panic"), Args: []ast.Expr{&ast.BinaryExpr{X: g.callerLocation(e.Pos()), Op: token.ADD, Y: message}}}
 	case check.BuiltinAssert:
 		g.usesAssert = true
 		return &ast.CallExpr{Fun: ast.NewIdent("_assert"), Args: []ast.Expr{args[0], g.callerLocation(e.Pos())}}
@@ -2208,4 +2211,65 @@ func (g *gen) interp(e *check.Interp) ([]ast.Stmt, ast.Expr) {
 		return stmts, lit("")
 	}
 	return stmts, out
+}
+
+// Report bork type names even when the input is represented by Go's any.
+func (g *gen) assertIsTypeText(value ast.Expr, typ check.Type) ast.Expr {
+	var members []check.Type
+	if union, ok := typ.(*check.Union); ok {
+		members = union.Members
+	} else if !patternDiagnosticGeneric(typ) {
+		return strLit(check.TypeText(typ, nil))
+	}
+	var body []ast.Stmt
+	for _, member := range members {
+		if patternDiagnosticGeneric(member) {
+			continue
+		}
+		body = append(body, &ast.IfStmt{Cond: g.isType(g.goType(member), value), Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{strLit(check.TypeText(member, nil))}}}}})
+	}
+	if patternDiagnosticGeneric(typ) {
+		for _, member := range check.PatternRuntimeTypes(g.info) {
+			body = append(body, &ast.IfStmt{Cond: g.isType(g.goType(member), value), Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{strLit(check.TypeText(member, nil))}}}}})
+		}
+		g.imports["fmt"] = true
+		// Some source annotations, such as function effects and union element
+		// types, are erased. Report the runtime representation explicitly.
+		body = append(body, &ast.ReturnStmt{Results: []ast.Expr{&ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent("fmt"), Sel: ast.NewIdent("Sprintf")}, Args: []ast.Expr{strLit("runtime %T; generic annotations erased"), value}}}})
+	} else {
+		body = append(body, &ast.ReturnStmt{Results: []ast.Expr{strLit(check.TypeText(typ, nil))}})
+	}
+	return &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("string")}}}}, Body: &ast.BlockStmt{List: body}}}
+}
+
+func patternDiagnosticGeneric(t check.Type) bool {
+	switch t := t.(type) {
+	case *check.TypeParam:
+		return true
+	case *check.List:
+		return patternDiagnosticGeneric(t.Elem)
+	case *check.Map:
+		return patternDiagnosticGeneric(t.Key) || patternDiagnosticGeneric(t.Value)
+	case *check.Seq:
+		return patternDiagnosticGeneric(t.Elem)
+	case *check.FuncType:
+		for _, param := range t.Params {
+			if patternDiagnosticGeneric(param) {
+				return true
+			}
+		}
+		return patternDiagnosticGeneric(t.Result)
+	case *check.Union:
+		for _, member := range t.Members {
+			if patternDiagnosticGeneric(member) {
+				return true
+			}
+		}
+	}
+	for _, arg := range check.TypeArgs(t) {
+		if patternDiagnosticGeneric(arg) {
+			return true
+		}
+	}
+	return false
 }

@@ -23,7 +23,8 @@ type item struct {
 	loopIn     bool
 	// with is set for the word with where it may start a with block
 	// (not after a '.'), which is spaced from its '('.
-	with bool
+	with        bool
+	patternTest bool
 }
 
 type delimiter struct {
@@ -41,6 +42,10 @@ func Source(path string, src []byte) ([]byte, error) {
 	tokens, comments := syntax.LexCompiler(path, src, d)
 	if d.Len() != 0 {
 		return nil, fmt.Errorf("%s", d.Error())
+	}
+	patternTests := map[diag.Pos]bool{}
+	for _, pos := range syntax.ParseScript(path, src, &diag.List{}).PatternTestOperators {
+		patternTests[pos] = true
 	}
 	lines := []int{0}
 	for i, b := range src {
@@ -74,8 +79,9 @@ func Source(path string, src []byte) ([]byte, error) {
 		u := t.Kind == syntax.Not || (t.Kind == syntax.Minus || t.Kind == syntax.Caret) && !endsExpr(prev)
 		loopIn := t.Kind == syntax.TIdent && t.Text == "in" && len(items) >= 3 && items[len(items)-1].kind == syntax.TIdent && items[len(items)-2].kind == syntax.LParen && items[len(items)-3].kind == syntax.KwFor
 		w := t.Kind == syntax.TIdent && t.Text == "with" && prev != syntax.Dot && prev != syntax.KwFn && prev != syntax.RParen
-		chain := t.Kind == syntax.Dot && endsExpr(prev) || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot
-		items = append(items, item{chain: chain, loopIn: loopIn, kind: t.Kind, text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && !endsExpr(prev), with: w})
+		afterPatternTest := len(items) > 0 && items[len(items)-1].patternTest
+		chain := t.Kind == syntax.Dot && endsExpr(prev) && !afterPatternTest || prev == syntax.Dot && len(items) > 0 && !items[len(items)-1].contextDot
+		items = append(items, item{patternTest: patternTests[t.Pos], chain: chain, loopIn: loopIn, kind: t.Kind, text: text, start: start, end: offset(t.End), line: t.Pos.Line, unary: u, contextDot: t.Kind == syntax.Dot && (!endsExpr(prev) || afterPatternTest), with: w})
 		prev = t.Kind
 	}
 	for _, c := range comments {
@@ -221,7 +227,7 @@ func space(a, b item) bool {
 	case syntax.Comma, syntax.Colon, syntax.Quest, syntax.Semi, syntax.RParen, syntax.RBrack:
 		return false
 	case syntax.LParen:
-		if a.kind == syntax.TIdent && a.text == "derive" || a.with {
+		if a.kind == syntax.TIdent && a.text == "derive" || a.with || a.patternTest {
 			return true
 		}
 		return a.kind != syntax.TIdent && a.kind != syntax.RParen && a.kind != syntax.RBrack
@@ -229,7 +235,7 @@ func space(a, b item) bool {
 		if a.kind == syntax.KwGenerate {
 			return false
 		}
-		if a.loopIn {
+		if a.loopIn || a.patternTest {
 			return true
 		}
 		return a.kind != syntax.TIdent && a.kind != syntax.RBrack

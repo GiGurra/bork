@@ -31,6 +31,35 @@ ok    an empty title gives an empty slug
 
 A test body may use any run-time [effect](effects.md) without declaring it, like `main`.
 
+## Typed assertions
+
+`assert(value is Pattern)` checks any pattern without extracting values. Import
+`bork/test` and call `test.AssertIs[T](value)` when you need the checked value:
+
+```bork
+import "bork/test"
+
+pred positive(n: Int) { n > 0 }
+pred atMost(n: Int, limit: Int) { n <= limit }
+fn render(text: Bool): Int | String { if (text) { "hello" } else { 3 } }
+fn needsPositive(n: Int where positive): Int { n }
+
+test "a rendered number carries checked facts" {
+  n = test.AssertIs[Int where positive and atMost(100)](render(false))
+  assertEqual(needsPositive(n), 3)
+  assert(render(true) is String)
+}
+```
+
+Give one explicit target type; the input is inferred independently. The helper
+checks the erased type first, then its predicates, and returns the value with
+those facts proven. Relational facts retain the identities of their arguments.
+An unsuccessful check fails the test with the expected type and predicates,
+actual value, actual bork type and source location. Predicate panics propagate.
+The input is evaluated once. The original binding gains no facts or narrowing.
+Runtime tests reject targets that depend on erased generic unions or effects;
+see [bork/test](../std/test.md) for generic restrictions and failure reporting.
+
 ## Snapshots
 
 For large values, writing the expected result by hand is tedious. `assertSnapshot(value)` compares the printed value with a file saved earlier:

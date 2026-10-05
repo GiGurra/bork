@@ -219,3 +219,10 @@ test('context variant patterns retain type scopes', () => {
   const ls = tokenize('match (x) { .Some { value: .Ready } => 1, .None => 0 }');
   for (const word of ['Some', 'Ready', 'None']) has(ls, 0, word, 'entity.name.type.bork');
 });
+
+test('is is contextual between a value and a pattern', () => {
+ const ls=tokenize('value is Int where positive\nvalue is .Some { value: _ }\nfn is(x: Int): Int { x }\nresult = is(3)\nresult = value.is(3)');
+ has(ls,0,'is','keyword.control.bork');
+ has(ls,1,'is','keyword.control.bork');
+ for (const line of [2,3,4]) assert.ok(!scopes(ls,line,'is').includes('keyword.control.bork'));
+});

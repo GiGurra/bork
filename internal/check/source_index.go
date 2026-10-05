@@ -209,6 +209,9 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 	for binding, pat := range info.tuplePats {
 		b.pattern(binding.Pattern, pat)
 	}
+	for source, pattern := range info.patternTests {
+		b.pattern(source.Pattern, pattern)
+	}
 	var out SymbolIndex
 	for _, symbol := range b.definitions {
 		out.symbols = append(out.symbols, symbol)

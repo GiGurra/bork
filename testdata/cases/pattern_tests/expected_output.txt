@@ -1,0 +1,21 @@
+true false true 3
+true false 4 5
+true false true false
+once
+3
+once
+true
+false
+true
+false true
+true false
+true
+true true true
+false false true 4
+3 3 3 3
+true true false false
+true
+true true
+(3, "ok")
+3
+true true

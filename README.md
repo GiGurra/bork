@@ -202,6 +202,14 @@ fn find(db: sql.Connection, name: String) uses io + net: List[User] | sql.Error 
 
 The library also checks the literal while compiling. Writing `'$name'` in quotes is rejected: `SQL hole is inside quoted text or an identifier`. More on [typed interpolation](docs/language/interpolators.md).
 
+## Testing shapes and facts
+
+`value is Pattern` returns a Bool without binding names. Use
+`assert(reply is .Found { text: _ })` for a shape assertion, or
+`test.AssertIs[Int where positive](value)` from `bork/test` to return a typed
+value with checked facts. See [matching](docs/language/matching.md) and
+[testing](docs/language/testing.md).
+
 ## Editor support
 
 The [VS Code extension](editors/vscode/README.md) combines syntax highlighting

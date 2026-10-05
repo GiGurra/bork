@@ -4108,3 +4108,26 @@ completed-value obligations. Source labels are relative to the module rather
 than guessed repository URLs. Adjacent whole-line comments and fenced examples
 share one renderer with LSP hover. Authors can commit generated API.md or HTML;
 a hosted documentation workflow and library index remain deferred.
+
+### Pattern tests and typed assertions (bork-878uk7)
+
+`value is Pattern` is a Bool expression at comparison precedence. It supports
+match patterns without bindings, and evaluates the operand once. Unknown or
+private variants, unknown fields and unsupported constraints are errors; a valid
+disjoint test returns false. `is` does not narrow source bindings or establish
+facts around an enclosing branch. Type tests may include direct predicates and
+constrained aliases. Structural checks precede predicates; `and` and `or`
+short-circuit in source order, predicate preconditions must be proven, and
+predicate panics propagate. Relational arguments follow existing constraint
+scope rules. Statically certain tests receive suppressible lint warnings
+`lint.pattern-always-true` or `lint.pattern-always-false` without eliminating
+operand or predicate evaluation.
+
+`test.AssertIs[T](value)` from `bork/test` requires one explicit target type and
+infers its input independently. It returns the checked value narrowed to T,
+including proven direct and relational facts. Failure reports the target and its
+predicates, the actual value, its bork type and the caller's source location,
+using the ordinary test panic path. The compiler recognizes the resolved standard
+package function, and other generic functions keep ordinary constraint rules.
+Runtime tests must not establish guarantees erased by Go representation,
+including different function or sequence effects with the same representation.

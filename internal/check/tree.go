@@ -227,7 +227,8 @@ type CallBuiltin struct {
 	Args      []Expr
 	// Conv describes a numeric conversion of a value that is not a
 	// constant; nil for other builtins.
-	Conv *Conversion
+	Conv     *Conversion
+	Expected string
 }
 
 // CallValue is a call of a function value: `f(x)`, `r.handler(x)`.
@@ -381,6 +382,12 @@ type FieldUpdate struct {
 
 // Match is `match (x) { pattern => value, ... }`.
 type Match struct {
+	PatternTest bool
+	// ValidationGuards retain obligations from statically impossible tests.
+	// They are checked but never emitted or evaluated.
+	ValidationGuards []Expr
+	Assertion        *Instance
+	SourceCall       *syntax.Call
 	expr
 	X    Expr
 	Arms []*MatchArm

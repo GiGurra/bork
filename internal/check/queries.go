@@ -55,6 +55,9 @@ type ParameterDescription struct {
 
 func DescribeCallable(fn *Func, params []Type, from *Package, bound bool) *CallableDescription {
 	out := &CallableDescription{NamedArguments: true, ParameterNamesAreAPI: true, Parameters: []ParameterDescription{}}
+	if assertIsIntrinsic(fn) {
+		out.NamedArguments, out.ParameterNamesAreAPI = false, false
+	}
 	if fn.Requires != nil {
 		out.Requires = []string{requirementText(fn.Requires, from)}
 	}
@@ -605,6 +608,36 @@ func EditorRemainingParameters(callable *CallableDescription, args []syntax.Argu
 		if !used[i] && !p.Receiver {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+// PatternRuntimeTypes lists concrete, distinguishable bork types for assertion
+// diagnostics whose input type is generic. Erased unions/effects are excluded.
+func PatternRuntimeTypes(info *Info) []Type {
+	byName := map[string]Type{}
+	add := func(t Type) {
+		if t != Invalid && isValue(t) && !hasTypeParam(t) && !patternErasedType(t) {
+			byName[TypeText(t, nil)] = t
+		}
+	}
+	for _, t := range basicTypes {
+		add(t)
+	}
+	for _, t := range info.types {
+		add(t)
+	}
+	for _, t := range info.writtenTypes {
+		add(t)
+	}
+	var names []string
+	for name := range byName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]Type, 0, len(names))
+	for _, name := range names {
+		out = append(out, byName[name])
 	}
 	return out
 }

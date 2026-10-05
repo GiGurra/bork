@@ -1,4 +1,5 @@
 import "bork/process"
+import "bork/test"
 // APP_HOST=localhost APP_PORT=8080 bork run examples/time_env -- live
 // The default demo injects both the environment and clock.
 import "bork/env"
@@ -23,34 +24,20 @@ fn main() {
 test "config collects missing and invalid fields" {
   values = { "APP_PORT": "0" }
   result: Config | env.ConfigError = env.LoadWith("APP", name => values.get(name))
-  match (result) {
-    errors: env.ConfigError => assertEqual(errors.errors.length(), 2)
-    _ => assert(false)
-  }
+  errors = test.AssertIs[env.ConfigError](result)
+  assertEqual(errors.errors.length(), 2)
 }
 test "fake clock remains fixed" {
   clock = time.FixedClock(time.Instant { unixNanos: 42 })
   assertEqual(time.Read(clock), time.Read(clock))
 }
 test "negative arithmetic overflow is checked" {
-  match (time.Add(time.Instant { unixNanos: -9223372036854775808 }, time.Nanoseconds(-1))) {
-    _: OutOfRange => {}
-    _ => assert(false)
-  }
-  match (time.Between(time.Instant { unixNanos: 1 }, time.Instant { unixNanos: -9223372036854775808 })) {
-    _: OutOfRange => {}
-    _ => assert(false)
-  }
+  assert(time.Add(time.Instant { unixNanos: -9223372036854775808 }, time.Nanoseconds(-1)) is OutOfRange)
+  assert(time.Between(time.Instant { unixNanos: 1 }, time.Instant { unixNanos: -9223372036854775808 }) is OutOfRange)
 }
 test "invalid duration and instant text is rejected" {
-  match (time.ParseDuration("nope")) {
-    _: ParseError => {}
-    _ => assert(false)
-  }
-  match (time.Parse("nope", time.RFC3339())) {
-    _: ParseError => {}
-    _ => assert(false)
-  }
+  assert(time.ParseDuration("nope") is ParseError)
+  assert(time.Parse("nope", time.RFC3339()) is ParseError)
 }
 type Pair[A, B] = { first: A, second: B } derive (Decode)
 test "generic fields use instantiated decoder parsing kinds" {

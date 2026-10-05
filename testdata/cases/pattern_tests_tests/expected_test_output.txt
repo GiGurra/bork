@@ -1,0 +1,13 @@
+ok    success returns checked facts
+FAIL  helper mismatch attributed to caller
+      main.bork:8:62: expected Int, got hi (String)
+FAIL  predicate mismatch
+      main.bork:18:40: expected Int where positive, got -2 (Int)
+FAIL  predicate panic propagates
+      unexpected predicate 3
+FAIL  always disjoint assertion
+      main.bork:24:28: expected String, got 5 (Int)
+FAIL  generic mismatch reports concrete type
+      main.bork:27:52: expected Int, got text (String)
+1 passed, 5 failed
+exit code 1

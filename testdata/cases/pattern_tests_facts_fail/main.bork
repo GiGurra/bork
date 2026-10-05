@@ -1,0 +1,22 @@
+import "bork/test"
+
+pred positive(n: Int) { n > 0 }
+pred small(n: Int where positive) { n < 10 }
+fn needPositive(n: Int where positive): Int { n }
+fn missingIsPrecondition(n: Int): Bool { n is Int where small }
+fn missingAssertionPrecondition(n: Int): Int { test.AssertIs[Int where small](n) }
+fn noNarrowing(n: Int): Int { if (n is Int where positive) { needPositive(n) } else { 0 } }
+fn afterIs(n: Int): Int { _ = n is Int where positive; needPositive(n) }
+fn noOriginalFacts(n: Int): Int { _ = test.AssertIs[Int where positive](n); needPositive(n) }
+
+fn AssertIs[T](value: T): T { value }
+fn ordinaryGenericFacts(n: Int): Int { AssertIs[Int where positive](n) }
+
+fn impossibleIs(n: String): Bool { n is Int where small }
+fn impossibleAssert(n: String): Int { test.AssertIs[Int where small](n) }
+
+fn impossibleList(n: String): Bool { n is [Int where small] }
+type Choice = sealed { Some { value: Int } }
+fn impossibleVariant(n: String): Bool { n is Choice.Some { value: Int where small } }
+
+fn impossibleTuple(n: String): Bool { n is (Int where small, _) }

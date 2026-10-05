@@ -24,6 +24,19 @@ func editorSignature(fn *Func, params []Type, result Type, from *Package, bound 
 
 // EditorCheckedSignature returns the exact instantiation at a checked call.
 func EditorCheckedSignature(info *Info, from *Package, open diag.Pos) *EditorSignature {
+	// Predicate guards synthesized by an assertion share its source position.
+	// Prefer the actual assertion identity over those internal calls.
+	for call, assertion := range info.patternAssertions {
+		if call.Pos == open {
+			instance := info.instances[call]
+			signature := editorSignature(instance.Func, instance.Params, instance.Result, from, false)
+			signature.Result = assertion.Expected
+			if call.Pipe.File != "" {
+				signature.ImplicitParameters = 1
+			}
+			return signature
+		}
+	}
 	for call, instance := range info.instances {
 		if call.Pos != open || instance == nil {
 			continue
@@ -33,6 +46,9 @@ func EditorCheckedSignature(info *Info, from *Package, open diag.Pos) *EditorSig
 			bound = info.types[selector.X] != nil
 		}
 		signature := editorSignature(instance.Func, instance.Params, instance.Result, from, bound)
+		if assertion := info.patternAssertions[call]; assertion != nil {
+			signature.Result = assertion.Expected
+		}
 		if call.Pipe.File != "" {
 			signature.ImplicitParameters = 1
 		}
@@ -80,6 +96,9 @@ func EditorNamedSignature(info *Info, from *Package, name string, receiver Type,
 		if !assignable(receiver, in.subst(fn.Params[0])) {
 			return nil
 		}
+	}
+	if assertIsIntrinsic(fn) && len(typeArgs) == 1 {
+		typeArgs = append(append([]*syntax.TypeExpr(nil), typeArgs...), nil)
 	}
 	if len(typeArgs) > 0 {
 		if receiver != nil {

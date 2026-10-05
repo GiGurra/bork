@@ -441,3 +441,24 @@ func BenchmarkSemanticTokensHTTPServer(b *testing.B) {
 		}
 	})
 }
+
+func TestSemanticTokensPatternTestAndNamedIs(t *testing.T) {
+	src := `type Choice = sealed { Some { value: Int }, None }
+fn is(x: Int): Int { x }
+fn Example(x: Choice): Bool { x is .Some { value: _ } }
+`
+	s, path := newTestServer(t, src)
+	result, err := s.semanticTokens(path, src, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[int]string{}
+	for _, token := range decodeSemantic(t, src, result) {
+		if token.text == "is" {
+			found[token.start.Line] = token.kind
+		}
+	}
+	if found[1] != "function" || found[2] != "keyword" {
+		t.Fatalf("is classifications: %+v", found)
+	}
+}

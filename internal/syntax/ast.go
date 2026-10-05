@@ -4,6 +4,8 @@ import "github.com/GiGurra/bork/internal/diag"
 
 // File is one parsed .bork source file.
 type File struct {
+	// PatternTestOperators includes contextual is positions, including unfinished edits.
+	PatternTestOperators []diag.Pos
 	// ExpressionSpans retains parser ranges, including grouping, for compiler
 	// source queries and refactorings. One node can have several grouped spans.
 	ExpressionSpans []ExpressionSpan
@@ -852,3 +854,14 @@ func (e *Call) Position() diag.Pos           { return e.Fun.Position() }
 func (e *If) Position() diag.Pos             { return e.Pos }
 func (e *Block) Position() diag.Pos          { return e.Pos }
 func (e *Return) Position() diag.Pos         { return e.Pos }
+
+// Is tests a value against a pattern without introducing source bindings.
+type Is struct {
+	Pos     diag.Pos // contextual is operator
+	End     diag.Pos
+	X       Expr
+	Pattern Pattern
+}
+
+func (*Is) exprNode()            {}
+func (x *Is) Position() diag.Pos { return x.Pos }
