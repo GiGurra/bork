@@ -155,34 +155,51 @@ import "bork/shape"
 
 class Labels[T] { fn labels(x: T): List[String] }
 
-derivation labels[T]: Labels[T] {
+derive instance labels[T]: Labels[T] {
   fn labels(x: T): List[String] {
-    names = generate[String] {
-      static for (field in shape.fields[T]()) {
-        static if (!field.computed) { yield field.name }
-      }
-    }
-    names.toList()
+    [comptime for (field in shape.fields[T]())
+      comptime if (!field.computed) field.name]
   }
 }
 ```
 
-These examples are proposal text, not runnable snippets. A `derivation` belongs
-to the package defining its class; there is at most one template per resolved
+These examples are proposal text, not runnable snippets. A `derive instance`
+template belongs to the package defining its class; there is at most one template per resolved
 class. It supplies exactly the class's methods with matching signatures and
 may publish typed associated metadata. It is not an instance until requested
 by derive. A class without a template cannot be derived. The template has a
 symbolic target type T; errors independent of a target are checked at definition
 time and shape-dependent operations are checked during expansion.
 
-`static for` operates only over compiler-known shape sequences and unrolls in
+`comptime for` operates only over compiler-known shape sequences and unrolls in
 source order. Each iteration has a fresh lexical identity and concrete field
-handle. It is not a runtime heterogeneous list. `static if` and `static match`
+handle. It is not a runtime heterogeneous list. `comptime if` and `comptime match`
 select metadata-known branches before type checking their target-specific
 bodies; unsupported branches are not checked against the wrong target shape.
-Ordinary if/match retain their ordinary meaning. Static constructs are valid
-only in derivation templates and their explicitly declared template helpers;
-no general macro substitution leaks into ordinary functions.
+Ordinary if/match retain their ordinary meaning. These compile-time control forms are valid
+only in derivation templates and helpers declared with `derive fn` (the ordinary
+function declaration preceded by derive, specialized only when a template calls
+it). Such helpers cannot be called by runtime code or contain unsafe Go.
+No general macro substitution leaks into ordinary functions.
+
+Templates introduce no new keywords or source-level special type declarations.
+`derive instance` reuses declaration words; `comptime` marks expansion control.
+Shape descriptors and builders use ordinary library type names, with generic
+operations checked by the compiler as described below. Existing `comptime { ... }`
+continues to compute closed data through its native evaluator; these explicitly
+marked template controls instead specialize compiler-known metadata without
+starting that evaluator.
+
+A list expression may contain one compile-time comprehension:
+`[comptime for (field in fields) expression]`. Each expansion contributes one
+element, and the completed expression is an ordinary homogeneous List whose
+element type is inferred as usual. An optional `comptime if (condition)` guard
+before the element expression omits that iteration when false. The guard is
+metadata-known and is evaluated before checking the element body, so omitted
+computed fields require no codec dictionaries. This is filtering within the
+list form; an ordinary if expression retains its existing rules. Nested
+comprehensions can concatenate only through ordinary List library methods.
+The proposal adds AST forms and meaning, not a new keyword inventory.
 
 `bork/shape` exposes compiler-owned handles, with the following contract:
 
@@ -212,31 +229,27 @@ no payload. It exposes no representation of a foreign private variant. For
 example, the Encode template's sealed branch has this structure:
 
 ```text
-static for (variant in shape.variants[T]()) {
+comptime for (variant in shape.variants[T]()) {
   match (variant.project(x)) {
     Option.Some { value: payload } => {
-      fields = generate[codec.Field] {
-        static for (field in variant.fields) {
-          static if (!field.computed) {
-            yield codec.Field { name: field.name,
-              value: codec.encode[field.Type](field.read(payload)) }
-          }
-        }
-      }
-      return taggedObject(variant.name, fields.toList())
+      fields = [comptime for (field in variant.fields)
+        comptime if (!field.computed)
+          codec.Field { name: field.name,
+            value: codec.encode[field.Type](field.read(payload)) }]
+      return taggedObject(variant.name, fields)
     }
     Option.None => {}
   }
 }
 ```
 
-This sketch is the named-payload branch; a static positional branch produces
+This sketch is the named-payload branch; a comptime-selected positional branch produces
 an array in slot order instead. Exhausting all variant descriptors permits a
 checked unreachable tail. Runtime tag dispatch/refinement is a generic sealed
-shape operation, distinct from static metadata matching.
+shape operation, distinct from compile-time metadata matching.
 
 A field descriptor has an internal dependent signature `Field[Owner, FieldType]`.
-The compiler substitutes `field.Type` per static iteration. Type handles cannot
+The compiler substitutes `field.Type` per compile-time iteration. Type handles cannot
 escape into runtime values, unsafe Go, arbitrary containers or comptime results.
 Template helpers preserve dependent handle identities and undergo the same
 expansion limits. Ordinary pure functions can compute metadata such as names
@@ -304,7 +317,7 @@ resolved result type and its expression is checked bork. It is associated with
 the selected dictionary, not globally with T, because alternative codecs can
 have different schemas. `shape.metadata[T, Class, MetadataType]()` requests
 that selected dictionary and returns `Option[MetadataType]`. This intrinsic
-accepts type/class handles only as static parameters and contains no knowledge
+accepts type/class handles only as compile-time parameters and contains no knowledge
 of Decode. Duplicate keys and mismatched metadata types are definition errors.
 Handwritten instances without metadata return None; an explicit metadata block
 can opt them in without a new required class method.
@@ -424,7 +437,7 @@ Planned PRs (split further if review size warrants):
    coherent ownership and instance names, package migration and all syntax
    consumers. Keep the old codec backend temporarily. Coordinate positional
    codecs and the CLI's ongoing Decode APIs before source migration.
-3. **Shape and generic derivation:** handles, static constructs, typed expansion,
+3. **Shape and generic derivation:** handles, comptime control forms, typed expansion,
    validated builders, associated metadata, generic foreign layouts, cache and
    diagnostics. Exercise an independent Labels class before porting std.
 4. **Library derivations:** port Encode/Decode and schema metadata, then GoStruct
@@ -438,7 +451,7 @@ completion/navigation/rename/inlay/semantic/import tooling; playground parity;
 project templates; TextMate and tree-sitter grammar generation and queries;
 Vim/Emacs behavior; query snapshots, grammar pins and upstream drafts; grammar,
 requirements, reader docs and examples. Coordinate editor grammar ownership
-when changing static syntax. Proposal snippets become compilable docs only
+when extending comptime syntax. Proposal snippets become compilable docs only
 when their corresponding feature lands.
 
 Focused tests cover both spellings and cross-file order, qualified classes,
