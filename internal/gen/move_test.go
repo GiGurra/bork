@@ -149,4 +149,19 @@ func TestAttachWhileTheScopeWaitsForItsTasks(t *testing.T) {
  app.close()
  if closes.Load() != 1 { t.Fatal("not closed") }
 }
+
+func TestMoveWithinOneScopeKeepsItsCancellation(t *testing.T) {
+ var closes atomic.Int32
+ s, w := _scopeWith(context.Background()), _scopeWith(context.Background())
+ c := open(s, &closes)
+ _moveResource(c, s, s)
+ if c.handle.Context().Err() != nil { t.Fatal("cancelled by a move to its own scope") }
+ // Attached to s twice: moving one registration keeps s a source.
+ if why := c.owner.attach(s); why != "" { t.Fatal(why) }
+ _moveResource(c, s, w)
+ w.close()
+ if closes.Load() != 0 || c.handle.Context().Err() != nil { t.Fatal("cancelled or closed while s keeps it") }
+ s.close()
+ if closes.Load() != 1 { t.Fatal("not closed") }
+}
 `

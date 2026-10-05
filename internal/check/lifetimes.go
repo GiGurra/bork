@@ -40,9 +40,9 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 			}
 		}
 	}
-	acquires := summarize(fns, info)
+	acquires, passes := summarize(fns, info)
 	l := newLifeChecker(info, diags)
-	l.acquires = acquires
+	l.acquires, l.passes = acquires, passes
 	for _, fn := range fns {
 		l.function(fn)
 	}
@@ -75,6 +75,10 @@ func newLifeChecker(info *Info, diags *diag.List) *lifeChecker {
 		origins:  map[*Var]resOrigin{},
 		acquired: map[*Call]*handle{},
 		acquires: map[*Func]int{},
+
+		safeChild:  map[*Var]bool{},
+		passes:     map[*Func]bool{},
+		passParams: map[*Var]*handle{},
 	}
 }
 
@@ -162,6 +166,14 @@ type lifeChecker struct {
 	acquires     map[*Func]int
 	acquireParam *Var
 	acquireOK    bool
+	// safeChild holds the owners opened here with safe policies (see
+	// ended); passes the generic functions verified to give back only
+	// what they were given (see passedOrigin), passParams the markers of
+	// the parameters of the one being verified.
+	safeChild  map[*Var]bool
+	passes     map[*Func]bool
+	passParams map[*Var]*handle
+	passOK     bool
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -210,7 +222,7 @@ func (l *lifeChecker) function(fn *Func) {
 		}
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
-	l.verifyAcquires(fn.Body)
+	l.verifyResult(fn.Body)
 	if fn.Body.Type() != Never {
 		for _, p := range fn.ParamVars {
 			if p.Type == OwnedScope {
@@ -582,7 +594,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 	case *Return:
 		if x.Value != nil {
 			l.result(x.Value, l.use(x.Value, l.value(x.Value, "return")), l.what())
-			l.verifyAcquires(x.Value)
+			l.verifyResult(x.Value)
 		}
 		return nil
 	case *Try:
@@ -778,6 +790,7 @@ func (l *lifeChecker) stmt(s Stmt) {
 			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
 			l.frame[s.Var] = l.cur
 			l.bind(s.Var)
+			l.safeChild[s.Var] = safeOpen(s.Value)
 			if n := len(l.owners); n > 0 {
 				l.owners[n-1] = append(l.owners[n-1], s.Var)
 			}
@@ -840,9 +853,13 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	l.result(x.Body, l.use(x.Body, l.expr(x.Body)), "the lambda")
 	l.captures = l.captures[:len(l.captures)-1]
 	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
-	// The lambda lives as long as what it uses from outside.
+	// The lambda lives as long as what it uses from outside (not the
+	// registrations it acquired itself).
 	var life lifetime
 	for _, s := range used {
+		if h, ok := s.(*handle); ok && l.inFrame(h.frame, x) {
+			continue
+		}
 		if !l.within(s, x) {
 			life = life.union(lifetime{s})
 		}
@@ -1230,6 +1247,9 @@ func (l *lifeChecker) generate(x *Generate) lifetime {
 	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
 	var life lifetime
 	for _, s := range used {
+		if h, ok := s.(*handle); ok && l.inFrame(h.frame, x) {
+			continue
+		}
 		if !l.within(s, x) {
 			life = life.union(lifetime{s})
 		}

@@ -139,17 +139,15 @@ func (l *lifeChecker) originOf(x Expr) resOrigin {
 	return resOrigin{}
 }
 
-// passedOrigin gives the origin of a call of a generic bork function
-// whose result is a type parameter T (or a union of T with values that
-// hold no resource): it cannot make a value of T, so it gives one of its
-// arguments of a type built from T alone (T, T | Failure, Option[T]),
-// as for the lambdas of generic functions (see inferParams). fs.Open's
-// result(open(path, s)) is the value open acquired. Go bodies are not
-// counted on: one could keep a value from an earlier call.
-func (l *lifeChecker) passedOrigin(x *Call) resOrigin {
-	fn := x.Func
-	if len(fn.TypeParams) == 0 || fn.Decl == nil || fn.Decl.IsGo() || fn.Class != nil || fn.Of != nil || fn.Synthetic {
-		return resOrigin{}
+// passShape gives, for a generic bork function whose result is a type
+// parameter T (or a union of T with values that hold no resource) that
+// its bounds cannot make, T and its parameters that mention T, all built
+// from T alone (T, T | Failure, Option[T]). Such a function can only give
+// back a T it was given, unless it gets one elsewhere (from Go code that
+// keeps values, say): passes holds those verified not to (summarize).
+func (l *lifeChecker) passShape(fn *Func) (*TypeParam, []int) {
+	if len(fn.TypeParams) == 0 || fn.Body == nil || fn.Decl == nil || fn.Decl.IsGo() || fn.Class != nil || fn.Of != nil || fn.Synthetic {
+		return nil, nil
 	}
 	var tp *TypeParam
 	members := []Type{fn.Result}
@@ -157,28 +155,43 @@ func (l *lifeChecker) passedOrigin(x *Call) resOrigin {
 		members = u.Members
 	}
 	for _, m := range members {
-		switch m := m.(type) {
-		case *TypeParam:
+		if t, ok := m.(*TypeParam); ok {
 			if tp != nil {
-				return resOrigin{}
+				return nil, nil
 			}
-			tp = m
-		default:
-			if l.carriesLife(m) {
-				return resOrigin{}
-			}
+			tp = t
+		} else if l.carriesLife(m) {
+			return nil, nil
 		}
 	}
 	if tp == nil || !l.cannotMake(tp) {
-		return resOrigin{}
+		return nil, nil
 	}
 	can := map[*TypeParam]bool{tp: true}
-	o := resOrigin{known: true}
+	var params []int
 	for i, p := range fn.Params {
-		if i >= len(x.Args) || !mentionsParam(p, tp) {
+		if !mentionsParam(p, tp) {
 			continue
 		}
 		if !builtFrom(p, can, map[Type]bool{}) {
+			return nil, nil
+		}
+		params = append(params, i)
+	}
+	return tp, params
+}
+
+// passedOrigin gives the origin of a call of a generic function verified
+// to give back only what it was given (see passShape): that of those
+// arguments. fs.Open's result(open(path, s)) is the value open acquired.
+func (l *lifeChecker) passedOrigin(x *Call) resOrigin {
+	if !l.passes[x.Func] {
+		return resOrigin{}
+	}
+	_, params := l.passShape(x.Func)
+	o := resOrigin{known: true}
+	for _, i := range params {
+		if i >= len(x.Args) {
 			return resOrigin{}
 		}
 		o = o.union(l.originOf(x.Args[i]))
@@ -285,9 +298,12 @@ func (l *lifeChecker) pinned(h *handle) (pinAt, bool) {
 }
 
 // ended reports whether every scope of life has ended, so that nothing
-// it kept is still used: a scope block that ended (without a task
-// timeout, which can leave tasks running), or an owner's child that was
-// closed (not passed on, which leaves its tasks running).
+// it kept is still used: a scope block that ended, or an owner's child
+// that was closed (not passed on, which leaves its tasks running), opened
+// here (an owner parameter's child may have any policies). Either must
+// have only policies known not to leave tasks running (taskTimeout
+// orphans them); setScopePolicy cannot be called directly, so the
+// policies are all at the scope's start.
 func (l *lifeChecker) ended(life lifetime) bool {
 	if len(life) == 0 {
 		return false
@@ -295,11 +311,11 @@ func (l *lifeChecker) ended(life lifetime) bool {
 	for _, x := range life {
 		switch x := unhandle(x).(type) {
 		case *ScopeBlock:
-			if l.isOpen(x) || hasTaskTimeout(x) {
+			if l.isOpen(x) || !safePolicies(x.Policies) {
 				return false
 			}
 		case *child:
-			if g, ok := l.gone[x.owner]; !ok || g.how != "closed" {
+			if g, ok := l.gone[x.owner]; !ok || g.how != "closed" || !l.safeChild[x.owner] {
 				return false
 			}
 		default:
@@ -309,14 +325,32 @@ func (l *lifeChecker) ended(life lifetime) bool {
 	return true
 }
 
-func hasTaskTimeout(s *ScopeBlock) bool {
-	for _, p := range s.Policies {
-		// A policy other than a call (a variable, say) may be one.
-		if c, ok := p.(*Call); !ok || c.Func.Decl.Name == "taskTimeout" {
-			return true
+// safePolicies reports whether policies are all prelude policies that
+// leave no task running after the scope closes (cleanupTimeout,
+// logFailures). Anything else (taskTimeout, or a policy computed
+// elsewhere) may orphan tasks.
+func safePolicies(policies []Expr) bool {
+	for _, p := range policies {
+		c, ok := p.(*Call)
+		if !ok || !c.Func.Prelude || c.Func.Decl.Name != "cleanupTimeout" && c.Func.Decl.Name != "logFailures" {
+			return false
 		}
 	}
-	return false
+	return true
+}
+
+// safeOpen reports whether x opens an owned scope with safe policies
+// only: openScope(parent), or with a list of them.
+func safeOpen(x Expr) bool {
+	c, ok := x.(*Call)
+	if !ok || !c.Func.Prelude || c.Func.Decl.Name != "openScope" {
+		return false
+	}
+	if len(c.Args) < 2 || c.Args[1] == nil {
+		return true
+	}
+	list, ok := c.Args[1].(*ListLit)
+	return ok && safePolicies(list.Elems)
 }
 
 // pin records that what (at pos) may keep the values of life with the
@@ -340,12 +374,17 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 		args[i] = l.use(x.Args[i], l.expr(x.Args[i]))
 	}
 	r, target := x.Args[0], x.Args[1]
-	if _, ok := r.Type().(*Resource); !ok {
+	if _, ok := r.Type().(*Resource); !ok || args[0] == nil {
+		return args[1] // not a resource, or moved or released already: reported
+	}
+	// The target is evaluated after r (in order): it may have closed or
+	// moved what r is.
+	if order[0] == 0 && l.use(r, args[0]) == nil {
 		return args[1]
 	}
 	name := describe(r)
 	o := l.originOf(r)
-	if !o.known || len(o.hs) == 0 {
+	if !o.known || len(o.hs) == 0 || o.hs[0].res == nil {
 		l.errorf(r.Pos(), "%s cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until %s closes too", name, scopeName(target))
 		return args[1]
 	}
@@ -355,8 +394,12 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 			l.errorf(r.Pos(), "%s cannot be moved: it may belong to %s or %s", name, l.scopeText(src.scope), l.scopeText(h.scope))
 			return args[1]
 		}
+		if h.res == nil {
+			l.errorf(r.Pos(), "%s cannot be moved: it is borrowed (a parameter)", name)
+			return args[1]
+		}
 		if h.frame != l.cur {
-			l.errorf(r.Pos(), "%s cannot be moved here: it was acquired outside this lambda, which may run later or more than once; move it before", name)
+			l.errorf(r.Pos(), "%s cannot be moved here: it was acquired outside this %s, which may run later or more than once; move it before", name, l.frameKind())
 			return args[1]
 		}
 		if h.loop != l.loop {
@@ -372,12 +415,9 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 		l.errorf(target.Pos(), "%s already belongs to %s", name, l.scopeText(src.scope))
 		return args[1]
 	}
-	if args[0] == nil {
-		return args[1] // moved or released already: reported
-	}
-	to := strings.TrimPrefix(l.scopeText(unhandle(args[1][0])), "parameter ")
-	if len(args[1]) != 1 {
-		to = scopeName(target)
+	to := scopeName(target)
+	if len(args[1]) == 1 {
+		to = strings.TrimPrefix(l.scopeText(unhandle(args[1][0])), "parameter ")
 	}
 	for _, h := range o.hs {
 		l.moved[h] = movedAt{pos: x.Pos(), to: to}
@@ -444,6 +484,27 @@ func (l *lifeChecker) usesMoved(xargs []Expr, args []lifetime, moves []*handle) 
 	}
 }
 
+// frameKind names the current frame, for messages.
+func (l *lifeChecker) frameKind() string {
+	switch l.cur.(type) {
+	case *Func:
+		return "function"
+	case *Generate:
+		return "generator"
+	}
+	return "lambda (or lazy, async or comptime body)"
+}
+
+// inFrame reports whether frame f is g or nested in it.
+func (l *lifeChecker) inFrame(f, g any) bool {
+	for ; f != nil; f = l.parent[f] {
+		if f == g {
+			return true
+		}
+	}
+	return false
+}
+
 func copyMoved(m map[*handle]movedAt) map[*handle]movedAt {
 	out := make(map[*handle]movedAt, len(m))
 	for k, v := range m {
@@ -492,12 +553,27 @@ func joinMoves(start map[*handle]movedAt, ends []map[*handle]movedAt, startPins 
 	return moved, pins
 }
 
-// verifyAcquires checks, for a function that may acquire (one Scope
-// parameter, a resource result), that the value it gives back is
-// acquired in that scope here, and neither moved nor pinned.
-func (l *lifeChecker) verifyAcquires(x Expr) {
+// verifyResult checks, for a function being summarized, that the value
+// it gives back, x, is what its summary says: only its parameters' values
+// (passes), or acquired in its Scope parameter here, and neither moved
+// nor pinned (acquires).
+func (l *lifeChecker) verifyResult(x Expr) {
 	fn, ok := l.cur.(*Func)
-	if !ok || l.acquireParam == nil || x == nil || x.Type() == Never {
+	if !ok || x == nil || x.Type() == Never {
+		return
+	}
+	if len(l.passParams) > 0 {
+		o := l.originOf(x)
+		if !o.known {
+			l.passOK = false
+		}
+		for _, h := range o.hs {
+			if v, ok := h.scope.(*Var); !ok || h.res != nil || l.passParams[v] != h {
+				l.passOK = false
+			}
+		}
+	}
+	if l.acquireParam == nil {
 		return
 	}
 	o := l.originOf(x)
@@ -532,28 +608,48 @@ func mayAcquire(fn *Func) int {
 	return found
 }
 
-// summarize finds the bork functions that acquire: those whose result is
-// a resource they acquired into their one Scope parameter. It checks them
-// until no more are found, with diagnostics discarded.
-func summarize(fns []*Func, info *Info) map[*Func]int {
-	acquires := map[*Func]int{}
+// summarize finds the bork functions that acquire (whose result is a
+// resource they acquired into their one Scope parameter), and the
+// generic ones that give back only what they were given (see passShape).
+// It checks them until no more are found, with diagnostics discarded.
+func summarize(fns []*Func, info *Info) (map[*Func]int, map[*Func]bool) {
+	acquires, passes := map[*Func]int{}, map[*Func]bool{}
 	for changed := true; changed; {
 		changed = false
 		for _, fn := range fns {
-			i := mayAcquire(fn)
-			if _, ok := acquires[fn]; ok || i < 0 {
+			if i := mayAcquire(fn); i >= 0 {
+				if _, ok := acquires[fn]; !ok {
+					l := newLifeChecker(info, &diag.List{})
+					l.acquires, l.passes = acquires, passes
+					l.acquireParam = fn.ParamVars[i]
+					l.acquireOK = true
+					l.function(fn)
+					if l.acquireOK {
+						acquires[fn] = i
+						changed = true
+					}
+				}
+			}
+			if passes[fn] {
 				continue
 			}
 			l := newLifeChecker(info, &diag.List{})
-			l.acquires = acquires
-			l.acquireParam = fn.ParamVars[i]
-			l.acquireOK = true
-			l.function(fn)
-			if l.acquireOK {
-				acquires[fn] = i
-				changed = true
+			if _, params := l.passShape(fn); len(params) > 0 {
+				l.acquires, l.passes = acquires, passes
+				for _, i := range params {
+					p := fn.ParamVars[i]
+					marker := &handle{scope: p, frame: fn}
+					l.passParams[p] = marker
+					l.origins[p] = resOrigin{hs: []*handle{marker}, known: true}
+				}
+				l.passOK = true
+				l.function(fn)
+				if l.passOK {
+					passes[fn] = true
+					changed = true
+				}
 			}
 		}
 	}
-	return acquires
+	return acquires, passes
 }

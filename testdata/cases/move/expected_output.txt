@@ -25,7 +25,21 @@ h: moved twice
 g: in a task
 close g
 t ended
+open lambda
+lambda: moved in a lambda
+open generator
+["generator: moved in a generator"]
+open task
+close task
+close generator
+close lambda
+open p
+p: in a task
+open hop
+hop: hopped
 true
+close hop
+close p
 close h
 close f
 close b

@@ -28,6 +28,32 @@ fn pumped(s: Scope) uses io: Conn {
 
 type Holder = { conn: Conn }
 
+fn slow(): ScopePolicy {
+  taskTimeout(10)
+}
+
+fn finish(b: OwnedScope, s: Scope) uses state: Scope {
+  closeScope(b)
+  s
+}
+
+fn after(c: Conn, s: Scope): Scope {
+  s
+}
+
+fn root(): Scope unsafe go {
+  return nil
+}
+
+// Go code that may keep a value from an earlier call.
+fn stash[T](x: T): T unsafe go {
+  return x
+}
+
+fn wrap[T](x: T): T {
+  stash(x)
+}
+
 // It may make a new value of T with make: what it gives is borrowed.
 fn made[T](make: () => T): T {
   make()
@@ -86,6 +112,47 @@ fn main() {
       _ = move(w, app)
       z = pumped(s)
       _ = move(z, app)
+    }
+    scope s {
+      q = connect("q", s)
+      scope inner with slow() {
+        launch(inner, () => println(query(q, "orphan")))
+      }
+      _ = move(q, app)
+      r = connect("r", s)
+      b = openScope(s, [taskTimeout(10)])
+      launch(b.scope, () => println(query(r, "orphan")))
+      closeScope(b)
+      _ = move(r, app)
+      setScopePolicy(s, taskTimeout(10))
+      t = connect("t", s)
+      if (query(t, "") != "" && query(move(t, app), "") != "") {
+        println("")
+      }
+      println(query(t, "maybe moved"))
+      u = connect("u", s)
+      async(s) v = query(u, "async")
+      _ = move(u, app)
+      println(v)
+      o2 = connect("o2", s)
+      onClose(s, () => println(query(o2, "on close")))
+      _ = move(o2, app)
+      c2 = openScope(s)
+      cc = connect("cc", c2.scope)
+      _ = move(cc, finish(c2, app))
+      dd = connect("dd", s)
+      _ = move(dd, after(move(dd, app), app))
+      ee = connect("ee", app)
+      _ = wrap(ee)
+      ff = connect("ff", app)
+      gg = wrap(ff)
+      _ = move(gg, s)
+      c3 = openScope(s)
+      hh = connect("hh", s)
+      closeScope(c3)
+      _ = move(hh, c3.scope)
+      ii = connect("ii", s)
+      _ = move(ii, root())
     }
     scope s {
       h = connect("h", s)

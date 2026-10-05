@@ -17,6 +17,7 @@ import (
 	goscanner "go/scanner"
 	"go/token"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -1337,7 +1338,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if e.Func.Prelude && e.Func.Decl.Name == "move" && e.MoveFrom != nil {
 			// move(r, to) moves r's registration from the scope the
 			// lifetimes found (MoveFrom).
-			stmts, xs := g.values(append(e.EvaluationArgs(), e.MoveFrom))
+			stmts, xs := g.values(slices.Concat(e.EvaluationArgs(), []check.Expr{e.MoveFrom}))
 			if xs == nil {
 				return stmts, nil
 			}

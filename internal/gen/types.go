@@ -1009,27 +1009,31 @@ func (o *_Owner) attach(s *_Scope) string {
 
 // move moves the registration of the resource with from over to to,
 // atomically: from no longer closes it, to does. It gives "" or why it
-// cannot, and then changes nothing.
-func (o *_Owner) move(from, to *_Scope) string {
+// cannot (and then changes nothing), and whether from still has another
+// registration of it (an attach to the same scope).
+func (o *_Owner) move(from, to *_Scope) (string, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.count == 0 {
-		return "the resource is already closed"
+		return "the resource is already closed", false
 	}
 	i := slices.IndexFunc(o.regs, func(r *_ownerReg) bool { return r.scope == from })
 	if i < 0 {
-		return "the resource is not owned by the scope it is moved from"
+		return "the resource is not owned by the scope it is moved from", false
+	}
+	if from == to {
+		return "", true
 	}
 	r := &_ownerReg{scope: to}
 	r.owner.Store(o)
 	if !to.tryDefer(r) {
-		return "the target scope has finished closing"
+		return "the target scope has finished closing", false
 	}
 	old := o.regs[i]
 	old.owner.Store(nil)
 	o.regs[i] = r
 	from.compact()
-	return ""
+	return "", slices.ContainsFunc(o.regs, func(r *_ownerReg) bool { return r.scope == from })
 }
 
 // release releases the registration r: the resource closes with the
@@ -1064,13 +1068,17 @@ func _moveResource[R any](r R, from, to *_Scope) R {
 	if o == nil || o._ownerOf() == nil {
 		panic("bork: move: the resource was not opened with an owner (s.Own)")
 	}
-	if why := o._ownerOf().move(from, to); why != "" {
+	why, kept := o._ownerOf().move(from, to)
+	if why != "" {
 		panic("bork: move: " + why)
 	}
 	if h, ok := any(r).(interface{ _borkRebind(*_Scope) }); ok {
 		h._borkRebind(to)
 	}
-	if h, ok := any(r).(interface{ _borkUnbind(*_Scope) }); ok {
+	// Cancellation follows every owning scope: from only stops counting
+	// once it has no registration left (the same scope may be given
+	// under two names, or attached to twice).
+	if h, ok := any(r).(interface{ _borkUnbind(*_Scope) }); ok && !kept {
 		h._borkUnbind(from)
 	}
 	return r

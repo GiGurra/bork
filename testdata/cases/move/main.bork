@@ -36,6 +36,13 @@ fn tempFile(app: Scope) uses io: fs.File | fs.Error {
   }
 }
 
+// The same scope under two names: the move changes nothing.
+fn hop(a: Scope, b: Scope) uses io {
+  c = connect("hop", a)
+  m = move(c, b)
+  println(query(m, "hopped"))
+}
+
 fn main() {
   scope app {
     // Prompt release: app hands the connection to a shorter scope.
@@ -97,6 +104,32 @@ fn main() {
       launch(t, () => println(query(gt, "in a task")))
     }
     println("t ended")
+    // A lambda, a task and a generator may move what they acquire.
+    scope w {
+      viaLambda = () => {
+        own = connect("lambda", app)
+        query(move(own, w), "moved in a lambda")
+      }
+      println(viaLambda())
+      launch(w, () => {
+        own = connect("task", app)
+        _ = move(own, w)
+      })
+      lines = generate[String] {
+        own = connect("generator", app)
+        yield query(move(own, w), "moved in a generator")
+      }
+      println(lines.toList())
+    }
+    // A task that ended with its scope block no longer pins.
+    scope s {
+      p = connect("p", s)
+      scope inner with cleanupTimeout(100) {
+        launch(inner, () => println(query(p, "in a task")))
+      }
+      _ = move(p, app)
+    }
+    hop(app, app)
     match (tempFile(app)) {
       file: fs.File => println(fs.Path(file) != "")
       failure: fs.Error => println(failure)
