@@ -1,0 +1,105 @@
+import "bork/fs"
+
+// A connection that says when it opens and closes.
+type Conn = resource
+
+fn connect(name: String, s: Scope) uses io: Conn unsafe go {
+  import "fmt"
+  fmt.Println("open " + name)
+  return Conn{handle: name, owner: s.Own(func() { fmt.Println("close " + name) })}
+}
+
+fn tryConnect(name: String, s: Scope, ok: Bool) uses io: Conn | String {
+  if (ok) { connect(name, s) } else { "refused" }
+}
+
+fn query(c: Conn, q: String): String unsafe go {
+  return c.handle.(string) + ": " + q
+}
+
+// open acquires into s, so its callers own what it gives.
+fn open(name: String, s: Scope) uses io: Conn {
+  scope setup {
+    c = connect(name, setup)
+    println(query(c, "set up"))
+    move(c, s)
+  }
+}
+
+// A file from bork/fs (acquired through its generic result helper) can
+// be moved out of a short scope too.
+fn tempFile(app: Scope) uses io: fs.File | fs.Error {
+  scope short {
+    f = fs.TempFile(short)?
+    _ = fs.WriteText(f, "kept")?
+    move(f, app)
+  }
+}
+
+fn main() {
+  scope app {
+    // Prompt release: app hands the connection to a shorter scope.
+    scope session {
+      a = connect("a", app)
+      owned = move(a, session)
+      println(query(owned, "in session"))
+    }
+    println("session ended")
+    // Out of a short scope into a longer one.
+    kept = scope short {
+      b = connect("b", short)
+      move(b, app)
+    }
+    println(query(kept, "after short"))
+    // Attached elsewhere too: the move takes only its own registration.
+    scope outer {
+      scope inner {
+        c = connect("c", inner)
+        shared = attach(c, outer)
+        scope w { _ = move(c, w) }
+        println(query(shared, "still attached"))
+      }
+      println("inner ended")
+    }
+    println("outer ended")
+    // Moved on one path only; not used afterwards.
+    scope s {
+      d = connect("d", s)
+      scope w {
+        if (query(d, "x") != "") {
+          moved = move(d, w)
+          println(query(moved, "moved on one path"))
+        }
+      }
+      println("w ended")
+    }
+    // Into and out of owned child scopes.
+    child = openScope(app)
+    e = connect("e", app)
+    inChild = move(e, child.scope)
+    f = connect("f", child.scope)
+    outOfChild = move(f, app)
+    println(query(inChild, "in child"))
+    closeScope(child)
+    println(query(outOfChild, "after child"))
+    // Through a function that acquires, a match, a task, and twice.
+    scope t {
+      g = open("g", app)
+      match (tryConnect("h", app, true)) {
+        h: Conn => {
+          ht = move(h, t)
+          again = move(ht, app)
+          println(query(again, "moved twice"))
+        }
+        reason: String => println(reason)
+      }
+      gt = move(g, t)
+      launch(t, () => println(query(gt, "in a task")))
+    }
+    println("t ended")
+    match (tempFile(app)) {
+      file: fs.File => println(fs.Path(file) != "")
+      failure: fs.Error => println(failure)
+    }
+  }
+}

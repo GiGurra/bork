@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -354,6 +355,9 @@ func (l *lifeChecker) ownerRef(x *VarRef) (lifetime, bool) {
 // callLife checks a call of a declared function: b.scope (scopeOf(b))
 // borrows the child of b, and gives values of it.
 func (l *lifeChecker) callLife(x *Call) lifetime {
+	if x.Func.Prelude && x.Func.Decl.Name == "move" && len(x.Args) == 2 {
+		return l.moveCall(x)
+	}
 	if x.Func.Prelude && x.Func.Decl.Name == "scopeOf" && len(x.Args) == 1 {
 		v, ok := x.Args[0].(*VarRef)
 		if !ok {
@@ -373,7 +377,22 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 		}
 		return life
 	}
-	return l.call(x.Func, true, x.Args, x.ArgOrder)
+	life := l.call(x.Func, true, x.Args, x.ArgOrder)
+	// An acquisition, or an attach to a simple scope, gives a new
+	// registration, which may be moved.
+	var h *handle
+	if x.Func.Prelude && x.Func.Decl.Name == "attach" && len(x.Args) == 2 {
+		if r, ok := x.Args[0].Type().(*Resource); ok {
+			h = l.newHandle(r, x.Args[1], x.Pos())
+		}
+	} else {
+		h = l.acquisition(x)
+	}
+	if h != nil {
+		l.acquired[x] = h
+		life = life.union(lifetime{h})
+	}
+	return life
 }
 
 // block checks a block, its tail with tail. The owners bound in it must
@@ -440,6 +459,7 @@ func (l *lifeChecker) ownerArgs(fn *Func, xargs []Expr, args []lifetime, moved m
 				}
 				continue
 			}
+			l.pin(args[j], xargs[j].Pos(), fmt.Sprintf("parameter %s of %s, declared in %s,", fn.Decl.Params[j].Name, fn.Decl.Name, fn.Decl.Params[t].Name), target, false)
 			if short := l.storeShorter(args[j], target); short != nil {
 				l.errorf(xargs[j].Pos(), "%s may not live as long as %s (it depends on %s), but %s declares parameter %s in %s", describe(xargs[j]), describe(xargs[t]), l.scopeText(short), fn.Decl.Name, fn.Decl.Params[j].Name, fn.Decl.Params[t].Name)
 				args[j] = target
@@ -525,6 +545,11 @@ type branches struct {
 	start map[*Var]goneAt
 	mark  int
 	ends  []map[*Var]goneAt
+	// The moves and pins of handles, likewise (see joinMoves).
+	startMoved map[*handle]movedAt
+	movedEnds  []map[*handle]movedAt
+	startPins  map[*handle][]pinAt
+	pinEnds    []map[*handle][]pinAt
 }
 
 func copyGone(m map[*Var]goneAt) map[*Var]goneAt {
@@ -536,7 +561,7 @@ func copyGone(m map[*Var]goneAt) map[*Var]goneAt {
 }
 
 func (l *lifeChecker) fork() *branches {
-	return &branches{l: l, start: copyGone(l.gone), mark: len(l.bound)}
+	return &branches{l: l, start: copyGone(l.gone), mark: len(l.bound), startMoved: copyMoved(l.moved), startPins: copyPins(l.pins)}
 }
 
 // done ends a branch x (nil for an if's missing else), and starts the
@@ -544,8 +569,12 @@ func (l *lifeChecker) fork() *branches {
 func (b *branches) done(x Expr) {
 	if x == nil || x.Type() != Never {
 		b.ends = append(b.ends, b.l.gone)
+		b.movedEnds = append(b.movedEnds, b.l.moved)
+		b.pinEnds = append(b.pinEnds, b.l.pins)
 	}
 	b.l.gone = copyGone(b.start)
+	b.l.moved = copyMoved(b.startMoved)
+	b.l.pins = copyPins(b.startPins)
 }
 
 func (b *branches) join(pos diag.Pos, what string) {
@@ -568,6 +597,7 @@ func (b *branches) join(pos diag.Pos, what string) {
 		}
 	}
 	b.l.gone = out
+	b.l.moved, b.l.pins = joinMoves(b.startMoved, b.movedEnds, b.startPins, b.pinEnds)
 }
 
 // conditional checks x, which may not run (a match guard, or the right
@@ -575,7 +605,14 @@ func (b *branches) join(pos diag.Pos, what string) {
 func (l *lifeChecker) conditional(x Expr, check func()) {
 	before := copyGone(l.gone)
 	mark := len(l.bound)
+	movedBefore := copyMoved(l.moved)
 	check()
+	// What it moves is possibly moved.
+	for _, h := range l.movesSince(movedBefore) {
+		m := l.moved[h]
+		m.possibly = true
+		l.moved[h] = m
+	}
 	for v := range l.gone {
 		if _, ok := before[v]; !ok && l.bound[v] < mark {
 			l.errorf(x.Pos(), "owned scope %s cannot be closed or passed on in a condition that may not run", v.Name)

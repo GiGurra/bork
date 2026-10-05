@@ -65,7 +65,8 @@ func (h *_borkResourceHandle) _borkRebind(s *_Scope) {
   if source.ctx == s.ctx { return }
  }
  if s.ctx.Err() != nil {
-  if len(h.live) == 0 { h.cause = context.Cause(s.ctx); h.cancel(h.cause) }
+  h.cause = context.Cause(s.ctx)
+  if len(h.live) == 0 { h.cancel(h.cause) }
   return
  }
  source := s.ctx
@@ -93,6 +94,23 @@ func (h *_borkResourceHandle) pruneLocked() {
  h.live = kept
  if cause != nil { h.cause = cause }
  if len(h.live) == 0 && h.cause != nil && h.ctx.Err() == nil { h.cancel(h.cause) }
+}
+// _borkUnbind removes s as a source (the resource was moved away from it).
+// A handle left with no source is cancelled.
+func (h *_borkResourceHandle) _borkUnbind(s *_Scope) {
+ h.mu.Lock()
+ defer h.mu.Unlock()
+ for i, source := range h.live {
+  if source.ctx == s.ctx {
+   source.stop()
+   h.live = append(h.live[:i], h.live[i+1:]...)
+   break
+  }
+ }
+ if len(h.live) == 0 && h.ctx.Err() == nil {
+  if h.cause == nil { h.cause = context.Canceled }
+  h.cancel(h.cause)
+ }
 }
 func (h *_borkResourceHandle) Context() context.Context {
  h.mu.Lock()

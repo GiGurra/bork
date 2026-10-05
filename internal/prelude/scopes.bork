@@ -13,11 +13,23 @@ fn attach[R](r: R, s: Scope): R unsafe go {
   if o == nil || o._ownerOf() == nil {
     panic("bork: attach: the resource was not opened with an owner (s.Own)")
   }
-  if !o._ownerOf().attach(s) {
-    panic("bork: attach: the resource is already closed")
+  if why := o._ownerOf().attach(s); why != "" {
+    panic("bork: attach: " + why)
   }
   if h, ok := any(r).(interface { _borkRebind(*_Scope) }); ok { h._borkRebind(s) }
   return r
+}
+
+// move hands r over from the scope it belongs to here to scope s: that
+// scope no longer keeps it open, and it closes when s closes (or later,
+// if it is attached to other scopes still open). It gives r as a value
+// of s; r, and every value holding it, cannot be used after the move.
+// Only a resource acquired in this function or lambda (not a parameter,
+// or a value from a channel) that no task, channel or Go code may still
+// use can be moved; attach keeps the source owning it too. Cancellation
+// follows s instead of the source scope.
+fn move[R](r: R, s: Scope): R unsafe go {
+  panic("bork: move is compiled by the compiler")
 }
 
 // ScopePolicy configures how a scope ends, chosen with

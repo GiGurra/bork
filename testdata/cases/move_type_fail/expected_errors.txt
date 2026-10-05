@@ -1,0 +1,2 @@
+main.bork:3:10: cannot tell what R is for move here; use it where a function type is expected, or call it in a lambda
+main.bork:4:13: move takes a resource (a value of a resource type, such as File), found Int

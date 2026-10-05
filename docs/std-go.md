@@ -124,6 +124,12 @@ working after the opening scope ends, and also after a shorter attached scope
 ends while the opening scope is still open. Final cleanup still waits for every
 retained owner.
 
+A function given exactly one scope that returns a resource must return a fresh
+registration of it in that scope (made with `s.Own`, or attached to `s`), never
+one that someone else holds, and must not leave a task using it: callers may
+`move` it to another scope. `move` calls `_borkRebind(target)` and then
+`_borkUnbind(source)`, which drops the source's cancellation.
+
 `_borkNewResourceHandle(value any, s)` returns a `*_borkResourceHandle` with
 `Value`, `Context() context.Context`, and `Close()`. `Value` must be initialized
 before publishing the resource and never mutated afterwards. Its stable context

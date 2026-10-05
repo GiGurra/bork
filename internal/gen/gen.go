@@ -1334,6 +1334,19 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if e.Embedded != nil {
 			return nil, g.embedCall(e)
 		}
+		if e.Func.Prelude && e.Func.Decl.Name == "move" && e.MoveFrom != nil {
+			// move(r, to) moves r's registration from the scope the
+			// lifetimes found (MoveFrom).
+			stmts, xs := g.values(append(e.EvaluationArgs(), e.MoveFrom))
+			if xs == nil {
+				return stmts, nil
+			}
+			r, to := xs[0], xs[1]
+			if e.ArgOrder != nil && e.ArgOrder[0] == 1 {
+				r, to = to, r
+			}
+			return stmts, &ast.CallExpr{Fun: ast.NewIdent("_moveResource"), Args: []ast.Expr{r, xs[2], to}}
+		}
 		if e.Func.Prelude && e.Func.Decl.Name == "scopeOf" {
 			// b.scope borrows the owner's scope, leaving b armed.
 			if v, ok := e.Args[0].(*check.VarRef); ok {

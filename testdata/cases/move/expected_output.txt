@@ -1,0 +1,31 @@
+open a
+a: in session
+close a
+session ended
+open b
+b: after short
+open c
+c: still attached
+inner ended
+close c
+outer ended
+open d
+d: moved on one path
+close d
+w ended
+open e
+open f
+e: in child
+close e
+f: after child
+open g
+g: set up
+open h
+h: moved twice
+g: in a task
+close g
+t ended
+true
+close h
+close f
+close b

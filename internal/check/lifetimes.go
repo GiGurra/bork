@@ -32,7 +32,30 @@ import (
 func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 	info.Lifetimes = map[Expr][]string{}
 	info.VarLifetimes = map[*Var][]string{}
-	l := &lifeChecker{
+	var fns []*Func
+	for _, f := range files {
+		for _, fd := range f.Funcs {
+			if fn := info.FuncOf[fd]; fn != nil && fn.Body != nil {
+				fns = append(fns, fn)
+			}
+		}
+	}
+	acquires := summarize(fns, info)
+	l := newLifeChecker(info, diags)
+	l.acquires = acquires
+	for _, fn := range fns {
+		l.function(fn)
+	}
+	for _, binding := range info.PackageBindings {
+		l.function(binding.Boundary)
+	}
+	for _, fn := range info.Tests {
+		l.function(fn)
+	}
+}
+
+func newLifeChecker(info *Info, diags *diag.List) *lifeChecker {
+	return &lifeChecker{
 		info:     info,
 		diags:    diags,
 		env:      map[*Var]lifetime{},
@@ -46,26 +69,20 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 
 		lambdaParams:     map[*Var]lifetime{},
 		deferredCaptures: map[*Var]lifetime{},
-	}
-	for _, f := range files {
-		for _, fd := range f.Funcs {
-			if fn := info.FuncOf[fd]; fn != nil && fn.Body != nil {
-				l.function(fn)
-			}
-		}
-	}
-	for _, binding := range info.PackageBindings {
-		l.function(binding.Boundary)
-	}
-	for _, fn := range info.Tests {
-		l.function(fn)
+
+		moved:    map[*handle]movedAt{},
+		pins:     map[*handle][]pinAt{},
+		origins:  map[*Var]resOrigin{},
+		acquired: map[*Call]*handle{},
+		acquires: map[*Func]int{},
 	}
 }
 
 // A lifetime is a set of scopes: a value is usable while all of them
 // are open. Each scope is a *ScopeBlock, a *Var of a parameter (the
 // scope of a function's or lambda's caller), a *child: the scope an
-// owner variable owns (see owners.go), or forever. The empty lifetime is
+// owner variable owns (see owners.go), a *handle (the registration of a
+// resource with one of those, see moves.go), or forever. The empty lifetime is
 // forever too, but a value that keeps others (an atom started with a
 // value of no scope) says so with forever, which a union with shorter
 // scopes keeps: what is stored in it must still live forever.
@@ -131,6 +148,20 @@ type lifeChecker struct {
 	// lambdaParams holds the lifetimes inferred for the parameters of a
 	// lambda passed to a generic function (see inferParams).
 	lambdaParams map[*Var]lifetime
+	// moved and pins hold the state of handles (see moves.go), origins
+	// the handles each variable may be, acquired the handle of each
+	// acquisition, and loop the innermost loop around the current point
+	// in the current frame. acquires holds the bork functions that
+	// acquire into their Scope parameter (its index); acquireParam is set
+	// while finding out whether the current function does (acquireOK).
+	moved        map[*handle]movedAt
+	pins         map[*handle][]pinAt
+	origins      map[*Var]resOrigin
+	acquired     map[*Call]*handle
+	loop         *For
+	acquires     map[*Func]int
+	acquireParam *Var
+	acquireOK    bool
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -140,6 +171,7 @@ func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
 func (l *lifeChecker) function(fn *Func) {
 	l.cur = fn
 	l.open = nil
+	l.loop = nil
 	l.enclosing = map[*ScopeBlock][]*ScopeBlock{}
 	for _, p := range fn.ParamVars {
 		l.frame[p] = fn
@@ -178,6 +210,7 @@ func (l *lifeChecker) function(fn *Func) {
 		}
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
+	l.verifyAcquires(fn.Body)
 	if fn.Body.Type() != Never {
 		for _, p := range fn.ParamVars {
 			if p.Type == OwnedScope {
@@ -191,6 +224,7 @@ func (l *lifeChecker) function(fn *Func) {
 // a scope opened inside it.
 func (l *lifeChecker) result(x Expr, life lifetime, what string) {
 	for _, s := range life {
+		s = unhandle(s)
 		if s, ok := s.(*ScopeBlock); ok && l.within(s, l.cur) {
 			l.errorf(valuePos(x), "%s cannot return this value: it belongs to scope %s, which ends on line %d", what, s.Var.Name, s.Body.End.Line)
 			return
@@ -207,6 +241,7 @@ func (l *lifeChecker) result(x Expr, life lifetime, what string) {
 // within reports whether the scope or parameter x belongs to the frame
 // f, or to a lambda inside it.
 func (l *lifeChecker) within(x, f any) bool {
+	x = unhandle(x)
 	if c, ok := x.(*child); ok {
 		x = c.owner
 	}
@@ -233,6 +268,9 @@ func (l *lifeChecker) use(x Expr, life lifetime) lifetime {
 		g := l.gone[s.owner]
 		l.errorf(x.Pos(), "%s may be released: it belongs to owned scope %s, which was %s at line %d", describe(x), s.owner.Name, g.how, g.pos.Line)
 		return nil
+	case *handle:
+		l.movedUse(x, s)
+		return nil
 	}
 	return life
 }
@@ -253,6 +291,13 @@ func (l *lifeChecker) closed(life lifetime) any {
 			// Closing an owner closes its children too.
 			if inner := l.closed(l.env[s.owner]); inner != nil {
 				return inner
+			}
+		case *handle:
+			if inner := l.closed(lifetime{s.scope}); inner != nil {
+				return inner
+			}
+			if _, ok := l.moved[s]; ok {
+				return s
 			}
 		}
 	}
@@ -323,6 +368,10 @@ func (l *lifeChecker) funcRef(x *FuncRef) {
 			// What they keep is a value of the element type.
 			keeps = len(x.Inst.TypeArgs) == 1 && l.carriesLife(x.Inst.TypeArgs[0])
 		}
+		if fn.Prelude && fn.Decl.Name == "move" {
+			l.errorf(x.Pos(), "move cannot be used as a function value: a call through a function value is not checked; call it directly")
+			return
+		}
 		if keeps {
 			l.errorf(x.Pos(), "%s cannot be used as a function value here: it keeps its argument %s, which a call through a function value does not check; call it in a lambda instead", x.Name, fn.Decl.Params[i].Name)
 			return
@@ -332,7 +381,7 @@ func (l *lifeChecker) funcRef(x *FuncRef) {
 
 // scopeText names a scope of a lifetime, for messages.
 func (l *lifeChecker) scopeText(x any) string {
-	switch x := x.(type) {
+	switch x := unhandle(x).(type) {
 	case *ScopeBlock:
 		return "scope " + x.Var.Name
 	case *Var:
@@ -346,6 +395,7 @@ func (l *lifeChecker) scopeText(x any) string {
 }
 
 func (l *lifeChecker) scopeOutlives(x, y any) bool {
+	x, y = unhandle(x), unhandle(y)
 	if x == y || x == forever {
 		return true
 	}
@@ -451,6 +501,10 @@ func (l *lifeChecker) expr(x Expr) lifetime {
 func (l *lifeChecker) lifeText(life lifetime) []string {
 	var out []string
 	for _, s := range life {
+		// A handle's scope is in the lifetime too.
+		if _, ok := s.(*handle); ok {
+			continue
+		}
 		out = append(out, l.scopeText(s))
 	}
 	return out
@@ -516,7 +570,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		var life lifetime
 		b := l.fork()
 		for _, arm := range x.Arms {
-			l.bindPattern(arm.Pat, subject)
+			l.bindPattern(arm.Pat, subject, l.originOf(x.X))
 			for _, guard := range arm.Pat.Guards() {
 				l.conditional(guard, func() { l.use(guard, l.expr(guard)) })
 			}
@@ -528,6 +582,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 	case *Return:
 		if x.Value != nil {
 			l.result(x.Value, l.use(x.Value, l.value(x.Value, "return")), l.what())
+			l.verifyAcquires(x.Value)
 		}
 		return nil
 	case *Try:
@@ -556,7 +611,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		l.frame[x.Var] = l.cur
 		before := copyGone(l.gone)
 		mark := len(l.bound)
+		outer := l.loop
+		l.loop = x
 		l.expr(x.Body)
+		l.loop = outer
 		for owner, gone := range l.gone {
 			if _, ok := before[owner]; !ok && l.bound[owner] < mark {
 				l.errorf(gone.pos, "a loop cannot consume owned scope %s from outside its body; borrow its scope instead", owner.Name)
@@ -694,6 +752,7 @@ func (l *lifeChecker) stmt(s Stmt) {
 			life := l.lambda(s.Initializer)
 			payload := life
 			if s.Deferred == AsyncBinding {
+				l.pin(life, s.Pos, "the async binding of "+s.Var.Name, owner, false)
 				if short := l.storeShorter(life, owner); short != nil {
 					l.errorf(s.Pos, "async initializer may not live as long as scope %s (it depends on %s); attach shorter resources to the task scope first", scopeName(s.AsyncScope), l.scopeText(short))
 				}
@@ -726,6 +785,7 @@ func (l *lifeChecker) stmt(s Stmt) {
 		}
 		// A possibly released value can be bound; using it is the error.
 		l.env[s.Var] = l.expr(s.Value)
+		l.origins[s.Var] = l.originOf(s.Value)
 		if len(l.env[s.Var]) > 0 {
 			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
 		}
@@ -740,25 +800,29 @@ func (l *lifeChecker) stmt(s Stmt) {
 
 // bindPattern gives the names a pattern binds the lifetime of the value
 // it matches.
-func (l *lifeChecker) bindPattern(p *Pat, life lifetime) {
+// A name that binds the whole value (x, or x: T) is the resource it may
+// be (o); one inside it is unknown.
+func (l *lifeChecker) bindPattern(p *Pat, life lifetime, o resOrigin) {
 	if p == nil {
 		return
 	}
 	if p.Var != nil {
 		l.env[p.Var] = life
+		l.origins[p.Var] = o
 	}
 	for _, f := range p.Fields {
-		l.bindPattern(f.Pat, life)
+		l.bindPattern(f.Pat, life, resOrigin{})
 	}
 	for _, e := range p.Elems {
-		l.bindPattern(e, life)
+		l.bindPattern(e, life, resOrigin{})
 	}
-	l.bindPattern(p.Rest, life)
-	l.bindPattern(p.Sub, life)
+	l.bindPattern(p.Rest, life, resOrigin{})
+	l.bindPattern(p.Sub, life, o)
 }
 
 func (l *lifeChecker) lambda(x *Lambda) lifetime {
-	saved, savedOpen := l.cur, l.open
+	saved, savedOpen, savedLoop := l.cur, l.open, l.loop
+	l.loop = nil
 	l.parent[x] = l.cur
 	l.cur = x
 	for _, p := range x.Params {
@@ -775,7 +839,7 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	l.captures = append(l.captures, &used)
 	l.result(x.Body, l.use(x.Body, l.expr(x.Body)), "the lambda")
 	l.captures = l.captures[:len(l.captures)-1]
-	l.cur, l.open = saved, savedOpen
+	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
 	// The lambda lives as long as what it uses from outside.
 	var life lifetime
 	for _, s := range used {
@@ -799,6 +863,7 @@ func (l *lifeChecker) mock(m *Mock) {
 	}
 	life := l.use(m.Func.Body, l.expr(m.Func.Body))
 	l.result(m.Func.Body, life, l.what())
+	l.pin(life, m.Pos, "the mock of "+m.Text, nil, true)
 	// Callers give the result the lifetime the target's signature
 	// implies: that of the arguments. So it may not hold what the mock
 	// captured from the test.
@@ -837,6 +902,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	// moved holds the owner variables the call takes, by argument.
 	moved := map[int]*Var{}
 	goneBefore := copyGone(l.gone)
+	movedBefore := copyMoved(l.moved)
 	done := map[int]bool{}
 	for _, i := range indices {
 		a := xargs[i]
@@ -865,6 +931,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 		}
 		life = life.union(args[i])
 	}
+	l.usesMoved(xargs, args, l.movesSince(movedBefore))
 	// The owners its arguments consumed, and those it takes.
 	var consumed []*Var
 	for v := range l.gone {
@@ -921,6 +988,7 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 			args = []lifetime{args[0], args[len(args)-1]}
 			xargs = []Expr{xargs[0], xargs[len(xargs)-1]}
 		}
+		l.pin(args[1], xargs[1].Pos(), "the "+what+" "+describe(xargs[0])+" given it", args[0], false)
 		if short := l.storeShorter(args[1], args[0]); short != nil {
 			hint := "store only values that outlive the " + what + ", or attach a resource to its scope first"
 			if v, ok := short.(*Var); ok && v.Kind == VarParam {
@@ -978,6 +1046,14 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 			if j == i {
 				continue
 			}
+			keeper := "the function given scope " + scopeName(a)
+			if fn != nil {
+				keeper = fn.Decl.Name + ", given scope " + scopeName(a) + ","
+				if fn.Prelude && (fn.Decl.Name == "launch" || fn.Decl.Name == "spawn") {
+					keeper = "the task of " + scopeName(a) + " started"
+				}
+			}
+			l.pin(args[j], b.Pos(), keeper, args[i], false)
 			if short := l.storeShorter(args[j], args[i]); short != nil {
 				callee := "the function"
 				if fn != nil {
@@ -1143,14 +1219,15 @@ func scopeName(x Expr) string {
 }
 
 func (l *lifeChecker) generate(x *Generate) lifetime {
-	saved, savedOpen := l.cur, l.open
+	saved, savedOpen, savedLoop := l.cur, l.open, l.loop
+	l.loop = nil
 	l.parent[x] = l.cur
 	l.cur = x
 	var used lifetime
 	l.captures = append(l.captures, &used)
 	l.expr(x.Body)
 	l.captures = l.captures[:len(l.captures)-1]
-	l.cur, l.open = saved, savedOpen
+	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
 	var life lifetime
 	for _, s := range used {
 		if !l.within(s, x) {

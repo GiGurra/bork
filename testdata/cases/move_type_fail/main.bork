@@ -1,0 +1,6 @@
+fn main() {
+  scope app {
+    mv = move
+    _ = move(1, app)
+  }
+}

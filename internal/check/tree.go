@@ -190,6 +190,9 @@ type Call struct {
 	// Embedded is set for a compile-time bork/embed call.
 	Embedded  *Embedded
 	BuildRead *BuildRead
+	// MoveFrom is, for a call of move, the scope the resource is moved
+	// from: a scope variable, or b.scope of an owner b.
+	MoveFrom Expr
 	// ReceiverCall distinguishes x.method(a) from Type.method(x, a).
 	ReceiverCall bool
 	// TypeArgNames holds, per type parameter, an explicit type argument
