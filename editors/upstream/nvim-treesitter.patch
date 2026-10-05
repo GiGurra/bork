@@ -21,14 +21,14 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = '7b1587cdf5bfd2294631985675f5555f7eacf03e',
++      revision = 'adc07af5a5efbd6801f091042d31190c14e08265',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
 +  },
    bp = {
      install_info = {
-       revision = 'ee641d15390183d7535777947ce0f2f1fbcee69f',
+       revision = '538cc6f91bfac26dd6e6249225f38d7378777248',
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
 index 0000000..dac97f6
