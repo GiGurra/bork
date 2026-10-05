@@ -484,6 +484,9 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 	}
 	later := func(a syntax.Expr) bool {
 		a = debugSyntaxValue(a)
+		if _, tuple := a.(*syntax.TupleLit); tuple {
+			return c.needsContext(a)
+		}
 		_, isLambda := a.(*syntax.Lambda)
 		return isLambda || c.genericFuncRef(a)
 	}

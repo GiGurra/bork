@@ -35,18 +35,39 @@ func (c *checker) tupleLit(e *syntax.TupleLit, want Type) Type {
 		return Invalid
 	}
 	elems := make([]Type, len(e.Elems))
-	for i, elem := range e.Elems {
+	check := func(i int, elem syntax.Expr) {
 		var elemWant Type
 		if ok && expected.Tuple {
-			elemWant = expected.Fields[i].Type
+			elemWant = c.zonk(expected.Fields[i].Type)
 		}
 		elems[i] = c.exprWant(elem, elemWant)
+		if elemWant != nil {
+			c.solve(elemWant, elems[i])
+		}
+	}
+	// As with call arguments, infer ordinary elements before lambdas that
+	// need context. Another position may determine a shared type parameter.
+	for i, elem := range e.Elems {
+		if !c.needsContext(elem) {
+			check(i, elem)
+		}
+	}
+	for i, elem := range e.Elems {
+		if c.needsContext(elem) {
+			check(i, elem)
+		}
 		if elems[i] == Invalid {
 			return Invalid
 		}
 		if !isValue(elems[i]) {
 			c.errorf(elem.Position(), "a tuple cannot hold %s", elems[i])
 			return Invalid
+		}
+		if ok && expected.Tuple {
+			actual, target := c.settle(elems[i], expected.Fields[i].Type)
+			if assignable(actual, target) {
+				elems[i] = target
+			}
 		}
 	}
 	return tupleType(elems)

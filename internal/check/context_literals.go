@@ -456,6 +456,16 @@ func (c *checker) contextNeedsType(x syntax.Expr, want Type) bool {
 			}
 		}
 		return hasContextLiteral(x) && (want == nil || c.open(want))
+	case *syntax.TupleLit:
+		for i, elem := range x.Elems {
+			var elemWant Type
+			if tuple, ok := want.(*Record); ok && tuple.Tuple && i < len(tuple.Fields) {
+				elemWant = tuple.Fields[i].Type
+			}
+			if c.contextNeedsType(elem, elemWant) {
+				return true
+			}
+		}
 	case *syntax.ListLit:
 		var elem Type
 		if t, ok := want.(*List); ok {
@@ -532,6 +542,12 @@ func (c *checker) contextNeedsType(x syntax.Expr, want Type) bool {
 
 func hasContextLiteral(x syntax.Expr) bool {
 	switch x := x.(type) {
+	case *syntax.TupleLit:
+		for _, elem := range x.Elems {
+			if hasContextLiteral(elem) {
+				return true
+			}
+		}
 	case *syntax.ContextName:
 		return true
 	case *syntax.RecordLit:

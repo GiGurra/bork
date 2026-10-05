@@ -11,6 +11,60 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 )
 
+func (g *gen) tupleIdentity(tuple *check.Record) ast.Expr {
+	fields := &ast.FieldList{}
+	for i, field := range tuple.Fields {
+		fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("T" + strconv.Itoa(i))}, Type: g.tupleElementIdentity(field.Type)})
+	}
+	return &ast.StructType{Fields: fields}
+}
+
+func (g *gen) tupleElementIdentity(t check.Type) ast.Expr {
+	fields := &ast.FieldList{}
+	add := func(name string, typ check.Type) {
+		fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent(name)}, Type: g.tupleElementIdentity(typ)})
+	}
+	effects := func(e check.Effects) {
+		fields.List[len(fields.List)-1].Tag = &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote("bork:" + strconv.Quote(e.String()))}
+	}
+	switch t := t.(type) {
+	case *check.Union:
+		for i, member := range t.Members {
+			add("U"+strconv.Itoa(i), member)
+		}
+	case *check.FuncType:
+		for i, param := range t.Params {
+			add("P"+strconv.Itoa(i), param)
+		}
+		add("R", t.Result)
+		effects(t.Effects)
+	case *check.List:
+		return &ast.ArrayType{Elt: g.tupleElementIdentity(t.Elem)}
+	case *check.Map:
+		add("K", t.Key)
+		add("V", t.Value)
+	case *check.Seq:
+		add("S", t.Elem)
+		effects(t.Effects)
+	case *check.Record, *check.Sealed:
+		args := check.TypeArgs(t)
+		if tuple, ok := t.(*check.Record); ok && tuple.Tuple || len(args) == 0 {
+			return g.goType(t)
+		}
+		fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("N")}, Type: g.goType(t)})
+		for i, arg := range args {
+			add("A"+strconv.Itoa(i), arg)
+		}
+	default:
+		if t == check.Never {
+			fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("Never")}, Type: &ast.StructType{Fields: &ast.FieldList{}}})
+			break
+		}
+		return g.goType(t)
+	}
+	return &ast.StructType{Fields: fields}
+}
+
 func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {
 	json := g.info.Named["Json"].(*check.Sealed)
 	array := g.text(g.variantType(json.Variant("Array")))

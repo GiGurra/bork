@@ -90,8 +90,10 @@ provenance from the retained elements and replacement.
 
 A checked tuple lowers to a structural Go anonymous struct with exported generated
 fields `E0`, `E1`, etc., whose field types are the lowered element types. Identical
-bork tuple shapes share the same Go representation; generic tuples substitute their
-element types normally. Tuple results remain a single Go result value. Literals
+bork tuple shapes share the same Go representation. A zero-length phantom field
+preserves identity when Go erases union members or function effects; its component
+types substitute normally in generic tuples. The marker has no runtime value and
+is excluded from tuple rendering, equality and hashing. Tuple results remain a single Go result value. Literals
 and destructuring use temporaries where necessary to preserve evaluation order
 and avoid duplicate execution. Projections lower to `.E0`, etc. Match lowering
 reuses record/variant pattern machinery with positional fields, and debug source

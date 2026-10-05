@@ -1,0 +1,38 @@
+type Status = sealed { Active, Inactive }
+type A = (Int | String,)
+type B = (Bool | Int,)
+type Pure = (() => Int,)
+type Loud = (() uses io => Int,)
+type Config = { pair: (Int, String) = (1, "default") }
+type Wrapper[T] = { value: T }
+type WrappedA = (Wrapper[Int | String],)
+type WrappedB = (Wrapper[Bool | Int],)
+
+fn choose[T](pair: (T, Int), other: T): T { pair.0 }
+fn call[T](callback: ((T) => T,), value: T): T { callback.0 (value) }
+fn apply[T](pair: ((T) => T, T)): T { pair.0 (pair.1) }
+fn defaultPair(pair: (Int, String) = (2, "parameter")): (Int, String) { pair }
+fn unionElement(pair: (Int | String,)): Int {
+  match (pair.0) { Int => 1; String => 2 }
+}
+fn classify(pair: A | B): String { match (pair) { A => "A"; B => "B" } }
+fn classifyFunction(pair: Pure | Loud): String { match (pair) { Pure => "pure"; Loud => "io" } }
+fn classifyWrapped(pair: WrappedA | WrappedB): String { match (pair) { WrappedA => "wrapped A"; WrappedB => "wrapped B" } }
+fn pure(): Int { 1 }
+fn loud() uses io: Int { println("called"); 2 }
+fn main() {
+  println(choose((.Active, 1), Status.Inactive))
+  println(call(((n) => n + 1,), 2))
+  println(apply(((n) => n + 1, 4)))
+  println(defaultPair())
+  println(Config {})
+  println(unionElement((1,)))
+  println(unionElement(("text",)))
+  number: Int | String = 3
+  flag: Bool | Int = true
+  println(classify((number,)), classify((flag,)))
+  println(classifyFunction((pure,)), classifyFunction((loud,)))
+  wa: Wrapper[Int | String] = Wrapper { value: number }
+  wb: Wrapper[Bool | Int] = Wrapper { value: flag }
+  println(classifyWrapped((wa,)), classifyWrapped((wb,)))
+}

@@ -1,0 +1,10 @@
+Status.Active
+3
+5
+(2, "parameter")
+Config { pair: (1, "default") }
+1
+2
+A B
+pure io
+wrapped A wrapped B
