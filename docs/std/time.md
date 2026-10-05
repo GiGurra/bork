@@ -25,7 +25,7 @@ fn main() {
     ticks = time.Tick(s, time.Nanoseconds(1_000_000))
     deadline = time.After(s, time.Nanoseconds(5_000_000))
     match (ticks.receive(s)) {
-      t: time.Instant => println("tick")
+      _: time.Instant => println("tick")
       other => println(other)
     }
     _ = deadline.receive(s)

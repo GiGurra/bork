@@ -6,8 +6,8 @@ fn ms(n: Int): time.Duration {
 
 fn describe(r: time.Instant | Closed | Cancelled): String {
   match (r) {
-    t: time.Instant => "an instant"
-    c: Closed => "closed"
+    _: time.Instant => "an instant"
+    _: Closed => "closed"
     c: Cancelled => s"cancelled: ${c.reason}"
   }
 }
@@ -22,7 +22,7 @@ fn main() {
     println(describe(deadline.receive(s)))
     // Tick delivers until it is closed.
     ticks = time.Tick(s, ms(2))
-    for (i in Seq.range(0, 3)) {
+    for (_ in Seq.range(0, 3)) {
       println(describe(ticks.receive(s)))
     }
     ticks.close()

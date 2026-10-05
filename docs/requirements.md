@@ -1601,13 +1601,8 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, `state`, and
 | Effect  | Allows | Prelude and standard library |
 |---------|--------|------------------------------|
 | `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `args`, `exit`, the `bork/fs` functions that touch the file system, `process.Args`, `process.Exit`, `log.Configure`, `env.Get`, `env.Require`, `env.All`, `env.Load`, `env.LoadJson` |
-<<<<<<< HEAD
 | `net`   | the network | `http.Listen`, `http.Wait`, `http.WaitAny`, `http.WaitAll`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
-| `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep`, HTTP listener admission waits and client Retry-After dates |
-=======
-| `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
 | `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep`, `time.After`, `time.Tick`, HTTP listener admission waits and client Retry-After dates |
->>>>>>> 483f0820 (Add time.After and time.Tick as scope-owned channels)
 | `random` | random numbers | none yet (the future random number functions) |
 | `build` | captured module files inside comptime blocks | `bork/build.ReadString`, `bork/build.ReadBytes` |
 | `state` | state shared between tasks | `current`, `update`, `swap`, channel operations, `cancel`, `cancelled`, `checkpoint`, HTTP admission, `http.AdmissionState`, and client cancellation |
