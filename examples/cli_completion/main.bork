@@ -42,3 +42,16 @@ test "completion can be disabled without disabling positionals" {
     other => { panic(s"Expected disabled completion error, got ${other}") }
   }
 }
+
+type Scalar = { target: String } derive (Decode)
+test "scalar positional completion stops after its argument" {
+  scalarFlags: List[cli.Flag] = [.{ field: "target", positional: true, choices: [.{ value: "alpha" }, .{ value: "beta" }] }]
+  match (cli.Parse[Scalar]("deploy", "", ["__complete", "b"], flags: scalarFlags)) {
+    help: cli.Help => { assert(help.text == "beta\n:4\n") }
+    other => { panic(s"Expected completion, got ${other}") }
+  }
+  match (cli.Parse[Scalar]("deploy", "", ["__complete", "alpha", "b"], flags: scalarFlags)) {
+    help: cli.Help => { assert(help.text == ":4\n") }
+    other => { panic(s"Expected exhausted positional completion, got ${other}") }
+  }
+}

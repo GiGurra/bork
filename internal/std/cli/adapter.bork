@@ -55,6 +55,8 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   }
   configField := ""
   metadata := map[string]FieldSpec{}
+  kinds := map[string]string{}
+  for _, field := range schema { kinds[field.field] = field.kind }
   for _, spec := range specs {
     metadata[spec.field] = spec
     if spec.configFile { configField = spec.field }
@@ -169,7 +171,8 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   if err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
   for _, spec := range specs {
     long := mappingName(spec.long)
-    complete := func(_ *cobra.Command, _ []string, prefix string) ([]string, cobra.ShellCompDirective) {
+    complete := func(_ *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+      if spec.positional && len(args) > 0 && !strings.HasPrefix(kinds[spec.field], "list:") { return nil, cobra.ShellCompDirectiveNoFileComp }
       directive := cobra.ShellCompDirectiveNoFileComp
       if spec.files { directive = cobra.ShellCompDirectiveDefault }
       if spec.directories { directive = cobra.ShellCompDirectiveFilterDirs }
