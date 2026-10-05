@@ -169,7 +169,11 @@ Nothing is picked up from other packages behind your back, and if two instances 
 | `Eq` | `==` | Every type made of comparable parts has it automatically |
 | `Ord` | `compare(a, b)` | Numbers, strings, and runes. Used by `sorted()` |
 | `Show` | `show(x)` | How a value prints. Every type has a default |
-| `Decode`, `Encode` | Conversion from and to JSON-like data | Usually derived |
+
+
+Imported `codec.Decode` and `codec.Encode` convert between typed data and
+`codec.Value`. They are usually derived; import `bork/codec` and select
+`use codec.Defaults` for standard instances.
 
 To change how one of your types prints, declare a `Show` instance for it in the package that declares the type:
 
