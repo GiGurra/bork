@@ -1186,6 +1186,10 @@
         "required": true,
         "types": [
           {
+            "type": "_",
+            "named": false
+          },
+          {
             "type": "identifier",
             "named": true
           }
@@ -3036,6 +3040,10 @@
         "multiple": true,
         "required": false,
         "types": [
+          {
+            "type": "_",
+            "named": false
+          },
           {
             "type": "identifier",
             "named": true
