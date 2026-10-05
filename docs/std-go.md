@@ -118,18 +118,21 @@ imported package using every helper and checks persistence and scope cleanup.
 
 Resource handles may implement `_borkRebind(*_Scope)`. The generated resource
 forwards this optional method to its handle, and `attach(resource, s)` calls it
-after retaining ownership in `s`. Cancellation should then follow the destination
-scope, even after the opening scope ends. The latest attachment selects the
-cancellation source; final cleanup still waits for every retained owner.
+after retaining ownership in `s`. Cancellation should then follow every owning
+scope: the resource is cancelled once all of them are cancelled, so it keeps
+working after the opening scope ends, and also after a shorter attached scope
+ends while the opening scope is still open. Final cleanup still waits for every
+retained owner.
 
 `_borkNewResourceHandle(value any, s)` returns a `*_borkResourceHandle` with
 `Value`, `Context() context.Context`, and `Close()`. `Value` must be initialized
 before publishing the resource and never mutated afterwards. Its stable context
-carries cancellation from the current owner, supports rebinding, and carries no
+carries cancellation from its owners (cancelled once all of them are), supports
+rebinding, and carries no
 scope context values or deadline metadata. Call `Close` in the resource's final
 cleanup. Cancellation is terminal: attaching an already cancelled resource does
 not revive it. This allows Go APIs such as `database/sql.BeginTx` to retain the
-same context while attachment changes its cancellation source.
+same context while attachment adds cancellation sources.
 
 ## Ambient values
 

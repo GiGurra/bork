@@ -14,7 +14,8 @@ Failed writes can be partial. One reader and one writer may run concurrently.
 
 UDP Bind and Send use numeric IP:port addresses; Receive returns a complete
 datagram with its sender, including zero-length data. Resources follow their
-owner's cancellation, with attachment rebinding the cancellation source. Pure
+owners' cancellation: attachment adds a cancellation source, and a resource is
+cancelled once all its owners are. Pure
 host/port helpers parse and join addresses; scope-aware Resolve returns sorted
 IP strings. Timeouts and buffer sizes have checked facts; there is no new syntax.
 TLS can be added later alongside HTTP.
@@ -38,8 +39,7 @@ UDP `Bind(address, scope)` requires a numeric IP:port (port 0 selects a free
 port), and `SocketAddress(socket)` reports it. `Send(socket, numericAddress,
 bytes, timeoutMs = 0)` sends a datagram; `Receive(socket, timeoutMs = 0)` returns
 Packet with Bytes data and sender address, including empty datagrams. All socket
-resources close on owner cancellation; attachment changes their cancellation
-source. At most one reader and one writer may operate concurrently on a resource.
+resources close once every owner is cancelled; attachment adds an owner. At most one reader and one writer may operate concurrently on a resource.
 Timeouts are nonnegative milliseconds up to 9223372036854; zero clears the call's
 deadline and relies on owner cancellation. Socket operations declare net/state
 and calls with timeout support also declare clock. Cancellation is Cancelled;

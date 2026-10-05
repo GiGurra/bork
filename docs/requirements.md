@@ -1427,9 +1427,10 @@ transparent resource move.
 **What `attach` means today.** It adds shared ownership; it does not remove the
 source owner's finalizer. The resource closes only when every retained owner
 ends. Its returned value carries the destination lifetime; older aliases do not
-acquire a new lifetime. For handles using the [rebinding hook](std-go.md), the
-latest attachment selects the cancellation source, even while multiple owners
-remain. An already cancelled resource cannot be revived. Any proposed move must
+acquire a new lifetime. For handles using the [rebinding hook](std-go.md),
+cancellation follows every owner: the resource is cancelled once all the scopes
+it is attached to are cancelled, not when one of them is. An already cancelled
+resource cannot be revived. Any proposed move must
 state both its ownership and cancellation semantics; copying the lifetime of a
 value alone would be insufficient.
 

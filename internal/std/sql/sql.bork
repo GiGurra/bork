@@ -34,7 +34,7 @@ fn OpenSqlite(dataSource: String, s: Scope) uses io + net: Connection | Error { 
 fn OpenPostgres(dataSource: String, s: Scope) uses io + net: Connection | Error { Open("pgx", dataSource, s) }
 
 // Begin opens a transaction in s. Unless Commit succeeds, closing s rolls it
-// back. Attachment rebinds cancellation to the destination scope.
+// back. Attachment adds the destination scope as a cancellation source.
 fn Begin(connection: Connection, s: Scope) uses io + net: Transaction | Error unsafe go {
   import "database/sql"
   import "errors"
