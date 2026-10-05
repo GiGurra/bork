@@ -1,15 +1,16 @@
+import "bork/encoding"
 import "bork/compress"
 import "bork/archive"
 
 fn exercise() uses io: Ok | IoError {
-  payload = utf8Bytes("hello, archive")
+  payload = encoding.Utf8("hello, archive")
   compressed = compress.Gzip(payload)?
-  println(utf8String(compress.Gunzip(compressed)?))
+  println(encoding.ParseUtf8(compress.Gunzip(compressed)?))
   members = [archive.Member { name: "hello.txt", data: payload, directory: false }]
   zipped = archive.Zip(members)?
   tarred = archive.Tar(members)?
   println((archive.ReadZip(zipped)?).map(member => member.name))
-  println((archive.ReadTar(tarred)?).map(member => utf8String(member.data)))
+  println((archive.ReadTar(tarred)?).map(member => encoding.ParseUtf8(member.data)))
 }
 
 fn main() {

@@ -3826,8 +3826,8 @@ See also [roadmap.md](roadmap.md) for the implementation plan.
 `Bytes` is built-in immutable binary data, represented by a distinct named Go
 byte slice. It has content equality and may be a map key. It remains distinct
 from `List[Byte]`, including when both appear in a union. Conversions copy at
-Go boundaries; bork has no mutation operations. Construction uses `bytes` or
-`utf8Bytes`, without new literal syntax. `utf8String` validates UTF-8 and
+Go boundaries; bork has no mutation operations. Construction uses `List[Byte].toBytes()` or
+`encoding.Utf8` from `bork/encoding`, without new literal syntax. `encoding.ParseUtf8` validates UTF-8 and
 returns a union error. Immutable access uses `length`, `isEmpty`, `get`,
 `toList`, `slice` (bounds errors are unions), and `concat`. Printing uses
 `Bytes(lowercase hex)` rather than guessing text.

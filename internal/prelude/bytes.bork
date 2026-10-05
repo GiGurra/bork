@@ -1,19 +1,7 @@
-// Bytes is immutable binary data, distinct from List[Byte]. There is no
-// byte literal: use bytes([toByte(65)]) or utf8Bytes("A").
-fn bytes(values: List[Byte]): Bytes unsafe go {
+// Bytes is immutable binary data, distinct from List[Byte].
+// Copy a byte list with toBytes(); use bork/encoding for UTF-8 text.
+fn (values: List[Byte]) toBytes(): Bytes unsafe go {
   return _borkBytesFrom(values)
-}
-
-// utf8Bytes gives the UTF-8 bytes of text (including embedded zero bytes).
-fn utf8Bytes(text: String): Bytes unsafe go {
-  return _borkBytesFrom([]byte(text))
-}
-
-// utf8String validates before converting: invalid UTF-8 is an error.
-fn utf8String(data: Bytes): String | ParseError unsafe go {
-  import "unicode/utf8"
-  if !utf8.Valid(data) { return ParseError{input: data.String(), message: "invalid UTF-8"} }
-  return string(data)
 }
 
 fn (data: Bytes) length(): Int unsafe go { return int64(len(data)) }

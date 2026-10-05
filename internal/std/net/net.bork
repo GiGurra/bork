@@ -1,3 +1,4 @@
+import "bork/encoding"
 // Package net provides scope-owned TCP and UDP sockets.
 type Connection = resource
 type Server = resource
@@ -125,7 +126,7 @@ fn Read(conn: Connection, size: ReadSize = 4096, timeoutMs: TimeoutMs = 0) uses 
 // Invalid UTF-8 is ParseError; a final bare CR is preserved.
 fn ReadLine(conn: Connection, timeoutMs: TimeoutMs = 0) uses net + state + clock: String | Eof | IoError | Cancelled | ParseError {
   raw = readLine(conn, timeoutMs)?
-  utf8String(raw)
+  encoding.ParseUtf8(raw)
 }
 fn readLine(conn: Connection, timeoutMs: TimeoutMs) uses net + state + clock: Bytes | Eof | IoError | Cancelled unsafe go {
   import "bufio"
@@ -173,7 +174,7 @@ fn Write(conn: Connection, data: Bytes, timeoutMs: TimeoutMs = 0) uses net + sta
   return int64(n)
 }
 fn WriteLine(conn: Connection, line: String, timeoutMs: TimeoutMs = 0) uses net + state + clock: Int | IoError | Cancelled {
-  Write(conn, utf8Bytes(line + "\n"), timeoutMs)
+  Write(conn, encoding.Utf8(line + "\n"), timeoutMs)
 }
 
 // Bind opens a UDP socket. Address accepts a numeric IP and port, including 0.

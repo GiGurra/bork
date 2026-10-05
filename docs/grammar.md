@@ -219,9 +219,9 @@ Source spans follow the lexer's token ends, independently of printed token text.
 - **A program** is a package with `fn main()`, which takes no parameters and returns no value, and may use every runtime effect.
 
 - **Binary data:** `Bytes` is a built-in immutable byte sequence, distinct from
-  `List[Byte]`. There is no special literal: `bytes([toByte(0), toByte(255)])`
-  copies a byte list, and `utf8Bytes("hello")` gives a string's UTF-8 bytes.
-  `utf8String(data)` returns `String | ParseError`, rejecting invalid UTF-8.
+  `List[Byte]`. There is no special literal: `[toByte(0), toByte(255)].toBytes()`
+  copies a byte list. Import `bork/encoding`: `encoding.Utf8("hello")` gives a string's UTF-8 bytes.
+  `encoding.ParseUtf8(data)` returns `String | ParseError`, rejecting invalid UTF-8.
   Methods: `length`, `isEmpty`, `get(index)` (`Option[Byte]`), `toList`,
   `slice(from, to)` (exclusive end, `Bytes | OutOfRange`), and `concat(other)`.
   Equality compares contents; empty sequences are equal. Bytes prints as

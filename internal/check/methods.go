@@ -184,7 +184,15 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	if c.isVariantPath(sel.X) {
 		return nil, false
 	}
-	xt := c.expr(sel.X)
+	var receiverWant Type
+	// A concrete list receiver supplies context for literals such as
+	// [].toBytes(), just as a declared function parameter does.
+	if _, ok := sel.X.(*syntax.ListLit); ok {
+		if fn, _ := c.methodNamed(&List{Elem: Invalid}, sel.Name); fn != nil && len(fn.TypeParams) == 0 {
+			receiverWant = fn.Params[0]
+		}
+	}
+	xt := c.exprWant(sel.X, receiverWant)
 	if t, ok := c.seqMethod(e, sel, xt); ok {
 		return t, true
 	}

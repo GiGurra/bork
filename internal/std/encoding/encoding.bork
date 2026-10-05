@@ -1,5 +1,5 @@
 // Package encoding converts immutable Bytes to and from hex and padded
-// standard or URL-safe base64. Invalid input returns ParseError.
+// standard or URL-safe base64, and UTF-8 text. Invalid input returns ParseError.
 
 fn Hex(data: Bytes): String unsafe go {
   import "encoding/hex"
@@ -35,4 +35,16 @@ fn ParseBase64URL(text: String): Bytes | ParseError unsafe go {
   data, err := base64.URLEncoding.Strict().DecodeString(text)
   if err != nil { return ParseError{input: text, message: err.Error()} }
   return _borkBytesFrom(data)
+}
+
+// Utf8 gives the UTF-8 bytes of text, including embedded zero bytes.
+fn Utf8(text: String): Bytes unsafe go {
+  return _borkBytesFrom([]byte(text))
+}
+
+// ParseUtf8 validates before converting: invalid UTF-8 is an error.
+fn ParseUtf8(data: Bytes): String | ParseError unsafe go {
+  import "unicode/utf8"
+  if !utf8.Valid(data) { return ParseError{input: data.String(), message: "invalid UTF-8"} }
+  return string(data)
 }

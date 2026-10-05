@@ -15,16 +15,16 @@ fn entropyFailures(draw: () uses random => Bool, token: () uses random => Bool, 
   return draw() && token() && password()
 }
 fn exercise() uses io + random + state: Ok | crypto.Error | ParseError {
-  println(crypto.SHA256Hex(utf8Bytes("abc")))
-  println(crypto.SHA512Hex(utf8Bytes("abc")))
+  println(crypto.SHA256Hex(encoding.Utf8("abc")))
+  println(crypto.SHA512Hex(encoding.Utf8("abc")))
   key = encoding.ParseHex("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b")?
-  data = utf8Bytes("Hi There")
+  data = encoding.Utf8("Hi There")
   signature = crypto.HMAC256(key, data)
   println(encoding.Hex(signature))
   println(encoding.Hex(crypto.HMAC512(key, data)))
   println(crypto.VerifyHMAC256(key, data, signature))
-  println(crypto.VerifyHMAC256(key, utf8Bytes("changed"), signature))
-  println(crypto.Equal(signature, bytes([])))
+  println(crypto.VerifyHMAC256(key, encoding.Utf8("changed"), signature))
+  println(crypto.Equal(signature, [].toBytes()))
   println(crypto.RandomBytes(0))
   random = crypto.RandomBytes(16)?
   println(random.length() == 16)

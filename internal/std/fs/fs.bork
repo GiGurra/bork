@@ -1,3 +1,4 @@
+import "bork/encoding"
 // Package fs provides binary files, scoped handles, directories and paths.
 import "bork/time"
 
@@ -91,7 +92,7 @@ fn readAll(file: File) uses io: Bytes | fileFailure unsafe go {
 }
 
 // ReadAllText preserves the prelude's former readAll behavior: raw Go text.
-// For validated UTF-8 use ReadAll followed by utf8String.
+// For validated UTF-8 use ReadAll followed by encoding.ParseUtf8.
 fn ReadAllText(file: File) uses io: String | Error {
   data = ReadAll(file)?
   rawText(data)
@@ -107,7 +108,7 @@ fn writeTo(file: File, data: Bytes) uses io: Int | fileFailure unsafe go {
   return int64(written)
 }
 
-fn WriteText(file: File, text: String) uses io: Int | Error { WriteTo(file, utf8Bytes(text)) }
+fn WriteText(file: File, text: String) uses io: Int | Error { WriteTo(file, encoding.Utf8(text)) }
 
 fn Path(file: File): String unsafe go {
   import "os"

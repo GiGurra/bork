@@ -1,10 +1,11 @@
+import "bork/encoding"
 import "bork/fs"
 
 fn demo(s: Scope) uses io: Ok | fs.Error {
   directory = fs.TempDir(s)?
   root = fs.DirectoryPath(directory)
   path = fs.Join([root, "hello.txt"])
-  fs.Write(path, utf8Bytes("hello\nworld"))?
+  fs.Write(path, encoding.Utf8("hello\nworld"))?
   file = fs.Open(path, s)?
   fs.ForEachLine(file, line => println(line))?
   println((fs.Stat(path)?).size)

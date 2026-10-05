@@ -1,16 +1,16 @@
 import "bork/encoding"
 
 fn main() {
-  payload = utf8Bytes("hello, 世界")
+  payload = encoding.Utf8("hello, 世界")
   println(encoding.Hex(payload))
   println(encoding.Base64(payload))
   match (encoding.ParseBase64(encoding.Base64(payload))) {
-    decoded: Bytes => println(utf8String(decoded))
+    decoded: Bytes => println(encoding.ParseUtf8(decoded))
     error: ParseError => println(error)
   }
   // Binary values can contain bytes that are not valid UTF-8.
-  binary = bytes([toByte(0), toByte(255)])
+  binary = [toByte(0), toByte(255)].toBytes()
   println(binary)
   println(encoding.Base64URL(binary))
-  println(utf8String(binary))
+  println(encoding.ParseUtf8(binary))
 }

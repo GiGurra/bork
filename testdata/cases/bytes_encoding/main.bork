@@ -22,7 +22,7 @@ fn isolated(): Bytes unsafe go {
 fn nilBytes(): Bytes unsafe go { return nil }
 
 fn main() {
-  data = utf8Bytes("hé\x00")
+  data = encoding.Utf8("hé\x00")
   println(data)
   println(data.length())
   println(data.get(0))
@@ -31,18 +31,18 @@ fn main() {
   println(data.toList())
   println(data.slice(0, 1))
   println(data.slice(-1, 0))
-  println(data.concat(utf8Bytes("!")))
-  println(match (utf8String(data)) {
+  println(data.concat(encoding.Utf8("!")))
+  println(match (encoding.ParseUtf8(data)) {
     text: String => text == "hé\x00"
     error: ParseError => false
   })
-  println(bytes([]).isEmpty())
-  println(bytes([]) == utf8Bytes(""))
-  println(data == utf8Bytes("hé\x00"))
-  println(Packet { data: data } == Packet { data: utf8Bytes("hé\x00") })
+  println([].toBytes().isEmpty())
+  println([].toBytes() == encoding.Utf8(""))
+  println(data == encoding.Utf8("hé\x00"))
+  println(Packet { data: data } == Packet { data: encoding.Utf8("hé\x00") })
   println(discriminate(data))
   println(discriminate(data.toList()))
-  println({ data: "found" }.get(utf8Bytes("hé\x00")))
+  println({ data: "found" }.get(encoding.Utf8("hé\x00")))
   println(isolated())
   println(encoding.Hex(data))
   println(encoding.ParseHex("00Ff"))
@@ -50,15 +50,15 @@ fn main() {
   println(encoding.ParseHex("gg"))
   println(encoding.Base64(data))
   println(encoding.ParseBase64(encoding.Base64(data)))
-  binary = bytes([toByte(251), toByte(255)])
+  binary = [toByte(251), toByte(255)].toBytes()
   println(encoding.Base64(binary))
   println(encoding.Base64URL(binary))
   println(encoding.ParseBase64URL(encoding.Base64URL(binary)))
   println(encoding.ParseBase64("!!!!"))
   println(encoding.ParseBase64("Zh=="))
   println(encoding.ParseBase64URL("+/8="))
-  println(utf8String(binary))
-  println(nilBytes() == bytes([]))
+  println(encoding.ParseUtf8(binary))
+  println(nilBytes() == [].toBytes())
   println(nilRoundTrip())
   println(encoding.ParseHex(""))
   println(encoding.ParseBase64(""))

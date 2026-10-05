@@ -1,3 +1,4 @@
+import "bork/encoding"
 import "bork/net"
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
@@ -10,7 +11,7 @@ fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError |
   }
 }
 fn lines(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  written = net.Write(conn, utf8Bytes("first\r\nlast\r"), 1000)?
+  written = net.Write(conn, encoding.Utf8("first\r\nlast\r"), 1000)?
   checkpoint(s)
 }
 fn quiet(conn: net.Connection, s: Scope) uses clock + state: Ok | IoError | Cancelled {
@@ -20,7 +21,7 @@ fn broken(conn: net.Connection, s: Scope): Ok | IoError | Cancelled {
   panic("test handler panic")
 }
 fn partial(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  written = net.Write(conn, utf8Bytes("first"), 1000)?
+  written = net.Write(conn, encoding.Utf8("first"), 1000)?
   match (net.Read(conn, 1, 1000)) {
     data: Bytes => { sent = net.WriteLine(conn, "last", 1000)?; checkpoint(s) }
     end: net.Eof => checkpoint(s)
@@ -41,7 +42,7 @@ fn exercise(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled | 
   server = net.Listen("127.0.0.1:0", s, echo)?
   conn = net.Dial(net.Address(server), s, 1000)?
   println(net.RemoteAddress(conn) == net.Address(server))
-  binary = bytes([toByte(0), toByte(255), toByte(42)])
+  binary = [toByte(0), toByte(255), toByte(42)].toBytes()
   println(net.Write(conn, binary, 1000))
   println(net.Read(conn, 4096, 1000))
   println(net.Read(conn, 4096, 1000))
@@ -63,12 +64,12 @@ fn exercise(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled | 
   partialServer = net.Listen("127.0.0.1:0", s, partial)?
   partialConn = net.Dial(net.Address(partialServer), s, 1000)?
   println(match (net.ReadLine(partialConn, 100)) { error: IoError => true; _ => false })
-  ack = net.Write(partialConn, utf8Bytes("!"), 1000)?
+  ack = net.Write(partialConn, encoding.Utf8("!"), 1000)?
   println(net.ReadLine(partialConn, 1000))
   mixedConn = net.Dial(net.Address(partialServer), s, 1000)?
   println(match (net.ReadLine(mixedConn, 100)) { error: IoError => true; _ => false })
   println(net.Read(mixedConn, 2, 1000))
-  ack2 = net.Write(mixedConn, utf8Bytes("!"), 1000)?
+  ack2 = net.Write(mixedConn, encoding.Utf8("!"), 1000)?
   println(net.ReadLine(mixedConn, 1000))
   quietServer = net.Listen("127.0.0.1:0", s, quiet)?
   scope pending {
@@ -86,7 +87,7 @@ fn exercise(s: Scope) uses io + net + state + clock: Ok | IoError | Cancelled | 
   brokenConn = net.Dial(net.Address(brokenServer), s, 1000)?
   println(match (net.Read(brokenConn, 8, 1000)) { end: net.Eof => true; _ => false })
   attachedSocket = sharedSocket(s)?
-  println(net.Send(sender, net.SocketAddress(attachedSocket), bytes([]), 1000))
+  println(net.Send(sender, net.SocketAddress(attachedSocket), [].toBytes(), 1000))
   println(net.Receive(attachedSocket, 1000)?.data.isEmpty())
   attachedServer = sharedServer(s)?
   attachedConn = sharedConnection(s, net.Address(attachedServer))?

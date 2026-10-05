@@ -1,6 +1,7 @@
+import "bork/encoding"
 fn wantsBytes(data: Bytes) {}
 fn wantsList(data: List[Byte]) {}
 fn main() {
   wantsBytes([toByte(1)])
-  wantsList(utf8Bytes("a"))
+  wantsList(encoding.Utf8("a"))
 }
