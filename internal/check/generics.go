@@ -493,8 +493,14 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 		_, isLambda := a.(*syntax.Lambda)
 		return isLambda || c.genericFuncRef(a)
 	}
+	// A method receiver was already checked before this inference session.
+	// Solve it immediately so an optional receiver can type the callback.
 	var pending []int
 	for i, a := range args {
+		if i == 0 && recv != nil {
+			check(i, a)
+			continue
+		}
 		if !later(a) {
 			if i < len(params) && c.contextNeedsType(a, params[i]) {
 				pending = append(pending, i)

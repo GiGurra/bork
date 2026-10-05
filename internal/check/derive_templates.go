@@ -95,9 +95,10 @@ func (c *checker) declareDeriveTemplates(files []*syntax.File) {
 }
 
 type shapeField struct {
-	field *Field
-	index int
-	owner Type
+	field   *Field
+	index   int
+	owner   Type
+	variant *Variant
 }
 type shapeVariant struct{ variant *Variant }
 type shapeSequence struct {
@@ -308,6 +309,9 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			}
 		case shapeVariant:
 			switch x.Name {
+			case "Type":
+				view := p.variantView(value.variant)
+				return view, view != nil
 			case "name":
 				return value.variant.Name, true
 			case "index":
@@ -318,7 +322,7 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 				}
 				result := make([]any, len(value.variant.Fields))
 				for i, f := range value.variant.Fields {
-					result[i] = shapeField{f, i, value.variant.Parent}
+					result[i] = shapeField{field: f, index: i, owner: value.variant.Parent, variant: value.variant}
 				}
 				return shapeSequence{items: result, element: p.descriptorType("Field", value.variant.Parent)}, true
 			case "facts":
@@ -432,7 +436,7 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			}
 			result := make([]any, len(record.Fields))
 			for i, field := range record.Fields {
-				result[i] = shapeField{field, i, target}
+				result[i] = shapeField{field: field, index: i, owner: target}
 			}
 			return shapeSequence{items: result, element: p.descriptorType("Field", target)}, true
 		case "variants":
@@ -616,6 +620,13 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 				return p.runtimeHelper(x, helper, pkg)
 			}
 		}
+		if selector, ok := x.Fun.(*syntax.Selector); ok && selector.Name == "project" {
+			if value, known := p.eval(selector.X); known {
+				if variant, yes := value.(shapeVariant); yes {
+					return p.variantProject(x, variant.variant)
+				}
+			}
+		}
 		if selector, ok := x.Fun.(*syntax.Selector); ok && selector.Name == "read" {
 			if value, known := p.eval(selector.X); known {
 				if field, yes := value.(shapeField); yes {
@@ -627,7 +638,18 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 					if p.c.info.shapeReadOwners == nil {
 						p.c.info.shapeReadOwners = map[*syntax.Selector]Type{}
 					}
-					p.c.info.shapeReadOwners[read] = field.owner
+					if field.variant != nil {
+						if p.c.info.shapeViewReads == nil {
+							p.c.info.shapeViewReads = map[*syntax.Selector]*shapeViewRead{}
+						}
+						view := p.variantView(field.variant)
+						if view == nil {
+							return &syntax.Block{Pos: x.Pos}
+						}
+						p.c.info.shapeViewReads[read] = &shapeViewRead{variant: field.variant, field: field.field, view: view}
+					} else {
+						p.c.info.shapeReadOwners[read] = field.owner
+					}
 					return read
 				}
 			}
@@ -799,6 +821,12 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 			typ, yes := p.env[written.Name].(Type)
 			var projected *Field
 			if owner, member, ok := strings.Cut(written.Name, "."); ok && member == "Type" {
+				if variant, known := p.env[owner].(shapeVariant); known {
+					view := p.variantView(variant.variant)
+					if view != nil {
+						typ, yes = view, true
+					}
+				}
 				if field, known := p.env[owner].(shapeField); known {
 					typ, yes, projected = field.field.Type, true, field.field
 					if origin, known := p.origins[owner]; known {

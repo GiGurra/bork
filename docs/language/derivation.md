@@ -56,7 +56,14 @@ provider, and exclude computed fields: those require the complete owner and
 are available through `field.read(value)`.
 
 `shape.variants[T]()` describes sealed alternatives, with `name`, `index`, and
-`fields`. `shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
+`fields`. `variant.project(value)` checks the tag and returns an `Option`
+containing a read-only payload view. It evaluates the input once per projection.
+`variant.Type` supplies that view's type for annotations and helper arguments.
+A payload field's `read` requires the matching variant's view; the complete
+sealed value and other variants' views do not suffice. Source code cannot
+construct or update these views. Computed fields read through the proven owner.
+
+`shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
 `shape.Other` in `comptime if` or `comptime match`. `shape.name[T]()` and
 `shape.owner[T]()` expose the target's source name and defining package path.
 Inspecting a foreign private representation remains an error.

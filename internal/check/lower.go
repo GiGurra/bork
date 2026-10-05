@@ -421,6 +421,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			out.SourceCall = x
 			return out
 		}
+		if project := l.info.shapeProjects[x]; project != nil {
+			return l.shapeProjection(x, at, project)
+		}
 		if assertion := l.info.patternAssertions[x]; assertion != nil {
 			return l.assertIs(x, at, assertion)
 		}
@@ -555,6 +558,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		}
 		return out
 	case *syntax.Selector:
+		if read := l.info.shapeViewReads[x]; read != nil {
+			return l.shapeViewRead(x, at, read)
+		}
 		if v := l.info.selectorVariants[x]; v != nil {
 			return &VariantValue{expr: at, Variant: v, Text: writtenText(x), Head: l.constructorHead(x.X), Constraints: l.info.constructorConstraints[x]}
 		}

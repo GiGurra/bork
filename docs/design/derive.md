@@ -213,6 +213,7 @@ The proposal adds AST forms and meaning, not a new keyword inventory.
 | shape.variants[T]() | Ordered sealed variant descriptors |
 | variant.fields | Ordered named fields or positional slots |
 | variant.project(x) | Runtime Option of a typed, read-only view of the matching payload |
+| variant.Type | Payload view type projection for annotations and helper arguments |
 | variant.name, variant.positional, variant.index | Declared tag, payload kind and ordinal |
 | field.Type | Type projection usable in type arguments/annotations during expansion |
 | field.name, field.index, field.doc, field.computed | Declared metadata; slots have index, no wire name |

@@ -311,6 +311,9 @@ type Info struct {
 	selectMatches          map[*syntax.Match]bool
 	assemblyTypes          map[*syntax.TypeExpr]Type
 	deriveSourceKinds      map[diag.Pos]string
+	shapeProjects          map[*syntax.Call]*shapeProjection
+	shapeViewReads         map[*syntax.Selector]*shapeViewRead
+	shapeViews             map[*Variant]*Record
 	shapeReadOwners        map[*syntax.Selector]Type
 	shapeTypeFacts         map[*syntax.TypeExpr][]*Constraint
 	shapeDefaults          map[*syntax.Call]*Field
@@ -1794,6 +1797,14 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 func (c *checker) call(e *syntax.Call, want Type) Type {
 	if t, ok := c.positionalVariantCall(e, want); ok {
 		return t
+	}
+	if project := c.info.shapeProjects[e]; project != nil {
+		actual := c.expr(e.Args[0])
+		if !identical(actual, project.variant.Parent) {
+			c.errorf(e.Pos, "variant.project requires its proven sealed owner %s, found %s", project.variant.Parent, actual)
+			return Invalid
+		}
+		return instantiate(c.preludePkg.TypeNamed("Option"), []Type{project.view})
 	}
 	if field := c.info.shapeDefaults[e]; field != nil {
 		return field.Type

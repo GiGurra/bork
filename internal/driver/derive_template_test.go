@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1369,4 +1370,132 @@ fn main(){println(label(Item{}))}`
 derive instance labels[T]:Label[T]{fn label(x:T):String{"x"}}
 type Pair=(Int,String) derive(Label)
 fn main(){}`, "tuple aliases cannot derive custom classes")
+}
+
+func TestDeriveTemplateSealedViews(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+derive fn text[A,F](field:shape.Field[A],payload:F):String { toString(field.read(payload)) }
+class Render[T]{fn render(x:T):String}
+derive instance render[T]:Render[T]{
+ fn render(x:T):String{
+  comptime for (variant in shape.variants[T]()) {
+   rendered = variant.project(x).map((payload:variant.Type) => {
+    fields:List[String] = [comptime for (field in variant.fields) text[T,variant.Type](field,payload)]
+    variant.name + "(" + fields.join(",") + ")"
+   })
+   if (rendered.isSome()) { return rendered.getOr("") }
+  }
+  "unreachable"
+ }
+}
+type Choice[A]=sealed{Empty, One{item:A}, Pair{number:Int,text:String}} derive(Render)
+fn main(){println(render(Choice[Int].Empty));println(render(Choice.One{item:"hello"}));println(render(Choice[Int].Pair{number:3,text:"world"}))}`
+	for _, annotated := range []bool{false, true} {
+		t.Run(fmt.Sprint(annotated), func(t *testing.T) {
+			program := source
+			if !annotated {
+				program = strings.Replace(program, "(payload:variant.Type)", "payload", 1)
+			}
+			executable, err := buildFixtureOutput(t, validatorFixture(t, program))
+			if err != nil {
+				t.Fatal(err)
+			}
+			output, err := exec.Command(executable).CombinedOutput()
+			if err != nil || string(output) != "Empty()\nOne(hello)\nPair(3,world)\n" {
+				t.Fatalf("sealed view: %s, %v", output, err)
+			}
+		})
+	}
+
+}
+
+func TestDeriveTemplateSealedViewBoundaries(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+class C[T]{fn c(x:T):String}
+derive instance c[T]:C[T]{
+ fn c(x:T):String{
+  comptime for (v in shape.variants[T]()) {
+   comptime for (f in v.fields) { toString(f.read(x)) }
+  }
+  "x"
+ }
+}
+type Choice=sealed{One{item:Int}} derive(C)
+fn main(){}`, "field.read requires the proven payload view")
+	checkPreludeSource(t, `import "bork/shape"
+class C[T]{fn c(x:T):String}
+derive instance c[T]:C[T]{
+ fn c(x:T):String{
+  comptime for (v in shape.variants[T]()) { v.project(1) }
+  "x"
+ }
+}
+type Choice=sealed{One{item:Int}} derive(C)
+fn main(){}`, "variant.project requires its proven sealed owner Choice, found Int")
+	checkPreludeSource(t, `import "bork/shape"
+class C[T]{fn c(x:T):String}
+derive instance c[T]:C[T]{
+ fn c(x:T):String{
+  comptime for (v in shape.variants[T]()) {
+   v.project(x).map(payload => {
+    comptime for (other in shape.variants[T]()) {
+     comptime for (f in other.fields) { toString(f.read(payload)) }
+    }
+    "x"
+   })
+  }
+  "x"
+ }
+}
+type Choice=sealed{One{item:Int},Two{item:Int}} derive(C)
+fn main(){}`, "field.read requires the proven payload view")
+}
+
+func TestDeriveTemplateSealedViewReadOnly(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+class C[T]{fn c(x:T):String}
+derive instance c[T]:C[T]{
+ fn c(x:T):String{
+  comptime for (v in shape.variants[T]()) {
+   v.project(x).map(payload => { payload.copy(value:x); "x" })
+  }
+  "x"
+ }
+}
+type Choice=sealed{One{item:Int}} derive(C)
+fn main(){}`, "cannot copy")
+}
+
+func TestDeriveTemplateSealedViewFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n:Int){n>0}
+fn required(n:Int where positive):String{toString(n)}
+fn traced[T](x:T) uses io:T {println("project");x}
+class Render[T]{fn render(x:T) uses io:String}
+derive instance render[T]:Render[T]{
+ fn render(x:T) uses io:String{
+  comptime for (v in shape.variants[T]()) {
+   rendered = v.project(traced[T](x)).map(payload => {
+    fields:List[String]=[comptime for (f in v.fields) required(f.read(payload))]
+    fields.join(",")
+   })
+   if (rendered.isSome()) {return rendered.getOr("")}
+  }
+  "missing"
+ }
+}
+type Choice=sealed{One{item:Int where positive, lazy next:Int where positive=item+1}} derive(Render)
+fn main(){println(render(Choice.One{item:2}))}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil || string(output) != "project\n2,3\n" {
+		t.Fatalf("payload facts: %s, %v", output, err)
+	}
 }
