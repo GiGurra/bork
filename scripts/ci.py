@@ -17,7 +17,7 @@ LSP_SHARDS = ("lsp-0", "lsp-1", "lsp-2")
 PACKAGE_SHARDS = {}
 DEDICATED = {"driver-examples": "TestExamples"}
 CASE_SHARDS = 3
-INTEGRATION_SHARDS = 4
+INTEGRATION_SHARDS = 5
 SHARDS = ("core", *PACKAGE_SHARDS, *LSP_SHARDS, *(f"driver-cases-{i}" for i in range(CASE_SHARDS)), *DEDICATED,
           *(f"driver-integration-{i}" for i in range(INTEGRATION_SHARDS)))
 TIMINGS = Path(__file__).with_name("ci-timings.json")
