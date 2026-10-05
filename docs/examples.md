@@ -68,10 +68,10 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [process_capture](../examples/process_capture/main.bork) | Capturing stdout and stderr separately |
 | [process_combined](../examples/process_combined/main.bork) | Capturing stdout and stderr together, in order (2>&1) |
 | [process_forward](../examples/process_forward/main.bork) | Forwarding a child's stdin, stdout and stderr |
-| [process_mixed](../examples/process_mixed/main.bork) | Forwarding, capturing or discarding each stream on its own |
+| [process_mixed](../examples/process_mixed/main.bork) | Forwarding, capturing, discarding or writing each stream to a file |
 | [process_exit_codes](../examples/process_exit_codes/main.bork) | Exit codes, signal deaths and checked runs |
 | [process_stdin](../examples/process_stdin/main.bork) | Feeding stdin from text, bytes, a file or a pipe |
-| [process_streaming](../examples/process_streaming/main.bork) | Reading a child's output line by line while it runs |
+| [process_streaming](../examples/process_streaming/main.bork) | Reading output line by line while it runs, and two pipes at once |
 | [process_concurrent](../examples/process_concurrent/main.bork) | Several processes at once, monitored and collected |
 | [process_timeout](../examples/process_timeout/main.bork) | Timeouts, graceful cancellation and Stop |
 | [process_pipeline](../examples/process_pipeline/main.bork) | A pipeline of processes connected by OS pipes |

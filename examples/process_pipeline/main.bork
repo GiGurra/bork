@@ -3,7 +3,8 @@
 import "bork/process"
 
 fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
-  words = process.Start(s, "printf", ["cherry\\napple\\nbanana\\n"], stdout: .Pipe)?
+  // printf repeats its format for each word: one word per line.
+  words = process.Start(s, "printf", ["%s\\n", "cherry", "apple", "banana"], stdout: .Pipe)?
   sorted = process.Start(s, "sort", stdin: .From { reader: words.Stdout() }, stdout: .Pipe)?
   shouted = process.Run(s, "tr", ["a-z", "A-Z"], stdin: .From { reader: sorted.Stdout() })?
   println(shouted.StdoutText().trim())

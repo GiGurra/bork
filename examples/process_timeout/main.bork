@@ -3,7 +3,7 @@
 import "bork/process"
 import "bork/time"
 
-fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
+fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
   slow = scope limited {
     cancelAfter(limited, 200)
     process.Run(limited, "sleep", ["10"])
@@ -14,15 +14,21 @@ fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
     stopped: Cancelled => s"timed out: ${stopped.reason}"
   })
   // cancelGrace sends SIGTERM first, so the child can clean up before SIGKILL.
-  script = "trap 'echo cleaning up; exit 1' TERM; while true; do sleep 0.05; done"
+  // fd 3 keeps the real stderr for the trap; the loop's own stderr is
+  // silenced so the shell does not report the killed sleep.
+  script = "exec 3>&2; trap 'echo cleaning up >&3; exit 1' TERM; echo ready; while true; do sleep 0.05; done 2>/dev/null"
   graceful = scope limited {
-    cancelAfter(limited, 200)
-    process.Run(limited, "/bin/sh", ["-c", script], stdout: .Inherit, cancelGrace: time.Duration { nanos: 2_000_000_000 })
+    child = process.Start(limited, "/bin/sh", ["-c", script], stdout: .Pipe, stderr: .Inherit, cancelGrace: time.Duration { nanos: 2_000_000_000 })?
+    // Wait until the child has set its trap, then cancel its scope, as a
+    // deadline would.
+    _ = child.Stdout().NextLine()?
+    cancel(limited)
+    child.Wait()
   }
   println(match (graceful) {
     result: process.Result => "finished in time"
     error: IoError => error.message
-    stopped: Cancelled => "timed out after a graceful stop"
+    stopped: Cancelled => "stopped after a graceful shutdown"
   })
   // Stop sends SIGTERM to a running child, then SIGKILL after its grace.
   server = process.Start(s, "sleep", ["10"])?
@@ -35,5 +41,6 @@ fn main() {
     done: Ok => {}
     error: IoError => eprintln(error.message)
     stopped: Cancelled => eprintln(stopped.reason)
+    end: Closed => eprintln("the child closed its output early")
   }
 }

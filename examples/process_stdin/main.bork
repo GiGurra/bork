@@ -30,6 +30,9 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled | Closed | fs.Error {
 fn main() {
   match (scope app { run(app) }) {
     done: Ok => {}
-    other => eprintln(s"$other")
+    stopped: Cancelled => eprintln(stopped.reason)
+    end: Closed => eprintln("the greeter stopped early")
+    // fs.Error includes IoError.
+    failure: fs.Error => eprintln(s"$failure")
   }
 }

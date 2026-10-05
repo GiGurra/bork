@@ -1,5 +1,6 @@
-backup still running: true
 backup finished
 index finished
 report finished
+cat still running: true
+cat exited with 0
 ticks received: 4

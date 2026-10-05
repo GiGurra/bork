@@ -6,17 +6,34 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   // stderr: .Stdout merges both streams into the one Reader.
   child = process.Start(s, "/bin/sh", ["-c", script], stdout: .Pipe, stderr: .Stdout)?
   // Lines is a sequence: each line arrives as soon as the child writes it.
-  for (line in child.Stdout().Lines()) {
-    println(s"[child] $line")
+  // A read failure or cancellation is its last element.
+  for (item in child.Stdout().Lines()) {
+    match (item) {
+      line: String => println(s"[child] $line")
+      error: IoError => eprintln(error.message)
+      stopped: Cancelled => eprintln(stopped.reason)
+    }
   }
   println(s"exit code: ${child.Wait()?.code}")
   // NextLine reads one line at a time, then Closed at the end.
   greeter = process.Start(s, "/bin/sh", ["-c", "echo hello; echo world"], stdout: .Pipe)?
   output = greeter.Stdout()
-  println(output.NextLine())
-  println(output.NextLine())
-  println(output.NextLine())
+  for (attempt in [1, 2, 3]) {
+    println(match (output.NextLine()) {
+      line: String => s"line: $line"
+      end: Closed => "end of output"
+      error: IoError => error.message
+      stopped: Cancelled => stopped.reason
+    })
+  }
   _ = greeter.Wait()?
+  // Two piped streams must be read at the same time: a child blocks when a
+  // pipe nobody reads fills up. Read stderr in a task, stdout here.
+  both = process.Start(s, "/bin/sh", ["-c", "echo result; echo diagnostics >&2"], stdout: .Pipe, stderr: .Pipe)?
+  diagnostics = spawn(s, () => both.Stderr().ReadAll())
+  result = both.Stdout().ReadAll()?
+  println(s"stdout: ${result.length()} bytes, stderr: ${await(diagnostics)?.length()} bytes")
+  _ = both.Wait()?
 }
 
 fn main() {

@@ -3,6 +3,7 @@
 [child] test ok
 [child] all steps passed
 exit code: 0
-hello
-world
-Closed {}
+line: hello
+line: world
+end of output
+stdout: 7 bytes, stderr: 12 bytes
