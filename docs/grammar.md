@@ -437,6 +437,6 @@ fast executable reuse with untracked external inputs; it has no arguments. See
 [executable reuse](design/executable-reuse.md). This is manifest syntax and does
 not add a keyword to `.bork` programs.
 
-In a typed match pattern, the arm arrow terminates a top-level tuple type.
-A function type in that position must be enclosed in another pair of parentheses,
-for example `callback: ((Int) => Int) => callback(1)`.
+In a typed match pattern, an arrow after a top-level tuple type separates the
+arm unless a function result type followed by another arrow is present. A function
+type can use an extra pair of parentheses to make the boundary explicit, for example `callback: ((Int) => Int) => callback(1)`.

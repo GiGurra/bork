@@ -120,6 +120,7 @@ fn main() {
   match (value) {
     pair: (Int, String) => pair.0
     callback: ((Int) => Int) => callback(1)
+    ungrouped: (Int) => Int => ungrouped(1)
   }
 }
 ---
@@ -159,6 +160,22 @@ fn main() {
                   (type
                     (qualified_name
                       (identifier)))))))
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (number))))
+        (match_arm
+          (pattern
+            (identifier)
+            (type
+              (function_type
+                (type
+                  (qualified_name
+                    (identifier)))
+                (type
+                  (qualified_name
+                    (identifier))))))
           (call_expression
             (qualified_name
               (identifier))

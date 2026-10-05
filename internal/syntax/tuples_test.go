@@ -76,6 +76,7 @@ func TestTupleTypedMatchArrows(t *testing.T) {
   match (value) {
    pair: (Int, String) => pair.0
    fnValue: ((Int) => Int) => fnValue(1)
+   ungrouped: (Int) => Int => ungrouped(1)
   }
  }`
 	d := &diag.List{}
@@ -86,7 +87,7 @@ func TestTupleTypedMatchArrows(t *testing.T) {
 	match := file.Funcs[0].Body.Tail.(*Match)
 	pair := match.Arms[0].Pattern.(*TypePat).Type
 	fn := match.Arms[1].Pattern.(*TypePat).Type
-	if len(pair.Tuple) != 2 || fn.Func == nil {
+	if len(pair.Tuple) != 2 || fn.Func == nil || match.Arms[2].Pattern.(*TypePat).Type.Func == nil {
 		t.Fatal("arm arrows changed tuple or function annotations")
 	}
 }

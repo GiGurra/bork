@@ -130,7 +130,7 @@ module.exports = grammar({
     match_arm: $ => seq($.pattern, '=>', $._expression),
     pattern: $ => choice($.tuple_pattern, $.parenthesized_pattern, '_', $.number, seq('-', $.number), $.string, $.rune, $.boolean, seq(field('name', choice($._identifier, '_')), ':', alias($._pattern_type, $.type)), seq(choice($.qualified_name, $.context_pattern), optional(seq('{', items($.field_pattern, $), '}'))), seq('[', items(choice($.pattern, seq('...', optional(field('name', $._identifier)))), $), ']')),
     _pattern_type: $ => prec.dynamic(1, seq(choice($.qualified_name, seq('(', $.type, ')'), $.tuple_type, alias($._pattern_function_type, $.function_type)), optional($.type_arguments), optional($.uses_clause), optional($.where_clause), repeat(seq('|', alias($._pattern_type, $.type))))),
-    _pattern_function_type: $ => choice(seq('(', ')', optional($.uses_clause), '=>', $.type), seq('(', optional(comma($.type)), ')', $.uses_clause, '=>', $.type)),
+    _pattern_function_type: $ => seq('(', optional(comma($.type)), ')', optional($.uses_clause), '=>', alias($._pattern_type, $.type)),
     context_pattern: $ => seq('.', field('name', $._identifier)),
     field_pattern: $ => seq(field('name', $._identifier), optional(seq(':', field('pattern', $.pattern)))),
     return_expression: $ => prec.right(seq('return', optional($._expression))),

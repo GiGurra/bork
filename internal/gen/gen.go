@@ -549,6 +549,7 @@ type gen struct {
 	// mock's body found wrong.
 	typeParamNames   map[*check.TypeParam]string
 	typeParamGoTypes map[*check.TypeParam]ast.Expr
+	tupleConversions map[string]*tupleConversion
 	mockErrors       diag.List
 	usesMocks        bool
 	// usesAmbients is set when the program publishes or reads logged

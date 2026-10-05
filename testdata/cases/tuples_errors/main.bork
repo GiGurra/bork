@@ -12,3 +12,5 @@ fn main() {
   ((inner, _), _) = nested
   println((() => 1, 2) == (() => 1, 2))
 }
+
+fn ambiguous(value: (Int,) | (Bool,)) { match (value) { (_,) => 0 } }

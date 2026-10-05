@@ -967,7 +967,7 @@ func (p *parser) typeAtom() *TypeExpr {
 			p.errorf(p.tok().Pos, "expected => after a function type's effects")
 			panic(bailout{})
 		}
-		if p.at(Arrow) && (p.typeDepth != p.patternTypeDepth || len(params) == 0 || uses != nil) {
+		if p.at(Arrow) && (p.typeDepth != p.patternTypeDepth || len(params) == 0 || uses != nil || p.patternFunctionArrow()) {
 			p.next()
 			return &TypeExpr{Pos: pos, Func: &FuncTypeExpr{Params: params, Uses: uses, Result: p.typeExpr()}}
 		}
@@ -1438,6 +1438,29 @@ func (p *parser) matchExpr() Expr {
 		m.TrailingSeparator = p.toks[p.i-2].Kind == Comma || p.toks[p.i-2].Kind == Semi
 	}
 	return m
+}
+
+// A function annotation has a result type followed by a second arm arrow.
+// Speculate without publishing diagnostics so a tuple arm's first arrow remains
+// its separator when what follows is an expression rather than a result type.
+func (p *parser) patternFunctionArrow() (ok bool) {
+	trial := *p
+	trial.diags = &diag.List{}
+	var spans []ExpressionSpan
+	trial.spans = &spans
+	trial.spanSeen = map[Expr][]SourceSpan{}
+	defer func() {
+		if r := recover(); r != nil {
+			if _, bailout := r.(bailout); !bailout {
+				panic(r)
+			}
+			ok = false
+		}
+	}()
+	trial.next()
+	trial.patternTypeDepth = trial.typeDepth + 1
+	trial.typeExpr()
+	return trial.at(Arrow) && trial.diags.Len() == 0
 }
 
 func (p *parser) patternType() *TypeExpr {

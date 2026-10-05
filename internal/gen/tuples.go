@@ -63,7 +63,20 @@ func tupleNamedKey(name string, pkg *check.Package) string {
 func hasTupleRepresentation(t check.Type) bool {
 	switch t := t.(type) {
 	case *check.Record:
-		return t.Tuple
+		if t.Tuple {
+			return true
+		}
+		for _, arg := range t.Args {
+			if hasTupleRepresentation(arg) {
+				return true
+			}
+		}
+	case *check.Sealed:
+		for _, arg := range t.Args {
+			if hasTupleRepresentation(arg) {
+				return true
+			}
+		}
 	case *check.List:
 		return hasTupleRepresentation(t.Elem)
 	case *check.Map:
@@ -160,6 +173,30 @@ func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {
 	return expr
 }
 
+func (g *gen) representationFieldGoType(owner check.Type, field *check.Field, params []*check.TypeParam, args []check.Type, declaration bool) ast.Expr {
+	saved := g.typeParamGoTypes
+	if declaration {
+		overrides := make(map[*check.TypeParam]ast.Expr, len(saved)+len(params))
+		for param, typ := range saved {
+			overrides[param] = typ
+		}
+		for i, param := range params {
+			overrides[param] = g.goType(args[i])
+		}
+		g.typeParamGoTypes = overrides
+	}
+	defer func() { g.typeParamGoTypes = saved }()
+	if original, fieldParams, fieldArgs := tupleFieldDeclaration(owner, field); original != nil {
+		return g.parameterGoType(original.Type, fieldParams, fieldArgs)
+	}
+	return g.goType(field.Type)
+}
+
+type tupleConversion struct {
+	name      *ast.Ident
+	recursive bool
+}
+
 // representationConversion converts the declared Go layout of a generic
 // signature to its checked specialization, or back for an argument. Generic
 // unions can collapse, so retagging sometimes also needs element conversions.
@@ -170,6 +207,17 @@ func (g *gen) representationConversion(value ast.Expr, from, to check.Type, from
 	if g.text(fromGo) == g.text(toGo) && !needsUnionConversion {
 		return value
 	}
+	key := tupleShapeKey(from) + "->" + tupleShapeKey(to) + ":" + g.text(fromGo) + "->" + g.text(toGo)
+	if active := g.tupleConversions[key]; active != nil {
+		active.recursive = true
+		return &ast.CallExpr{Fun: active.name, Args: []ast.Expr{value}}
+	}
+	if g.tupleConversions == nil {
+		g.tupleConversions = map[string]*tupleConversion{}
+	}
+	active := &tupleConversion{name: g.newTmp()}
+	g.tupleConversions[key] = active
+	defer delete(g.tupleConversions, key)
 	repr := func(t check.Type, declaration bool) ast.Expr {
 		if declaration {
 			return g.parameterGoType(t, params, args)
@@ -180,8 +228,20 @@ func (g *gen) representationConversion(value ast.Expr, from, to check.Type, from
 		return g.representationConversion(x, a, b, repr(a, !toDeclaration), repr(b, toDeclaration), params, args, toDeclaration)
 	}
 	closure := func(body []ast.Stmt) ast.Expr {
-		return &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("_tupleValue")}, Type: fromGo}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: toGo}}}}, Body: &ast.BlockStmt{List: body}}, Args: []ast.Expr{value}}
+		signature := &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("_tupleValue")}, Type: fromGo}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: toGo}}}}
+		converter := &ast.FuncLit{Type: signature, Body: &ast.BlockStmt{List: body}}
+		if !active.recursive {
+			return &ast.CallExpr{Fun: converter, Args: []ast.Expr{value}}
+		}
+		input := ast.NewIdent("_tupleInput")
+		wrapper := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{input}, Type: fromGo}}}, Results: signature.Results}, Body: &ast.BlockStmt{List: []ast.Stmt{
+			varDecl(active.name, signature),
+			assign(active.name, converter),
+			&ast.ReturnStmt{Results: []ast.Expr{&ast.CallExpr{Fun: active.name, Args: []ast.Expr{input}}}},
+		}}}
+		return &ast.CallExpr{Fun: wrapper, Args: []ast.Expr{value}}
 	}
+
 	x := ast.NewIdent("_tupleValue")
 	var declaredUnion *check.Union
 	if toDeclaration {
@@ -223,6 +283,51 @@ func (g *gen) representationConversion(value ast.Expr, from, to check.Type, from
 			return closure([]ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{result}}})
 		}
 	}
+	nominalFields := func(root ast.Expr, sourceOwner, targetOwner check.Type, sourceFields, targetFields []*check.Field, typ ast.Expr) ast.Expr {
+		result := &ast.CompositeLit{Type: typ}
+		for i, field := range sourceFields {
+			target := targetFields[i]
+			fromFieldGo := g.representationFieldGoType(sourceOwner, field, params, args, !toDeclaration)
+			toFieldGo := g.representationFieldGoType(targetOwner, target, params, args, toDeclaration)
+			read := g.fieldRead(root, field)
+			converted := g.representationConversion(read, field.Type, target.Type, fromFieldGo, toFieldGo, params, args, toDeclaration)
+			if field.Lazy {
+				g.usesLazy = true
+				callback := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: toFieldGo}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{converted}}}}}
+				converted = &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent("_lazyNew"), Index: toFieldGo}, Args: []ast.Expr{callback}}
+			}
+			result.Elts = append(result.Elts, &ast.KeyValueExpr{Key: name(field.Name), Value: converted})
+		}
+		return result
+	}
+	if a, ok := from.(*check.Record); ok && !a.Tuple {
+		if b, ok := to.(*check.Record); ok && !b.Tuple {
+			return closure([]ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{nominalFields(x, a, b, a.Fields, b.Fields, toGo)}}})
+		}
+	}
+	if a, ok := from.(*check.Sealed); ok {
+		if b, ok := to.(*check.Sealed); ok {
+			variantGoType := func(v *check.Variant, declaration bool) ast.Expr {
+				typ := repr(v.Parent, declaration)
+				switch typ := typ.(type) {
+				case *ast.Ident:
+					typ.Name += "_" + v.Name
+				case *ast.IndexListExpr:
+					typ.X.(*ast.Ident).Name += "_" + v.Name
+				}
+				return typ
+			}
+			v := ast.NewIdent("_tupleVariant")
+			sw := &ast.TypeSwitchStmt{Assign: define(v, &ast.TypeAssertExpr{X: x}), Body: &ast.BlockStmt{}}
+			for i, source := range a.Variants {
+				target := b.Variants[i]
+				result := nominalFields(v, a, b, source.Fields, target.Fields, variantGoType(target, toDeclaration))
+				sw.Body.List = append(sw.Body.List, &ast.CaseClause{List: []ast.Expr{variantGoType(source, !toDeclaration)}, Body: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{result}}}})
+			}
+			return closure(append([]ast.Stmt{sw}, unreachable()...))
+		}
+	}
+
 	if a, ok := from.(*check.List); ok {
 		if b, ok := to.(*check.List); ok {
 			result, i := ast.NewIdent("_tupleResult"), ast.NewIdent("i")

@@ -226,7 +226,7 @@ For unfinished code there is `todo()`, described under [development helpers](tes
 Previous: [Types](types.md) · Next: [Collections](collections.md) · [All pages](../README.md#the-language)
 
 A tuple pattern also selects the unique compatible tuple member of a union. If
-several tuple members have the same arity, annotate elements to select a member,
+several tuple members have the same arity, use a typed element or an explicit variant to select a member,
 for example `(number: Int, text: String)`. A typed tuple arm can use
-`pair: (Int, String) => pair.0`. Put a function type in an extra pair of
-parentheses in a typed pattern: `callback: ((Int) => Int) => callback(1)`.
+`pair: (Int, String) => pair.0`. A function type can use extra
+parentheses to make its two arrows clear: `callback: ((Int) => Int) => callback(1)`.

@@ -6,3 +6,5 @@ main.bork:8:3: cannot match a 3-element tuple pattern against (Int, String)
 main.bork:10:3: tuple binding requires a tuple value, found (Int, String) | Bool
 main.bork:12:4: tuple binding requires a tuple value, found (Int, String) | Bool
 main.bork:13:24: cannot compare values of type (() => Int, Int) with == (functions, scopes, and resources have no ==)
+main.bork:16:41: value of type Int is not used (function ambiguous returns no value)
+main.bork:16:57: tuple pattern matches several tuple types in (Int,) | (Bool,); annotate its elements to select one

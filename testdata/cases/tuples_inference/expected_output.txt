@@ -22,5 +22,9 @@ reordered
 (13,) (14,)
 (15,)
 (2, 1)
+20
+16
+(18,)
+16
 pure io
 wrapped A wrapped B

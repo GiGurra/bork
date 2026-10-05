@@ -374,21 +374,39 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 
 func (c *checker) tuplePatternCompatible(p *syntax.TuplePat, rec *Record) bool {
 	for i, elem := range p.Elems {
-		field := rec.Fields[i].Type
-		switch elem := elem.(type) {
-		case *syntax.TypePat:
-			t := c.resolveType(elem.Type)
-			if !assignable(t, field) {
-				return false
+		if !c.tupleElementCompatible(elem, rec.Fields[i].Type) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *checker) tupleElementCompatible(elem syntax.Pattern, field Type) bool {
+	if typed, ok := elem.(*syntax.TypePat); ok {
+		return assignable(c.resolveType(typed.Type), field)
+	}
+	if union, ok := field.(*Union); ok {
+		for _, member := range union.Members {
+			if c.tupleElementCompatible(elem, member) {
+				return true
 			}
-		case *syntax.LitPat:
-			if !tupleLiteralCompatible(elem.Value, field) {
-				return false
-			}
-		case *syntax.TuplePat:
-			nested, ok := field.(*Record)
-			if !ok || !nested.Tuple || len(nested.Fields) != len(elem.Elems) || !c.tuplePatternCompatible(elem, nested) {
-				return false
+		}
+		return false
+	}
+	switch elem := elem.(type) {
+	case *syntax.LitPat:
+		return tupleLiteralCompatible(elem.Value, field)
+	case *syntax.TuplePat:
+		nested, ok := field.(*Record)
+		return ok && nested.Tuple && len(nested.Fields) == len(elem.Elems) && c.tuplePatternCompatible(elem, nested)
+	case *syntax.VariantPat:
+		if len(elem.Path) > 0 {
+			owner := c.typeNamed(elem.Path[0])
+			if owner != nil {
+				if base := genericBase(owner); base == owner {
+					return instanceIn(field, base) != nil
+				}
+				return assignable(owner, field)
 			}
 		}
 	}
