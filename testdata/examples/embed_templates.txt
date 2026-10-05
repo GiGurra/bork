@@ -1,0 +1,4 @@
+["about", "home"]
+home: 14 bytes
+about: 15 bytes
+missing: embedded file not found
