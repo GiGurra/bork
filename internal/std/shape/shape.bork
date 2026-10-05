@@ -11,11 +11,20 @@ type Field[T] = private {
   doc: String
   computed: Bool
   hasDefault: Bool
+  facts: List[Fact[T]]
+}
+// Fact keeps the resolved obligation identity during expansion. Its text is
+// display metadata, not a predicate to parse or a promise of validation.
+type Fact[T] = private {
+  text: String
+  path: String
+  independent: Bool
 }
 type Variant[T] = private {
   name: String
   index: Int
   fields: List[Field[T]]
+  facts: List[Fact[T]]
 }
 // fields exposes record fields in declaration order during derive expansion.
 fn fields[T](): List[Field[T]] unsafe go { panic("shape.fields requires a derive template") }
@@ -27,5 +36,7 @@ fn kind[T](): Kind unsafe go { panic("shape.kind requires a derive template") }
 fn name[T](): String unsafe go { panic("shape.name requires a derive template") }
 // owner returns the target's defining package path during derive expansion.
 fn owner[T](): String unsafe go { panic("shape.owner requires a derive template") }
+// facts exposes the target's invariants and constrained head obligations.
+fn facts[T](): List[Fact[T]] unsafe go { panic("shape.facts requires a derive template") }
 // fail rejects the target at its derive request with a compile-time message.
 fn fail(message: String): Never unsafe go { panic("shape.fail requires a derive template") }

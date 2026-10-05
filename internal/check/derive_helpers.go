@@ -68,6 +68,8 @@ func (p *deriveExpansion) metadataType(value any) Type {
 		return p.descriptorType("Field", value.owner)
 	case shapeVariant:
 		return p.descriptorType("Variant", value.variant.Parent)
+	case shapeFact:
+		return p.descriptorType("Fact", value.owner)
 	case shapeSequence:
 		if value.element != nil {
 			return &List{Elem: value.element}

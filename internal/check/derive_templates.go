@@ -302,6 +302,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 				return value.field.Decl != nil && value.field.Decl.Default != nil, true
 			case "Type":
 				return value.field.Type, true
+			case "facts":
+				return p.factSequence(x.Pos, value.owner, value.field, value.field.Constraints)
 			}
 		case shapeVariant:
 			switch x.Name {
@@ -318,6 +320,17 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 					result[i] = shapeField{f, i, value.variant.Parent}
 				}
 				return shapeSequence{items: result, element: p.descriptorType("Field", value.variant.Parent)}, true
+			case "facts":
+				return p.factSequence(x.Pos, value.variant.Parent, nil, value.variant.Constraints)
+			}
+		case shapeFact:
+			switch x.Name {
+			case "text":
+				return p.factText(x.Pos, value.constraint)
+			case "path":
+				return value.constraint.Path, true
+			case "independent":
+				return value.field != nil && !value.field.Computed && !value.constraint.HasSiblingArgs(), true
 			}
 		}
 	case *syntax.Unary:
@@ -402,8 +415,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		if member == "" {
 			return nil, false
 		}
-		target := p.typeArg(x.TypeArgs[0])
-		if (member == "fields" || member == "variants") && !p.accessible(target, x.Pos) {
+		target, headFacts := p.projectedTypeArg(x.TypeArgs[0])
+		if (member == "fields" || member == "variants" || member == "facts") && !p.accessible(target, x.Pos) {
 			return nil, false
 		}
 		switch member {
@@ -444,6 +457,8 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			default:
 				return shapeEnum("Other"), true
 			}
+		case "facts":
+			return p.factSequence(x.Pos, target, nil, targetShapeFacts(target), headFacts)
 		case "name":
 			switch target := target.(type) {
 			case *Record:
@@ -873,7 +888,7 @@ func (c *checker) expandDeriveBodies() {
 
 func metadataValue(value any) bool {
 	switch value.(type) {
-	case shapeField, shapeVariant, shapeSequence, shapeEnum, Type:
+	case shapeField, shapeVariant, shapeFact, shapeSequence, shapeEnum, Type:
 		return true
 	}
 	return false

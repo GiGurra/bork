@@ -1,8 +1,9 @@
 package check
 
 import (
-	"github.com/GiGurra/bork/internal/syntax"
 	"strings"
+
+	"github.com/GiGurra/bork/internal/syntax"
 )
 
 // Callable arity and argument labels do not depend on a target's shape. Check

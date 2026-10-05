@@ -41,6 +41,14 @@ into a checked field read; the value must have the descriptor's owner type.
 The projected type retains the field's facts. Descriptor values stay within
 template expansion and cannot escape into runtime results.
 
+`field.facts`, `variant.facts`, and `shape.facts[T]()` expose ordered obligation
+descriptors. A fact has display `text`, a nested traversal `path`, and an
+`independent` flag. The flag is true only for a stored-field obligation that
+does not depend on siblings; computed-field and whole-value obligations require
+the complete value. Fact handles retain resolved predicate and argument
+identities. Their display strings do not validate values or establish proofs.
+The target sequence includes declared invariants and constrained head facts.
+
 `shape.variants[T]()` describes sealed alternatives, with `name`, `index`, and
 `fields`. `shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
 `shape.Other` in `comptime if` or `comptime match`. `shape.name[T]()` and

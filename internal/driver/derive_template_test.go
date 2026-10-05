@@ -1011,3 +1011,132 @@ derive instance c[T]: C[T] {
 type Item = {} derive(C)
 fn main() { println(c(Item {}, -1)) }`, "where clauses on the methods of classes and instances are not supported yet")
 }
+
+func TestDeriveTemplateFactDescriptors(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Facts[T] {
+ fn fields(x: T): List[List[String]]
+ fn independent(x: T): List[List[String]]
+ fn invariants(x: T): List[String]
+}
+derive fn description[T](fact: shape.Fact[T]): String { fact.text + fact.path }
+derive instance facts[T]: Facts[T] {
+ fn fields(x: T): List[List[String]] {
+  [comptime for (field in shape.fields[T]())
+    [comptime for (fact in field.facts) description[T](fact)]]
+ }
+ fn independent(x: T): List[List[String]] {
+  [comptime for (field in shape.fields[T]())
+    [comptime for (fact in field.facts) comptime if (fact.independent) fact.text]]
+ }
+ fn invariants(x: T): List[String] {
+  [comptime for (fact in shape.facts[T]()) fact.text]
+ }
+}
+pred positive(n: Int) { n > 0 }
+pred atLeast(n: Int, lo: Int) { n >= lo }
+pred ordered(r: Row) { r.hi >= r.lo }
+type Row = {
+ lo: Int where positive
+ hi: Int where atLeast(lo)
+ values: List[Int where positive]
+ lazy next: Int where positive = lo + 1
+} where ordered derive(Facts)
+fn main() {
+ row = Row { lo: 1, hi: 2, values: [3] }
+ println(fields(row))
+ println(independent(row))
+ println(invariants(row))
+}`
+	dir := validatorFixture(t, source)
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	for _, expected := range []string{
+		`[["positive"], ["atLeast(lo)"], ["positive.[]"], ["positive"]]`,
+		`[["positive"], [], ["positive"], []]`,
+		`["ordered"]`,
+	} {
+		if !strings.Contains(string(output), expected) {
+			t.Fatalf("want %s in: %s", expected, output)
+		}
+	}
+}
+
+func TestDeriveTemplateVariantFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Facts[T] { fn facts(x: T): List[List[String]] }
+derive instance facts[T]: Facts[T] {
+ fn facts(x: T): List[List[String]] {
+  [comptime for (variant in shape.variants[T]()) [comptime for (fact in variant.facts) fact.text]]
+ }
+}
+pred valid(x: Choice) { true }
+type Choice = sealed { Full { n: Int } where valid, Empty } derive(Facts)
+fn main() { println(facts(Choice.Full { n: 1 })) }`
+	dir := validatorFixture(t, source)
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), `[["valid"], []]`) {
+		t.Fatalf("variant facts: %s", output)
+	}
+}
+
+func TestDeriveTemplateFactHandleDoesNotEscape(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+class Facts[T] { fn facts(x: T): List[shape.Fact[T]] }
+derive instance facts[T]: Facts[T] {
+ fn facts(x: T): List[shape.Fact[T]] { shape.facts[T]() }
+}
+pred valid(x: Row) { true }
+type Row = {} where valid derive(Facts)
+fn main() {}`, "cannot escape")
+}
+
+func TestDeriveTemplateConstrainedHeadFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Facts[T] { fn facts(x: T): List[String] }
+derive instance facts[T]: Facts[T] {
+ fn facts(x: T): List[String] { [comptime for (fact in shape.facts[T]()) fact.text] }
+}
+pred original(x: Row) { true }
+pred additional(x: Row) { true }
+type Row = {} where original
+type Checked = Row where additional
+derive Facts for Checked
+fn main() { row: Checked = Row {}; println(facts(row)) }`
+	dir := validatorFixture(t, source)
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), `["original", "additional"]`) {
+		t.Fatalf("constrained head facts: %s", output)
+	}
+}
+
+func TestDeriveTemplateFactPrivacy(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+fn main() { println(shape.facts[Int]()) }`
+	checkPreludeSource(t, source, "only during derive template expansion")
+}
