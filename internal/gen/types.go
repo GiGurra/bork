@@ -772,11 +772,13 @@ type _Scope struct {
 // Root scopes inherit process-signal cancellation; nested scopes inherit
 // their parent's cancellation. The first SIGINT or SIGTERM cancels; the
 // handler is then removed, so a second one terminates the program at once.
+// Copies within half a second count as the first: a signal sent to a
+// process group can also arrive forwarded by a parent such as bork run.
 var _mainContext = _signalContext()
 
 func _signalContext() context.Context {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	go func() { <-ctx.Done(); stop() }()
+	go func() { <-ctx.Done(); time.Sleep(500 * time.Millisecond); stop() }()
 	return ctx
 }
 

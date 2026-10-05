@@ -10,11 +10,10 @@ import (
 )
 
 // Run starts cmd and waits for it. While it runs, SIGINT and SIGTERM no
-// longer stop the caller, so it cannot exit and orphan the program:
-//   - SIGINT from a terminal's Ctrl+C already reaches the whole foreground
-//     process group, program included, so it is not forwarded; sending it
-//     again would count as a second Ctrl+C.
-//   - SIGTERM is aimed at the caller alone, so it is forwarded.
+// longer stop the caller, so it cannot exit and orphan the program; they
+// are forwarded to the program instead. A signal sent to the whole process
+// group, such as a terminal's Ctrl+C, then reaches the program twice in
+// quick succession; generated programs count both as one.
 func Run(cmd *exec.Cmd) error {
 	signals := make(chan os.Signal, 4)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
@@ -28,9 +27,7 @@ func Run(cmd *exec.Cmd) error {
 		for {
 			select {
 			case sig := <-signals:
-				if sig == syscall.SIGTERM {
-					_ = cmd.Process.Signal(sig)
-				}
+				_ = cmd.Process.Signal(sig)
 			case <-done:
 				return
 			}

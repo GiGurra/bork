@@ -6,9 +6,12 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -42,9 +45,16 @@ fn main() uses io + clock {
 }
 `
 
-// startRunSignal runs bork run on source in a process group of its own, as
-// a shell runs a foreground job, and waits until the program is running.
-func startRunSignal(t *testing.T, source string, unsafeGo bool) (*exec.Cmd, <-chan string, int) {
+// runSignalJob is bork run in a process group of its own, as a shell runs
+// a foreground job.
+type runSignalJob struct {
+	cmd   *exec.Cmd
+	lines <-chan string
+	group int
+}
+
+// writeRunSignal writes a package with source and returns its directory.
+func writeRunSignal(t *testing.T, source string, unsafeGo bool) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.bork"), []byte(source), 0o644); err != nil {
@@ -56,40 +66,49 @@ func startRunSignal(t *testing.T, source string, unsafeGo bool) (*exec.Cmd, <-ch
 			t.Fatal(err)
 		}
 	}
+	return dir
+}
+
+// startRunSignal starts bork run with args and waits for an output line
+// (stdout or stderr) containing ready.
+func startRunSignal(t *testing.T, ready string, args ...string) *runSignalJob {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
-	cmd := exec.CommandContext(ctx, cliExecutable(t, false), "run", dir)
+	cmd := exec.CommandContext(ctx, cliExecutable(t, false), append([]string{"run"}, args...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// An orphaned program would hold stdout open forever.
+	// An orphaned program would hold the output open forever.
 	cmd.WaitDelay = 5 * time.Second
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd.Stderr = os.Stderr
+	reader, writer := io.Pipe()
+	cmd.Stdout, cmd.Stderr = writer, writer
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	group := cmd.Process.Pid
-	t.Cleanup(func() { _ = syscall.Kill(-group, syscall.SIGKILL); _ = cmd.Wait() })
-	lines := make(chan string, 16)
+	job := &runSignalJob{cmd: cmd, group: cmd.Process.Pid}
+	t.Cleanup(func() { _ = syscall.Kill(-job.group, syscall.SIGKILL); _ = cmd.Wait(); _ = writer.Close() })
+	lines := make(chan string, 64)
 	go func() {
 		defer close(lines)
-		scanner := bufio.NewScanner(stdout)
+		scanner := bufio.NewScanner(reader)
 		for scanner.Scan() {
 			lines <- scanner.Text()
 		}
 	}()
-	if line := nextLine(t, lines); line != "ready" {
-		t.Fatalf("program did not start: %q", line)
+	job.lines = lines
+	for {
+		if line := job.next(t); strings.Contains(line, ready) {
+			return job
+		}
 	}
-	return cmd, lines, group
 }
 
-func nextLine(t *testing.T, lines <-chan string) string {
+func (job *runSignalJob) next(t *testing.T) string {
 	t.Helper()
 	select {
-	case line := <-lines:
+	case line, ok := <-job.lines:
+		if !ok {
+			t.Fatal("output ended")
+		}
 		return line
 	case <-time.After(time.Minute):
 		t.Fatal("no output")
@@ -97,11 +116,28 @@ func nextLine(t *testing.T, lines <-chan string) string {
 	}
 }
 
-// waitRunSignal waits for bork run to exit and checks that it left no
-// process of its group behind.
-func waitRunSignal(t *testing.T, cmd *exec.Cmd, group int) int {
+// program is the pid of the program bork run runs: the other member of
+// its process group.
+func (job *runSignalJob) program(t *testing.T) int {
 	t.Helper()
-	err := cmd.Wait()
+	out, err := exec.Command("pgrep", "-g", strconv.Itoa(job.group)).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range strings.Fields(string(out)) {
+		if pid, err := strconv.Atoi(field); err == nil && pid != job.group {
+			return pid
+		}
+	}
+	t.Fatal("no program process")
+	return 0
+}
+
+// wait waits for bork run to exit and checks that it left no process of
+// its group behind.
+func (job *runSignalJob) wait(t *testing.T) int {
+	t.Helper()
+	err := job.cmd.Wait()
 	code := 0
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
@@ -110,7 +146,7 @@ func waitRunSignal(t *testing.T, cmd *exec.Cmd, group int) int {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for syscall.Kill(-group, 0) == nil {
+	for syscall.Kill(-job.group, 0) == nil {
 		if time.Now().After(deadline) {
 			t.Fatal("bork run exited but left its program running")
 		}
@@ -119,50 +155,84 @@ func waitRunSignal(t *testing.T, cmd *exec.Cmd, group int) int {
 	return code
 }
 
-func TestRunInterruptCancelsProgramAndWaits(t *testing.T) {
-	t.Parallel()
-	cmd, out, group := startRunSignal(t, runSignalCooperative, false)
-	// Ctrl+C reaches the whole foreground process group.
-	if err := syscall.Kill(-group, syscall.SIGINT); err != nil {
-		t.Fatal(err)
-	}
-	if line := nextLine(t, out); line != "cancelled" {
+// expectCancelled checks that the program saw one cancellation and ended
+// normally, and bork run with it.
+func (job *runSignalJob) expectCancelled(t *testing.T) {
+	t.Helper()
+	if line := job.next(t); line != "cancelled" {
 		t.Fatalf("program output %q", line)
 	}
-	if code := waitRunSignal(t, cmd, group); code != 0 {
+	if code := job.wait(t); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
 }
 
-func TestRunForwardsTerminateToProgram(t *testing.T) {
+func TestRunInterruptCancelsProgramAndWaits(t *testing.T) {
 	t.Parallel()
-	cmd, out, group := startRunSignal(t, runSignalCooperative, false)
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	job := startRunSignal(t, "ready", writeRunSignal(t, runSignalCooperative, false))
+	// Ctrl+C reaches the whole foreground process group, and bork run also
+	// forwards its copy: the program must count the two as one.
+	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
 		t.Fatal(err)
 	}
-	if line := nextLine(t, out); line != "cancelled" {
-		t.Fatalf("program output %q", line)
+	job.expectCancelled(t)
+}
+
+func TestRunTerminateToGroupCountsOnce(t *testing.T) {
+	t.Parallel()
+	job := startRunSignal(t, "ready", writeRunSignal(t, runSignalCooperative, false))
+	if err := syscall.Kill(-job.group, syscall.SIGTERM); err != nil {
+		t.Fatal(err)
 	}
-	if code := waitRunSignal(t, cmd, group); code != 0 {
-		t.Fatalf("exit %d", code)
+	job.expectCancelled(t)
+}
+
+func TestRunForwardsSignalsToProgram(t *testing.T) {
+	t.Parallel()
+	for _, sig := range []syscall.Signal{syscall.SIGINT, syscall.SIGTERM} {
+		t.Run(sig.String(), func(t *testing.T) {
+			t.Parallel()
+			job := startRunSignal(t, "ready", writeRunSignal(t, runSignalCooperative, false))
+			if err := job.cmd.Process.Signal(sig); err != nil {
+				t.Fatal(err)
+			}
+			job.expectCancelled(t)
+		})
 	}
 }
 
 func TestRunSecondInterruptStopsUnresponsiveProgram(t *testing.T) {
 	t.Parallel()
-	cmd, _, group := startRunSignal(t, runSignalStubborn, true)
-	if err := syscall.Kill(-group, syscall.SIGINT); err != nil {
+	job := startRunSignal(t, "ready", writeRunSignal(t, runSignalStubborn, true))
+	program := job.program(t)
+	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
 		t.Fatal(err)
 	}
-	// The first one only cancels, which this program ignores.
-	time.Sleep(500 * time.Millisecond)
-	if syscall.Kill(-group, 0) != nil {
-		t.Fatal("first interrupt stopped the program or bork run")
+	// The first interrupt only cancels, which this program ignores. Wait
+	// out the window in which copies of it count as the same one.
+	time.Sleep(time.Second)
+	if err := syscall.Kill(program, 0); err != nil {
+		t.Fatalf("first interrupt stopped the program: %v", err)
 	}
-	if err := syscall.Kill(-group, syscall.SIGINT); err != nil {
+	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
 		t.Fatal(err)
 	}
-	if code := waitRunSignal(t, cmd, group); code != 128+int(syscall.SIGINT) {
+	if code := job.wait(t); code != 128+int(syscall.SIGINT) {
 		t.Fatalf("exit %d, want %d", code, 128+int(syscall.SIGINT))
+	}
+}
+
+func TestRunInterruptStopsHTTPServer(t *testing.T) {
+	t.Parallel()
+	root, err := filepath.Abs(filepath.Join("..", "..", "examples", "http_server"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := startRunSignal(t, "listening", root, "--", "serve", "127.0.0.1:0")
+	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if code := job.wait(t); code != 0 {
+		t.Fatalf("exit %d", code)
 	}
 }
