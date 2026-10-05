@@ -134,7 +134,7 @@ func (c *checker) deriveInstance(request *deriveRequest) {
 	var args []Type
 	for _, p := range typeParamsOf(t) {
 		tp := &TypeParam{Name: p.Name, Decl: p.Decl}
-		if !IsGoStruct(cl) {
+		if !IsGoStruct(cl) && cl.Template == nil {
 			tp.Bounds = []*Class{cl}
 		}
 		tps = append(tps, tp)
@@ -149,6 +149,11 @@ func (c *checker) deriveInstance(request *deriveRequest) {
 	if request.written != nil && len(request.written.Args) > 0 {
 		digest := sha256.Sum256([]byte(TypeText(t, nil)))
 		name += fmt.Sprintf("_%x", digest[:4])
+	}
+	if cl.Template != nil {
+		for _, tp := range tps {
+			tp.Bounds = c.seededDeriveBounds(name, tp)
+		}
 	}
 	for _, ci := range c.pkg.instances {
 		if ci.Name == name {
@@ -171,6 +176,14 @@ func (c *checker) deriveInstance(request *deriveRequest) {
 		fn := &Func{Decl: fd, Pkg: c.pkg, Prelude: request.prelude, Of: ci, TypeParams: tps, Result: subst(m.Result, bound), Effects: m.Effects, Derived: &Derived{}}
 		for _, p := range m.Params {
 			fn.Params = append(fn.Params, subst(p, bound))
+		}
+		if cl.Template != nil {
+			fn.Derived = nil
+			fn.TemplatePkg = cl.Template.Pkg
+			fn.TemplateScope = ci
+			fn.Decl = c.expandDeriveMethod(request, ci, fn, head)
+			fd = fn.Decl
+			c.info.ExpandedFunctions = append(c.info.ExpandedFunctions, fn)
 		}
 		fn.ParamConstraints = make([][]*Constraint, len(fn.Params))
 		ci.Methods = append(ci.Methods, fn)

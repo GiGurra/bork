@@ -31,20 +31,18 @@ index fca90f6..39dfeb3 100644
        revision = 'ee641d15390183d7535777947ce0f2f1fbcee69f',
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
-index 0000000..4250463
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
 @@ -0,0 +1,4 @@
 +[(block) (record_type) (record_literal) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (instances_declaration)
-+ (list_literal) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
++ (list_literal) (list_comprehension) (map_literal) (tuple_literal) (tuple_type) (tuple_pattern)
 + (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..3ccd4dd
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,44 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -88,13 +86,13 @@ index 0000000..3ccd4dd
 +
 +(specialized_variant_pattern name: (identifier) @type.enum.variant)
 +(specialized_variant_pattern (qualified_name (identifier) @type))
++(list_comprehension name: (identifier) @variable)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
-index 0000000..a4f6423
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
 @@ -0,0 +1,7 @@
-+[(block) (record_literal) (record_type) (list_literal) (map_literal)
++[(block) (record_literal) (record_type) (list_literal) (list_comprehension) (map_literal)
 + (tuple_literal) (tuple_type) (tuple_pattern)
 + (parameters) (type_arguments) (match_expression) (select_expression) (class_declaration)
 + (instance_declaration) (instances_declaration)] @indent.begin
@@ -103,7 +101,6 @@ index 0000000..a4f6423
 +(go_content) @indent.ignore
 diff --git a/runtime/queries/bork/injections.scm b/runtime/queries/bork/injections.scm
 new file mode 100644
-index 0000000..5bc64d4
 --- /dev/null
 +++ b/runtime/queries/bork/injections.scm
 @@ -0,0 +1,2 @@
@@ -111,10 +108,9 @@ index 0000000..5bc64d4
 + (#set! injection.language "go"))
 diff --git a/runtime/queries/bork/locals.scm b/runtime/queries/bork/locals.scm
 new file mode 100644
-index 0000000..52246cc
 --- /dev/null
 +++ b/runtime/queries/bork/locals.scm
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,26 @@
 +(block) @local.scope
 +(function_declaration) @local.scope
 +(parameter name: (identifier) @local.definition)
@@ -138,3 +134,6 @@ index 0000000..52246cc
 +(field_pattern name: (identifier) @local.definition !pattern)
 +((pattern . (qualified_name . (identifier) @local.definition .) .)
 + (#match? @local.definition "^[a-z]"))
++
++(list_comprehension) @local.scope
++(list_comprehension name: (identifier) @local.definition)

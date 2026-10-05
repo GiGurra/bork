@@ -1,0 +1,31 @@
+// Package shape describes a target during typed derive expansion. Descriptors
+// cannot escape into runtime values; compile-time controls consume them.
+type Kind = sealed {
+  Record
+  Sealed
+  Other
+}
+type Field[T] = private {
+  name: String
+  index: Int
+  doc: String
+  computed: Bool
+  hasDefault: Bool
+}
+type Variant[T] = private {
+  name: String
+  index: Int
+  fields: List[Field[T]]
+}
+// fields exposes record fields in declaration order during derive expansion.
+fn fields[T](): List[Field[T]] unsafe go { panic("shape.fields requires a derive template") }
+// variants exposes sealed alternatives in declaration order.
+fn variants[T](): List[Variant[T]] unsafe go { panic("shape.variants requires a derive template") }
+// kind identifies the target representation during derive expansion.
+fn kind[T](): Kind unsafe go { panic("shape.kind requires a derive template") }
+// name returns the target's source type name during derive expansion.
+fn name[T](): String unsafe go { panic("shape.name requires a derive template") }
+// owner returns the target's defining package path during derive expansion.
+fn owner[T](): String unsafe go { panic("shape.owner requires a derive template") }
+// fail rejects the target at its derive request with a compile-time message.
+fn fail(message: String): Never unsafe go { panic("shape.fail requires a derive template") }

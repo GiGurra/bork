@@ -483,3 +483,39 @@ func TestStandaloneDerive(t *testing.T) {
 		}
 	}
 }
+
+func TestDeriveTemplateSyntax(t *testing.T) {
+	d := &diag.List{}
+	file := Parse("derive.bork", []byte(`import "bork/shape"
+class Labels[T] { fn labels(x: T): List[String] }
+derive instance labels[T]: Labels[T] {
+ fn labels(x: T): List[String] {
+  [comptime for (f in shape.fields[T]()) comptime if (!f.computed) f.name]
+ }
+}
+derive fn helper[T](): String {
+ comptime if (true) { "yes" } else { "no" }
+}
+fn main() {}`), d)
+	if d.Len() != 0 {
+		t.Fatal(d.Error())
+	}
+	if len(file.Templates) != 1 || len(file.DeriveHelpers) != 1 || len(file.Funcs) != 1 {
+		t.Fatalf("declarations: %+v", file)
+	}
+	body := file.Templates[0].Methods[0].Body.Tail.(*ListLit)
+	loop := body.Elems[0].(*For)
+	if !loop.Comptime || !loop.Comprehension || !loop.Body.Tail.(*If).Comptime {
+		t.Fatal("staging markers missing")
+	}
+	for _, source := range []string{
+		`fn main() { comptime for (x in []) {} }`,
+		`fn main() { [comptime for (x in []) x] }`,
+	} {
+		d := &diag.List{}
+		Parse("runtime.bork", []byte(source), d)
+		if d.Len() == 0 {
+			t.Fatalf("accepted staged control outside a template: %s", source)
+		}
+	}
+}

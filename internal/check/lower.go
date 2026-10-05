@@ -103,6 +103,9 @@ func (c *checker) lower(files []*syntax.File) {
 			}
 		}
 	}
+	for _, fn := range c.info.ExpandedFunctions {
+		l.function(fn)
+	}
 	for _, binding := range c.info.PackageBindings {
 		binding.Value = l.stmt(binding.Decl).(*Let)
 		l.roots = append(l.roots, binding.Value.Value)

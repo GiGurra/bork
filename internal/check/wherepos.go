@@ -23,6 +23,9 @@ func (c *checker) unappliedWheres(files []*syntax.File) {
 			continue
 		}
 		c.inFile(f)
+		copy := *f
+		copy.Templates, copy.DeriveHelpers = nil, nil
+		f = &copy
 		if !c.pkg.Root {
 			// Imported tests are not checked as part of the root package.
 			copy := *f
@@ -32,6 +35,10 @@ func (c *checker) unappliedWheres(files []*syntax.File) {
 		c.forTypeExprs(reflect.ValueOf(f), func(t *syntax.TypeExpr, where string) {
 			c.unappliedIn(t, where)
 		})
+	}
+	for _, fn := range c.info.ExpandedFunctions {
+		c.pkg = fn.TemplatePkg
+		c.forTypeExprs(reflect.ValueOf(fn.Decl), func(t *syntax.TypeExpr, where string) { c.unappliedIn(t, where) })
 	}
 }
 

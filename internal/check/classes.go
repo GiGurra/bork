@@ -13,12 +13,13 @@ import (
 // (`class Show[T] { fn show(x: T): String }`). Its methods are called
 // like functions; which instance a call uses is decided by the types.
 type Class struct {
-	Name    string
-	Decl    *syntax.ClassDecl
-	Pkg     *Package
-	Prelude bool
-	Param   *TypeParam
-	Methods []*Func // each has Class set, and Param as its type parameter
+	Template *DeriveTemplate
+	Name     string
+	Decl     *syntax.ClassDecl
+	Pkg      *Package
+	Prelude  bool
+	Param    *TypeParam
+	Methods  []*Func // each has Class set, and Param as its type parameter
 }
 
 func (c *Class) String() string { return c.Name }
@@ -749,6 +750,10 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 	}
 	if tp, ok := t.(*TypeParam); ok && c.inScopeParam(tp) {
 		if tp.HasBound(class) {
+			c.discoverBound(tp, class)
+			return &Dict{Class: class, Type: t, Param: tp}
+		}
+		if c.discoverBound(tp, class) {
 			return &Dict{Class: class, Type: t, Param: tp}
 		}
 		c.errorf(pos, "%s needs an instance of %s for %s; require one: [%s: %s]", c.useText(), class.Name, tp.Name, tp.Name, class.Name)
@@ -773,8 +778,18 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		return d
 	}
 	var matches []*Dict
+	var candidateBounds map[*Dict][]deriveClause
+	var initialBounds []deriveClause
+	if c.deriveDiscovery != nil {
+		candidateBounds = map[*Dict][]deriveClause{}
+		initialBounds = append([]deriveClause(nil), c.deriveDiscovery.clauses...)
+	}
 	var partial []*ClassInstance // the head fits, but a bound does not
-	for _, ci := range c.pkg.inScope {
+	scope := c.pkg
+	if c.fn != nil && c.fn.TemplatePkg != nil {
+		scope = c.fn.TemplateScope.Pkg
+	}
+	for _, ci := range scope.inScope {
 		if ci.Class != class {
 			continue
 		}
@@ -785,11 +800,25 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		if !ok {
 			continue
 		}
+		if c.deriveDiscovery != nil {
+			c.deriveDiscovery.clauses = append([]deriveClause(nil), initialBounds...)
+		}
 		d := &Dict{Class: class, Type: t, Inst: ci, TypeArgs: args}
 		fits := true
 		for i, tp := range ci.TypeParams {
 			for _, b := range tp.Bounds {
+				var origins []deriveToken
+				if c.deriveDiscovery != nil {
+					origins = c.deriveDiscovery.origins
+					if ci.Derived != "" && ci.Class.Template != nil {
+						key := deriveBoundKey(ci.Pkg, ci.Name, tp.Name)
+						c.deriveDiscovery.origins = append(origins, deriveToken{key, classIdentity(b)})
+					}
+				}
 				sub := c.dictQuiet(b, args[i], depth+1)
+				if c.deriveDiscovery != nil {
+					c.deriveDiscovery.origins = origins
+				}
 				if sub == nil {
 					fits = false
 				}
@@ -798,13 +827,22 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		}
 		if fits {
 			matches = append(matches, d)
+			if c.deriveDiscovery != nil {
+				candidateBounds[d] = append([]deriveClause(nil), c.deriveDiscovery.clauses...)
+			}
 		} else {
 			partial = append(partial, ci)
 		}
 	}
+	if c.deriveDiscovery != nil {
+		c.deriveDiscovery.clauses = initialBounds
+	}
 	matches = mostSpecific(matches)
 	switch {
 	case len(matches) == 1:
+		if c.deriveDiscovery != nil {
+			c.deriveDiscovery.clauses = candidateBounds[matches[0]]
+		}
 		return matches[0]
 	case len(matches) > 1:
 		names := make([]string, len(matches))
@@ -822,6 +860,9 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 		c.errorf(pos, "more than one instance of %s for %s is in scope: %s; %s", class.Name, t, strings.Join(names, " and "), advice)
 		return nil
 	case len(partial) == 1:
+		if c.deriveDiscovery != nil {
+			return nil
+		}
 		// Report why the one candidate does not fit.
 		ci := partial[0]
 		args, _ := matchHead(ci, t)
@@ -957,7 +998,7 @@ type Derived struct {
 
 // derivable reports whether instances of class can be derived.
 func derivable(class *Class) bool {
-	return IsCodec(class, "Decode") || IsCodec(class, "Encode") || IsGoStruct(class)
+	return class.Template != nil || IsCodec(class, "Decode") || IsCodec(class, "Encode") || IsGoStruct(class)
 }
 
 // A provisional derivation is available while defaults are checked, but a

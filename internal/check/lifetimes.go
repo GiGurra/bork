@@ -42,6 +42,7 @@ func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 			}
 		}
 	}
+	fns = append(fns, info.ExpandedFunctions...)
 	acquires, passes := summarize(fns, info)
 	l := newLifeChecker(info, diags)
 	l.acquires, l.passes = acquires, passes

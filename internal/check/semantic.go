@@ -106,6 +106,27 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 		s.name(derive.Pos, "derive", SemanticToken{Kind: "keyword"})
 		s.name(derive.ClassPos, derive.Class, SemanticToken{Kind: "class", Readonly: true})
 	}
+	for _, helper := range file.DeriveHelpers {
+		s.declaration(helper.Pos, helper.Name, "function", false)
+		s.typeParams(helper.TypeParams)
+		for _, parameter := range helper.Params {
+			s.name(parameter.Pos, parameter.Name, SemanticToken{Kind: "parameter", Declaration: true, Readonly: true})
+		}
+	}
+	for _, template := range file.Templates {
+		s.declaration(template.Pos, template.Name, "variable", false)
+		s.name(template.ClassPos, template.Class, SemanticToken{Kind: "class", Readonly: true})
+		s.typeParams(template.TypeParams)
+		for _, method := range template.Methods {
+			s.declaration(method.Pos, method.Name, "method", false)
+			for _, parameter := range method.Params {
+				s.name(parameter.Pos, parameter.Name, SemanticToken{Kind: "parameter", Declaration: true, Readonly: true})
+			}
+		}
+	}
+	for position, kind := range info.deriveSourceKinds {
+		s.name(position, info.sourceNames[position], SemanticToken{Kind: kind, Readonly: true})
+	}
 	for declaration, fn := range info.FuncOf {
 		if declaration.Pos.File != file.Path || declaration.ScriptMain {
 			continue

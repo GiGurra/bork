@@ -41,3 +41,4 @@
 
 (specialized_variant_pattern name: (identifier) @variant)
 (specialized_variant_pattern (qualified_name (identifier) @type))
+(list_comprehension name: (identifier) @variable)

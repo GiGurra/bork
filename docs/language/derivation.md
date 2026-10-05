@@ -1,0 +1,75 @@
+# Derivation templates
+
+A class's package can declare how to derive its instances with `derive instance`.
+The template has one target parameter and implements the class's methods.
+Each request expands the template for its target, then checks the resulting
+Bork code with the ordinary type, effect, fact and lifetime rules.
+
+```bork
+import "bork/shape"
+
+class Labels[T] {
+  fn labels(x: T): List[String]
+}
+
+derive instance labels[T]: Labels[T] {
+  fn labels(x: T): List[String] {
+    [comptime for (field in shape.fields[T]()) comptime if (!field.computed) field.name]
+  }
+}
+
+type Item = { name: String, count: Int } derive (Labels)
+type Box[A] = { value: A }
+derive Labels for Box
+
+fn main() {
+  println(labels(Item { name: "one", count: 1 }))
+  println(labels(Box { value: true }))
+}
+```
+
+`comptime for` expands one body per descriptor. Each field has its own type,
+so `field.Type` can appear in annotations and type arguments. The list form
+collects one expression per field, and its optional `comptime if` filters fields.
+An empty sequence produces an empty list. Ordinary `for` and `if` retain their
+runtime meaning; the prefix states which stage should select or repeat code.
+A runtime loop over descriptors reports an error offering to add `comptime`.
+
+`shape.fields[T]()` returns record fields in declaration order. A field exposes
+`name`, `index`, `doc`, `computed`, and `hasDefault`. `field.read(value)` expands
+into a checked field read; the value must have the descriptor's owner type.
+The projected type retains the field's facts. Descriptor values stay within
+template expansion and cannot escape into runtime results.
+
+`shape.variants[T]()` describes sealed alternatives, with `name`, `index`, and
+`fields`. `shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
+`shape.Other` in `comptime if` or `comptime match`. `shape.name[T]()` and
+`shape.owner[T]()` expose the target's source name and defining package path.
+Inspecting a foreign private representation remains an error.
+Use `shape.fail("explanation")` in a selected branch to reject an unsupported
+target. Its diagnostic points to the derive request and identifies the template
+operation.
+
+Template code can call ordinary functions. Dictionary requirements inferred
+from those calls become bounds on a generic derived instance; unused fields
+create no bounds. A class's template does not automatically require that same
+class for every field.
+
+Declare reusable expansion helpers with `derive fn`. They resolve names in
+their author's package and can receive descriptors as parameters. Helpers with
+runtime arguments specialize into checked ordinary functions; pure metadata
+helpers can provide compile-time conditions or scalar values. Declared class
+bounds and facts still apply. Helpers cannot contain unsafe Go or be called
+from runtime source. The metadata evaluator supports String, Bool and Int literals, bindings, descriptor
+properties, sequence `length()` and `isEmpty()` queries, scalar equality,
+String concatenation, Boolean operations, staged conditions and matches, and calls to
+helpers using these operations. Other computations report an unsupported
+compile-time value when a staged control needs their result. Expansion has a
+shared work and depth limits and does not execute
+the native evaluator used by ordinary `comptime { ... }` blocks.
+
+A standalone request follows the [ownership and instance import rules](types.md):
+it belongs to the type's or class's package, and other packages import the
+resulting instance with `use`. The class name itself is not an instance import.
+
+The [derive_labels example](../../examples/derive_labels/README.md) is runnable.

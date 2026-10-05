@@ -10,24 +10,33 @@ import (
 // Requirements are checked before bodies, including bodyless class signatures.
 func (c *checker) checkFunctionRequirements() {
 	for _, fn := range c.info.FuncOf {
-		if fn.Decl.Requires == nil {
-			continue
-		}
-		c.fn, c.pkg, c.inPrelude = fn, fn.Pkg, fn.Prelude
-		c.useTypeParams(fn)
-		if fn.ParamConstraints == nil {
-			fn.ParamConstraints = make([][]*Constraint, len(fn.Params))
-		}
-		c.scopes = []map[string]*local{{}}
-		for i, p := range fn.Decl.Params {
-			c.scopes[0][p.Name] = &local{typ: fn.Params[i], decl: p, used: true}
-		}
-		x := fn.Decl.Requires
-		if c.expr(x) != Bool {
-			c.errorf(x.Position(), "function-level where must be Bool")
-		}
-		c.requirementSyntax(x)
+		c.checkFunctionRequirement(fn)
 	}
+	c.fn, c.inPrelude = nil, false
+	c.useTypeParams(nil)
+}
+
+func (c *checker) checkFunctionRequirement(fn *Func) {
+	if fn.Decl.Requires == nil {
+		return
+	}
+	c.fn, c.pkg, c.inPrelude = fn, fn.Pkg, fn.Prelude
+	if fn.TemplatePkg != nil {
+		c.pkg = fn.TemplatePkg
+	}
+	c.useTypeParams(fn)
+	if fn.ParamConstraints == nil {
+		fn.ParamConstraints = make([][]*Constraint, len(fn.Params))
+	}
+	c.scopes = []map[string]*local{{}}
+	for i, p := range fn.Decl.Params {
+		c.scopes[0][p.Name] = &local{typ: fn.Params[i], decl: p, used: true}
+	}
+	x := fn.Decl.Requires
+	if c.expr(x) != Bool {
+		c.errorf(x.Position(), "function-level where must be Bool")
+	}
+	c.requirementSyntax(x)
 	c.fn, c.inPrelude = nil, false
 	c.useTypeParams(nil)
 }

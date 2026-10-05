@@ -114,6 +114,18 @@ func (c *checker) isTypeRef(x syntax.Expr) (string, bool) {
 }
 
 func (c *checker) selector(e *syntax.Selector, want Type) Type {
+	if owner := c.info.shapeReadOwners[e]; owner != nil {
+		actual := c.expr(e.X)
+		if !identical(actual, owner) {
+			c.errorf(e.Pos, "field.read requires its proven owner %s, found %s", owner, actual)
+			return Invalid
+		}
+		if record, ok := owner.(*Record); ok {
+			return record.Field(e.Name).Type
+		}
+		c.errorf(e.Pos, "sealed field.read requires a proven variant payload view")
+		return Invalid
+	}
 	if head, ok := e.X.(*syntax.TypeHead); ok {
 		typ := c.resolveType(head.Type)
 		s, ok := typ.(*Sealed)

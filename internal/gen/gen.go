@@ -333,6 +333,11 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			funcs = append(funcs, decl)
 		}
 	}
+	for _, fn := range info.ExpandedFunctions {
+		if emit[fn] {
+			funcs = append(funcs, g.funcDecl(fn.Decl))
+		}
+	}
 	if g.usesBind {
 		// The wrappers' runtime returns both.
 		g.goType(info.Named["GoError"])

@@ -1,0 +1,182 @@
+==================
+Derive template and staged controls
+==================
+import "bork/shape"
+derive fn label[T](f: shape.Field[T]): String { f.name }
+derive instance labels[T]: Labels[T] {
+ fn labels(x: T): List[String] {
+  comptime if (true) {
+   [comptime for (f in shape.fields[T]()) comptime if (!f.computed) label[T](f)]
+  } else { [] }
+ }
+}
+---
+
+(source_file
+  (import_declaration
+    (string))
+  (derive_helper_declaration
+    (function_declaration
+      (identifier)
+      (type_parameters
+        (identifier))
+      (parameters
+        (parameter
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)
+              (identifier))
+            (type_arguments
+              (type
+                (qualified_name
+                  (identifier)))))))
+      (type
+        (qualified_name
+          (identifier)))
+      (block
+        (selector_expression
+          (qualified_name
+            (identifier))
+          (identifier)))))
+  (derive_template_declaration
+    (instance_declaration
+      (identifier)
+      (type_parameters
+        (identifier))
+      (type
+        (qualified_name
+          (identifier))
+        (type_arguments
+          (type
+            (qualified_name
+              (identifier)))))
+      (function_declaration
+        (identifier)
+        (parameters
+          (parameter
+            (identifier)
+            (type
+              (qualified_name
+                (identifier)))))
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier)))))
+        (block
+          (comptime_control_expression
+            (if_expression
+              (boolean)
+              (block
+                (list_literal
+                  (list_comprehension
+                    (identifier)
+                    (call_expression
+                      (generic_expression
+                        (qualified_name
+                          (identifier)
+                          (identifier))
+                        (type_arguments
+                          (type
+                            (qualified_name
+                              (identifier))))))
+                    (unary_expression
+                      (selector_expression
+                        (qualified_name
+                          (identifier))
+                        (identifier)))
+                    (call_expression
+                      (generic_expression
+                        (qualified_name
+                          (identifier))
+                        (type_arguments
+                          (type
+                            (qualified_name
+                              (identifier)))))
+                      (argument
+                        (qualified_name
+                          (identifier)))))))
+              (block
+                (list_literal)))))))))
+
+==================
+Staged match and statement loop
+==================
+derive instance c[T]: C[T] {
+ fn c(x: T) {
+  comptime match (shape.kind[T]()) {
+   .Record => { comptime for (f in shape.fields[T]()) { useField(f.read(x)) } }
+   _ => {}
+  }
+ }
+}
+---
+
+(source_file
+  (derive_template_declaration
+    (instance_declaration
+      (identifier)
+      (type_parameters
+        (identifier))
+      (type
+        (qualified_name
+          (identifier))
+        (type_arguments
+          (type
+            (qualified_name
+              (identifier)))))
+      (function_declaration
+        (identifier)
+        (parameters
+          (parameter
+            (identifier)
+            (type
+              (qualified_name
+                (identifier)))))
+        (block
+          (comptime_control_expression
+            (match_expression
+              (call_expression
+                (generic_expression
+                  (qualified_name
+                    (identifier)
+                    (identifier))
+                  (type_arguments
+                    (type
+                      (qualified_name
+                        (identifier))))))
+              (match_arm
+                (pattern
+                  (context_pattern
+                    (identifier)))
+                (block
+                  (comptime_control_expression
+                    (for_expression
+                      (identifier)
+                      (call_expression
+                        (generic_expression
+                          (qualified_name
+                            (identifier)
+                            (identifier))
+                          (type_arguments
+                            (type
+                              (qualified_name
+                                (identifier))))))
+                      (block
+                        (call_expression
+                          (qualified_name
+                            (identifier))
+                          (argument
+                            (call_expression
+                              (qualified_name
+                                (identifier)
+                                (identifier))
+                              (argument
+                                (qualified_name
+                                  (identifier)))))))))))
+              (match_arm
+                (pattern)
+                (block)))))))))

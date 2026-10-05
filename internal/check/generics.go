@@ -800,6 +800,10 @@ func (c *checker) funcValue(e syntax.Expr, name string, fn *Func, want Type) Typ
 		c.errorf(e.Position(), "test.AssertIs must be called directly with an explicit target type")
 		return Invalid
 	}
+	if fn.Pkg != nil && fn.Pkg.Path == "bork/shape" {
+		c.errorf(e.Position(), "shape operations cannot be used as runtime function values")
+		return Invalid
+	}
 	if c.fn != nil {
 		c.fn.Calls = append(c.fn.Calls, fn)
 		c.testCall(fn, e.Position(), true)

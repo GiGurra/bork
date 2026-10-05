@@ -27,6 +27,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 
 | Example | What it shows |
 | --- | --- |
+| [derive_labels](../examples/derive_labels/README.md) | A custom class derived from field metadata, including a generic record |
 | [comptime](../examples/comptime/README.md) | A lookup table and a validated configuration file, both computed while compiling |
 | [sql_interpolation](../examples/sql_interpolation/README.md) | Typed SQL literals: bound values, quoted names, and composed fragments |
 | [config](../examples/config/README.md) | Field defaults, named arguments, and a record only its own package can construct |

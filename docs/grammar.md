@@ -8,7 +8,7 @@
 - **Shebang:** a first-line `#!...` is retained as a comment and selects script mode; other lines cannot contain a shebang.
 - **Comments:** `// to end of line` and `/* block */`. They are kept by the lexer and formatter; consecutive `//` lines directly above a field also become its doc comment.
 - **Identifiers:** a letter followed by letters, digits, or `_`. Identifiers cannot start with `_`, which is reserved for the compiler.
-- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list or declaration, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `is` is contextual between a value and a pattern, at comparison precedence; declarations, calls and selectors named `is` remain valid. `select` is a keyword only where an expression starts and `{` follows. `comptime` is contextual only before `{` where an expression starts. `lazy` is contextual before a local or package binding name, and before a record field name. `async` is a keyword only at a local binding head, `async(scopeExpression) name = expr`; ordinary calls and names `async` remain legal. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
+- **Keywords:** `fn`, `pred`, `type`, `sealed`, `match`, `if`, `else`, `return`, `true`, `false`, `unsafe`, `where`, `and`, `or`, `trust`, `rule`, `generate`, `yield`, `for`, `break`, `continue`. `import`, `use`, `class`, `instance`, `test`, `instances`, `scope`, `with`, `resource`, `private`, `derive`, `uses`, `nothing`, `in`, `ambient`, `logged`, `propagated`, `needs` are keywords only where they start a declaration, a scope block (or its policy), a with block (`with (` where an expression starts), a resource type, a derive list or declaration, a list of effects or needs, or the scope a parameter belongs to, and can otherwise be used as names (a function named `with` cannot be called as `with(...)` where an expression starts). `is` is contextual between a value and a pattern, at comparison precedence; declarations, calls and selectors named `is` remain valid. `select` is a keyword only where an expression starts and `{` follows. `comptime` is contextual before `{` where an expression starts, and before `if`, `for`, or `match` within derivation templates and helpers. `lazy` is contextual before a local or package binding name, and before a record field name. `async` is a keyword only at a local binding head, `async(scopeExpression) name = expr`; ordinary calls and names `async` remain legal. `mock` is a keyword only at the start of a statement or after a binding's `=`, followed by a name.
 - **`_`** on its own is the wildcard pattern.
 - **Integer literals:** decimal (`10_000`), hex (`0xFF`), binary (`0b1010`), or octal (`0o17`), with `_` allowed between digits, as in Go.
 - **Float literals:** `1.5`, `2e10`, `1.5e-3`. A `.` must be followed by a digit (so `5.copy(...)` is a selector).
@@ -25,7 +25,7 @@
 Package    = { File } .
 Script     = [ Shebang EOL ] { HeaderDirective EOL } { Import EOL } { Use EOL } { ( Decl | Binding | Expr ) EOL } . (* statements become implicit-main locals; explicit lazy remains package-level *)
 HeaderDirective = "// bork:require" ModulePath PinnedVersion | "// bork:unsafe" . (* standalone script header only *)
-File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | DeriveDecl | Instances | PackageBinding ) EOL } .
+File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | DeriveDecl | DeriveTemplate | DeriveHelper | Instances | PackageBinding ) EOL } .
 PackageBinding = [ "lazy" ] Ident [ ":" Type ] "=" Expr . (* pure memo; comptime reads bake data; uppercase names are exported *)
 AmbientDecl = { "logged" | "propagated" "(" String ")" } "ambient" Ident ":" Type .     (* ambient traceId: String: a value functions read with needs, bound by with *)
 Use        = "use" UseItem .                (* use money.DecodeAmount, use money.*, use api.Json *)
@@ -48,6 +48,8 @@ TypeDecl   = "type" Ident [ TypeParams ] "=" ( ( [ "private" ] Fields | Sealed |
                                              (* type Pair[A, B] = { ... }; type File = resource: values made by unsafe go *)
 Derive     = "derive" "(" ( Ident | QualIdent ) { "," ( Ident | QualIdent ) } ")" .  (* derive (Decode, Encode, GoStruct): instances written by the compiler *)
 DeriveDecl = "derive" ( Ident | QualIdent ) "for" Type . (* package declaration; bare generic names request universal instances *)
+DeriveTemplate = "derive" InstanceDecl . (* one unconstrained target parameter, declared by the class owner *)
+DeriveHelper = "derive" FuncDecl . (* expansion-only Bork helper *)
 Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
 Field      = [ "lazy" ] Ident ":" Type [ "=" Expr ] [ GoTags ] . (* eager defaults are closed values; pure lazy defaults may depend on siblings; preceding // lines are field docs *)
 GoTags     = "go" "{" [ GoTag { Sep GoTag } [ Sep ] ] "}" .
@@ -120,7 +122,7 @@ Argument   = [ Ident ":" ] Expr .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | TypedInterp | "true" | "false" | Ident
            | "." [ Ident ]
-           | "(" Expr ")" | TupleLit | Block | If | Match | Select | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl | WithExpr .
+           | "(" Expr ")" | TupleLit | Block | If | Match | Select | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl | WithExpr | StagedControl .
 (* A bare leading "." must be followed by RecordLit: .{ field: value }.
    .Variant and .Variant { field: value } need an expected sealed type;
    .{ field: value } needs an expected record type. Variant patterns may also omit their owner using scrutinee context. *)
@@ -134,13 +136,15 @@ LoopHeader = ( Ident | "_" ) "in" Expr                  (* for (x in xs) *)
            | [ LoopInit { "," LoopInit } ] ";" [ Expr ] ";" [ LoopPost { "," LoopPost } ] .
 LoopInit   = Ident [ ":" Type ] "=" Expr .         (* in order: each sees the names before it *)
 LoopPost   = Ident "=" Expr .                      (* the next values of header names, computed together *)
+StagedControl = "comptime" ( If | For | Match ) . (* inside derive definitions only *)
 LoopControl = "break" | "continue" .
 WithExpr   = "with" "(" WithBind { Sep WithBind } [ Sep ] ")" Block .  (* with (traceId: id, principal: p) { ... } *)
 WithBind   = ( Ident | QualIdent ) ":" Expr .
 ScopeExpr  = "scope" Ident [ "with" Expr { "," Expr } ] Block .  (* scope s { f = fs.Open(path, s)? ... }; scope s with taskTimeout(100), cleanupTimeout(500) { ... } *)
 Lambda     = ( Ident | "(" [ LParam { "," LParam } ] ")" ) "=>" Expr .  (* x => x + 1 *)
 LParam     = Ident [ ":" Type ] .
-ListLit    = "[" [ Expr { Sep Expr } [ Sep ] ] "]" .
+ListLit    = "[" ( [ Expr { Sep Expr } [ Sep ] ] | ListComprehension ) "]" .
+ListComprehension = "comptime" "for" "(" Ident "in" Expr ")" [ "comptime" "if" "(" Expr ")" ] Expr .
 MapLit     = "{" ":" "}" | "{" Entry { Sep Entry } [ Sep ] "}" .  (* {"a": 1, "b": 2}; {:} is the empty map *)
 Entry      = Expr ":" Expr .
 If         = "if" "(" Expr ")" Block [ "else" ( If | Block ) ] .

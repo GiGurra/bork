@@ -1,0 +1,20 @@
+import "bork/shape"
+
+class Labels[T] {
+  fn labels(x: T): List[String]
+}
+
+derive instance labels[T]: Labels[T] {
+  fn labels(x: T): List[String] {
+    [comptime for (field in shape.fields[T]()) comptime if (!field.computed) field.name]
+  }
+}
+
+type Item = { name: String, count: Int } derive (Labels)
+type Box[A] = { value: A }
+derive Labels for Box
+
+fn main() {
+  println(labels(Item { name: "one", count: 1 }))
+  println(labels(Box { value: true }))
+}

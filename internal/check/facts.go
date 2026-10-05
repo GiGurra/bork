@@ -115,6 +115,9 @@ func Facts(files []*syntax.File, info *Info, diags *diag.List, eval Evaluator) {
 			}
 		}
 	}
+	for _, fn := range info.ExpandedFunctions {
+		f.function(fn)
+	}
 	for _, binding := range info.PackageBindings {
 		f.function(binding.Boundary)
 	}

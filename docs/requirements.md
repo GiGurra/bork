@@ -195,6 +195,8 @@ instance showBox[T: Show]: Show[Box[T]] { ... }   // universal renderer for an o
 fn sum[T: Monoid](xs: List[T]): T { xs.fold(empty[T](), combine) }
 ```
 
+- **Class owners can define typed derivation templates** with `derive instance name[T]: Class[T]`. Their methods match the class signatures. `comptime for`, `comptime if`, and `comptime match` consume shape metadata during expansion; list comprehensions collect or filter field results. `derive fn` declares reusable helpers that cannot be called by runtime code or contain unsafe Go. Each expansion is ordinary checked Bork code, with projected field facts, effects and lifetimes preserved. Generic dictionary requirements are solved before ordinary callers and defaults are checked, using fresh discovery state and grounded dependency closure; failed candidate searches cannot introduce bounds. Shape descriptors cannot escape to runtime, private representations cannot be inspected by foreign packages, and expansion has a shared work limit. Undefined global references are diagnosed even in unapplied definitions; target-dependent typing is checked when requested. See [derivation templates](language/derivation.md).
+
 - **Instances are named,** so several can exist per class and type, and `use` can pick them: `use money.DecodeAmount`, or every exported one: `use money.*`.
 - **A package suggests instances with a named set,** which importers take with one `use`. This is the "default set of instances" a library may expose, still imported explicitly. A set can hold the package's own instances (exported or not: they come with the set), other packages' (`money.*`), and other sets. A `use` applies to the whole package.
 

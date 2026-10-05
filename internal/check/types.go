@@ -404,6 +404,8 @@ func typeKey(t Type) string {
 		return fmt.Sprintf("%s#%p", t.Name, t)
 	case *List:
 		return "List[" + typeKey(t.Elem) + "]"
+	case *Seq:
+		return fmt.Sprintf("Seq[%s;%d]", typeKey(t.Elem), t.Effects)
 	case *Map:
 		return "Map[" + typeKey(t.Key) + "," + typeKey(t.Value) + "]"
 	case *FuncType:

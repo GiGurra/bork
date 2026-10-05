@@ -21,3 +21,6 @@
 (field_pattern name: (identifier) @local.definition !pattern)
 ((pattern . (qualified_name . (identifier) @local.definition .) .)
  (#match? @local.definition "^[a-z]"))
+
+(list_comprehension) @local.scope
+(list_comprehension name: (identifier) @local.definition)
