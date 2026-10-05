@@ -49,7 +49,7 @@ fn main() {
 		args, want, absent []string
 		warning            bool
 	}{
-		{name: "env-defaults", args: []string{"--svc-verbose"}, want: []string{`serverHost: "env-host"`, `envOnly: "exact-env"`, `secret: "secret-default"`, "httpPort: 8080", "Ok"}},
+		{name: "env-defaults", args: []string{"--svc-verbose"}, want: []string{`serverHost: "env-host"`, `envOnly: "exact-env"`, `secret: "secret-default"`, `noConfig: "config-default"`, "httpPort: 8080", "Ok"}},
 		{name: "cli-overrides", args: []string{"--svc-server-host", "cli-host", "--svc-verbose=false", "-s", "443", "--secret", "cli-secret"}, want: []string{`serverHost: "cli-host"`, "httpPort: 443", "verbose: false", `secret: "cli-secret"`}},
 		{name: "deprecated", args: []string{"--svc-verbose", "-l", "81"}, want: []string{"oldPort: 81"}, warning: true},
 		{name: "deprecated-help", args: []string{"--legacy", "81", "--help"}, want: []string{"Usage:", "Ok"}, absent: []string{"Options {"}, warning: true},
@@ -106,6 +106,10 @@ func TestCLIMappingMetadata(t *testing.T) {
 	root := t.TempDir()
 	source := `import "bork/cli"
 type Options = { alpha: String = "a", another: String = "b", beta: String = "c" } derive (Decode)
+type Docs = {
+ // Inherited alpha documentation.
+ alpha: String = "a"
+} derive (Decode)
 type ScalarPositional = { inputFile: String = "input.txt" } derive (Decode)
 type ListPositional = { inputFiles: List[String] = [] } derive (Decode)
 fn describe(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec {
@@ -122,7 +126,7 @@ fn main() {
  println(cli.Parse[Options]("disabled-env", "", [], [.{ field: "alpha", envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_MAPPING_DISABLED" }))
  println(cli.Parse[Options]("custom", "", ["--custom-alpha", "enriched"], settings: .{ enrichers: [prefix, describe] }))
  println(cli.Parse[Options]("custom-help", "", ["--help"], settings: .{ enrichers: [prefix, describe] }))
- println(cli.Parse[Options]("suppressed-doc", "", ["--help"], [.{ field: "alpha", description: Option.Some { value: "" } }]))
+ println(cli.Parse[Docs]("suppressed-doc", "", ["--help"], [.{ field: "alpha", description: Option.Some { value: "" } }]))
  println(cli.Parse[Options]("bad", "", [], [.{ field: "alpha", short: "x", shortName: cli.Mapping.Disabled }], configFiles: ["missing.json"]))
  println(cli.Parse[Options]("bad", "", [], [.{ field: "alpha", env: "EXACT", envName: cli.Mapping.Disabled }]))
  println(cli.Parse[Options]("bad", "", [], [.{ field: "alpha", long: cli.Mapping.Disabled, short: "x" }]))
@@ -156,6 +160,9 @@ fn main() {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
+	}
+	if strings.Contains(string(out), "Inherited alpha documentation.") {
+		t.Errorf("explicit empty description did not suppress field docs:\n%s", out)
 	}
 	if strings.Contains(string(out), "bork-field-") {
 		t.Errorf("internal field name leaked into positional help:\n%s", out)
