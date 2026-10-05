@@ -102,6 +102,22 @@ func (p *deriveExpansion) helperPlan(call *syntax.Call, helper *syntax.FuncDecl,
 		return nil, false
 	}
 	child := &deriveExpansion{c: p.c, template: &DeriveTemplate{Pkg: pkg}, target: p.target, scope: p.scope, instance: p.instance, env: map[string]any{}, origins: map[string]diag.Pos{}, typeFacts: map[string][]*Constraint{}, names: map[string]bool{}, active: p.active, budget: p.budget}
+	fn := &Func{Decl: helper, Pkg: pkg, Params: make([]Type, len(helper.Params)), defaultsChecked: true}
+	for i := range fn.Params {
+		fn.Params[i] = Invalid
+	}
+	args, valid := p.c.namedArgs(call, helper.Name, fn, call.Args)
+	if !valid {
+		p.failed = true
+		return nil, false
+	}
+	child.helperArgs = args
+	child.helperOrder = p.c.info.callOrder[call]
+	if len(child.helperOrder) == 0 {
+		for i := range args {
+			child.helperOrder = append(child.helperOrder, i)
+		}
+	}
 	for i, parameter := range helper.TypeParams {
 		typ, facts := p.projectedTypeArg(call.TypeArgs[i])
 		child.env[parameter.Name] = typ
@@ -111,6 +127,9 @@ func (p *deriveExpansion) helperPlan(call *syntax.Call, helper *syntax.FuncDecl,
 }
 
 func (p *deriveExpansion) evalHelper(call *syntax.Call, helper *syntax.FuncDecl, pkg *Package) (any, bool) {
+	if p.active == nil {
+		p.active = map[*syntax.FuncDecl]bool{}
+	}
 	if p.active[helper] {
 		return nil, false
 	}
@@ -119,7 +138,7 @@ func (p *deriveExpansion) evalHelper(call *syntax.Call, helper *syntax.FuncDecl,
 		return nil, false
 	}
 	for i, parameter := range helper.Params {
-		value, known := p.eval(call.Args[i])
+		value, known := p.eval(child.helperArgs[i])
 		if !known {
 			return nil, false
 		}
@@ -201,19 +220,21 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 	// source code and never appear in the resulting function signature.
 	var runtimeArgs []syntax.Expr
 	var runtimeParameters []*syntax.Param
+	runtimeIndices := map[int]int{}
 	key := fmt.Sprintf("%s\x00%s\x00%s", pkg.Path, helper.Name, deriveBoundKey(p.instance.Pkg, p.instance.Name, ""))
 	for _, parameter := range helper.TypeParams {
 		key += "\x00" + typeKey(child.env[parameter.Name].(Type)) + "\x00" + deriveFactsKey(child.typeFacts[parameter.Name])
 	}
 	for i, parameter := range helper.Params {
-		if value, known := p.eval(call.Args[i]); known && metadataValue(value) {
+		if value, known := p.eval(child.helperArgs[i]); known && metadataValue(value) {
 			child.env[parameter.Name] = value
 			child.origins[parameter.Name] = parameter.Pos
 			child.checkMetadataType(parameter.Type, value, parameter.Pos)
 			key += fmt.Sprintf("\x00%#v", value)
 		} else {
+			runtimeIndices[i] = len(runtimeParameters)
 			runtimeParameters = append(runtimeParameters, parameter)
-			runtimeArgs = append(runtimeArgs, p.expr(call.Args[i]))
+			runtimeArgs = append(runtimeArgs, p.expr(child.helperArgs[i]))
 			child.names[parameter.Name] = true
 		}
 	}
@@ -254,6 +275,11 @@ func (p *deriveExpansion) runtimeHelper(call *syntax.Call, helper *syntax.FuncDe
 		written := &syntax.TypeExpr{Pos: call.Pos, Name: parameter.Name}
 		p.c.info.assemblyTypes[written] = parameter
 		generated.TypeArgs = append(generated.TypeArgs, written)
+	}
+	for _, sourceIndex := range child.helperOrder {
+		if runtimeIndex, present := runtimeIndices[sourceIndex]; present {
+			p.c.info.callOrder[generated] = append(p.c.info.callOrder[generated], runtimeIndex)
+		}
 	}
 	p.registerCall(generated, fn)
 	return generated

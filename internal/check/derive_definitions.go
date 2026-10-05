@@ -99,7 +99,7 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 						locals[node.Field] = true
 					}
 				case *syntax.VariantPat:
-					if len(node.Path) == 1 && !node.Context && !node.Braces && len(node.Fields) == 0 && !c.isTypeName(node.Path[0]) {
+					if len(node.Path) == 1 && !node.Context && !node.Braces && len(node.Fields) == 0 && !c.isTypeName(node.Path[0]) && !typeNames[node.Path[0]] {
 						locals[node.Path[0]] = true
 					}
 				}
@@ -107,6 +107,14 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 			walk(reflect.ValueOf(method.Params), collect)
 			walk(reflect.ValueOf(method.Body), collect)
 			references := func(node any) {
+				if pattern, ok := node.(*syntax.VariantPat); ok && len(pattern.Path) == 1 && typeNames[pattern.Path[0]] {
+					if declaration := typeDeclarations[pattern.Path[0]]; declaration != nil {
+						c.noteDeriveSource(pattern.Pos, pattern.Path[0], declaration.Pos, "typeParameter")
+					}
+				}
+				if call, ok := node.(*syntax.Call); ok {
+					c.checkDeriveCallShape(call, locals)
+				}
 				if written, ok := node.(*syntax.TypeExpr); ok && written.Name != "" {
 					projected := false
 					if owner, member, qualified := strings.Cut(written.Name, "."); qualified && member == "Type" && locals[owner] {

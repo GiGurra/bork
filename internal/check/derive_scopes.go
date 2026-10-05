@@ -43,7 +43,7 @@ func (c *checker) checkDeriveScopes(method *syntax.FuncDecl, localNames, typeNam
 			}
 			bind(env, pat.Rest, pat.RestPos)
 		case *syntax.VariantPat:
-			if len(pat.Path) == 1 && !pat.Context && !pat.Braces && len(pat.Fields) == 0 && !c.isTypeName(pat.Path[0]) {
+			if len(pat.Path) == 1 && !pat.Context && !pat.Braces && len(pat.Fields) == 0 && !c.isTypeName(pat.Path[0]) && !typeNames[pat.Path[0]] {
 				bind(env, pat.Path[0], pat.Pos)
 			}
 			for _, field := range pat.Fields {

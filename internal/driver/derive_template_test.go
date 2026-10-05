@@ -640,6 +640,10 @@ fn main() { println(c(Item { n: 1 })) }`
 			t.Fatalf("helper completion at line %d: %t", site.line, found)
 		}
 	}
+	callColumn := strings.Index(lines[6], "echo[f.Type](") + len("echo[f.Type](") + 1
+	if help := analysis.SignatureHelp(path, source, diag.Pos{File: path, Line: 7, Col: callColumn}); help == nil || help.Name != "echo" || help.Callable == nil || len(help.Callable.Parameters) != 1 {
+		t.Fatalf("helper signature help: %+v", help)
+	}
 	helperColumn := strings.Index(lines[6], "echo[") + 1
 	foundToken := false
 	for _, token := range analysis.SemanticTokens(path) {
@@ -867,4 +871,143 @@ fn main() {}`)
 	if _, err := checkLoadedProgramObserved(loaded, module, ctx, captureEmbedsSnapshot, nil); err != nil {
 		t.Fatalf("derive checking must succeed without launching the native tool: %v", err)
 	}
+}
+
+func TestDeriveTemplateNamedHelperArguments(t *testing.T) {
+	t.Parallel()
+	dir := validatorFixture(t, `derive fn choose(number: Int, text: String): String { text }
+class C[T] { fn c(x: T): String }
+derive instance c[T]: C[T] { fn c(x: T): String { choose(text: "named", number: 1) } }
+type Item = {} derive(C)
+fn main() { println(c(Item {})) }`)
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if strings.TrimSpace(string(output)) != "named" {
+		t.Fatalf("named metadata helper: %s", output)
+	}
+}
+
+func TestDeriveTemplateNamedHelperEvaluationOrder(t *testing.T) {
+	t.Parallel()
+	dir := validatorFixture(t, `derive fn concat(first: String, second: String): String { first + second }
+fn next(text: String) uses io: String { println(text); text }
+class C[T] { fn c(x: T) uses io: String }
+derive instance c[T]: C[T] {
+ fn c(x: T) uses io: String { concat(second: next("second"), first: next("first")) }
+}
+type Item = {} derive(C)
+fn main() { println(c(Item {})) }`)
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if strings.TrimSpace(string(output)) != "second\nfirst\nfirstsecond" {
+		t.Fatalf("named runtime helper order: %s", output)
+	}
+}
+
+func TestDeriveTemplateUnrequestedCallShapes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `fn ordinary(x: Int): Int { x }
+derive fn unused(): Int { ordinary() }
+fn main() {}`, "derive definition call to ordinary takes 1 to 1 arguments, found 0")
+	checkPreludeSource(t, `derive fn helper[T](x: T): T { x }
+derive fn unused(): Int { helper(1) }
+fn main() {}`, "derive definition call to helper requires 1 type arguments")
+	checkPreludeSource(t, `derive fn helper(x: Int): Int { x }
+derive fn unused(): Int { helper(wrong: 1) }
+fn main() {}`, "helper has no parameter named wrong")
+	checkPreludeSource(t, `fn ordinary(x: Int = 1): Int { x }
+derive fn unused(): Int { ordinary() }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedIntrinsicArguments(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused(): String { shape.fail(wrong: "bad") }
+fn main() {}`, "shape.fail has no parameter named wrong")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused(): String { shape.name() }
+fn main() {}`, "derive definition call to shape.name requires 1 type arguments")
+}
+
+func TestDeriveTemplateLocalCallableScope(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn run(count: (Int) => Int): Int { count(1) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateNamedConstructorDefaults(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `type Item = { x: Int = 1, y: Int }
+fn New = Item.new
+derive fn build(): Item { New(y: 2) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateSymbolicTypePatternScope(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `derive fn inspect[T](x: T): String { match (x) { T => "same" } }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateSymbolicTypePatternExpansion(t *testing.T) {
+	t.Parallel()
+	dir := validatorFixture(t, `derive fn inspect[T](x: T): String { match (x) { T => "same" } }
+class C[T] { fn c(x: T): String }
+derive instance c[T]: C[T] { fn c(x: T): String { inspect[T](x) } }
+type Item = {} derive(C)
+fn main() { println(c(Item {})) }`)
+	analysis, err := NewSession().Analyze(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, symbol := range analysis.Symbols() {
+		if strings.HasPrefix(symbol.Name, "_derive_") {
+			t.Fatalf("generated pattern binding leaked: %+v", symbol)
+		}
+	}
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if strings.TrimSpace(string(output)) != "same" {
+		t.Fatalf("symbolic type pattern: %s", output)
+	}
+}
+
+func TestDeriveTemplateMetadataHelperInSignature(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `pred above(x: Int, minimum: Int) { x > minimum }
+derive fn minimum(): Int { 0 }
+class C[T] { fn c(x: T, n: Int): String }
+derive instance c[T]: C[T] { fn c(x: T, n: Int where above(minimum())): String { "ok" } }
+fn main() {}`, "where clauses on the methods of classes and instances are not supported yet")
+}
+
+func TestDeriveTemplateCannotStrengthenClassParameters(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `pred positive(x: Int) { x > 0 }
+fn needsPositive(n: Int where positive): String { "ok" }
+class C[T] { fn c(x: T, n: Int): String }
+derive instance c[T]: C[T] {
+ fn c(x: T, n: Int where positive): String { needsPositive(n) }
+}
+type Item = {} derive(C)
+fn main() { println(c(Item {}, -1)) }`, "where clauses on the methods of classes and instances are not supported yet")
 }

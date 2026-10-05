@@ -58,6 +58,7 @@ func (c *checker) declareDeriveTemplates(files []*syntax.File) {
 				if valid {
 					plan := &deriveExpansion{c: c, template: &DeriveTemplate{Decl: decl, Pkg: c.pkg}, env: map[string]any{decl.TypeParams[0].Name: class.Param}, budget: &deriveBudget{remaining: 100000}, names: map[string]bool{}}
 					for _, method := range decl.Methods {
+						c.noWhere(method)
 						expected := class.Method(method.Name)
 						if len(method.Params) != len(expected.Params) {
 							c.errorf(method.Pos, "template method %s must match its class signature", method.Name)
@@ -108,18 +109,20 @@ type shapeEnum string
 // A plan has a bounded, deterministic metadata evaluator. It never invokes the
 // ordinary native comptime evaluator or executes unsafe Go.
 type deriveExpansion struct {
-	c         *checker
-	template  *DeriveTemplate
-	target    Type
-	instance  *ClassInstance
-	active    map[*syntax.FuncDecl]bool
-	scope     *Package
-	names     map[string]bool
-	env       map[string]any
-	origins   map[string]diag.Pos
-	typeFacts map[string][]*Constraint
-	budget    *deriveBudget
-	failed    bool
+	c           *checker
+	template    *DeriveTemplate
+	target      Type
+	instance    *ClassInstance
+	active      map[*syntax.FuncDecl]bool
+	scope       *Package
+	names       map[string]bool
+	env         map[string]any
+	origins     map[string]diag.Pos
+	typeFacts   map[string][]*Constraint
+	budget      *deriveBudget
+	failed      bool
+	helperArgs  []syntax.Expr
+	helperOrder []int
 }
 
 func (p *deriveExpansion) error(pos diag.Pos, format string, args ...any) {
@@ -739,6 +742,14 @@ func (p *deriveExpansion) clone(value reflect.Value) reflect.Value {
 	case reflect.Pointer:
 		if value.IsNil() {
 			return value
+		}
+		if pattern, ok := value.Interface().(*syntax.VariantPat); ok && !pattern.Context && !pattern.Braces && len(pattern.Fields) == 0 && len(pattern.Path) == 1 {
+			if _, known := p.env[pattern.Path[0]].(Type); known {
+				written := &syntax.TypeExpr{Pos: pattern.Pos, Name: pattern.Path[0]}
+				expanded := &syntax.TypePat{Pos: pattern.Pos, Name: p.generatedName("pattern", p.template.Pkg), Type: p.clone(reflect.ValueOf(written)).Interface().(*syntax.TypeExpr)}
+				p.c.info.assemblyNames[expanded] = "derived type match"
+				return reflect.ValueOf(expanded)
+			}
 		}
 		// Several syntax nodes store their body as *Block rather than Expr.
 		// Enter those bodies through expansion too, preserving their scopes.
