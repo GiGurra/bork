@@ -13,8 +13,9 @@ way to observe changes outside the default recipe. It wins over `--fast`.
 ## Recorded evidence
 
 The dependency closure is captured before building and captured again afterward;
-any observed changes decline publication. On a miss, evaluator builds refresh Go objects before emitting compile-time
-values, including on an initial build with an existing Go cache. Final builds with mutable cgo
+any observed changes decline publication. On a miss, evaluators reaching foreign helpers refresh Go objects before emitting compile-time
+values, including on an initial build with an existing Go cache. Checked pure helpers use only generated code and the
+immutable SDK; they retain Go object reuse. Final builds with mutable cgo
 headers or external assembly force Go to rebuild objects: Go’s own cache does
 not cover every included header, so its cached objects cannot certify this wider
 closure. Unchanged warm requests reuse the recipe without rebuilding. The recipe is written only after a successful build. It records the request

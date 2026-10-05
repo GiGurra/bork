@@ -36,6 +36,9 @@ func TestExecutableRecipeAssetsAndKnownBuildInputs(t *testing.T) {
 				return output
 			}
 			initial := run()
+			if commands, err := os.ReadFile(probe); err != nil || bytes.Contains(commands, []byte(" -a ")) {
+				t.Fatalf("checked inputs forced fresh Go objects: %s: %v", commands, err)
+			}
 			if err := os.Truncate(probe, 0); err != nil {
 				t.Fatal(err)
 			}

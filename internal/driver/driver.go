@@ -168,6 +168,9 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 	for _, batch := range info.InterpolationBatches {
 		foreignEvaluation = foreignEvaluation || recipeHasForeignHelpers(batch.Recipe)
 	}
+	if context.refreshForeign && foreignEvaluation {
+		context.forceBuild = true
+	}
 	eval := evaluatorWithTimeoutObserved(files, info, module, context, 0, nil, usage)
 	if len(info.Comptimes) > 0 {
 		phase(observe, "comptime")
@@ -190,6 +193,9 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 			usage.evaluator = true
 			for _, query := range queries {
 				foreignEvaluation = foreignEvaluation || recipeHasForeignQuery(query)
+			}
+			if context.refreshForeign && foreignEvaluation {
+				context.forceBuild = true
 			}
 			return inner(queries)
 		}
