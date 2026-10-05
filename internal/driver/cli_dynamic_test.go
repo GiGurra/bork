@@ -12,10 +12,12 @@ import (
 func TestCLIDynamicCompletion(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import "bork/codec"
+import "bork/cli"
 import "bork/process"
 import "bork/fs"
 import "bork/encoding"
+use codec.Defaults
 pred validPort(port: Int) { port > 0 }
 type Options = {
  config: Option[String]
@@ -27,47 +29,47 @@ type Options = {
  resource: Option[String]
  inspect: Option[String]
  targets: List[String] = []
-} derive (Decode)
+} derive (codec.Decode)
 fn complete(request: cli.CompletionRequest, s: Scope) uses io: cli.Suggestions | cli.Error {
  onClose(s, () => { _ = fs.Write("callback.txt", encoding.Utf8("closed")) })
  if (request.field == "inspect") {
   port = match (request.partial.Get[Int]("port")) {
-   missing: cli.Missing => "missing-port"
-   error: DecodeError => s"invalid-port:${error.path}"
+   _: cli.Missing => "missing-port"
+   error: codec.DecodeError => s"invalid-port:${error.path}"
    value: Int => s"port:${value}"
   }
   region = match (request.partial.Get[String]("region")) {
-   missing: cli.Missing => "missing-region"
-   error: DecodeError => "invalid-region"
+   _: cli.Missing => "missing-region"
+   _: codec.DecodeError => "invalid-region"
    value: String => s"region:${value}"
   }
   tags = match (request.partial.Get[List[String]]("tags")) {
-   missing: cli.Missing => "missing-tags"
-   error: DecodeError => "invalid-tags"
+   _: cli.Missing => "missing-tags"
+   _: codec.DecodeError => "invalid-tags"
    values: List[String] => s"tags:${values.length()}"
   }
   optional = match (request.partial.Get[Option[String]]("optional")) {
-   missing: cli.Missing => "missing-optional"
-   error: DecodeError => "invalid-optional"
+   _: cli.Missing => "missing-optional"
+   _: codec.DecodeError => "invalid-optional"
    option: Option[String] => match (option) {
     Option.None => "null-optional"
     Option.Some { value } => s"optional:${value}"
    }
   }
   mismatch = match (request.partial.Get[Int]("namespace")) {
-   missing: cli.Missing => "missing-namespace"
-   error: DecodeError => s"mismatch:${error.path}"
-   value: Int => "unexpected-number"
+   _: cli.Missing => "missing-namespace"
+   error: codec.DecodeError => s"mismatch:${error.path}"
+   _: Int => "unexpected-number"
   }
   unknown = match (request.partial.Get[String]("unknown")) {
-   error: DecodeError => s"unknown:${error.path}"
-   other => "unexpected-unknown"
+   error: codec.DecodeError => s"unknown:${error.path}"
+   _ => "unexpected-unknown"
   }
   cli.Suggestions { choices: [.{ value: port }, .{ value: region }, .{ value: tags }, .{ value: optional }, .{ value: mismatch }, .{ value: unknown }] }
  } else {
   namespace = match (request.partial.Get[String]("namespace")) {
-   missing: cli.Missing => "default"
-   error: DecodeError => { return cli.Error { errors: [error] } }
+   _: cli.Missing => "default"
+   error: codec.DecodeError => { return cli.Error { errors: [error] } }
    value: String => value
   }
   cli.Suggestions { choices: [.{ value: s"${namespace}-web", description: "Web service" }, .{ value: s"${namespace}-worker" }, .{ value: s"${namespace}-web", description: "Duplicate" }], keepOrder: true }
@@ -176,8 +178,10 @@ fn main() {
 func TestCLIDynamicMetadataAndProtocol(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
-type Options = { value: Option[String] } derive (Decode)
+	source := `import "bork/codec"
+import "bork/cli"
+use codec.Defaults
+type Options = { value: Option[String] } derive (codec.Decode)
 fn invalid(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error { cli.Suggestions { choices: [.{ value: "bad\nvalue" }] } }
 fn main() {
  completion = cli.Completion { field: "value", suggest: invalid }
@@ -218,8 +222,10 @@ fn main() {
 func TestCLIDynamicEffects(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
-type Options = {} derive (Decode)
+	source := `import "bork/codec"
+import "bork/cli"
+use codec.Defaults
+type Options = {} derive (codec.Decode)
 fn partial() uses io: Options | cli.Error | cli.Help { cli.ParseWith[Options]("app", "", []) }
 fn main() {}
 `
@@ -234,21 +240,23 @@ fn main() {}
 func TestCLIDynamicRecordDecoders(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	source := `import "bork/cli"
+	source := `import "bork/codec"
+import "bork/cli"
+use codec.Defaults
 pred positive(port: Int) { port > 0 }
 pred after(value: Int, start: Int) { value > start }
-type Service = { port: Int where positive } derive (Decode)
-type Options = { service: Service, start: Int, end: Int where after(start), suggest: Option[String] } derive (Decode)
+type Service = { port: Int where positive } derive (codec.Decode)
+type Options = { service: Service, start: Int, end: Int where after(start), suggest: Option[String] } derive (codec.Decode)
 fn complete(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
  service = match (request.partial.Get[Service]("service")) {
   value: Service => value
-  error: DecodeError => { return cli.Error { errors: [error] } }
-  missing: cli.Missing => { return cli.Error { errors: [DecodeError { path: ".service", message: "missing service" }] } }
+  error: codec.DecodeError => { return cli.Error { errors: [error] } }
+  _: cli.Missing => { return cli.Error { errors: [codec.DecodeError { path: ".service", message: "missing service" }] } }
  }
  end = match (request.partial.Get[Int]("end")) {
   value: Int => value
-  error: DecodeError => { return cli.Error { errors: [error] } }
-  missing: cli.Missing => 0
+  error: codec.DecodeError => { return cli.Error { errors: [error] } }
+  _: cli.Missing => 0
  }
  cli.Suggestions { choices: [.{ value: s"${service.port}:${end}" }] }
 }
@@ -281,5 +289,64 @@ fn main() {
 	}
 	if string(out) != "partial-record\nfield-fact-error\ncomplete-record-error\n" {
 		t.Fatalf("unexpected output: %s", out)
+	}
+}
+
+func TestCLIDynamicTypeCheckWithoutGo(t *testing.T) {
+	root := t.TempDir()
+	source := `import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+type Options = { value: String } derive (codec.Decode)
+fn suggest(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
+ match (request.partial.Get[String]("value")) {
+  value: String => cli.Suggestions { choices: [.{ value: value }] }
+  _: cli.Missing => cli.Suggestions { choices: [] }
+  error: codec.DecodeError => cli.Error { errors: [error] }
+ }
+}
+fn main() { _ = cli.SubcommandWith[Options]("deploy", "", (options, s) => {}, completions: [.{ field: "value", suggest: suggest }]) }
+`
+	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	if _, _, err := Check(root); err != nil {
+		t.Fatalf("dynamic CLI checking without Go: %v", err)
+	}
+}
+
+func TestCLIDynamicCapturedResources(t *testing.T) {
+	t.Parallel()
+	body := `file = match (fs.Open("catalog.txt", temporary)) {
+  file: fs.File => file
+  error: fs.Error => { panic(s"${error}") }
+ }
+ cli.SubcommandWith[Options]("deploy", "", (options, s) => {}, completions: [.{ field: "value", suggest: (request, s) => {
+  _ = fs.ReadAllText(file)
+  cli.Suggestions { choices: [] }
+ } }])`
+	for _, escapes := range []bool{false, true} {
+		name := "within owner scope"
+		main := "scope temporary { " + strings.Replace(body, " cli.SubcommandWith", " command = cli.SubcommandWith", 1) + "\n _ = cli.Dispatch(\"app\", \"\", [], [command]) }"
+		if escapes {
+			name = "after owner scope"
+			main = "command = scope temporary { " + body + " }\n _ = cli.Dispatch(\"app\", \"\", [], [command])"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			source := "import \"bork/cli\"\nimport \"bork/codec\"\nimport \"bork/fs\"\nuse codec.Defaults\ntype Options = { value: String } derive (codec.Decode)\nfn main() { " + main + " }\n"
+			if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := Check(root)
+			if escapes {
+				if err == nil || !strings.Contains(err.Error(), "may be released") {
+					t.Fatalf("escaped captured resource: %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("live captured resource: %v", err)
+			}
+		})
 	}
 }

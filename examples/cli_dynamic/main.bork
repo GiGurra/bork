@@ -1,17 +1,19 @@
+import "bork/codec"
 import "bork/cli"
 import "bork/process"
+use codec.Defaults
 type Options = {
   config: Option[String]
   // Namespace used to find matching resources.
   namespace: String = "dev"
   // Resource selected for deployment.
   resource: String
-} derive (Decode)
+} derive (codec.Decode)
 fn resources(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
   namespace = match (request.partial.Get[String]("namespace")) {
     value: String => value
-    missing: cli.Missing => "dev"
-    error: DecodeError => { return cli.Error { errors: [error] } }
+    _: cli.Missing => "dev"
+    error: codec.DecodeError => { return cli.Error { errors: [error] } }
   }
   cli.Suggestions {
     choices: [.{ value: s"${namespace}-web", description: "Web service" }, .{ value: s"${namespace}-worker", description: "Background worker" }]

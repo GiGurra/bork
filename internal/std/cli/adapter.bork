@@ -1,6 +1,6 @@
 import "bork/codec"
-use codec.Defaults
 import codecs "bork/json"
+use codec.Defaults
 // The private adapter shares boa registration between parsing and command trees.
 // Mutable native commands are private handles owned by the parse/dispatch scope.
 type nativeCommand = resource
@@ -13,6 +13,7 @@ type inputField = {
   configDefault: String
   validate: (codec.Value) uses nothing => Ok | codec.DecodeError
 }
+type nativeBuilder = (String, String, List[FieldSpec], List[inputField], List[String], (String) uses nothing => codec.Value | codecs.JsonError, (String) uses nothing => String, List[Completion], (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, Scope) uses nothing => adapter | Error
 type pending = {}
 type inputCollection = { fields: List[codec.Field], errors: List[codec.DecodeError] }
 type adapter = { native: nativeCommand, result: () uses io => codec.Value | Error | pending }

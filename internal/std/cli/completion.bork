@@ -1,7 +1,7 @@
 import "bork/codec"
-use codec.Defaults
 import "bork/process"
 import codecs "bork/json"
+use codec.Defaults
 // Partial is an immutable input snapshot, never a complete options record.
 // Omitted fields remain Missing even when their record declares a default.
 type Partial = private { read: (String) uses nothing => partialEntry | Missing | codec.DecodeError }
@@ -43,23 +43,23 @@ fn ParseWith[T: codec.Decode](name: String, description: String, args: List[Stri
 // ParseDetailedWith also preserves warnings from successfully accepted flags.
 fn ParseDetailedWith[T: codec.Decode](name: String, description: String, args: List[String], completions: List[Completion] = [], flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}) uses io + net + clock + random + state: Parsed[T] | Error | Help {
   scope owner {
-  match (resolve[T](flags, settings, name)) {
-    error: Error => error
-    specs: List[FieldSpec] => match (inputFields[T](name)) {
+    match (resolve[T](flags, settings, name)) {
       error: Error => error
-      fields: List[inputField] => match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, completions, invokeCompletion, owner)) {
+      specs: List[FieldSpec] => match (inputFields[T](name)) {
         error: Error => error
-        prepared: adapter => match (evaluateWith(() => evaluate(prepared, args, settings.completion, configureCompletion))) {
+        fields: List[inputField] => match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, completions, invokeCompletion, owner)) {
           error: Error => error
-          help: Help => help
-          input: parsedInput => match (codec.decode[T](input.value)) {
-            error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
-            options: T => Parsed[T] { options: options, warnings: input.warnings }
+          prepared: adapter => match (evaluateWith(() => evaluate(prepared, args, settings.completion, configureCompletion))) {
+            error: Error => error
+            help: Help => help
+            input: parsedInput => match (codec.decode[T](input.value)) {
+              error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
+              options: T => Parsed[T] { options: options, warnings: input.warnings }
+            }
           }
         }
       }
     }
-  }
   }
 }
 

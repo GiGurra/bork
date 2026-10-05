@@ -160,7 +160,7 @@ overridden by a valid flag. Only the resulting immutable proven record reaches
 the handler. Help does not read files or invoke the handler.
 
 ```bork
-import codec "bork/codec"
+import "bork/codec"
 
 import "bork/cli"
 use codec.Defaults
@@ -318,13 +318,15 @@ warnings in Parsed.warnings. ParseWith discards successful warnings for the same
 reason as Parse; RunWith prints them to stderr before the handler.
 
 ```bork
+import "bork/codec"
 import "bork/cli"
-type Options = { namespace: String = "dev", resource: String } derive (Decode)
+use codec.Defaults
+type Options = { namespace: String = "dev", resource: String } derive (codec.Decode)
 fn resources(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error {
   namespace = match (request.partial.Get[String]("namespace")) {
     value: String => value
-    missing: cli.Missing => "dev"
-    error: DecodeError => { return cli.Error { errors: [error] } }
+    _: cli.Missing => "dev"
+    error: codec.DecodeError => { return cli.Error { errors: [error] } }
   }
   cli.Suggestions { choices: [.{ value: s"${namespace}-web", description: "Web service" }] }
 }
@@ -342,7 +344,7 @@ their ordinary declared path default. Each query creates fresh state and reads
 its sources once. Help and shell-script generation invoke no completer and read
 no config files.
 
-`partial.Get[U: Decode](field)` returns `U | cli.Missing | DecodeError`. It first
+`partial.Get[U: codec.Decode](field)` returns `U | cli.Missing | codec.DecodeError`. It first
 checks the original field decoder's independent constraints, then decodes U;
 unknown fields, malformed input and a requested type mismatch retain field paths.
 U can be a derived user record. Get does not prove relations between sibling
