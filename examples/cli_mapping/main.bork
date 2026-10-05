@@ -1,0 +1,17 @@
+import "bork/cli"
+import "bork/process"
+type Options = { serverHost: String = "localhost", port: Int = 8080 } derive (Decode)
+fn main() {
+  match (cli.Run[Options]("mapping", "Automatic and exact flag names", (options, s) => {
+    println(s"${options.serverHost}:${options.port}")
+    }, flags: [.{ field: "port", long: cli.Mapping.Named { name: "listen" }, short: "p" }], settings: .{ autoShort: true, flagPrefix: "service" })) {
+    error: cli.Error => { println(error); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "exact names bypass prefixes" {
+  match (cli.Parse[Options]("mapping", "", ["--listen", "443"], [.{ field: "port", long: cli.Mapping.Named { name: "listen" } }], settings: .{ flagPrefix: "service" })) {
+    options: Options => { assertEqual(options.port, 443) }
+    other => { panic(s"Expected options, got ${other}") }
+  }
+}

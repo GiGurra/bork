@@ -7,7 +7,7 @@ Box { items: [1, 2], optional: Option.None }
 Box { items: [[1, 2], []], optional: Option.None }
 Error { errors: [DecodeError { path: ".items[0]", message: "invalid JSON at line 1, column 1: expected a value" }, DecodeError { path: ".items[1]", message: "invalid JSON at line 1, column 1: expected a value" }] }
 Error { errors: [DecodeError { path: "httpPrt", message: "unknown CLI field; closest field is \"httpPort\"" }] }
-Error { errors: [DecodeError { path: "httpPort", message: "short flag duplicates name" }, DecodeError { path: "httpPort", message: "environment variable duplicates name" }, DecodeError { path: "httpPort", message: "positional field duplicates name" }] }
+Error { errors: [DecodeError { path: "name", message: "short flag requires an enabled long flag" }, DecodeError { path: "httpPort", message: "short flag requires an enabled long flag" }, DecodeError { path: "httpPort", message: "short flag duplicates name" }, DecodeError { path: "httpPort", message: "environment variable duplicates name" }, DecodeError { path: "httpPort", message: "positional field duplicates name" }] }
 Error { errors: [DecodeError { path: "name", message: "duplicate CLI field metadata" }] }
 Error { errors: [DecodeError { path: "name", message: "short flag must be one ASCII character" }] }
 Error { errors: [DecodeError { path: "name", message: "short flag must be one ASCII character" }] }

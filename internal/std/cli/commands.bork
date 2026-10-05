@@ -1,4 +1,5 @@
 import "bork/process"
+import codecs "bork/json"
 // Command stores a callback with a fixed effect bound, allowing heterogeneous
 // option records in one list. Subcommand captures each typed decoder/handler.
 type Command = {
@@ -8,15 +9,23 @@ type Command = {
 }
 
 // Subcommand keeps the handler typed; only validated options reach it.
-fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = []): Command {
+fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
+  resolved = resolve[T](flags, settings, name)
   Command {
     name: name
     description: description
     execute: (displayName, arguments, s) => {
-      match (Parse[T](displayName, description, arguments, flags, configFiles)) {
+      result = match (resolved) {
+        error: Error => error
+        fields: List[FieldSpec] => prepare[T](displayName, description, arguments, fields, configFiles, codecs.Parse, (options, warnings) => Parsed[T] { options: options, warnings: warnings })
+      }
+      match (result) {
         help: Help => help
         error: Error => error
-        options: T => { run(options, s) }
+        parsed: Parsed[T] => {
+          for (warning in parsed.warnings) { printError(s"${warning}\n") }
+          run(parsed.options, s)
+        }
       }
     }
   }
@@ -46,7 +55,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     seen[command.name] = true
   }
   if len(failures) != 0 { return Error{errors: failures} }
-  var output bytes.Buffer
+  var output, diagnostics bytes.Buffer
   var result any
   ran := false
   root := &cobra.Command{Use: name, Short: description, SilenceUsage: true, SilenceErrors: true}
@@ -77,7 +86,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     // `<command> --help`, rather than the flag-free routing command's help.
     child.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
       value := command.execute(cmd.CommandPath(), []string{"--help"}, s)
-      if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text) } else { ran = true; result = value }
+      if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text); _, _ = fmt.Fprint(cmd.ErrOrStderr(), help.diagnostics) } else { ran = true; result = value }
     })
     root.AddCommand(child)
   }
@@ -88,9 +97,9 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
   if _, _, err := root.Find(arguments); err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
   root.SetArgs(append([]string{}, arguments...))
   root.SetOut(&output)
-  root.SetErr(&output)
+  root.SetErr(&diagnostics)
   if err := root.Execute(); err != nil { return Error{errors: []DecodeError{{path: name, message: err.Error()}}} }
-  if !ran { return Help{text: output.String()} }
+  if !ran { return Help{text: output.String(), diagnostics: diagnostics.String()} }
   return result
 }
 
@@ -98,7 +107,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
 // returned errors and choose an exit code, as with Run.
 fn RunCommands(name: String, description: String, commands: List[Command]) uses io + net + clock + random + state: Ok | Error {
   match (Dispatch(name, description, process.Args(), commands)) {
-    help: Help => { print(help.text) }
+    help: Help => { print(help.text); printError(help.diagnostics) }
     error: Error => error
     Ok => {}
   }
