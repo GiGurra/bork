@@ -127,8 +127,8 @@ retained owner.
 `_borkNewResourceHandle(value any, s)` returns a `*_borkResourceHandle` with
 `Value`, `Context() context.Context`, and `Close()`. `Value` must be initialized
 before publishing the resource and never mutated afterwards. Its stable context
-carries cancellation from its owners (cancelled once all of them are), supports
-rebinding, and carries no
+carries cancellation from its owners (cancelled once all of them are, with the
+cause of the last), accepts new owners through `_borkRebind`, and carries no
 scope context values or deadline metadata. Call `Close` in the resource's final
 cleanup. Cancellation is terminal: attaching an already cancelled resource does
 not revive it. This allows Go APIs such as `database/sql.BeginTx` to retain the

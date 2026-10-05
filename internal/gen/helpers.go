@@ -34,15 +34,20 @@ func _borkTryScopeTask(s *_Scope, work func() any) (func() any, bool) {
 }
 
 // A stable cancellation context that follows every scope owning the resource:
-// it is cancelled once all of them are cancelled. Attachment adds a source.
+// it is cancelled once all of them are cancelled, with the cause of the last
+// one (of the earliest owner, when several are found cancelled at once).
+// Attachment adds a source; cancelled sources are dropped, so a handle
+// attached to many short scopes keeps only the live ones.
 // Value is immutable after construction. Close must run with final release.
 type _borkResourceHandle struct {
  Value any
  mu sync.Mutex
- sources []context.Context
+ live []_borkHandleSource
+ cause error
  ctx context.Context
  cancel context.CancelCauseFunc
 }
+type _borkHandleSource struct { ctx context.Context; stop func() bool }
 func _borkNewResourceHandle(value any, s *_Scope) *_borkResourceHandle {
  ctx, cancel := context.WithCancelCause(context.Background())
  h := &_borkResourceHandle{Value: value, ctx: ctx, cancel: cancel}
@@ -53,35 +58,56 @@ func _borkNewResourceHandle(value any, s *_Scope) *_borkResourceHandle {
 // is cancelled for good: attaching it does not revive it.
 func (h *_borkResourceHandle) _borkRebind(s *_Scope) {
  h.mu.Lock()
- h.checkLocked()
- if h.ctx.Err() != nil { h.mu.Unlock(); return }
- for _, source := range h.sources {
-  if source == s.ctx { h.mu.Unlock(); return }
+ defer h.mu.Unlock()
+ h.pruneLocked()
+ if h.ctx.Err() != nil { return }
+ for _, source := range h.live {
+  if source.ctx == s.ctx { return }
  }
- h.sources = append(h.sources, s.ctx)
- h.checkLocked()
- h.mu.Unlock()
- context.AfterFunc(s.ctx, h.check)
-}
-func (h *_borkResourceHandle) check() {
- h.mu.Lock()
- h.checkLocked()
- h.mu.Unlock()
-}
-// checkLocked cancels the handle once every source is cancelled, with the
-// cause of the most recently added one.
-func (h *_borkResourceHandle) checkLocked() {
- if h.ctx.Err() != nil || len(h.sources) == 0 { return }
- for _, source := range h.sources {
-  if source.Err() == nil { return }
+ if s.ctx.Err() != nil {
+  if len(h.live) == 0 { h.cause = context.Cause(s.ctx); h.cancel(h.cause) }
+  return
  }
- h.cancel(context.Cause(h.sources[len(h.sources)-1]))
+ source := s.ctx
+ stop := context.AfterFunc(source, func() {
+  h.mu.Lock()
+  defer h.mu.Unlock()
+  h.pruneLocked()
+ })
+ h.live = append(h.live, _borkHandleSource{source, stop})
+}
+// pruneLocked drops the sources that are cancelled (their AfterFunc may not
+// have run yet), and cancels the handle once none is left.
+func (h *_borkResourceHandle) pruneLocked() {
+ kept := h.live[:0]
+ var cause error
+ for _, source := range h.live {
+  if source.ctx.Err() == nil {
+   kept = append(kept, source)
+   continue
+  }
+  source.stop()
+  if cause == nil { cause = context.Cause(source.ctx) }
+ }
+ clear(h.live[len(kept):])
+ h.live = kept
+ if cause != nil { h.cause = cause }
+ if len(h.live) == 0 && h.cause != nil && h.ctx.Err() == nil { h.cancel(h.cause) }
 }
 func (h *_borkResourceHandle) Context() context.Context {
- h.check()
+ h.mu.Lock()
+ h.pruneLocked()
+ h.mu.Unlock()
  return h.ctx
 }
-func (h *_borkResourceHandle) Close() { h.cancel(context.Canceled) }
+func (h *_borkResourceHandle) Close() {
+ h.mu.Lock()
+ defer h.mu.Unlock()
+ for _, source := range h.live { source.stop() }
+ h.live = nil
+ h.cancel(context.Canceled)
+}
+
 
 `
 
