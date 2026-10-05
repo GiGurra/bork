@@ -15,13 +15,13 @@ import (
 func TestLazyBindingChecks(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
-		{"unused effects", "fn work() uses io: Int { println(1);1 }\nfn f(){ lazy ignored=work() }", "uses io"},
+		{"unused effects", "fn work() uses io: Int { println(1);1 }\nfn f(){ lazy ignored=work();_=()=>ignored }", "uses io"},
 		{"typed proof", "pred positive(x:Int){x>0}\nfn f(flag:Bool):Int{lazy x:Int where positive={if(flag){return -1};1};x}", "is false"},
 		{"inferred proof", "pred positive(x:Int){x>0}\nfn f(x:Int where positive):Int where positive {lazy y=x;y}", ""},
-		{"validator context", "type C={x:Int} where Valid\npred Valid(c:C){lazy proof=requiresValid(c);true}\nfn requiresValid(c:C where Valid):Int{1}\nfn main(){println(C{x:-1})}", "invariant is unavailable"},
-		{"nested validator context", "type C={x:Int} where Valid\npred Valid(c:C){lazy proof={lazy inner=requiresValid(c);inner};true}\nfn requiresValid(c:C where Valid):Int{1}\nfn main(){println(C{x:-1})}", "invariant is unavailable"},
+		{"validator context", "type C={x:Int} where Valid\npred Valid(c:C){lazy proof=requiresValid(c);_=()=>proof;true}\nfn requiresValid(c:C where Valid):Int{1}\nfn main(){println(C{x:-1})}", "invariant is unavailable"},
+		{"nested validator context", "type C={x:Int} where Valid\npred Valid(c:C){lazy proof={lazy inner=requiresValid(c);inner};_=()=>proof;true}\nfn requiresValid(c:C where Valid):Int{1}\nfn main(){println(C{x:-1})}", "invariant is unavailable"},
 		{"pure constant candidate", "pred p(x:Int){lazy value=x;value>0}\nfn main(){n:Int where p=1;println(n)}", ""},
-		{"pure unused panic candidate", "pred p(x:Int){lazy unused:Int=panic(\"unused\");x>0}\nfn main(){n:Int where p=1;println(n)}", ""},
+		{"pure unused panic candidate", "pred p(x:Int){lazy unused:Int=panic(\"unused\");_=()=>unused;x>0}\nfn main(){n:Int where p=1;println(n)}", ""},
 		{"pure invalid constant candidate", "pred p(x:Int){lazy value=x;value>0}\nfn main(){n:Int where p=-1;println(n)}", "is false"},
 		{"self reference", "fn main(){lazy x=x;println(x)}", "undefined: x"},
 		{"forward reference", "fn main(){lazy x=y;lazy y=x;println(y)}", "undefined: y"},
@@ -29,7 +29,7 @@ func TestLazyBindingChecks(t *testing.T) {
 		{"destructure", "fn main(){lazy (x,y)=(1,2)}", "expected"},
 		{"independent field", "type C={lazy value:Int}\nfn main(){}", ""},
 		{"package binding", "lazy x=1\nfn main(){}", ""},
-		{"cross loop", "fn main(){for(n in [1]){lazy x:Int={break;1};println(x)}}", "require a loop in the same function"},
+		{"cross loop", "fn main(){for(_ in [1]){lazy x:Int={break;1};println(x)}}", "require a loop in the same function"},
 		{"cross yield", "fn main(){x=generate[Int]{lazy y:Int={yield 1;2};yield y};println(x.toList())}", "yield requires a generator"},
 		{"nested lambda return", "fn main(){lazy x:()=>Int=()=>{return 1};println(x())}", "return cannot be used in a lambda"},
 		{"nested lambda try", "fn main(){n=1000;lazy x:()=>Int8=()=>toInt8(n)?;println(x())}", "? cannot be used in a lambda"},

@@ -47,7 +47,7 @@ fn identity(n:Int where positive):Int where positive{n}
 fn main(){a:Int where positive=comptime{identity(2)};b:Int where positive=comptime{a+1};println(b)}`},
 		{name: "false preflight", source: `pred positive(n:Int){n>0}
 fn must(n:Int where positive):Int{panic("must not execute")}
-fn main(){a=comptime{1};println(comptime{must(-1)})}`, want: "positive(-1) is false"},
+fn main(){_=comptime{1};println(comptime{must(-1)})}`, want: "positive(-1) is false"},
 		{name: "failed value before dependent", source: `pred positive(r:R){r.n>0}
 type R={n:Int} where positive
 fn invalid():R unsafe go{return R{n:-1}}
@@ -57,10 +57,10 @@ fn main(){r=comptime{invalid()};println(comptime{consume(r)})}`, want: "positive
 fn b():Int{a()}
 fn main(){println(a())}`, want: "cyclic comptime"},
 		{name: "per recipe timeout", source: `fn spin():Int unsafe go{for{}}
-fn main(){a=comptime{1};println(comptime{spin()})}`, want: "evaluation exceeded 150ms", limit: 150 * time.Millisecond},
+fn main(){_=comptime{1};println(comptime{spin()})}`, want: "evaluation exceeded 150ms", limit: 150 * time.Millisecond},
 		{name: "result limit", source: `fn huge():String unsafe go{import "strings"
 return strings.Repeat("x",17<<20)}
-fn main(){a=comptime{1};println(comptime{huge()})}`, want: "result exceeds 16 MiB"},
+fn main(){_=comptime{1};println(comptime{huge()})}`, want: "result exceeds 16 MiB"},
 		// The combined encoded results exceed one request's budget.
 		{name: "result budget resets", source: `fn large():String unsafe go{import "strings"
 return strings.Repeat("x",7<<20)}

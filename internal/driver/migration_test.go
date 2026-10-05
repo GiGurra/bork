@@ -21,7 +21,7 @@ fn main() {
   println("Unit")
   results: List[Unit | Error] = [finish(() => Ok)]
   results.forEach(result => match (result) {
-    success: Unit => {}
+    _: Unit => {}
     error: Error => println(error.message)
   })
   succeed()

@@ -54,7 +54,7 @@ func TestComptimeStaticChecks(t *testing.T) {
 		{"lazy field result", "type C={lazy value:Int}\nfn f():C{comptime{C{value:1}}}", "field value: lazy cell"},
 		{"nested lazy field result", "type C={lazy value:Int}\ntype R={child:C}\nfn f():R{comptime{R{child:C{value:1}}}}", "field child: field value: lazy cell"},
 		{"sealed lazy field result", "type C=sealed{V{lazy value:Int}}\nfn f():C{comptime{C.V{value:1}}}", "variant V field value: lazy cell"},
-		{"cross loop boundary", "fn f(){for(n in [1]){x=comptime{break;1};println(x)}}", "require a loop in the same function"},
+		{"cross loop boundary", "fn f(){for(_ in [1]){x=comptime{break;1};println(x)}}", "require a loop in the same function"},
 		{"cross generator boundary", "fn f(){x=generate[Int]{n=comptime{yield 1;2};yield n};println(x.toList())}", "yield requires a generator"},
 		{"keyword name", "fn comptime(n:Int):Int{n}\nfn f():Int{comptime(1)}", ""},
 	} {

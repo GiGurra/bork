@@ -26,8 +26,8 @@ fn main() uses io + clock + state {
   scope s {
     println("ready")
     match (time.Sleep(s, time.Nanoseconds(3600000000000))) {
-      done: Ok => println("slept")
-      stopped: Cancelled => println("cancelled")
+      _: Ok => println("slept")
+      _: Cancelled => println("cancelled")
     }
   }
 }
