@@ -94,3 +94,11 @@ func TestRemoveFunctionsPhysicalOffsets(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestImportName(t *testing.T) {
+	for path, want := range map[string]string{"math/rand/v2": "rand", "fmt": "fmt", "net/http": "http", "example.com/v2": "example.com", "example.com/v": "v"} {
+		if got := importName(path); got != want {
+			t.Errorf("importName(%q) = %q, want %q", path, got, want)
+		}
+	}
+}

@@ -319,7 +319,7 @@ func (l *lifeChecker) funcRef(x *FuncRef) {
 			continue
 		}
 		keeps := i < len(fn.ParamIn) && fn.ParamIn[i] >= 0
-		if fn.Prelude && i == 1 && (fn.Decl.Name == "send" || fn.Decl.Name == "update" || fn.Decl.Name == "swap") {
+		if fn.Prelude && (i == 1 && (fn.Decl.Name == "update" || fn.Decl.Name == "swap") || i == len(fn.Params)-1 && channelStore(fn)) {
 			// What they keep is a value of the element type.
 			keeps = len(x.Inst.TypeArgs) == 1 && l.carriesLife(x.Inst.TypeArgs[0])
 		}
@@ -912,10 +912,14 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 	// A channel or an atom keeps what is stored in it (sent, or made by
 	// update's or swap's function), and gives it as a value of its own
 	// lifetime: it must live as long.
-	if fn != nil && fn.Prelude && len(args) == 2 && (fn.Decl.Name == "send" || fn.Decl.Name == "update" || fn.Decl.Name == "swap") {
-		what := "channel"
-		if fn.Decl.Name != "send" {
-			what = "atom"
+	if fn != nil && fn.Prelude && (len(args) == 2 && (fn.Decl.Name == "update" || fn.Decl.Name == "swap") || channelStore(fn) && len(args) >= 2) {
+		what := "atom"
+		if channelStore(fn) {
+			// ch.send(s, x) and ch.trySend(x): the scope it waits in is
+			// not kept.
+			what = "channel"
+			args = []lifetime{args[0], args[len(args)-1]}
+			xargs = []Expr{xargs[0], xargs[len(xargs)-1]}
 		}
 		if short := l.storeShorter(args[1], args[0]); short != nil {
 			hint := "store only values that outlive the " + what + ", or attach a resource to its scope first"
@@ -939,6 +943,17 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 					break
 				}
 			}
+		}
+	}
+	// A channel's methods only wait in the scope they are given: what
+	// they give is a value of the channel's lifetime.
+	if channelMethod(fn) {
+		switch fn.Decl.Name {
+		case "send", "receive", "trySend", "tryReceive", "close", "length", "capacity", "toList":
+			return args[0]
+		case "values":
+			// The sequence waits in s each time it is traversed.
+			return args[0].union(args[1])
 		}
 	}
 	// Go code given a scope may keep its other arguments until the scope
@@ -1135,4 +1150,19 @@ func (l *lifeChecker) generate(x *Generate) lifetime {
 		}
 	}
 	return life
+}
+
+// channelStore reports whether fn is a prelude Channel method that keeps
+// its last argument: send and trySend.
+func channelStore(fn *Func) bool {
+	return channelMethod(fn) && (fn.Decl.Name == "send" || fn.Decl.Name == "trySend")
+}
+
+// channelMethod reports whether fn is a method of the prelude's Channel.
+func channelMethod(fn *Func) bool {
+	if fn == nil || !fn.Prelude || !fn.Decl.IsMethod || len(fn.Params) == 0 {
+		return false
+	}
+	r, ok := genericBaseOrSelf(fn.Params[0]).(*Record)
+	return ok && r.Name == "Channel"
 }

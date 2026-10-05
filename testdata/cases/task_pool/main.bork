@@ -13,7 +13,7 @@ fn main() {
     gate = channel[Bool](app, 0)
     calls = atom(0)
     first = mustTask(tasks.TrySpawn(pool, app, () => {
-      _ = receive(gate)
+      _ = gate.receive(app)
       42
     }))
     println(tasks.TrySpawn(pool, app, () => update(calls, n => n + 1)))
@@ -23,7 +23,7 @@ fn main() {
       cancel(cancelledRequest)
       println(tasks.TrySpawn(pool, cancelledRequest, () => 1))
     }
-    _ = send(gate, true)
+    _ = gate.send(app, true)
     println("joined", await(first))
     second = mustTask(tasks.TrySpawn(pool, app, () => toString(tasks.TryLaunch(pool, app, () => {}))))
     println("nested submission", await(second))
@@ -51,7 +51,7 @@ fn main() {
     pool = tasks.Open(app, 3)
     gate = channel[Bool](app, 0)
     submitters = range(0, 20).map(i => spawn(app, () => {
-      match (tasks.TrySpawn(pool, app, () => { _ = receive(gate); i })) {
+      match (tasks.TrySpawn(pool, app, () => { _ = gate.receive(app); i })) {
         _: Task[Int] => true
         _: tasks.TaskLimitReached => false
         error: Cancelled => panic(toString(error))
@@ -59,17 +59,17 @@ fn main() {
     }))
     admitted = submitters.map(await).count(x => x)
     println("concurrent capacity", admitted)
-    range(0, admitted).forEach(i => { _ = send(gate, true) })
+    range(0, admitted).forEach(i => { _ = gate.send(app, true) })
   }
 
   scope app {
     pool = tasks.Open(app, 1)
     gate = channel[Bool](app, 0)
     scope request {
-      task = mustTask(tasks.TrySpawn(pool, request, () => { _ = receive(gate); 11 }))
+      task = mustTask(tasks.TrySpawn(pool, request, () => { _ = gate.receive(request); 11 }))
       cancel(request)
       println("cancelled task holds slot", tasks.TryLaunch(pool, app, () => {}))
-      _ = send(gate, true)
+      _ = gate.send(request, true)
       println("uncooperative task joined", await(task))
     }
     println("slot after cancellation", await(mustTask(tasks.TrySpawn(pool, app, () => 12))))

@@ -1,0 +1,9 @@
+// A program that only makes and closes a channel still builds when the
+// runtime's unused helpers, and their imports, are pruned.
+fn main() {
+  scope s {
+    ch = channel[Int](s)
+    ch.close()
+    println(ch.capacity())
+  }
+}

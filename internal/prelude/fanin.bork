@@ -86,13 +86,16 @@ fn (ch: Channel[T]) receiveCase[T, R](mapResult: (T | Cancelled | Closed) uses n
 }
 
 // select receives from exactly one arm; losing channels are untouched. Empty
-// lists give None; several ready arms are chosen in unspecified order.
+// lists give None; several ready arms are chosen at random.
 fn (arms: List[ReceiveCase[R]]) select[R](s: Scope) uses state: Option[R] | Cancelled unsafe go {
   if len(arms) == 0 { return Option_None[R]{} }
-  native := make([]*_borkReceiveChoice, len(arms))
-  for i, arm := range arms { native[i] = arm.native.handle.(*_borkReceiveChoice) }
-  index, value := _borkFanInReceive(s.ctx, native)
-  if index < 0 { return value }
+  native := make([]_borkChanArm, len(arms))
+  for i, arm := range arms { native[i] = _borkChanArm{ch: arm.native.handle.(*_borkChan), scope: s.ctx} }
+  index, status, value := _borkChanSelect(native, true)
+  switch status {
+  case _borkChanCancelled: return value
+  case _borkChanClosed: value = Closed{}
+  }
   payload := SelectPayload{handle: value, owner: arms[index].native.owner}
   return Option_Some[R]{value: arms[index].decode(payload)}
 }

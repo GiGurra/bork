@@ -144,13 +144,14 @@ fn main() {
   scope s {
     numbers = channel[Int](s, 2)
     launch(s, () => {
-      _ = send(numbers, 1)
-      _ = send(numbers, 2)
-      closeChannel(numbers)
+      _ = numbers.send(s, 1)
+      _ = numbers.send(s, 2)
+      numbers.close()
     })
-    println(receive(numbers))
-    println(receive(numbers))
-    println(receive(numbers))
+    for (n in numbers.values(s)) {
+      println(n)
+    }
+    println(numbers.receive(s))
   }
 }
 ```
@@ -161,7 +162,7 @@ fn main() {
 Closed {}
 ```
 
-`channel[T](s, capacity)` makes a channel owned by the scope. `send` and `receive` wait when the channel is full or empty, and report `Closed` or `Cancelled` as values.
+`channel[T](s, capacity)` makes a channel owned by the scope (`channel[T](s)` is unbuffered, and `unboundedChannel[T](s)` grows as needed). `send` and `receive` wait when the channel is full or empty, in the scope they are given, and report `Closed` or `Cancelled` as values. `for (x in ch.values(s))` receives until the channel is closed.
 
 ## Shared state
 

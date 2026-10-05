@@ -13,8 +13,8 @@ fn nameOf(c: Conn): String unsafe go {
 // A generic function cannot make a value of its type parameters' types:
 // the elements forEach passes its lambda are those of xs, so a lambda
 // may send them to a channel xs outlives.
-fn sendAll(ch: Channel[Conn], xs: List[Conn] in ch) uses state {
-  xs.forEach(c => { _ = send(ch, c) })
+fn sendAll(s: Scope, ch: Channel[Conn], xs: List[Conn] in ch) uses state {
+  xs.forEach(c => { _ = ch.send(s, c) })
 }
 
 // So may a lambda of a generic function of the program's own.
@@ -37,28 +37,30 @@ fn ifSome[T](o: Option[T], f: (T) uses state => Ok) uses state {
 }
 
 // What comes out of a channel lives as long as the channel.
-fn drain[T](from: Channel[T], f: (T) uses state => Ok) uses state {
-  received(from).forEach(f)
+fn drain[T](s: Scope, from: Channel[T], f: (T) uses state => Ok) uses state {
+  for (x in from.values(s)) {
+    f(x)
+  }
 }
 
 fn main() uses io + state {
   scope app {
     ch = channel[Conn](app, 8)
     conns = [connect("a", app), connect("b", app)]
-    conns.forEach(c => { _ = send(ch, c) })
-    sendAll(ch, [connect("c", app)])
-    each([connect("d", app)], c => { _ = send(ch, c) })
+    conns.forEach(c => { _ = ch.send(app, c) })
+    sendAll(app, ch, [connect("c", app)])
+    each([connect("d", app)], c => { _ = ch.send(app, c) })
     byName = { "e": connect("e", app) }
-    byName.forEach((k, c) => { _ = send(ch, c) })
-    ifSome(Option.Some { value: connect("f", app) }, c => { _ = send(ch, c) })
+    byName.forEach((k, c) => { _ = ch.send(app, c) })
+    ifSome(Option.Some { value: connect("f", app) }, c => { _ = ch.send(app, c) })
     store = atom([connect("g", app)])
     conns.forEach(c => { _ = update(store, cs => cs.append(c)) })
     first = channel[Conn](app, 1)
-    _ = send(first, connect("h", app))
-    closeChannel(first)
-    drain(first, c => { _ = send(ch, c) })
-    closeChannel(ch)
-    println(received(ch).map(nameOf))
+    _ = first.send(app, connect("h", app))
+    first.close()
+    drain(app, first, c => { _ = ch.send(app, c) })
+    ch.close()
+    println(ch.values(app).toList().map(nameOf))
     println(current(store).map(nameOf))
   }
 }

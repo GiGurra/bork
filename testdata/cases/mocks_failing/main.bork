@@ -11,7 +11,7 @@ test "a failing test with a task waiting in a mock fails, and does not hang" {
   scope s {
     ch = channel[Int](s, 0)
     mock Fetch(url) {
-      r = receive(ch)
+      r = ch.receive(s)
       s"got $r"
     }
     launch(s, () => println(Fetch("a")))

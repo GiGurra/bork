@@ -4,7 +4,7 @@ fn escapedTimeout() uses clock + state: Channel[Int] | Cancelled {
 fn escapedSelection(wait: Scope) uses state: Option[Channel[Int] | Cancelled | Closed] | Cancelled {
   scope source {
     values = channel[Channel[Int]](source, 1)
-    _ = send(values, channel[Int](source, 1))
+    _ = values.send(source, channel[Int](source, 1))
     arm = values.receiveCase(value => value)
     [arm].select(wait)
   }
@@ -17,3 +17,18 @@ fn escapedTaskResult(wait: Scope) uses state: Option[Channel[Int]] | Cancelled {
   }
 }
 fn main() {}
+// A receive arm keeps what its mapper captures.
+fn leakedMapper(outer: Scope): ReceiveCase[Channel[Int]] {
+  values = channel[Int](outer, 1)
+  scope inner {
+    short = channel[Int](inner, 1)
+    values.receiveCase(v => short)
+  }
+}
+// A channel's values wait in the scope they are given.
+fn escapedValues(outer: Scope): Seq[Int] uses state {
+  ch = channel[Int](outer)
+  scope inner {
+    ch.values(inner)
+  }
+}

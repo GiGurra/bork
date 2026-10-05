@@ -254,9 +254,16 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 			}
 			if fd.GoBody != nil {
 				fn := info.FuncOf[fd]
-				if strings.Contains(fd.GoBody.Body, "_borkFanIn") || strings.Contains(fd.GoBody.Body, "_borkReceiveChoice") {
+				if strings.Contains(fd.GoBody.Body, "_borkFanIn") {
 					g.usesFanIn = true
 					g.usesScopes = true
+					g.goType(info.Named["Cancelled"])
+					g.goType(info.Named["Closed"])
+				}
+				if strings.Contains(fd.GoBody.Body, "_borkChan") {
+					g.usesChannels = true
+					g.usesScopes = true
+					g.usesOk = true
 					g.goType(info.Named["Cancelled"])
 					g.goType(info.Named["Closed"])
 				}
@@ -489,6 +496,7 @@ type gen struct {
 	usesScopes       bool
 	usesParallel     bool
 	usesFanIn        bool
+	usesChannels     bool
 	usesDerive       bool
 	usesEqual        bool
 	usesHash         bool

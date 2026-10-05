@@ -653,26 +653,26 @@ fn (output: Reader) Lines() uses io + state: Seq[String | Cancelled | IoError] u
 // to capacity lines, from a task of s, and closes it at the end of the
 // stream. A read failure is sent as the last element. Use it to wait on
 // process output together with other channels.
-fn (output: Reader) LinesChannel(s: Scope, capacity: Int = 64) uses io + state: Channel[String | IoError] {
+fn (output: Reader) LinesChannel(s: Scope, capacity: Int where validCapacity = 64) uses io + state: Channel[String | IoError] {
   lines: Channel[String | IoError] = channel(s, capacity)
   owned = attach(output, s)
   launch(s, () => {
     for (item in owned.Lines()) {
       match (item) {
         line: String => {
-          match (send(lines, line)) {
+          match (lines.send(s, line)) {
             _: Ok => {}
             _ => break
           }
         }
         error: IoError => {
-          _ = send(lines, error)
+          _ = lines.send(s, error)
           break
         }
         _: Cancelled => break
       }
     }
-    closeChannel(lines)
+    lines.close()
   })
   lines
 }

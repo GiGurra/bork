@@ -315,28 +315,28 @@ fn main() {
     entered = channel[Bool](app, 1)
     release = channel[Bool](app, 1)
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
-      _ = send(entered, true)
-      _ = receive(release)
+      _ = entered.send(app, true)
+      _ = release.receive(app)
       http.Text(200, budget(s))
     }))
     active = spawn(app, () => http.Get(s"http://${http.Address(server)}", app, timeoutMs: 30000))
-    _ = receive(entered)
+    _ = entered.receive(app)
     cancelAfter(app, 10000)
-    _ = send(release, true)
+    _ = release.send(app, true)
     println("later listener deadline", withinBudget(resultText(await(active)), 10000000000))
   }
   scope app {
     entered = channel[Bool](app, 1)
     release = channel[Bool](app, 1)
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
-      if (request.path == "/held") { _ = send(entered, true); _ = receive(release) }
+      if (request.path == "/held") { _ = entered.send(app, true); _ = release.receive(app) }
       http.Text(200, "ok")
       }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000 } }))
     active = spawn(app, () => http.Get(s"http://${http.Address(server)}/held", app))
-    _ = receive(entered)
+    _ = entered.receive(app)
     println("queued deadline", queuedDeadline(http.Address(server)))
     println("queue released", http.AdmissionState(server))
-    _ = send(release, true)
+    _ = release.send(app, true)
     _ = await(active)
   }
 }

@@ -131,7 +131,7 @@ func preserveImports(decls []ast.Decl, all, live map[string]bool) {
 				name = spec.Name.Name
 			} else {
 				imported, _ := strconv.Unquote(spec.Path.Value)
-				name = path.Base(imported)
+				name = importName(imported)
 			}
 			// Preserve init effects when only removed helpers used a package. Leave
 			// originally unused imports unchanged so their Go errors remain visible.
@@ -140,6 +140,16 @@ func preserveImports(decls []ast.Decl, all, live map[string]bool) {
 			}
 		}
 	}
+}
+
+// importName is the name an unnamed import declares: its path's last
+// element, or the one before a major version suffix (math/rand/v2).
+func importName(imported string) string {
+	name := path.Base(imported)
+	if dir := path.Dir(imported); dir != "." && len(name) > 1 && name[0] == 'v' && strings.Trim(name[1:], "0123456789") == "" {
+		return path.Base(dir)
+	}
+	return name
 }
 
 // Remove raw declarations by physical byte offset, retaining unsafe Go layout

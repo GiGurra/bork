@@ -103,18 +103,18 @@ fn main() {
     }
     scope request {
       ready = channel[Bool](app, 1)
-      launch(request, () => { _ = receive(ready); cancel(request) })
+      launch(request, () => { _ = ready.receive(request); cancel(request) })
       calls = atom(0)
-      result = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = send(ready, true); ceiling } })
+      result = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = ready.send(request, true); ceiling } })
       println("cancel wait", kind(result), current(calls))
     }
   }
   scope s {
     budget = fixedBudget(s, 10)
     ready = channel[Bool](s, 1)
-    launch(s, () => { _ = receive(ready); finalizer(budget) })
+    launch(s, () => { _ = ready.receive(s); finalizer(budget) })
     calls = atom(0)
-    result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = send(ready, true); ceiling } })
+    result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = ready.send(s, true); ceiling } })
     println("budget close wait", kind(result), current(calls))
     result2 = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() })
     println("closed budget", kind(result2), current(calls))
@@ -122,8 +122,8 @@ fn main() {
   scope s {
     budget = fixedBudget(s, 10)
     ready = channel[Bool](s, 1)
-    launch(s, () => { _ = receive(ready); finalizer(budget) })
-    result = http.Retry(s, budget, attempt => { _ = send(ready, true); waitCancelled(attempt) })
+    launch(s, () => { _ = ready.receive(s); finalizer(budget) })
+    result = http.Retry(s, budget, attempt => { _ = ready.send(s, true); waitCancelled(attempt) })
     println("budget cancels operation", kind(result))
   }
   scope s {

@@ -3,4 +3,17 @@ Ok
 Closed {}
 a
 Closed {}
+Closed {}
+Cancelled { reason: "deadline exceeded" }
 Cancelled { reason: "context deadline exceeded" }
+Option.None
+Ok
+Full {}
+1 Option.Some { value: 1 }
+Option.Some { value: 1 }
+Closed {} Closed {}
+1000 Option.None
+499500
+1650
+[]
+0 1

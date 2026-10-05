@@ -133,91 +133,174 @@ fn swap[T](a: Atom[T], f: (T) uses nothing => T) uses state: T {
   a.swapFn(f)
 }
 
-// Channel passes values of type T between tasks. It belongs to the
-// scope it was made in, and closes when that scope closes; its
-// operations stop with Cancelled when that scope is cancelled.
-type Channel[T] = private {
-  native: ChannelHandle,
-  sendFn: (T) uses state => Ok | Cancelled | Closed,
-  receiveFn: () uses state => T | Cancelled | Closed,
-  closeFn: () uses state => Ok,
-}
+// Channel passes values of type T between tasks, in the order they were
+// sent. It belongs to the scope it was made in, which closes it when it
+// closes. Operations that wait take the scope they wait in, and give
+// Cancelled when it, or the channel's scope, is cancelled.
+type Channel[T] = private { native: ChannelHandle }
+
+// Full is what trySend gives when the channel has no room.
+type Full = {}
+
+// validCapacity holds for the capacities a channel can have.
+pred validCapacity(capacity: Int) { capacity >= 0 }
 
 // channel makes a channel in scope s that holds up to capacity values
-// that are not received yet (0: a sender waits for a receiver).
-fn channel[T](s: Scope, capacity: Int): Channel[T] unsafe go {
-  import "sync"
-  import "reflect"
-  c := make(chan T, capacity)
-  closed := make(chan struct{})
-  var once sync.Once
-  closeFn := func() { once.Do(func() { close(closed) }) }
-  owner := s.Own(closeFn)
-  // The Go channel is never closed, so a late send cannot panic.
-  return Channel[T]{
-    native: ChannelHandle{handle: &_borkReceiveChoice{data: reflect.ValueOf(c), closed: closed, ctx: s.ctx}, owner: owner},
-    sendFn: func(x T) any {
-      select {
-      case <-closed:
-        return Closed{}
-      case <-s.ctx.Done():
-        return Cancelled{reason: s._cancelReason()}
-      default:
-      }
-      select {
-      case c <- x:
-        return _borkOk()
-      case <-closed:
-        return Closed{}
-      case <-s.ctx.Done():
-        return Cancelled{reason: s._cancelReason()}
-      }
-    },
-    receiveFn: func() any {
-      select {
-      case x := <-c:
-        return x
-      case <-closed:
-        select {
-        case x := <-c:
-          return x
-        default:
-          return Closed{}
-        }
-      case <-s.ctx.Done():
-        return Cancelled{reason: s._cancelReason()}
-      }
-    },
-    closeFn: closeFn,
+// that are not received yet; with capacity 0 (the default), a sender
+// waits for a receiver.
+fn channel[T](s: Scope, capacity: Int where validCapacity = 0): Channel[T] unsafe go {
+  c := _borkNewChan(s, int(capacity))
+  return Channel[T]{native: ChannelHandle{handle: c, owner: s.Own(c.release)}}
+}
+
+// unboundedChannel makes a channel in scope s whose buffer grows as
+// needed, so a send never waits. Its memory is bounded only by how far
+// the receivers fall behind.
+fn unboundedChannel[T](s: Scope): Channel[T] unsafe go {
+  c := _borkNewChan(s, -1)
+  return Channel[T]{native: ChannelHandle{handle: c, owner: s.Own(c.release)}}
+}
+
+// send passes x to the channel, waiting in s while it is full (or, for
+// an unbuffered channel, until a receiver takes it).
+fn (ch: Channel[T]) send[T](s: Scope, x: T) uses state: Ok | Closed | Cancelled unsafe go {
+  return _borkChanSend(s, ch.native.handle.(*_borkChan), x)
+}
+
+// receive takes the next value from the channel, waiting in s until
+// there is one. A closed channel gives the values still buffered, then
+// Closed.
+fn (ch: Channel[T]) receive[T](s: Scope) uses state: T | Closed | Cancelled unsafe go {
+  value, _ := _borkChanReceive(s, ch.native.handle.(*_borkChan))
+  return value
+}
+
+// trySend sends x if that needs no waiting.
+fn (ch: Channel[T]) trySend[T](x: T) uses state: Ok | Full | Closed unsafe go {
+  _, status, _ := _borkChanSelect([]_borkChanArm{{ch: ch.native.handle.(*_borkChan), send: true, value: x}}, false)
+  switch status {
+  case _borkChanClosed:
+    return Closed{}
+  case _borkChanNotReady:
+    return Full{}
   }
+  return _borkOk()
 }
 
-// send passes x to the channel, waiting while it is full.
-fn send[T](ch: Channel[T], x: T) uses state: Ok | Cancelled | Closed unsafe go {
-  return ch.sendFn(x)
+// tryReceive receives a value if one is ready: None when none is.
+fn (ch: Channel[T]) tryReceive[T]() uses state: Option[T] | Closed unsafe go {
+  _, status, value := _borkChanSelect([]_borkChanArm{{ch: ch.native.handle.(*_borkChan)}}, false)
+  switch status {
+  case _borkChanClosed:
+    return Closed{}
+  case _borkChanNotReady:
+    return Option_None[T]{}
+  }
+  x, _ := value.(T)
+  return Option_Some[T]{value: x}
 }
 
-// receive takes the next value from the channel, waiting until there
-// is one.
-fn receive[T](ch: Channel[T]) uses state: T | Cancelled | Closed unsafe go {
-  return ch.receiveFn()
+// close closes the channel: sends give Closed, and receives give the
+// values still buffered, then Closed. Closing it again does nothing.
+fn (ch: Channel[T]) close[T]() uses state unsafe go {
+  ch.native.handle.(*_borkChan).close()
 }
 
-// closeChannel closes the channel: sends give Closed, and receives
-// give the values still buffered, then Closed.
-fn closeChannel[T](ch: Channel[T]) uses state unsafe go {
-  ch.closeFn()
+// length is how many values are buffered now.
+fn (ch: Channel[T]) length[T]() uses state: Int unsafe go {
+  return int64(ch.native.handle.(*_borkChan).length())
 }
 
-// received receives values until the channel closes (or its scope is
-// cancelled), and gives them in order.
-fn received[T](ch: Channel[T]) uses state: List[T] unsafe go {
+// capacity is how many values the channel buffers: None when unbounded.
+fn (ch: Channel[T]) capacity[T](): Option[Int] unsafe go {
+  if limit := ch.native.handle.(*_borkChan).limit; limit >= 0 {
+    return Option_Some[int64]{value: int64(limit)}
+  }
+  return Option_None[int64]{}
+}
+
+// values receives values until the channel is closed, or s is
+// cancelled: for (x in ch.values(s)) { ... }. Traversing it again goes
+// on receiving.
+fn (ch: Channel[T]) values[T](s: Scope): Seq[T] uses state unsafe go {
+  c := ch.native.handle.(*_borkChan)
+  return _Seq[T]{run: func(yield func(T) bool) {
+    for {
+      value, ok := _borkChanReceive(s, c)
+      if !ok {
+        return
+      }
+      x, _ := value.(T)
+      if !yield(x) {
+        return
+      }
+    }
+  }}
+}
+
+// toList receives values until the channel is closed, and gives them in
+// order; Cancelled if s is cancelled first.
+fn (ch: Channel[T]) toList[T](s: Scope) uses state: List[T] | Cancelled unsafe go {
+  c := ch.native.handle.(*_borkChan)
   out := []T{}
   for {
-    v, ok := ch.receiveFn().(T)
+    value, ok := _borkChanReceive(s, c)
     if !ok {
+      if cancelled, is := value.(Cancelled); is {
+        return cancelled
+      }
       return out
     }
-    out = append(out, v)
+    x, _ := value.(T)
+    out = append(out, x)
   }
+}
+
+// produce makes a channel in s and runs work with it as a task of s,
+// closing the channel when work returns, so receivers' loops end. (If
+// work panics, s is cancelled, which stops them too.) A producer written
+// as a named function can stop with out.send(s, x)? when the channel is
+// closed or s is cancelled.
+fn produce[T](s: Scope, capacity: Int where validCapacity, work: (Channel[T]) => Ok | Closed | Cancelled in s) uses state: Channel[T] {
+  out = channel[T](s, capacity)
+  launch(s, () => {
+    _ = work(out)
+    out.close()
+  })
+  out
+}
+
+// merge receives from every source and passes the values on to one
+// unbuffered channel, which is closed when every source is closed: the
+// fan-in of a list of channels. If the merged channel is closed or s is
+// cancelled, each source loses at most the one value it was passing on.
+fn merge[T](s: Scope, sources: List[Channel[T]] in s) uses state: Channel[T] unsafe go {
+  import "sync/atomic"
+  out := _borkNewChan(s, 0)
+  owner := s.Own(out.release)
+  var remaining atomic.Int64
+  remaining.Store(int64(len(sources)))
+  if len(sources) == 0 {
+    out.close()
+  }
+  for _, source := range sources {
+    in := source.native.handle.(*_borkChan)
+    s.Go(func() any {
+      defer func() {
+        if remaining.Add(-1) == 0 {
+          out.close()
+        }
+      }()
+      for {
+        value, ok := _borkChanReceive(s, in)
+        if !ok {
+          return nil
+        }
+        if _, sent := _borkChanSend(s, out, value).(_Ok); !sent {
+          return nil
+        }
+      }
+    })
+  }
+  return Channel[T]{native: ChannelHandle{handle: out, owner: owner}}
 }

@@ -1,0 +1,7 @@
+fn capacities(n: Int) {
+  scope s {
+    _ = channel[Int](s, -1)
+    _ = channel[Int](s, n)
+  }
+}
+fn main() {}

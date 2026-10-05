@@ -1,0 +1,2 @@
+main.bork:3:25: channel requires capacity to be validCapacity, but validCapacity(-1) is false
+main.bork:4:25: channel requires capacity to be validCapacity, but that is not proven for n (check it first with if (validCapacity(n)) { ... }, or require it: n: Int where validCapacity)

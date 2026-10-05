@@ -4,14 +4,14 @@ fn main() {
   scope app {
     pool = tasks.Open(app, maxTasks: 1)
     gate = channel[Bool](app, 0)
-    match (tasks.TrySpawn(pool, app, () => { _ = receive(gate); "finished" })) {
+    match (tasks.TrySpawn(pool, app, () => { _ = gate.receive(app); "finished" })) {
       task: Task[String] => {
         match (tasks.TryLaunch(pool, app, () => println("second task"))) {
           overloaded: tasks.TaskLimitReached => println(s"pool full: limit ${overloaded.limit}")
           cancelled: Cancelled => println(cancelled)
           _ => {}
         }
-        _ = send(gate, true)
+        _ = gate.send(app, true)
         println(await(task))
       }
       error: tasks.TaskLimitReached | Cancelled => println(error)

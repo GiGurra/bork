@@ -14,11 +14,11 @@ fn main() {
   scope s {
     ready = channel[Int](s, 2)
     release = channel[Int](s, 2)
-    async(owner(s)) first = { _ = send(ready, 1); _ = receive(release); 11 }
-    async(s) second = { _ = send(ready, 2); _ = receive(release); 22 }
-    _ = receive(ready); _ = receive(ready)
+    async(owner(s)) first = { _ = ready.send(s, 1); _ = release.receive(s); 11 }
+    async(s) second = { _ = ready.send(s, 2); _ = release.receive(s); 22 }
+    _ = ready.receive(s); _ = ready.receive(s)
     println("both started")
-    _ = send(release, 1); _ = send(release, 2)
+    _ = release.send(s, 1); _ = release.send(s, 2)
     reader = () => first
     tasks = [1, 2, 3].map(n => spawn(s, () => reader()))
     println(tasks.map(t => await(t)))
@@ -51,7 +51,7 @@ fn main() {
   scope outer {
     ch = channel[Int](outer, 1)
     copy = scope inner { async(inner) value = ch; value }
-    _ = send(copy, 7)
-    println(receive(copy))
+    _ = copy.send(outer, 7)
+    println(copy.receive(outer))
   }
 }

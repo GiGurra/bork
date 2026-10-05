@@ -117,6 +117,10 @@ func keepsValuesSeen(t Type, seen map[Type]bool, typeParams bool) bool {
 	case *Basic:
 		return t == Scope || t == OwnedScope
 	case *Record:
+		// A channel keeps what is sent to it, in its native handle.
+		if b, ok := genericBaseOrSelf(t).(*Record); ok && b.Prelude && b.Name == "Channel" {
+			return true
+		}
 		for _, f := range t.Fields {
 			if f.Lazy || keepsValuesSeen(f.Type, seen, typeParams) {
 				return true

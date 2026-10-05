@@ -11,9 +11,9 @@ fn show(item: String | Closed | Cancelled | IoError): String {
   }
 }
 
-fn drain(lines: Channel[String | IoError], seen: List[String]) uses state: List[String] {
-  match (receive(lines)) {
-    line: String => drain(lines, seen.append(line))
+fn drain(s: Scope, lines: Channel[String | IoError], seen: List[String]) uses state: List[String] {
+  match (lines.receive(s)) {
+    line: String => drain(s, lines, seen.append(line))
     error: IoError => seen.append(error.message)
     _: Closed => seen
     _: Cancelled => seen
@@ -88,7 +88,7 @@ fn pipelines(s: Scope) uses io + state: Ok | IoError | Cancelled {
   println(rest.StdoutText())
   _ = started.Wait()?
   lines = process.Start(s, "/bin/sh", ["-c", "echo one; echo two; echo three"], stdout: .Pipe)?
-  println(drain(lines.Stdout().LinesChannel(s, capacity: 1), []))
+  println(drain(s, lines.Stdout().LinesChannel(s, capacity: 1), []))
   _ = lines.Wait()?
 }
 

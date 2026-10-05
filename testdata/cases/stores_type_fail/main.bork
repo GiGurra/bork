@@ -1,7 +1,7 @@
 // The fields are internal.
 fn fields(app: Scope) uses io {
   ch = channel[Int](app, 1)
-  f = ch.sendFn
+  f = ch.native
   a = atom(1)
   match (a) {
     Atom { currentFn } => println("x")
@@ -11,14 +11,14 @@ fn fields(app: Scope) uses io {
 // Nor can they be called, copied, or built outside the prelude.
 fn fieldCalls(app: Scope) uses state {
   ch = channel[Int](app, 1)
-  _ = ch.sendFn(1)
+  _ = ch.native
   a = atom(1)
   _ = a.updateFn(x => x + 1)
-  _ = ch.copy(closeFn: () => {})
+  _ = ch.copy(native: ch.native)
 }
 
 fn literal(ch: Channel[Int]): Channel[Int] {
-  Channel { sendFn: ch.sendFn, receiveFn: ch.receiveFn, closeFn: ch.closeFn }
+  Channel { native: ch.native }
 }
 
 // in needs a target that can belong to a scope, and no cycles.

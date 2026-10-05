@@ -9,7 +9,7 @@ fn shorterList() uses state {
   scope app {
     ch = channel[Conn](app, 1)
     scope inner {
-      [connect(inner)].forEach(c => { _ = send(ch, c) })
+      [connect(inner)].forEach(c => { _ = ch.send(inner, c) })
     }
   }
 }
@@ -25,7 +25,7 @@ fn withConn(f: (Conn) uses state => Ok) uses state {
 fn concrete() uses state {
   scope app {
     ch = channel[Conn](app, 1)
-    withConn(c => { _ = send(ch, c) })
+    withConn(c => { _ = ch.send(app, c) })
   }
 }
 
@@ -49,7 +49,7 @@ fn folded() uses state {
   scope app {
     ch = channel[Conn](app, 1)
     _ = [connect(app)].fold(0, (n, c) => {
-      _ = send(ch, c)
+      _ = ch.send(app, c)
       n + 1
     })
   }
@@ -69,7 +69,7 @@ fn eachAfter[T](f: (T) uses state => Ok, xs: List[T]) uses state {
 fn after() uses state {
   scope app {
     ch = channel[Conn](app, 1)
-    eachAfter(c => { _ = send(ch, c) }, [connect(app)])
+    eachAfter(c => { _ = ch.send(app, c) }, [connect(app)])
   }
 }
 
@@ -91,7 +91,7 @@ instance makeConn: Make[Conn] {
 fn bounded() uses state {
   scope app {
     ch = channel[Conn](app, 1)
-    made([connect(app)], c => { _ = send(ch, c) })
+    made([connect(app)], c => { _ = ch.send(app, c) })
   }
 }
 
@@ -106,7 +106,7 @@ fn viaMaker[T](mk: (Scope) => T, f: (T) uses state => Ok) uses state {
 fn maker() uses state {
   scope app {
     ch = channel[Conn](app, 1)
-    viaMaker(s => connect(s), c => { _ = send(ch, c) })
+    viaMaker(s => connect(s), c => { _ = ch.send(app, c) })
   }
 }
 
@@ -120,6 +120,6 @@ fn viaConv[T](conv: (Conn) => T, f: (T) uses state => Ok) uses state {
 fn converted() uses state {
   scope app {
     ch = channel[Conn](app, 1)
-    viaConv(c => c, c => { _ = send(ch, c) })
+    viaConv(c => c, c => { _ = ch.send(app, c) })
   }
 }

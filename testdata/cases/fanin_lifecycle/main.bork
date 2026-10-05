@@ -1,5 +1,5 @@
 fn loser(child: Scope, started: Channel[Int], finished: Atom[Bool]) uses clock + state: Int | Cancelled {
-  assertEqual(send(started, 1), {})
+  assertEqual(started.send(child, 1), {})
   waited = delay(child, 10000)
   assertEqual(update(finished, old => true), true)
   match (waited) { c: Cancelled => c; _ => 999 }
@@ -10,7 +10,7 @@ test "race cancels and joins losers without cancelling the parent" {
     started = channel[Int](s, 1)
     finished = atom(false)
     result = race[Int | Cancelled](s, [
-      child => { assertEqual(receive(started), 1); 7 },
+      child => { assertEqual(started.receive(s), 1); 7 },
       child => loser(child, started, finished),
     ])
     match (result) {
@@ -25,13 +25,13 @@ test "race cancels and joins losers without cancelling the parent" {
 test "awaitFirst leaves losing tasks in their owner scope" {
   scope s {
     gate = channel[Int](s, 0)
-    pending = spawn(s, () => receive(gate))
+    pending = spawn(s, () => gate.receive(s))
     ready = spawn(s, () => 7)
     // Both tasks have the same result type for this wait.
     immediate = spawn(s, () => { value: Int | Cancelled | Closed = await(ready); value })
     result = [pending, immediate].awaitFirst(s)
     match (result) { Option.Some { value } => assertEqual(value, 7); _ => panic("expected ready task") }
-    assertEqual(send(gate, 9), {})
+    assertEqual(gate.send(s, 9), {})
     assertEqual(await(pending), 9)
   }
 }
@@ -57,7 +57,7 @@ test "successful timeout resources remain open until the parent closes" {
   scope s {
     result = withTimeout(s, 1000000, child => channel[Int](child, 1))
     match (result) {
-      ch: Channel[Int] => assertEqual(send(ch, 3), {})
+      ch: Channel[Int] => assertEqual(ch.send(s, 3), {})
       _ => panic("expected a channel")
     }
   }
@@ -67,17 +67,17 @@ test "selection does not consume losing channels and drains closed buffers" {
   scope s {
     a = channel[Int](s, 1)
     b = channel[String](s, 1)
-    assertEqual(send(a, 4), {})
-    assertEqual(send(b, "hello"), {})
+    assertEqual(a.send(s, 4), {})
+    assertEqual(b.send(s, "hello"), {})
     numbers = a.receiveCase(v => match (v) { n: Int => toString(n); _ => "end" })
     words = b.receiveCase(v => match (v) { text: String => text; _ => "end" })
     chosen = [numbers, words].select(s)
     match (chosen) {
-      Option.Some { value } => if (value == "hello") { assertEqual(receive(a), 4) } else { assertEqual(value, "4"); assertEqual(receive(b), "hello") }
+      Option.Some { value } => if (value == "hello") { assertEqual(a.receive(s), 4) } else { assertEqual(value, "4"); assertEqual(b.receive(s), "hello") }
       _ => panic("expected selected value")
     }
-    assertEqual(send(a, 5), {})
-    closeChannel(a)
+    assertEqual(a.send(s, 5), {})
+    a.close()
     assertEqual([numbers].select(s), Option.Some { value: "5" })
     assertEqual([numbers].select(s), Option.Some { value: "end" })
   }
@@ -86,20 +86,20 @@ test "selection does not consume losing channels and drains closed buffers" {
 test "selection receives from an unbuffered channel" {
   scope s {
     ch = channel[Int](s, 0)
-    task = spawn(s, () => send(ch, 8))
+    task = spawn(s, () => ch.send(s, 8))
     arm = ch.receiveCase(v => match (v) { n: Int => n; _ => -1 })
     assertEqual([arm].select(s), Option.Some { value: 8 })
     assertEqual(await(task), {})
   }
 }
 
-test "selection distinguishes arm cancellation from wait cancellation" {
+test "selection is cancelled by an arm's channel scope and by the wait scope" {
   scope outer {
     scope source {
       ch = channel[Int](source, 0)
-      arm = ch.receiveCase(v => match (v) { n: Int => n; _: Cancelled => 42; _ => -1 })
+      arm = ch.receiveCase(v => match (v) { n: Int => n; _ => -1 })
       cancel(source)
-      assertEqual([arm].select(outer), Option.Some { value: 42 })
+      match ([arm].select(outer)) { c: Cancelled => assertEqual(c.reason, "cancelled"); _ => panic("expected cancellation") }
     }
     ch = channel[Int](outer, 0)
     scope wait {

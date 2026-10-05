@@ -46,12 +46,12 @@ fn main() {
     println(timeout(s, 1000000, canceledValue).reason)
     numbers = channel[Int](s, 1)
     words = channel[String](s, 1)
-    assertEqual(send(words, "hello"), {})
+    assertEqual(words.send(s, "hello"), {})
     arms = [numbers.receiveCase(numberEvent), words.receiveCase(textEvent)]
     println(arms.select(s))
-    assertEqual(send(numbers, 42), {})
+    assertEqual(numbers.send(s, 42), {})
     println(arms.select(s))
-    closeChannel(words)
+    words.close()
     println([words.receiveCase(textEvent)].select(s))
     none: List[ReceiveCase[Event]] = []
     println(none.select(s))

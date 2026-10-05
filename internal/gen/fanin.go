@@ -69,34 +69,4 @@ func _borkFanInTimeout(s *_Scope, ms int64, work func(*_Scope) any) any {
  if child.ctx.Err() != nil { return Cancelled{reason: child._cancelReason()} }
  return value
 }
-
-type _borkReceiveChoice struct {
- data reflect.Value
- closed <-chan struct{}
- ctx context.Context
-}
-
-// Selection receives from exactly one channel. Closing a channel leaves its
-// buffer available before Closed is returned, matching receive.
-func _borkFanInReceive(ctx context.Context, arms []*_borkReceiveChoice) (int, any) {
- if len(arms) > 21845 { panic("bork: select: at most 21845 receive arms") }
- cases := make([]reflect.SelectCase, len(arms)*3+1)
- for i, arm := range arms {
-  cases[i*3] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: arm.data}
-  cases[i*3+1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(arm.closed)}
-  cases[i*3+2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(arm.ctx.Done())}
- }
- cases[len(cases)-1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())}
- if ctx.Err() != nil { return -1, Cancelled{reason: context.Cause(ctx).Error()} }
- index, value, _ := reflect.Select(cases)
- if index == len(cases)-1 { return -1, Cancelled{reason: context.Cause(ctx).Error()} }
- arm := arms[index/3]
- switch index%3 {
- case 0: return index/3, value.Interface()
- case 1:
-  if value, ok := arm.data.TryRecv(); ok { return index/3, value.Interface() }
-  return index/3, Closed{}
- default: return index/3, Cancelled{reason: context.Cause(arm.ctx).Error()}
- }
-}
 `

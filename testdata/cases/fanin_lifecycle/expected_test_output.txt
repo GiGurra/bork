@@ -4,6 +4,6 @@ ok    timeout includes callback-spawned tasks and preserves parent cancellation
 ok    successful timeout resources remain open until the parent closes
 ok    selection does not consume losing channels and drains closed buffers
 ok    selection receives from an unbuffered channel
-ok    selection distinguishes arm cancellation from wait cancellation
+ok    selection is cancelled by an arm's channel scope and by the wait scope
 7 passed, 0 failed
 exit code 0
