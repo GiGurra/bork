@@ -413,14 +413,11 @@ func (program *compiledProgram) requireMain() error {
 
 // Build compiles the package at path into an executable at out.
 func Build(path, out string) error {
-	if cacheCLIState != nil && !cacheDisabled() {
-		return cachedBuild(path, out)
+	_, cleanup, _, err := buildOutput(path, out)
+	if cleanup != nil {
+		cleanup()
 	}
-	program, goSrc, err := emitProgramObserved(path, nil)
-	if err != nil {
-		return err
-	}
-	return buildGoWithContext(program.files, goSrc, out, program.module, program.context, program.info.Embeds...)
+	return err
 }
 
 // buildGo builds generated Go source (for the given bork files) into an
@@ -508,18 +505,14 @@ type goModuleHookFunc func(goMod []byte) []byte
 // Assigned once by TestMain; individual fixtures use goContextOptions instead.
 var goModuleHook goModuleHookFunc
 
-// Run builds the package at path into a temporary executable and runs
+// Run builds the package at path into a reusable executable and runs
 // it with the given arguments. It returns the program's exit code.
 func Run(path string, args []string) (int, error) {
-	dir, err := os.MkdirTemp("", "bork-run-*")
+	exe, cleanup, _, err := buildOutput(path, "")
 	if err != nil {
 		return 1, err
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
-	exe := filepath.Join(dir, "program")
-	if err := Build(path, exe); err != nil {
-		return 1, err
-	}
+	defer cleanup()
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := childproc.Run(cmd); err != nil {

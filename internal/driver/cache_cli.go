@@ -107,16 +107,14 @@ func lookupCachedCompilation(path string, emit bool) *cachedCompilation {
 	return nil
 }
 
-func cachedBuild(path, out string) error {
+func compileBuild(path string, build func(*compiledProgram, []byte) error) error {
 	if result := lookupCachedCompilation(path, true); result != nil && result.rootSource != "" {
 		// These are only source-location records for staging/error mapping. No
 		// parser/checker state is reconstructed or reused.
 		files := cachedBuildFiles(result)
-		return buildGoWithContext(files, result.goSource, out, result.module, result.context)
+		return build(&compiledProgram{files: files, module: result.module, context: result.context}, result.goSource)
 	}
-	_, _, err := freshCachedCompileWithBuild(path, true, func(program *compiledProgram, source []byte) error {
-		return buildGoWithContext(program.files, source, out, program.module, program.context, program.info.Embeds...)
-	})
+	_, _, err := freshCachedCompileWithBuild(path, true, build)
 	return err
 }
 
