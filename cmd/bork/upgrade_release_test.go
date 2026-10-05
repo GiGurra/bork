@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -52,7 +53,7 @@ func compilerTestArchive(t *testing.T, goos string, payload []byte) []byte {
 }
 
 func TestUpgradeRelease(t *testing.T) {
-	for _, scenario := range []string{"success", "bad-checksum", "missing-checksum", "missing-asset", "up-to-date", "bad-tag"} {
+	for _, scenario := range []string{"success", "bad-checksum", "missing-checksum", "missing-asset", "up-to-date", "bad-tag", "checksum-unavailable", "archive-unavailable", "checksum-interrupted", "archive-interrupted"} {
 		t.Run(scenario, func(t *testing.T) {
 			tag := "v0.4.0"
 			if scenario == "up-to-date" {
@@ -82,9 +83,23 @@ func TestUpgradeRelease(t *testing.T) {
 					}
 					_, _ = fmt.Fprintf(w, `{"tag_name":%q,"assets":[%s]}`, tag, assets)
 				case "/archive":
+					if scenario == "archive-unavailable" {
+						http.NotFound(w, r)
+						return
+					}
 					downloads++
+					if scenario == "archive-interrupted" {
+						w.Header().Set("Content-Length", fmt.Sprint(len(archive)+1))
+					}
 					_, _ = w.Write(archive)
 				case "/checksums":
+					if scenario == "checksum-unavailable" {
+						http.NotFound(w, r)
+						return
+					}
+					if scenario == "checksum-interrupted" {
+						w.Header().Set("Content-Length", "1000")
+					}
 					_, _ = fmt.Fprintf(w, "%s  %s\n", checksum, asset)
 				default:
 					http.NotFound(w, r)
@@ -120,7 +135,7 @@ func TestUpgradeRelease(t *testing.T) {
 				if err != nil || downloads != 0 || !strings.Contains(output.String(), "already up to date") || string(data) != "old compiler" {
 					t.Fatalf("already current: %v; %s", err, &output)
 				}
-			case "missing-asset":
+			case "missing-asset", "checksum-unavailable", "archive-unavailable", "checksum-interrupted", "archive-interrupted":
 				if err == nil || !strings.Contains(err.Error(), "requires Go on PATH") || !strings.Contains(output.String(), "falling back to source") {
 					t.Fatalf("fallback: %v; %s", err, &output)
 				}
@@ -152,8 +167,8 @@ func TestCompilerReleaseFallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := compilerRelease(ctx, http.DefaultClient, "https://example.invalid", "latest")
-	if err == nil {
-		t.Fatal("canceled request succeeded")
+	if err == nil || releaseUnavailable(err) {
+		t.Fatalf("cancellation must not fall back: %v", err)
 	}
 }
 
@@ -219,4 +234,35 @@ func TestHomebrewInstall(t *testing.T) {
 	if !homebrewInstall(link) {
 		t.Fatal("missed Homebrew symlink")
 	}
+}
+
+// Requests must not begin until the matching plain progress line is emitted.
+func TestUpgradeProgressPrecedesNetwork(t *testing.T) {
+	var checking atomic.Bool
+	output := &upgradeObservedOutput{checking: &checking}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !checking.Load() {
+			t.Error("release lookup started before progress was printed")
+		}
+		_, _ = fmt.Fprint(w, `{"tag_name":"v0.4.0","assets":[]}`)
+	}))
+	defer server.Close()
+	command := upgradeCommandWithClient(server.Client(), server.URL)
+	command.SetOut(output)
+	command.SetErr(output)
+	command.SetArgs(nil)
+	t.Setenv("BORKBIN", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	if err := command.Execute(); err == nil {
+		t.Fatal("missing source Go unexpectedly succeeded")
+	}
+}
+
+type upgradeObservedOutput struct{ checking *atomic.Bool }
+
+func (out *upgradeObservedOutput) Write(data []byte) (int, error) {
+	if strings.Contains(string(data), "Checking release version") {
+		out.checking.Store(true)
+	}
+	return len(data), nil
 }

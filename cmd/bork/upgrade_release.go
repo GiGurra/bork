@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,6 +30,11 @@ var errNoCompilerRelease = errors.New("no matching compiler release")
 
 func releaseUnavailable(err error) bool { return errors.Is(err, errNoCompilerRelease) }
 
+func downloadUnavailable(status int, err error) bool {
+	var networkError net.Error
+	return status == 0 || status == http.StatusNotFound || errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &networkError)
+}
+
 func compilerRelease(ctx context.Context, client *http.Client, api, requested string) (editorRelease, error) {
 	query := "latest"
 	if requested != "latest" {
@@ -41,7 +47,7 @@ func compilerRelease(ctx context.Context, client *http.Client, api, requested st
 		}
 		// A missing release or unavailable network may still permit an offline
 		// source install from Go's cache. Integrity errors never use this fallback.
-		if status == 0 || status == http.StatusNotFound {
+		if downloadUnavailable(status, err) {
 			return editorRelease{}, fmt.Errorf("%w: %v", errNoCompilerRelease, err)
 		}
 		return editorRelease{}, err
@@ -89,8 +95,14 @@ func downloadCompiler(ctx context.Context, client *http.Client, release editorRe
 	}
 	var expected string
 	err := progress.step("Downloading checksums.txt", func() error {
-		data, _, err := releaseRequest(ctx, client, checksumURL, 1<<20)
+		data, status, err := releaseRequest(ctx, client, checksumURL, 1<<20)
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if downloadUnavailable(status, err) {
+				return fmt.Errorf("%w: %v", errNoCompilerRelease, err)
+			}
 			return err
 		}
 		for _, line := range strings.Split(string(data), "\n") {
@@ -120,16 +132,25 @@ func downloadCompiler(ctx context.Context, client *http.Client, release editorRe
 		req.Header.Set("User-Agent", "bork-upgrade")
 		resp, err := client.Do(req)
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("%w: %v", errNoCompilerRelease, err)
 		}
 		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: archive HTTP 404", errNoCompilerRelease)
+		}
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("compiler archive download: HTTP %d", resp.StatusCode)
 		}
 		count := &upgradeCounter{progress: progress}
 		n, err := io.Copy(io.MultiWriter(&archive, count), io.LimitReader(resp.Body, (64<<20)+1))
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("%w: %v", errNoCompilerRelease, err)
 		}
 		if n > 64<<20 {
 			return fmt.Errorf("compiler archive exceeds 64 MiB")

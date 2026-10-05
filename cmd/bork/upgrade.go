@@ -110,9 +110,11 @@ func upgradeCommandWithClient(client *http.Client, api string) *cobra.Command {
 			if !fromSource && release.Tag != "" {
 				installed, err = downloadCompiler(cmd.Context(), client, release, stage, progress)
 				if err != nil {
-					return err
-				}
-				if !installed {
+					if !releaseUnavailable(err) {
+						return err
+					}
+					progress.line("Prebuilt download unavailable: " + err.Error() + "; falling back to source")
+				} else if !installed {
 					progress.line("No prebuilt archive for this platform; falling back to source")
 				}
 			}

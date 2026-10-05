@@ -148,7 +148,7 @@ func defaultValue(name string) (string, error) {
 		// go env includes Go's persisted user settings, not just process variables.
 		command := exec.Command("go", "env", "-json", "GOBIN", "GOPATH")
 		// Storage settings never require selecting or downloading a Go SDK.
-		command.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+		command.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GO111MODULE=off", "GOWORK=off")
 		output, err := command.Output()
 		if err != nil {
 			return "", fmt.Errorf("resolve BORKBIN with go env: %w", err)
