@@ -11,7 +11,8 @@ import (
 )
 
 // EditorOrganizeImports sorts parsed imports and removes only imports identified
-// as unused by the current compiler diagnostics. It never infers usage from text.
+// as unused by the current compiler diagnostics, and collapses duplicate imports
+// with the same path and alias. It never infers usage from text.
 func EditorOrganizeImports(path, source string, diagnostics []diag.Diagnostic) (string, error) {
 	d := &diag.List{}
 	files := syntax.ParseFiles([]string{path}, [][]byte{[]byte(source)}, false, d)
@@ -72,6 +73,20 @@ func EditorOrganizeImports(path, source string, diagnostics []diag.Diagnostic) (
 	entries := make([]entry, len(imports))
 	for i, imp := range imports {
 		entries[i] = entry{path: imp.Path, name: imp.Name, text: source[offset(imp.Pos):offset(imp.End)], unused: unused[imp.Pos]}
+	}
+	seen := map[[2]string]bool{}
+	for i := range entries {
+		entry := &entries[i]
+		if entry.unused {
+			continue
+		}
+		key := [2]string{entry.path, entry.name}
+		if seen[key] {
+			// Reuse unused-import comment preservation for duplicate entries.
+			entry.unused = true
+		} else {
+			seen[key] = true
+		}
 	}
 	for _, comment := range files[0].Comments {
 		if offset(comment.Pos) < start || offset(comment.End) > end {
