@@ -7,9 +7,9 @@ fn job(s: Scope, name: String, seconds: String) uses io + state: process.Process
 }
 
 // count receives until the channel closes; a read failure ends it early.
-fn count(lines: Channel[String | IoError], seen: Int) uses state: Int {
-  match (receive(lines)) {
-    _: String => count(lines, seen + 1)
+fn count(s: Scope, lines: Channel[String | IoError], seen: Int) uses state: Int {
+  match (lines.receive(s)) {
+    _: String => count(s, lines, seen + 1)
     _: IoError => seen
     _: Closed => seen
     _: Cancelled => seen
@@ -33,7 +33,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   println(s"cat exited with ${waiting.Wait()?.code}")
   // LinesChannel turns piped output into a channel a task can receive from.
   ticker = process.Start(s, "/bin/sh", ["-c", "for i in 1 2 3 4; do echo tick $i; sleep 0.05; done"], stdout: .Pipe)?
-  counted = spawn(s, () => count(ticker.Stdout().LinesChannel(s), 0))
+  counted = spawn(s, () => count(s, ticker.Stdout().LinesChannel(s), 0))
   _ = ticker.Wait()?
   println(s"ticks received: ${await(counted)}")
 }
