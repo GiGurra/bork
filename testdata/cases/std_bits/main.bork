@@ -1,0 +1,32 @@
+import "bork/bits"
+
+fn main() {
+  a: Byte = 240
+  println(a.OnesCount(), a.LeadingZeros(), a.TrailingZeros())
+  println(a.RotateLeft(2), a.RotateLeft(-2), a.Reverse(), a.ReverseBytes())
+  println(a.TestBit(7), a.SetBit(0), a.ClearBit(7))
+  println(a.Extract(4, 4), a.Insert(0, 4, 5))
+  println(a.Extract(8, 0), a.Insert(8, 0, 0), a.Insert(0, 8, 255))
+  println(a.TestBit(-1), a.SetBit(8), a.ClearBit(9223372036854775807))
+  println(a.Extract(7, 2), a.Extract(-1, 1), a.Extract(0, -1))
+  println(a.Insert(0, 4, 16), a.Insert(0, 0, 1), a.Insert(9223372036854775807, 1, 0))
+  b: Uint16 = 4660
+  c: Uint32 = 305419896
+  d: Uint64 = 18446744073709551615
+  e: Int8 = -128
+  f: Int16 = -2
+  g: Int32 = -2
+  h: Int = -2
+  println(b.OnesCount(), b.LeadingZeros(), b.TrailingZeros(), b.ReverseBytes(), b.RotateLeft(8), b.Reverse())
+  println(c.OnesCount(), c.LeadingZeros(), c.TrailingZeros(), c.ReverseBytes(), c.RotateLeft(8), c.Reverse())
+  println(d.OnesCount(), d.LeadingZeros(), d.TrailingZeros(), d.ReverseBytes(), d.RotateLeft(64), d.Reverse())
+  println(e.OnesCount(), e.LeadingZeros(), e.TrailingZeros(), e.ReverseBytes(), e.RotateLeft(1), e.Reverse())
+  println(f.OnesCount(), f.LeadingZeros(), f.TrailingZeros(), f.ReverseBytes(), f.RotateLeft(1), f.Reverse())
+  println(g.OnesCount(), g.LeadingZeros(), g.TrailingZeros(), g.ReverseBytes(), g.RotateLeft(1), g.Reverse())
+  println(h.OnesCount(), h.LeadingZeros(), h.TrailingZeros(), h.ReverseBytes(), h.RotateLeft(1), h.Reverse())
+  println(e.Extract(7, 1), e.Extract(0, 8), e.Insert(0, 8, -1), e.Insert(0, 7, -1))
+  println(d.Extract(0, 64), d.Insert(0, 64, 0), d.ClearBit(63), d.SetBit(63), d.TestBit(63))
+  zero: Uint64 = 0
+  println(zero.LeadingZeros(), zero.TrailingZeros(), zero.OnesCount())
+  println(a.RotateLeft(9223372036854775807), a.RotateLeft(-9223372036854775808))
+}
