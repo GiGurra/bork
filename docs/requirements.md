@@ -3298,7 +3298,9 @@ replacements publish atomically, including while older copies run.
 
 System C headers/libraries and external state read by foreign compile-time code
 are untracked by default. Warm reuse with those inputs warns once on stderr per
-invocation. `--fast`, `BORKFAST=1`, or `fast` in bork.mod suppresses that warning;
+invocation. The C warning names only nonstandard cgo packages; standard-library
+cgo alone is covered by the Go toolchain identity and does not warn.
+`--fast`, `BORKFAST=1`, or `fast` in bork.mod suppresses that warning;
 `--rebuild` or `BORKREBUILD=1` forces full checking, reevaluation and Go rebuild,
 and takes precedence. Programs with no untracked inputs do not warn. Cached CLI
 executions replace the process on Unix; library execution APIs, Windows and

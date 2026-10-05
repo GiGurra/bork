@@ -63,7 +63,10 @@ file size and modification time are preserved.
 
 The default recipe does not track system C headers and libraries, nor external
 state read secretly by foreign compile-time code (environment, clock, or files
-outside the compiler's known project inputs). Those changes require `--rebuild`.
+outside the compiler's known project inputs). Those changes require
+`--rebuild`. The C warning names only nonstandard cgo packages (user code and module dependencies). Cgo used solely by the Go standard
+library, such as `net`, `os/user`, or `runtime/cgo`, is covered by the installed
+Go SDK identity and does not cause this warning.
 Checked pure compile-time code and `bork/build` reads use the recorded input
 contract. Foreign helpers reached by compile-time recipes or predicate evaluation
 carry the external-state warning conservatively; bork does not infer that an
