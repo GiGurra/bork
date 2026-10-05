@@ -31,7 +31,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   }
   // Starting a missing program is an IoError, not a Result.
   println(match (process.Run(s, "/no/such/program")) {
-    result: process.Result => "unexpected"
+    _: process.Result => "unexpected"
     error: IoError => s"could not start ${error.path}"
     stopped: Cancelled => stopped.reason
   })
@@ -39,7 +39,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
 
 fn main() {
   match (scope app { run(app) }) {
-    done: Ok => {}
+    _: Ok => {}
     error: IoError => eprintln(error.message)
     stopped: Cancelled => eprintln(stopped.reason)
   }

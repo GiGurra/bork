@@ -9,7 +9,7 @@ fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
     process.Run(limited, "sleep", ["10"])
   }
   println(match (slow) {
-    result: process.Result => "finished in time"
+    _: process.Result => "finished in time"
     error: IoError => error.message
     stopped: Cancelled => s"timed out: ${stopped.reason}"
   })
@@ -26,9 +26,9 @@ fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
     child.Wait()
   }
   println(match (graceful) {
-    result: process.Result => "finished in time"
+    _: process.Result => "finished in time"
     error: IoError => error.message
-    stopped: Cancelled => "stopped after a graceful shutdown"
+    _: Cancelled => "stopped after a graceful shutdown"
   })
   // Stop sends SIGTERM to a running child, then SIGKILL after its grace.
   server = process.Start(s, "sleep", ["10"])?
@@ -38,9 +38,9 @@ fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | Closed {
 
 fn main() {
   match (scope app { run(app) }) {
-    done: Ok => {}
+    _: Ok => {}
     error: IoError => eprintln(error.message)
     stopped: Cancelled => eprintln(stopped.reason)
-    end: Closed => eprintln("the child closed its output early")
+    _: Closed => eprintln("the child closed its output early")
   }
 }

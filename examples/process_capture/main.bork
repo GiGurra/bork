@@ -12,7 +12,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
 
 fn main() {
   match (scope app { run(app) }) {
-    done: Ok => {}
+    _: Ok => {}
     error: IoError => eprintln(error.message)
     stopped: Cancelled => eprintln(stopped.reason)
   }

@@ -9,10 +9,10 @@ fn job(s: Scope, name: String, seconds: String) uses io + state: process.Process
 // count receives until the channel closes; a read failure ends it early.
 fn count(lines: Channel[String | IoError], seen: Int) uses state: Int {
   match (receive(lines)) {
-    received: String => count(lines, seen + 1)
-    error: IoError => seen
-    end: Closed => seen
-    stopped: Cancelled => seen
+    _: String => count(lines, seen + 1)
+    _: IoError => seen
+    _: Closed => seen
+    _: Cancelled => seen
   }
 }
 
@@ -40,7 +40,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
 
 fn main() {
   match (scope app { run(app) }) {
-    done: Ok => {}
+    _: Ok => {}
     error: IoError => eprintln(error.message)
     stopped: Cancelled => eprintln(stopped.reason)
   }

@@ -18,10 +18,10 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   // NextLine reads one line at a time, then Closed at the end.
   greeter = process.Start(s, "/bin/sh", ["-c", "echo hello; echo world"], stdout: .Pipe)?
   output = greeter.Stdout()
-  for (attempt in [1, 2, 3]) {
+  for (_ in [1, 2, 3]) {
     println(match (output.NextLine()) {
       line: String => s"line: $line"
-      end: Closed => "end of output"
+      _: Closed => "end of output"
       error: IoError => error.message
       stopped: Cancelled => stopped.reason
     })
@@ -38,7 +38,7 @@ fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
 
 fn main() {
   match (scope app { run(app) }) {
-    done: Ok => {}
+    _: Ok => {}
     error: IoError => eprintln(error.message)
     stopped: Cancelled => eprintln(stopped.reason)
   }
