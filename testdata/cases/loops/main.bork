@@ -30,11 +30,11 @@ fn swap() uses io {
   }
 }
 
-fn serve(jobs: Channel[Int]) uses io + state: Ok | Cancelled {
+fn serve(s: Scope, jobs: Channel[Int]) uses io + state: Ok | Cancelled {
   for {
-    match (receive(jobs)) {
+    match (jobs.receive(s)) {
       n: Int => println(s"job $n")
-      c: Closed => break
+      _: Closed => break
       c: Cancelled => return c
     }
   }
@@ -82,10 +82,10 @@ fn main() uses io + state {
   swap()
   scope s {
     ch = channel[Int](s, 3)
-    _ = send(ch, 1)
-    _ = send(ch, 2)
-    closeChannel(ch)
-    println(serve(ch))
+    _ = ch.send(s, 1)
+    _ = ch.send(s, 2)
+    ch.close()
+    println(serve(s, ch))
   }
   for (false) {
     println("never")
