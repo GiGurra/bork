@@ -5,9 +5,28 @@ type Pure = (() => Int,)
 type Loud = (() uses io => Int,)
 type Config = { pair: (Int, String) = (1, "default") }
 type Wrapper[T] = { value: T }
+type Reordered = (String | Int,)
+type Inner = { value: Int }
+type LazyConfig = { inner: Inner, lazy pair: (Int, Int) = (inner.value, 1) }
+type LazyTupleBox[T] = { value: T, lazy pair: (T,) = (value,) }
+type ExplicitLazyTupleBox[T] = { lazy pair: (T,) }
+type TupleBox[T] = { pair: (T,) }
+type TupleUnionBox[T] = { pair: (T | Int,) }
 type WrappedA = (Wrapper[Int | String],)
 type WrappedB = (Wrapper[Bool | Int],)
 
+class Pair[T] { fn toPair(value: T): (T,) }
+instance pairInt: Pair[Int] { fn toPair(value: Int): (Int,) { (value,) } }
+fn genericPair[T: Pair](value: T): (T,) { toPair(value) }
+fn wrapUnion[T](value: T): (T | Int,) { (value,) }
+fn takeUnion[T](pair: (T | Int,)): T | Int { pair.0 }
+fn unionList[T](value: T): List[(T | Int,)] { [(value,)] }
+fn unionMap[T: Eq](value: T): Map[(T | Int,), String] { { (value,): "entry" } }
+fn thunk[T](value: T): () => (T | Int,) { () => (value,) }
+fn wrap[T](value: T): (T,) { (value,) }
+fn take[T](pair: (T,)): T { pair.0 }
+fn reordered(pair: Reordered): String { "reordered" }
+fn box[T](value: T): TupleBox[T] { TupleBox { pair: (value,) } }
 fn choose[T](pair: (T, Int), other: T): T { pair.0 }
 fn call[T](callback: ((T) => T,), value: T): T { callback.0 (value) }
 fn apply[T](pair: ((T) => T, T)): T { pair.0 (pair.1) }
@@ -25,12 +44,32 @@ fn main() {
   println(call(((n) => n + 1,), 2))
   println(apply(((n) => n + 1, 4)))
   println(defaultPair())
+  println(toPair(3), genericPair(4))
   println(Config {})
   println(unionElement((1,)))
   println(unionElement(("text",)))
   number: Int | String = 3
   flag: Bool | Int = true
   println(classify((number,)), classify((flag,)))
+  println(unionElement(wrap(number)))
+  println(wrapUnion(4))
+  println(takeUnion[Int]((5,)))
+  println(unionList(6))
+  println(unionMap(7).get((7,)))
+  println(thunk(8)())
+  wrapValue: (Int) => (Int,) = wrap
+  println(wrapValue(9))
+  unionBox: TupleUnionBox[Int] = TupleUnionBox { pair: (10,) }
+  println(unionBox.pair)
+  println(take((number,)))
+  println(reordered((number,)))
+  println(box(number).pair)
+  lazyBox: LazyTupleBox[Int] = LazyTupleBox { value: 11 }
+  println(lazyBox.pair, lazyBox.copy(value: 12).pair)
+  explicit: ExplicitLazyTupleBox[Int] = ExplicitLazyTupleBox { pair: (13,) }
+  println(explicit.pair, explicit.copy(pair: (14,)).pair)
+  println(unionBox.copy(pair: (15,)).pair)
+  println(LazyConfig { inner: Inner { value: 2 } }.pair)
   println(classifyFunction((pure,)), classifyFunction((loud,)))
   wa: Wrapper[Int | String] = Wrapper { value: number }
   wb: Wrapper[Bool | Int] = Wrapper { value: flag }

@@ -11,6 +11,11 @@ import (
 // record traversals for generics, facts, equality and lifetime analysis.
 var tupleBases sync.Map
 
+// SubstituteType applies a checked generic signature's arguments for lowering.
+func SubstituteType(t Type, params []*TypeParam, args []Type) Type {
+	return subst(t, bindParams(params, args))
+}
+
 func tupleType(elems []Type) *Record {
 	arity := len(elems)
 	base, found := tupleBases.Load(arity)
@@ -82,14 +87,23 @@ func (c *checker) tupleBinding(s *syntax.TupleBinding) Type {
 		return Ok
 	}
 	names := map[string]bool{}
-	var valid func(syntax.Pattern) bool
-	valid = func(p syntax.Pattern) bool {
+	var valid func(syntax.Pattern, Type) bool
+	valid = func(p syntax.Pattern, t Type) bool {
 		switch p := p.(type) {
 		case *syntax.WildcardPat:
 			return true
 		case *syntax.TuplePat:
-			for _, elem := range p.Elems {
-				if !valid(elem) {
+			rec, ok := t.(*Record)
+			if !ok || !rec.Tuple {
+				c.errorf(p.Pos, "tuple binding requires a tuple value, found %s", t)
+				return false
+			}
+			if len(rec.Fields) != len(p.Elems) {
+				// The pattern checker reports the arity mismatch.
+				return true
+			}
+			for i, elem := range p.Elems {
+				if !valid(elem, rec.Fields[i].Type) {
 					return false
 				}
 			}
@@ -108,7 +122,7 @@ func (c *checker) tupleBinding(s *syntax.TupleBinding) Type {
 		c.errorf(p.Position(), "tuple binding requires names, wildcards or nested tuple patterns")
 		return false
 	}
-	if !valid(s.Pattern) {
+	if !valid(s.Pattern, t) {
 		return Ok
 	}
 	pat := c.pattern(s.Pattern, t)

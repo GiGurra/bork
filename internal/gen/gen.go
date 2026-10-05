@@ -547,9 +547,10 @@ type gen struct {
 	// typeParamNames renames type parameters in Go (see
 	// mangleTypeParams), and mockErrors are what generating a generic
 	// mock's body found wrong.
-	typeParamNames map[*check.TypeParam]string
-	mockErrors     diag.List
-	usesMocks      bool
+	typeParamNames   map[*check.TypeParam]string
+	typeParamGoTypes map[*check.TypeParam]ast.Expr
+	mockErrors       diag.List
+	usesMocks        bool
 	// usesAmbients is set when the program publishes or reads logged
 	// or propagated ambient values (ambientRuntime). labelGuard, while
 	// a Go function's body is generated, is set if a with in it
@@ -988,7 +989,7 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		if frame := g.passthrough(e.Inst.Func); frame != nil {
 			return stmts, g.nextRef(e.Inst, frame, needs)
 		}
-		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || collapsedUnion(inst) || len(needs) > 0 {
+		if inst := e.Inst; inst.Func.Class != nil || len(inst.Dicts) > 0 || collapsedUnion(inst) || len(needs) > 0 || len(inst.TypeArgs) > 0 && hasTupleRepresentation(&check.FuncType{Params: inst.Params, Result: inst.Result}) {
 			return stmts, g.funcRef(inst, needs...)
 		}
 		return nil, g.instance(e.Inst)
@@ -1319,6 +1320,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		inst := e.Inst
 		for i := range xs {
 			xs[i] = g.convert(xs[i], e.Args[i].Type(), inst.Params[i])
+			xs[i] = g.instanceArgument(inst, i, xs[i])
 		}
 		stmts = append(stmts, g.takeOwnersLast(e.Args, inst.Params, xs)...)
 		if inst.Func.Class != nil {
@@ -1376,8 +1378,20 @@ func collapsedUnion(inst *check.Instance) bool {
 }
 
 func (g *gen) instanceResult(inst *check.Instance, call ast.Expr) ast.Expr {
+	if inst.Func.Class != nil {
+		return g.convert(call, inst.Result, inst.Result)
+	}
 	if collapsedUnion(inst) {
+		if len(inst.TypeArgs) > 0 && hasTupleRepresentation(inst.Result) {
+			return g.representationConversion(call, inst.Func.Result, inst.Result, g.parameterGoType(inst.Func.Result, inst.Func.TypeParams, inst.TypeArgs), g.goType(inst.Result), inst.Func.TypeParams, inst.TypeArgs, false)
+		}
 		return &ast.TypeAssertExpr{X: call, Type: g.goType(inst.Result)}
+	}
+	if hasTupleRepresentation(inst.Result) {
+		if len(inst.TypeArgs) > 0 {
+			return g.representationConversion(call, inst.Func.Result, inst.Result, g.parameterGoType(inst.Func.Result, inst.Func.TypeParams, inst.TypeArgs), g.goType(inst.Result), inst.Func.TypeParams, inst.TypeArgs, false)
+		}
+		return &ast.CallExpr{Fun: g.goType(inst.Result), Args: []ast.Expr{call}}
 	}
 	return call
 }
@@ -1941,6 +1955,9 @@ func (g *gen) returnStmt(e *check.Return) []ast.Stmt {
 func (g *gen) convert(x ast.Expr, from, to check.Type) ast.Expr {
 	if to == nil || !check.Identical(from, to) {
 		x = g.typed(x, from)
+	}
+	if hasTupleRepresentation(to) {
+		return &ast.CallExpr{Fun: g.goType(to), Args: []ast.Expr{x}}
 	}
 	if _, ok := to.(*check.Sealed); ok {
 		if _, isLit := x.(*ast.CompositeLit); isLit {

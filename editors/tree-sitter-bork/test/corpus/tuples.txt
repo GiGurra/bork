@@ -112,3 +112,55 @@ fn main() {
                     (boolean))
                   (pattern)))
               (string))))))))
+
+==================
+Typed tuple arms and grouped function annotation
+==================
+fn main() {
+  match (value) {
+    pair: (Int, String) => pair.0
+    callback: ((Int) => Int) => callback(1)
+  }
+}
+---
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (identifier)
+            (type
+              (tuple_type
+                (type
+                  (qualified_name
+                    (identifier)))
+                (type
+                  (qualified_name
+                    (identifier))))))
+          (selector_expression
+            (qualified_name
+              (identifier))
+            (tuple_index)))
+        (match_arm
+          (pattern
+            (identifier)
+            (type
+              (type
+                (function_type
+                  (type
+                    (qualified_name
+                      (identifier)))
+                  (type
+                    (qualified_name
+                      (identifier)))))))
+          (call_expression
+            (qualified_name
+              (identifier))
+            (argument
+              (number))))))))

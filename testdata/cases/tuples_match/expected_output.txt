@@ -1,0 +1,8 @@
+1
+Failure { message: "failed" }
+1 ok
+Failure { message: "failed" }
+(1, "ok") Failure { message: "failed" }
+3
+4
+true flag

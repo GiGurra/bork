@@ -327,6 +327,12 @@ func closedDefaultUsesSibling(value syntax.Expr, siblings []*Field) bool {
 		return findField(siblings, value.Name) != nil
 	case *syntax.Selector:
 		return closedDefaultUsesSibling(value.X, siblings)
+	case *syntax.TupleLit:
+		for _, elem := range value.Elems {
+			if closedDefaultUsesSibling(elem, siblings) {
+				return true
+			}
+		}
 	case *syntax.RecordLit:
 		for _, field := range value.Fields {
 			if closedDefaultUsesSibling(field.Value, siblings) {

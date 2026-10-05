@@ -36,6 +36,9 @@ func (g *gen) goType(t check.Type) ast.Expr {
 func (g *gen) lowerGoType(t check.Type) ast.Expr {
 	switch t := t.(type) {
 	case *check.TypeParam:
+		if typ := g.typeParamGoTypes[t]; typ != nil {
+			return typ
+		}
 		if n, ok := g.typeParamNames[t]; ok {
 			return ast.NewIdent(n)
 		}
@@ -53,12 +56,12 @@ func (g *gen) lowerGoType(t check.Type) ast.Expr {
 	case *check.Record:
 		if t.Tuple {
 			fields := &ast.FieldList{}
-			// The zero-length marker preserves distinctions erased by Go,
-			// including union members and function effects. Its types also
-			// substitute naturally when the tuple contains type parameters.
-			fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("_")}, Type: &ast.ArrayType{Len: ast.NewIdent("0"), Elt: &ast.StarExpr{X: g.tupleIdentity(t)}}})
 			for _, f := range t.Fields {
-				fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{name(f.Name)}, Type: g.goType(f.Type)})
+				field := &ast.Field{Names: []*ast.Ident{name(f.Name)}, Type: g.goType(f.Type)}
+				if len(fields.List) == 0 {
+					field.Tag = &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote("bork:" + strconv.Quote(tupleShapeKey(t)))}
+				}
+				fields.List = append(fields.List, field)
 			}
 			return &ast.StructType{Fields: fields}
 		}
@@ -1308,11 +1311,10 @@ func _str(x any) string {
 	switch v := reflect.ValueOf(x); v.Kind() {
 	case reflect.Struct:
 		if v.Type().Name() == "" && v.NumField() > 0 {
-			parts := make([]string, 0, v.NumField())
-			for i := 0; i < v.NumField(); i++ {
-				if v.Type().Field(i).Name == "_" { continue }
-				if v.Type().Field(i).Name != "E" + strconv.Itoa(len(parts)) { return fmt.Sprint(x) }
-				parts = append(parts, _show(v.Field(i).Interface()))
+			parts := make([]string, v.NumField())
+			for i := range parts {
+				if v.Type().Field(i).Name != "E" + strconv.Itoa(i) { return fmt.Sprint(x) }
+				parts[i] = _show(v.Field(i).Interface())
 			}
 			text := strings.Join(parts, ", ")
 			if len(parts) == 1 { text += "," }
@@ -1644,7 +1646,6 @@ func _equalValues(x, y reflect.Value) bool {
 			return _equalMapHook(x, y)
 		}
 		for i := 0; i < x.NumField(); i++ {
-			if x.Type().Field(i).Name == "_" { continue }
 			if !_equalValues(x.Field(i), y.Field(i)) {
 				return false
 			}

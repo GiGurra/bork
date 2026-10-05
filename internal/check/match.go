@@ -294,6 +294,25 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		return pat
 
 	case *syntax.TuplePat:
+		if union, ok := st.(*Union); ok {
+			var candidates []*Record
+			for _, member := range union.Members {
+				if rec, ok := member.(*Record); ok && rec.Tuple && len(rec.Fields) == len(p.Elems) && c.tuplePatternCompatible(p, rec) {
+					candidates = append(candidates, rec)
+				}
+			}
+			if len(candidates) == 1 {
+				inner := c.pattern(p, candidates[0])
+				if inner == nil {
+					return nil
+				}
+				return &Pat{Kind: PatType, Type: st, Members: []Type{candidates[0]}, Sub: inner}
+			}
+			if len(candidates) > 1 {
+				c.errorf(p.Pos, "tuple pattern matches several tuple types in %s; annotate its elements to select one", st)
+				return nil
+			}
+		}
 		rec, ok := st.(*Record)
 		if !ok || !rec.Tuple || len(rec.Fields) != len(p.Elems) {
 			c.errorf(p.Pos, "cannot match a %d-element tuple pattern against %s", len(p.Elems), st)
@@ -351,6 +370,55 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		return pat
 	}
 	return nil
+}
+
+func (c *checker) tuplePatternCompatible(p *syntax.TuplePat, rec *Record) bool {
+	for i, elem := range p.Elems {
+		field := rec.Fields[i].Type
+		switch elem := elem.(type) {
+		case *syntax.TypePat:
+			t := c.resolveType(elem.Type)
+			if !assignable(t, field) {
+				return false
+			}
+		case *syntax.LitPat:
+			if !tupleLiteralCompatible(elem.Value, field) {
+				return false
+			}
+		case *syntax.TuplePat:
+			nested, ok := field.(*Record)
+			if !ok || !nested.Tuple || len(nested.Fields) != len(elem.Elems) || !c.tuplePatternCompatible(elem, nested) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func tupleLiteralCompatible(value syntax.Expr, typ Type) bool {
+	if union, ok := typ.(*Union); ok {
+		for _, member := range union.Members {
+			if tupleLiteralCompatible(value, member) {
+				return true
+			}
+		}
+		return false
+	}
+	switch value := value.(type) {
+	case *syntax.BoolLit:
+		return typ == Bool
+	case *syntax.StringLit:
+		return typ == String
+	case *syntax.RuneLit:
+		return typ == Rune
+	case *syntax.IntLit:
+		return IsInteger(typ)
+	case *syntax.FloatLit:
+		return IsFloat(typ)
+	case *syntax.Unary:
+		return tupleLiteralCompatible(value.X, typ)
+	}
+	return false
 }
 
 // nestedPatternFacts checks the written arguments too: a phantom generic

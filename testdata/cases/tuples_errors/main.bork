@@ -6,5 +6,9 @@ fn main() {
   (a, a) = pair
   (false, _) = (true, 1)
   (x, y, z) = pair
+  maybe: (Int, String) | Bool = pair
+  (value, text) = maybe
+  nested: ((Int, String) | Bool, Int) = (pair, 0)
+  ((inner, _), _) = nested
   println((() => 1, 2) == (() => 1, 2))
 }

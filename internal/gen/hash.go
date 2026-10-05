@@ -57,7 +57,7 @@ func _hashValue(v reflect.Value) uint64 {
   return h
  case reflect.Struct:
   var h uint64
-  for i := 0; i < v.NumField(); i++ { if v.Type().Field(i).Name != "_" { h = _hashMix(h, _hashValue(v.Field(i))) } }
+  for i := 0; i < v.NumField(); i++ { h = _hashMix(h, _hashValue(v.Field(i))) }
   return h
  case reflect.Bool: return maphash.Comparable(_mapSeed, v.Bool())
  case reflect.String: return maphash.Comparable(_mapSeed, v.String())

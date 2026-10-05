@@ -1,0 +1,38 @@
+type Failure = { message: String }
+fn read(ok: Bool): (Int, String) | Failure {
+  if (ok) { (1, "ok") } else { Failure { message: "failed" } }
+}
+fn genericRead[T](value: T): (T,) | Failure { (value,) }
+fn genericTake[T](value: (T,) | Failure): String {
+  match (value) { (item: T,) => s"$item"; error: Failure => error.message }
+}
+fn unwrap(ok: Bool): (Int, String) | Failure {
+  pair = read(ok)?
+  pair
+}
+fn main() {
+  match (read(true)) {
+    pair: (Int, String) => println(pair.0)
+    error: Failure => println(error)
+  }
+  match (read(false)) {
+    pair: (Int, String) => { println(pair.1) }
+    error: Failure => println(error)
+  }
+  match (read(true)) {
+    (value: Int, text: String) => println(value, text)
+    error: Failure => println(error)
+  }
+  match (read(false)) {
+    (value, text) => println(value, text)
+    error: Failure => println(error)
+  }
+  println(unwrap(true), unwrap(false))
+  println(match (genericRead(3)) { pair: (Int,) => pair.0; error: Failure => 0 })
+  println(genericTake[Int](genericRead(4)))
+  choice: (Int, String) | (Bool, String) = (true, "flag")
+  println(match (choice) {
+    (value: Int, text: String) => s"$value $text"
+    (value: Bool, text: String) => s"$value $text"
+  })
+}

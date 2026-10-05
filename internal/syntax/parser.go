@@ -176,13 +176,14 @@ func (p *parser) lazyBinding() *Binding {
 type bailout struct{}
 
 type parser struct {
-	spans    *[]ExpressionSpan
-	spanSeen map[Expr][]SourceSpan
-	compiler bool
-	comments []Comment
-	toks     []Token
-	i        int
-	diags    *diag.List
+	typeDepth, patternTypeDepth int
+	spans                       *[]ExpressionSpan
+	spanSeen                    map[Expr][]SourceSpan
+	compiler                    bool
+	comments                    []Comment
+	toks                        []Token
+	i                           int
+	diags                       *diag.List
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
@@ -703,6 +704,8 @@ func (p *parser) useItem(pos diag.Pos) (u *Use, ended bool) {
 
 // typeExpr parses a type: `Name`, `Name[Args]`, or a union `A | B`.
 func (p *parser) typeExpr() *TypeExpr {
+	p.typeDepth++
+	defer func() { p.typeDepth-- }()
 	first := p.constrainedType()
 	if !p.at(Pipe) {
 		return first
@@ -964,7 +967,7 @@ func (p *parser) typeAtom() *TypeExpr {
 			p.errorf(p.tok().Pos, "expected => after a function type's effects")
 			panic(bailout{})
 		}
-		if p.at(Arrow) {
+		if p.at(Arrow) && (p.typeDepth != p.patternTypeDepth || len(params) == 0 || uses != nil) {
 			p.next()
 			return &TypeExpr{Pos: pos, Func: &FuncTypeExpr{Params: params, Uses: uses, Result: p.typeExpr()}}
 		}
@@ -1437,6 +1440,13 @@ func (p *parser) matchExpr() Expr {
 	return m
 }
 
+func (p *parser) patternType() *TypeExpr {
+	saved := p.patternTypeDepth
+	p.patternTypeDepth = p.typeDepth + 1
+	defer func() { p.patternTypeDepth = saved }()
+	return p.typeExpr()
+}
+
 func (p *parser) pattern() Pattern {
 	t := p.tok()
 	switch t.Kind {
@@ -1493,7 +1503,7 @@ func (p *parser) pattern() Pattern {
 		if t.Kind == TIdent && p.peekKind() == Colon {
 			p.next()
 			p.next()
-			return &TypePat{Pos: t.Pos, Name: t.Text, Type: p.typeExpr()}
+			return &TypePat{Pos: t.Pos, Name: t.Text, Type: p.patternType()}
 		}
 		vp := &VariantPat{Pos: t.Pos}
 		if t.Kind == Dot {

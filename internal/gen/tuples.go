@@ -5,64 +5,110 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 )
 
-func (g *gen) tupleIdentity(tuple *check.Record) ast.Expr {
-	fields := &ast.FieldList{}
-	for i, field := range tuple.Fields {
-		fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("T" + strconv.Itoa(i))}, Type: g.tupleElementIdentity(field.Type)})
-	}
-	return &ast.StructType{Fields: fields}
-}
-
-func (g *gen) tupleElementIdentity(t check.Type) ast.Expr {
-	fields := &ast.FieldList{}
-	add := func(name string, typ check.Type) {
-		fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent(name)}, Type: g.tupleElementIdentity(typ)})
-	}
-	effects := func(e check.Effects) {
-		fields.List[len(fields.List)-1].Tag = &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote("bork:" + strconv.Quote(e.String()))}
+// Tuple tags preserve semantic distinctions erased by Go. Explicit Go
+// conversions ignore struct tags, so generic call boundaries can retag values.
+func tupleShapeKey(t check.Type) string {
+	join := func(types []check.Type) string {
+		parts := make([]string, len(types))
+		for i, typ := range types {
+			parts[i] = tupleShapeKey(typ)
+		}
+		return strings.Join(parts, ",")
 	}
 	switch t := t.(type) {
 	case *check.Union:
+		parts := make([]string, len(t.Members))
 		for i, member := range t.Members {
-			add("U"+strconv.Itoa(i), member)
+			parts[i] = tupleShapeKey(member)
 		}
+		sort.Strings(parts)
+		return "union[" + strings.Join(parts, ",") + "]"
 	case *check.FuncType:
-		for i, param := range t.Params {
-			add("P"+strconv.Itoa(i), param)
-		}
-		add("R", t.Result)
-		effects(t.Effects)
+		return "func[" + join(t.Params) + "]" + t.Effects.String() + ":" + tupleShapeKey(t.Result)
 	case *check.List:
-		return &ast.ArrayType{Elt: g.tupleElementIdentity(t.Elem)}
+		return "list[" + tupleShapeKey(t.Elem) + "]"
 	case *check.Map:
-		add("K", t.Key)
-		add("V", t.Value)
+		return "map[" + tupleShapeKey(t.Key) + "," + tupleShapeKey(t.Value) + "]"
 	case *check.Seq:
-		add("S", t.Elem)
-		effects(t.Effects)
-	case *check.Record, *check.Sealed:
-		args := check.TypeArgs(t)
-		if tuple, ok := t.(*check.Record); ok && tuple.Tuple || len(args) == 0 {
-			return g.goType(t)
+		return "seq[" + tupleShapeKey(t.Elem) + "]" + t.Effects.String()
+	case *check.Record:
+		if t.Tuple {
+			return "tuple[" + join(t.Args) + "]"
 		}
-		fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("N")}, Type: g.goType(t)})
-		for i, arg := range args {
-			add("A"+strconv.Itoa(i), arg)
-		}
-	default:
-		if t == check.Never {
-			fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{ast.NewIdent("Never")}, Type: &ast.StructType{Fields: &ast.FieldList{}}})
-			break
-		}
-		return g.goType(t)
+		return tupleNamedKey(t.Name, t.Pkg) + "[" + join(t.Args) + "]"
+	case *check.Sealed:
+		return tupleNamedKey(t.Name, t.Pkg) + "[" + join(t.Args) + "]"
+	case *check.Resource:
+		return tupleNamedKey(t.Name, t.Pkg)
+	case *check.Opaque:
+		return tupleNamedKey(t.Name, t.Pkg)
 	}
-	return &ast.StructType{Fields: fields}
+	return t.String()
+}
+
+func tupleNamedKey(name string, pkg *check.Package) string {
+	if pkg == nil {
+		return name
+	}
+	return pkg.Path + ":" + name
+}
+
+func hasTupleRepresentation(t check.Type) bool {
+	switch t := t.(type) {
+	case *check.Record:
+		return t.Tuple
+	case *check.List:
+		return hasTupleRepresentation(t.Elem)
+	case *check.Map:
+		return hasTupleRepresentation(t.Key) || hasTupleRepresentation(t.Value)
+	case *check.Seq:
+		return hasTupleRepresentation(t.Elem)
+	case *check.FuncType:
+		for _, p := range t.Params {
+			if hasTupleRepresentation(p) {
+				return true
+			}
+		}
+		return hasTupleRepresentation(t.Result)
+	case *check.Union:
+		for _, member := range t.Members {
+			if hasTupleRepresentation(member) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (g *gen) parameterGoType(t check.Type, params []*check.TypeParam, args []check.Type) ast.Expr {
+	saved := g.typeParamGoTypes
+	overrides := make(map[*check.TypeParam]ast.Expr, len(saved)+len(params))
+	for param, typ := range saved {
+		overrides[param] = typ
+	}
+	for i, param := range params {
+		overrides[param] = g.goType(args[i])
+	}
+	g.typeParamGoTypes = overrides
+	defer func() { g.typeParamGoTypes = saved }()
+	return g.goType(t)
+}
+
+func (g *gen) instanceArgument(inst *check.Instance, i int, value ast.Expr) ast.Expr {
+	if inst.Func.Class != nil {
+		return value // dictMethod exposes the checked, specialized signature
+	}
+	if len(inst.TypeArgs) > 0 && hasTupleRepresentation(inst.Params[i]) {
+		return g.representationConversion(value, inst.Params[i], inst.Func.Params[i], g.goType(inst.Params[i]), g.parameterGoType(inst.Func.Params[i], inst.Func.TypeParams, inst.TypeArgs), inst.Func.TypeParams, inst.TypeArgs, true)
+	}
+	return value
 }
 
 func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {
@@ -112,4 +158,162 @@ func (g *gen) tupleCodec(d *check.Dict, tuple *check.Record) ast.Expr {
 		panic(fmt.Sprintf("tuple codec: %v\n%s", err, source.String()))
 	}
 	return expr
+}
+
+// representationConversion converts the declared Go layout of a generic
+// signature to its checked specialization, or back for an argument. Generic
+// unions can collapse, so retagging sometimes also needs element conversions.
+func (g *gen) representationConversion(value ast.Expr, from, to check.Type, fromGo, toGo ast.Expr, params []*check.TypeParam, args []check.Type, toDeclaration bool) ast.Expr {
+	_, fromUnion := from.(*check.Union)
+	_, toUnion := to.(*check.Union)
+	needsUnionConversion := fromUnion && hasTupleRepresentation(from) || toUnion && hasTupleRepresentation(to)
+	if g.text(fromGo) == g.text(toGo) && !needsUnionConversion {
+		return value
+	}
+	repr := func(t check.Type, declaration bool) ast.Expr {
+		if declaration {
+			return g.parameterGoType(t, params, args)
+		}
+		return g.goType(t)
+	}
+	child := func(x ast.Expr, a, b check.Type) ast.Expr {
+		return g.representationConversion(x, a, b, repr(a, !toDeclaration), repr(b, toDeclaration), params, args, toDeclaration)
+	}
+	closure := func(body []ast.Stmt) ast.Expr {
+		return &ast.CallExpr{Fun: &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("_tupleValue")}, Type: fromGo}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: toGo}}}}, Body: &ast.BlockStmt{List: body}}, Args: []ast.Expr{value}}
+	}
+	x := ast.NewIdent("_tupleValue")
+	var declaredUnion *check.Union
+	if toDeclaration {
+		declaredUnion, _ = to.(*check.Union)
+	} else {
+		declaredUnion, _ = from.(*check.Union)
+	}
+	if declaredUnion != nil && hasTupleRepresentation(declaredUnion) {
+		var body []ast.Stmt
+		for _, original := range declaredUnion.Members {
+			bound := check.SubstituteType(original, params, args)
+			a, b := original, bound
+			if toDeclaration {
+				a, b = bound, original
+			}
+			if !hasTupleRepresentation(a) && !hasTupleRepresentation(b) {
+				continue
+			}
+			if _, expands := a.(*check.Union); expands {
+				continue // a type parameter's stored value already has its concrete representation
+			}
+			v, ok := ast.NewIdent("_member"), ast.NewIdent("_ok")
+			body = append(body, &ast.IfStmt{Init: &ast.AssignStmt{Lhs: []ast.Expr{v, ok}, Tok: token.DEFINE, Rhs: []ast.Expr{&ast.TypeAssertExpr{X: x, Type: repr(a, !toDeclaration)}}}, Cond: ok, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{child(v, a, b)}}}}})
+		}
+		if toUnion {
+			body = append(body, &ast.ReturnStmt{Results: []ast.Expr{x}})
+		} else {
+			body = append(body, &ast.ReturnStmt{Results: []ast.Expr{&ast.TypeAssertExpr{X: x, Type: toGo}}})
+		}
+		return closure(body)
+	}
+	if a, ok := from.(*check.Record); ok && a.Tuple {
+		if b, ok := to.(*check.Record); ok && b.Tuple {
+			result := &ast.CompositeLit{Type: toGo}
+			for i, f := range a.Fields {
+				read := &ast.SelectorExpr{X: x, Sel: name(f.Name)}
+				result.Elts = append(result.Elts, &ast.KeyValueExpr{Key: name(f.Name), Value: child(read, f.Type, b.Fields[i].Type)})
+			}
+			return closure([]ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{result}}})
+		}
+	}
+	if a, ok := from.(*check.List); ok {
+		if b, ok := to.(*check.List); ok {
+			result, i := ast.NewIdent("_tupleResult"), ast.NewIdent("i")
+			body := []ast.Stmt{define(result, &ast.CallExpr{Fun: ast.NewIdent("make"), Args: []ast.Expr{toGo, &ast.CallExpr{Fun: ast.NewIdent("len"), Args: []ast.Expr{x}}}}), &ast.RangeStmt{Key: i, Tok: token.DEFINE, X: x, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{&ast.IndexExpr{X: result, Index: i}}, Tok: token.ASSIGN, Rhs: []ast.Expr{child(&ast.IndexExpr{X: x, Index: i}, a.Elem, b.Elem)}}}}}, &ast.ReturnStmt{Results: []ast.Expr{result}}}
+			return closure(body)
+		}
+	}
+	if a, ok := from.(*check.Map); ok {
+		if b, ok := to.(*check.Map); ok {
+			result, k, v := ast.NewIdent("_tupleResult"), ast.NewIdent("k"), ast.NewIdent("v")
+			callback := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{k}, Type: repr(a.Key, !toDeclaration)}, {Names: []*ast.Ident{v}, Type: repr(a.Value, !toDeclaration)}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: ast.NewIdent("bool")}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{assign(result, &ast.CallExpr{Fun: &ast.SelectorExpr{X: result, Sel: ast.NewIdent("put")}, Args: []ast.Expr{child(k, a.Key, b.Key), child(v, a.Value, b.Value)}}), &ast.ReturnStmt{Results: []ast.Expr{ast.NewIdent("true")}}}}}
+			return closure([]ast.Stmt{&ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{result}, Type: toGo}}}}, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: x, Sel: ast.NewIdent("each")}, Args: []ast.Expr{callback}}}, &ast.ReturnStmt{Results: []ast.Expr{result}}})
+		}
+	}
+	if a, ok := from.(*check.Seq); ok {
+		if b, ok := to.(*check.Seq); ok {
+			callback := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{x}, Type: repr(a.Elem, !toDeclaration)}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: repr(b.Elem, toDeclaration)}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{child(x, a.Elem, b.Elem)}}}}}
+			return &ast.CallExpr{Fun: ast.NewIdent("_seqmap"), Args: []ast.Expr{value, callback}}
+		}
+	}
+	if a, ok := from.(*check.FuncType); ok {
+		if b, ok := to.(*check.FuncType); ok {
+			signature := &ast.FuncType{Params: &ast.FieldList{}}
+			var values []ast.Expr
+			for i, p := range b.Params {
+				n := ast.NewIdent(fmt.Sprintf("_p%d", i))
+				signature.Params.List = append(signature.Params.List, &ast.Field{Names: []*ast.Ident{n}, Type: repr(p, toDeclaration)})
+				values = append(values, g.representationConversion(n, p, a.Params[i], repr(p, toDeclaration), repr(a.Params[i], !toDeclaration), params, args, !toDeclaration))
+			}
+			call := &ast.CallExpr{Fun: x, Args: values}
+			var body []ast.Stmt
+			if b.Result == check.Ok || b.Result == check.Never {
+				body = []ast.Stmt{&ast.ExprStmt{X: call}}
+			} else {
+				signature.Results = &ast.FieldList{List: []*ast.Field{{Type: repr(b.Result, toDeclaration)}}}
+				body = []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{child(call, a.Result, b.Result)}}}
+			}
+			return closure([]ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{&ast.FuncLit{Type: signature, Body: &ast.BlockStmt{List: body}}}}})
+		}
+	}
+	if _, union := from.(*check.Union); union {
+		if _, staysUnion := to.(*check.Union); !staysUnion && g.text(fromGo) == "any" {
+			return &ast.TypeAssertExpr{X: value, Type: toGo}
+		}
+	}
+	return &ast.CallExpr{Fun: toGo, Args: []ast.Expr{value}}
+}
+
+func tupleFieldDeclaration(owner check.Type, field *check.Field) (original *check.Field, params []*check.TypeParam, args []check.Type) {
+	switch owner := owner.(type) {
+	case *check.Record:
+		if owner.Base != nil && !owner.Tuple {
+			return owner.Base.Field(field.Name), owner.Base.TypeParams, owner.Args
+		}
+	case *check.Sealed:
+		if owner.Base != nil {
+			for _, variant := range owner.Base.Variants {
+				for _, candidate := range variant.Fields {
+					if candidate.Decl == field.Decl {
+						return candidate, owner.Base.TypeParams, owner.Args
+					}
+				}
+			}
+		}
+	}
+	return nil, nil, nil
+}
+
+func (g *gen) tupleFieldRead(root ast.Expr, owner check.Type, field *check.Field) ast.Expr {
+	value := g.fieldRead(root, field)
+	if hasTupleRepresentation(field.Type) {
+		if original, params, args := tupleFieldDeclaration(owner, field); original != nil {
+			return g.representationConversion(value, original.Type, field.Type, g.parameterGoType(original.Type, params, args), g.goType(field.Type), params, args, false)
+		}
+	}
+	return value
+}
+
+func (g *gen) tupleFieldCell(thunk *check.Lambda, metadata *check.LazyDescription, owner check.Type, field *check.Field) ast.Expr {
+	if hasTupleRepresentation(field.Type) {
+		if original, params, args := tupleFieldDeclaration(owner, field); original != nil {
+			source := thunk.Type().(*check.FuncType)
+			target := &check.FuncType{Result: original.Type}
+			callback := g.representationConversion(g.lambda(thunk), source, target, g.goType(source), g.parameterGoType(target, params, args), params, args, true)
+			g.usesLazy = true
+			constructor := "_lazyNew"
+			if g.evalMode && metadata != nil && metadata.Effects == "nothing" {
+				constructor = "_lazyConstNew"
+			}
+			return &ast.CallExpr{Fun: &ast.IndexExpr{X: ast.NewIdent(constructor), Index: g.parameterGoType(original.Type, params, args)}, Args: []ast.Expr{callback}}
+		}
+	}
+	return g.fieldCell(thunk, metadata)
 }
