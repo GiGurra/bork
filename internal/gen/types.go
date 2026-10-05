@@ -23,6 +23,17 @@ import (
 //   - a function type becomes a Go func type
 //   - a type parameter becomes a Go type parameter
 func (g *gen) goType(t check.Type) ast.Expr {
+	result := g.lowerGoType(t)
+	if g.debugSource != "" {
+		if g.debugTypes == nil {
+			g.debugTypes = map[check.Type]ast.Expr{}
+		}
+		g.debugTypes[t] = result
+	}
+	return result
+}
+
+func (g *gen) lowerGoType(t check.Type) ast.Expr {
 	switch t := t.(type) {
 	case *check.TypeParam:
 		if n, ok := g.typeParamNames[t]; ok {

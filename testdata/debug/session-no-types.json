@@ -1,0 +1,291 @@
+[
+  {
+    "request": "scope Locals",
+    "variables": [
+      {
+        "name": "boxed",
+        "type": "",
+        "value": "Box[Float] { item: 2.0 }",
+        "expandable": true
+      },
+      {
+        "name": "chosen",
+        "type": "",
+        "value": "2",
+        "expandable": false
+      },
+      {
+        "name": "listUnion",
+        "type": "",
+        "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+        "expandable": true
+      },
+      {
+        "name": "nested",
+        "type": "",
+        "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
+        "expandable": true
+      },
+      {
+        "name": "none",
+        "type": "",
+        "value": "None",
+        "expandable": false
+      },
+      {
+        "name": "recordUnion",
+        "type": "",
+        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+        "expandable": true
+      },
+      {
+        "name": "scalarUnion",
+        "type": "",
+        "value": "8",
+        "expandable": false
+      },
+      {
+        "name": "shape",
+        "type": "",
+        "value": "Shape.Circle { radius: 2.0 }",
+        "expandable": true
+      },
+      {
+        "name": "shapes",
+        "type": "",
+        "value": "[]Shape len: 1, cap: 1, [Shape.Circle { radius: 2.0 }]",
+        "expandable": true
+      },
+      {
+        "name": "some",
+        "type": "",
+        "value": "Some(3)",
+        "expandable": true
+      },
+      {
+        "name": "someFloat",
+        "type": "",
+        "value": "Some(2.0)",
+        "expandable": true
+      },
+      {
+        "name": "x",
+        "type": "",
+        "value": "3",
+        "expandable": false
+      },
+      {
+        "name": "y",
+        "type": "",
+        "value": "7",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate shape",
+    "value": {
+      "type": "",
+      "value": "Shape.Circle { radius: 2.0 }",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand shape",
+    "variables": [
+      {
+        "name": "radius",
+        "type": "",
+        "value": "2.0",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate some",
+    "value": {
+      "type": "",
+      "value": "Some(3)",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand some",
+    "variables": [
+      {
+        "name": "value",
+        "type": "",
+        "value": "3",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate none",
+    "value": {
+      "type": "",
+      "value": "None",
+      "expandable": false
+    }
+  },
+  {
+    "request": "evaluate nested",
+    "value": {
+      "type": "",
+      "value": "Outer { inner: Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }, shape: Shape.Circle { radius: 2.0 }, optional: Some(3) }",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand nested",
+    "variables": [
+      {
+        "name": "inner",
+        "type": "",
+        "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+        "expandable": true
+      },
+      {
+        "name": "optional",
+        "type": "",
+        "value": "Some(3)",
+        "expandable": true
+      },
+      {
+        "name": "shape",
+        "type": "",
+        "value": "Shape.Circle { radius: 2.0 }",
+        "expandable": true
+      }
+    ]
+  },
+  {
+    "request": "expand nested.inner",
+    "variables": [
+      {
+        "name": "count",
+        "type": "",
+        "value": "5",
+        "expandable": false
+      },
+      {
+        "name": "label",
+        "type": "",
+        "value": "\"main.Shape_Circle {radius: 9}\"",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "expand nested.shape",
+    "variables": [
+      {
+        "name": "radius",
+        "type": "",
+        "value": "2.0",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "expand nested.optional",
+    "variables": [
+      {
+        "name": "value",
+        "type": "",
+        "value": "3",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate recordUnion",
+    "value": {
+      "type": "",
+      "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand recordUnion",
+    "variables": [
+      {
+        "name": "count",
+        "type": "",
+        "value": "5",
+        "expandable": false
+      },
+      {
+        "name": "label",
+        "type": "",
+        "value": "\"main.Shape_Circle {radius: 9}\"",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate scalarUnion",
+    "value": {
+      "type": "",
+      "value": "8",
+      "expandable": false
+    }
+  },
+  {
+    "request": "evaluate someFloat",
+    "value": {
+      "type": "",
+      "value": "Some(2.0)",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand someFloat",
+    "variables": [
+      {
+        "name": "value",
+        "type": "",
+        "value": "2.0",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate boxed",
+    "value": {
+      "type": "",
+      "value": "Box[Float] { item: 2.0 }",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand boxed",
+    "variables": [
+      {
+        "name": "item",
+        "type": "",
+        "value": "2.0",
+        "expandable": false
+      }
+    ]
+  },
+  {
+    "request": "evaluate listUnion",
+    "value": {
+      "type": "",
+      "value": "[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand listUnion",
+    "variables": [
+      {
+        "name": "data",
+        "type": "",
+        "value": "(loaded 64/80) []Int len: 80, cap: 80, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,...+16 more]",
+        "expandable": true
+      }
+    ]
+  }
+]

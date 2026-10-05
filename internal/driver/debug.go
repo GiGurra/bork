@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -32,7 +33,7 @@ func BuildDebug(path, out string) error {
 		return err
 	}
 	dir := absOut + ".bork-debug"
-	source, err := gen.DebugPackage(program.files, program.info, filepath.Join(dir, "main.go"))
+	source, debugMap, err := gen.DebugPackageMap(program.files, program.info, filepath.Join(dir, "main.go"))
 	if err != nil {
 		return err
 	}
@@ -41,6 +42,13 @@ func BuildDebug(path, out string) error {
 	}
 	pinned, err := writeGoStage(dir, source, program.module, program.info.Embeds, program.context.moduleHook)
 	if err != nil {
+		return err
+	}
+	metadata, err := json.MarshalIndent(debugMap, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "debug-map.json"), append(metadata, '\n'), 0644); err != nil {
 		return err
 	}
 	return buildStagedGoOptions(program.files, absOut, dir, pinned, program.context, nil, "-gcflags=all=-N -l")
@@ -99,7 +107,7 @@ func SetupDelve(ctx context.Context, output io.Writer) error {
 	return err
 }
 
-// DebugDAP delegates DAP to Delve on a loopback TCP listener. The adapter prints
+// DebugDAP relays DAP to Delve on a loopback TCP listener. The adapter prints
 // its actual listener address, including the selected port when listen ends in :0.
 func DebugDAP(ctx context.Context, explicit, listen string, stdout, stderr io.Writer) error {
 	host, _, err := net.SplitHostPort(listen)
@@ -114,17 +122,7 @@ func DebugDAP(ctx context.Context, explicit, listen string, stdout, stderr io.Wr
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, binary, "dap", "--listen", listen)
-	configureDebugProcess(cmd)
-	cmd.WaitDelay = 2 * time.Second
-	cmd.Stdout, cmd.Stderr = stdout, stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return nil
-		}
-		return fmt.Errorf("debug adapter: %w", err)
-	}
-	return nil
+	return debugDAPRelay(ctx, binary, listen, stdout, stderr)
 }
 
 func commandContext(ctx context.Context, original *exec.Cmd) *exec.Cmd {
