@@ -213,3 +213,9 @@ test('every reserved compiler keyword is covered by the highlighting grammar', (
       `compiler keyword ${word} has no highlighting rule`);
   }
 });
+
+
+test('context variant patterns retain type scopes', () => {
+  const ls = tokenize('match (x) { .Some { value: .Ready } => 1, .None => 0 }');
+  for (const word of ['Some', 'Ready', 'None']) has(ls, 0, word, 'entity.name.type.bork');
+});

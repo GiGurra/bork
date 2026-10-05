@@ -73,6 +73,10 @@ func TestCompletionGenericFieldsAndMatchArms(t *testing.T) {
 	if c := completionItem(items, "Choice.First"); c == nil || !strings.Contains(c["textEdit"].(textEdit).NewText, "{ value } =>") {
 		t.Fatalf("match: %+v", items)
 	}
+	items = completeAt(t, s, path, strings.Replace(src, "Choice.First { value } => value, Choice.Second => 0", ".Fi|", 1))
+	if c := completionItem(items, "First"); c == nil || c["textEdit"].(textEdit).NewText != "First { value } => " {
+		t.Fatalf("context match: %+v", items)
+	}
 }
 func TestCompletionAutoImportEditChecks(t *testing.T) {
 	dir := t.TempDir()

@@ -1,0 +1,7 @@
+main.bork:3:43: .Ready has several expected constructors: A, B; write the constructor explicitly
+main.bork:4:37: A has no variant Reedy
+main.bork:5:25: match is not exhaustive: missing A.Empty
+main.bork:6:55: unreachable match arm: every value it matches is handled by an earlier arm
+main.bork:7:37: .Ready needs an expected sealed type with variant Ready, found Int
+main.bork:8:47: cannot tell the constructor of .Ready; give the value an expected record or sealed type, or write its constructor explicitly
+main.bork:11:72: .Some has several expected constructors: Option[Int], Option[String]; write the constructor explicitly

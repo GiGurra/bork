@@ -411,7 +411,7 @@ func (c *checker) peekPattern(p syntax.Pattern, t Type, locals map[string]Type) 
 	case *syntax.TypePat:
 		locals[p.Name] = c.peekType(p.Type)
 	case *syntax.VariantPat:
-		if len(p.Path) == 1 && !p.Braces && c.typeNamed(p.Path[0]) == nil {
+		if !p.Context && len(p.Path) == 1 && !p.Braces && c.typeNamed(p.Path[0]) == nil {
 			locals[p.Path[0]] = t
 			return
 		}
@@ -426,6 +426,17 @@ func (c *checker) peekPattern(p syntax.Pattern, t Type, locals map[string]Type) 
 				}
 			}
 		case *Union:
+			if p.Context {
+				owners, unresolved := c.contextCandidates(p.Path[0], s)
+				if len(owners) == 1 && !unresolved {
+					if owner, ok := owners[0].(*Sealed); ok {
+						if v := owner.Variant(p.Path[0]); v != nil {
+							fields = v.Fields
+						}
+					}
+				}
+				break
+			}
 			if base := c.typeNamed(strings.Join(p.Path, ".")); base != nil {
 				if r, ok := instanceIn(s, base).(*Record); ok {
 					fields = r.Fields

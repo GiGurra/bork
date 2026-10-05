@@ -467,6 +467,22 @@ func (c *checker) bindPat(pat *Pat, name string, pos diag.Pos, node any) {
 // namePattern checks a pattern written as a name: `Shape.Circle { r }`,
 // `Option.None`, `NotFound`, `User { name }`, or a name to bind.
 func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
+	if p.Context {
+		name := &syntax.ContextName{Pos: p.Pos, End: p.End, Name: p.Path[0]}
+		owner, ok := c.contextTarget(name, st, true).(*Sealed)
+		if !ok {
+			return nil
+		}
+		v := c.contextVariantOf(name, owner)
+		if v == nil {
+			return nil
+		}
+		inner := &Pat{Kind: PatVariant, Type: owner, Variant: v}
+		if !c.fieldPatterns(inner, p.Fields, v.Fields, owner.Name+"."+v.Name) {
+			return nil
+		}
+		return c.within(inner, owner, st, p.Pos)
+	}
 	switch len(p.Path) {
 	case 1:
 		name := p.Path[0]

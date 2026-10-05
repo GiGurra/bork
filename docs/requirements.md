@@ -2826,7 +2826,7 @@ fn summary(id: UserId): Summary | NotFound | DbError | Timeout = {
 - **Comments** are `// ...` and `/* ... */`. **String literals** use double quotes with Go's escape sequences.
 - **Identifiers cannot start with `_`.** That prefix is reserved for the compiler.
 - **Records have named fields:** `type User = { name: String, age: Int }`, built as `User { name: "Ada", age: 36 }`. There are no positional constructors.
-- **Sealed variants are always qualified:** `Shape.Circle { radius: 1 }`, `Shape.Empty`, also in patterns. Unqualified variants may come later, through imports.
+- **Sealed variants may omit their owner in an expected type or match context:** `Shape.Circle { radius: 1 }`, `Shape.Empty`. Patterns may use `.Circle { radius }` or `.Empty` when the scrutinee selects exactly one sealed owner; bare unqualified variant names are not introduced.
 - **Pattern matching is `match (x) { pattern => value, ... }`.**
 - **Changed copies use `copy`, with nested paths:** `u.copy(age: 37, address.city: "Oslo")`. Paths reach nested records directly.
 
@@ -2989,8 +2989,12 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   retain defaults, ordering and diagnostics of explicit literals.
   Option uses `.Some { value: x }` and `.None`; `.Some(x)` is rejected with a
   suggested rewrite to the named field form. It does not introduce positional
-  constructors for arbitrary variants. Context shorthand applies to expressions
-  only; patterns retain their explicit types and qualified variants. `.Empty {}`
+  constructors for arbitrary variants. Context variant shorthand also applies to
+  match patterns, with the scrutinee
+  type supplying context under the same uniqueness and visibility rules. Nested
+  field and element patterns use their matched type. Qualified patterns remain
+  available to disambiguate unions; context record patterns are not supported.
+  `.Empty {}`
   is allowed for a fieldless variant. Bare `.WithDefaults` is rejected when the
   variant has fields, even when every field has a default; write `.WithDefaults {}`.
   These rules match explicit variant construction.

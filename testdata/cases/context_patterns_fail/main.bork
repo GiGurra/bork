@@ -1,0 +1,11 @@
+type A = sealed { Ready, Empty }
+type B = sealed { Ready, Other }
+fn ambiguous(x: A | B): Int { match (x) { .Ready => 1, _ => 0 } }
+fn unknown(x: A): Int { match (x) { .Reedy => 1, _ => 0 } }
+fn missing(x: A): Int { match (x) { .Ready => 1 } }
+fn unreachable(x: A): Int { match (x) { A.Ready => 1, .Ready => 2, .Empty => 0 } }
+fn wrong(x: Int): Int { match (x) { .Ready => 1, _ => 0 } }
+fn unresolved[T](x: A | T): Int { match (x) { .Ready => 1, _ => 0 } }
+fn main() {}
+
+fn specializations(x: Option[Int] | Option[String]): Int { match (x) { .Some { value: _ } => 1, _ => 0 } }

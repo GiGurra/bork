@@ -1443,14 +1443,21 @@ func (p *parser) pattern() Pattern {
 			lp.Elems = append(lp.Elems, p.pattern())
 		})
 		return lp
-	case TIdent:
-		if p.peekKind() == Colon {
+	case TIdent, Dot:
+		if t.Kind == TIdent && p.peekKind() == Colon {
 			p.next()
 			p.next()
 			return &TypePat{Pos: t.Pos, Name: t.Text, Type: p.typeExpr()}
 		}
-		vp := &VariantPat{Pos: t.Pos, Path: []string{p.qualify(p.next())}}
-		for p.at(Dot) {
+		vp := &VariantPat{Pos: t.Pos}
+		if t.Kind == Dot {
+			p.next()
+			name := p.expect(TIdent, "after '.' in a variant pattern")
+			vp.Context, vp.End, vp.Path = true, name.End, []string{name.Text}
+		} else {
+			vp.Path = []string{p.qualify(p.next())}
+		}
+		for !vp.Context && p.at(Dot) {
 			p.next()
 			vp.Path = append(vp.Path, p.expect(TIdent, "(variant name)").Text)
 		}

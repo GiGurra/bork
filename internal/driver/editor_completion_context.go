@@ -23,6 +23,9 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 		}
 	}
 	if len(prior) > 0 && prior[len(prior)-1].Kind == syntax.Dot {
+		if arms, ok := a.editorContextPatternCompletions(file, src, prior[:len(prior)-1]); ok {
+			return arms, true
+		}
 		if len(prior) > 1 {
 			receiver := prior[len(prior)-2]
 			members := a.EditorPackageSymbols(file, receiver.Text)
@@ -169,6 +172,62 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 	}
 
 	return out, false
+}
+
+func (a *EditorAnalysis) editorContextPatternCompletions(file, src string, prior []syntax.Token) ([]EditorCompletion, bool) {
+	if len(prior) == 0 || prior[len(prior)-1].Kind != syntax.LBrace && prior[len(prior)-1].Kind != syntax.Comma {
+		return nil, false
+	}
+	depth := 0
+	for i := len(prior) - 1; i >= 0; i-- {
+		switch prior[i].Kind {
+		case syntax.RBrace:
+			depth++
+		case syntax.LBrace:
+			if depth > 0 {
+				depth--
+				continue
+			}
+			if i == 0 || prior[i-1].Kind != syntax.RParen {
+				return nil, false
+			}
+			parens := 1
+			for j := i - 2; j >= 0; j-- {
+				if prior[j].Kind == syntax.RParen {
+					parens++
+				}
+				if prior[j].Kind != syntax.LParen {
+					continue
+				}
+				parens--
+				if parens != 0 {
+					continue
+				}
+				if j == 0 || prior[j-1].Kind != syntax.KwMatch {
+					return nil, false
+				}
+				arms := a.EditorMatchArms(a.editorSnapshotPosition(file, src, prior[j-1].Pos))
+				counts := map[string]int{}
+				for _, arm := range arms {
+					if arm.Kind == "enumMember" {
+						counts[arm.Name[strings.LastIndex(arm.Name, ".")+1:]]++
+					}
+				}
+				var out []EditorCompletion
+				for _, arm := range arms {
+					name := arm.Name[strings.LastIndex(arm.Name, ".")+1:]
+					if arm.Kind == "enumMember" && counts[name] == 1 {
+						arm.Text = name + strings.TrimPrefix(arm.Text, arm.Name)
+						arm.Name = name
+						out = append(out, arm)
+					}
+				}
+				return out, true
+			}
+			return nil, false
+		}
+	}
+	return nil, false
 }
 
 func editorCompletionLabelUsed(tokens []syntax.Token, name string) bool {

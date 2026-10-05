@@ -44,7 +44,7 @@ new file mode 100644
 index 0000000..716cce7
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,34 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -77,6 +77,8 @@ index 0000000..716cce7
 +["+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator
 +["(" ")" "[" "]" "{" "}"] @punctuation.bracket
 +["," ";" ":" "."] @punctuation.delimiter
++
++(context_pattern name: (identifier) @type.enum.variant)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
 index 0000000..686bfac

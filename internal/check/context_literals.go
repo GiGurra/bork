@@ -10,7 +10,7 @@ import (
 
 // contextTarget selects only from the expected nominal types, never from
 // field shapes or the packages in scope. Unsolved union heads may add candidates.
-func (c *checker) contextTarget(e *syntax.ContextName, want Type) Type {
+func (c *checker) contextTarget(e *syntax.ContextName, want Type, pattern bool) Type {
 	want = c.zonk(want)
 	candidates, unresolved := c.contextCandidates(e.Name, want)
 	if unresolved || want == nil {
@@ -22,7 +22,7 @@ func (c *checker) contextTarget(e *syntax.ContextName, want Type) Type {
 	}
 	if len(candidates) == 0 {
 		if e.Name != "" {
-			if fixes := c.variantContextSuggestions(e, want); len(fixes) > 0 {
+			if fixes := c.variantContextSuggestions(e, want, pattern); len(fixes) > 0 {
 				c.diags.AddCode(e.Pos, "type.context_variant_unknown", "no expected sealed type in %s has variant %s", want, e.Name)
 				c.diags.Suggest(e.Pos, "type.context_variant_unknown", e.End, fixes...)
 				return Invalid
@@ -40,7 +40,7 @@ func (c *checker) contextTarget(e *syntax.ContextName, want Type) Type {
 	private := false
 	for _, t := range candidates {
 		names = append(names, TypeText(t, c.pkg))
-		if fix := c.explicitContextFix(e, t); fix != nil {
+		if fix := c.explicitContextFix(e, t, pattern); fix != nil {
 			fixes = append(fixes, *fix)
 		} else {
 			private = true
@@ -55,7 +55,7 @@ func (c *checker) contextTarget(e *syntax.ContextName, want Type) Type {
 	return Invalid
 }
 
-func (c *checker) variantContextSuggestions(e *syntax.ContextName, want Type) []diag.Fix {
+func (c *checker) variantContextSuggestions(e *syntax.ContextName, want Type, pattern bool) []diag.Fix {
 	members := []Type{want}
 	if u, ok := want.(*Union); ok {
 		members = u.Members
@@ -95,7 +95,7 @@ func (c *checker) variantContextSuggestions(e *syntax.ContextName, want Type) []
 		if len(closest) == 1 && len(constructors) == 1 {
 			fixes = append(fixes, diag.Fix{Message: "use variant " + name.Name, Edits: []diag.TextEdit{{Start: e.Pos, End: e.End, Replacement: "." + name.Name}}})
 		} else {
-			if fix := c.explicitContextFix(&name, candidate.owner); fix != nil {
+			if fix := c.explicitContextFix(&name, candidate.owner, pattern); fix != nil {
 				fixes = append(fixes, *fix)
 			}
 		}
@@ -152,7 +152,7 @@ func (c *checker) contextError(e *syntax.ContextName, code, format string, args 
 	})
 }
 
-func (c *checker) explicitContextFix(e *syntax.ContextName, t Type) *diag.Fix {
+func (c *checker) explicitContextFix(e *syntax.ContextName, t Type, pattern bool) *diag.Fix {
 	switch v := t.(type) {
 	case *Record:
 		if v.Decl.Private && v.Pkg != c.pkg {
@@ -164,6 +164,12 @@ func (c *checker) explicitContextFix(e *syntax.ContextName, t Type) *diag.Fix {
 		}
 	}
 	name, visible := c.constructorTypeName(t)
+	// Patterns do not accept a specialized constructor head such as
+	// Option[Int].Some. A visible alias works; otherwise ask for one.
+	if pattern && strings.Contains(name, "[") {
+		return &diag.Fix{Message: "name or declare a type alias for " + TypeText(t, c.pkg) + " (replace Type)", RequiresInput: true,
+			Edits: []diag.TextEdit{{Start: e.Pos, End: e.End, Replacement: "Type." + e.Name}}}
+	}
 	if !visible {
 		name = "Type"
 	}
@@ -284,7 +290,7 @@ func (c *checker) constructorTypeName(t Type) (string, bool) {
 }
 
 func (c *checker) contextVariant(e *syntax.ContextName, want Type) Type {
-	t := c.contextTarget(e, want)
+	t := c.contextTarget(e, want, false)
 	s, ok := t.(*Sealed)
 	if !ok {
 		return Invalid
@@ -340,7 +346,7 @@ func (c *checker) contextVariantOf(e *syntax.ContextName, s *Sealed) *Variant {
 }
 
 func (c *checker) contextRecord(e *syntax.RecordLit, name *syntax.ContextName, want Type) Type {
-	target := c.contextTarget(name, want)
+	target := c.contextTarget(name, want, false)
 	switch t := target.(type) {
 	case *Record:
 		if !c.recordConstruction(name.Pos, t, "construct") {
@@ -371,7 +377,7 @@ func (c *checker) contextRecord(e *syntax.RecordLit, name *syntax.ContextName, w
 }
 
 func (c *checker) contextVariantCall(e *syntax.Call, name *syntax.ContextName, want Type) Type {
-	t := c.contextTarget(name, want)
+	t := c.contextTarget(name, want, false)
 	c.diags.AddCode(name.Pos, "type.context_variant_call", "variants use named fields, not positional calls; write %s { ... }", contextText(name))
 	var valueWant Type
 	if s, ok := t.(*Sealed); ok && genericBaseOrSelf(s) == c.info.Named["Option"] && name.Name == "Some" && len(e.Args) == 1 && !hasNamedArgs(e) {

@@ -701,10 +701,12 @@ type ListPat struct {
 }
 
 type VariantPat struct {
-	Pos    diag.Pos
-	Path   []string
-	Fields []*FieldPat
-	Braces bool // written with { ... }, possibly empty
+	Pos     diag.Pos
+	End     diag.Pos // end of a context variant name, for diagnostics and fixes
+	Context bool     // owner omitted with .Variant
+	Path    []string
+	Fields  []*FieldPat
+	Braces  bool // written with { ... }, possibly empty
 }
 
 // FieldPat is one field of a destructuring pattern: `{ radius }` binds

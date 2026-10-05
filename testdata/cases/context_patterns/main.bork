@@ -1,0 +1,33 @@
+type Light = sealed { Red, Green }
+type Alias = Light
+fn light(x: Alias): Int {
+  match (x) { .Red => 1, Light.Green => 2 }
+}
+fn nested[T](x: Option[Option[T]]): Bool {
+  match (x) {
+    .Some { value: .Some { value: _ } } => true
+    // The next leading dot starts an arm, even across comments.
+    .Some { value: .None } => false
+    .None => false
+  }
+}
+fn union(x: Light | String): String {
+  match (x) { .Red => "red", .Green {} => "green", text: String => text }
+}
+fn first(xs: List[Light]): Int {
+  match (xs) { [.Red, ...] => 1, [.Green, ...] => 2, [] => 0 }
+}
+type Red = Int where positive
+pred positive(n: Int) { n > 0 }
+fn need(n: Int where positive): Int { n }
+fn facts(x: Option[Int where positive]): Int {
+  match (x) { .Some { value } => need(value), .None => 0 }
+}
+fn main() {
+  println(facts(Option.Some { value: 3 }))
+  println(light(Light.Red))
+  println(union(Light.Green))
+  println(first([Light.Red]))
+  println(nested(Option.Some { value: Option.Some { value: 3 } }))
+  println(nested(Option.Some { value: Option[Int].None }))
+}

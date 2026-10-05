@@ -19,7 +19,46 @@ func Lex(file string, src []byte, diags *diag.List) ([]Token, []Comment) {
 func lexAt(file string, src []byte, line, col int, diags *diag.List, compiler bool) ([]Token, []Comment) {
 	lx := &lexer{file: file, src: src, line: line, col: col, diags: diags, compiler: compiler}
 	lx.run()
-	return lx.toks, lx.comments
+	// A context match arm starts with the same dot as a continued selector.
+	// Once tokens are available, its => distinguishes the two without changing
+	// multiline method chains or looking through raw strings and comments.
+	var toks []Token
+	last := 0
+	for i, t := range lx.toks {
+		if i > 0 && t.Kind == Dot && t.Pos.Line > lx.toks[i-1].End.Line && contextPatternAhead(lx.toks[i:]) {
+			prev := lx.toks[i-1]
+			switch prev.Kind {
+			case TIdent, TInt, TFloat, TRune, TString, TInterp, TGoCode, KwTrue, KwFalse, RParen, RBrace, RBrack, Quest:
+				toks = append(toks, lx.toks[last:i]...)
+				toks = append(toks, Token{Kind: Semi, Text: "\n", Pos: prev.End, End: prev.End})
+				last = i
+			}
+		}
+	}
+	if toks == nil {
+		return lx.toks, lx.comments
+	}
+	toks = append(toks, lx.toks[last:]...)
+	return toks, lx.comments
+}
+
+func contextPatternAhead(toks []Token) bool {
+	if len(toks) < 3 || toks[0].Kind != Dot || toks[1].Kind != TIdent {
+		return false
+	}
+	i := 2
+	if toks[i].Kind == LBrace {
+		depth := 1
+		for i++; i < len(toks) && depth > 0; i++ {
+			switch toks[i].Kind {
+			case LBrace:
+				depth++
+			case RBrace:
+				depth--
+			}
+		}
+	}
+	return i < len(toks) && toks[i].Kind == Arrow
 }
 
 // LexCompiler permits reserved names in compiler-owned sources and formatting.

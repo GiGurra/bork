@@ -14,9 +14,9 @@ type Shape = sealed {
 
 fn describe(shape: Shape): String {
   match (shape) {
-    Shape.Circle { radius: 0 } => "a point"
-    Shape.Circle { radius } => s"a circle of radius $radius"
-    Shape.Rect { width, height: h } => s"a $width by $h rectangle"
+    .Circle { radius: 0 } => "a point"
+    .Circle { radius } => s"a circle of radius $radius"
+    .Rect { width, height: h } => s"a $width by $h rectangle"
   }
 }
 
@@ -28,6 +28,11 @@ fn main() {
 
 Inside the braces, `{ radius }` binds the field to a name of its own, `{ height: h }` binds it to `h`, and `{ radius: 0 }` requires it to equal a value.
 
+A leading dot omits the variant owner: `.Circle` uses the type of `shape`.
+Nested variant patterns use the field or element type. In a union, the written
+variant must belong to exactly one sealed member; write `Shape.Circle` when
+several members have that variant. Qualified patterns keep working.
+
 ## Patterns
 
 | Pattern | Matches |
@@ -38,7 +43,7 @@ Inside the braces, `{ radius }` binds the field to a name of its own, `{ height:
 | `n: Int` | a value of that type, named `n` |
 | `NotFound` | a value of that type, without naming it |
 | `User { name, age: 0 }` | a record, looking at the fields listed |
-| `Shape.Circle { radius }` | one variant of a sealed type |
+| `.Circle { radius }`, `Shape.Circle { radius }` | one variant of a sealed type |
 | `[]`, `[x]`, `[first, ...rest]` | a list by its length, naming the elements |
 
 Patterns nest, so a field can be matched against another pattern:
