@@ -83,19 +83,42 @@ func instName(ci *check.ClassInstance) string {
 // dictParam is the Go parameter holding the instance of class for the
 // type parameter tp.
 func dictParam(tp *check.TypeParam, class *check.Class) *ast.Ident {
-	tag := class.Name
+	collision := false
 	if !class.Prelude && !check.IsCodec(class, "Decode") && !check.IsCodec(class, "Encode") {
 		for _, bound := range tp.Bounds {
-			if bound != class && bound.Name == class.Name {
-				// Keep the standard codec bridge names; distinguish other
-				// same-named classes by their defining package identity.
-				tag = className(class).Name
-				if tag == class.Name {
-					tag += "_local"
-				}
-				break
-			}
+			collision = collision || (bound != class && bound.Name == class.Name)
 		}
+	}
+	if !collision {
+		return ast.NewIdent("_d_" + tp.Name + "_" + class.Name)
+	}
+	counts := map[string]int{}
+	reserved := map[string]bool{}
+	for _, bound := range tp.Bounds {
+		counts[bound.Name]++
+		reserved[bound.Name] = true
+	}
+	tags := map[*check.Class]string{}
+	for _, bound := range tp.Bounds {
+		tag := bound.Name
+		if counts[tag] > 1 && !bound.Prelude && !check.IsCodec(bound, "Decode") && !check.IsCodec(bound, "Encode") {
+			// Reserve every declared class name before assigning alternatives,
+			// retaining the standard codec bridge names even with collisions.
+			stem := className(bound).Name
+			if stem == bound.Name {
+				stem += "_local"
+			}
+			tag = stem
+			for serial := 2; reserved[tag]; serial++ {
+				tag = fmt.Sprintf("%s_%d", stem, serial)
+			}
+			reserved[tag] = true
+		}
+		tags[bound] = tag
+	}
+	tag := tags[class]
+	if tag == "" {
+		tag = class.Name
 	}
 	return ast.NewIdent("_d_" + tp.Name + "_" + tag)
 }

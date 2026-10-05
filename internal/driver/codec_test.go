@@ -112,7 +112,11 @@ func TestCodecSameNamedClassBounds(t *testing.T) {
 use codec.Defaults
 class Decode[T]{fn read(x:T):Int}
 instance mine:Decode[Int]{fn read(x:Int):Int{x}}
-fn Both[T:Decode+codec.Decode](x:T):Int{read(x)}
+class Decode_local[T]{fn another(x:T):Int}
+instance mine2:Decode_local[Int]{fn another(x:Int):Int{x}}
+class Decode_local_2[T]{fn more(x:T):Int}
+instance mine3:Decode_local_2[Int]{fn more(x:Int):Int{x}}
+fn Both[T:Decode+codec.Decode+Decode_local+Decode_local_2](x:T):Int{read(x)+another(x)+more(x)}
 fn main(){println(Both(1))}`
 	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
 	if err != nil {
@@ -122,7 +126,7 @@ fn main(){println(Both(1))}`
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, output)
 	}
-	if string(output) != "1\n" {
+	if string(output) != "3\n" {
 		t.Fatalf("output: %s", output)
 	}
 }
