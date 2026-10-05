@@ -32,7 +32,7 @@ import "bork/binary"
 fn payload(data: Bytes): Bytes | binary.BinaryError {
   reader = binary.NewReader(data, binary.ByteOrder.BigEndian)
   (size, next) = reader.ReadUint16()?
-  (body, end) = next.ReadBytes(toInt(size))?
+  (body, _) = next.ReadBytes(toInt(size))?
   body
 }
 
