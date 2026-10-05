@@ -179,7 +179,7 @@ func (g *gen) matchStmt(m *check.Match, k sink) []ast.Stmt {
 	}
 	switch st.(type) {
 	case *check.Sealed, *check.Union:
-		if flat {
+		if flat && g.disjointTypeCases(pats) {
 			return append(stmts, g.typeSwitch(m, pats, x, v, k))
 		}
 	default:
@@ -253,6 +253,40 @@ func and(conds []ast.Expr) ast.Expr {
 	return x
 }
 
+// Go type switches require distinct cases; overlapping arms use the ordered
+// conditional path so the first matching arm wins.
+func (g *gen) disjointTypeCases(pats []*check.Pat) bool {
+	seen := map[string]bool{}
+	for _, p := range pats {
+		for _, typ := range g.typeCases(p) {
+			key := g.text(typ)
+			if seen[key] {
+				return false
+			}
+			seen[key] = true
+		}
+	}
+	return true
+}
+
+func (g *gen) typeCases(p *check.Pat) []ast.Expr {
+	var list []ast.Expr
+	switch p.Kind {
+	case check.PatVariant:
+		list = []ast.Expr{g.variantType(p.Variant)}
+	case check.PatType:
+		switch {
+		case p.Sub != nil && p.Sub.Kind == check.PatVariant:
+			list = []ast.Expr{g.variantType(p.Sub.Variant)}
+		default:
+			for _, mt := range p.Members {
+				list = append(list, g.goType(mt))
+			}
+		}
+	}
+	return list
+}
+
 func (g *gen) typeSwitch(m *check.Match, pats []*check.Pat, x ast.Expr, v *ast.Ident, k sink) ast.Stmt {
 	sw := &ast.TypeSwitchStmt{Assign: &ast.ExprStmt{X: &ast.TypeAssertExpr{X: x}}, Body: &ast.BlockStmt{}}
 	for _, p := range pats {
@@ -264,20 +298,7 @@ func (g *gen) typeSwitch(m *check.Match, pats []*check.Pat, x ast.Expr, v *ast.I
 	hasDefault := false
 	for i, arm := range m.Arms {
 		p := pats[i]
-		var list []ast.Expr
-		switch p.Kind {
-		case check.PatVariant:
-			list = []ast.Expr{g.variantType(p.Variant)}
-		case check.PatType:
-			switch {
-			case p.Sub != nil && p.Sub.Kind == check.PatVariant:
-				list = []ast.Expr{g.variantType(p.Sub.Variant)}
-			default:
-				for _, mt := range p.Members {
-					list = append(list, g.goType(mt))
-				}
-			}
-		}
+		list := g.typeCases(p)
 		if list == nil {
 			hasDefault = true
 		}
