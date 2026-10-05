@@ -218,6 +218,13 @@ type factChecker struct {
 	observe           func(diag.Pos, env)
 	producer          *Generate
 	yieldCheck        func(*Yield, env)
+	// Carried names (see loop): the loop values that the values passed
+	// on must give the facts their names declare (what), the facts
+	// proven for each value passed on to a join where it was passed
+	// on, and the facts each join has.
+	carryMust  map[*Var]string
+	carryFacts map[[2]*Var][]*Constraint
+	joinKnown  map[*Var][]*Constraint
 }
 
 // lambdaArg places a lambda's parameter: the lambda is argument arg of
@@ -656,11 +663,10 @@ func (f *factChecker) walk(x Expr, e env) {
 	case *For:
 		if x.Items != nil {
 			f.walk(x.Items, e)
-			f.walk(x.Body, e)
-			return
 		}
 		f.loop(x, e)
 	case *LoopControl:
+		f.carryEdges(x.Carry, e)
 	case *Lambda:
 		// Facts known here still hold inside: values never change.
 		f.walk(x.Body, e)
@@ -706,7 +712,9 @@ func (f *factChecker) walk(x Expr, e env) {
 		if x.Else != nil && (!known || !value) {
 			f.walk(x.Else, e.with(f.conditionFacts(x.Cond, false)...))
 		}
+		f.joins(x.Joins, e)
 	case *Block:
+		before := e
 		e = f.stmts(x.Stmts, e)
 		if !f.statementsComplete(x.Stmts) {
 			return
@@ -714,6 +722,8 @@ func (f *factChecker) walk(x Expr, e env) {
 		if x.Tail != nil {
 			f.walk(x.Tail, e)
 		}
+		f.carryEdges(x.Carry, e)
+		f.joins(x.Joins, before)
 	case *ScopeBlock:
 		for _, p := range x.Policies {
 			f.walk(p, e)
@@ -768,6 +778,7 @@ func (f *factChecker) walk(x Expr, e env) {
 		for _, arm := range x.Arms {
 			f.walk(arm.Body, f.walkPatternGuards(arm.Pat, f.patternInvariants(arm.Pat, x.X, e)))
 		}
+		f.joins(x.Joins, e)
 	case *Try:
 		f.walk(x.X, e)
 		if f.fn != nil {
@@ -1463,6 +1474,15 @@ func (f *factChecker) proveCases(x Expr, ob obligation, e env, depth int) (bool,
 				return cs.result()
 			}
 			if cs.take(f.prove(d.Let.Value, ob, e, depth+1)) {
+				return true, nil
+			}
+		case VarJoin:
+			// A value where paths meet has what the value of every path has.
+			var paths []branch
+			for _, in := range d.Joins {
+				paths = append(paths, branch{x: &VarRef{expr: expr{pos: x.Pos(), typ: in.Type}, Var: in}, e: e})
+			}
+			if len(paths) > 0 && cs.take(f.all(ob, depth, paths...)) {
 				return true, nil
 			}
 		case VarLambdaParam:
@@ -2323,6 +2343,11 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 	if ref, ok := x.(*VarRef); ok && ref.Var.Kind == VarDefaultField && ref.Var.Sibling.Computed {
 		return nil
 	}
+	if ref, ok := x.(*VarRef); ok {
+		if v := joinedVar(ref.Var); v != ref.Var {
+			return f.declared(&VarRef{expr: ref.expr, Var: v}, e, depth)
+		}
+	}
 	if ref, ok := x.(*VarRef); ok && ref.Var.Unvalidated {
 		return nil
 	}
@@ -2412,6 +2437,8 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 			if d.Let.Initializer == nil && depth < maxDepth {
 				out = append(out, f.declared(d.Let.Value, e, depth+1)...)
 			}
+		case VarJoin:
+			add(f.joinKnown[d], f.ownParams())
 		case VarPattern, VarLoop:
 			// A loop's header name has the facts it declares.
 			add(d.Invariant, f.ownParams())
@@ -2978,6 +3005,9 @@ func (f *factChecker) key(x Expr) string {
 	}
 	switch x := x.(type) {
 	case *VarRef:
+		if v := joinedVar(x.Var); v != x.Var {
+			return f.key(&VarRef{expr: x.expr, Var: v})
+		}
 		switch d := x.Var; d.Kind {
 		case VarParam:
 			return "p:" + d.Name
@@ -3391,14 +3421,29 @@ func withoutPatternGuards(p *Pat) *Pat {
 // header name must have the facts the name declares (its invariant),
 // and the condition is known in the body and the post clause.
 func (f *factChecker) loop(x *For, e env) {
-	invariant := func(v *Var, value Expr, e env, which string) {
-		for _, con := range v.Invariant {
-			f.oblige(value, con, f.ownParams(), e, fmt.Sprintf("%s of loop variable %s must be %s", which, pathPhrase(con.Path, v.displayName()), con))
+	invariant := func(c *Carry, value Expr, e env, which string) {
+		for _, con := range c.Head.Invariant {
+			f.oblige(value, con, f.ownParams(), e, fmt.Sprintf(which+" must be %s", f.carrySubject(c, x, con), con))
 		}
 	}
-	for i, init := range x.Init {
-		f.walk(init, e)
-		invariant(x.Header[i], init, e, "the first value")
+	for _, c := range x.Carries {
+		if c.Init != nil {
+			f.walk(c.Init, e)
+			invariant(c, c.Init, e, "the first value of %s")
+		} else {
+			invariant(c, &VarRef{expr: expr{pos: x.Pos(), typ: c.Outer.Type}, Var: c.Outer}, e, "the value before the loop of %s")
+		}
+		// The value each iteration passes on, and each break's, has the
+		// facts the name declares; the values in between need not.
+		if f.carryMust == nil {
+			f.carryMust = map[*Var]string{}
+		}
+		if c.Post == nil {
+			f.carryMust[c.Latch] = "the next value of " + f.carrySubject(c, x, nil)
+		}
+		if c.After != nil {
+			f.carryMust[c.After] = "at a break, the value of " + f.carrySubject(c, x, nil)
+		}
 	}
 	inside := e
 	if x.Cond != nil {
@@ -3406,10 +3451,113 @@ func (f *factChecker) loop(x *For, e env) {
 		inside = e.with(f.conditionFacts(x.Cond, true)...)
 	}
 	f.walk(x.Body, inside)
-	for i, post := range x.Post {
-		if post != nil {
-			f.walk(post, inside)
-			invariant(x.Header[i], post, inside, "the next value")
+	for _, c := range x.Carries {
+		f.joinFacts(c.Latch, c.Head, inside)
+		if c.Post != nil {
+			f.walk(c.Post, inside)
+			invariant(c, c.Post, inside, "the next value of %s")
+		}
+		if c.After != nil {
+			f.joinFacts(c.After, c.Head, inside)
 		}
 	}
+}
+
+// carrySubject names a carried name in messages.
+func (f *factChecker) carrySubject(c *Carry, x *For, con *Constraint) string {
+	name := c.Head.displayName()
+	if con != nil {
+		name = pathPhrase(con.Path, name)
+	}
+	if c.Header() {
+		return "loop variable " + name
+	}
+	return fmt.Sprintf("%s, which the loop at line %d carries,", name, x.Pos().Line)
+}
+
+// carryEdges checks the values a path passes on, in its facts e: one
+// passed on to the next iteration or out of the loop must have the
+// facts its name declares, and one passed on to a join is noted for
+// the join if it has them.
+func (f *factChecker) carryEdges(edges []*CarryEdge, e env) {
+	for _, edge := range edges {
+		from := &VarRef{expr: expr{pos: edge.From.Pos, typ: edge.From.Type}, Var: edge.From}
+		if what, ok := f.carryMust[edge.To]; ok {
+			for _, con := range edge.To.Invariant {
+				f.oblige(from, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", what, con))
+			}
+		}
+		f.noteCarried(edge.To, edge.From, e)
+	}
+}
+
+// noteCarried notes which facts the name of join to declares the value
+// from, passed on to it, has in facts e.
+func (f *factChecker) noteCarried(to, from *Var, e env) {
+	if len(to.Invariant) == 0 {
+		return
+	}
+	if f.carryFacts == nil {
+		f.carryFacts = map[[2]*Var][]*Constraint{}
+	}
+	key := [2]*Var{to, from}
+	f.carryFacts[key] = nil
+	saved := f.diags
+	f.diags = &diag.List{}
+	defer func() { f.diags = saved }()
+	for _, con := range to.Invariant {
+		ob := f.obligationOf(con, f.ownParams(), "")
+		if ok, pending := f.prove(&VarRef{expr: expr{pos: from.Pos, typ: from.Type}, Var: from}, ob, e, 0); ok && len(pending) == 0 {
+			f.carryFacts[key] = append(f.carryFacts[key], con)
+		}
+	}
+}
+
+// joinFacts gives join v the facts its name declares that every value
+// passed on to it has. prior is the value no edge passes on, which is
+// checked in facts e.
+func (f *factChecker) joinFacts(v, prior *Var, e env) {
+	if len(v.Invariant) == 0 {
+		return
+	}
+	var known []*Constraint
+	for i, con := range v.Invariant {
+		all := true
+		for _, in := range v.Joins {
+			if in == prior {
+				if _, ok := f.carryFacts[[2]*Var{v, in}]; !ok {
+					f.noteCarried(v, in, e)
+				}
+			}
+			found := false
+			for _, c := range f.carryFacts[[2]*Var{v, in}] {
+				found = found || c == con
+			}
+			all = all && found
+		}
+		if all {
+			known = append(known, v.Invariant[i])
+		}
+	}
+	if f.joinKnown == nil {
+		f.joinKnown = map[*Var][]*Constraint{}
+	}
+	f.joinKnown[v] = known
+}
+
+// joins gives the joins after a statement, in facts e, their facts.
+func (f *factChecker) joins(js []*Join, e env) {
+	for _, j := range js {
+		f.joinFacts(j.Var, j.Prior, e)
+	}
+}
+
+// joinedVar is the value a carried name's join always has, when only
+// one path reaches it (a loop's latch when the body never rebinds the
+// name), or v.
+func joinedVar(v *Var) *Var {
+	for v.Kind == VarJoin && len(v.Joins) == 1 {
+		v = v.Joins[0]
+	}
+	return v
 }

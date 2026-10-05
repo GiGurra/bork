@@ -570,6 +570,9 @@ type gen struct {
 	mockErrors       diag.List
 	usesMocks        bool
 	usesMockIn       bool
+	// carryStates are the latches that a loop's After values are
+	// assigned through (see carried.go).
+	carryStates map[*check.Var]*ast.Ident
 	// usesAmbients is set when the program publishes or reads logged
 	// or propagated ambient values (ambientRuntime). labelGuard, while
 	// a Go function's body is generated, is set if a with in it
@@ -1646,7 +1649,7 @@ func (g *gen) effect(e check.Expr) []ast.Stmt {
 	case *check.Match:
 		return g.matchStmt(e, sink{})
 	case *check.Block:
-		return []ast.Stmt{&ast.BlockStmt{List: g.blockInto(e, sink{})}}
+		return g.joined(e.Joins, []ast.Stmt{&ast.BlockStmt{List: g.blockInto(e, sink{})}})
 	case *check.ScopeBlock:
 		return g.scopeInto(e, sink{})
 	case *check.Return:
@@ -1728,6 +1731,7 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 		case k.res != nil:
 			out = append(out, assign(k.res, g.okValue()))
 		}
+		out = append(out, g.carryEdges(b.Carry)...)
 		return append(out, g.endMocks(mocks)...)
 	}
 	out = append(out, g.debugLine(b.Tail.Pos())...)
@@ -1735,6 +1739,7 @@ func (g *gen) blockInto(b *check.Block, k sink) []ast.Stmt {
 	if k.ret || b.Tail.Type() == check.Never {
 		return out // returning ended them
 	}
+	out = append(out, g.carryEdges(b.Carry)...)
 	return append(out, g.endMocks(mocks)...)
 }
 
@@ -1788,7 +1793,7 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 				out = append(out, assign(ast.NewIdent("_"), x))
 				continue
 			}
-			if s.Declared || ((check.IsNumeric(vt) || vt == check.Rune) && isConst(x)) {
+			if s.Declared || s.Carried || ((check.IsNumeric(vt) || vt == check.Rune) && isConst(x)) {
 				// A declared type is kept, and an untyped Go constant would
 				// get Go's default type (int, float64).
 				out = append(out, typedVar(varIdent(s.Var), g.goType(bt), g.convert(x, vt, bt)))
@@ -1987,6 +1992,10 @@ func (g *gen) diverges(stmts []check.Stmt) bool {
 // `else if` whose condition needs no setup statements becomes a Go
 // `else if`.
 func (g *gen) ifChain(e *check.If, k sink) []ast.Stmt {
+	return g.joined(e.Joins, g.ifChainOf(e, k))
+}
+
+func (g *gen) ifChainOf(e *check.If, k sink) []ast.Stmt {
 	stmts, cond := g.value(e.Cond)
 	if cond == nil {
 		return stmts

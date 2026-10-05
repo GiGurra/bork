@@ -1,0 +1,28 @@
+pred nonNegative(n: Int) { n >= 0 }
+
+// The value an iteration passes on must have the facts the name
+// declares.
+fn nextValue(xs: List[Int]) uses io {
+  i: Int where nonNegative = 0
+  for (x in xs) {
+    i = i - x
+  }
+  println(i)
+}
+
+// So must the value a break passes on.
+fn breakValue(xs: List[Int]) uses io {
+  i: Int where nonNegative = 0
+  for (x in xs) {
+    if (x < 0) {
+      i = x
+      break
+    }
+  }
+  println(i)
+}
+
+fn main() uses io {
+  nextValue([1])
+  breakValue([1])
+}

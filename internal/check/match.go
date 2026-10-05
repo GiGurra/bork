@@ -150,6 +150,10 @@ func (c *checker) patSources(p *Pat, subject syntax.Expr, path string, field *Fi
 }
 
 func (c *checker) match(m *syntax.Match, want Type) Type {
+	// As a statement in a loop body, the arms may give the names the loop
+	// carries new values (see carried.go).
+	j := c.startJoin()
+	defer c.endJoin(j, m, len(m.Arms))
 	st := c.expr(m.X)
 	if len(m.Arms) == 0 {
 		c.errorf(m.Pos, "match needs at least one arm")
@@ -190,21 +194,24 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 	}
 	for _, i := range append(order, later...) {
 		arm := m.Arms[i]
-		c.pushScope()
-		p := c.pattern(arm.Pattern, st)
-		if p == nil {
-			ok = false
-		} else {
-			c.info.armPats[arm] = p
-			c.patSources(p, m.X, "", nil, nil)
-		}
-		pats[i] = p
-		armWant := want
-		if (armWant == nil || c.unbound(armWant)) && len(later) > 0 && len(order) > 0 {
-			armWant = armTypes[order[0]]
-		}
-		armTypes[i] = c.exprWant(arm.Body, armWant)
-		c.popScope()
+		armTypes[i] = c.joinBranch(j, i, func() Type {
+			c.nextTransparent = j != nil
+			c.pushScope()
+			defer c.popScope()
+			p := c.pattern(arm.Pattern, st)
+			if p == nil {
+				ok = false
+			} else {
+				c.info.armPats[arm] = p
+				c.patSources(p, m.X, "", nil, nil)
+			}
+			pats[i] = p
+			armWant := want
+			if (armWant == nil || c.unbound(armWant)) && len(later) > 0 && len(order) > 0 {
+				armWant = armTypes[order[0]]
+			}
+			return c.branchExpr(j, arm.Body, armWant)
+		})
 	}
 	// Broken patterns are left out; and without them, missing cases
 	// would only be follow-up errors.

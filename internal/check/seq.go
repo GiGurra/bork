@@ -44,10 +44,11 @@ func (c *checker) yieldExpr(e *syntax.Yield) Type {
 }
 
 // loopContext is a loop being checked: the lambda depth of its body,
-// and whether a break leaves it.
+// whether a break leaves it, and the names it carries.
 type loopContext struct {
 	depth  int
 	broken bool
+	carry  *carryLoop
 }
 
 func (c *checker) forExpr(e *syntax.For) Type {
@@ -67,14 +68,18 @@ func (c *checker) forExpr(e *syntax.For) Type {
 			c.errorf(e.Items.Position(), "for requires a List or Seq, found %s", source)
 		}
 	}
+	outer, names := c.carriable(e)
+	c.nextTransparent = true
 	c.pushScope()
 	if e.Name != "_" {
 		c.bind(e.Name, e.NamePos, elem, e)
 	}
-	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth})
-	body := c.loopBody(e.Body)
+	loop := c.carry(e, outer, names)
+	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth, carry: loop})
+	body := c.loopBodyCarrying(loop, e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
 	c.popScope()
+	c.endCarry(loop)
 	if body != Ok && body != Never && body != Invalid {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}
@@ -92,17 +97,20 @@ func (c *checker) loopBody(b *syntax.Block) Type {
 
 // loopExpr checks `for { }`, `for (cond) { }`, and
 // `for (init; cond; post) { }`. The header names are bound in a scope
-// of the loop's own; each post binding gives one of them its next value.
+// of the loop's own; each post binding gives one of them, or a name
+// the loop carries from outside, its next value.
 func (c *checker) loopExpr(e *syntax.For) Type {
+	outer, names := c.carriable(e)
+	c.nextTransparent = true
 	c.pushScope()
-	defer c.popScope()
-	header := map[string]*syntax.Binding{}
+	c.noCarry = true
 	for _, b := range e.Init {
 		if c.stmt(b) == Never {
 			c.errorf(b.Value.Position(), "a loop's header binding cannot leave the function")
 		}
-		header[b.Name] = b
 	}
+	c.noCarry = false
+	loop := c.carry(e, outer, names)
 	if e.Cond != nil {
 		saved := c.loopCond
 		c.loopCond = c.lambdaDepth + 1
@@ -111,40 +119,57 @@ func (c *checker) loopExpr(e *syntax.For) Type {
 		}
 		c.loopCond = saved
 	}
-	loop := &loopContext{depth: c.lambdaDepth}
-	c.loops = append(c.loops, loop)
-	body := c.loopBody(e.Body)
+	ctx := &loopContext{depth: c.lambdaDepth, carry: loop}
+	c.loops = append(c.loops, ctx)
+	body := c.loopBodyCarrying(loop, e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
 	if body != Ok && body != Never && body != Invalid {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}
-	seen := map[string]bool{}
+	c.checkPost(e, loop)
+	c.popScope()
+	c.endCarry(loop)
+	if e.Cond == nil && !ctx.broken {
+		return Never
+	}
+	return Ok
+}
+
+// checkPost checks a loop's post clause: each binding gives a name the
+// loop carries its next value, computed from the values at the end of
+// the iteration.
+func (c *checker) checkPost(e *syntax.For, loop *carryLoop) {
+	if len(e.Post) == 0 {
+		return
+	}
 	savedPost := c.postClause
 	c.postClause = c.lambdaDepth + 1
 	c.loops = append(c.loops, &loopContext{depth: -1}) // break and continue cannot leave it either
-	defer func() { c.postClause, c.loops = savedPost, c.loops[:len(c.loops)-1] }()
+	c.postScope(loop)
+	defer func() {
+		c.popScope()
+		c.postClause, c.loops = savedPost, c.loops[:len(c.loops)-1]
+	}()
+	seen := map[string]bool{}
 	for _, b := range e.Post {
-		init := header[b.Name]
-		if init == nil {
+		slot := loop.byName[b.Name]
+		if slot == nil {
 			c.expr(b.Value)
-			c.errorf(b.Pos, "the post clause can only rebind the loop's own header names, and %s is not one", b.Name)
+			c.errorf(b.Pos, "the post clause can only rebind the loop's header names and the names it carries, and %s is neither", b.Name)
 			continue
 		}
 		if seen[b.Name] {
 			c.errorf(b.Pos, "%s is rebound twice in the post clause", b.Name)
 		}
 		seen[b.Name] = true
-		want := c.info.bindings[init]
+		slot.post = b
+		want := slot.typ
 		t := c.exprWant(b.Value, want)
 		if t, want := c.settle(t, want); t != Invalid && want != Invalid && !assignable(t, want) {
-			c.errorf(b.Value.Position(), "%s is the loop's %s, so its next value must be %s, found %s", b.Name, b.Name, want, t)
+			c.errorf(b.Value.Position(), "%s is carried by the loop, so its next value must be %s, found %s", b.Name, want, t)
 		}
 		c.info.bindings[b] = want
 	}
-	if e.Cond == nil && !loop.broken {
-		return Never
-	}
-	return Ok
 }
 
 type seqCallInfo struct {

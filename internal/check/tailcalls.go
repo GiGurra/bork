@@ -168,13 +168,13 @@ func (s *tailScan) walk(x Expr, c tailCtx) {
 		return
 	case *For:
 		s.walk(x.Items, c.inner(tailUsed))
-		for _, init := range x.Init {
-			s.walk(init, c.inner(tailUsed))
+		for _, carry := range x.Carries {
+			s.walk(carry.Init, c.inner(tailUsed))
 		}
 		s.walk(x.Cond, c.inner(tailUsed))
 		s.walk(x.Body, c.inner("the loop continues after it returns"))
-		for _, post := range x.Post {
-			s.walk(post, c.inner(tailUsed))
+		for _, carry := range x.Carries {
+			s.walk(carry.Post, c.inner(tailUsed))
 		}
 		return
 	case *RecordLit:

@@ -1,0 +1,17 @@
+3 values, total 16, 2 skipped
+row 3
+row 3
+total 6
+9
+i 6, steps 024
+i 0 acc 1
+i 1 acc 2
+i 2 acc 4
+i 3 acc 8
+acc 16
+01567
+small 2 big 1 other 1 last 500
+n 15 steps 3
+[0, 1, 2]
+[0, 2, 4]
+3

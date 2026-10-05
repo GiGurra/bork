@@ -90,6 +90,7 @@ const (
 	VarAmbient                     // an ambient value a function needs
 	VarDefaultField                // a computed default's synthetic sibling parameter
 	VarMockHandle                  // a mock's call inspection handle
+	VarJoin                        // a carried name's value where paths meet (see Var.Joins)
 )
 
 // Var is a variable: a parameter, a binding, a name bound by a pattern,
@@ -121,9 +122,13 @@ type Var struct {
 	Ambient *Ambient
 	// Unused is set for a binding or pattern name that is never read.
 	Unused bool
-	// Invariant holds the facts a loop's header name declares, which
-	// every iteration's value has.
+	// Invariant holds the facts a loop's header name declares, or that
+	// the first binding of a name a loop carries declares, which every
+	// iteration's value has.
 	Invariant []*Constraint
+	// Joins are the values a VarJoin may have: one for each path that
+	// reaches it (see docs/design/loops.md).
+	Joins []*Var
 }
 
 func (v *Var) displayName() string {
@@ -271,6 +276,17 @@ type If struct {
 	Cond Expr
 	Then *Block
 	Else Expr
+	// Joins are the carried names the branches give new values, as a
+	// statement in a loop body (see Join).
+	Joins []*Join
+}
+
+// Join is a carried name after a statement whose branches give it new
+// values: Var, a VarJoin of the value Prior before the statement (nil
+// when every branch that ends gives a new one) and those the branches
+// pass on as they end (see Block.Carry).
+type Join struct {
+	Var, Prior *Var
 }
 
 // Comptime retains a checked recipe until the driver evaluates it.
@@ -295,6 +311,18 @@ type Block struct {
 	// which the block publishes in the goroutine's labels once its
 	// statements (the with's bindings) have run, until it ends.
 	Labels []*Var
+	// Joins are as If.Joins, for a block statement in a loop body.
+	Joins []*Join
+	// Carry are the carried values a branch of a statement, or a loop's
+	// body, passes on when it ends.
+	Carry []*CarryEdge
+}
+
+// CarryEdge passes a carried name's value From on, where paths meet:
+// to the join To after a statement (a VarJoin), or to the end of a
+// loop's iteration (its Carry's Latch) or its end (After).
+type CarryEdge struct {
+	To, From *Var
 }
 
 // ScopeBlock is `scope s { ... }`.
@@ -397,6 +425,8 @@ type Match struct {
 	expr
 	X    Expr
 	Arms []*MatchArm
+	// Joins are as If.Joins.
+	Joins []*Join
 }
 
 // MatchArm is an arm of a match: its checked pattern, and its value.
@@ -440,6 +470,9 @@ type Let struct {
 	// are then its where clauses.
 	Declared    bool
 	Constraints []*Constraint
+	// Carried is set when the binding gives a new value to a name a loop
+	// carries, which keeps the name's type (see Carry).
+	Carried bool
 }
 
 // ExprStmt is an expression evaluated for its effect.
@@ -494,18 +527,44 @@ type For struct {
 	Var   *Var
 	Items Expr
 	Body  *Block
-	// Without Items: the header names of `for (init; cond; post)`,
-	// their first values (each may read the names before it), the
-	// condition (nil for none), and their next values (nil for a name
-	// the post clause does not rebind), computed from the iteration's.
-	Header []*Var
-	Init   []Expr
-	Cond   Expr
-	Post   []Expr
+	// Cond is the condition of `for (cond)` and `for (init; cond; post)`
+	// (nil for none).
+	Cond Expr
+	// Carries are the names the loop carries from one iteration to the
+	// next: the header names of `for (init; cond; post)`, then the names
+	// its body gives new values from outside it.
+	Carries []*Carry
 }
+
+// Carry is a name a loop carries (see docs/design/loops.md).
+type Carry struct {
+	// Head is the name's value in an iteration (a VarLoop).
+	Head *Var
+	// Init is a header name's first value (each may read the header
+	// names before it); Outer is the value before the loop of a name
+	// carried from outside it.
+	Init  Expr
+	Outer *Var
+	// Latch is the value at the end of an iteration: a VarJoin of the
+	// value at the end of the body and each continue's.
+	Latch *Var
+	// Post is the next value, computed from the latches; nil when it is
+	// the latch.
+	Post Expr
+	// After is the value after the loop: a VarJoin of the iteration's
+	// value when the loop ends between iterations, and each break's; nil
+	// for a header name.
+	After *Var
+}
+
+// Header reports whether c is a header name of its loop.
+func (c *Carry) Header() bool { return c.Outer == nil }
+
 type LoopControl struct {
 	expr
 	Continue bool
+	// Carry are the carried values the break or continue passes on.
+	Carry []*CarryEdge
 }
 
 type SeqCall struct {

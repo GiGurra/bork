@@ -1,0 +1,9 @@
+main.bork:4:3: count is never observed: it is only read to compute its own next value, and not after the loop
+main.bork:6:5: count is never observed: it is only read to compute its own next value, and not after the loop
+main.bork:12:3: binding a is never read; discard explicitly with _
+main.bork:13:3: b is never observed: it is only read to compute its own next value, and not after the loop
+main.bork:15:5: a is never observed: it is only read to compute its own next value, and not after the loop
+main.bork:16:5: b is never observed: it is only read to compute its own next value, and not after the loop
+main.bork:22:8: i is never observed: the loop only computes its next value; leave it out of the header (for { ... } when nothing else is left)
+main.bork:27:8: binding j is never read; discard explicitly with _
+main.bork:36:5: binding last is never read; discard explicitly with _
