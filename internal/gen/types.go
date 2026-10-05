@@ -770,8 +770,15 @@ type _Scope struct {
 }
 
 // Root scopes inherit process-signal cancellation; nested scopes inherit
-// their parent's cancellation. The handler lives for the program's lifetime.
-var _mainContext, _ = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+// their parent's cancellation. The first SIGINT or SIGTERM cancels; the
+// handler is then removed, so a second one terminates the program at once.
+var _mainContext = _signalContext()
+
+func _signalContext() context.Context {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	go func() { <-ctx.Done(); stop() }()
+	return ctx
+}
 
 // _newScope opens the scope name inside parent (nil for none).
 func _newScope(parent *_Scope, name string) *_Scope {

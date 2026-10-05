@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/GiGurra/bork/internal/check"
+	"github.com/GiGurra/bork/internal/childproc"
 	"github.com/GiGurra/bork/internal/diag"
 	"github.com/GiGurra/bork/internal/gen"
 	"github.com/GiGurra/bork/internal/syntax"
@@ -521,10 +522,10 @@ func Run(path string, args []string) (int, error) {
 	}
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := childproc.Run(cmd); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return exitErr.ExitCode(), nil
+			return childproc.ExitCode(exitErr), nil
 		}
 		return 1, err
 	}
