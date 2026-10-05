@@ -69,14 +69,33 @@ fn main() {
   }
 }
 
+fn assertStatus(server: http.Server, path: String, s: Scope, expected: Int) uses net + clock + state {
+  match (http.Get(s"http://${http.Address(server)}$path", s)) {
+    response: http.Response => assert(response.status == expected)
+    error => panic(toString(error))
+  }
+}
+
 test "each listener serves only its own routes" {
   scope app {
-    match (http.ListenRoutes("127.0.0.1:0", app, metricsRoutes())) {
-      metrics: http.Server => {
-        assert(call(metrics, "/metrics", app) == "/metrics -> 200 requests_total 1")
-        assert(call(metrics, "/hello", app).startsWith("/hello -> 404"))
+    match (listenAll(app, "127.0.0.1:0", "127.0.0.1:0", "127.0.0.1:0")) {
+      servers: List[http.Server] => {
+        match (servers) {
+          [api, metrics, debug] => {
+            assertStatus(api, "/hello", app, 200)
+            assertStatus(api, "/metrics", app, 404)
+            assertStatus(api, "/debug/health", app, 404)
+            assertStatus(metrics, "/hello", app, 404)
+            assertStatus(metrics, "/metrics", app, 200)
+            assertStatus(metrics, "/debug/health", app, 404)
+            assertStatus(debug, "/hello", app, 404)
+            assertStatus(debug, "/metrics", app, 404)
+            assertStatus(debug, "/debug/health", app, 200)
+          }
+          _ => panic("expected three listeners")
+        }
       }
-      error: IoError => assert(false)
+      error: IoError => panic(toString(error))
     }
   }
 }

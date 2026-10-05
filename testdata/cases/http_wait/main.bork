@@ -1,0 +1,71 @@
+import "bork/http"
+
+fn listen(s: Scope) uses net + clock + state: http.Server {
+  match (http.Listen("127.0.0.1:0", s, (req, rs) => http.Text(200, "ok"))) {
+    server: http.Server => server
+    error: IoError => panic(toString(error))
+  }
+}
+
+// Inject a completed Serve result into a copy of a real resource. Public
+// listeners have no stop operation independent of scope cancellation.
+fn stopped[T](server: http.Server, message: String, wasCancelled: Bool) uses net: http.Server unsafe go {
+  import "errors"
+  state := server.handle.(struct {
+    addr string
+    done chan struct{}
+    cancelled <-chan struct{}
+    failure *error
+    load func() Option[T]
+  })
+  state.done = make(chan struct{})
+  cancelled := make(chan struct{})
+  state.cancelled = cancelled
+  state.failure = new(error)
+  if message != "" { *state.failure = errors.New(message) }
+  if wasCancelled { close(cancelled) }
+  close(state.done)
+  server.handle = state
+  return server
+}
+
+fn failure(value: Ok | IoError, address: String, message: String): Bool {
+  match (value) {
+    error: IoError => error.path == address && error.message == message
+    Ok => false
+  }
+}
+
+fn main() {
+  println("empty", http.WaitAny([]) == Ok, http.WaitAll([]) == Ok)
+  scope app {
+    live = listen(app)
+    ended = stopped[http.AdmissionLoad](live, "accept failed", false)
+    println("any unexpected", failure(http.WaitAny([live, ended]), http.Address(live), "accept failed"))
+    println("nil serve error", failure(http.WaitAny([stopped[http.AdmissionLoad](live, "", false)]), http.Address(live), "server stopped"))
+    first = stopped[http.AdmissionLoad](live, "first failure", false)
+    second = stopped[http.AdmissionLoad](live, "second failure", false)
+    println("all list order", failure(http.WaitAll([first, second]), http.Address(live), "first failure"))
+    cancelled = stopped[http.AdmissionLoad](live, "server closed", true)
+    println("cancelled completion", http.WaitAny([cancelled]) == Ok, http.WaitAll([cancelled]) == Ok)
+    println("mixed completion", failure(http.WaitAll([cancelled, second]), http.Address(live), "second failure"))
+  }
+  scope app {
+    first = openScope(app)
+    second = openScope(app)
+    a = listen(first.scope)
+    b = listen(second.scope)
+    cancel(first.scope)
+    println("any cancellation", http.WaitAny([a, b]) == Ok, !cancelled(second.scope))
+    // WaitAll must keep waiting for the second scope after the first ends.
+    launch(second.scope, () => {
+      _ = delay(second.scope, 50)
+      cancel(second.scope)
+    })
+    println("all cancellation", http.WaitAll([a, b]) == Ok, cancelled(second.scope))
+    http.Wait(a)
+    http.Wait(b)
+    closeScope(first)
+    closeScope(second)
+  }
+}

@@ -1,0 +1,5 @@
+/hello -> 200 hello
+/metrics -> 200 requests_total 1
+/debug/health -> 200 ok
+/hello -> 404 404 page not found
+
