@@ -1,0 +1,15 @@
+# Service configuration. Anchors and merge keys share settings between
+# environments; every environment must still decode into Service.
+defaults: &defaults
+  port: 8080
+  workers: 4
+  tags: [api]
+
+environments:
+  staging:
+    <<: *defaults
+    host: staging.example
+  production:
+    <<: *defaults
+    host: production.example
+    workers: 16

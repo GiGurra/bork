@@ -1,0 +1,76 @@
+import "bork/encoding"
+import "bork/fs"
+import "bork/yaml"
+
+type Server = { name: String, port: Int, tags: List[String] } derive (Decode)
+
+fn show(result: Json | yaml.Error) uses io {
+  match (result) {
+    value: Json => println(value)
+    error: yaml.Error => println(s"error ${error.line}:${error.column}: ${error.message}")
+  }
+}
+
+fn render(result: String | yaml.Error) uses io {
+  match (result) {
+    text: String => println(text.trim())
+    error: yaml.Error => println(s"error: ${error.message}")
+  }
+}
+
+fn files(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs.Exists | yaml.Error {
+  root = fs.DirectoryPath(fs.TempDir(s)?)
+  path = fs.Join([root, "config.yaml"])
+  yaml.WriteFile(path, Json.Object { fields: [JsonField { name: "name", value: Json.String { value: "bork" } }, JsonField { name: "port", value: Json.Number { text: "8080" } }, JsonField { name: "tags", value: Json.Array { items: [] } }] })?
+  value = yaml.ReadFile(path)?
+  println(decode[Server](value))
+  match (yaml.ReadAllFile(fs.Join([root, "missing.yaml"]))) {
+    error: IoError => println("missing file is an IoError")
+    _ => println("unexpected")
+  }
+  bad = fs.Join([root, "bad.yaml"])
+  fs.Write(bad, encoding.Utf8("a: [1\n"))?
+  match (yaml.ReadFile(bad)) {
+    error: yaml.Error => println(error.path == bad && error.line == 2)
+    _ => println("unexpected")
+  }
+}
+
+fn main() {
+  config = "name: bork\nport: 0x1F90\nratio: .5\ntags: [a, 'b']\nenabled: true\nnothing: ~\nwhen: 2026-10-05\nbig: 12345678901234567890\n"
+  show(yaml.Parse(config))
+  match (yaml.Parse(config)) {
+    value: Json => {
+      println(yaml.At(value, ["tags", 1]))
+      println(yaml.Field(value, "missing"))
+      render(yaml.Render(value))
+      render(yaml.Render(value, 4))
+    }
+    error: yaml.Error => println(error)
+  }
+  // Aliases, merge keys and multiple documents.
+  show(yaml.Parse("base: &b {x: 1, y: 2}\nderived:\n  <<: *b\n  y: 3\n  z: *b\n"))
+  match (yaml.ParseAll("a: 1\n---\n- 2\n---\n")) {
+    values: List[Json] => {
+      println(values)
+      render(yaml.RenderAll(values))
+    }
+    error: yaml.Error => println(error)
+  }
+  show(yaml.Parse(""))
+  show(yaml.Parse("one\n---\ntwo\n"))
+  // Rejected input.
+  show(yaml.Parse("a: 1\nb: [x, y\n"))
+  show(yaml.Parse("a: 1\na: 2\n"))
+  show(yaml.Parse("a: !!binary aGk=\n"))
+  show(yaml.Parse("a: !custom x\n"))
+  show(yaml.Parse("a: .inf\n"))
+  show(yaml.Parse("? [1]\n: x\n"))
+  show(yaml.Parse("&a [*a]\n"))
+  show(yaml.Parse("a: &a [x, x, x, x, x, x, x, x, x, x]\nb: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]\nc: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]\nd: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c, *c]\ne: [*d, *d, *d, *d, *d, *d, *d, *d, *d, *d]\n"))
+  // Strings that look like other scalars are quoted on output.
+  render(yaml.Render(Json.Array { items: [Json.String { value: "true" }, Json.String { value: "1.5" }, Json.String { value: "" }, Json.String { value: "line\nbreak\n" }, Json.Object { fields: [] }] }))
+  render(yaml.Render(Json.Object { fields: [JsonField { name: "n", value: Json.Array { items: [Json.Number { text: "1,2" }] } }] }))
+  render(yaml.Render(Json.Object { fields: [JsonField { name: "x", value: Json.Null }, JsonField { name: "x", value: Json.Null }] }))
+  scope s { println(files(s)) }
+}
