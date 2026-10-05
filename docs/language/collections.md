@@ -72,7 +72,7 @@ fn main() {
   for (i = 0, j = 10; i < j; i = i + 3, j = j - 1) {
     println(s"$i $j")
   }
-  for (i = 1; ; i = i * 2) {
+  for (i = 1;; i = i * 2) {
     if (i > 50) { break }
     println(i)
   }
