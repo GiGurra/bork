@@ -1,5 +1,10 @@
 import "bork/bits"
 
+fn count8(value: Byte): Int where bits.Count8 { value.OnesCount() }
+fn count16(value: Uint16): Int where bits.Count16 { value.OnesCount() }
+fn count32(value: Uint32): Int where bits.Count32 { value.OnesCount() }
+fn count64(value: Uint64): Int where bits.Count64 { value.OnesCount() }
+
 fn main() {
   a: Byte = 240
   println(a.OnesCount(), a.LeadingZeros(), a.TrailingZeros())
@@ -26,6 +31,7 @@ fn main() {
   println(h.OnesCount(), h.LeadingZeros(), h.TrailingZeros(), h.ReverseBytes(), h.RotateLeft(1), h.Reverse())
   println(e.Extract(7, 1), e.Extract(0, 8), e.Insert(0, 8, -1), e.Insert(0, 7, -1))
   println(d.Extract(0, 64), d.Insert(0, 64, 0), d.ClearBit(63), d.SetBit(63), d.TestBit(63))
+  println(count8(255), count16(65535), count32(4294967295), count64(18446744073709551615))
   zero: Uint64 = 0
   println(zero.LeadingZeros(), zero.TrailingZeros(), zero.OnesCount())
   println(a.RotateLeft(9223372036854775807), a.RotateLeft(-9223372036854775808))

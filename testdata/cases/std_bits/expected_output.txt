@@ -15,5 +15,6 @@ OutOfRange { value: "16", target: "4-bit field" } OutOfRange { value: "1", targe
 63 0 1 -72057594037927937 -3 9223372036854775807
 1 -128 -1 OutOfRange { value: "-1", target: "7-bit field" }
 18446744073709551615 0 9223372036854775807 18446744073709551615 true
+8 16 32 64
 64 64 0
 120 240
