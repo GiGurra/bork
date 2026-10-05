@@ -17,8 +17,8 @@ arguments.
 | Per-stream config | `Cmd.Stdin/Stdout/Stderr` fields (nil = /dev/null, `*os.File`, any `io.Writer`, or `StdoutPipe()`) | `Stdio::inherit/piped/null`, `From<File>`, `From<ChildStdout>` | `stdin/stdout/stderr=None/PIPE/DEVNULL/fd/file` | `stdin: Input`, `stdout: Output`, `stderr: ErrorOutput` sealed values |
 | Default | all /dev/null | `output()` captures, `spawn()`/`status()` inherit | inherit | Run and Start capture stdout/stderr; stdin is empty |
 | Combined output | `CombinedOutput()`, or same writer for both | not built in (needs `os_pipe`) | `stderr=STDOUT` | `stderr: .Stdout`, ordered by the OS |
-| Non-zero exit | `*ExitError` from `Run/Output` | data: `ExitStatus` | data: `returncode`; `check=True` raises | data: `Result.exit`; `result.Check()` turns it into `ExitError` |
-| Killed by signal | `ExitCode() == -1`, `WaitStatus.Signaled()` | `ExitStatusExt::signal()` | negative `returncode` | `Exit.Signaled { number, name }` |
+| Non-zero exit | `*ExitError` from `Run/Output` | data: `ExitStatus` | data: `returncode`; `check=True` raises | data: `Result.status`; `result.Check()` turns it into `ExitError` |
+| Killed by signal | `ExitCode() == -1`, `WaitStatus.Signaled()` | `ExitStatusExt::signal()` | negative `returncode` | `ExitStatus.Signaled { number, name }` |
 | Timeout | `CommandContext` | none (manual `try_wait` loop) | `timeout=` raises `TimeoutExpired` | a scope with `cancelAfter` gives `Cancelled` |
 | Async handle | `Start` + `Wait`; pipes are `io.ReadCloser` | `Child` with `stdin/stdout/stderr: Option<…>`, `wait`, `try_wait`, `kill` | `Popen` with `poll`, `wait`, `communicate`, `send_signal`, `terminate`, `kill` | `Process` with `Stdout()/Stderr()` readers, `Stdin()` writer, `Wait`, `TryWait`, `Signal`, `Stop`, `Kill`, `Pid` |
 | Pipeline | `b.Stdin, _ = a.StdoutPipe()` | `Stdio::from(child.stdout.take())` | `stdin=p1.stdout` | `stdin: .From { reader: a.Stdout() }` |
@@ -99,17 +99,18 @@ passing stdin change.
 ## Exit status
 
 ```bork
-type Exit = sealed {
+type ExitStatus = sealed {
   Exited { code: Int },                    // normal exit with a status code
   Signaled { number: Int, name: String },  // killed by a signal (Unix)
 }
 
-type Result = { code: Int, exit: Exit, stdout: Bytes, stderr: Bytes }
+type Result = { code: Int, status: ExitStatus, stdout: Bytes, stderr: Bytes }
 ```
 
 `code` stays for compatibility and simple checks: the exit code, or -1 when
-the process was killed by a signal (Go's `ExitCode()` convention). `exit` says
-which happened. `name` is the conventional name (`"SIGKILL"`, `"SIGTERM"`); a
+the process was killed by a signal (Go's `ExitCode()` convention). `status` says
+which happened (the type is `ExitStatus` because `process.Exit` is already
+the function that ends the program). `name` is the conventional name (`"SIGKILL"`, `"SIGTERM"`); a
 number is kept because `bork/signal.Signal` deliberately covers only catchable
 shutdown signals, and SIGKILL or SIGSEGV must still be reportable. Windows
 never produces `Signaled`.
@@ -125,7 +126,7 @@ fn (r: Result) Success(): Bool                       // exit is Exited { code: 0
 fn (r: Result) Check(): Result | ExitError           // like Python's check=True
 fn (r: Result) StdoutText(): String                  // the bytes as a String
 fn (r: Result) StderrText(): String
-type ExitError = { exit: Exit, stdout: Bytes, stderr: Bytes, message: String }
+type ExitError = { status: ExitStatus, stdout: Bytes, stderr: Bytes, message: String }
 ```
 
 `Check` is a method, not a flag on Run, so Run's result type never depends on
@@ -271,7 +272,7 @@ Handing a Reader to another process transfers it: further reads on it return
 All operations that start, signal, wait or move bytes declare `io + state`, as
 today. `Pid` reads a stored value and stays effect-free. `Process`, `Reader`
 and `Writer` are resources owned by the scope passed to Start and follow the
-usual attach rules. `Input`, `Output`, `ErrorOutput`, `Exit`, `Result` and
+usual attach rules. `Input`, `Output`, `ErrorOutput`, `ExitStatus`, `Result` and
 `ExitError` are plain immutable values.
 
 ## Implementation notes
@@ -284,9 +285,9 @@ usual attach rules. `Input`, `Output`, `ErrorOutput`, `Exit`, `Result` and
   process as an `*os.File`. The parent closes its copy of write ends after
   Start. Reader wraps the read end with a `bufio.Reader`; scope cancellation
   closes the read end, which unblocks a pending read on Go's poller.
-- `Exit` comes from `ProcessState.Sys().(syscall.WaitStatus)` behind the same
-  reflection guard Start uses for `Setpgid`, so non-Unix targets compile and
-  report `Exited`.
+- `ExitStatus` comes from `ProcessState.Sys().(syscall.WaitStatus)`; Windows
+  defines the same type with `Signaled()` always false, so it reports
+  `Exited`.
 - `Stop`/`cancelGrace` send SIGTERM to `-pid` and arm a timer for SIGKILL;
   cancellation uses `Cmd.Cancel` plus `Cmd.WaitDelay` (grace + 1s).
 - The current one-second bound for inherited output pipes after exit stays,
@@ -294,13 +295,15 @@ usual attach rules. `Input`, `Output`, `ErrorOutput`, `Exit`, `Result` and
 
 ## Delivery
 
-1. **Stream config and sync** — `Input`/`Output`/`ErrorOutput`, `Exit`,
-   `Result.exit`, `Success`/`Check`/text methods, `cancelGrace`, migration of
-   `stdin` callers, methods replacing `Await`/`Stop`/`Pid`. Golden tests in
-   `testdata/cases/process` for each stream mode, merge ordering, exit codes,
+1. **Stream config and sync** — `Input`/`Output`/`ErrorOutput` (without
+   `Pipe`/`From`), `ExitStatus`, `Result.status`, `Success`/`Check`/text
+   methods, `cancelGrace`, migration of `stdin` callers, and every Process
+   method except the stream accessors (`Wait`, `TryWait`, `Pid`, `Signal`,
+   graceful `Stop`, `Kill`), so callers migrate once. Golden tests in
+   `testdata/cases/process_streams` for each stream mode, merge ordering, exit codes,
    signal deaths, Check and deadline cancellation.
 2. **Async and streaming** — `Reader`, `Writer`, `.Pipe`, `.From` pipelines,
-   `TryWait`, `Signal`, graceful `Stop`, `Kill`, `Lines` channel adapter
+   `Stdin`/`Stdout`/`Stderr` accessors, `Lines` channel adapter
    (aligned with bork-73dn9h). Tests for interleaved streaming, incremental
    stdin, cleanup on cancel with unread pipes, and pipelines.
 3. **Examples and docs** — small runnable, tested examples under
