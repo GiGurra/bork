@@ -1,8 +1,9 @@
 // Package yaml reads and writes YAML as bork/codec values, so the
 // Field/Index/At queries and the codec Decode and Encode classes work on
-// YAML as they do on JSON.
+// YAML as they do on JSON: Decode and Encode give typed values.
 import codec "bork/codec"
 import "bork/json"
+use codec.Defaults
 
 // Error says where YAML text was rejected. Line and column are one-based,
 // or 0 when no position applies; path is the file, or "" for text.
@@ -50,9 +51,33 @@ fn Render(value: codec.Value, spaces: Indent = 2): String | Error { dump([value]
 // RenderAll writes each value as a document, separated by "---" lines.
 fn RenderAll(values: List[codec.Value], spaces: Indent = 2): String | Error { dump(values, spaces) }
 
-// WriteFile replaces the file with one rendered document.
-fn WriteFile(path: String, value: codec.Value, spaces: Indent = 2) uses io: Ok | Error | IoError {
-  match (Render(value, spaces)) {
+// Decode parses one document and decodes it with T's Decode instance, so
+// derived records check their field invariants as with bork/json.
+fn Decode[T: codec.Decode](text: String): T | Error | codec.DecodeError {
+  value = Parse(text)?
+  codec.decode[T](value)
+}
+
+// DecodeAll decodes every document of a stream. A DecodeError path starts with
+// the document's index ("[1].port").
+fn DecodeAll[T: codec.Decode](text: String): List[T] | Error | codec.DecodeError {
+  values = ParseAll(text)?
+  codec.decode[List[T]](codec.Value.Array { items: values })
+}
+
+// Encode renders a value through T's Encode instance.
+fn Encode[T: codec.Encode](value: T, spaces: Indent = 2): String | Error { Render(codec.encode(value), spaces) }
+
+// DecodeFile reads a file as ReadFile does and decodes it.
+fn DecodeFile[T: codec.Decode](path: String) uses io: T | Error | IoError | codec.DecodeError {
+  value = ReadFile(path)?
+  codec.decode[T](value)
+}
+
+// WriteFile replaces the file with one rendered document. A codec.Value encodes
+// as itself, so it writes dynamic and typed values alike.
+fn WriteFile[T: codec.Encode](path: String, value: T, spaces: Indent = 2) uses io: Ok | Error | IoError {
+  match (Encode(value, spaces)) {
     text: String => writeText(path, text)
     error: Error => Error { path: path, line: 0, column: 0, message: error.message }
   }
@@ -348,6 +373,7 @@ fn dump(values: List[codec.Value], spaces: Indent): String | Error unsafe go {
   import "strings"
   import "go.yaml.in/yaml/v4"
   jsonNumber := regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$`)
+  yaml11Bool := regexp.MustCompile(`^(y|Y|yes|Yes|YES|n|N|no|No|NO|on|On|ON|off|Off|OFF)$`)
   // node converts a value; at is its path (".items[2]") for messages.
   var node func(value codec.Value, at string) (*yaml.Node, *Error)
   node = func(value codec.Value, at string) (*yaml.Node, *Error) {
@@ -376,7 +402,13 @@ fn dump(values: List[codec.Value], spaces: Indent): String | Error unsafe go {
       }
       return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: value.text}, nil
     case codec.Value_String:
-      return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value.value}, nil
+      out := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value.value}
+      if yaml11Bool.MatchString(value.value) {
+        // Plain yes/no/on/off are strings in YAML 1.2 but booleans to 1.1
+        // readers such as PyYAML; quote them for those.
+        out.Style = yaml.SingleQuotedStyle
+      }
+      return out, nil
     case codec.Value_Array:
       out := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
       for i, item := range value.items {

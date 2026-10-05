@@ -3,13 +3,13 @@ import "bork/process"
 import "bork/yaml"
 use codec.Defaults
 
-// yaml_config loads a YAML configuration file, decodes each environment into
-// a checked record, and writes one back out:
+// yaml_config loads a YAML configuration file into checked records and
+// writes one back out:
 //
 //   bork run examples/yaml_config -- config.yaml
 //
-// YAML values are bork/codec values, so derive (codec.Decode) records and
-// the Field/Index/At queries work on them unchanged.
+// yaml.DecodeFile and yaml.Encode use the same derived Decode and Encode
+// instances as bork/json, so the where clauses are checked on load.
 
 pred ValidPort(port: Int) { port >= 1 && port <= 65535 }
 pred Positive(n: Int) { n > 0 }
@@ -21,22 +21,17 @@ type Service = {
   tags: List[String],
 } derive (codec.Decode, codec.Encode)
 
-// environment decodes one environment; derived Decode checks the where clauses.
-fn environment(config: codec.Value, name: String): Service | codec.DecodeError {
-  match (yaml.At(config, ["environments", name])) {
-    Option.Some { value } => codec.decode[Service](value)
-    Option.None => codec.DecodeError { path: s".environments.$name", message: "missing" }
-  }
-}
+// Config is the whole file. Fields it doesn't name, like the defaults
+// anchor, are ignored.
+type Config = { environments: Map[String, Service] } derive (codec.Decode)
 
 fn load(path: String) uses io: Ok | yaml.Error | IoError | codec.DecodeError {
-  config = yaml.ReadFile(path)?
-  println(yaml.At(config, ["environments", "staging", "workers"]))
-  println(environment(config, "staging")?)
-  production = environment(config, "production")?
-  println(production)
-  // Render writes block-style YAML; fields follow the record's order.
-  println(yaml.Render(codec.encode(Service { host: production.host, port: 9090, workers: production.workers, tags: production.tags }))?.trim())
+  config = yaml.DecodeFile[Config](path)?
+  config.environments.forEach((name, service) => println(s"$name: $service"))
+  match (config.environments.get("production")) {
+    Option.Some { value: production } => println(yaml.Encode(Service { host: production.host, port: 9090, workers: production.workers, tags: production.tags })?.trim())
+    Option.None => println("no production environment")
+  }
 }
 
 fn main() {

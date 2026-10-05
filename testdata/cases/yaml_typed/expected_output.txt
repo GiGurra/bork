@@ -1,0 +1,40 @@
+Server { host: "example.com", port: 8080, replicas: Option.None, labels: {"team": "core", "tier": "1"}, shapes: [Shape.Circle { radius: 1.5 }, Shape.Square { side: 3.0 }, Shape.Square { side: 2.0 }] }
+host: example.com
+port: 8080
+replicas: null
+labels:
+  team: core
+  tier: '1'
+shapes:
+- type: Circle
+  radius: 1.5
+- type: Square
+  side: 3.0
+- type: Square
+  side: 2.0
+Server { host: "example.com", port: 8080, replicas: Option.None, labels: {"team": "core", "tier": "1"}, shapes: [Shape.Circle { radius: 1.5 }, Shape.Square { side: 3.0 }, Shape.Square { side: 2.0 }] }
+DecodeError { path: ".port", message: "must satisfy value <= 65535 (ValidPort)" }
+DecodeError { path: ".port", message: "expected a whole number, found an array" }
+Error { path: "", line: 2, column: 1, message: "did not find expected ',' or ']' (while parsing a flow sequence that starts at line 1, column 7)" }
+[1, 2]
+DecodeError { path: "[1]", message: "expected a whole number, found a string" }
+- 1
+- 2
+'yes'
+Option.None
+DecodeError { path: "", message: "expected an object, found null" }
+Error { path: "", line: 4, column: 1, message: "did not find expected ',' or ']' (while parsing a flow sequence that starts at line 3, column 1)" }
+[Shape.Free, Shape.Free]
+- type: Free
+'1': 'yes'
+'true': 'no'
+'': 'on'
+plain: 'off'
+{"1": "yes", "true": "no", "": "on", "plain": "off"}
+Server { host: "h", port: 2, replicas: Option.None, labels: {:}, shapes: [] }
+Error { path: "", line: 0, column: 0, message: "invalid number text \"NaN\" at [0]" }
+Server { host: "file", port: 1, replicas: Option.None, labels: {:}, shapes: [] }
+missing file is an IoError
+DecodeError { path: "", message: "expected an object, found a string" }
+[true]
+Ok
