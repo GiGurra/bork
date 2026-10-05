@@ -624,6 +624,13 @@ func (p *deriveExpansion) expr(x syntax.Expr) syntax.Expr {
 				}
 			}
 		}
+		if selector, ok := x.Fun.(*syntax.Selector); ok && selector.Name == "default" {
+			if value, known := p.eval(selector.X); known {
+				if field, yes := value.(shapeField); yes {
+					return p.fieldDefault(x, field)
+				}
+			}
+		}
 	case *syntax.ListLit:
 		out := &syntax.ListLit{Pos: x.Pos}
 		for _, item := range x.Elems {

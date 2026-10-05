@@ -1140,3 +1140,153 @@ func TestDeriveTemplateFactPrivacy(t *testing.T) {
 fn main() { println(shape.facts[Int]()) }`
 	checkPreludeSource(t, source, "only during derive template expansion")
 }
+
+func TestDeriveTemplateDefaults(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+class Defaults[T] { fn defaults(x: T): List[String] }
+derive instance defaults[T]: Defaults[T] {
+ fn defaults(x: T): List[String] {
+  [comptime for (field in shape.fields[T]())
+    comptime if (!field.computed && field.hasDefault)
+      toString(field.default())]
+ }
+}
+pred positive(n: Int) { n > 0 }
+type Row = {
+ n: Int where positive = 2
+ text: String = "hello"
+ noDefault: Bool
+ lazy next: Int = n + 1
+} derive(Defaults)
+type Box[A] = { values: List[A] = [] } derive(Defaults)
+fn main() {
+ println(defaults(Row { noDefault: false }))
+ println(defaults(Box[Int] {}))
+}`
+	dir := validatorFixture(t, source)
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), `["2", "hello"]`) || !strings.Contains(string(output), `["[]"]`) {
+		t.Fatalf("defaults: %s", output)
+	}
+}
+
+func TestDeriveTemplateDefaultChecks(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, fields, operation, want string }{
+		{"missing", "n: Int", "field.default()", "has no declared default"},
+		{"computed", "n: Int, lazy next: Int = n + 1", "field.default()", "requires a complete owner value"},
+		{"arguments", "n: Int = 1", "field.default(2)", "takes no arguments"},
+		{"type arguments", "n: Int = 1", "field.default[Int]()", "takes no arguments"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkPreludeSource(t, `import "bork/shape"
+class Defaults[T] { fn defaults(x: T): List[String] }
+derive instance defaults[T]: Defaults[T] {
+ fn defaults(x: T): List[String] {
+  [comptime for (field in shape.fields[T]()) comptime if (field.name != "n" || shape.fields[T]().length() == 1) toString[field.Type](`+tc.operation+`)]
+ }
+}
+type Row = { `+tc.fields+` } derive(Defaults)
+fn main() {}`, tc.want)
+		})
+	}
+}
+
+func TestDeriveTemplateDefaultRetainsFacts(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/shape"
+pred positive(n: Int) { n > 0 }
+fn required(n: Int where positive): Int { n }
+class Defaults[T] { fn defaults(x: T): List[Int] }
+derive instance defaults[T]: Defaults[T] {
+ fn defaults(x: T): List[Int] {
+  [comptime for (field in shape.fields[T]()) required(field.default())]
+ }
+}
+type Row = { n: Int where positive = 2 } derive(Defaults)
+fn main() { println(defaults(Row {})) }`
+	dir := validatorFixture(t, source)
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), `[2]`) {
+		t.Fatalf("default facts: %s", output)
+	}
+}
+
+func TestDeriveTemplateDefaultLexicalOwner(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sources := map[string]string{
+		"bork.mod": "module example.com/derive\n",
+		"foreign/types.bork": `type Mode = sealed { First, Second }
+type Row = { mode: Mode = Mode.Second }`,
+		"main.bork": `import "bork/shape"
+import "example.com/derive/foreign"
+type Mode = sealed { First }
+class Defaults[T] { fn defaults(x: T): List[String] }
+derive instance defaults[T]: Defaults[T] {
+ fn defaults(x: T): List[String] {
+  [comptime for (field in shape.fields[T]()) toString(field.default())]
+ }
+}
+derive Defaults for foreign.Row
+fn main() { println(defaults(foreign.Row {})) }`,
+	}
+	for path, source := range sources {
+		path = filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executable, err := buildFixtureOutput(t, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "Second") {
+		t.Fatalf("lexical default: %s", output)
+	}
+}
+
+func TestDeriveTemplateDefaultOutputBudget(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+class Defaults[T] { fn defaults(x: T): List[String] }
+derive instance defaults[T]: Defaults[T] {
+ fn defaults(x: T): List[String] { [comptime for (field in shape.fields[T]()) field.default()] }
+}
+type Row = { value: String = "`+strings.Repeat("x", 100001)+`" } derive(Defaults)
+fn main() {}`, "compile-time work limit")
+}
+
+func TestDeriveTemplateImplicitDefaultOutputBudget(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+class Defaults[T] { fn defaults(x: T): List[String] }
+derive instance defaults[T]: Defaults[T] {
+ fn defaults(x: T): List[String] { [comptime for (field in shape.fields[T]()) toString(field.default())] }
+}
+type Huge = { payload: String = "`+strings.Repeat("x", 100001)+`" }
+type Row = { child: Huge = Huge {} } derive(Defaults)
+fn main() {}`, "compile-time work limit")
+}

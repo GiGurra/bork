@@ -49,6 +49,12 @@ the complete value. Fact handles retain resolved predicate and argument
 identities. Their display strings do not validate values or establish proofs.
 The target sequence includes declared invariants and constrained head facts.
 
+`field.default()` supplies the declared stored-field default with its checked
+type and lexical references. The provider runs at runtime when called;
+inspecting `hasDefault` does not call it. Test `hasDefault` before using the
+provider, and exclude computed fields: those require the complete owner and
+are available through `field.read(value)`.
+
 `shape.variants[T]()` describes sealed alternatives, with `name`, `index`, and
 `fields`. `shape.kind[T]()` selects `shape.Record`, `shape.Sealed`, or
 `shape.Other` in `comptime if` or `comptime match`. `shape.name[T]()` and

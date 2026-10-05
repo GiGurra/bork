@@ -313,6 +313,7 @@ type Info struct {
 	deriveSourceKinds      map[diag.Pos]string
 	shapeReadOwners        map[*syntax.Selector]Type
 	shapeTypeFacts         map[*syntax.TypeExpr][]*Constraint
+	shapeDefaults          map[*syntax.Call]*Field
 	assemblyNames          map[any]string
 	interpolatorCalls      map[*syntax.Interp]*syntax.Call
 	interpolatorValidators map[*syntax.Interp]*Dict
@@ -1793,6 +1794,9 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 func (c *checker) call(e *syntax.Call, want Type) Type {
 	if t, ok := c.positionalVariantCall(e, want); ok {
 		return t
+	}
+	if field := c.info.shapeDefaults[e]; field != nil {
+		return field.Type
 	}
 	if fn := c.deriveCalls[e]; fn != nil {
 		return c.callFunc(e, fn.Decl.Name, fn, e.Args, nil, e.TypeArgs, want)
