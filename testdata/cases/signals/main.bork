@@ -1,0 +1,71 @@
+import "bork/signal"
+import "bork/time"
+
+fn reload(s: Scope) uses io + state: signal.Signal | signal.Error | Cancelled | Closed {
+  events = signal.Subscribe(s, [.Hangup])?
+  events.Next()
+}
+
+test "reload subscribes without OS signals" {
+  scope app {
+    calls = mock signal.Subscribe(s, signals) {
+      events = signal.MockSubscription(s)
+      launch(s, () => {
+        assert(match (events.Emit(.Hangup)) { done: Ok => true; _ => false })
+      })
+      events
+    }
+    assertEqual(reload(app), signal.Signal.Hangup)
+    calls.expect(times: 1)
+  }
+}
+
+test "mock buffers notifications" {
+  scope app {
+    events = signal.MockSubscription(app)
+    assert(match (events.Emit(.Interrupt)) { done: Ok => true; _ => false })
+    assertEqual(events.Next(), signal.Signal.Interrupt)
+  }
+}
+
+test "invalid grace and empty registrations" {
+  scope app {
+    assert(match (signal.Configure(app, grace: .Some { value: time.Nanoseconds(-1) })) { error: signal.Error => error.message == "grace must be nonnegative"; _ => false })
+    assert(match (signal.Subscribe(app, [])) { error: signal.Error => true; _ => false })
+    assert(match (signal.Ignore(app, [])) { error: signal.Error => true; _ => false })
+  }
+}
+
+test "cancelled mock receive stops" {
+  scope app {
+    events = signal.MockSubscription(app)
+    cancel(app)
+    assert(match (events.Next()) { stopped: Cancelled => true; _ => false })
+  }
+}
+
+test "test triggers an event after the application subscribes" {
+  ready = atom(false)
+  deliver = atom(false)
+  scope app {
+    calls = mock signal.Subscribe(s, signals) {
+      events = signal.MockSubscription(s)
+      _ = update(ready, old => true)
+      launch(s, () => {
+        waitForFlag(deliver)
+        _ = events.Emit(.Hangup)
+      })
+      events
+    }
+    task = spawn(app, () => reload(app))
+    waitForFlag(ready)
+    _ = update(deliver, old => true)
+    assertEqual(await(task), signal.Signal.Hangup)
+    calls.expect(times: 1)
+  }
+}
+
+fn waitForFlag(flag: Atom[Bool]) uses state unsafe go {
+  import "runtime"
+  for !flag.currentFn() { runtime.Gosched() }
+}

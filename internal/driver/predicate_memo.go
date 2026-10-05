@@ -128,7 +128,7 @@ func predicateMemoSupport(source []byte) bool {
 			return false
 		}
 		switch path {
-		case "cmp", "context", "encoding/base64", "encoding/json", "errors", "fmt", "hash/maphash", "log/slog", "math", "math/bits", "os", "os/signal", "reflect", "slices", "strconv", "strings", "sync", "sync/atomic", "syscall", "time", "unicode/utf8":
+		case "cmp", "context", "encoding/base64", "encoding/json", "errors", "fmt", "hash/maphash", "log/slog", "math", "math/bits", "os", "os/signal", "reflect", "runtime", "slices", "strconv", "strings", "sync", "sync/atomic", "syscall", "time", "unicode/utf8":
 		default:
 			return false
 		}
@@ -152,7 +152,7 @@ func predicateMemoSupport(source []byte) bool {
 					continue
 				}
 				switch predicateSupportText(spec) {
-				case `_mainContext = _signalContext()`,
+				case `_mainContext = _signalContext()`, `_mainSignals = _newSignalBroker(false)`, `_mainContext = _mainSignals.ctx`,
 					`_errCancelled = errors.New("cancelled")`, `_errScopeEnded = errors.New("the scope ended")`,
 					`_mapHash = _hash`, `_mapSeed = maphash.MakeSeed()`:
 				default:

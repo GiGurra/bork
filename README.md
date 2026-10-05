@@ -161,6 +161,9 @@ fn main() {
 }
 ```
 
+Ctrl+C and SIGTERM cancel root scopes and allow cleanup, then exit with 130 or 143.
+[bork/signal](docs/std/signal.md) configures shutdown grace, subscriptions, and ignored signals.
+
 The `?` returns an error to the caller and keeps the successful value. More on [scopes and tasks](docs/language/scopes.md).
 
 ### Compile-time evaluation

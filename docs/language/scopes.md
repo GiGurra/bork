@@ -45,6 +45,26 @@ Files are not closed by hand. A function that needs an open resource takes it as
 
 A scope is itself a value, of type `Scope`, so a function can take one as a parameter and open resources or start tasks in it. Several examples below do this with `s: Scope`.
 
+## Process signals
+
+SIGINT (Ctrl+C) and SIGTERM cancel every root scope by default. Nested scopes
+and tasks inherit the cancellation, whose reason names the signal. After cleanup,
+a normal return exits with `128 + signal number`: 130 for SIGINT, 143 for SIGTERM.
+An explicit `process.Exit(code)` keeps that code. Copies within 500 ms count as
+one request; a subsequent cancelling signal terminates immediately. There is no
+default grace deadline. Other signals, including SIGHUP, keep their Go/OS
+behavior. Programs that never open a scope install no bork signal handler.
+
+[bork/signal](../std/signal.md) chooses cancellation signals, sets a grace
+duration, subscribes to events such as SIGHUP reloads, or ignores signals.
+**A registration's scope owns its lifetime, not an isolated disposition.**
+Its signal behavior affects the whole process until its last owner closes.
+Subscriptions prevent their signals from cancelling any root scope.
+
+On Windows, Ctrl+C and Ctrl+Break both act as SIGINT. Console close, logoff
+and shutdown give a SIGTERM cleanup opportunity, subject to Windows' own
+termination deadline.
+
 ## Tasks
 
 `spawn` starts a task that runs at the same time as the code that started it. A task also belongs to a scope, and the scope does not end until its tasks are done.

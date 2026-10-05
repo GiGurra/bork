@@ -116,8 +116,8 @@ func (job *runSignalJob) next(t *testing.T) string {
 	}
 }
 
-// program is the pid of the program bork run runs: the other member of
-// its process group.
+// program is the generated program: a child of bork run, or the group
+// leader itself when the CLI replaces itself with the cached executable.
 func (job *runSignalJob) program(t *testing.T) int {
 	t.Helper()
 	out, err := exec.Command("pgrep", "-g", strconv.Itoa(job.group)).Output()
@@ -128,6 +128,9 @@ func (job *runSignalJob) program(t *testing.T) int {
 		if pid, err := strconv.Atoi(field); err == nil && pid != job.group {
 			return pid
 		}
+	}
+	if syscall.Kill(job.group, 0) == nil {
+		return job.group
 	}
 	t.Fatal("no program process")
 	return 0
@@ -157,13 +160,13 @@ func (job *runSignalJob) wait(t *testing.T) int {
 
 // expectCancelled checks that the program saw one cancellation and ended
 // normally, and bork run with it.
-func (job *runSignalJob) expectCancelled(t *testing.T) {
+func (job *runSignalJob) expectCancelled(t *testing.T, sig syscall.Signal) {
 	t.Helper()
 	if line := job.next(t); line != "cancelled" {
 		t.Fatalf("program output %q", line)
 	}
-	if code := job.wait(t); code != 0 {
-		t.Fatalf("exit %d", code)
+	if code := job.wait(t); code != 128+int(sig) {
+		t.Fatalf("exit %d, want %d", code, 128+int(sig))
 	}
 }
 
@@ -175,7 +178,7 @@ func TestRunInterruptCancelsProgramAndWaits(t *testing.T) {
 	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
 		t.Fatal(err)
 	}
-	job.expectCancelled(t)
+	job.expectCancelled(t, syscall.SIGINT)
 }
 
 func TestRunTerminateToGroupCountsOnce(t *testing.T) {
@@ -184,7 +187,7 @@ func TestRunTerminateToGroupCountsOnce(t *testing.T) {
 	if err := syscall.Kill(-job.group, syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
-	job.expectCancelled(t)
+	job.expectCancelled(t, syscall.SIGTERM)
 }
 
 func TestRunForwardsSignalsToProgram(t *testing.T) {
@@ -196,7 +199,7 @@ func TestRunForwardsSignalsToProgram(t *testing.T) {
 			if err := job.cmd.Process.Signal(sig); err != nil {
 				t.Fatal(err)
 			}
-			job.expectCancelled(t)
+			job.expectCancelled(t, sig)
 		})
 	}
 }
@@ -232,7 +235,49 @@ func TestRunInterruptStopsHTTPServer(t *testing.T) {
 	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
 		t.Fatal(err)
 	}
-	if code := job.wait(t); code != 0 {
+	if code := job.wait(t); code != 130 {
 		t.Fatalf("exit %d", code)
+	}
+}
+
+func TestRunSignalKeepsExplicitExitCode(t *testing.T) {
+	t.Parallel()
+	source := strings.Replace(runSignalCooperative, "println(\"cancelled\")", "{ println(\"cancelled\"); process.Exit(7) }", 1)
+	source = "import \"bork/process\"\n" + source
+	job := startRunSignal(t, "ready", writeRunSignal(t, source, false))
+	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if line := job.next(t); line != "cancelled" {
+		t.Fatalf("output %q", line)
+	}
+	if code := job.wait(t); code != 7 {
+		t.Fatalf("exit %d, want 7", code)
+	}
+}
+
+func TestRunSignalGraceStopsUnresponsiveProgram(t *testing.T) {
+	t.Parallel()
+	source := "import \"bork/signal\"\nimport \"bork/time\"\n" + runSignalStubborn
+	source = strings.Replace(source, "scope s {", "scope s {\n    policy = signal.Configure(s, grace: .Some { value: time.Nanoseconds(200000000) })\n", 1)
+	source = strings.Replace(source, "uses io + clock {", "uses io + clock + state {", 1)
+	job := startRunSignal(t, "ready", writeRunSignal(t, source, true))
+	if err := syscall.Kill(-job.group, syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if code := job.wait(t); code != 143 {
+		t.Fatalf("exit %d, want 143", code)
+	}
+}
+
+func TestRunSignalWithoutScopeUsesOSDefault(t *testing.T) {
+	t.Parallel()
+	source := "import \"bork/time\"\nfn block() uses clock unsafe go {\n import \"time\"\n for { time.Sleep(time.Hour) }\n}\nfn main() uses io + clock { println(time.Nanoseconds(1)); println(\"ready\"); block() }\n"
+	job := startRunSignal(t, "ready", writeRunSignal(t, source, true))
+	if err := syscall.Kill(-job.group, syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if code := job.wait(t); code != 130 {
+		t.Fatalf("exit %d, want 130", code)
 	}
 }

@@ -720,7 +720,9 @@ func _snapshotDiff(old, new string) string {
 }
 `
 
-const scopeRuntime = `package main
+const scopeRuntime = scopeCoreRuntime + signalRuntime
+
+const scopeCoreRuntime = `package main
 
 import (
 	"context"
@@ -729,6 +731,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"sync"
 	"sync/atomic"
@@ -769,21 +772,13 @@ type _Scope struct {
 	children []*_Scope
 }
 
-// Root scopes inherit process-signal cancellation; nested scopes inherit
-// their parent's cancellation. The first SIGINT or SIGTERM cancels; the
-// handler is then removed, so a second one terminates the program at once.
-// Copies within half a second count as the first: a signal sent to a
-// process group can also arrive forwarded by a parent such as bork run.
-var _mainContext = _signalContext()
-
-func _signalContext() context.Context {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	go func() { <-ctx.Done(); time.Sleep(500 * time.Millisecond); stop() }()
-	return ctx
-}
+// Root scopes share a terminal process-signal cancellation context.
+var _mainSignals = _newSignalBroker(false)
+var _mainContext = _mainSignals.ctx
 
 // _newScope opens the scope name inside parent (nil for none).
 func _newScope(parent *_Scope, name string) *_Scope {
+	if parent == nil { _mainSignals.start() }
 	ctx := _mainContext
 	if parent != nil {
 		ctx = parent.ctx

@@ -21,6 +21,7 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 | [bork/process](process.md) | Program arguments, exit codes, and running subprocesses |
 | [bork/rand](rand.md) | Random numbers and seeded generators |
 | [bork/regex](regex.md) | Regular expressions, captures, and facts about matching strings |
+| [bork/signal](signal.md) | Shutdown signals, grace deadlines, and scope-owned subscriptions |
 | [bork/sql](sql.md) | SQLite and Postgres connections, transactions, and typed SQL literals |
 | [bork/tasks](tasks.md) | Task pools that limit how much work runs at once |
 | [bork/time](time.md) | Instants, durations, and clocks that tests can replace |

@@ -1,0 +1,102 @@
+// Package signal owns temporary process-wide signal registrations in scopes.
+import "bork/time"
+
+type Signal = sealed { Interrupt, Terminate, Hangup, User1, User2 }
+type Error = { message: String }
+type Policy = resource
+type Subscription = resource
+
+fn name(value: Signal): String {
+  match (value) {
+    Signal.Interrupt => "Interrupt"
+    Signal.Terminate => "Terminate"
+    Signal.Hangup => "Hangup"
+    Signal.User1 => "User1"
+    Signal.User2 => "User2"
+  }
+}
+
+fn numbers(values: List[Signal]): List[Int] | Error unsafe go {
+  out := make([]int64, 0, len(values))
+  for _, value := range values {
+    n, err := _borkSignalNumber(name(value))
+    if err != nil { return Error{message: err.Error()} }
+    out = append(out, int64(n))
+  }
+  return out
+}
+
+// Configure replaces the process cancellation policy until its owner closes.
+// A newer live Configure wins. None grace waits indefinitely for cleanup.
+fn Configure(s: Scope, cancel: List[Signal] = [.Interrupt, .Terminate], grace: Option[time.Duration] = .None) uses io + state: Policy | Error {
+  register(s, "configure", numbers(cancel)?, grace)
+}
+
+// Ignore suppresses cancellation and OS defaults unless a subscription exists.
+fn Ignore(s: Scope, signals: List[Signal]) uses io + state: Policy | Error {
+  if (signals.isEmpty()) { return Error { message: "Ignore requires at least one signal" } }
+  register(s, "ignore", numbers(signals)?, .None)
+}
+
+fn register(s: Scope, kind: String, values: List[Int], grace: Option[time.Duration]) uses io + state: Policy | Error unsafe go {
+  import "time"
+  duration, bounded := _borkOptionGet(grace)
+  if bounded && duration.nanos < 0 { return Error{message: "grace must be nonnegative"} }
+  native := make([]int, len(values))
+  for i, n := range values { native[i] = int(n) }
+  r := _borkSignalRegister(s, kind, native, time.Duration(duration.nanos), bounded)
+  return Policy{handle: r, owner: s.Own(func(){ _borkSignalClose(r) })}
+}
+
+// Subscribe receives events and suppresses cancellation for these signals.
+// The scope owns its lifetime; the disposition affects the whole process.
+fn Subscribe(s: Scope, signals: List[Signal]) uses io + state: Subscription | Error {
+  if (signals.isEmpty()) { return Error { message: "Subscribe requires at least one signal" } }
+  subscribe(s, numbers(signals)?)
+}
+
+fn subscribe(s: Scope, values: List[Int]) uses io + state: Subscription unsafe go {
+  native := make([]int, len(values))
+  for i, n := range values { native[i] = int(n) }
+  r := _borkSignalRegister(s, "subscribe", native, 0, false)
+  handle := _borkNewResourceHandle(r, s)
+  return Subscription{handle: handle, owner: s.Own(func(){ handle.Close(); _borkSignalClose(r) })}
+}
+
+// next waits for a notification; a full 16-event buffer drops further events.
+fn (events: Subscription) Next() uses io + state: Signal | Cancelled | Closed unsafe go {
+  import "context"
+  handle := events.handle.(*_borkResourceHandle)
+  r := handle.Value.(*_signalRegistration)
+  ctx := handle.Context()
+  select { case <-ctx.Done(): return Cancelled{reason: context.Cause(ctx).Error()}; default: }
+  select {
+  case <-ctx.Done(): return Cancelled{reason: context.Cause(ctx).Error()}
+  case <-r.closed: return Closed{}
+  case n := <-r.events:
+    switch _borkSignalName(n) {
+    case "Interrupt": return Signal_Interrupt{}
+    case "Terminate": return Signal_Terminate{}
+    case "Hangup": return Signal_Hangup{}
+    case "User1": return Signal_User1{}
+    case "User2": return Signal_User2{}
+    }
+    panic("bork: unknown signal event")
+  }
+}
+
+// Mock is an isolated subscription. Mock Subscribe to return it in a test.
+fn MockSubscription(s: Scope) uses state: Subscription unsafe go {
+  r := _borkSignalMock(s)
+  handle := _borkNewResourceHandle(r, s)
+  return Subscription{handle: handle, owner: s.Own(func(){ handle.Close(); _borkSignalClose(r) })}
+}
+
+// emit injects an event into a Mock and never delivers an OS signal.
+fn (events: Subscription) Emit(value: Signal) uses state: Ok | Closed | Error unsafe go {
+  r := events.handle.(*_borkResourceHandle).Value.(*_signalRegistration)
+  open, err := _borkSignalEmit(r, _borkSignalMockNumber(name(value)))
+  if err != nil { return Error{message: err.Error()} }
+  if !open { return Closed{} }
+  return _borkOk()
+}
