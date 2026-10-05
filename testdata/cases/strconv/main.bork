@@ -388,3 +388,22 @@ test "unsigned arbitrary radix round trips" (value: Uint64, base: Int where strc
   assertEqual(value.Format(base, width).ParseUint64(base), value)
   assertEqual(value.Format(base, width, uppercase: true).ParseUint64(base), value)
 }
+
+test "unsigned parsing rejects negative zero" {
+  match ("-0".ParseUint64()) {
+    value: Uint64 => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0")
+  }
+  match ("-0x0".ParseUint64(0)) {
+    value: Uint64 => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0x0")
+  }
+  match ("-0".ParseByte()) {
+    value: Byte => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0")
+  }
+  match ("-0x0".ParseByte(0)) {
+    value: Byte => panic("negative zero accepted")
+    error: ParseError => assertEqual(error.input, "-0x0")
+  }
+}

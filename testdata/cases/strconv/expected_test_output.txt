@@ -15,5 +15,6 @@ ok    Uint64 boundaries and round trips
 ok    Byte boundaries and round trips
 ok    signed arbitrary radix round trips
 ok    unsigned arbitrary radix round trips
-17 passed, 0 failed
+ok    unsigned parsing rejects negative zero
+18 passed, 0 failed
 exit code 0
