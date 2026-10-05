@@ -3287,6 +3287,15 @@ closed predicate batches in their staging entries. Reuse still performs current
 Facts checking and preserves diagnostics; explicit comptime values execute afresh.
 Stale, corrupt or unavailable entries always fall back to fresh evaluation.
 
+Linux/macOS `run` and `script` retain an executable per canonical program request
+and build context. Unchanged supported native Go builds validate recorded emitted
+sources, module inputs, installed SDK identity, concrete Go dependency inputs and
+the executable's bytes and mode before skipping `go build`. Warm hits preserve
+inode and mtime; completed replacements publish atomically, including when older
+copies are running. Cgo and unsupported external assembly/embed closures retain
+Go's normal checks. Cached CLI executions replace the process on Unix; library
+execution APIs, Windows and temporary fallback builds wait for the child.
+
 `bork install [path]` defaults to `.` and builds into `BORKBIN`, whose default is
 Go's effective `GOBIN`, else the first effective `GOPATH` entry plus `/bin`
 (normally `~/go/bin`). Explicit settings always win and are never moved. Paths

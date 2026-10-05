@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/GiGurra/bork/internal/childproc"
 )
 
 // The program waits in a scope until it is cancelled.
@@ -77,6 +79,7 @@ func startRunSignal(t *testing.T, ready string, args ...string) *runSignalJob {
 	t.Cleanup(cancel)
 	cmd := exec.CommandContext(ctx, cliExecutable(t, false), append([]string{"run"}, args...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Env = append(os.Environ(), "BORKCACHE="+t.TempDir(), "BORKTOOLCHAIN=local")
 	// An orphaned program would hold the output open forever.
 	cmd.WaitDelay = 5 * time.Second
 	reader, writer := io.Pipe()
@@ -144,7 +147,7 @@ func (job *runSignalJob) wait(t *testing.T) int {
 	code := 0
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
-		code = exit.ExitCode()
+		code = childproc.ExitCode(exit)
 	} else if err != nil {
 		t.Fatal(err)
 	}

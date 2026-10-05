@@ -513,6 +513,24 @@ func Run(path string, args []string) (int, error) {
 		return 1, err
 	}
 	defer cleanup()
+	return runExecutable(exe, args)
+}
+
+// RunCLI replaces the CLI process with the built program on supported Unix
+// platforms. Temporary fallback builds and other platforms wait as Run does.
+func RunCLI(path string, args []string) (int, error) {
+	exe, cleanup, stable, err := buildOutput(path, "")
+	if err != nil {
+		return 1, err
+	}
+	defer cleanup()
+	if stable && canExecProgram {
+		return 1, execProgram(exe, args)
+	}
+	return runExecutable(exe, args)
+}
+
+func runExecutable(exe string, args []string) (int, error) {
 	cmd := exec.Command(exe, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := childproc.Run(cmd); err != nil {

@@ -19,9 +19,15 @@ const buildReceiptLimit = 64 << 20
 type buildReceipt struct {
 	Schema    int
 	Input     [sha256.Size]byte
-	Output    [sha256.Size]byte
+	Output    buildExecutableIdentity
+	Declined  bool
 	SDK       *installedSDKIdentity
 	Inventory *buildInventory
+}
+
+type buildExecutableIdentity struct {
+	Digest [sha256.Size]byte
+	Mode   os.FileMode
 }
 
 type buildInventory struct {
@@ -68,14 +74,20 @@ func buildWithReceipt(program *compiledProgram, out, dir string, pinned, stable 
 	}{1, files, ctx.namespace, dir})
 	input := sha256.Sum256(encoded)
 	name := filepath.Join(filepath.Dir(dir), fmtBuildReceiptName(out))
+	var receipt *buildReceipt
+	var seed *buildExecutableIdentity
 	if stable && !cacheDisabled() {
-		if receipt := readBuildReceipt(name); receipt != nil && receipt.Input == input &&
+		receipt = readBuildReceipt(name)
+		if receipt != nil {
+			if actual, err := readBuildExecutable(out); err == nil && actual == receipt.Output && actual.Mode.Perm()&0111 != 0 {
+				seed = &receipt.Output
+			}
+		}
+		if receipt != nil && seed != nil && !receipt.Declined && receipt.Input == input &&
 			receipt.SDK.current(ctx.tool, ctx.values["GOROOT"], ctx.values["GOVERSION"]) &&
 			receipt.Inventory.current() {
-			if digest, err := buildFileDigest(out); err == nil && digest == receipt.Output {
-				testCacheProbeAt("BORK_TEST_BUILD_CACHE_PROBE", "hit")
-				return nil
-			}
+			testCacheProbeAt("BORK_TEST_BUILD_CACHE_PROBE", "hit")
+			return nil
 		}
 	}
 	var sdk *installedSDKIdentity
@@ -83,12 +95,14 @@ func buildWithReceipt(program *compiledProgram, out, dir string, pinned, stable 
 	if stable && !cacheDisabled() && ctx.processValue("GOCACHEPROG") == "" && ctx.processValue("GO_EXTLINK_ENABLED") != "1" {
 		if info, err := buildinfo.ReadFile(ctx.tool); err == nil && info.Path == "cmd/go" && supportedGoVersion(info.GoVersion) {
 			sdk = captureInstalledSDK(ctx.tool, ctx.values["GOROOT"], ctx.values["GOVERSION"])
-			if sdk != nil {
+			knownDecline := receipt != nil && receipt.Declined && receipt.Input == input && receipt.SDK.current(ctx.tool, ctx.values["GOROOT"], ctx.values["GOVERSION"])
+			if sdk != nil && !knownDecline {
 				inventory = captureBuildInventory(dir, ctx)
 			}
 		}
 	}
-	if err := buildAtomicOutput(program, out, dir, pinned); err != nil {
+	output, err := buildAtomicOutput(program, out, dir, pinned, seed)
+	if err != nil {
 		return err
 	}
 	if inventory != nil && sdk.current(ctx.tool, ctx.values["GOROOT"], ctx.values["GOVERSION"]) && inventory.current() {
@@ -98,12 +112,15 @@ func buildWithReceipt(program *compiledProgram, out, dir string, pinned, stable 
 		beforeBytes, _ := json.Marshal(inventory)
 		afterBytes, _ := json.Marshal(after)
 		if bytes.Equal(beforeBytes, afterBytes) && inventory.current() {
-			if output, err := buildFileDigest(out); err == nil {
-				writeBuildReceipt(name, &buildReceipt{Schema: 1, Input: input, Output: output, SDK: sdk, Inventory: inventory})
-				testCacheProbeAt("BORK_TEST_BUILD_CACHE_PROBE", "miss")
-				return nil
-			}
+			writeBuildReceipt(name, &buildReceipt{Schema: 1, Input: input, Output: output, SDK: sdk, Inventory: inventory})
+			testCacheProbeAt("BORK_TEST_BUILD_CACHE_PROBE", "miss")
+			return nil
 		}
+	}
+	if stable && !cacheDisabled() {
+		// A declined receipt can seed a future Go target with independently
+		// verified bytes, but never authorizes skipping Go's build checks.
+		writeBuildReceipt(name, &buildReceipt{Schema: 1, Input: input, Output: output, SDK: sdk, Declined: true})
 	}
 	testCacheProbeAt("BORK_TEST_BUILD_CACHE_PROBE", "bypass")
 	return nil
@@ -125,7 +142,16 @@ func readBuildReceipt(path string) *buildReceipt {
 		return nil
 	}
 	var receipt buildReceipt
-	if decodeStrictCacheJSON(data, &receipt) != nil || receipt.Schema != 1 || receipt.SDK == nil || receipt.Inventory == nil || len(receipt.Inventory.Packages) == 0 {
+	var envelope cacheArtifactEnvelope
+	if decodeStrictCacheJSON(data, &envelope) != nil || envelope.Schema != 1 {
+		return nil
+	}
+	digest := sha256.Sum256(envelope.Body)
+	if envelope.Checksum != fmt.Sprintf("%x", digest) || decodeStrictCacheJSON(envelope.Body, &receipt) != nil || receipt.Schema != 1 {
+		return nil
+	}
+	canonical, err := json.Marshal(&receipt)
+	if err != nil || !bytes.Equal(canonical, envelope.Body) || (!receipt.Declined && (receipt.SDK == nil || receipt.Inventory == nil || len(receipt.Inventory.Packages) == 0)) {
 		return nil
 	}
 	return &receipt
@@ -133,6 +159,11 @@ func readBuildReceipt(path string) *buildReceipt {
 
 func writeBuildReceipt(path string, receipt *buildReceipt) {
 	data, err := json.Marshal(receipt)
+	if err != nil || len(data) > buildReceiptLimit {
+		return
+	}
+	digest := sha256.Sum256(data)
+	data, err = json.Marshal(cacheArtifactEnvelope{Schema: 1, Body: data, Checksum: fmt.Sprintf("%x", digest)})
 	if err != nil || len(data) > buildReceiptLimit {
 		return
 	}
@@ -149,6 +180,10 @@ func writeBuildReceipt(path string, receipt *buildReceipt) {
 }
 
 func captureBuildInventory(dir string, ctx *goContext) *buildInventory {
+	canonical, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil
+	}
 	cmd := ctx.command("list", "-deps", "-json", "-mod=readonly", "-buildvcs=false", ".")
 	cmd.Dir = dir
 	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
@@ -156,7 +191,7 @@ func captureBuildInventory(dir string, ctx *goContext) *buildInventory {
 	if err != nil || len(data) > buildReceiptLimit {
 		return nil
 	}
-	result := &buildInventory{Stage: dir, Files: map[string]buildFileInput{}, Directories: map[string]buildDirectoryIdentity{}}
+	result := &buildInventory{Stage: canonical, Files: map[string]buildFileInput{}, Directories: map[string]buildDirectoryIdentity{}}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	for {
 		var pkg buildPackage
@@ -166,7 +201,7 @@ func captureBuildInventory(dir string, ctx *goContext) *buildInventory {
 			return nil
 		}
 		result.Packages = append(result.Packages, pkg)
-		if pkg.Standard || pkg.Dir == dir {
+		if pkg.Standard || pkg.Dir == canonical {
 			continue
 		}
 		// Assembly includes and external embed globs need a wider closure than
@@ -231,10 +266,13 @@ func (inventory *buildInventory) current() bool {
 	// The graph itself is persisted so deletion of its concrete observations
 	// cannot silently turn a dependency-bearing receipt into an empty one.
 	for _, pkg := range inventory.Packages {
-		if pkg.Error != nil || len(pkg.CgoFiles) != 0 {
+		if pkg.Error != nil || len(pkg.CgoFiles) != 0 || !filepath.IsAbs(pkg.Dir) || !validReceiptPath(pkg.Dir) {
 			return false
 		}
 		if !pkg.Standard && pkg.Dir != inventory.Stage {
+			if len(pkg.SFiles)+len(pkg.HFiles)+len(pkg.SysoFiles)+len(pkg.EmbedPatterns) != 0 {
+				return false
+			}
 			if _, ok := inventory.Directories[pkg.Dir]; !ok {
 				return false
 			}
@@ -256,6 +294,14 @@ func (inventory *buildInventory) current() bool {
 		}
 	}
 	return true
+}
+
+func readBuildExecutable(path string) (buildExecutableIdentity, error) {
+	input, ok := captureBuildFile(path)
+	if !ok {
+		return buildExecutableIdentity{}, errInvalidCacheArtifact
+	}
+	return buildExecutableIdentity{input.Digest, input.Identity.Mode}, nil
 }
 
 func captureBuildFile(path string) (buildFileInput, bool) {

@@ -480,7 +480,7 @@ func main() {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
 				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
-					code, err := driver.Run(p.Path, p.Args)
+					code, err := driver.RunCLI(p.Path, p.Args)
 					if err != nil {
 						fail(err)
 					}
@@ -490,7 +490,7 @@ func main() {
 			boa.CmdT[runParams]{
 				Use: "script", Short: "compile and run a single .bork script with an implicit main",
 				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
-					code, err := driver.RunScript(p.Path, p.Args)
+					code, err := driver.RunScriptCLI(p.Path, p.Args)
 					if err != nil {
 						fail(err)
 					}

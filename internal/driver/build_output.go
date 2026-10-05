@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"debug/buildinfo"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,9 +25,18 @@ func buildOutput(path, out string) (executable string, cleanup func(), stable bo
 		if program.info != nil {
 			embeds = program.info.Embeds
 		}
-		mode := "program"
+		requested := strings.TrimPrefix(path, scriptRequestPrefix)
+		identity, stageErr := filepath.Abs(requested)
+		if stageErr != nil {
+			return stageErr
+		}
+		identity, stageErr = filepath.EvalSymlinks(identity)
+		if stageErr != nil {
+			return stageErr
+		}
+		mode := "program:" + identity
 		if strings.HasPrefix(path, scriptRequestPrefix) {
-			mode = path
+			mode = scriptRequestPrefix + identity
 		}
 		dir, pinned, release, stageErr := stageGo(program.files, source, program.module, program.context, mode, embeds)
 		if stageErr != nil {
@@ -83,44 +91,55 @@ func buildOutput(path, out string) (executable string, cleanup func(), stable bo
 	return
 }
 
-// Seed a private Go target with a symlink to the existing executable. Go reads
+// Seed a private Go target with a hard link to a verified existing executable. Go reads
 // its build ID and leaves an up-to-date target alone. When it rebuilds, Go
-// replaces the symlink; we then atomically publish the completed regular file.
+// replaces the link; we then atomically publish the completed regular file.
 // This preserves the old inode on hits and never truncates a running executable.
-func buildAtomicOutput(program *compiledProgram, out, dir string, pinned bool) error {
+func buildAtomicOutput(program *compiledProgram, out, dir string, pinned bool, seed *buildExecutableIdentity) (buildExecutableIdentity, error) {
+	var zero buildExecutableIdentity
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		return buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
+		return zero, buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
 	}
 	if info, err := os.Stat(out); err == nil && !info.Mode().IsRegular() {
 		// Preserve Go's handling of output directories and devices such as
 		// /dev/null; an atomic rename must never replace a device node.
-		return buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
+		return zero, buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
 	}
 	if err := os.MkdirAll(filepath.Dir(out), 0755); err != nil {
-		return err
+		return zero, err
 	}
 	file, err := os.CreateTemp(filepath.Dir(out), ".bork-build-*")
 	if err != nil {
-		return err
+		return zero, err
 	}
 	pending := file.Name()
 	_ = file.Close()
 	_ = os.Remove(pending)
 	defer func() { _ = os.Remove(pending) }()
-	if _, err := buildinfo.ReadFile(out); err == nil {
-		if err := os.Symlink(out, pending); err != nil {
-			return err
+	if seed != nil {
+		if err := os.Link(out, pending); err == nil {
+			// Another stage may replace the shared output between validation and
+			// linking. The private inode must match the independently recorded bytes.
+			if actual, err := readBuildExecutable(pending); err != nil || actual != *seed {
+				_ = os.Remove(pending)
+			}
 		}
 	}
 	if err := buildStagedGoObserved(program.files, pending, dir, pinned, program.context, nil); err != nil {
-		return err
+		return zero, err
 	}
-	info, err := os.Lstat(pending)
+	identity, err := readBuildExecutable(pending)
 	if err != nil {
-		return err
+		return zero, err
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return nil
+	// Certify the private artifact before publication. Different stages can
+	// publish to the same -o, so hashing the shared path afterward is unsafe.
+	info, err := os.Stat(pending)
+	if err != nil {
+		return zero, err
 	}
-	return os.Rename(pending, out)
+	if current, err := os.Stat(out); err == nil && os.SameFile(info, current) {
+		return identity, nil
+	}
+	return identity, os.Rename(pending, out)
 }

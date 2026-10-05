@@ -21,13 +21,16 @@ def measure(command, env):
 def diagnose(command, bork, root, env):
     probe = root / "go-commands.txt"
     phases = root / "phases.json"
+    status = root / "cache-status.txt"
     cache = root / "profile-cache"
     profile_env = dict(
         env,
         BORKCACHE=str(cache),
         BORK_TEST_CACHE_PRODUCTION="1",
+        BORK_TEST_CACHE_PUBLISH="on",
         BORK_TEST_GO_COMMAND_PROBE=str(probe),
         BORK_TEST_DISK_CACHE_TIMINGS=str(phases),
+        BORK_TEST_DISK_CACHE_PROBE=str(status),
     )
     command = [str(Path(bork).resolve()), *command[1:]]
     output = None
@@ -49,12 +52,14 @@ def diagnose(command, bork, root, env):
 
     before = binaries()
     probe.write_text("")
+    status.write_text("")
     measure(command, profile_env)
     commands = probe.read_text().splitlines()
     return {
         "unchanged_inode_and_mtime": bool(before) and before == binaries(),
         "warm_go_commands": commands,
         "warm_go_command_count": len(commands),
+        "compiler_cache_status": status.read_text().splitlines(),
         "warm_phases_ms": json.loads(phases.read_text()) if phases.exists() else {},
     }
 
