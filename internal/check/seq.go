@@ -70,7 +70,6 @@ func (c *checker) forExpr(e *syntax.For) Type {
 	c.pushScope()
 	if e.Name != "_" {
 		c.bind(e.Name, e.NamePos, elem, e)
-		c.scopes[len(c.scopes)-1][e.Name].node = nil
 	}
 	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth})
 	body := c.loopBody(e.Body)
