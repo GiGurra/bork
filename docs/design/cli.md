@@ -22,10 +22,10 @@ handling; use the pinned version rather than copying its internals.
 | Short flags | Automatic first letter, collision skipping, explicit override | Explicit only | Opt-in automatic shorts, deterministic collision handling, explicit disable |
 | Environment | Opt-in automatic UPPER_SNAKE_CASE, prefix, `noenv` | Explicit `env` only | Global auto-env/prefix plus per-field override/disable |
 | Enrichers | Ordered functions over current parameter and previously processed parameters | None | Pure functions over immutable field specs; ordered composition |
-| Field help | `descr` or programmatic description | Leading field comments from Decode schema | Official leading-comment docs; explicit description override |
+| Field help | `descr` or programmatic description | Leading field comments from codec.Decode schema | Official leading-comment docs; explicit description override |
 | Required and optional | Tags, pointers, global optional default, conditional hooks | Required unless default or Option; decoder remains authority | Preserve bork rules; use Option/defaults and typed validation |
 | Defaults | Tags/programmatic defaults, bool false enricher, help display | Record defaults and help display | Preserve record defaults; no implicit bool false |
-| Validation | Alternatives, min/max/pattern/custom validators | Derived Decode and field facts, collected errors | Keep Decode; add explicit static choices policy for CLI values |
+| Validation | Alternatives, min/max/pattern/custom validators | Derived codec.Decode and field facts, collected errors | Keep codec.Decode; add explicit static choices policy for CLI values |
 | Bash/zsh/fish/PowerShell | Cobra completion command and generators | Leaf inherits some Cobra behavior; dispatcher disables command and rejects hidden endpoints | Uniform scripts and completion endpoints for leaves and trees |
 | Static value completion | Alternatives on flags/positionals, command names | Not exposed | Choices with descriptions and file-completion controls |
 | Dynamic value completion | Callback sees synchronized partial raw params | Not exposed | Partial input view with typed decoding; callbacks have declared effects |
@@ -98,14 +98,14 @@ Completer = (CompletionRequest, Scope)
             uses io + net + clock + random + state => Suggestions | Error
 Completion = { field: String, suggest: Completer }
 
-ParseWith[T: Decode](..., completions: List[Completion], settings: Settings)
+ParseWith[T: codec.Decode](..., completions: List[Completion], settings: Settings)
   uses io + net + clock + random + state: T | Error | Help
-RunWith[T: Decode](..., completions: List[Completion], settings: Settings)
+RunWith[T: codec.Decode](..., completions: List[Completion], settings: Settings)
   uses io + net + clock + random + state: Ok | Error
-SubcommandWith[T: Decode](..., completions: List[Completion], settings: Settings)
+SubcommandWith[T: codec.Decode](..., completions: List[Completion], settings: Settings)
   : Command
 
-Partial.Get[U: Decode](field: String): U | Missing | DecodeError
+Partial.Get[U: codec.Decode](field: String): U | Missing | codec.DecodeError
 Group(name: String, description: String, children: List[Command]): Command
 ```
 
@@ -151,7 +151,7 @@ reserved names stay reserved so toggling settings cannot reinterpret a user comm
 
 Resolve all metadata before reading env or config or invoking callbacks:
 
-1. Read declaration-order Decode fields; take name and doc from the existing
+1. Read declaration-order codec.Decode fields; take name and doc from the existing
    schema. Build a spec per field and validate references in Flag/Completion.
 2. Normalize compatibility aliases and explicit per-field mappings. Reserve all
    explicit short names across the command before assigning automatic shorts.
@@ -181,7 +181,7 @@ per-command values: applications reuse one value for global policy; there is no
 mutable process-global registry. Groups do not implicitly override leaf settings.
 
 Leading `//` comments immediately above a record field are the official default
-documentation source. They already travel parser -> checker -> derived Decode
+documentation source. They already travel parser -> checker -> derived codec.Decode
 schema -> boa `descr`; document that path in the reader page without introducing
 a second parser or annotation. `description: Some("")` deliberately suppresses
 the comment; None inherits it. Required/default markers and mapped environment
@@ -200,7 +200,7 @@ for flags that were not used. Command dispatch prints warnings on successful
 execution, matching Run; detailed dispatch can be added separately if needed.
 
 Static choices are suggestions by default. `strictChoices: true` is an additional
-CLI acceptance policy, reported as collected DecodeError values and applied to
+CLI acceptance policy, reported as collected codec.DecodeError values and applied to
 supplied CLI/env/config values consistently; record facts remain the authority
 for type guarantees. Use string fields or List[String] initially and reject
 other strict-choice shapes, instead of making JSON stringification a hidden
@@ -216,14 +216,14 @@ values may be malformed, and record facts may fail. A compiler-generated
 Partial[T] record would add a new derivation and risk duplicating decoder rules.
 Use an opaque Partial that stores the already collected field inputs and their
 proven schema decoders. Its generic Get method runs the original field decoder
-and then the requested U decoder. It returns a U proven by Decode, Missing for
-an omitted input, or DecodeError for unknown fields, invalid input, or a U mismatch.
+and then the requested U decoder. It returns a U proven by codec.Decode, Missing for
+an omitted input, or codec.DecodeError for unknown fields, invalid input, or a U mismatch.
 The field-name relationship is checked at runtime, as it already is for Flag;
 no unchecked casts or zero-valued stand-ins escape into bork. The schema field
 decoder checks independent field constraints only; sibling-dependent constraints
 remain the final record decoder's responsibility. Get never claims the partial
 record satisfies those relations. U may be a user
-record or constrained type with a Decode instance; a different U does not inherit
+record or constrained type with a codec.Decode instance; a different U does not inherit
 facts from the declared field. Preserve paths in errors.
 
 Partial contains explicitly supplied CLI, env and config values under the normal
@@ -236,7 +236,11 @@ A configFile field's existing default can still select the file, as in normal
 parsing. An explicit Option null is a supplied value, not an omitted input.
 Partial exposes input errors per field, so an invalid unrelated port need not
 prevent completing a namespace. Syntax errors that prevent Cobra from resolving
-flags produce an empty/error completion directive and no handler.
+flags produce empty native Cobra completion output and no handler. Native
+routing/flag syntax errors retain Cobra v1.10.2's `:0` directive and direct
+process-stderr debug messages (which bypass SetErr); the lead accepted this
+upstream limit to avoid a parser copy or dependency fork. Our source/callback
+errors return `:1` and captured diagnostics.
 
 Each invocation creates fresh partial state. Snapshot env/config once per query;
 JSON files use bork/json and the same overlay helper used by normal Parse. Missing
@@ -259,7 +263,7 @@ words, `--`, repeated Lists, and positional prefixes.
 
 Refactor the existing adapter into command construction, input collection,
 field conversion, and final decoding. Keep boa/Cobra inside the stdlib unsafe-go
-bridge. Reuse `_borkDecodeFields`, per-field Decode and the final T decoder.
+bridge. Reuse `_borkDecodeFields`, per-field codec.Decode and the final T decoder.
 Do not implement facts, field documentation parsing, option inference, kebab naming
 or shell protocols a second time in the compiler.
 

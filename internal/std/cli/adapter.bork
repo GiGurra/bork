@@ -13,7 +13,9 @@ type inputField = {
   configDefault: String
   validate: (codec.Value) uses nothing => Ok | codec.DecodeError
 }
+type nativeBuilder = (String, String, List[FieldSpec], List[inputField], List[String], (String) uses nothing => codec.Value | codecs.JsonError, (String) uses nothing => String, List[Completion], (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, Scope) uses nothing => adapter | Error
 type pending = {}
+type inputCollection = { fields: List[codec.Field], errors: List[codec.DecodeError] }
 type adapter = { native: nativeCommand, result: () uses io => codec.Value | Error | pending }
 type parsedInput = { value: codec.Value, warnings: List[String], path: String }
 
@@ -41,13 +43,13 @@ fn inputFields[T: codec.Decode](name: String): List[inputField] | Error unsafe g
 }
 fn parseInput(name: String, description: String, args: List[String], specs: List[FieldSpec], fields: List[inputField], configFiles: List[String], completion: Bool) uses io: parsedInput | Error | Help {
   scope s {
-    match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, s)) {
+    match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, [], invokeCompletion, s)) {
       error: Error => error
       prepared: adapter => evaluate(prepared, args, completion, configureCompletion)
     }
   }
 }
-fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, s: Scope): adapter | Error unsafe go {
+fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, s: Scope): adapter | Error unsafe go {
   import "fmt"
   import "reflect"
   import "strconv"
@@ -65,6 +67,14 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   for _, spec := range specs {
     metadata[spec.field] = spec
     if spec.configFile { configField = spec.field }
+  }
+  dynamic := map[string]Completion{}
+  for _, completion := range completions {
+    spec, known := metadata[completion.field]
+    if !known { return Error{errors: []codec.DecodeError{{path: completion.field, message: "unknown CLI completion field"}}} }
+    if _, duplicate := dynamic[completion.field]; duplicate { return Error{errors: []codec.DecodeError{{path: completion.field, message: "duplicate CLI completion field"}}} }
+    if !spec.positional && mappingName(spec.long) == "" { return Error{errors: []codec.DecodeError{{path: completion.field, message: "completion field needs an enabled flag or positional"}}} }
+    dynamic[completion.field] = completion
   }
   fields := make([]reflect.StructField, len(schema))
   for i, field := range schema {
@@ -95,10 +105,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   }
   shadow := reflect.New(reflect.StructOf(fields))
   var result any = pending{}
-  command := boa.Cmd{
-    Use: name, Short: description, Params: shadow.Interface(),
-    ParamEnrich: boa.ParamEnricherNone,
-    RunFunc: func(cmd *cobra.Command, remaining []string) {
+  collect := func(partial bool) any {
       files := append([]string{}, configFiles...)
       for i, field := range schema {
         if field.field != configField { continue }
@@ -123,7 +130,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
         }
         return nil
       })
-      if err != nil { result = Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}}; return }
+      if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
       jsonFields := []codec.Field{}
       failures := []codec.DecodeError{}
       for i, field := range schema {
@@ -131,7 +138,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
         var json codec.Value
         if value.IsNil() {
           if configured, exists := config[field.field]; exists { json = configured } else {
-            if field.hasDefault { continue }
+            if partial || field.hasDefault { continue }
             if !field.optional { failures = append(failures, codec.DecodeError{path: "." + field.field, message: "is missing"}); continue }
             json = codec.Value_Null{}
           }
@@ -165,19 +172,83 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
           if array, ok := json.(codec.Value_Array); ok { for j, item := range array.items { checkChoice(item, fmt.Sprintf(".%s[%d]", field.field, j)) } } else { checkChoice(json, "."+field.field) }
           if invalid { continue }
         }
-        if err, bad := field.validate(json).(codec.DecodeError); bad { failures = append(failures, err); continue }
+        if !partial { if err, bad := field.validate(json).(codec.DecodeError); bad { failures = append(failures, err); continue } }
         jsonFields = append(jsonFields, codec.Field{name: field.field, value: json})
       }
-      if len(failures) != 0 { result = Error{errors: failures}; return }
-      result = codec.Value_Object{fields: jsonFields}
+      return inputCollection{fields: jsonFields, errors: failures}
+  }
+  command := boa.Cmd{
+    Use: name, Short: description, Params: shadow.Interface(),
+    ParamEnrich: boa.ParamEnricherNone,
+    RunFunc: func(cmd *cobra.Command, remaining []string) {
+      collected := collect(false)
+      if failure, bad := collected.(Error); bad { result = failure; return }
+      input := collected.(inputCollection)
+      if len(input.errors) != 0 { result = Error{errors: input.errors}; return }
+      result = codec.Value_Object{fields: input.fields}
+
     },
   }
   cmd, err := command.ToCobraE()
   if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
   for _, spec := range specs {
     long := mappingName(spec.long)
-    complete := func(_ *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+    complete := func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
       if spec.positional && len(args) > 0 && !strings.HasPrefix(kinds[spec.field], "list:") { return nil, cobra.ShellCompDirectiveNoFileComp }
+      if completion, supplied := dynamic[spec.field]; supplied && !spec.hidden && spec.deprecated == "" {
+        fail := func(errors []codec.DecodeError) ([]string, cobra.ShellCompDirective) {
+          for _, failure := range errors { _, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\n", failure.path, failure.message) }
+          return nil, cobra.ShellCompDirectiveError
+        }
+        // Cobra parses successful completion flags twice (with and without a
+        // trailing --). Array values append on both passes; keep one copy of
+        // that parse before boa synchronizes its mirrors into the shadow.
+        for _, field := range specs {
+          flag := cmd.Flags().Lookup(mappingName(field.long))
+          if flag == nil || !flag.Changed { continue }
+          if value, list := flag.Value.(interface { GetSlice() []string; Replace([]string) error }); list {
+            values := value.GetSlice()
+            if len(values)%2 == 0 { if err := value.Replace(values[:len(values)/2]); err != nil { return fail([]codec.DecodeError{{path: "."+field.field, message: err.Error()}}) } }
+          }
+        }
+        // Reuse boa's ordinary positional/env binding pipeline on optional
+        // raw pointers. It has no user hooks or complete-record decoder.
+        if err := cmd.ValidateArgs(args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) }
+        if err := cmd.PreRunE(cmd, args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) }
+        collected := collect(true)
+        if failure, bad := collected.(Error); bad { return fail(failure.errors) }
+        input := collected.(inputCollection)
+        snapshot := map[string]any{}
+        for _, field := range schema { snapshot[field.field] = Missing{field: field.field} }
+        for _, entry := range input.fields {
+          for _, field := range schema { if entry.name == field.field { snapshot[entry.name] = partialEntry{value: entry.value, validate: field.validate}; break } }
+        }
+        for _, failure := range input.errors {
+          for _, field := range schema {
+            path := "."+field.field
+            if failure.path == path || strings.HasPrefix(failure.path, path+"[") || strings.HasPrefix(failure.path, path+".") { snapshot[field.field] = failure; break }
+          }
+        }
+        response := invoke(completion, CompletionRequest{field: spec.field, prefix: prefix, arguments: append([]string{}, args...), partial: Partial{read: func(field string) any { value, known := snapshot[field]; if !known { return codec.DecodeError{path: "."+field, message: "unknown CLI field"} }; return value }}})
+        if failure, bad := response.(Error); bad { return fail(failure.errors) }
+        suggestions := response.(Suggestions)
+        if suggestions.files && suggestions.directories { return fail([]codec.DecodeError{{path: spec.field, message: "choose files or directories, not both"}}) }
+        directive := cobra.ShellCompDirectiveNoFileComp
+        if suggestions.files { directive = cobra.ShellCompDirectiveDefault }
+        if suggestions.directories { directive = cobra.ShellCompDirectiveFilterDirs }
+        if suggestions.keepOrder { directive |= cobra.ShellCompDirectiveKeepOrder }
+        candidates := []string{}
+        seen := map[string]bool{}
+        for _, choice := range suggestions.choices {
+          if choice.value == "" || strings.ContainsAny(choice.value+choice.description, "\t\n\r") { return fail([]codec.DecodeError{{path: spec.field, message: "completion choices must be nonempty and contain no tabs or newlines"}}) }
+          if !strings.HasPrefix(choice.value, prefix) || seen[choice.value] { continue }
+          seen[choice.value] = true
+          candidate := choice.value
+          if choice.description != "" { candidate += "\t"+choice.description }
+          candidates = append(candidates, candidate)
+        }
+        return candidates, directive
+      }
       directive := cobra.ShellCompDirectiveNoFileComp
       if spec.files { directive = cobra.ShellCompDirectiveDefault }
       if spec.directories { directive = cobra.ShellCompDirectiveFilterDirs }

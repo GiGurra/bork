@@ -20,16 +20,10 @@ type Command = {
 
 // Subcommand keeps the handler typed; only validated options reach it.
 fn Subcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
-  resolved = resolve[T](flags, settings, name)
-  schema = inputFields[T](name)
-  completionEnabled = settings.completion
-  factory: (String, Scope) uses nothing => adapter | Error = (displayName, owner) => match (resolved) {
-    error: Error => error
-    fields: List[FieldSpec] => match (schema) {
-      error: Error => error
-      inputs: List[inputField] => buildAdapter(displayName, description, fields, inputs, configFiles, codecs.Parse, flagName, owner)
-    }
-  }
+  makeSubcommand[T](name, description, run, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, [])
+}
+fn makeSubcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, configFiles: List[String], resolved: List[FieldSpec] | Error, schema: List[inputField] | Error, completionEnabled: Bool, completions: List[Completion]): Command {
+  factory = nativeFactory(description, configFiles, resolved, schema, completions, codecs.Parse, flagName, invokeCompletion, buildAdapter)
   apply: (parsedInput, Scope) uses io + net + clock + random + state => Ok | Error = (input, s) => match (codec.decode[T](input.value)) {
     error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
     options: T => {
@@ -50,6 +44,17 @@ fn Subcommand[T: codec.Decode](name: String, description: String, run: (T, Scope
         input: parsedInput => apply(input, s)
       }
     }
+  }
+}
+
+// The owner registers only a no-op native-handle finalizer. Captured metadata
+// and callbacks live with the returned Command, and are not retained in owner.
+// The trusted factory avoids charging their lifetime to that unrelated scope.
+fn nativeFactory(description: String, configFiles: List[String], resolved: List[FieldSpec] | Error, schema: List[inputField] | Error, completions: List[Completion], parse: (String) uses nothing => codec.Value | codecs.JsonError, makeName: (String) uses nothing => String, invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, build: nativeBuilder): (String, Scope) uses nothing => adapter | Error unsafe go {
+  return func(displayName string, owner *_Scope) any {
+    if failure, bad := resolved.(Error); bad { return failure }
+    if failure, bad := schema.(Error); bad { return failure }
+    return build(displayName, description, resolved.([]FieldSpec), schema.([]inputField), configFiles, parse, makeName, completions, invoke, owner)
   }
 }
 
