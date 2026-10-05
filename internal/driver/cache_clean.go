@@ -330,6 +330,26 @@ func selectCleanEntries(ctx context.Context, root *os.Root, namespace [sha256.Si
 			}
 		}
 	}
+	recipeShards, err := cleanDirectoryEntries(ctx, root, filepath.Join("executables", "v1"))
+	if err != nil {
+		return nil, err
+	}
+	for _, shard := range recipeShards {
+		if !cacheShard(shard.Name()) || !shard.IsDir() {
+			continue
+		}
+		base := filepath.Join("executables", "v1", shard.Name())
+		recipes, err := cleanDirectoryEntries(ctx, root, base)
+		if err != nil {
+			return nil, err
+		}
+		for _, recipe := range recipes {
+			name := strings.TrimSuffix(recipe.Name(), ".json")
+			if _, ok := cacheHexDigest(name); ok && strings.HasSuffix(recipe.Name(), ".json") && name[:2] == shard.Name() {
+				entries = append(entries, cacheCleanEntry{path: filepath.Join(base, recipe.Name()), layer: "index"})
+			}
+		}
+	}
 	jobs, err := cleanDirectoryEntries(ctx, root, filepath.Join("jobs", "v1"))
 	if err != nil {
 		return nil, err

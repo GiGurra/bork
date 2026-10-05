@@ -15,7 +15,7 @@ import (
 
 // Names is the complete set of supported user settings, in display order.
 func Names() []string {
-	return []string{"BORKCACHE", "BORKBIN", "BORK_CACHE", "BORKTOOLCHAIN", "BORKUPDATECHECK"}
+	return []string{"BORKCACHE", "BORKBIN", "BORK_CACHE", "BORKTOOLCHAIN", "BORKUPDATECHECK", "BORKFAST", "BORKREBUILD"}
 }
 
 // Setting includes the origin of an effective value.
@@ -85,6 +85,10 @@ func validate(name, value string) error {
 		if version.Query != version.Minimum {
 			return fmt.Errorf("BORKTOOLCHAIN must pin a full version such as v0.4.2")
 		}
+	} else if name == "BORKFAST" || name == "BORKREBUILD" {
+		if value != "0" && value != "1" {
+			return fmt.Errorf("%s must be 0 or 1", name)
+		}
 	} else if name == "BORK_CACHE" || name == "BORKUPDATECHECK" {
 		if value != "on" && value != "off" {
 			return fmt.Errorf("%s must be on or off", name)
@@ -153,6 +157,8 @@ func defaultValue(name string) (string, error) {
 		return goBin(values["GOBIN"], values["GOPATH"])
 	case "BORK_CACHE", "BORKUPDATECHECK":
 		return "on", nil
+	case "BORKFAST", "BORKREBUILD":
+		return "0", nil
 	case "BORKTOOLCHAIN":
 		return "auto", nil
 	}

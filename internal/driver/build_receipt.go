@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 )
 
 const buildReceiptLimit = 64 << 20
@@ -31,16 +34,22 @@ type buildExecutableIdentity struct {
 }
 
 type buildInventory struct {
-	Stage       string
-	Packages    []buildPackage
-	Files       map[string]buildFileInput
-	Directories map[string]buildDirectoryIdentity
+	RequireFreshObjects bool
+	Broad               bool
+	Missing             []string
+	Stage               string
+	Packages            []buildPackage
+	Files               map[string]buildFileInput
+	Directories         map[string]buildDirectoryIdentity
 }
 
 type buildPackage struct {
+	CgoPkgConfig                                                                     []string
+	CgoCPPFLAGS, CgoCFLAGS, CgoCXXFLAGS                                              []string
 	Dir, ImportPath                                                                  string
 	Standard                                                                         bool
 	GoFiles, CgoFiles, SFiles, HFiles, SysoFiles, EmbedFiles, EmbedPatterns, Imports []string
+	CFiles, CXXFiles, MFiles, FFiles                                                 []string
 	Module                                                                           *buildModule
 	Error                                                                            *json.RawMessage
 }
@@ -180,33 +189,87 @@ func writeBuildReceipt(path string, receipt *buildReceipt) {
 }
 
 func captureBuildInventory(dir string, ctx *goContext) *buildInventory {
+	return captureBuildInventoryMode(dir, ctx, false)
+}
+
+func captureBuildInventoryMode(dir string, ctx *goContext, broad bool) *buildInventory {
 	canonical, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		return nil
 	}
 	cmd := ctx.command("list", "-deps", "-json", "-mod=readonly", "-buildvcs=false", ".")
 	cmd.Dir = dir
-	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
+	cmd.Env = append(cmd.Env, "GOWORK=off")
 	data, err := cmd.Output()
 	if err != nil || len(data) > buildReceiptLimit {
 		return nil
 	}
-	result := &buildInventory{Stage: canonical, Files: map[string]buildFileInput{}, Directories: map[string]buildDirectoryIdentity{}}
+	result := &buildInventory{Broad: broad, Stage: canonical, Files: map[string]buildFileInput{}, Directories: map[string]buildDirectoryIdentity{}}
+	if broad {
+		if !result.captureFile(ctx.tool) || result.Files[ctx.tool].Digest != ctx.toolDigest {
+			return nil
+		}
+		resolved := resolveGoContext()
+		if resolved.err != nil || resolved.tool != ctx.launcher || !result.captureFile(resolved.tool) || result.Files[resolved.tool].Digest != ctx.launcherDigest {
+			return nil
+		}
+		if ctx.savedSettings != nil {
+			if !ctx.savedSettings.current() {
+				return nil
+			}
+			for key, value := range ctx.savedSettings.reads {
+				if value.err != nil {
+					if !os.IsNotExist(value.err) {
+						return nil
+					}
+					result.Missing = append(result.Missing, key.path)
+				} else {
+					if !result.captureFile(key.path) || result.Files[key.path].Digest != sha256.Sum256(value.data) {
+						return nil
+					}
+				}
+			}
+		}
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	for {
 		var pkg buildPackage
 		if err := decoder.Decode(&pkg); err == io.EOF {
 			break
-		} else if err != nil || pkg.Error != nil || !filepath.IsAbs(pkg.Dir) || len(pkg.CgoFiles) != 0 {
+		} else if err != nil || pkg.Error != nil || !filepath.IsAbs(pkg.Dir) || (!broad && len(pkg.CgoFiles) != 0) {
 			return nil
 		}
 		result.Packages = append(result.Packages, pkg)
+		if broad && !pkg.Standard && len(pkg.CgoFiles)+len(pkg.SFiles) > 0 {
+			result.RequireFreshObjects = true
+		}
+		if broad && len(pkg.FFiles) > 0 {
+			command := ctx.processValue("FC")
+			if command == "" {
+				command = "gfortran"
+			}
+			parts, ok := splitBuildWords(command)
+			if !ok || len(parts) == 0 {
+				return nil
+			}
+			compiler, err := exec.LookPath(parts[0])
+			if err != nil {
+				return nil
+			}
+			absolute, err := filepath.Abs(compiler)
+			if err != nil || !result.captureFile(absolute) {
+				return nil
+			}
+		}
+		if broad && len(pkg.CgoFiles) > 0 && (!result.captureIncludeDirectories(pkg.Dir) || !result.captureCInputs(pkg, ctx)) {
+			return nil
+		}
 		if pkg.Standard || pkg.Dir == canonical {
 			continue
 		}
 		// Assembly includes and external embed globs need a wider closure than
 		// Go's package file listing. Leave those builds on Go's own cache.
-		if len(pkg.SFiles)+len(pkg.HFiles)+len(pkg.SysoFiles)+len(pkg.EmbedPatterns) != 0 {
+		if !broad && len(pkg.SFiles)+len(pkg.HFiles)+len(pkg.SysoFiles)+len(pkg.EmbedPatterns) != 0 {
 			return nil
 		}
 		identity, ok := buildDirectoryStat(pkg.Dir)
@@ -214,10 +277,16 @@ func captureBuildInventory(dir string, ctx *goContext) *buildInventory {
 			return nil
 		}
 		result.Directories[pkg.Dir] = identity
-		for _, name := range pkg.GoFiles {
+		for _, name := range buildPackageFiles(pkg, broad) {
 			if !filepath.IsLocal(name) || !result.captureFile(filepath.Join(pkg.Dir, name)) {
 				return nil
 			}
+		}
+		if broad && len(pkg.EmbedPatterns) > 0 && !result.captureEmbedDirectories(pkg.Dir) {
+			return nil
+		}
+		if broad && len(pkg.SFiles) > 0 && !result.captureAssemblyIncludes(pkg, ctx.values["GOROOT"]) {
+			return nil
 		}
 		for module := pkg.Module; module != nil; module = module.Replace {
 			if module.GoMod != "" && !result.captureFile(module.GoMod) {
@@ -244,8 +313,16 @@ func (inventory *buildInventory) captureFile(path string) bool {
 }
 
 func (inventory *buildInventory) current() bool {
-	if inventory == nil || len(inventory.Files) > goStageInventoryLimit || len(inventory.Directories) > goStageInventoryLimit {
+	if inventory == nil || len(inventory.Missing) > goStageInventoryLimit || len(inventory.Files) > goStageInventoryLimit || len(inventory.Directories) > goStageInventoryLimit {
 		return false
+	}
+	for _, path := range inventory.Missing {
+		if !filepath.IsAbs(path) || !validReceiptPath(path) {
+			return false
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			return false
+		}
 	}
 	for path, before := range inventory.Directories {
 		if !filepath.IsAbs(path) || !validReceiptPath(path) {
@@ -266,17 +343,17 @@ func (inventory *buildInventory) current() bool {
 	// The graph itself is persisted so deletion of its concrete observations
 	// cannot silently turn a dependency-bearing receipt into an empty one.
 	for _, pkg := range inventory.Packages {
-		if pkg.Error != nil || len(pkg.CgoFiles) != 0 || !filepath.IsAbs(pkg.Dir) || !validReceiptPath(pkg.Dir) {
+		if pkg.Error != nil || (!inventory.Broad && len(pkg.CgoFiles) != 0) || !filepath.IsAbs(pkg.Dir) || !validReceiptPath(pkg.Dir) {
 			return false
 		}
 		if !pkg.Standard && pkg.Dir != inventory.Stage {
-			if len(pkg.SFiles)+len(pkg.HFiles)+len(pkg.SysoFiles)+len(pkg.EmbedPatterns) != 0 {
+			if !inventory.Broad && len(pkg.SFiles)+len(pkg.HFiles)+len(pkg.SysoFiles)+len(pkg.EmbedPatterns) != 0 {
 				return false
 			}
 			if _, ok := inventory.Directories[pkg.Dir]; !ok {
 				return false
 			}
-			for _, file := range pkg.GoFiles {
+			for _, file := range buildPackageFiles(pkg, inventory.Broad) {
 				if !filepath.IsLocal(file) {
 					return false
 				}
@@ -346,4 +423,123 @@ func buildFileDigest(path string) ([sha256.Size]byte, error) {
 	}
 	copy(result[:], hash.Sum(nil))
 	return result, nil
+}
+
+func buildPackageFiles(pkg buildPackage, broad bool) []string {
+	files := append([]string(nil), pkg.GoFiles...)
+	if broad {
+		for _, group := range [][]string{pkg.CgoFiles, pkg.CFiles, pkg.CXXFiles, pkg.MFiles, pkg.FFiles, pkg.SFiles, pkg.HFiles, pkg.SysoFiles, pkg.EmbedFiles} {
+			files = append(files, group...)
+		}
+	}
+	return files
+}
+
+// Go resolves embed globs during cold discovery. Record all package subtree
+// directories then; a later addition changes an existing parent's identity.
+func (inventory *buildInventory) captureEmbedDirectories(root string) bool {
+	return inventory.captureDirectories(root, false, map[string]bool{})
+}
+func (inventory *buildInventory) captureIncludeDirectories(root string) bool {
+	return inventory.captureDirectories(root, true, map[string]bool{})
+}
+func (inventory *buildInventory) captureDirectories(root string, follow bool, seen map[string]bool) bool {
+	identity, ok := buildDirectoryStat(root)
+	if !ok || len(inventory.Directories) >= goStageInventoryLimit {
+		return false
+	}
+	inventory.Directories[root] = identity
+	canonical, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return false
+	}
+	if seen[canonical] {
+		return true
+	}
+	seen[canonical] = true
+	err = filepath.WalkDir(canonical, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if follow && entry.Type()&os.ModeSymlink != 0 {
+			info, err := os.Stat(path)
+			if os.IsNotExist(err) {
+				inventory.Missing = append(inventory.Missing, path)
+				return nil
+			}
+			if err != nil {
+				return nil
+			}
+			if info.IsDir() && !inventory.captureDirectories(path, true, seen) {
+				return errInvalidCacheArtifact
+			}
+		}
+		if entry.IsDir() {
+			identity, ok := buildDirectoryStat(path)
+			if !ok || len(inventory.Directories) >= goStageInventoryLimit {
+				return errInvalidCacheArtifact
+			}
+			inventory.Directories[path] = identity
+		}
+		return nil
+	})
+	return err == nil && len(inventory.Missing) <= goStageInventoryLimit
+}
+
+var assemblyIncludePattern = regexp.MustCompile(`(?m)^\s*#\s*include\s*"([^"]+)"`)
+
+func (inventory *buildInventory) captureAssemblyIncludes(pkg buildPackage, root string) bool {
+	seen := map[string]bool{}
+	var visit func(string) bool
+	visit = func(path string) bool {
+		if seen[path] {
+			return true
+		}
+		seen[path] = true
+		if !inventory.captureFile(path) {
+			return false
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		for _, match := range assemblyIncludePattern.FindAllSubmatch(data, -1) {
+			include := string(match[1])
+			if include == "go_asm.h" {
+				continue
+			} // generated from the recorded Go files
+			candidate := filepath.Join(pkg.Dir, filepath.FromSlash(include))
+			if filepath.IsAbs(include) {
+				candidate = include
+			}
+			if _, err := os.Stat(candidate); os.IsNotExist(err) {
+				inventory.Missing = append(inventory.Missing, candidate)
+				candidate = filepath.Join(root, "pkg", "include", include)
+				// Installed SDK headers follow the immutable SDK contract.
+				if _, err := os.Stat(candidate); os.IsNotExist(err) {
+					inventory.Missing = append(inventory.Missing, candidate)
+				} else if err != nil {
+					return false
+				}
+				continue
+			} else if err != nil {
+				return false
+			}
+			identity, ok := buildDirectoryStat(filepath.Dir(candidate))
+			if !ok {
+				return false
+			}
+			inventory.Directories[filepath.Dir(candidate)] = identity
+			if !visit(candidate) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, name := range pkg.SFiles {
+		if !visit(filepath.Join(pkg.Dir, name)) {
+			return false
+		}
+	}
+	return len(inventory.Missing) <= goStageInventoryLimit
 }

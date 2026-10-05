@@ -27,8 +27,8 @@ func RunScript(path string, args []string) (int, error) {
 }
 
 // RunScriptCLI uses the same process replacement as bork run.
-func RunScriptCLI(path string, args []string) (int, error) {
-	return runScript(path, args, RunCLI)
+func RunScriptCLI(path string, args []string, options ...BuildOptions) (int, error) {
+	return runScript(path, args, func(path string, args []string) (int, error) { return RunCLI(path, args, options...) })
 }
 
 func runScript(path string, args []string, run func(string, []string) (int, error)) (int, error) {

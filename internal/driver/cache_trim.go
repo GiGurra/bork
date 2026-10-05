@@ -27,7 +27,7 @@ type cacheTrimReport struct {
 	Complete       bool
 }
 
-var cacheTrimLayers = [...]string{"trash/v1", "results/v2", "stage/v3", "indexes/v1"}
+var cacheTrimLayers = [...]string{"trash/v1", "results/v2", "stage/v3", "indexes/v1", "executables/v1"}
 
 // Whole shards are the portable resume unit. An interrupted pass rereads only
 // its current shard, streaming bounded batches, never a materialized inventory.

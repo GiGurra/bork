@@ -22,6 +22,11 @@ import (
 // work retain their existing behavior. This is not a complete reuse key for
 // external package metadata, toolchain contents or evaluator effects.
 type goContext struct {
+	forceBuild     bool
+	refreshForeign bool
+	savedSettings  *sourceSnapshot
+	launcher       string
+	launcherDigest [sha256.Size]byte
 	// The module transform is captured once; all metadata and build stages use it.
 	moduleHook goModuleHookFunc
 	// Tests can shorten comptime deadlines; a nonzero limit changes execution
@@ -50,8 +55,10 @@ type goContext struct {
 // launcher discovery still uses the caller's PATH. Defaults are assigned once
 // before compilation starts, and a captured context never rereads the hook.
 type goContextOptions struct {
-	settings   []string
-	moduleHook goModuleHookFunc
+	forceBuild     bool
+	refreshForeign bool
+	settings       []string
+	moduleHook     goModuleHookFunc
 }
 
 func captureGoContext() *goContext {
@@ -67,7 +74,7 @@ func resolveGoContext() *goContext {
 }
 
 func resolveGoContextWithOptions(options goContextOptions) *goContext {
-	ctx := &goContext{processEnv: append(slices.Clone(os.Environ()), options.settings...), moduleHook: options.moduleHook}
+	ctx := &goContext{forceBuild: options.forceBuild, refreshForeign: options.refreshForeign, processEnv: append(slices.Clone(os.Environ()), options.settings...), moduleHook: options.moduleHook}
 	ctx.env = slices.Clone(ctx.processEnv)
 	ctx.self, _ = os.Executable()
 	ctx.driver = ctx.processValue("GOPACKAGESDRIVER")
@@ -103,6 +110,18 @@ func resolveGoContextWithOptions(options goContextOptions) *goContext {
 func loadGoContext(ctx *goContext) *goContext {
 	if ctx.err != nil {
 		return ctx
+	}
+	ctx.launcher = ctx.tool
+	ctx.launcherDigest, _, _ = captureGoToolEvidence(ctx.launcher)
+	ctx.savedSettings = newSourceSnapshot()
+	settingPath := ctx.processValue("GOENV")
+	if settingPath == "" {
+		if config, err := os.UserConfigDir(); err == nil {
+			settingPath = filepath.Join(config, "go", "env")
+		}
+	}
+	if settingPath != "" && settingPath != "off" {
+		_, _ = ctx.savedSettings.readFile(settingPath)
 	}
 	testCacheProbeAt("BORK_TEST_GO_COMMAND_PROBE", "env -json")
 	values, env, tool, err := gotoolchain.Query(ctx.tool, "", ctx.processEnv)
@@ -194,7 +213,7 @@ func (ctx *goContext) command(args ...string) *exec.Cmd {
 	return cmd
 }
 func (ctx *goContext) metadataEnv() []string {
-	return append(slices.Clone(ctx.env), "GOWORK=off", "GOFLAGS=-mod=readonly")
+	return append(slices.Clone(ctx.env), "GOWORK=off", "GOFLAGS="+strings.TrimSpace(ctx.values["GOFLAGS"]+" -mod=readonly"))
 }
 
 func goToolDigest(path string) ([sha256.Size]byte, error) {

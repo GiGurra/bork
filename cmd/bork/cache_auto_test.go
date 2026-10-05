@@ -104,6 +104,27 @@ func TestAutomaticCacheCLI(t *testing.T) {
 				}
 				return
 			}
+			if mode == "build" || mode == "run" {
+				second := invoke()
+				if string(first) != string(second) {
+					t.Fatal("cached program output differs")
+				}
+				data, err := os.ReadFile(probe)
+				if err != nil || string(data) != "executable-hit\n" {
+					t.Fatalf("automatic executable reuse: %q %v", data, err)
+				}
+				if mode == "build" {
+					if err := os.Remove(outputPath); err != nil {
+						t.Fatal(err)
+					}
+					invoke()
+					output, err := exec.Command(outputPath).CombinedOutput()
+					if err != nil || strings.TrimSpace(string(output)) != "42" {
+						t.Fatalf("missing output was not rebuilt: %q %v", output, err)
+					}
+				}
+				return
+			}
 			data, err := os.ReadFile(probe)
 			if err != nil || string(data) != "queued\n" {
 				t.Fatalf("automatic miss did not queue: %q %v", data, err)

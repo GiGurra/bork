@@ -61,6 +61,14 @@ type installParams struct {
 }
 
 type buildParams struct {
+	Fast    bool   `optional:"true" descr:"accept reuse with untracked external build inputs"`
+	Rebuild bool   `optional:"true" descr:"recheck all build inputs and rebuild"`
+	JSON    bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
+	Path    string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	Output  string `short:"o" optional:"true" descr:"output executable (default: the file or directory name)"`
+}
+
+type debugBuildParams struct {
 	JSON   bool   `optional:"true" descr:"report diagnostics as JSON Lines"`
 	Path   string `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
 	Output string `short:"o" optional:"true" descr:"output executable (default: the file or directory name)"`
@@ -86,8 +94,10 @@ type testParams struct {
 }
 
 type runParams struct {
-	Path string   `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
-	Args []string `positional:"true" optional:"true" descr:"arguments passed to the program (put them after --)"`
+	Fast    bool     `optional:"true" descr:"accept reuse with untracked external build inputs"`
+	Rebuild bool     `optional:"true" descr:"recheck all build inputs and rebuild"`
+	Path    string   `positional:"true" optional:"true" default:"." descr:"a .bork file, or a directory of .bork files (one package)"`
+	Args    []string `positional:"true" optional:"true" descr:"arguments passed to the program (put them after --)"`
 }
 
 type describeParams struct {
@@ -411,9 +421,9 @@ func main() {
 			boa.CmdT[boa.NoParams]{
 				Use: "debug", Short: "build and debug bork programs",
 				SubCmds: boa.SubCmds(
-					boa.CmdT[buildParams]{
+					boa.CmdT[debugBuildParams]{
 						Use: "build", Short: "build with bork source locations and inspectable variables",
-						RunFunc: func(p *buildParams, _ *cobra.Command, _ []string) {
+						RunFunc: func(p *debugBuildParams, _ *cobra.Command, _ []string) {
 							out := p.Output
 							if out == "" {
 								out = driver.DefaultOutput(p.Path)
@@ -456,7 +466,7 @@ func main() {
 					if out == "" {
 						out = driver.DefaultOutput(p.Path)
 					}
-					if err := driver.Build(p.Path, out); err != nil {
+					if err := driver.Build(p.Path, out, driver.BuildOptions{Fast: p.Fast, Rebuild: p.Rebuild}); err != nil {
 						failDiagnostics(err, p.JSON, os.Stderr)
 					}
 				},
@@ -480,7 +490,7 @@ func main() {
 					return completeBorkPaths(p, cmd, args, toComplete)
 				},
 				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
-					code, err := driver.RunCLI(p.Path, p.Args)
+					code, err := driver.RunCLI(p.Path, p.Args, driver.BuildOptions{Fast: p.Fast, Rebuild: p.Rebuild})
 					if err != nil {
 						fail(err)
 					}
@@ -490,7 +500,7 @@ func main() {
 			boa.CmdT[runParams]{
 				Use: "script", Short: "compile and run a single .bork script with an implicit main",
 				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
-					code, err := driver.RunScriptCLI(p.Path, p.Args)
+					code, err := driver.RunScriptCLI(p.Path, p.Args, driver.BuildOptions{Fast: p.Fast, Rebuild: p.Rebuild})
 					if err != nil {
 						fail(err)
 					}

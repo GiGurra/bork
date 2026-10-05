@@ -86,8 +86,10 @@ inspect the resulting String/bytes/config as ordinary values.
 Pure `unsafe go` bodies/bindings retain the existing trust boundary: their
 signatures must be truthful. Comptime is not an operating-system sandbox for
 foreign code. We cannot promise reproducibility for Go code that secretly reads
-the environment, clock or mutable globals. Unknown foreign build inputs force
-cache bypass; authorization in `bork.mod` is still required. Document this
+the environment, clock or mutable globals. Unknown foreign build inputs force compiler-result
+cache bypass for checking/emission; executable reuse defaults to the recorded
+input recipe, warns about external state, and offers `--rebuild`. See
+[executable reuse](executable-reuse.md). Authorization in `bork.mod` is still required. Document this
 limitation rather than presenting effect checking as process isolation.
 
 Bork's known pure-but-nondeterministic unordered-map iteration is rejected in
