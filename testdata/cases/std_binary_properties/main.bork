@@ -6,32 +6,28 @@ type BytesRead = (Bytes, binary.Reader)
 test "Byte endian IO round trips" (value: Byte) {
   padding: List[Byte] = [85, 85, 85]
   original = padding.toBytes()
-  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
-    match (original.WriteByte(1, value)) {
-      written: Bytes => {
-        assert(written.ReadByte(1) == value)
-        assertEqual(written.get(0), original.get(0))
-        assertEqual(written.get(2), original.get(2))
-        assertEqual(original, padding.toBytes())
-      }
-      _: binary.BinaryError => assert(false)
+  match (original.WriteByte(1, value)) {
+    written: Bytes => {
+      assert(written.ReadByte(1) == value)
+      assertEqual(written.get(0), original.get(0))
+      assertEqual(written.get(2), original.get(2))
+      assertEqual(original, padding.toBytes())
     }
+    _: binary.BinaryError => assert(false)
   }
 }
 
 test "Int8 endian IO round trips" (value: Int8) {
   padding: List[Byte] = [85, 85, 85]
   original = padding.toBytes()
-  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
-    match (original.WriteInt8(1, value)) {
-      written: Bytes => {
-        assert(written.ReadInt8(1) == value)
-        assertEqual(written.get(0), original.get(0))
-        assertEqual(written.get(2), original.get(2))
-        assertEqual(original, padding.toBytes())
-      }
-      _: binary.BinaryError => assert(false)
+  match (original.WriteInt8(1, value)) {
+    written: Bytes => {
+      assert(written.ReadInt8(1) == value)
+      assertEqual(written.get(0), original.get(0))
+      assertEqual(written.get(2), original.get(2))
+      assertEqual(original, padding.toBytes())
     }
+    _: binary.BinaryError => assert(false)
   }
 }
 
