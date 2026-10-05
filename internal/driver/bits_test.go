@@ -11,6 +11,7 @@ func TestBitwiseChecking(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
 		{"unsigned count", "fn f(x:Int8,n:Uint64):Int8{x<<n}", ""},
+		{"impure count", "fn count() uses io:Int{println(1);1}\nfn f(x:Int) uses io:Int{x<<count()}", "shift count must be proven nonnegative"},
 		{"unproven count", "fn f(x:Int,n:Int):Int{x<<n}", "shift count must be proven nonnegative"},
 		{"negative count", "fn f(x:Int):Int{x<< -1}", "shift count must be proven nonnegative"},
 		{"guarded count", "fn f(x:Int,n:Int):Int{if(n>=0){x<<n}else{x}}", ""},

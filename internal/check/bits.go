@@ -53,7 +53,9 @@ func (f *factChecker) shiftCount(x *Binary, e env) {
 	condition := &Binary{expr: expr{typ: Bool}, Op: syntax.GtEq, X: x.Y, Y: zero}
 	ok, _ := f.proveCondition(condition, true, e, 0)
 	if !ok {
-		ok = f.integerComparisonKnown(f.comparison(condition, true), e.facts, 0, false)
+		if want := f.comparison(condition, true); want != nil {
+			ok = f.integerComparisonKnown(want, e.facts, 0, false)
+		}
 	}
 	if !ok {
 		// A strictly positive count also meets the requirement.
