@@ -12,7 +12,7 @@ type Command = {
   hidden: Bool = false
   children: List[Command] = []
   group: Bool = false
-  factory: Option[(String) uses nothing => adapter | Error] = Option.None
+  factory: Option[(String, Scope) uses nothing => adapter | Error] = Option.None
   apply: Option[(parsedInput, Scope) uses io + net + clock + random + state => Ok | Error] = Option.None
 }
 
@@ -21,11 +21,11 @@ fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses
   resolved = resolve[T](flags, settings, name)
   schema = inputFields[T](name)
   completionEnabled = settings.completion
-  factory: (String) uses nothing => adapter | Error = displayName => match (resolved) {
+  factory: (String, Scope) uses nothing => adapter | Error = (displayName, owner) => match (resolved) {
     error: Error => error
     fields: List[FieldSpec] => match (schema) {
       error: Error => error
-      inputs: List[inputField] => buildAdapter(displayName, description, fields, inputs, configFiles, codecs.Parse, flagName)
+      inputs: List[inputField] => buildAdapter(displayName, description, fields, inputs, configFiles, codecs.Parse, flagName, owner)
     }
   }
   apply: (parsedInput, Scope) uses io + net + clock + random + state => Ok | Error = (input, s) => match (decode[T](input.value)) {
@@ -40,7 +40,7 @@ fn Subcommand[T: Decode](name: String, description: String, run: (T, Scope) uses
     description: description
     factory: Option.Some { value: factory }
     apply: Option.Some { value: apply }
-    execute: (displayName, arguments, s) => match (factory(displayName)) {
+    execute: (displayName, arguments, s) => match (factory(displayName, s)) {
       error: Error => error
       prepared: adapter => match (evaluate(prepared, arguments, completionEnabled, configureCompletion)) {
         error: Error => error
@@ -117,10 +117,10 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
         child = &cobra.Command{Use: command.name}
         if err := attach(child, command.children); err != nil { return err }
       } else if factory, native := _borkOptionGet(command.factory); native {
-        built := factory(command.name)
+        built := factory(command.name, s)
         if failure, bad := built.(Error); bad { result = failure; return fmt.Errorf("invalid options for %s", command.name) }
         prepared := built.(adapter)
-        child = _borkGo(prepared.native)
+        child = prepared.native.handle.(*cobra.Command)
         collect := child.RunE
         child.RunE = func(cmd *cobra.Command, args []string) error {
           if err := collect(cmd, args); err != nil { return err }
@@ -169,7 +169,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
   })
   root.InitDefaultHelpFlag()
   root.InitDefaultHelpCmd()
-  if failure, bad := configure(_borkOpaque[nativeCommand](root), arguments, completion).(Error); bad { return failure }
+  if failure, bad := configure(nativeCommand{handle: root, owner: s.Own(func() {})}, arguments, completion).(Error); bad { return failure }
   root.SetArgs(append([]string{}, arguments...))
   if err := root.Execute(); err != nil {
     failures := []DecodeError{{path: name, message: err.Error()}}

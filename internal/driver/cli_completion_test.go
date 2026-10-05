@@ -195,3 +195,20 @@ fn main() {
 		t.Fatalf("metadata errors should precede help/handler:\n%s", out)
 	}
 }
+
+// Native adapter handles stay in unsafe stdlib code, so checking CLI programs
+// does not need the Go toolchain or Cobra package signatures.
+func TestCLITypeCheckWithoutGo(t *testing.T) {
+	root := t.TempDir()
+	source := `import "bork/cli"
+type Options = { namespace: String = "dev" } derive (Decode)
+fn main() { _ = cli.Subcommand[Options]("deploy", "", (options, s) => {}) }
+`
+	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	if _, _, err := Check(root); err != nil {
+		t.Fatalf("CLI checking without Go: %v", err)
+	}
+}

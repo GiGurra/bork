@@ -1,6 +1,7 @@
 import codecs "bork/json"
 // The private adapter shares boa registration between parsing and command trees.
-type nativeCommand = go "*github.com/spf13/cobra.Command"
+// Mutable native commands are private handles owned by the parse/dispatch scope.
+type nativeCommand = resource
 type inputField = {
   field: String
   kind: String
@@ -37,12 +38,14 @@ fn inputFields[T: Decode](name: String): List[inputField] | Error unsafe go {
   return fields
 }
 fn parseInput(name: String, description: String, args: List[String], specs: List[FieldSpec], fields: List[inputField], configFiles: List[String], completion: Bool) uses io: parsedInput | Error | Help {
-  match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName)) {
-    error: Error => error
-    prepared: adapter => evaluate(prepared, args, completion, configureCompletion)
+  scope s {
+    match (buildAdapter(name, description, specs, fields, configFiles, codecs.Parse, flagName, s)) {
+      error: Error => error
+      prepared: adapter => evaluate(prepared, args, completion, configureCompletion)
+    }
   }
 }
-fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => Json | JsonError, makeName: (String) => String): adapter | Error unsafe go {
+fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => Json | JsonError, makeName: (String) => String, s: Scope): adapter | Error unsafe go {
   import "fmt"
   import "reflect"
   import "strconv"
@@ -197,13 +200,14 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
     if spec.hidden { if err := cmd.Flags().MarkHidden(long); err != nil { return Error{errors: []DecodeError{{path: spec.field, message: err.Error()}}} } }
     if spec.deprecated != "" { if err := cmd.Flags().MarkDeprecated(long, spec.deprecated); err != nil { return Error{errors: []DecodeError{{path: spec.field, message: err.Error()}}} } }
   }
-  return adapter{native: _borkOpaque[nativeCommand](cmd), result: func() any { return result }}
+  return adapter{native: nativeCommand{handle: cmd, owner: s.Own(func() {})}, result: func() any { return result }}
 }
 
 fn evaluate(prepared: adapter, args: List[String], completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok) uses io: parsedInput | Error | Help unsafe go {
   import "bytes"
   import "strings"
-  cmd := _borkGo(prepared.native)
+  import "github.com/spf13/cobra"
+  cmd := prepared.native.handle.(*cobra.Command)
   var output, diagnostics bytes.Buffer
   if failure, bad := configure(prepared.native, args, completion).(Error); bad { return failure }
   cmd.SetArgs(append([]string{}, args...))
@@ -239,7 +243,7 @@ fn withWarnings(error: Error, warnings: List[String], path: String): Error {
 fn configureCompletion(native: nativeCommand, args: List[String], enabled: Bool): Error | Ok unsafe go {
   import "fmt"
   import "github.com/spf13/cobra"
-  cmd := _borkGo(native)
+  cmd := native.handle.(*cobra.Command)
   cmd.CompletionOptions.DisableDefaultCmd = !enabled
   if enabled { return _Ok{} }
   sentinel := &cobra.Command{Use: "__complete", Aliases: []string{"__completeNoDesc"}, Hidden: true}
