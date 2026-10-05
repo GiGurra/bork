@@ -154,6 +154,9 @@ func printDescription(result *describe.Result) {
 	if len(result.BelongsTo) > 0 {
 		fmt.Println("belongs to:", strings.Join(result.BelongsTo, ", "))
 	}
+	if result.Ownership != "" {
+		fmt.Println("ownership:", result.Ownership)
+	}
 	if result.Async != nil {
 		fmt.Println("async: scope", result.Async.Scope, "(read awaits)")
 		fmt.Println("initializer effects:", result.Async.Effects)

@@ -32,6 +32,8 @@ import (
 func Lifetimes(files []*syntax.File, info *Info, diags *diag.List) {
 	info.Lifetimes = map[Expr][]string{}
 	info.VarLifetimes = map[*Var][]string{}
+	info.Ownership = map[Expr]string{}
+	info.VarOwnership = map[*Var]string{}
 	var fns []*Func
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -79,6 +81,7 @@ func newLifeChecker(info *Info, diags *diag.List) *lifeChecker {
 		safeChild:  map[*Var]bool{},
 		passes:     map[*Func]bool{},
 		passParams: map[*Var]*handle{},
+		lastUse:    map[*Var]string{},
 	}
 }
 
@@ -174,6 +177,10 @@ type lifeChecker struct {
 	passes     map[*Func]bool
 	passParams map[*Var]*handle
 	passOK     bool
+	// resVars lists the resource variables bound in the current function,
+	// whose ownership is described where it ends.
+	resVars []*Var
+	lastUse map[*Var]string
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -223,6 +230,16 @@ func (l *lifeChecker) function(fn *Func) {
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
 	l.verifyResult(fn.Body)
+	// A variable's definition shows whether it ends up moved, or else
+	// what it was at its last use (its scope may have ended since).
+	for _, v := range l.resVars {
+		text := l.ownership(&VarRef{Var: v})
+		if last := l.lastUse[v]; last != "" && !strings.Contains(text, "moved to") {
+			text = last
+		}
+		l.info.VarOwnership[v] = text
+	}
+	l.resVars = nil
 	if fn.Body.Type() != Never {
 		for _, p := range fn.ParamVars {
 			if p.Type == OwnedScope {
@@ -548,6 +565,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		for _, c := range l.captures {
 			*c = c.union(life)
 		}
+		if text := l.ownership(x); text != "" {
+			l.info.Ownership[x] = text
+			l.lastUse[x.Var] = text
+		}
 		return l.use(x, life)
 	case *Block:
 		return l.block(x, l.expr)
@@ -802,6 +823,9 @@ func (l *lifeChecker) stmt(s Stmt) {
 		// A possibly released value can be bound; using it is the error.
 		l.env[s.Var] = l.expr(s.Value)
 		l.origins[s.Var] = l.originOf(s.Value)
+		if _, ok := s.Var.Type.(*Resource); ok {
+			l.resVars = append(l.resVars, s.Var)
+		}
 		if len(l.env[s.Var]) > 0 {
 			l.info.VarLifetimes[s.Var] = l.lifeText(l.env[s.Var])
 		}

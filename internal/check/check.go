@@ -261,6 +261,12 @@ type Info struct {
 	// VarLifetimes each variable's (see lifetimes.go), for queries.
 	Lifetimes    map[Expr][]string
 	VarLifetimes map[*Var][]string
+	// Ownership says, for each use of a resource variable and each one
+	// bound (VarOwnership), whether it was acquired here and can be
+	// moved, is borrowed, is kept by a task or a channel, or was moved
+	// (see moves.go), for queries.
+	Ownership    map[Expr]string
+	VarOwnership map[*Var]string
 	// Mocks holds the bodies of the tests' `mock` statements (see
 	// Func.MockOf), and mocks them by statement.
 	Mocks []*Func

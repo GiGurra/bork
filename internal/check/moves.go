@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -450,6 +451,33 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 		life = life.union(lifetime{h})
 	}
 	return life
+}
+
+// ownership describes, for queries, what a resource variable x is here:
+// moved, possibly moved, kept by something that may still use it,
+// borrowed, or owned here (and so movable).
+func (l *lifeChecker) ownership(x *VarRef) string {
+	if _, ok := x.Var.Type.(*Resource); !ok || l.origins == nil {
+		return ""
+	}
+	o := l.origins[x.Var]
+	if !o.known || len(o.hs) == 0 || o.hs[0].res == nil {
+		return "borrowed: not acquired here, so it cannot be moved (attach it instead)"
+	}
+	for _, h := range o.hs {
+		if m, ok := l.moved[h]; ok {
+			if m.possibly {
+				return fmt.Sprintf("possibly moved to %s at line %d", m.to, m.pos.Line)
+			}
+			return fmt.Sprintf("moved to %s at line %d", m.to, m.pos.Line)
+		}
+	}
+	for _, h := range o.hs {
+		if p, ok := l.pinned(h); ok {
+			return fmt.Sprintf("owned by %s, and kept by %s at line %d, so it cannot be moved", l.scopeText(h.scope), p.what, p.pos.Line)
+		}
+	}
+	return fmt.Sprintf("owned by %s, acquired here: move(%s, s) hands it to scope s", l.scopeText(o.hs[0].scope), x.Var.Name)
 }
 
 // movedUse reports the use of x, of a value that holds the moved handle

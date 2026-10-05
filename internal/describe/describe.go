@@ -28,7 +28,11 @@ type Result struct {
 	Facts          []check.KnownFact                `json:"facts"`
 	// BelongsTo lists the scopes the value belongs to: it is usable
 	// while all of them are open.
-	BelongsTo []string                   `json:"belongs_to,omitempty"`
+	BelongsTo []string `json:"belongs_to,omitempty"`
+	// Ownership says whether a resource variable was acquired here and
+	// can be moved, is borrowed, is kept by a task or a channel, or was
+	// moved.
+	Ownership string                     `json:"ownership,omitempty"`
 	Proof     *check.Proof               `json:"proof,omitempty"`
 	Callable  *check.CallableDescription `json:"callable,omitempty"`
 }

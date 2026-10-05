@@ -763,3 +763,13 @@ fn main() {}
 		}
 	}
 }
+
+func TestDescribeOwnership(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	files := map[string]string{
+		"bork.mod": "module example.com/own\nunsafe \"example.com/own\"\n",
+		"main.bork": `type Conn = resource
+fn connect(s: Scope) uses io: Conn unsafe go {
+  return Conn{handle: 1, owner: s.Own(func() {})}
+}
