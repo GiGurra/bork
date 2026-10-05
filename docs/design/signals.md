@@ -16,7 +16,10 @@ Copies received within 500 ms of the first cancelling signal count as the same
 request. A subsequent cancelling signal terminates immediately without waiting
 for cleanup. Default cancellation signals return to their previous OS behavior
 after the duplicate window, preserving #331's second-interrupt escape hatch.
-Signals with an explicit subscription or ignore registration remain handled.
+Signals with an explicit subscription or ignore registration remain handled,
+with one exception: three Ctrl+C presses within 5 seconds (each at least
+500 ms after the previous counted press) always exit with 130, so a program
+that subscribes to or ignores Interrupt can still be stopped from the keyboard.
 Configured user signals also remain handled for escalation, because their
 Go/OS defaults do not terminate the process.
 No default grace deadline is imposed. Other signals retain their Go/OS defaults,

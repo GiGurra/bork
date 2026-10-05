@@ -51,7 +51,9 @@ SIGINT (Ctrl+C) and SIGTERM cancel every root scope by default. Nested scopes
 and tasks inherit the cancellation, whose reason names the signal. After cleanup,
 a normal return exits with `128 + signal number`: 130 for SIGINT, 143 for SIGTERM.
 An explicit `process.Exit(code)` keeps that code. Copies within 500 ms count as
-one request; a subsequent cancelling signal terminates immediately. There is no
+one request; a subsequent cancelling signal terminates immediately. Three
+Ctrl+C presses within 5 seconds always exit with 130, even when the program
+subscribes to or ignores `Interrupt`. There is no
 default grace deadline. Other signals, including SIGHUP, keep their Go/OS
 behavior. Programs that never open a scope install no bork signal handler.
 
