@@ -122,7 +122,7 @@ Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | TypedInter
            | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl | WithExpr .
 (* A bare leading "." must be followed by RecordLit: .{ field: value }.
    .Variant and .Variant { field: value } need an expected sealed type;
-   .{ field: value } needs an expected record type. Patterns stay explicit. *)
+   .{ field: value } needs an expected record type. Variant patterns may also omit their owner using scrutinee context. *)
 TypedInterp = ( Ident | QualIdent ) InterpBody . (* prefix and opening quote must be adjacent; s is reserved *)
 (* InterpBody is the double-quoted body with $name, ${Expr}, $$, and string escapes. *)
 Generate   = "generate" "[" Type "]" Block .
@@ -145,7 +145,7 @@ Pattern    = "_"                             (* anything *)
            | Literal                         (* 1, -1, 1.5, 'a', "a", true *)
            | "[" [ ListElems ] "]"            (* [], [x], [first, ...rest], [0, ...] *)
            | Ident ":" Type                  (* n: Int, e: NotFound | DbError *)
-           | Ident [ "." Ident ] [ "{" FieldPat { Sep FieldPat } [ Sep ] "}" ] .
+           | ( "." Ident | Ident [ "." Ident ] ) [ "{" FieldPat { Sep FieldPat } [ Sep ] "}" ] .
                                              (* Shape.Circle { radius }, NotFound, User { name }, n *)
 ListElems  = ( Pattern { Sep Pattern } [ Sep "..." [ Ident ] ] | "..." [ Ident ] ) [ Sep ] .
 FieldPat   = Ident [ ":" Pattern ] .         (* radius, radius: r, radius: 0, center: Point { x: 0 } *)

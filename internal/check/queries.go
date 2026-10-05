@@ -11,6 +11,17 @@ import (
 	"github.com/GiGurra/bork/internal/syntax"
 )
 
+// EditorContextVariantUnique applies context selection to a checked scrutinee.
+// Invisible variants still count toward ambiguity, as they do in the checker.
+func EditorContextVariantUnique(t Type, name string) bool {
+	candidates, unresolved := contextCandidates(name, t)
+	if unresolved || len(candidates) != 1 {
+		return false
+	}
+	owner, ok := candidates[0].(*Sealed)
+	return ok && owner.Variant(name) != nil
+}
+
 // MethodDescription is a method as seen from the querying package. Ambiguous
 // names are reported separately from callable methods.
 type MethodDescription struct {

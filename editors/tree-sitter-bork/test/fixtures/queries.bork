@@ -25,3 +25,4 @@ fn (self: User) rename(): User {
 }
 type Kind = sealed { caseName }
 fn variant(state: Kind) { match (state) { Kind.caseName => Ok } }
+fn contextVariant(state: Kind) { match (state) { .caseName => Ok } }

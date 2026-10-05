@@ -21,7 +21,7 @@ index fca90f6..39dfeb3 100644
 +  bork = {
 +    install_info = {
 +      location = 'editors/tree-sitter-bork',
-+      revision = 'e9c1cc0d096656cb824d9ee3ddfd47b04f9f76fc',
++      revision = '9cf9ba8784976e8a5be11bd7a126412ef29ea065',
 +      url = 'https://github.com/GiGurra/bork',
 +    },
 +    tier = 3,
@@ -43,7 +43,7 @@ new file mode 100644
 index 0000000..218cc7a
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,34 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -76,6 +76,8 @@ index 0000000..218cc7a
 +["+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator
 +["(" ")" "[" "]" "{" "}"] @punctuation.bracket
 +["," ";" ":" "."] @punctuation.delimiter
++
++(context_pattern name: (identifier) @type.enum.variant)
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
 index 0000000..b64b10a

@@ -402,8 +402,11 @@ func (s *semanticIndex) constructor(expr syntax.Expr, kind string, goBinding boo
 
 func (s *semanticIndex) contextName(expr *syntax.ContextName, kind string) {
 	if expr.Name != "" {
-		pos := expr.Pos
-		pos.Col++ // ContextName.Pos points at the dot.
+		pos := expr.NamePos
+		if pos.File == "" {
+			pos = expr.Pos
+			pos.Col++
+		}
 		s.name(pos, expr.Name, SemanticToken{Kind: kind, Readonly: kind == "enumMember"})
 	}
 }
@@ -444,6 +447,9 @@ func (s *semanticIndex) patternNames(source syntax.Pattern, checked *Pat) {
 	}
 	switch source := source.(type) {
 	case *syntax.VariantPat:
+		if checked.Sub != nil {
+			checked = checked.Sub
+		}
 		kind := ""
 		switch checked.Kind {
 		case PatVariant:
@@ -452,7 +458,11 @@ func (s *semanticIndex) patternNames(source syntax.Pattern, checked *Pat) {
 			kind = "type"
 		}
 		if kind != "" {
-			s.name(source.Pos, strings.Join(source.Path, "."), SemanticToken{Kind: kind, Readonly: kind == "enumMember"})
+			pos := source.Pos
+			if source.Context {
+				pos = source.NamePos
+			}
+			s.name(pos, strings.Join(source.Path, "."), SemanticToken{Kind: kind, Readonly: kind == "enumMember"})
 			if checked.Kind == PatVariant && len(source.Path) > 1 {
 				s.name(source.Pos, strings.Join(source.Path[:len(source.Path)-1], "."), SemanticToken{Kind: "type"})
 			}

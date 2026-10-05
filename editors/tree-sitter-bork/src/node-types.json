@@ -975,6 +975,22 @@
     }
   },
   {
+    "type": "context_pattern",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "derive_clause",
     "named": true,
     "fields": {},
@@ -3033,6 +3049,10 @@
       "types": [
         {
           "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "context_pattern",
           "named": true
         },
         {

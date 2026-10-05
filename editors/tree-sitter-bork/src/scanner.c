@@ -1,6 +1,61 @@
 #include "tree_sitter/parser.h"
 #include <stdlib.h>
 
+static void skip_space_comments(TSLexer *lexer) {
+  for (;;) {
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t' || lexer->lookahead == '\r' || lexer->lookahead == '\n') lexer->advance(lexer, false);
+    if (lexer->lookahead != '/') return;
+    lexer->advance(lexer, false);
+    if (lexer->lookahead == '/') {
+      while (!lexer->eof(lexer) && lexer->lookahead != '\n') lexer->advance(lexer, false);
+    } else if (lexer->lookahead == '*') {
+      lexer->advance(lexer, false);
+      int previous = 0;
+      while (!lexer->eof(lexer)) {
+        int c = lexer->lookahead;
+        lexer->advance(lexer, false);
+        if (previous == '*' && c == '/') break;
+        previous = c;
+      }
+    } else return;
+  }
+}
+
+// After a leading dot, => distinguishes a context arm from a selector chain.
+// mark_end remains before this lookahead so strings/comments stay in the tree.
+static bool context_arm(TSLexer *lexer) {
+  while ((lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
+         (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
+         (lexer->lookahead >= '0' && lexer->lookahead <= '9') ||
+         lexer->lookahead == '_' || lexer->lookahead >= 0x80) lexer->advance(lexer, false);
+  skip_space_comments(lexer);
+  if (lexer->lookahead == '{') {
+    unsigned depth = 1;
+    lexer->advance(lexer, false);
+    while (!lexer->eof(lexer) && depth) {
+      skip_space_comments(lexer);
+      int c = lexer->lookahead;
+      if (c == '"' || c == '\'') {
+        int quote = c;
+        lexer->advance(lexer, false);
+        while (!lexer->eof(lexer) && lexer->lookahead != quote) {
+          if (lexer->lookahead == '\\') lexer->advance(lexer, false);
+          if (!lexer->eof(lexer)) lexer->advance(lexer, false);
+        }
+        if (!lexer->eof(lexer)) lexer->advance(lexer, false);
+      } else {
+        if (c == '{') depth++;
+        if (c == '}') depth--;
+        if (!lexer->eof(lexer)) lexer->advance(lexer, false);
+      }
+    }
+    skip_space_comments(lexer);
+  }
+  if (lexer->lookahead != '=') return false;
+  lexer->advance(lexer, false);
+  return lexer->lookahead == '>';
+}
+
 void *tree_sitter_bork_external_scanner_create(void) { return NULL; }
 void tree_sitter_bork_external_scanner_destroy(void *payload) { (void)payload; }
 unsigned tree_sitter_bork_external_scanner_serialize(void *payload, char *buffer) {
@@ -47,9 +102,10 @@ bool tree_sitter_bork_external_scanner_scan(void *payload, TSLexer *lexer, const
       } else if (lexer->lookahead == '.') {
         lexer->advance(lexer, false);
         int c = lexer->lookahead;
-        continuation = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80;
+        continuation = ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80) && !context_arm(lexer);
       }
       if (!continuation) { lexer->result_symbol = 1; return true; }
+      return false;
     }
   }
   if (valid[3] || valid[4] || valid[5]) {

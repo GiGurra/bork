@@ -23,6 +23,15 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 		}
 	}
 	if len(prior) > 0 && prior[len(prior)-1].Kind == syntax.Dot {
+		if arms, ok := a.editorContextPatternCompletions(file, src, prior[:len(prior)-1], prior[len(prior)-1].Pos); ok {
+			previous := prior[len(prior)-2]
+			if previous.Kind == syntax.LBrace || previous.Kind == syntax.Comma {
+				return arms, true
+			}
+			// An unfinished newline dot can start either the next arm or a
+			// continued selector. Keep both sets until syntax distinguishes them.
+			out = append(out, arms...)
+		}
 		if len(prior) > 1 {
 			receiver := prior[len(prior)-2]
 			members := a.EditorPackageSymbols(file, receiver.Text)
@@ -169,6 +178,46 @@ func (a *EditorAnalysis) EditorContextCompletions(file, src string, pos, at diag
 	}
 
 	return out, false
+}
+
+func (a *EditorAnalysis) editorContextPatternCompletions(file, src string, prior []syntax.Token, dot diag.Pos) ([]EditorCompletion, bool) {
+	if len(prior) == 0 || prior[len(prior)-1].Kind != syntax.LBrace && prior[len(prior)-1].Kind != syntax.Comma && prior[len(prior)-1].End.Line >= dot.Line {
+		return nil, false
+	}
+	depth := 0
+	for i := len(prior) - 1; i >= 0; i-- {
+		switch prior[i].Kind {
+		case syntax.RBrace:
+			depth++
+		case syntax.LBrace:
+			if depth > 0 {
+				depth--
+				continue
+			}
+			if i == 0 || prior[i-1].Kind != syntax.RParen {
+				return nil, false
+			}
+			parens := 1
+			for j := i - 2; j >= 0; j-- {
+				if prior[j].Kind == syntax.RParen {
+					parens++
+				}
+				if prior[j].Kind != syntax.LParen {
+					continue
+				}
+				parens--
+				if parens != 0 {
+					continue
+				}
+				if j == 0 || prior[j-1].Kind != syntax.KwMatch {
+					return nil, false
+				}
+				return a.editorMatchArms(a.editorSnapshotPosition(file, src, prior[j-1].Pos), true), true
+			}
+			return nil, false
+		}
+	}
+	return nil, false
 }
 
 func editorCompletionLabelUsed(tokens []syntax.Token, name string) bool {

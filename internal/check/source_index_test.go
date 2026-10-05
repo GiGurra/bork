@@ -121,3 +121,47 @@ func TestSourceIndexExactPositions(t *testing.T) {
 		}
 	}
 }
+
+func TestContextPatternIdentitiesAndVisibility(t *testing.T) {
+	for _, private := range []bool{false, true} {
+		d := &diag.List{}
+		files := prelude.Parse(d)
+		model := syntax.Parse("model.bork", []byte("type Choice = sealed { Some { value: Int }, Empty, hidden }\n"), d)
+		model.Package = "example.com/context/model"
+		source := "import \"example.com/context/model\"\nfn read(x: model.Choice | String): Int { match (x) { . /* note */ Some { value } => value, . Empty => 0, _ => 1 } }\n"
+		if private {
+			source = "import \"example.com/context/model\"\nfn read(x: model.Choice): Int { match (x) { .hidden => 0, _ => 1 } }\n"
+		}
+		file := syntax.Parse("use.bork", []byte(source), d)
+		file.Package = "example.com/context/use"
+		files = append(files, model, file)
+		info := Program(files, file.Package, d, nil)
+		if private {
+			if !strings.Contains(d.Error(), "not exported") {
+				t.Fatalf("private context variant: %s", d.Error())
+			}
+			continue
+		}
+		if d.Len() != 0 {
+			t.Fatal(d.Error())
+		}
+		index := BuildSourceIndex(files, info)
+		for _, name := range []string{"Some", "Empty"} {
+			offset := strings.Index(source, name)
+			pos := diag.Pos{File: file.Path, Line: 2, Col: offset - strings.LastIndex(source[:offset], "\n")}
+			ref := index.At(pos)
+			if ref == nil || ref.Start != pos || ref.Name != name || ref.Definition.File != model.Path {
+				t.Fatalf("context pattern %s: %+v", name, ref)
+			}
+			found := false
+			for _, token := range SemanticTokens(file, info) {
+				if token.Start == pos && token.Kind == "enumMember" && token.End.Col == pos.Col+len(name) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("context variant %s lacks semantic classification at %s", name, pos)
+			}
+		}
+	}
+}

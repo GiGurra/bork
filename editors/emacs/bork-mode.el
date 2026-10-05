@@ -89,6 +89,7 @@
        (bare_return) (bare_break) (bare_continue)] @font-lock-keyword-face)
     :language 'bork :feature 'string '([(string) (interpolated_string) (rune)] @font-lock-string-face)
     :language 'bork :feature 'type '( (type_declaration name: (identifier) @font-lock-type-face)
+                                   (context_pattern name: (identifier) @font-lock-type-face)
                                    (type (qualified_name (identifier) @font-lock-type-face)))
     :language 'bork :feature 'definition
     '([(function_declaration name: (identifier) @font-lock-function-name-face)

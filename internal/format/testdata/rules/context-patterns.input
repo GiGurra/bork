@@ -1,0 +1,8 @@
+fn f(x:Option[Option[Int]]):Int{
+match(x){
+.Some{value:.Some{value:n}}=>n
+// a context arm, not a selector chain
+.Some{value:.None}=>0
+.None=>0
+}
+}

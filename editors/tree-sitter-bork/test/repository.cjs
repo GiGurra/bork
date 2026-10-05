@@ -48,7 +48,7 @@ function captures(query) {
   return result.stdout;
 }
 const highlights = captures('highlights.scm');
-for (const [scope, text] of [['keyword', 'match'], ['type.definition', 'User'], ['function', 'describe'], ['variable.parameter', 'user']]) {
+for (const [scope, text] of [['type.enum.variant', 'caseName'], ['keyword', 'match'], ['type.definition', 'User'], ['function', 'describe'], ['variable.parameter', 'user']]) {
   assert.ok(highlights.split('\n').some(line => line.includes(' - ' + scope + ',') && line.includes('text: `' + text + '`')), `Missing ${scope} capture for ${text}`);
 }
 const injection = captures('injections.scm').match(/injection\.content, start: \((\d+), (\d+)\), end: \((\d+), (\d+)\)/);
