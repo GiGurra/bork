@@ -15,14 +15,14 @@ test "Int8 bit operations preserve width" (value: Int8, count: Int) {
         assert(inserted.Extract(4, 4) == field)
         assertEqual(inserted.Extract(0, 4), value.Extract(0, 4))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(7)
   clear = value.ClearBit(7)
-  match (set) { n: Int8 => assert(n.TestBit(7) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Int8 => assert(n.TestBit(7) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Int8 => assert(n.TestBit(7) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int8 => assert(n.TestBit(7) == false), _: OutOfRange => assert(false) }
 }
 
 test "Int16 bit operations preserve width" (value: Int16, count: Int) {
@@ -40,14 +40,14 @@ test "Int16 bit operations preserve width" (value: Int16, count: Int) {
         assert(inserted.Extract(8, 8) == field)
         assertEqual(inserted.Extract(0, 8), value.Extract(0, 8))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(15)
   clear = value.ClearBit(15)
-  match (set) { n: Int16 => assert(n.TestBit(15) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Int16 => assert(n.TestBit(15) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Int16 => assert(n.TestBit(15) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int16 => assert(n.TestBit(15) == false), _: OutOfRange => assert(false) }
 }
 
 test "Int32 bit operations preserve width" (value: Int32, count: Int) {
@@ -65,14 +65,14 @@ test "Int32 bit operations preserve width" (value: Int32, count: Int) {
         assert(inserted.Extract(16, 16) == field)
         assertEqual(inserted.Extract(0, 16), value.Extract(0, 16))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(31)
   clear = value.ClearBit(31)
-  match (set) { n: Int32 => assert(n.TestBit(31) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Int32 => assert(n.TestBit(31) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Int32 => assert(n.TestBit(31) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int32 => assert(n.TestBit(31) == false), _: OutOfRange => assert(false) }
 }
 
 test "Int bit operations preserve width" (value: Int, count: Int) {
@@ -90,14 +90,14 @@ test "Int bit operations preserve width" (value: Int, count: Int) {
         assert(inserted.Extract(32, 32) == field)
         assertEqual(inserted.Extract(0, 32), value.Extract(0, 32))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(63)
   clear = value.ClearBit(63)
-  match (set) { n: Int => assert(n.TestBit(63) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Int => assert(n.TestBit(63) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Int => assert(n.TestBit(63) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Int => assert(n.TestBit(63) == false), _: OutOfRange => assert(false) }
 }
 
 test "Byte bit operations preserve width" (value: Byte, count: Int) {
@@ -115,14 +115,14 @@ test "Byte bit operations preserve width" (value: Byte, count: Int) {
         assert(inserted.Extract(4, 4) == field)
         assertEqual(inserted.Extract(0, 4), value.Extract(0, 4))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(7)
   clear = value.ClearBit(7)
-  match (set) { n: Byte => assert(n.TestBit(7) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Byte => assert(n.TestBit(7) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Byte => assert(n.TestBit(7) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Byte => assert(n.TestBit(7) == false), _: OutOfRange => assert(false) }
 }
 
 test "Uint16 bit operations preserve width" (value: Uint16, count: Int) {
@@ -140,14 +140,14 @@ test "Uint16 bit operations preserve width" (value: Uint16, count: Int) {
         assert(inserted.Extract(8, 8) == field)
         assertEqual(inserted.Extract(0, 8), value.Extract(0, 8))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(15)
   clear = value.ClearBit(15)
-  match (set) { n: Uint16 => assert(n.TestBit(15) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Uint16 => assert(n.TestBit(15) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Uint16 => assert(n.TestBit(15) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Uint16 => assert(n.TestBit(15) == false), _: OutOfRange => assert(false) }
 }
 
 test "Uint32 bit operations preserve width" (value: Uint32, count: Int) {
@@ -165,14 +165,14 @@ test "Uint32 bit operations preserve width" (value: Uint32, count: Int) {
         assert(inserted.Extract(16, 16) == field)
         assertEqual(inserted.Extract(0, 16), value.Extract(0, 16))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(31)
   clear = value.ClearBit(31)
-  match (set) { n: Uint32 => assert(n.TestBit(31) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Uint32 => assert(n.TestBit(31) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Uint32 => assert(n.TestBit(31) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Uint32 => assert(n.TestBit(31) == false), _: OutOfRange => assert(false) }
 }
 
 test "Uint64 bit operations preserve width" (value: Uint64, count: Int) {
@@ -190,12 +190,12 @@ test "Uint64 bit operations preserve width" (value: Uint64, count: Int) {
         assert(inserted.Extract(32, 32) == field)
         assertEqual(inserted.Extract(0, 32), value.Extract(0, 32))
       }
-      error: OutOfRange => assert(false)
+      _: OutOfRange => assert(false)
     }
-    error: OutOfRange => assert(false)
+    _: OutOfRange => assert(false)
   }
   set = value.SetBit(63)
   clear = value.ClearBit(63)
-  match (set) { n: Uint64 => assert(n.TestBit(63) == true), error: OutOfRange => assert(false) }
-  match (clear) { n: Uint64 => assert(n.TestBit(63) == false), error: OutOfRange => assert(false) }
+  match (set) { n: Uint64 => assert(n.TestBit(63) == true), _: OutOfRange => assert(false) }
+  match (clear) { n: Uint64 => assert(n.TestBit(63) == false), _: OutOfRange => assert(false) }
 }
