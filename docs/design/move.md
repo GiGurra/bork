@@ -120,13 +120,19 @@ It tracks two things per value:
   - an acquisition (below), `attach` and `move`, which create a fresh handle;
   - a variable, whose origin is its initializer's;
   - `?`, a block's tail, and a pattern that binds the whole matched value;
-  - `if` and `match`, whose origin is the union of their branches' origins;
-  - a record field select, whose origin is the field's origin as built
-    (`{c: conn}.c`), tracked through record literals and copies of records
-    bound in this frame.
+  - `if` and `match`, whose origin is the union of their branches' origins
+    (a branch whose type holds no resource, such as an error, adds nothing);
+  - a call of a generic bork function whose result is a type parameter `T`
+    (or `T` with members that hold no resource) that its bounds cannot make,
+    and whose `T`-mentioning parameters are built from `T` alone: it can only
+    give back what it was given, so its origin is that of those arguments.
+    `fs.Open` is `result(open(path, s))`, so files from it can be moved.
+    Go bodies are not counted on (one could keep a value from an earlier
+    call).
 
   Every other expression has an unknown origin: other calls, `receive`,
-  `current`, `await`, lambda and function parameters, list elements. A value of
+  `current`, `await`, lambda and function parameters, list elements, record
+  fields (`holder.conn`; tracking fields is possible future work). A value of
   unknown origin is borrowed.
 
 ### Acquisitions
