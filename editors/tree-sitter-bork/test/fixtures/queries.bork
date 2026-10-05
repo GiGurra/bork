@@ -14,6 +14,7 @@ fn (self: User) rename(): User {
   scope app {
     xs = [1, 2].map(value => value + 1)
     for (item in xs) { println(item) }
+    for (step = 0; step < 2; step = step + 1) { println(step) }
     mock println(message) { message }
     match (xs) {
       [first, ...rest] => println(first, rest)

@@ -109,10 +109,10 @@ index 0000000..5bc64d4
 + (#set! injection.language "go"))
 diff --git a/runtime/queries/bork/locals.scm b/runtime/queries/bork/locals.scm
 new file mode 100644
-index 0000000..8238aaa
+index 0000000..52246cc
 --- /dev/null
 +++ b/runtime/queries/bork/locals.scm
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,23 @@
 +(block) @local.scope
 +(function_declaration) @local.scope
 +(parameter name: (identifier) @local.definition)
@@ -128,6 +128,7 @@ index 0000000..8238aaa
 +(receiver name: (identifier) @local.definition)
 +(lambda_expression parameter: (identifier) @local.definition)
 +(for_expression name: (identifier) @local.definition)
++(for_expression init: (loop_binding name: (identifier) @local.definition))
 +(scope_expression name: (identifier) @local.definition)
 +(select_arm name: (identifier) @local.definition)
 +(mock_parameters name: (identifier) @local.definition)
