@@ -9,6 +9,7 @@ const recovery = new Set([
   'copy_separator_fail', // Assignment in a named update.
   'go_bindings_parse_fail', // A numeric unsafe Go body.
   'interpolation_errors_fail', // Invalid interpolation holes.
+  'named_argument_separator_fail', // Assignment in a named argument.
   'number_errors_fail', // Invalid numeric tokens.
   'rune_and_constant_errors_fail', // A multi-character rune.
   'single_ampersand_fail', // An unsupported operator.
