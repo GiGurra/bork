@@ -28,7 +28,7 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 | [bork/sql](sql.md) | SQLite and Postgres connections, transactions, and typed SQL literals |
 | [bork/strconv](strconv.md) | Integer formatting and parsing in bases 2 through 36 |
 | [bork/tasks](tasks.md) | Task pools that limit how much work runs at once |
-| [bork/test](test.md) | Typed assertions that return checked values and facts |
+| [bork/test](test.md) | Typed assertions and exact tuple element replacement |
 | [bork/time](time.md) | Instants, durations, and clocks that tests can replace |
 | [bork/url](url.md) | Parsing, building, and escaping URLs |
 | [bork/uuid](uuid.md) | Parsing and generating UUIDs |
@@ -37,5 +37,3 @@ Standard packages ship with the compiler. Import one as `bork/name` and call its
 Operations on strings, lists, maps, options, and bytes need no import. They are methods that are available everywhere, such as `text.trim()` and `xs.map(f)`.
 
 For contributors: when adding a package, add its page and a row to this table. The [Go helper API](../std-go.md) documents the contracts that standard-package implementations share.
-
-- [test](test.md): exact tuple replacements with Swap and SwapAt.
