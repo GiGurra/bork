@@ -1506,6 +1506,33 @@ func (p *parser) patternType() *TypeExpr {
 	return p.typeExpr()
 }
 
+func (p *parser) selectExpr() Expr {
+	sel := &Select{Pos: p.next().Pos}
+	p.expect(LBrace, "to start the select arms")
+	p.list(RBrace, "a select arm", func() {
+		arm := &SelectArm{Pos: p.tok().Pos}
+		switch {
+		case p.at(Underscore) && p.peekKind() == Arrow:
+			p.next()
+		case (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == Assign:
+			name := p.next()
+			if name.Kind == TIdent {
+				arm.Name, arm.NamePos = name.Text, name.Pos
+			}
+			p.next()
+			arm.Op = p.expr()
+		default:
+			arm.Op = p.expr()
+		}
+		p.expect(Arrow, "after the select arm's operation")
+		p.skipNewlines()
+		arm.Body = p.expr()
+		sel.Arms = append(sel.Arms, arm)
+	})
+	sel.Close = p.toks[p.i-1].Pos
+	return sel
+}
+
 func (p *parser) pattern() Pattern {
 	t := p.tok()
 	switch t.Kind {
@@ -1691,6 +1718,10 @@ func (p *parser) primary() Expr {
 		// `with` is a keyword where an expression starts and '(' follows.
 		if t.Text == "with" && p.peekKind() == LParen {
 			return p.withExpr()
+		}
+		// `select` is a keyword where an expression starts and '{' follows.
+		if t.Text == "select" && p.peekKind() == LBrace {
+			return p.selectExpr()
 		}
 		// `scope` is a keyword only where a scope block starts.
 		if t.Text == "scope" && p.peekKind() == TIdent {

@@ -504,6 +504,12 @@ func (c *checker) contextNeedsType(x syntax.Expr, want Type) bool {
 				return true
 			}
 		}
+	case *syntax.Select:
+		for _, a := range x.Arms {
+			if c.contextNeedsType(a.Body, want) {
+				return true
+			}
+		}
 	case *syntax.Call:
 		if !hasContextLiteral(x) {
 			return false
@@ -596,6 +602,12 @@ func hasContextLiteral(x syntax.Expr) bool {
 	case *syntax.If:
 		return hasContextLiteral(x.Then) || hasContextLiteral(x.Else)
 	case *syntax.Match:
+		for _, a := range x.Arms {
+			if hasContextLiteral(a.Body) {
+				return true
+			}
+		}
+	case *syntax.Select:
 		for _, a := range x.Arms {
 			if hasContextLiteral(a.Body) {
 				return true

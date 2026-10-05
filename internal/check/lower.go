@@ -264,6 +264,11 @@ func (l *lowerer) expr(x syntax.Expr) (result Expr) {
 }
 
 func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
+	if sel, ok := x.(*syntax.Select); ok {
+		out := l.block(l.info.selects[sel])
+		out.token = sel.Pos
+		return out
+	}
 	if call, ok := x.(*syntax.Call); ok {
 		if expansion := l.info.conversionCalls[call]; expansion != nil {
 			out := l.block(expansion)

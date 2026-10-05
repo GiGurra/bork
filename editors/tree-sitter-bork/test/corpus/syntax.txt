@@ -467,3 +467,52 @@ derive codec.Encode for Box[Int]
         (type
           (qualified_name
             (identifier)))))))
+
+================================================================================
+Select arms
+================================================================================
+
+fn f() {
+  select {
+    n = numbers.receive(s) => n
+    out.send(s, 1) => 2
+    _ => 3
+  }
+  select = 1
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (select_expression
+        (select_arm
+          (identifier)
+          (call_expression
+            (qualified_name
+              (identifier)
+              (identifier))
+            (argument
+              (qualified_name
+                (identifier))))
+          (qualified_name
+            (identifier)))
+        (select_arm
+          (call_expression
+            (qualified_name
+              (identifier)
+              (identifier))
+            (argument
+              (qualified_name
+                (identifier)))
+            (argument
+              (number)))
+          (number))
+        (select_arm
+          (number)))
+      (binding
+        (identifier)
+        (number)))))

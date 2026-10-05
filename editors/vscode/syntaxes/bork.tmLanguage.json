@@ -237,6 +237,10 @@
           "name": "keyword.control.bork"
         },
         {
+          "match": "\\bselect\\b(?=\\s*\\{)",
+          "name": "keyword.control.bork"
+        },
+        {
           "match": "\\b(fn|pred|type|class|instance|instances|providers|rule)\\b",
           "name": "storage.type.bork"
         },

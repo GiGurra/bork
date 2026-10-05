@@ -700,6 +700,26 @@ type Arm struct {
 	Body    Expr
 }
 
+// Select is `select { n = ch.receive(s) => value, ... }`: it waits until
+// one of its arms' channel operations can complete, completes only that
+// one, and gives the value of its arm.
+type Select struct {
+	Pos   diag.Pos
+	Close diag.Pos // the closing brace
+	Arms  []*SelectArm
+}
+
+// SelectArm is one arm of a select: `[name =] op => body`, where op is a
+// channel's receive or send call, or `_ => body` (Op nil), which runs when
+// no operation is ready, so the select does not wait.
+type SelectArm struct {
+	Pos     diag.Pos
+	Name    string // the binding of the operation's result, or ""
+	NamePos diag.Pos
+	Op      Expr
+	Body    Expr
+}
+
 // Try is `x?`: keep the leftmost member of x's type, and return every
 // other member from the enclosing function.
 type Try struct {
@@ -824,6 +844,7 @@ func (*TypeHead) exprNode()    {}
 func (*RecordLit) exprNode()   {}
 func (*Copy) exprNode()        {}
 func (*Match) exprNode()       {}
+func (*Select) exprNode()      {}
 func (*Try) exprNode()         {}
 
 func (e *Selector) Position() diag.Pos    { return e.X.Position() }
@@ -832,6 +853,7 @@ func (e *TypeHead) Position() diag.Pos    { return e.Type.Pos }
 func (e *RecordLit) Position() diag.Pos   { return e.Type.Position() }
 func (e *Copy) Position() diag.Pos        { return e.X.Position() }
 func (e *Match) Position() diag.Pos       { return e.Pos }
+func (e *Select) Position() diag.Pos      { return e.Pos }
 func (e *Try) Position() diag.Pos         { return e.X.Position() }
 
 func (*IntLit) exprNode()         {}

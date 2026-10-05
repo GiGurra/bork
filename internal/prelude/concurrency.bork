@@ -10,7 +10,6 @@
 // Native completion handles are implementation details of tasks and channels.
 type TaskHandle = resource
 type ChannelHandle = resource
-type SelectPayload = resource
 
 type Task[T] = private { wait: () => T, native: TaskHandle }
 

@@ -3969,16 +3969,34 @@ deadline, so its returned resources remain usable; internal child resources
 stay owned until `s` closes. `withTimeoutDo` is the Ok-callback counterpart,
 returning `Ok | Cancelled`, as Ok is not a generic value argument.
 
-Typed selection uses `ch.receiveCase(f)` to map each channel's own
-`T | Closed` into a common event type `R`, and
-`arms.select(s)` gives `Option[R] | Cancelled`. Mapping callbacks are pure.
-Only the winning receive consumes a value; losing channels are untouched,
-including unbuffered channels. Empty arm lists give `None`. A closed channel
-first yields its buffered values, then `Closed`; cancellation of the
-selection scope, or of a channel's own scope, returns `Cancelled` directly.
-Several ready arms are chosen at random; ready tasks have no specified tie
-order. The task selector supports up to 65,535 task completions in one wait;
-exceeding that bound panics.
+Ready tasks have no specified tie order. The task selector supports up to
+65,535 task completions in one wait; exceeding that bound panics.
+
+### Select (implemented, bork-73dn9h)
+
+`select { arms }` waits until one of its arms' channel operations can
+complete, completes exactly that one, and gives the value of that arm's
+body. An operation arm is
+`[name =] ch.receive(s) => body` or `[name =] ch.send(s, x) => body`: the
+same calls as outside a select, written with positional arguments. The
+channel, scope and value expressions are evaluated once, in source order,
+before waiting. `name` (or `_`) binds the operation's result, without
+`Cancelled`: `T | Closed` for a receive, `Ok | Closed` for a send. A
+closed channel's receive is always ready. At most one `_ => body` arm
+makes the select not wait: it runs when no operation is ready. Among ready
+operations one is chosen uniformly at random. If a scope an arm waits in,
+or a channel's own scope, is cancelled before an operation completes, the
+select completes none and gives `Cancelled`, even with a `_` arm. The
+select's type is its arm bodies' types joined as match arms are, and
+`Cancelled`, so `select { ... }?` passes cancellation on. Arm bodies are
+code of the enclosing function: `return`, `?`, `break` and `continue`
+mean what they mean around the select. The checker lowers a select to
+ordinary code calling internal prelude functions, which programs cannot
+name, so effects, facts and lifetimes are checked as for the operations
+written out: a value sent must outlive the channel, and a received value
+lives as long as its channel. `select` is a keyword only where an
+expression starts and `{` follows. The list form
+`[ch.receiveCase(f)].select(s)` was removed.
 
 Effects of work callbacks inside a list are open in parameter declarations
 such as `List[(Scope) => T]`. Calls charge the effects of the actual elements,

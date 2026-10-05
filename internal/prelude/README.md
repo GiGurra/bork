@@ -48,11 +48,9 @@ in its cooperative deadline; use `withTimeoutDo` for an Ok callback.
 A successful timeout stops its timer, keeping returned resources usable until
 the parent closes. Race resources follow the cancelled race scope.
 
-For heterogeneous channels, map each arm to one result type with
-`ch.receiveCase(value => event(value))`, then call `arms.select(s)`. Only
-one channel is consumed; closure reaches its arm mapper, while cancellation
-of the selection scope or of a channel's scope returns `Cancelled` directly.
-Empty task/race/select lists return `Option.None`. Ready channel arms are chosen at random; ready task ties are unspecified.
+Selecting among channels is the `select` expression, which the checker lowers
+to the internal `compilerSelect` functions in `select.bork`.
+Empty task/race lists return `Option.None`. Ready task ties are unspecified.
 See [the runnable example](../../examples/task_fanin/main.bork).
 
 Internal helpers can opt into caller locations by calling

@@ -127,6 +127,18 @@ func (l *List) Append(other *List) { l.items = append(l.items, other.items...) }
 // Truncate drops the diagnostics added after the first n.
 func (l *List) Truncate(n int) { l.items = l.items[:n] }
 
+// Rewrite passes the diagnostics added after the first n to f, which may
+// change them, and keeps those it reports true for.
+func (l *List) Rewrite(n int, f func(*Diagnostic) bool) {
+	kept := l.items[:n]
+	for _, d := range l.items[n:] {
+		if f(&d) {
+			kept = append(kept, d)
+		}
+	}
+	l.items = kept
+}
+
 // Sorted returns the diagnostics ordered by file, line, and column.
 func (l *List) Sorted() []Diagnostic {
 	out := append([]Diagnostic(nil), l.items...)

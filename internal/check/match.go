@@ -226,6 +226,18 @@ func (c *checker) match(m *syntax.Match, want Type) Type {
 			c.diags.Suggest(m.Pos, "type.error", m.Close, c.missingMatchFix(m, valid, st))
 		}
 	}
+	if c.info.selectMatches[m] && len(armTypes) > 0 {
+		// A select's value is its arms' joined, and Cancelled (the last
+		// arm, taken when a scope was cancelled).
+		arms := c.unify(m.Pos, "select arms have", armTypes[:len(armTypes)-1], want)
+		switch arms {
+		case Invalid:
+			return Invalid
+		case Never:
+			return armTypes[len(armTypes)-1]
+		}
+		return newUnion([]Type{arms, armTypes[len(armTypes)-1]})
+	}
 	return c.unify(m.Pos, "match arms have", armTypes, want)
 }
 

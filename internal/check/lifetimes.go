@@ -956,6 +956,14 @@ func (l *lifeChecker) call(fn *Func, direct bool, xargs []Expr, order ...[]int) 
 			return args[0].union(args[1])
 		}
 	}
+	// So do a select expression's: what it receives is a value of the
+	// channel's lifetime.
+	if fn != nil && fn.Prelude && strings.HasPrefix(fn.Decl.Name, "compilerSelect") {
+		if fn.Decl.Name == "compilerSelectReceived" {
+			return args[1]
+		}
+		return args[0]
+	}
 	// Go code given a scope may keep its other arguments until the scope
 	// closes (as a finalizer, say). So may a function value, which could
 	// be such Go code.
@@ -1153,8 +1161,11 @@ func (l *lifeChecker) generate(x *Generate) lifetime {
 }
 
 // channelStore reports whether fn is a prelude Channel method that keeps
-// its last argument: send and trySend.
+// its last argument: send and trySend, and a select's send arm.
 func channelStore(fn *Func) bool {
+	if fn != nil && fn.Prelude && fn.Decl.Name == "compilerSelectSend" {
+		return true
+	}
 	return channelMethod(fn) && (fn.Decl.Name == "send" || fn.Decl.Name == "trySend")
 }
 

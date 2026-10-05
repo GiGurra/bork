@@ -420,6 +420,12 @@ func listReceiverLiteral(expr syntax.Expr) bool {
 				return true
 			}
 		}
+	case *syntax.Select:
+		for _, arm := range expr.Arms {
+			if listReceiverLiteral(arm.Body) {
+				return true
+			}
+		}
 	}
 	return false
 }

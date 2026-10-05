@@ -335,6 +335,12 @@ func _borkChanSelect(arms []_borkChanArm, block bool) (int, int, any) {
  return sel.arm, sel.status, sel.value
 }
 
+// _borkChanSelected is the outcome of a select expression.
+type _borkChanSelected struct {
+ index, status int
+ value any
+}
+
 // _borkChanSend sends x on c, waiting in scope.
 func _borkChanSend(scope *_Scope, c *_borkChan, x any) any {
  _, status, value := _borkChanSelect([]_borkChanArm{{ch: c, send: true, value: x, scope: scope.ctx}}, true)

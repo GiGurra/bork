@@ -1,5 +1,4 @@
 main.bork:2:3: function escapedTimeout cannot return this value: it belongs to scope s, which ends on line 2
-main.bork:5:3: function escapedSelection cannot return this value: it belongs to scope source, which ends on line 10
-main.bork:13:3: function escapedTaskResult cannot return this value: it belongs to scope source, which ends on line 17
-main.bork:23:3: function leakedMapper cannot return this value: it belongs to scope inner, which ends on line 26
-main.bork:31:3: function escapedValues cannot return this value: it belongs to scope inner, which ends on line 33
+main.bork:5:3: function escapedSelection cannot return this value: it belongs to scope source, which ends on line 11
+main.bork:14:3: function escapedTaskResult cannot return this value: it belongs to scope source, which ends on line 18
+main.bork:24:3: function escapedValues cannot return this value: it belongs to scope inner, which ends on line 26

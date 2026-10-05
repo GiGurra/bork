@@ -20,7 +20,7 @@
     "and" "or" "trust" "rule" "generate" "yield" "for" "break" "continue"
     "import" "use" "class" "instance" "instances" "providers" "test" "private"
     "derive" "uses" "needs" "nothing" "ambient" "logged" "propagated" "lazy"
-    "async" "scope" "with" "in" "resource" "go" "comptime" "mock"))
+    "async" "scope" "with" "in" "resource" "go" "comptime" "mock" "select"))
 (defvar bork-mode-syntax-table
   (let ((table (make-syntax-table)))
     (modify-syntax-entry ?/ ". 124b" table)
@@ -111,6 +111,7 @@
            ((parent-is "tuple_pattern") parent-bol ,bork-indent-offset)
            ((parent-is "tuple_type") parent-bol ,bork-indent-offset)
            ((parent-is "match_expression") parent-bol ,bork-indent-offset)
+           ((parent-is "select_expression") parent-bol ,bork-indent-offset)
            (no-node parent-bol 0))))
   (treesit-major-mode-setup))
 
