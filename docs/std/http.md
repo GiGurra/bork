@@ -135,11 +135,18 @@ The budget and any captured injected clock must outlive their explicit scope.
 ```bork
 import "bork/http"
 
-fn fetch(url: String) uses net + clock + random + state: http.Result {
+fn fetch(url: String, request: Scope, budget: http.RetryBudget in request) uses net + clock + random + state: http.Result {
+  http.Retry(request, budget, operation: attempt => http.Get(url, attempt), maxAttempts: 3, baseDelayMs: 20, maxDelayMs: 1000)
+}
+
+fn main() uses io + net + clock + random + state {
   scope app {
     budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 1000)
-    scope request {
-      http.Retry(request, budget, operation: attempt => http.Get(url, attempt), maxAttempts: 3, baseDelayMs: 20, maxDelayMs: 1000)
+    scope first {
+      println(fetch("https://example.com", first, budget))
+    }
+    scope second {
+      println(fetch("https://example.com", second, budget))
     }
   }
 }
