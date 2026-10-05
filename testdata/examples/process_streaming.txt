@@ -3,7 +3,7 @@
 [child] test ok
 [child] all steps passed
 exit code: 0
-line: hello
-line: world
-end of output
+call 1: hello
+call 2: world
+call 3: end of output
 stdout: 7 bytes, stderr: 12 bytes
