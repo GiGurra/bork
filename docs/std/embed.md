@@ -27,9 +27,10 @@ assets themselves. The emitted source by itself is not a complete build artifact
 
 Only the argument of `Directory` must be a constant: it tells the compiler what
 to embed. Paths read from the snapshot can be computed at runtime, so a whole
-directory can be embedded once and its files found by naming convention:
+directory can be embedded once and its files found by naming convention. This
+fragment assumes an `assets/` directory beside the source file:
 
-```bork
+```bork fragment
 import "bork/embed"
 
 Assets = embed.Directory("assets")

@@ -45,14 +45,17 @@ func readerPages(t *testing.T) []string {
 	t.Helper()
 	root := filepath.Join("..", "..")
 	pages := []string{filepath.Join(root, "README.md")}
-	for _, name := range []string{"README.md", "tour.md", "cli.md", "playground.md", "examples.md", "contributing.md", filepath.Join("std", "README.md")} {
+	for _, name := range []string{"README.md", "tour.md", "cli.md", "playground.md", "examples.md", "contributing.md"} {
 		pages = append(pages, filepath.Join(root, "docs", name))
 	}
-	found, err := filepath.Glob(filepath.Join(root, "docs", "language", "*.md"))
-	if err != nil {
-		t.Fatal(err)
+	for _, dir := range []string{"language", "std"} {
+		found, err := filepath.Glob(filepath.Join(root, "docs", dir, "*.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages = append(pages, found...)
 	}
-	return append(pages, found...)
+	return pages
 }
 
 // parseDocPage splits a Markdown text. With strict set, it accepts only

@@ -133,10 +133,23 @@ Attachment extends ownership; the budget closes when its last owner closes.
 The budget and any captured injected clock must outlive their explicit scope.
 
 ```bork
-budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 1000)
-result = http.Retry(request, budget,
-  operation: attempt => http.Get(url, attempt),
-  maxAttempts: 3, baseDelayMs: 20, maxDelayMs: 1000)
+import "bork/http"
+
+fn fetch(url: String, request: Scope, budget: http.RetryBudget in request) uses net + clock + random + state: http.Result {
+  http.Retry(request, budget, operation: attempt => http.Get(url, attempt), maxAttempts: 3, baseDelayMs: 20, maxDelayMs: 1000)
+}
+
+fn main() uses io + net + clock + random + state {
+  scope app {
+    budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 1000)
+    scope first {
+      println(fetch("https://example.com", first, budget))
+    }
+    scope second {
+      println(fetch("https://example.com", second, budget))
+    }
+  }
+}
 ```
 
 `Retry` explicitly asserts that replay is safe. It retries only `Overloaded`;
