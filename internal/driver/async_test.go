@@ -47,9 +47,9 @@ func TestAsyncBindingChecks(t *testing.T) {
 		{"scalar value escape", "fn make():Int{scope s{async(s) x=1;x}}", ""},
 		{"keyword function", "fn async(x:Int):Int{x}\nfn main(){scope s{async(s) x=async(1);println(x)}}", ""},
 		{"owner unconditional return", "fn f():Int{scope s{async(return 7) x=1}}", ""},
-		{"resolved channel escape", "fn main(){scope outer{ch=channel[Int](outer,1);copy=scope inner{async(inner) value=ch;value};_ = send(copy,7);println(receive(copy))}}", ""},
+		{"resolved channel escape", "fn main(){scope outer{ch=channel[Int](outer,1);copy=scope inner{async(inner) value=ch;value};_ = copy.send(outer,7);println(copy.receive(outer))}}", ""},
 		{"resolved channel cell escape", "fn make(s:Scope):()=>Channel[Int]{ch=channel[Int](s,1);scope inner{async(inner) value=ch;()=>value}}", "cannot return this value"},
-		{"released channel cell", "fn main(){scope s{ch=channel[Int](s,1);owner=openScope(s);async(owner.scope) value=ch;closeScope(owner);println(receive(value))}}", "may be released"},
+		{"released channel cell", "fn main(){scope s{ch=channel[Int](s,1);owner=openScope(s);async(owner.scope) value=ch;closeScope(owner);println(value.receive(s))}}", "may be released"},
 		{"owner early return", "fn f():Int{scope s{async({if(true){return 7};s}) x=1;x}}", ""},
 		{"owner early try", "type Failed={}\nfn choice(s:Scope):Scope|Failed{s}\nfn f():Int|Failed{scope s{async(choice(s)?) x=1;x}}", ""},
 	} {
