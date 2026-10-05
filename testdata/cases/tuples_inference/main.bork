@@ -6,6 +6,8 @@ type Loud = (() uses io => Int,)
 type Config = { pair: (Int, String) = (1, "default") }
 type Wrapper[T] = { value: T }
 type Reordered = (String | Int,)
+type Node[T] = { value: T, children: Seq[Node[T]] }
+fn nodes[T](value: T): Seq[Node[(T,)]] { generate[Node[(T,)]] { yield Node { value: (value,), children: generate[Node[(T,)]] {} } } }
 type Chain[T] = { value: T, next: Option[Chain[T]] }
 fn chain[T](value: T): Chain[(T,)] { Chain { value: (value,), next: .Some { value: Chain { value: (value,), next: .None } } } }
 fn chainValue(value: Chain[(Int,)]): Int { match (value.next) { Option.Some { value: inner } => inner.value.0; Option.None => value.value.0 } }
@@ -81,6 +83,7 @@ fn main() {
   println(unionBox.copy(pair: (15,)).pair)
   println(LazyConfig { inner: Inner { value: 2 } }.pair)
   println(chainValue(chain(20)))
+  println(nodes(21).map(node => node.value.0).toList())
   outer = genericOuter(16)
   println(genericInnerValue(outer.inner))
   println(genericLazyOuter(18).inner.value)

@@ -345,7 +345,7 @@ func (g *gen) representationConversion(value ast.Expr, from, to check.Type, from
 	if a, ok := from.(*check.Seq); ok {
 		if b, ok := to.(*check.Seq); ok {
 			callback := &ast.FuncLit{Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{x}, Type: repr(a.Elem, !toDeclaration)}}}, Results: &ast.FieldList{List: []*ast.Field{{Type: repr(b.Elem, toDeclaration)}}}}, Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{child(x, a.Elem, b.Elem)}}}}}
-			return &ast.CallExpr{Fun: ast.NewIdent("_seqmap"), Args: []ast.Expr{value, callback}}
+			return closure([]ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("_seqmap"), Args: []ast.Expr{x, callback}}}}})
 		}
 	}
 	if a, ok := from.(*check.FuncType); ok {
