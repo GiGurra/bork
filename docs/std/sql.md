@@ -13,8 +13,12 @@
 ```bork
 import "bork/sql"
 
-statement = sql.SQL"SELECT id, name FROM users WHERE name = $name"
-rows = statement.Query[User](connection)?
+type User = { id: Int, name: String } derive (Decode)
+
+fn usersNamed(connection: sql.Connection, name: String) uses io + net: List[User] | sql.Error | DecodeError {
+  statement = sql.SQL"SELECT id, name FROM users WHERE name = $name"
+  statement.Query[User](connection)
+}
 ```
 
 SQL constructs a private, immutable Statement, preserving literal text and hole
@@ -29,11 +33,15 @@ Dots are part of a component; use `$schema.$table` to compose qualified names.
 Nested Statement holes splice structured fragments and preserve parameter order:
 
 ```bork
-table = sql.Name(tableName)?
-column = sql.Name(columnName)?
-filter = sql.SQL"$column = $name"
-query = sql.SQL"SELECT * FROM $table WHERE $filter"
-result = query.QueryJson(connection)?
+import "bork/sql"
+
+fn lookup(connection: sql.Connection, tableName: String, columnName: String, name: String) uses io + net: Json | sql.Error {
+  table = sql.Name(tableName)?
+  column = sql.Name(columnName)?
+  filter = sql.SQL"$column = $name"
+  query = sql.SQL"SELECT * FROM $table WHERE $filter"
+  query.QueryJson(connection)
+}
 ```
 
 The prefix factory accepts compiler-created `StaticParts`, whose immutable
@@ -91,8 +99,14 @@ Prefer typed SQL literals for application queries. Code that must execute SQL
 assembled as a runtime String opts in with `sql.Unsafe(text): sql.UnsafeQuery`:
 
 ```bork
-raw = sql.Unsafe(queryText)
-rows = sql.Query[User](connection, raw, params)?
+import "bork/sql"
+
+type User = { id: Int, name: String } derive (Decode)
+
+fn rawUsers(connection: sql.Connection, queryText: String, params: List[sql.Value]) uses io + net: List[User] | sql.Error | DecodeError {
+  raw = sql.Unsafe(queryText)
+  sql.Query[User](connection, raw, params)
+}
 ```
 
 All five raw APIs require UnsafeQuery as their query argument:

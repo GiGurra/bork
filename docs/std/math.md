@@ -19,7 +19,7 @@ Decimal `Ord` instance: its numeric comparison would disagree with structural
 `==`. Normalize both values with an explicit `Round(scale, rounding)` before
 using amounts as keys when scale should be ignored.
 
-```
+```bork
 import "bork/math"
 
 fn tax(subtotal: math.Decimal, rate: math.Decimal): math.Decimal | OutOfRange {

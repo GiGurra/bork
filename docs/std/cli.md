@@ -87,9 +87,7 @@ type Options = {
 } derive (Decode)
 
 fn main() {
-  result = cli.Run[Options]("app", "Example", (options, s) => {
-    println(options.port)
-  }, flags: [cli.Flag { field: "config", configFile: true }], configFiles: ["settings.json"])
+  result = cli.Run[Options]("app", "Example", (options, s) => println(options.port), flags: [cli.Flag { field: "config", configFile: true }], configFiles: ["settings.json"])
   println(result)
 }
 ```

@@ -21,7 +21,7 @@ Golden tests live in `testdata/cases/<name>/`, and every example's expected outp
 
 The documentation is tested too, in `internal/driver/docs_snippets_test.go`:
 
-- `TestDocSnippets` compiles the bork code blocks of the README and the reader pages. A block marked `bork` must compile and be formatted. One marked `bork fails` must not compile, and a `text` block right after it quotes the compiler's message, which is checked as well. One marked `bork fragment` is not checked.
+- `TestDocSnippets` compiles the bork code blocks of the README and the reader pages, automatically discovering every `docs/language/*.md` and `docs/std/*.md` page. A block marked `bork` must compile and be formatted. One marked `bork fails` must not compile, and a `text` block right after it quotes the compiler's message, which is checked as well. One marked `bork fragment` is not checked.
 - `TestDocLinks` checks the relative links, and the headings they point at, in every Markdown page under `docs/` and `examples/`.
 
 ## Building the documentation site
