@@ -83,7 +83,21 @@ func instName(ci *check.ClassInstance) string {
 // dictParam is the Go parameter holding the instance of class for the
 // type parameter tp.
 func dictParam(tp *check.TypeParam, class *check.Class) *ast.Ident {
-	return ast.NewIdent("_d_" + tp.Name + "_" + class.Name)
+	tag := class.Name
+	if !class.Prelude && !check.IsCodec(class, "Decode") && !check.IsCodec(class, "Encode") {
+		for _, bound := range tp.Bounds {
+			if bound != class && bound.Name == class.Name {
+				// Keep the standard codec bridge names; distinguish other
+				// same-named classes by their defining package identity.
+				tag = className(class).Name
+				if tag == class.Name {
+					tag += "_local"
+				}
+				break
+			}
+		}
+	}
+	return ast.NewIdent("_d_" + tp.Name + "_" + tag)
 }
 
 // dictParams are the parameters for the bounds of type parameters.

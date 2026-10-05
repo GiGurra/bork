@@ -33,7 +33,7 @@ func (c *checker) markUnsafeGoImports(files []*syntax.File) {
 			body := fd.GoBody.Body
 			relevant := false
 			for alias := range candidates {
-				relevant = relevant || strings.Contains(body, alias+".")
+				relevant = relevant || strings.Contains(body, alias)
 			}
 			if !relevant {
 				continue

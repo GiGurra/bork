@@ -11,9 +11,10 @@ func TestUnsafeGoBorkPackageNames(t *testing.T) {
 	t.Parallel()
 	source := `import "example.com/validator/foreign"
 fn Read():Int unsafe go {
- box:=foreign.Box[int64]{value:3}
- value:=foreign.Shape_Value{value:box.value}
- answer:=value.value+foreign.Increment(1)
+ box:=foreign /* typed */ . Box[int64]{value:3}
+ value:=foreign . Shape_Value{value:box.value}
+ answer:=value.value+foreign.
+ Increment(1)
  foreign:=struct{Value int64}{Value:7}
  return answer+foreign.Value
 }

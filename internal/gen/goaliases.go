@@ -12,8 +12,8 @@ import (
 )
 
 // Rewrite file-local package aliases to unique generated import names. Parser
-// objects distinguish local shadowing from package references. Text edits retain
-// the original body layout and line directives.
+// objects distinguish local shadowing from package references. Text edits leave the rest of
+// the original body intact.
 func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 	body := fd.GoBody.Body
 	imports := g.info.GoImportNames[fd.GoBody]
@@ -31,8 +31,8 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 		params[varIdent(v).Name] = true
 	}
 	type edit struct {
-		offset            int
-		name, replacement string
+		offset, length int
+		replacement    string
 	}
 	var edits []edit
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -45,7 +45,7 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 			return true
 		}
 		if path, ok := imports[name.Name]; ok {
-			edits = append(edits, edit{fset.Position(name.Pos()).Offset - len(prefix), name.Name, g.goImport(path)})
+			edits = append(edits, edit{fset.Position(name.Pos()).Offset - len(prefix), len(name.Name), g.goImport(path)})
 			return true
 		}
 		pkg := g.info.FuncOf[fd].Pkg.Imported(name.Name)
@@ -73,14 +73,15 @@ func (g *gen) goBodyAliases(fd *syntax.FuncDecl) string {
 			}
 		}
 		if generated != "" {
-			original := name.Name + "." + member
-			edits = append(edits, edit{fset.Position(name.Pos()).Offset - len(prefix), original, generated})
+			start := fset.Position(selector.Pos()).Offset - len(prefix)
+			end := fset.Position(selector.End()).Offset - len(prefix)
+			edits = append(edits, edit{start, end - start, generated})
 		}
 		return true
 	})
 	slices.SortFunc(edits, func(a, b edit) int { return b.offset - a.offset })
 	for _, change := range edits {
-		body = body[:change.offset] + change.replacement + body[change.offset+len(change.name):]
+		body = body[:change.offset] + change.replacement + body[change.offset+change.length:]
 	}
 	return body
 }

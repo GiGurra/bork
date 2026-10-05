@@ -105,3 +105,24 @@ fn main(){
 		t.Fatalf("numeric codecs: %s", output)
 	}
 }
+
+func TestCodecSameNamedClassBounds(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+class Decode[T]{fn read(x:T):Int}
+instance mine:Decode[Int]{fn read(x:Int):Int{x}}
+fn Both[T:Decode+codec.Decode](x:T):Int{read(x)}
+fn main(){println(Both(1))}`
+	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(exe).CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, output)
+	}
+	if string(output) != "1\n" {
+		t.Fatalf("output: %s", output)
+	}
+}
