@@ -1,0 +1,50 @@
+first
+second
+<closed>
+0
+ping
+pong
+<closed>
+true
+0
+a
+b
+c
+0
+out 1
+out 2
+out 3
+
+err 1
+err 2
+err 3
+
+true
+true
+5
+0
+<closed>
+header
+x
+y
+
+["one", "two", "three"]
+<closed>
+true
+captured
+
+run
+errors
+
+header
+one
+
+a
+true
+b
+true
+true
+context deadline exceeded
+<cancelled: context deadline exceeded>
+context deadline exceeded
+ok

@@ -3,7 +3,7 @@ import "bork/fs"
 import "bork/process"
 import "bork/time"
 
-fn shell(s: Scope, script: String, stdin: process.Input = .Empty, stdout: process.Output = .Capture, stderr: process.ErrorOutput = .Capture) uses io + state: process.Result | IoError | Cancelled {
+fn shell(s: Scope, script: String, stdin: process.Input in s = .Empty, stdout: process.Output = .Capture, stderr: process.ErrorOutput = .Capture) uses io + state: process.Result | IoError | Cancelled {
   process.Run(s, "/bin/sh", ["-c", script], stdin: stdin, stdout: stdout, stderr: stderr)
 }
 

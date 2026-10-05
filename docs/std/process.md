@@ -1,8 +1,8 @@
 # bork/process
 
 `bork/process` runs argv commands without a shell. `Run` waits for the child
-and gives its Result; `Start` gives a scope-owned `Process` to wait on, signal
-or stop later. Each of stdin, stdout and stderr is configured on its own. A
+and gives its Result; `Start` gives a scope-owned `Process` to stream from,
+write to, wait on, signal or stop later. Each of stdin, stdout and stderr is configured on its own. A
 nonzero exit or a death by signal is data in the Result, not an error.
 `Args()` returns the command-line arguments without the program name, and
 `Exit(code)` terminates with that status without closing scopes.
@@ -34,12 +34,15 @@ Each stream takes its own value, so any mix works:
 
 | Argument | Variants | Default |
 | --- | --- | --- |
-| `stdin: Input` | `Empty` (/dev/null), `Inherit`, `Data { data }`, `Text { text }`, `File { path }` | `.Empty` |
-| `stdout: Output` | `Capture`, `Inherit`, `Discard`, `File { path }` (truncates), `Append { path }` | `.Capture` |
+| `stdin: Input` | `Empty` (/dev/null), `Inherit`, `Data { data }`, `Text { text }`, `File { path }`, `Pipe`, `From { reader }` | `.Empty` |
+| `stdout: Output` | `Capture`, `Inherit`, `Discard`, `File { path }` (truncates), `Append { path }`, `Pipe` | `.Capture` |
 | `stderr: ErrorOutput` | the Output variants, plus `Stdout` (2>&1) | `.Capture` |
 
 `Capture` keeps the stream in memory in `Result.stdout` or `Result.stderr`;
-`Inherit` forwards it to the parent's own stream; `Discard` drops it.
+`Inherit` forwards it to the parent's own stream; `Discard` drops it. `Pipe`
+streams it through the Process while it runs (see [Streaming](#streaming));
+Run has no Process, so there a piped stdin is empty and piped output is
+captured.
 `stderr: .Stdout` sends stderr wherever stdout goes. With capture, both land in
 `Result.stdout` in the order the child wrote them, because the child gets a
 single pipe, and `Result.stderr` is empty.
@@ -65,6 +68,109 @@ that overwrite each other. Captured output drains in the background, so a
 chatty child never blocks on a full pipe, even if nobody waits for it. It is
 kept in memory without a limit, so give long-running children `.Discard`,
 `.File` or `.Inherit`.
+
+## Streaming
+
+A `.Pipe` stream is read or written while the child runs. `child.Stdout()` and
+`child.Stderr()` give a `Reader`; `child.Stdin()` gives a `Writer`:
+
+```bork
+import "bork/process"
+
+fn follow(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  child = process.Start(s, "ping", ["-c", "3", "localhost"], stdout: .Pipe)?
+  for (item in child.Stdout().Lines()) {
+    match (item) {
+      line: String => println(line)
+      error: IoError => eprintln(error.message)
+      stopped: Cancelled => eprintln(stopped.reason)
+    }
+  }
+  println(child.Wait()?.code)
+}
+
+fn ask(s: Scope) uses io + state: Ok | IoError | Cancelled | Closed {
+  echo = process.Start(s, "cat", stdin: .Pipe, stdout: .Pipe)?
+  echo.Stdin().WriteText("ping\n")?
+  println(echo.Stdout().NextLine())
+  echo.Stdin().Close()
+  _ = echo.Wait()?
+}
+```
+
+Reader methods:
+
+- `NextLine()` gives the next line without `\n` or `\r\n`, a final
+  unterminated line, then `Closed` at the end of the stream.
+- `NextChunk(limit = 32768)` gives the bytes available now, up to `limit`.
+- `ReadAll()` reads to the end.
+- `Lines()` is a `Seq` of lines for `for` loops; `Cancelled` or `IoError` end it
+  as a final element.
+- `LinesChannel(s, capacity = 64)` pumps lines from a task of `s` into a
+  bounded channel and closes it at the end, so process output can be received
+  together with other channels. A read failure is the last element. The
+  Reader is attached to `s`, so when `s` ends or is cancelled the Reader is
+  closed too; use the scope that should own it.
+
+Writer methods: `Write(bytes)` and `WriteText(text)` give `Ok`, or `Closed`
+once stdin is closed or the child stopped reading; `Close()` sends end of
+input and can be repeated. Close stdin when you are done: a child that reads
+to the end waits for it, and `Wait` does not close it for you, so another task
+can still be writing. Reads and writes wait for the child and give
+`Cancelled` when the scope is cancelled.
+
+`Stdout()` on a stream that is not `.Pipe` gives a Reader that is already at
+its end (`Closed`), and `Stdin()` on a stdin that is not `.Pipe` gives a Writer
+whose writes give `Closed`. Every call gives the same Reader or Writer.
+
+A Reader releases its pipe at the end of the stream, and piped stdin is
+closed once the child exits. A pipe that is never read to the end stays open
+until the scope ends. One task reads a Reader at a time: a second read, or
+handing it to `From`, waits for the first to return.
+
+A pipe holds only a small OS buffer, so a child writing to a pipe nobody reads
+waits. Read each piped stream (in a task when there are two), use
+`stderr: .Stdout` for one combined stream, or use `.Capture`, which always
+drains. Cancelling the scope still stops the child and closes its pipes.
+
+```bork
+import "bork/process"
+
+fn both(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  child = process.Start(s, "make", stdout: .Pipe, stderr: .Pipe)?
+  errors = spawn(s, () => child.Stderr().ReadAll())
+  output = child.Stdout().ReadAll()?
+  println(output.length())
+  println(await(errors)?.length())
+  _ = child.Wait()?
+}
+```
+
+## Pipelines
+
+`stdin: .From { reader }` connects one child's piped output to another's
+stdin through the OS, without copying through bork. The Reader moves to the
+new child when that child starts: reading it afterwards gives `Closed`. Lines
+it had already buffered are passed on first. A Start that fails to open one
+of its files leaves the Reader with its owner; one whose program cannot be
+started consumes it.
+
+```bork
+import "bork/process"
+
+fn count(s: Scope) uses io + state: String | IoError | Cancelled {
+  producer = process.Start(s, "git", ["log", "--oneline"], stdout: .Pipe)?
+  counter = process.Start(s, "wc", ["-l"], stdin: .From { reader: producer.Stdout() })?
+  lines = counter.Wait()?.StdoutText().trim()
+  _ = producer.Wait()?
+  lines
+}
+```
+
+`stdin` is declared `in s`: a Reader passed with `From` belongs to the scope
+that starts the new child, as one from a sibling Start in the same scope does.
+A function that passes its own `Input` parameter on to Run or Start declares
+it the same way: `stdin: process.Input in s`.
 
 ## Exit status
 
@@ -114,7 +220,9 @@ the grace period plus one second.
 `Start` takes the same arguments and gives a `Process` owned by the scope:
 
 - `Wait()` waits and gives `Result | IoError | Cancelled`. It can be called
-  repeatedly and always gives the same result.
+  repeatedly and always gives the same result. It leaves a piped stdin open:
+  waiting on a child that reads stdin to the end hangs until you call
+  `Stdin().Close()` (or the scope is cancelled).
 - `TryWait()` does not block: `None` while the child runs.
 - `Pid()` is the process ID.
 - `Signal(signal)` sends a `bork/signal` Signal (`.Interrupt`, `.Terminate`,

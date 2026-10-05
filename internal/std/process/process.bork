@@ -4,25 +4,37 @@ import "bork/time"
 
 type Process = resource
 
+// Reader reads a child's piped stdout or stderr as it is written. It belongs
+// to the scope that started the child.
+type Reader = resource
+
+// Writer writes a child's piped stdin incrementally.
+type Writer = resource
+
 // Input is where a child's stdin comes from. Empty is /dev/null; Data and
-// Text are written by bork and then closed; File is opened for reading.
+// Text are written by bork and then closed; File is opened for reading; Pipe
+// is written with child.Stdin(); From connects another child's piped output.
 type Input = sealed {
   Empty
   Inherit
   Data { data: Bytes }
   Text { text: String }
   File { path: String }
+  Pipe
+  From { reader: Reader }
 }
 
 // Output is where a child's stdout goes. Capture keeps it in Result;
 // Inherit forwards it to the parent's stdout; Discard is /dev/null; File
-// creates or truncates, Append creates or appends.
+// creates or truncates, Append creates or appends; Pipe streams it through
+// child.Stdout().
 type Output = sealed {
   Capture
   Inherit
   Discard
   File { path: String }
   Append { path: String }
+  Pipe
 }
 
 // ErrorOutput is where a child's stderr goes: an Output, or Stdout to share
@@ -33,6 +45,7 @@ type ErrorOutput = sealed {
   Discard
   File { path: String }
   Append { path: String }
+  Pipe
   Stdout
 }
 
@@ -73,9 +86,32 @@ fn Exit(code: Int) uses io: Never unsafe go {
 // Some([]) clears it. Inherited output pipes are bounded to one second (plus
 // cancelGrace) after exit/cancellation. A successful exit with open pipes is
 // IoError; nonzero Result output may truncate.
-fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Result | IoError | Cancelled {
-  child = Start(s, name, arguments, environment, directory, stdin, stdout, stderr, cancelGrace)?
+fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Result | IoError | Cancelled {
+  child = Start(s, name, arguments, environment, directory, runInput(stdin), runOutput(stdout), runErrorOutput(stderr), cancelGrace)?
   child.Wait()
+}
+
+// Run has no handle to stream through, so a piped stdin is empty and piped
+// output is captured.
+fn runInput(input: Input): Input {
+  match (input) {
+    Input.Pipe => .Empty
+    _ => input
+  }
+}
+
+fn runOutput(output: Output): Output {
+  match (output) {
+    Output.Pipe => .Capture
+    _ => output
+  }
+}
+
+fn runErrorOutput(output: ErrorOutput): ErrorOutput {
+  match (output) {
+    ErrorOutput.Pipe => .Capture
+    _ => output
+  }
 }
 
 // Start starts a subprocess in its own Unix process group, killed on
@@ -85,8 +121,8 @@ fn Run(s: Scope, name: String, arguments: List[String] = [], environment: Option
 // Other targets kill only the direct child. Closing the scope cancels and
 // reaps it even if Wait was never called. Captured output drains in the
 // background whether or not anyone waits.
-fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Process | IoError | Cancelled {
-  start(s, name, arguments, environment, directory, inputStream(stdin), outputStream(stdout), errorStream(stderr), cancelGrace.nanos)
+fn Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Process | IoError | Cancelled {
+  start(s, name, arguments, environment, directory, inputStream(stdin), source(stdin), outputStream(stdout), errorStream(stderr), cancelGrace.nanos)
 }
 
 fn inputStream(input: Input): stream {
@@ -96,6 +132,15 @@ fn inputStream(input: Input): stream {
     Input.Data { data } => stream { kind: "data", path: "", data: data, text: "" }
     Input.Text { text } => stream { kind: "text", path: "", data: noBytes(), text: text }
     Input.File { path } => stream { kind: "file", path: path, data: noBytes(), text: "" }
+    Input.Pipe => named("pipe", "")
+    Input.From { reader: _ } => named("from", "")
+  }
+}
+
+fn source(input: Input): Option[Reader] {
+  match (input) {
+    Input.From { reader } => .Some { value: reader }
+    _ => .None
   }
 }
 
@@ -106,6 +151,7 @@ fn outputStream(output: Output): stream {
     Output.Discard => named("discard", "")
     Output.File { path } => named("file", path)
     Output.Append { path } => named("append", path)
+    Output.Pipe => named("pipe", "")
   }
 }
 
@@ -116,6 +162,7 @@ fn errorStream(output: ErrorOutput): stream {
     ErrorOutput.Discard => named("discard", "")
     ErrorOutput.File { path } => named("file", path)
     ErrorOutput.Append { path } => named("append", path)
+    ErrorOutput.Pipe => named("pipe", "")
     ErrorOutput.Stdout => named("stdout", "")
   }
 }
@@ -126,7 +173,7 @@ fn noBytes(): Bytes unsafe go { return _borkBytesFrom(nil) }
 
 // The resource value is one dispatcher over the child's operations, so each
 // method below names a single Go type.
-fn start(s: Scope, name: String, arguments: List[String], environment: Option[List[String]], directory: String, stdin: stream, stdout: stream, stderr: stream, graceNanos: Int) uses io + state: Process | IoError | Cancelled unsafe go {
+fn start(s: Scope, name: String, arguments: List[String], environment: Option[List[String]], directory: String, stdin: stream, from: Option[Reader], stdout: stream, stderr: stream, graceNanos: Int) uses io + state: Process | IoError | Cancelled unsafe go {
   import "bytes"
   import "context"
   import "errors"
@@ -135,7 +182,10 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
   import "os"
   import "os/exec"
   import "reflect"
+  import "runtime"
+  import "bufio"
   import "strings"
+  import "sync"
   import "sync/atomic"
   import "syscall"
   import "time"
@@ -185,15 +235,19 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
   if grace > 0 { cmd.WaitDelay += grace }
   cmd.Dir = directory
   if values, present := _borkOptionGet(environment); present { cmd.Env = append([]string{}, values...) }
-  var files []*os.File
+  // files are the child's ends, closed in the parent once it has started;
+  // kept are the parent's pipe ends, closed only if Start fails.
+  var files, kept []*os.File
   closeFiles := func() { for _, file := range files { file.Close() } }
   fail := func(path string, err error) any {
     closeFiles()
+    for _, file := range kept { file.Close() }
     cancelChild()
     handle.Close()
     if scopeContext := _borkScopeContext(s); scopeContext.Err() != nil { return Cancelled{reason: context.Cause(scopeContext).Error()} }
     return IoError{path: path, message: err.Error()}
   }
+  var stdinPipe *os.File
   switch stdin.kind {
   case "inherit": cmd.Stdin = os.Stdin
   case "data": cmd.Stdin = bytes.NewReader(_borkBytesData(stdin.data))
@@ -203,11 +257,22 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     if err != nil { return fail(stdin.path, err) }
     files = append(files, file)
     cmd.Stdin = file
+  case "pipe":
+    childEnd, parentEnd, err := os.Pipe()
+    if err != nil { return fail(name, err) }
+    files, kept, stdinPipe = append(files, childEnd), append(kept, parentEnd), parentEnd
+    cmd.Stdin = childEnd
   }
   var stdoutBuffer, stderrBuffer bytes.Buffer
   // A nil writer is /dev/null; a shared writer gives the child one pipe.
-  destination := func(spec stream, buffer *bytes.Buffer, parent *os.File) (io.Writer, error) {
+  var stdoutPipe, stderrPipe *os.File
+  destination := func(spec stream, buffer *bytes.Buffer, parent *os.File, pipe **os.File) (io.Writer, error) {
     switch spec.kind {
+    case "pipe":
+      parentEnd, childEnd, err := os.Pipe()
+      if err != nil { return nil, err }
+      files, kept, *pipe = append(files, childEnd), append(kept, parentEnd), parentEnd
+      return childEnd, nil
     case "capture": return buffer, nil
     case "inherit": return parent, nil
     case "file", "append":
@@ -220,19 +285,53 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     }
     return nil, nil
   }
-  out, err := destination(stdout, &stdoutBuffer, os.Stdout)
+  out, err := destination(stdout, &stdoutBuffer, os.Stdout, &stdoutPipe)
   if err != nil { return fail(stdout.path, err) }
   cmd.Stdout = out
   if stderr.kind == "stdout" {
     cmd.Stderr = cmd.Stdout
   } else {
-    errOut, err := destination(stderr, &stderrBuffer, os.Stderr)
+    errOut, err := destination(stderr, &stderrBuffer, os.Stderr, &stderrPipe)
     if err != nil { return fail(stderr.path, err) }
     cmd.Stderr = errOut
+  }
+  // A From Reader is taken after every open that can fail. Bytes it already
+  // buffered go first, through a pipe of our own fed by a goroutine that stops
+  // when the child is done, so exec never waits on the producer.
+  var forward func()
+  if reader, present := _borkOptionGet(from); present && stdin.kind == "from" {
+    taken := reader.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("take", 0).(struct { file *os.File; prefix []byte })
+    switch {
+    case taken.file == nil:
+    case len(taken.prefix) == 0:
+      files = append(files, taken.file)
+      cmd.Stdin = taken.file
+    default:
+      childEnd, parentEnd, err := os.Pipe()
+      if err != nil {
+        taken.file.Close()
+        return fail(name, err)
+      }
+      files, kept = append(files, childEnd), append(kept, parentEnd, taken.file)
+      cmd.Stdin = childEnd
+      forward = func() {
+        go func() {
+          if _, err := parentEnd.Write(taken.prefix); err == nil { io.Copy(parentEnd, taken.file) }
+          parentEnd.Close()
+          taken.file.Close()
+        }()
+        go func() {
+          <-done
+          taken.file.Close()
+          parentEnd.Close()
+        }()
+      }
+    }
   }
   if err := cmd.Start(); err != nil { return fail(name, err) }
   // The child holds its own copies of file descriptors.
   closeFiles()
+  if forward != nil { forward() }
   // sigName follows the conventional SIG names; others give "signal N".
   sigName := func(sig syscall.Signal) string {
     names := map[syscall.Signal]string{syscall.SIGHUP: "SIGHUP", syscall.SIGINT: "SIGINT", syscall.SIGQUIT: "SIGQUIT", syscall.SIGILL: "SIGILL", syscall.SIGTRAP: "SIGTRAP", syscall.SIGABRT: "SIGABRT", syscall.SIGBUS: "SIGBUS", syscall.SIGFPE: "SIGFPE", syscall.SIGKILL: "SIGKILL", syscall.SIGSEGV: "SIGSEGV", syscall.SIGPIPE: "SIGPIPE", syscall.SIGALRM: "SIGALRM", syscall.SIGTERM: "SIGTERM"}
@@ -247,6 +346,8 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     defer cancelChild()
     defer close(done)
     err := cmd.Wait()
+    // Nothing reads stdin any more; later writes give Closed.
+    if stdinPipe != nil { stdinPipe.Close() }
     if cancelled.Load() {
       // The cause names the current owner's reason, such as a deadline, also
       // after attach.
@@ -264,6 +365,116 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     }
     result = raw
   }()
+  // Readers and writers own their pipe ends; cancelling their scope closes the
+  // end, which unblocks a pending read or write. A Reader releases its end at
+  // the end of the stream.
+  newReader := func(file *os.File) Reader {
+    readerHandle := _borkNewResourceHandle(nil, s)
+    var mu sync.Mutex
+    var buffered *bufio.Reader
+    stopCloser := func() bool { return true }
+    if file != nil {
+      buffered = bufio.NewReaderSize(file, 32768)
+      origin := file
+      stopCloser = context.AfterFunc(readerHandle.Context(), func() { origin.Close() })
+    }
+    failure := func(err error) any {
+      if readerContext := readerHandle.Context(); readerContext.Err() != nil { return Cancelled{reason: context.Cause(readerContext).Error()} }
+      if errors.Is(err, os.ErrClosed) { return Closed{} }
+      return IoError{path: name, message: err.Error()}
+    }
+    finish := func() {
+      if stopCloser() { file.Close() }
+      file = nil
+    }
+    readerHandle.Value = func(operation string, limit int64) any {
+      mu.Lock()
+      defer mu.Unlock()
+      if file == nil {
+        switch operation {
+        case "all": return _borkBytesFrom(nil)
+        case "take": return struct { file *os.File; prefix []byte }{}
+        }
+        return Closed{}
+      }
+      switch operation {
+      case "line":
+        line, err := buffered.ReadString('\n')
+        if len(line) > 0 { return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r") }
+        if errors.Is(err, io.EOF) {
+          finish()
+          return Closed{}
+        }
+        return failure(err)
+      case "chunk":
+        // The buffer never holds more, so a larger chunk gains nothing.
+        limit = min(max(limit, 1), 32768)
+        chunk := make([]byte, limit)
+        n, err := buffered.Read(chunk)
+        if n > 0 { return _borkBytesFrom(chunk[:n]) }
+        if errors.Is(err, io.EOF) {
+          finish()
+          return Closed{}
+        }
+        return failure(err)
+      case "all":
+        data, err := io.ReadAll(buffered)
+        if err == nil {
+          finish()
+        } else if failed := failure(err); failed != (Closed{}) {
+          return failed
+        }
+        return _borkBytesFrom(data)
+      case "take":
+        // After cancellation has begun closing the file there is nothing to move.
+        if !stopCloser() {
+          file = nil
+          return struct { file *os.File; prefix []byte }{}
+        }
+        prefix, _ := buffered.Peek(buffered.Buffered())
+        taken := struct { file *os.File; prefix []byte }{file, append([]byte(nil), prefix...)}
+        file = nil
+        return taken
+      }
+      return Closed{}
+    }
+    return Reader{handle: readerHandle, owner: s.Own(func() { readerHandle.Close() })}
+  }
+  newWriter := func(file *os.File) Writer {
+    writerHandle := _borkNewResourceHandle(nil, s)
+    var mu sync.Mutex
+    var closed atomic.Bool
+    closeFile := func() { if file != nil && !closed.Swap(true) { file.Close() } }
+    if file != nil { context.AfterFunc(writerHandle.Context(), closeFile) }
+    brokenPipe := func(err error) bool {
+      if errors.Is(err, syscall.EPIPE) || errors.Is(err, os.ErrClosed) { return true }
+      // ERROR_BROKEN_PIPE and ERROR_NO_DATA.
+      return runtime.GOOS == "windows" && (errors.Is(err, syscall.Errno(109)) || errors.Is(err, syscall.Errno(232)))
+    }
+    writerHandle.Value = func(operation string, data []byte) any {
+      if operation == "close" {
+        closeFile()
+        return _borkOk()
+      }
+      mu.Lock()
+      defer mu.Unlock()
+      if file == nil || closed.Load() { return Closed{} }
+      if _, err := file.Write(data); err != nil {
+        if writerContext := writerHandle.Context(); writerContext.Err() != nil { return Cancelled{reason: context.Cause(writerContext).Error()} }
+        if brokenPipe(err) { return Closed{} }
+        return IoError{path: name, message: err.Error()}
+      }
+      return _borkOk()
+    }
+    return Writer{handle: writerHandle, owner: s.Own(func() { writerHandle.Close(); closeFile() })}
+  }
+  // Streams that are not piped get closed stand-ins, made only when asked for.
+  var stdinOnce, stdoutOnce, stderrOnce sync.Once
+  var stdinWriter Writer
+  var stdoutReader, stderrReader Reader
+  if stdinPipe != nil { stdinOnce.Do(func() { stdinWriter = newWriter(stdinPipe) }) }
+  if stdoutPipe != nil { stdoutOnce.Do(func() { stdoutReader = newReader(stdoutPipe) }) }
+  if stderrPipe != nil { stderrOnce.Do(func() { stderrReader = newReader(stderrPipe) }) }
   pid := cmd.Process.Pid
   handle.Value = func(operation string, argument int64) any {
     switch operation {
@@ -277,6 +488,15 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
       }
     case "pid":
       return int64(pid)
+    case "stdin":
+      stdinOnce.Do(func() { stdinWriter = newWriter(nil) })
+      return stdinWriter
+    case "stdout":
+      stdoutOnce.Do(func() { stdoutReader = newReader(nil) })
+      return stdoutReader
+    case "stderr":
+      stderrOnce.Do(func() { stderrReader = newReader(nil) })
+      return stderrReader
     }
     select {
     case <-done: return _borkOk()
@@ -310,7 +530,8 @@ fn finished(outcome: rawResult | IoError | Cancelled): Result | IoError | Cancel
 
 // Wait waits for the child to finish. It may be called repeatedly; every call
 // returns the same immutable result. Cancelled means the owning scope was
-// cancelled; Stop and Kill give a Result.
+// cancelled; Stop and Kill give a Result. Wait leaves a piped stdin open, so
+// waiting on a child that reads stdin to the end hangs until Stdin().Close().
 fn (child: Process) Wait() uses io + state: Result | IoError | Cancelled {
   match (operate(child, "wait", 0)) {
     raw: rawResult => finished(raw)
@@ -376,6 +597,100 @@ fn (child: Process) Stop(grace: time.Duration = time.Duration { nanos: 5_000_000
 // Kill ends the child and its process group at once with SIGKILL.
 fn (child: Process) Kill() uses io + state {
   _ = operate(child, "stop", 0)
+}
+
+// Stdin writes to a child started with stdin: .Pipe. Close it when done, or a
+// child that reads to the end waits forever. For any other stdin it is a
+// Writer whose writes give Closed.
+fn (child: Process) Stdin(): Writer unsafe go {
+  return child.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("stdin", 0).(Writer)
+}
+
+// Stdout reads a child started with stdout: .Pipe. For any other stdout it is
+// a Reader already at its end (Closed). Every call gives the same Reader.
+fn (child: Process) Stdout(): Reader unsafe go {
+  return child.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("stdout", 0).(Reader)
+}
+
+// Stderr reads a child started with stderr: .Pipe, like Stdout.
+fn (child: Process) Stderr(): Reader unsafe go {
+  return child.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("stderr", 0).(Reader)
+}
+
+// NextLine gives the next line without its line ending, a final unterminated
+// line, then Closed at the end of the stream. It waits while the child has
+// written nothing new; cancelling the scope gives Cancelled.
+fn (output: Reader) NextLine() uses io + state: String | Closed | Cancelled | IoError unsafe go {
+  return output.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("line", 0)
+}
+
+// NextChunk gives the bytes available now, at most limit, waiting for at least
+// one; Closed at the end of the stream.
+fn (output: Reader) NextChunk(limit: Int = 32768) uses io + state: Bytes | Closed | Cancelled | IoError unsafe go {
+  return output.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("chunk", limit)
+}
+
+// ReadAll reads to the end of the stream.
+fn (output: Reader) ReadAll() uses io + state: Bytes | Cancelled | IoError unsafe go {
+  return output.handle.(*_borkResourceHandle).Value.(func(string, int64) any)("all", 0)
+}
+
+// Lines reads the stream line by line as it is consumed; it ends at the end of
+// the stream, and Cancelled or IoError are final elements.
+fn (output: Reader) Lines() uses io + state: Seq[String | Cancelled | IoError] unsafe go {
+  next := output.handle.(*_borkResourceHandle).Value.(func(string, int64) any)
+  return _Seq[any]{run: func(yield func(any) bool) {
+    for {
+      item := next("line", 0)
+      if _, end := item.(Closed); end { return }
+      if !yield(item) { return }
+      if _, line := item.(string); !line { return }
+    }
+  }}
+}
+
+// LinesChannel pumps the stream's lines into a channel of scope s holding up
+// to capacity lines, from a task of s, and closes it at the end of the
+// stream. A read failure is sent as the last element. Use it to wait on
+// process output together with other channels.
+fn (output: Reader) LinesChannel(s: Scope, capacity: Int = 64) uses io + state: Channel[String | IoError] {
+  lines: Channel[String | IoError] = channel(s, capacity)
+  owned = attach(output, s)
+  launch(s, () => {
+    for (item in owned.Lines()) {
+      match (item) {
+        line: String => {
+          match (send(lines, line)) {
+            _: Ok => {}
+            _ => break
+          }
+        }
+        error: IoError => {
+          _ = send(lines, error)
+          break
+        }
+        _: Cancelled => break
+      }
+    }
+    closeChannel(lines)
+  })
+  lines
+}
+
+// Write writes data to the child's stdin, waiting while the child is not
+// reading. Closed means stdin was closed or the child stopped reading.
+fn (input: Writer) Write(data: Bytes) uses io + state: Ok | Closed | Cancelled | IoError unsafe go {
+  return input.handle.(*_borkResourceHandle).Value.(func(string, []byte) any)("write", _borkBytesData(data))
+}
+
+// WriteText writes text to the child's stdin.
+fn (input: Writer) WriteText(text: String) uses io + state: Ok | Closed | Cancelled | IoError unsafe go {
+  return input.handle.(*_borkResourceHandle).Value.(func(string, []byte) any)("write", []byte(text))
+}
+
+// Close sends end of input to the child. Closing again does nothing.
+fn (input: Writer) Close() uses io + state unsafe go {
+  input.handle.(*_borkResourceHandle).Value.(func(string, []byte) any)("close", nil)
 }
 
 // Success reports whether the child exited with code 0.
