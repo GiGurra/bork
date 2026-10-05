@@ -1,0 +1,14 @@
+import "bork/strconv"
+
+fn invalid(base: Int, width: Int) uses io: String {
+  println(1.Format(1))
+  println(1.Format(37))
+  println(1.Hex(width: -1))
+  println(1.Binary(width: 4097))
+  println("1".ParseInt(1))
+  println("1".ParseByte(37))
+  println(1.Format(base))
+  println(1.Octal(width: width))
+  println("1".ParseInt(base))
+  ""
+}

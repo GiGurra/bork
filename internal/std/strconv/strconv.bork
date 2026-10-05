@@ -1,0 +1,309 @@
+// Package strconv formats and parses fixed-width integers in bases 2 through 36.
+pred ValidBase(base: Int) { base >= 2 && base <= 36 }
+pred ValidBaseOrZero(base: Int) { base == 0 || ValidBase(base) }
+// Width counts digits, excluding the sign and prefix, and is bounded to 4096.
+pred ValidWidth(width: Int) { width >= 0 && width <= 4096 }
+
+fn formatDigits(digits: String, width: Int, uppercase: Bool, prefix: String): String unsafe go {
+  import "strings"
+  sign := ""
+  if strings.HasPrefix(digits, "-") { sign, digits = "-", digits[1:] }
+  if int64(len(digits)) < width { digits = strings.Repeat("0", int(width)-len(digits)) + digits }
+  if uppercase { digits, prefix = strings.ToUpper(digits), strings.ToUpper(prefix) }
+  return sign + prefix + digits
+}
+
+fn parseSigned(text: String, base: Int, bits: Int): Int | ParseError unsafe go {
+  import "strconv"
+  normalized := normalize(text, base)
+  if err, ok := normalized.(ParseError); ok { return err }
+  // normalize chooses decimal for unprefixed input and strips separators.
+  actualBase := base
+  if actualBase == 0 { actualBase = detectedBase(text) }
+  value, err := strconv.ParseInt(normalized.(string), int(actualBase), int(bits))
+  if err != nil { return ParseError{input: text, message: err.(*strconv.NumError).Err.Error()} }
+  return value
+}
+
+fn parseUnsigned(text: String, base: Int, bits: Int): Uint64 | ParseError unsafe go {
+  import "strconv"
+  normalized := normalize(text, base)
+  if err, ok := normalized.(ParseError); ok { return err }
+  actualBase := base
+  if actualBase == 0 { actualBase = detectedBase(text) }
+  digits := normalized.(string)
+  if len(digits) > 0 && digits[0] == '+' { digits = digits[1:] }
+  value, err := strconv.ParseUint(digits, int(actualBase), int(bits))
+  if err != nil { return ParseError{input: text, message: err.(*strconv.NumError).Err.Error()} }
+  return value
+}
+
+fn detectedBase(text: String): Int unsafe go {
+  if len(text) > 0 && (text[0] == '+' || text[0] == '-') { text = text[1:] }
+  if len(text) >= 2 && text[0] == '0' {
+    switch text[1] {
+    case 'b', 'B': return int64(2)
+    case 'o', 'O': return int64(8)
+    case 'x', 'X': return int64(16)
+    }
+  }
+  return int64(10)
+}
+
+fn normalize(text: String, base: Int): String | ParseError unsafe go {
+  import "strings"
+  fail := func(message string) any { return ParseError{input: text, message: message} }
+  digits, sign := text, ""
+  if len(digits) > 0 && (digits[0] == '+' || digits[0] == '-') { sign, digits = digits[:1], digits[1:] }
+  prefixed := len(digits) >= 2 && digits[0] == '0' && strings.ContainsRune("bBoOxX", rune(digits[1]))
+  if prefixed && (base == 0 || base == detectedBase(digits)) {
+    base = detectedBase(digits)
+    digits = digits[2:]
+    if len(digits) > 0 && digits[0] == '_' { digits = digits[1:] }
+  } else if base == 0 { base = 10 }
+  if len(digits) == 0 { return fail("expected digits") }
+  previousDigit := false
+  for i := 0; i < len(digits); i++ {
+    c := digits[i]
+    if c == '_' {
+      if !previousDigit || i+1 == len(digits) { return fail("separator must be between digits") }
+      previousDigit = false
+      continue
+    }
+    digit := int64(-1)
+    switch {
+    case c >= '0' && c <= '9': digit = int64(c-'0')
+    case c >= 'a' && c <= 'z': digit = int64(c-'a')+10
+    case c >= 'A' && c <= 'Z': digit = int64(c-'A')+10
+    }
+    if digit < 0 || digit >= base { return fail("invalid digit for base") }
+    previousDigit = true
+  }
+  return sign + strings.ReplaceAll(digits, "_", "")
+}
+
+fn (value: Int) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatInt(int64(value), int(base)), width, uppercase, "")
+}
+fn (value: Int) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatInt(int64(value), 16), width, uppercase, mark)
+}
+fn (value: Int) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatInt(int64(value), 2), width, uppercase, mark)
+}
+fn (value: Int) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatInt(int64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseInt(base: Int where ValidBaseOrZero = 10): Int | ParseError unsafe go {
+  result := parseSigned(text, base, int64(64))
+  if value, ok := result.(int64); ok { return int64(value) }
+  return result.(ParseError)
+}
+
+fn (value: Int8) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatInt(int64(value), int(base)), width, uppercase, "")
+}
+fn (value: Int8) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatInt(int64(value), 16), width, uppercase, mark)
+}
+fn (value: Int8) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatInt(int64(value), 2), width, uppercase, mark)
+}
+fn (value: Int8) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatInt(int64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseInt8(base: Int where ValidBaseOrZero = 10): Int8 | ParseError unsafe go {
+  result := parseSigned(text, base, int64(8))
+  if value, ok := result.(int64); ok { return int8(value) }
+  return result.(ParseError)
+}
+
+fn (value: Int16) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatInt(int64(value), int(base)), width, uppercase, "")
+}
+fn (value: Int16) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatInt(int64(value), 16), width, uppercase, mark)
+}
+fn (value: Int16) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatInt(int64(value), 2), width, uppercase, mark)
+}
+fn (value: Int16) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatInt(int64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseInt16(base: Int where ValidBaseOrZero = 10): Int16 | ParseError unsafe go {
+  result := parseSigned(text, base, int64(16))
+  if value, ok := result.(int64); ok { return int16(value) }
+  return result.(ParseError)
+}
+
+fn (value: Int32) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatInt(int64(value), int(base)), width, uppercase, "")
+}
+fn (value: Int32) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatInt(int64(value), 16), width, uppercase, mark)
+}
+fn (value: Int32) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatInt(int64(value), 2), width, uppercase, mark)
+}
+fn (value: Int32) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatInt(int64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseInt32(base: Int where ValidBaseOrZero = 10): Int32 | ParseError unsafe go {
+  result := parseSigned(text, base, int64(32))
+  if value, ok := result.(int64); ok { return int32(value) }
+  return result.(ParseError)
+}
+
+fn (value: Uint8) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatUint(uint64(value), int(base)), width, uppercase, "")
+}
+fn (value: Uint8) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatUint(uint64(value), 16), width, uppercase, mark)
+}
+fn (value: Uint8) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatUint(uint64(value), 2), width, uppercase, mark)
+}
+fn (value: Uint8) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatUint(uint64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseUint8(base: Int where ValidBaseOrZero = 10): Uint8 | ParseError unsafe go {
+  result := parseUnsigned(text, base, int64(8))
+  if value, ok := result.(uint64); ok { return uint8(value) }
+  return result.(ParseError)
+}
+
+fn (value: Uint16) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatUint(uint64(value), int(base)), width, uppercase, "")
+}
+fn (value: Uint16) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatUint(uint64(value), 16), width, uppercase, mark)
+}
+fn (value: Uint16) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatUint(uint64(value), 2), width, uppercase, mark)
+}
+fn (value: Uint16) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatUint(uint64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseUint16(base: Int where ValidBaseOrZero = 10): Uint16 | ParseError unsafe go {
+  result := parseUnsigned(text, base, int64(16))
+  if value, ok := result.(uint64); ok { return uint16(value) }
+  return result.(ParseError)
+}
+
+fn (value: Uint32) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatUint(uint64(value), int(base)), width, uppercase, "")
+}
+fn (value: Uint32) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatUint(uint64(value), 16), width, uppercase, mark)
+}
+fn (value: Uint32) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatUint(uint64(value), 2), width, uppercase, mark)
+}
+fn (value: Uint32) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatUint(uint64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseUint32(base: Int where ValidBaseOrZero = 10): Uint32 | ParseError unsafe go {
+  result := parseUnsigned(text, base, int64(32))
+  if value, ok := result.(uint64); ok { return uint32(value) }
+  return result.(ParseError)
+}
+
+fn (value: Uint64) Format(base: Int where ValidBase, width: Int where ValidWidth = 0, uppercase: Bool = false): String unsafe go {
+  import "strconv"
+  return formatDigits(strconv.FormatUint(uint64(value), int(base)), width, uppercase, "")
+}
+fn (value: Uint64) Hex(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0x" }
+  return formatDigits(strconv.FormatUint(uint64(value), 16), width, uppercase, mark)
+}
+fn (value: Uint64) Binary(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0b" }
+  return formatDigits(strconv.FormatUint(uint64(value), 2), width, uppercase, mark)
+}
+fn (value: Uint64) Octal(width: Int where ValidWidth = 0, uppercase: Bool = false, prefix: Bool = false): String unsafe go {
+  import "strconv"
+  mark := ""
+  if prefix { mark = "0o" }
+  return formatDigits(strconv.FormatUint(uint64(value), 8), width, uppercase, mark)
+}
+fn (text: String) ParseUint64(base: Int where ValidBaseOrZero = 10): Uint64 | ParseError unsafe go {
+  result := parseUnsigned(text, base, int64(64))
+  if value, ok := result.(uint64); ok { return uint64(value) }
+  return result.(ParseError)
+}
+
+fn (text: String) ParseByte(base: Int where ValidBaseOrZero = 10): Byte | ParseError { text.ParseUint8(base) }
