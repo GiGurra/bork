@@ -1,0 +1,133 @@
+// bork run examples/http_multi -- serve
+// One app, three listeners: a public API, and metrics and debug endpoints
+// bound to localhost only. Ctrl+C drains and stops all of them together.
+import "bork/http"
+import "bork/process"
+
+fn apiRoutes(): List[http.Route] {
+  [.{ pattern: "GET /hello", handler: (req, rs) => http.Text(200, "hello") }]
+}
+
+fn metricsRoutes(): List[http.Route] {
+  [.{ pattern: "GET /metrics", handler: (req, rs) => http.Text(200, "requests_total 1") }]
+}
+
+fn debugRoutes(): List[http.Route] {
+  [.{ pattern: "GET /debug/health", handler: (req, rs) => http.Text(200, "ok") }]
+}
+
+// listenAll starts every listener. If one fails to start, `?` returns and
+// closing the scope stops the ones that did start.
+fn listenAll(s: Scope, api: String, metrics: String, debug: String) uses io + net + clock + random + state: List[http.Server] | IoError {
+  [
+    http.ListenRoutes(api, s, apiRoutes())?,
+    http.ListenRoutes(metrics, s, metricsRoutes())?,
+    http.ListenRoutes(debug, s, debugRoutes())?,
+  ]
+}
+
+fn serve() uses io + net + clock + random + state: Ok | IoError {
+  scope app with cleanupTimeout(5000) {
+    servers = listenAll(app, ":8080", "127.0.0.1:9090", "127.0.0.1:6060")?
+    for (server in servers) { println(s"listening on ${http.Address(server)}") }
+    // Returns on Ctrl+C, or as soon as any listener stops on its own;
+    // http.WaitAll would instead wait for every one of them.
+    http.WaitAny(servers)
+  }
+}
+
+// call fetches one path from a running server.
+fn call(server: http.Server, path: String, s: Scope) uses net + clock + state: String {
+  match (http.Get(s"http://${http.Address(server)}$path", s)) {
+    response: http.Response => s"$path -> ${response.status} ${response.body}"
+    error => s"$path -> ${toString(error)}"
+  }
+}
+
+// demo starts all three on free ports and calls each once.
+fn demo() uses io + net + clock + random + state: Ok | IoError {
+  scope app {
+    api = http.ListenRoutes("127.0.0.1:0", app, apiRoutes())?
+    metrics = http.ListenRoutes("127.0.0.1:0", app, metricsRoutes())?
+    debug = http.ListenRoutes("127.0.0.1:0", app, debugRoutes())?
+    println(call(api, "/hello", app))
+    println(call(metrics, "/metrics", app))
+    println(call(debug, "/debug/health", app))
+    // The metrics port only serves metrics.
+    println(call(metrics, "/hello", app))
+    Ok
+  }
+}
+
+fn main() {
+  match (if (process.Args() == ["serve"]) { serve() } else { demo() }) {
+    error: IoError => {
+      eprintln(s"${error.path}: ${error.message}")
+      process.Exit(1)
+    }
+    Ok => {}
+  }
+}
+
+fn assertStatus(server: http.Server, path: String, s: Scope, expected: Int) uses net + clock + state {
+  match (http.Get(s"http://${http.Address(server)}$path", s)) {
+    response: http.Response => assert(response.status == expected)
+    error => panic(toString(error))
+  }
+}
+
+test "each listener serves only its own routes" {
+  scope app {
+    match (listenAll(app, "127.0.0.1:0", "127.0.0.1:0", "127.0.0.1:0")) {
+      servers: List[http.Server] => {
+        match (servers) {
+          [api, metrics, debug] => {
+            assertStatus(api, "/hello", app, 200)
+            assertStatus(api, "/metrics", app, 404)
+            assertStatus(api, "/debug/health", app, 404)
+            assertStatus(metrics, "/hello", app, 404)
+            assertStatus(metrics, "/metrics", app, 200)
+            assertStatus(metrics, "/debug/health", app, 404)
+            assertStatus(debug, "/hello", app, 404)
+            assertStatus(debug, "/metrics", app, 404)
+            assertStatus(debug, "/debug/health", app, 200)
+          }
+          _ => panic("expected three listeners")
+        }
+      }
+      error: IoError => panic(toString(error))
+    }
+  }
+}
+
+test "waiting on no servers returns at once" {
+  assert(http.WaitAll([]) == Ok)
+  assert(http.WaitAny([]) == Ok)
+}
+
+test "a later startup failure cleans up earlier listeners" {
+  scope app {
+    apiAddress = scope reservation {
+      match (http.ListenRoutes("127.0.0.1:0", reservation, apiRoutes())) {
+        server: http.Server => http.Address(server)
+        error: IoError => panic(toString(error))
+      }
+    }
+    match (http.ListenRoutes("127.0.0.1:0", app, metricsRoutes())) {
+      metrics: http.Server => {
+        scope startup {
+          match (listenAll(startup, apiAddress, http.Address(metrics), "127.0.0.1:0")) {
+            error: IoError => assert(error.path == http.Address(metrics))
+            _ => panic("expected a metrics port clash")
+          }
+        }
+        // Rebind while this process is alive to verify scope cleanup released API.
+        match (http.ListenRoutes(apiAddress, app, apiRoutes())) {
+          server: http.Server => assertStatus(server, "/hello", app, 200)
+          error: IoError => panic(toString(error))
+        }
+      }
+      error: IoError => panic(toString(error))
+    }
+  }
+}

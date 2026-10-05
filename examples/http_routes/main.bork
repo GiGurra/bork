@@ -17,12 +17,6 @@ fn logged(handler: http.Handler): http.Handler {
     handler(req, rs)
   }
 }
-fn waitForStop(s: Scope) uses clock + state {
-  match (delay(s, 1000)) {
-    _: Cancelled => {}
-    _ => waitForStop(s)
-  }
-}
 fn main() {
   scope app with cleanupTimeout(5000) {
     match (http.ListenRoutes(if (process.Args() == ["demo"]) { "127.0.0.1:0" } else { "localhost:8080" }, app, [
@@ -35,7 +29,7 @@ fn main() {
             response: http.Response => println(response.status, response.body)
             error => println(toString(error))
           }
-        } else { println(http.Address(server)); waitForStop(app) }
+        } else { println(http.Address(server)); http.Wait(server) }
       }
       error: IoError => println(error.message)
     }

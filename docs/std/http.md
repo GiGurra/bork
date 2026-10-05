@@ -12,6 +12,30 @@ HTTP servers support `http.ListenRoutes(addr, s, routes, drainTimeoutMs: 0)` wit
 
 Closing the server scope cancels request scopes and stops accepting new connections, then waits for active handlers through Go's graceful shutdown. A zero drain timeout inherits `cleanupTimeout`; without that policy shutdown waits indefinitely. A positive per-server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). When draining times out, connections are forcibly closed; cooperative handlers may still be finishing. `Wait` waits for the listener to stop, while scope cleanup drains active requests. See [http_routes](../../examples/http_routes/main.bork).
 
+## Multiple listeners
+
+Run API, metrics and debug listeners in one application scope, with a separate
+route list for each listener. Binding internal endpoints to `127.0.0.1` keeps
+them on localhost. Each listener serves only its own routes.
+
+`http.WaitAny(servers)` waits until any listener stops or its scope is cancelled.
+It returns `Ok` on cancellation, or `IoError { path: address, message: ... }`
+when a listener stops unexpectedly. A completed Serve failure remains an error
+even if its scope is cancelled later. Return from the application scope after
+waiting to shut down and drain the remaining listeners.
+
+`http.WaitAll(servers)` waits until every listener stops or its scope is
+cancelled. It returns the first unexpected failure in list order, or `Ok` when
+all end through cancellation. Both functions use `net`, accept `List[http.Server]`,
+and return `Ok` immediately for an empty list. Cancellation can finish a wait
+before request draining completes; scope cleanup performs the drain.
+
+See [http_multi](../../examples/http_multi/main.bork): `bork run examples/http_multi`
+runs a demo on free ports; `bork run examples/http_multi -- serve` starts API,
+metrics and debug listeners on ports 8080, 9090 and 6060. Ctrl+C shuts them all
+down. A startup failure prints the failing address and exits nonzero; listeners
+already started are cleaned up by the scope.
+
 ## HTTP API
 
 HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeout: `http.Get(url, s, timeoutMs: 0)`, `http.Post(url, contentType, body, s, timeoutMs: 0)`, or `http.Send(method, url, headers, body, s, timeoutMs: 0)`. Zero uses scope cancellation and its effective deadline; the maximum is 9223372036854 milliseconds. Use `http.ValidTimeout(value)` as a guard for a dynamic timeout. `http.Headers` is `Map[String, List[String]]`; use `{:}` for no headers. `http.HeaderOf` finds the first value without regard to case. Clients use `net + clock + state` and return `http.Result`, an alias for `Response | Overloaded | DeadlineExceeded | Cancelled | IoError`. Transport and request-construction errors remain `IoError`; cancellation and deadline expiry have their own types. Completed 429/503 responses become `Overloaded { response, retryAfter }`, preserving the full body and repeated headers. Other HTTP statuses remain responses. Deadline and cancellation errors during body reads follow the same classification. Already exhausted deadlines stop before sending. `cancelAfter` exposes the earliest

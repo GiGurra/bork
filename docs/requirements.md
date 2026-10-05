@@ -1329,6 +1329,13 @@ scope maint {
   - **Known limits.** Other lambda parameters (of a function taking `(Conn) => Ok`, of a function value, or when the conditions above do not hold) are not known to outlive anything, so storing them is rejected (store the value directly, or use a helper with `x: Conn in ch`). An atom started empty (`atom(Option.None)`) can only hold values that live forever; start it with a value of the scope instead. `unsafe go` code given a channel or an atom can store anything, as it can keep any argument.
 - **Cancellation through scopes (implemented):** a scope carries what Go's `context.Context` does. `cancel(s)` cancels it, `cancelAfter(s, ms)` sets an observable deadline that only ever shortens (existing children observe later ancestor deadlines too), a task that panics cancels its scope (so its siblings stop), the scope's end cancels it, and a scope nested in another (in the same function) is cancelled with it. Cancellation is cooperative: tasks see it at cancellation points, `delay(s, ms)` and `checkpoint(s)` (both `Ok | Cancelled`, so `checkpoint(s)?` stops a loop), and channel operations. A cancelled scope still waits for its tasks. **The scope does not decide how its tasks stop:** its end is the same signal whether the block finished, returned early, or panicked, and each task chooses what to do with it: stop at once (a worker waiting in `delay` or on a channel), clean up first, or finish its work (code that never checks for cancellation runs to the end). Work the block needs done is awaited before the block ends. In `bork/http`, each request has a scope, cancelled when the client goes away or the server's scope closes. Scope contexts preserve external deadline limits and context values. Nonpositive `cancelAfter` delays cancel immediately; huge positive millisecond values saturate instead of overflowing. Deadline expiry has the Go `context.DeadlineExceeded` cause and error, whose text is "context deadline exceeded".
 
+HTTP applications can run several listeners in one scope. `http.WaitAny`
+returns when any listener stops or is cancelled; `http.WaitAll` waits for all
+of them. Both use `net`, return `Ok` for cancellation or an empty list, and
+report unexpected stops as `IoError` naming the listener address. WaitAll
+selects its first failure in list order. Scope cleanup drains the listeners.
+See [Multiple listeners](std/http.md#multiple-listeners).
+
 ### Backpressure
 
 HTTP admission before body buffering, typed overload/deadline
@@ -1573,7 +1580,7 @@ The set is small and fixed in v0.1: `io`, `net`, `clock`, `random`, `state`, and
 | Effect  | Allows | Prelude and standard library |
 |---------|--------|------------------------------|
 | `io`    | standard streams, files, the process | `println` (built in), `eprintln`, `args`, `exit`, the `bork/fs` functions that touch the file system, `process.Args`, `process.Exit`, `log.Configure`, `env.Get`, `env.Require`, `env.All`, `env.Load`, `env.LoadJson` |
-| `net`   | the network | `http.Listen`, `http.Wait`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
+| `net`   | the network | `http.Listen`, `http.Wait`, `http.WaitAny`, `http.WaitAll`, `http.Get`, `http.Post`, `http.Send`, and the `bork/net` sockets |
 | `clock` | time and waiting | `sleep`, `delay`, `cancelAfter`, `time.Now`, `time.Read` (a `time.Clock`'s `now` uses `clock`), `time.Sleep`, HTTP listener admission waits and client Retry-After dates |
 | `random` | random numbers | none yet (the future random number functions) |
 | `build` | captured module files inside comptime blocks | `bork/build.ReadString`, `bork/build.ReadBytes` |

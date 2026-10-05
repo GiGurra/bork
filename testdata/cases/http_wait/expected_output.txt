@@ -1,0 +1,10 @@
+empty true true
+any unexpected true
+nil serve error true
+all list order true
+cancelled completion true true
+failure before cancellation true true
+mixed completion true
+any cancellation true true
+all waits after failure true true
+all cancellation true true

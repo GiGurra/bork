@@ -404,8 +404,8 @@ fn start(addr: String, s: Scope, routes: List[Route], certificate: Option[Certif
     ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
   }
   srv := &http.Server{BaseContext: func(net.Listener) context.Context { return _borkScopeContext(s) }, Handler: handler, ReadHeaderTimeout: 10*time.Second}
-  state := struct { addr string; done chan struct{}; cancelled <-chan struct{}; load func() Option[AdmissionLoad] }{ln.Addr().String(), make(chan struct{}), _borkScopeContext(s).Done(), load}
-  go func() { srv.Serve(ln); close(state.done) }()
+  state := struct { addr string; done chan struct{}; cancelled <-chan struct{}; failure *error; load func() Option[AdmissionLoad] }{ln.Addr().String(), make(chan struct{}), _borkScopeContext(s).Done(), new(error), load}
+  go func() { *state.failure = srv.Serve(ln); close(state.done) }()
   return Server{handle: state, owner: s.Own(func() {
     ctx := context.Background()
     if drain > 0 { var stop context.CancelFunc; ctx, stop = context.WithTimeout(ctx, drain); defer stop() }
@@ -420,13 +420,14 @@ fn Address(server: Server): String unsafe go {
     addr string
     done chan struct{}
     cancelled <-chan struct{}
+    failure *error
     load func() Option[AdmissionLoad]
   }).addr
 }
 
 // AdmissionState is a consistent counter snapshot, or None when no policy is set.
 fn AdmissionState(server: Server) uses state: Option[AdmissionLoad] unsafe go {
-  return server.handle.(struct { addr string; done chan struct{}; cancelled <-chan struct{}; load func() Option[AdmissionLoad] }).load()
+  return server.handle.(struct { addr string; done chan struct{}; cancelled <-chan struct{}; failure *error; load func() Option[AdmissionLoad] }).load()
 }
 
 // Wait blocks until the server stops or its scope is cancelled, for
@@ -436,12 +437,79 @@ fn Wait(server: Server) uses net unsafe go {
     addr string
     done chan struct{}
     cancelled <-chan struct{}
+    failure *error
     load func() Option[AdmissionLoad]
   })
   select {
   case <-state.done:
   case <-state.cancelled:
   }
+}
+
+// WaitAny blocks until the first server stops: an app with several
+// listeners (an API, metrics, debug) can watch them all at once. It returns
+// Ok when a server's scope is cancelled, for example by Ctrl+C, and IoError
+// naming the address when a server stops on its own. Closing the scope then
+// shuts the remaining servers down. An empty list returns Ok at once.
+fn WaitAny(servers: List[Server]) uses net: Ok | IoError unsafe go {
+  failures := waitServers(servers, 1)
+  if len(failures) > 0 { return failures[0] }
+  return _borkOk()
+}
+
+// WaitAll blocks until every server has stopped or its scope is cancelled.
+// It returns the first IoError among servers that stopped on their own, in
+// list order, or Ok. An empty list returns Ok at once.
+fn WaitAll(servers: List[Server]) uses net: Ok | IoError unsafe go {
+  failures := waitServers(servers, int64(len(servers)))
+  if len(failures) > 0 { return failures[0] }
+  return _borkOk()
+}
+
+// waitServers waits until count servers have stopped or been cancelled,
+// and returns IoErrors for those that stopped on their own, in list order.
+fn waitServers(servers: List[Server], count: Int): List[IoError] unsafe go {
+  if len(servers) == 0 { return nil }
+  type serverState = struct {
+    addr string
+    done chan struct{}
+    cancelled <-chan struct{}
+    failure *error
+    load func() Option[AdmissionLoad]
+  }
+  type ended struct { index int; failed bool }
+  results := make(chan ended, len(servers))
+  stop := make(chan struct{})
+  defer close(stop)
+  for index, server := range servers {
+    state := server.handle.(serverState)
+    go func() {
+      select {
+      case <-state.done:
+        results <- ended{index, *state.failure != http.ErrServerClosed}
+      case <-state.cancelled:
+        // Preserve a completed Serve failure even if cancellation came later.
+        select {
+        case <-state.done: results <- ended{index, *state.failure != http.ErrServerClosed}
+        default: results <- ended{index, false}
+        }
+      case <-stop:
+      }
+    }()
+  }
+  failed := make([]bool, len(servers))
+  for i := int64(0); i < count; i++ {
+    if result := <-results; result.failed { failed[result.index] = true }
+  }
+  var failures []IoError
+  for index, server := range servers {
+    if !failed[index] { continue }
+    state := server.handle.(serverState)
+    message := "server stopped"
+    if err := *state.failure; err != nil { message = err.Error() }
+    failures = append(failures, IoError{path: state.addr, message: message})
+  }
+  return failures
 }
 
 // Get sends a GET request cancelled with s. timeoutMs bounds the entire request,
