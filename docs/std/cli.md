@@ -312,7 +312,10 @@ the With APIs charge the closed `io + net + clock + random + state` bound.
 Ordinary Parse and Run keep their existing effect behavior. Each completer has
 type `(cli.CompletionRequest, Scope) uses io + net + clock + random + state =>
 cli.Suggestions | cli.Error`. Pure functions with that result union can also be
-used as completers.
+used as completers. `ParseDetailedWith` has the same arguments as ParseWith
+and returns `cli.Parsed[T] | cli.Error | cli.Help`, preserving successful flag
+warnings in Parsed.warnings. ParseWith discards successful warnings for the same
+reason as Parse; RunWith prints them to stderr before the handler.
 
 ```bork
 import "bork/cli"

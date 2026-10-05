@@ -181,6 +181,7 @@ type Options = { value: Option[String] } derive (Decode)
 fn invalid(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Error { cli.Suggestions { choices: [.{ value: "bad\nvalue" }] } }
 fn main() {
  completion = cli.Completion { field: "value", suggest: invalid }
+ println(cli.ParseDetailedWith[Options]("app", "", ["--value", "accepted"], completions: [completion], flags: [.{ field: "value", deprecated: "use replacement" }]))
  println(cli.ParseWith[Options]("app", "", ["--help"], completions: [completion, completion]))
  println(cli.ParseWith[Options]("app", "", ["--help"], completions: [completion.copy(field: "unknown")]))
  println(cli.ParseWith[Options]("app", "", ["--help"], completions: [completion], settings: .{ autoLong: false }))
@@ -204,7 +205,7 @@ fn main() {
 	if err != nil {
 		t.Fatalf("run: %v\n%s\n%s", err, out, &stderr)
 	}
-	for _, want := range []string{"duplicate CLI completion field", "unknown CLI completion field", "completion field needs an enabled flag or positional", "captured-error"} {
+	for _, want := range []string{"Parsed {", "accepted", "warnings:", "use replacement", "duplicate CLI completion field", "unknown CLI completion field", "completion field needs an enabled flag or positional", "captured-error"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
