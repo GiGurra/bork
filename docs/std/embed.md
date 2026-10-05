@@ -23,6 +23,32 @@ inflate generated Go source. `bork emit` lists staged file names and their sourc
 paths in a comment beside the embed directives; consumers must stage the listed
 assets themselves. The emitted source by itself is not a complete build artifact.
 
+## Convention-based lookups
+
+Only the argument of `Directory` must be a constant: it tells the compiler what
+to embed. Paths read from the snapshot can be computed at runtime, so a whole
+directory can be embedded once and its files found by naming convention:
+
+```bork
+import "bork/embed"
+
+Assets = embed.Directory("assets")
+
+fn template(page: String): Bytes | IoError {
+  Assets.Read(s"templates/$page.html")
+}
+
+fn main() uses io {
+  println(Assets.Paths())
+  println(template("home"))
+}
+```
+
+Every file under `assets/` is embedded, so adding one needs no code change. A
+name that was not embedded is an `IoError` at runtime, since the compiler cannot
+know which names will be requested. `Paths()` lists what was embedded, for
+discovery. See [examples/embed_templates](../../examples/embed_templates/main.bork).
+
 ## Embedded asset API
 
 - **Embedded assets:** `bork/embed` provides pure compiler intrinsics

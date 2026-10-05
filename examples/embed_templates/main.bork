@@ -1,0 +1,38 @@
+// bork run examples/embed_templates: pages looked up by naming convention.
+import "bork/embed"
+
+// Assets embeds every file under assets/ at build time. Only the directory
+// name must be a constant; files inside it are found with runtime paths.
+Assets = embed.Directory("assets")
+
+// templatePath maps a page name to its file by convention.
+fn templatePath(page: String): String { s"templates/$page.html" }
+
+// pages lists the templates that were embedded, without naming them.
+fn pages(): List[String] {
+  Assets.Paths().map((path: String) => path.replaceAll("templates/", "").replaceAll(".html", ""))
+}
+
+fn render(page: String): String | IoError {
+  data = Assets.Read(templatePath(page))?
+  s"$page: ${data.length()} bytes"
+}
+
+fn main() uses io {
+  println(pages())
+  for (page in ["home", "about", "missing"]) {
+    match (render(page)) {
+      text: String => println(text)
+      error: IoError => println(s"$page: ${error.message}")
+    }
+  }
+}
+
+test "every embedded template renders" {
+  for (page in pages()) {
+    match (render(page)) {
+      text: String => assert(text.startsWith(page))
+      error: IoError => assert(false)
+    }
+  }
+}

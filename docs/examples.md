@@ -59,6 +59,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [crypto](../examples/crypto/main.bork) | Hashes and HMAC with [bork/crypto](std/crypto.md) |
 | [csv](../examples/csv/main.bork) | CSV rows decoded into records with [bork/encoding](std/encoding.md) |
 | [embed](../examples/embed/main.bork) | Files built into the executable with [bork/embed](std/embed.md) |
+| [embed_templates](../examples/embed_templates/main.bork) | A whole embedded directory, with files found by naming convention at runtime |
 | [fs](../examples/fs/main.bork) | Files and directories with [bork/fs](std/fs.md) |
 | [json_lines](../examples/json_lines/main.bork) | Streaming JSON Lines with [bork/json](std/json.md) |
 | [math](../examples/math/main.bork) | Exact decimal money with [bork/math](std/math.md) |
