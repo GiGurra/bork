@@ -149,23 +149,29 @@ value` can be added later without changing anything here; Rust's
 
 Bindings are immutable, and after PR #349 a name may be rebound in the same
 block (`x = f(x)` makes a new binding). Nested blocks cannot rebind names from
-an enclosing block. Loops need exactly one exception. **The top-level block
-of a loop body may rebind a name that the block containing the loop may
-rebind.** Such a name is *carried*. Each rebinding gives the name a new
-immutable value for the rest of the iteration. Its latest value flows into the
-next iteration, and after the loop the name has the value it had when the
-loop ended.
+an enclosing block. Loops need exactly one exception. **A loop body may
+rebind a name that the block containing the loop may rebind, at its top level
+or inside the branches of `if` and `match` statements in it** (human
+decision, option B). Such a name is *carried*. Each rebinding gives the name a
+new immutable value for the rest of its block. Where branches meet, the name
+has the value of the branch that ran; a branch that does not rebind it keeps
+the previous value. The latest value flows into the next iteration, and after
+the loop the name has the value it had when the loop ended.
 
 ```bork
 fn stats(xs: List[Int]): String {
   count = 0
   total = 0
+  negatives = 0
   for (x in xs) {
-    if (x < 0) { continue }
+    if (x < 0) {
+      negatives = negatives + 1
+      continue
+    }
     count = count + 1
     total = total + x
   }
-  s"$count values, total $total"
+  s"$count values, total $total, $negatives skipped"
 }
 ```
 
@@ -176,7 +182,8 @@ The names that can be carried:
   the function's parameters if that block is the function body's top level.
   These are the names that block may rebind under PR #349;
 - recursively, the names carried by an enclosing loop, when the inner `for`
-  is at the top level of the outer loop's body.
+  is where the outer loop's body may rebind them (its top level, or a branch
+  as below).
 
 Nested loops therefore carry through each level:
 
@@ -190,13 +197,33 @@ for (row in rows) {
 println(total)
 ```
 
-Not carried, and still an error under PR #349: rebinding from a nested block
-inside the body (an `if`'s block, a match arm, a scope or `with` block, a
-lambda). A conditional update is a rebinding with an `if` value:
-`best = if (x > best) { x } else { best }`. Keeping updates at the body's top
-level keeps every carried value visible in one column, and keeps the
-data flow to a simple chain per iteration that the checker can follow without
-general flow analysis.
+**Branches.** A carried name may be rebound inside the then and else blocks of
+an `if`, inside `match` arms, and inside plain nested blocks, at any depth,
+when each of these is a *statement*. That means its value is not used: it is
+an expression statement of the loop body, or of a branch that qualifies in
+turn. Go programmers write `if (x > best) { best = x }`, and that works:
+
+```bork
+best = 0
+for (x in xs) {
+  if (x > best) {
+    best = x
+  }
+}
+```
+
+At the end of each `if`/`match` statement the name is *joined*. Its value is
+that of the branch that ran, or the value from before the statement for a
+branch that did not rebind it (including an `if` without `else`). Branches
+that end in `return`, `break`, `continue`, `?` or a panic do not reach the
+join. They carry their own current values to where they go.
+
+Still errors, as under PR #349 outside loops: rebinding in an `if` or `match`
+whose value is used (`y = if (c) { total = 1; 2 } else { 3 }`), because the
+rebinding would happen in the middle of an expression; in a scope or `with`
+block; in a lambda, `lazy`/`async` initializer or generator; and anywhere
+outside a loop body. The error for a branch whose value is used says to move
+the rebinding out, or to write the `if` as a statement.
 
 A for-in's element name (`x`) is per-iteration, not carried: rebinding it in
 the body is an ordinary same-block rebinding, and the next iteration gets the
@@ -209,11 +236,12 @@ tuple. The carried-rebinding rule covers for-in and while loops too
 (`total = total + x` is the most common loop there is), and reads like Go
 while staying immutable. The cost is one exception to "no rebinding in nested
 blocks", limited to the one place where it means "next iteration's value".
-This is the decision I most want the lead to check.
+The lead approved this. The human then chose option B, which allows
+rebinding in branches too (below).
 
 **What `continue` and `break` carry.** `continue` carries the values current at
-the `continue`: the latest top-level rebinding before it (bindings inside the
-nested block holding the `continue` are not carried). In a three-clause loop
+the `continue`: the latest rebinding on the path to it, including rebindings
+in the branches it is in. In a three-clause loop
 the post clause then runs. `break` ends the loop with the values current at the
 `break`. Reaching the end of the body is an implicit `continue`.
 
@@ -230,10 +258,12 @@ before the loop as total: Float = ...
 ```
 
 Declared facts on the first binding (`i: Int where nonNegative = 0`) are the
-loop invariant. The value that leaves an iteration must prove them: the value
-current at `continue`, at the end of the body, after the post clause, and at
-`break`. Intermediate rebindings within an iteration need not. The facts hold
-at the start of every iteration and after the loop. Flow facts the first value had
+loop invariant. The value that leaves an iteration must prove them on every
+path: the value current at each `continue`, at the end of the body, after the
+post clause, and at each `break`. Intermediate rebindings within an iteration
+need not. The facts hold at the start of every iteration and after the loop.
+At a join, the name knows the facts that hold for the value of every incoming
+branch. Flow facts the first value had
 (its constant identity, branch facts) are dropped at the loop head, because
 later iterations may not keep them. Inside the body, a while or three-clause
 condition is known (`i < n`), as an `if` guard is. After a loop with no
@@ -262,11 +292,12 @@ println(fs.map(f => f()))   // [0, 1, 2]
 PR #349 makes every unused local binding an error. Carried names use the same
 rule, with the loop's back edge counted as a use:
 
-- A carried rebinding is used if it is read later in the same iteration, or if
-  it can reach the next iteration (end of body, `continue`, post clause) and
-  the name is read at the head (condition, post clause, or the body before its
-  first rebinding), or if it can reach the loop's end (condition false,
-  `break`) and the name is read after the loop.
+- A carried rebinding is used if, on some path from it, the value is read
+  before the name is rebound. Paths run through the rest of its block, joins,
+  the next iteration (end of body, `continue`, post clause, then the head), and
+  the loop's end (condition false, `break`) to the code after the loop. A
+  rebinding that every path overwrites before reading is unused, in a branch
+  as anywhere.
 - The binding before the loop is used if the loop reads it at the head, or if
   the loop may run zero times or `break` before rebinding it and the name is
   read after the loop.
@@ -352,6 +383,12 @@ must see the iteration's copies. One flat shape serves all three forms. The exis
 loop-exit machinery (scopes opened in the body closed on `break`/`continue`,
 owners, mocks, `return` through range-over-func `Seq` loops) is reused for
 the new forms.
+
+Joins use the same rule. Before an `if` or `match` statement whose branches
+rebind carried names, a join variable is declared for each. Every branch that
+reaches the end assigns its current binding to it, and after the statement a
+fresh binding copies it (`best_3 := _j_best`). Closures capture branch
+bindings or the fresh copy, never the join variable.
 
 Every new statement carries its bork position for the debugger and `//line`
 mapping. A breakpoint on the `for` line hits once per condition check.
