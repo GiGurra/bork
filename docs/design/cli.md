@@ -67,6 +67,7 @@ Flag gains:
   shortName: Mapping = Auto
   envName: Mapping = Auto
   description: Option[String] = None
+  config: Bool = true
   hidden: Bool = false
   deprecated: String = ""
   choices: List[Choice] = []
@@ -85,7 +86,7 @@ Settings = {
 
 Choice = { value: String, description: String = "" }
 FieldSpec = { field: String, long: Mapping, short: Mapping, env: Mapping,
-              description: String, positional: Bool, hidden: Bool,
+              description: String, positional: Bool, config: Bool, hidden: Bool,
               deprecated: String, choices: List[Choice], strictChoices: Bool }
 Enricher = (List[FieldSpec], FieldSpec) uses nothing => FieldSpec
 
@@ -114,6 +115,17 @@ for the same source is a metadata error. This deliberately distinguishes
 inherit/derive, disable, and explicitly named without assigning several meanings
 to an empty string. `long: Disabled` means config/env-only; disabling short
 alone keeps the long flag. An env-disabled field still accepts flags/config.
+Automatic shorts are suppressed when canonical long registration is disabled,
+including autoLong: false and positional fields. Explicit Named shorts on such
+fields are metadata errors.
+
+`config: false` disables file input for that field. Reject a config file key for
+a disabled field, including a null value, with a source/field-path diagnostic;
+do not silently ignore misspelled or forbidden configuration. Required fields
+still need another enabled source; defaults still apply normally. A config-file
+selector obtains its path from CLI/env/default, as today, without recursively
+selecting files from config values.
+
 Disabling all flags globally requires `autoLong: false` and `autoShort: false`;
 explicit Named mappings still opt fields in. `autoLong: false` disables derived
 long registrations; an explicit short needs a Named long because Cobra flags
@@ -258,8 +270,16 @@ Heterogeneous option types remain erased only behind Command's private bridge.
 Group traversals and script generation inspect actual registered leaf flags,
 allowing Cobra's completion/help routing to work uniformly. Keep public command
 constructors typed and avoid exposing reflect values or Go command pointers.
-Help/Script/completion protocol output can use the existing Help text carrier
-for compatibility; Run prints it and never calls the handler. Normal command
+Help/script/completion protocol output uses an extended Help carrier:
+`Help { text: String, diagnostics: String = "" }`. Capture Cobra stdout and
+stderr separately. Parse/Dispatch return protocol stdout in text and stderr
+diagnostics in diagnostics, including explicit-argument queries; Run APIs print
+text to stdout and diagnostics to stderr without calling the handler. Completion
+failures return Help with Cobra's error directive in text and the diagnostic in
+diagnostics, so Run returns Ok after emitting the protocol and application error
+rendering cannot accidentally add candidates to stdout. Ordinary parse failures
+remain Error values. Add tests for malformed config and callback failure through
+both explicit-argument and process-argument APIs. Normal command
 execution creates a fresh Scope after successful decoding. Existing externally
 constructible Command.execute remains supported through a fallback routing leaf,
 with documented absence of schema/value completion on such custom commands.
@@ -301,7 +321,9 @@ fields, prefix/disable composition, docs/default/required help, collected facts,
 config zero/null values and precedence, no handler during help or completion,
 all four generated scripts, nested completion endpoints, and state isolation
 across queries. Test dynamic callback input visibility, invalid/missing unrelated
-fields, typed Get mismatch, config-selected paths, candidate protocol validation,
+fields, typed Get mismatch, standalone vs sibling-dependent facts, config-selected
+paths, config-disabled keys/required/defaults, disabled-long automatic shorts,
+candidate protocol validation,
 effects rejected when undeclared, and callback scope cleanup. Script tests assert
 shell-specific generator output; protocol tests call __complete directly so
 installed shells are not required. When available, add focused bash/fish/zsh
