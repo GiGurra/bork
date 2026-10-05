@@ -82,8 +82,6 @@ func newLifeChecker(info *Info, diags *diag.List) *lifeChecker {
 		passes:     map[*Func]bool{},
 		passParams: map[*Var]*handle{},
 		record:     true,
-		handleVars: map[*handle][]*Var{},
-		varDepth:   map[*Var]int{},
 	}
 }
 
@@ -180,13 +178,10 @@ type lifeChecker struct {
 	passParams map[*Var]*handle
 	passOK     bool
 	// record is set when describing ownership for queries (not while
-	// summarizing); handleVars lists the variables each handle may be,
-	// varDepth how deep in branches each was bound, and depth how deep
-	// the current point is (see noteVar).
-	record     bool
-	handleVars map[*handle][]*Var
-	varDepth   map[*Var]int
-	depth      int
+	// summarizing); defined lists the resource variables bound in the
+	// blocks being checked (see noteVar).
+	record  bool
+	defined []*Var
 }
 
 func (l *lifeChecker) errorf(pos diag.Pos, format string, args ...any) {
@@ -198,6 +193,7 @@ func (l *lifeChecker) function(fn *Func) {
 	l.open = nil
 	l.loop = nil
 	l.enclosing = map[*ScopeBlock][]*ScopeBlock{}
+	mark := len(l.defined)
 	for _, p := range fn.ParamVars {
 		l.frame[p] = fn
 		l.env[p] = lifetime{p}
@@ -236,6 +232,7 @@ func (l *lifeChecker) function(fn *Func) {
 		}
 	}
 	l.result(fn.Body, l.value(fn.Body, "return"), l.what())
+	l.settle(mark)
 	l.verifyResult(fn.Body)
 	if fn.Body.Type() != Never {
 		for _, p := range fn.ParamVars {
@@ -562,8 +559,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		for _, c := range l.captures {
 			*c = c.union(life)
 		}
-		if text := l.ownership(x); text != "" && l.record {
-			l.info.Ownership[x] = text
+		if l.record {
+			if text := l.ownership(x); text != "" {
+				l.info.Ownership[x] = text
+			}
 		}
 		return l.use(x, life)
 	case *Block:
@@ -599,11 +598,13 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		var life lifetime
 		b := l.fork()
 		for _, arm := range x.Arms {
+			defined := len(l.defined)
 			l.bindPattern(arm.Pat, subject, l.originOf(x.X))
 			for _, guard := range arm.Pat.Guards() {
 				l.conditional(guard, func() { l.use(guard, l.expr(guard)) })
 			}
 			life = life.union(l.expr(arm.Body))
+			l.settle(defined)
 			b.done(arm.Body)
 		}
 		b.join(x.Pos(), "match")
@@ -645,7 +646,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		mark := len(l.bound)
 		outer := l.loop
 		l.loop = x
+		defined := len(l.defined)
+		l.noteVar(x.Var)
 		l.expr(x.Body)
+		l.settle(defined)
 		l.loop = outer
 		for owner, gone := range l.gone {
 			if _, ok := before[owner]; !ok && l.bound[owner] < mark {
@@ -860,6 +864,7 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	l.loop = nil
 	l.parent[x] = l.cur
 	l.cur = x
+	mark := len(l.defined)
 	for _, p := range x.Params {
 		l.frame[p] = x
 		l.env[p] = lifetime{p}
@@ -874,6 +879,7 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	var used lifetime
 	l.captures = append(l.captures, &used)
 	l.result(x.Body, l.use(x.Body, l.expr(x.Body)), "the lambda")
+	l.settle(mark)
 	l.captures = l.captures[:len(l.captures)-1]
 	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
 	// The lambda lives as long as what it uses from outside (not the
@@ -897,11 +903,14 @@ func (l *lifeChecker) mock(m *Mock) {
 	saved := l.cur
 	l.parent[m.Func] = l.cur
 	l.cur = m.Func
+	mark := len(l.defined)
 	for _, p := range m.Func.ParamVars {
 		l.frame[p] = m.Func
 		l.env[p] = lifetime{p}
+		l.noteVar(p)
 	}
 	life := l.use(m.Func.Body, l.expr(m.Func.Body))
+	l.settle(mark)
 	l.result(m.Func.Body, life, l.what())
 	l.pin(life, m.Pos, "the mock of "+m.Text, nil, true)
 	// Callers give the result the lifetime the target's signature

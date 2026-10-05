@@ -378,9 +378,6 @@ func (l *lifeChecker) pin(life lifetime, pos diag.Pos, what string, keeper lifet
 		p := pinAt{pos: pos, what: what, keeper: keeper, forever: forever}
 		// Branches share the slices (copyPins): never append in place.
 		l.pins[h] = append(slices.Clip(l.pins[h]), p)
-		if l.record {
-			l.notePin(h, p)
-		}
 	}
 }
 
@@ -452,9 +449,6 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 	for _, h := range o.hs {
 		m := movedAt{pos: x.Pos(), to: to}
 		l.moved[h] = m
-		if l.record {
-			l.noteMove(h, m)
-		}
 	}
 	x.MoveFrom = src.from
 	life := args[1]
@@ -469,10 +463,14 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 // it is used: moved, possibly moved, kept by something that may still
 // use it, borrowed, or owned (and movable here, or not).
 func (l *lifeChecker) ownership(x *VarRef) string {
-	if _, ok := x.Var.Type.(*Resource); !ok {
+	return l.varOwnership(x.Var)
+}
+
+func (l *lifeChecker) varOwnership(v *Var) string {
+	if _, ok := v.Type.(*Resource); !ok {
 		return ""
 	}
-	o := l.origins[x.Var]
+	o := l.origins[v]
 	if !o.known || len(o.hs) == 0 || o.hs[0].res == nil {
 		return borrowedText
 	}
@@ -501,44 +499,21 @@ func (l *lifeChecker) ownership(x *VarRef) string {
 
 const borrowedText = "borrowed (not acquired here), so it cannot be moved; attach it instead"
 
-// noteVar records, for queries, what the resource variable v is where it
-// is bound (owned or borrowed); pins and moves of what it may be update
-// it (notePin, noteMove), so that its definition says how it ends up.
+// noteVar marks v, bound here, for queries: where the block (or body)
+// that binds it ends, settle records what it is there, which is how it
+// ends up (moves and pins of other paths joined, ended keepers gone).
 func (l *lifeChecker) noteVar(v *Var) {
-	if !l.record {
-		return
-	}
-	if _, ok := v.Type.(*Resource); !ok {
-		return
-	}
-	l.varDepth[v] = l.depth
-	o := l.origins[v]
-	if !o.known || len(o.hs) == 0 || o.hs[0].res == nil {
-		l.info.VarOwnership[v] = borrowedText
-		return
-	}
-	for _, h := range o.hs {
-		l.handleVars[h] = append(l.handleVars[h], v)
-	}
-	l.info.VarOwnership[v] = fmt.Sprintf("owned by %s and acquired here, so move can hand it to another scope", l.scopeText(o.hs[0].scope))
-}
-
-func (l *lifeChecker) notePin(h *handle, p pinAt) {
-	for _, v := range l.handleVars[h] {
-		if text := l.info.VarOwnership[v]; !strings.Contains(text, "moved to") {
-			l.info.VarOwnership[v] = fmt.Sprintf("owned by %s, and kept by %s at line %d, so it cannot be moved", l.scopeText(h.scope), p.what, p.pos.Line)
-		}
+	if _, ok := v.Type.(*Resource); ok && l.record {
+		l.defined = append(l.defined, v)
 	}
 }
 
-func (l *lifeChecker) noteMove(h *handle, m movedAt) {
-	for _, v := range l.handleVars[h] {
-		how := "moved"
-		if l.depth > l.varDepth[v] {
-			how = "possibly moved"
-		}
-		l.info.VarOwnership[v] = fmt.Sprintf("%s to %s at line %d", how, m.to, m.pos.Line)
+// settle records the state of the variables noted since mark.
+func (l *lifeChecker) settle(mark int) {
+	for _, v := range l.defined[mark:] {
+		l.info.VarOwnership[v] = l.varOwnership(v)
 	}
+	l.defined = l.defined[:mark]
 }
 
 // movedUse reports the use of x, of a value that holds the moved handle
@@ -646,6 +621,11 @@ func joinMoves(start map[*handle]movedAt, ends []map[*handle]movedAt, startPins 
 				}
 			}
 			if prev, ok := moved[h]; ok && !prev.possibly {
+				// Moved on every path: name each target (at the first move).
+				if !m.possibly && !slices.Contains(strings.Split(prev.to, " or "), m.to) {
+					prev.to += " or " + m.to
+					moved[h] = prev
+				}
 				continue
 			}
 			moved[h] = m

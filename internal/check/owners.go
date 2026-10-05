@@ -404,6 +404,7 @@ func (l *lifeChecker) callLife(x *Call) lifetime {
 // be gone where it ends, if it does.
 func (l *lifeChecker) block(b *Block, tail func(Expr) lifetime) lifetime {
 	l.owners = append(l.owners, nil)
+	defined := len(l.defined)
 	for _, s := range b.Stmts {
 		l.stmt(s)
 	}
@@ -418,6 +419,7 @@ func (l *lifeChecker) block(b *Block, tail func(Expr) lifetime) lifetime {
 			l.mustBeGone(v, b.End)
 		}
 	}
+	l.settle(defined)
 	return life
 }
 
@@ -566,7 +568,6 @@ func copyGone(m map[*Var]goneAt) map[*Var]goneAt {
 }
 
 func (l *lifeChecker) fork() *branches {
-	l.depth++
 	return &branches{l: l, start: copyGone(l.gone), mark: len(l.bound), startMoved: copyMoved(l.moved), startPins: copyPins(l.pins)}
 }
 
@@ -605,7 +606,6 @@ func (b *branches) join(pos diag.Pos, what string) {
 		}
 	}
 	b.l.gone = out
-	b.l.depth--
 	b.l.moved, b.l.pins = joinMoves(b.startMoved, b.movedEnds, b.startPins, b.pinEnds)
 }
 
@@ -615,9 +615,7 @@ func (l *lifeChecker) conditional(x Expr, check func()) {
 	before := copyGone(l.gone)
 	mark := len(l.bound)
 	movedBefore := copyMoved(l.moved)
-	l.depth++
 	check()
-	l.depth--
 	// What it moves is possibly moved.
 	for _, h := range l.movesSince(movedBefore) {
 		m := l.moved[h]

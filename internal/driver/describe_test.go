@@ -810,6 +810,20 @@ fn main() {
     for (i in [1, 2]) { println(query(e)) }
   }
 }
+fn more(s: Scope, w: Scope, v: Scope, flag: Bool) uses io: String {
+  a = connect(s)
+  if (flag) { _ = move(a, w) } else { _ = move(a, v) }
+  b = connect(s)
+  if (flag) { _ = move(b, w) } else { return "early" }
+  e = connect(s)
+  for (x in [e]) { c = e; println(query(c)) }
+  k = connect(s)
+  launch(s, () => println(query(k)))
+  k2 = k
+  t = connect(s)
+  scope u { launch(u, () => println(query(t))) }
+  query(t)
+}
 `,
 	}
 	for name, source := range files {
@@ -829,6 +843,12 @@ fn main() {
 		{"31:19", "owned by scope s and acquired here, so move can hand it to another scope"},
 		{"33:5", "owned by scope s, and kept by the task of s started at line 34, so it cannot be moved"},
 		{"39:39", "owned by scope s, but acquired outside this loop, so it cannot be moved here"},
+		{"43:3", "moved to scope w or scope v at line 44"},
+		{"45:3", "moved to scope w at line 46"},
+		{"48:20", "owned by parameter s, but acquired outside this loop, so it cannot be moved here"},
+		{"48:8", borrowed},
+		{"51:3", "owned by parameter s, and kept by the task of s started at line 50, so it cannot be moved"},
+		{"52:3", "owned by parameter s and acquired here, so move can hand it to another scope"},
 		{"36:21", "owned by scope s, but acquired outside this lambda (or lazy, async or comptime body), so it cannot be moved here"},
 	} {
 		result, err := Describe(path+":"+tc.pos, "")
