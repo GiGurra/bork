@@ -52,6 +52,7 @@ fn parseInput(name: String, description: String, args: List[String], specs: List
 fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, s: Scope): adapter | Error unsafe go {
   import "fmt"
   import "reflect"
+  import "sort"
   import "strconv"
   import "strings"
   import "github.com/GiGurra/boa/pkg/boa"
@@ -67,6 +68,20 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   for _, spec := range specs {
     metadata[spec.field] = spec
     if spec.configFile { configField = spec.field }
+  }
+  positionalIndex := func(spec FieldSpec) int {
+    if position, specified := spec.position.(Option_Some[int64]); specified { return int(position.value) }
+    return 0
+  }
+  schema = append([]inputField{}, schema...)
+  indexed := false
+  for _, spec := range specs { if _, positioned := spec.position.(Option_Some[int64]); positioned { indexed = true } }
+  if indexed {
+    sort.SliceStable(schema, func(i, j int) bool {
+      left, right := metadata[schema[i].field], metadata[schema[j].field]
+      if left.positional != right.positional { return left.positional }
+      return left.positional && positionalIndex(left) < positionalIndex(right)
+    })
   }
   dynamic := map[string]Completion{}
   for _, completion := range completions {
@@ -105,7 +120,18 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   }
   shadow := reflect.New(reflect.StructOf(fields))
   var result any = pending{}
-  collect := func(partial bool) any {
+  collect := func(arguments []string, partial bool) any {
+      // Boa joins List positionals with commas. Keep original words, including
+      // commas, whitespace and JSON compound elements, after its raw binding.
+      for i, field := range schema {
+        spec := metadata[field.field]
+        if !spec.positional || !strings.HasPrefix(field.kind, "list:") { continue }
+        index := positionalIndex(spec)
+        if len(arguments) > index {
+          values := append([]string{}, arguments[index:]...)
+          shadow.Elem().Field(i).Set(reflect.ValueOf(&values))
+        }
+      }
       files := append([]string{}, configFiles...)
       for i, field := range schema {
         if field.field != configField { continue }
@@ -181,7 +207,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
     Use: name, Short: description, Params: shadow.Interface(),
     ParamEnrich: boa.ParamEnricherNone,
     RunFunc: func(cmd *cobra.Command, remaining []string) {
-      collected := collect(false)
+      collected := collect(remaining, false)
       if failure, bad := collected.(Error); bad { result = failure; return }
       input := collected.(inputCollection)
       if len(input.errors) != 0 { result = Error{errors: input.errors}; return }
@@ -191,10 +217,12 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
   }
   cmd, err := command.ToCobraE()
   if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
+  positionalCompletions := map[int]func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective){}
+  listPosition := -1
   for _, spec := range specs {
     long := mappingName(spec.long)
     complete := func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
-      if spec.positional && len(args) > 0 && !strings.HasPrefix(kinds[spec.field], "list:") { return nil, cobra.ShellCompDirectiveNoFileComp }
+      if spec.positional && len(args) > positionalIndex(spec) && !strings.HasPrefix(kinds[spec.field], "list:") { return nil, cobra.ShellCompDirectiveNoFileComp }
       if completion, supplied := dynamic[spec.field]; supplied && !spec.hidden && spec.deprecated == "" {
         fail := func(errors []codec.DecodeError) ([]string, cobra.ShellCompDirective) {
           for _, failure := range errors { _, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s: %s\n", failure.path, failure.message) }
@@ -215,7 +243,7 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
         // raw pointers. It has no user hooks or complete-record decoder.
         if err := cmd.ValidateArgs(args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) }
         if err := cmd.PreRunE(cmd, args); err != nil { return fail([]codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}) }
-        collected := collect(true)
+        collected := collect(args, true)
         if failure, bad := collected.(Error); bad { return fail(failure.errors) }
         input := collected.(inputCollection)
         snapshot := map[string]any{}
@@ -266,12 +294,25 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
       }
       return choices, directive
     }
-    if spec.positional { cmd.ValidArgsFunction = complete; continue }
+    if spec.positional {
+      index := positionalIndex(spec)
+      positionalCompletions[index] = complete
+      if strings.HasPrefix(kinds[spec.field], "list:") { listPosition = index }
+      continue
+    }
     if long == "" { continue }
     if err := cmd.RegisterFlagCompletionFunc(long, complete); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} }
 
     if spec.hidden { if err := cmd.Flags().MarkHidden(long); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} } }
     if spec.deprecated != "" { if err := cmd.Flags().MarkDeprecated(long, spec.deprecated); err != nil { return Error{errors: []codec.DecodeError{{path: spec.field, message: err.Error()}}} } }
+  }
+  if len(positionalCompletions) != 0 {
+    cmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, prefix string) ([]string, cobra.ShellCompDirective) {
+      index := len(args)
+      if listPosition >= 0 && index >= listPosition { index = listPosition }
+      if complete, exists := positionalCompletions[index]; exists { return complete(cmd, args, prefix) }
+      return nil, cobra.ShellCompDirectiveNoFileComp
+    }
   }
   return adapter{native: nativeCommand{handle: cmd, owner: s.Own(func() {})}, result: func() any { return result }}
 }

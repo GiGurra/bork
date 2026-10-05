@@ -1,0 +1,1 @@
+copy with 2 workers: ["first.txt", "second.txt"]

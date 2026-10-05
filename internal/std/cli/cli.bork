@@ -7,6 +7,7 @@ type Flag = {
   short: String = ""
   env: String = ""
   positional: Bool = false
+  position: Option[Int] = Option.None
   configFile: Bool = false
   long: Mapping = Mapping.Auto
   shortName: Mapping = Mapping.Auto

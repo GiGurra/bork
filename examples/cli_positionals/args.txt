@@ -1,0 +1,4 @@
+copy
+2
+first.txt
+second.txt
