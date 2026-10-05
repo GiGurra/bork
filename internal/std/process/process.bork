@@ -49,7 +49,7 @@ type Result = { code: Int, status: ExitStatus, stdout: Bytes, stderr: Bytes }
 
 // ExitError is a Result that Check rejected; message describes the exit and
 // ends with the last line of captured stderr, if any.
-type ExitError = { status: ExitStatus, stdout: Bytes, stderr: Bytes, message: String }
+type ExitError = { code: Int, status: ExitStatus, stdout: Bytes, stderr: Bytes, message: String }
 
 type stream = { kind: String, path: String, data: Bytes, text: String }
 type rawResult = { code: Int, signaled: Bool, signal: Int, signalName: String, stdout: Bytes, stderr: Bytes }
@@ -136,6 +136,7 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
   import "os/exec"
   import "reflect"
   import "strings"
+  import "sync/atomic"
   import "syscall"
   import "time"
   handle := _borkNewResourceHandle(nil, s)
@@ -150,7 +151,11 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     cmd.SysProcAttr = attributes
     grouped = true
   }
+  // signalAll reaches the group only while the direct child is unreaped: after
+  // Process.Wait the leader probe reports done, so a reused group ID is never
+  // signalled and descendants that outlive the child are left alone.
   signalAll := func(sig os.Signal) error {
+    if err := cmd.Process.Signal(syscall.Signal(0)); errors.Is(err, os.ErrProcessDone) { return nil }
     if !grouped { return cmd.Process.Signal(sig) }
     processGroup, err := os.FindProcess(-cmd.Process.Pid)
     if err != nil { return err }
@@ -170,7 +175,11 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     })
   }
   grace := time.Duration(graceNanos)
-  cmd.Cancel = func() error { terminate(grace); return nil }
+  // A child that exited on its own keeps its Result even if the scope is
+  // cancelled while its output drains; only a cancellation that reached the
+  // child reports Cancelled.
+  var cancelled atomic.Bool
+  cmd.Cancel = func() error { cancelled.Store(true); terminate(grace); return nil }
   // Bound inherited output pipes after child exit or cancellation.
   cmd.WaitDelay = time.Second
   if grace > 0 { cmd.WaitDelay += grace }
@@ -182,7 +191,7 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     closeFiles()
     cancelChild()
     handle.Close()
-    if reason := _borkScopeContext(s).Err(); reason != nil { return Cancelled{reason: reason.Error()} }
+    if scopeContext := _borkScopeContext(s); scopeContext.Err() != nil { return Cancelled{reason: context.Cause(scopeContext).Error()} }
     return IoError{path: path, message: err.Error()}
   }
   switch stdin.kind {
@@ -238,11 +247,10 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     defer cancelChild()
     defer close(done)
     err := cmd.Wait()
-    if err := ctx.Err(); err != nil {
-      // Prefer the owning scope's reason, such as a cancelAfter deadline.
-      reason := s._cancelReason()
-      if reason == "" { reason = err.Error() }
-      result = Cancelled{reason: reason}
+    if cancelled.Load() {
+      // The cause names the current owner's reason, such as a deadline, also
+      // after attach.
+      result = Cancelled{reason: context.Cause(ctx).Error()}
       return
     }
     var exitError *exec.ExitError
@@ -276,7 +284,7 @@ fn start(s: Scope, name: String, arguments: List[String], environment: Option[Li
     }
     switch operation {
     case "signal":
-      if err := signalAll(syscall.Signal(argument)); err != nil { return IoError{path: name, message: err.Error()} }
+      if err := signalAll(syscall.Signal(argument)); err != nil && !errors.Is(err, syscall.ESRCH) { return IoError{path: name, message: err.Error()} }
     case "stop":
       terminate(time.Duration(argument))
     }
@@ -379,7 +387,7 @@ fn (result: Result) Check(): Result | ExitError {
   if (result.Success()) {
     result
   } else {
-    ExitError { status: result.status, stdout: result.stdout, stderr: result.stderr, message: exitMessage(result.status, result.stderr) }
+    ExitError { code: result.code, status: result.status, stdout: result.stdout, stderr: result.stderr, message: exitMessage(result.status, result.stderr) }
   }
 }
 

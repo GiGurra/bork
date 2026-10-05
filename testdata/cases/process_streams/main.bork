@@ -101,12 +101,82 @@ fn handles(s: Scope, directory: String) uses io + state + clock: Ok | IoError | 
   })
 }
 
+fn settle(s: Scope, child: process.Process) uses io + state + clock: process.Result | IoError | Cancelled {
+  match (child.TryWait()) {
+    Option.Some { value } => value
+    Option.None => {
+      delay(s, 10)?
+      settle(s, child)
+    }
+  }
+}
+
+fn millis() uses clock: Int unsafe go {
+  import "time"
+  return time.Now().UnixMilli()
+}
+
+// Captured output drains without a reader, and stubborn children are killed.
+fn robustness(s: Scope, directory: String) uses io + state + clock: Ok | IoError | Cancelled | fs.Error {
+  loud = process.Start(s, "head", ["-c", "1048576", "/dev/zero"])?
+  println(settle(s, loud)?.stdout.length())
+  both = process.Start(s, "/bin/sh", ["-c", "head -c 1048576 /dev/zero; head -c 1048576 /dev/zero >&2"], stderr: .Stdout)?
+  println(settle(s, both)?.stdout.length())
+  big = process.Run(s, "wc", ["-c"], stdin: .Text { text: "x".repeat(1048576) })?
+  println(big.StdoutText().trim())
+  silent = shell(s, "echo out; echo err >&2", stdout: .Discard, stderr: .Stdout)?
+  println(silent.stdout.length() + silent.stderr.length())
+  path = fs.Join([directory, "errors-append.txt"])
+  _ = shell(s, "echo one >&2", stderr: .Append { path: path })?
+  _ = shell(s, "echo two >&2", stderr: .Append { path: path })?
+  println(encoding.ParseUtf8(fs.Read(path)?))
+  ready = fs.Join([directory, "stubborn"])
+  stubborn = process.Start(s, "/bin/sh", ["-c", "trap '' TERM; echo ready > \"$1\"; while true; do sleep 0.05; done", "sh", ready])?
+  waitReady(ready)
+  start = millis()
+  stubborn.Stop(time.Duration { nanos: 200_000_000 })
+  println(stubborn.Wait()?.status)
+  println(millis() - start < 2000)
+  escalated = scope patient {
+    cancelAfter(patient, 200)
+    process.Run(patient, "/bin/sh", ["-c", "trap '' TERM; while true; do sleep 0.05; done"], cancelGrace: time.Duration { nanos: 200_000_000 })
+  }
+  println(match (escalated) {
+    stopped: Cancelled => stopped.reason
+    _ => "unexpected"
+  })
+  // The direct child exits on SIGTERM; the SIGKILL timer must not reach a
+  // descendant that outlives it while still holding the captured pipe.
+  survivor = fs.Join([directory, "survivor"])
+  marker = fs.Join([directory, "outer"])
+  outer = process.Start(s, "/bin/sh", ["-c", "sh -c 'trap \"\" TERM; sleep 0.5; echo survived > \"$1\"' sh \"$1\" & trap 'exit 0' TERM; echo ready > \"$2\"; wait", "sh", survivor, marker])?
+  waitReady(marker)
+  outer.Stop(time.Duration { nanos: 100_000_000 })
+  _ = outer.Wait()?
+  println(encoding.ParseUtf8(fs.Read(survivor)?))
+}
+
+fn adopted(s: Scope) uses io + state: process.Process | IoError | Cancelled {
+  scope child {
+    proc = process.Start(child, "sleep", ["5"])?
+    attach(proc, s)
+  }
+}
+
 fn cancellation(directory: String) uses io + state + clock: Ok | IoError | Cancelled {
   limited = scope limited {
     cancelAfter(limited, 100)
     process.Run(limited, "sleep", ["5"])
   }
   println(match (limited) {
+    stopped: Cancelled => stopped.reason
+    _ => "unexpected"
+  })
+  moved = scope deadline {
+    cancelAfter(deadline, 100)
+    adopted(deadline)?.Wait()
+  }
+  println(match (moved) {
     stopped: Cancelled => stopped.reason
     _ => "unexpected"
   })
@@ -130,6 +200,7 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled | fs.Err
   streams(s, directory)?
   statuses(s)?
   handles(s, directory)?
+  robustness(s, directory)?
   cancellation(directory)?
 }
 

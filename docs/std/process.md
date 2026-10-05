@@ -59,8 +59,12 @@ fn build(s: Scope) uses io + state: Ok | IoError | Cancelled {
 ```
 
 Files are opened before the child starts; failing to open one is an IoError
-naming that path, and nothing runs. Captured output drains in the background,
-so a chatty child never blocks on a full pipe, even if nobody waits for it.
+naming that path, and nothing runs. To send both streams to one file, use
+`stderr: .Stdout` rather than the same path twice, which opens two handles
+that overwrite each other. Captured output drains in the background, so a
+chatty child never blocks on a full pipe, even if nobody waits for it. It is
+kept in memory without a limit, so give long-running children `.Discard`,
+`.File` or `.Inherit`.
 
 ## Exit status
 
@@ -71,8 +75,8 @@ child (`name` is the conventional name, such as `"SIGKILL"`; Unix only).
 `StdoutText()` and `StderrText()` give the bytes as a String; use
 `encoding.ParseUtf8` when they must be validated.
 
-`Check()` turns a failed Result into an `ExitError { status, stdout, stderr,
-message }`, like Python's `check=True`. The message names the exit and ends
+`Check()` turns a failed Result into an `ExitError { code, status, stdout,
+stderr, message }`, like Python's `check=True`. The message names the exit and ends
 with the last line of captured stderr, such as `exit status 128: fatal: not a
 git repository`.
 
@@ -120,7 +124,8 @@ the grace period plus one second.
   SIGKILL after `grace`. `Kill()` sends SIGKILL at once. Neither cancels the
   scope; `Wait` gives the child's Result, such as
   `Signaled { number: 15, name: "SIGTERM" }`, or the code the child chose when
-  it handled SIGTERM.
+  it handled SIGTERM. On Windows both terminate the child at once and it
+  reports `Exited { code: 1 }`.
 
 ```bork
 import "bork/process"
@@ -147,8 +152,8 @@ while the direct child is running: descendants that outlive its normal exit are
 not killed by later cancellation or scope cleanup. Other targets act only on
 the direct child, and Stop kills at once there.
 
-Run waits at most one second (plus `cancelGrace`) for inherited output pipes
-after the child exits or is cancelled. If a descendant keeps them open after a
+Wait (and so Run) waits at most one second (plus `cancelGrace`) for
+inherited output pipes after the child exits, is stopped or is cancelled. If a descendant keeps them open after a
 successful exit, the result is IoError rather than partial output. Nonzero
 exits keep their Result and output may be truncated at this bound. This bound
 keeps capture from blocking cleanup forever.

@@ -32,6 +32,19 @@ got usr1
 cleaned up
 
 true
+1048576
+2097152
+1048576
+0
+one
+two
+
+ExitStatus.Signaled { number: 9, name: "SIGKILL" }
+true
+context deadline exceeded
+survived
+
+context deadline exceeded
 context deadline exceeded
 true
 graceful exit
