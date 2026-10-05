@@ -35,7 +35,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [parallel_lists](../examples/parallel_lists/main.bork) | Bounded parallel `map` over a list, with cancellation |
 | [task_fanin](../examples/task_fanin/main.bork) | Awaiting many tasks, racing them, and timeouts |
 | [channels](../examples/channels/main.bork) | Sending, receiving, closing, buffers, and producers |
-| [select_timeout](../examples/select_timeout/main.bork) | `select` with a timeout, a heartbeat ticker, polling, and a scope deadline |
+| [select_timeout](../examples/select_timeout/main.bork) | `select` with a timeout, a ticker pacing work, polling, and a scope deadline |
 | [pipeline](../examples/pipeline/main.bork) | Stages joined by channels, stopped when the scope ends |
 | [fan_in_out](../examples/fan_in_out/main.bork) | Workers sharing one channel of jobs, and `merge` collecting their results |
 | [unbounded_queue](../examples/unbounded_queue/main.bork) | A queue that never blocks its producer, against a bounded one |

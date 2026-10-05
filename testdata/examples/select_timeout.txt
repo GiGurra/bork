@@ -1,6 +1,9 @@
 fast question: 42
 TimedOut {}
-beat while waiting: true
+tick: fetch
+tick: parse
+tick: store
+Ok
 nothing yet
 got hello
 Cancelled { reason: "deadline exceeded" }

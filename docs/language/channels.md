@@ -249,7 +249,7 @@ empty
 
 - **Pipeline**: stages joined by channels, each a task made with `produce` that receives from the stage before it. See [examples/pipeline](../../examples/pipeline/main.bork).
 - **Fan out, fan in**: several workers receive from one channel of jobs, so each job goes to one of them, and `merge` collects their results. See [examples/fan_in_out](../../examples/fan_in_out/main.bork).
-- **Timeouts and heartbeats**: `select` over a reply, `time.After`, and `time.Tick`. See [examples/select_timeout](../../examples/select_timeout/main.bork).
+- **Timeouts and tickers**: `select` over a reply and `time.After`, and `time.Tick` pacing steps. See [examples/select_timeout](../../examples/select_timeout/main.bork).
 - **A queue that never blocks its producer**: [examples/unbounded_queue](../../examples/unbounded_queue/main.bork).
 - **The basics in one program**: [examples/channels](../../examples/channels/main.bork).
 
