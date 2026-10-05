@@ -194,11 +194,7 @@ func EditorActiveParameter(callable *CallableDescription, previous []syntax.Argu
 
 func editorVariantSignature(variant *Variant, from *Package) *EditorSignature {
 	pos := variant.Parent.Decl.Variants[variant.Index].Pos
-	callable := &CallableDescription{Parameters: []ParameterDescription{}}
-	for _, field := range variant.Fields {
-		callable.Parameters = append(callable.Parameters, ParameterDescription{Type: TypeText(field.Type, from)})
-	}
-	return &EditorSignature{Name: variant.Parent.Name + "." + variant.Name, Result: TypeText(variant.Parent, from), Effects: "nothing", Callable: callable, Definition: &pos}
+	return &EditorSignature{Name: variant.Parent.Name + "." + variant.Name, Result: TypeText(variant.Parent, from), Effects: "nothing", Callable: DescribeVariantCallable(variant, from), Definition: &pos}
 }
 
 func (c *checker) editorVariantSignatureNamed(name string, from *Package, site diag.Pos) *EditorSignature {

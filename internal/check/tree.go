@@ -382,6 +382,7 @@ type VariantValue struct {
 // type: `User { name: "Ada" }`, `Shape.Circle { radius: 3 }`. Fields
 // are in the order written.
 type RecordLit struct {
+	SourceCall *syntax.Call // positional constructor syntax, for source queries
 	expr
 	Candidate *Var
 	// Promoted marks an implicit Some around a source expression.

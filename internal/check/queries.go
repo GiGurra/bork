@@ -641,3 +641,12 @@ func PatternRuntimeTypes(info *Info) []Type {
 	}
 	return out
 }
+
+// DescribeVariantCallable exposes ordered payload types without source field names.
+func DescribeVariantCallable(variant *Variant, from *Package) *CallableDescription {
+	out := &CallableDescription{Parameters: []ParameterDescription{}}
+	for _, field := range variant.Fields {
+		out.Parameters = append(out.Parameters, ParameterDescription{Type: TypeText(field.Type, from)})
+	}
+	return out
+}

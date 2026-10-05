@@ -2,8 +2,13 @@ import "bork/json"
 import "bork/test"
 
 pred positive(n: Int) { n > 0 }
-type Payload[T] = sealed { Pair(T, String), One((T, String)), Named { value: T }, Empty } derive (Encode, Decode)
-type Positive = sealed { Value(Int where positive), Empty } derive (Encode, Decode)
+type Payload[T] = sealed { Pair(T, String), One((T, String)), Named { value: T }, Empty }
+type Positive = sealed { Value(Int where positive), Empty }
+derive Encode for Payload
+derive Decode for Payload
+derive Encode for Positive
+derive Decode for Positive
+
 type Bits = sealed { Pair(Bool, Bool), Empty }
 
 fn read[T](value: Payload[T]): T | String {

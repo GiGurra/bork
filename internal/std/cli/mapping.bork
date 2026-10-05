@@ -193,8 +193,8 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
         switch value := field.Default().(type) {
         case string: defaults = []string{value}
         case []string: defaults = value
-        case Option_Some[string]: defaults = []string{value.value}
-        case Option_Some[[]string]: defaults = value.value
+        case Option_Some[string]: defaults = []string{value.E0}
+        case Option_Some[[]string]: defaults = value.E0
         }
         for _, value := range defaults { if !allowed[value] { fail(field.Name, "default is not one of the allowed choices"); break } }
       }

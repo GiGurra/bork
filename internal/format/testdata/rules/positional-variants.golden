@@ -1,0 +1,5 @@
+type Reply[T] = sealed { Found(T, String), Gone, Named { value: T } }
+fn read(x: Reply[Int]): Int { match (x) { Reply[Int].Found(value, _) => value
+  .Gone => 0
+  .Named { value } => value } }
+fn make(): Reply[Int] { .Found(1, "hello") }

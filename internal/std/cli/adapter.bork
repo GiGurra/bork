@@ -31,7 +31,7 @@ fn inputFields[T: codec.Decode](name: String): List[inputField] | Error unsafe g
       text = fmt.Sprintf("%v", value)
       switch value := value.(type) {
       case string: path = value
-      case Option_Some[string]: path = value.value
+      case Option_Some[string]: path = value.E0
       }
     }
     fields = append(fields, inputField{field: field.Name, kind: field.Kind, optional: field.Optional, hasDefault: field.HasDefault, defaultText: text, configDefault: path, validate: func(value codec.Value) any {

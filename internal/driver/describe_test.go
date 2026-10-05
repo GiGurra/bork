@@ -972,3 +972,43 @@ fn main() {
 		t.Fatalf("got definition %v with facts %v, want line 4 known nonNegative", result.Definition, facts)
 	}
 }
+
+func TestDescribePositionalVariantConstructors(t *testing.T) {
+	source := `type Pair[T]=sealed{Pair(T,String),Empty}
+fn main(){println(Pair[Int].Pair(1,"x"),Option.Some(3))}`
+	path := filepath.Join(t.TempDir(), "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		fragment, typ string
+		arity         int
+	}{
+		{"Pair(1", "(Int, String) => Pair[Int]", 2},
+		{"Some(3", "(Int) => Option[Int]", 1},
+	} {
+		offset := strings.Index(source, tc.fragment)
+		column := offset - strings.LastIndex(source[:offset], "\n")
+		result, err := Describe(fmt.Sprintf("%s:2:%d", path, column), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Type != tc.typ || result.Callable == nil || len(result.Callable.Parameters) != tc.arity || result.Callable.NamedArguments || result.Callable.ParameterNamesAreAPI {
+			t.Fatalf("%s: %+v", tc.fragment, result)
+		}
+		for _, p := range result.Callable.Parameters {
+			if p.Name != "" {
+				t.Fatalf("exposed internal name: %+v", p)
+			}
+		}
+		resultColumn := column + strings.Index(tc.fragment, "(")
+		value, err := Describe(fmt.Sprintf("%s:2:%d", path, resultColumn), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantResult := strings.Split(tc.typ, " => ")[1]
+		if value.Type != wantResult || value.Callable != nil {
+			t.Fatalf("constructor result: %+v", value)
+		}
+	}
+}

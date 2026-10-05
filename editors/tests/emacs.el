@@ -15,6 +15,15 @@
     (bork-indent-line)
     (should (= (current-indentation) 2))))
 
+(ert-deftest bork-positional-variant-highlighting ()
+  (with-temp-buffer
+    (insert "type Reply[T] = sealed { Found(T, String), Gone }\nmatch(x) { Reply[Int].Found(n, _) => n, .Gone => 0 }\n")
+    (bork-mode)
+    (font-lock-ensure)
+    (goto-char (point-min))
+    (while (search-forward "Found" nil t)
+      (should (eq (get-text-property (- (point) 5) 'face) 'font-lock-type-face)))))
+
 (ert-deftest bork-shebang ()
   (with-temp-buffer
     (insert "#!/usr/bin/env -S bork script\nprintln(1)\n")

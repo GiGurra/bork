@@ -414,7 +414,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		return &Binary{expr: at, Op: x.Op, X: l.expr(x.X), Y: l.expr(x.Y)}
 	case *syntax.Call:
 		if literal := l.info.variantCalls[x]; literal != nil {
-			return l.expr(literal)
+			out := l.expr(literal).(*RecordLit)
+			out.SourceCall = x
+			return out
 		}
 		if assertion := l.info.patternAssertions[x]; assertion != nil {
 			return l.assertIs(x, at, assertion)
