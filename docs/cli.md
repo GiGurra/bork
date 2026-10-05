@@ -110,7 +110,7 @@ bork lint .          # advisory warnings; exit 1 for compiler errors
 bork lint --json .   # the same diagnostic schema as check --json
 ```
 
-Lint checks unused local bindings, parameters and unreferenced private functions,
+Lint checks unused parameters and unreferenced private functions,
 types and package values; predicate checks already proved by the compiler;
 redundant boolean literals; and declared effects not performed by a function.
 Warnings are also shown by the language server, with quick fixes when a change
@@ -119,13 +119,14 @@ warnings are skipped for packages containing unsafe Go bodies. Removing paramete
 names could break labeled calls, so unused parameter warnings have no rename fix.
 
 Suppress an advisory rule on the same line or the next line with
-`// lint:ignore lint.unused-binding reason`. Separate multiple rule codes with
+`// lint:ignore lint.unused-parameter reason`. Separate multiple rule codes with
 commas, or use `all`. The comment only suppresses lint warnings. Exported functions
 may reserve effects as API headroom; use a suppression before that declaration
 when the extra effects are intentional.
 
-Shadowing, unreachable match arms, unused imports and needless effects on private
-functions remain compiler errors, including their existing fixes. Lint does not
+Unused local bindings, nested shadowing, unreachable match arms, unused imports
+and needless effects on private functions remain compiler errors, including their
+existing fixes. Lint does not
 weaken these guarantees. Warnings alone leave the command's exit status at 0.
 The linter uses the compiler's parsed and checked trees, and proven-check warnings
 require a proof without extra compile-time evaluation.

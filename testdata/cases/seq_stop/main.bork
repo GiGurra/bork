@@ -30,7 +30,7 @@ fn protect(work: () => Ok): Bool unsafe go {
 }
 fn failClose(s: Scope) uses io unsafe go { s.Defer(func() { panic("cleanup failed") }) }
 fn give(parent: Scope) uses io: OwnedScope {
-  for (n in Seq.range(0, 1)) {
+  for (_ in Seq.range(0, 1)) {
     owner = openScope(parent)
     cleanup(owner.scope, "returned owner closed")
     scope failing { failClose(failing); return owner }

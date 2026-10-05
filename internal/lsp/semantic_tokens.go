@@ -15,7 +15,7 @@ var semanticTokenTypes = []string{
 	"enumMember", "function", "method", "keyword", "string", "number", "operator", "comment", "class",
 }
 var semanticTokenModifiers = []string{
-	"declaration", "readonly", "static", "defaultLibrary", "predicate", "effect", "goBinding",
+	"declaration", "readonly", "static", "defaultLibrary", "predicate", "effect", "goBinding", "rebinding",
 }
 
 type semanticTokensResult struct {
@@ -64,7 +64,7 @@ func (s *server) semanticTokens(path, source string, requested *sourceRange) (se
 			continue
 		}
 		var modifiers uint32
-		for i, enabled := range []bool{token.Declaration, token.Readonly, token.Static, token.Builtin, predicate, effect, token.GoBinding} {
+		for i, enabled := range []bool{token.Declaration, token.Readonly, token.Static, token.Builtin, predicate, effect, token.GoBinding, token.Rebinding} {
 			if enabled {
 				modifiers |= 1 << i
 			}

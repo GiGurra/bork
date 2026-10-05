@@ -5,9 +5,9 @@ type Outer = { config: settings.Config, name: String }
 type InferredDefault = { config: settings.Config = .{} }
 type Defaults = { config: settings.Config = settings.Config {} }
 fn main() {
-  inferred: settings.Config = .{ port: 9000 }
-  inferredAlias: Alias = .{ port: 9000 }
-  inferredGeneric: settings.Box[String] = .{ value: "bad" }
+  _: settings.Config = .{ port: 9000 }
+  _: Alias = .{ port: 9000 }
+  _: settings.Box[String] = .{ value: "bad" }
   c = settings.New(9000)
   println(settings.Config { port: 9000 }, Alias { port: 9000 }, settings.Box { value: "bad" })
   println(c.copy(port: 9001))

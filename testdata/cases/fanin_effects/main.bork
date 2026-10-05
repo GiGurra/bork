@@ -1,6 +1,6 @@
 import "bork/time"
 fn first(works: List[(Int) => Int]): Int {
-  match (works) { [head, ...tail] => head(1); [] => 0 }
+  match (works) { [head, ...] => head(1); [] => 0 }
 }
 fn relay(works: List[(Int) => Int]): Int { first(works) }
 fn ioCall() uses io: Int { relay([x => { println("callback"); x }]) }
@@ -11,7 +11,7 @@ fn clockRace(s: Scope) uses clock + state: Option[Int] | Cancelled {
   race(s, [child => { _ = time.Sleep(child, time.Nanoseconds((1) * 1000000)); 8 }])
 }
 fn pick(callbacks: List[() => Int]): () => Int {
-  () => match (callbacks) { [callback, ...rest] => callback(); [] => 0 }
+  () => match (callbacks) { [callback, ...] => callback(); [] => 0 }
 }
 fn main() {
   empty: () uses nothing => Int = pick([])

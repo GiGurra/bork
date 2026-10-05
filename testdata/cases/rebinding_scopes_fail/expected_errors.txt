@@ -1,0 +1,1 @@
+main.bork:7:9: oldScope may be released: it belongs to owned scope owner, which was closed at line 5

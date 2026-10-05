@@ -17,14 +17,14 @@ fn requiresPositive(n: Int where positive): Int { n }
 fn classify(x: Int | String): String {
   match (x) {
     n: PosInt => s"positive ${requiresPositive(n)}"
-    n: Int where zero => "zero"
+    _: Int where zero => "zero"
     n: Int => s"other $n"
     s: String => s"text $s"
   }
 }
 fn inside(n: Int, low: Int, high: Int): Bool {
   match (n) {
-    v: Int where between(low, high) => true
+    _: Int where between(low, high) => true
     _ => false
   }
 }
@@ -32,7 +32,7 @@ fn accepted(n: Int): Int where positive {
   match (n) { v: AnotherPos => v; _ => 1 }
 }
 fn onlyPure(n: Int, keep: (Int) uses nothing => Bool): Bool {
-  match (n) { v: Int where keep => true; _ => false }
+  match (n) { _: Int where keep => true; _ => false }
 }
 fn kept(n: Int, keep: (Int) uses nothing => Bool): Int where keep {
   match (n) { v: Int where keep => v; _ => panic("not kept") }
@@ -42,11 +42,11 @@ fn main() {
   println(classify(4), classify(0), classify(-2), classify("hello"))
   println(inside(3, 1, 4), inside(7, 1, 4), accepted(-1), accepted(2))
   println(onlyPure(2, positive), onlyPure(-2, positive), kept(2, positive))
-  println(match (once()) { n: Int where positive and checkedPositive => 10; _ => 20 })
-  println(match (0) { n: Int where positive or zero => "nonnegative"; _ => "negative" })
-  println(match (3) { n: Int where positive or unexpected => 30; _ => 0 })
+  println(match (once()) { _: Int where positive and checkedPositive => 10; _ => 20 })
+  println(match (0) { _: Int where positive or zero => "nonnegative"; _ => "negative" })
+  println(match (3) { _: Int where positive or unexpected => 30; _ => 0 })
   println(match ("ok") { s: String where same("ok") => s; _ => "no" })
-  println(match ([1]) { xs: List[Int] where hasValue("yes") => 1; _ => 0 })
+  println(match ([1]) { _: List[Int] where hasValue("yes") => 1; _ => 0 })
   println(match (3) { n: Int where positive and small => requiresPositive(n); _ => 0 })
   println(match ([7]) { xs: List[Int] where notEmpty => xs.first(); _ => 0 })
   empty: List[Int] = []

@@ -12,11 +12,11 @@ fn endpoint(index: Int, request: http.Request, rs: Scope): http.Response {
     1 => match (http.QueryAs[Search](request)) {
       value: Search => http.Text(200, value.name + ":" + toString(value.count) + ":" + toString(value.optional))
       error: DecodeError => http.Text(422, error.path)
-      error: IoError => http.Text(400, "bad query")
+      _: IoError => http.Text(400, "bad query")
     }
     2 => match (http.Form(request)) {
       value: http.Headers => http.Text(200, toString(value.get("name")))
-      error: IoError => http.Text(400, "bad form")
+      _: IoError => http.Text(400, "bad form")
     }
     _ => http.Text(500, "unexpected")
   }
@@ -70,9 +70,9 @@ fn main() {
       }
       error: IoError => println("unexpected", error.message)
     }
-    println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }, http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }])) { error: IoError => true; _ => false })
-    println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /{", handler: (req, rs) => endpoint(0, req, rs) }])) { error: IoError => true; _ => false })
-    println(match (http.Listen("127.0.0.1:0", s, (request, rs) => http.Text(200, "ok"), 1001)) { error: IoError => true; _ => false })
-    println(match (http.ListenTLS("127.0.0.1:0", s, [http.Route { pattern: "/", handler: (req, rs) => endpoint(0, req, rs) }], "missing-cert", "missing-key")) { error: IoError => true; _ => false })
+    println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }, http.Route { pattern: "GET /x", handler: (req, rs) => endpoint(0, req, rs) }])) { _: IoError => true; _ => false })
+    println(match (http.ListenRoutes("127.0.0.1:0", s, [http.Route { pattern: "GET /{", handler: (req, rs) => endpoint(0, req, rs) }])) { _: IoError => true; _ => false })
+    println(match (http.Listen("127.0.0.1:0", s, (request, rs) => http.Text(200, "ok"), 1001)) { _: IoError => true; _ => false })
+    println(match (http.ListenTLS("127.0.0.1:0", s, [http.Route { pattern: "/", handler: (req, rs) => endpoint(0, req, rs) }], "missing-cert", "missing-key")) { _: IoError => true; _ => false })
   }
 }

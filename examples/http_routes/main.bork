@@ -19,7 +19,7 @@ fn logged(handler: http.Handler): http.Handler {
 }
 fn waitForStop(s: Scope) uses clock + state {
   match (delay(s, 1000)) {
-    e: Cancelled => {}
+    _: Cancelled => {}
     _ => waitForStop(s)
   }
 }

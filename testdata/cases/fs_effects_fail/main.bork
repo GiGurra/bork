@@ -3,5 +3,5 @@ import "bork/fs"
 type PureReader = { read: (String) uses nothing => (Bytes | fs.Error) }
 
 fn main() {
-  reader = PureReader { read: fs.Read }
+  _ = PureReader { read: fs.Read }
 }

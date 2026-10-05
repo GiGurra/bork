@@ -16,17 +16,33 @@ fn main() {
 
 The type after the name is optional. The compiler works it out when it is left off.
 
-Bindings are immutable. A name keeps its value, and it cannot be bound a second time, not even in a nested block:
+Bindings are immutable. Reusing a name in the same block creates a new binding,
+whose type may differ. Its initializer sees the previous binding; closures keep
+the value they captured:
 
-```bork fails
+```bork
 fn main() {
   count = 1
+  earlier = () => count
   count = count + 1
-  println(count)
+  count = s"now $count"
+  println(earlier(), count)
 }
 ```
 
-Give the new value a new name instead (`next = count + 1`).
+Parameters may be rebound in the function body's top-level block. Inner blocks
+and lambdas cannot shadow a name from an enclosing scope. Sibling blocks may
+reuse names. Package functions, imports and package values cannot be rebound locally.
+Prelude free functions may be shadowed by locals; calling a non-function local
+with a prelude function’s name reports the local declaration.
+
+Every local binding must be read, including a binding replaced by another one.
+Unused locals are compiler errors; parameters are exempt. Use `_ = expression`
+(or `_: Type = expression` when an annotation is needed) to discard a result.
+In patterns, use `_`, `{ field: _ }`, `_: Type`, or `[_, ...]` to discard values.
+A deferred value can be captured by a discarded closure (`_ = () => value`)
+without forcing it. Editors mark rebinding declarations and show the earlier
+binding's line in hover text.
 
 ## Functions
 

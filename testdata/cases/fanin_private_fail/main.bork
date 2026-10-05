@@ -1,11 +1,11 @@
 fn main() {
   scope s {
     task = spawn(s, () => 1)
-    fake: Task[String] = Task { native: task.native, wait: () => "fake" }
-    changed = task.copy(wait: () => 2)
-    ch: Channel[Int] = Channel {}
+    _: Task[String] = Task { native: task.native, wait: () => "fake" }
+    _ = task.copy(wait: () => 2)
+    _: Channel[Int] = Channel {}
     existing = channel[Int](s, 1)
     arm = existing.receiveCase(value => 1)
-    forged: ReceiveCase[Int] = ReceiveCase { native: arm.native, decode: arm.decode }
+    _: ReceiveCase[Int] = ReceiveCase { native: arm.native, decode: arm.decode }
   }
 }

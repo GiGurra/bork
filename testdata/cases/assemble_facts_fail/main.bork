@@ -8,6 +8,6 @@ fn main() {
     println(assemble[Good](s, good, number))
     println(assemble[Port](s, number))
     println(assembleAll[Port](s, number))
-    saved = good
+    _ = good
   }
 }

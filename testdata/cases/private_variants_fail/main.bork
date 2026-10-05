@@ -2,15 +2,15 @@ import "example.com/private/api"
 type Local = api.Secret
 type LocalBox = api.Box[Int]
 fn main() {
-  context: api.Secret = .hidden { value: 1 }
-  contextAlias: LocalBox = .hidden { value: 2 }
-  contextBare: api.Box[Int] = .empty
+  _: api.Secret = .hidden { value: 1 }
+  _: LocalBox = .hidden { value: 2 }
+  _: api.Box[Int] = .empty
   aliased = Local.hidden { value: 1 }
   genericAlias = LocalBox.hidden { value: 1 }
   first = api.Secret.hidden { value: 1 }
-  generic: api.Box[Int] = api.Box.hidden { value: 2 }
+  _: api.Box[Int] = api.Box.hidden { value: 2 }
   inferred = api.Box.hidden { value: "bad" }
-  bare: api.Box[Int] = api.Box.empty
+  _: api.Box[Int] = api.Box.empty
   match (api.New()) { api.Secret.hidden { value } => println("hidden"); _ => {} }
   match (api.Boxed(1)) { api.Box.hidden { value } => println("hidden"); _ => {} }
 }

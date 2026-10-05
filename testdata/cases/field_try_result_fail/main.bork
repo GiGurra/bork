@@ -15,7 +15,7 @@ fn fieldTailPromise(flag: Bool): Int | Problem where Approved {
   box = Box { value: { if (flag) { return Problem { code: 0 } }; approvedSource() } }
   box.value?
 }
-pred NumericExit(x: Int | Ok) { match (x) { n: Int => true; unit: Ok => false } }
+pred NumericExit(x: Int | Ok) { match (x) { _: Int => true; _: Ok => false } }
 fn emptyExit(): Int | Ok {}
 type ExitBox = { lazy value: Int | Ok }
 fn fieldEmpty(): (Int | Ok) where NumericExit {

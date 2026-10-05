@@ -17,6 +17,6 @@ instance greetInt: Greeter[Int] {
 }
 
 fn main() {
-  x: Int = e
-  y: Int = k
+  _: Int = e
+  _: Int = k
 }

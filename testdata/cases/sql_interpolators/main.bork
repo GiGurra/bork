@@ -26,10 +26,10 @@ fn demo() uses io + net: Ok | dbsql.Error | DecodeError {
   inspect(dbsql.SQL"SELECT ${true}, ${1.25}, ${encoding.Utf8("hello")}, ${dbsql.Null {}}", dbsql.Dialect.Postgres)
   scope app {
     db = dbsql.OpenSqlite(":memory:", app)?
-    created = dbsql.SQL"CREATE TABLE users (name TEXT, note TEXT)".Exec(db)?
+    _ = dbsql.SQL"CREATE TABLE users (name TEXT, note TEXT)".Exec(db)?
     scope transaction {
       tx = dbsql.Begin(db, transaction)?
-      inserted = dbsql.SQL"INSERT INTO $table (name, note) VALUES ($hostile, ${dbsql.Null {}})".Exec(tx)?
+      _ = dbsql.SQL"INSERT INTO $table (name, note) VALUES ($hostile, ${dbsql.Null {}})".Exec(tx)?
       dbsql.Commit(tx)?
     }
     println(dbsql.SQL"SELECT ${true} AS active, ${1.25} AS score, ${encoding.Utf8("hi")} AS data, ${dbsql.Null {}} AS note".QueryJson(db)?)

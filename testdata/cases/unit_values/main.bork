@@ -7,7 +7,7 @@ fn explicitEffect() uses io: Ok { return println("explicit effect") }
 fn defaultSuccess(value: Ok | Error = Ok): Ok | Error { value }
 fn consume(label: String, x: Ok | Error) uses io {
   match (x) {
-    unit: Ok => println(label)
+    _: Ok => println(label)
     error: Error => println(error.message)
   }
 }
@@ -60,7 +60,7 @@ fn main() {
   consume("empty if", if (false) { done() } else {})
   consume("match", match (true) { true => done(), false => {} })
   consume("scope", scope s { onClose(s, () => println("closed")); done() })
-  consume("statements", { done(); x = 1 })
+  consume("statements", { done(); _ = 1 })
   consume(mark("first"), { println("second") })
   consume("returned", returned(true))
   consume("returned", returned(false))

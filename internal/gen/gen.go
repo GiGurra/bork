@@ -1008,9 +1008,9 @@ func (g *gen) value(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			if len(g.loops) > 0 {
 				root := g.loops[len(g.loops)-1].cleanup
 				root.used = true
-				return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeLoopOwner"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: root.name}, &ast.UnaryExpr{Op: token.AND, X: name(e.Var.Name)}}}
+				return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeLoopOwner"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: root.name}, &ast.UnaryExpr{Op: token.AND, X: varIdent(e.Var)}}}
 			}
-			return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(e.Var.Name)}}}
+			return nil, &ast.CallExpr{Fun: ast.NewIdent("_takeScope"), Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: varIdent(e.Var)}}}
 		}
 		return nil, varIdent(e.Var)
 	case *check.SeqCall:
@@ -1288,7 +1288,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 			// b.scope borrows the owner's scope, leaving b armed.
 			if v, ok := e.Args[0].(*check.VarRef); ok {
 				g.captured(v.Var, true)
-				return nil, borrowedName(v.Var.Name)
+				return nil, borrowedName(varIdent(v.Var).Name)
 			}
 		}
 		stmts, xs := g.values(e.EvaluationArgs())
@@ -1712,12 +1712,12 @@ func (g *gen) stmts(list []check.Stmt) []ast.Stmt {
 				if len(g.loops) > 0 {
 					root := g.loops[len(g.loops)-1].cleanup
 					root.used = true
-					out = append(out, dropOwner(s.Var.Name)[:2]...)
-					out = append(out, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("owner")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: name(s.Var.Name)}}}})
+					out = append(out, dropOwner(varIdent(s.Var).Name)[:2]...)
+					out = append(out, &ast.ExprStmt{X: &ast.CallExpr{Fun: &ast.SelectorExpr{X: root.name, Sel: ast.NewIdent("owner")}, Args: []ast.Expr{&ast.UnaryExpr{Op: token.AND, X: varIdent(s.Var)}}}})
 				} else {
-					out = append(out, dropOwner(s.Var.Name)...)
+					out = append(out, dropOwner(varIdent(s.Var).Name)...)
 				}
-				g.blockOwners = append(g.blockOwners, blockOwner{s.Var.Name, len(g.openScopes)})
+				g.blockOwners = append(g.blockOwners, blockOwner{varIdent(s.Var).Name, len(g.openScopes)})
 			}
 		case *check.ExprStmt:
 			out = append(out, g.effect(s.X)...)
@@ -1772,7 +1772,7 @@ func (g *gen) tailReturn(e check.Expr) []ast.Stmt {
 // (by a deferred close) when it panics.
 func (g *gen) scopeInto(e *check.ScopeBlock, k sink) []ast.Stmt {
 	g.usesScopes = true
-	s := name(e.Var.Name)
+	s := varIdent(e.Var)
 	closeCall := &ast.CallExpr{Fun: &ast.SelectorExpr{X: s, Sel: ast.NewIdent("close")}}
 	// A scope inside another one in the function is cancelled with it.
 	var parent ast.Expr = ast.NewIdent("nil")

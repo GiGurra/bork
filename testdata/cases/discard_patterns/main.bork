@@ -1,0 +1,10 @@
+pred positive(n: Int) { n > 0 }
+fn choose(x: Int | String): Int {
+  match (x) { _: Int where positive => 1; _: Int => 2; _: String => 3 }
+}
+fn main() {
+  _: List[Int] = []
+  println(choose(1), choose(-1), choose("text"))
+  for (_ in[1, 2]) { println("iteration") }
+  _ = match ([1, 2]) { [_, ...] => 0; _ => 1 }
+}

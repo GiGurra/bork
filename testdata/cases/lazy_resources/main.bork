@@ -27,6 +27,7 @@ fn owning(parent: Scope) uses io + state: Int {
 fn main() {
   scope s {
     lazy unused = acquire(s, "unused")
+    _ = () => unused
     println("unused scope")
   }
   scope s {

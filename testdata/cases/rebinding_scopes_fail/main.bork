@@ -1,0 +1,10 @@
+fn main() {
+  scope s {
+    owner = openScope(s)
+    oldScope = () => owner.scope
+    closeScope(owner)
+    owner = openScope(s)
+    _ = oldScope()
+    closeScope(owner)
+  }
+}

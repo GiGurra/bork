@@ -15,7 +15,7 @@ fn exercise() uses io: Ok | IoError {
 
 fn main() {
   match (exercise()) {
-    done: Ok => {}
+    _: Ok => {}
     error: IoError => println(error)
   }
 }

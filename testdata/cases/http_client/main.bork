@@ -37,13 +37,13 @@ fn started(server: TestServer) uses clock + state unsafe go {
 }
 fn cancelledResult(response: http.Result): Bool {
   match (response) {
-    error: Cancelled => true
+    _: Cancelled => true
     _ => false
   }
 }
 fn timedOut(response: http.Result): Bool {
   match (response) {
-    error: http.DeadlineExceeded => true
+    _: http.DeadlineExceeded => true
     _ => false
   }
 }

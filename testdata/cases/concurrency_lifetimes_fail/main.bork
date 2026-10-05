@@ -15,7 +15,7 @@ fn inner(path: String) uses io: Int {
   scope outer {
     scope s {
       f = fs.Open(path, s)
-      t = spawn(outer, () => match (f) { x: fs.File => 1, e: fs.Error => 0 })
+      _ = spawn(outer, () => match (f) { _: fs.File => 1, _: fs.Error => 0 })
       0
     }
   }

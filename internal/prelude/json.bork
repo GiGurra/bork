@@ -20,11 +20,11 @@ type JsonError = { message: String }
 fn _jsonKind (j: Json): String {
   match (j) {
     Json.Null => "null"
-    Json.Bool { value } => "a boolean"
-    Json.Number { text } => "a number"
-    Json.String { value } => "a string"
-    Json.Array { items } => "an array"
-    Json.Object { fields } => "an object"
+    Json.Bool { value: _ } => "a boolean"
+    Json.Number { text: _ } => "a number"
+    Json.String { value: _ } => "a string"
+    Json.Array { items: _ } => "an array"
+    Json.Object { fields: _ } => "an object"
   }
 }
 
@@ -62,7 +62,7 @@ instance decodeInt: Decode[Int] {
     match (json) {
       Json.Number { text } => match (parseInt(text)) {
         n: Int => n
-        e: ParseError => DecodeError { path: "", message: s"expected a whole number, found $text" }
+        ParseError => DecodeError { path: "", message: s"expected a whole number, found $text" }
       }
       other => _decodeMismatch ("a whole number", other)
     }
@@ -74,7 +74,7 @@ instance decodeFloat: Decode[Float] {
     match (json) {
       Json.Number { text } => match (parseFloat(text)) {
         f: Float => f
-        e: ParseError => DecodeError { path: "", message: s"expected a number, found $text" }
+        ParseError => DecodeError { path: "", message: s"expected a number, found $text" }
       }
       other => _decodeMismatch ("a number", other)
     }

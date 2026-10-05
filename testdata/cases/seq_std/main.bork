@@ -12,7 +12,7 @@ fn demo() uses io + net: Ok | fs.Error | sql.Error {
     println(fs.Lines(path).toList())
     println(fs.Entries(fs.DirectoryPath(directory)).map(entry => match (entry) {
       value: fs.DirEntry => value.name
-      error: fs.Error => "error"
+      _: fs.Error => "error"
       }).toList())
     db = sql.OpenSqlite(":memory:", app)?
     rows = sql.SQL"SELECT 1 AS n UNION ALL SELECT 2 AS n".Rows[Row](db)

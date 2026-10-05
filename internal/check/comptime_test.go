@@ -47,7 +47,7 @@ func TestComptimeStaticChecks(t *testing.T) {
 		{"open callback", "fn f(cb:()=>Int):Int {comptime {cb()}}", "cannot capture runtime value cb"},
 		{"generic result", "fn f[T](n:T):T{comptime {n}}", "cannot capture runtime value n"},
 		{"generic capture", "fn f[T]():Int{xs:List[T]=[];comptime {xs.length()}}", "cannot capture runtime value xs"},
-		{"generic generator recipe", "fn f[T]():Int{comptime{xs=generate[T]{};1}}", "requires concrete types"},
+		{"generic generator recipe", "fn f[T]():Int{comptime{_=generate[T]{};1}}", "requires concrete types"},
 		{"generic recipe", "fn id[T](n:Int):Int{n}\nfn f[T]():Int{comptime{id[T](1)}}", "requires concrete types"},
 		{"function result", "fn f():()=>Int{comptime {()=>1}}", "cannot bake result type"},
 		{"nested function result", "type R={f:()=>Int}\nfn make():R{comptime {R{f:()=>1}}}", "field f: unsupported"},

@@ -13,7 +13,7 @@ fn task(result: Task[String] | tasks.TaskLimitReached | Cancelled): Task[String]
 fn response(result: http.Result): String {
   match (result) {
     value: http.Response => if (value.status == 200) { "ok" } else { panic(toString(value)) }
-    value: http.Overloaded => "overloaded"
+    _: http.Overloaded => "overloaded"
     error => panic(toString(error))
   }
 }
@@ -66,7 +66,7 @@ fn main() {
           Option.None => panic("admission not enabled")
         }
         range(0, 4).forEach(i => { _ = send(finish, true) })
-        remaining = range(0, 4).map(i => got(receive(completed)))
+        _ = range(0, 4).map(i => got(receive(completed)))
         results = callers.map(await)
         println("finished", results.count(value => value == "ok"), "overloaded", results.count(value => value == "overloaded"))
         println("attempts", current(calls), "initial", 6, "retries", current(calls) - 6)

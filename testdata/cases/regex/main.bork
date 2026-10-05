@@ -25,7 +25,7 @@ fn main() {
   parsed = regex.Parse("[a-z]+")
   println(match (parsed) {
     value: regex.Regex => value.Matches("abc") && value.Replace("123 abc", "ok") == "123 ok"
-    error: ParseError => false
+    _: ParseError => false
   })
   println(checked("[a-z]+"))
   println(checked("["))

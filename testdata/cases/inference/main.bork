@@ -31,12 +31,12 @@ fn laterChecks() uses io {
     y.append(x)
   }))
   println(xs.fold([], (acc, x) => {
-    b = Bag { items: acc }
+    _ = Bag { items: acc }
     acc.append(x)
   }))
   g = (ys: List[Int]) => ys.length()
   println(xs.fold([], (acc, x) => {
-    n = g(acc)
+    _ = g(acc)
     acc.append(x)
   }))
   println(xs.fold(Tree.Leaf, (t, x) => Tree.Node { v: x, l: t }))

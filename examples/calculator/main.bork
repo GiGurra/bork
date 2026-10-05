@@ -104,7 +104,7 @@ fn parseNumber(src: String, i: Int): Parsed | SyntaxError {
       n: Int => Parsed { expr: Expr.Num { value: n }, next: end }
       e: ParseError => SyntaxError { at: i, message: s"bad number $digits: ${e.message}" }
     }
-    e: OutOfRange => SyntaxError { at: i, message: "bad number" }
+    _: OutOfRange => SyntaxError { at: i, message: "bad number" }
   }
 }
 

@@ -36,36 +36,6 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 	}
 	for node := range info.unused {
 		switch node := node.(type) {
-		case *syntax.Binding:
-			if node.Name == "_" {
-				continue
-			}
-			end := node.Pos
-			end.Col += len(node.Name)
-			var fixes []diag.Fix
-			if !node.Lazy && node.AsyncScope == nil {
-				fixes = append(fixes, diag.Fix{Message: "discard the unused value", Edits: []diag.TextEdit{{Start: node.Pos, End: end, Replacement: "_"}}})
-			}
-			warn(node.Pos, "lint.unused-binding", "binding "+node.Name+" is never read", end, fixes...)
-		case *syntax.VariantPat:
-			if len(node.Path) != 1 {
-				continue
-			}
-			end := node.Pos
-			end.Col += len(node.Path[0])
-			warn(node.Pos, "lint.unused-binding", "pattern binding "+node.Path[0]+" is never read", end)
-		case *syntax.FieldPat:
-			end := node.Pos
-			end.Col += len(node.Field)
-			warn(node.Pos, "lint.unused-binding", "pattern binding "+node.Field+" is never read", end)
-		case *syntax.ListPat:
-			if node.Rest == "" {
-				continue
-			}
-			end := node.RestPos
-			end.Col += len(node.Rest)
-			warn(node.RestPos, "lint.unused-binding", "pattern binding "+node.Rest+" is never read", end)
-
 		case *syntax.Param:
 			if node.Name == "_" {
 				continue

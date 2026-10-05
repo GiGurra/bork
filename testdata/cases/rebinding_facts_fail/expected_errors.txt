@@ -1,0 +1,2 @@
+main.bork:7:8: take requires n to be positive, but positive(-1) is false
+main.bork:12:3: transformed promises a result that is positive, but positive(-1) is false

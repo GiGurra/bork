@@ -24,7 +24,7 @@ fn (o: Option[T]) getOr[T](otherwise: T): T {
 
 fn (o: Option[T]) isSome[T](): Bool {
   match (o) {
-    Option.Some { value } => true
+    Option.Some { value: _ } => true
     Option.None => false
   }
 }

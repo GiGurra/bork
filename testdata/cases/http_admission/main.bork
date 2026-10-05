@@ -103,7 +103,7 @@ fn raceTransfer(server: http.Server in app, entered: Channel[Bool] in app, permi
 }
 fn main() {
   println(json.Decode[http.Admission]("{\"maxInFlight\":2}"))
-  println("invalid decoded capacity", match (json.Decode[http.Admission]("{\"maxInFlight\":0}")) { error: DecodeError => true, _ => false })
+  println("invalid decoded capacity", match (json.Decode[http.Admission]("{\"maxInFlight\":0}")) { _: DecodeError => true, _ => false })
 
   scope app {
     entered = channel[String](app, 10)
@@ -137,7 +137,7 @@ fn main() {
       queued = spawn(request, () => http.Get(s"$url/cancelled", request))
       waitQueued(app, server, 1)
       cancel(request)
-      println("queued cancellation", match (await(queued)) { error: Cancelled => true, _ => false })
+      println("queued cancellation", match (await(queued)) { _: Cancelled => true, _ => false })
       waitQueued(app, server, 0)
     }
     println("after cancellation", load(server))
@@ -195,7 +195,7 @@ fn main() {
       http.Text(200, "ok")
       }, admission: Option.Some { value: http.Admission { maxInFlight: 1 } }))
     url = s"http://${http.Address(server)}"
-    println("handler panic", match (http.Get(s"$url/panic", app)) { error: IoError => true, _ => false })
+    println("handler panic", match (http.Get(s"$url/panic", app)) { _: IoError => true, _ => false })
     println("after panic", status(http.Get(url, app)), load(server))
   }
   scope app {

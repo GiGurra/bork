@@ -171,6 +171,10 @@
       {
         "id": "goBinding",
         "description": "A declaration or name bound to Go."
+      },
+      {
+        "id": "rebinding",
+        "description": "An immutable binding that replaces an earlier binding in the same block."
       }
     ],
     "semanticTokenScopes": [
@@ -194,6 +198,9 @@
           ],
           "variable.readonly.static": [
             "variable.other.constant.bork"
+          ],
+          "variable.rebinding": [
+            "variable.other.rebinding.bork"
           ]
         }
       }

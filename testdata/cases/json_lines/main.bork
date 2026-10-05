@@ -8,12 +8,12 @@ fn nextText(reader: json.Reader) uses io: String {
     Option.Some { value } => json.Render(value)
     Option.None => "EOF"
     error: json.LineError => s"bad line ${error.line}"
-    error: IoError => "IO error"
+    _: IoError => "IO error"
   }
 }
 fn countLines(reader: json.Reader) uses io: Int {
   match (json.Next(reader)) {
-    Option.Some { value } => 1 + countLines(reader)
+    Option.Some { value: _ } => 1 + countLines(reader)
     Option.None => 0
     _ => -100
   }
@@ -27,9 +27,9 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
     json.Write(writer, Item { name: "one\ntwo", count: 2 })?
     json.Write(writer, Json.Null)?
     json.Write(writer, Json.Number { text: " 3\n " })?
-    println(match (json.Write(writer, Json.Number { text: "true" })) { error: JsonError => true; _ => false })
-    println(match (json.Write(writer, Json.Array { items: [Json.Number { text: "1,2" }] })) { error: JsonError => true; _ => false })
-    println(match (json.Write(writer, Json.Number { text: "1\n2" })) { error: JsonError => true; _ => false })
+    println(match (json.Write(writer, Json.Number { text: "true" })) { _: JsonError => true; _ => false })
+    println(match (json.Write(writer, Json.Array { items: [Json.Number { text: "1,2" }] })) { _: JsonError => true; _ => false })
+    println(match (json.Write(writer, Json.Number { text: "1\n2" })) { _: JsonError => true; _ => false })
   }
   reader = json.OpenLines(path, s)?
   println(nextText(reader))
@@ -56,8 +56,8 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
   emptyPath = fs.Join([root, "empty.jsonl"])
   fs.Write(emptyPath, encoding.Utf8(""))?
   println(nextText(json.OpenLines(emptyPath, s)?))
-  println(match (json.OpenLines(fs.Join([root, "missing"]), s)) { error: IoError => true; _ => false })
-  println(match (json.CreateLines(fs.Join([root, "missing", "file"]), s)) { error: IoError => true; _ => false })
+  println(match (json.OpenLines(fs.Join([root, "missing"]), s)) { _: IoError => true; _ => false })
+  println(match (json.CreateLines(fs.Join([root, "missing", "file"]), s)) { _: IoError => true; _ => false })
   concurrentPath = fs.Join([root, "concurrent.jsonl"])
   scope writing {
     writer = json.CreateLines(concurrentPath, writing)?

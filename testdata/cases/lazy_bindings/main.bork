@@ -9,6 +9,7 @@ fn named() needs label: String { label }
 
 fn main() {
   lazy never = work(99)
+  _ = () => never
   lazy value = work(7)
   reader = () => value
   println("before")

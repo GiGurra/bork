@@ -25,3 +25,13 @@ nodes and cycle paths marked. Facts, effects and lifetime violations in resolved
 provider calls use their ordinary diagnostic codes.
 
 Watch mode publishes complete result objects rather than individual diagnostic lines; see [the watch stream](watch.md#json-stream).
+
+`binding.unused` reports a local binding that is never read. This includes an
+older binding replaced in the same block and names introduced by patterns.
+Parameters are exempt. The compiler offers an explicit discard or, when safe,
+removal without losing effects. Lint suppression cannot suppress this error.
+`binding.shadow` reports forbidden nested shadowing or a collision with a
+package function, import or package value. Rebinding in the same block is allowed.
+
+`binding.not-callable` identifies a non-function local that shadows a prelude
+function, including the local declaration’s position.

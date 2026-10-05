@@ -26,8 +26,8 @@ fn viaList(p: String) uses io: Int {
 fn scopeInLambda(p: String) uses io: Int {
   h = scope s { () => fs.Open(p, s) }
   match (h()) {
-    f: fs.File => 1
-    e: fs.Error => 0
+    _: fs.File => 1
+    _: fs.Error => 0
   }
 }
 

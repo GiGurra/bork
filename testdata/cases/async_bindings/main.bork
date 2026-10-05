@@ -42,7 +42,7 @@ fn main() {
     println(keyword); println(generic(s, "generic"))
     for (n in [1, 2]) { async(s) item = n; println(item); println(item) }
     done = atom(0)
-    scope child { async(child) unused = update(done, n => n + 1) }
+    scope child { async(child) unused = update(done, n => n + 1); _ = () => unused }
     println(current(done))
     async(s) checked: Int where positive = 7
     println(positive(checked))

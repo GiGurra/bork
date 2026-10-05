@@ -3,8 +3,8 @@ type Row = { name: String } derive (Decode)
 fn demo(text: String) uses io + net: Ok | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
-    created = sql.Exec(db, sql.Unsafe(text), [])?
-    inserted = sql.Exec(db, sql.Unsafe("INSERT INTO users VALUES (?)"), ["O'Reilly"])?
+    _ = sql.Exec(db, sql.Unsafe(text), [])?
+    _ = sql.Exec(db, sql.Unsafe("INSERT INTO users VALUES (?)"), ["O'Reilly"])?
     query = sql.Unsafe("SELECT name FROM users")
     println(sql.Query[Row](db, query, [])?)
     println(sql.QueryJson(db, query, [])?)

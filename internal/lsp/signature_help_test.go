@@ -149,7 +149,7 @@ fn (box: Box) plus(amount: Int): Int { box.value + amount }
 fn (items: List[T]) plus[T](other: String): List[T] { items }
 fn (items: List[T]) choose[T](index: Int): List[T] { items }
 fn run(choose: (String) => String) uses io { println([1].choose(0)) }
-fn main() uses io { box = [1]; holder = Holder { box: Box { value: 1 } }; println(holder.box.plus(2)) }
+fn main() uses io { box = [1]; _ = box; holder = Holder { box: Box { value: 1 } }; println(holder.box.plus(2)) }
 `
 	s, path := newTestServer(t, src)
 	for _, tc := range []struct{ before, after string }{
@@ -164,7 +164,7 @@ fn main() uses io { box = [1]; holder = Holder { box: Box { value: 1 } }; printl
 }
 
 func TestSignatureHelpQualifiedPackageRecovery(t *testing.T) {
-	src := "import \"bork/json\"\nfn main() { encoded = json.Encode(42) }\n"
+	src := "import \"bork/json\"\nfn main() { encoded = json.Encode(42); _ = encoded }\n"
 	s, path := newTestServer(t, src)
 	help := signatureAt(t, s, path, src+"fn other() { json.Encode[Int](|) }")
 	if help == nil || help.Signatures[0].Label != "Encode(x: Int): String" || help.ActiveParameter == nil || *help.ActiveParameter != 0 {
@@ -173,7 +173,7 @@ func TestSignatureHelpQualifiedPackageRecovery(t *testing.T) {
 }
 
 func TestSignatureHelpStaleAndNoAnalysis(t *testing.T) {
-	src := "// Adds two integers.\nfn add(left: Int, right: Int): Int { left + right }\nfn main() { value = add(1, 2) }\n"
+	src := "// Adds two integers.\nfn add(left: Int, right: Int): Int { left + right }\nfn main() { value = add(1, 2); _ = value }\n"
 	s, path := newTestServer(t, src)
 	current := strings.Replace(src, "add(1, 2)", "add(right: missing)", 1)
 	s.docs[path] = document{current, 2}
@@ -191,7 +191,7 @@ func TestSignatureHelpStaleAndNoAnalysis(t *testing.T) {
 	}
 }
 func TestSignatureHelpProtocol(t *testing.T) {
-	src := "fn add(left: Int, right: Int): Int { left + right }\nfn main() { value = add(1, 2) }\n"
+	src := "fn add(left: Int, right: Int): Int { left + right }\nfn main() { value = add(1, 2); _ = value }\n"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")
 	if err := os.WriteFile(path, []byte(src), 0600); err != nil {
@@ -224,7 +224,7 @@ func TestSignatureHelpProtocol(t *testing.T) {
 	}
 }
 func TestSignatureHelpStdioDocumentChanges(t *testing.T) {
-	src := "// Adds two integers.\nfn add(left: Int, right: Int): Int { left + right }\nfn main() { value = add(1, 2) }\n"
+	src := "// Adds two integers.\nfn add(left: Int, right: Int): Int { left + right }\nfn main() { value = add(1, 2); _ = value }\n"
 	current := strings.Replace(src, "add(1, 2)", "add(right: missing)", 1)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.bork")

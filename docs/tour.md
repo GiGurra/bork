@@ -214,7 +214,7 @@ fn report(path: String) uses io: Ok | fs.Error {
   results = readLines(path)?.map(parseExpense)
   expenses = results.flatMap(r => match (r) {
     e: Expense => [e]
-    b: BadLine => []
+    _: BadLine => []
   })
   results.forEach(r => match (r) {
     e: Expense => println(s"${e.label}: ${e.cents}")

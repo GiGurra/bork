@@ -27,7 +27,7 @@ fn exercise() uses io + random + clock + state: Ok | ParseError | IoError {
   println(uuid.Parse("{f81d4fae-7dec-11d0-a765-00a0c91e6bf6}") == id)
   println(uuid.Parse("urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6") == id)
   println(uuid.Parse("f81d4fae7dec11d0a76500a0c91e6bf6") == id)
-  println(match (uuid.Parse("bad")) { error: ParseError => true; _ => false })
+  println(match (uuid.Parse("bad")) { _: ParseError => true; _ => false })
   println(json.Encode(id))
   println(json.Decode[uuid.Uuid]("\"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\"") == id)
   println(json.Decode[uuid.Uuid]("42"))

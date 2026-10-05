@@ -5,11 +5,11 @@ fn busy(hint: Int = 0): http.Result {
 }
 fn kind(result: http.Result): String {
   match (result) {
-    value: http.Overloaded => "overloaded"
-    value: http.Response => "response"
-    value: http.DeadlineExceeded => "deadline"
-    value: Cancelled => "cancelled"
-    value: IoError => "io"
+    _: http.Overloaded => "overloaded"
+    _: http.Response => "response"
+    _: http.DeadlineExceeded => "deadline"
+    _: Cancelled => "cancelled"
+    _: IoError => "io"
   }
 }
 fn fixedBudget(s: Scope, capacity: http.RetryCount) uses clock + state: http.RetryBudget {

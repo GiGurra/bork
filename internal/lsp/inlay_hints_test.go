@@ -106,7 +106,7 @@ func inlayProtocol(t *testing.T, source string, options map[string]bool, selecti
 func TestInlayHintsProtocol(t *testing.T) {
 	source := `fn sum(first: Int, second: Int = 2): Int { first + second }
 fn main() uses io {
- greeting = "😀"; inferred = sum(1, second: 3)
+ greeting = "😀"; _ = greeting; inferred = sum(1, second: 3)
  explicit: Int = 4
  println(inferred + explicit)
 }`

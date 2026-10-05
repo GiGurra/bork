@@ -46,7 +46,7 @@ fn report(counts: List[FileCount]) uses io: Bool {
   })
   found = counts.flatMap(fc => match (fc.result) {
     c: Counts => [c]
-    e: fs.Error => []
+    _: fs.Error => []
   })
   if (found.length() > 1) {
     println(row(found.fold(Counts { lines: 0, words: 0, bytes: 0 }, add), "total"))

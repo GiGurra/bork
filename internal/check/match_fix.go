@@ -1,7 +1,6 @@
 package check
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -38,13 +37,7 @@ func (c *checker) missingMatchPattern(w *witness) string {
 		if !c.matchTypeVisible(h.member) {
 			return "_"
 		}
-		name := "missingValue"
-		probe := *c
-		probe.diags = &diag.List{}
-		for i := 2; probe.nameTaken(name, diag.Pos{}); i++ {
-			name = "missingValue" + strconv.Itoa(i)
-		}
-		return name + ": " + TypeText(h.member, c.pkg)
+		return "_: " + TypeText(h.member, c.pkg)
 	}
 	if h.lit != nil {
 		return h.label

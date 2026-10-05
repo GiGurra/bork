@@ -53,7 +53,7 @@ fn forcedDrain(policy: Int) uses io + net + clock + state {
         server: http.Server => {
           address = "http://" + http.Address(server)
           launch(app, () => {
-            failure = match (http.Get(address, app, 2000)) { error: IoError => true; _ => false }
+            failure = match (http.Get(address, app, 2000)) { _: IoError => true; _ => false }
             _ = update(failed, old => failure)
             mark(clientDone)
           })

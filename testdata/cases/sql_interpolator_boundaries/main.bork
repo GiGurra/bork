@@ -2,11 +2,11 @@ import "bork/sql"
 
 fn rejects(label: String, statement: sql.Statement, dialect: sql.Dialect) uses io {
   result = statement.Render(dialect)
-  println(label, match (result) { error: sql.Error => true, _ => false })
+  println(label, match (result) { _: sql.Error => true, _ => false })
 }
 fn accepts(label: String, statement: sql.Statement, dialect: sql.Dialect) uses io {
   result = statement.Render(dialect)
-  println(label, match (result) { rendered: sql.Rendered => true, _ => false })
+  println(label, match (result) { _: sql.Rendered => true, _ => false })
 }
 fn main() {
   value = "hostile"
@@ -61,6 +61,6 @@ fn main() {
   accepts("pg JSON operator", sql.SQL"SELECT '{} '::jsonb ? $value", postgres)
   accepts("pg CR ends comment", sql.SQL"SELECT 1 -- text\r, $value", postgres)
   accepts("newline ends comment", sql.SQL"SELECT 1 -- text\n, $value", sqlite)
-  println("empty identifier", match (sql.Name("")) { error: sql.Error => true, _ => false })
-  println("NUL identifier", match (sql.Name("a\u0000b")) { error: sql.Error => true, _ => false })
+  println("empty identifier", match (sql.Name("")) { _: sql.Error => true, _ => false })
+  println("NUL identifier", match (sql.Name("a\u0000b")) { _: sql.Error => true, _ => false })
 }

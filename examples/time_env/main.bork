@@ -34,21 +34,21 @@ test "fake clock remains fixed" {
 }
 test "negative arithmetic overflow is checked" {
   match (time.Add(time.Instant { unixNanos: -9223372036854775808 }, time.Nanoseconds(-1))) {
-    error: OutOfRange => {}
+    _: OutOfRange => {}
     _ => assert(false)
   }
   match (time.Between(time.Instant { unixNanos: 1 }, time.Instant { unixNanos: -9223372036854775808 })) {
-    error: OutOfRange => {}
+    _: OutOfRange => {}
     _ => assert(false)
   }
 }
 test "invalid duration and instant text is rejected" {
   match (time.ParseDuration("nope")) {
-    error: ParseError => {}
+    _: ParseError => {}
     _ => assert(false)
   }
   match (time.Parse("nope", time.RFC3339())) {
-    error: ParseError => {}
+    _: ParseError => {}
     _ => assert(false)
   }
 }

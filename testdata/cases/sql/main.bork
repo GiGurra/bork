@@ -25,7 +25,7 @@ fn showError(result: Json | sql.Error) uses io {
 fn rollbackPanic(db: sql.Connection) uses io + net: Ok | sql.Error {
   scope transaction {
     tx = sql.Begin(db, transaction)?
-    inserted = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (10, 'panic')"), [])?
+    _ = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (10, 'panic')"), [])?
     panic("rollback test")
   }
 }
@@ -40,7 +40,7 @@ fn protect(work: () => Ok): Bool unsafe go {
 fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
-    created = sql.Exec(db, sql.Unsafe("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)"), [])?
+    _ = sql.Exec(db, sql.Unsafe("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)"), [])?
     inserted = sql.Exec(db, sql.Unsafe("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)"), [1, "Ada", sql.Null {}, true, 1.25, encoding.Utf8("ab")])?
     println(inserted.rowsAffected, inserted.lastInsertId)
     rows = sql.Query[Row](db, sql.Unsafe("SELECT id, name, note, active, score, data FROM users ORDER BY id"), [])?
@@ -52,12 +52,12 @@ fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
     showError(sql.QueryJson(db, sql.Unsafe("SELECT missing FROM users"), []))
     scope transaction {
       tx = sql.Begin(db, transaction)?
-      discarded = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (?, ?)"), [2, "discarded"])?
+      _ = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (?, ?)"), [2, "discarded"])?
     }
     println(count(db))
     scope transaction {
       tx = sql.Begin(db, transaction)?
-      kept = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (?, ?)"), [3, "quote' OR 1=1 --"])?
+      _ = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (?, ?)"), [3, "quote' OR 1=1 --"])?
       sql.Commit(tx)?
     }
     println(count(db))
@@ -65,14 +65,14 @@ fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
     println(matched)
     scope transaction {
       tx = sql.Begin(db, transaction)?
-      discarded = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (?, ?)"), [4, "rollback"])?
+      _ = sql.Exec(tx, sql.Unsafe("INSERT INTO users(id, name) VALUES (?, ?)"), [4, "rollback"])?
       sql.Rollback(tx)?
       sql.Rollback(tx)?
     }
     println(count(db))
     println(protect(() => { match (rollbackPanic(db)) { error: sql.Error => println(error); _ => {} } }))
     println(count(db))
-    invalid = sql.Exec(db, sql.Unsafe("UPDATE users SET name = '' WHERE id = 1"), [])?
+    _ = sql.Exec(db, sql.Unsafe("UPDATE users SET name = '' WHERE id = 1"), [])?
     result: List[Row] | sql.Error | DecodeError = sql.Query(db, sql.Unsafe("SELECT id, name, note, active, score, data FROM users WHERE id = 1"), [])
     match (result) {
       error: DecodeError => println(s"${error.path}: ${error.message}")
@@ -99,13 +99,13 @@ fn attachments() uses io + net + state: Ok | sql.Error | DecodeError {
       opened = sql.OpenSqlite(":memory:", original)?
       attach(opened, outer)
     }
-    created = sql.Exec(db, sql.Unsafe("CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT)"), [])?
+    _ = sql.Exec(db, sql.Unsafe("CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT)"), [])?
     scope owner {
       tx = scope original {
         started = sql.Begin(db, original)?
         attach(started, owner)
       }
-      inserted = sql.Exec(tx, sql.Unsafe("INSERT INTO users VALUES(1, 'attached')"), [])?
+      _ = sql.Exec(tx, sql.Unsafe("INSERT INTO users VALUES(1, 'attached')"), [])?
       showError(sql.QueryJson(tx, sql.Unsafe("SELECT count(*) AS count FROM users"), []))
     }
     println(count(db))
@@ -114,7 +114,7 @@ fn attachments() uses io + net + state: Ok | sql.Error | DecodeError {
         started = sql.Begin(db, original)?
         attach(started, owner)
       }
-      inserted = sql.Exec(tx, sql.Unsafe("INSERT INTO users VALUES(2, 'committed')"), [])?
+      _ = sql.Exec(tx, sql.Unsafe("INSERT INTO users VALUES(2, 'committed')"), [])?
       sql.Commit(tx)?
     }
     println(count(db))

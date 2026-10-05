@@ -2,6 +2,10 @@
 
 A scope is a block that owns things with a lifetime: open files, connections, and running tasks. When the block ends, everything it owns is finished or closed.
 
+Local names may be rebound only within the same block. A scope body is a nested
+block, so it cannot rebind a name from outside that scope. Each local value must
+be used; explicitly discard unwanted values with `_`.
+
 ## Scopes own resources
 
 ```bork

@@ -66,7 +66,7 @@ fn Rollback(transaction: Transaction) uses io + net: Ok | Error unsafe go {
 fn Exec(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: Result | Error {
   match (run(connection, query.text, params, read: false)) {
     outcome.Changed { result } => result
-    outcome.Rows { values } => panic("sql: unexpected query result")
+    outcome.Rows { values: _ } => panic("sql: unexpected query result")
     error: Error => error
   }
 }
@@ -86,7 +86,7 @@ fn Query[T: Decode](connection: Connection | Transaction, query: UnsafeQuery, pa
 fn QueryJson(connection: Connection | Transaction, query: UnsafeQuery, params: List[Value]) uses io + net: Json | Error {
   match (run(connection, query.text, params, read: true)) {
     outcome.Rows { values } => Json.Array { items: values }
-    outcome.Changed { result } => panic("sql: unexpected exec result")
+    outcome.Changed { result: _ } => panic("sql: unexpected exec result")
     error: Error => error
   }
 }

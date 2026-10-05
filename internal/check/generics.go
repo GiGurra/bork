@@ -726,7 +726,11 @@ func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 	ft, ok := t.(*FuncType)
 	if !ok {
 		if t != Invalid {
-			c.errorf(e.Fun.Position(), "cannot call a value of type %s", t)
+			if id, ok := e.Fun.(*syntax.Ident); ok && c.lookup(id.Name) != nil && c.preludePkg.Funcs[id.Name] != nil {
+				c.diags.AddCode(id.Pos, "binding.not-callable", "cannot call local binding %s declared at %s: it has type %s (it shadows a prelude function)", id.Name, sourceNodePosition(c.lookup(id.Name).decl), TypeText(t, c.pkg))
+			} else {
+				c.errorf(e.Fun.Position(), "cannot call a value of type %s", t)
+			}
 		}
 		for _, a := range e.Args {
 			c.expr(a)
@@ -852,7 +856,12 @@ func (c *checker) lambda(e *syntax.Lambda, want Type) Type {
 	c.lambdaDepth++
 	outer := c.used
 	c.used = 0
-	bt := c.exprWant(e.Body, rw)
+	var bt Type
+	if body, ok := e.Body.(*syntax.Block); ok {
+		bt = c.blockInScope(body, rw)
+	} else {
+		bt = c.exprWant(e.Body, rw)
+	}
 	ft.Effects = c.used
 	c.used = outer
 	c.lambdaDepth--

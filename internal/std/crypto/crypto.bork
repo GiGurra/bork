@@ -151,6 +151,6 @@ fn verifyBcrypt(password: String, encoded: String): Bool | Error unsafe go {
 fn NeedsRehash(encoded: String, parameters: PasswordParams = PasswordParams { memoryKiB: 19456, iterations: 2, parallelism: 1 }): Bool {
   match (parsePasswordHash(encoded)) {
     parsed: passwordHash => parsed.parameters != parameters || parsed.salt.length() != 16 || parsed.key.length() != 32
-    error: Error => true
+    _: Error => true
   }
 }

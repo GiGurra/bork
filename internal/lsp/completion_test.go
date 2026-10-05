@@ -301,7 +301,7 @@ func TestCompletionProtocolFeatures(t *testing.T) {
 	}{
 		{name: "local", src: "fn main() uses io { value = 42; println(value) }\n", current: "fn main() uses io { value = 42; println(va|) }\n", label: "value", text: "value"},
 		{name: "argument", src: "fn greet(name: String): String { name }\nfn main() uses io { println(greet(\"Ada\")) }\n", current: "fn greet(name: String): String { name }\nfn main() uses io { println(greet(na|)) }\n", label: "name", text: "name: "},
-		{name: "literal", src: "type User = { name: String }\nfn main() { user = User { name: \"Ada\" } }\n", current: "type User = { name: String }\nfn main() { user = User { na| } }\n", label: "name", text: "name: "},
+		{name: "literal", src: "type User = { name: String }\nfn main() { user = User { name: \"Ada\" }; _ = user }\n", current: "type User = { name: String }\nfn main() { user = User { na| } }\n", label: "name", text: "name: "},
 		{name: "pattern", src: "type User = { name: String }\nfn read(user: User): String { match (user) { User { name } => name } }\nfn main() {}\n", current: "type User = { name: String }\nfn read(user: User): String { match (user) { User { na| } => name } }\nfn main() {}\n", label: "name", text: "name"},
 		{name: "match", src: "type Choice = sealed { First, Second }\nfn read(c: Choice): Int { match (c) { Choice.First => 1, Choice.Second => 2 } }\nfn main() {}\n", current: "type Choice = sealed { First, Second }\nfn read(c: Choice): Int { match (c) { Ch| } }\nfn main() {}\n", label: "Choice.First", text: "Choice.First => "},
 		{name: "snippet", src: "fn main() {}\n", current: "fn main() {}\nfn|", label: "fn snippet"},
@@ -417,7 +417,7 @@ func TestCompletionExistingLabelsCheckAfterAcceptance(t *testing.T) {
 }
 
 func TestCompletionInferredGenericRecordAndPositionalArguments(t *testing.T) {
-	src := "type Box[T] = { value: T }\nfn main() { box = Box { value: 1 } }\n"
+	src := "type Box[T] = { value: T }\nfn main() { box = Box { value: 1 }; _ = box }\n"
 	s, path := newTestServer(t, src)
 	marked := strings.Replace(src, "value: 1", "va|lue: 1", 1)
 	item := completionItem(completeAt(t, s, path, marked), "value")
