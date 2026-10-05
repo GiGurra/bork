@@ -33,7 +33,12 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [mocking](../examples/mocking/main.bork) | Tests that replace the network and the clock with mocks |
 | [assemble](../examples/assemble/main.bork) | Wiring a database and an HTTP service together from provider functions |
 | [parallel_lists](../examples/parallel_lists/main.bork) | Bounded parallel `map` over a list, with cancellation |
-| [task_fanin](../examples/task_fanin/main.bork) | Awaiting many tasks, racing them, timeouts, and selecting from channels |
+| [task_fanin](../examples/task_fanin/main.bork) | Awaiting many tasks, racing them, and timeouts |
+| [channels](../examples/channels/main.bork) | Sending, receiving, closing, buffers, and producers |
+| [select_timeout](../examples/select_timeout/main.bork) | `select` with a timeout, a heartbeat ticker, polling, and a scope deadline |
+| [pipeline](../examples/pipeline/main.bork) | Stages joined by channels, stopped when the scope ends |
+| [fan_in_out](../examples/fan_in_out/main.bork) | Workers sharing one channel of jobs, and `merge` collecting their results |
+| [unbounded_queue](../examples/unbounded_queue/main.bork) | A queue that never blocks its producer, against a bounded one |
 | [task_pool](../examples/task_pool/main.bork) | A bounded task pool that refuses work when it is full |
 
 ## Services

@@ -15,7 +15,7 @@ Timeouts and periodic events are ordinary [channels](../language/scopes.md#chann
 - `time.After(s, d)` gives a `Channel[Instant]` of scope `s` that receives the instant `d` has passed, once, and is then closed. A deadline made once therefore stays expired: every later receive gives `Closed` at once. A nonpositive `d` fires at once.
 - `time.Tick(s, every)` gives a `Channel[Instant]` that receives an instant every period, keeping to the cadence. It buffers one tick: a tick that finds the last one not yet received is dropped, so a slow receiver gets the latest rather than a backlog. The period must be positive; `Tick` panics otherwise, as Go's `NewTicker` does.
 
-Neither leaks a timer: closing the channel, or the end of its scope, stops it.
+Neither leaks a timer: closing the channel, or the end of its scope, stops it. They are ordinary channels, so a [`select`](../language/channels.md#select) can wait for one alongside others.
 
 ```bork
 import "bork/time"

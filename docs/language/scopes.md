@@ -162,31 +162,7 @@ fn main() {
 Closed {}
 ```
 
-`channel[T](s, capacity)` makes a channel owned by the scope (`channel[T](s)` is unbuffered, and `unboundedChannel[T](s)` grows as needed). `send` and `receive` wait when the channel is full or empty, in the scope they are given, and report `Closed` or `Cancelled` as values. `for (x in ch.values(s))` receives until the channel is closed.
-
-`select` waits for whichever of several channel operations can happen first, and completes only that one:
-
-```bork
-import "bork/time"
-
-fn main() {
-  scope s {
-    replies = channel[String](s, 1)
-    deadline = time.After(s, time.Nanoseconds(50_000_000))
-    message = select {
-      reply = replies.receive(s) => s"reply: $reply"
-      _ = deadline.receive(s) => "no reply in time"
-    }
-    println(message)
-  }
-}
-```
-
-```text
-no reply in time
-```
-
-Each arm is a `receive` or `send` call, optionally naming its result, and the arm's body is ordinary code of the function around it, so it can `return`, use `?`, or `break` out of a loop. A `_ => ...` arm runs when no operation is ready, so the select does not wait. If the scope an arm waits in is cancelled, the select gives `Cancelled`: its value is the arms' value or `Cancelled`.
+`channel[T](s, capacity)` makes a channel owned by the scope. `send` and `receive` wait in the scope they are given, and report `Closed` or `Cancelled` as values. `for (x in ch.values(s))` receives until the channel is closed, and `select` waits for whichever of several channel operations can happen first. [Channels](channels.md) covers them in full: capacities, closing, producers, `select`, timeouts, and patterns such as pipelines and fan-out.
 
 ## Shared state
 
@@ -249,4 +225,4 @@ Most programs need only `scope` blocks.
 
 ---
 
-Previous: [Effects](effects.md) · Next: [Compile-time evaluation](comptime.md) · [All pages](../README.md#the-language)
+Previous: [Effects](effects.md) · Next: [Channels](channels.md) · [All pages](../README.md#the-language)

@@ -1,0 +1,75 @@
+// select waits for whichever of several channel operations can happen
+// first, and completes only that one. Timeouts and tickers are channels
+// too, so they are ordinary arms.
+import "bork/time"
+
+type TimedOut = {}
+
+fn ms(n: Int): time.Duration { time.Nanoseconds(n * 1_000_000) }
+
+// ask starts a worker that answers after a delay, and waits for the
+// answer for at most patience.
+fn ask(s: Scope, question: String, delay: Int, patience: Int) uses clock + state: String | TimedOut | Closed | Cancelled {
+  answers = channel[String](s, 1)
+  launch(s, () => {
+    _ = time.Sleep(s, ms(delay))
+    _ = answers.send(s, s"$question: 42")
+  })
+  // The timer belongs to s, so it stops when s ends, fired or not.
+  deadline = time.After(s, ms(patience))
+  select {
+    answer = answers.receive(s) => answer
+    _ = deadline.receive(s) => TimedOut {}
+  }
+}
+
+// beats counts ticks until done closes. Each arm decides what the loop
+// does next.
+fn beats(s: Scope, ticks: Channel[time.Instant], done: Channel[Bool], count: Int) uses state: Int | Cancelled {
+  select {
+    _ = ticks.receive(s) => beats(s, ticks, done, count + 1)?
+    _ = done.receive(s) => count
+  }
+}
+
+// heartbeat ticks every 50ms while work that takes 300ms runs.
+fn heartbeat(s: Scope) uses clock + state: Int | Cancelled {
+  done = channel[Bool](s)
+  launch(s, () => {
+    _ = time.Sleep(s, ms(300))
+    done.close()
+  })
+  beats(s, time.Tick(s, ms(50)), done, 0)
+}
+
+fn main() {
+  scope s {
+    println(ask(s, "fast question", 0, 1000))
+    // Each call ends a scope of its own, so the slow worker is cancelled
+    // instead of running on.
+    println(scope q { ask(q, "slow question", 1000, 20) })
+
+    // How many beats depends on timing, so this only shows that it beat.
+    match (heartbeat(s)) {
+      count: Int => println(s"beat while waiting: ${count > 0}")
+      cancelled: Cancelled => println(cancelled)
+    }
+
+    // A _ arm runs when nothing is ready, so the select does not wait.
+    mailbox = channel[String](s, 1)
+    poll = () => select {
+      message = mailbox.receive(s) => s"got $message"
+      _ => "nothing yet"
+    }
+    println(poll())
+    _ = mailbox.send(s, "hello")
+    println(poll())
+
+    // A deadline on the scope stops every select waiting in it: the
+    // select gives Cancelled.
+    never = channel[String](s)
+    println(withTimeout(s, 20, c => select {
+      message = never.receive(c) => message
+    }))
+  }
+}

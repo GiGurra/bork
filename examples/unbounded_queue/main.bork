@@ -1,0 +1,41 @@
+// An unbounded channel's buffer grows as needed, so a send never waits.
+// That suits a producer that must not be held up, such as one recording
+// events, when the consumer keeps up on average. A fixed capacity is the
+// better default: it pushes back on a producer that is too fast instead
+// of letting memory grow.
+
+type Event = { seq: Int, kind: String }
+
+fn record(s: Scope, events: Channel[Event], count: Int) uses state: Ok | Closed | Cancelled {
+  for (i in Seq.range(0, count)) {
+    events.send(s, Event { seq: i, kind: if (i % 10 == 0) { "error" } else { "info" } })?
+  }
+  Ok
+}
+
+fn main() {
+  scope s {
+    events = unboundedChannel[Event](s)
+    // It has no capacity: capacity() gives None.
+    println(s"capacity: ${events.capacity()}")
+    // No one receives yet, and still every send completes at once.
+    println(record(s, events, 10_000))
+    println(s"queued: ${events.length()}")
+    events.close()
+    // The consumer drains what is queued, in order, then sees the close.
+    received = atom(0)
+    errors = atom(0)
+    for (event in events.values(s)) {
+      _ = update(received, n => n + 1)
+      if (event.kind == "error") {
+        _ = update(errors, n => n + 1)
+      }
+    }
+    println(s"received ${current(received)}, ${current(errors)} errors")
+
+    // A full fixed buffer refuses: trySend reports Full, and send waits.
+    bounded = channel[Event](s, 100)
+    sent = range(0, 10_000).map(i => bounded.trySend(Event { seq: i, kind: "info" }))
+    println(s"bounded took ${sent.filter(r => r == Ok).length()} of ${sent.length()}")
+  }
+}

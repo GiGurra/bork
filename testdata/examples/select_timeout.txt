@@ -1,0 +1,6 @@
+fast question: 42
+TimedOut {}
+beat while waiting: true
+nothing yet
+got hello
+Cancelled { reason: "deadline exceeded" }
