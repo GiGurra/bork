@@ -145,6 +145,16 @@ test "writer snapshots remain independent" (value: Uint64) {
           assertEqual(second.Length(), 9)
           assert(second.Bytes().ReadUint64(0, binary.ByteOrder.LittleEndian) == value)
           assert(second.Bytes().ReadByte(8) == 17)
+          match (first.WriteByte(34)) {
+            branch: binary.Writer => {
+              assert(branch.Bytes().ReadByte(8) == 34)
+              assert(second.Bytes().ReadByte(8) == 17)
+              assertEqual(first.Bytes(), snapshot)
+            }
+            error: binary.BinaryError => assert(false)
+          }
+          emptyData: List[Byte] = []
+          assert(first.WriteBytes(emptyData.toBytes()) == first)
         }
         error: binary.BinaryError => assert(false)
       }
@@ -166,6 +176,15 @@ test "reader cursors are immutable" (value: Uint64) {
           assertEqual(reader.Remaining(), 8)
           assertEqual(next.Offset(), 8)
           assertEqual(next.Remaining(), 0)
+          assert(next.Skip(0) == next)
+          match (next.ReadBytes(9223372036854775807)) {
+            huge: BytesRead => assert(false)
+            error: binary.BinaryError => { assertEqual(error.offset, 8); assertEqual(error.length, 8) }
+          }
+          match (next.Skip(9223372036854775807)) {
+            huge: binary.Reader => assert(false)
+            error: binary.BinaryError => { assertEqual(error.offset, 8); assertEqual(error.length, 8) }
+          }
           match (next.ReadUint64()) {
             extra: Uint64Read => assert(false)
             error: binary.BinaryError => assertEqual(next.Offset(), 8)

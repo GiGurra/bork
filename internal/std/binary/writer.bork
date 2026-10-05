@@ -8,6 +8,7 @@ fn NewWriter(order: ByteOrder): Writer unsafe go {
 fn (value: Writer) Length(): Int unsafe go { return value.(Writer_writer).length }
 fn writerOrder(value: Writer): ByteOrder unsafe go { return value.(Writer_writer).order }
 fn appendWriter(value: Writer, chunk: Bytes): Writer | BinaryError unsafe go {
+  if len(chunk) == 0 { return value }
   node := value.(Writer_writer)
   limit := int64(int(^uint(0) >> 1))
   if int64(len(chunk)) > limit - node.length {
@@ -18,7 +19,8 @@ fn appendWriter(value: Writer, chunk: Bytes): Writer | BinaryError unsafe go {
 fn (value: Writer) WriteBytes(data: Bytes): Writer | BinaryError { appendWriter(value, data) }
 fn (value: Writer) Bytes(): Bytes unsafe go {
   node := value.(Writer_writer)
-  result := make([]byte, int(node.length))
+  // Allocate an owned Bytes value and fill it before exposing the snapshot.
+  result := append(_borkBytesFrom(nil), make([]byte, int(node.length))...)
   offset := node.length
   for {
     offset -= int64(len(node.chunk))
@@ -27,7 +29,7 @@ fn (value: Writer) Bytes(): Bytes unsafe go {
     if !ok { break }
     node = previous.(Writer_writer)
   }
-  return _borkBytesFrom(result)
+  return result
 }
 fn (value: Writer) WriteByte(number: Byte): Writer | BinaryError unsafe go {
   return appendWriter(value, _borkBytesFrom([]byte{number}))
