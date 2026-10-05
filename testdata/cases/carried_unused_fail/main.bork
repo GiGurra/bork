@@ -39,4 +39,13 @@ fn overwritten(xs: List[Int]): Int {
   last
 }
 
+// Through a temporary too.
+fn throughTemporary(xs: List[Int]) {
+  count = 0
+  for (_ in xs) {
+    next = count + 1
+    count = next
+  }
+}
+
 fn main() {}

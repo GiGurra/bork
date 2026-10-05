@@ -11,7 +11,7 @@ import (
 // been checked against the preceding environment. Simultaneous declarations
 // (parameters and patterns) use bind, which also rejects duplicate names.
 func (c *checker) bindRebinding(name string, pos diag.Pos, t Type, node any) {
-	if b, ok := node.(*syntax.Binding); ok && !c.noCarry {
+	if b, ok := node.(*syntax.Binding); ok && !c.headers[b] {
 		if l, i := c.lookupAt(name); l != nil && l.carry != nil {
 			c.rebindCarried(b, l, i, t)
 			return

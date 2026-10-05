@@ -538,6 +538,8 @@ type For struct {
 	// next: the header names of `for (init; cond; post)`, then the names
 	// its body gives new values from outside it.
 	Carries []*Carry
+	// Broken is set when a break leaves the loop.
+	Broken bool
 }
 
 // Carry is a name a loop carries (see docs/design/loops.md).

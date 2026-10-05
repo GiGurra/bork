@@ -46,6 +46,8 @@ func carryOrigin(decl any) any {
 // it carries from outside.
 type carryLoop struct {
 	pos diag.Pos
+	// broken is set when a break leaves the loop.
+	broken bool
 	// base is the index of the loop's own scope.
 	base   int
 	slots  []*carrySlot
@@ -140,12 +142,12 @@ func (c *checker) carriedAt(l *local, i int) bool {
 
 // carriedHere is the slot of a carried name that a binding here would
 // give a new value, or nil.
-func (c *checker) carriedHere(name string) *carrySlot {
-	if c.noCarry {
+func (c *checker) carriedHere(b *syntax.Binding) *carrySlot {
+	if c.headers[b] {
 		return nil
 	}
-	if l, i := c.lookupAt(name); c.carriedAt(l, i) {
-		return l.carry.byName[name]
+	if l, i := c.lookupAt(b.Name); c.carriedAt(l, i) {
+		return l.carry.byName[b.Name]
 	}
 	return nil
 }

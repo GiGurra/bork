@@ -69,6 +69,7 @@ func (l *lowerer) loop(x *syntax.For, out *For) *For {
 	var slots []*carrySlot
 	if loop != nil {
 		slots = loop.slots
+		out.Broken = loop.broken
 	}
 	for _, slot := range slots {
 		c := &Carry{}

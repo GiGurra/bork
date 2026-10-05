@@ -1329,15 +1329,24 @@ func (l *lifeChecker) loopForm(x *For) {
 	type next struct {
 		at   Expr
 		life lifetime
+		what string
 	}
 	nexts := make([][]next, len(x.Carries))
 	for i, c := range x.Carries {
 		l.joined(c.Latch)
 		if c.Post != nil {
-			nexts[i] = append(nexts[i], next{c.Post, l.use(c.Post, l.expr(c.Post))})
+			nexts[i] = append(nexts[i], next{c.Post, l.use(c.Post, l.expr(c.Post)), "the next value"})
 		} else {
 			for _, in := range c.Latch.Joins {
-				nexts[i] = append(nexts[i], next{&VarRef{expr: expr{pos: in.Pos, typ: in.Type}, Var: in}, l.env[in]})
+				nexts[i] = append(nexts[i], next{&VarRef{expr: expr{pos: in.Pos, typ: in.Type}, Var: in}, l.env[in], "the next value"})
+			}
+		}
+		if c.After != nil {
+			// A break passes its value out of the loop.
+			for _, in := range c.After.Joins {
+				if in != c.Head {
+					nexts[i] = append(nexts[i], next{&VarRef{expr: expr{pos: in.Pos, typ: in.Type}, Var: in}, l.env[in], "the value a break passes out"})
+				}
 			}
 		}
 	}
@@ -1353,7 +1362,7 @@ func (l *lifeChecker) loopForm(x *For) {
 		for _, n := range nexts[i] {
 			for _, scope := range n.life {
 				if !l.env[v].has(scope) {
-					l.errorf(n.at.Pos(), "the next value of %s belongs to a scope its first value does not, so it could outlive it; give %s a first value of that scope", v.Name, v.Name)
+					l.errorf(n.at.Pos(), "%s of %s belongs to a scope its first value does not, so it could outlive it; give %s a first value of that scope", n.what, v.Name, v.Name)
 					break
 				}
 			}

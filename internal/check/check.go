@@ -875,8 +875,8 @@ type checker struct {
 	carryFrames     []*carryFrame
 	nextTransparent bool
 	stmtPos         bool
-	// noCarry is set while a loop's header names are bound.
-	noCarry bool
+	// headers are loops' header bindings, which bind new names.
+	headers map[*syntax.Binding]bool
 
 	conversionSerial int
 	// inForce lists the mocks in force at the current point of a test:
@@ -1297,9 +1297,9 @@ func (c *checker) stmt(s syntax.Stmt) Type {
 		}
 		if s.Lazy || s.AsyncScope != nil {
 			t = c.deferredInitializer(s, declared)
-		} else if declared == nil && c.carriedHere(s.Name) != nil {
+		} else if slot := c.carriedHere(s); declared == nil && slot != nil {
 			// A carried name keeps its type, which guides the new value.
-			t = c.exprWant(s.Value, c.carriedHere(s.Name).typ)
+			t = c.exprWant(s.Value, slot.typ)
 		} else {
 			t = c.exprWant(s.Value, declared)
 		}

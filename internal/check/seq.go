@@ -76,8 +76,10 @@ func (c *checker) forExpr(e *syntax.For) Type {
 	}
 	loop := c.carry(e, outer, names)
 	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth, carry: loop})
+	ctx := c.loops[len(c.loops)-1]
 	body := c.loopBodyCarrying(loop, e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
+	loop.broken = ctx.broken
 	c.popScope()
 	c.endCarry(loop)
 	if body != Ok && body != Never && body != Invalid {
@@ -103,13 +105,17 @@ func (c *checker) loopExpr(e *syntax.For) Type {
 	outer, names := c.carriable(e)
 	c.nextTransparent = true
 	c.pushScope()
-	c.noCarry = true
+	if c.headers == nil {
+		c.headers = map[*syntax.Binding]bool{}
+	}
+	for _, b := range e.Init {
+		c.headers[b] = true
+	}
 	for _, b := range e.Init {
 		if c.stmt(b) == Never {
 			c.errorf(b.Value.Position(), "a loop's header binding cannot leave the function")
 		}
 	}
-	c.noCarry = false
 	loop := c.carry(e, outer, names)
 	if e.Cond != nil {
 		saved := c.loopCond
@@ -123,6 +129,7 @@ func (c *checker) loopExpr(e *syntax.For) Type {
 	c.loops = append(c.loops, ctx)
 	body := c.loopBodyCarrying(loop, e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
+	loop.broken = ctx.broken
 	if body != Ok && body != Never && body != Invalid {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}

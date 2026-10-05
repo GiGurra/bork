@@ -42,10 +42,15 @@ func (cl *carryLiveness) visit(x Expr, owner *Var) {
 				switch s := s.(type) {
 				case *Let:
 					cl.visit(s.AsyncScope, owner)
-					if s.Carried {
+					switch {
+					case s.Carried:
 						cl.source(s.Var)
 						cl.visit(s.Value, s.Var)
-					} else {
+					case s.Var.Name != "_" && s.Var.PackageBinding == nil:
+						// A value computed through a binding is observed
+						// when the binding is.
+						cl.visit(s.Value, s.Var)
+					default:
 						cl.visit(s.Value, owner)
 					}
 				case *ExprStmt:

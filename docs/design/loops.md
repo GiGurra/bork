@@ -225,9 +225,9 @@ block; in a lambda, `lazy`/`async` initializer or generator; and anywhere
 outside a loop body. The error for a branch whose value is used says to move
 the rebinding out, or to write the `if` as a statement.
 
-A for-in's element name (`x`) is per-iteration, not carried: rebinding it in
-the body is an ordinary same-block rebinding, and the next iteration gets the
-next element.
+A for-in's element name (`x`) is per-iteration, not carried. It belongs to
+the loop, not to the body's block, so the body cannot rebind it (bind another
+name), and the next iteration gets the next element.
 
 **Why not only header names?** The lead suggested making header names the
 only carried state. That leaves no way to get a result out of a loop without

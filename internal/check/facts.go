@@ -532,6 +532,11 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 			}
 		case *ExprStmt:
 			f.walk(s.X, e)
+			// A loop left only by its condition leaves its negation known
+			// (of the values it carried: see joinedVar).
+			if loop, ok := s.X.(*For); ok && loop.Cond != nil && !loop.Broken {
+				e = e.with(f.conditionFacts(loop.Cond, false)...)
+			}
 			// A guard: `if (!p(x)) { return ... }` leaves p(x) known.
 			if ifx, ok := s.X.(*If); ok {
 				if ifx.Then.Type() == Never {
@@ -3501,11 +3506,17 @@ func (f *factChecker) noteCarried(to, from *Var, e env) {
 		f.carryFacts = map[[2]*Var][]*Constraint{}
 	}
 	key := [2]*Var{to, from}
+	// Several paths may pass the same value on: it has what it has on
+	// every one.
+	earlier, again := f.carryFacts[key]
 	f.carryFacts[key] = nil
 	saved := f.diags
 	f.diags = &diag.List{}
 	defer func() { f.diags = saved }()
 	for _, con := range to.Invariant {
+		if again && !slices.Contains(earlier, con) {
+			continue
+		}
 		ob := f.obligationOf(con, f.ownParams(), "")
 		if ok, pending := f.prove(&VarRef{expr: expr{pos: from.Pos, typ: from.Type}, Var: from}, ob, e, 0); ok && len(pending) == 0 {
 			f.carryFacts[key] = append(f.carryFacts[key], con)
