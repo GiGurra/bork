@@ -23,11 +23,20 @@ const scriptRequestPrefix = "bork-script:"
 
 // RunScript executes a single file with an implicit main, even without a shebang.
 func RunScript(path string, args []string) (int, error) {
+	return runScript(path, args, Run)
+}
+
+// RunScriptCLI uses the same process replacement as bork run.
+func RunScriptCLI(path string, args []string) (int, error) {
+	return runScript(path, args, RunCLI)
+}
+
+func runScript(path string, args []string, run func(string, []string) (int, error)) (int, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return 1, err
 	}
-	return Run(scriptRequestPrefix+absolute, args)
+	return run(scriptRequestPrefix+absolute, args)
 }
 
 type scriptHeader struct {

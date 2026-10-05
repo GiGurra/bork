@@ -104,6 +104,7 @@ func loadGoContext(ctx *goContext) *goContext {
 	if ctx.err != nil {
 		return ctx
 	}
+	testCacheProbeAt("BORK_TEST_GO_COMMAND_PROBE", "env -json")
 	values, env, tool, err := gotoolchain.Query(ctx.tool, "", ctx.processEnv)
 	if err != nil {
 		ctx.err = err
@@ -183,6 +184,7 @@ func (ctx *goContext) processValue(key string) string {
 	return ""
 }
 func (ctx *goContext) command(args ...string) *exec.Cmd {
+	testCacheProbeAt("BORK_TEST_GO_COMMAND_PROBE", strings.Join(args, " "))
 	tool := ctx.tool
 	if tool == "" {
 		tool = "go"

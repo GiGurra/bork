@@ -253,7 +253,11 @@ Switching needs Go on `PATH` to install an uncached compiler. Download failures 
 
 ## The compile cache
 
-On Linux and macOS, `check`, `emit`, `build`, and `run` reuse earlier compiler results from `BORKCACHE` when nothing they depend on has changed. There is nothing to set up. A build still runs the Go compiler, which has its own cache, and `run` still runs the program each time.
+On Linux and macOS, `check`, `emit`, `build`, `run`, and `script` reuse earlier compiler results from `BORKCACHE` when nothing they depend on has changed. There is nothing to set up. `run` and `script` also reuse their executable, preserving its inode and modification time on a warm hit so the operating system can reuse earlier executable checks. The program runs every time.
+
+For native Go builds with a supported installed Go SDK and unchanged inputs, `build`, `run`, and `script` skip `go build` too. Source and dependency changes, build settings, missing outputs, and corrupted executables invalidate the recorded build. Concurrent runs and rebuilding while an older copy runs are safe: a completed replacement is published atomically. Cgo, custom Go launchers, and Go dependencies with assembly or embedded assets use Go's normal build checks. Programs that require fresh compiler checks can still reuse an unchanged executable after those checks.
+
+On Unix, a cached `run` or `script` executable replaces the CLI process, keeping its PID, arguments, environment, and standard streams. Windows and temporary fallback builds wait for the child program and return its exit status.
 
 Multiple `comptime` blocks share one evaluation program during compilation; their values are recomputed for each fresh compilation.
 
