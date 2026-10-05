@@ -1,6 +1,7 @@
+import "bork/encoding"
 import "bork/crypto"
 fn main() {
-  println(crypto.SHA256Hex(utf8Bytes("hello")))
-  signature = crypto.HMAC256(utf8Bytes("key"), utf8Bytes("message"))
-  println(crypto.VerifyHMAC256(utf8Bytes("key"), utf8Bytes("message"), signature))
+  println(crypto.SHA256Hex(encoding.Utf8("hello")))
+  signature = crypto.HMAC256(encoding.Utf8("key"), encoding.Utf8("message"))
+  println(crypto.VerifyHMAC256(encoding.Utf8("key"), encoding.Utf8("message"), signature))
 }

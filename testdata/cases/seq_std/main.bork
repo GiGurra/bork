@@ -1,3 +1,4 @@
+import "bork/encoding"
 import codecs "bork/json"
 import "bork/fs"
 import "bork/sql"
@@ -6,7 +7,7 @@ fn demo() uses io + net: Ok | fs.Error | sql.Error {
   scope app {
     directory = fs.TempDir(app, pattern: "seq-")?
     path = fs.Join([fs.DirectoryPath(directory), "lines.txt"])
-    fs.Write(path, utf8Bytes("one\ntwo\nthree\n"))?
+    fs.Write(path, encoding.Utf8("one\ntwo\nthree\n"))?
     println(fs.Lines(path).take(1).toList())
     println(fs.Lines(path).toList())
     println(fs.Entries(fs.DirectoryPath(directory)).map(entry => match (entry) {

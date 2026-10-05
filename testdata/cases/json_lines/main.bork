@@ -1,3 +1,4 @@
+import "bork/encoding"
 import "bork/json"
 import "bork/fs"
 
@@ -37,7 +38,7 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
   println(nextText(reader))
   println(nextText(reader))
   mixed = fs.Join([root, "mixed.jsonl"])
-  fs.Write(mixed, utf8Bytes("1\r\n\nnot-json\ntrue\n\"last\""))?
+  fs.Write(mixed, encoding.Utf8("1\r\n\nnot-json\ntrue\n\"last\""))?
   mixedReader = json.OpenLines(mixed, s)?
   println(nextText(mixedReader))
   println(nextText(mixedReader))
@@ -46,14 +47,14 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
   println(nextText(mixedReader))
   println(nextText(mixedReader))
   longPath = fs.Join([root, "long.jsonl"])
-  fs.Write(longPath, utf8Bytes("\"" + "a".repeat(70000) + "\"\n"))?
+  fs.Write(longPath, encoding.Utf8("\"" + "a".repeat(70000) + "\"\n"))?
   longReader = json.OpenLines(longPath, s)?
   match (json.Next(longReader)) {
     Option.Some { value: Json.String { value } } => println(value.byteLength())
     _ => println("unexpected")
   }
   emptyPath = fs.Join([root, "empty.jsonl"])
-  fs.Write(emptyPath, utf8Bytes(""))?
+  fs.Write(emptyPath, encoding.Utf8(""))?
   println(nextText(json.OpenLines(emptyPath, s)?))
   println(match (json.OpenLines(fs.Join([root, "missing"]), s)) { error: IoError => true; _ => false })
   println(match (json.CreateLines(fs.Join([root, "missing", "file"]), s)) { error: IoError => true; _ => false })

@@ -1,9 +1,10 @@
+import "bork/encoding"
 import "bork/http"
 instance bytesEncode: Encode[Bytes] {
   fn encode(value: Bytes): Json { Json.String { value: "secret" } }
 }
 instance bytesDecode: Decode[Bytes] {
-  fn decode(json: Json): Bytes | DecodeError { utf8Bytes("invalid-secret") }
+  fn decode(json: Json): Bytes | DecodeError { encoding.Utf8("invalid-secret") }
 }
 type Serialized = http.Certificate derive (Encode)
 type Forged = http.Certificate derive (Decode)

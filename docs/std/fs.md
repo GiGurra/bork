@@ -31,7 +31,7 @@ There are no new language constructs.
   `ReadAll(file)` consumes remaining bytes; `WriteTo(file, bytes)` returns
   the byte count. `ReadAllText` and `WriteText` replace the former prelude's
   text operations; ReadAllText preserves raw text, while validated decoding
-  is `utf8String(ReadAll(file)?)`. `ForEachLine(file, visit)` streams lines
+  is `encoding.ParseUtf8(ReadAll(file)?)`. `ForEachLine(file, visit)` streams lines
   without a scanner size limit, removing LF/CRLF and keeping a final line.
   Directory operations: `ReadDir` (lexical entry order), `Walk` (includes
   root, lexical traversal, no symlink following), `MkdirAll`, `Remove`,

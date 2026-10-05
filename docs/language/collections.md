@@ -143,11 +143,13 @@ Standard packages use sequences for input that should not be loaded all at once,
 `Bytes` is an immutable sequence of bytes, for binary data.
 
 ```bork
+import "bork/encoding"
+
 fn main() {
-  data = utf8Bytes("héllo")
+  data = encoding.Utf8("héllo")
   println(data, data.length())
-  println(utf8String(data))
-  println(bytes([toByte(0), toByte(255)]))
+  println(encoding.ParseUtf8(data))
+  println([toByte(0), toByte(255)].toBytes())
 }
 ```
 
@@ -157,7 +159,7 @@ héllo
 Bytes(00ff)
 ```
 
-`utf8String` returns `String | ParseError`, because not every byte sequence is valid text. Methods are `length`, `isEmpty`, `get`, `slice`, `concat`, and `toList`. The [bork/encoding](../std/encoding.md) package has hex and base64.
+`encoding.ParseUtf8` returns `String | ParseError`, because not every byte sequence is valid text. Methods are `length`, `isEmpty`, `get`, `slice`, `concat`, and `toList`. The [bork/encoding](../std/encoding.md) package has UTF-8, hex and base64. `List[Byte].toBytes()` copies a byte list.
 
 ## Parallel list operations
 

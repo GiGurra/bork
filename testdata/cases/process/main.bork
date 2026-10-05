@@ -1,3 +1,4 @@
+import "bork/encoding"
 import "bork/process"
 import "bork/env"
 
@@ -56,7 +57,7 @@ fn signalTest(s: Scope, interrupt: Bool) uses io + state + clock: Ok | IoError |
   output = process.Await(child)?
   expected = if (interrupt) { 130 } else { 143 }
   println(output.code == expected)
-  println(utf8String(output.stdout))
+  println(encoding.ParseUtf8(output.stdout))
 }
 fn server(path: String) uses io + state + clock {
   scope child {
@@ -173,10 +174,10 @@ fn parentEnv() uses io unsafe go {
 }
 fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   parentEnv()
-  output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: utf8Bytes("input") })?
+  output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", Option.Some { value: encoding.Utf8("input") })?
   println(output.code)
-  println(utf8String(output.stdout))
-  println(utf8String(output.stderr))
+  println(encoding.ParseUtf8(output.stdout))
+  println(encoding.ParseUtf8(output.stderr))
   child = process.Start(s, executable(), ["child"], Option.Some { value: [] })?
   first = process.Await(child)?
   second = process.Await(child)?
@@ -184,10 +185,10 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   println(process.Pid(child) > 0)
   directory = markerDir(marker(s))
   located = process.Run(s, executable(), ["cwd"], Option.None, directory)?
-  println(utf8String(located.stdout) == directory + "\n")
+  println(encoding.ParseUtf8(located.stdout) == directory + "\n")
   inherit = process.Run(s, executable(), ["child"])?
-  println(utf8String(inherit.stdout) == "Option.Some { value: \"parent\" }\n\n")
-  println(utf8String(first.stdout) == "Option.None\n\n")
+  println(encoding.ParseUtf8(inherit.stdout) == "Option.Some { value: \"parent\" }\n\n")
+  println(encoding.ParseUtf8(first.stdout) == "Option.None\n\n")
   abandonedPid = abandoned()?
   println(gone(abandonedPid))
   shared = attached(s)?

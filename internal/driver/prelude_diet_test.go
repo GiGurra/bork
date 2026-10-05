@@ -13,6 +13,12 @@ func TestPreludeDiet(t *testing.T) {
 		{"json codecs", `import "bork/json"
 type Config = { count: Int } derive (Decode, Encode)
 fn main() { println(json.Decode[Config](json.Encode(Config { count: 2 })), json.Render(Json.Null), json.Parse("null")) }`, ""},
+		{"byte conversion methods", `import "bork/encoding"
+fn main() { println([].toBytes(), [toByte(65)].toBytes().toList(), encoding.ParseUtf8(encoding.Utf8("hé"))) }`, ""},
+		{"user byte functions", `fn bytes(n: Int): Int { n }
+fn utf8Bytes(n: Int): Int { n }
+fn utf8String(n: Int): Int { n }
+fn main() { println(bytes(1), utf8Bytes(2), utf8String(3)) }`, ""},
 		{"process", `import "bork/process"
 fn main() { println(process.Args()); if (false) { process.Exit(1) } }`, ""},
 		{"cancellable sleep", `import "bork/time"
@@ -21,7 +27,7 @@ fn main() { scope s { cancel(s); println(time.Sleep(s, time.Nanoseconds(0))) } }
 	} {
 		t.Run(tc.name, func(t *testing.T) { checkPreludeSource(t, tc.source, tc.want) })
 	}
-	for _, name := range []string{"args", "exit", "sleep", "parseJson", "renderJson", "decodeJson", "encodeJson", "jsonKind", "decodeMismatch", "atPath", "decodeItems", "decodeFields", "jsonFieldPut", "jsonFieldsOf", "isDigit", "isLetter", "isSpace", "isUpper", "isLower"} {
+	for _, name := range []string{"bytes", "utf8Bytes", "utf8String", "args", "exit", "sleep", "parseJson", "renderJson", "decodeJson", "encodeJson", "jsonKind", "decodeMismatch", "atPath", "decodeItems", "decodeFields", "jsonFieldPut", "jsonFieldsOf", "isDigit", "isLetter", "isSpace", "isUpper", "isLower"} {
 		t.Run("removed "+name, func(t *testing.T) {
 			checkPreludeSource(t, "fn main() { println("+name+") }", "undefined")
 		})

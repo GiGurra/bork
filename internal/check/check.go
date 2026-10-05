@@ -407,6 +407,7 @@ func Program(files []*syntax.File, root string, diags *diag.List, goTypes GoType
 func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goTypes GoTypes, observe func(string)) *Info {
 	c := &checker{
 		recordPredicateRefs: true,
+		files:               files,
 		diags:               diags,
 		info: &Info{
 			GoBindings:             map[*Func]*GoBinding{},
@@ -749,6 +750,7 @@ func (c *checker) inFile(f *syntax.File) {
 }
 
 type checker struct {
+	files []*syntax.File
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	packagePath         []*PackageBinding
@@ -1597,6 +1599,16 @@ func (c *checker) call(e *syntax.Call, want Type) Type {
 	}
 	fn, ok := c.funcNamed(id.Name)
 	if !ok {
+		if c.removedBytesCall(e, id) {
+			for _, arg := range e.Args {
+				var context Type
+				if id.Name == "bytes" {
+					context = &List{Elem: Uint8}
+				}
+				c.exprWant(arg, context)
+			}
+			return Invalid
+		}
 		checked := 0
 		if e.Pipe.File != "" && len(e.Args) > 0 {
 			recv := c.expr(e.Args[0])

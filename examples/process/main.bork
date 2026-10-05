@@ -1,9 +1,10 @@
+import "bork/encoding"
 import "bork/process"
 
 fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
   result = process.Run(s, "echo", arguments: ["hello", "from", "a", "subprocess"])?
   println(result.code)
-  println(utf8String(result.stdout))
+  println(encoding.ParseUtf8(result.stdout))
 }
 fn main() {
   result = scope app { run(app) }

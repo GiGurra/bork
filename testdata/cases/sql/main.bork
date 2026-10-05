@@ -1,3 +1,4 @@
+import "bork/encoding"
 import "bork/json"
 import "bork/sql"
 
@@ -40,7 +41,7 @@ fn demo() uses io + net + state: Ok | sql.Error | DecodeError {
   scope app {
     db = sql.OpenSqlite(":memory:", app)?
     created = sql.Exec(db, sql.Unsafe("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT, active BOOLEAN, score REAL, data BLOB)"), [])?
-    inserted = sql.Exec(db, sql.Unsafe("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)"), [1, "Ada", sql.Null {}, true, 1.25, utf8Bytes("ab")])?
+    inserted = sql.Exec(db, sql.Unsafe("INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)"), [1, "Ada", sql.Null {}, true, 1.25, encoding.Utf8("ab")])?
     println(inserted.rowsAffected, inserted.lastInsertId)
     rows = sql.Query[Row](db, sql.Unsafe("SELECT id, name, note, active, score, data FROM users ORDER BY id"), [])?
     println(rows)

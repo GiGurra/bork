@@ -75,8 +75,13 @@ implementation helpers (`_jsonKind`, `_decodeMismatch`, `_atPath`, `_decodeItems
 ordinary source cannot name them. Compiler-embedded sources may use reserved
 names, including inside interpolations.
 
+UTF-8 text conversion belongs to `bork/encoding`: `Utf8(text): Bytes` and
+`ParseUtf8(data): String | ParseError`. `List[Byte].toBytes()` mirrors
+`Bytes.toList()`; the old `bytes`, `utf8Bytes`, and `utf8String` functions
+are removed, with compiler fixes for legacy calls.
+
 The rest stays: println/eprintln, concurrency and scope primitives (including
-delay/cancelAfter), range/prepend, scalar parse functions, bytes/UTF-8
+delay/cancelAfter), range/prepend, scalar parse functions, Bytes and List[Byte].toBytes()
 construction, collection methods, Eq/Ord/Show/GoStruct, and Mock methods. These
 are core value operations or language/runtime primitives, rather than duplicate
 standard-package services. No other user-visible implementation helpers or OS

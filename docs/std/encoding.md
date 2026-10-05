@@ -23,12 +23,16 @@ ragged rows. No new syntax is introduced.
 
 ## Binary encoding
 
-`bork/encoding` supplies hex and padded standard/URL-safe base64 encoders and
-parsers. Invalid encodings return `ParseError` without partial data. The
+`bork/encoding` supplies UTF-8, hex and padded standard/URL-safe base64 encoders and
+parsers. `Utf8(text): Bytes` preserves embedded zero bytes;
+`ParseUtf8(data): String | ParseError` rejects invalid UTF-8. Invalid encodings return `ParseError` without partial data. The
 base64 parsers enforce zero trailing padding bits and accept CR/LF.
 
 ## Encoding API
 
+- **UTF-8:** `Utf8(text): Bytes` encodes text; `ParseUtf8(data): String | ParseError`
+  validates and decodes bytes. Copy a byte list with `values.toBytes()`;
+  `data.toList()` makes the reverse conversion.
 - **`bork/encoding`:** `Hex` / `ParseHex`, `Base64` / `ParseBase64`, and
   `Base64URL` / `ParseBase64URL` convert Bytes and String. Parsers return
   `Bytes | ParseError`; hex accepts either case and requires complete pairs.
@@ -64,7 +68,7 @@ base64 parsers enforce zero trailing padding bits and accept CR/LF.
 
 ## Examples
 
-Import `bork/encoding` for hex and standard or URL-safe base64; malformed
+Import `bork/encoding` for UTF-8, hex and standard or URL-safe base64; malformed
 input returns `ParseError`. See [the encoding example](../../examples/bytes_encoding/main.bork).
 
 Import `bork/encoding` for CSV. `encoding.DecodeCsv[T]` reads header-based records

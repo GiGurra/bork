@@ -1,3 +1,4 @@
+import "bork/encoding"
 import "bork/fs"
 
 fn exercise(s: Scope) uses io: Ok | fs.Error {
@@ -9,8 +10,8 @@ fn exercise(s: Scope) uses io: Ok | fs.Error {
   println(recovered(() => panicAfterCreating(root)))
   println((fs.ReadDir(root)?).length())
   path = fs.Join([root, "data.bin"])
-  fs.Write(path, bytes([toByte(0), toByte(255)]))?
-  fs.Append(path, utf8Bytes("!"))?
+  fs.Write(path, [toByte(0), toByte(255)].toBytes())?
+  fs.Append(path, encoding.Utf8("!"))?
   println(fs.Read(path)?)
   println(match (fs.CreateNew(path, s)) {
     file: fs.File => false
@@ -31,10 +32,10 @@ fn exercise(s: Scope) uses io: Ok | fs.Error {
   reader = fs.Open(fs.Path(lines), s)?
   fs.ForEachLine(reader, line => println(line))?
   temporary = fs.TempFile(s, root)?
-  temporaryWritten = fs.WriteTo(temporary, utf8Bytes("temp"))?
+  temporaryWritten = fs.WriteTo(temporary, encoding.Utf8("temp"))?
   println((fs.Stat(fs.Path(temporary))?).size)
   endingsPath = fs.Join([root, "endings.txt"])
-  fs.Write(endingsPath, utf8Bytes("\n\r\nlast\r"))?
+  fs.Write(endingsPath, encoding.Utf8("\n\r\nlast\r"))?
   endings = fs.Open(endingsPath, s)?
   fs.ForEachLine(endings, line => println(line.byteLength()))?
   linkPath = fs.Join([root, "link"])

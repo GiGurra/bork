@@ -184,7 +184,15 @@ func (c *checker) methodCallOf(e *syntax.Call, want Type) (Type, bool) {
 	if c.isVariantPath(sel.X) {
 		return nil, false
 	}
-	xt := c.expr(sel.X)
+	var receiverWant Type
+	// A concrete list receiver supplies context for literals such as
+	// [].toBytes(), including conditional results, just as a parameter does.
+	if listReceiverLiteral(sel.X) {
+		if fn, _ := c.methodNamed(&List{Elem: Invalid}, sel.Name); fn != nil && len(fn.TypeParams) == 0 {
+			receiverWant = fn.Params[0]
+		}
+	}
+	xt := c.exprWant(sel.X, receiverWant)
 	if t, ok := c.seqMethod(e, sel, xt); ok {
 		return t, true
 	}
@@ -393,4 +401,25 @@ func (c *checker) methodReferenceOwner(e syntax.Expr) Type {
 		return nil
 	}
 	return t
+}
+
+// listReceiverLiteral finds list literals in the receiver's result positions.
+func listReceiverLiteral(expr syntax.Expr) bool {
+	switch expr := expr.(type) {
+	case *syntax.ListLit:
+		return true
+	case *syntax.Block:
+		return listReceiverLiteral(expr.Tail)
+	case *syntax.WithExpr:
+		return listReceiverLiteral(expr.Body)
+	case *syntax.If:
+		return listReceiverLiteral(expr.Then) || listReceiverLiteral(expr.Else)
+	case *syntax.Match:
+		for _, arm := range expr.Arms {
+			if listReceiverLiteral(arm.Body) {
+				return true
+			}
+		}
+	}
+	return false
 }
