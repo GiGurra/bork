@@ -381,6 +381,14 @@ on the wire. Fieldless variants and Option's explicit null/value instances
 remain unchanged. Shape records named versus positional payloads explicitly;
 codec chooses the representation rather than the compiler.
 
+Coordinate with context-pattern PR #345 and tuple PR #350 before the positional
+payload stage. Positional metadata uses ordered numeric slots (0, 1, ...), with
+backend fields E0/E1; neither those names nor the numeric labels become object
+keys. Shape payload views use the explicit slot index. Option's representation
+migration moves unsafe-Go/projection readers to its first numeric slot, while
+its library codec remains the explicit null/value protocol. Inspect helpers
+through resolved slot metadata instead of assuming a stored field named value.
+
 The first implementation stage still has compiler codec generation, identified
 by the actual bork/codec package and declaration identity, never by short class
 names. Its helpers and unsafe Go rewriting must use resolved package prefixes.
