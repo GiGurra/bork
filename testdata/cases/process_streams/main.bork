@@ -155,11 +155,12 @@ fn robustness(s: Scope, directory: String) uses io + state + clock: Ok | IoError
   // The direct child exits on SIGTERM; the SIGKILL timer must not reach a
   // descendant that outlives it while still holding the captured pipe. Stop
   // signals the whole group, so first wait until the descendant ignores SIGTERM.
+  // The descendant gives up after a minute so a failed run leaves no orphan.
   survivor = fs.Join([directory, "survivor"])
   marker = fs.Join([directory, "outer"])
   inner = fs.Join([directory, "inner"])
   release = fs.Join([directory, "release"])
-  outer = process.Start(s, "/bin/sh", ["-c", "sh -c 'trap \"\" TERM; echo ready > \"$2\"; until [ -s \"$3\" ]; do sleep 0.05; done; echo survived > \"$1\"' sh \"$1\" \"$3\" \"$4\" & trap 'exit 0' TERM; echo ready > \"$2\"; wait", "sh", survivor, marker, inner, release], cancelGrace: time.Duration { nanos: 3_000_000_000 })?
+  outer = process.Start(s, "/bin/sh", ["-c", "sh -c 'trap \"\" TERM; echo ready > \"$2\"; n=0; until [ -s \"$3\" ]; do n=$((n+1)); [ $n -gt 1200 ] && exit 1; sleep 0.05; done; echo survived > \"$1\"' sh \"$1\" \"$3\" \"$4\" & trap 'exit 0' TERM; echo ready > \"$2\"; wait", "sh", survivor, marker, inner, release], cancelGrace: time.Duration { nanos: 3_000_000_000 })?
   waitReady(marker)
   waitReady(inner)
   outer.Stop(time.Duration { nanos: 2_000_000_000 })
