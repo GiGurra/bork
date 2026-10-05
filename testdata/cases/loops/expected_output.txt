@@ -1,0 +1,21 @@
+3
+2
+1
+first 0
+first 1
+second 20
+second 22
+8
+odd 5
+odd 3
+odd 1
+0 5
+1 4
+2 3
+1 2
+2 1
+1 2
+job 1
+job 2
+done
+Ok

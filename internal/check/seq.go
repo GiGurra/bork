@@ -107,6 +107,10 @@ func (c *checker) loopExpr(e *syntax.For) Type {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
 	}
 	seen := map[string]bool{}
+	savedPost := c.postClause
+	c.postClause = c.lambdaDepth + 1
+	c.loops = append(c.loops, &loopContext{depth: -1}) // break and continue cannot leave it either
+	defer func() { c.postClause, c.loops = savedPost, c.loops[:len(c.loops)-1] }()
 	for _, b := range e.Post {
 		init := header[b.Name]
 		if init == nil {
@@ -125,7 +129,7 @@ func (c *checker) loopExpr(e *syntax.For) Type {
 		}
 		c.info.bindings[b] = want
 	}
-	if e.Form() == syntax.ForInfinite && !loop.broken {
+	if e.Cond == nil && !loop.broken {
 		return Never
 	}
 	return Ok

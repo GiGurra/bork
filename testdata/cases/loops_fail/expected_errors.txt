@@ -1,0 +1,6 @@
+main.bork:2:8: a loop's condition must be Bool, found Int
+main.bork:9:22: the post clause can only rebind the loop's own header names, and n is not one
+main.bork:15:26: i is the loop's i, so its next value must be Int, found String
+main.bork:21:28: a loop's post clause cannot use return; compute the value in the body instead
+main.bork:30:3: unreachable code
+main.bork:35:30: a loop's post clause cannot use break; compute the value in the body instead

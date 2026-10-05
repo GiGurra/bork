@@ -65,7 +65,23 @@ fn main() {
 }
 ```
 
-`for` goes through a `List` or a `Seq`. There is no `while`, and no variable to count with. A loop that builds up a value is written as a `fold` or as a function that calls itself.
+`for (x in xs)` goes through a `List` or a `Seq`. The other forms are Go's. `for { ... }` loops until `break` or `return`. `for (cond) { ... }` checks a condition before each round. `for (init; cond; post) { ... }` counts:
+
+```bork
+fn main() {
+  for (i = 0, j = 10; i < j; i = i + 3, j = j - 1) {
+    println(s"$i $j")
+  }
+  for (i = 1; ; i = i * 2) {
+    if (i > 50) { break }
+    println(i)
+  }
+}
+```
+
+The header names (`i`, `j`) belong to the loop. Each round has its own values: a closure made in one round keeps that round's. The post clause gives the next round's values, computed together from this round's, so `a = b, b = a` swaps them. `continue` runs it too. It cannot `return`, `?`, `break` or `continue`. A header name may declare facts (`i: Int where nonNegative = 0`), which every first and next value must prove. The condition is known in the body. A `for` without a condition and without a `break` never ends normally, so code after it is unreachable.
+
+A loop that builds up a value is written as a `fold`, or as a function that calls itself in tail position, which compiles to a loop (see [tail calls](basics.md#recursion-and-tail-calls)).
 
 ## Maps
 

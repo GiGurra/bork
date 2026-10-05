@@ -495,6 +495,7 @@ type Yield struct {
 	Pos   diag.Pos
 	Value Expr
 }
+
 // For is a loop (see docs/design/loops.md). With Items it is
 // `for (x in xs)`. Otherwise it is `for { }` (no header), `for (cond)`
 // (Cond alone), or `for (init; cond; post)` (Clauses), whose Init
@@ -534,6 +535,7 @@ func (f *For) Form() ForForm {
 	}
 	return ForInfinite
 }
+
 type LoopControl struct {
 	Pos      diag.Pos
 	Continue bool

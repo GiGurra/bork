@@ -412,7 +412,17 @@ func (s *sourceIndex) walk(x check.Expr) {
 			s.selectVar(x.Var, x.Body.Pos())
 		}
 		s.walk(x.Items)
+		for i, v := range x.Header {
+			if s.contains(v.Pos, len(v.Name)) {
+				s.selectVar(v, x.Body.Pos())
+			}
+			s.walk(x.Init[i])
+		}
+		s.walk(x.Cond)
 		s.walk(x.Body)
+		for _, post := range x.Post {
+			s.walk(post)
+		}
 	case *check.ListLit:
 		for _, elem := range x.Elems {
 			s.walk(elem)

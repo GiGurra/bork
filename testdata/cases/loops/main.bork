@@ -1,0 +1,84 @@
+// Go-style loops: for { }, for (cond) { }, and for (init; cond; post) { }.
+type Done = {}
+
+fn firstSquareAbove(limit: Int): Int {
+  for (i = 0; ; i = i + 1) {
+    if (i * i > limit) {
+      return i
+    }
+  }
+}
+
+fn countDown(n: Int) uses io {
+  for (i = n; i > 0; i = i - 1) {
+    if (i % 2 == 0) {
+      continue
+    }
+    println(s"odd $i")
+  }
+}
+
+fn pairs() uses io {
+  for (lo = 0, hi = lo + 5; lo < hi; lo = lo + 1, hi = hi - 1) {
+    println(s"$lo $hi")
+  }
+}
+
+fn swap() uses io {
+  for (a = 1, b = 2, n = 0; n < 3; a = b, b = a, n = n + 1) {
+    println(s"$a $b")
+  }
+}
+
+fn serve(jobs: Channel[Int]) uses io + state: Ok | Cancelled {
+  for {
+    match (receive(jobs)) {
+      n: Int => println(s"job $n")
+      c: Closed => break
+      c: Cancelled => return c
+    }
+  }
+  println("done")
+}
+
+pred nonNegative(n: Int) { n >= 0 }
+
+fn needsNonNegative(n: Int where nonNegative): Int { n }
+
+// A header name's declared facts hold in every iteration.
+fn invariant() uses io {
+  for (i: Int where nonNegative = 3; i > 0; i = i - 1) {
+    println(needsNonNegative(i))
+  }
+}
+
+// Sibling loops may reuse header names, and closures capture each
+// iteration's values.
+fn siblings() uses io {
+  for (i = 0; i < 2; i = i + 1) {
+    println(s"first $i")
+  }
+  for (i = 10; i < 12; i = i + 1) {
+    f = () => i * 2
+    println(s"second ${f()}")
+  }
+}
+
+fn main() uses io + state {
+  invariant()
+  siblings()
+  println(firstSquareAbove(50))
+  countDown(5)
+  pairs()
+  swap()
+  scope s {
+    ch = channel[Int](s, 3)
+    _ = send(ch, 1)
+    _ = send(ch, 2)
+    closeChannel(ch)
+    println(serve(ch))
+  }
+  for (false) {
+    println("never")
+  }
+}

@@ -641,7 +641,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return nil
 	case *For:
 		if x.Items == nil {
-			l.loop(x)
+			l.loopForm(x)
 			return nil
 		}
 		l.env[x.Var] = l.use(x.Items, l.expr(x.Items))
@@ -1311,20 +1311,26 @@ func channelMethod(fn *Func) bool {
 	return ok && r.Name == "Channel"
 }
 
-// loop checks a loop without a source. A header name lives as long as
+// loopForm checks a loop without a source. A header name lives as long as
 // its first value; each next value must live as long (it is a value of
 // the same variable, read where the first one could be).
-func (l *lifeChecker) loop(x *For) {
+func (l *lifeChecker) loopForm(x *For) {
 	for i, init := range x.Init {
 		v := x.Header[i]
 		l.env[v] = l.use(init, l.expr(init))
 		l.frame[v] = l.cur
+	}
+	defined := len(l.defined)
+	for _, v := range x.Header {
+		l.noteVar(v)
 	}
 	if x.Cond != nil {
 		l.expr(x.Cond)
 	}
 	before := copyGone(l.gone)
 	mark := len(l.bound)
+	outer := l.loop
+	l.loop = x
 	l.expr(x.Body)
 	for owner, gone := range l.gone {
 		if _, ok := before[owner]; !ok && l.bound[owner] < mark {
@@ -1344,4 +1350,6 @@ func (l *lifeChecker) loop(x *For) {
 			}
 		}
 	}
+	l.loop = outer
+	l.settle(defined)
 }

@@ -849,7 +849,10 @@ type checker struct {
 	selectSerial       int
 	producer           *producerContext
 	loops              []*loopContext
-	conversionSerial   int
+	// postClause is one more than the lambda depth of the loop post
+	// clause being checked, or 0: it cannot leave the loop.
+	postClause       int
+	conversionSerial int
 	// inForce lists the mocks in force at the current point of a test:
 	// their targets, and how many scopes were open when each started.
 	inForce []mockInForce
@@ -1348,7 +1351,13 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	case *syntax.For:
 		return c.record(e, c.forExpr(e))
 	case *syntax.LoopControl:
-		if len(c.loops) == 0 || c.loops[len(c.loops)-1].depth != c.lambdaDepth {
+		word := "break"
+		if e.Continue {
+			word = "continue"
+		}
+		if c.postClause == c.lambdaDepth+1 {
+			c.inPostClause(e.Pos, word)
+		} else if len(c.loops) == 0 || c.loops[len(c.loops)-1].depth != c.lambdaDepth {
 			c.errorf(e.Pos, "break and continue require a loop in the same function or producer")
 		} else if !e.Continue {
 			c.loops[len(c.loops)-1].broken = true
@@ -1411,6 +1420,7 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	case *syntax.WithExpr:
 		return c.withExpr(e, want)
 	case *syntax.Return:
+		c.inPostClause(e.Pos, "return")
 		c.returnExpr(e)
 		return c.record(e, Never)
 	case *syntax.Selector:
@@ -1431,9 +1441,18 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	case *syntax.Select:
 		return c.record(e, c.selectExpr(e, want))
 	case *syntax.Try:
+		c.inPostClause(e.Pos, "?")
 		return c.record(e, c.try(e))
 	}
 	panic("unhandled expression")
+}
+
+// inPostClause reports what cannot leave a loop's post clause, which
+// runs between iterations.
+func (c *checker) inPostClause(pos diag.Pos, what string) {
+	if c.postClause == c.lambdaDepth+1 {
+		c.errorf(pos, "a loop's post clause cannot use %s; compute the value in the body instead", what)
+	}
 }
 
 func (c *checker) ident(e *syntax.Ident, want Type) Type {
