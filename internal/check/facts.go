@@ -654,8 +654,12 @@ func (f *factChecker) walk(x Expr, e env) {
 			f.yieldCheck(x, e)
 		}
 	case *For:
-		f.walk(x.Items, e)
-		f.walk(x.Body, e)
+		if x.Items != nil {
+			f.walk(x.Items, e)
+			f.walk(x.Body, e)
+			return
+		}
+		f.loop(x, e)
 	case *LoopControl:
 	case *Lambda:
 		// Facts known here still hold inside: values never change.
@@ -2409,6 +2413,8 @@ func (f *factChecker) declared(x Expr, e env, depth int) []known {
 				out = append(out, f.declared(d.Let.Value, e, depth+1)...)
 			}
 		case VarPattern, VarLoop:
+			// A loop's header name has the facts it declares.
+			add(d.Invariant, f.ownParams())
 			if src := d.Source; src != nil && depth < maxDepth {
 				if src.Field != nil {
 					owner := src.Subject
@@ -3379,4 +3385,31 @@ func withoutPatternGuards(p *Pat) *Pat {
 	}
 	copy.Sub, copy.Rest = withoutPatternGuards(p.Sub), withoutPatternGuards(p.Rest)
 	return &copy
+}
+
+// loop checks a loop without a source: every first and next value of a
+// header name must have the facts the name declares (its invariant),
+// and the condition is known in the body and the post clause.
+func (f *factChecker) loop(x *For, e env) {
+	invariant := func(v *Var, value Expr, e env, which string) {
+		for _, con := range v.Invariant {
+			f.oblige(value, con, f.ownParams(), e, fmt.Sprintf("%s of loop variable %s must be %s", which, pathPhrase(con.Path, v.displayName()), con))
+		}
+	}
+	for i, init := range x.Init {
+		f.walk(init, e)
+		invariant(x.Header[i], init, e, "the first value")
+	}
+	inside := e
+	if x.Cond != nil {
+		f.walk(x.Cond, e)
+		inside = e.with(f.conditionFacts(x.Cond, true)...)
+	}
+	f.walk(x.Body, inside)
+	for i, post := range x.Post {
+		if post != nil {
+			f.walk(post, inside)
+			invariant(x.Header[i], post, inside, "the next value")
+		}
+	}
 }

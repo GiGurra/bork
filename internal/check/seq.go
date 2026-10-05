@@ -42,7 +42,17 @@ func (c *checker) yieldExpr(e *syntax.Yield) Type {
 	return Ok
 }
 
+// loopContext is a loop being checked: the lambda depth of its body,
+// and whether a break leaves it.
+type loopContext struct {
+	depth  int
+	broken bool
+}
+
 func (c *checker) forExpr(e *syntax.For) Type {
+	if e.Items == nil {
+		return c.loopExpr(e)
+	}
 	source := c.expr(e.Items)
 	elem := Type(Invalid)
 	switch t := source.(type) {
@@ -59,13 +69,64 @@ func (c *checker) forExpr(e *syntax.For) Type {
 	c.pushScope()
 	if e.Name != "_" {
 		c.bind(e.Name, e.NamePos, elem, e)
+		c.scopes[len(c.scopes)-1][e.Name].node = nil
 	}
-	c.loops = append(c.loops, c.lambdaDepth)
+	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth})
 	body := c.block(e.Body, Ok)
 	c.loops = c.loops[:len(c.loops)-1]
 	c.popScope()
 	if body != Ok && body != Never && body != Invalid {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
+	}
+	return Ok
+}
+
+// loopExpr checks `for { }`, `for (cond) { }`, and
+// `for (init; cond; post) { }`. The header names are bound in a scope
+// of the loop's own; each post binding gives one of them its next value.
+func (c *checker) loopExpr(e *syntax.For) Type {
+	c.pushScope()
+	defer c.popScope()
+	header := map[string]*syntax.Binding{}
+	for _, b := range e.Init {
+		if c.stmt(b) == Never {
+			c.errorf(b.Value.Position(), "a loop's header binding cannot leave the function")
+		}
+		header[b.Name] = b
+	}
+	if e.Cond != nil {
+		if t := c.exprWant(e.Cond, Bool); t != Bool && t != Invalid {
+			c.errorf(e.Cond.Position(), "a loop's condition must be Bool, found %s", t)
+		}
+	}
+	loop := &loopContext{depth: c.lambdaDepth}
+	c.loops = append(c.loops, loop)
+	body := c.block(e.Body, Ok)
+	c.loops = c.loops[:len(c.loops)-1]
+	if body != Ok && body != Never && body != Invalid {
+		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
+	}
+	seen := map[string]bool{}
+	for _, b := range e.Post {
+		init := header[b.Name]
+		if init == nil {
+			c.expr(b.Value)
+			c.errorf(b.Pos, "the post clause can only rebind the loop's own header names, and %s is not one", b.Name)
+			continue
+		}
+		if seen[b.Name] {
+			c.errorf(b.Pos, "%s is rebound twice in the post clause", b.Name)
+		}
+		seen[b.Name] = true
+		want := c.info.bindings[init]
+		t := c.exprWant(b.Value, want)
+		if t, want := c.settle(t, want); t != Invalid && want != Invalid && !assignable(t, want) {
+			c.errorf(b.Value.Position(), "%s is the loop's %s, so its next value must be %s, found %s", b.Name, b.Name, want, t)
+		}
+		c.info.bindings[b] = want
+	}
+	if e.Form() == syntax.ForInfinite && !loop.broken {
+		return Never
 	}
 	return Ok
 }

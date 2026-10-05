@@ -848,7 +848,7 @@ type checker struct {
 	assemblySerial     int
 	selectSerial       int
 	producer           *producerContext
-	loops              []int
+	loops              []*loopContext
 	conversionSerial   int
 	// inForce lists the mocks in force at the current point of a test:
 	// their targets, and how many scopes were open when each started.
@@ -1348,8 +1348,10 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 	case *syntax.For:
 		return c.record(e, c.forExpr(e))
 	case *syntax.LoopControl:
-		if len(c.loops) == 0 || c.loops[len(c.loops)-1] != c.lambdaDepth {
+		if len(c.loops) == 0 || c.loops[len(c.loops)-1].depth != c.lambdaDepth {
 			c.errorf(e.Pos, "break and continue require a loop in the same function or producer")
+		} else if !e.Continue {
+			c.loops[len(c.loops)-1].broken = true
 		}
 		return c.record(e, Never)
 	case *syntax.IntLit:

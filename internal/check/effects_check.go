@@ -323,11 +323,24 @@ func (u *effectUses) expr(x Expr) {
 	case *Yield:
 		u.expr(x.Value)
 	case *For:
-		u.expr(x.Items)
-		if t, ok := x.Items.Type().(*Seq); ok {
-			u.add(t.Effects, x.Pos(), "sequence traversal")
+		if x.Items != nil {
+			u.expr(x.Items)
+			if t, ok := x.Items.Type().(*Seq); ok {
+				u.add(t.Effects, x.Pos(), "sequence traversal")
+			}
+		}
+		for _, init := range x.Init {
+			u.expr(init)
+		}
+		if x.Cond != nil {
+			u.expr(x.Cond)
 		}
 		u.block(x.Body)
+		for _, post := range x.Post {
+			if post != nil {
+				u.expr(post)
+			}
+		}
 	case *LoopControl:
 	case *Lambda:
 		// Not run here, but main may not be referred to in it either.

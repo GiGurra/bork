@@ -1020,6 +1020,75 @@ func (p *parser) typeAtom() *TypeExpr {
 	return te
 }
 
+// forLoop parses the forms of for: `for { }`, `for (x in xs) { }`,
+// `for (cond) { }`, and `for (init; cond; post) { }`.
+func (p *parser) forLoop() *For {
+	f := &For{Pos: p.next().Pos}
+	if p.at(LBrace) {
+		f.Body = p.block()
+		return f
+	}
+	p.expect(LParen, "after for (or '{' for a loop without a condition)")
+	if (p.at(TIdent) || p.at(Underscore)) && p.peekKind() == TIdent && p.toks[min(p.i+1, len(p.toks)-1)].Text == "in" {
+		n := p.next()
+		p.next() // in
+		f.Name, f.NamePos = n.Text, n.Pos
+		f.Items = p.expr()
+		p.expect(RParen, "after the iteration source")
+		f.Body = p.block()
+		return f
+	}
+	if p.at(Semi) || p.at(TIdent) && (p.peekKind() == Assign || p.peekKind() == Colon) {
+		f.Clauses = true
+		f.Init = p.loopBindings(true)
+		p.expect(Semi, "after the loop's header bindings")
+		if !p.at(Semi) {
+			f.Cond = p.expr()
+		}
+		p.expect(Semi, "after the loop's condition")
+		if !p.at(RParen) {
+			f.Post = p.loopBindings(false)
+		}
+		p.expect(RParen, "after the loop's post clause")
+		f.Body = p.block()
+		return f
+	}
+	f.Cond = p.expr()
+	if p.at(Semi) {
+		p.errorf(p.tok().Pos, "a loop's header bindings are name = value, as in for (i = 0; i < n; i = i + 1)")
+		panic(bailout{})
+	}
+	p.expect(RParen, "after the loop's condition")
+	f.Body = p.block()
+	return f
+}
+
+// loopBindings parses comma-separated `name = value` bindings of a
+// loop's header (init may also annotate a type), up to a ';' or ')'.
+func (p *parser) loopBindings(init bool) []*Binding {
+	var out []*Binding
+	for p.at(TIdent) {
+		name := p.next()
+		b := &Binding{Pos: name.Pos, Name: name.Text}
+		if init && p.at(Colon) {
+			p.next()
+			b.Type = p.typeExpr()
+		}
+		p.expect(Assign, "after the loop variable's name")
+		b.Value = p.expr()
+		out = append(out, b)
+		if !p.at(Comma) {
+			break
+		}
+		p.next()
+	}
+	if init && len(out) == 0 && !p.at(Semi) || !init && len(out) == 0 {
+		p.errorf(p.tok().Pos, "expected a binding, name = value, found %s", p.tok().Kind)
+		panic(bailout{})
+	}
+	return out
+}
+
 func (p *parser) block() *Block {
 	b := &Block{Pos: p.expect(LBrace, "to start a block").Pos}
 	for {
@@ -1666,21 +1735,7 @@ func (p *parser) primary() Expr {
 		p.next()
 		return &Yield{Pos: t.Pos, Value: p.expr()}
 	case KwFor:
-		p.next()
-		p.expect(LParen, "after for")
-		var n Token
-		if p.at(Underscore) {
-			n = p.next()
-		} else {
-			n = p.expect(TIdent, "(iteration variable)")
-		}
-		in := p.expect(TIdent, "in after the iteration variable")
-		if in.Text != "in" {
-			p.errorf(in.Pos, "expected in after the iteration variable")
-		}
-		items := p.expr()
-		p.expect(RParen, "after the iteration source")
-		return &For{Pos: t.Pos, Name: n.Text, NamePos: n.Pos, Items: items, Body: p.block()}
+		return p.forLoop()
 	case KwBreak, KwContinue:
 		p.next()
 		return &LoopControl{Pos: t.Pos, Continue: t.Kind == KwContinue}

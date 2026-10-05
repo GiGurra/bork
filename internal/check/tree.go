@@ -121,6 +121,9 @@ type Var struct {
 	Ambient *Ambient
 	// Unused is set for a binding or pattern name that is never read.
 	Unused bool
+	// Invariant holds the facts a loop's header name declares, which
+	// every iteration's value has.
+	Invariant []*Constraint
 }
 
 func (v *Var) displayName() string {
@@ -491,6 +494,14 @@ type For struct {
 	Var   *Var
 	Items Expr
 	Body  *Block
+	// Without Items: the header names of `for (init; cond; post)`,
+	// their first values (each may read the names before it), the
+	// condition (nil for none), and their next values (nil for a name
+	// the post clause does not rebind), computed from the iteration's.
+	Header []*Var
+	Init   []Expr
+	Cond   Expr
+	Post   []Expr
 }
 type LoopControl struct {
 	expr

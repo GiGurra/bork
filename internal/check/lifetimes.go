@@ -640,6 +640,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		l.pin(life, x.Pos(), "the generator's yield", nil, true)
 		return nil
 	case *For:
+		if x.Items == nil {
+			l.loop(x)
+			return nil
+		}
 		l.env[x.Var] = l.use(x.Items, l.expr(x.Items))
 		l.frame[x.Var] = l.cur
 		before := copyGone(l.gone)
@@ -1305,4 +1309,39 @@ func channelMethod(fn *Func) bool {
 	}
 	r, ok := genericBaseOrSelf(fn.Params[0]).(*Record)
 	return ok && r.Name == "Channel"
+}
+
+// loop checks a loop without a source. A header name lives as long as
+// its first value; each next value must live as long (it is a value of
+// the same variable, read where the first one could be).
+func (l *lifeChecker) loop(x *For) {
+	for i, init := range x.Init {
+		v := x.Header[i]
+		l.env[v] = l.use(init, l.expr(init))
+		l.frame[v] = l.cur
+	}
+	if x.Cond != nil {
+		l.expr(x.Cond)
+	}
+	before := copyGone(l.gone)
+	mark := len(l.bound)
+	l.expr(x.Body)
+	for owner, gone := range l.gone {
+		if _, ok := before[owner]; !ok && l.bound[owner] < mark {
+			l.errorf(gone.pos, "a loop cannot consume owned scope %s from outside its body; borrow its scope instead", owner.Name)
+		}
+	}
+	l.gone = before
+	for i, post := range x.Post {
+		if post == nil {
+			continue
+		}
+		v := x.Header[i]
+		for _, scope := range l.use(post, l.expr(post)) {
+			if !l.env[v].has(scope) {
+				l.errorf(post.Pos(), "the next value of %s belongs to a scope its first value does not, so it could outlive it; give %s a first value of that scope", v.Name, v.Name)
+				break
+			}
+		}
+	}
 }

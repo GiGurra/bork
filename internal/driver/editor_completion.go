@@ -138,7 +138,12 @@ func (a *EditorAnalysis) EditorSymbols(pos diag.Pos) []EditorCompletion {
 				}
 			case *check.For:
 				if inside(x.Body) {
-					addVar(x.Var)
+					if x.Var != nil {
+						addVar(x.Var)
+					}
+					for _, v := range x.Header {
+						addVar(v)
+					}
 				}
 			case *check.ScopeBlock:
 				if inside(x.Body) {

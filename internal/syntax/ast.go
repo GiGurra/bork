@@ -495,12 +495,44 @@ type Yield struct {
 	Pos   diag.Pos
 	Value Expr
 }
+// For is a loop (see docs/design/loops.md). With Items it is
+// `for (x in xs)`. Otherwise it is `for { }` (no header), `for (cond)`
+// (Cond alone), or `for (init; cond; post)` (Clauses), whose Init
+// binds the loop's header names and whose Post rebinds them for the
+// next iteration; Cond may then be nil.
 type For struct {
 	Pos     diag.Pos
 	Name    string
 	NamePos diag.Pos
 	Items   Expr
 	Body    *Block
+
+	Cond    Expr
+	Clauses bool
+	Init    []*Binding
+	Post    []*Binding
+}
+
+// ForForm says which form of loop f is.
+type ForForm int
+
+const (
+	ForIn       ForForm = iota // for (x in xs)
+	ForInfinite                // for { }
+	ForWhile                   // for (cond)
+	ForClauses                 // for (init; cond; post)
+)
+
+func (f *For) Form() ForForm {
+	switch {
+	case f.Items != nil:
+		return ForIn
+	case f.Clauses:
+		return ForClauses
+	case f.Cond != nil:
+		return ForWhile
+	}
+	return ForInfinite
 }
 type LoopControl struct {
 	Pos      diag.Pos
