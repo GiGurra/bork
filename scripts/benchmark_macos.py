@@ -81,7 +81,11 @@ def main():
         script_deps.write_text(
             '#!/usr/bin/env -S bork script\n'
             '// bork:require github.com/GiGurra/boa v1.0.31\n'
-            'println("Hello, dependencies!")\n'
+            '// bork:unsafe\n'
+            'fn answer():Int unsafe go {\n'
+            'import "github.com/GiGurra/boa/pkg/boa"\n'
+            'var _ boa.NoParams\nreturn 42\n}\n'
+            'println(answer())\n'
         )
         for name, path in (("hello", script), ("inline-deps", script_deps)):
             shutil.rmtree(root / "cache", ignore_errors=True)

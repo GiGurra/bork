@@ -63,7 +63,7 @@ bork build hello.bork    # compile to an executable
 
 The [tour](docs/tour.md) continues from here. Read the [documentation online](https://gigurra.github.io/bork/). For a single file with top-level statements, use `bork script hello.bork`; see [scripts](docs/language/scripts.md).
 
-On Linux and macOS, checks and builds automatically cache unchanged compiler results and pure predicate answers. `run` and `script` reuse unchanged executables, and supported native Go builds skip `go build` on a warm hit. See [the compile cache](docs/cli.md#the-compile-cache).
+On Linux and macOS, checks and builds automatically cache unchanged compiler results and pure predicate answers. `run` and `script` reuse unchanged executables, and unchanged builds, runs and scripts start neither Go nor the compiler on a warm hit, including embeds, cgo and compile-time code. Use `--rebuild` for an exhaustive rebuild; `--fast` accepts reuse with untracked external inputs. See [the compile cache](docs/cli.md#the-compile-cache).
 
 Package values such as `MaxRetries = 3` are immutable and pure, computed once on first read, or baked as data when read by `comptime`. See [bindings and package values](docs/language/basics.md).
 

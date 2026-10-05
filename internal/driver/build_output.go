@@ -12,9 +12,18 @@ import (
 
 // An empty output selects the program executable next to its stable Go stage.
 // The stage lock serializes builders; execution itself never holds that lock.
-func buildOutput(path, out string) (executable string, cleanup func(), stable bool, err error) {
+func buildOutput(path, out string, supplied ...BuildOptions) (executable string, cleanup func(), stable bool, err error) {
 	timings := newCacheTestTimings()
 	defer timings.finish()
+	timings.phase("executable-recipe")
+	options, err := resolveBuildOptions(supplied)
+	if err != nil {
+		return "", nil, false, err
+	}
+	request := recipeRequest(path, out)
+	if recipe := lookupExecutableRecipe(request, options); recipe != nil {
+		return recipe.Executable, func() {}, true, nil
+	}
 	timings.phase("compile-or-lookup")
 	build := func(program *compiledProgram, source []byte) error {
 		timings.phase("stage")
@@ -70,19 +79,31 @@ func buildOutput(path, out string) (executable string, cleanup func(), stable bo
 			return stageErr
 		}
 		timings.phase("executable")
-		buildErr := buildWithReceipt(program, executable, dir, pinned, stable, files)
+		var broadBefore *buildInventory
+		if stable && cacheCLIState != nil && !cacheDisabled() {
+			broadBefore = captureBuildInventoryMode(dir, program.context, true)
+		}
+		var buildErr error
+		var certified buildExecutableIdentity
+		if options.Rebuild {
+			certified, buildErr = buildAtomicOutput(program, executable, dir, pinned, nil, "-a")
+		} else {
+			buildErr = buildWithReceipt(program, executable, dir, pinned, stable, files)
+			if receipt := readBuildReceipt(filepath.Join(filepath.Dir(dir), fmtBuildReceiptName(executable))); receipt != nil {
+				certified = receipt.Output
+			}
+		}
+		if buildErr == nil && stable {
+			writeExecutableRecipe(captureExecutableRecipe(request, executable, dir, program, certified, broadBefore))
+		}
 		timings.phase("publish-compiler-result")
 		return buildErr
 	}
-	if cacheCLIState != nil && !cacheDisabled() {
-		err = compileBuild(path, build)
-	} else {
-		var program *compiledProgram
-		var source []byte
-		program, source, err = emitProgramObserved(path, nil)
-		if err == nil {
-			err = build(program, source)
-		}
+	var program *compiledProgram
+	var source []byte
+	program, source, err = emitProgramObserved(path, nil)
+	if err == nil {
+		err = build(program, source)
 	}
 	if err != nil && cleanup != nil {
 		cleanup()
@@ -95,15 +116,15 @@ func buildOutput(path, out string) (executable string, cleanup func(), stable bo
 // its build ID and leaves an up-to-date target alone. When it rebuilds, Go
 // replaces the link; we then atomically publish the completed regular file.
 // This preserves the old inode on hits and never truncates a running executable.
-func buildAtomicOutput(program *compiledProgram, out, dir string, pinned bool, seed *buildExecutableIdentity) (buildExecutableIdentity, error) {
+func buildAtomicOutput(program *compiledProgram, out, dir string, pinned bool, seed *buildExecutableIdentity, options ...string) (buildExecutableIdentity, error) {
 	var zero buildExecutableIdentity
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		return zero, buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
+		return zero, buildStagedGoOptions(program.files, out, dir, pinned, program.context, nil, options...)
 	}
 	if info, err := os.Stat(out); err == nil && !info.Mode().IsRegular() {
 		// Preserve Go's handling of output directories and devices such as
 		// /dev/null; an atomic rename must never replace a device node.
-		return zero, buildStagedGoObserved(program.files, out, dir, pinned, program.context, nil)
+		return zero, buildStagedGoOptions(program.files, out, dir, pinned, program.context, nil, options...)
 	}
 	if err := os.MkdirAll(filepath.Dir(out), 0755); err != nil {
 		return zero, err
@@ -125,7 +146,7 @@ func buildAtomicOutput(program *compiledProgram, out, dir string, pinned bool, s
 			}
 		}
 	}
-	if err := buildStagedGoObserved(program.files, pending, dir, pinned, program.context, nil); err != nil {
+	if err := buildStagedGoOptions(program.files, pending, dir, pinned, program.context, nil, options...); err != nil {
 		return zero, err
 	}
 	identity, err := readBuildExecutable(pending)

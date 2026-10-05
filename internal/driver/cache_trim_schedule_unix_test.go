@@ -16,7 +16,7 @@ func TestCacheTrimSchedulingGate(t *testing.T) {
 	if _, err := runCacheTrim(context.Background(), base, now, 256); err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
+	for range len(cacheTrimLayers) - 1 {
 		if _, err := runCacheTrim(context.Background(), base, now, 256); err != nil {
 			t.Fatal(err)
 		}

@@ -424,3 +424,8 @@ explicit, checked recovery allowlist. Compiler syntax and validation remain the
 authority. Keyword drift is checked against `internal/syntax/token.go`.
 [Native editor packages](editors.md) adapt the shared queries and provide Vim and
 Emacs lexical highlighting; CI exercises every example and case in each format.
+
+`bork.mod` may also include one `fast` directive after its module line. It accepts
+fast executable reuse with untracked external inputs; it has no arguments. See
+[executable reuse](design/executable-reuse.md). This is manifest syntax and does
+not add a keyword to `.bork` programs.

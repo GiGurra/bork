@@ -217,6 +217,8 @@ Compiler settings control storage and toolchain selection:
 | `BORKBIN` | Go's `GOBIN`, or else `GOPATH/bin` (normally `~/go/bin`) | Where `bork install` and `bork upgrade` put executables |
 | `BORK_CACHE` | `on` | Set to `off` to turn off the compile cache |
 | `BORKTOOLCHAIN` | `auto` | Automatically satisfy project compiler requirements; `local` disables switching, or an exact version such as `v0.4.2` selects that compiler |
+| `BORKFAST` | `0` | Accept fast executable reuse with untracked inputs (`1` suppresses the warning) |
+| `BORKREBUILD` | `0` | Force fresh checking/evaluation and a full Go rebuild when `1` |
 | `BORKUPDATECHECK` | `on` | Quiet daily update notice in interactive commands; set `off` to disable |
 | `GOTOOLCHAIN` | Go's effective selection policy | Read-only here; inherited from the process or `go env -w`, with the Bork minimum applied |
 | `GOVERSION`, `GOROOT` | the selected Go SDK | Read-only; used for Go compilation and cache identity |
@@ -255,13 +257,13 @@ Switching needs Go on `PATH` to install an uncached compiler. Download failures 
 
 On Linux and macOS, `check`, `emit`, `build`, `run`, and `script` reuse earlier compiler results from `BORKCACHE` when nothing they depend on has changed. There is nothing to set up. `run` and `script` also reuse their executable, preserving its inode and modification time on a warm hit so the operating system can reuse earlier executable checks. The program runs every time.
 
-For native Go builds with a supported installed Go SDK and unchanged inputs, `build`, `run`, and `script` skip `go build` too. Source and dependency changes, build settings, missing outputs, and corrupted executables invalidate the recorded build. Concurrent runs and rebuilding while an older copy runs are safe: a completed replacement is published atomically. Cgo, custom Go launchers, and Go dependencies with assembly or embedded assets use Go's normal build checks. Programs that require fresh compiler checks can still reuse an unchanged executable after those checks.
+For unchanged `build`, `run`, and `script` requests, an executable recipe skips both the compiler and Go. This covers Go dependencies, embedded files, assembly, cgo, and compile-time code. Recorded source, module, dependency, build-setting, toolchain and output changes invalidate reuse. Warm hits hash recorded files and inspect recorded directory metadata without scanning directory contents. Completed replacements publish atomically, including while older copies run.
+
+`--rebuild` or `BORKREBUILD=1` forces fresh checking, compile-time evaluation, and a full Go rebuild. System C headers/libraries and external state secretly read by foreign compile-time code are not tracked by default. Reusing an executable with those inputs prints a one-line stderr warning. Accept fast reuse explicitly with `--fast`, `BORKFAST=1`, or a `fast` line after `module` in `bork.mod`; a script can put `--fast` in its shebang. Acceptance suppresses the warning and keeps validation of known inputs. Programs with no untracked inputs never warn. See [the executable recipe contract](design/executable-reuse.md) for its exact inputs and trust assumptions.
 
 On Unix, a cached `run` or `script` executable replaces the CLI process, keeping its PID, arguments, environment, and standard streams. Windows and temporary fallback builds wait for the child program and return its exit status.
 
-Multiple `comptime` blocks share one evaluation program during compilation; their values are recomputed for each fresh compilation.
-
-Some programs are compiled afresh every time for now: those that use `comptime`, typed literals that are checked at compile time such as `sql.SQL`, embedded files, facts proven by running predicates at compile time, or their own Go bindings and Go dependencies. Pure predicates with unchanged constant arguments can reuse their earlier answers while the rest of the program is checked again. Changed arguments or helpers are evaluated afresh. On other platforms the cache is not used.
+`check` and `emit` retain stricter compiler-result caching. Programs using compile-time evaluation, embedded files, or foreign Go checking can still require fresh checking for those commands. Pure predicates with unchanged constant arguments can reuse earlier answers while the rest of the program is checked again. On other platforms the persistent cache is not used.
 
 The cache looks after itself. Entries that have not been used for five days are removed in the background. If the cache cannot be read or written, compilation carries on without it.
 

@@ -87,12 +87,13 @@ func CheckWarnings(path string) ([]diag.Diagnostic, error) {
 }
 
 type compiledProgram struct {
-	files   []*syntax.File
-	info    *check.Info
-	inputs  *sourceSnapshot
-	module  *goModuleInputs
-	assets  *embedSnapshot
-	context *goContext
+	evaluator bool
+	files     []*syntax.File
+	info      *check.Info
+	inputs    *sourceSnapshot
+	module    *goModuleInputs
+	assets    *embedSnapshot
+	context   *goContext
 }
 
 func checkObserved(path string, observe func(string)) ([]*syntax.File, *check.Info, error) {
@@ -115,7 +116,7 @@ func checkProgramObserved(path string, observe func(string)) (*compiledProgram, 
 // Rebuild semantic state from independently parsed captured inputs. Callers own
 // the parsed files; immutable source/module/context snapshots may be shared.
 func checkLoadedProgramObserved(loaded *loadedSources, module *goModuleInputs, context *goContext, captureAssets func(*check.Info, *diag.List, *sourceSnapshot) *embedSnapshot, observe func(string)) (*compiledProgram, error) {
-	return checkLoadedProgramTracked(loaded, module, context, captureAssets, nil, observe)
+	return checkLoadedProgramTracked(loaded, module, context, captureAssets, &goUsage{deferInputs: true}, observe)
 }
 
 func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, context *goContext, captureAssets func(*check.Info, *diag.List, *sourceSnapshot) *embedSnapshot, usage *goUsage, observe func(string)) (*compiledProgram, error) {
@@ -157,6 +158,13 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 			return nil, &DiagError{Diags: diags}
 		}
 	}
+	foreignEvaluation := false
+	for _, node := range info.Comptimes {
+		foreignEvaluation = foreignEvaluation || recipeHasForeignHelpers(node)
+	}
+	for _, batch := range info.InterpolationBatches {
+		foreignEvaluation = foreignEvaluation || recipeHasForeignHelpers(batch.Recipe)
+	}
 	eval := evaluatorWithTimeoutObserved(files, info, module, context, 0, nil, usage)
 	if len(info.Comptimes) > 0 {
 		phase(observe, "comptime")
@@ -175,13 +183,19 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 	phase(observe, "facts")
 	if usage != nil {
 		inner := eval
-		eval = func(queries []check.Query) ([]bool, error) { usage.evaluator = true; return inner(queries) }
+		eval = func(queries []check.Query) ([]bool, error) {
+			usage.evaluator = true
+			for _, query := range queries {
+				foreignEvaluation = foreignEvaluation || recipeHasForeignQuery(query)
+			}
+			return inner(queries)
+		}
 	}
 	check.Facts(files, info, diags, eval)
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
-	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module, assets: assets, context: context}, nil
+	return &compiledProgram{files: files, info: info, inputs: loaded.Inputs, module: module, assets: assets, context: context, evaluator: foreignEvaluation}, nil
 }
 
 // evaluator runs predicates on constants at compile time, by building
@@ -412,8 +426,8 @@ func (program *compiledProgram) requireMain() error {
 }
 
 // Build compiles the package at path into an executable at out.
-func Build(path, out string) error {
-	_, cleanup, _, err := buildOutput(path, out)
+func Build(path, out string, options ...BuildOptions) error {
+	_, cleanup, _, err := buildOutput(path, out, options...)
 	if cleanup != nil {
 		cleanup()
 	}
@@ -468,7 +482,7 @@ func buildStagedGoOptions(files []*syntax.File, absOut, dir string, pinned bool,
 	args := append([]string{"build", "-mod=readonly", "-buildvcs=false", "-o", absOut}, options...)
 	cmd := context.command(append(args, ".")...)
 	cmd.Dir = dir
-	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
+	cmd.Env = append(cmd.Env, "GOWORK=off")
 	observation.command(cmd, true)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -518,8 +532,8 @@ func Run(path string, args []string) (int, error) {
 
 // RunCLI replaces the CLI process with the built program on supported Unix
 // platforms. Temporary fallback builds and other platforms wait as Run does.
-func RunCLI(path string, args []string) (int, error) {
-	exe, cleanup, stable, err := buildOutput(path, "")
+func RunCLI(path string, args []string, options ...BuildOptions) (int, error) {
+	exe, cleanup, stable, err := buildOutput(path, "", options...)
 	if err != nil {
 		return 1, err
 	}

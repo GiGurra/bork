@@ -22,6 +22,9 @@ import (
 // work retain their existing behavior. This is not a complete reuse key for
 // external package metadata, toolchain contents or evaluator effects.
 type goContext struct {
+	savedSettings  *sourceSnapshot
+	launcher       string
+	launcherDigest [sha256.Size]byte
 	// The module transform is captured once; all metadata and build stages use it.
 	moduleHook goModuleHookFunc
 	// Tests can shorten comptime deadlines; a nonzero limit changes execution
@@ -103,6 +106,18 @@ func resolveGoContextWithOptions(options goContextOptions) *goContext {
 func loadGoContext(ctx *goContext) *goContext {
 	if ctx.err != nil {
 		return ctx
+	}
+	ctx.launcher = ctx.tool
+	ctx.launcherDigest, _, _ = captureGoToolEvidence(ctx.launcher)
+	ctx.savedSettings = newSourceSnapshot()
+	settingPath := ctx.processValue("GOENV")
+	if settingPath == "" {
+		if config, err := os.UserConfigDir(); err == nil {
+			settingPath = filepath.Join(config, "go", "env")
+		}
+	}
+	if settingPath != "" && settingPath != "off" {
+		_, _ = ctx.savedSettings.readFile(settingPath)
 	}
 	testCacheProbeAt("BORK_TEST_GO_COMMAND_PROBE", "env -json")
 	values, env, tool, err := gotoolchain.Query(ctx.tool, "", ctx.processEnv)
@@ -194,7 +209,7 @@ func (ctx *goContext) command(args ...string) *exec.Cmd {
 	return cmd
 }
 func (ctx *goContext) metadataEnv() []string {
-	return append(slices.Clone(ctx.env), "GOWORK=off", "GOFLAGS=-mod=readonly")
+	return append(slices.Clone(ctx.env), "GOWORK=off", "GOFLAGS="+strings.TrimSpace(ctx.values["GOFLAGS"]+" -mod=readonly"))
 }
 
 func goToolDigest(path string) ([sha256.Size]byte, error) {

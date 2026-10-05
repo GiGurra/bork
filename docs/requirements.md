@@ -3287,14 +3287,23 @@ closed predicate batches in their staging entries. Reuse still performs current
 Facts checking and preserves diagnostics; explicit comptime values execute afresh.
 Stale, corrupt or unavailable entries always fall back to fresh evaluation.
 
-Linux/macOS `run` and `script` retain an executable per canonical program request
-and build context. Unchanged supported native Go builds validate recorded emitted
-sources, module inputs, installed SDK identity, concrete Go dependency inputs and
-the executable's bytes and mode before skipping `go build`. Warm hits preserve
-inode and mtime; completed replacements publish atomically, including when older
-copies are running. Cgo and unsupported external assembly/embed closures retain
-Go's normal checks. Cached CLI executions replace the process on Unix; library
-execution APIs, Windows and temporary fallback builds wait for the child.
+Linux/macOS `build`, `run` and `script` reuse a bounded executable recipe before
+compiler or Go startup. Mutable recorded files are hashed; recorded directory
+identities detect membership changes without warm directory scans. This covers
+foreign Go dependencies, embeds, assembly, cgo, and compile-time code. Source and
+manifest/checksum inputs, Go settings and toolchain identity, selected Go/asm/C/
+embed files, cgo compiler identity, known project compile-time inputs, and output
+bytes/mode are validated. Warm hits preserve inode and mtime; completed
+replacements publish atomically, including while older copies run.
+
+System C headers/libraries and external state read by foreign compile-time code
+are untracked by default. Warm reuse with those inputs warns once on stderr per
+invocation. `--fast`, `BORKFAST=1`, or `fast` in bork.mod suppresses that warning;
+`--rebuild` or `BORKREBUILD=1` forces full checking, reevaluation and Go rebuild,
+and takes precedence. Programs with no untracked inputs do not warn. Cached CLI
+executions replace the process on Unix; library execution APIs, Windows and
+temporary fallback builds wait for the child. See
+[executable reuse](design/executable-reuse.md) for the trust argument.
 
 `bork install [path]` defaults to `.` and builds into `BORKBIN`, whose default is
 Go's effective `GOBIN`, else the first effective `GOPATH` entry plus `/bin`
@@ -3304,7 +3313,7 @@ must be absolute. The installed name follows `bork build`'s default name, with
 Output placement and cache root do not change generated program semantics; Go
 configuration and captured program inputs remain part of existing receipts.
 
-The three settings are the supported compiler environment API. Test-runner
+The documented bork settings are the supported compiler environment API. Test-runner
 `BORK_SEED`, `BORK_CASES`, `BORK_PARALLEL`, `BORK_SNAPSHOTS`, and
 `BORK_UPDATE_SNAPSHOTS` are protocol values controlled by CLI flags. Internal,
 test and benchmark controls are unsupported and cannot be persisted by `bork env`.

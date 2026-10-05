@@ -23,6 +23,7 @@ const ModFile = "bork.mod"
 
 // module is the module a package belongs to.
 type module struct {
+	fast    bool
 	root    string // the directory holding bork.mod
 	path    string // the module path; "" without a bork.mod
 	version string // minimum compiler requirement, if declared
@@ -77,6 +78,11 @@ func parseModFile(text string) (module, error) {
 			mod.path = fields[1]
 		case mod.path == "":
 			return module{}, fmt.Errorf("expected `module <path>`, found %q", line)
+		case len(fields) == 1 && fields[0] == "fast":
+			if mod.fast {
+				return module{}, fmt.Errorf("duplicate fast directive")
+			}
+			mod.fast = true
 		case len(fields) == 2 && fields[0] == "bork":
 			if mod.version != "" {
 				return module{}, fmt.Errorf("duplicate bork version directive")
