@@ -184,6 +184,7 @@ type parser struct {
 	toks                        []Token
 	i                           int
 	diags                       *diag.List
+	testingPattern              bool
 	// noLambda is set while parsing rule premises, where `x =>` ends
 	// the premises instead of starting a lambda.
 	noLambda bool
@@ -1180,12 +1181,24 @@ func (p *parser) binary(minPrec int) (out Expr) {
 		p.rememberSpan(x, start)
 		op := p.tok()
 		prec, ok := precedence[op.Kind]
+		is := op.Kind == TIdent && op.Text == "is"
+		if is {
+			prec, ok = 4, true
+		}
 		if !ok || prec < minPrec {
 			return x
 		}
 		end := p.toks[p.i-1].End
 		p.next()
 		p.skipNewlines() // an operator at the end of a line continues the expression
+		if is {
+			saved := p.testingPattern
+			p.testingPattern = true
+			pat := p.testPattern()
+			p.testingPattern = saved
+			x = &Is{Pos: op.Pos, X: x, Pattern: pat, End: p.toks[p.i-1].End}
+			continue
+		}
 		y := p.binary(prec + 1)
 		if op.Kind == PipeGt {
 			x = pipe(op, x, y, start, end, p.toks[p.i-1].End)
@@ -1553,6 +1566,9 @@ func (p *parser) pattern() Pattern {
 				}
 				vp.Fields = append(vp.Fields, fp)
 			})
+		}
+		if p.testingPattern && !vp.Braces && len(vp.Path) == 1 {
+			return &TypePat{Pos: vp.Pos, Type: &TypeExpr{Pos: vp.Pos, Name: vp.Path[0]}}
 		}
 		return vp
 	}
@@ -2174,4 +2190,27 @@ func (p *parser) tupleBindingAhead() bool {
 		}
 	}
 	return false
+}
+
+// testPattern extends match patterns with unbound fact-qualified type tests.
+func (p *parser) testPattern() Pattern {
+	if p.at(TIdent) {
+		start := p.i
+		p.next()
+		for p.at(Dot) {
+			p.next()
+			p.expect(TIdent, "after '.'")
+		}
+		typed := p.at(LBrack) || p.at(KwWhere) || p.at(Pipe)
+		p.i = start
+		if typed {
+			t := p.typeExpr()
+			return &TypePat{Pos: t.Pos, Type: t}
+		}
+	}
+	if p.at(LParen) {
+		t := p.typeExpr()
+		return &TypePat{Pos: t.Pos, Type: t}
+	}
+	return p.pattern()
 }

@@ -387,6 +387,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	case *syntax.Binary:
 		return &Binary{expr: at, Op: x.Op, X: l.expr(x.X), Y: l.expr(x.Y)}
 	case *syntax.Call:
+		if assertion := l.info.patternAssertions[x]; assertion != nil {
+			return l.assertIs(x, at, assertion)
+		}
 		if call := l.info.seqCalls[x]; call != nil {
 			args := l.exprs(call.args)
 			if len(args) > 1 {
@@ -582,6 +585,17 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		}
 		l.refreshComputedCopy(out)
 		return out
+	case *syntax.Is:
+		subject := l.expr(x.X)
+		pat := l.info.patternTests[x]
+		if pat.Kind == PatNever {
+			pat = &Pat{Kind: PatNever, Type: subject.Type()}
+		}
+		l.patVars(pat, subject)
+		return &Match{expr: at, PatternTest: true, X: subject, Arms: []*MatchArm{
+			{Pat: pat, Body: &Const{expr: expr{pos: x.Pos, typ: Bool}, Value: constant.MakeBool(true)}},
+			{Pat: &Pat{Kind: PatWild, Type: subject.Type()}, Body: &Const{expr: expr{pos: x.Pos, typ: Bool}, Value: constant.MakeBool(false)}},
+		}}
 	case *syntax.Match:
 		out := &Match{expr: at, X: l.expr(x.X)}
 		for _, arm := range x.Arms {
@@ -785,4 +799,19 @@ func (l *lowerer) constructorHead(x syntax.Expr) *ConstructorHead {
 	}
 	visit(h.Type)
 	return out
+}
+
+func (l *lowerer) assertIs(source *syntax.Call, at expr, assertion *assertIsInfo) Expr {
+	subject := l.expr(source.Args[0])
+	pat := assertion.Pattern
+	actual := &Var{Name: "_assertActual", Type: subject.Type(), Kind: VarPattern, Pos: source.Pos}
+	failure := &CallBuiltin{expr: expr{pos: source.Pos, typ: Never}, Builtin: BuiltinAssertIsFailure, Name: "test.AssertIs", Expected: assertion.Expected, Args: []Expr{&VarRef{expr: expr{pos: source.Pos, typ: subject.Type()}, Var: actual}}}
+	fallback := &MatchArm{Pat: &Pat{Kind: PatWild, Type: subject.Type(), Bind: actual.Name, BindType: actual.Type, Var: actual}, Body: failure}
+	result := &Match{expr: at, PatternTest: true, X: subject}
+	if pat.Kind != PatNever {
+		l.patVars(pat, subject)
+		result.Arms = append(result.Arms, &MatchArm{Pat: pat, Body: &VarRef{expr: expr{pos: source.Pos, typ: assertion.Target}, Var: pat.Var}})
+	}
+	result.Arms = append(result.Arms, fallback)
+	return result
 }

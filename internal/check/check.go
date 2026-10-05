@@ -153,6 +153,7 @@ const (
 	BuiltinAssertEqual    // assertEqual(actual, expected)
 	BuiltinAssertSnapshot // assertSnapshot(x)
 	BuiltinAssemble
+	BuiltinAssertIsFailure
 )
 
 var builtins = map[string]Builtin{
@@ -345,8 +346,10 @@ type Info struct {
 	ownerScopes     map[*syntax.Selector]*Func
 	contextVariants map[*syntax.ContextName]*Variant
 	// armPats holds the checked pattern of every match arm.
-	armPats   map[*syntax.Arm]*Pat
-	tuplePats map[*syntax.TupleBinding]*Pat
+	armPats           map[*syntax.Arm]*Pat
+	tuplePats         map[*syntax.TupleBinding]*Pat
+	patternTests      map[*syntax.Is]*Pat
+	patternAssertions map[*syntax.Call]*assertIsInfo
 	// tries describes every `?`.
 	tries map[*syntax.Try]*TryInfo
 	// unused holds bindings whose value is never read: *syntax.Binding,
@@ -452,6 +455,8 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			contextVariants:        map[*syntax.ContextName]*Variant{},
 			armPats:                map[*syntax.Arm]*Pat{},
 			tuplePats:              map[*syntax.TupleBinding]*Pat{},
+			patternAssertions:      map[*syntax.Call]*assertIsInfo{},
+			patternTests:           map[*syntax.Is]*Pat{},
 			tries:                  map[*syntax.Try]*TryInfo{},
 			unused:                 map[any]bool{},
 			rebindings:             map[any]any{},
@@ -761,6 +766,7 @@ type checker struct {
 	files            []*syntax.File
 	tupleDerives     []*ClassInstance
 	tupleBindingMode bool
+	patternTest      bool
 	// Only compilation retains source identities; read-only queries do not.
 	recordPredicateRefs bool
 	bindingFiles        map[string]*syntax.File
@@ -1378,6 +1384,8 @@ func (c *checker) exprWantRaw(e syntax.Expr, want Type) Type {
 		return c.record(e, c.recordLit(e, want))
 	case *syntax.Copy:
 		return c.record(e, c.copyExpr(e))
+	case *syntax.Is:
+		return c.record(e, c.isExpr(e))
 	case *syntax.Match:
 		return c.record(e, c.match(e, want))
 	case *syntax.Try:

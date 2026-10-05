@@ -212,11 +212,12 @@ type factChecker struct {
 	// declared functions, which call and parameter they belong to.
 	lambdaArgs map[*Var]lambdaArg
 	// observe captures the proof context for queries keyed by source position.
-	lintProven   map[diag.Pos]bool
-	lintChecking bool
-	observe      func(diag.Pos, env)
-	producer     *Generate
-	yieldCheck   func(*Yield, env)
+	lintPatternProven map[diag.Pos]bool
+	lintProven        map[diag.Pos]bool
+	lintChecking      bool
+	observe           func(diag.Pos, env)
+	producer          *Generate
+	yieldCheck        func(*Yield, env)
 }
 
 // lambdaArg places a lambda's parameter: the lambda is argument arg of
@@ -430,6 +431,7 @@ func (f *factChecker) tail(x Expr, e env, result func(Expr, env)) {
 		}
 		f.tail(x.Else, e.with(f.conditionFacts(x.Cond, false)...), result)
 	case *Match:
+		f.patternTestCertainty(x, e)
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
 			f.tail(arm.Body, f.walkPatternGuards(arm.Pat, f.patternInvariants(arm.Pat, x.X, e)), result)
@@ -747,6 +749,7 @@ func (f *factChecker) walk(x Expr, e env) {
 		}
 		f.copyObligations(x, e)
 	case *Match:
+		f.patternTestCertainty(x, e)
 		f.walk(x.X, e)
 		for _, arm := range x.Arms {
 			f.walk(arm.Body, f.walkPatternGuards(arm.Pat, f.patternInvariants(arm.Pat, x.X, e)))
@@ -3318,4 +3321,43 @@ func ruleValueFits(r *Rule, a RuleArg, v argVal, path string) bool {
 		}
 	}
 	return false
+}
+
+// Certainty reads the existing proof context, before learning any facts from
+// the test itself. It does not eliminate operand or predicate evaluation.
+func (f *factChecker) patternTestCertainty(x *Match, e env) {
+	if !x.PatternTest || f.lintPatternProven == nil || len(x.Arms) == 0 {
+		return
+	}
+	p := x.Arms[0].Pat
+	if p.Kind == PatNever || len(missingCases([]*Pat{withoutPatternGuards(p)}, p.Type)) != 0 {
+		return
+	}
+	saved := f.lintChecking
+	f.lintChecking = true
+	defer func() { f.lintChecking = saved }()
+	for _, guard := range p.Guards() {
+		proven, queries := f.proveCondition(guard, true, e, 0)
+		if !proven || len(queries) > 0 {
+			return
+		}
+	}
+	f.lintPatternProven[x.TokenPos()] = true
+}
+func withoutPatternGuards(p *Pat) *Pat {
+	if p == nil {
+		return nil
+	}
+	copy := *p
+	copy.Guard, copy.guard = nil, nil
+	copy.Fields = nil
+	for _, field := range p.Fields {
+		copy.Fields = append(copy.Fields, &PatField{Name: field.Name, Pat: withoutPatternGuards(field.Pat)})
+	}
+	copy.Elems = nil
+	for _, elem := range p.Elems {
+		copy.Elems = append(copy.Elems, withoutPatternGuards(elem))
+	}
+	copy.Sub, copy.Rest = withoutPatternGuards(p.Sub), withoutPatternGuards(p.Rest)
+	return &copy
 }

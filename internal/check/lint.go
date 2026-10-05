@@ -12,7 +12,7 @@ import (
 func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 	warnings := &diag.List{}
 	sources := map[string]*lintSource{}
-	proven := lintProvenChecks(info)
+	proven, patternProven := lintProvenChecks(info)
 	roots := map[string]*syntax.File{}
 	for _, file := range files {
 		for _, pkg := range info.Packages {
@@ -29,6 +29,20 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 		}
 		warnings.Warn(pos, code, message)
 		warnings.Suggest(pos, code, end, fixes...)
+	}
+	for source, pat := range info.patternTests {
+		if pat.Kind == PatNever {
+			warn(source.Pos, "lint.pattern-always-false", "pattern test always fails", source.End)
+		} else if patternProven[source.Pos] || (!pat.HasGuard() && len(missingCases([]*Pat{pat}, pat.Type)) == 0) {
+			warn(source.Pos, "lint.pattern-always-true", "pattern test always succeeds", source.End)
+		}
+	}
+	for source, assertion := range info.patternAssertions {
+		if assertion.Pattern.Kind == PatNever {
+			warn(source.Pos, "lint.pattern-always-false", "test.AssertIs always fails", source.End)
+		} else if patternProven[source.Pos] {
+			warn(source.Pos, "lint.pattern-always-true", "test.AssertIs always succeeds", source.End)
+		}
 	}
 	used := map[any]bool{}
 	for _, declaration := range info.defs {
@@ -341,8 +355,8 @@ func (s *lintSource) exprRange(expression syntax.Expr) (diag.Pos, diag.Pos) {
 
 // Reuse the facts walk without evaluating its pending constant queries. Lint
 // never executes additional compile-time code and ordinary checks pay no cost.
-func lintProvenChecks(info *Info) map[diag.Pos]bool {
-	f := &factChecker{info: info, diags: &diag.List{}, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}, lintProven: map[diag.Pos]bool{}}
+func lintProvenChecks(info *Info) (map[diag.Pos]bool, map[diag.Pos]bool) {
+	f := &factChecker{info: info, diags: &diag.List{}, paths: map[*Func][]branch{}, active: map[string]bool{}, params: map[*Var]*VarRef{}, predParams: map[*Var]*Func{}, lambdaArgs: map[*Var]lambdaArg{}, lintProven: map[diag.Pos]bool{}, lintPatternProven: map[diag.Pos]bool{}}
 	f.validators = validationContexts(info)
 	for _, fn := range info.FuncOf {
 		if fn.Pkg != nil && fn.Pkg.Root && fn.Body != nil && !fn.Decl.IsPred {
@@ -352,5 +366,5 @@ func lintProvenChecks(info *Info) map[diag.Pos]bool {
 	for _, fn := range info.Tests {
 		f.function(fn)
 	}
-	return f.lintProven
+	return f.lintProven, f.lintPatternProven
 }

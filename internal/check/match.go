@@ -14,6 +14,8 @@ type PatKind int
 const (
 	// PatWild matches anything (`_`, or a name that binds the value).
 	PatWild PatKind = iota
+	// PatNever is a well-formed test disjoint from its input type.
+	PatNever
 	// PatLit matches one literal value.
 	PatLit
 	// PatVariant matches one variant of a sealed type, and its fields.
@@ -234,6 +236,18 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		return &Pat{Kind: PatWild, Type: st}
 
 	case *syntax.LitPat:
+		if c.patternTest {
+			if u, yes := st.(*Union); yes {
+				t := c.expr(p.Value)
+				if t == Invalid {
+					return nil
+				}
+				if !containsMember(u, t) {
+					return &Pat{Kind: PatNever, Type: st}
+				}
+				return &Pat{Kind: PatType, Type: st, Members: []Type{t}, Sub: &Pat{Kind: PatLit, Type: t, Lit: c.literalValue(p.Value)}}
+			}
+		}
 		if _, isUnion := st.(*Union); isUnion {
 			c.errorf(p.Pos, "cannot match a literal against a value of type %s; match its type first (as in n: Int)", st)
 			return nil
@@ -243,12 +257,24 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 			return nil
 		}
 		if !identical(lt, st) {
+			if c.patternTest {
+				return &Pat{Kind: PatNever, Type: st}
+			}
 			c.errorf(p.Pos, "cannot match a %s literal against a value of type %s", lt, st)
 			return nil
 		}
 		return &Pat{Kind: PatLit, Type: st, Lit: c.literalValue(p.Value)}
 
 	case *syntax.TypePat:
+		if c.patternTest && p.Name != "" {
+			c.errorf(p.Pos, "is patterns cannot bind names; write the type without a binding")
+			return nil
+		}
+		if p.Name == "" {
+			copy := *p
+			copy.Name = "_patternValue"
+			p = &copy
+		}
 		t := c.resolveType(p.Type)
 		if t == Invalid {
 			c.bind(p.Name, p.Pos, Invalid, p)
@@ -260,6 +286,10 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 			return nil
 		}
 		c.bindPat(pat, p.Name, p.Pos, p)
+		if pat.Kind == PatNever {
+			pat.BindType = t
+			c.lookup(p.Name).typ = t
+		}
 		if c.nestedPatternFacts(p.Type) {
 			c.whereReported(p.Type)
 			c.errorf(p.Type.Pos, "nested constraints in type patterns are not supported yet; match the base type and then guard with the predicate")
@@ -333,6 +363,24 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 	case *syntax.ListPat:
 		lt, ok := st.(*List)
 		if !ok {
+			if c.patternTest && st != Invalid {
+				if u, yes := st.(*Union); yes {
+					var members []Type
+					for _, m := range u.Members {
+						if _, yes := m.(*List); yes {
+							members = append(members, m)
+						}
+					}
+					if len(members) == 1 {
+						sub := c.pattern(p, members[0])
+						if sub == nil {
+							return nil
+						}
+						return &Pat{Kind: PatType, Type: st, Members: members, Sub: sub}
+					}
+				}
+				return &Pat{Kind: PatNever, Type: st}
+			}
 			if st != Invalid {
 				c.errorf(p.Pos, "cannot match a list pattern against a value of type %s", st)
 			}
@@ -354,6 +402,10 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 			ep := c.pattern(e, lt.Elem)
 			ok = ok && ep != nil
 			pat.Elems = append(pat.Elems, ep)
+		}
+		if c.patternTest && p.Rest != "" {
+			c.errorf(p.RestPos, "is patterns cannot bind the rest of a list; write ... without a name")
+			return nil
 		}
 		if p.HasRest {
 			pat.Rest = &Pat{Kind: PatWild, Type: st}
@@ -538,12 +590,35 @@ func (c *checker) typePattern(t, st Type, pos diag.Pos) *Pat {
 	}
 	u, ok := st.(*Union)
 	if !ok {
+		if c.patternTest {
+			return &Pat{Kind: PatNever, Type: st}
+		}
 		c.errorf(pos, "pattern type %s does not match a value of type %s", t, st)
 		return nil
 	}
 	members := []Type{t}
 	if tu, ok := t.(*Union); ok {
 		members = tu.Members
+	}
+	if c.patternTest {
+		for _, target := range members {
+			for _, source := range u.Members {
+				if !identical(target, source) && parallelSameRepresentation(target, source) {
+					c.errorf(pos, "pattern type %s cannot be distinguished from %s at runtime", target, source)
+					return nil
+				}
+			}
+		}
+		var overlap []Type
+		for _, m := range members {
+			if containsMember(u, m) {
+				overlap = append(overlap, m)
+			}
+		}
+		if len(overlap) == 0 {
+			return &Pat{Kind: PatNever, Type: st}
+		}
+		return &Pat{Kind: PatType, Type: st, Members: overlap}
 	}
 	for i, m := range members {
 		if target, ok := m.(*Seq); ok {
@@ -601,6 +676,10 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 		t := c.typeNamed(name)
 		c.noteSourceType(p.Pos, name)
 		if t == nil {
+			if c.patternTest {
+				c.errorf(p.Pos, "is patterns cannot bind names; %s must name a type", name)
+				return nil
+			}
 			if p.Braces {
 				c.unknownType(p.Pos, name)
 				return nil
@@ -646,6 +725,9 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 		}
 		if !identical(v.Parent, st) {
 			if u, ok := st.(*Union); !ok || !containsMember(u, v.Parent) {
+				if c.patternTest {
+					return &Pat{Kind: PatNever, Type: st}
+				}
 				c.errorf(p.Pos, "%s.%s cannot occur in a value of type %s", owner, name, st)
 				return nil
 			}
@@ -688,6 +770,11 @@ func (c *checker) fieldPatterns(pat *Pat, fps []*syntax.FieldPat, fields []*Fiel
 		seen[fp.Field] = true
 		var sub *Pat
 		if fp.Pattern == nil {
+			if c.patternTest {
+				c.errorf(fp.Pos, "is patterns cannot bind fields; write %s: _ to ignore the value", fp.Field)
+				ok = false
+				continue
+			}
 			sub = &Pat{Kind: PatWild, Type: f.Type}
 			c.bindPat(sub, fp.Field, fp.Pos, fp)
 		} else if sub = c.pattern(fp.Pattern, f.Type); sub == nil {

@@ -1,0 +1,6 @@
+// AssertIs checks the erased type and the target's predicates, failing at the
+// caller's location on mismatch. Its returned value carries the checked facts.
+// The compiler infers the input independently of the one explicit target.
+fn AssertIs[T, A](value: A): T unsafe go {
+  panic("test.AssertIs must be called directly with an explicit target type")
+}

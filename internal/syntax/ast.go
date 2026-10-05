@@ -852,3 +852,14 @@ func (e *Call) Position() diag.Pos           { return e.Fun.Position() }
 func (e *If) Position() diag.Pos             { return e.Pos }
 func (e *Block) Position() diag.Pos          { return e.Pos }
 func (e *Return) Position() diag.Pos         { return e.Pos }
+
+// Is tests a value against a pattern without introducing source bindings.
+type Is struct {
+	Pos     diag.Pos // contextual is operator
+	End     diag.Pos
+	X       Expr
+	Pattern Pattern
+}
+
+func (*Is) exprNode()            {}
+func (x *Is) Position() diag.Pos { return x.Pos }

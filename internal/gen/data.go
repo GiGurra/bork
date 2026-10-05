@@ -207,7 +207,7 @@ func (g *gen) matchStmt(m *check.Match, k sink) []ast.Stmt {
 			return append(stmts, g.literalSwitch(m, pats, x, v, k))
 		}
 	}
-	stmts = append(stmts, define(v, x))
+	stmts = append(stmts, define(v, x), assign(ast.NewIdent("_"), v))
 	var chain *ast.IfStmt
 	var last *ast.IfStmt
 	var final *ast.BlockStmt
@@ -401,6 +401,8 @@ func (g *gen) tests(p *check.Pat, x ast.Expr) []ast.Expr {
 
 func (g *gen) patternTests(p *check.Pat, x ast.Expr) []ast.Expr {
 	switch p.Kind {
+	case check.PatNever:
+		return []ast.Expr{ast.NewIdent("false")}
 	case check.PatLit:
 		if p.Lit.Kind() == constant.Bool {
 			if constant.BoolVal(p.Lit) {
