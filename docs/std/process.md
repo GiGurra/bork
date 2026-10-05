@@ -220,7 +220,9 @@ the grace period plus one second.
 `Start` takes the same arguments and gives a `Process` owned by the scope:
 
 - `Wait()` waits and gives `Result | IoError | Cancelled`. It can be called
-  repeatedly and always gives the same result.
+  repeatedly and always gives the same result. It leaves a piped stdin open:
+  waiting on a child that reads stdin to the end hangs until you call
+  `Stdin().Close()` (or the scope is cancelled).
 - `TryWait()` does not block: `None` while the child runs.
 - `Pid()` is the process ID.
 - `Signal(signal)` sends a `bork/signal` Signal (`.Interrupt`, `.Terminate`,

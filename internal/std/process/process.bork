@@ -530,7 +530,8 @@ fn finished(outcome: rawResult | IoError | Cancelled): Result | IoError | Cancel
 
 // Wait waits for the child to finish. It may be called repeatedly; every call
 // returns the same immutable result. Cancelled means the owning scope was
-// cancelled; Stop and Kill give a Result.
+// cancelled; Stop and Kill give a Result. Wait leaves a piped stdin open, so
+// waiting on a child that reads stdin to the end hangs until Stdin().Close().
 fn (child: Process) Wait() uses io + state: Result | IoError | Cancelled {
   match (operate(child, "wait", 0)) {
     raw: rawResult => finished(raw)
