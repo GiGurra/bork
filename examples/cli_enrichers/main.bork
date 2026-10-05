@@ -1,0 +1,27 @@
+import "bork/cli"
+import "bork/process"
+type Options = { host: String = "localhost", port: Int = 8080 } derive (Decode)
+fn teamNames(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec {
+  field.copy(long: cli.Mapping.Named { name: s"team-${field.field}" })
+}
+fn fieldDocs(previous: List[cli.FieldSpec], field: cli.FieldSpec): cli.FieldSpec {
+  field.copy(description: s"Configure ${field.field}; ${previous.length()} fields precede it.")
+}
+fn policy(): cli.Settings { .{ enrichers: [teamNames, fieldDocs] } }
+fn main() {
+  match (cli.Run[Options]("enrichers", "Compose reusable metadata policies", (options, s) => {
+    println(s"${options.host}:${options.port}")
+    }, settings: policy())) {
+    error: cli.Error => { println(error); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "enrichers compose in declaration order" {
+  match (cli.Parse[Options]("enrichers", "", ["--help"], settings: policy())) {
+    help: cli.Help => {
+      assert(help.text.contains("--team-host"))
+      assert(help.text.contains("Configure port; 1 fields precede it."))
+    }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}

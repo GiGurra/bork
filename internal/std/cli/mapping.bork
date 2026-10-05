@@ -1,0 +1,158 @@
+// Mapping separates automatic policy, source disabling, and exact names.
+type Mapping = sealed { Auto, Disabled, Named { name: String } }
+type Settings = {
+  autoLong: Bool = true
+  autoShort: Bool = false
+  autoEnv: Bool = false
+  flagPrefix: String = ""
+  envPrefix: String = ""
+  enrichers: List[Enricher] = []
+}
+// FieldSpec is the immutable metadata passed through each enricher.
+type FieldSpec = {
+  field: String
+  long: Mapping
+  short: Mapping
+  env: Mapping
+  description: String
+  positional: Bool
+  configFile: Bool
+  config: Bool
+  hidden: Bool
+  deprecated: String
+}
+type Enricher = (List[FieldSpec], FieldSpec) uses nothing => FieldSpec
+
+fn resolve[T: Decode](flags: List[Flag], settings: Settings, name: String): List[FieldSpec] | Error {
+  resolveFields[T](flags, settings, name, flagName)
+}
+fn resolveFields[T: Decode](flags: List[Flag], settings: Settings, name: String, makeName: (String) => String): List[FieldSpec] | Error unsafe go {
+  import "fmt"
+  import "strings"
+  import "unicode"
+  schema, supported := _borkDecodeFields(_d_T_Decode)
+  if !supported { return Error{errors: []DecodeError{{path: name, message: "CLI options require a derived record decoder"}}} }
+  errors := []DecodeError{}
+  fail := func(field, message string) { errors = append(errors, DecodeError{path: field, message: message}) }
+  metadata := map[string]Flag{}
+  for _, flag := range flags {
+    found := false
+    for _, field := range schema { if field.Name == flag.field { found = true; break } }
+    if !found {
+      closest, distance := "", int(^uint(0)>>1)
+      for _, field := range schema {
+        left, right := []rune(flag.field), []rune(field.Name)
+        row := make([]int, len(right)+1)
+        for j := range row { row[j] = j }
+        for i, a := range left {
+          prev := row[0]; row[0] = i+1
+          for j, b := range right { old := row[j+1]; cost := 0; if a != b { cost = 1 }; row[j+1] = min(row[j]+1, row[j+1]+1, prev+cost); prev = old }
+        }
+        d := row[len(right)]
+        if d < distance || d == distance && field.Name < closest { closest, distance = field.Name, d }
+      }
+      message := "unknown CLI field"
+      if closest != "" { message += fmt.Sprintf("; closest field is %q", closest) }
+      fail(flag.field, message); continue
+    }
+    if _, duplicate := metadata[flag.field]; duplicate { fail(flag.field, "duplicate CLI field metadata"); continue }
+    if flag.short != "" {
+      if _, auto := flag.shortName.(Mapping_Auto); !auto { fail(flag.field, "short and shortName cannot both be specified") }
+      flag.shortName = Mapping_Named{name: flag.short}
+    }
+    if flag.env != "" {
+      if _, auto := flag.envName.(Mapping_Auto); !auto { fail(flag.field, "env and envName cannot both be specified") }
+      flag.envName = Mapping_Named{name: flag.env}
+    }
+    metadata[flag.field] = flag
+  }
+  if len(errors) != 0 { return Error{errors: errors} }
+  nameOf := func(mapping Mapping) string {
+    if named, ok := mapping.(Mapping_Named); ok { return named.name }
+    return ""
+  }
+  prefix := func(prefix, separator, name string) string {
+    if prefix == "" { return name }
+    return prefix+separator+name
+  }
+  // Reserve explicit shorts even on later fields before assigning automatic ones.
+  occupied := map[string]bool{"h": true}
+  for _, flag := range metadata { if short := nameOf(flag.shortName); short != "" { occupied[short] = true } }
+  specs := []FieldSpec{}
+  names, shorts, envs := map[string]string{}, map[string]string{}, map[string]string{}
+  positional, configField := "", ""
+  validLong := func(name string) bool {
+    return name != "" && !strings.HasPrefix(name, "-") && strings.IndexFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' }) < 0
+  }
+  validEnv := func(name string) bool {
+    if name == "" { return false }
+    for i, r := range name { if r != '_' && !(r >= 'A' && r <= 'Z') && !(r >= 'a' && r <= 'z') && !(i > 0 && r >= '0' && r <= '9') { return false } }
+    return true
+  }
+  for _, field := range schema {
+    flag, exists := metadata[field.Name]
+    if !exists { flag = Flag{field: field.Name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true} }
+    doc := field.Doc
+    if description, ok := flag.description.(Option_Some[string]); ok { doc = description.value }
+    spec := FieldSpec{field: field.Name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated}
+    derive := func(spec FieldSpec) FieldSpec {
+      if _, auto := spec.long.(Mapping_Auto); auto {
+        spec.long = Mapping_Disabled{}
+        if settings.autoLong && !spec.positional { spec.long = Mapping_Named{name: prefix(settings.flagPrefix, "-", makeName(spec.field))} }
+      }
+      long := nameOf(spec.long)
+      if _, auto := spec.short.(Mapping_Auto); auto {
+        spec.short = Mapping_Disabled{}
+        if settings.autoShort && long != "" && !spec.positional && long[0] < 128 && unicode.IsLetter(rune(long[0])) && !occupied[long[:1]] {
+          spec.short = Mapping_Named{name: long[:1]}
+        }
+      }
+      if _, auto := spec.env.(Mapping_Auto); auto {
+        spec.env = Mapping_Disabled{}
+        if settings.autoEnv && !spec.positional {
+          base := long
+          if base == "" { base = makeName(spec.field) }
+          spec.env = Mapping_Named{name: prefix(settings.envPrefix, "_", strings.ToUpper(strings.ReplaceAll(base, "-", "_")))}
+        }
+      }
+      return spec
+    }
+    spec = derive(spec)
+    for _, enrich := range settings.enrichers { spec = enrich(append([]FieldSpec{}, specs...), spec) }
+    if spec.field != field.Name { fail(field.Name, "enricher must preserve field identity") }
+    spec = derive(spec)
+    long, short, env := nameOf(spec.long), nameOf(spec.short), nameOf(spec.env)
+    if _, named := spec.long.(Mapping_Named); named {
+      if !validLong(long) { fail(field.Name, "long flag must contain letters, digits, hyphens, or underscores and not start with a hyphen") }
+      if long == "help" { fail(field.Name, "flag name is reserved for help") }
+      if spec.positional { fail(field.Name, "positional field cannot have a long flag") }
+      if previous, duplicate := names[long]; duplicate { fail(field.Name, "flag name duplicates " + previous) }
+      names[long] = field.Name
+    }
+    if _, named := spec.short.(Mapping_Named); named {
+      if len(short) != 1 || short[0] > 127 { fail(field.Name, "short flag must be one ASCII character") }
+      if short == "h" { fail(field.Name, "short flag h is reserved for help") }
+      if long == "" || spec.positional { fail(field.Name, "short flag requires an enabled long flag") }
+      if previous, duplicate := shorts[short]; duplicate { fail(field.Name, "short flag duplicates " + previous) }
+      shorts[short] = field.Name
+      occupied[short] = true
+    }
+    if _, named := spec.env.(Mapping_Named); named {
+      if !validEnv(env) { fail(field.Name, "environment variable must be an identifier") }
+      if previous, duplicate := envs[env]; duplicate { fail(field.Name, "environment variable duplicates " + previous) }
+      envs[env] = field.Name
+    }
+    if spec.positional {
+      if positional != "" { fail(field.Name, "positional field duplicates " + positional) }
+      positional = field.Name
+    }
+    if spec.configFile {
+      if configField != "" { fail(field.Name, "config-file field duplicates " + configField) }
+      if field.Kind != "string" || field.Type != "String" && field.Type != "Option[String]" { fail(field.Name, "config-file field must be String or Option[String]") }
+      configField = field.Name
+    }
+    specs = append(specs, spec)
+  }
+  if len(errors) != 0 { return Error{errors: errors} }
+  return specs
+}

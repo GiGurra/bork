@@ -2,53 +2,131 @@
 
 ## Command-line options
 
-`bork/cli` wraps boa through a reflection shadow struct built from a derived
-Decode schema. `Parse[T]` returns proven options, collected field errors, or help;
-`Run[T]` invokes a `(T, Scope) => Ok` handler only after successful validation.
-Docs/defaults drive help, `cli.Flag` maps short/env/positional metadata, and List
-fields take repeated flags. Unknown metadata names include a closest-field hint;
-duplicate short/env/positional mappings are errors before parsing. Environment
-loading stays independent. JSON configuration files use explicit precedence;
-typed subcommands support heterogeneous option records. See
-[the schema adapter](cli.md#command-line-schema-adapter) and
-[the example](../../examples/cli/main.bork).
+`Parse[T]` accepts arguments without the executable name and returns a proven
+options record, `cli.Error`, or `cli.Help`. The record must derive `Decode`.
+`Run[T]` reads process arguments and invokes `(T, Scope) => Ok` only after
+successful validation. Applications render errors and choose their exit code.
+Both use `io`; Run also carries its handler's effects.
 
-## CLI API
+Strings are literal, booleans accept `--verbose` and `--verbose=false`, and
+numbers and compound values use JSON syntax. Lists take repeated flags;
+string elements are literal and other elements use JSON. A plain field without
+a default is required, including Bool. Option fields may be omitted. Record
+defaults and facts follow the same rules as ordinary decoding.
 
-`bork/cli` parses a derived `Decode` record through boa. `Parse[T]` accepts
-explicit arguments and returns options, collected errors, or help text; `Run[T]`
-uses process arguments and calls a handler in a scope. Field docs/defaults appear
-in help; `cli.Flag` supplies short/env/positional metadata. Lists use repeated
-flags. See [the schema adapter](cli.md#command-line-schema-adapter).
+## Field documentation
+
+Leading `//` comments immediately above a record field provide its help text.
+Multiple consecutive comment lines are joined; trailing comments and comments
+separated from the field by a blank line are not field documentation. Required
+markers and declared defaults appear in help too.
+
+Override a field comment with `cli.Flag { field: "host", description:
+Option.Some { value: "Server address." } }`. Some with an empty String
+suppresses the comment; None inherits it. Required/default markers still appear.
+See [the documentation example](../../examples/cli_docs/main.bork).
+
+## Names, environment and source policies
+
+Pass `settings: cli.Settings { ... }` to Parse, ParseDetailed, Run or Subcommand.
+Settings are per command; reuse the same value to share an application policy.
+There is no process-global registry.
+
+| Setting | Default | Behavior |
+| --- | --- | --- |
+| autoLong | true | Derive kebab-case long flags: httpPort becomes --http-port |
+| autoShort | false | Derive the first ASCII letter of the canonical long name |
+| autoEnv | false | Derive UPPER_SNAKE_CASE environment names |
+| flagPrefix | empty | Prefix derived long flags, separated by a hyphen |
+| envPrefix | empty | Prefix derived environment names, separated by an underscore |
+| enrichers | empty | Compose pure metadata functions in list order |
+
+Automatic shorts skip occupied letters and `h`; explicit short names on later
+fields are reserved before automatic assignment. Derived environment names use
+the resolved long name (including its prefix), or the field's kebab-case name
+if long flags are disabled. Automatic shorts and environment bindings skip
+positional fields. Explicit environment bindings for positionals are supported.
+An empty environment value is absent, following boa's rules.
+
+Each Flag identifies an exact record field. `long`, `shortName`, and `envName`
+accept `cli.Mapping.Auto`, `cli.Mapping.Disabled`, or
+`cli.Mapping.Named { name: "exact-name" }`. Auto follows settings; Disabled
+turns that source off; Named is exact and bypasses prefixes. Existing `short`
+and `env` String fields remain convenient aliases for Named. Do not specify
+an alias together with a non-Auto mapping for the same source.
+
+`long: Disabled` makes a field config/env-only; its automatic short is also
+disabled. An explicit short requires an enabled canonical long flag. Env can
+be disabled independently. `config: false` rejects that field's key in JSON
+config files, including null; defaults and enabled CLI/env sources still work.
+To disable all derived flags, set autoLong and autoShort false. Explicit Named
+long flags can still opt individual fields in.
+
+Long names contain letters, digits, underscores and hyphens and cannot start
+with a hyphen. Short names are one ASCII character; `h` and the long name `help`
+are reserved. Environment names are identifiers made of ASCII letters, digits
+and underscores, with no leading digit. Duplicate resulting long/short/env
+names, duplicate Flag metadata, invalid names and unknown fields return errors
+before environment/config access. Unknown fields include a closest-name hint.
+
+There is currently at most one positional field; mark it with `positional: true`.
+A List positional collects remaining arguments. It does not register a long or
+short flag. Explicit long/short mappings on a positional are metadata errors.
+See [the flag mapping example](../../examples/cli_mapping/main.bork) and
+[the environment example](../../examples/cli_env/main.bork).
+
+```bork
+import "bork/cli"
+type Options = { host: String = "localhost", port: Int = 8080 } derive (Decode)
+fn main() {
+  println(cli.Parse[Options]("app", "Example", ["--listen", "443"],
+    flags: [.{ field: "port", long: cli.Mapping.Named { name: "listen" }, short: "p" }],
+    settings: .{ autoEnv: true, envPrefix: "MY_APP" }))
+}
+```
+
+This exposes --host, --listen/-p, MY_APP_HOST and MY_APP_LISTEN. Flags override
+environment values. Environment loading through `bork/env` remains independent.
+
+## Custom enrichers
+
+An `Enricher` is a pure `(List[cli.FieldSpec], cli.FieldSpec) => cli.FieldSpec`
+function. It receives completed prior specs in declaration order and the current
+spec after built-in derivation. Return a copy with the desired metadata changes.
+Each function in settings.enrichers runs once, in list order, for every field;
+its output feeds the next function. Enrichers may override explicit mappings,
+but must preserve the field identity. Final names are validated after enrichment.
+
+FieldSpec contains field, long, short, env, description, positional, configFile,
+config, hidden and deprecated. Built-in policies preserve Disabled; a custom
+function may deliberately enable it again. Auto returned by a custom function
+is resolved under settings after the chain. Prefixes apply only to automatic
+names, once. Enrichers cannot change record defaults, requiredness or facts.
+See [the composed enricher example](../../examples/cli_enrichers/main.bork).
+
+## Hidden flags and warnings
+
+`hidden: true` hides a flag from help while keeping it accepted and validated.
+`deprecated: "use --replacement instead"` hides a flag and warns when it is
+used. These controls do not disable env/config input.
+
+`ParseDetailed[T]` has the same arguments as Parse and returns
+`cli.Parsed[T] | cli.Error | cli.Help`. Parsed contains options and a List[String]
+of warnings. Parse preserves its original result union and discards successful
+warnings. Run prints warnings to stderr before the handler. A selected Subcommand
+prints warnings the same way. Failed parses retain warnings in their error list.
+Help contains text for stdout and diagnostics for stderr; explicit-argument APIs
+return both without printing. Run and RunCommands print the corresponding streams.
 
 ## Command-line schema adapter
 
-`bork/cli` wraps boa with a `reflect.StructOf` shadow struct built from the
-derived Decode field schema. It requires `Decode`, without a GoStruct bound.
-Docs and defaults appear in generated help. Optional shadow pointers track
-which fields were omitted, so defaults and Option values follow the same rules
-as regular decoding. After parsing, the adapter validates each supplied field,
-collects missing, JSON conversion, and fact errors across fields, then decodes the complete record. Boa flag syntax errors (including invalid booleans) stop parsing and return one error before field validation.
-Only that proven record can reach the handler.
-
-`cli.Flag { field, short, env, positional, configFile }` maps boa metadata to a bork field.
-The adapter validates these names and rejects duplicate field metadata, short
-flags, environment names, or positional fields. Short flags must be single ASCII characters; `-h` and `--help` are reserved. Field names that produce the same kebab-case flag are rejected. Unknown fields include a closest
-name hint. There is at most one positional field; a List can collect its values.
-Flag names use kebab case (`httpPort` becomes `--http-port`). Strings are literal,
-booleans support `--verbose` and `--verbose=false`, and numbers use JSON syntax.
-Lists take repeated flags (`--tag a --tag b`); string elements are literal and
-other elements use JSON. Nested lists use a JSON array for each occurrence.
-Explicit `env` mappings use boa's environment parsing, and CLI values override
-them. Boa treats an empty environment value as absent. Environment loading through `bork/env` remains independent.
-
-`Parse[T: Decode](name, description, args, flags = [], configFiles = [])` returns `T | cli.Error |
-cli.Help`. Arguments exclude the executable name. It captures help text rather
-than printing it. `Run[T: Decode](name, description, handler, flags = [], configFiles = [])` reads
-process arguments, prints help, and invokes `(T, Scope) => Ok` in a fresh scope
-on success. It returns `Ok | cli.Error`; applications choose how to render
-errors and exit. Both use `io` for environment access, and Run carries its
-handler's effects. Typed subcommands close callback effects as described below.
+The stdlib builds a boa reflection shadow struct from the existing derived Decode
+field schema; no GoStruct bound is needed. Optional shadow pointers track omitted
+inputs. The adapter converts supplied values, collects missing/type/fact errors
+across fields, and then invokes the complete record decoder. Sibling-dependent
+facts are checked by that final decoder. Boa flag syntax failures (including
+invalid booleans) stop parsing before field validation. Only the proven record
+reaches the handler. Help reads no configuration files and invokes no handler.
 
 ## Configuration files
 
@@ -103,7 +181,11 @@ Run with `app --config local.json --port 9000`. `settings.json` might contain
 `bork/cli` wraps boa to parse proven options from a record deriving `Decode`.
 It generates help from field docs and defaults, supports short flags, explicit
 environment bindings, positionals, and repeated list flags, and collects field
-errors before invoking a handler. See [examples/cli](../../examples/cli/main.bork).
+errors before invoking a handler. See [examples/cli](../../examples/cli/main.bork). Focused examples cover
+[field documentation](../../examples/cli_docs/main.bork),
+[flag mapping](../../examples/cli_mapping/main.bork),
+[environment policies](../../examples/cli_env/main.bork), and
+[custom enrichers](../../examples/cli_enrichers/main.bork).
 
 The checked-in example also supports a selectable config file:
 
@@ -113,7 +195,7 @@ bork run examples/cli -- --config examples/cli/config.json --port 9000
 
 ## Subcommands
 
-`Subcommand[T: Decode](name, description, handler, flags = [], configFiles = [])` creates a
+`Subcommand[T: Decode](name, description, handler, flags = [], configFiles = [], settings = .{})` creates a
 `cli.Command`, capturing the derived decoder and a typed handler for `T`.
 Commands with different option records can share a `List[cli.Command]`; the public command stores an erased callback, while decoded options keep type
 `T` inside that callback. The handler never receives
@@ -131,8 +213,8 @@ produce help; command help includes field docs/defaults and its own flags.
 Unknown commands and invalid flags return errors.
 
 Each handler has the closed type `(T, Scope) uses io + net + clock + random +
-state => Ok`. `Subcommand` itself is pure: it stores the handler without
-running it. `Command.execute`, `Dispatch`, and `RunCommands` conservatively
+state => Ok`. `Subcommand` itself is pure: it resolves metadata/enrichers and stores the handler
+without running it. `Command.execute`, `Dispatch`, and `RunCommands` conservatively
 charge all five effects, even if the selected handler uses fewer. A fixed bound
 is required for storing heterogeneous callbacks and follows the existing
 `http.Handler` convention. Use ordinary `Parse`/`Run` when selective callback
