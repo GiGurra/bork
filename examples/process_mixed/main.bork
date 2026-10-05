@@ -1,0 +1,22 @@
+// Each stream is configured on its own: forward one, capture or drop another.
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  script = "echo noisy progress; echo 'error: config missing' >&2"
+  // Hide the normal output, show errors as they happen.
+  _ = process.Run(s, "/bin/sh", ["-c", script], stdout: .Discard, stderr: .Inherit)?
+  // Show the normal output, keep the errors for later.
+  quiet = process.Run(s, "/bin/sh", ["-c", script], stdout: .Inherit, stderr: .Capture)?
+  println(s"errors kept for the report: ${quiet.StderrText().trim()}")
+  // Silence everything; only the exit code matters.
+  silent = process.Run(s, "/bin/sh", ["-c", script], stdout: .Discard, stderr: .Discard)?
+  println(s"silent run exited with ${silent.code}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

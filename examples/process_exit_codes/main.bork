@@ -1,0 +1,46 @@
+// A failing command is data: its Result says how it ended. Check turns a
+// failure into an error when that is what you want.
+import "bork/process"
+
+fn describe(result: process.Result): String {
+  match (result.status) {
+    process.ExitStatus.Exited { code } => s"exited with code $code"
+    process.ExitStatus.Signaled { name } => s"killed by $name"
+  }
+}
+
+// Check gives ExitError for a nonzero exit, so ? can pass it on.
+fn version(s: Scope, script: String) uses io + state: String | IoError | Cancelled | process.ExitError {
+  process.Run(s, "/bin/sh", ["-c", script])?.Check()?.StdoutText().trim()
+}
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  ok = process.Run(s, "true")?
+  println(s"true: ${describe(ok)}, success: ${ok.Success()}")
+  failed = process.Run(s, "/bin/sh", ["-c", "exit 3"])?
+  println(s"exit 3: ${describe(failed)}, success: ${failed.Success()}, code: ${failed.code}")
+  killed = process.Run(s, "/bin/sh", ["-c", "kill -9 $$"])?
+  println(s"kill -9: ${describe(killed)}, code: ${killed.code}")
+  for (script in ["echo 1.4.2", "echo 'fatal: no version file' >&2; exit 2"]) {
+    println(match (version(s, script)) {
+      found: String => s"version $found"
+      failure: process.ExitError => s"checked run failed: ${failure.message}"
+      error: IoError => error.message
+      stopped: Cancelled => stopped.reason
+    })
+  }
+  // Starting a missing program is an IoError, not a Result.
+  println(match (process.Run(s, "/no/such/program")) {
+    result: process.Result => "unexpected"
+    error: IoError => s"could not start ${error.path}"
+    stopped: Cancelled => stopped.reason
+  })
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

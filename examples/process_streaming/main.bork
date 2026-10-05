@@ -1,0 +1,28 @@
+// Read a child's output line by line while it is still running.
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  script = "for step in fetch build test; do echo \"$step ok\"; sleep 0.1; done; echo 'all steps passed' >&2"
+  // stderr: .Stdout merges both streams into the one Reader.
+  child = process.Start(s, "/bin/sh", ["-c", script], stdout: .Pipe, stderr: .Stdout)?
+  // Lines is a sequence: each line arrives as soon as the child writes it.
+  for (line in child.Stdout().Lines()) {
+    println(s"[child] $line")
+  }
+  println(s"exit code: ${child.Wait()?.code}")
+  // NextLine reads one line at a time, then Closed at the end.
+  greeter = process.Start(s, "/bin/sh", ["-c", "echo hello; echo world"], stdout: .Pipe)?
+  output = greeter.Stdout()
+  println(output.NextLine())
+  println(output.NextLine())
+  println(output.NextLine())
+  _ = greeter.Wait()?
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

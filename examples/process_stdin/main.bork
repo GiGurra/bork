@@ -1,0 +1,35 @@
+// Feed a child's stdin: all at once from text, bytes or a file, or bit by bit
+// through a pipe.
+import "bork/encoding"
+import "bork/fs"
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled | Closed | fs.Error {
+  sorted = process.Run(s, "sort", stdin: .Text { text: "pear\napple\nfig\n" })?
+  println(sorted.StdoutText().trim())
+  counted = process.Run(s, "wc", ["-c"], stdin: .Data { data: encoding.Utf8("twelve bytes") })?
+  println(s"wc -c counted ${counted.StdoutText().trim()} bytes")
+  directory = fs.DirectoryPath(fs.TempDir(s)?)
+  path = fs.Join([directory, "names.txt"])
+  fs.Write(path, encoding.Utf8("ada\ngrace\n"))?
+  upper = process.Run(s, "tr", ["a-z", "A-Z"], stdin: .File { path: path })?
+  println(upper.StdoutText().trim())
+  // With .Pipe, write while the child runs, and close stdin when done.
+  // Each reply is read before the next name is written.
+  greeter = process.Start(s, "/bin/sh", ["-c", "while read -r name; do echo \"hello, $name\"; done; echo bye"], stdin: .Pipe, stdout: .Pipe)?
+  for (name in ["ada", "grace"]) {
+    greeter.Stdin().WriteText(s"$name\n")?
+    println(greeter.Stdout().NextLine()?)
+  }
+  // Closing stdin ends the child's read loop.
+  greeter.Stdin().Close()
+  println(greeter.Stdout().NextLine()?)
+  println(s"greeter exited with ${greeter.Wait()?.code}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    other => eprintln(s"$other")
+  }
+}

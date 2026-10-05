@@ -1,0 +1,39 @@
+// Run several processes at once, monitor one while it runs, and collect
+// their results.
+import "bork/process"
+
+fn job(s: Scope, name: String, seconds: String) uses io + state: process.Process | IoError | Cancelled {
+  process.Start(s, "/bin/sh", ["-c", "sleep \"$1\"; echo \"$2 finished\"", "sh", seconds, name])
+}
+
+fn collect(s: Scope, lines: Channel[String | IoError], seen: Int) uses state: Int {
+  match (receive(lines)) {
+    line: String => collect(s, lines, seen + 1)
+    _ => seen
+  }
+}
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  // All three start right away and run side by side.
+  backup = job(s, "backup", "0.3")?
+  index = job(s, "index", "0.1")?
+  report = job(s, "report", "0.2")?
+  // TryWait does not block: None while a child is still running.
+  println(s"backup still running: ${backup.TryWait() == Option.None}")
+  for (child in [backup, index, report]) {
+    println(child.Wait()?.StdoutText().trim())
+  }
+  // LinesChannel turns piped output into a channel a task can receive from.
+  ticker = process.Start(s, "/bin/sh", ["-c", "for i in 1 2 3 4; do echo tick $i; sleep 0.05; done"], stdout: .Pipe)?
+  counted = spawn(s, () => collect(s, ticker.Stdout().LinesChannel(s), 0))
+  _ = ticker.Wait()?
+  println(s"ticks received: ${await(counted)}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

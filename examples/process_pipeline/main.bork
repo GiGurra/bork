@@ -1,0 +1,20 @@
+// Connect processes like a shell pipeline: printf | sort | tr a-z A-Z. The
+// data flows through OS pipes between the children, not through bork.
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  words = process.Start(s, "printf", ["cherry\\napple\\nbanana\\n"], stdout: .Pipe)?
+  sorted = process.Start(s, "sort", stdin: .From { reader: words.Stdout() }, stdout: .Pipe)?
+  shouted = process.Run(s, "tr", ["a-z", "A-Z"], stdin: .From { reader: sorted.Stdout() })?
+  println(shouted.StdoutText().trim())
+  // Every stage has its own exit status.
+  println(s"printf: ${words.Wait()?.code}, sort: ${sorted.Wait()?.code}, tr: ${shouted.code}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

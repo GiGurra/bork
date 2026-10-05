@@ -1,0 +1,8 @@
+[child] fetch ok
+[child] build ok
+[child] test ok
+[child] all steps passed
+exit code: 0
+hello
+world
+Closed {}

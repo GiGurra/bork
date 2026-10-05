@@ -1,0 +1,5 @@
+step 1
+step 2 failed, retrying
+step 2
+done
+separate stderr bytes: 0

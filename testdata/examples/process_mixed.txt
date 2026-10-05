@@ -1,0 +1,4 @@
+error: config missing
+noisy progress
+errors kept for the report: error: config missing
+silent run exited with 0

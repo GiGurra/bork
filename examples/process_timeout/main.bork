@@ -1,0 +1,39 @@
+// A timeout is a scope with a deadline: when it passes, the child is
+// stopped and Run gives Cancelled. Stop ends a child on demand.
+import "bork/process"
+import "bork/time"
+
+fn run(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
+  slow = scope limited {
+    cancelAfter(limited, 200)
+    process.Run(limited, "sleep", ["10"])
+  }
+  println(match (slow) {
+    result: process.Result => "finished in time"
+    error: IoError => error.message
+    stopped: Cancelled => s"timed out: ${stopped.reason}"
+  })
+  // cancelGrace sends SIGTERM first, so the child can clean up before SIGKILL.
+  script = "trap 'echo cleaning up; exit 1' TERM; while true; do sleep 0.05; done"
+  graceful = scope limited {
+    cancelAfter(limited, 200)
+    process.Run(limited, "/bin/sh", ["-c", script], stdout: .Inherit, cancelGrace: time.Duration { nanos: 2_000_000_000 })
+  }
+  println(match (graceful) {
+    result: process.Result => "finished in time"
+    error: IoError => error.message
+    stopped: Cancelled => "timed out after a graceful stop"
+  })
+  // Stop sends SIGTERM to a running child, then SIGKILL after its grace.
+  server = process.Start(s, "sleep", ["10"])?
+  server.Stop()
+  println(s"server: ${server.Wait()?.status}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}

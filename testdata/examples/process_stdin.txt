@@ -1,0 +1,10 @@
+apple
+fig
+pear
+wc -c counted 12 bytes
+ADA
+GRACE
+hello, ada
+hello, grace
+bye
+greeter exited with 0

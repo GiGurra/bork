@@ -1,0 +1,5 @@
+backup still running: true
+backup finished
+index finished
+report finished
+ticks received: 4

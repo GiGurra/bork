@@ -65,6 +65,16 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [math](../examples/math/main.bork) | Exact decimal money with [bork/math](std/math.md) |
 | [net](../examples/net/main.bork) | A TCP echo server with [bork/net](std/net.md) |
 | [process](../examples/process/main.bork) | Running a subprocess with [bork/process](std/process.md) |
+| [process_capture](../examples/process_capture/main.bork) | Capturing stdout and stderr separately |
+| [process_combined](../examples/process_combined/main.bork) | Capturing stdout and stderr together, in order (2>&1) |
+| [process_forward](../examples/process_forward/main.bork) | Forwarding a child's stdin, stdout and stderr |
+| [process_mixed](../examples/process_mixed/main.bork) | Forwarding, capturing or discarding each stream on its own |
+| [process_exit_codes](../examples/process_exit_codes/main.bork) | Exit codes, signal deaths and checked runs |
+| [process_stdin](../examples/process_stdin/main.bork) | Feeding stdin from text, bytes, a file or a pipe |
+| [process_streaming](../examples/process_streaming/main.bork) | Reading a child's output line by line while it runs |
+| [process_concurrent](../examples/process_concurrent/main.bork) | Several processes at once, monitored and collected |
+| [process_timeout](../examples/process_timeout/main.bork) | Timeouts, graceful cancellation and Stop |
+| [process_pipeline](../examples/process_pipeline/main.bork) | A pipeline of processes connected by OS pipes |
 | [rand](../examples/rand/main.bork) | Seeded random generators with [bork/rand](std/rand.md) |
 | [regex](../examples/regex/main.bork) | Regular expressions with [bork/regex](std/regex.md) |
 | [time_env](../examples/time_env/main.bork) | Configuration from the environment and an injectable clock with [bork/env](std/env.md) and [bork/time](std/time.md) |

@@ -1,0 +1,20 @@
+// Capture stdout and stderr together, in the order the child wrote them,
+// like 2>&1 in a shell.
+import "bork/process"
+
+fn run(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  script = "echo step 1; echo 'step 2 failed, retrying' >&2; echo step 2; echo done >&2"
+  // stderr: .Stdout sends stderr wherever stdout goes; here, into one capture.
+  transcript = process.Run(s, "/bin/sh", ["-c", script], stderr: .Stdout)?
+  println(transcript.StdoutText().trim())
+  // Nothing is left for stderr on its own.
+  println(s"separate stderr bytes: ${transcript.stderr.length()}")
+}
+
+fn main() {
+  match (scope app { run(app) }) {
+    done: Ok => {}
+    error: IoError => eprintln(error.message)
+    stopped: Cancelled => eprintln(stopped.reason)
+  }
+}
