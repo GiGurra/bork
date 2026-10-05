@@ -16,7 +16,7 @@ fn main() {
 ```
 
 ```text
-Option.Some { value: 0 } Option.Some { value: 16 } Option.None
+Option.Some(0) Option.Some(16) Option.None
 ```
 
 | Made with | Buffer | A send waits |
@@ -134,7 +134,7 @@ fn main() {
 ```text
 Ok Full {}
 1
-Option.Some { value: 1 } Option.None
+Option.Some(1) Option.None
 ```
 
 ## Producers and merge

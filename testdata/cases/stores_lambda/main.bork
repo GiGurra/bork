@@ -31,7 +31,7 @@ fn each[T](xs: List[T], f: (T) uses state => Ok) uses state {
 // Entries of a map, and the values of an option, are its arguments' too.
 fn ifSome[T](o: Option[T], f: (T) uses state => Ok) uses state {
   match (o) {
-    Option.Some { value: v } => f(v)
+    Option.Some(v) => f(v)
     _ => {}
   }
 }
@@ -52,7 +52,7 @@ fn main() uses io + state {
     each([connect("d", app)], c => { _ = ch.send(app, c) })
     byName = { "e": connect("e", app) }
     byName.forEach((k, c) => { _ = ch.send(app, c) })
-    ifSome(Option.Some { value: connect("f", app) }, c => { _ = ch.send(app, c) })
+    ifSome(Option.Some(connect("f", app)), c => { _ = ch.send(app, c) })
     store = atom([connect("g", app)])
     conns.forEach(c => { _ = update(store, cs => cs.append(c)) })
     first = channel[Conn](app, 1)

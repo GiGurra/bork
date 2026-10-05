@@ -14,8 +14,8 @@ APP_ENABLED: invalid JSON at line 1, column 1: expected a value
 APP_HOST: is missing
 APP_HTTP_PORT: is missing
 APP_ENABLED: is missing
-Config { host: "localhost", httpPort: 8080, enabled: true, label: Option.Some { value: "" } }
-Option.Some { value: "" } 
-Option.Some { value: "" }
+Config { host: "localhost", httpPort: 8080, enabled: true, label: Option.Some("") }
+Option.Some("") 
+Option.Some("")
 Config { host: "json-host", httpPort: 80, enabled: true, label: Option.None }
 Cancelled { reason: "cancelled" }

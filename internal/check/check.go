@@ -357,6 +357,7 @@ type Info struct {
 	sourceNames            map[diag.Pos]string
 	writtenTypes           map[*syntax.TypeExpr]Type
 	constructorConstraints map[syntax.Expr][]*Constraint
+	variantCalls           map[*syntax.Call]*syntax.RecordLit
 	recordTargets          map[*syntax.RecordLit]any
 	recordInits            map[*syntax.RecordLit][]*syntax.FieldInit
 	fieldDefaults          map[*Field]syntax.Expr
@@ -423,7 +424,7 @@ func (info *Info) args(call *syntax.Call) []syntax.Expr {
 
 // patSource is where a value bound by a match pattern came from.
 //
-// A name bound inside the pattern (`Option.Some { value: v }`) has the
+// A name bound inside the pattern (`Option.Some(v)`) has the
 // field path to it from the subject (".value"), and the Field.
 type patSource struct {
 	Subject syntax.Expr
@@ -480,6 +481,7 @@ func ProgramObserved(files []*syntax.File, root string, diags *diag.List, goType
 			sourceNames:            map[diag.Pos]string{},
 			writtenTypes:           map[*syntax.TypeExpr]Type{},
 			constructorConstraints: map[syntax.Expr][]*Constraint{},
+			variantCalls:           map[*syntax.Call]*syntax.RecordLit{},
 			recordTargets:          map[*syntax.RecordLit]any{},
 			recordInits:            map[*syntax.RecordLit][]*syntax.FieldInit{},
 			fieldDefaults:          map[*Field]syntax.Expr{},
@@ -1756,11 +1758,11 @@ func (c *checker) binary(e *syntax.Binary, want Type) Type {
 }
 
 func (c *checker) call(e *syntax.Call, want Type) Type {
+	if t, ok := c.positionalVariantCall(e, want); ok {
+		return t
+	}
 	if sel, ok := e.Fun.(*syntax.Selector); ok && sel.Name == "into" {
 		return c.into(e, sel)
-	}
-	if name, ok := e.Fun.(*syntax.ContextName); ok {
-		return c.contextVariantCall(e, name, want)
 	}
 	if id, ok := e.Fun.(*syntax.Ident); ok && assemblyName(id.Name) && c.lookup(id.Name) == nil {
 		return c.assemble(e, id.Name)

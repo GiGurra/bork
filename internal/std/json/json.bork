@@ -25,12 +25,12 @@ fn Index(value: codec.Value, index: Int): Option[codec.Value] {
 // a JSON null remains Some(Null), distinct from a missing path.
 fn At(value: codec.Value, path: List[String | Int]): Option[codec.Value] {
   match (path) {
-    [] => Option.Some { value: value }
+    [] => Option.Some(value)
     [step, ...rest] => match (match (step) {
       name: String => Field(value, name)
       index: Int => Index(value, index)
     }) {
-      Option.Some { value: next } => At(next, rest)
+      Option.Some(next) => At(next, rest)
       Option.None => Option.None
     }
   }

@@ -291,7 +291,7 @@ func (g *gen) typeDecl(t check.Type) []ast.Decl {
 				Type: markerType,
 				Body: &ast.BlockStmt{},
 			})
-			decls = append(decls, g.showStringMethod(recv, t, t.Name+"."+v.Name, v.Fields, false))
+			decls = append(decls, g.showStringMethod(recv, t, t.Name+"."+v.Name, v.Fields, false, v.Positional))
 			decls = append(decls, g.showMethods(recv, t)...)
 			decls = append(decls, g.valueMethods(recv, v.Fields)...)
 		}
@@ -310,7 +310,7 @@ func (g *gen) structDecl(n *ast.Ident, params []*check.TypeParam, fields []*chec
 // stringMethod generates `func (v T) String() string` rendering the
 // value as `Label { field: value, ... }`. String fields are quoted.
 // A variant without fields renders as just its label.
-func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, isRecord bool) ast.Decl {
+func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, isRecord bool, positional ...bool) ast.Decl {
 	fields = independentFields(fields)
 	strLit := func(s string) ast.Expr { return &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(s)} }
 	var result ast.Expr
@@ -326,6 +326,12 @@ func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, i
 			if i == 0 {
 				prefix = label + " { " + f.Name + ": "
 			}
+			if len(positional) > 0 && positional[0] {
+				prefix = ", "
+				if i == 0 {
+					prefix = label + "("
+				}
+			}
 			show := g.showValue(g.fieldRead(ast.NewIdent("v"), f), f.Type)
 			part := &ast.BinaryExpr{X: strLit(prefix), Op: token.ADD, Y: show}
 			if result == nil {
@@ -334,7 +340,11 @@ func (g *gen) stringMethod(recv ast.Expr, label string, fields []*check.Field, i
 				result = &ast.BinaryExpr{X: result, Op: token.ADD, Y: part}
 			}
 		}
-		result = &ast.BinaryExpr{X: result, Op: token.ADD, Y: strLit(" }")}
+		end := " }"
+		if len(positional) > 0 && positional[0] {
+			end = ")"
+		}
+		result = &ast.BinaryExpr{X: result, Op: token.ADD, Y: strLit(end)}
 	}
 	recvName := ast.NewIdent("v")
 	if len(fields) == 0 {
@@ -1527,10 +1537,10 @@ func _sequnfold[T, S any](seed S, step func(S) Option[SeqStep[T, S]]) _Seq[T] {
 			if !ok {
 				return
 			}
-			if !yield(next.value.value) {
+			if !yield(next.E0.value) {
 				return
 			}
-			state = next.value.state
+			state = next.E0.state
 		}
 	}}
 }
@@ -1541,7 +1551,7 @@ func _sequnfold[T, S any](seed S, step func(S) Option[SeqStep[T, S]]) _Seq[T] {
 
 func _seqfirst[T any](source _Seq[T]) Option[T] {
 	var result Option[T] = Option_None[T]{}
-	_seqRun(source, func(x T) bool { result = Option_Some[T]{value: x}; return false })
+	_seqRun(source, func(x T) bool { result = Option_Some[T]{E0: x}; return false })
 	return result
 }
 `)

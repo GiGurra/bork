@@ -4,7 +4,7 @@ fn trim(s: String): String {
 }
 
 fn find(id: Int): Option[Int] {
-  if (id > 0) { Option.Some { value: id } } else { Option.None }
+  if (id > 0) { Option.Some(id) } else { Option.None }
 }
 
 fn main() {

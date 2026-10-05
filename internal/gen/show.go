@@ -59,9 +59,9 @@ func (g *gen) showMethods(recv ast.Expr, t check.Type) []ast.Decl {
 	}}
 }
 
-func (g *gen) showStringMethod(recv ast.Expr, t check.Type, label string, fields []*check.Field, record bool) ast.Decl {
+func (g *gen) showStringMethod(recv ast.Expr, t check.Type, label string, fields []*check.Field, record bool, positional ...bool) ast.Decl {
 	if g.showInstance(t) == nil {
-		return g.stringMethod(recv, label, fields, record)
+		return g.stringMethod(recv, label, fields, record, positional...)
 	}
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("v")}, Type: recv}}},

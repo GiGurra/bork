@@ -30,7 +30,7 @@ fn main() {
   println(propagate)
   lazy inferredUnion = { number = bad()?; number + 1 }
   println(inferredUnion)
-  lazy optional: Option[Int] = { number = Option.Some { value: 8 }?; number + 1 }
+  lazy optional: Option[Int] = { number = Option.Some(8)?; number + 1 }
   println(optional)
 
   with (label: "captured") {

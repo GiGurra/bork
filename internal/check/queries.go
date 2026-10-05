@@ -528,7 +528,7 @@ func EditorVariantFields(info *Info, from *Package, owner *syntax.TypeExpr, name
 		return nil
 	}
 	variant := c.specializedVariant(owner.Pos, sealed, name)
-	if variant == nil || c.diags.Len() != 0 {
+	if variant == nil || variant.Positional || c.diags.Len() != 0 {
 		return nil
 	}
 	return variant.Fields

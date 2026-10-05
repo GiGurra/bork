@@ -8,7 +8,7 @@ fn main() {
       budget = http.OpenRetryBudget(short, capacity: 1, refillMs: 1)
       _ = http.Retry(app, budget, attempt => http.Text(200, "ok"))
       clock = time.Clock { now: () => instantFor(short) }
-      _ = http.OpenRetryBudget(app, capacity: 1, refillMs: 1, clock: .Some { value: clock })
+      _ = http.OpenRetryBudget(app, capacity: 1, refillMs: 1, clock: .Some(clock))
     }
   }
 }

@@ -49,7 +49,7 @@ fn main() {println(wrap(1))}`, "body produces"},
 		{"source rigid union", `fn wrap[T](x: Int | T): Option[Int | T] { x }
 fn main() {println(wrap[String](1))}`, "body produces"},
 		{"explicit inference", `fn take[T](x:Option[T]) uses io {println(x)}
-fn main() {x=Option.Some{value:1}; take(x); take(.Some{value:1}); take(Option.Some{value:1})}`, ""},
+fn main() {x=Option.Some(1); take(x); take(.Some(1)); take(Option.Some(1))}`, ""},
 		{"generic callback result", `fn apply[T](witness:T, f:() => Option[T]):Option[T] {f()}
 fn main() {println(apply(1,()=>2))}`, ""},
 		{"generic expected result", `fn take[T](value:Option[T]):Option[T] {value}
@@ -70,13 +70,13 @@ fn main() {r:Option[Range]=.{lo:2,hi:1};println(r)}`, "is false"},
 fn choose[T](a:Option[T],b:Option[T]):Option[T]{a}
 fn (c:C) Get():Option[Int] {c.value}
 fn identity[T](x:T):T{x}
-fn main(){c=C{value:.Some{value:2}}; f:()=>Option[Int]=()=>3
+fn main(){c=C{value:.Some(2)}; f:()=>Option[Int]=()=>3
 println(choose(1,c.value)); println(choose(c.value,1))
 println(choose(1,f())); println(choose(f(),1))
 println(choose(1,c.Get()));println(choose(c.Get(),1))
 println(choose(1,identity(c.value)));println(choose(identity(c.value),1))
 println(choose(1,identity[Option[Int]](c.value)))
-println(choose(1,{y:Option[Int]=.Some{value:2};y}))}`, ""},
+println(choose(1,{y:Option[Int]=.Some(2);y}))}`, ""},
 
 		{"optional lifetime escape", `fn escape():Option[Task[Int]] {scope s {spawn(s,()=>1)}}
 fn main() {println(escape())}`, "belongs to scope s"},
@@ -93,13 +93,13 @@ fn main(){println(wrap(Range{lo:1,hi:2}))}`, ""},
 
 		{"composite and constructor witnesses", `fn choose[T](a:Option[T],b:Option[T]):Option[T]{a}
 fn identity[T](x:T):T{x}
-fn opt():Option[Int]{.Some{value:2}}
+fn opt():Option[Int]{.Some(2)}
 type C[T]={value:T}
 fn(c:C[T]) get[T]():T{c.value}
-fn main(){println(choose([1],{x:Option[List[Int]]=.Some{value:[2]};x}))
-println(choose(1,identity(Option[Int].Some{value:2})))
-c=C{value:Option[Int].Some{value:2}};println(choose(1,c.get()))
-println(choose(1,match(true){true=>Option[Int].Some{value:2},false=>Option[Int].None}))
+fn main(){println(choose([1],{x:Option[List[Int]]=.Some([2]);x}))
+println(choose(1,identity(Option[Int].Some(2))))
+c=C{value:Option[Int].Some(2)};println(choose(1,c.get()))
+println(choose(1,match(true){true=>Option[Int].Some(2),false=>Option[Int].None}))
 println(choose(1,if(true){opt()}else{Option[Int].None}))}`, ""},
 
 		{"annotated and structural witnesses", `fn choose[T](a:Option[T],b:Option[T]):Option[T]{a}
@@ -113,16 +113,16 @@ println(choose(1,if(true){x}else{.None}));println(choose(1,if(true){x}else{panic
 h=Holder{value:2};println(choose(1,match(h){Holder{value:v}=>v}))}`, ""},
 
 		{"rigid composite witness", `fn choose[T](a:Option[T],b:Option[T]):Option[T]{a}
-fn pass[T](xs:List[T]) uses io {println(choose(xs,{w:Option[List[T]]=.Some{value:xs};w}))}
+fn pass[T](xs:List[T]) uses io {println(choose(xs,{w:Option[List[T]]=.Some(xs);w}))}
 fn main(){pass([1])}`, ""},
 
 		{"unknown witness annotation", `fn choose[T](a:Option[T],b:Option[T]):Option[T]{a}
 fn main(){println(choose(1,{w:Option[Unknown]=.None;w}))}`, "Unknown"},
 
-		{"explicit nested", `fn main() { x: Option[Option[Int]] = .Some {value: .Some {value: 1}}; println(x) }`, ""},
+		{"explicit nested", `fn main() { x: Option[Option[Int]] = .Some(.Some(1)); println(x) }`, ""},
 		{"known rigid head", `fn make[T](value: List[T]): Option[List[T]] { value }
 fn main() { println(make([1])) }`, ""},
-		{"nested rejection", `fn main() { x: Option[Option[Int]] = Option[Int].Some {value:1}; println(x) }`, "found Option[Int]"},
+		{"nested rejection", `fn main() { x: Option[Option[Int]] = Option[Int].Some(1); println(x) }`, "found Option[Int]"},
 		{"rigid rejection", `fn make[T](value:T): Option[T] { value }
 fn main() { println(make(1)) }`, "body produces T"},
 		{"no inference", `fn take[T](value: Option[T]) uses io { println(value) }

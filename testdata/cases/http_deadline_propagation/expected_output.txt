@@ -5,4 +5,4 @@ outgoing true
 stalled cancellation true
 later listener deadline true
 queued deadline true
-queue released Option.Some { value: AdmissionLoad { inFlight: 1, queued: 0 } }
+queue released Option.Some(AdmissionLoad { inFlight: 1, queued: 0 })

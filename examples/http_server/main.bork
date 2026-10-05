@@ -65,7 +65,7 @@ fn create(store: Atom[Store], body: String) uses state: http.Response {
       id = s.nextId - 1
       log.Info("created", { "id": id, "title": req.title })
       match (s.todos.get(id)) {
-        Option.Some { value: item } => http.JsonReply(201, json.Encode(item))
+        Option.Some(item) => http.JsonReply(201, json.Encode(item))
         Option.None => notFound(id)
       }
     }
@@ -76,14 +76,14 @@ fn create(store: Atom[Store], body: String) uses state: http.Response {
 
 fn show(store: Atom[Store], id: Int) uses state: http.Response {
   match (current(store).todos.get(id)) {
-    Option.Some { value: item } => http.JsonReply(200, json.Encode(item))
+    Option.Some(item) => http.JsonReply(200, json.Encode(item))
     Option.None => notFound(id)
   }
 }
 
 fn finish(store: Atom[Store], id: Int) uses state: http.Response {
   _ = update(store, st => match (st.todos.get(id)) {
-    Option.Some { value: item } => st.copy(todos: st.todos.put(id, item.copy(done: true)))
+    Option.Some(item) => st.copy(todos: st.todos.put(id, item.copy(done: true)))
     Option.None => st
   })
   show(store, id)

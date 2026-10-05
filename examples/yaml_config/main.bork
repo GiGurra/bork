@@ -29,7 +29,7 @@ fn load(path: String) uses io: Ok | yaml.Error | IoError | codec.DecodeError {
   config = yaml.DecodeFile[Config](path)?
   config.environments.forEach((name, service) => println(s"$name: $service"))
   match (config.environments.get("production")) {
-    Option.Some { value: production } => println(yaml.Encode(Service { host: production.host, port: 9090, workers: production.workers, tags: production.tags })?.trim())
+    Option.Some(production) => println(yaml.Encode(Service { host: production.host, port: 9090, workers: production.workers, tags: production.tags })?.trim())
     Option.None => println("no production environment")
   }
 }

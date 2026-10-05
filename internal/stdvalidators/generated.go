@@ -357,9 +357,9 @@ func (Option_Some[T]) isOption(T) {
 func (v Option_Some[T]) String() string {
 	nativeEnter()
 	defer nativeLeave()
-	return "Option.Some { value: " +
+	return "Option.Some(" +
 		func() string { nativeStep(); return _show(v.value) }() +
-		" }"
+		")"
 }
 
 func (v Option_Some[T]) _borkEqual(other any) bool {
@@ -2254,7 +2254,7 @@ func _sql_validateSQL(parts StaticParts, holes []InterpolationHole) []Interpolat
 	}
 	var hole Option[int64] = Option_None[int64]{}
 	if sqlite.hole >= 0 && sqlite.hole == postgres.hole {
-		hole = Option_Some[int64]{value: sqlite.hole}
+		hole = Option_Some[int64]{E0: sqlite.hole}
 	}
 	return []InterpolationIssue{{hole: hole, message: sqlite.detail.message}}
 }

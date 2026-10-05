@@ -49,6 +49,8 @@ func (c *checker) optionResultWant(want, result Type) Type {
 
 func (c *checker) optionalConstructor(x syntax.Expr) bool {
 	switch x := x.(type) {
+	case *syntax.Call:
+		return c.optionalConstructor(x.Fun)
 	case *syntax.RecordLit:
 		return c.optionalConstructor(x.Type)
 	case *syntax.ContextName:
@@ -333,7 +335,7 @@ func (c *checker) optionPromotionNote(args []any) string {
 	if IsOption(want) {
 		payload := want.(*Sealed).Args[0]
 		if found != Invalid && found != Never && (c.open(payload) || assignable(found, payload)) {
-			return "; write .Some { value: ... } to make the optional layer or type inference explicit"
+			return "; write .Some(...) to make the optional layer or type inference explicit"
 		}
 	}
 	return ""
@@ -441,6 +443,11 @@ func (c *checker) peekPattern(p syntax.Pattern, t Type, locals map[string]Type) 
 				if r, ok := instanceIn(s, base).(*Record); ok {
 					fields = r.Fields
 				}
+			}
+		}
+		for i, elem := range p.Elems {
+			if i < len(fields) {
+				c.peekPattern(elem, fields[i].Type, locals)
 			}
 		}
 		for _, fp := range p.Fields {

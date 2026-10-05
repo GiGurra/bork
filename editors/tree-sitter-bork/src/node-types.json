@@ -3857,6 +3857,10 @@
           "named": true
         },
         {
+          "type": "specialized_variant_pattern",
+          "named": true
+        },
+        {
           "type": "string",
           "named": true
         },
@@ -5422,6 +5426,36 @@
     }
   },
   {
+    "type": "specialized_variant_pattern",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "qualified_name",
+          "named": true
+        },
+        {
+          "type": "type_arguments",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "string",
     "named": true,
     "fields": {},
@@ -5549,6 +5583,10 @@
         },
         {
           "type": "rune",
+          "named": true
+        },
+        {
+          "type": "specialized_variant_pattern",
           "named": true
         },
         {
@@ -6365,6 +6403,10 @@
       "types": [
         {
           "type": "record_type",
+          "named": true
+        },
+        {
+          "type": "type",
           "named": true
         },
         {

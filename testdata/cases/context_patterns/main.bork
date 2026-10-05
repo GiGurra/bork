@@ -5,9 +5,9 @@ fn light(x: Alias): Int {
 }
 fn nested[T](x: Option[Option[T]]): Bool {
   match (x) {
-    .Some { value: .Some { value: _ } } => true
+    .Some(.Some(_)) => true
     // The next leading dot starts an arm, even across comments.
-    .Some { value: .None } => false
+    .Some(.None) => false
     .None => false
   }
 }
@@ -21,13 +21,13 @@ type Red = Int where positive
 pred positive(n: Int) { n > 0 }
 fn need(n: Int where positive): Int { n }
 fn facts(x: Option[Int where positive]): Int {
-  match (x) { .Some { value } => need(value), .None => 0 }
+  match (x) { .Some(value) => need(value), .None => 0 }
 }
 fn main() {
-  println(facts(Option.Some { value: 3 }))
+  println(facts(Option.Some(3)))
   println(light(Light.Red))
   println(union(Light.Green))
   println(first([Light.Red]))
-  println(nested(Option.Some { value: Option.Some { value: 3 } }))
-  println(nested(Option.Some { value: Option[Int].None }))
+  println(nested(Option.Some(Option.Some(3))))
+  println(nested(Option.Some(Option[Int].None)))
 }

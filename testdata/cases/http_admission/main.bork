@@ -13,7 +13,7 @@ fn status(value: http.Result): Int {
 }
 fn load(server: http.Server) uses state: http.AdmissionLoad {
   match (http.AdmissionState(server)) {
-    Option.Some { value: snapshot } => snapshot
+    Option.Some(snapshot) => snapshot
     Option.None => panic("admission disabled")
   }
 }
@@ -74,13 +74,13 @@ fn immediate(policy: http.Admission) uses io + net + clock + state {
       _ = entered.send(app, true)
       _ = permits.receive(app)
       http.Text(200, "ok")
-      }, admission: Option.Some { value: policy }))
+      }, admission: Option.Some(policy)))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
     _ = entered.receive(app)
     showRejected(http.Get(url, app))
     println("no waiting", load(server))
-    other = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => http.Text(200, "independent"), admission: Option.Some { value: policy }))
+    other = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => http.Text(200, "independent"), admission: Option.Some(policy)))
     println("independent", status(http.Get(s"http://${http.Address(other)}", app)))
     _ = permits.send(app, true)
     _ = await(active)
@@ -117,7 +117,7 @@ fn main() {
       http.Text(200, request.path)
     }
     policy = http.Admission { maxInFlight: 1, maxQueued: 2, queueTimeoutMs: 5000, retryAfterMs: 1 }
-    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some { value: policy }))
+    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some(policy)))
     url = s"http://${http.Address(server)}"
     first = spawn(app, () => http.Get(s"$url/first", app))
     println(entered.receive(app))
@@ -151,9 +151,7 @@ fn main() {
     entered = channel[Bool](app, 1)
     permits = channel[Bool](app, 0)
     handler: http.Handler = (request, s) => { _ = entered.send(app, true); _ = permits.receive(app); http.Text(200, "ok") }
-    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some {
-      value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5, status: 429 }
-    }))
+    server = mustServer(http.Listen("127.0.0.1:0", app, handler, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5, status: 429 })))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
     _ = entered.receive(app)
@@ -167,7 +165,7 @@ fn main() {
   scope app {
     server = mustServer(http.ListenRoutes("127.0.0.1:0", app, [http.Route {
       pattern: "POST /body", handler: (request, s) => http.Text(200, request.body),
-      }], maxBodyBytes: 3, admission: Option.Some { value: http.Admission { maxInFlight: 1 } }))
+      }], maxBodyBytes: 3, admission: Option.Some(http.Admission { maxInFlight: 1 })))
     url = s"http://${http.Address(server)}"
     println("body limit", status(http.Send("POST", s"$url/body", {:}, "long", app)))
     println("after body error", load(server))
@@ -181,7 +179,7 @@ fn main() {
       _ = entered.send(app, true)
       _ = delay(s, 5000)
       http.Text(200, "stopped")
-      }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 } }))
+      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 })))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
     _ = entered.receive(app)
@@ -196,7 +194,7 @@ fn main() {
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
       if (request.path == "/panic") { panic("handler panic") }
       http.Text(200, "ok")
-      }, admission: Option.Some { value: http.Admission { maxInFlight: 1 } }))
+      }, admission: Option.Some(http.Admission { maxInFlight: 1 })))
     url = s"http://${http.Address(server)}"
     println("handler panic", match (http.Get(s"$url/panic", app)) { _: IoError => true, _ => false })
     println("after panic", status(http.Get(url, app)), load(server))
@@ -207,7 +205,7 @@ fn main() {
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
       if (request.path == "/held") { _ = entered.send(app, true); _ = permits.receive(app) }
       http.Text(200, "ok")
-      }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 } }))
+      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 5000 })))
     raceTransfer(server, entered, permits, app, 30)
     println("cancel transfer race", load(server))
   }
@@ -218,9 +216,9 @@ fn main() {
       _ = entered.send(app, true)
       _ = permits.receive(app)
       http.Text(200, "ok")
-      }, admission: Option.Some { value: http.Admission {
+      }, admission: Option.Some(http.Admission {
         maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000, retryAfterMs: 9223372036854,
-    } }))
+    })))
     url = s"http://${http.Address(server)}"
     active = spawn(app, () => http.Get(url, app))
     _ = entered.receive(app)

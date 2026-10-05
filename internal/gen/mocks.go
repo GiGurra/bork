@@ -744,7 +744,7 @@ func _mockExpectFn[A any](f *_mockFrame) func(func(A) bool, bool, Option[int64],
 	return func(match func(A) bool, where bool, times, atLeast, atMost Option[int64], at string) {
 		bound := func(option Option[int64]) (int64, bool) {
 			some, given := option.(Option_Some[int64])
-			return some.value, given
+			return some.E0, given
 		}
 		t, hasTimes := bound(times)
 		lo, hasLo := bound(atLeast)

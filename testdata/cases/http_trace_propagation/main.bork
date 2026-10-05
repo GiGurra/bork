@@ -9,7 +9,7 @@ ambient principal: String
 
 fn root(last: String): http.TraceParent {
   match (http.TraceParentOf({ "traceparent": ["00-4bf92f3577b34da6a3ce929d0e0e473" + last + "-00f067aa0ba902b7-01"] })) {
-    Option.Some { value } => if (http.ValidTraceParent(value)) { value } else { panic("invalid decoded parent") }
+    Option.Some(value) => if (http.ValidTraceParent(value)) { value } else { panic("invalid decoded parent") }
     error => panic(toString(error))
   }
 }
@@ -59,7 +59,7 @@ fn concurrent(url: String) uses net + state unsafe go {
       if err != nil { failures <- err.Error(); return }
       body, err := io.ReadAll(reply.Body)
       reply.Body.Close()
-      expected := "lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=" + parent + " forwarded=[Option.Some { value: \"" + parent + "\" }, Option.None, Option.None, Option.None]"
+      expected := "lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=" + parent + " forwarded=[Option.Some(\"" + parent + "\"), Option.None, Option.None, Option.None]"
       if err != nil || string(body) != expected { failures <- "request labels crossed: " + string(body) }
     }(index)
   }
@@ -111,7 +111,7 @@ fn main() {
       middle = mustServer(http.Listen("127.0.0.1:0", app, handler: (request, s) => {
         lexical = captured()
         checked = match (http.TraceParentOf(request.headers)) {
-          Option.Some { value } => if (http.ValidTraceParent(value)) { with (trace: value) { captured() } } else { panic("invalid decoded parent") }
+          Option.Some(value) => if (http.ValidTraceParent(value)) { with (trace: value) { captured() } } else { panic("invalid decoded parent") }
           _ => "none"
         }
         forwarded = response(http.Get(target, s))

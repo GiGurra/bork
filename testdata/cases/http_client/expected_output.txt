@@ -1,6 +1,6 @@
 418 a,b:payload
-Option.Some { value: ["one", "two"] }
-Option.Some { value: "one" }
+Option.Some(["one", "two"])
+Option.Some("one")
 :posted:application/json
 true
 true
@@ -8,4 +8,4 @@ true
 true
 true
 first
-Option.Some { value: ["one", "two"] }
+Option.Some(["one", "two"])

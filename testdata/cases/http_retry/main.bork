@@ -1,7 +1,7 @@
 import "bork/http"
 import "bork/time"
 fn busy(hint: Int = 0): http.Result {
-  http.Overloaded { retryAfter: .Some { value: time.Duration { nanos: hint } }, response: http.Text(503, "busy") }
+  http.Overloaded { retryAfter: .Some(time.Duration { nanos: hint }), response: http.Text(503, "busy") }
 }
 fn kind(result: http.Result): String {
   match (result) {
@@ -13,7 +13,7 @@ fn kind(result: http.Result): String {
   }
 }
 fn fixedBudget(s: Scope, capacity: http.RetryCount) uses clock + state: http.RetryBudget {
-  http.OpenRetryBudget(s, capacity: capacity, refillMs: 60000, clock: .Some { value: time.FixedClock(.{ unixNanos: 0 }) })
+  http.OpenRetryBudget(s, capacity: capacity, refillMs: 60000, clock: .Some(time.FixedClock(.{ unixNanos: 0 })))
 }
 // Simulate the resource finalizer for closed-budget races independently of the
 // static borrow rule that correctly forbids closing an owner's borrowed scope.
@@ -70,11 +70,11 @@ fn main() {
   scope s {
     budget = fixedBudget(s, 10)
     ceilings = atom([0].take(0))
-    result = http.Retry(s, budget, attempt => busy(), maxAttempts: 5, baseDelayMs: 1, maxDelayMs: 4, jitter: .Some { value: ceiling => { _ = update(ceilings, xs => xs.append(ceiling)); 9223372036854775807 } })
+    result = http.Retry(s, budget, attempt => busy(), maxAttempts: 5, baseDelayMs: 1, maxDelayMs: 4, jitter: .Some(ceiling => { _ = update(ceilings, xs => xs.append(ceiling)); 9223372036854775807 }))
     println("capped jitter", kind(result), current(ceilings))
-    result2 = http.Retry(s, budget, attempt => busy(), maxAttempts: 4, baseDelayMs: 9223372036854, maxDelayMs: 9223372036854, jitter: .Some { value: ceiling => -1 })
+    result2 = http.Retry(s, budget, attempt => busy(), maxAttempts: 4, baseDelayMs: 9223372036854, maxDelayMs: 9223372036854, jitter: .Some(ceiling => -1))
     println("negative jitter and maximum backoff", kind(result2))
-    result3 = http.Retry(s, budget, attempt => busy(9223372036854775807), maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 1, jitter: .Some { value: ceiling => ceiling })
+    result3 = http.Retry(s, budget, attempt => busy(9223372036854775807), maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 1, jitter: .Some(ceiling => ceiling))
     println("wait overflow", kind(result3))
   }
   scope s {
@@ -105,7 +105,7 @@ fn main() {
       ready = channel[Bool](app, 1)
       launch(request, () => { _ = ready.receive(request); cancel(request) })
       calls = atom(0)
-      result = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = ready.send(request, true); ceiling } })
+      result = http.Retry(request, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some(ceiling => { _ = ready.send(request, true); ceiling }))
       println("cancel wait", kind(result), current(calls))
     }
   }
@@ -114,7 +114,7 @@ fn main() {
     ready = channel[Bool](s, 1)
     launch(s, () => { _ = ready.receive(s); finalizer(budget) })
     calls = atom(0)
-    result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some { value: ceiling => { _ = ready.send(s, true); ceiling } })
+    result = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() }, baseDelayMs: 60000, maxDelayMs: 60000, jitter: .Some(ceiling => { _ = ready.send(s, true); ceiling }))
     println("budget close wait", kind(result), current(calls))
     result2 = http.Retry(s, budget, attempt => { _ = update(calls, n => n + 1); busy() })
     println("closed budget", kind(result2), current(calls))

@@ -32,10 +32,10 @@ fn parseQuantity(input: String): Int | InvalidQuantity {
 fn discountFor(coupon: Option[String]): Discount | InvalidDiscount {
   match (coupon) {
     Option.None => Discount.None
-    Option.Some { value: "TENOFF" } => Discount.Percent { percent: 10 }
-    Option.Some { value: "FIVEBUCKS" } => Discount.FixedOff { cents: 500 }
-    Option.Some { value: "3FOR2" } => Discount.BuyNGetOneFree { n: 2 }
-    Option.Some { value: code } => InvalidDiscount { reason: s"unknown coupon ${code.toUpper()}" }
+    Option.Some("TENOFF") => Discount.Percent { percent: 10 }
+    Option.Some("FIVEBUCKS") => Discount.FixedOff { cents: 500 }
+    Option.Some("3FOR2") => Discount.BuyNGetOneFree { n: 2 }
+    Option.Some(code) => InvalidDiscount { reason: s"unknown coupon ${code.toUpper()}" }
   }
 }
 
@@ -86,12 +86,12 @@ fn receipt(result: Priced | InvalidQuantity | InvalidDiscount): String {
 
 fn main() {
   println(receipt(placeOrder("A-1", "coffee", 450, "2", Option.None)))
-  println(receipt(placeOrder("A-2", "coffee", 450, " 10 ", Option.Some { value: "TENOFF" })))
-  println(receipt(placeOrder("A-3", "mug", 1299, "3", Option.Some { value: "3FOR2" })))
-  println(receipt(placeOrder("A-4", "sticker", 199, "1", Option.Some { value: "FIVEBUCKS" })))
+  println(receipt(placeOrder("A-2", "coffee", 450, " 10 ", Option.Some("TENOFF"))))
+  println(receipt(placeOrder("A-3", "mug", 1299, "3", Option.Some("3FOR2"))))
+  println(receipt(placeOrder("A-4", "sticker", 199, "1", Option.Some("FIVEBUCKS"))))
   println(receipt(placeOrder("A-5", "coffee", 450, "zero", Option.None)))
   println(receipt(placeOrder("A-6", "coffee", 450, "0", Option.None)))
-  println(receipt(placeOrder("A-7", "coffee", 450, "1", Option.Some { value: "free" })))
+  println(receipt(placeOrder("A-7", "coffee", 450, "1", Option.Some("free"))))
 
   // Changing an order means building a new one.
   first = price(Order { id: "B-1", item: Item { name: "tea", unitPrice: 300, quantity: 1 }, discount: Discount.None, coupon: Option.None })

@@ -51,7 +51,7 @@ fn main() {
   }
   println(NewPayload("new"), NilPayload(), PayloadError(), PayloadOption(false), PayloadOption(true), Payloads())
   match (GetStringer(true)) {
-    Option.Some { value: v } => {
+    Option.Some(v) => {
       println(v, Show(v))
       match (StringerChoice(v)) {
         s: Stringer => println("stringer", Show(s))

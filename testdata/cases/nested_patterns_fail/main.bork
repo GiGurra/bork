@@ -3,14 +3,14 @@ type NotFound = { key: String }
 
 fn a(o: Option[Bool]): Int {
   match (o) {
-    Option.Some { value: true } => 1
+    Option.Some(true) => 1
     Option.None => 0
   }
 }
 
 fn b(o: Option[Int] | NotFound): Int {
   match (o) {
-    Option.Some { value: 1 } => 1
+    Option.Some(1) => 1
     NotFound { key: "x" } => 2
     Option.None => 0
   }
@@ -26,9 +26,9 @@ fn c(p: Point): Int {
 
 fn d(o: Option[Int]): Int {
   match (o) {
-    Option.Some { value: n } => n
-    Option.Some { value: 5 } => 5
-    Option.Some { valu: 6 } => 6
+    Option.Some(n) => n
+    Option.Some(5) => 5
+    Option.Some(valu: 6) => 6
     Option.None => 0
   }
 }

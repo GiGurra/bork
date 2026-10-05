@@ -66,7 +66,7 @@ fn main() {
   println(yaml.DecodeAll[Int]("1\n---\n2\n"))
   println(yaml.DecodeAll[Int]("1\n---\ntwo\n"))
   println(trimmed(yaml.Encode([1, 2])))
-  println(trimmed(yaml.Encode(Option.Some { value: "yes" })))
+  println(trimmed(yaml.Encode(Option.Some("yes"))))
   // Empty text is Null; a later document can fail to parse.
   println(yaml.Decode[Option[Int]]("# nothing\n"))
   println(yaml.Decode[Server](""))

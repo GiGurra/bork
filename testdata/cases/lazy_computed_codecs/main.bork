@@ -38,7 +38,7 @@ fn main() {
   decode("{\"n\":0}")
   decode("{\"n\":1,\"doubled\":9}")
   choice: Choice = .Item { n: 7 }; println(json.Encode(choice))
-  loaded = env.LoadWith[Config]("", name => if (name == "N") { .Some { value: "8" } } else { .None })
+  loaded = env.LoadWith[Config]("", name => if (name == "N") { .Some("8") } else { .None })
   match (loaded) { v: Config => println(v.doubled), e: env.ConfigError => println(e) }
   rows = encoding.DecodeCsv[Config]("n,tag\n6,row\n")
   match (rows) { values: List[Config] => println(values.map(row => row.doubled)), e: encoding.CsvError => println(e), e: encoding.CsvErrors => println(e) }

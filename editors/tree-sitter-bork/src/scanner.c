@@ -29,7 +29,9 @@ static bool context_arm(TSLexer *lexer) {
          (lexer->lookahead >= '0' && lexer->lookahead <= '9') ||
          lexer->lookahead == '_' || lexer->lookahead >= 0x80) lexer->advance(lexer, false);
   skip_space_comments(lexer);
-  if (lexer->lookahead == '{') {
+  if (lexer->lookahead == '{' || lexer->lookahead == '(') {
+    int open = lexer->lookahead;
+    int close = open == '{' ? '}' : ')';
     unsigned depth = 1;
     lexer->advance(lexer, false);
     while (!lexer->eof(lexer) && depth) {
@@ -44,8 +46,8 @@ static bool context_arm(TSLexer *lexer) {
         }
         if (!lexer->eof(lexer)) lexer->advance(lexer, false);
       } else {
-        if (c == '{') depth++;
-        if (c == '}') depth--;
+        if (c == open) depth++;
+        if (c == close) depth--;
         if (!lexer->eof(lexer)) lexer->advance(lexer, false);
       }
     }

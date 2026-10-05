@@ -36,6 +36,43 @@ Nested variant patterns use the field or element type. In a union, the written
 variant must belong to exactly one sealed member; write `Shape.Circle` when
 several members have that variant. Qualified patterns keep working.
 
+## Positional payloads
+
+A sealed variant can declare ordered payload types. Construct and match it with
+parentheses, keeping the declared order and exact number of values:
+
+```bork
+type Reply[T] = sealed { Found(T, String), Missing }
+fn text(reply: Reply[Int]): String {
+  match (reply) {
+    .Found(number, label) => s"$label: $number"
+    .Missing => "missing"
+  }
+}
+fn main() {
+  println(text(Reply.Found(3, "count")))
+  println(text(Reply[Int].Missing))
+  value = Option[Int].Some(4)
+  println(match (value) { Option[Int].Some(n) => n, Option[Int].None => 0 })
+}
+```
+
+`Option[T]` declares `Some(T)` and `None`. Use `Option.Some(value)` or
+`.Some(value)` with an expected Option type, and `.Some(name)` to bind its
+payload. A fieldless variant stays bare: `.None`. Explicit type arguments go
+on the owner, as in `Option[Int].None`, including inside patterns.
+
+Named variants keep braces. Positional variants accept no names, defaults or
+spread, and reject braces. A bare variant pattern ignores all its payloads.
+`One((Int, String))` has one tuple-valued payload; `Pair(Int, String)` has two.
+Nested patterns may inspect each slot, and refutable slots require further
+arms to cover the remaining values.
+
+Derived codecs encode positional payloads as a `values` array in a tagged
+object, for example `{"type":"Found","values":[3,"count"]}`. Decoding checks
+exact array length and reports errors at `.values[0]`. Option keeps its existing
+null or bare-value encoding.
+
 ## Patterns
 
 | Pattern | Matches |
@@ -46,7 +83,8 @@ several members have that variant. Qualified patterns keep working.
 | `n: Int` | a value of that type, named `n` |
 | `NotFound` | a value of that type, without naming it |
 | `User { name, age: 0 }` | a record, looking at the fields listed |
-| `.Circle { radius }`, `Shape.Circle { radius }` | one variant of a sealed type |
+| `.Circle { radius }`, `Shape.Circle { radius }` | a variant with named fields |
+| `.Some(value)`, `Option[Int].Some(value)` | a variant with positional payloads |
 | `(left, right)`, `(only,)` | a tuple with that exact number of elements |
 | `[]`, `[x]`, `[first, ...rest]` | a list by its length, naming the elements |
 

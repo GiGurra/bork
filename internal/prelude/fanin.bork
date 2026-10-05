@@ -20,7 +20,7 @@ fn (tasks: List[Task[T]]) awaitFirst[T](s: Scope) uses state: Option[T] | Cancel
   for i, task := range tasks { native[i] = task.native.handle.(*_task) }
   i := _borkFanInFirst(s.ctx, native)
   if i < 0 { return Cancelled{reason: s._cancelReason()} }
-  return Option_Some[T]{value: tasks[i].wait()}
+  return Option_Some[T]{E0: tasks[i].wait()}
 }
 
 // Failure-aware fan-in watches completions, stops at the first observed E,
@@ -60,7 +60,7 @@ fn race[T](s: Scope, works: List[(Scope) => T]) uses state: Option[T] | Cancelle
   child.cancel(_errCancelled)
   _borkFanInJoin(child)
   if selected < 0 { return Cancelled{reason: child._cancelReason()} }
-  return Option_Some[T]{value: tasks[selected].Await().(T)}
+  return Option_Some[T]{E0: tasks[selected].Await().(T)}
 }
 
 // withTimeout bounds a child operation cooperatively. The deadline includes

@@ -5,7 +5,7 @@ https
 /a/b
 {"q": ["one", "two"], "space": ["hello world"]}
 f/g
-Option.Some { value: UserInfo { username: "user", password: Option.Some { value: "p@ss" } } }
+Option.Some(UserInfo { username: "user", password: Option.Some("p@ss") })
 https://user:p%40ss@[::1]:8443/a%2Fb?q=one&q=two&space=hello+world#f%2Fg
 https://user:p%40ss@[::1]:8443/new%20path?q=one&q=two&space=hello+world#new%20fragment
 https://example.com/hello%20world?flag=&q=a%2Bb&q=%C3%A9#a%20b
@@ -15,10 +15,10 @@ Url { scheme: "", host: "", path: "../a/b", query: {"x": ["1"]}, fragment: "two"
 Url { scheme: "mailto", host: "", path: "", query: {:}, fragment: "", user: Option.None, opaque: "user@example.com", rawPath: "", rawFragment: "", forceQuery: false, omitHost: false }
 mailto:user@example.com
 ../a%2Fb?x=1#two
-Option.Some { value: UserInfo { username: "user", password: Option.None } }
+Option.Some(UserInfo { username: "user", password: Option.None })
 https://user@example.com/
 //example.com/a
-Option.Some { value: UserInfo { username: "user", password: Option.Some { value: "" } } }
+Option.Some(UserInfo { username: "user", password: Option.Some("") })
 https://user:@example.com/
 true
 https:/path

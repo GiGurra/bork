@@ -17,7 +17,7 @@ type Entry[K, V] = { key: K, value: V }
 
 fn (m: Map[K, V]) get[K: Eq, V](key: K): Option[V] unsafe go {
   if v, ok := m.get(key); ok {
-    return Option_Some[V]{value: v}
+    return Option_Some[V]{E0: v}
   }
   return Option_None[V]{}
 }

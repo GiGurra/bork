@@ -11,7 +11,7 @@ true
 false
 Danger { n: 0 }
 true
-Option.Some { value: "present" }
+Option.Some("present")
 true
-Option.Some { value: "callback" }
+Option.Some("callback")
 5

@@ -36,5 +36,5 @@ fn send(msg: String, level: Level = Level.Low, retry: Retry = Retry { times: 3, 
 fn more() uses io {
   println(send("a"))
   println(send("b", Level.High))
-  println(send("c", Level.High, Retry { times: 1, backoff: Option.Some { value: 50 } }))
+  println(send("c", Level.High, Retry { times: 1, backoff: Option.Some(50) }))
 }

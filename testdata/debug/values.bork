@@ -1,3 +1,4 @@
+type Payload = sealed { Pair(Int, Float) }
 type Shape = sealed { Circle { radius: Float }, Empty }
 type Inner = { label: String, count: Int }
 type Outer = { inner: Inner, shape: Shape, optional: Option[Int] }
@@ -6,8 +7,9 @@ fn main() {
   x = 3
   y = x + 4
   shape: Shape = .Circle { radius: 2.0 }
-  some: Option[Int] = .Some { value: 3 }
-  someFloat: Option[Float] = .Some { value: 2.0 }
+  some: Option[Int] = .Some(3)
+  someFloat: Option[Float] = .Some(2.0)
+  payload: Payload = .Pair(3, 2.0)
   boxed = Box[Float] { item: 2.0 }
   shapes = [shape]
   none: Option[Int] = .None
@@ -17,5 +19,5 @@ fn main() {
   listUnion: List[Int] | Int = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   chosen = match (shape) { Shape.Circle { radius } => radius, Shape.Empty => 0.0 }
   println(y)
-  println(x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, listUnion)
+  println(payload, x, shape, some, none, nested, recordUnion, scalarUnion, chosen, someFloat, boxed, shapes, listUnion)
 }

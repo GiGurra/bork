@@ -17,7 +17,7 @@ fn demo(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied | fs
   }
   input = json.OpenLines(path, s)?
   match (json.Next(input)) {
-    Option.Some { value } => {
+    Option.Some(value) => {
       println(json.At(value, ["kind"]))
       println(json.Pretty(value))
     }

@@ -3,4 +3,4 @@ Pair { first: 1, second: "one" } Pair { first: "one", second: 1 } one
 Tree.Node { left: Tree.Leaf, value: "x", right: Tree.Leaf }
 ok: 42 error: invalid syntax
 rent: 1200 nothing
-true Option.Some { value: 3 } Option.Some { value: 1 }
+true Option.Some(3) Option.Some(1)

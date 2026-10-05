@@ -2,7 +2,7 @@ rand.Generator
 true
 true
 true
-Option.Some { value: 42 }
+Option.Some(42)
 true
 true
 true
@@ -12,12 +12,12 @@ true
 true
 true
 true
-Option.Some { value: 42 }
+Option.Some(42)
 true
 Option.None
 true
 true
 true
-Option.Some { value: 42 }
+Option.Some(42)
 Option.None
 [42]

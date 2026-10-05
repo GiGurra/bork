@@ -320,7 +320,14 @@ func (a *EditorAnalysis) editorTypePatterns(typ check.Type, from *check.Package,
 						}
 						fields = append(fields, field)
 					}
-					text += " { " + strings.Join(fields, ", ") + " }"
+					if v.Positional {
+						for i := range fields {
+							fields[i] = "_"
+						}
+						text += "(" + strings.Join(fields, ", ") + ")"
+					} else {
+						text += " { " + strings.Join(fields, ", ") + " }"
+					}
 				}
 				detail := "match arm"
 				if testPattern {

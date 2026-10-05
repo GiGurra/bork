@@ -3,7 +3,7 @@ Value.Object { fields: [Field { name: "a", value: Value.Array { items: [Value.Nu
 JsonError { message: "invalid JSON at line 1, column 2: expected a field name" }
 [1, 2, 3]
 DecodeError { path: "[1]", message: "expected a whole number, found a string" }
-[Option.Some { value: "a" }, Option.None]
+[Option.Some("a"), Option.None]
 [1,null]
 {"s":"a\"b\né","n":-1.5e3,"z":0}
 JsonError { message: "unexpected end of JSON: expected a value" }

@@ -33,6 +33,12 @@
         "expandable": false
       },
       {
+        "name": "payload",
+        "type": "",
+        "value": "Payload.Pair(3, 2.0)",
+        "expandable": true
+      },
+      {
         "name": "recordUnion",
         "type": "",
         "value": "Inner { label: \"main.Shape_Circle {radius: 9}\", count: 5 }",
@@ -83,6 +89,31 @@
     ]
   },
   {
+    "request": "evaluate payload",
+    "value": {
+      "type": "",
+      "value": "Payload.Pair(3, 2.0)",
+      "expandable": true
+    }
+  },
+  {
+    "request": "expand payload",
+    "variables": [
+      {
+        "name": "0",
+        "type": "",
+        "value": "3",
+        "expandable": false
+      },
+      {
+        "name": "1",
+        "type": "",
+        "value": "2.0",
+        "expandable": false
+      }
+    ]
+  },
+  {
     "request": "evaluate shape",
     "value": {
       "type": "",
@@ -113,7 +144,7 @@
     "request": "expand some",
     "variables": [
       {
-        "name": "value",
+        "name": "0",
         "type": "",
         "value": "3",
         "expandable": false
@@ -191,7 +222,7 @@
     "request": "expand nested.optional",
     "variables": [
       {
-        "name": "value",
+        "name": "0",
         "type": "",
         "value": "3",
         "expandable": false
@@ -243,7 +274,7 @@
     "request": "expand someFloat",
     "variables": [
       {
-        "name": "value",
+        "name": "0",
         "type": "",
         "value": "2.0",
         "expandable": false

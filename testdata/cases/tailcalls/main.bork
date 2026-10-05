@@ -76,7 +76,7 @@ fn findSeq(n: Int, key: Int) uses tailrec: Int {
 fn last[T](xs: List[T]) uses tailrec: Option[T] {
   match (xs) {
     [] => Option.None
-    [x] => Option.Some { value: x }
+    [x] => Option.Some(x)
     [_, ...rest] => last(rest)
   }
 }

@@ -3,5 +3,5 @@ user: User { name: "Ada", age: 36 }
 Hello, Bob! Hello, AdaAda!
 costs $9.5, or $19.0 for two
 plain  tab	here "quoted" å
-union: 7, option: Option.Some { value: 2.0 }, rune: x
+union: 7, option: Option.Some(2.0), rune: x
 not interpolated: $u ${u}

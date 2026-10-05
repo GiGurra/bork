@@ -1,1 +1,1 @@
-3 [ x ] Option.Some { value: 2 } STILL HERE
+3 [ x ] Option.Some(2) STILL HERE

@@ -35,12 +35,12 @@ fn targets(request: cli.CompletionRequest, s: Scope): cli.Suggestions | cli.Erro
 }
 fn main() {
  deploy = cli.SubcommandWith[Options]("deploy", "Deploy", (options, s) => { println(options) }, completions: [.{ field: "targets", suggest: targets }], flags: [
-  .{ field: "targets", position: Option.Some { value: 2 } }
-  .{ field: "count", position: Option.Some { value: 1 }, choices: [.{ value: "1" }, .{ value: "2" }] }
-  .{ field: "region", position: Option.Some { value: 0 }, env: "BORK_POSITIONAL_REGION", choices: [.{ value: "dev" }, .{ value: "prod" }] }
+  .{ field: "targets", position: Option.Some(2) }
+  .{ field: "count", position: Option.Some(1), choices: [.{ value: "1" }, .{ value: "2" }] }
+  .{ field: "region", position: Option.Some(0), env: "BORK_POSITIONAL_REGION", choices: [.{ value: "dev" }, .{ value: "prod" }] }
  ], configFiles: ["base.json"])
- numbers = cli.Subcommand[Numbers]("numbers", "JSON elements", (options, s) => { println(options) }, flags: [.{ field: "values", position: Option.Some { value: 1 } }, .{ field: "head", position: Option.Some { value: 0 } }])
- scalars = cli.Subcommand[Scalars]("scalars", "Two scalars", (options, s) => { println(options) }, flags: [.{ field: "first", position: Option.Some { value: 0 }, choices: [.{ value: "alpha" }] }, .{ field: "second", position: Option.Some { value: 1 }, choices: [.{ value: "beta" }] }])
+ numbers = cli.Subcommand[Numbers]("numbers", "JSON elements", (options, s) => { println(options) }, flags: [.{ field: "values", position: Option.Some(1) }, .{ field: "head", position: Option.Some(0) }])
+ scalars = cli.Subcommand[Scalars]("scalars", "Two scalars", (options, s) => { println(options) }, flags: [.{ field: "first", position: Option.Some(0), choices: [.{ value: "alpha" }] }, .{ field: "second", position: Option.Some(1), choices: [.{ value: "beta" }] }])
  match (cli.RunCommands("app", "", [deploy, numbers, scalars])) {
   error: cli.Error => { println(error); process.Exit(1) }
   Ok => {}
@@ -114,15 +114,15 @@ type Optional = { a: String = "default", b: String } derive (codec.Decode)
 type Lists = { a: List[String], b: List[String] } derive (codec.Decode)
 type Collision = { fooBar: String, fooBAR: String } derive (codec.Decode)
 fn main() {
- println(cli.Parse[Collision]("app", "", ["first", "second"], flags: [.{ field: "fooBar", position: Option.Some { value: 0 } }, .{ field: "fooBAR", position: Option.Some { value: 1 } }], configFiles: ["missing.json"]))
- println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: -1 } }]))
- println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: 1 } }]))
- println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: 0 } }, .{ field: "b", position: Option.Some { value: 0 } }]))
- println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", positional: true, position: Option.Some { value: 0 } }]))
- println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", positional: true }, .{ field: "b", position: Option.Some { value: 0 } }]))
- println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: 0 }, short: "a" }]))
- println(cli.Parse[Optional]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: 0 } }, .{ field: "b", position: Option.Some { value: 1 } }]))
- println(cli.Parse[Lists]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some { value: 0 } }, .{ field: "b", position: Option.Some { value: 1 } }]))
+ println(cli.Parse[Collision]("app", "", ["first", "second"], flags: [.{ field: "fooBar", position: Option.Some(0) }, .{ field: "fooBAR", position: Option.Some(1) }], configFiles: ["missing.json"]))
+ println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some(-1) }]))
+ println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some(1) }]))
+ println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some(0) }, .{ field: "b", position: Option.Some(0) }]))
+ println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", positional: true, position: Option.Some(0) }]))
+ println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", positional: true }, .{ field: "b", position: Option.Some(0) }]))
+ println(cli.Parse[Scalars]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some(0), short: "a" }]))
+ println(cli.Parse[Optional]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some(0) }, .{ field: "b", position: Option.Some(1) }]))
+ println(cli.Parse[Lists]("app", "", ["--help"], flags: [.{ field: "a", position: Option.Some(0) }, .{ field: "b", position: Option.Some(1) }]))
 }
 `
 	if err := os.WriteFile(filepath.Join(root, "main.bork"), []byte(source), 0o644); err != nil {

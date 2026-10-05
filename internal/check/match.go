@@ -712,7 +712,7 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 			return nil
 		}
 		inner := &Pat{Kind: PatVariant, Type: owner, Variant: v}
-		if !c.fieldPatterns(inner, p.Fields, v.Fields, owner.Name+"."+v.Name) {
+		if !c.variantPatterns(inner, p, v, owner.Name+"."+v.Name) {
 			return nil
 		}
 		return c.within(inner, owner, st, p.Pos)
@@ -727,7 +727,7 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 				c.errorf(p.Pos, "is patterns cannot bind names; %s must name a type", name)
 				return nil
 			}
-			if p.Braces {
+			if p.Braces || p.Positional {
 				c.unknownType(p.Pos, name)
 				return nil
 			}
@@ -742,6 +742,10 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 				c.errorf(p.Pos, "%s does not match a value of type %s", name, st)
 				return nil
 			}
+		}
+		if p.Positional {
+			c.errorf(p.Pos, "%s is a type, not a positional variant", name)
+			return nil
 		}
 		if !p.Braces {
 			return c.typePattern(t, st, p.Pos)
@@ -762,12 +766,19 @@ func (c *checker) namePattern(p *syntax.VariantPat, st Type) *Pat {
 	case 2:
 		owner, name := p.Path[0], p.Path[1]
 		c.noteSourceType(p.Pos, owner)
-		v := c.variantRef(p.Pos, owner, name, st)
+		var v *Variant
+		if p.Owner != nil {
+			if specialized, ok := c.resolveType(p.Owner).(*Sealed); ok {
+				v = c.specializedVariant(p.Pos, specialized, name)
+			}
+		} else {
+			v = c.variantRef(p.Pos, owner, name, st)
+		}
 		if v == nil {
 			return nil
 		}
 		inner := &Pat{Kind: PatVariant, Type: v.Parent, Variant: v}
-		if !c.fieldPatterns(inner, p.Fields, v.Fields, owner+"."+name) {
+		if !c.variantPatterns(inner, p, v, owner+"."+name) {
 			return nil
 		}
 		if !identical(v.Parent, st) {

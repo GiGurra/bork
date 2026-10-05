@@ -80,7 +80,7 @@ fn handles(s: Scope, directory: String) uses io + state + clock: Ok | IoError | 
   slow.Kill()
   println(slow.Wait()?.status)
   println(match (slow.TryWait()) {
-    Option.Some { value: _ } => true
+    Option.Some(_) => true
     Option.None => false
   })
   ready = fs.Join([directory, "ready"])
@@ -104,7 +104,7 @@ fn handles(s: Scope, directory: String) uses io + state + clock: Ok | IoError | 
 
 fn settle(s: Scope, child: process.Process) uses io + state + clock: process.Result | IoError | Cancelled {
   match (child.TryWait()) {
-    Option.Some { value } => value
+    Option.Some(value) => value
     Option.None => {
       delay(s, 10)?
       settle(s, child)

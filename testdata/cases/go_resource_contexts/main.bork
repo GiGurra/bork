@@ -25,7 +25,7 @@ fn Resources(s: Scope, shape: String) uses state: List[R] {
 }
 fn At(rs: List[R], index: Int): R {
   match (rs.get(index)) {
-    Option.Some { value: r } => r
+    Option.Some(r) => r
     Option.None => panic("missing")
   }
 }

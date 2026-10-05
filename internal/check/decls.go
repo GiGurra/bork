@@ -2,6 +2,7 @@ package check
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -161,11 +162,18 @@ func (c *checker) resolveDecl(e *typeEntry) Type {
 				continue
 			}
 			seen[vd.Name] = true
+			fields := vd.Fields
+			if vd.Positional {
+				for i, slot := range vd.Slots {
+					fields = append(fields, &syntax.FieldDecl{Pos: slot.Pos, Name: strconv.Itoa(i), Type: slot})
+				}
+			}
 			s.Variants = append(s.Variants, &Variant{
-				Name:   vd.Name,
-				Fields: c.resolveFields(vd.Fields, "variant "+td.Name+"."+vd.Name),
-				Parent: s,
-				Index:  i,
+				Name:       vd.Name,
+				Positional: vd.Positional,
+				Fields:     c.resolveFields(fields, "variant "+td.Name+"."+vd.Name),
+				Parent:     s,
+				Index:      i,
 			})
 		}
 		if len(s.Variants) == 0 {

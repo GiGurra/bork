@@ -1,7 +1,7 @@
 <go *example.com/bindtest.Payload> hello hello hello hello
 Envelope { payload: <go *example.com/bindtest.Payload> }
 hello
-<go *example.com/bindtest.Payload> GoValueError { path: "result", message: "nil" } GoError { message: "nil result without an error", goType: "" } Option.None Option.Some { value: <go *example.com/bindtest.Payload> } GoValueError { path: "result[1]", message: "nil" }
+<go *example.com/bindtest.Payload> GoValueError { path: "result", message: "nil" } GoError { message: "nil result without an error", goType: "" } Option.None Option.Some(<go *example.com/bindtest.Payload>) GoValueError { path: "result[1]", message: "nil" }
 <go fmt.Stringer> 1s
 stringer 1s
 Option.None <go time.Duration> 1.0 1000000000 1s

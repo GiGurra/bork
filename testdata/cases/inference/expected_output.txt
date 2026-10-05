@@ -1,8 +1,8 @@
 ["b"]
 ["a"]
 {"a": [1, 1], "b": [1]}
-Option.Some { value: "aba" }
-Option.Some { value: "b" }
+Option.Some("aba")
+Option.Some("b")
 3
 [1, 2, 3]
 [1, 2, 3]

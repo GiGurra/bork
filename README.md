@@ -93,7 +93,7 @@ fn findUser(id: Int): User | NotFound {
 
 fn describe(id: Int): String {
   match (findUser(id)) {
-    User { name, email: .Some { value } } => s"$name <$value>"
+    User { name, email: .Some(value) } => s"$name <$value>"
     User { name } => name
     NotFound { id: missing } => s"no user with id $missing"
   }

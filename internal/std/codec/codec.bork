@@ -103,7 +103,7 @@ instance decodeOption[T: Decode]: Decode[Option[T]] {
       Value.Null => Option.None
       other => {
         value = decode[T](other)?
-        Option.Some { value: value }
+        Option.Some(value)
       }
     }
   }
@@ -121,7 +121,7 @@ instance decodeList[T: Decode]: Decode[List[T]] {
 fn decodeItems [T: Decode](items: List[Value], index: Int, done: List[T]): List[T] | DecodeError {
   match (items.head()) {
     Option.None => done.reverse()
-    Option.Some { value: item } => match (decode[T](item)) {
+    Option.Some(item) => match (decode[T](item)) {
       e: DecodeError => atPath (e, s"[$index]")
       x: T => decodeItems (items.drop(1), index + 1, prepend(x, done))
     }
@@ -141,7 +141,7 @@ instance decodeMap[V: Decode]: Decode[Map[String, V]] {
 fn decodeFields [V: Decode](fields: List[Field], done: Map[String, V]): Map[String, V] | DecodeError {
   match (fields.head()) {
     Option.None => done
-    Option.Some { value: field } => match (decode[V](field.value)) {
+    Option.Some(field) => match (decode[V](field.value)) {
       e: DecodeError => atPath (e, s".${field.name}")
       x: V => decodeFields (fields.drop(1), fieldPut (done, field.name, x))
     }
@@ -176,7 +176,7 @@ instance encodeOption[T: Encode]: Encode[Option[T]] {
   fn encode(x: Option[T]): Value {
     match (x) {
       Option.None => Value.Null
-      Option.Some { value } => encode(value)
+      Option.Some(value) => encode(value)
     }
   }
 }
@@ -214,7 +214,7 @@ instance decodeRune: Decode[Rune] {
     match (json) {
       Value.String { value } => if ( validRuneString (value)) {
         match (value.runeAt(0)) {
-          Option.Some { value: r } => r
+          Option.Some(r) => r
           Option.None => DecodeError { path: "", message: "expected one Unicode scalar" }
         }
       } else { DecodeError { path: "", message: "expected one Unicode scalar" } }

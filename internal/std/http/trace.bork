@@ -35,7 +35,7 @@ fn TraceParentOf(headers: Headers): Option[TraceParent] | codec.DecodeError {
   raw = singletonHeader(headers, "traceparent")?
   match (raw) {
     Option.None => Option.None
-    Option.Some { value } => Option.Some { value: codec.decode[TraceParent](codec.Value.String { value: value })? }
+    Option.Some(value) => Option.Some(codec.decode[TraceParent](codec.Value.String { value: value })?)
   }
 }
 
@@ -43,9 +43,9 @@ fn TraceParentOf(headers: Headers): Option[TraceParent] | codec.DecodeError {
 // An absent or invalid parent leaves state None; state errors keep the parent.
 fn TraceStateOf(headers: Headers): Option[TraceState] | codec.DecodeError {
   match (TraceParentOf(headers)) {
-    Option.Some { value: _ } => match (combinedHeader(headers, "tracestate")?) {
+    Option.Some(_) => match (combinedHeader(headers, "tracestate")?) {
       Option.None => Option.None
-      Option.Some { value: raw } => Option.Some { value: codec.decode[TraceState](codec.Value.String { value: raw })? }
+      Option.Some(raw) => Option.Some(codec.decode[TraceState](codec.Value.String { value: raw })?)
     }
     _ => Option.None
   }

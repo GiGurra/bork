@@ -89,7 +89,7 @@ common. Files are opened by bork before the child starts; a failure is an
 `IoError` naming the path, and nothing is started.
 
 **Compatibility.** `stdin: Option[Bytes]` becomes `stdin: Input`. Existing call
-sites that passed `Option.Some { value: data }` change to
+sites that passed `Option.Some(data)` change to
 `.Data { data: data }`; the repo's callers migrate in the same PR. The old
 `Option.None` default is `.Empty`, unchanged. Positional arguments keep their
 order (`s, name, arguments, environment, directory, stdin`); the new

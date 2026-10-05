@@ -68,7 +68,7 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 			b.WriteString("_ = _obj\n")
 		}
 		b.WriteString("if !_isObj {\n" + g.decodeError(`""`, `"expected an object, found " + _jsonKind(json)`) + "}\n")
-		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t), decodeInvariant{t, append(append([]*check.Constraint{}, t.Constraints...), fn.Of.Constraints...)}))
+		b.WriteString(g.decodeFields(t.Fields, fn.Derived.FieldDicts[0], g.typeText(t), decodeInvariant{typ: t, constraints: append(append([]*check.Constraint{}, t.Constraints...), fn.Of.Constraints...)}))
 	case *check.Sealed:
 		b.WriteString("var _tag string\n")
 		fmt.Fprintf(&b, "if _s, _isStr := json.(%s); _isStr {\n_tag = _s.value\n} else if _isObj {\n", jsonVariant("String"))
@@ -82,7 +82,7 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 			fmt.Fprintf(&b, "case %q:\n", v.Name)
 			cons := append(append([]*check.Constraint{}, t.Constraints...), v.Constraints...)
 			cons = append(cons, fn.Of.Constraints...)
-			b.WriteString(g.decodeFields(v.Fields, fn.Derived.FieldDicts[i], g.text(g.variantType(v)), decodeInvariant{t, cons}))
+			b.WriteString(g.decodeFields(v.Fields, fn.Derived.FieldDicts[i], g.text(g.variantType(v)), decodeInvariant{typ: t, constraints: cons, positional: v.Positional}))
 		}
 		b.WriteString("}\n")
 		g.imports["strconv"] = true
@@ -94,6 +94,7 @@ func (g *gen) deriveDecode(fn *check.Func) string {
 // decodeFields decodes the fields of a record (or variant) from _obj,
 // and returns the value built from them.
 type decodeInvariant struct {
+	positional  bool
 	typ         check.Type
 	constraints []*check.Constraint
 }
@@ -101,15 +102,34 @@ type decodeInvariant struct {
 func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType string, invariants ...decodeInvariant) string {
 	var b strings.Builder
 	var inits []string
+	positional := len(invariants) > 0 && invariants[0].positional
+	if positional {
+		array := g.text(g.variantType(g.info.Named["Json"].(*check.Sealed).Variant("Array")))
+		b.WriteString("if !_isObj {\n" + g.decodeError(`".values"`, `"expected an array of payload values"`) + "}\n")
+		b.WriteString("_values, _present := _jsonField(_obj, \"values\")\n")
+		fmt.Fprintf(&b, "_array, _isArray := _values.(%s)\n", array)
+		b.WriteString("if !_present || !_isArray {\n" + g.decodeError(`".values"`, `"expected an array of payload values"`) + "}\n")
+		fmt.Fprintf(&b, "if len(_array.items) != %d {\n%s}\n", len(fields), g.decodeError(`".values"`, strconv.Quote(fmt.Sprintf("expected an array of length %d", len(fields)))))
+	}
+	fieldPath := func(f *check.Field) string {
+		if positional {
+			return ".values[" + f.Name + "]"
+		}
+		return "." + f.Name
+	}
 	for i, f := range fields {
 		if f.Computed {
 			fmt.Fprintf(&b, "if _, present := _jsonField(_obj, %q); present {\n%s}\n", f.Name, g.decodeError(strconv.Quote("."+f.Name), strconv.Quote("computed field is read-only")))
 			continue
 		}
 		v := fmt.Sprintf("_f%d", i)
-		path := strconv.Quote("." + f.Name)
+		path := strconv.Quote(fieldPath(f))
 		fmt.Fprintf(&b, "var %s %s\n{\n", v, g.typeText(f.Type))
-		fmt.Fprintf(&b, "_v, _present := _jsonField(_obj, %q)\n", f.Name)
+		if positional {
+			fmt.Fprintf(&b, "_v, _present := _array.items[%d], true\n", i)
+		} else {
+			fmt.Fprintf(&b, "_v, _present := _jsonField(_obj, %q)\n", f.Name)
+		}
 		if f.Default != nil {
 			fmt.Fprintf(&b, "if !_present { %s = %s } else {\n", v, g.fieldDefault(f))
 		} else if !check.IsOption(f.Type) {
@@ -151,7 +171,7 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 				if phases == 2 && (phase == 0) != early {
 					continue
 				}
-				stmts := g.atFailurePath(g.fieldRead(ast.NewIdent("_out"), f), f.Type, splitPath(con.Path), stringLit("."+f.Name), func(x ast.Expr, t check.Type, path ast.Expr) []ast.Stmt {
+				stmts := g.atFailurePath(g.fieldRead(ast.NewIdent("_out"), f), f.Type, splitPath(con.Path), stringLit(fieldPath(f)), func(x ast.Expr, t check.Type, path ast.Expr) []ast.Stmt {
 					runtime := fieldConstraint(con, func(n string) string {
 						for _, sibling := range fields {
 							if sibling.Name == n {
@@ -224,7 +244,18 @@ func (g *gen) deriveEncode(fn *check.Func) string {
 			if len(v.Fields) == 0 {
 				b.WriteString("_ = _v\n")
 			}
-			b.WriteString(fields("_v", v.Fields, fn.Derived.FieldDicts[i], v.Name))
+			if v.Positional {
+				var values []string
+				for slot, f := range v.Fields {
+					fun, ds := g.dictMethod(fn.Derived.FieldDicts[i][slot], "encode")
+					values = append(values, g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent("_v"), f))}))
+				}
+				json := g.info.Named["Json"].(*check.Sealed)
+				array := g.text(g.variantType(json.Variant("Array")))
+				fmt.Fprintf(&b, "return %s{fields: []%s{{name: \"type\", value: %s{value: %q}}, {name: \"values\", value: %s{items: []%s{%s}}}}}\n", obj, field, str, v.Name, array, g.typeText(json), strings.Join(values, ", "))
+			} else {
+				b.WriteString(fields("_v", v.Fields, fn.Derived.FieldDicts[i], v.Name))
+			}
 		}
 		b.WriteString("}\npanic(\"bork: unreachable\")\n")
 	}

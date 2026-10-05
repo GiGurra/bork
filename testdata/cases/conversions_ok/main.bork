@@ -23,7 +23,7 @@ fn main() {
   println(c, toFloat(3) / 2)
   // ? keeps the converted value.
   println(checkedSum(100, 27), checkedSum(100, 28))
-  println(toString(1.5) + "!", toString(true), toString(Option.Some { value: 1 }))
+  println(toString(1.5) + "!", toString(true), toString(Option.Some(1)))
 }
 
 fn checkedSum(a: Int, b: Int): Int8 | OutOfRange {

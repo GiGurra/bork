@@ -38,13 +38,13 @@ fn main() {
       _ = finish.receive(app)
       _ = update(active, n => n - 1)
       http.Text(200, "finished")
-      }, admission: .Some { value: http.Admission { maxInFlight: 2, maxQueued: 2, queueTimeoutMs: 60000, retryAfterMs: 0 } })
+      }, admission: .Some(http.Admission { maxInFlight: 2, maxQueued: 2, queueTimeoutMs: 60000, retryAfterMs: 0 }))
     match (listener) {
       server: http.Server => {
         url = "http://" + http.Address(server) + "/work"
         pool = tasks.Open(app, maxTasks: 6)
         budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 60000,
-          clock: .Some { value: time.FixedClock(.{ unixNanos: 0 }) })
+          clock: .Some(time.FixedClock(.{ unixNanos: 0 })))
         callers = range(0, 6).map(i => task(tasks.TrySpawn(pool, app, () => {
           value = response(http.Retry(app, budget, operation: attempt => {
             _ = update(calls, n => n + 1)
@@ -62,7 +62,7 @@ fn main() {
         _ = started.receive(app)
         println("shed", first, second)
         match (http.AdmissionState(server)) {
-          Option.Some { value } => println("bounded downstream", value.inFlight, "active", value.queued, "queued")
+          Option.Some(value) => println("bounded downstream", value.inFlight, "active", value.queued, "queued")
           Option.None => panic("admission not enabled")
         }
         range(0, 4).forEach(i => { _ = finish.send(app, true) })

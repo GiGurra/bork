@@ -10,7 +10,7 @@ true
 true
 DecodeError { path: "", message: "expected a UUID string" }
 DecodeError { path: ".id", message: "invalid UUID length: 3" }
-Option.Some { value: "value" }
+Option.Some("value")
 00000000-0000-0000-0000-000000000000
 true
 true

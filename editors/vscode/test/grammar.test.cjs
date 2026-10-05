@@ -233,3 +233,9 @@ test('is is contextual between a value and a pattern', () => {
  has(ls,1,'is','keyword.control.bork');
  for (const line of [2,3,4]) assert.ok(!scopes(ls,line,'is').includes('keyword.control.bork'));
 });
+
+
+test('positional variant payloads and specialized owner patterns', () => {
+  const ls = tokenize('type Reply[T] = sealed { Found(T, String), Missing }\nmatch (x) { .Found(value, _) => value, Reply[Int].Missing => 0 }\nresult = Option[Int].Some(3)');
+  for (const [row, word] of [[0,'Reply'],[0,'Found'],[0,'String'],[1,'Found'],[1,'Reply'],[1,'Int'],[1,'Missing'],[2,'Option'],[2,'Int'],[2,'Some']]) has(ls,row,word,'entity.name.type.bork');
+});

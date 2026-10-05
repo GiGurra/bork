@@ -16,7 +16,7 @@ fn main() {
     shop.Item { name: "cake", price: money.Amount { cents: 425 } },
   ]
   match (shop.Total(items)) {
-    Option.Some { value: total } => {
+    Option.Some(total) => {
       println(money.Format(total, money.Currency.Eur))
       println(money.Format(total, money.Currency.Other { code: "NOK" }))
     }

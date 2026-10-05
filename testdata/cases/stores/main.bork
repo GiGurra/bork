@@ -57,11 +57,11 @@ fn main() uses io + state {
     // An atom lives as long as its first value: one of app keeps
     // values of app.
     kept = connect("kept", app)
-    latest = atom(Option.Some { value: kept })
+    latest = atom(Option.Some(kept))
     newer = connect("newer", app)
-    _ = update(latest, old => Option.Some { value: newer })
+    _ = update(latest, old => Option.Some(newer))
     match (current(latest)) {
-      Option.Some { value } => println(s"atom holds ${nameOf(value)}")
+      Option.Some(value) => println(s"atom holds ${nameOf(value)}")
       Option.None => println("empty")
     }
     // A channel of channels of the same scope.

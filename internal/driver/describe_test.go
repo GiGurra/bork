@@ -523,7 +523,7 @@ fn main() {
   config: Config = .{ port: 80 }
   state: State = .Ready
   value: State = .Value { value: 1 }
-  option: Option[Int] = .Some { value: 2 }
+  option: Option[Int] = .Some(2)
   println(config); println(state); println(value); println(option)
 }
 `
@@ -646,7 +646,7 @@ func TestDescribeSpecializedDefaults(t *testing.T) {
 	t.Parallel()
 	source := `pred positive(x: Int) { x > 0 }
 fn take(x: Option[(Int) uses io => Int] = Option[(Int) uses io => Int].None,
- y: Option[Int] = Option[Int where positive].Some { value: 1 }, z: Option[Seq[Int] uses io] = Option[Seq[Int] uses io].None) uses io { println(x); println(y); println(z) }
+ y: Option[Int] = Option[Int where positive].Some(1), z: Option[Seq[Int] uses io] = Option[Seq[Int] uses io].None) uses io { println(x); println(y); println(z) }
 fn main() { take() }
 `
 	path := filepath.Join(t.TempDir(), "main.bork")
@@ -660,7 +660,7 @@ fn main() { take() }
 	if result.Callable == nil || len(result.Callable.Parameters) != 3 {
 		t.Fatalf("missing callable: %+v", result)
 	}
-	for i, want := range []string{"Option[(Int) uses io => Int].None", "Option[Int where positive].Some { value: 1 }", "Option[Seq[Int] uses io].None"} {
+	for i, want := range []string{"Option[(Int) uses io => Int].None", "Option[Int where positive].Some(1)", "Option[Seq[Int] uses io].None"} {
 		if got := result.Callable.Parameters[i].Default; got != want {
 			t.Fatalf("default %d: got %q, want %q", i, got, want)
 		}

@@ -8,9 +8,9 @@ names or `T?` syntax.
 ## Context patterns
 
 A match arm may omit a sealed variant's owner: `.None` or
-`.Some { value: x }`. Explicit `Option.None` and named-field patterns remain
+`.Some(x)`. Explicit `Option.None` and named-field patterns remain
 valid. A nested pattern receives the matched field or element's type as its
-context, so `.Some { value: .Ready }` resolves each variant independently.
+context, so `.Some(.Ready)` resolves each variant independently.
 
 Use the context-literal uniqueness rules on the scrutinee's checked type:
 resolve aliases and select exactly one nominal sealed candidate declaring the
@@ -42,7 +42,11 @@ positional payload, not a named-field literal or an arbitrary function call.
 Arity must match exactly. Context constructors use the existing expected-type
 selection; explicit constructors retain generic inference. Check each argument
 against its instantiated payload type, preserving constraints and effects.
-Nested patterns receive the corresponding instantiated type. Named variants
+Nested patterns receive the corresponding instantiated type. Explicit owner heads
+work for constructors and patterns: `Option[Int].Some(x)` and
+`Option[Int].None`. Type arguments belong on the owner, never on `None[T]`.
+When an expected type is missing, a quick fix adds owner arguments, using `_`
+placeholders for arguments the compiler cannot determine. Named variants
 retain braces; a positional variant rejects braces and a named variant rejects
 parentheses. A bare positional variant pattern may ignore its payload, following
 the existing bare named-variant pattern rule.
@@ -100,5 +104,5 @@ Add positive and failing driver cases for unique/ambiguous/private/unknown
 context variants, nested patterns, generic aliases/unions, payload arity and
 form errors, constraints, exhaustiveness, evaluation order, codecs and legacy
 Option fixes. Run focused package and golden tests locally, inspect every
-golden diff, run lint and formatting checks, and let CI run the full suite.
+golden diff, run lint and formatting checks, and run full local CI only with the lead's exclusive validation token.
 Obtain a fresh cold review for each PR and rebase before reporting it ready.

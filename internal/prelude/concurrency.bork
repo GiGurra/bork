@@ -196,7 +196,7 @@ fn (ch: Channel[T]) tryReceive[T]() uses state: Option[T] | Closed unsafe go {
     return Option_None[T]{}
   }
   x, _ := value.(T)
-  return Option_Some[T]{value: x}
+  return Option_Some[T]{E0: x}
 }
 
 // close closes the channel: sends give Closed, and receives give the
@@ -213,7 +213,7 @@ fn (ch: Channel[T]) length[T]() uses state: Int unsafe go {
 // capacity is how many values the channel buffers: None when unbounded.
 fn (ch: Channel[T]) capacity[T](): Option[Int] unsafe go {
   if limit := ch.native.handle.(*_borkChan).limit; limit >= 0 {
-    return Option_Some[int64]{value: int64(limit)}
+    return Option_Some[int64]{E0: int64(limit)}
   }
   return Option_None[int64]{}
 }

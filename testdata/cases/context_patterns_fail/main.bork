@@ -8,4 +8,4 @@ fn wrong(x: Int): Int { match (x) { .Ready => 1, _ => 0 } }
 fn unresolved[T](x: A | T): Int { match (x) { .Ready => 1, _ => 0 } }
 fn main() {}
 
-fn specializations(x: Option[Int] | Option[String]): Int { match (x) { .Some { value: _ } => 1, _ => 0 } }
+fn specializations(x: Option[Int] | Option[String]): Int { match (x) { .Some(_) => 1, _ => 0 } }

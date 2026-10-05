@@ -27,7 +27,7 @@ fn main() {
 [30, 40, 50, 90]
 23
 [1, 3, 4, 5, 9]
-Option.Some { value: 3 } Option.None
+Option.Some(3) Option.None
 [3, 1, 4]
 [0, 1, 2, 3, 4]
 ```
@@ -126,7 +126,7 @@ fn main() {
 ```text
 {"apple": 3, "pear": 0}
 {"apple": 3, "fig": 12}
-Option.Some { value: 12 } Option.None 0
+Option.Some(12) Option.None 0
 ["apple", "fig"] true 2
 true
 ```

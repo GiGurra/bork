@@ -31,7 +31,7 @@ fn handle(raw: Int, name: Option[String]): Receipt | HandleError = {
   // raw: Int where positive
 
   match (name) {
-    Option.Some { value: n } => greet(n)     // n: String
+    Option.Some(n) => greet(n)     // n: String
     Option.None              => greetAnon()
   }
 
@@ -257,7 +257,7 @@ r: SignUp | JsonError | DecodeError = json.Decode(line)   // DecodeError { path:
 - **Comparison guards unfold simple predicates:** `if (n > 0)` proves `positive(n)` when its body is `n > 0`; conjunctions, disjunctions, positive predicate calls, and negated comparisons are supported. Integer and String order negation reverses the comparison; Float negation retains its polarity for NaN safety. Facts remain local to the branch, and matching stable fields or aliases is allowed. Relational rules bind subjects mentioned only in premises and try premises in either order; transitivity and symmetry remain user-written rules.
 - **Derived results:** a function that declares no promise still passes on what its body proves. With `fn clamp(x: Int): Int { if (positive(x)) { x } else { 1 } }`, `retry(clamp(n))` proves `positive`: every path of the body is checked against the obligation. A path returning a parameter is checked at the call site, for the argument. Helpers chain, in any declaration order. A declared promise is still the way to make a fact part of the contract (and is verified).
 - **Implicit failure returns keep result promises.** Union `?` failures and `Option.None` returned by `?` must satisfy the enclosing function's result predicates, just like an explicit return. This also applies inside call arguments and blocks, and when deriving facts from an unannotated function's body. A predicate on the entire result union is checked for each returned member or smaller union; narrowing preserves already-proven facts about the same value.
-- **Facts inside type arguments:** `List[Int where positive]` constrains every element, `Option[String where nonEmpty]` the value if there is one. A fact written where it would not be checked (on Map keys or values, a member of a union that is not a result, a function type, a rule variable, a lambda parameter, a constrained bare/destructuring pattern or nested pattern type argument, a constructor name using a constrained alias, or a type argument held inside another type) is a compile error, never silently dropped. A list literal is checked element by element (`[1, 0]` fails with "positive(0) is false"), `Option.None` needs nothing, and a name bound by `Option.Some { value: v }` has the facts of the value. Rules apply to elements too. Bound type patterns (`n: Int where positive`, or `n: PosInt`) check the erased type first, then evaluate the predicates at runtime. The subject is evaluated once; arms and short-circuiting `and`/`or` clauses follow source order, and predicate panics propagate. Successful predicates establish arm-local facts, including for constrained calls and results; their own requirements must be proven before they run. Guarded arms never count toward exhaustiveness or make later arms unreachable, so an unguarded fallback is required. Earlier unguarded arms can make guarded arms unreachable. Only direct whole-value constraints are supported; constrained bare type names, constrained destructuring, and nested type-argument constraints remain compile errors. Generic and imported predicates use ordinary call checking; function-valued predicate parameters must declare `uses nothing`. To construct a constrained alias, use its base constructor in an annotated binding (`p: PosPoint = Point { x: 1 }`); the binding checks the predicate.
+- **Facts inside type arguments:** `List[Int where positive]` constrains every element, `Option[String where nonEmpty]` the value if there is one. A fact written where it would not be checked (on Map keys or values, a member of a union that is not a result, a function type, a rule variable, a lambda parameter, a constrained bare/destructuring pattern or nested pattern type argument, a constructor name using a constrained alias, or a type argument held inside another type) is a compile error, never silently dropped. A list literal is checked element by element (`[1, 0]` fails with "positive(0) is false"), `Option.None` needs nothing, and a name bound by `Option.Some(v)` has the facts of the value. Rules apply to elements too. Bound type patterns (`n: Int where positive`, or `n: PosInt`) check the erased type first, then evaluate the predicates at runtime. The subject is evaluated once; arms and short-circuiting `and`/`or` clauses follow source order, and predicate panics propagate. Successful predicates establish arm-local facts, including for constrained calls and results; their own requirements must be proven before they run. Guarded arms never count toward exhaustiveness or make later arms unreachable, so an unguarded fallback is required. Earlier unguarded arms can make guarded arms unreachable. Only direct whole-value constraints are supported; constrained bare type names, constrained destructuring, and nested type-argument constraints remain compile errors. Generic and imported predicates use ordinary call checking; function-valued predicate parameters must declare `uses nothing`. To construct a constrained alias, use its base constructor in an annotated binding (`p: PosPoint = Point { x: 1 }`); the binding checks the predicate.
 - **Predicate parameters:** a function parameter can be the predicate: `fn (xs: List[T]) filter[T](keep: (T) => Bool): List[T where keep]`. What the argument checks is then known: `xs.filter(positive)` is a `List[Int where positive]`, and `xs.filter(x => positive(x) && small(x))` has both facts. `find` refines its `Option` the same way.
 - **Facts flow through generic functions.** A generic function cannot make values of its type parameters, so the ones in its result come from its arguments: what holds for all of those holds for them. `positives.head()` holds a positive number, and so do `reverse`, `take`, `positives.concat([5])`, and so on; a lambda's parameter gets the facts of the values the function can hand it (`positives.map(p => transfer(p))`). This holds for `unsafe go` generic functions by trust, like their signatures.
 - **Test mode checks what is trusted.** `bork test` runs the tests with runtime checks of `trust` statements and of what `unsafe go` functions promise (through list elements, Option values, and fields), so trusted facts that drift from the truth are caught by tests: "validate promised a result that is positive, but returned 0".
@@ -1584,7 +1584,7 @@ names.forEach(n => println(n))                              // this call uses io
 
 - **Inside the body, an open parameter can be called freely.** Its effects belong to the caller.
 - **Inside the body, an open parameter's effects are unknown**: one effect variable, `open`, standing for whatever the caller passes. The implementation models it that way. A lambda that calls an open parameter has `open` among its effects, like the parameter itself.
-- **What has `open` among its effects can only flow to another open position:** an open parameter of a call, or the open result of its own signature. `open` fits in no fixed set of effects, so such a value cannot be stored in, or passed as, a function type with fixed effects, pure or not (a `run: () uses io => Ok` field could then hold a function that uses `net`). Nor can it escape through a generic result or an untyped element: `[f]`, `Option.Some { value: f }`, `identity(f)`, `() => f()` in a record field. To store a function, close the parameter: `fn job(name: String, f: () uses io => Ok): Job`.
+- **What has `open` among its effects can only flow to another open position:** an open parameter of a call, or the open result of its own signature. `open` fits in no fixed set of effects, so such a value cannot be stored in, or passed as, a function type with fixed effects, pure or not (a `run: () uses io => Ok` field could then hold a function that uses `net`). Nor can it escape through a generic result or an untyped element: `[f]`, `Option.Some(f)`, `identity(f)`, `() => f()` in a record field. To store a function, close the parameter: `fn job(name: String, f: () uses io => Ok): Job`.
 - **An open parameter can be returned.** A function type without `uses` in the *result* of the same signature is open too: `fn compose[A, B, C](f: (A) => B, g: (B) => C): (A) => C` gives a function that uses what `f` and `g` use. A value returned in an open result may use `open` and nothing else, so `fn wrap(f: () => Ok): () => Ok { () => { println("x"); f() } }` is an error: there is no way to write "io plus what f uses". (Write `wrap(f: () uses io => Ok): () uses io => Ok` instead.)
 - **A call is charged the effects of its open arguments, unless the function's result is open.** Then they are carried in the result's type instead: `compose(a, b)` is pure, and the function it gives uses what `a` and `b` use, as a hand-written `handler` closure does. In exchange, a function with an open result may not call its open parameters itself, only return them in its result (or pass them to calls whose results it returns). This keeps the rule a matter of signatures, not of what a body does.
 - **Which positions are open:** a parameter (receivers included) or result whose type is a function type written without `uses`, also through a type alias (`handler: Handler`, with `type Handler = (Request, Scope) => Response`). A direct `List[() => Ok]` parameter also opens its element callback and charges all its callbacks at the call; an explicit `uses nothing` keeps the elements pure. List results, nested lists, and list aliases stay closed. Nothing else: not a union such as `((A) => B) | None`, and not the parameters or results inside a function type (`(A) => (B) => C` has an open result `(B) => C` only at the top). So a middleware type such as `((Request) => Response) => (Request) => Response` takes pure handlers only, and one that wraps effectful handlers names their effects.
@@ -1995,7 +1995,7 @@ not carry the parameters' facts.
   alone), and `m.expect()` (at least once) declare how many calls the mock
   must answer; `times: 0` means never. The bounds are `Option[Int]` with
   `.None` defaults; a supplied nonnegative integer promotes to Some, and
-  explicit `.Some { value: n }` also works. Every supplied negative integer,
+  explicit `.Some(n)` also works. Every supplied negative integer,
   including -1, fails the test. `m.expectWhere(c => c.url == "a",
   times: 1)` counts only the calls whose record matches; the matcher is pure
   (`(A) uses nothing => Bool`), so it can run when the check does. They are
@@ -2983,7 +2983,7 @@ without changing name lookup. Choose `.{ ... }`, `.Variant`, and
   constructs a record; `.Variant` constructs a fieldless sealed variant, and
   `.Variant { field: expression }` constructs a variant with fields. Fields
   retain defaults, ordering and diagnostics of explicit literals.
-  Option uses `.Some { value: x }` and `.None`; `.Some(x)` is rejected with a
+  Option uses `.Some(x)` and `.None`; `.Some(x)` is rejected with a
   suggested rewrite to the named field form. It does not introduce positional
   constructors for arbitrary variants. Context variant shorthand also applies to
   match patterns, with the scrutinee
@@ -3112,7 +3112,7 @@ arguments. This also makes context-literal ambiguity edits complete.
 
 ```bork
 ints = Box[Int] { values: [] }
-some = Option[String].Some { value: "trace" }
+some = Option[String].Some("trace")
 none = Option[String].None
 imported = settings.Box[String] { value: "value" }
 ```
@@ -3178,8 +3178,8 @@ must remain compatible.
 ### Expected-type Option promotion
 
 A known optional value position accepts its ordinary value directly. The compiler
-builds `Some { value: ... }`, so config overrides can read
-`settings.New(host: "localhost", debug: "requests")`. Explicit `.Some { value: x }`
+builds `Some(...)`, so config overrides can read
+`settings.New(host: "localhost", debug: "requests")`. Explicit `.Some(x)`
 and `.None` remain valid and useful when the wrapper supplies inference context.
 
 - **Promotion needs a known target.** The expected type must be exactly the

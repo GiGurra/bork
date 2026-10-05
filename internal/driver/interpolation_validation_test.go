@@ -96,10 +96,10 @@ func TestInterpolationValidatorCompletedComptimeDependency(t *testing.T) {
 func TestInterpolationValidatorLimitsAndDiagnostics(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, body, want string }{
-		{"bad index", `[InterpolationIssue{hole:Option.Some{value:3},message:"bad"}]`, "returned invalid hole index 3"},
+		{"bad index", `[InterpolationIssue{hole:Option.Some(3),message:"bad"}]`, "returned invalid hole index 3"},
 		{"panic", `panic("validator panic")`, "validator panic"},
 		{"timeout", `spin();[]`, "evaluation exceeded 150ms"},
-		{"message", `[InterpolationIssue{hole:Option.Some{value:0},message:"custom boundary"}]`, "custom boundary (validator example.com/validator.validation)"},
+		{"message", `[InterpolationIssue{hole:Option.Some(0),message:"custom boundary"}]`, "custom boundary (validator example.com/validator.validation)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			source := validatorBuilder + `fn spin() unsafe go{for{}}

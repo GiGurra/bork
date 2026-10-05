@@ -202,7 +202,7 @@ A union can be given a name: `type Lookup = String | NotFound`.
 
 ## Option
 
-`Option[T]` is a value that may be missing. It is an ordinary sealed type with the variants `Some { value }` and `None`. There is no null.
+`Option[T]` is a value that may be missing. It is an ordinary sealed type with the variants `Some(T)` and `None`. There is no null.
 
 ```bork
 type User = { name: String, nickname: Option[String] }
@@ -224,7 +224,7 @@ fn main() {
 ```text
 The Countess Tim
 Option.None
-Option.Some { value: 21 }
+Option.Some(21)
 ```
 
 Where an `Option[String]` is expected, a plain `String` is accepted and becomes `Some`. Option methods are `map`, `flatMap`, `getOr`, `isSome`, and `isNone`.

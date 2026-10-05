@@ -3,11 +3,11 @@
 {"a": 3, "b": 2}
 {"user": "ada", "age": 36, "admin": false}
 {Point { x: 1, y: 2 }: "a", Point { x: 0, y: 0 }: "origin"}
-Option.Some { value: "a" }
+Option.Some("a")
 true
 false
 2
-Option.Some { value: 36 }
+Option.Some(36)
 Option.None
 0
 {"ada": 37, "bob": 41, "cy": 29}

@@ -16,7 +16,7 @@ fn main() {
   println(xs)
   r: Option[Int] = match (1) { 1 => 10, _ => .None }
   println(r)
-  nested: Option[Option[Int]] = .Some { value: 11 }
+  nested: Option[Option[Int]] = .Some(11)
   println(nested)
   w: Option[List[Int]] = []
   println(w)

@@ -81,6 +81,13 @@ func (c *checker) missingMatchPattern(w *witness) string {
 		name = qualify(h.record.Name, owner, c.pkg)
 		fields = h.record.Fields
 	}
+	if h.variant != nil && h.variant.Positional {
+		var slots []string
+		for range fields {
+			slots = append(slots, "_")
+		}
+		return name + "(" + strings.Join(slots, ", ") + ")"
+	}
 	var labels []string
 	for _, f := range fields {
 		if owner == nil || owner == c.pkg || Exported(f.Name) {

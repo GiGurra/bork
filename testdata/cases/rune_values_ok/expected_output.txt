@@ -1,6 +1,6 @@
 ÿ å 😀
-界 30028 97 Option.Some { value: a } 界 界
-[界, a] Box { value: 界 } Option.Some { value: 界 }
+界 30028 97 Option.Some(a) 界 界
+[界, a] Box { value: 界 } Option.Some(界)
 界 Box { value: 界 }
 [a, z, 界]
 true Option.None true Option.None Option.None true true Option.None
@@ -10,7 +10,7 @@ DecodeError { path: "", message: "expected one Unicode scalar" } DecodeError { p
 Å 197
 a GoValueError { path: "result", message: "invalid Unicode scalar" } GoValueError { path: "result", message: "invalid Unicode scalar" } GoValueError { path: "result", message: "invalid Unicode scalar" }
 [a, 界] GoValueError { path: "result[1]", message: "invalid Unicode scalar" }
-Option.Some { value: 界 }
+Option.Some(界)
 Glyph { character: å } Glyph { character: a } GoValueError { path: "result.character", message: "invalid Unicode scalar" }
 界 [界, a]
 界 Box { value: å }

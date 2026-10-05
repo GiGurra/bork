@@ -1,5 +1,5 @@
 ["B", "A", "B", "C"]
 {"b": 2, "a": 1, "c": 1}
 {"a": 1, "b": 1, "c": 1}
-Option.Some { value: 3 }
+Option.Some(3)
 {:}

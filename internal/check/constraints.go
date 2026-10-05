@@ -100,7 +100,13 @@ func (c *checker) resolveConstraints(files []*syntax.File) {
 			c.pkg, c.inPrelude = t.Pkg, t.Prelude
 			t.Constraints = c.typeConstraints(t.Decl.Where, t)
 			for _, v := range t.Variants {
-				c.fieldConstraints(v.Fields, t.Decl.Variants[v.Index].Fields)
+				decls := t.Decl.Variants[v.Index].Fields
+				if v.Positional {
+					for _, field := range v.Fields {
+						decls = append(decls, field.Decl)
+					}
+				}
+				c.fieldConstraints(v.Fields, decls)
 				v.Constraints = c.typeConstraints(t.Decl.Variants[v.Index].Where, t)
 			}
 		}

@@ -95,7 +95,7 @@ fn main() {
   // Call type arguments: facts on their parts, or kept only inside the
   // result.
   println(id[List[Int where positive]]([1]))
-  println(id[Option[PosInt]](Option.Some { value: 1 }))
+  println(id[Option[PosInt]](Option.Some(1)))
   println(listOf[PosInt](1))
   a = atom[PosInt](1)
   println([1].map[PosInt]((x: Int) => x))

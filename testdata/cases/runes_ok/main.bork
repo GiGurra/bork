@@ -1,7 +1,7 @@
 // Counts the digits in s, from rune index i on.
 fn countDigits(s: String, i: Int): Int {
   match (s.runeAt(i)) {
-    Option.Some { value: r } => if (r.isDigit()) { 1 + countDigits(s, i + 1) } else { countDigits(s, i + 1) }
+    Option.Some(r) => if (r.isDigit()) { 1 + countDigits(s, i + 1) } else { countDigits(s, i + 1) }
     Option.None => 0
   }
 }

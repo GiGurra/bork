@@ -10,10 +10,10 @@ fn main() {
   println(words.fold({:}, (m, w) => m.put(w, m.getOr(w, []).append(1))))
   // An operator decides its unknown operand from the other one.
   println(words.fold(Option.None, (best, w) => match (best) {
-    Option.Some { value } => Option.Some { value: value + w }
-    Option.None => Option.Some { value: w }
+    Option.Some(value) => Option.Some(value + w)
+    Option.None => Option.Some(w)
   }))
-  println(words.fold(Option.None, (b, w) => if (w == "b") { Option.Some { value: w } } else { b }))
+  println(words.fold(Option.None, (b, w) => if (w == "b") { Option.Some(w) } else { b }))
   println(words.fold([], (acc, w) => [w].concat(acc)).length())
   laterChecks()
 }
@@ -42,6 +42,6 @@ fn laterChecks() uses io {
   println(xs.fold(Tree.Leaf, (t, x) => Tree.Node { v: x, l: t }))
   println(xs.fold([], (acc, x) => Box { v: x, rest: acc }.rest.append(x)))
   ws = ["a", "b", "b"]
-  println(ws.fold([], (acc, w) => if (acc.last() == Option.Some { value: w }) { acc } else { acc.append(w) }))
+  println(ws.fold([], (acc, w) => if (acc.last() == Option.Some(w)) { acc } else { acc.append(w) }))
   println(ws.fold([], (acc, w) => if (acc == ["a"]) { acc } else { acc.append(w) }))
 }

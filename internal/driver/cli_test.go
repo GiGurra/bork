@@ -164,14 +164,14 @@ func TestCLIConfigSelectors(t *testing.T) {
 
 import "bork/cli"
 use codec.Defaults
-pred selected(value: Option[String]) { match (value) { Option.Some { value: _ } => true, Option.None => false } }
+pred selected(value: Option[String]) { match (value) { Option.Some(_) => true, Option.None => false } }
 type Constrained = { config: Option[String] where selected, name: String } derive (codec.Decode)
 type Defaults = { config: String = "chosen.json", name: String } derive (codec.Decode)
-type OptionalDefaults = { config: Option[String] = Option.Some { value: "chosen.json" }, name: String } derive (codec.Decode)
+type OptionalDefaults = { config: Option[String] = Option.Some("chosen.json"), name: String } derive (codec.Decode)
 type Bad = { config: Int = 0, other: String = "" } derive (codec.Decode)
 type RuneSelector = { config: Rune = 'a' } derive (codec.Decode)
-type OptionalRuneSelector = { config: Option[Rune] = Option.Some { value: 'a' } } derive (codec.Decode)
-type NestedOption = { config: Option[Option[String]] = Option.Some { value: Option.Some { value: "chosen.json" } }, name: String = "" } derive (codec.Decode)
+type OptionalRuneSelector = { config: Option[Rune] = Option.Some('a') } derive (codec.Decode)
+type NestedOption = { config: Option[Option[String]] = Option.Some(Option.Some("chosen.json")), name: String = "" } derive (codec.Decode)
 fn main() uses io {
  println(cli.Parse[RuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[OptionalRuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))

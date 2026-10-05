@@ -13,7 +13,7 @@ fn main() {
   // Methods are found by a type known at that point.
   println(words.fold([], (acc, w) => if (w == "a") {
     d = match (acc.last()) {
-      Option.Some { value } => value.toUpper()
+      Option.Some(value) => value.toUpper()
       Option.None => ""
     }
     acc

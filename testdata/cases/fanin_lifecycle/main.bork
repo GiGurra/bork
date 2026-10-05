@@ -22,7 +22,7 @@ test "race cancels and joins losers without cancelling the parent" {
       child => loser(child, started, finished),
     ])
     match (result) {
-      Option.Some { value } => assertEqual(value, 7)
+      Option.Some(value) => assertEqual(value, 7)
       _ => panic("expected a race winner")
     }
     assertEqual(current(finished), true)
@@ -38,7 +38,7 @@ test "awaitFirst leaves losing tasks in their owner scope" {
     // Both tasks have the same result type for this wait.
     immediate = spawn(s, () => { value: Int | Cancelled | Closed = await(ready); value })
     result = [pending, immediate].awaitFirst(s)
-    match (result) { Option.Some { value } => assertEqual(value, 7); _ => panic("expected ready task") }
+    match (result) { Option.Some(value) => assertEqual(value, 7); _ => panic("expected ready task") }
     assertEqual(gate.send(s, 9), {})
     assertEqual(await(pending), 9)
   }

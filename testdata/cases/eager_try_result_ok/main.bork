@@ -33,19 +33,19 @@ fn guarded(value: Int | Problem): (Int | Problem) where Allowed {
 }
 fn subset(flag: Bool): (Int | Problem | String) where Permitted { whole(flag) }
 pred Permitted(x: Int | Problem | String) { match (x) { _: Int => true; _: Problem => true; _: String => false } }
-pred AnyOption(x: Option[Int]) { match (x) { Option.Some { value: _ } => true; Option.None => true } }
-fn optionSource(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some { value: 1 } } }
-fn optionForward(flag: Bool): Option[Int] where AnyOption { value = optionSource(flag)?; Option.Some { value: value } }
-pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some { value: _ } => true; Option.None => flag } }
+pred AnyOption(x: Option[Int]) { match (x) { Option.Some(_) => true; Option.None => true } }
+fn optionSource(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some(1) } }
+fn optionForward(flag: Bool): Option[Int] where AnyOption { value = optionSource(flag)?; Option.Some(value) }
+pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some(_) => true; Option.None => flag } }
 fn optionParameter(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
   value = x?
-  Option.Some { value: value }
+  Option.Some(value)
 }
 
 pred Positive(x: Int) { x > 0 }
 fn somePositive(flag: Bool): Option[Int where Positive] {
   value = optionSource(flag)?
-  if (Positive(value)) { Option.Some { value: value } } else { Option.None }
+  if (Positive(value)) { Option.Some(value) } else { Option.None }
 }
 fn lazyForward(flag: Bool): Int | Problem where Approved {
   lazy value: Int | Problem = { _ = source(flag, Problem { code: 1 })?; 1 }
@@ -56,7 +56,7 @@ fn lazyReturn(flag: Bool): Int | Problem where Approved {
   value?
 }
 fn lazyOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
-  lazy value: Option[Int] where ConditionalOption(flag) = { n = x?; Option.Some { value: n } }
+  lazy value: Option[Int] where ConditionalOption(flag) = { n = x?; Option.Some(n) }
   value
 }
 fn lazyInline(flag: Bool): Int | Problem where Approved {
@@ -126,6 +126,6 @@ fn main() {
   println(guarded(Problem { code: 1 }), guarded(1))
   println(subset(true), subset(false))
   println(optionForward(true), optionForward(false))
-  println(optionParameter(true, Option.None), optionParameter(false, Option.Some { value: 1 }))
+  println(optionParameter(true, Option.None), optionParameter(false, Option.Some(1)))
   println(somePositive(true), somePositive(false))
 }

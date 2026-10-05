@@ -16,7 +16,7 @@ type Options = {
   labels: Map[String, Int] = {:}
   child: Child = Child {}
   level: Level = Level.Quiet
-  optional: Option[Int] = Option.Some { value: 7 }
+  optional: Option[Int] = Option.Some(7)
   required: String
 } derive (codec.Decode, codec.Encode)
 type Box[T] = { value: T, extras: List[T] = [] } derive (codec.Decode, codec.Encode)

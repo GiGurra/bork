@@ -1,5 +1,5 @@
 Value.Object { fields: [Field { name: "name", value: Value.String { value: "bork" } }, Field { name: "port", value: Value.Number { text: "8080" } }, Field { name: "ratio", value: Value.Number { text: "0.5" } }, Field { name: "tags", value: Value.Array { items: [Value.String { value: "a" }, Value.String { value: "b" }] } }, Field { name: "enabled", value: Value.Bool { value: true } }, Field { name: "nothing", value: Value.Null }, Field { name: "when", value: Value.String { value: "2026-10-05" } }, Field { name: "big", value: Value.Number { text: "12345678901234567890" } }] }
-Option.Some { value: Value.String { value: "b" } }
+Option.Some(Value.String { value: "b" })
 Option.None
 name: bork
 port: 8080

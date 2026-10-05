@@ -216,6 +216,9 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 			goBinding = semanticGoType(typ)
 		}
 		s.constructor(literal.Type, kind, goBinding)
+		if literal.Positional {
+			continue
+		}
 		for _, field := range literal.Fields {
 			s.name(field.Pos, field.Name, SemanticToken{Kind: "property", Readonly: true})
 		}
@@ -482,9 +485,18 @@ func (s *semanticIndex) patternNames(source syntax.Pattern, checked *Pat) {
 			if source.Context {
 				pos = source.NamePos
 			}
-			s.name(pos, strings.Join(source.Path, "."), SemanticToken{Kind: kind, Readonly: kind == "enumMember"})
+			written := strings.Join(source.Path, ".")
+			if source.Owner != nil {
+				pos, written = source.NamePos, source.Path[len(source.Path)-1]
+			}
+			s.name(pos, written, SemanticToken{Kind: kind, Readonly: kind == "enumMember"})
 			if checked.Kind == PatVariant && len(source.Path) > 1 {
 				s.name(source.Pos, strings.Join(source.Path[:len(source.Path)-1], "."), SemanticToken{Kind: "type"})
+			}
+		}
+		for i, element := range source.Elems {
+			if i < len(checked.Fields) {
+				s.patternNames(element, checked.Fields[i].Pat)
 			}
 		}
 		for _, field := range source.Fields {

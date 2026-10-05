@@ -36,19 +36,19 @@ fn (xs: List[T]) get[T](index: Int): Option[T] unsafe go {
   if index < 0 || index >= int64(len(xs)) {
     return Option_None[T]{}
   }
-  return Option_Some[T]{value: xs[index]}
+  return Option_Some[T]{E0: xs[index]}
 }
 fn (xs: List[T]) head[T](): Option[T] unsafe go {
   if len(xs) == 0 {
     return Option_None[T]{}
   }
-  return Option_Some[T]{value: xs[0]}
+  return Option_Some[T]{E0: xs[0]}
 }
 fn (xs: List[T]) last[T](): Option[T] unsafe go {
   if len(xs) == 0 {
     return Option_None[T]{}
   }
-  return Option_Some[T]{value: xs[len(xs)-1]}
+  return Option_Some[T]{E0: xs[len(xs)-1]}
 }
 fn (xs: List[A]) map[A, B](f: (A) => B): List[B] unsafe go {
   out := make([]B, len(xs))
@@ -88,7 +88,7 @@ fn (xs: List[T]) fold[T, A](initial: A, f: (A, T) => A): A unsafe go {
 fn (xs: List[T]) find[T](matches: (T) => Bool): Option[T where matches] unsafe go {
   for _, x := range xs {
     if matches(x) {
-      return Option_Some[T]{value: x}
+      return Option_Some[T]{E0: x}
     }
   }
   return Option_None[T]{}

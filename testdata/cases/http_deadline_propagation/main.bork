@@ -331,7 +331,7 @@ fn main() {
     server = mustServer(http.Listen("127.0.0.1:0", app, (request, s) => {
       if (request.path == "/held") { _ = entered.send(app, true); _ = release.receive(app) }
       http.Text(200, "ok")
-      }, admission: Option.Some { value: http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000 } }))
+      }, admission: Option.Some(http.Admission { maxInFlight: 1, maxQueued: 1, queueTimeoutMs: 1000 })))
     active = spawn(app, () => http.Get(s"http://${http.Address(server)}/held", app))
     _ = entered.receive(app)
     println("queued deadline", queuedDeadline(http.Address(server)))

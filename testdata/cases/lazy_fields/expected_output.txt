@@ -25,4 +25,4 @@ force 20
 force 20
 true
 Lazy { value: 20 }
-Option.Some { value: "present" }
+Option.Some("present")

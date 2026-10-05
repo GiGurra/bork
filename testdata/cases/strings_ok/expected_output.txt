@@ -4,6 +4,6 @@ ParseError { input: "two", message: "invalid syntax" }
 ParseError { input: "99999999999999999999", message: "value out of range" }
 Hello, bork 11 6
 true true false
-Option.Some { value: 7 } Option.None
+Option.Some(7) Option.None
 HELLO, BORK hello, bork Hello, world
 ababab true
