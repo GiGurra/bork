@@ -13,7 +13,7 @@ index a5403e6..e69a200 100644
 @@ -5655,3 +5656,19 @@ comment-tokens = ["REM", "::"]
  [[grammar]]
  name = "batch"
- source = { git = "https://github.com/wharflab/tree-sitter-batch", rev = "538cc6f91bfac26dd6e6249225f38d7378777248" }
+ source = { git = "https://github.com/wharflab/tree-sitter-batch", rev = "5fc5f54267ef9a78e7a5319b80e092194252aabf" }
 +
 +[[language]]
 +name = "bork"

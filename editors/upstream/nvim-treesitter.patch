@@ -28,7 +28,7 @@ index fca90f6..39dfeb3 100644
 +  },
    bp = {
      install_info = {
-       revision = '538cc6f91bfac26dd6e6249225f38d7378777248',
+       revision = 'ee641d15390183d7535777947ce0f2f1fbcee69f',
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
 index 0000000..dac97f6
