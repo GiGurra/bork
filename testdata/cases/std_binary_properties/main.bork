@@ -14,7 +14,7 @@ test "Byte endian IO round trips" (value: Byte) {
         assertEqual(written.get(2), original.get(2))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -30,7 +30,7 @@ test "Int8 endian IO round trips" (value: Int8) {
         assertEqual(written.get(2), original.get(2))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -46,7 +46,7 @@ test "Uint16 endian IO round trips" (value: Uint16) {
         assertEqual(written.get(3), original.get(3))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -62,7 +62,7 @@ test "Uint32 endian IO round trips" (value: Uint32) {
         assertEqual(written.get(5), original.get(5))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -78,7 +78,7 @@ test "Uint64 endian IO round trips" (value: Uint64) {
         assertEqual(written.get(9), original.get(9))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -94,7 +94,7 @@ test "Int16 endian IO round trips" (value: Int16) {
         assertEqual(written.get(3), original.get(3))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -110,7 +110,7 @@ test "Int32 endian IO round trips" (value: Int32) {
         assertEqual(written.get(5), original.get(5))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -126,7 +126,7 @@ test "Int64 endian IO round trips" (value: Int64) {
         assertEqual(written.get(9), original.get(9))
         assertEqual(original, padding.toBytes())
       }
-      error: binary.BinaryError => assert(false)
+      _: binary.BinaryError => assert(false)
     }
   }
 }
@@ -151,15 +151,15 @@ test "writer snapshots remain independent" (value: Uint64) {
               assert(second.Bytes().ReadByte(8) == 17)
               assertEqual(first.Bytes(), snapshot)
             }
-            error: binary.BinaryError => assert(false)
+            _: binary.BinaryError => assert(false)
           }
           emptyData: List[Byte] = []
           assert(first.WriteBytes(emptyData.toBytes()) == first)
         }
-        error: binary.BinaryError => assert(false)
+        _: binary.BinaryError => assert(false)
       }
     }
-    error: binary.BinaryError => assert(false)
+    _: binary.BinaryError => assert(false)
   }
 }
 
@@ -178,25 +178,25 @@ test "reader cursors are immutable" (value: Uint64) {
           assertEqual(next.Remaining(), 0)
           assert(next.Skip(0) == next)
           match (next.ReadBytes(9223372036854775807)) {
-            huge: BytesRead => assert(false)
+            _: BytesRead => assert(false)
             error: binary.BinaryError => { assertEqual(error.offset, 8); assertEqual(error.length, 8) }
           }
           match (next.Skip(9223372036854775807)) {
-            huge: binary.Reader => assert(false)
+            _: binary.Reader => assert(false)
             error: binary.BinaryError => { assertEqual(error.offset, 8); assertEqual(error.length, 8) }
           }
           match (next.ReadUint64()) {
-            extra: Uint64Read => assert(false)
-            error: binary.BinaryError => assertEqual(next.Offset(), 8)
+            _: Uint64Read => assert(false)
+            _: binary.BinaryError => assertEqual(next.Offset(), 8)
           }
           match (next.ReadBytes(0)) {
             bytesResult: BytesRead => { assert(bytesResult.0.isEmpty()); assertEqual(bytesResult.1, next) }
-            error: binary.BinaryError => assert(false)
+            _: binary.BinaryError => assert(false)
           }
         }
-        error: binary.BinaryError => assert(false)
+        _: binary.BinaryError => assert(false)
       }
     }
-    error: binary.BinaryError => assert(false)
+    _: binary.BinaryError => assert(false)
   }
 }
