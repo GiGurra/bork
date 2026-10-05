@@ -5,6 +5,7 @@
 // of letting memory grow.
 
 type Event = { seq: Int, kind: String }
+type Tally = { received: Int, errors: Int, inOrder: Bool }
 
 fn record(s: Scope, events: Channel[Event], count: Int) uses state: Ok | Closed | Cancelled {
   for (i in Seq.range(0, count)) {
@@ -23,15 +24,12 @@ fn main() {
     println(s"queued: ${events.length()}")
     events.close()
     // The consumer drains what is queued, in order, then sees the close.
-    received = atom(0)
-    errors = atom(0)
-    for (event in events.values(s)) {
-      _ = update(received, n => n + 1)
-      if (event.kind == "error") {
-        _ = update(errors, n => n + 1)
-      }
-    }
-    println(s"received ${current(received)}, ${current(errors)} errors")
+    tally = events.values(s).fold(Tally { received: 0, errors: 0, inOrder: true }, (t, event) => Tally {
+      received: t.received + 1,
+      errors: if (event.kind == "error") { t.errors + 1 } else { t.errors },
+      inOrder: t.inOrder && event.seq == t.received,
+    })
+    println(s"received ${tally.received}, ${tally.errors} errors, in order: ${tally.inOrder}")
 
     // A full fixed buffer refuses: trySend reports Full, and send waits.
     bounded = channel[Event](s, 100)

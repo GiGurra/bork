@@ -3,7 +3,7 @@
 // channels on to one, which closes when all of them have.
 
 type Order = { id: Int, items: Int }
-type Packed = { order: Int, worker: String, boxes: Int }
+type Packed = { order: Int, boxes: Int }
 
 // jobs sends the orders, then returns, and produce closes the channel.
 fn jobs(s: Scope, out: Channel[Order]) uses state: Ok | Closed | Cancelled {
@@ -15,9 +15,9 @@ fn jobs(s: Scope, out: Channel[Order]) uses state: Ok | Closed | Cancelled {
 
 // pack takes orders until there are none left. A receive gives each
 // order to exactly one worker.
-fn pack(s: Scope, name: String, orders: Channel[Order], out: Channel[Packed]) uses state: Ok | Closed | Cancelled {
+fn pack(s: Scope, orders: Channel[Order], out: Channel[Packed]) uses state: Ok | Closed | Cancelled {
   for (order in orders.values(s)) {
-    out.send(s, Packed { order: order.id, worker: name, boxes: (order.items + 3) / 4 })?
+    out.send(s, Packed { order: order.id, boxes: (order.items + 3) / 4 })?
   }
   Ok
 }
@@ -26,7 +26,7 @@ fn main() {
   scope s {
     orders = produce[Order](s, 0, out => jobs(s, out))
     // Three workers share the orders: fan out.
-    workers = ["ana", "bo", "cy"].map(name => produce[Packed](s, 0, out => pack(s, name, orders, out)))
+    workers = range(0, 3).map(i => produce[Packed](s, 0, out => pack(s, orders, out)))
     // One channel for all their results: fan in.
     packed = merge(s, workers).toList(s)
     match (packed) {

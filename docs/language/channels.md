@@ -1,6 +1,6 @@
 # Channels
 
-A channel carries values from one task to another. Like a file or a task, a channel belongs to a [scope](scopes.md) and cannot outlive it. Operations that wait take the scope they wait in, so a send or receive reports `Closed` or `Cancelled` as a value instead of hanging.
+A channel carries values from one task to another. Like a file or a task, a channel belongs to a [scope](scopes.md) and cannot outlive it. Operations that wait take the scope they wait in: a send or receive reports `Closed` or `Cancelled` as a value, and cancelling the scope always ends the wait.
 
 ## Making a channel
 
@@ -112,13 +112,13 @@ two
 []
 ```
 
-The loop also ends, quietly, if `s` is cancelled. `ch.toList(s)` receives everything into a list, or gives `Cancelled`.
+The loop also ends, quietly, if `s` is cancelled. Unlike most sequences, `values(s)` does not start again when it is read a second time: it goes on receiving where the last read stopped. `ch.toList(s)` receives everything into a list, or gives `Cancelled`.
 
 The sender closes a channel, to tell its receivers it is done. A receiver can close it too, to tell the sender to stop: the sender's next send gives `Closed`.
 
 ## Operations that do not wait
 
-`trySend(x)` gives `Ok`, `Full` or `Closed`, and `tryReceive()` gives `Option.Some` of a value, `Option.None` when nothing is buffered, or `Closed`. Neither waits, and neither checks for cancellation. `length()` is how many values are buffered, and `capacity()` the size of the buffer (`None` for an unbounded channel).
+`trySend(x)` gives `Ok`, `Full` or `Closed`, and `tryReceive()` gives `Option.Some` of a value, `Option.None` when no value is ready, or `Closed`. Neither waits, and neither checks for cancellation. `length()` is how many values are buffered, and `capacity()` the size of the buffer (`None` for an unbounded channel).
 
 ```bork
 fn main() {
@@ -139,7 +139,7 @@ Option.Some { value: 1 } Option.None
 
 ## Producers and merge
 
-`produce(s, capacity, work)` makes a channel, runs `work` with it as a task of `s`, and closes the channel when `work` returns. The receivers' loops then end, and no close can be forgotten. If `work` panics, the failed task cancels `s`, as any failed task does.
+`produce(s, capacity, work)` makes a channel, runs `work` with it as a task of `s`, and closes the channel when `work` returns. The receivers' loops then end, and no close can be forgotten. If `work` panics, the failed task cancels `s`, as any failed task does, and the panic resurfaces when `s` ends.
 
 ```bork
 fn squares(s: Scope, out: Channel[Int], count: Int) uses state: Ok | Closed | Cancelled {

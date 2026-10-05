@@ -3,7 +3,7 @@
 // after, so all stages run at once, and small buffers keep a fast stage
 // from running far ahead of a slow one.
 
-// numbers sends 1, 2, 3, ... until the channel is closed.
+// numbers sends 1, 2, 3, ... until the channel is closed or s is cancelled.
 fn numbers(s: Scope, out: Channel[Int]) uses state: Ok | Closed | Cancelled {
   for (n in Seq.range(1, 1_000_000_000)) {
     out.send(s, n)?

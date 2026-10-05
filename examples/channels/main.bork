@@ -1,6 +1,7 @@
 // Channels carry values from one task to another. A channel belongs to a
-// scope, and operations that wait take the scope they wait in, so they
-// report Closed or Cancelled as values instead of hanging.
+// scope, and operations that wait take the scope they wait in: they
+// report Closed or Cancelled as values, and cancelling the scope always
+// ends the wait.
 
 // countdown sends n, n - 1, ..., 1. ? passes Closed or Cancelled on.
 fn countdown(s: Scope, out: Channel[Int], n: Int) uses state: Ok | Closed | Cancelled {

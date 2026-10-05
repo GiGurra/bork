@@ -1,5 +1,5 @@
 capacity: Option.None
 Ok
 queued: 10000
-received 10000, 1000 errors
+received 10000, 1000 errors, in order: true
 bounded took 100 of 10000

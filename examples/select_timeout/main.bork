@@ -45,8 +45,8 @@ fn heartbeat(s: Scope) uses clock + state: Int | Cancelled {
 fn main() {
   scope s {
     println(ask(s, "fast question", 0, 1000))
-    // Each call ends a scope of its own, so the slow worker is cancelled
-    // instead of running on.
+    // This call runs in a scope of its own, so when it ends the slow worker
+    // is cancelled instead of running on.
     println(scope q { ask(q, "slow question", 1000, 20) })
 
     // How many beats depends on timing, so this only shows that it beat.
