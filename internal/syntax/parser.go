@@ -946,6 +946,7 @@ func (p *parser) typeAtom() *TypeExpr {
 		// A function type `(A, B) => C`, or a parenthesized type.
 		pos := p.next().Pos
 		var params []*TypeExpr
+		comma := false
 		p.skipNewlines()
 		for !p.at(RParen) {
 			params = append(params, p.typeExpr())
@@ -953,6 +954,7 @@ func (p *parser) typeAtom() *TypeExpr {
 			if !p.at(Comma) {
 				break
 			}
+			comma = true
 			p.next()
 			p.skipNewlines()
 		}
@@ -966,8 +968,11 @@ func (p *parser) typeAtom() *TypeExpr {
 			p.next()
 			return &TypeExpr{Pos: pos, Func: &FuncTypeExpr{Params: params, Uses: uses, Result: p.typeExpr()}}
 		}
+		if comma {
+			return &TypeExpr{Pos: pos, Tuple: params}
+		}
 		if len(params) != 1 {
-			p.errorf(pos, "expected => after a function type's parameters")
+			p.errorf(pos, "empty tuples are not supported; expected => after function parameters")
 			panic(bailout{})
 		}
 		return params[0]
@@ -1046,6 +1051,14 @@ func (p *parser) scriptStatement() (stmt Stmt) {
 func (p *parser) statement() Stmt {
 	var stmt Stmt
 	switch {
+	case p.at(LParen) && p.tupleBindingAhead():
+		pattern, ok := p.pattern().(*TuplePat)
+		if !ok {
+			p.errorf(p.tok().Pos, "tuple binding needs a comma in its pattern")
+			panic(bailout{})
+		}
+		p.expect(Assign, "after the tuple binding pattern")
+		stmt = &TupleBinding{Pos: pattern.Pos, Pattern: pattern, Value: p.expr()}
 	case p.atAsyncBinding():
 		pos := p.next().Pos
 		p.next() // '('
@@ -1319,7 +1332,15 @@ func (p *parser) postfix(x Expr, start diag.Pos) Expr {
 			x = call
 		case p.at(Dot):
 			p.next()
-			name := p.expect(TIdent, "after '.'")
+			var name Token
+			if p.at(TInt) {
+				name = p.next()
+				if strings.Trim(name.Text, "0123456789") != "" {
+					p.errorf(name.Pos, "tuple selectors require a decimal position")
+				}
+			} else {
+				name = p.expect(TIdent, "after '.'")
+			}
 			if name.Text == "copy" && p.at(LParen) {
 				x = p.copyExpr(x, name.Pos)
 			} else {
@@ -1419,6 +1440,27 @@ func (p *parser) matchExpr() Expr {
 func (p *parser) pattern() Pattern {
 	t := p.tok()
 	switch t.Kind {
+	case LParen:
+		p.next()
+		p.skipNewlines()
+		first := p.pattern()
+		p.skipNewlines()
+		if !p.at(Comma) {
+			p.expect(RParen, "to close the pattern")
+			return first
+		}
+		tuple := &TuplePat{Pos: t.Pos, Elems: []Pattern{first}}
+		for p.at(Comma) {
+			p.next()
+			p.skipNewlines()
+			if p.at(RParen) {
+				break
+			}
+			tuple.Elems = append(tuple.Elems, p.pattern())
+			p.skipNewlines()
+		}
+		tuple.End = p.expect(RParen, "to close the tuple pattern").End
+		return tuple
 	case Underscore:
 		p.next()
 		if p.at(Colon) {
@@ -1604,6 +1646,20 @@ func (p *parser) primary() Expr {
 		p.skipNewlines()
 		x := p.expr()
 		p.skipNewlines()
+		if p.at(Comma) {
+			lit := &TupleLit{Pos: t.Pos, Elems: []Expr{x}}
+			for p.at(Comma) {
+				p.next()
+				p.skipNewlines()
+				if p.at(RParen) {
+					break
+				}
+				lit.Elems = append(lit.Elems, p.expr())
+				p.skipNewlines()
+			}
+			lit.End = p.expect(RParen, "to close the tuple").End
+			return lit
+		}
 		p.expect(RParen, "to close the parenthesis")
 		return x
 	case LBrace:
@@ -2061,6 +2117,24 @@ func (p *parser) atAsyncBinding() bool {
 			depth--
 			if depth == 0 {
 				return i+1 < len(p.toks) && (p.toks[i+1].Kind == TIdent || p.toks[i+1].Kind == Underscore)
+			}
+		case EOF:
+			return false
+		}
+	}
+	return false
+}
+
+func (p *parser) tupleBindingAhead() bool {
+	depth := 0
+	for i := p.i; i < len(p.toks); i++ {
+		switch p.toks[i].Kind {
+		case LParen:
+			depth++
+		case RParen:
+			depth--
+			if depth == 0 {
+				return i+1 < len(p.toks) && p.toks[i+1].Kind == Assign
 			}
 		case EOF:
 			return false

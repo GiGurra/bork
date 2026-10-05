@@ -596,7 +596,7 @@ func definition(x check.Expr) *diag.Pos {
 	case *check.Call:
 		pos = x.Func.Decl.Pos
 	case *check.Select:
-		if r, ok := x.X.Type().(*check.Record); ok {
+		if r, ok := x.X.Type().(*check.Record); ok && r.Decl != nil {
 			for _, field := range r.Decl.Fields {
 				if field.Name == x.Name {
 					pos = field.Pos
@@ -610,7 +610,7 @@ func definition(x check.Expr) *diag.Pos {
 			}
 		}
 	case *check.RecordLit:
-		if x.Record != nil {
+		if x.Record != nil && x.Record.Decl != nil {
 			pos = x.Record.Decl.Pos
 		} else if x.Variant != nil {
 			for _, variant := range x.Variant.Parent.Decl.Variants {

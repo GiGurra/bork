@@ -3,6 +3,7 @@
 [(bare_return) (bare_break) (bare_continue)] @keyword
 (identifier) @variable
 (number) @number
+(tuple_index) @property
 (rune) @string
 (string) @string
 (interpolated_string) @string

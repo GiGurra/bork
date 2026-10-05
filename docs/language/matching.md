@@ -47,7 +47,20 @@ several members have that variant. Qualified patterns keep working.
 | `NotFound` | a value of that type, without naming it |
 | `User { name, age: 0 }` | a record, looking at the fields listed |
 | `.Circle { radius }`, `Shape.Circle { radius }` | one variant of a sealed type |
+| `(left, right)`, `(only,)` | a tuple with that exact number of elements |
 | `[]`, `[x]`, `[first, ...rest]` | a list by its length, naming the elements |
+
+Tuple patterns can combine literal and nested patterns, and the compiler checks
+that the arms cover every possibility:
+
+```bork
+fn describe(pair: (Bool, Int)): String {
+  match (pair) {
+    (true, n) => s"enabled: $n"
+    (false, _) => "disabled"
+  }
+}
+```
 
 Patterns nest, so a field can be matched against another pattern:
 

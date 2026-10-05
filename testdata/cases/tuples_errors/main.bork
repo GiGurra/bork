@@ -1,0 +1,10 @@
+fn needsPair(p: (Int, String)) {}
+fn main() {
+  pair = (1, "one")
+  println(pair.2)
+  needsPair((1,))
+  (a, a) = pair
+  (false, _) = (true, 1)
+  (x, y, z) = pair
+  println((() => 1, 2) == (() => 1, 2))
+}

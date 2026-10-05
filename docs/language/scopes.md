@@ -49,6 +49,10 @@ Files are not closed by hand. A function that needs an open resource takes it as
 
 A scope is itself a value, of type `Scope`, so a function can take one as a parameter and open resources or start tasks in it. Several examples below do this with `s: Scope`.
 
+Tuples preserve these lifetimes too: wrapping a resource in `(file, label)` or
+destructuring that tuple cannot let the resource outlive its scope. A tuple cannot
+hold an OwnedScope, because owning scopes cannot be copied into containers.
+
 ## Process signals
 
 SIGINT (Ctrl+C) and SIGTERM cancel every root scope by default. Nested scopes

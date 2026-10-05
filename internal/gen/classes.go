@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 )
@@ -164,6 +165,11 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+			method := strings.ToLower(d.Class.Name)
+			fun, _ := g.dictMethod(d, method)
+			return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun}}}
+		}
 		// Built-in equality and rendering dispatch through universal helpers.
 		method := "equals"
 		if check.IsShow(d.Class) {
@@ -203,6 +209,9 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 		return &ast.SelectorExpr{X: dictParam(d.Param, d.Class), Sel: name(method)}, nil
 	}
 	if d.Builtin {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (d.Class.Name == "Encode" || d.Class.Name == "Decode") {
+			return g.tupleCodec(d, tuple), nil
+		}
 		if check.IsShow(d.Class) {
 			g.usesShow = true
 			return &ast.IndexExpr{X: ast.NewIdent("_strOf"), Index: g.goType(d.Type)}, nil

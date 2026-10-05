@@ -68,6 +68,9 @@ func (c *checker) unappliedIn(t *syntax.TypeExpr, where string) {
 		}
 		return own
 	}
+	for _, elem := range t.Tuple {
+		c.unappliedIn(elem, in("on a tuple element"))
+	}
 	for _, m := range t.Union {
 		c.unappliedIn(m, in("on a member of a union"))
 	}
@@ -101,7 +104,7 @@ func (c *checker) hasFacts(t *syntax.TypeExpr) bool {
 		if t == nil {
 			return false
 		}
-		if len(t.Where) > 0 || slices.ContainsFunc(t.Union, has) || slices.ContainsFunc(t.Args, has) {
+		if len(t.Where) > 0 || slices.ContainsFunc(t.Union, has) || slices.ContainsFunc(t.Args, has) || slices.ContainsFunc(t.Tuple, has) {
 			return true
 		}
 		if t.Func != nil && (has(t.Func.Result) || slices.ContainsFunc(t.Func.Params, has)) {
@@ -129,7 +132,7 @@ func (c *checker) hasFacts(t *syntax.TypeExpr) bool {
 // constrainedAlias returns the facts of the constrained alias that t
 // names, if it names one.
 func (c *checker) constrainedAlias(t *syntax.TypeExpr) []*Constraint {
-	if t.Union != nil || t.Func != nil || len(t.Args) > 0 {
+	if t.Union != nil || t.Func != nil || t.Tuple != nil || len(t.Args) > 0 {
 		return nil
 	}
 	if e := c.lookupType(t.Name); e != nil && e.decl.Kind == syntax.AliasType {
@@ -145,7 +148,7 @@ func (c *checker) whereReported(t *syntax.TypeExpr) {
 		return
 	}
 	c.appliedWhere[t] = true
-	for _, x := range append(append([]*syntax.TypeExpr{}, t.Union...), t.Args...) {
+	for _, x := range append(append(append([]*syntax.TypeExpr{}, t.Union...), t.Args...), t.Tuple...) {
 		c.whereReported(x)
 	}
 	if t.Func != nil {

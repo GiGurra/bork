@@ -340,6 +340,17 @@ func (w *witness) describe(top bool) string {
 	} else {
 		fields = c.record.Fields
 	}
+	if c.record != nil && c.record.Tuple {
+		parts := make([]string, len(w.args))
+		for i, a := range w.args {
+			parts[i] = a.describe(false)
+		}
+		text := strings.Join(parts, ", ")
+		if len(parts) == 1 {
+			text += ","
+		}
+		return "(" + text + ")"
+	}
 	var shown []string
 	for i, a := range w.args {
 		if a.ctor != nil || a.other {

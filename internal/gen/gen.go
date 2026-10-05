@@ -768,6 +768,9 @@ func init() {
 // name maps a bork identifier to a Go identifier. bork identifiers
 // cannot start with '_', so temporaries ('_tN') never collide.
 func name(s string) *ast.Ident {
+	if s != "" && s[0] >= '0' && s[0] <= '9' {
+		return ast.NewIdent("E" + s)
+	}
 	if goReserved[s] {
 		return ast.NewIdent(s + "_")
 	}

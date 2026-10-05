@@ -35,6 +35,9 @@
           "include": "#keywords"
         },
         {
+          "include": "#tuple-selectors"
+        },
+        {
           "include": "#numbers"
         },
         {
@@ -326,6 +329,10 @@
           "include": "#expression"
         }
       ]
+    },
+    "tuple-selectors": {
+      "match": "(?<=\\.)[0-9]+\\b",
+      "name": "variable.other.member.bork"
     }
   },
   "firstLineMatch": "^#!.*\\bbork\\b"

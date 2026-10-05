@@ -118,6 +118,16 @@ func defaultText(x syntax.Expr) string {
 		return "." + x.Name
 	case *syntax.Selector:
 		return defaultText(x.X) + "." + x.Name
+	case *syntax.TupleLit:
+		var parts []string
+		for _, e := range x.Elems {
+			parts = append(parts, defaultText(e))
+		}
+		text := strings.Join(parts, ", ")
+		if len(parts) == 1 {
+			text += ","
+		}
+		return "(" + text + ")"
 	case *syntax.ListLit:
 		var parts []string
 		for _, e := range x.Elems {
@@ -428,6 +438,17 @@ func writtenPredText(ref *syntax.PredRef) string {
 func writtenTypeAtomText(t *syntax.TypeExpr) string {
 	if t == nil {
 		return "Ok"
+	}
+	if t.Tuple != nil {
+		var parts []string
+		for _, e := range t.Tuple {
+			parts = append(parts, writtenTypeText(e))
+		}
+		text := strings.Join(parts, ", ")
+		if len(parts) == 1 {
+			text += ","
+		}
+		return "(" + text + ")"
 	}
 	if t.Union != nil {
 		var parts []string

@@ -211,6 +211,10 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 			s.name(field.Pos, field.Name, SemanticToken{Kind: "property", Readonly: true})
 		}
 	}
+	for binding, pattern := range info.tuplePats {
+		s.pattern(pattern)
+		s.patternNames(binding.Pattern, pattern)
+	}
 	for arm, pattern := range info.armPats {
 		s.pattern(pattern)
 		s.patternNames(arm.Pattern, pattern)
@@ -480,6 +484,12 @@ func (s *semanticIndex) patternNames(source syntax.Pattern, checked *Pat) {
 		}
 	case *syntax.TypePat:
 		// Preserve the resolved written-type classification.
+	case *syntax.TuplePat:
+		for i, element := range source.Elems {
+			if i < len(checked.Fields) {
+				s.patternNames(element, checked.Fields[i].Pat)
+			}
+		}
 	case *syntax.ListPat:
 		for i, element := range source.Elems {
 			if i < len(checked.Elems) {

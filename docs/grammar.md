@@ -86,7 +86,8 @@ Where      = "where" Clause { "and" Clause } .
 Clause     = PredRef { "or" PredRef }          (* alone: p or q *)
            | "(" PredRef { "or" PredRef } ")" .  (* with and: (p or q) and r *)
 PredRef    = Ident [ "(" Expr { "," Expr } ")" ] .  (* positive, between(1, 65535), atLeast(lo) *)
-TypeAtom   = Ident [ "[" Type { "," Type } "]" ] [ Uses ] | "(" Type ")" | FuncType .
+TypeAtom   = Ident [ "[" Type { "," Type } "]" ] [ Uses ] | "(" Type ")" | TupleType | FuncType .
+TupleType  = "(" Type "," [ Type { "," Type } [ "," ] ] ")" .
 FuncType   = "(" [ Type { "," Type } ] ")" [ Uses ] "=>" Type .  (* (Int, String) => Bool, (String) uses io => Ok; TypeAtom Uses applies only to Seq *)
 
 Block      = "{" { Stmt EOL } [ Expr ] "}" .
@@ -94,7 +95,7 @@ Stmt       = Binding | Trust | Mock | Expr .
 Mock       = [ Ident "=" ] "mock" ( Ident | QualIdent ) [ "." Ident ] "(" [ ( Ident | "_" ) { "," ( Ident | "_" ) } ] ")" Block .
                                              (* in tests: mock payments.Charge(card, amount) { ... }, calls = mock Store.save(s, x) { ... } *)
 Trust      = "trust" Call .                  (* trust positive(x) *)
-Binding    = ( Ident | "_" | ( "lazy" | "async" "(" Expr ")" ) Ident ) [ ":" Type ] "=" Expr .   (* x = 1, x: Int8 = 1, or _ = write(f, s)? to drop a value *)
+Binding    = TuplePat "=" Expr | ( Ident | "_" | ( "lazy" | "async" "(" Expr ")" ) Ident ) [ ":" Type ] "=" Expr .   (* x = 1, x: Int8 = 1, or _ = write(f, s)? to drop a value *)
 
 Expr       = PipeExpr .
 PipeExpr   = OrExpr { "|>" OrExpr } .        (* x |> f(a) is f(x, a); x |> f is f(x) *)
@@ -106,7 +107,7 @@ MulExpr    = Unary { ( "*" | "/" | "%" | "&" | "<<" | ">>" ) Unary } .
 Unary      = ( "-" | "!" | "^" ) Unary | Postfix .
 Postfix    = Primary { [ "[" Type { "," Type } "]" ] "(" [ Args ] ")"
                      | "[" Type { "," Type } "]" (* only on a constructor owner, followed by RecordLit or .Variant *)
-                     | "." Ident
+                     | "." ( Ident | IntLit )
                      | ".copy" "(" Update { Sep Update } [ Sep ] ")"
                      | ".into" "[" Type "]" "(" [ Update { Sep Update } [ Sep ] ] ")"
                      | "?"
@@ -119,7 +120,7 @@ Argument   = [ Ident ":" ] Expr .
 
 Primary    = IntLit | FloatLit | RuneLit | StringLit | InterpString | TypedInterp | "true" | "false" | Ident
            | "." [ Ident ]
-           | "(" Expr ")" | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl | WithExpr .
+           | "(" Expr ")" | TupleLit | Block | If | Match | Return | Lambda | ListLit | MapLit | ScopeExpr | Generate | Yield | For | LoopControl | WithExpr .
 (* A bare leading "." must be followed by RecordLit: .{ field: value }.
    .Variant and .Variant { field: value } need an expected sealed type;
    .{ field: value } needs an expected record type. Variant patterns may also omit their owner using scrutinee context. *)
@@ -141,7 +142,9 @@ If         = "if" "(" Expr ")" Block [ "else" ( If | Block ) ] .
 Return     = "return" [ Expr ] .
 Match      = "match" "(" Expr ")" "{" [ Arm { Sep Arm } [ Sep ] ] "}" .
 Arm        = Pattern "=>" Expr .
-Pattern    = "_"                             (* anything *)
+TupleLit   = "(" Expr "," [ Expr { "," Expr } [ "," ] ] ")" .
+TuplePat   = "(" Pattern "," [ Pattern { "," Pattern } [ "," ] ] ")" .
+Pattern    = TuplePat | "(" Pattern ")" | "_"                             (* anything *)
            | Literal                         (* 1, -1, 1.5, 'a', "a", true *)
            | "[" [ ListElems ] "]"            (* [], [x], [first, ...rest], [0, ...] *)
            | ( Ident | "_" ) ":" Type                  (* n: Int, e: NotFound | DbError *)
@@ -163,6 +166,7 @@ Source spans follow the lexer's token ends, independently of printed token text.
 - **`Ok` is the no-value type and success expression.** Write `fn save(): Ok | Error { Ok }`, `() => Ok`, or omit the result type for a function that just completes. `Ok` carries no payload; it is not a generic Result constructor. It can inhabit a union, but cannot be a standalone binding, parameter, field, or generic value argument (`Task[Ok]` and `Channel[Ok]` remain invalid). `Unit` is a deprecated type alias for one release; `bork check --json` offers edits to replace its type uses with `Ok`.
 - **`if` with `else`** produces a value; both branches must have the same type. **`if` without `else`** is only run for its effect.
 - **`return`** has type `Never`, which fits wherever any type is expected, so `x = if (c) { return 0 } else { 1 }` works. Code after a `return` is a compile error.
+- **Tuples:** `(a, b)` groups heterogeneous positional values; `(a,)` is a singleton, while `(a)` groups an expression. Types use `(Int, String)` / `(Int,)`. There is no empty tuple; `() => expr` keeps its function meaning. `pair.0` selects a statically checked zero-based position. `(a, b) = pair` destructures names, wildcards and nested tuples; match patterns may test elements. Types are structural by arity and ordered element types. Elements evaluate once from left to right. Equality/hash recurse over comparable elements; Encode/Decode use exact-arity JSON arrays and index error paths. Facts, effects and scope ownership recurse through elements. See [tuples](language/types.md#tuples).
 - **Bindings are immutable.** Same-block rebinding creates a distinct value of any type, including rebinding parameters in the function body. Nested shadowing is forbidden. Every local must be read or explicitly discarded; parameters are exempt. Prelude functions are an exception to name protection: a local or package function can use their names. Methods have a separate namespace, so a free `fn find` and `xs.find(test)` can coexist.
 - **A value that is computed but never used is a compile error** (e.g. calling a function that returns `Int` as a statement).
 - **Numbers:** `Int8`, `Int16`, `Int32`, `Int` (= `Int64`), `Uint8` (= `Byte`), `Uint16`, `Uint32`, `Uint64`, `Float32`, `Float` (= `Float64`). Integers wrap on overflow, like Go.

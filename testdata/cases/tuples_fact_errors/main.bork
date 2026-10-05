@@ -1,0 +1,3 @@
+pred positive(n: Int) { n > 0 }
+fn need(pair: (Int where positive, String)): Int { pair.0 }
+fn main() { println(need((-1, "bad"))) }

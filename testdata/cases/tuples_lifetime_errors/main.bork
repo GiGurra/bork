@@ -1,0 +1,13 @@
+import "bork/fs"
+
+fn escaped(path: String) uses io: String | fs.Error {
+  pair = scope s { (fs.Open(path, s)?, "file") }
+  fs.ReadAllText(pair.0)
+}
+
+fn owner() uses io {
+  scope s {
+    child = openScope(s)
+    println((child,))
+  }
+}

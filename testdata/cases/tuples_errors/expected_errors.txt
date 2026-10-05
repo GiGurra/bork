@@ -1,0 +1,6 @@
+main.bork:4:16: (Int, String) has no field 2
+main.bork:5:13: tuple has 1 elements, expected 2
+main.bork:6:7: tuple binding repeats name a
+main.bork:7:4: tuple binding requires names, wildcards or nested tuple patterns
+main.bork:8:3: cannot match a 3-element tuple pattern against (Int, String)
+main.bork:9:24: cannot compare values of type (() => Int, Int) with == (functions, scopes, and resources have no ==)

@@ -229,3 +229,7 @@ Vim, Neovim, Emacs, Helix and Zed are linked from [editor setup](docs/editors.md
 ## License
 
 [MIT](LICENSE)
+
+Tuples group heterogeneous values without a record declaration: `(3, "count")`,
+with type `(Int, String)`, `.0` access and `(number, label) = pair` destructuring.
+See [tuples](docs/language/types.md#tuples).

@@ -51,6 +51,13 @@ func (g *gen) lowerGoType(t check.Type) ast.Expr {
 	case *check.FuncType:
 		return g.funcType(t, nil)
 	case *check.Record:
+		if t.Tuple {
+			fields := &ast.FieldList{}
+			for _, f := range t.Fields {
+				fields.List = append(fields.List, &ast.Field{Names: []*ast.Ident{name(f.Name)}, Type: g.goType(f.Type)})
+			}
+			return &ast.StructType{Fields: fields}
+		}
 		g.usedTypes[baseOf(t)] = true
 		return g.instantiated(typeName(t.Name, t.Pkg), t)
 	case *check.Sealed:
@@ -1295,6 +1302,17 @@ func _str(x any) string {
 		return x
 	}
 	switch v := reflect.ValueOf(x); v.Kind() {
+	case reflect.Struct:
+		if v.Type().Name() == "" && v.NumField() > 0 {
+			parts := make([]string, v.NumField())
+			for i := range parts {
+				if v.Type().Field(i).Name != "E" + strconv.Itoa(i) { return fmt.Sprint(x) }
+				parts[i] = _show(v.Field(i).Interface())
+			}
+			text := strings.Join(parts, ", ")
+			if len(parts) == 1 { text += "," }
+			return "(" + text + ")"
+		}
 	case reflect.Slice:
 		parts := make([]string, v.Len())
 		for i := range parts {

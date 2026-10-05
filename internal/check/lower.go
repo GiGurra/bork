@@ -21,6 +21,7 @@ type lowerer struct {
 	vars      map[any]*Var
 	yieldElem Type
 	// withs counts the with bindings, to name them apart.
+	tuples               int
 	withs                int
 	interpolationSources map[syntax.Expr]Expr
 	interpolationSites   []*InterpolationSite
@@ -181,6 +182,10 @@ func (l *lowerer) exprs(xs []syntax.Expr) []Expr {
 func (l *lowerer) block(b *syntax.Block) *Block {
 	out := &Block{expr: expr{pos: b.Pos, typ: l.info.types[b]}, End: b.End}
 	for _, s := range b.Stmts {
+		if tuple, ok := s.(*syntax.TupleBinding); ok {
+			out.Stmts = append(out.Stmts, l.tupleBinding(tuple)...)
+			continue
+		}
 		out.Stmts = append(out.Stmts, l.stmt(s))
 	}
 	if b.Tail != nil {
@@ -444,6 +449,14 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			out.Params = append(out.Params, v)
 		}
 		out.Body = l.expr(x.Body)
+		return out
+	case *syntax.TupleLit:
+		rec := at.typ.(*Record)
+		out := &RecordLit{expr: at, Record: rec}
+		for i, elem := range x.Elems {
+			field := rec.Fields[i]
+			out.Fields = append(out.Fields, &FieldValue{Name: field.Name, Field: field, Value: l.expr(elem)})
+		}
 		return out
 	case *syntax.ListLit:
 		return &ListLit{expr: at, Elems: l.exprs(x.Elems)}

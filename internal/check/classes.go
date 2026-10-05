@@ -656,6 +656,11 @@ func (c *checker) promisesArgFacts(inst *Instance, argFacts [][]*Constraint, nam
 			if len(argFacts[i]) == 0 || d == nil || !producesParam(b) {
 				continue
 			}
+			if d.Builtin && b.Prelude && b.Name == "Decode" {
+				if tuple, ok := d.Type.(*Record); ok && tuple.Tuple && len(missingConstraints(tupleConstraints(tuple), argFacts[i])) == 0 {
+					continue
+				}
+			}
 			if d.Inst == nil || len(missingConstraints(d.Inst.Constraints, argFacts[i])) > 0 {
 				which := "the " + b.Name + " instance in use"
 				if d.Inst != nil {
@@ -750,6 +755,17 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 			return nil
 		}
 		return &Dict{Class: class, Type: t, Builtin: true}
+	}
+	if tuple, ok := t.(*Record); ok && tuple.Tuple && class.Prelude && (class.Name == "Encode" || class.Name == "Decode") {
+		d := &Dict{Class: class, Type: t, Builtin: true}
+		for _, field := range tuple.Fields {
+			element := c.dict(class, field.Type, pos, depth+1)
+			if element == nil {
+				return nil
+			}
+			d.Args = append(d.Args, element)
+		}
+		return d
 	}
 	var matches []*Dict
 	var partial []*ClassInstance // the head fits, but a bound does not
@@ -973,6 +989,14 @@ func (c *checker) declareDerived(files []*syntax.File) {
 					c.errorf(td.DerivePos, "%s cannot be derived; only Decode, Encode and GoStruct can (yet)", name)
 					continue
 				}
+				if tuple, ok := e.typ.(*Record); ok && tuple.Tuple {
+					if IsGoStruct(cl) {
+						c.errorf(td.DerivePos, "GoStruct cannot be derived for a tuple")
+					} else {
+						c.tupleDerives = append(c.tupleDerives, &ClassInstance{Type: tuple, Class: cl, Pkg: c.pkg, Decl: &syntax.InstanceDecl{Pos: td.DerivePos}})
+					}
+					continue
+				}
 				if IsGoStruct(cl) {
 					if r, ok := e.typ.(*Record); ok && r.Decl != nil && r.Decl.Private && r.Pkg != c.pkg {
 						continue
@@ -1046,6 +1070,12 @@ func (c *checker) discardDerived(ci *ClassInstance) {
 // resolveDerived finds the instances the fields of derived instances'
 // types need, now that it is known which instances are in scope.
 func (c *checker) resolveDerived() {
+	defer func() {
+		for _, derived := range c.tupleDerives {
+			c.pkg, c.typeParams = derived.Pkg, nil
+			c.dict(derived.Class, derived.Type, derived.Decl.Pos, 0)
+		}
+	}()
 	for _, ci := range c.info.ClassInstances {
 		if !IsGoStruct(ci.Class) && (len(ci.Methods) == 0 || ci.Methods[0].Derived == nil) {
 			continue

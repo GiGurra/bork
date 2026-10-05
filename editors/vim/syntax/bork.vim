@@ -5,6 +5,7 @@ syntax keyword borkContextual import use class instance instances providers test
 syntax keyword borkBoolean true false
 syntax match borkType '\<[A-Z][A-Za-z0-9_]*\>'
 syntax match borkNumber '\<\d[0-9A-Fa-f_xXbBoO]*\%(\.\d[0-9_]*\)\?\%([eE][+-]\=[0-9_]*\)\?\>'
+syntax match borkTupleIndex '\.\zs[0-9]\+'
 syntax match borkOperator '|>\|=>\|[+*/%!?=<>|&^-]'
 syntax region borkString start=+"+ skip=+\\.+ end=+"+ contains=borkEscape
 syntax match borkEscape '\\.' contained
@@ -27,6 +28,7 @@ highlight default link borkContextual Keyword
 highlight default link borkBoolean Boolean
 highlight default link borkType Type
 highlight default link borkNumber Number
+highlight default link borkTupleIndex Identifier
 highlight default link borkOperator Operator
 highlight default link borkString String
 highlight default link borkTypedString String

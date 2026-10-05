@@ -65,6 +65,19 @@ A few things to notice:
 - Lists have methods such as `map` and `fold`. `map` is given the function `double` by name. `(sum, n) => sum + n` is a small function written in place, called a lambda.
 - `s"..."` inserts values into a string, with `$name` or `${expression}`.
 
+Tuples group values by position. Each position keeps its own type; use `.0`,
+`.1`, and so on, or unpack the tuple into names:
+
+```bork
+fn label(): (Int, String) { (3, "items") }
+
+fn main() {
+  pair = label()
+  (count, text) = pair
+  println(count, text, pair.0)
+}
+```
+
 ## Your own types
 
 A record groups named fields. A function that can fail says so in its result type, with `|` between the outcomes: `parseExpense` below returns an `Expense` or a `BadLine`.

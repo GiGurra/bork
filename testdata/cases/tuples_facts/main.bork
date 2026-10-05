@@ -1,0 +1,12 @@
+import "bork/json"
+
+pred positive(n: Int) { n > 0 }
+
+type PositivePair = (Int where positive, String)
+fn pair(): PositivePair { (3, "yes") }
+fn main() {
+  p = pair()
+  println(p.0 > 0)
+  println(json.Decode[PositivePair]("[4,\"ok\"]"))
+  println(json.Decode[PositivePair]("[-4,\"bad\"]"))
+}

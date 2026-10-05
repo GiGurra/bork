@@ -12,6 +12,8 @@ import (
 func TestNativeDiagnosticParity(t *testing.T) {
 	for _, source := range []string{
 		`fn main() { println("hello") }`,
+		`fn main() { pair = (1, "one"); (n, label) = pair; println(n, label, pair.0) }`,
+		`fn main() { println((1, true).2) }`,
 		`fn main() { println(missing) }`,
 		`fn greet() { println("hi") }`,
 		"pred positive(x: Int) { x > 0 }\nfn need(x: Int where positive): Int { x }\nfn safe(x: Int): Int { if (positive(x)) { need(x) } else { 0 } }",

@@ -85,6 +85,9 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 	for _, pat := range info.armPats {
 		bindings(pat)
 	}
+	for _, pat := range info.tuplePats {
+		bindings(pat)
+	}
 	for pos, def := range info.sourceDefinitions {
 		b.referenceNamed(pos, info.sourceNames[pos], def)
 	}
@@ -202,6 +205,9 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 	}
 	for arm, pat := range info.armPats {
 		b.pattern(arm.Pattern, pat)
+	}
+	for binding, pat := range info.tuplePats {
+		b.pattern(binding.Pattern, pat)
 	}
 	var out SymbolIndex
 	for _, symbol := range b.definitions {
@@ -511,6 +517,12 @@ func (b *sourceIndexBuilder) pattern(raw syntax.Pattern, pat *Pat) {
 			}
 			if i < len(target.Fields) && field.Pattern != nil {
 				b.pattern(field.Pattern, target.Fields[i].Pat)
+			}
+		}
+	case *syntax.TuplePat:
+		for i, element := range raw.Elems {
+			if i < len(pat.Fields) {
+				b.pattern(element, pat.Fields[i].Pat)
 			}
 		}
 	case *syntax.ListPat:

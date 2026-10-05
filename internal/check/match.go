@@ -293,6 +293,21 @@ func (c *checker) pattern(p syntax.Pattern, st Type) *Pat {
 		}
 		return pat
 
+	case *syntax.TuplePat:
+		rec, ok := st.(*Record)
+		if !ok || !rec.Tuple || len(rec.Fields) != len(p.Elems) {
+			c.errorf(p.Pos, "cannot match a %d-element tuple pattern against %s", len(p.Elems), st)
+			return nil
+		}
+		out := &Pat{Kind: PatRecord, Type: rec}
+		for i, elem := range p.Elems {
+			pat := c.pattern(elem, rec.Fields[i].Type)
+			if pat == nil {
+				return nil
+			}
+			out.Fields = append(out.Fields, &PatField{Name: rec.Fields[i].Name, Pat: pat})
+		}
+		return out
 	case *syntax.VariantPat:
 		return c.namePattern(p, st)
 
@@ -349,7 +364,7 @@ func (c *checker) nestedPatternFacts(t *syntax.TypeExpr) bool {
 				return true
 			}
 		}
-		for _, a := range t.Args {
+		for _, a := range append(append([]*syntax.TypeExpr{}, t.Args...), t.Tuple...) {
 			if c.hasFacts(a) {
 				return true
 			}

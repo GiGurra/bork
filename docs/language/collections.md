@@ -2,6 +2,10 @@
 
 bork has lists, maps, lazy sequences, and bytes built in. All of them are immutable: an operation gives a new collection and leaves the old one as it was.
 
+[Tuples](types.md#tuples) group a fixed number of values whose types may differ;
+lists hold any number of values of one element type. Comparable tuples can also
+be map keys.
+
 ## Lists
 
 ```bork

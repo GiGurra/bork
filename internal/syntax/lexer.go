@@ -279,12 +279,13 @@ func (lx *lexer) number(pos diag.Pos) {
 		digits()
 		// A '.' must be followed by a digit, so `5.copy(...)` stays a
 		// selector on an Int.
-		if lx.peek(0) == '.' && isDigit(lx.peek(1)) {
+		selector := len(lx.toks) > 0 && lx.toks[len(lx.toks)-1].Kind == Dot
+		if !selector && lx.peek(0) == '.' && isDigit(lx.peek(1)) {
 			kind = TFloat
 			lx.advance()
 			digits()
 		}
-		if lx.peek(0) == 'e' || lx.peek(0) == 'E' {
+		if !selector && (lx.peek(0) == 'e' || lx.peek(0) == 'E') {
 			kind = TFloat
 			lx.advance()
 			if lx.peek(0) == '+' || lx.peek(0) == '-' {
