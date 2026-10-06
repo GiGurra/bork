@@ -1,12 +1,10 @@
 // A pipeline: a producer sends numbers, a worker squares them, and the
 // main routine collects the results.
-fn count(s: Scope, ch: Channel[Int], n: Int, last: Int) uses state: Ok | Cancelled | Closed {
-  if (n <= last) {
+fn count(s: Scope, ch: Channel[Int], first: Int, last: Int) uses state: Ok | Cancelled | Closed {
+  for (n = first; n <= last; n = n + 1) {
     ch.send(s, n)?
-    count(s, ch, n + 1, last)
-  } else {
-    ch.close()
   }
+  ch.close()
 }
 
 fn square(s: Scope, input: Channel[Int], output: Channel[Int]) uses state: Ok | Cancelled | Closed {
