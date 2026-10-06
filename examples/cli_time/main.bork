@@ -1,0 +1,73 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/env"
+import "bork/json"
+import "bork/process"
+import "bork/test"
+import "bork/time"
+import "bork/yaml"
+use codec.Defaults
+use time.Codecs
+
+pred Positive(value: time.Duration) { value.nanos > 0 }
+type Options = {
+  timeout: time.Duration where Positive
+  since: Option[time.Instant]
+  retries: List[time.Duration] = []
+} derive (codec.Decode)
+
+fn main() {
+  match (cli.Run[Options]("timer", "Duration and RFC3339 flags", (options, s) => {
+    println(s"timeout=${time.FormatDuration(options.timeout)}")
+    println(options.since.map(value => time.Format(value, time.RFC3339())))
+    println(options.retries.map(time.FormatDuration))
+  })) {
+    error: cli.Error => { eprintln(error.Render("timer")); process.Exit(2) }
+    Ok => {}
+  }
+}
+
+test "duration codec round trips the signed nanosecond range" {
+  [-9223372036854775808, -1, 0, 1, 9223372036854775807].forEach(nanos => {
+    value = time.Nanoseconds(nanos)
+    assertEqual(test.AssertIs[time.Duration](codec.decode[time.Duration](codec.encode(value))), value)
+  })
+  assertEqual(test.AssertIs[time.Duration](json.Decode[time.Duration]("\"1h2m3s\"")).nanos, 3723000000000)
+  assertEqual(test.AssertIs[time.Duration](yaml.Decode[time.Duration]("250ms")).nanos, 250000000)
+  assertEqual(json.Encode(time.Nanoseconds(1500000000)), "\"1.5s\"")
+}
+
+test "instant wire strings normalize offsets and preserve fractions" {
+  instant = test.AssertIs[time.Instant](json.Decode[time.Instant]("\"1970-01-01T01:00:00.123456789+01:00\""))
+  assertEqual(instant.unixNanos, 123456789)
+  assertEqual(json.Encode(instant), "\"1970-01-01T00:00:00.123456789Z\"")
+  [-9223372036854775808, -1, 0, 1, 9223372036854775807].forEach(nanos => {
+    value = time.Instant { unixNanos: nanos }
+    assertEqual(test.AssertIs[time.Instant](codec.decode[time.Instant](codec.encode(value))), value)
+  })
+  assertEqual(test.AssertIs[time.Instant](yaml.Decode[time.Instant]("'1970-01-01T00:00:00Z'")).unixNanos, 0)
+}
+
+test "nonstring invalid and out of range wire values fail" {
+  assert(codec.decode[time.Duration](codec.Value.Number { text: "1" }) is codec.DecodeError)
+  assert(codec.decode[time.Instant](codec.Value.Null) is codec.DecodeError)
+  ["", "bad", "9223372036854775808ns"].forEach(text => {
+    assert(codec.decode[time.Duration](codec.Value.String { value: text }) is codec.DecodeError)
+  })
+  ["bad", "1970-01-01", "1600-01-01T00:00:00Z", "2300-01-01T00:00:00Z"].forEach(text => {
+    assert(codec.decode[time.Instant](codec.Value.String { value: text }) is codec.DecodeError)
+  })
+}
+
+test "selected decoder metadata makes environment input strings" {
+  assertEqual(codec.FieldInfo[time.Duration]().kind, "string")
+  assertEqual(codec.FieldInfo[time.Instant]().kind, "string")
+  assertEqual(codec.FieldInfo[List[time.Duration]]().kind, "list:string")
+  assertEqual(codec.FieldInfo[Option[time.Instant]]().kind, "string")
+  assertEqual(codec.FieldInfo[Option[time.Instant]]().optional, true)
+  values = { "TIMER_TIMEOUT": "2s", "TIMER_SINCE": "1970-01-01T00:00:00Z", "TIMER_RETRIES": "[\"10ms\",\"20ms\"]" }
+  options = test.AssertIs[Options](env.LoadWith[Options]("TIMER", name => values.get(name)))
+  assertEqual(options.timeout.nanos, 2000000000)
+  assertEqual(options.since, Option.Some(time.Instant { unixNanos: 0 }))
+  assertEqual(options.retries.map(value => value.nanos), [10000000, 20000000])
+}

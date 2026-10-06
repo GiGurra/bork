@@ -1,0 +1,42 @@
+import "bork/codec"
+
+// Time values use strings in JSON and YAML. Opt in with use time.Codecs.
+instance DecodeDuration: codec.Decode[Duration] {
+  metadata codec.FieldSchema = codec.FieldSchema { kind: "string", optional: false }
+  fn decode(value: codec.Value): Duration | codec.DecodeError {
+    match (value) {
+      codec.Value.String { value: text } => match (ParseDuration(text)) {
+        duration: Duration => duration
+        error: ParseError => codec.DecodeError { path: "", message: error.message }
+      }
+      _ => codec.DecodeError { path: "", message: "expected a duration string" }
+    }
+  }
+}
+instance EncodeDuration: codec.Encode[Duration] {
+  fn encode(value: Duration): codec.Value {
+    codec.Value.String { value: FormatDuration(value) }
+  }
+}
+
+// RFC3339 accepts offsets and optional nanoseconds. Encoding normalizes to UTC;
+// Parse rejects instants outside the signed Unix nanosecond range.
+instance DecodeInstant: codec.Decode[Instant] {
+  metadata codec.FieldSchema = codec.FieldSchema { kind: "string", optional: false }
+  fn decode(value: codec.Value): Instant | codec.DecodeError {
+    match (value) {
+      codec.Value.String { value: text } => match (Parse(text, RFC3339())) {
+        instant: Instant => instant
+        error: ParseError => codec.DecodeError { path: "", message: error.message }
+      }
+      _ => codec.DecodeError { path: "", message: "expected an RFC3339 instant string" }
+    }
+  }
+}
+instance EncodeInstant: codec.Encode[Instant] {
+  fn encode(value: Instant): codec.Value {
+    codec.Value.String { value: Format(value, RFC3339()) }
+  }
+}
+
+instances Codecs { DecodeDuration, EncodeDuration, DecodeInstant, EncodeInstant }
