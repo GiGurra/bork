@@ -80,9 +80,9 @@ Each stream takes its own value, so any mix works:
 
 | Argument | Variants | Default |
 | --- | --- | --- |
-| `stdin: Input` | `Empty` (/dev/null), `Inherit`, `Data { data }`, `Text { text }`, `File { path }`, `Pipe`, `From { reader }` | `.Empty` |
-| `stdout: Output` | `Capture`, `Inherit`, `Discard`, `File { path }` (truncates), `Append { path }`, `Pipe` | `.Capture` |
-| `stderr: ErrorOutput` | the Output variants, plus `Stdout` (2>&1) | `.Capture` |
+| `stdin: Input` | `Empty` (/dev/null), `Inherit`, `Data { data: Bytes }`, `Text { text: String }`, `File { path: String }`, `Pipe`, `From { reader: Reader }` | `.Empty` |
+| `stdout: Output` | `Capture`, `Inherit`, `Discard`, `File { path: String }` (truncates), `Append { path: String }`, `Pipe` | `.Capture` |
+| `stderr: ErrorOutput` | `Capture`, `Inherit`, `Discard`, `File { path: String }`, `Append { path: String }`, `Pipe`, `Stdout` (2>&1) | `.Capture` |
 
 `Capture` keeps the stream in memory in `Result.stdout` or `Result.stderr`;
 `Inherit` forwards it to the parent's own stream; `Discard` drops it. `Pipe`

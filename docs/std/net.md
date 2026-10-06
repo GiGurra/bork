@@ -76,10 +76,11 @@ operations also charge `clock`. A Listen handler also contributes its effects.
 import "bork/net"
 
 fn echo(conn: net.Connection, s: Scope) uses net + state + clock: Ok | IoError | Cancelled {
-  match (net.Read(conn, 4096, 1000)) {
-    data: Bytes => { _ = net.Write(conn, data, 1000)?; checkpoint(s) }
+  match (net.ReadLine(conn, 1000)) {
+    line: String => { _ = net.WriteLine(conn, line, 1000)?; checkpoint(s) }
     _: net.Eof => checkpoint(s)
     error: IoError => error
+    error: ParseError => IoError { path: net.RemoteAddress(conn), message: error.message }
     stopped: Cancelled => stopped
   }
 }
