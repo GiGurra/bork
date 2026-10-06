@@ -1,7 +1,7 @@
 # bork/cli
 
 Build command-line applications from records: flags, environment variables and
-JSON configuration are decoded and validated before a typed handler runs.
+JSON or YAML configuration are decoded and validated before a typed handler runs.
 
 Save this as `greet.bork`:
 
@@ -134,12 +134,16 @@ fn main() {
 }
 ```
 
-Strings are literal; booleans accept `--excited` and `--excited=false`.
+Fields whose selected decoder has string input take literal text; booleans accept `--excited` and `--excited=false`.
 Numbers and compound values use JSON syntax. Lists take repeated flags:
-`--tag one --tag two`; String elements are literal, other elements use JSON.
-Nested lists use a JSON array per occurrence. A field without a default is
-required, including Bool; Option fields may be omitted. Defaults and facts use
-the same rules as [ordinary decoding](codec.md).
+`--tag one --tag two`; Elements with string input are literal; other elements use JSON.
+Nested lists use a JSON array per occurrence. A non-optional Bool without a
+declared default starts as false; `--excited` sets it true. Declared defaults
+still apply, and Option[Bool] remains None when omitted. Other fields without
+defaults are required; Option fields may be omitted. This inferred false is a
+CLI source policy, including command trees, rather than a change to ordinary
+codec decoding or `env.Load`. Field facts still validate the inferred value.
+See [cli_bool](../../examples/cli_bool/main.bork).
 
 Field failures are collected before the handler runs. Flag syntax failures
 (such as malformed booleans) stop parsing before field validation. The complete
@@ -159,7 +163,7 @@ schema. `field` always names an exact bork field, independent of its flag name.
 | `envName: cli.Mapping = cli.Mapping.Auto` | Environment binding policy. |
 | `positional: Bool = false` | Shorthand for a single positional field. |
 | `position: Option[Int] = Option.None` | Indexed position in an ordered layout. |
-| `configFile: Bool = false` | Select an additional JSON configuration file. |
+| `configFile: Bool = false` | Select an additional JSON or YAML configuration file. |
 | `description: Option[String] = Option.None` | Override the field comment; Some("") suppresses it. |
 | `config: Bool = true` | Allow this field in configuration documents. |
 | `hidden: Bool = false` | Accept the flag but omit it from help/name completion. |
@@ -207,6 +211,21 @@ Option.Some("Server address.") }`. Some with an empty String
 suppresses the comment; None inherits it. Required/default markers still appear.
 See [the documentation example](../../examples/cli_docs/main.bork).
 
+### Input labels and displayed defaults
+
+Help labels follow the selected decoder's input kind. Built-in numbers display
+labels such as `int` and `float`; Rune displays `rune`, and structured values
+use `json`. Repeated lists display plural labels such as `strings` and `ints`.
+Bool flags take no value when used to set true.
+
+Defaults are readable display text: outer type prefixes are removed, an outer
+Some is unwrapped, and None displays as `unset`. Nested values keep their
+representation. These defaults are not guaranteed to be accepted input syntax.
+A nonpositional field with an enabled environment binding but no flag appears under
+`Environment variables:`; hidden and deprecated fields are omitted. Help skips
+source reads and validation, so a required environment variable need not be set
+just to view it. See [cli_help](../../examples/cli_help/main.bork).
+
 ## Names, environment and source policies
 
 Pass `settings: cli.Settings { ... }` to Parse, ParseDetailed, Run or Subcommand.
@@ -238,7 +257,7 @@ an alias together with a non-Auto mapping for the same source.
 
 `long: Disabled` makes a field config/env-only; its automatic short is also
 disabled. An explicit short requires an enabled canonical long flag. Env can
-be disabled independently. `config: false` rejects that field's key in JSON
+be disabled independently. `config: false` rejects that field's key in
 config files, including null; defaults and enabled CLI/env sources still work.
 To disable all derived flags, set autoLong and autoShort false. Explicit Named
 long flags can still opt individual fields in.
@@ -406,13 +425,20 @@ files or invokes a handler. See [entry points](#entry-points) for result handlin
 
 ## Configuration files
 
-`configFiles` is a list of JSON files using the options record's exact bork field
-names (`httpPort`, not `http-port`). Files overlay from left to right; a later
-field replaces an earlier field completely, including lists and nested records.
-Missing fields keep earlier values. Empty file paths are skipped. JSON must be
-an object; unknown top-level keys, malformed JSON, and unreadable files return
-`cli.Error`. Nested records follow their derived decoder's usual rules, which
-ignore unknown nested keys.
+`configFiles` accepts JSON and YAML files using the options record's exact bork
+field names (`httpPort`, not `http-port`). Each file selects its parser by its
+extension: `.yaml` and `.yml`, case-insensitively, select YAML; all other names,
+including extensionless paths, select JSON. The config-file selector follows
+the same rule, so one overlay chain can mix formats.
+
+Files overlay from left to right; a later field replaces an earlier field
+completely, including lists and nested records. Missing fields keep earlier
+values. Empty file paths are skipped. Each document must decode to an object;
+unknown top-level keys, malformed documents and unreadable files return
+`cli.Error`. YAML parse errors retain line/column diagnostics. Nested records
+follow their derived decoder's usual rules, which ignore unknown nested keys.
+See [cli_yaml](../../examples/cli_yaml/main.bork). Compound flag values still use
+JSON syntax, regardless of the config file's format.
 
 Mark one String or Option[String] field with `cli.Flag { field: "config",
 configFile: true }` to expose `--config <path>` (with ordinary short/env metadata
@@ -452,6 +478,43 @@ fn main() {
 Run with `app --config local.json --port 9000`. `settings.json` might contain
 `{"port": 8081}`; `local.json` might contain `{"port": 8082}`. The handler sees
 9000.
+
+## Duration and instant inputs
+
+Import `bork/time` and select `use time.Codecs` alongside `use codec.Defaults`
+to decode time values from strings:
+
+```bork
+import "bork/cli"
+import "bork/codec"
+import "bork/time"
+use codec.Defaults
+use time.Codecs
+
+type Options = {
+  timeout: time.Duration
+  since: Option[time.Instant]
+  retries: List[time.Duration] = []
+} derive (codec.Decode)
+
+fn main() {
+  println(cli.Parse[Options]("timer", "Time inputs", [
+    "--timeout", "1h2m3s", "--since", "1970-01-01T00:00:00Z",
+    "--retries", "250ms", "--retries", "1.5s"
+  ]))
+}
+```
+
+Duration uses `time.ParseDuration` syntax, including signed and compound values
+such as `-250ms` and `1h2m3s`. Instant accepts RFC3339 timestamps with offsets
+and optional fractional seconds. Values must fit signed nanoseconds. Option and
+List wrappers preserve these string inputs; help labels them `string` or
+`strings`, and environment scalar inputs use the same literal strings.
+
+The opt-in codecs also use strings in JSON and YAML; numeric values are
+rejected. Encoding formats Duration with `time.FormatDuration` and normalizes
+Instant to UTC RFC3339 with nanosecond precision. Quote timestamps in YAML to
+retain their string type. See [cli_time](../../examples/cli_time/main.bork).
 
 ## Subcommands
 
@@ -526,7 +589,8 @@ command or emit its warning. Failures retain warnings in the
 error list. The warning belongs to the selected command, including a group
 selected for help; ancestor groups do not warn during a child invocation. Manual
 execute callbacks preserve warnings in Help/Error and print successful warnings
-after the callback returns; their parsing and handler share one callback, so warning timing differs from typed Subcommand handlers. Root and persistent flags are not exposed.
+after the callback returns; their parsing and handler share one callback, so warning timing differs from typed Subcommand handlers. Use the
+[persistent root APIs](#persistent-root-flags) for shared root options.
 
 Names and aliases contain letters, digits, hyphens or underscores, cannot start
 with a hyphen, and must be unique among siblings. `help`, `completion`,
@@ -729,10 +793,10 @@ shorthand, including on the same field. At most one List is allowed, in the fina
 slot. Optional/default scalar fields cannot precede required scalar fields.
 These layout failures return metadata errors before reading config or env.
 
-Scalar positionals use the same literal String/JSON conversion as flags; a List
+Scalar positionals use the same decoder-based literal/JSON conversion as flags; a List
 uses one original command-line word per element. Commas, whitespace, quotes and
-empty String words retain their literal meaning. Non-String List elements use
-JSON, so a List[List[Int]] can consume shell-quoted `[1,2]` and `[]` as two
+empty words retain their literal meaning for string-input decoders. Other List
+elements use JSON, so a List[List[Int]] can consume shell-quoted `[1,2]` and `[]` as two
 elements. Mapped env and JSON config can fill omitted positions under ordinary
 precedence; provided words always occupy their indexed slots.
 
