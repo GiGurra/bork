@@ -1,8 +1,8 @@
-main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:467:78)
-main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:477:67)
-main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:376:70)
-main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:392:62)
-main.bork:5:52: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:394:41)
+main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:473:78)
+main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:483:67)
+main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:382:70)
+main.bork:5:52: no instance of Decode for (Int) => Int is in scope (declare one: instance name: codec.Decode[(Int) => Int] { ... }) (derive template at bork/codec/codec.bork:398:62)
+main.bork:5:52: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:400:41)
 main.bork:6:35: no instance of Encode for Handler is in scope (add `derive (codec.Encode)` to type Handler, or declare one: instance name: codec.Encode[Handler] { ... }) (derive template at bork/codec/codec.bork:317:79)
 main.bork:7:23: Show cannot be derived; only Decode, Encode and GoStruct can (yet)
 main.bork:8:27: unknown class Nope

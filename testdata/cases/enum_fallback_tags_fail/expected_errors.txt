@@ -1,0 +1,11 @@
+main.bork:2:28: codec fallback requires one positional String without facts, defaults, or a variant where clause
+main.bork:3:28: codec fallback requires one positional String without facts, defaults, or a variant where clause
+main.bork:4:67: a sealed type can have at most one codec fallback variant
+main.bork:5:23: codec fallback is only supported with fieldless known variants
+main.bork:6:44: codec fallback cannot declare a wire name or aliases
+main.bork:7:44: codec fallback cannot declare a wire name or aliases
+main.bork:9:28: codec fallback requires one positional String without facts, defaults, or a variant where clause
+main.bork:11:32: codec fallback requires one positional String without facts, defaults, or a variant where clause
+main.bork:12:30: codec fallback requires one positional String without facts, defaults, or a variant where clause
+main.bork:13:31: codec fallback requires one positional String without facts, defaults, or a variant where clause
+main.bork:14:22: an enum with a fallback needs at least one known variant

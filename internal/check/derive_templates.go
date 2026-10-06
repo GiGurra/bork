@@ -949,6 +949,14 @@ func (p *deriveExpansion) iterate(loop *syntax.For, list bool) []syntax.Expr {
 			}
 			result = append(result, p.expr(element))
 		} else {
+			// A pruned sole guard emits no statement. Keeping its empty block
+			// after a prior iteration's return would diagnose unreachable code.
+			if guard, ok := loop.Body.Tail.(*syntax.If); ok && len(loop.Body.Stmts) == 0 && guard.Comptime && guard.Else == nil {
+				chosen, valid := p.condition(guard.Cond)
+				if !valid || !chosen {
+					continue
+				}
+			}
 			result = append(result, p.expr(loop.Body))
 		}
 	}

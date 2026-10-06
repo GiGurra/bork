@@ -28,10 +28,10 @@ fn WireName(name: String, naming: Naming): String {
   match (naming) { Naming.Verbatim => name, _ => JoinWords(Words(name), naming) }
 }
 
-// EnumShape identifies a sealed type whose alternatives all have no payload.
+// EnumShape identifies fieldless alternatives plus an optional String fallback.
 derive fn EnumShape[T](): Bool {
   comptime match (shape.kind[T]()) {
-    shape.Sealed => [comptime for (variant in shape.variants[T]()) comptime if (!variant.fields.isEmpty()) true].isEmpty()
+    shape.Sealed => [comptime for (variant in shape.variants[T]()) comptime if (!variant.fields.isEmpty() && !VariantFallback[T](variant)) true].isEmpty()
     _ => false
   }
 }
@@ -83,11 +83,13 @@ derive fn CheckWireNames[T](): Ok {
     shape.Record => { comptime if (!shape.positional[T]()) { CheckFieldNames[T](shape.fields[T]()) } else { CheckPositionalNames[T](shape.fields[T]()) } }
     shape.Sealed => {
       comptime for (variant in shape.variants[T]()) {
-        comptime if (!wireAliasesAllowed(VariantAliases[T](variant), true)) { shape.fail("codec variant '" + variant.name + "' has an invalid YAML alias") }
-        comptime if (!variantNameAllowed(VariantWireName[T](variant))) { shape.fail("codec variant '" + variant.name + "' has invalid YAML wire name '" + VariantWireName[T](variant) + "'") }
-        comptime if (!variant.positional) { CheckFieldNames[T](variant.fields) } else { CheckPositionalNames[T](variant.fields) }
+        comptime if (!VariantFallback[T](variant)) {
+          comptime if (!wireAliasesAllowed(VariantAliases[T](variant), true)) { shape.fail("codec variant '" + variant.name + "' has an invalid YAML alias") }
+          comptime if (!variantNameAllowed(VariantWireName[T](variant))) { shape.fail("codec variant '" + variant.name + "' has invalid YAML wire name '" + VariantWireName[T](variant) + "'") }
+          comptime if (!variant.positional) { CheckFieldNames[T](variant.fields) } else { CheckPositionalNames[T](variant.fields) }
+        }
       }
-      comptime if (!wireNamespacesUnique([comptime for (variant in shape.variants[T]()) VariantNames[T](variant)])) { shape.fail("codec variants have duplicate wire names or aliases") }
+      comptime if (!wireNamespacesUnique([comptime for (variant in shape.variants[T]()) comptime if (!VariantFallback[T](variant)) VariantNames[T](variant)])) { shape.fail("codec variants have duplicate wire names or aliases") }
       Ok
     }
     _ => Ok

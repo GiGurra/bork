@@ -1,0 +1,5 @@
+main.bork:6:33: Color.Other requires 0 to be _derive_codecUnknown_Color_Other_1, but _derive_codecUnknown_Color_Other_1("RED") is false
+main.bork:7:33: Color.Other requires 0 to be _derive_codecUnknown_Color_Other_1, but _derive_codecUnknown_Color_Other_1("red") is false
+main.bork:8:49: Color.Other requires 0 to be _derive_codecUnknown_Color_Other_1, but that is not proven for name (check it first with if (_derive_codecUnknown_Color_Other_1(name)) { ... }, or require it: name: String where _derive_codecUnknown_Color_Other_1)
+main.bork:11:25: A_B.C requires 0 to be _derive_codecUnknown_A_B_C_2, but _derive_codecUnknown_A_B_C_2("FIRST") is false
+main.bork:12:24: A.B_C requires 0 to be _derive_codecUnknown_A_B_C_3, but _derive_codecUnknown_A_B_C_3("SECOND") is false
