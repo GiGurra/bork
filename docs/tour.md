@@ -82,6 +82,8 @@ fn main() {
 
 ## Your own types
 
+Records and sealed variants can also carry [typed package tags](language/types.md#typed-package-tags), such as `codec { name: "login" }` for a field’s wire name. These configure derivation while keeping the program’s source names.
+
 A record groups named fields. A function that can fail says so in its result type, with `|` between the outcomes: `parseExpense` below returns an `Expense` or a `BadLine`.
 
 To find out which one it got, a caller uses `match`. Each arm has a pattern on the left of `=>` and a result on the right, and the first pattern that fits is taken.

@@ -75,7 +75,7 @@ role: member
   `ipv4Addr` gives ipv4, addr; flags stay `apiURL` → `--api-url`). `_`, `-`
   and spaces also separate words, so an override such as `name: "user_name"`
   gives the flag `--user-name`. The rule moves to one function,
-  `codec.words`, which cli and env then call.
+  `codec.Words`, which cli and env then call.
 - **Joining.** Each policy joins the words: `httpUrlPort`, `HttpUrlPort`,
   `http_url_port`, `http-url-port`, `HTTP_URL_PORT`. Acronym case is not kept,
   so `userID` under Camel becomes `userId`. Use a `name` override to keep it.
@@ -138,8 +138,9 @@ role: member
   group's record literal (see [Syntax](#syntax)).
 - **Computed fields** are checked by wire name and aliases in the "computed
   field is read-only" check.
-- **CSV encode** needs every column, so it ignores `omit` and writes an empty
-  cell for None.
+- **CSV encode** needs every schema column. If codec omission removes one,
+  encoding reports the missing column and recommends `codec.Omit.Never`.
+  Richer default-preserving omission support is tracked in `bork-x6i5jn`.
 
 ## Syntax
 
@@ -309,14 +310,18 @@ forward compatibility. To keep the two designs consistent:
 `codec.RecordField` gains `wireName: String`, `aliases: List[String]` and
 `words: List[String]`. `name` stays the bork field name. cli, env, CSV and
 HTTP build `codec.Value` objects keyed by `wireName`. CSV headers and HTTP
-form keys use the wire name and accept aliases. `codec.words` and the joiners
-are public, so other libraries can follow the same rules.
+form keys use the wire name and accept aliases. `codec.Words` and the joiners
+are public (`codec.Words` and `codec.JoinWords`), so other libraries can follow
+the same rules. `RecordField.tags: List[codec.TagGroup] = []` additionally carries
+foreign typed field groups as `{ package: String, value: codec.Value }`, using
+canonical package paths and each tag record’s selected Encode instance. Codec’s
+own naming group already has dedicated fields and is excluded.
 
 ## Learnings from Go's encoding/json/v2
 
 Read from `go doc encoding/json/v2` and `encoding/json/jsontext` (Go 1.27).
 
-| Feature | json/v2 behaviour | bork today | Recommendation |
+| Feature | json/v2 behaviour | Before this delivery | Decision |
 | --- | --- | --- | --- |
 | Name matching | Case-sensitive by default. `case:ignore` and `MatchCaseInsensitiveNames` also ignore `-` and `_`. | Exact match | **Never** case-insensitive matching. v2 itself calls it a source of duplicates. Aliases cover renames. |
 | Duplicate names | Rejected by default (`AllowDuplicateNames` to allow) | YAML rejects. JSON accepts; a record decode keeps the first, a Map decode keeps the last. | **Now:** `json.Parse` rejects duplicates with line and column, as YAML does. |
@@ -332,14 +337,14 @@ Read from `go doc encoding/json/v2` and `encoding/json/jsontext` (Go 1.27).
 | Streaming | `jsontext` Encoder/Decoder, `MarshalerTo` / `UnmarshalerFrom` | Every value goes through the `codec.Value` tree | **Later**, when the parked performance work resumes: add `encodeTo` / `decodeFrom` class methods whose default goes through the tree. Derived instances can write tokens directly. This design keeps that easy: names are compile-time constants, and aliases become a fixed match. |
 | Error detail | `SemanticError` with a JSON Pointer, kind and Go type | `DecodeError { path, message }` | **Now:** keep paths in wire names (see overrides). **Later:** add a source line and column to DecodeError when parsing and decoding are combined. |
 
-## Delivery plan (after approval)
+## Delivery plan (approved)
 
 1. **JSON safety:** reject duplicate names and invalid UTF-8 in `json.Parse`,
    sort unordered map keys on encode, and report the `type` payload
    collision.
 2. **Tag groups:** grammar, parser, fmt, checker typing, `shape.tagged`, and
    the editor grammars (docs/syntax-changes.md).
-3. **Naming and overrides** in the codec templates: `codec.words`, the
+3. **Naming and overrides** in the codec templates: `codec.Words`, the
    policies, wire names, aliases, checks, `omit` and `unknown`. Golden and
    round-trip tests in JSON and YAML.
 4. **Schema users:** `RecordField.wireName`, `aliases` and `words` in cli, env,
