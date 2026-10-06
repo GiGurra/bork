@@ -4,9 +4,10 @@ For the implementer of [docs/design/codec-naming.md](../docs/design/codec-naming
 (PR #408). Read that note first. This file covers the decisions, how to split
 the work into PRs, where the code is, and the traps.
 
-Status: the design is waiting for the human to approve the syntax. **Don't
-start PR 2 or later until the lead confirms the approval.** PR 1 (JSON safety)
-doesn't depend on the syntax. Ask the lead before you start it.
+Status: syntax and the implementation splits have been approved. JSON safety,
+typed tags, wire naming, aliases, omission and consumer integration are delivered
+through the focused PR boundaries below, including the foreign field-tag carrier
+requested by the CLI worker.
 
 ## Decisions already made
 
@@ -27,7 +28,7 @@ doesn't depend on the syntax. Ask the lead before you start it.
   bork source name unless it is listed as an alias (needed for enums'
   fallback).
 - **Errors** use input (wire) names in their paths.
-- **cli/env:** share `codec.words` and the overrides. Flags stay kebab-case and
+- **cli/env:** share `codec.Words` and the overrides. Flags stay kebab-case and
   env names stay UPPER_SNAKE. Alias env names are derived only with a non-empty
   prefix. Precedence is enricher, then `Mapping.Named`, then the codec
   override, then the field name. Full rules are in the note's cli section,
@@ -44,7 +45,8 @@ doesn't depend on the syntax. Ask the lead before you start it.
      YAML's message) and invalid UTF-8.
    - `encodeMap` writes unordered maps sorted by key.
    - A named payload field called `type` in a sealed type becomes a compile
-     error, via `shape.fail` in `encodeShape` and `DecodeSealed`.
+     error, via `shape.fail` in `encodeShape` and `DecodeSealed`. The guard
+     starts here; the `name: "type"` regression ships with naming in PR 4.
    - Search goldens and examples for duplicate-key inputs first.
 2. **Tag groups: syntax.** AST, parser, formatter, describe, tree-sitter,
    TextMate and editor queries, and docs/grammar.md. Generalise `GoTags` into
@@ -60,7 +62,7 @@ doesn't depend on the syntax. Ask the lead before you start it.
    - Errors: a duplicate group in one place, a group on a resource or alias
      type, and a package without the matching tags type.
 4. **Codec naming and wire names.**
-   - `codec.Naming`, `codec.words` and the joiners.
+   - `codec.Naming`, `codec.Words` and the joiners.
    - `TypeTags`, `FieldTags` and `VariantTags` in internal/std/codec.
    - Wire names in `encodeShape`, `DecodeRecord`, `DecodeSealed` and
      `RecordInfo`.
@@ -68,15 +70,22 @@ doesn't depend on the syntax. Ask the lead before you start it.
    - Remap error paths.
    - The enum UPPER_SNAKE default (update goldens and say in the PR that it is
      a wire break).
-5. **Aliases, `omit`, `unknown`.** Decode alias matching and the "same field"
-   error. `omit` with its round-trip checks. `unknown: Reject`. JSON and YAML
-   round-trip tests, including YAML merge keys.
+5. **Aliases and unknown policy**, then a separate **omission** PR. Decode
+   alias matching and the "same field" error, `unknown: Reject`, and fallback tag
+   metadata ship first. `omit` and its round-trip checks ship separately. JSON
+   and YAML tests include alias conflicts through YAML merge keys.
 6. **Schema users.**
    - `RecordField.wireName`, `aliases` and `words`.
-   - env, CSV and HTTP key objects by `wireName`. CSV encode ignores `omit`.
-   - Replace `cli.flagName` and `env.variableName` with `codec.words`.
+   - env, CSV and HTTP key objects by `wireName`. CSV encode requires every
+     schema column; a missing omitted column is an error recommending `codec.Omit.Never` (follow-up `bork-x6i5jn`).
+   - Replace `cli.flagName` and `env.variableName` with `codec.Words`.
    - cli aliases, `FieldSpec.aliases`, conflict errors and config keys.
    - Message the `cli` worker before starting; their PRs touch the same files.
+   - Split env/CSV/HTTP consumers (6a) from CLI mapping/aliases/config (6b).
+   - A separate carrier PR exposes compile-time `field.tagGroups` and publishes
+     foreign groups as default-empty `RecordField.tags: List[codec.TagGroup]`.
+     Paths are canonical import paths; each concrete tag record needs a selected
+     Encode instance. Codec naming tags already have dedicated schema members.
 7. **Docs:** docs/std/json.md, encoding.md and cli.md (config keys follow the
    policy), env docs, and the language and tour pages for the tag-group
    syntax. TestDocSnippets compiles every `bork` block.

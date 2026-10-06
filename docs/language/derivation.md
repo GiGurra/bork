@@ -117,7 +117,15 @@ for descriptor signatures, builders, and validation rules.
 
 `shape.fields[T]()` returns record fields in declaration order. A field exposes
 `name`, `positional`, `index`, `doc`, `computed`, `hasDefault`, and `tags`, the
-field's declared `go { name: "value" }` tags in order as a `List[shape.Tag]`. `field.read(value)` expands
+field's declared `go { name: "value" }` tags in order as a `List[shape.Tag]`.
+Package tag records are checked separately: `field.tagged[M]()` and
+`variant.tagged[M]()` return `Option[M]`, while `shape.tagged[T, M]()` reads a type
+group. `field.tagGroups` enumerates checked package groups during expansion, with
+canonical package paths, concrete `Type` and `value()`. See
+[typed package tags](types.md#typed-package-tags) and the
+[shape API](../std/shape.md#fields-facts-and-tags).
+
+`field.read(value)` expands
 into a checked field read; the value must have the descriptor's owner type.
 The projected type retains independent field facts. Sibling constraints remain
 on the descriptor and complete owner proof, since their arguments require that
