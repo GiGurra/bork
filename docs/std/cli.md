@@ -873,6 +873,55 @@ supplied collections and keeps omitted fields Missing. Enrichers can override
 reads. Explicit `Collection.Repeat` preserves the default input policy.
 See [cli_collections](../../examples/cli_collections/main.bork).
 
+## Nested records
+
+A field whose selected decoder advertises named record inputs becomes prefixed
+flags. Each segment follows the shared codec naming policy: `db.host` becomes
+`--db-host` and, with automatic environment bindings, `DB_HOST`. Codec overrides
+and aliases apply to their own segment. CLI prefixes apply to the full name.
+Explicit `Flag` and `Completion` metadata use dotted source paths such as
+`field: "db.host"`; enrichers see the same stable identity.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Db = { host: String = "localhost", port: Int = 5432 } derive (codec.Decode)
+type Options = { db: Db, replica: Option[Db] } derive (codec.Decode)
+
+fn main() {
+  println(cli.Parse[Options]("app", "Databases", ["--db-port", "8080"]))
+}
+```
+
+Put defaults on the leaves, rather than on the parent record field. In this
+example, no flags yields the default database and `replica: Option.None`.
+Supplying any replica child activates that group; its missing required leaves
+must then be supplied, while its own defaults still apply. CLI Bool switches
+retain their inferred false default inside an active group.
+
+Configuration keeps nested objects: `{"db":{"host":"config","port":5432}}`.
+A child flag or environment value overrides that leaf and preserves configured
+siblings. Record facts run after complete reconstruction. Partial completion
+can read supplied leaves with `partial.Get[String]("db.host")`; omitted leaves
+remain Missing.
+
+To retain whole JSON input for a record field, select `use cli.FieldTagsEncode`
+where its options decoder is derived and annotate it with `cli { flatten: false }`.
+This also permits a declared parent default. A parent default on a flattened
+record is an error; partial overlays of parent defaults are not supported.
+Custom selected decoders without record metadata retain their advertised input
+kind, such as literal strings or whole JSON input.
+Record groups cannot be positional arguments or configuration-file selectors;
+individual scalar leaves can be positioned as usual. Configuration-file selectors
+must be top-level fields. Metadata rejects more than 32 nested record levels or
+256 accepted name paths for one leaf.
+
+The same options type can be passed to multiple `Subcommand` constructors;
+flattening also applies to persistent `RunRoot` options. See
+[cli_nested](../../examples/cli_nested/main.bork).
+
 ## Ordered positional arguments
 
 ```bork

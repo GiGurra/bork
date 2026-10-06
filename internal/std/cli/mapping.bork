@@ -186,6 +186,8 @@ fn resolveMetadataWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordS
       kind := strings.TrimPrefix(field.kind, "map:")
       if !strings.HasPrefix(field.kind, "map:") || kind != "string" && kind != "number" && kind != "bool" { fail(field.name, "KeyValue collection requires a Map[String, V] with string, number, or bool input values") }
     }
+    for _, group := range flattened.(cliSchema).groups { if group.field == field.name && isPositional(spec) { fail(field.name, "record groups cannot be positional arguments") } }
+    if spec.configFile && strings.Contains(field.name, ".") { fail(field.name, "nested configuration-file selectors are not supported") }
     long, short, env := nameOf(spec.long), nameOf(spec.short), nameOf(spec.env)
     if long == "" || isPositional(spec) { spec.aliases.long = nil }
     if env == "" || isPositional(spec) { spec.aliases.env = nil }

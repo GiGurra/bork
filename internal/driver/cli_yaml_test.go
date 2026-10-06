@@ -14,6 +14,7 @@ func TestCLIYamlConfig(t *testing.T) {
 	source := `import "bork/codec"
 import "bork/cli"
 use codec.Defaults
+use cli.FieldTagsEncode
 pred validPort(port: Int) { port > 0 && port < 65536 }
 type Nested = { enabled: Bool } derive (codec.Decode)
 type Options = {
@@ -21,7 +22,7 @@ type Options = {
  name: String
  port: Int where validPort = 8080
  tags: List[String] = ["default"]
- nested: Nested = Nested { enabled: true }
+ nested: Nested = Nested { enabled: true } cli { flatten: false }
  secret: String = "hidden"
 } derive (codec.Decode)
 fn main() {

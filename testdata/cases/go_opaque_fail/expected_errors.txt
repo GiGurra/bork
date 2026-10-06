@@ -21,10 +21,11 @@ main.bork:26:46: cannot compare values of type Payload with ==: opaque Go values
 main.bork:27:46: cannot compare values of type List[Payload] with ==: opaque Go values can change
 main.bork:28:17: facts cannot apply to Payload, which holds a Go value that can change
 main.bork:29:45: predicate generic cannot take Payload, which holds a Go value that can change
-main.bork:30:36: Encode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:326:89)
-main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:489:78)
-main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:499:67)
-main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:394:70)
-main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:414:62)
-main.bork:30:36: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:416:41)
+main.bork:30:36: Encode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:328:89)
+main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:492:78)
+main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:502:67)
+main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:396:70)
+main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:416:68)
+main.bork:30:36: Decode cannot apply to go_opaque_fail.Payload, which holds an opaque Go value (derive template at bork/codec/codec.bork:417:62)
+main.bork:30:36: match arms have different types: DecodeError and Ok (derive template at bork/codec/codec.bork:419:41)
 main.bork:31:22: cmp.Ordered is a constraint interface, so it cannot hold Go values

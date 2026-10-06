@@ -61,7 +61,7 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     env, enabled := spec.env.(Mapping_Named)
     if !enabled { continue }
     doc := spec.description
-    if field.hasDefault { doc += " (default " + defaultLabel(field) + ")" } else if !field.optional { doc += " (required)" }
+    if field.hasDefault { doc += " (default " + defaultLabel(field) + ")" } else if !field.optional { doc += " (" + helpRequired(field) + ")" }
     envLines = append(envLines, fmt.Sprintf("  %s %s  %s", env.name, label, strings.TrimSpace(doc)))
   }
   for name, label := range labels {
@@ -120,4 +120,11 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     _, err = fmt.Fprint(out, text)
     return err
   })
+}
+
+fn helpRequired(field: inputField): String unsafe go {
+  import "strings"
+  deepest, label := "", "required"
+  for _, group := range field.groups { if group.optional && strings.HasPrefix(field.field, group.field+".") && len(group.field) > len(deepest) { deepest, label = group.field, "required when " + group.key + " is set" } }
+  return label
 }
