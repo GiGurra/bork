@@ -272,6 +272,11 @@ The checks that do run are the ones written in the code, such as the `if` in a v
 
 `where` works on parameters, results, bindings, record and variant fields, list elements, and type aliases. In a place where the compiler could not enforce it, such as the keys or values of a `Map`, writing a `where` is a compile error. A fact is never silently ignored.
 
+Tuple element facts are checked like record field facts. A parameter of type
+`(Int where positive, String)` requires the first element to satisfy positive;
+`.0` access and tuple destructuring preserve the proof. Decode validates constrained
+elements before returning success and reports JSON index paths.
+
 To see what the compiler knows at some point in your code, ask it with [`bork describe`](../cli.md#describe).
 
 The [payments example](../../examples/payments/main.bork) uses facts end to end.
@@ -279,8 +284,3 @@ The [payments example](../../examples/payments/main.bork) uses facts end to end.
 ---
 
 Previous: [Collections](collections.md) · Next: [Effects](effects.md) · [All pages](../README.md#the-language)
-
-Tuple element facts are checked like record field facts. A parameter of type
-`(Int where positive, String)` requires the first element to satisfy positive;
-`.0` access and tuple destructuring preserve the proof. Decode validates constrained
-elements before returning success and reports JSON index paths.
