@@ -1,32 +1,78 @@
 # bork/process
 
-`bork/process` runs argv commands without a shell. `Run` waits for the child
-and gives its Result; `Start` gives a scope-owned `Process` to stream from,
-write to, wait on, signal or stop later. Each of stdin, stdout and stderr is configured on its own. A
-nonzero exit or a death by signal is data in the Result, not an error.
-`Args()` returns the command-line arguments without the program name, and
-`Exit(code)` terminates with that status without closing scopes.
-
-## Running a command
+`bork/process` runs argv commands with captured, forwarded, or piped streams and scope-owned cancellation.
 
 ```bork
 import "bork/process"
 
-fn status(s: Scope) uses io + state: Ok | IoError | Cancelled {
-  result = process.Run(s, "git", ["status", "--short"])?
+fn demo(s: Scope) uses io + state: Ok | IoError | Cancelled {
+  result = process.Run(s, "printf", ["hello\\n"])?
+  println(result.StdoutText().trim())
   println(result.code)
-  println(result.StdoutText())
+  match (process.Run(s, "false")?.Check()) {
+    error: process.ExitError => println(error.message)
+    _: process.Result => println("success")
+  }
+}
+
+fn main() {
+  println(scope app { demo(app) })
 }
 ```
 
-`Run(scope, name, arguments = [], environment = Option.None, directory = "",
-stdin = .Empty, stdout = .Capture, stderr = .Capture, cancelGrace = 0)` gives
-`Result | IoError | Cancelled`. None environment inherits the parent
-environment, `Some([])` clears it, and `Some(values)` supplies `KEY=value`
-entries. An empty directory inherits the current directory. `IoError` means
-the child could not be started (its path names the executable or the file that
-could not be opened) or could not be waited for. `Cancelled` means the owning
-scope was cancelled.
+```text
+hello
+0
+exit status 1
+Ok
+```
+
+This example uses the host's `printf` and `false` executables. No shell parses
+the arguments. A nonzero exit is a `Result`; `Check` turns it into `ExitError`.
+
+## API
+
+| Signature | Meaning |
+| --- | --- |
+| `Args() uses io: List[String]` | Return arguments without the program name. |
+| `Exit(code: Int) uses io: Never` | Exit immediately without closing scopes. |
+| `Run(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Result \| IoError \| Cancelled` | Start a child and wait for its result. |
+| `Start(s: Scope, name: String, arguments: List[String] = [], environment: Option[List[String]] = Option.None, directory: String = "", stdin: Input in s = .Empty, stdout: Output = .Capture, stderr: ErrorOutput = .Capture, cancelGrace: time.Duration = time.Duration { nanos: 0 }) uses io + state: Process \| IoError \| Cancelled` | Start a scope-owned child. |
+| `(child: Process) Wait() uses io + state: Result \| IoError \| Cancelled` | Wait for the same immutable result on each call. |
+| `(child: Process) TryWait() uses io + state: Option[Result \| IoError \| Cancelled]` | Poll; None means the child is running. |
+| `(child: Process) Pid(): Int` | Read the process ID without effects. |
+| `(child: Process) Signal(value: signal.Signal) uses io + state: Ok \| IoError` | Send a signal to the running child’s group. |
+| `(child: Process) Stop(grace: time.Duration = time.Duration { nanos: 5_000_000_000 }) uses io + state: Ok` | Send SIGTERM, then SIGKILL after grace. |
+| `(child: Process) Kill() uses io + state: Ok` | Kill the running child’s group immediately. |
+| `(child: Process) Stdin(): Writer` | Get the configured stdin pipe. |
+| `(child: Process) Stdout(): Reader` | Get the configured stdout pipe. |
+| `(child: Process) Stderr(): Reader` | Get the configured stderr pipe. |
+| `(output: Reader) NextLine() uses io + state: String \| Closed \| Cancelled \| IoError` | Read a line without its line ending. |
+| `(output: Reader) NextChunk(limit: Int = 32768) uses io + state: Bytes \| Closed \| Cancelled \| IoError` | Read at most limit bytes, waiting for some data. |
+| `(output: Reader) ReadAll() uses io + state: Bytes \| Cancelled \| IoError` | Read a pipe to the end. |
+| `(output: Reader) Lines() uses io + state: Seq[String \| Cancelled \| IoError]` | Traverse lines; failures are final elements. |
+| `(output: Reader) LinesChannel(s: Scope, capacity: Int where validCapacity = 64) uses io + state: Channel[String \| IoError]` | Pump lines into a bounded channel owned by s. |
+| `(input: Writer) Write(data: Bytes) uses io + state: Ok \| Closed \| Cancelled \| IoError` | Write bytes to stdin. |
+| `(input: Writer) WriteText(text: String) uses io + state: Ok \| Closed \| Cancelled \| IoError` | Write UTF-8 text to stdin. |
+| `(input: Writer) Close() uses io + state: Ok` | Send end-of-input; safe to repeat. |
+| `(result: Result) Success(): Bool` | Test for exit code zero. |
+| `(result: Result) Check(): Result \| ExitError` | Give the Result or an ExitError. |
+| `(result: Result) StdoutText(): String` | Read captured stdout as raw text. |
+| `(result: Result) StderrText(): String` | Read captured stderr as raw text. |
+
+`Run` and `Start` take the same options. `environment: .None` inherits the parent
+environment; `.Some([])` clears it; `.Some(values)` supplies `KEY=value` entries.
+An empty directory inherits the current directory. `IoError` means startup,
+stream, or wait failure; its path identifies the executable or affected file.
+`Cancelled` means the owning scope was cancelled. See [stream variants](#streams).
+
+| Record or variant | Fields |
+| --- | --- |
+| `Result` | `code: Int`, `status: ExitStatus`, `stdout: Bytes`, `stderr: Bytes` |
+| `ExitError` | Result fields plus `message: String` |
+| `ExitStatus.Exited` | `code: Int` |
+| `ExitStatus.Signaled` | `number: Int`, `name: String` (Unix) |
+| `Process`, `Reader`, `Writer` | Scope-owned resources. |
 
 ## Streams
 
@@ -201,12 +247,18 @@ is killed and Run gives `Cancelled` with the scope's reason:
 
 ```bork
 import "bork/process"
+import "bork/time"
 
-fn bounded(s: Scope) uses io + state + clock: process.Result | IoError | Cancelled {
+fn bounded() uses io + state + clock: process.Result | IoError | Cancelled {
   scope limited {
     cancelAfter(limited, 2000)
-    process.Run(limited, "slow-tool")
+    process.Run(limited, "sleep", ["10"],
+      cancelGrace: time.Nanoseconds(100_000_000))
   }
+}
+
+fn main() {
+  println(bounded())
 }
 ```
 
@@ -228,7 +280,7 @@ the grace period plus one second.
 - `Signal(signal)` sends a `bork/signal` Signal (`.Interrupt`, `.Terminate`,
   `.Hangup`, `.User1`, `.User2`) to the child's process group. It does nothing
   after the child has finished; unsupported signals give IoError.
-- `Stop(grace = 5s)` ends the child gracefully: SIGTERM to its group, then
+- `Stop(grace: time.Duration = time.Duration { nanos: 5_000_000_000 })` ends the child gracefully: SIGTERM to its group, then
   SIGKILL after `grace`. `Kill()` sends SIGKILL at once. Neither cancels the
   scope; `Wait` gives the child's Result, such as
   `Signaled { number: 15, name: "SIGTERM" }`, or the code the child chose when
@@ -288,5 +340,9 @@ Each runs as is and is tested:
 - [process_concurrent](../../examples/process_concurrent/main.bork): several processes at once, monitored and collected
 - [process_timeout](../../examples/process_timeout/main.bork): timeouts, graceful cancellation and Stop
 - [process_pipeline](../../examples/process_pipeline/main.bork): a pipeline of processes connected by OS pipes
+
+See the [process design](../design/process.md) for API rationale.
+
+Run `bork doc bork/process` for the generated reference.
 
 [All standard packages](README.md)
