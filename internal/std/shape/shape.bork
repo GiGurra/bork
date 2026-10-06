@@ -50,3 +50,6 @@ type Obligation = private { owner: String, variant: String, field: String, index
 type ValidationError = { path: String, message: String, obligation: Option[Obligation] = Option.None }
 // builder has a dependent private storage result during derive expansion.
 fn builder[T](): Never unsafe go { panic("shape.builder requires a derive template") }
+
+// positional identifies the ordered slots of a structural tuple target.
+fn positional[T](): Bool unsafe go { panic("shape.positional requires a derive template") }

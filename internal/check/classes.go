@@ -775,6 +775,9 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 			}
 			d.Args = append(d.Args, element)
 		}
+		if IsCodec(class, "Encode") && class.Template != nil {
+			return c.sourceTupleEncoder(d, tuple, pos)
+		}
 		return d
 	}
 	var matches []*Dict

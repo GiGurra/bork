@@ -505,6 +505,9 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 			default:
 				return shapeEnum("Other"), true
 			}
+		case "positional":
+			record, ok := target.(*Record)
+			return ok && record.Tuple, true
 		case "facts":
 			return p.factSequence(x.Pos, target, nil, targetShapeFacts(target), headFacts)
 		case "name":
@@ -518,6 +521,9 @@ func (p *deriveExpansion) eval(x syntax.Expr) (any, bool) {
 		case "owner":
 			switch target := target.(type) {
 			case *Record:
+				if target.Pkg == nil {
+					return "", true
+				}
 				return target.Pkg.Path, true
 			case *Sealed:
 				return target.Pkg.Path, true

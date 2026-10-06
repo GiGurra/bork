@@ -209,7 +209,7 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (check.IsCodec(d.Class, "Encode") || check.IsCodec(d.Class, "Decode")) {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && check.IsCodec(d.Class, "Decode") {
 			method := strings.ToLower(d.Class.Name)
 			fun, _ := g.dictMethod(d, method)
 			return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun}}}
@@ -224,6 +224,26 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 			&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun},
 		}}
 	}
+	if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple {
+		// Retag generic tuple implementations through their checked method
+		// signatures instead of returning a dictionary with formal Go tags.
+		var fields []ast.Expr
+		for _, method := range d.Class.Methods {
+			var implementation *check.Func
+			for _, candidate := range d.Inst.Methods {
+				if candidate.Decl.Name == method.Decl.Name {
+					implementation = candidate
+				}
+			}
+			signature := check.SubstituteType(&check.FuncType{Params: method.Params, Result: method.Result}, []*check.TypeParam{d.Class.Param}, []check.Type{d.Type}).(*check.FuncType)
+			copy := *implementation
+			copy.Class = nil
+			reference := &check.Instance{Func: &copy, TypeArgs: d.TypeArgs, Dicts: d.Args, Params: signature.Params, Result: signature.Result}
+			fields = append(fields, &ast.KeyValueExpr{Key: name(method.Decl.Name), Value: g.funcRef(reference)})
+		}
+		return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: fields}
+	}
+
 	var fun ast.Expr = ast.NewIdent(instName(d.Inst))
 	if len(d.TypeArgs) > 0 {
 		idx := &ast.IndexListExpr{X: fun}
@@ -259,7 +279,7 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 		return fun, nil
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && (check.IsCodec(d.Class, "Encode") || check.IsCodec(d.Class, "Decode")) {
+		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && check.IsCodec(d.Class, "Decode") {
 			return g.tupleCodec(d, tuple), nil
 		}
 		if check.IsShow(d.Class) {
@@ -297,7 +317,8 @@ func (g *gen) tupleMethod(d *check.Dict, source *check.Func, typeArgs []check.Ty
 		}
 	}
 	declared := &check.FuncType{Params: method.Params, Result: method.Result}
-	if !hasTupleRepresentation(declared) {
+	implementation := &check.FuncType{Params: source.Params, Result: source.Result}
+	if !hasTupleRepresentation(declared) && !hasTupleRepresentation(implementation) {
 		return fun, dicts
 	}
 	want := check.SubstituteType(declared, []*check.TypeParam{d.Class.Param}, []check.Type{d.Type}).(*check.FuncType)

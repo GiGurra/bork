@@ -152,7 +152,7 @@ func (c *checker) checkDeriveDefinitions(files []*syntax.File) {
 					return
 				}
 				if alias, member, qualified := strings.Cut(identifier.Name, "."); qualified {
-					if pkg := c.pkg.imports[alias]; pkg != nil && pkg.Path == "bork/shape" && (member == "Record" || member == "Sealed" || member == "Other" || member == "fields" || member == "variants" || member == "kind" || member == "name" || member == "owner" || member == "facts" || member == "builder" || member == "fail") {
+					if pkg := c.pkg.imports[alias]; pkg != nil && pkg.Path == "bork/shape" && (member == "Record" || member == "Sealed" || member == "Other" || member == "fields" || member == "variants" || member == "kind" || member == "name" || member == "owner" || member == "positional" || member == "facts" || member == "builder" || member == "fail") {
 						return
 					}
 				}

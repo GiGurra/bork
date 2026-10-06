@@ -239,11 +239,17 @@ derive instance encodeShape[T]: Encode[T] {
   fn encode(x: T): Value {
     comptime match (shape.kind[T]()) {
       shape.Record => {
-        fields: List[Field] = [comptime for (field in shape.fields[T]())
-          comptime if (!field.computed) {
-            Field { name: field.name, value: encode[field.Type](field.read(x)) }
-          }]
-        Value.Object { fields: fields }
+        comptime if (shape.positional[T]()) {
+          values: List[Value] = [comptime for (field in shape.fields[T]())
+            encode[field.Type](field.read(x))]
+          Value.Array { items: values }
+        } else {
+          fields: List[Field] = [comptime for (field in shape.fields[T]())
+            comptime if (!field.computed) {
+              Field { name: field.name, value: encode[field.Type](field.read(x)) }
+            }]
+          Value.Object { fields: fields }
+        }
       }
       shape.Sealed => {
         comptime for (variant in shape.variants[T]()) {

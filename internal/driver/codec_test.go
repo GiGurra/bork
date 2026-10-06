@@ -164,3 +164,25 @@ derive instance wrong[T]: Wrong[T] {
 type Row = { value: Option[Int where positive] } derive(Wrong)
 fn main() {}`, "positive(-1) is false")
 }
+
+func TestCodecSourceTupleEncodeGenericAndComptime(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+import "bork/json"
+use codec.Defaults
+fn pair[A: codec.Encode, B: codec.Encode](left: A, right: B): String { json.Encode((left, right)) }
+encoded: codec.Value = comptime { codec.encode((1, "compile")) }
+fn main() {
+  println(pair(2, "runtime"))
+  println(json.Render(encoded))
+  println(json.Encode(((3,), ("nested", true))))
+}`
+	exe, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(exe).CombinedOutput()
+	if err != nil || string(out) != "[2,\"runtime\"]\n[1,\"compile\"]\n[[3],[\"nested\",true]]\n" {
+		t.Fatalf("source tuple encoding: %s, %v", out, err)
+	}
+}

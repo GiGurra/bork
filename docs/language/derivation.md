@@ -135,8 +135,9 @@ resulting instance with `use`. The class name itself is not an instance import.
 
 The [derive_labels example](../../examples/derive_labels/README.md) is runnable.
 
-The standard `codec.Encode` derivation for named records and sealed types is a
-source template in `bork/codec`. It omits computed fields, retains named-field
+The standard `codec.Encode` derivation is a source template in `bork/codec`. It omits computed fields, retains named-field
 object order, and uses the tagged `values` array for positional payloads.
-Tuple codecs and `codec.Decode` still use their existing compiler paths during
-the source migration.
+Tuple encoding uses the same template's array branch; `shape.positional[T]()`
+identifies those ordered slots. Implicit tuple dictionaries retain their normal
+per-slot instance selection. `codec.Decode` and tuple decoding still use their
+existing compiler paths during the source migration.

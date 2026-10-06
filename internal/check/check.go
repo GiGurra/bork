@@ -248,6 +248,10 @@ type Info struct {
 	// Classes and ClassInstances list every class and instance.
 	Classes        []*Class
 	ClassInstances []*ClassInstance
+	// Structural source plans belong to request-wide state, including
+	// specializations discovered while temporary initializer scopes restore
+	// their checker state.
+	deriveTupleEncoders map[string]*ClassInstance
 	// Funcs holds the functions visible to the root package by name: its
 	// own, and the prelude's that it does not replace.
 	Funcs map[string]*Func
@@ -667,9 +671,15 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 	}
 	c.expandDeriveBodies()
 	// Establish template bounds before ordinary callers select their dictionaries.
-	for _, fn := range c.info.ExpandedFunctions {
-		c.checkFunc(fn)
+	expandedChecked := 0
+	checkExpanded := func() {
+		for expandedChecked < len(c.info.ExpandedFunctions) {
+			fn := c.info.ExpandedFunctions[expandedChecked]
+			expandedChecked++
+			c.checkFunc(fn)
+		}
 	}
+	checkExpanded()
 	// Pass 3: check bodies.
 	for _, f := range files {
 		for _, fd := range f.Funcs {
@@ -688,6 +698,9 @@ func programObserved(files []*syntax.File, root string, diags *diag.List, goType
 			c.checkTest(td, names)
 		}
 	}
+	// Implicit structural dictionaries discovered in ordinary functions and
+	// tests can add source specializations after the initial template pass.
+	checkExpanded()
 	c.materializeDefaultUses()
 	c.ensureAllFieldDefaults()
 	c.unappliedWheres(files)
