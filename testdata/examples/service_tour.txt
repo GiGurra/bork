@@ -1,0 +1,7 @@
+GET /health -> 200 ok
+level=INFO msg="note created" id=1
+POST /notes -> 201 {"id":1,"title":"learn bork"}
+empty title -> 422 {"path":".title","message":"must be nonEmpty"}
+broken JSON -> 400 {"path":"","message":"unexpected end of JSON: expected a field name"}
+GET /notes -> 200 [{"id":1,"title":"learn bork"}]
+application scope closed

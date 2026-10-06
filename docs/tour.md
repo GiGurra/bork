@@ -4,7 +4,7 @@ This tour builds a small program that reads a file of expenses and adds them up.
 
 ## Install
 
-bork compiles through Go, so install [Go](https://go.dev/dl/) 1.26 or later first. Then:
+bork compiles through Go. Install [Go](https://go.dev/dl/) 1.21 or later with automatic toolchain switching enabled (the default); Go downloads the required 1.26 or newer toolchain when needed. With `GOTOOLCHAIN=local`, install Go 1.26 or newer yourself. Then:
 
 ```sh
 go install github.com/GiGurra/bork/cmd/bork@latest
@@ -63,7 +63,7 @@ A few things to notice:
 
 - A function's value is the last expression in its body. There is a `return`, but it is rarely needed.
 - `if` is an expression, so it gives a value.
-- `prices = ...` names a value. A name keeps its value: it cannot be assigned again or reused for something else.
+- `prices = ...` names an immutable value. A later binding in the same block may reuse the name and refer to its previous value; earlier values do not change. Nested blocks cannot shadow an outer name. See [names and values](language/basics.md#names-and-values).
 - Lists have methods such as `map` and `fold`. `map` is given the function `double` by name. `(sum, n) => sum + n` is a small function written in place, called a lambda.
 - `s"..."` inserts values into a string, with `$name` or `${expression}`.
 
@@ -315,6 +315,7 @@ See the [command-line reference](cli.md) for all of them.
 
 ## Where to go next
 
+- **Next:** [Build a SQLite-backed JSON API](tour-service.md), with configuration, validated requests, logging, tests and shutdown.
 - The [language pages](README.md#the-language) explain each area in more depth, starting with [the basics](language/basics.md).
 - The [examples](examples.md) are complete programs, each with its expected output.
 - The [standard packages](std/README.md) cover files, HTTP, JSON, SQL, and more.

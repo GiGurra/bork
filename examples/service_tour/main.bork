@@ -1,0 +1,233 @@
+// bork run examples/service_tour -- demo
+// TOUR_ADDRESS=127.0.0.1:8080 TOUR_DATABASE=notes.db bork run examples/service_tour -- serve
+// curl -H 'Content-Type: application/json' -d '{"title":"learn bork"}' localhost:8080/notes
+import "bork/codec"
+import "bork/env"
+import "bork/http"
+import "bork/fs"
+import "bork/json"
+import "bork/log"
+import "bork/process"
+import "bork/sql"
+use codec.Defaults
+
+pred nonEmpty(value: String) { value.byteLength() > 0 }
+pred short(value: String) { value.byteLength() <= 100 }
+type Title = String where nonEmpty and short
+type NewNote = { title: Title } derive (codec.Decode)
+type Note = { id: Int, title: Title } derive (codec.Decode, codec.Encode)
+type Problem = { path: String, message: String } derive (codec.Encode)
+type Config = {
+  address: String where nonEmpty = "127.0.0.1:8080",
+  database: String where nonEmpty = "notes.db",
+} derive (codec.Decode)
+
+fn setup(db: sql.Connection) uses io + net: Ok | sql.Error {
+  _ = sql.SQL"CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL)".Exec(db)?
+}
+
+// A request owns its transaction. Commit makes the row durable; any earlier
+// return rolls it back. The connection pool stays in the application's scope.
+fn insert(db: sql.Connection in request, request: Scope, note: NewNote) uses io + net: Note | sql.Error | codec.DecodeError {
+  tx = sql.Begin(db, request)?
+  _ = sql.SQL"INSERT INTO notes(title) VALUES (${note.title})".Exec(tx)?
+  rows = sql.SQL"SELECT id, title FROM notes WHERE id = last_insert_rowid()".Query[Note](tx)?
+  match (rows) {
+    [saved] => { sql.Commit(tx)?; saved }
+    _ => sql.Error { operation: "insert", message: "expected one inserted note" }
+  }
+}
+
+fn storageError(error: sql.Error | codec.DecodeError): http.Response {
+  log.Error("storage failed", { "error": toString(error) })
+  http.JsonReply(500, json.Encode(Problem { path: "", message: "storage unavailable" }))
+}
+
+fn create(db: sql.Connection in request, req: http.Request, request: Scope) uses io + net: http.Response {
+  match (http.Body[NewNote](req)) {
+    note: NewNote => match (insert(db, request, note)) {
+      saved: Note => {
+        log.Info("note created", { "id": saved.id })
+        http.JsonReply(201, json.Encode(saved))
+      }
+      error: sql.Error | codec.DecodeError => storageError(error)
+    }
+    error: json.JsonError => http.JsonReply(400, json.Encode(Problem { path: "", message: error.message }))
+    error: codec.DecodeError => http.JsonReply(422, json.Encode(Problem { path: error.path, message: error.message }))
+  }
+}
+
+fn list(db: sql.Connection in request, request: Scope) uses io + net: List[Note] | sql.Error | codec.DecodeError {
+  tx = sql.Begin(db, request)?
+  sql.SQL"SELECT id, title FROM notes ORDER BY id".Query[Note](tx)
+}
+
+fn route(db: sql.Connection in request, req: http.Request, request: Scope) uses io + net: http.Response {
+  match ((req.method, req.path)) {
+    ("GET", "/health") => http.Text(200, "ok")
+    ("POST", "/notes") => create(db, req, request)
+    ("GET", "/notes") => match (list(db, request)) {
+      notes: List[Note] => http.JsonReply(200, json.Encode(notes))
+      error: sql.Error | codec.DecodeError => storageError(error)
+    }
+    (_, "/notes") => http.Text(405, "use GET or POST")
+    _ => http.Text(404, "not found")
+  }
+}
+
+fn start(config: Config, app: Scope) uses io + net + clock + state: http.Server | sql.Error | IoError {
+  db = sql.OpenSqlite(config.database, app)?
+  setup(db)?
+  http.Listen(config.address, app, handler: (req, request) => route(attach(db, request), req, request), drainTimeoutMs: 5000, requestTimeoutMs: 2000)
+}
+
+fn serve() uses io + net + clock + state: Ok | env.ConfigError | sql.Error | IoError {
+  config = env.Load[Config]("TOUR")?
+  scope app with cleanupTimeout(5000) {
+    server = start(config, app)?
+    log.Info("listening", { "address": http.Address(server) })
+    http.WaitAny([server])
+  }
+}
+
+fn show(label: String, result: http.Result) uses io {
+  match (result) {
+    response: http.Response => println(s"$label -> ${response.status} ${response.body}")
+    error => panic(toString(error))
+  }
+}
+
+fn demo() uses io + net + clock + state: Ok | sql.Error | IoError {
+  scope app with cleanupTimeout(5000) {
+    server = start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)?
+    base = "http://" + http.Address(server)
+    show("GET /health", http.Get(base + "/health", app))
+    show("POST /notes", http.Post(base + "/notes", "application/json", "{\"title\":\"learn bork\"}", app))
+    show("empty title", http.Post(base + "/notes", "application/json", "{\"title\":\"\"}", app))
+    show("broken JSON", http.Post(base + "/notes", "application/json", "{", app))
+    show("GET /notes", http.Get(base + "/notes", app))
+  }
+  println("application scope closed")
+}
+
+fn main() {
+  log.Configure(log.Defaults().copy(timestamps: false))
+  result = match (process.Args()) {
+    [] => demo()
+    ["demo"] => demo()
+    ["serve"] => serve()
+    _ => { eprintln("usage: service_tour [demo|serve]"); process.Exit(2) }
+  }
+  match (result) {
+    Ok => {}
+    error => { eprintln(toString(error)); process.Exit(1) }
+  }
+}
+
+fn makeRequest(method: String, path: String, body: String = ""): http.Request {
+  .{ method: method, path: path, body: body, query: "", params: {:}, headers: {:} }
+}
+
+fn database(result: sql.Connection | sql.Error): sql.Connection {
+  match (result) { db: sql.Connection => db, error => panic(toString(error)) }
+}
+
+test "direct handlers validate and store notes" {
+  scope app {
+    db = database(sql.OpenSqlite(":memory:", app))
+    assertEqual(setup(db), Ok)
+    scope req {
+      response = route(db, makeRequest("POST", "/notes", "{\"title\":\"learn bork\"}"), req)
+      assertEqual(response.status, 201)
+      assertEqual(response.body, "{\"id\":1,\"title\":\"learn bork\"}")
+    }
+    scope req {
+      assertEqual(route(db, makeRequest("POST", "/notes", "{\"title\":\"\"}"), req).status, 422)
+      assertEqual(route(db, makeRequest("POST", "/notes", "{"), req).status, 400)
+      assertEqual(route(db, makeRequest("POST", "/notes", "{\"title\":\"" + "x".repeat(101) + "\"}"), req).status, 422)
+      assertEqual(route(db, makeRequest("GET", "/notes"), req).body, "[{\"id\":1,\"title\":\"learn bork\"}]")
+      assertEqual(route(db, makeRequest("DELETE", "/notes"), req).status, 405)
+      assertEqual(route(db, makeRequest("GET", "/missing"), req).status, 404)
+    }
+  }
+}
+
+test "configuration validates supplied environment values" {
+  loaded = env.LoadWith[Config]("TOUR", key => if (key == "TOUR_DATABASE") { Option.Some("") } else { Option.None })
+  match (loaded) { _: env.ConfigError => {}, _ => assert(false) }
+  assertEqual(env.LoadWith[Config]("TOUR", key => Option.None), Config {})
+}
+
+test "database startup failure does not open a listener" {
+  scope fixture {
+    directory = match (fs.TempDir(fixture)) { value: fs.Directory => value, error => panic(toString(error)) }
+    scope app {
+      missing = fs.Join([fs.DirectoryPath(directory), "missing", "notes.db"])
+      if (nonEmpty(missing)) {
+        match (start(Config { address: "127.0.0.1:0", database: missing }, app)) {
+          _: sql.Error => {}
+          _ => assert(false)
+        }
+      } else { assert(false) }
+    }
+  }
+}
+
+test "listener startup failure returns its error" {
+  scope app {
+    match (start(Config { address: "bad address", database: ":memory:" }, app)) {
+      _: IoError => {}
+      _ => assert(false)
+    }
+  }
+}
+
+test "scope cleanup releases the listener" {
+  address = scope app with cleanupTimeout(5000) {
+    match (start(Config { address: "127.0.0.1:0", database: ":memory:" }, app)) {
+      server: http.Server => http.Address(server)
+      error => panic(toString(error))
+    }
+  }
+  scope replacement {
+    match (http.Listen(address, replacement, handler: (req, rs) => http.Text(200, "ok"))) {
+      server: http.Server => assertEqual(http.Address(server), address)
+      error => panic(toString(error))
+    }
+  }
+}
+
+test "uncommitted writes roll back at scope exit" {
+  scope app {
+    db = database(sql.OpenSqlite(":memory:", app))
+    assertEqual(setup(db), Ok)
+    scope request {
+      match (sql.Begin(db, request)) {
+        tx: sql.Transaction => { _ = sql.SQL"INSERT INTO notes(title) VALUES (${"discarded"})".Exec(tx) }
+        error => panic(toString(error))
+      }
+    }
+    scope request {
+      assertEqual(route(db, makeRequest("GET", "/notes"), request).body, "[]")
+    }
+  }
+}
+
+test "storage failures return a generic response" {
+  scope app {
+    db = database(sql.OpenSqlite(":memory:", app))
+    assertEqual(setup(db), Ok)
+    _ = sql.SQL"INSERT INTO notes(title) VALUES (${""})".Exec(db)
+    scope request {
+      response = route(db, makeRequest("GET", "/notes"), request)
+      assertEqual(response.status, 500)
+      assertEqual(response.body, "{\"path\":\"\",\"message\":\"storage unavailable\"}")
+    }
+    _ = sql.SQL"DROP TABLE notes".Exec(db)
+    scope request {
+      response = route(db, makeRequest("POST", "/notes", "{\"title\":\"valid\"}"), request)
+      assertEqual(response.status, 500)
+      assertEqual(response.body, "{\"path\":\"\",\"message\":\"storage unavailable\"}")
+    }
+  }
+}
