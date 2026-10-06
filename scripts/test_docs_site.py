@@ -2,6 +2,7 @@
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+from collections import Counter
 import tempfile
 import unittest
 
@@ -15,6 +16,7 @@ class Tables(HTMLParser):
         super().__init__()
         self.tables = []
         self.links = []
+        self.first_cell_links = []
         self.in_table = False
 
     def handle_starttag(self, tag, attrs):
@@ -26,7 +28,10 @@ class Tables(HTMLParser):
         elif tag in {"td", "th"} and self.in_table:
             self.tables[-1][-1] += 1
         elif tag == "a" and self.in_table:
-            self.links.extend(value for name, value in attrs if name == "href")
+            links = [value for name, value in attrs if name == "href"]
+            self.links.extend(links)
+            if self.tables[-1][-1] == 1:
+                self.first_cell_links.extend(links)
 
     def handle_endtag(self, tag):
         if tag == "table":
@@ -91,6 +96,15 @@ def checked_tables(source):
     if rendered.tables != expected:
         raise ValueError(f"rendered tables {rendered.tables} differ from source {expected}")
     return rendered
+
+
+def indexed_examples(tables):
+    counts = Counter(match[1] for url in tables.first_cell_links
+                     if (match := re.search(r"^\.\./examples/([^/#]+)(?:/|$)", url)))
+    duplicate = sorted(name for name, count in counts.items() if count > 1)
+    if duplicate:
+        raise ValueError(f"public examples appear in multiple rendered entries: {duplicate}")
+    return set(counts)
 
 
 class SiteTests(unittest.TestCase):
@@ -202,11 +216,17 @@ class SiteTests(unittest.TestCase):
                 source = page.read_text()
                 tables = checked_tables(source)
                 if page == root / "docs/examples.md":
-                    linked = {match[1] for url in tables.links
-                              if (match := re.search(r"^\.\./examples/([^/#]+)(?:/|$)", url))}
+                    linked = indexed_examples(tables)
                     public = {entry.name for entry in (root / "examples").iterdir()
                               if entry.is_dir() and not entry.name.startswith(".") and (entry / "main.bork").is_file()}
                     self.assertTrue(public <= linked, f"examples missing from rendered table rows: {public - linked}")
+
+    def test_example_table_entries_unique(self):
+        row = '| [Demo](../examples/demo/main.bork) | [Related source](../examples/demo/main.bork) |\n'
+        source = '| Example | Description |\n| --- | --- |\n'
+        self.assertEqual(indexed_examples(checked_tables(source + row)), {"demo"})
+        with self.assertRaisesRegex(ValueError, 'multiple rendered entries'):
+            indexed_examples(checked_tables(source + row + row))
 
     def test_table_regressions(self):
         valid = '| API | Result |\n| --- | --- |\n| `call()` | `Int \\| Error` |\n'

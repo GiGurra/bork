@@ -117,6 +117,7 @@ These examples build on [bork/cli](std/cli.md). Configuration and catalog paths 
 
 | Example | What it shows | Run from repository root |
 | --- | --- | --- |
+| [cli_bool](../examples/cli_bool/main.bork) | Omitted Bool switches, explicit defaults, and optional Bool values | `bork run examples/cli_bool` |
 | [cli_completion](../examples/cli_completion/main.bork) | Shell completion and positional arguments | `(cd examples/cli_completion && bork run . -- --environment prod web worker)` |
 | [cli_docs](../examples/cli_docs/main.bork) | Field comments and flag help | `(cd examples/cli_docs && bork run . -- --host docs.example --keep-alive)` |
 | [cli_dynamic](../examples/cli_dynamic/main.bork) | Dynamic defaults and choices with local configuration | `(cd examples/cli_dynamic && bork run . -- --config settings.json --namespace team --resource team-web)` |
@@ -131,4 +132,3 @@ These examples build on [bork/cli](std/cli.md). Configuration and catalog paths 
 | [cli_names_manual](../examples/cli_names_manual/main.bork) | Explicit flag, short and environment names | `MANUAL_PORT=5433 MANUAL_TOKEN=secret bork run examples/cli_names_manual -- --addr db.internal` |
 | [cli_names_mixed](../examples/cli_names_mixed/main.bork) | Flag/env/config precedence with derived and explicit names | `(cd examples/cli_names_mixed && MIXED_SERVER_HOST=env.example MIXED_LISTEN=7000 MIXED_DEBUG=true bork run . -- --config settings.json --server-host flag.example)` |
 | [cli_validation](../examples/cli_validation/main.bork) | Field, cross-field and whole-record validation | `bork run examples/cli_validation -- --name Billing_API --port 0` (intentionally exits 2); use `--name billing-api --port 8080` for success |
-| [cli_yaml](../examples/cli_yaml/main.bork) | Mixed YAML/JSON config overlays and CLI overrides | `(cd examples/cli_yaml && bork run . -- --config selected.yml --port 9090)` |
