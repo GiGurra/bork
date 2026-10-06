@@ -22,6 +22,8 @@ func TestOkTasks(t *testing.T) {
 		{"lambda", `fn main() { scope s { [1].forEach(i => fork(s, () => println(i))) } }`, ""},
 		{"never returns", `fn main() { scope s { t: Task[Ok] = fork(s, () => panic("x")); await(t) } }`, ""},
 		{"returned task", `fn start(s: Scope) uses io: Task[Ok] { fork(s, () => println("x")) }`, ""},
+		{"for body", `fn main() { scope s { for (i in [1, 2]) { fork(s, () => println(i)) } } }`, ""},
+		{"branch tail of union result", `fn f(s: Scope, x: Int) uses io: Ok | Cancelled { match (x) { 1 => fork(s, () => println("x")); _ => {} } }`, "match arms have different types: Task[Ok] and Ok"},
 		{"valued task", `fn main() { scope s { fork(s, () => 1) } }`, "value of type Task[Int] is not used"},
 		{"union with Ok", `fn main() { scope s { checkpoint(s) } }`, "value of type Ok | Cancelled is not used"},
 		{"tail of union result", `fn start(s: Scope) uses io: Ok | Cancelled { fork(s, () => println("x")) }`, "but its body produces Task[Ok]"},

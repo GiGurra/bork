@@ -618,7 +618,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return life
 	case *Return:
 		if x.Value != nil {
-			l.result(x.Value, l.use(x.Value, l.value(x.Value, "return")), l.what())
+			l.result(x.Value, l.tail(x.Value, l.value(x.Value, "return")), l.what())
 			l.verifyResult(x.Value)
 		}
 		return nil
@@ -792,6 +792,14 @@ func (l *lifeChecker) dropped(x Expr) bool {
 	return false
 }
 
+// tail uses the value x a function or lambda gives, unless it drops it.
+func (l *lifeChecker) tail(x Expr, life lifetime) lifetime {
+	if l.dropped(x) {
+		return nil
+	}
+	return l.use(x, life)
+}
+
 func (l *lifeChecker) what() string {
 	if fn, ok := l.cur.(*Func); ok {
 		if fn.Test != nil {
@@ -910,7 +918,7 @@ func (l *lifeChecker) lambda(x *Lambda) lifetime {
 	}
 	var used lifetime
 	l.captures = append(l.captures, &used)
-	l.result(x.Body, l.use(x.Body, l.expr(x.Body)), "the lambda")
+	l.result(x.Body, l.tail(x.Body, l.expr(x.Body)), "the lambda")
 	l.settle(mark)
 	l.captures = l.captures[:len(l.captures)-1]
 	l.cur, l.open, l.loop = saved, savedOpen, savedLoop
@@ -941,7 +949,7 @@ func (l *lifeChecker) mock(m *Mock) {
 		l.env[p] = lifetime{p}
 		l.noteVar(p)
 	}
-	life := l.use(m.Func.Body, l.expr(m.Func.Body))
+	life := l.tail(m.Func.Body, l.expr(m.Func.Body))
 	l.settle(mark)
 	l.result(m.Func.Body, life, l.what())
 	l.pin(life, m.Pos, "the mock of "+m.Text, nil, true)

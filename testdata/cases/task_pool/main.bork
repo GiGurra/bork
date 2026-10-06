@@ -7,7 +7,7 @@ fn mustTask[T](result: Task[T] | tasks.TaskLimitReached | Cancelled): Task[T] {
   }
 }
 fn main() {
-  launched = atom(false)
+  okTaskRan = atom(false)
   scope app {
     pool = tasks.Open(app, maxTasks: 1)
     gate = channel[Bool](app, 0)
@@ -27,14 +27,14 @@ fn main() {
     println("joined", await(first))
     second = mustTask(tasks.TryFork(pool, app, () => toString(tasks.TryFork(pool, app, () => {}))))
     println("nested submission", await(second))
-    match (tasks.TryFork(pool, app, () => { _ = update(launched, old => true) })) {
+    match (tasks.TryFork(pool, app, () => { _ = update(okTaskRan, old => true) })) {
       e: tasks.TaskLimitReached | Cancelled => panic(toString(e))
       _ => {}
     }
     // Joining this ordinary task does not consume pool capacity.
     println(await(fork(app, () => "ordinary fork unchanged")))
   }
-  println("Ok task joined", current(launched))
+  println("Ok task joined", current(okTaskRan))
   scope app {
     pool = scope setup { attach(tasks.Open(setup, 1), app) }
     scope request {

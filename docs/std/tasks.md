@@ -8,7 +8,7 @@ until its callback finishes or panics, even if that callback ignores cancellatio
 `tasks.TryFork(pool, s, work)` gives `Task[T] | tasks.TaskLimitReached | Cancelled`,
 and charges `state` plus the callback's effects. For an Ok callback the task is a
 `Task[Ok]`: handle the failures, and drop the task once admitted (the scope still
-joins it). It replaces `TrySpawn` and `TryLaunch`. Saturation returns `TaskLimitReached { limit }`
+joins it). Saturation returns `TaskLimitReached { limit }`
 at once. A cancelled or closing task scope, or a closed pool, gives `Cancelled`.
 Rejected callbacks never run. Admission racing cancellation may succeed, in
 which case the callback can observe that cancellation.

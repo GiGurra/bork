@@ -2057,9 +2057,13 @@ func (c *checker) unify(pos diag.Pos, what string, ts []Type, want Type) Type {
 			return wide
 		}
 	}
-	// A Task[Ok] joins Ok: the branch's task is dropped like an Ok.
+	// A Task[Ok] joins Ok where no value is wanted: the branch's task is
+	// dropped like an Ok. (A union result, Ok | E, would return the task.)
 	okJoin := false
 	for _, t := range vals {
+		if want != nil && want != Ok {
+			break
+		}
 		if t != Ok && !isOkTask(t) {
 			okJoin = false
 			break

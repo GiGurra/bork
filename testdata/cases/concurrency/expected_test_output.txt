@@ -1,4 +1,5 @@
 ok    tasks run concurrently, and await gives their results
 ok    a task with no value can be awaited or dropped
-2 passed, 0 failed
+ok    tasks with no value are dropped in loops, tails and mocks
+3 passed, 0 failed
 exit code 0

@@ -134,7 +134,7 @@ fn main() {
 }
 ```
 
-Only a call that gives exactly `Ok`, which has no value, needs no `_`. A union that includes `Ok`, such as `Ok | IoError`, still has to be handled or dropped with `_ =`. A task with no value, `Task[Ok]`, is the one other exception (see [tasks](scopes.md#tasks)).
+An expression that gives exactly `Ok`, which has no value, needs no `_`. A union that includes `Ok`, such as `Ok | IoError`, still has to be handled or dropped with `_ =`. A task with no value, `Task[Ok]`, is the one other exception (see [tasks](scopes.md#tasks)).
 
 ## Numbers
 

@@ -116,7 +116,7 @@ fn main() {
         yield query(move(own, w), "moved in a generator")
       }
       println(lines.toList())
-      // Launched last, so that its output follows the generator's.
+      // Forked last, so that its output follows the generator's.
       fork(w, () => {
         own = connect("task", app)
         _ = move(own, w)

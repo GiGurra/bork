@@ -59,3 +59,24 @@ test "a task with no value can be awaited or dropped" {
   }
   assertEqual(current(ran), 11)
 }
+
+fn bump(ran: Atom[Int]) uses state {
+  return scope t { fork(t, () => { _ = update(ran, n => n + 100) }) }
+}
+
+fn notify(s: Scope, ran: Atom[Int]) uses state { _ = update(ran, n => n) }
+
+test "tasks with no value are dropped in loops, tails and mocks" {
+  ran = atom(0)
+  scope s {
+    mock notify(m, _) { fork(m, () => { _ = update(ran, n => n + 1000) }) }
+    work = () => { _ = update(ran, n => n + 0) }
+    fork(s, work)
+    for (i in [1, 2]) { fork(s, () => { _ = update(ran, n => n + i) }) }
+    g: () uses state => Ok = () => scope t { fork(t, () => { _ = update(ran, n => n + 10) }) }
+    g()
+    bump(ran)
+    notify(s, ran)
+  }
+  assertEqual(current(ran), 1113)
+}

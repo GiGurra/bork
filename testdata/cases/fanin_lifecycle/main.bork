@@ -44,7 +44,7 @@ test "awaitFirst leaves losing tasks in their owner scope" {
   }
 }
 
-test "timeout includes callback-spawned tasks and preserves parent cancellation" {
+test "timeout includes callback-forked tasks and preserves parent cancellation" {
   scope s {
     finished = atom(false)
     result = withTimeout(s, 100, child => {
