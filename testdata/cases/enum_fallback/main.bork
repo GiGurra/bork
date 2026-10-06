@@ -1,0 +1,63 @@
+import "bork/codec"
+import "bork/json"
+import "bork/yaml"
+import "bork/shape"
+use codec.Defaults
+
+type Color = sealed {
+  Red codec { aliases: ["red"] }
+  DarkBlue
+  Other(String) codec { fallback: true }
+} derive (codec.Decode, codec.Encode)
+
+class FallbackBuilder[T] { fn fallback(input: String): T | shape.ValidationError }
+derive instance buildFallback[T]: FallbackBuilder[T] {
+  fn fallback(input: String): T | shape.ValidationError {
+    comptime for (variant in shape.variants[T]()) {
+      comptime if (codec.VariantFallback[T](variant)) {
+        initial = variant.builder()
+        comptime for (field in variant.fields) {
+          return initial.set(field, input).finish()
+        }
+      }
+    }
+  }
+}
+type Custom[T] = sealed {
+  SiteAdmin codec { name: "root", aliases: ["admin"] }
+  Other(String) codec { fallback: true }
+} codec { naming: codec.Naming.Kebab } derive (codec.Decode, codec.Encode, FallbackBuilder)
+
+fn guarded(name: String): Color | Ok {
+  if (name != "RED" && name != "red" && name != "DARK_BLUE") {
+    Color.Other(name)
+  } else { Ok }
+}
+
+fn main() {
+  println(json.Encode(Color.Red))
+  println(json.Encode(Color.Other("purple")))
+  match (yaml.Encode(Color.Other("true"))) {
+    text: String => { println(text.trim()); println(yaml.Decode[Color](text)) }
+    error: yaml.Error => println(error)
+  }
+  println(json.Decode[Color](json.Encode(Color.Other("紫-with spaces"))))
+  println(json.Decode[Color]("\"red\""))
+  println(json.Decode[Color]("\"purple\""))
+  println(json.Decode[Color]("{\"type\":\"purple\"}"))
+  println(json.Decode[Color]("{\"type\":\"purple\",\"extra\":1}"))
+  println(yaml.Decode[Color]("purple"))
+  println(json.Decode[Color]("42"))
+  println(json.Decode[Color]("{\"type\":\"purple\",\"values\":[]}"))
+  println(json.Decode[Color]("{\"type\":\"purple\",\"type\":\"other\"}"))
+  println(json.Decode[Color]("\"DARK_BLUE\""))
+  println(json.Decode[Color]("\"DarkBlue\""))
+  println(json.Decode[Color]("\"\""))
+  println(guarded("purple"), guarded("red"))
+  println(json.Decode[Custom[Int]]("\"admin\""))
+  println(json.Decode[Custom[Int]]("\"other\""))
+  println(json.Encode(Custom[Int].Other("site-admin")))
+  println(fallback[Custom[Int]]("root"))
+  println(fallback[Custom[Int]]("admin"))
+  println(fallback[Custom[Int]]("purple"))
+}

@@ -106,13 +106,35 @@ fn main() {}
 
 `codec.Naming` provides `Verbatim`, `Camel`, `Pascal`, `Snake`, `Kebab`, and `ScreamingSnake`. Records and mixed sealed types default to `Verbatim`. Set an enum's `naming` to `Verbatim` to preserve source spelling; it still encodes as a bare string.
 
-`codec.Words(name)` splits underscores, hyphens, whitespace, lowercase-to-uppercase transitions, and acronym boundaries. Digits stay within their word: `httpURLPort` gives `["http", "url", "port"]` and `ipv4Addr` gives `["ipv4", "addr"]`. `codec.JoinWords(words, naming)` joins words under a policy; `codec.WireName(name, naming)` also preserves the original text under `Verbatim`. The derived helpers `NamingOf[T]`, `FieldWireName[T]`, and `VariantWireName[T]` use the same rules and typed tags. `EnumShape[T]` identifies the payload-free sealed shape.
+`codec.Words(name)` splits underscores, hyphens, whitespace, lowercase-to-uppercase transitions, and acronym boundaries. Digits stay within their word: `httpURLPort` gives `["http", "url", "port"]` and `ipv4Addr` gives `["ipv4", "addr"]`. `codec.JoinWords(words, naming)` joins words under a policy; `codec.WireName(name, naming)` also preserves the original text under `Verbatim`. The derived helpers `NamingOf[T]`, `FieldWireName[T]`, and `VariantWireName[T]` use the same rules and typed tags. `EnumShape[T]` identifies fieldless alternatives with an optional String fallback.
 
 Fields and variants can declare exact decode-only `aliases`. For example, `codec { name: "login", aliases: ["uid", "user"] }` writes `login` and reads any one of those names. Two spellings in one object fail at the second input key, such as `.uid: same field as .login`. This also applies after YAML merge expansion. Field validation errors use the spelling present in the input; missing fields use the canonical name. Canonical names and aliases must be unique within their namespace, including a member's own names.
 
 `codec { unknown: codec.Unknown.Reject }` on a type rejects unknown object keys; the default is `Unknown.Ignore`. It applies to named record fields and the selected sealed payload; `type` and positional `values` remain protocol keys. Computed fields and their aliases are recognized but remain read-only. Positional fields cannot declare names or aliases.
 
-`codec.VariantTags` also provides `fallback: Bool = false` metadata for enum support. This metadata alone does not change decoding. `FieldAliases[T]`, `VariantAliases[T]`, `FieldNames[T]`, and `VariantNames[T]` expose aliases and canonical-first accepted names during derivation; `VariantFallback[T]` reads the fallback flag.
+`codec.VariantTags` provides `fallback: Bool = false`. Mark one positional String alternative to preserve unknown enum names:
+
+```bork
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+type Color = sealed {
+  Red codec { aliases: ["red"] }
+  Other(String) codec { fallback: true }
+} derive (codec.Encode, codec.Decode)
+
+fn main() {
+  println(json.Decode[Color]("\"purple\""))
+  println(json.Encode(Color.Other("purple")))
+}
+```
+
+Known canonical names and aliases select their declared variants. Unknown strings become the fallback and encode unchanged. The legacy `{ "type": "purple" }` form also falls back; extra members fail decoding. Other input shapes fail. The type still defaults to `ScreamingSnake` for known names.
+
+A fallback requires exactly one positional String and fieldless known alternatives. It cannot declare facts, defaults, a variant `where`, a wire name, or aliases. The compiler adds a payload fact excluding every known canonical name and alias, even without deriving a codec. Known literals fail construction; a runtime string needs a guard proving those exclusions or a checked builder. Builder validation reports the payload path `[0]`.
+
+`FieldAliases[T]`, `VariantAliases[T]`, `FieldNames[T]`, and `VariantNames[T]` expose aliases and canonical-first accepted names during derivation; `VariantFallback[T]` reads the fallback flag.
 
 Derivation rejects duplicate canonical names within a record or variant namespace, empty names, the YAML merge key `<<`, and a named sealed payload field renamed to the discriminator `type`. Variant names must parse as unchanged YAML string scalars: `true`, `null`, and numeric spellings fail, while YAML 1.2 string spellings such as `ON` are allowed. Derived decode errors use canonical field names, including errors from checked builders. Map keys and tuple indices retain their existing representation.
 

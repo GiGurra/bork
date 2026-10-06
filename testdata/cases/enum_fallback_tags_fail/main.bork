@@ -1,0 +1,14 @@
+import "bork/codec"
+type Wrong = sealed { Red, Other(Int) codec { fallback: true } }
+type Named = sealed { Red, Other { name: String } codec { fallback: true } }
+type Duplicate = sealed { Other(String) codec { fallback: true }, Another(String) codec { fallback: true } }
+type Mixed = sealed { Some(Int), Other(String) codec { fallback: true } }
+type Renamed = sealed { Red, Other(String) codec { fallback: true, name: "unknown" } }
+type Aliased = sealed { Red, Other(String) codec { fallback: true, aliases: ["old"] } }
+pred nonempty(s: String) { s != "" }
+type Facts = sealed { Red, Other(String where nonempty) codec { fallback: true } }
+pred permitted(value: WithWhere) { match (value) { .Red => true, .Other(name) => name != "" } }
+type WithWhere = sealed { Red, Other(String) codec { fallback: true } where permitted }
+type Default = sealed { Red, Other { name: String = "purple" } codec { fallback: true } }
+type TwoSlots = sealed { Red, Other(String, String) codec { fallback: true } }
+fn main() {}

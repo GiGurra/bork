@@ -332,23 +332,29 @@ derive instance encodeShape[T]: Encode[T] {
           match (variant.project(x)) {
             Option.Some(payload) => {
               _ = payload
-              comptime if (EnumShape[T]() && variant.fields.isEmpty()) {
-                return Value.String { value: VariantWireName[T](variant) }
+              comptime if (VariantFallback[T](variant)) {
+                comptime for (field in variant.fields) {
+                  return Value.String { value: field.read(payload) }
+                }
               } else {
-                comptime if (variant.positional) {
-                  values: List[Value] = [comptime for (field in variant.fields)
-                    encode[field.Type](field.read(payload))]
-                  return Value.Object { fields: [
-                    Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } },
-                    Field { name: "values", value: Value.Array { items: values } }
-                  ] }
+                comptime if (EnumShape[T]() && variant.fields.isEmpty()) {
+                  return Value.String { value: VariantWireName[T](variant) }
                 } else {
-                  fields: List[Field] = [comptime for (field in variant.fields)
-                    comptime if (!field.computed) {
-                      Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }
-                  }]
-                  return Value.Object { fields: prepend(
-                    Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
+                  comptime if (variant.positional) {
+                    values: List[Value] = [comptime for (field in variant.fields)
+                      encode[field.Type](field.read(payload))]
+                    return Value.Object { fields: [
+                      Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } },
+                      Field { name: "values", value: Value.Array { items: values } }
+                    ] }
+                  } else {
+                    fields: List[Field] = [comptime for (field in variant.fields)
+                      comptime if (!field.computed) {
+                        Field { name: FieldWireName[T](field), value: encode[field.Type](field.read(payload)) }
+                    }]
+                    return Value.Object { fields: prepend(
+                      Field { name: "type", value: Value.String { value: VariantWireName[T](variant) } }, fields) }
+                  }
                 }
               }
             }
@@ -525,102 +531,123 @@ derive fn DecodeSealed[T](json: Value): T | DecodeError {
       fields: List[Field] = match (json) { Value.Object { fields } => fields, _ => [] }
       _ = fields
       comptime for (variant in shape.variants[T]()) {
-        comptime if (!variant.positional) {
-          comptime for (field in variant.fields) {
-            comptime if (wireNamesHave(FieldNames[T](field), "type")) {
-              shape.fail("named sealed payload field 'type' collides with the codec discriminator")
-            }
-          }
-        }
-        if (VariantNames[T](variant).includes(name)) {
-          comptime if (variant.positional) {
-            match (checkInputNames(fields, [], ["type", "values"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
-          } else {
-            match (checkInputNames(fields, [comptime for (field in variant.fields) FieldNames[T](field)], ["type"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
-          }
-          initial = variant.builder()
-          comptime if (variant.positional) {
-            items: List[Value] | DecodeError = match (inputField(fields, "values")) {
-              Option.Some(value) => match (value) {
-                Value.Array { items } => items
-                _ => DecodeError { path: ".values", message: "expected an array of payload values" }
+        comptime if (!VariantFallback[T](variant)) {
+          comptime if (!variant.positional) {
+            comptime for (field in variant.fields) {
+              comptime if (wireNamesHave(FieldNames[T](field), "type")) {
+                shape.fail("named sealed payload field 'type' collides with the codec discriminator")
               }
-              Option.None => DecodeError { path: ".values", message: "expected an array of payload values" }
             }
-            match (items) {
-              error: DecodeError => return error
-              values: List[Value] => {
-                if (values.length() != variant.fields.length()) {
-                  return DecodeError { path: ".values", message: s"expected an array of length ${variant.fields.length()}" }
+          }
+          if (VariantNames[T](variant).includes(name)) {
+            comptime if (variant.positional) {
+              match (checkInputNames(fields, [], ["type", "values"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
+            } else {
+              match (checkInputNames(fields, [comptime for (field in variant.fields) FieldNames[T](field)], ["type"], RejectUnknown[T]())) { error: DecodeError => return error, Ok => {} }
+            }
+            initial = variant.builder()
+            comptime if (variant.positional) {
+              items: List[Value] | DecodeError = match (inputField(fields, "values")) {
+                Option.Some(value) => match (value) {
+                  Value.Array { items } => items
+                  _ => DecodeError { path: ".values", message: "expected an array of payload values" }
                 }
-                steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
-                  (state: initial.Type) => match (values.get(field.index)) {
-                    Option.Some(input) => match (decode[field.RawType](input)) {
-                      error: DecodeError => atPath(error, s".values[${field.index}]")
-                      value: field.RawType => state.set(field, value)
+                Option.None => DecodeError { path: ".values", message: "expected an array of payload values" }
+              }
+              match (items) {
+                error: DecodeError => return error
+                values: List[Value] => {
+                  if (values.length() != variant.fields.length()) {
+                    return DecodeError { path: ".values", message: s"expected an array of length ${variant.fields.length()}" }
+                  }
+                  steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
+                    (state: initial.Type) => match (values.get(field.index)) {
+                      Option.Some(input) => match (decode[field.RawType](input)) {
+                        error: DecodeError => atPath(error, s".values[${field.index}]")
+                        value: field.RawType => state.set(field, value)
+                      }
+                      Option.None => DecodeError { path: s".values[${field.index}]", message: "is missing" }
+                  }]
+                  start: initial.Type | DecodeError = initial
+                  assembled = steps.fold(start, (state, step) => match (state) {
+                    error: DecodeError => error
+                    pending: initial.Type => step(pending)
+                  })
+                  return match (assembled) {
+                    error: DecodeError => error
+                    pending: initial.Type => match (pending.finish()) {
+                      error: shape.ValidationError => DecodeError { path: if (error.path.startsWith("[")) { ".values" + error.path } else { error.path }, message: error.message }
+                      value: T => value
                     }
-                    Option.None => DecodeError { path: s".values[${field.index}]", message: "is missing" }
-                }]
-                start: initial.Type | DecodeError = initial
-                assembled = steps.fold(start, (state, step) => match (state) {
-                  error: DecodeError => error
-                  pending: initial.Type => step(pending)
-                })
-                return match (assembled) {
-                  error: DecodeError => error
-                  pending: initial.Type => match (pending.finish()) {
-                    error: shape.ValidationError => DecodeError { path: if (error.path.startsWith("[")) { ".values" + error.path } else { error.path }, message: error.message }
-                    value: T => value
                   }
                 }
               }
-            }
-          } else {
-            steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
-              (state: initial.Type) => {
-                comptime if (field.computed) {
-                  if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
-                    DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
-                  } else { state }
-                } else {
-                  input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
-                    Option.Some(value) => Option.Some(value)
-                    Option.None => {
-                      comptime if (field.hasDefault) { Option.None } else {
-                        info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
-                        if (info.optional) { Option.Some(Value.Null) } else {
-                          DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
+            } else {
+              steps: List[(initial.Type) => initial.Type | DecodeError] = [comptime for (field in variant.fields)
+                (state: initial.Type) => {
+                  comptime if (field.computed) {
+                    if (inputNamedField(fields, FieldNames[T](field)).isSome()) {
+                      DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "computed field is read-only" }
+                    } else { state }
+                  } else {
+                    input: Option[Value] | DecodeError = match (inputNamedField(fields, FieldNames[T](field))) {
+                      Option.Some(value) => Option.Some(value)
+                      Option.None => {
+                        comptime if (field.hasDefault) { Option.None } else {
+                          info = shape.metadata[field.RawType, Decode, FieldSchema]().getOr(FieldSchema { kind: "json", optional: false })
+                          if (info.optional) { Option.Some(Value.Null) } else {
+                            DecodeError { path: s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}", message: "is missing" }
+                          }
                         }
                       }
                     }
-                  }
-                  match (input) {
-                    error: DecodeError => error
-                    Option.None => state
-                    Option.Some(value) => match (decode[field.RawType](value)) {
-                      error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
-                      decoded: field.RawType => state.set(field, decoded)
+                    match (input) {
+                      error: DecodeError => error
+                      Option.None => state
+                      Option.Some(value) => match (decode[field.RawType](value)) {
+                        error: DecodeError => atPath(error, s".${inputWireName(fields, FieldWireName[T](field), FieldNames[T](field))}")
+                        decoded: field.RawType => state.set(field, decoded)
+                      }
                     }
                   }
+              }]
+              start: initial.Type | DecodeError = initial
+              assembled = steps.fold(start, (state, step) => match (state) {
+                error: DecodeError => error
+                pending: initial.Type => step(pending)
+              })
+              return match (assembled) {
+                error: DecodeError => error
+                pending: initial.Type => match (pending.finish()) {
+                  error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in variant.fields)(field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))]), message: error.message }
+                  value: T => value
                 }
-            }]
-            start: initial.Type | DecodeError = initial
-            assembled = steps.fold(start, (state, step) => match (state) {
-              error: DecodeError => error
-              pending: initial.Type => step(pending)
-            })
-            return match (assembled) {
-              error: DecodeError => error
-              pending: initial.Type => match (pending.finish()) {
-                error: shape.ValidationError => DecodeError { path: remapWirePath(error.path, [comptime for (field in variant.fields)(field.name, inputWireName(fields, FieldWireName[T](field), FieldNames[T](field)))]), message: error.message }
+              }
+            }
+          }
+        }
+      }
+      comptime if ([comptime for (variant in shape.variants[T]()) comptime if (VariantFallback[T](variant)) true].isEmpty()) {
+        expected: List[String] = [comptime for (variant in shape.variants[T]()) comptime if (!VariantFallback[T](variant)) VariantWireName[T](variant)]
+        DecodeError { path: ".type", message: "unknown variant " + quoted(name) + " of " + shape.name[T]() + "; expected one of " + expected.join(", ") }
+      } else {
+        comptime for (variant in shape.variants[T]()) {
+          comptime if (VariantFallback[T](variant)) {
+            if (fields.length() > 1) {
+              return DecodeError { path: "", message: "an unknown enum variant object must contain only its type name" }
+            }
+            initial = variant.builder()
+            comptime for (field in variant.fields) {
+              assembled = initial.set(field, name)
+              return match (assembled.finish()) {
+                error: shape.ValidationError => DecodeError { path: error.path, message: error.message }
                 value: T => value
               }
             }
           }
         }
       }
-      expected: List[String] = [comptime for (variant in shape.variants[T]()) VariantWireName[T](variant)]
-      DecodeError { path: ".type", message: "unknown variant " + quoted(name) + " of " + shape.name[T]() + "; expected one of " + expected.join(", ") }
+
     }
   }
 }

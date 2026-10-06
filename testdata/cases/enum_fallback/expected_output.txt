@@ -1,0 +1,23 @@
+"RED"
+"purple"
+'true'
+Color.Other("true")
+Color.Other("紫-with spaces")
+Color.Red
+Color.Other("purple")
+Color.Other("purple")
+DecodeError { path: "", message: "an unknown enum variant object must contain only its type name" }
+Color.Other("purple")
+DecodeError { path: "", message: "expected an object, found a number" }
+DecodeError { path: "", message: "an unknown enum variant object must contain only its type name" }
+JsonError { message: "invalid JSON at line 1, column 18: duplicate key \"type\" (first at line 1, column 2)" }
+Color.DarkBlue
+Color.Other("DarkBlue")
+Color.Other("")
+Color.Other("purple") Ok
+Custom.SiteAdmin
+Custom.Other("other")
+"site-admin"
+ValidationError { path: "[0]", message: "must be _derive_codecUnknown_Custom_Other_2", obligation: Option.Some(Obligation { owner: "main:Custom[T]", variant: "Other", field: "[0]", index: 0, source: "../../testdata/cases/enum_fallback/main.bork:28:3" }) }
+ValidationError { path: "[0]", message: "must be _derive_codecUnknown_Custom_Other_2", obligation: Option.Some(Obligation { owner: "main:Custom[T]", variant: "Other", field: "[0]", index: 0, source: "../../testdata/cases/enum_fallback/main.bork:28:3" }) }
+Custom.Other("purple")

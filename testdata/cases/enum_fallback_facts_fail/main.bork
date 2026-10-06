@@ -1,0 +1,13 @@
+import "bork/codec"
+type Color = sealed {
+  Red codec { aliases: ["red"] }
+  Other(String) codec { fallback: true }
+}
+fn known(): Color { Color.Other("RED") }
+fn alias(): Color { Color.Other("red") }
+fn unguarded(name: String): Color { Color.Other(name) }
+type A_B = sealed { First, C(String) codec { fallback: true } }
+type A = sealed { Second, B_C(String) codec { fallback: true } }
+fn first(): A_B { A_B.C("FIRST") }
+fn second(): A { A.B_C("SECOND") }
+fn main() { println(known(), alias(), unguarded("purple")) }
