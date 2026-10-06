@@ -18,6 +18,7 @@ type goNameInput struct {
 }
 type goUsage struct {
 	proofs           *sessionProofCache
+	plans            *derivePlanCache
 	deferInputs      bool
 	names            []goNameInput
 	types, evaluator bool
@@ -40,6 +41,7 @@ type Session struct {
 	mu            sync.Mutex
 	last          *sessionArtifact
 	proofs        *sessionProofCache
+	plans         *derivePlanCache
 	stats         SessionStats
 	watch         bool
 	attempt       *watchAttempt
@@ -52,9 +54,10 @@ type Session struct {
 // SessionStats counts requests and explains the most recent hit or miss.
 // Proof counters count native predicate batches, separately from program hits.
 type SessionStats struct {
-	Hits, Misses, Bypasses                uint64
-	ProofHits, ProofMisses, ProofDeclines uint64
-	Reason                                string
+	Hits, Misses, Bypasses                               uint64
+	ProofHits, ProofMisses, ProofDeclines                uint64
+	DerivePlanHits, DerivePlanMisses, DerivePlanDeclines uint64
+	Reason                                               string
 }
 
 type sessionArtifact struct {
@@ -135,7 +138,10 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 	if err != nil {
 		return nil, nil, err
 	}
-	usage := &goUsage{proofs: s.proofCache()}
+	if s.plans == nil {
+		s.plans = newDerivePlanCache()
+	}
+	usage := &goUsage{proofs: s.proofCache(), plans: s.plans}
 	captureAssets := captureEmbedsSnapshot
 	if s.watch {
 		defer func() { s.attempt.names = slices.Clone(usage.names) }()
@@ -152,6 +158,9 @@ func (s *Session) compile(path string, emit bool) ([]byte, []diag.Diagnostic, er
 	if err != nil {
 		return nil, nil, err
 	}
+	s.stats.DerivePlanHits += program.info.DerivePlans.Hits
+	s.stats.DerivePlanMisses += program.info.DerivePlans.Misses
+	s.stats.DerivePlanDeclines += program.info.DerivePlans.Declines
 	phase(s.observe, "warnings")
 	warnings := check.DebugWarnings(program.info)
 	warnings.Append(check.LazyWarnings(program.info))

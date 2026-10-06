@@ -1015,7 +1015,7 @@ func (c *checker) expandDeriveBodies() {
 			for _, param := range method.Decl.Params {
 				plan.names[param.Name] = true
 			}
-			method.Decl.Body = plan.expr(method.Decl.Body).(*syntax.Block)
+			method.Decl.Body = plan.expandBody(method)
 			c.diags.DeriveContext(start, instance.Decl.Pos)
 		}
 		c.pkg = saved

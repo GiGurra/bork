@@ -394,3 +394,45 @@ func TestCacheCleanRejectsAliasedLayersAndLocks(t *testing.T) {
 		})
 	}
 }
+
+func TestCacheCleanDerivePlansNamespacesAndTemporaries(t *testing.T) {
+	requireStageLock(t)
+	base := t.TempDir()
+	namespace, err := compilerArtifactNamespace("shape-plan-v1", "normalized-syntax-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := sha256.Sum256([]byte("plan"))
+	other := sha256.Sum256([]byte("older compiler"))
+	paths := []string{}
+	for _, digest := range [][32]byte{namespace, other} {
+		for _, suffix := range []string{".json", ".json.tmp"} {
+			path := filepath.Join(base, "plans", "v1", fmt.Sprintf("%x", digest), fmt.Sprintf("%x%s", key, suffix))
+			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte("plan bytes"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			paths = append(paths, path)
+		}
+	}
+	report, err := cleanCache(context.Background(), base, [32]byte{}, false)
+	if err != nil || report.Plans != 1 || report.Temporaries != 1 {
+		t.Fatalf("current plan cleanup: %+v %v", report, err)
+	}
+	for i, path := range paths {
+		_, err := os.Stat(path)
+		if i < 2 && !os.IsNotExist(err) || i >= 2 && err != nil {
+			t.Fatalf("namespace cleanup %s: %v", path, err)
+		}
+	}
+	report, err = cleanCache(context.Background(), base, [32]byte{}, true)
+	if err != nil || report.Plans != 1 || report.Temporaries != 1 {
+		t.Fatalf("all plan cleanup: %+v %v", report, err)
+	}
+	lock := filepath.Join(base, "locks", "shape-plans", fmt.Sprintf("%02x.lock", key[0]))
+	if _, err := os.Stat(lock); err != nil {
+		t.Fatalf("coordination lock removed: %v", err)
+	}
+}

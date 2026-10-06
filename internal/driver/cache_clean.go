@@ -15,8 +15,8 @@ import (
 )
 
 type CacheCleanReport struct {
-	Results, Stages, Temporaries, Dependencies int
-	Bytes                                      int64
+	Results, Plans, Stages, Temporaries, Dependencies int
+	Bytes                                             int64
 }
 
 // Clean removes compiler-owned artifacts, preserving project outputs, Go's
@@ -129,6 +129,8 @@ func cleanCache(ctx context.Context, directory string, namespace [sha256.Size]by
 		switch entry.layer {
 		case "results":
 			report.Results++
+		case "plans":
+			report.Plans++
 		case "stage":
 			report.Stages++
 		case "index":
@@ -287,6 +289,11 @@ func selectCleanEntries(ctx context.Context, root *os.Root, namespace [sha256.Si
 			}
 		}
 	}
+	plans, err := selectCleanDerivePlans(ctx, root, all)
+	if err != nil {
+		return nil, err
+	}
+	entries = append(entries, plans...)
 	versions := []string{"v3"}
 	if all {
 		versions = append(versions, "v2", "v1")
@@ -440,6 +447,52 @@ func selectCleanEntries(ctx context.Context, root *os.Root, namespace [sha256.Si
 	}
 	return entries, nil
 }
+
+// Plan namespaces have their own ABI and therefore differ from result namespaces.
+func selectCleanDerivePlans(ctx context.Context, root *os.Root, all bool) ([]cacheCleanEntry, error) {
+	candidates, err := cleanDirectoryEntries(ctx, root, "plans/v1")
+	if err != nil || len(candidates) == 0 {
+		return nil, err
+	}
+	var current [sha256.Size]byte
+	if !all {
+		current, err = compilerArtifactNamespace("shape-plan-v1", "normalized-syntax-v1")
+		if err != nil {
+			return nil, err
+		}
+	}
+	var entries []cacheCleanEntry
+	for _, candidate := range candidates {
+		digest, ok := cacheHexDigest(candidate.Name())
+		if !ok || !candidate.IsDir() || !all && digest != current {
+			continue
+		}
+		directory := filepath.Join("plans", "v1", candidate.Name())
+		files, err := cleanDirectoryEntries(ctx, root, directory)
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			name := file.Name()
+			temporary := strings.HasSuffix(name, ".json.tmp")
+			suffix := ".json"
+			if temporary {
+				suffix = ".json.tmp"
+			}
+			key, ok := cacheHexDigest(strings.TrimSuffix(name, suffix))
+			if !ok || !strings.HasSuffix(name, suffix) {
+				continue
+			}
+			layer := "plans"
+			if temporary {
+				layer = "temporary"
+			}
+			entries = append(entries, cacheCleanEntry{path: filepath.Join(directory, name), slot: filepath.Join("locks", "shape-plans", fmt.Sprintf("%02x.lock", key[0])), layer: layer})
+		}
+	}
+	return entries, nil
+}
+
 func legacyResultLockName(namespace, key [sha256.Size]byte) string {
 	digest := sha256.New()
 	_, _ = digest.Write(namespace[:])
