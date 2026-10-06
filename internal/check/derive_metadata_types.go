@@ -23,8 +23,9 @@ const (
 )
 
 type deriveMetadataTypes struct {
-	c      *checker
-	locals map[*local]deriveDescriptor
+	c         *checker
+	locals    map[*local]deriveDescriptor
+	typeNames map[string]bool
 }
 
 func (m *deriveMetadataTypes) annotation(typ *syntax.TypeExpr) deriveDescriptor {
@@ -40,6 +41,18 @@ func (m *deriveMetadataTypes) annotation(typ *syntax.TypeExpr) deriveDescriptor 
 	alias, member, qualified := strings.Cut(typ.Name, ".")
 	pkg := m.c.pkg.imports[alias]
 	if !qualified || pkg == nil || pkg.Path != "bork/shape" || len(typ.Args) != 1 {
+		if deriveConcreteType(typ, m.typeNames) {
+			if record, ok := m.c.resolveType(typ).(*Record); ok && record.Pkg != nil && record.Pkg.Path == "bork/shape" {
+				switch record.Name {
+				case "Field":
+					return deriveField
+				case "Variant":
+					return deriveVariant
+				case "Fact":
+					return deriveFact
+				}
+			}
+		}
 		return 0
 	}
 	switch member {
@@ -114,7 +127,7 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 				}
 			}
 		}
-		if selector, ok := call.Fun.(*syntax.Selector); ok && m.kind(selector.X) >= deriveFields && len(call.Args) == 0 && len(call.TypeArgs) == 0 {
+		if selector, ok := call.Fun.(*syntax.Selector); ok && m.kind(selector.X) >= deriveFields && len(call.Args) == 0 && len(call.TypeArgs) <= 1 {
 			switch selector.Name {
 			case "length":
 				return Int
@@ -167,6 +180,35 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 // It checks operators and calls without evaluating metadata or supplying fake
 // descriptor values, projected field types, or runtime facts.
 func (m *deriveMetadataTypes) check(expr syntax.Expr, want Type) Type {
+	// Scalar replacement must not bypass the lexical descriptor contracts,
+	// including a sequence call nested in an otherwise concrete expression.
+	var validate func(reflect.Value)
+	validate = func(value reflect.Value) {
+		if !value.IsValid() || (value.Kind() == reflect.Pointer || value.Kind() == reflect.Interface) && value.IsNil() {
+			return
+		}
+		if value.Kind() == reflect.Pointer && value.CanInterface() {
+			switch node := value.Interface().(type) {
+			case *syntax.Call:
+				m.checkCall(node)
+			case *syntax.Selector:
+				m.checkMember(node)
+			}
+		}
+		switch value.Kind() {
+		case reflect.Interface, reflect.Pointer:
+			validate(value.Elem())
+		case reflect.Struct:
+			for _, index := range walkableSyntaxFields(value.Type()) {
+				validate(value.Field(index))
+			}
+		case reflect.Slice:
+			for i := range value.Len() {
+				validate(value.Index(i))
+			}
+		}
+	}
+	validate(reflect.ValueOf(expr))
 	var contains func(reflect.Value) bool
 	contains = func(value reflect.Value) bool {
 		if !value.IsValid() {
@@ -270,4 +312,92 @@ func (m *deriveMetadataTypes) check(expr syntax.Expr, want Type) Type {
 		return value
 	}
 	return m.c.exprWant(clone(reflect.ValueOf(expr)).Interface().(syntax.Expr), want)
+}
+
+// Descriptor member sets are known before a target is chosen. Dependent
+// operations keep their result/head obligations for expansion, but misspelled
+// members and impossible call shapes cannot be repaired by any target.
+func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
+	kind := m.kind(selector.X)
+	valid := false
+	switch kind {
+	case deriveField:
+		switch selector.Name {
+		case "name", "doc", "index", "positional", "computed", "hasDefault", "facts", "Type", "read", "default":
+			valid = true
+		}
+	case deriveVariant:
+		switch selector.Name {
+		case "name", "index", "positional", "fields", "facts", "Type", "project", "builder":
+			valid = true
+		}
+	case deriveFact:
+		switch selector.Name {
+		case "text", "path", "independent":
+			valid = true
+		}
+	case deriveFields, deriveVariants, deriveFacts:
+		valid = selector.Name == "length" || selector.Name == "isEmpty"
+	default:
+		return
+	}
+	if !valid {
+		m.c.errorf(selector.Pos, "shape descriptor has no member %s", selector.Name)
+	}
+}
+
+func (m *deriveMetadataTypes) checkCall(call *syntax.Call) {
+	selector, ok := call.Fun.(*syntax.Selector)
+	if !ok {
+		return
+	}
+	kind := m.kind(selector.X)
+	if kind >= deriveFields {
+		if selector.Name != "length" && selector.Name != "isEmpty" {
+			return
+		}
+		if len(call.Args) != 0 || len(call.TypeArgs) > 1 {
+			m.c.errorf(call.Pos, "metadata sequence %s takes no arguments and at most one element type", selector.Name)
+		}
+		if len(call.TypeArgs) == 1 {
+			element := m.annotation(call.TypeArgs[0])
+			// Unknown projected/generic aliases remain dependent. A resolved
+			// concrete head or a known descriptor head can be checked here.
+			if element != 0 && element != kind-deriveFields+deriveField || element == 0 && deriveConcreteType(call.TypeArgs[0], m.typeNames) && m.c.resolveType(call.TypeArgs[0]) != Invalid {
+				m.c.errorf(call.TypeArgs[0].Pos, "metadata sequence %s requires its descriptor element type", selector.Name)
+			}
+		}
+		return
+	}
+	arity := -1
+	switch kind {
+	case deriveField:
+		if selector.Name == "read" {
+			arity = 1
+		}
+		if selector.Name == "default" {
+			arity = 0
+		}
+	case deriveVariant:
+		if selector.Name == "project" {
+			arity = 1
+		}
+		if selector.Name == "builder" {
+			arity = 0
+		}
+	}
+	if arity >= 0 {
+		if len(call.Args) != arity || len(call.TypeArgs) != 0 {
+			m.c.errorf(call.Pos, "shape descriptor %s takes %d argument(s) and no type arguments", selector.Name, arity)
+		}
+		for _, argument := range call.Arguments {
+			if argument.Name != "" {
+				m.c.errorf(argument.Pos, "shape descriptor %s requires positional arguments", selector.Name)
+			}
+		}
+		return
+	}
+	if kind >= deriveField && kind <= deriveFact && (m.scalar(selector) != nil || m.kind(selector) != 0 || selector.Name == "Type") {
+		m.c.errorf(call.Pos, "shape descriptor member %s is a property, not a callable method", selector.Name)
+	}
 }

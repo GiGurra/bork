@@ -2326,3 +2326,53 @@ fn main() {}`, "derive expression must be String")
 derive fn unused[T](): Bool { shape.kind[T]() == shape.Record }
 fn main() {}`, "")
 }
+
+func TestDeriveTemplateUnrequestedDescriptorMemberContracts(t *testing.T) {
+	for _, item := range []struct{ name, code, error string }{
+		{"field property", "field.nmae", "shape descriptor has no member nmae"},
+		{"fact property", "fact.txt", "shape descriptor has no member txt"},
+		{"variant property", "variant.computed", "shape descriptor has no member computed"},
+		{"read arity", "field.read()", "shape descriptor read takes 1 argument(s)"},
+		{"default arity", "field.default(1)", "shape descriptor default takes 0 argument(s)"},
+		{"project arity", "variant.project()", "shape descriptor project takes 1 argument(s)"},
+		{"property called", "field.name()", "shape descriptor member name is a property"},
+		{"field type called", "field.Type()", "shape descriptor member Type is a property"},
+		{"variant type called", "variant.Type()", "shape descriptor member Type is a property"},
+		{"sequence member", "fields.nmae", "shape descriptor has no member nmae"},
+		{"sequence arity", "fields.length(1)", "metadata sequence length takes no arguments"},
+		{"sequence type", "fields.length[Int]()", "requires its descriptor element type"},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			source := `import "bork/shape"
+derive fn inspect[T](field: shape.Field[T], variant: shape.Variant[T], fact: shape.Fact[T], fields: List[shape.Field[T]]): Ok {
+ _ = ` + item.code + `
+}
+fn main() {}`
+			checkPreludeSource(t, source, item.error)
+		})
+	}
+}
+
+func TestDeriveTemplateUnrequestedSequenceElementAlias(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+type F = shape.Field[Int]
+derive fn unused(fields: List[F]): Int { fields.length[F]() }
+fn main() {}`, "")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](fields: List[shape.Field[T]]): Int { fields.length[Int]() + 1 }
+fn main() {}`, "requires its descriptor element type")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](fields: List[shape.Field[T]]): Int { fields.length[shape.Variant[T]]() }
+fn main() {}`, "requires its descriptor element type")
+}
+
+func TestDeriveTemplateNestedSequenceContractSingleDiagnostic(t *testing.T) {
+	dir := validatorFixture(t, `import "bork/shape"
+fn accept(value: Int): Int { value }
+derive fn unused[T](fields: List[shape.Field[T]]): Int { accept(fields.length[Int]()) }
+fn main() {}`)
+	_, _, err := Check(dir)
+	if err == nil || strings.Count(err.Error(), "requires its descriptor element type") != 1 {
+		t.Fatalf("expected one nested contract diagnostic, got %v", err)
+	}
+}

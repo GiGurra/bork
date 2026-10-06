@@ -19,7 +19,7 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 	defer func() { c.scopes, c.used = outer, effects }()
 	c.used = 0
 	c.scopes = append(c.scopes, map[string]*local{})
-	metadata := deriveMetadataTypes{c: c, locals: map[*local]deriveDescriptor{}}
+	metadata := deriveMetadataTypes{c: c, locals: map[*local]deriveDescriptor{}, typeNames: typeNames}
 	bind := func(name string, typ Type, node any) {
 		if typ == nil {
 			typ = Invalid
@@ -262,6 +262,18 @@ func (c *checker) checkDeriveLiteralTypes(method *syntax.FuncDecl, typeNames map
 				}
 				c.scopes = c.scopes[:len(c.scopes)-1]
 				return
+			case *syntax.Selector:
+				if concrete(node) {
+					check(node, want)
+					return
+				}
+				metadata.checkMember(node)
+			case *syntax.Call:
+				if concrete(node) {
+					check(node, want)
+					return
+				}
+				metadata.checkCall(node)
 			case syntax.Expr:
 				if concrete(node) {
 					check(node, want)
