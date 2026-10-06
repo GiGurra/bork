@@ -511,13 +511,15 @@ type gen struct {
 	comptimePackages map[*check.PackageBinding]ast.Expr
 	comptimeMode     bool
 	// Captures disappear from emitted recipes; retain valid Go bindings for their declarations.
-	comptimeReads    map[*check.Var]bool
-	usesSeq          bool
-	usesSeqFirst     bool
-	usesSeqUnfold    bool
-	usesLoopCleanup  bool
-	yieldName        *ast.Ident
-	loops            []loopFrame
+	comptimeReads   map[*check.Var]bool
+	usesSeq         bool
+	usesSeqFirst    bool
+	usesSeqUnfold   bool
+	usesLoopCleanup bool
+	yieldName       *ast.Ident
+	loops           []loopFrame
+	// tail is the function being generated, if its self calls jump.
+	tail             *tailFrame
 	usesDecodeSchema bool
 	usesGoStruct     bool
 	usesBytes        bool
@@ -567,6 +569,7 @@ type gen struct {
 	tupleConversions map[string]*tupleConversion
 	mockErrors       diag.List
 	usesMocks        bool
+	usesMockIn       bool
 	// usesAmbients is set when the program publishes or reads logged
 	// or propagated ambient values (ambientRuntime). labelGuard, while
 	// a Go function's body is generated, is set if a with in it
@@ -931,6 +934,9 @@ func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 		g.callerAt = ast.NewIdent("_callerAt")
 	}
 	decl := g.signature(fd)
+	if g.info.TailJumps(fn) {
+		return g.tailFuncDecl(fn, decl)
+	}
 	// An owned scope given to the function is closed if it ends early.
 	// A parameter declared in another closes before it: its fallback is
 	// deferred after that one's.
@@ -1622,6 +1628,10 @@ func (g *gen) effect(e check.Expr) []ast.Stmt {
 	case *check.LoopControl:
 		return g.loopControl(e)
 	case *check.Call, *check.CallBuiltin, *check.CallValue:
+		if call, ok := e.(*check.Call); ok && g.tailJump(call) {
+			// A function without a result reaches its tail calls here.
+			return g.jump(call)
+		}
 		if e.Type() == check.Never {
 			stmts, _ := g.value(e)
 			return stmts
@@ -1836,6 +1846,10 @@ func (g *gen) tailReturn(e check.Expr) []ast.Stmt {
 		return g.scopeInto(e, ret)
 	case *check.Return:
 		return g.returnStmt(e)
+	case *check.Call:
+		if g.tailJump(e) {
+			return g.jump(e)
+		}
 	}
 	if e.Type() == check.Ok && g.fnResult != check.Ok {
 		return append(g.effect(e), g.returning(g.okValue())...)
@@ -1906,6 +1920,10 @@ type blockOwner struct {
 func (g *gen) returning(results ...ast.Expr) []ast.Stmt {
 	if len(g.loops) > 0 {
 		frame := g.loops[len(g.loops)-1]
+		if frame.tail && len(g.openScopes) == frame.scopes && len(g.blockOwners) == frame.owners && len(g.openMocks) == frame.mocks && g.fnResult != check.OwnedScope {
+			// Nothing to end: the function's loop is left directly.
+			return []ast.Stmt{&ast.ReturnStmt{Results: results}}
+		}
 		frame.exit.used = true
 		if g.fnResult == check.OwnedScope {
 			frame.cleanup.used = true
@@ -1992,6 +2010,9 @@ func (g *gen) ifChain(e *check.If, k sink) []ast.Stmt {
 func (g *gen) returnStmt(e *check.Return) []ast.Stmt {
 	if e.Value == nil {
 		return g.returning()
+	}
+	if call, ok := e.Value.(*check.Call); ok && g.tailJump(call) {
+		return g.jump(call)
 	}
 	if g.fnResult == check.Ok && e.Value.Type() == check.Ok {
 		return append(g.effect(e.Value), g.returning()...)

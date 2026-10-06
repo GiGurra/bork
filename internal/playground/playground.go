@@ -99,6 +99,9 @@ func Handle(request Request) (response Response) {
 		check.CheckEffects(files, info, diags)
 	}
 	if diags.Len() == 0 {
+		check.CheckTailCalls(files, info, diags)
+	}
+	if diags.Len() == 0 {
 		check.Lifetimes(files, info, diags)
 	}
 	if diags.Len() == 0 {

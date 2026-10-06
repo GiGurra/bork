@@ -1,0 +1,19 @@
+fn countdown(n: Int) uses io + tailrec: Int {
+  if (n == 0) { 0 } else { countdown(n - 1) }
+}
+
+fn main() {
+  println(countdown(3))
+}
+
+test "deep recursion without mocks" {
+  assertEqual(countdown(1000000), 0)
+}
+
+test "recursive calls go through a mock" {
+  m = mock countdown(n) {
+    if (n == 2) { 100 } else { countdown(n) }
+  }
+  assertEqual(countdown(5), 100)
+  assertEqual(m.count(), 4)
+}

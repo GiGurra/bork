@@ -1,0 +1,7 @@
+main.bork:6:32: fact declares tailrec, but this call of itself is not a tail call: its result is used after it returns
+main.bork:11:30: inScope declares tailrec, but this call of itself is not a tail call: it is inside the scope block at line 10, which closes after the call returns
+main.bork:17:7: tried declares tailrec, but this call of itself is not a tail call: its result is checked by ?
+main.bork:21:23: plain declares tailrec, but never calls itself; remove the marker
+main.bork:23:22: ping declares tailrec, but it is mutually recursive: ping calls pong, which calls ping; tailrec covers only calls of itself, so write the states as a loop over a state value
+main.bork:27:13: lambda declares tailrec, but this call of itself is not a tail call: it is inside a lambda, which is a function of its own
+main.bork:44:5: rebound declares tailrec, but this call of itself is not a tail call: it is inside the with block at line 43, whose ambient values end after the call returns

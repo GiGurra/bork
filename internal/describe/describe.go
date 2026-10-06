@@ -35,6 +35,9 @@ type Result struct {
 	Ownership string                     `json:"ownership,omitempty"`
 	Proof     *check.Proof               `json:"proof,omitempty"`
 	Callable  *check.CallableDescription `json:"callable,omitempty"`
+	// TailCall says, at a call of a function by itself, whether it is
+	// compiled as a jump.
+	TailCall *check.TailCall `json:"tail_call,omitempty"`
 }
 
 // Selection is a source value and the position at which to query its facts.
@@ -50,6 +53,7 @@ type Selection struct {
 	Value          bool
 	Callable       *check.CallableDescription
 	Assembly       *check.Assembly
+	TailCall       *check.TailCall
 }
 
 func ParsePosition(text string) (diag.Pos, error) {
@@ -585,6 +589,7 @@ func (s *sourceIndex) callee(call *check.Call) {
 	s.choose(call, &check.FuncType{Params: params, Result: call.Inst.Result, Effects: call.Func.Effects}, &pos)
 	s.selected.Value = false
 	s.selected.Callable = check.DescribeCallable(call.Func, params, s.fn.Pkg, call.ReceiverCall)
+	s.selected.TailCall = s.info.TailCalls[call]
 }
 
 // mock selects in a mock statement: its handle, its target (the

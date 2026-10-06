@@ -139,6 +139,10 @@ func checkLoadedProgramTracked(loaded *loadedSources, module *goModuleInputs, co
 	if diags.Len() > 0 {
 		return nil, &DiagError{Diags: diags}
 	}
+	check.CheckTailCalls(files, info, diags)
+	if diags.Len() > 0 {
+		return nil, &DiagError{Diags: diags}
+	}
 	phase(observe, "lifetimes")
 	check.Lifetimes(files, info, diags)
 	if diags.Len() > 0 {

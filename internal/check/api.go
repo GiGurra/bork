@@ -218,7 +218,7 @@ func apiFunction(fn *Func) string {
 		text += " where " + requirementText(fn.Requires, fn.Pkg)
 	}
 	if fd.Uses != nil || fn.Effects != 0 {
-		text += " uses " + fn.Effects.String()
+		text += " " + usesText(fd, fn.Effects)
 	}
 	callable := DescribeCallable(fn, fn.Params, fn.Pkg, false)
 	if len(callable.Needs) > 0 {

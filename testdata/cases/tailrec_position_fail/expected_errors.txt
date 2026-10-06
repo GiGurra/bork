@@ -1,0 +1,2 @@
+main.bork:1:16: main cannot declare tailrec: it cannot be called, so it cannot recur
+main.bork:5:24: tailrec marks a declared function whose recursive calls must be tail calls; it is not an effect, and only a function or method declaration with a bork body can have it, not a class or instance method

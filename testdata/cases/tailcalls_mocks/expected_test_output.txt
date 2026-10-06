@@ -1,0 +1,4 @@
+ok    deep recursion without mocks
+ok    recursive calls go through a mock
+2 passed, 0 failed
+exit code 0

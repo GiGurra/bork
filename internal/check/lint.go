@@ -152,7 +152,7 @@ func LintWarnings(files []*syntax.File, info *Info) *diag.List {
 				if needless := fn.Effects &^ uses.used; needless != 0 && uses.open == nil {
 					// Replacing only the uses clause preserves defaults, needs and result
 					// contracts. Declared effects of callees remain part of the contract.
-					replacement := "uses " + (fn.Effects &^ needless).String()
+					replacement := usesText(fd, fn.Effects&^needless)
 					message := "function never performs " + needless.String()
 					if Exported(fd.Name) {
 						message += "; suppress this warning if the declaration reserves effects for API compatibility"

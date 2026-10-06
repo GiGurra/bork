@@ -74,6 +74,31 @@ A value shared by the whole package is declared at the top level, as in `MaxRetr
 
 Package values can refer to values declared later or in another file in the same package. Dependency cycles are compile errors, including through helper functions. An uppercase name is exported, as with functions and types. An annotation can require facts (`Limit: Int where positive = 3`); the initializer must prove them and reads retain those promises. A package initializer can itself use `comptime { ... }` and read other pure package values; see [compile-time evaluation](comptime.md).
 
+## Recursion and tail calls
+
+A call is a *tail call* when its result is the function's result, with nothing left to do after it. A function's calls of itself in tail position are compiled as jumps to the top of the function, so they use no stack:
+
+```bork
+fn gcd(a: Int, b: Int) uses tailrec: Int {
+  if (b == 0) { a } else { gcd(b, a % b) }
+}
+
+fn countdown(n: Int) uses io {
+  if (n > 0) {
+    countdown(n - 1)
+  }
+}
+
+fn main() {
+  println(gcd(48, 18))
+  countdown(10000000)
+}
+```
+
+This needs no marker: `countdown` runs ten million rounds without growing its stack. Writing `tailrec` in the `uses` list asks the compiler to guarantee it. The function must call itself, every call of itself must be a tail call, and it must not be mutually recursive with another function. Otherwise compilation fails, and the error names each call and the reason. `tailrec` is not an effect. Callers do not declare it, and it is not part of the function's type.
+
+Positions that are not tail positions include a call whose result is used afterwards (`n * fact(n - 1)`), the operand of `?`, and a call inside a `scope` or `with` block, which ends after the call returns. Only direct calls of the function itself are optimized; calls between two functions are ordinary calls. `bork describe` and editor hovers show how a call of a function by itself is compiled.
+
 ## Everything is an expression
 
 `if`, `match`, and blocks all produce values, so they can be used wherever a value is expected.

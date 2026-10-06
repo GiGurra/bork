@@ -1,0 +1,5 @@
+fn main() uses tailrec {
+  println(apply(x => x, 1))
+}
+
+fn apply(f: (Int) uses tailrec => Int, x: Int): Int { f(x) }
