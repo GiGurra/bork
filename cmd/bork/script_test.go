@@ -56,3 +56,108 @@ func TestScriptCLIAndCache(t *testing.T) {
 		t.Fatalf("directory script: %s: %v", out, err)
 	}
 }
+
+func TestScriptMainCommands(t *testing.T) {
+	exe := cliExecutable(t, false)
+	root := t.TempDir()
+	path := filepath.Join(root, "main.bork")
+	source := `#!/usr/bin/env -S bork script
+import "bork/process"
+lazy Greeting = "hello"
+type Message = { text: String }
+fn message(name: String): Message { Message { text: s"$Greeting, $name" } }
+fn main() {
+ println(message(process.Args().head().getOr("world")).text)
+}
+test "helper" { assert(message("Ada").text == "hello, Ada") }
+`
+	if err := os.WriteFile(path, []byte(source), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"check", path}, {"fmt", path}, {"fmt", "--check", path}, {"test", path}} {
+		out, err := exec.Command(exe, args...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v: %s: %v", args, out, err)
+		}
+	}
+	built := filepath.Join(root, "app")
+	if out, err := exec.Command(exe, "build", path, "-o", built).CombinedOutput(); err != nil {
+		t.Fatalf("build: %s: %v", out, err)
+	}
+	for _, args := range [][]string{{"script", path, "Ada"}, {"script", path, "--", "Ada"}, {"script", "--fast", path, "Ada"}, {"run", path, "--", "Ada"}} {
+		out, err := exec.Command(exe, args...).CombinedOutput()
+		if err != nil || string(out) != "hello, Ada\n" {
+			t.Fatalf("%v: %s: %v", args, out, err)
+		}
+	}
+	if out, err := exec.Command(built, "Ada").CombinedOutput(); err != nil || string(out) != "hello, Ada\n" {
+		t.Fatalf("built: %s: %v", out, err)
+	}
+	// Explicit script mode also accepts main without a shebang.
+	if err := os.WriteFile(path, []byte(strings.TrimPrefix(source, "#!/usr/bin/env -S bork script\n")), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(exe, "script", path, "Ada").CombinedOutput(); err != nil || string(out) != "hello, Ada\n" {
+		t.Fatalf("no shebang: %s: %v", out, err)
+	}
+}
+
+func TestScriptCLIFlagsAndShebang(t *testing.T) {
+	exe := cliExecutable(t, false)
+	for _, main := range []bool{false, true} {
+		t.Run(map[bool]string{false: "top-level", true: "main"}[main], func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "cli.bork")
+			declarations := `import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+type Options = { config: Option[String], name: String = "world" } derive (codec.Decode)
+`
+			body := `println(cli.Run[Options]("greet", "Greeting script", (options, s) => { println(s"Hello ${options.name}") }, flags: [.{ field: "config", configFile: true }]))`
+			if main {
+				body = "fn main() {\n" + body + "\n}"
+			}
+			source := "#!/usr/bin/env -S bork script\n" + declarations + body + "\n"
+			if err := os.WriteFile(path, []byte(source), 0700); err != nil {
+				t.Fatal(err)
+			}
+			config := filepath.Join(root, "config.json")
+			if err := os.WriteFile(config, []byte(`{"name":"file"}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, args := range [][]string{{"script", path, "--name", "Ada"}, {"script", path, "--", "--name", "Ada"}, {"script", path, "--config", config, "--name", "Ada"}} {
+				out, err := exec.Command(exe, args...).CombinedOutput()
+				if err != nil || string(out) != "Hello Ada\nOk\n" {
+					t.Fatalf("%v: %s: %v", args, out, err)
+				}
+			}
+			for _, flag := range []string{"--help", "--version", "--fast", "--rebuild"} {
+				out, err := exec.Command(exe, "script", path, flag).CombinedOutput()
+				if err != nil {
+					t.Fatalf("script flag %s: %s: %v", flag, out, err)
+				}
+				if flag == "--help" {
+					if !strings.Contains(string(out), "Greeting script") || strings.Contains(string(out), "Hello") {
+						t.Fatalf("script help: %s", out)
+					}
+				} else if !strings.Contains(string(out), "unknown flag") {
+					t.Fatalf("compiler consumed script flag %s: %s", flag, out)
+				}
+			}
+			if runtime.GOOS == "windows" {
+				return
+			}
+			// Exercise env -S and the real executable-file path with unseparated flags.
+			bin := t.TempDir()
+			if err := os.Symlink(exe, filepath.Join(bin, "bork")); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(path, "--config", config)
+			cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			out, err := cmd.CombinedOutput()
+			if err != nil || string(out) != "Hello file\nOk\n" {
+				t.Fatalf("shebang: %s: %v", out, err)
+			}
+		})
+	}
+}

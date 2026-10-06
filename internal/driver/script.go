@@ -21,7 +21,7 @@ import (
 // loader strips it before observing files, so diagnostics retain source paths.
 const scriptRequestPrefix = "bork-script:"
 
-// RunScript executes a single file with an implicit main, even without a shebang.
+// RunScript executes a single script file, even without a shebang.
 func RunScript(path string, args []string) (int, error) {
 	return runScript(path, args, Run)
 }

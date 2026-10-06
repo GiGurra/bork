@@ -48,6 +48,8 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [package_values](../examples/package_values/main.bork) | Package-level constants and inferred value types | `bork run examples/package_values` |
 | [tuples](../examples/tuples/main.bork) | Tuple results, destructuring and positional access | `bork run examples/tuples` |
 | [scripts](../examples/scripts/main.bork) | A script with a shebang and arguments | `(cd examples/scripts && bork run . -- Ada)` |
+| [script_cli](../examples/script_cli/main.bork) | Typed CLI flags in a top-level script | `bork script examples/script_cli/main.bork --name Ada` |
+| [script_cli_main](../examples/script_cli_main/main.bork) | A script with `fn main()`, a helper, and typed CLI flags | `bork script examples/script_cli_main/main.bork --name Ada` |
 | [script_uuid](../examples/script_uuid/main.bork) | A script with a Go-module dependency | `bork run examples/script_uuid` |
 
 ## Services

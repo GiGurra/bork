@@ -1,6 +1,6 @@
 # Scripts
 
-A bork script is one `.bork` file with statements at the top level. Put a shebang on the first line to make other compiler commands recognize it as a script:
+A bork script is one `.bork` file with statements at the top level or an explicit `fn main()`. Put a shebang on the first line to make other compiler commands recognize it as a script:
 
 ```bork
 #!/usr/bin/env -S bork script
@@ -19,7 +19,7 @@ chmod +x hello.bork
 ./hello.bork Ada
 ```
 
-The executable form needs `bork` on your `PATH` and an `env` that supports `-S`. You can always use `bork script hello.bork`, which also accepts a file without a shebang. Arguments after `--` go to `process.Args()`, without the program name. The running script keeps the caller's working directory; relative file paths are relative to that directory.
+The executable form needs `bork` on your `PATH` and an `env` that supports `-S`. You can always use `bork script hello.bork`, which also accepts a file without a shebang. Arguments after the file go to `process.Args()`, without the program name. An optional `--` after the file is accepted. Put compiler flags such as `--fast` before the file; flags after it belong to the script. The running script keeps the caller's working directory; relative file paths are relative to that directory.
 
 ## Bindings and declarations
 
@@ -36,7 +36,7 @@ name = "Ada"
 println(greet(name))
 ```
 
-A script cannot also declare `fn main()`, and scripts cannot be imported as packages. Compile each script as one root file. Explicit `lazy` package values follow the [package binding rules](basics.md): pure initializers, once on first read, checked facts, capitalization exports and cycle detection.
+A script may instead declare `fn main()`. Other declarations, including helpers, types, tests and pure `lazy` package values, still work. Combining `fn main()` with top-level statements is an error that names the main declaration and the first statement; move those statements into main or remove main. Scripts cannot be imported as packages. Compile each script as one root file. Explicit `lazy` package values follow the [package binding rules](basics.md): pure initializers, once on first read, checked facts, capitalization exports and cycle detection.
 
 The other commands work on a script with a shebang too:
 
@@ -47,6 +47,27 @@ bork describe hello.bork:4:1
 bork build hello.bork -o hello
 bork test hello.bork
 ```
+
+## Command-line tools
+
+Scripts can use [bork/cli](../std/cli.md) in either entrypoint form, including typed flags, config files, subcommands and persistent root flags (`RunRoot`). The CLI APIs receive script arguments without the program name. Flags such as `--help` belong to the script, so they work through shebang execution too.
+
+```bork
+#!/usr/bin/env -S bork script
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Options = { name: String = "world" } derive (codec.Decode)
+fn greeting(name: String): String { s"Hello, $name!" }
+fn main() {
+  println(cli.Run[Options]("greet", "A greeting script", (options, s) => {
+    println(greeting(options.name))
+  }))
+}
+```
+
+Run it with `bork script greet.bork --name Ada` or `./greet.bork --name Ada`. See the checked [top-level CLI script](../../examples/script_cli/main.bork) and [fn-main CLI script](../../examples/script_cli_main/main.bork).
 
 ## Inline dependencies
 

@@ -491,8 +491,11 @@ func main() {
 				},
 			},
 			boa.CmdT[runParams]{
-				Use: "script", Short: "compile and run a single .bork script with an implicit main",
+				Use: "script", Short: "compile and run a single .bork script",
 				RunFunc: func(p *runParams, _ *cobra.Command, _ []string) {
+					if len(p.Args) > 0 && p.Args[0] == "--" {
+						p.Args = p.Args[1:]
+					}
 					code, err := driver.RunScriptCLI(p.Path, p.Args, driver.BuildOptions{Fast: p.Fast, Rebuild: p.Rebuild})
 					if err != nil {
 						fail(err)
@@ -595,6 +598,12 @@ func main() {
 	}
 	command.SubCmds = append(command.SubCmds, envCommand(), upgradeCommand(), editorCommand())
 	root := command.ToCobra()
+	for _, cmd := range root.Commands() {
+		if cmd.Name() == "script" {
+			// The file ends compiler options; remaining flags belong to the script.
+			cmd.Flags().SetInterspersed(false)
+		}
+	}
 	if path, enabled := earlyToolchainTarget(root, os.Args[1:]); enabled {
 		if err := selectToolchain(root, path); err != nil {
 			fail(err)

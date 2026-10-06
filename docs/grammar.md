@@ -23,7 +23,7 @@
 
 ```ebnf
 Package    = { File } .
-Script     = [ Shebang EOL ] { HeaderDirective EOL } { Import EOL } { Use EOL } { ( Decl | Binding | Expr ) EOL } . (* statements become implicit-main locals; explicit lazy remains package-level *)
+Script     = [ Shebang EOL ] { HeaderDirective EOL } { Import EOL } { Use EOL } { ( Decl | Binding | Expr ) EOL } . (* fn main excludes executable top-level statements; otherwise statements become implicit-main locals; explicit lazy remains package-level *)
 HeaderDirective = "// bork:require" ModulePath PinnedVersion | "// bork:unsafe" . (* standalone script header only *)
 File       = { Import EOL } { Use EOL } { ( FuncDecl | PredDecl | TypeDecl | AmbientDecl | RuleDecl | TestDecl | ClassDecl | InstanceDecl | DeriveDecl | DeriveTemplate | DeriveHelper | Instances | PackageBinding ) EOL } .
 PackageBinding = [ "lazy" ] Ident [ ":" Type ] "=" Expr . (* pure memo; comptime reads bake data; uppercase names are exported *)
