@@ -92,7 +92,7 @@ fn After(s: Scope, d: Duration) uses clock + state: Channel[Instant] unsafe go {
 
 // Tick gives a channel of s that receives an Instant every period, until
 // it is closed or s ends. A tick that finds the last one not yet received
-// is dropped, so a slow receiver gets the latest, not a backlog. The
+// is dropped, so a slow receiver gets the earliest pending tick, not a backlog. The
 // period must be positive: Tick panics otherwise, as Go's NewTicker does.
 fn Tick(s: Scope, every: Duration) uses clock + state: Channel[Instant] unsafe go {
   import "time"
