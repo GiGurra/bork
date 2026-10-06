@@ -1,0 +1,38 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/json"
+import "bork/process"
+import "bork/test"
+use codec.Defaults
+
+type Level = sealed {
+  // Normal application output.
+  Info,
+  // Diagnostic output.
+  Debug codec { aliases: ["verbose"] },
+  Other(String) codec { fallback: true }
+} derive (codec.Decode, codec.Encode)
+type Options = {
+  level: Level = Level.Info
+  optional: Option[Level]
+  levels: List[Level] = []
+} derive (codec.Decode, codec.Encode)
+
+fn main() {
+  match (cli.Run[Options]("enums", "Known enum names on the command line", (options, s) => println(json.Encode(options)))) {
+    Ok => {}
+    error: cli.Error => { eprintln(error.Render("enums")); process.Exit(2) }
+  }
+}
+
+test "bare canonical names and aliases" {
+  options = test.AssertIs[Options](cli.Parse[Options]("enums", "", ["--level", "verbose", "--optional", "INFO", "--levels", "DEBUG"]))
+  assertEqual(options.level, Level.Debug)
+  assertEqual(options.optional, Option.Some(Level.Info))
+  assertEqual(options.levels, [Level.Debug])
+}
+test "CLI is strict while codec fallback remains available" {
+  failure = test.AssertIs[cli.Error](cli.Parse[Options]("enums", "", ["--level", "future"]))
+  assert(failure.Render("enums").contains("must be one of: INFO, DEBUG"))
+  assertEqual(test.AssertIs[Level](codec.decode[Level](codec.Value.String { value: "future" })), Level.Other("future"))
+}
