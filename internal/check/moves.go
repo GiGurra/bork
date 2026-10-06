@@ -42,6 +42,17 @@ type movedAt struct {
 	pos      diag.Pos
 	to       string
 	possibly bool
+	// handOver is set for a hand-over through a Handoff, which has no
+	// attach to suggest instead.
+	handOver bool
+}
+
+// verb is how the move is told: moved, or handed over.
+func (m movedAt) verb() string {
+	if m.handOver {
+		return "handed over"
+	}
+	return "moved"
 }
 
 // pinAt is a use that may keep a value with a handle: until every scope
@@ -384,56 +395,22 @@ func (l *lifeChecker) pin(life lifetime, pos diag.Pos, what string, keeper lifet
 // moveCall checks move(r, s), and gives its lifetime: that of s, with a
 // new handle.
 func (l *lifeChecker) moveCall(x *Call) lifetime {
-	order := []int{0, 1}
-	if x.ArgOrder != nil {
-		order = x.ArgOrder
-	}
-	args := make([]lifetime, 2)
-	for _, i := range order {
-		args[i] = l.use(x.Args[i], l.expr(x.Args[i]))
-	}
+	args, reported := l.evalArgs(x)
 	r, target := x.Args[0], x.Args[1]
-	if _, ok := r.Type().(*Resource); !ok || args[0] == nil {
+	if _, ok := r.Type().(*Resource); !ok || reported[0] {
 		return args[1] // not a resource, or moved or released already: reported
 	}
 	// The target is evaluated after r (in order): it may have closed or
 	// moved what r is.
-	if order[0] == 0 && l.use(r, args[0]) == nil {
+	if !l.evaluatedLast(x, 0) && args[0] != nil && l.use(r, args[0]) == nil {
 		return args[1]
 	}
 	name := describe(r)
-	o := l.originOf(r)
-	if !o.known || len(o.hs) == 0 || o.hs[0].res == nil {
-		l.errorf(r.Pos(), "%s cannot be moved: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; attach it instead to keep it open until %s closes too", name, scopeName(target))
+	o, ok := l.movable(r, moveVerb, fmt.Sprintf("attach it instead to keep it open until %s closes too", scopeName(target)))
+	if !ok {
 		return args[1]
 	}
 	src := o.hs[0]
-	for _, h := range o.hs {
-		if unhandle(h.scope) != unhandle(src.scope) {
-			l.errorf(r.Pos(), "%s cannot be moved: it may belong to %s or %s", name, l.scopeText(src.scope), l.scopeText(h.scope))
-			return args[1]
-		}
-		if scopeVar(h.from) != scopeVar(src.from) {
-			l.errorf(r.Pos(), "%s cannot be moved: it may belong to scope %s or scope %s", name, scopeName(src.from), scopeName(h.from))
-			return args[1]
-		}
-		if h.res == nil {
-			l.errorf(r.Pos(), "%s cannot be moved: it is borrowed (a parameter)", name)
-			return args[1]
-		}
-		if h.frame != l.cur {
-			l.errorf(r.Pos(), "%s cannot be moved here: it was acquired outside this %s, which may run later or more than once; move it before", name, l.frameKind())
-			return args[1]
-		}
-		if h.loop != l.loop {
-			l.errorf(r.Pos(), "a loop cannot move %s, which was acquired outside its body", name)
-			return args[1]
-		}
-		if p, ok := l.pinned(h); ok {
-			l.errorf(r.Pos(), "%s cannot be moved: %s at line %d may still use it; attach it instead", name, p.what, p.pos.Line)
-			return args[1]
-		}
-	}
 	if len(args[1]) == 1 && unhandle(args[1][0]) == unhandle(src.scope) {
 		l.errorf(target.Pos(), "%s already belongs to %s", name, l.scopeText(src.scope))
 		return args[1]
@@ -447,8 +424,7 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 		}
 	}
 	for _, h := range o.hs {
-		m := movedAt{pos: x.Pos(), to: to}
-		l.moved[h] = m
+		l.moved[h] = movedAt{pos: x.Pos(), to: to}
 	}
 	x.MoveFrom = src.from
 	life := args[1]
@@ -457,6 +433,171 @@ func (l *lifeChecker) moveCall(x *Call) lifetime {
 		life = life.union(lifetime{h})
 	}
 	return life
+}
+
+// handOverCall checks h.handOver(s, r): a move of r to the handoff's
+// scope, checked as move's (though r may belong to that scope already).
+// It ends r's handles, so it keeps nothing r's source could still use:
+// it pins nothing.
+func (l *lifeChecker) handOverCall(x *Call) lifetime {
+	args, reported := l.evalArgs(x)
+	ch, r := x.Args[0], x.Args[2]
+	if _, ok := r.Type().(*Resource); !ok {
+		// Handoff[R] of a type parameter, in generic code: what it is
+		// is not known here.
+		l.errorf(r.Pos(), "%s cannot be handed over: only a resource of a known type can be (not a type parameter)", describe(r))
+		return nil
+	}
+	if reported[2] {
+		return nil // moved or released already: reported
+	}
+	if !l.evaluatedLast(x, 2) && args[2] != nil && l.use(r, args[2]) == nil {
+		return nil
+	}
+	o, ok := l.movable(r, handOverVerb, "only a resource acquired here, or received from a handoff named by a variable, can be handed over")
+	if !ok {
+		return nil
+	}
+	to := "handoff " + describe(ch)
+	if d := describe(ch); d == "this value" {
+		to = "the handoff"
+	}
+	for _, h := range o.hs {
+		l.moved[h] = movedAt{pos: x.Pos(), to: to, handOver: true}
+	}
+	x.MoveFrom = o.hs[0].from
+	return nil
+}
+
+// evalArgs checks the arguments of x in the order they are evaluated,
+// and gives their lifetimes, by parameter, and which were reported as
+// unusable (moved or released).
+func (l *lifeChecker) evalArgs(x *Call) ([]lifetime, []bool) {
+	args := make([]lifetime, len(x.Args))
+	reported := make([]bool, len(x.Args))
+	for _, i := range argOrder(x) {
+		life := l.expr(x.Args[i])
+		args[i] = l.use(x.Args[i], life)
+		reported[i] = life != nil && args[i] == nil
+	}
+	return args, reported
+}
+
+func argOrder(x *Call) []int {
+	if x.ArgOrder != nil {
+		return x.ArgOrder
+	}
+	order := make([]int, len(x.Args))
+	for i := range order {
+		order[i] = i
+	}
+	return order
+}
+
+// evaluatedLast reports whether argument i of x is evaluated after the
+// others.
+func (l *lifeChecker) evaluatedLast(x *Call, i int) bool {
+	order := argOrder(x)
+	return order[len(order)-1] == i
+}
+
+// verbs tell a kind of move, in messages.
+type verbs struct{ base, past, it, pinned string }
+
+var (
+	moveVerb     = verbs{"move", "moved", "move it", "attach it instead"}
+	handOverVerb = verbs{"hand over", "handed over", "hand it over", "hand it over before that"}
+)
+
+// movable checks that r, a resource, can be moved (or handed over: verb)
+// here, and gives its origin. A borrowed r gets hint.
+func (l *lifeChecker) movable(r Expr, v verbs, hint string) (resOrigin, bool) {
+	verb := v.past
+	name := describe(r)
+	o := l.originOf(r)
+	if !o.known || len(o.hs) == 0 || o.hs[0].res == nil {
+		l.errorf(r.Pos(), "%s cannot be %s: it is borrowed (a parameter, a value from a channel, a task or a call that may give a resource held elsewhere), not acquired here; %s", name, verb, hint)
+		return o, false
+	}
+	src := o.hs[0]
+	for _, h := range o.hs {
+		if unhandle(h.scope) != unhandle(src.scope) {
+			l.errorf(r.Pos(), "%s cannot be %s: it may belong to %s or %s", name, verb, l.scopeText(src.scope), l.scopeText(h.scope))
+			return o, false
+		}
+		if scopeVar(h.from) != scopeVar(src.from) {
+			l.errorf(r.Pos(), "%s cannot be %s: it may belong to scope %s or scope %s", name, verb, scopeName(src.from), scopeName(h.from))
+			return o, false
+		}
+		if h.res == nil {
+			l.errorf(r.Pos(), "%s cannot be %s: it is borrowed (a parameter)", name, verb)
+			return o, false
+		}
+		if h.frame != l.cur {
+			l.errorf(r.Pos(), "%s cannot be %s here: it was acquired outside this %s, which may run later or more than once; %s before", name, verb, l.frameKind(), v.it)
+			return o, false
+		}
+		if h.loop != l.loop {
+			l.errorf(r.Pos(), "a loop cannot %s %s, which was acquired outside its body", v.base, name)
+			return o, false
+		}
+		if p, ok := l.pinned(h); ok {
+			l.errorf(r.Pos(), "%s cannot be %s: %s at line %d may still use it; %s", name, verb, p.what, p.pos.Line, v.pinned)
+			return o, false
+		}
+	}
+	return o, true
+}
+
+// received gives the handle of the resource a call receives from a
+// Handoff named by a variable (so that a move of it can find the
+// handoff's scope at run time): it was handed over, so the receiver is
+// its only holder. nil for any other call.
+func (l *lifeChecker) received(x *Call) *handle {
+	if !handoffMethod(x.Func) || x.Func.Decl.Name != "receive" || len(x.Args) == 0 {
+		return nil
+	}
+	return l.handoffHandle(x.Args[0], x.Pos(), l.loop)
+}
+
+// handoffHandle makes a handle, in the scope of the handoff ch names, of
+// a resource received from it at pos (in loop).
+func (l *lifeChecker) handoffHandle(ch Expr, pos diag.Pos, loop *For) *handle {
+	v, ok := ch.(*VarRef)
+	if !ok {
+		return nil
+	}
+	res, ok := storedType(ch.Type()).(*Resource)
+	if !ok {
+		return nil
+	}
+	// The handoff's scope: its one scope, or, for a parameter that is
+	// known only to outlive some (declared in another), the parameter.
+	// The move finds it at run time from the handoff itself.
+	var scope any = v.Var
+	if life := l.env[v.Var]; len(life) == 1 {
+		scope = unhandle(life[0])
+	}
+	return &handle{res: res, scope: scope, from: ch, frame: l.cur, loop: loop, pos: pos}
+}
+
+// handoffValues gives the handle of what a for loop over h.values(s)
+// receives in each round: created in its body, which may move it.
+func (l *lifeChecker) handoffValues(x *For) *handle {
+	c, ok := x.Items.(*Call)
+	if !ok || !handoffMethod(c.Func) || c.Func.Decl.Name != "values" || len(c.Args) == 0 {
+		return nil
+	}
+	return l.handoffHandle(c.Args[0], x.Var.Pos, x)
+}
+
+// handoffMethod reports whether fn is a method of the prelude's Handoff.
+func handoffMethod(fn *Func) bool {
+	if fn == nil || !fn.Prelude || !fn.Decl.IsMethod || len(fn.Params) == 0 {
+		return false
+	}
+	r, ok := genericBaseOrSelf(fn.Params[0]).(*Record)
+	return ok && r.Name == "Handoff"
 }
 
 // ownership describes, for queries, what a resource variable x is where
@@ -477,9 +618,9 @@ func (l *lifeChecker) varOwnership(v *Var) string {
 	for _, h := range o.hs {
 		if m, ok := l.moved[h]; ok {
 			if m.possibly {
-				return fmt.Sprintf("possibly moved to %s at line %d", m.to, m.pos.Line)
+				return fmt.Sprintf("possibly %s to %s at line %d", m.verb(), m.to, m.pos.Line)
 			}
-			return fmt.Sprintf("moved to %s at line %d", m.to, m.pos.Line)
+			return fmt.Sprintf("%s to %s at line %d", m.verb(), m.to, m.pos.Line)
 		}
 	}
 	owner := l.scopeText(o.hs[0].scope)
@@ -520,17 +661,21 @@ func (l *lifeChecker) settle(mark int) {
 // h.
 func (l *lifeChecker) movedUse(x Expr, h *handle) {
 	m := l.moved[h]
-	how := "was moved"
+	how := "was " + m.verb()
 	if m.possibly {
-		how = "may have been moved"
+		how = "may have been " + m.verb()
 	}
 	o := l.originOf(x)
 	if o.known && containsHandle(o.hs, h) {
-		l.errorf(x.Pos(), "%s %s to %s at line %d; to keep using it here, attach it instead of moving it", describe(x), how, m.to, m.pos.Line)
+		if m.handOver {
+			l.errorf(x.Pos(), "%s %s to %s at line %d, which ends its use here", describe(x), how, m.to, m.pos.Line)
+		} else {
+			l.errorf(x.Pos(), "%s %s to %s at line %d; to keep using it here, attach it instead of moving it", describe(x), how, m.to, m.pos.Line)
+		}
 	} else {
 		l.errorf(x.Pos(), "%s may be released: it holds a resource that %s to %s at line %d", describe(x), how, m.to, m.pos.Line)
 	}
-	if m.pos.Line > 0 {
+	if m.pos.Line > 0 && !m.handOver {
 		end := m.pos
 		end.Col += len("move")
 		l.diags.Suggest(x.Pos(), "lifetime.error", x.Pos(), diag.Fix{

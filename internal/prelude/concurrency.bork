@@ -300,3 +300,87 @@ fn merge[T](s: Scope, sources: List[Channel[T]] in s) uses state: Channel[T] uns
   }
   return Channel[T]{native: ChannelHandle{handle: out, owner: owner}}
 }
+
+// Handoff passes resources between tasks, one owner at a time: what is
+// handed over belongs to the handoff's scope, and whoever receives it is
+// its only holder, who may move it on (to a session's scope, say). It
+// belongs to the scope it was made in, which closes it, and the resources
+// nobody received, when it closes.
+type Handoff[R] = private { native: ChannelHandle }
+
+// handoff makes a handoff of resources R in scope s that holds up to
+// capacity resources that are not received yet; with capacity 0 (the
+// default), a sender waits for a receiver.
+fn handoff[R](s: Scope, capacity: Int where validCapacity = 0): Handoff[R] unsafe go {
+  c := _borkNewChan(s, int(capacity))
+  return Handoff[R]{native: ChannelHandle{handle: c, owner: s.Own(c.release)}}
+}
+
+// handOver hands r over to whoever receives it, waiting in s while the
+// handoff is full (or, if it is unbuffered, until a receiver takes it):
+// r moves to the handoff's scope, and r, and every value holding it,
+// cannot be used after it. If it gives Closed or Cancelled, nobody
+// received r, and it is released: it closes, unless it is attached to
+// other scopes. r must be movable here, as for move.
+fn (h: Handoff[R]) handOver[R](s: Scope, r: R) uses state: Ok | Closed | Cancelled unsafe go {
+  // Compiled to _borkHandOver, given the scope r is moved from.
+  _ = h.native.handle.(*_borkChan)
+  panic("bork: handOver is compiled by the compiler")
+}
+
+// receive takes the next resource, waiting in s until there is one. The
+// receiver is its only holder: it belongs to the handoff's scope until
+// it is moved on. A closed handoff gives the resources still buffered,
+// then Closed.
+fn (h: Handoff[R]) receive[R](s: Scope) uses state: R | Closed | Cancelled unsafe go {
+  value, _ := _borkChanReceive(s, h.native.handle.(*_borkChan))
+  return value
+}
+
+// tryReceive receives a resource if one is ready: None when none is.
+fn (h: Handoff[R]) tryReceive[R]() uses state: Option[R] | Closed unsafe go {
+  _, status, value := _borkChanSelect([]_borkChanArm{{ch: h.native.handle.(*_borkChan)}}, false)
+  switch status {
+  case _borkChanClosed:
+    return Closed{}
+  case _borkChanNotReady:
+    return Option_None[R]{}
+  }
+  x, _ := value.(R)
+  return Option_Some[R]{E0: x}
+}
+
+// close closes the handoff: handOver gives Closed, and receives give the
+// resources still buffered, then Closed. Closing it again does nothing.
+fn (h: Handoff[R]) close[R]() uses state unsafe go {
+  h.native.handle.(*_borkChan).close()
+}
+
+// length is how many resources are buffered now.
+fn (h: Handoff[R]) length[R]() uses state: Int unsafe go {
+  return int64(h.native.handle.(*_borkChan).length())
+}
+
+// capacity is how many resources the handoff buffers.
+fn (h: Handoff[R]) capacity[R](): Int unsafe go {
+  return int64(h.native.handle.(*_borkChan).limit)
+}
+
+// values receives resources until the handoff is closed, or s is
+// cancelled: for (c in h.values(s)) { ... }, where the loop's body is
+// the only holder of each c, and may move it on.
+fn (h: Handoff[R]) values[R](s: Scope): Seq[R] uses state unsafe go {
+  c := h.native.handle.(*_borkChan)
+  return _Seq[R]{run: func(yield func(R) bool) {
+    for {
+      value, ok := _borkChanReceive(s, c)
+      if !ok {
+        return
+      }
+      x, _ := value.(R)
+      if !yield(x) {
+        return
+      }
+    }
+  }}
+}

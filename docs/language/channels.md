@@ -273,12 +273,48 @@ fn main() {
 empty
 ```
 
+## Handing resources over
+
+A resource sent on a `Channel` stays where it is: the sender's scope still owns it and may keep using it, and the receiver only borrows it. To pass the resource itself to whichever task receives it, use a `Handoff`:
+
+```bork
+import "bork/fs"
+
+fn main() {
+  scope app {
+    files = handoff[fs.File](app)
+    worker = fork(app, () => {
+      for (file in files.values(app)) {
+        scope job {
+          mine = move(file, job) // the worker owns it now
+          println(fs.Path(mine) != "")
+        } // and it closes here
+      }
+    })
+    for (_ in [1, 2]) {
+      match (fs.TempFile(app)) {
+        file: fs.File => { _ = files.handOver(app, file) } // app lets go of it
+        failure: fs.Error => println(failure)
+      }
+    }
+    files.close()
+    await(worker)
+  }
+}
+```
+
+- `handoff[R](s)` or `handoff[R](s, capacity)` makes one in scope `s`. It carries resources only.
+- `h.handOver(s, r)` is a `move` of `r` to the handoff's scope, followed by a send. The compiler rejects any later use of `r`, or of anything holding it, and `r` must be movable there, as for `move`. It gives `Ok | Closed | Cancelled`. If it fails, nobody received `r`, so `r` is closed at once (unless it is attached to another scope).
+- `h.receive(s)` and `for (r in h.values(s))` give the receiver a hold of its own on the resource, which it may move: it belongs to the handoff's scope until the receiver moves it on, attaches it, or hands it over again. This works for a handoff held in a variable or parameter. Resources nobody received close with the handoff's scope.
+- `tryReceive`, `close`, `length` and `capacity` work as they do for channels. A value from `tryReceive` is borrowed, and so is one received from a handoff that is not a plain name (`make().receive(s)`). `select` does not take handoffs yet.
+
 ## Patterns
 
 - **Pipeline**: stages joined by channels, each a task made with `produce` that receives from the stage before it. See [examples/pipeline](../../examples/pipeline/main.bork).
 - **Fan out, fan in**: several workers receive from one channel of jobs, so each job goes to one of them, and `merge` collects their results. See [examples/fan_in_out](../../examples/fan_in_out/main.bork).
 - **Timeouts and tickers**: `select` over a reply and `time.After`, and `time.Tick` pacing steps. See [examples/select_timeout](../../examples/select_timeout/main.bork).
 - **A queue that never blocks its producer**: [examples/unbounded_queue](../../examples/unbounded_queue/main.bork).
+- **A worker pool that owns its connections**: hand each one over with a `Handoff`, and let the worker move it into a scope of its own, as above.
 - **The basics in one program**: [examples/channels](../../examples/channels/main.bork).
 
 ## Coming from Go

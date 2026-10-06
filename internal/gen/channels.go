@@ -37,6 +37,9 @@ type _borkChan struct {
  head, n int
  closed bool
  owner context.Context
+ // scope is the scope the channel belongs to: a Handoff's values are
+ // registered with it.
+ scope *_Scope
  recvq, sendq []*_borkWaiter
  // onClose runs once, when the channel closes (stopping a timer, say).
  onClose func()
@@ -69,7 +72,7 @@ type _borkWaiter struct {
 }
 
 func _borkNewChan(owner *_Scope, limit int) *_borkChan {
- return &_borkChan{id: _borkChanIDs.Add(1), limit: limit, owner: owner.ctx}
+ return &_borkChan{id: _borkChanIDs.Add(1), limit: limit, owner: owner.ctx, scope: owner}
 }
 
 // push buffers v. The buffer grows as needed, up to a fixed capacity, so a
@@ -351,6 +354,29 @@ func _borkChanSend(scope *_Scope, c *_borkChan, x any) any {
   return value
  }
  return _borkOk()
+}
+
+// _borkHandOver hands the resource r over through c (what a Handoff's
+// handOver compiles to). It moves r's registration from scope from to the
+// channel's scope before r can be received, so that a receiver may move it
+// on at once, and then sends it, waiting in scope. If the send fails (or
+// the channel's scope has already closed), nobody received r and the
+// sender can no longer use it, so it is released: it closes, unless other
+// scopes keep it open.
+func _borkHandOver(scope *_Scope, c *_borkChan, r any, from *_Scope) any {
+ if why := _tryMoveResource(r, from, c.scope); why == _errMoveFinished {
+  // An orphaned task handing over to a handoff whose scope has closed:
+  // nobody can receive it.
+  _releaseResource(r, from)
+  return Closed{}
+ } else if why != "" {
+  panic("bork: handOver: " + why)
+ }
+ result := _borkChanSend(scope, c, r)
+ if _, ok := result.(_Ok); !ok {
+  _releaseResource(r, c.scope)
+ }
+ return result
 }
 
 // _borkChanReceive receives from c, waiting in scope: the value, Closed,
