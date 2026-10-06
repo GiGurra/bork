@@ -1,0 +1,25 @@
+import "example.com/emptydefaults/api"
+type Box[T] = { value: T, optional: Option[T] = Option[T].None {} }
+fn choose[T](value: T, optional: Option[T] = Option.None): Option[T] { optional }
+fn contextual[T](value: T, optional: Option[T] = .None): Option[T] { optional }
+fn explicit[T](value: T, optional: Option[T] = Option[T].None): Option[T] { optional }
+fn braces[T](value: T, optional: Option[T] = Option.None {}): Option[T] { optional }
+fn callback[T](value: T, run: Option[(T) => T] = Option.None): Bool { run.isNone() }
+type State[T] = sealed { Other }
+fn main() {
+  println(api.Default(1))
+  println(api.Default(sample: "a"))
+  println(choose(1))
+  println(choose("a"))
+  println(choose(value: true))
+  println(contextual(1))
+  println(contextual("a"))
+  println(explicit(1))
+  println(explicit("a"))
+  println(braces(1))
+  println(braces("a"))
+  println(callback(1))
+  println(callback("a"))
+  println(Box { value: 1 })
+  println(Box { value: "a" })
+}

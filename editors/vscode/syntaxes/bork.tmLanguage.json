@@ -29,6 +29,9 @@
           "include": "#runes"
         },
         {
+          "include": "#tag-groups"
+        },
+        {
           "include": "#declarations"
         },
         {
@@ -341,6 +344,14 @@
     "tuple-selectors": {
       "match": "(?<=\\.)[0-9]+\\b",
       "name": "variable.other.member.bork"
+    },
+    "tag-groups": {
+      "match": "(?<=[\\w\\]\\)\\}\"'])[ \\t]+((?!(?:true|false|if|else|match|return|sealed|where|for|break|continue)\\b)[a-z][A-Za-z0-9_]*)(?=[ \\t]*\\{)",
+      "captures": {
+        "1": {
+          "name": "entity.name.namespace.bork"
+        }
+      }
     }
   },
   "firstLineMatch": "^#!.*\\bbork\\b"

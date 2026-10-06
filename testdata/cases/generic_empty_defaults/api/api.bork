@@ -1,0 +1,2 @@
+type State[T] = sealed { hidden, Value(T) }
+fn Default[T](sample: T, state: State[T] = State.hidden): State[T] { state }

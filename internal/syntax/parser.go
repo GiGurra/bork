@@ -421,6 +421,7 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 				}
 				p.list(RParen, "a payload type", func() { v.Slots = append(v.Slots, p.typeExpr()) })
 			}
+			v.TagGroups = p.tagGroups()
 			v.Where = p.whereClause()
 			td.Variants = append(td.Variants, v)
 		})
@@ -459,6 +460,7 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 		td.Kind = AliasType
 		td.Alias = p.typeExpr()
 	}
+	td.TagGroups = p.tagGroups()
 	if td.Kind == RecordType || td.Kind == SealedType {
 		td.Where = p.whereClause()
 	}
@@ -494,24 +496,42 @@ func (p *parser) fieldDecls() []*FieldDecl {
 			p.next()
 			field.Default = p.expr()
 		}
-		if p.at(TIdent) && p.tok().Text == "go" && p.peekKind() == LBrace {
-			p.next()
-			p.next()
-			p.list(RBrace, "a Go struct tag", func() {
-				key := p.expect(TIdent, "(Go struct tag name)")
-				p.expect(Colon, "after the Go struct tag name")
-				value := p.expect(TString, "(Go struct tag value)")
-				decoded, err := strconv.Unquote(value.Text)
-				if err != nil {
-					p.errorf(value.Pos, "invalid Go struct tag value: %v", err)
-					panic(bailout{})
-				}
-				field.GoTags = append(field.GoTags, GoTag{Pos: key.Pos, Name: key.Text, Value: decoded})
-			})
-		}
+		field.TagGroups = p.tagGroups()
 		fields = append(fields, field)
 	})
 	return fields
+}
+
+// A group starts on the same line as the type/default/payload it follows.
+// Newline-separated identifiers in a sealed body remain variant names.
+func (p *parser) tagGroups() []*TagGroup {
+	var groups []*TagGroup
+	for p.at(TIdent) && p.peekKind() == LBrace && p.tok().Pos.Line == p.toks[p.i-1].End.Line {
+		name := p.next()
+		group := &TagGroup{Pos: name.Pos, Name: name.Text}
+		p.next()
+		p.list(RBrace, "a tag entry", func() {
+			key := p.expect(TIdent, "(tag name)")
+			p.expect(Colon, "after the tag name")
+			var value Expr
+			if group.Name == "go" {
+				token := p.expect(TString, "(Go struct tag value)")
+				decoded, err := strconv.Unquote(token.Text)
+				if err != nil {
+					p.errorf(token.Pos, "invalid Go struct tag value: %v", err)
+					panic(bailout{})
+				}
+				value = &StringLit{Pos: token.Pos, Value: decoded}
+			} else {
+				p.skipNewlines()
+				value = p.expr()
+			}
+			group.Entries = append(group.Entries, &FieldInit{Pos: key.Pos, Name: key.Text, Value: value})
+		})
+		group.End = p.toks[p.i-1].End
+		groups = append(groups, group)
+	}
+	return groups
 }
 
 func (p *parser) funcDecl() (fn *FuncDecl) {

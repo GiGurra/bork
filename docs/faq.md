@@ -164,7 +164,7 @@ fn answer(): Int | Failure { Failure { message: "no answer" } }
 fn main() {
   match (answer()) {
     value: Int => println(value)
-    error: Failure => eprintln(toString(error))
+    error: Failure => eprintln(error)
   }
 }
 ```
@@ -346,11 +346,12 @@ until it stops, except when `taskTimeout` explicitly limits joining. See
 
 ## How do I print a record error to stderr?
 
-Convert it with toString; this works for user-defined errors and cli.Error.
+Pass the value directly to `eprintln`; this works for user-defined errors and
+`cli.Error`, using their `Show` instance when available.
 
 ```bork
 type Failure = { message: String }
-fn main() { eprintln(toString(Failure { message: "failed" })) }
+fn main() { eprintln(Failure { message: "failed" }) }
 ```
 
 ## How do I return a nonzero exit code?

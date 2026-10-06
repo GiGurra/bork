@@ -23,6 +23,11 @@ first; item numbers below refer to its §3 table.
   hidden flags and deprecated-flag warnings. `docs4e` owns the matching
   `docs/std/cli.md` API documentation update.
 
+- Item 6 parses `.yaml`/`.yml` config files through `bork/yaml`, selected per
+  file; other extensions retain JSON parsing. Mixed overlay order and source
+  precedence stay unchanged. `cli_yaml` demonstrates JSON/YAML overlays and
+  a selected YAML file followed by a CLI override.
+
 ## Approved order (lead, message #14009): one focused PR each, under ~2k lines
 
 1. **Error rendering.** A `cli.Error` → readable text (`Error: ...` lines plus a

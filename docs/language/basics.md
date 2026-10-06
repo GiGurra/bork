@@ -346,7 +346,7 @@ Integers wrap around on overflow. Dividing by a constant zero is a compile error
 | `%` | two integers of the same type |
 | `<` `<=` `>` `>=` | numbers, strings, and runes |
 | `==` `!=` | any two values of the same type that can be compared |
-| `&&` `||` `!` | `Bool`. The right side of `&&` and `||` runs only when needed |
+| `&&` `\|\|` `!` | `Bool`. The right side of `&&` and `\|\|` runs only when needed |
 
 `==` compares by content: two records, lists, or maps are equal when their parts are. Functions cannot be compared.
 
@@ -385,19 +385,20 @@ String methods include `byteLength`, `runeCount`, `contains`, `startsWith`, `end
 ### Printing
 
 `println` writes values to standard output, separated by spaces, then adds a
-newline. `eprintln` writes one `String` to standard error. Convert another type
-with `toString`, or interpolate it:
+newline. `eprintln` accepts the same values and writes to standard error.
+Both use a value's `Show` instance when available:
 
 ```bork
 fn main() {
   count = 3
   println("count:", count)
-  eprintln(toString(count))
-  eprintln(s"count: $count")
+  eprintln(count)
+  eprintln("count:", count)
 }
 ```
 
-Calling `eprintln(count)` or `eprintln("count:", count)` is a compile error.
+Calling either function with no arguments prints a newline. Use `toString` or
+interpolation when you need the rendered value as a `String`.
 Functions that print declare `uses io`; `main` can use the entry point's effects.
 
 ## Runes
@@ -511,4 +512,4 @@ fn main() {}
 
 ---
 
-Next: [Types](types.md) · [All pages](../README.md#the-language)
+Previous: [Scripts](scripts.md) · Next: [Types](types.md) · [All pages](../README.md#the-language)

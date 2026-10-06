@@ -1,0 +1,24 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+use codec.Defaults
+
+// Run from this directory with --config selected.yml --port 9090.
+// Files overlay left to right; environment and command-line input win.
+pred ValidPort(port: Int) { port > 0 && port < 65536 }
+type Options = {
+  config: Option[String]
+  name: String
+  port: Int where ValidPort = 8080
+  tags: List[String] = []
+} derive (codec.Decode)
+
+fn main() {
+  match (cli.Run[Options]("service", "YAML and JSON config overlays", (options, s) => {
+    println(s"${options.name}: ${options.port}")
+    println(options.tags)
+    }, flags: [.{ field: "config", configFile: true }], configFiles: ["base.yaml", "overlay.json"])) {
+    error: cli.Error => { eprintln(error.Render("service")); process.Exit(2) }
+    Ok => {}
+  }
+}

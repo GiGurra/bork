@@ -40,6 +40,8 @@ These functions are pure; `json.JsonError` has `{ message: String }`. A `codec.D
 | `Encode[T: codec.Encode](x: T): String` | Encode a typed value as compact JSON. |
 | `Pretty(value: codec.Value, spaces: Indent = 2): String \| JsonError` | Render indented JSON; Indent is Int in `0..8`. |
 
+`json.Parse` rejects duplicate decoded object keys, including equivalent escaped spellings, and reports the second key's line/column and the first key's location. It rejects invalid UTF-8 before parsing with a line/column diagnostic; a valid U+FFFD replacement character is accepted. `json.Encode` sorts keys for unordered hash maps, while insertion-ordered and custom ordered maps retain traversal order. These parsing checks do not restrict manually constructed `codec.Value` objects.
+
 Pretty preserves object field order and exact number text, and rejects invalid manually constructed number text. Render/Encode return text directly; use Pretty or Write when you need checked rendering of a manually assembled tree.
 
 ## Separate syntax and type errors

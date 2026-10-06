@@ -6,17 +6,18 @@ bork is a programming language for backend services. These pages describe the la
 
 - [Installing bork](install.md): Go, `go install`, Homebrew, release archives, and upgrades.
 - [A tour of bork](tour.md): build a small program step by step.
+- [Build a service](tour-service.md): a SQLite-backed JSON API, handler tests, and graceful shutdown.
 - [Browser playground](playground.md): check code, inspect types, and format a file without installing anything.
 - [Examples](examples.md): complete programs to read and run.
 
 ## The language
 
-Each page covers one area in plain terms, with code you can run.
+Each page covers one area in plain terms, with code you can run. Follow the Previous/Next links through the same order.
 
 | Page | What it covers |
 | --- | --- |
 | [Scripts](language/scripts.md) | Executable single files, top-level statements, shebangs, and inline Go dependencies |
-| [Basics](language/basics.md) | Names, functions, expressions, numbers, strings, runes, lambdas, and methods |
+| [Basics](language/basics.md) | Names, rebinding, functions, control flow, loops, tail calls, and printing |
 | [Types](language/types.md) | Records, sealed types, unions, `Option`, `Ok`, and generics |
 | [Matching and errors](language/matching.md) | `match`, patterns, exhaustiveness, and `?` |
 | [Collections](language/collections.md) | Lists, maps, lazy sequences, bytes, and parallel list operations |
@@ -24,12 +25,22 @@ Each page covers one area in plain terms, with code you can run.
 | [Effects](language/effects.md) | `uses`, pure functions, and ambient values |
 | [Scopes and tasks](language/scopes.md) | Resources, tasks, channels, shared state, cancellation, process signals, and `lazy` and `async` bindings |
 | [Channels](language/channels.md) | Sending and receiving between tasks, closing, producers, `select`, timeouts, and pipelines |
-| [Derivation templates](language/derivation.md) | Custom class derivation with typed shape metadata |
+| [Packages and type classes](language/packages.md) | Packages, modules, imports, type classes, derived instances, and dependency assembly |
+| [Libraries](language/libraries.md) | Dependencies, publishing, private modules, and reusable packages |
 | [Compile-time evaluation](language/comptime.md) | `comptime` blocks and reading files at build time |
 | [Typed interpolation](language/interpolators.md) | `s"..."`, `sql.SQL"..."`, and defining your own prefix |
-| [Packages and type classes](language/packages.md) | Packages, modules, imports, type classes, derived instances, and dependency assembly |
+| [Derivation templates](language/derivation.md) | Custom class derivation with typed shape metadata |
 | [Calling Go](language/go-interop.md) | `unsafe go`, bindings to Go functions, and Go dependencies |
 | [Testing](language/testing.md) | Tests, snapshots, mocks, and property tests |
+
+## Quick references
+
+- [Cheat sheet](cheatsheet.md): everyday syntax and useful commands.
+- [Cookbook](cookbook.md): complete programs for common backend tasks.
+- [FAQ and pitfalls](faq.md): compiler diagnostics, explanations, and checked fixes.
+- [Coming from another language](coming-from.md): Go, TypeScript, Rust, and Python comparisons.
+
+<!-- Builtin API slot: add std/builtins.md when PR 2b publishes its source entry page. -->
 
 ## Reference
 

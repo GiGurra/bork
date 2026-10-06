@@ -478,7 +478,7 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			c.solve(params[i], recv)
 			return
 		case c.sharedDefaults[a]:
-			types[i] = c.info.types[a]
+			types[i] = c.specializeDefault(a, fresh)
 			return
 		}
 		if i >= len(params) {

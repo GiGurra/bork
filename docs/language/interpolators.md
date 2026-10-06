@@ -125,4 +125,4 @@ A library can also check its literals at compile time, as `sql.SQL` does, by dec
 
 ---
 
-Previous: [Compile-time evaluation](comptime.md) · Next: [Packages and type classes](packages.md) · [All pages](../README.md#the-language)
+Previous: [Compile-time evaluation](comptime.md) · Next: [Derivation templates](derivation.md) · [All pages](../README.md#the-language)

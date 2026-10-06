@@ -10,7 +10,8 @@ import "github.com/GiGurra/bork/internal/syntax"
 // `Config { retries: 3 }`). A call that leaves parameters out gets
 // their defaults as arguments, which the rest of the compiler sees as
 // if written there: a copy of a literal (which then takes its type
-// from the call, so `xs: List[T] = []` works for every T), or else the
+// from the call, so `xs: List[T] = []` works for every T). Fieldless
+// variants also specialize per use; other closed values reuse the
 // default itself, checked once where it was declared, so its names
 // mean what they mean there. The call's syntax is left as written; its
 // arguments with the defaults are in Info.callArgs, and the typed tree.
@@ -32,6 +33,10 @@ func (c *checker) ensureDefaults(fn *Func) {
 	c.scopes = []map[string]*local{{}}
 	c.typeParams, c.lambdaDepth, c.have = nil, 0, nil
 	c.session = nil // the defaults' calls are inferred on their own
+	c.typeParams = map[string]*TypeParam{}
+	for _, tp := range fn.TypeParams {
+		c.typeParams[tp.Name] = tp
+	}
 	defer func() {
 		shared, solved, mapKeys := c.sharedDefaults, c.solved, c.mapKeyChecks
 		*c = saved
@@ -51,8 +56,8 @@ func (c *checker) ensureDefaults(fn *Func) {
 		case !isClosed(x, c.closedConstructorCandidate):
 			c.errorf(x.Position(), "a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)")
 			continue
-		case hasTypeParam(fn.Params[i]):
-			c.errorf(x.Position(), "the default of %s can only be a literal, since its type depends on a type parameter", p.Name)
+		case hasTypeParam(fn.Params[i]) && !c.emptyVariantDefault(x, fn.Params[i]):
+			c.errorf(x.Position(), "the default of %s can only be a literal or a fieldless variant, since its type depends on a type parameter", p.Name)
 			continue
 		default:
 			if c.sharedDefaults == nil {
@@ -86,11 +91,7 @@ func (c *checker) withDefaults(args []syntax.Expr, fn *Func) []syntax.Expr {
 	}
 	out := append([]syntax.Expr(nil), args...)
 	for _, p := range missing {
-		if isLiteral(p.Default) {
-			out = append(out, copyLiteral(p.Default))
-		} else {
-			out = append(out, p.Default)
-		}
+		out = append(out, c.copyDefault(p.Default))
 	}
 	return out
 }
@@ -314,7 +315,12 @@ func (c *checker) ensureFieldDefault(field *Field) {
 		*c = saved
 		c.sharedDefaults, c.solved, c.mapKeyChecks = shared, solved, mapKeys
 	}()
+	c.typeParams = field.defaultTypes
 	x := field.Decl.Default
+	if field.defaultBase != nil {
+		c.ensureFieldDefault(field.defaultBase)
+		x = c.cloneComputedSyntax(x, field.defaultBound)
+	}
 	if field.Lazy && (!isClosed(x, c.closedConstructorCandidate) || closedDefaultUsesSibling(x, field.siblings)) {
 		c.computedFieldDefault(field)
 		return
@@ -329,8 +335,8 @@ func (c *checker) ensureFieldDefault(field *Field) {
 			c.errorf(x.Position(), "a field's default must be a closed value: a literal, or a record or variant of them")
 		}
 		return
-	case hasTypeParam(field.Type):
-		c.errorf(x.Position(), "the default of %s can only be a literal, since its type depends on a type parameter", field.Name)
+	case hasTypeParam(field.Type) && !c.emptyVariantDefault(x, field.Type):
+		c.errorf(x.Position(), "the default of %s can only be a literal or a fieldless variant, since its type depends on a type parameter", field.Name)
 		return
 	default:
 		if c.sharedDefaults == nil {
@@ -338,10 +344,11 @@ func (c *checker) ensureFieldDefault(field *Field) {
 		}
 		c.sharedDefaults[x] = true
 	}
+	x = c.copyDefault(x)
 	if t := c.fieldInitializer(x, field); t != Invalid {
 		if !c.checkedClosedValue(x) {
 			c.errorf(x.Position(), "a field's default must be a closed value: a literal, or a record or variant of them")
-		} else if !assignable(t, field.Type) {
+		} else if !assignable(c.zonk(t), c.zonk(field.Type)) {
 			c.errorf(field.Decl.Default.Position(), "the default of %s must be %s, found %s", field.Name, field.Type, t)
 		}
 	}
@@ -385,4 +392,82 @@ func (c *checker) ensureAllFieldDefaults() {
 			}
 		}
 	}
+}
+
+// Check constructors in the declaration's scope before permitting specialization.
+func (c *checker) emptyVariantDefault(x syntax.Expr, want Type) bool {
+	switch x.(type) {
+	case *syntax.Selector, *syntax.ContextName, *syntax.RecordLit:
+	default:
+		return false
+	}
+	if c.exprWant(x, want) == Invalid {
+		return false
+	}
+	return c.defaultVariant(x) != nil
+}
+func (c *checker) defaultVariant(x syntax.Expr) *Variant {
+	var v *Variant
+	switch x := x.(type) {
+	case *syntax.Selector:
+		v = c.info.selectorVariants[x]
+	case *syntax.ContextName:
+		v = c.info.contextVariants[x]
+	case *syntax.RecordLit:
+		v, _ = c.info.recordTargets[x].(*Variant)
+	}
+	if v != nil && len(v.Fields) == 0 {
+		return v
+	}
+	return nil
+}
+
+// Fieldless defaults need separate typing nodes; retain the declaration-bound name.
+func (c *checker) copyDefault(x syntax.Expr) syntax.Expr {
+	if isLiteral(x) {
+		return copyLiteral(x)
+	}
+	v := c.defaultVariant(x)
+	if v == nil {
+		return x
+	}
+	var cp syntax.Expr
+	switch x := x.(type) {
+	case *syntax.Selector:
+		clone := *x
+		cp = &clone
+		c.info.selectorVariants[&clone] = v
+	case *syntax.ContextName:
+		clone := *x
+		cp = &clone
+		c.info.contextVariants[&clone] = v
+	case *syntax.RecordLit:
+		clone := *x
+		cp = &clone
+		c.info.recordTargets[&clone] = v
+		c.info.recordInits[&clone] = c.info.recordInits[x]
+	}
+	c.info.types[cp] = c.info.types[x]
+	c.info.constructorConstraints[cp] = c.info.constructorConstraints[x]
+	c.sharedDefaults[cp] = true
+	return cp
+}
+func (c *checker) specializeDefault(x syntax.Expr, bound map[*TypeParam]Type) Type {
+	t := subst(c.info.types[x], bound)
+	if v := c.defaultVariant(x); v != nil {
+		c.info.types[x] = t
+		c.info.constructorConstraints[x] = substConstraints(c.info.constructorConstraints[x], bound)
+		if sealed, ok := t.(*Sealed); ok {
+			v = sealed.Variant(v.Name)
+			switch x := x.(type) {
+			case *syntax.Selector:
+				c.info.selectorVariants[x] = v
+			case *syntax.ContextName:
+				c.info.contextVariants[x] = v
+			case *syntax.RecordLit:
+				c.info.recordTargets[x] = v
+			}
+		}
+	}
+	return t
 }

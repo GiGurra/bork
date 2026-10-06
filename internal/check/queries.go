@@ -549,6 +549,9 @@ func EditorVisibleTypes(info *Info, from *Package) map[string]Type {
 			continue
 		}
 		for name, entry := range pkg.types {
+			if pkg == c.preludePkg && !PreludeVisible(name) {
+				continue
+			}
 			out[name] = c.resolveDecl(entry)
 		}
 	}

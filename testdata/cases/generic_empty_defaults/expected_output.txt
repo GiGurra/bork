@@ -1,0 +1,15 @@
+State.hidden
+State.hidden
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+Option.None
+true
+true
+Box { value: 1, optional: Option.None }
+Box { value: "a", optional: Option.None }

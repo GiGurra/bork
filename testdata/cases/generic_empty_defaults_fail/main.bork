@@ -1,0 +1,8 @@
+fn make[T](): Option[T] { Option.None }
+fn call[T](value: T, optional: Option[T] = make[T]()) {}
+fn payload[T](value: T, optional: Option[T] = Option.Some(1)) {}
+type Box[T] = { optional: Option[T] = Option.Some(1) }
+fn mismatch[T](value: T, optional: Option[T] = Option[Int].None) {}
+type State[T] = sealed { Payload { value: Int = 1 }, Empty }
+fn bracesPayload[T](value: T, optional: State[T] = State.Payload {}) {}
+fn main() {}

@@ -9,6 +9,7 @@ type inputField = {
   kind: String
   optional: Bool
   hasDefault: Bool
+  defaultFalse: Bool
   defaultText: String
   configDefault: String
   validate: (codec.Value) uses nothing => Ok | codec.DecodeError
@@ -34,7 +35,10 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
       text = value.display
       path, _ = _borkOptionGet(value.configPath)
     }
-    fields = append(fields, inputField{field: field.name, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
+    // CLI switches default to false independently of the record decoder.
+    defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
+    if defaultFalse { text = "false" }
+    fields = append(fields, inputField{field: field.name, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
       if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
@@ -57,6 +61,7 @@ fn buildRootAdapter(name: String, description: String, specs: List[FieldSpec], s
 }
 fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, persistent: Bool, s: Scope): adapter | Error unsafe go {
   import "fmt"
+  import "path/filepath"
   import "reflect"
   import "sort"
   import "strconv"
@@ -148,21 +153,28 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         if path != "" { files = append(files, path) }
       }
       config := map[string]codec.Value{}
-      err := boa.LoadConfigFiles(files, &config, func(data []byte, target any) error {
-        parsed := parse(string(data))
-        if err, bad := parsed.(codecs.JsonError); bad { return fmt.Errorf("%s", err.message) }
-        object, ok := parsed.(codec.Value_Object)
-        if !ok { return fmt.Errorf("CLI config must be a JSON object") }
-        values := target.(*map[string]codec.Value)
-        for _, entry := range object.fields {
-          known := false
-          for _, field := range schema { if field.field == entry.name { known = true; break } }
-          if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
-          if !metadata[entry.name].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
-          (*values)[entry.name] = entry.value
-        }
-        return nil
-      })
+      var err error
+      for _, path := range files {
+        extension := strings.ToLower(filepath.Ext(path))
+        isYaml := extension == ".yaml" || extension == ".yml"
+        err = boa.LoadConfigFiles([]string{path}, &config, func(data []byte, target any) error {
+          var parsed any
+          if isYaml { parsed = parseYamlConfig(string(data)) } else { parsed = parse(string(data)) }
+          if err, bad := parsed.(codecs.JsonError); bad { return fmt.Errorf("%s", err.message) }
+          object, ok := parsed.(codec.Value_Object)
+          if !ok { if isYaml { return fmt.Errorf("CLI config must be a YAML object") }; return fmt.Errorf("CLI config must be a JSON object") }
+          values := target.(*map[string]codec.Value)
+          for _, entry := range object.fields {
+            known := false
+            for _, field := range schema { if field.field == entry.name { known = true; break } }
+            if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
+            if !metadata[entry.name].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
+            (*values)[entry.name] = entry.value
+          }
+          return nil
+        })
+        if err != nil { break }
+      }
       if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
       jsonFields := []codec.Field{}
       failures := []codec.DecodeError{}
@@ -170,7 +182,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         value := shadow.Elem().Field(i)
         var json codec.Value
         if value.IsNil() {
-          if configured, exists := config[field.field]; exists { json = configured } else {
+          if configured, exists := config[field.field]; exists { json = configured } else if field.defaultFalse && !partial { json = codec.Value_Bool{value: false} } else {
             if partial || field.hasDefault { continue }
             if !field.optional { failures = append(failures, codec.DecodeError{path: "." + field.field, message: "is missing"}); continue }
             json = codec.Value_Null{}

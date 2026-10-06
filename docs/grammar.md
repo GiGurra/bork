@@ -44,18 +44,18 @@ RuleDecl   = "rule" Ident "(" Params ")" "{" Premises "=>" Conclusions "}" .
 Premises   = Expr { "and" Expr } .  (* predicate calls on the variables, and conditions *)
 Conclusions = Call { "and" Call } .
 
-TypeDecl   = "type" Ident [ TypeParams ] "=" ( ( [ "private" ] Fields | Sealed | GoName Fields ) [ Where ] | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
+TypeDecl   = "type" Ident [ TypeParams ] "=" ( ( [ "private" ] Fields | Sealed | GoName Fields ) { TagGroup } [ Where ] | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
                                              (* type Pair[A, B] = { ... }; type File = resource: values made by unsafe go *)
 Derive     = "derive" "(" ( Ident | QualIdent ) { "," ( Ident | QualIdent ) } ")" .  (* derive (Decode, Encode, GoStruct): instances written by the compiler *)
 DeriveDecl = "derive" ( Ident | QualIdent ) "for" Type . (* package declaration; bare generic names request universal instances *)
 DeriveTemplate = "derive" InstanceDecl . (* one unconstrained target parameter, declared by the class owner *)
 DeriveHelper = "derive" FuncDecl . (* expansion-only Bork helper *)
 Fields     = "{" [ Field { Sep Field } [ Sep ] ] "}" .
-Field      = [ "lazy" ] Ident ":" Type [ "=" Expr ] [ GoTags ] . (* eager defaults are closed values; pure lazy defaults may depend on siblings; preceding // lines are field docs *)
-GoTags     = "go" "{" [ GoTag { Sep GoTag } [ Sep ] ] "}" .
-GoTag      = Ident ":" String .
+Field      = [ "lazy" ] Ident ":" Type [ "=" Expr ] { TagGroup } . (* eager defaults are closed values; pure lazy defaults may depend on siblings; preceding // lines are field docs *)
+TagGroup   = Ident "{" [ TagEntry { Sep TagEntry } [ Sep ] ] "}" . (* starts on the same line as the token it follows; go values remain String only *)
+TagEntry   = Ident ":" Expr .
 Sealed     = "sealed" "{" [ Variant { Sep Variant } [ Sep ] ] "}" .
-Variant    = Ident [ Fields | "(" Type { "," Type } [ "," ] ")" ] [ Where ] .
+Variant    = Ident [ Fields | "(" Type { "," Type } [ "," ] ")" ] { TagGroup } [ Where ] .
 Sep        = "," | newline .                 (* commas or one item per line *)
 
 FuncDecl   = "fn" [ Receiver ] Ident [ TypeParams ] "(" [ Params ] ")" [ FunctionWhere ] [ Uses ] [ Needs ] [ ":" Type ] ( Block | GoBody )
@@ -208,6 +208,8 @@ Source spans follow the lexer's token ends, independently of printed token text.
 - **Sibling field facts** use the same `where` syntax: `type Range = { lo: Int, hi: Int where atLeast(lo) }`. Predicate arguments can name any sibling in the record or the same sealed variant, regardless of field order. Construction checks the completed field values, including defaults. Selection and destructuring retain these relations. Derived decoding and Go conversions validate them after converting all fields.
 - **`copy`** makes a changed copy: `u.copy(age: 37, address.city: "Oslo")`. Paths reach into nested records; two updates may not overlap (`address` and `address.city`). Changing a constrained field or a sibling it refers to rechecks the relation on the resulting values, including nested updates.
 - **`into`** converts records with `user.into[UserDto](name: "Ada", address.city: "Oslo")`. It copies compatible target fields, converts nested records/lists/options, and uses defaults for absent fields. Named overrides run after the receiver in source order; an override union's members outside its field type become conversion failures, stopping later work. Every new candidate proves its target facts and obeys private construction. Identical values without overrides are reused, with additional target-alias facts still checked. See [record conversion](requirements.md#record-conversion-implemented-bork-2zn4s1).
+Package tag groups are parsed on fields, variants and record/sealed bodies. Typed package groups currently report an unsupported-tag error; type checking and shape access follow separately. The built-in `go` group remains usable only on fields with string values. Several groups may follow a declaration in order. A group must start on the same line as the token it follows, including after a multiline body closes; a default expression ends before its group identifier.
+
 - **Sealed types** (`type Shape = sealed { Circle { radius: Int }, Empty }`) list all their variants. Variants are always qualified: `Shape.Circle { radius: 1 }`, `Shape.Empty`. For an exported type, upper-case variants are visible wherever the type is; lower-case variants can only be constructed or matched in their declaring package, including generic variants. Fields keep their existing visibility.
 - **Match payload facts:** destructuring a sealed union member retains the member's declared field facts. For `Option[Text] | Error`, where `Text` is a fact alias, `Option.Some(value)` binds a value with that fact, including for imported function results.
 - **Unions** (`Int | NotFound | DbError`) hold a value of any one of their types. A value of a member type, or of a smaller union, can be used where the union is expected. `type Lookup = Int | NotFound` names a union. `Ok` can be a member: `fn save(x: Item): Ok | DbError` either does its work or fails, and a body that ends without a value (or with a call that returns nothing) produces the `Ok`. Ok-valued expressions can also supply that member in arguments, fields, and collection elements; their effects run before the value is passed. With `?`, `save(x)?` is a statement that returns the error.

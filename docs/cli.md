@@ -148,6 +148,7 @@ bork fmt --check .    # list the files that would change, and exit 1 if there ar
 ```sh
 bork doc                              # this package, as Markdown
 bork doc ./lib --all > API.md          # packages below lib, in this module
+bork doc builtin                       # built-in types, functions and methods
 bork doc bork/http                     # a standard package
 bork doc example.com/library/api       # a pinned library package
 bork doc example.com/library --all --html > api.html
@@ -156,7 +157,14 @@ bork doc example.com/library --all --html > api.html
 A `.bork` file argument documents its whole package. `--all` walks package
 subdirectories in the same module, skipping hidden directories, `vendor`,
 and nested modules; it also works for library modules that have no root
-package. Standard packages take one package argument without `--all`.
+package. Standard packages and `builtin` take one argument without `--all`.
+`builtin` includes the prelude and compiler-provided functions, with their
+signatures and comments; compiler-internal helpers are omitted. It works
+outside a project and uses the built-ins embedded in the running compiler.
+Compiler-provided signatures use `value` for any value type and `values...`
+for zero or more independently typed arguments. Square brackets around a
+parameter indicate that it is optional. Private built-in records show
+`private { ... }` in place of their implementation fields.
 
 The compiler checks each package before writing any output. Signatures retain
 facts and `where` clauses, effects (`uses`), ambient requirements (`needs`),

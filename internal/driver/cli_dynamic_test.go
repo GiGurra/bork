@@ -24,6 +24,7 @@ type Options = {
  namespace: String
  port: Int where validPort = 8080
  region: String = "west"
+ verbose: Bool
  tags: List[String] = []
  optional: Option[String]
  resource: Option[String]
@@ -42,6 +43,11 @@ fn complete(request: cli.CompletionRequest, s: Scope) uses io: cli.Suggestions |
    _: cli.Missing => "missing-region"
    _: codec.DecodeError => "invalid-region"
    value: String => s"region:${value}"
+  }
+  verbose = match (request.partial.Get[Bool]("verbose")) {
+   _: cli.Missing => "missing-verbose"
+   _: codec.DecodeError => "invalid-verbose"
+   value: Bool => s"verbose:${value}"
   }
   tags = match (request.partial.Get[List[String]]("tags")) {
    _: cli.Missing => "missing-tags"
@@ -65,7 +71,7 @@ fn complete(request: cli.CompletionRequest, s: Scope) uses io: cli.Suggestions |
    error: codec.DecodeError => s"unknown:${error.path}"
    _ => "unexpected-unknown"
   }
-  cli.Suggestions { choices: [.{ value: port }, .{ value: region }, .{ value: tags }, .{ value: optional }, .{ value: mismatch }, .{ value: unknown }] }
+  cli.Suggestions { choices: [.{ value: port }, .{ value: region }, .{ value: verbose }, .{ value: tags }, .{ value: optional }, .{ value: mismatch }, .{ value: unknown }] }
  } else {
   namespace = match (request.partial.Get[String]("namespace")) {
    _: cli.Missing => "default"
@@ -109,7 +115,8 @@ fn main() {
 		exact                         bool
 		callback, handler, failure    bool
 	}{
-		{name: "missing-defaults", args: []string{"__complete", "cluster", "deploy", "--inspect", ""}, base: `{}`, want: "missing-port\nmissing-region\nmissing-tags\nmissing-optional\nmissing-namespace\nunknown:.unknown\n:4\n", exact: true, callback: true},
+		{name: "missing-defaults", args: []string{"__complete", "cluster", "deploy", "--inspect", ""}, base: `{}`, want: "missing-port\nmissing-region\nmissing-verbose\nmissing-tags\nmissing-optional\nmissing-namespace\nunknown:.unknown\n:4\n", exact: true, callback: true},
+		{name: "partial-bool", args: []string{"__complete", "cluster", "deploy", "--verbose", "--inspect", "verbose"}, base: `{}`, want: "verbose:true\n:4\n", exact: true, callback: true},
 		{name: "partial-flags", args: []string{"__complete", "cluster", "deploy", "-n", "prod", "--resource", "p"}, base: `{}`, want: "prod-web\tWeb service\nprod-worker\n:36\n", exact: true, callback: true},
 		{name: "assignment", args: []string{"__complete", "cluster", "deploy", "--namespace=prod", "--resource=prod-w"}, base: `{}`, want: "prod-web\tWeb service\nprod-worker\n:36\n", exact: true, callback: true},
 		{name: "partial-env", args: []string{"__completeNoDesc", "cluster", "deploy", "--resource", ""}, base: `{}`, namespace: "env", want: "env-web\nenv-worker\n:36\n", exact: true, callback: true},

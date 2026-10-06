@@ -2562,16 +2562,17 @@ fn UserAgent(r: Request): String unsafe go "(*net/http.Request).UserAgent"
 ### Syntax
 
 ```ebnf
-TypeDecl   = "type" Ident [ TypeParams ] "=" ( Fields | Sealed | "resource" [ GoName ] | GoName [ Fields ] | Type ) [ Derive ] .
+TypeDecl   = "type" Ident [ TypeParams ] "=" ( ( Fields | Sealed | GoName Fields ) { TagGroup } | "resource" [ GoName ] | GoName | Type ) [ Derive ] .
 GoName     = "go" StringLit .               (* go "*net/http.Request" *)
-Field      = [ Doc ] Ident ":" Type [ "=" Expr ] [ GoTags ] .
-GoTags     = "go" "{" [ GoTag { Sep GoTag } [ Sep ] ] "}" .   (* go { json: "port,omitempty", short: "p" } *)
-GoTag      = Ident ":" StringLit .
+Field      = [ Doc ] Ident ":" Type [ "=" Expr ] { TagGroup } .
+TagGroup   = Ident "{" [ TagEntry { Sep TagEntry } [ Sep ] ] "}" .
+TagEntry   = Ident ":" Expr . (* go values remain StringLit only *)
 GoBody     = "unsafe" "go" ( "{" { GoImport } GoStatements "}" | StringLit ) .
 ```
 
 - `go` stays an identifier everywhere else. After `=` in a type declaration, `go` followed by a string literal is a `GoName` (a type named `go` cannot take a string, so there is no ambiguity). The lexer's raw-Go mode after `unsafe go` starts only at a `{`; `unsafe go "os.Getenv"` is ordinary tokens.
-- A field's default is an expression, which ends at the end of the field (newline or `,`) or at `go {`, since an expression never continues with an identifier.
+- A field's default is an expression, which ends at the end of the field (newline or `,`) or at a same-line package tag group such as `go {`, since an expression never continues with an identifier.
+- Package tag groups are retained in order on fields, variants (before `where`), and type bodies (before `where` and `derive`). A group starts on the same line as the token it follows. The built-in `go` group keeps its string-only field semantics. Other package groups currently produce an unsupported-tag error; their typing and shape access are a separate implementation step.
 - `Doc` is the `//` comment lines directly above a field. The parser keeps them, like the other doc comments it will keep for tooling.
 
 ### Naming Go things

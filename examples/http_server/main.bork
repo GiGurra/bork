@@ -1,7 +1,3 @@
-import codec "bork/codec"
-
-import "bork/process"
-import "bork/json"
 // http_server is a small REST API for a todo list, kept in memory:
 //
 //   bork run examples/http_server -- serve localhost:8080
@@ -21,6 +17,10 @@ import "bork/json"
 //   - structured logging;
 //   - scopes: the server runs until its scope closes.
 
+import codec "bork/codec"
+
+import "bork/process"
+import "bork/json"
 import "bork/http"
 import "bork/log"
 use codec.Defaults

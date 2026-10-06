@@ -1,0 +1,5 @@
+main.bork:2:44: a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)
+main.bork:3:47: the default of optional can only be a literal or a fieldless variant, since its type depends on a type parameter
+main.bork:4:39: the default of optional can only be a literal or a fieldless variant, since its type depends on a type parameter
+main.bork:5:48: the default of optional must be Option[T], found Option[Int]
+main.bork:7:52: the default of optional can only be a literal or a fieldless variant, since its type depends on a type parameter
