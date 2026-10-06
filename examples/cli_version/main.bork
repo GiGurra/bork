@@ -1,0 +1,21 @@
+import "bork/cli"
+import "bork/codec"
+import "bork/process"
+import "bork/test"
+use codec.Defaults
+
+type Options = { name: String } derive (codec.Decode)
+fn main() {
+  match (cli.Run[Options]("greet", "Version before decoding", (options, s) => {
+    println(s"Hello, ${options.name}.")
+    }, settings: .{ version: "1.2.3" })) {
+    Ok => {}
+    error: cli.Error => { eprintln(error.Render("greet")); process.Exit(2) }
+  }
+}
+
+test "version skips required fields and configuration reads" {
+  help = test.AssertIs[cli.Help](cli.Parse[Options]("greet", "", ["--version"],
+    configFiles: ["missing.json"], settings: .{ version: "1.2.3" }))
+  assertEqual(help.text, "greet version 1.2.3\n")
+}

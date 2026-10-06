@@ -8,6 +8,7 @@ type Command = {
   name: String
   description: String
   execute: (String, List[String], Scope) uses io + net + clock + random + state => Ok | Error | Help
+  version: String = ""
   aliases: List[String] = []
   longDescription: String = ""
   examples: String = ""
@@ -22,9 +23,9 @@ type Command = {
 
 // Subcommand keeps the handler typed; only validated options reach it.
 fn Subcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}): Command {
-  makeSubcommand[T](name, description, run, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, [])
+  makeSubcommand[T](name, description, run, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, [], settings.version)
 }
-fn makeSubcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, configFiles: List[String], resolved: List[FieldSpec] | Error, schema: List[inputField] | Error, completionEnabled: Bool, completions: List[Completion]): Command {
+fn makeSubcommand[T: codec.Decode](name: String, description: String, run: (T, Scope) uses io + net + clock + random + state => Ok, configFiles: List[String], resolved: List[FieldSpec] | Error, schema: List[inputField] | Error, completionEnabled: Bool, completions: List[Completion], version: String = ""): Command {
   factory = nativeFactory(description, configFiles, resolved, schema, completions, codecs.Parse, flagName, invokeCompletion, buildAdapter)
   apply: (parsedInput, Scope) uses io + net + clock + random + state => Ok | Error = (input, s) => match (codec.decode[T](input.value)) {
     error: codec.DecodeError => withWarnings(Error { errors: [error] }, input.warnings, input.path)
@@ -36,14 +37,18 @@ fn makeSubcommand[T: codec.Decode](name: String, description: String, run: (T, S
   Command {
     name: name
     description: description
+    version: version
     factory: Option.Some(factory)
     apply: Option.Some(apply)
     execute: (displayName, arguments, s) => match (factory(displayName, s)) {
       error: Error => error
-      prepared: adapter => match (evaluate(prepared, arguments, completionEnabled, configureCompletion)) {
+      prepared: adapter => match (configureVersion(prepared.native, version)) {
         error: Error => error
-        help: Help => help
-        input: parsedInput => apply(input, s)
+        Ok => match (evaluate(prepared, arguments, completionEnabled, configureCompletion)) {
+          error: Error => error
+          help: Help => help
+          input: parsedInput => apply(input, s)
+        }
       }
     }
   }
@@ -74,10 +79,10 @@ fn Group(name: String, description: String, children: List[Command]): Command {
 // Dispatch accepts explicit arguments without the executable name. Completion
 // settings belong to this entrypoint, and apply to the entire command tree.
 fn Dispatch(name: String, description: String, arguments: List[String], commands: List[Command], settings: Settings = .{}) uses io + net + clock + random + state: Ok | Error | Help {
-  scope s { dispatch(name, description, arguments, commands, s, settings.completion, configureCompletion, printError) }
+  scope s { dispatch(name, description, arguments, commands, s, settings.completion, configureCompletion, printError, version: settings.version) }
 }
 
-fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope, completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok, warn: (String) uses io => Ok, rootOptions: Option[rootPlan] = Option.None) uses io + net + clock + random + state: Ok | Error | Help unsafe go {
+fn dispatch(name: String, description: String, arguments: List[String], commands: List[Command], s: Scope, completion: Bool, configure: (nativeCommand, List[String], Bool) => Error | Ok, warn: (String) uses io => Ok, rootOptions: Option[rootPlan] = Option.None, version: String = "") uses io + net + clock + random + state: Ok | Error | Help unsafe go {
   import "bytes"
   import "fmt"
   import "strings"
@@ -121,6 +126,9 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     rootCollect = root.RunE
     // A root without a standalone handler behaves like the existing routing root.
     if !rootInput.hasHandler { root.RunE = nil }
+  }
+  if !rooted {
+    if failure, bad := configureVersion(nativeCommand{handle: root, owner: s.Own(func() {})}, version).(Error); bad { return failure }
   }
   root.SetOut(&output)
   root.SetErr(&diagnostics)
@@ -186,6 +194,23 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
         // Preserve manually constructed execute callbacks without schema completion.
         child = &cobra.Command{Use: command.name, DisableFlagParsing: true}
         child.Run = func(cmd *cobra.Command, args []string) {
+          if command.version != "" {
+            // Manual callbacks keep their raw arguments. Parse only our local
+            // version flag, using pflag's bool and -- semantics.
+            versions := pflag.NewFlagSet("version", pflag.ContinueOnError)
+            versions.ParseErrorsWhitelist.UnknownFlags = true
+            versions.SetOutput(&diagnostics)
+            requested := versions.Bool("version", false, "")
+            if err := versions.Parse(args); err != nil {
+              ran = true
+              result = Error{errors: []codec.DecodeError{{path: cmd.CommandPath(), message: err.Error()}}}
+              return
+            }
+            if *requested {
+              _, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s version %s\n", cmd.CommandPath(), cmd.Version)
+              return
+            }
+          }
           routeDeprecation(cmd)
           ran = true
           result = command.execute(cmd.CommandPath(), args, s)
@@ -198,6 +223,7 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
           if help, ok := value.(Help); ok { _, _ = fmt.Fprint(cmd.OutOrStdout(), help.text); _, _ = fmt.Fprint(cmd.ErrOrStderr(), help.diagnostics) } else { ran = true; result = value }
         })
       }
+      if failure, bad := configureVersion(nativeCommand{handle: child, owner: s.Own(func() {})}, command.version).(Error); bad { result = failure; return fmt.Errorf("invalid version for %s", command.name) }
       if rooted {
         child.Flags().VisitAll(func(flag *pflag.Flag) {
           if root.PersistentFlags().Lookup(flag.Name) != nil { failures = append(failures, codec.DecodeError{path: command.name, message: "flag --"+flag.Name+" conflicts with a root flag"}) }
@@ -252,8 +278,11 @@ fn dispatch(name: String, description: String, arguments: List[String], commands
     // Re-register the same flag pointers so boa's mirrors keep their values.
     globals := []*pflag.Flag{}
     root.PersistentFlags().VisitAll(func(flag *pflag.Flag) { globals = append(globals, flag) })
+    var versionFlag *pflag.Flag
+    if root.Version != "" { versionFlag = root.Flags().Lookup("version") }
     root.ResetFlags()
     for _, flag := range globals { root.PersistentFlags().AddFlag(flag) }
+    if versionFlag != nil { root.Flags().AddFlag(versionFlag) }
   }
   root.Flags().SetOutput(&diagnostics)
   root.PersistentFlags().SetOutput(&diagnostics)

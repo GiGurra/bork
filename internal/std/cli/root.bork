@@ -16,7 +16,7 @@ type rootPlan = {
 
 // RootSubcommand receives root and leaf options only after both are valid.
 fn RootSubcommand[R: codec.Decode, T: codec.Decode](name: String, description: String, run: (R, T, Scope) uses io + net + clock + random + state => Ok, flags: List[Flag] = [], configFiles: List[String] = [], settings: Settings = .{}, completions: List[Completion] = []): RootCommand[R] {
-  leaf = makeSubcommand[T](name, description, (options, s) => {}, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions)
+  leaf = makeSubcommand[T](name, description, (options, s) => {}, configFiles, resolve[T](flags, settings, name), inputFields[T](name), settings.completion, completions, settings.version)
   RootCommand[R] { command: leaf.copy(rootApply: Option.Some((root, child, s) => applyRootChild[R, T](root, child, s, run))) }
 }
 
@@ -79,6 +79,7 @@ fn prepareRoot[R: codec.Decode](name: String, description: String, flags: List[F
   if (!errors.isEmpty()) { return Error { errors: errors } }
   factory = nativeFactory(description, configFiles, resolved.fields, schema, completions, codecs.Parse, flagName, invokeCompletion, buildRootAdapter)
   prepared = factory(name, s)?
+  configureVersion(prepared.native, settings.version)?
   rootPlan {
     prepared: prepared
     automaticShorts: resolved.automaticShorts
