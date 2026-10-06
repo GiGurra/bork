@@ -136,7 +136,10 @@ test "the reminder says how long is left" {
 
 ### Mock handle methods
 
-`A` is the generated call-record type, with one named field per parameter.
+`A` is the generated call-record type. Fields use the target's parameter names,
+but omit parameters that can carry scope lifetimes and parameters whose types
+mention the target's type parameters. For `http.Get`, the record has `url` and
+`timeoutMs`, but no `s`. Inspect omitted arguments inside the mock body.
 Matchers have type `(A) uses nothing => Bool`.
 
 | Method | Effects | Meaning |
