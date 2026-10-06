@@ -1,227 +1,306 @@
 # bork/http
 
-## HTTP resources
+`bork/http` serves scoped HTTP handlers and sends requests whose deadlines and cancellation follow an explicit scope.
 
-`bork/http`, a server whose lifetime is a scope (`http.Listen(addr, s, handler)` serves until `s` closes, each request on its own goroutine, with a scope of its own that the handler gets), a scope-cancellable client (`http.Get(url, s, timeoutMs: 0)`, `http.Post(url, contentType, body, s, timeoutMs: 0)`, `http.Send(method, url, headers, body, s, timeoutMs: 0)`), whose optional millisecond timeout covers both the request and reading the response body; headers are maps of names to value lists, preserving repeated values, and transport failures return `IoError`, cancellation returns `Cancelled`, expired deadlines return `http.DeadlineExceeded`, and 429/503 responses return `http.Overloaded`, and helpers (`http.Text`, `http.JsonReply`, `http.Segments` for matching paths with list patterns). Status codes are facts: `http.Text(42, "x")` does not compile. See [examples/signup_api](../../examples/signup_api/main.bork).
-
-## Routes and shutdown
-
-HTTP servers support `http.ListenRoutes(addr, s, routes, drainTimeoutMs: 0)` with immutable `http.Route { pattern: "GET /users/{id}", handler: ... }` records. Patterns follow Go 1.22 ServeMux: method matching, HEAD for GET, redirects, `{name}` and `{name...}` path captures (in `request.params`), and 404/405 responses. Invalid/conflicting patterns return `IoError` before listening. `http.Handler` permits all five effects, so routed server functions declare `uses io + net + clock + random + state`; ordinary functions `(http.Handler) => http.Handler` implement middleware. The original `Listen` retains open handler effects.
-
-`http.Body[T: codec.Decode](request)` decodes JSON with field facts. `Query` parses query values; `QueryAs[T]` and `PathAs[T]` load derived records, using literal strings and JSON syntax for other fields. Missing Option fields become None; repeated values for record fields are errors. `Form` parses URL-encoded body values separately from the query. `Multipart` returns value lists and immutable upload Bytes; multipart and incoming server bodies default to 16 MiB. Listen, ListenRoutes, ListenTLS and Multipart accept a nonnegative maxBodyBytes override; zero rejects nonempty bodies. A server rejects oversized bodies with HTTP 413. `Static(request, root, prefix: "")` serves a directory through Go's file server, buffering the response; it supports directory listings, symlinks, ranges and conditional requests. `ListenTLS(addr, s, routes, certFile, keyFile, drainTimeoutMs: 0)` loads PEM certificate/key files and requires TLS 1.2 or newer.
-
-Closing the server scope cancels request scopes and stops accepting new connections, then waits for active handlers through Go's graceful shutdown. A zero drain timeout inherits `cleanupTimeout`; without that policy shutdown waits indefinitely. A positive per-server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). When draining times out, connections are forcibly closed; cooperative handlers may still be finishing. `Wait` waits for the listener to stop, while scope cleanup drains active requests. See [http_routes](../../examples/http_routes/main.bork).
-
-## Multiple listeners
-
-Run API, metrics and debug listeners in one application scope, with a separate
-route list for each listener. Binding internal endpoints to `127.0.0.1` keeps
-them on localhost. Each listener serves only its own routes.
-
-`http.WaitAny(servers)` waits until any listener stops or its scope is cancelled.
-It returns `Ok` on cancellation, or `IoError { path: address, message: ... }`
-when a listener stops unexpectedly. A completed Serve failure remains an error
-even if its scope is cancelled later. Return from the application scope after
-waiting to shut down and drain the remaining listeners.
-
-`http.WaitAll(servers)` waits until every listener stops or its scope is
-cancelled. It returns the first unexpected failure in list order, or `Ok` when
-all end through cancellation. Both functions use `net`, accept `List[http.Server]`,
-and return `Ok` immediately for an empty list. Cancellation can finish a wait
-before request draining completes; scope cleanup performs the drain.
-
-See [http_multi](../../examples/http_multi/main.bork): `bork run examples/http_multi`
-runs a demo on free ports; `bork run examples/http_multi -- serve` starts API,
-metrics and debug listeners on ports 8080, 9090 and 6060. Ctrl+C shuts them all
-down. A startup failure prints the failing address and exits nonzero; listeners
-already started are cleaned up by the scope.
-
-## HTTP API
-
-HTTP clients take an explicit `Scope` and optional nonnegative millisecond timeout: `http.Get(url, s, timeoutMs: 0)`, `http.Post(url, contentType, body, s, timeoutMs: 0)`, or `http.Send(method, url, headers, body, s, timeoutMs: 0)`. Zero uses scope cancellation and its effective deadline; the maximum is 9223372036854 milliseconds. Use `http.ValidTimeout(value)` as a guard for a dynamic timeout. `http.Headers` is `Map[String, List[String]]`; use `{:}` for no headers. `http.HeaderOf` finds the first value without regard to case. Clients use `net + clock + state` and return `http.Result`, an alias for `Response | Overloaded | DeadlineExceeded | Cancelled | IoError`. Transport and request-construction errors remain `IoError`; cancellation and deadline expiry have their own types. Completed 429/503 responses become `Overloaded { response, retryAfter }`, preserving the full body and repeated headers. Other HTTP statuses remain responses. Deadline and cancellation errors during body reads follow the same classification. Already exhausted deadlines stop before sending. `cancelAfter` exposes the earliest
-scope/ancestor deadline, including updates to ancestors of existing scopes. There are no automatic retries.
-
-HTTP servers support `http.ListenRoutes(addr, s, routes, drainTimeoutMs: 0)` with immutable `http.Route { pattern: "GET /users/{id}", handler: ... }` records. Patterns follow Go 1.22 ServeMux: method matching, HEAD for GET, redirects, `{name}` and `{name...}` path captures (in `request.params`), and 404/405 responses. Invalid/conflicting patterns return `IoError` before listening. `http.Handler` permits all five effects, so routed server functions declare `uses io + net + clock + random + state`; ordinary functions `(http.Handler) => http.Handler` implement middleware. The original `Listen` retains open handler effects.
-
-`http.Body[T: codec.Decode](request)` decodes JSON with field facts. `Query` parses query values; `QueryAs[T]` and `PathAs[T]` load derived records, using literal strings and JSON syntax for other fields. Missing Option fields become None; repeated values for record fields are errors. `Form` parses URL-encoded body values separately from the query. `Multipart` returns value lists and immutable upload Bytes; multipart and incoming server bodies default to 16 MiB. Listen, ListenRoutes, ListenTLS and Multipart accept a nonnegative maxBodyBytes override; zero rejects nonempty bodies. A server rejects oversized bodies with HTTP 413. `Static(request, root, prefix: "")` serves a directory through Go's file server, buffering the response; it supports directory listings, symlinks, ranges and conditional requests. `ListenTLS(addr, s, routes, certFile, keyFile, drainTimeoutMs: 0)` loads PEM certificate/key files and requires TLS 1.2 or newer.
-
-Closing the server scope cancels request scopes and stops accepting new connections, then waits for active handlers through Go's graceful shutdown. A zero drain timeout inherits `cleanupTimeout`; without that policy shutdown waits indefinitely. A positive per-server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). When draining times out, connections are forcibly closed; cooperative handlers may still be finishing. `Wait` waits for the listener to stop, while scope cleanup drains active requests. See [http_routes](../../examples/http_routes/main.bork).
-
-## Deadline budgets between Bork services
-
-Get, Post and Send automatically send the calling scope's remaining deadline
-as `Bork-Timeout-Ns`, including a tighter timeoutMs. They recompute it for each
-call and redirect, and return typed DeadlineExceeded without sending when the
-budget is exhausted. The client reserves this header: manual values are replaced
-by the effective budget, or removed when the call has no deadline. Other headers
-retain their existing behavior. Redirect policy and sensitive-header handling
-remain Go's defaults (or an explicitly configured native client policy).
-
-Listen, ListenRoutes and ListenTLS accept `requestTimeoutMs: TimeoutMs = 0`.
-A positive value caps each request from entry to the server handler; zero adds no
-server deadline. The request uses the earliest listener/context deadline, server
-cap and incoming budget. The header is one unsigned decimal nanosecond count,
-with at most 19 digits, in 0..9223372036854775807. Missing adds no caller limit;
-zero returns 504. Malformed, repeated, negative or out-of-range fields return
-400. Validation and deadline cancellation precede admission and body buffering.
-Deadline expiry while queued returns 504; an ordinary admission timeout remains
-429/503. Expiry interrupts blocked body reads and returns 504 where possible.
-HTTP/1 early rejections close the connection to avoid draining unfinished uploads.
-Current listeners serve HTTP/1; outgoing clients can negotiate HTTP/2. Native
-server transports must support response-controller read deadlines to
-buffer cancellable bodies; an unsupported transport returns 500 before reading.
-
-A handler scope exposes its effective deadline, including later changes to the
-listener scope, for outgoing calls and local operations. Cooperative handlers may
-return their own response after cancellation. Request deadlines do not forcibly
-stop tasks/finalizers or bound total cleanup time; request scopes keep their
-existing unbounded cleanup defaults and do not inherit listener cleanup policies.
-Use explicit taskTimeout/cleanupTimeout policies where bounded waits are needed.
-
-This is a bork-to-bork relative-budget protocol; a grpc-timeout bridge could be
-added later. Receiving timers start on arrival, so wire transit and internal Go
-transport replay time are not deducted exactly from the remote budget. The
-caller retains its own local deadline and cancels its HTTP call. A server cap
-bounds cooperative work when disconnect detection is delayed; clocks need not be
-synchronized. See the [boundary design](../design/http-propagation.md).
-
-## Retry-After hints
-
-`Overloaded.retryAfter` is `Option[time.Duration]`. Exactly one Retry-After
-value is accepted, without regard to header name case: nonnegative whole
-seconds or an HTTP date. Missing, malformed, repeated, or overflowing values
-become None; past dates give zero. Obsolete two-digit years follow the supplied
-clock and HTTP's 50-year rule, rather than a fixed century pivot. The raw response always keeps its headers.
-A valid hint is never silently shortened.
-
-`http.RetryAfter(headers, now: time.Instant)` exposes the pure parser for
-explicit clock readings and deterministic tests. Client requests read the
-system clock when parsing dates; date hints are approximate under clock skew.
-See [HTTP date formats](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.7).
-Handle `Overloaded.response` when an application needs the original status or
-body. A typed overload result alone does not authorize replaying side effects.
-See [Shared retries](#shared-retries) for the explicit shared-budget API.
-
-## Bounded admission
-
-Pass `admission: Option.Some(http.Admission { maxInFlight: 64,
-maxQueued: 32, queueTimeoutMs: 25, retryAfterMs: 100, status: 503 })` to
-`Listen`, `ListenRoutes`, or `ListenTLS` to bound application work on one
-listener. Omit it to preserve unlimited admission. `maxInFlight` must be
-positive; `maxQueued` defaults to zero. Queue and retry durations use the
-checked `TimeoutMs` range. Status defaults to 503 and may also be 429.
-
-Admission precedes request body buffering and handler middleware, and covers
-body reads, request tasks and cleanup, and response writing. Waiters enter a
-bounded FIFO queue. A full queue rejects immediately; zero `maxQueued` or
-`queueTimeoutMs` disables waiting. Request-context cancellation removes queued requests; queue timeout rejects
-them. Go detects HTTP/1 client disconnects only after consuming their body, so
-unread-body waiters can remain until timeout, server cancellation, or permit
-transfer. Admission never peeks at or drains those bodies. Body errors and handler panics release capacity.
-
-Rejections include `Retry-After` rounded upward to whole seconds (zero stays
-zero). HTTP/1 rejections close the connection so an unfinished body cannot
-hold up the overload response. The limit bounds application work and body
-buffers, rather than transport connections or all Go goroutines. Graceful
-shutdown cancels queued waits and retains the existing drain policy.
-
-`http.AdmissionState(server)` returns `Option[http.AdmissionLoad]`, a consistent
-snapshot with `inFlight` and `queued`, or None when admission is disabled. It
-uses `state`. `Listen` adds `clock + state` to its open handler effects because
-admission observes shared capacity and timed waits. Routed and TLS listeners
-already declare all five effects. See the admission fixture in
-[testdata/cases/http_admission](../../testdata/cases/http_admission/main.bork).
-
-## TLS certificates
-
-HTTP's `Certificate` stores validated PEM certificate and key bytes in a private
-variant, so its declaration needs no Go signature resolution. `LoadCertificate`
-reads and validates files; `ParseCertificate` validates supplied Bytes. Both
-return `Certificate | IoError`. Its Show instance prints only `http.Certificate`.
-`ListenTLS` reconstructs the Go certificate from immutable bytes when opening the
-listener; certificate or key file changes after loading cannot alter the value.
-
-## Examples
-
-HTTP clients take a scope (`http.Get(url, s, timeoutMs: 0)`); cancellation and optional timeouts cover the response body too. Request/response headers are `Map[String, List[String]]`, preserving repeated header values.
-
-HTTP servers accept method/path routes, middleware functions, typed body/query/path decoding, TLS, static files and forms. Server body limits are configurable (16 MiB by default). Scope cleanup drains active requests, bounded by `cleanupTimeout` or a per-server timeout. See [http_routes](../../examples/http_routes/main.bork).
-
-## Shared retries
-
-Create one `http.OpenRetryBudget(s, capacity: 4, refillMs: 1000)` per destination
-and share it across callers. The scope-owned resource starts full and lazily adds
-one token per interval, up to capacity, without a refill goroutine. Capacity and
-refill intervals must be positive; refill milliseconds must fit `TimeoutMs`.
-Attachment extends ownership; the budget closes when its last owner closes.
-The budget and any captured injected clock must outlive their explicit scope.
+This complete program starts a local server on a free port, calls it, and stops it when the scope ends:
 
 ```bork
 import "bork/http"
 
-fn fetch(url: String, request: Scope, budget: http.RetryBudget in request) uses net + clock + random + state: http.Result {
-  http.Retry(request, budget, operation: attempt => http.Get(url, attempt), maxAttempts: 3, baseDelayMs: 20, maxDelayMs: 1000)
-}
-
-fn main() uses io + net + clock + random + state {
+fn main() {
   scope app {
-    budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 1000)
-    scope first {
-      println(fetch("https://example.com", first, budget))
-    }
-    scope second {
-      println(fetch("https://example.com", second, budget))
+    match (http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "hello"))) {
+      server: http.Server => {
+        match (http.Get("http://" + http.Address(server), app)) {
+          response: http.Response => println(response.status, response.body)
+          error => eprintln(toString(error))
+        }
+      }
+      error: IoError => eprintln(error.message)
     }
   }
 }
 ```
 
-`Retry` explicitly asserts that replay is safe. It retries only `Overloaded`;
-responses, transport errors, cancellation and deadline failures return directly.
-`maxAttempts` is positive and includes the initial attempt, which spends no
-budget token. Further attempts reserve shared tokens immediately before work;
-concurrent callers cannot overspend. Each attempt receives a fresh scope, whose
-tasks and resources finish cleanup before returning or beginning another attempt.
-Closing the budget cancels active attempt scopes and retry waits. An operation
-must cooperate with cancellation to finish promptly.
+Save as `main.bork` and run `bork run main.bork`. Output:
 
-Waits use the nonnegative server hint plus full jitter from zero through capped
-exponential local backoff. `maxDelayMs` must be at least `baseDelayMs`; it caps
-local backoff, and never shortens a server hint. Overflow, an insufficient
-remaining scope deadline, exhausted attempts or an empty budget return the last
-`Overloaded`. An already expired deadline gives `DeadlineExceeded`; cancellation
-gives `Cancelled`. Tokens spent on failed or cancelled retries are not refunded.
-Negative hints in a manually constructed `Overloaded` are treated as zero.
-The helper charges operation effects plus `clock + random + state`.
+```text
+200 hello
+```
 
-For deterministic refill tests, pass `clock: .Some(time.FixedClock(...))`
-or another `time.Clock` to `OpenRetryBudget`. The default `.None` reads monotonic
-system time. Backward injected readings pause refill until the clock catches up;
-fractional intervals retain their phase. Native `mock time.Now()` is another test
-option when the injected clock is `time.SystemClock()`; it does not replace the
-budget's default monotonic Go clock. The optional `Retry` argument
-`jitter: Option[(Int) uses random + state => Int]` receives a nanosecond ceiling.
-Its result is clamped to `0..ceiling`. Default jitter uses `bork/rand.IntBetween`,
-which can also be mocked in native tests. Timed waits and scope deadlines retain
-real system timing.
+Each incoming request gets its own scope; returning from the handler closes it. The server runs until its owning scope closes. A client call covers sending the request and reading the complete response body.
 
-[examples/slow_downstream](../../examples/slow_downstream/main.bork) runs a local
-service with two active requests and two queued requests. Six GET callers share
-four retry tokens. Gates hold accepted work while excess callers exhaust the
-budget, then let the accepted work finish. It reports four successes, two
-overloads, ten total attempts, and a peak of two handlers. The example uses a
-fixed refill clock and zero local delay to show exact bounds without a throughput
-benchmark.
+## Client API
+
+Names below belong to `http`. All client calls return `Result = Response | Overloaded | DeadlineExceeded | Cancelled | IoError`.
+
+| Signature | Meaning |
+| --- | --- |
+| `Get(url: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result` | GET and read the response. |
+| `Post(url: String, contentType: String, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result` | POST a body with a Content-Type header. |
+| `Send(method: String, url: String, headers: Headers, body: String, s: Scope, timeoutMs: TimeoutMs = 0) uses net + clock + state: Result` | Send an arbitrary method and repeated headers. |
+| `HeaderOf(headers: Headers, name: String): Option[String]` | Find the first header value without regard to case. |
+| `RetryAfter(headers: Headers, now: time.Instant): Option[time.Duration]` | Parse an overload hint with an explicit clock reading. |
+
+| Type | Fields or constraint |
+| --- | --- |
+| `Headers` | `Map[String, List[String]]`; preserves repeated values. Use `{:}` for no headers. |
+| `Status` | Int in `100..599`; guard dynamic values with `http.ValidStatus`. |
+| `TimeoutMs` | Int in `0..9223372036854`; guard with `http.ValidTimeout`. |
+| `Response` | `{ status: Status, headers: Headers, body: String }` |
+| `Overloaded` | `{ retryAfter: Option[time.Duration], response: Response }` |
+| `DeadlineExceeded` | `{ message: String }` |
+
+A zero timeout adds no per-call deadline; the scope and its ancestors still cancel the call. A positive timeout caps it, including response-body reads. Completed 429/503 responses become `Overloaded`, retaining the body and headers; other HTTP statuses are ordinary `Response` values. Transport or request-construction failures are `IoError`. Cancellation and deadline expiry have their own result types. Calls never retry automatically.
+
+A malformed URL exercises the failure branch without an external service:
+
+```bork
+import "bork/http"
+
+fn main() {
+  scope app {
+    match (http.Get(":", app)) {
+      _: IoError => println("request construction failed")
+      result => println(toString(result))
+    }
+  }
+}
+```
+
+The invalid URL takes the IoError branch:
+
+```text
+request construction failed
+```
+
+## Server API
+
+All listener functions return `Server | IoError`. Their final options share these types and defaults:
+
+| Named option | Meaning |
+| --- | --- |
+| `drainTimeoutMs: TimeoutMs = 0` | Graceful shutdown limit; zero inherits the scope's cleanup timeout. |
+| `maxBodyBytes: BodyLimit = 16777216` | Incoming buffered-body limit; `BodyLimit` is a nonnegative Int. |
+| `admission: Option[Admission] = Option.None` | Optional bound on active and queued application requests. |
+| `requestTimeoutMs: TimeoutMs = 0` | Cap each incoming request's deadline; zero adds no cap. |
+
+| Signature before the shared options | Effects |
+| --- | --- |
+| `Listen(addr: String, s: Scope, handler: (Request, Scope) => Response): Server \| IoError` | `net + clock + state`, plus the handler's open effects. |
+| `ListenRoutes(addr: String, s: Scope, routes: List[Route]): Server \| IoError` | `io + net + clock + random + state` |
+| `ListenTLS(addr: String, s: Scope, routes: List[Route], certFile: String, keyFile: String): Server \| IoError` | `io + net + clock + random + state` |
+| `Address(server: Server): String` | Pure; includes the selected port when opening with port 0. |
+| `Wait(server: Server) uses net` | Wait for one listener to stop. |
+| `WaitAny(servers: List[Server]) uses net: Ok \| IoError` | Wait until any listener stops or its scope is cancelled. |
+| `WaitAll(servers: List[Server]) uses net: Ok \| IoError` | Wait for every listener to stop or its scope to be cancelled. |
+| `Text(status: Status, body: String): Response` | Pure; plain-text Content-Type. |
+| `JsonReply(status: Status, body: String): Response` | Pure; JSON Content-Type; body is already encoded text. |
+| `Segments(path: String): List[String]` | Pure; split a path into nonempty components. |
+
+| Type | Fields |
+| --- | --- |
+| `Request` | `method: String`, `path: String`, `query: String`, `params: Map[String, String]`, `headers: Headers`, `body: String` |
+| `Handler` | `(Request, Scope) uses io + net + clock + random + state => Response` |
+| `Route` | `{ pattern: String, handler: Handler }` |
+
+Listen routes every request to one handler. ListenRoutes and ListenTLS accept method/path patterns: `"GET /users/{id}"` captures `id` in `request.params`. GET also accepts HEAD; patterns support redirects, `{name...}` captures, and automatic 404/405 responses. Invalid or conflicting patterns return `IoError` before opening a socket.
+
+`http.Handler` permits all five effects. A function starting a routed listener therefore declares all five, even when its handlers are pure. Middleware is an ordinary `(http.Handler) => http.Handler` function.
+
+## Routes and checked input
+
+Decode body, query or path fields into derived records. Field facts are checked before the decoder returns a value. This example sends one valid path and one invalid path:
+
+```bork
+import "bork/codec"
+import "bork/http"
+use codec.Defaults
+
+pred positive(n: Int) { n > 0 }
+type UserPath = { id: Int where positive } derive (codec.Decode)
+
+fn user(req: http.Request, rs: Scope): http.Response {
+  match (http.PathAs[UserPath](req)) {
+    path: UserPath => http.Text(200, s"user ${path.id}")
+    error: codec.DecodeError => http.Text(422, error.path + ": " + error.message)
+  }
+}
+
+fn main() {
+  scope app {
+    match (http.ListenRoutes("127.0.0.1:0", app, [.{ pattern: "GET /users/{id}", handler: user }])) {
+      server: http.Server => {
+        for (id in ["42", "0"]) {
+          match (http.Get("http://" + http.Address(server) + "/users/" + id, app)) {
+            response: http.Response => println(response.status, response.body)
+            error => eprintln(toString(error))
+          }
+        }
+      }
+      error: IoError => eprintln(error.message)
+    }
+  }
+}
+```
+
+The valid path succeeds and the fact violation returns 422:
+
+```text
+200 user 42
+422 .id: must be positive
+```
+
+| Decoder/helper signature | Result |
+| --- | --- |
+| `Body[T: codec.Decode](request: Request)` | `T \| json.JsonError \| codec.DecodeError` |
+| `Query(request: Request)` | `Headers \| IoError` |
+| `QueryAs[T: codec.Decode](request: Request)` | `T \| IoError \| codec.DecodeError` |
+| `PathAs[T: codec.Decode](request: Request)` | `T \| codec.DecodeError` |
+| `Form(request: Request)` | `Headers \| IoError` |
+| `Multipart(request: Request, maxBodyBytes: BodyLimit = 16777216)` | `MultipartForm \| IoError` |
+| `Static(request: Request, root: String, prefix: String = "") uses io` | `Response` |
+
+Except for Static, these helpers are pure. Body parses JSON; syntax errors come from `bork/json`, while type/fact failures come from `bork/codec`. QueryAs and PathAs require derived record decoders, use literal strings for String fields and JSON syntax for other fields, and make missing Option fields None. Repeated query values for one record field are errors.
+
+Form parses a URL-encoded body independently of the query. Multipart returns `MultipartForm { values: Headers, files: List[Upload] }`, where `Upload` has `field: String`, `filename: String`, `contentType: String`, and immutable `data: Bytes`.
+
+Incoming bodies and Multipart default to 16 MiB. Override `maxBodyBytes` with a nonnegative value; zero rejects nonempty bodies. An oversized server request receives 413. Static buffers its response and supports directory listings, symlinks, ranges and conditional requests; choose the root and prefix accordingly. See [http_routes](../../examples/http_routes/main.bork) for middleware, forms, TLS and static serving.
+
+## Multiple listeners
+
+Closing the server scope cancels request scopes, stops accepting new connections, and drains active handlers. A zero `drainTimeoutMs` inherits `cleanupTimeout`; without that policy draining is unbounded. A positive server timeout overrides the default and cannot exceed a positive scope cleanup timeout (`IoError` otherwise). Expiry forcibly closes connections; cooperative handlers can still be finishing.
+
+Wait/WaitAny/WaitAll can finish before draining completes. Scope cleanup performs the drain. WaitAny reports an unexpected stop as `IoError { path: address, message }`; a completed failure remains an error after cancellation. WaitAll returns the first unexpected failure in list order. Both return Ok immediately for an empty list.
+
+```bork
+import "bork/http"
+
+fn serve(app: Scope) uses io + net + clock + random + state: Ok | IoError {
+  api = http.ListenRoutes("127.0.0.1:8080", app, [
+    .{ pattern: "GET /health", handler: (req, rs) => http.Text(200, "ok") },
+  ])?
+  metrics = http.ListenRoutes("127.0.0.1:9090", app, [
+    .{ pattern: "GET /metrics", handler: (req, rs) => http.Text(200, "requests 0") },
+  ])?
+  http.WaitAny([api, metrics])
+}
+
+fn main() {
+  scope app with cleanupTimeout(5000) {
+    match (serve(app)) {
+      _: Ok => {}
+      error: IoError => eprintln(error.path + ": " + error.message)
+    }
+  }
+}
+```
+
+This server waits for scope cancellation (Ctrl+C) or listener failure. Each listener exposes only its own routes. See [http_multi](../../examples/http_multi/main.bork) for a runnable multi-listener demo and startup-failure handling.
+
+## Deadlines between services
+
+Get, Post and Send forward the scope's remaining deadline, including a tighter `timeoutMs`, in the reserved `Bork-Timeout-Ns` header. Each call and redirect recomputes the budget. An exhausted deadline returns `DeadlineExceeded` before sending; manual values of this header are replaced, or removed when there is no deadline.
+
+Incoming requests use the earliest listener/context deadline, server `requestTimeoutMs` cap and caller budget. Missing budgets add no limit; zero returns 504. Invalid or repeated budgets return 400 before admission or body buffering. Deadline expiry while queued or reading a body returns 504 where possible; ordinary admission timeout remains 429/503.
+
+A handler's scope carries this deadline into outgoing calls and local operations, including later changes to the listener deadline. Handlers must cooperate with cancellation and may return their own response after cancellation. Request scopes do not inherit listener cleanup policies: use explicit taskTimeout/cleanupTimeout scopes when bounded task/finalizer waits are needed. A deadline does not forcibly stop arbitrary code or bound total cleanup time.
+
+Relative budgets start on arrival, so wire transit and internal transport replay time are not deducted exactly from the remote timer. The caller still enforces its local deadline; clocks need not be synchronized. Current listeners serve HTTP/1; outgoing clients can negotiate HTTP/2. Early HTTP/1 rejection closes the connection to avoid draining an unfinished upload. See the [boundary design](../design/http-propagation.md) for the header format and transport constraints, and [service_context](../../examples/service_context/main.bork) for a two-service example.
+
+## Bound admission
+
+An Admission limits application work and buffered bodies per listener. It does not bound transport connections or all runtime goroutines.
+
+| `Admission` field | Constraint/default |
+| --- | --- |
+| `maxInFlight: InFlightLimit` | Positive Int; required. |
+| `maxQueued: QueueLimit = 0` | Nonnegative Int. |
+| `queueTimeoutMs: TimeoutMs = 0` | Zero disables queue waiting. |
+| `retryAfterMs: TimeoutMs = 0` | Rejection hint, rounded upward to seconds. |
+| `status: AdmissionStatus = 503` | 429 or 503. |
+
+```bork
+import "bork/http"
+
+fn main() {
+  scope app {
+    limit = http.Admission { maxInFlight: 64, maxQueued: 32, queueTimeoutMs: 25, retryAfterMs: 100 }
+    match (http.Listen("127.0.0.1:0", app, (req, rs) => http.Text(200, "ok"), admission: .Some(limit))) {
+      server: http.Server => println(http.AdmissionState(server))
+      error: IoError => eprintln(error.message)
+    }
+  }
+}
+```
+
+Admission precedes body buffering and middleware and holds capacity through request tasks, cleanup and response writing. Waiters use a bounded FIFO queue; a full queue rejects immediately. Zero maxQueued or queueTimeoutMs disables waiting. Cancellation removes queued requests; body errors and handler panics release capacity. Shutdown cancels queued waits.
+
+Go detects HTTP/1 disconnects only after consuming the body, so unread-body waiters can remain until timeout, cancellation or permit transfer. Admission does not peek at or drain bodies. `AdmissionState(server) uses state: Option[AdmissionLoad]` gives a consistent `{ inFlight: Int, queued: Int }` snapshot, or None when disabled. See the [admission fixture](../../testdata/cases/http_admission/main.bork) for concurrent requests.
+
+## Shared retries
+
+Retrying asserts that repeating the operation is safe. Only Overloaded is retried; responses, IoError, Cancelled and DeadlineExceeded return directly. Share one scope-owned RetryBudget per destination across callers.
+
+```bork
+import "bork/http"
+
+fn main() {
+  scope app {
+    budget = http.OpenRetryBudget(app, capacity: 4, refillMs: 1000)
+    attempts = atom(0)
+    result = http.Retry(app, budget, operation: attempt => {
+      count = update(attempts, n => n + 1)
+      if (count == 1) {
+        http.Overloaded { response: http.Text(503, "busy"), retryAfter: .None }
+      } else { http.Text(200, "ok") }
+      }, baseDelayMs: 0, maxDelayMs: 0)
+    match (result) {
+      response: http.Response => println(response.status, response.body)
+      error => eprintln(toString(error))
+    }
+  }
+}
+```
+
+The retry reaches its second attempt:
+
+```text
+200 ok
+```
+
+| Signature | Meaning |
+| --- | --- |
+| `OpenRetryBudget(s: Scope, capacity: RetryCount, refillMs: RefillMs, clock: Option[time.Clock] in s = .None) uses clock + state: RetryBudget` | Positive capacity and refill interval (milliseconds within TimeoutMs); starts full, adds one token per interval up to capacity. |
+| `Retry(s: Scope, budget: RetryBudget in s, operation: (Scope) => Result, maxAttempts: RetryCount = 3, baseDelayMs: TimeoutMs = 20, maxDelayMs: TimeoutMs where AtLeastBase(baseDelayMs) = 1000, jitter: Option[(Int) uses random + state => Int] = .None) uses clock + random + state: Result` | Retry with shared tokens and fresh attempt scopes; adds operation effects. |
+
+The first attempt spends no token; maxAttempts includes it. Further attempts reserve shared tokens before work, and concurrent callers cannot overspend. Tokens are not refunded. Every attempt finishes its task/resource cleanup before the next attempt. Closing the budget cancels active attempts and waits; operations must cooperate. Attachment extends ownership; the budget and any captured injected clock must outlive their explicit scope.
+
+Waits add the nonnegative server hint to full jitter from zero through capped exponential local backoff. maxDelayMs caps only local backoff and cannot be below baseDelayMs; a valid server hint is never shortened. Overflow, insufficient remaining deadline, exhausted attempts or an empty budget return the last Overloaded. Expired deadlines return DeadlineExceeded; cancellation returns Cancelled. Negative manually constructed hints count as zero.
+
+Retry-After accepts exactly one nonnegative whole-seconds or HTTP-date value. Missing, malformed, repeated or overflowing values become None; past dates give zero. Raw headers remain available on `Overloaded.response`. Date hints use the client clock and are approximate under clock skew.
+
+For deterministic refill, inject `time.FixedClock` or another Clock; the default uses monotonic system time and needs no refill goroutine. Backward readings pause refill until the clock catches up. Custom jitter receives a nanosecond ceiling and its result is clamped to `0..ceiling`; timed waits and scope deadlines still use real time. See [slow_downstream](../../examples/slow_downstream/main.bork) for shared retry/admission bounds.
+
+## TLS certificates
+
+ListenTLS loads PEM certificate/key files before opening the listener and requires TLS 1.2 or newer. `LoadCertificate(certFile: String, keyFile: String) uses io: Certificate | IoError` reads files; `ParseCertificate(certificatePem: Bytes, keyPem: Bytes): Certificate | IoError` validates supplied bytes. A Certificate stores immutable private bytes; Show prints only `http.Certificate`.
+
+```bork
+import "bork/http"
+
+fn main() {
+  empty: List[Byte] = []
+  match (http.ParseCertificate(empty.toBytes(), empty.toBytes())) {
+    _: http.Certificate => println("valid certificate")
+    _: IoError => println("invalid certificate")
+  }
+}
+```
 
 ## Trace context and marked values
 
-`Send` forwards ambient declarations explicitly marked `propagated("header")`.
-Bound marked values replace matching manual headers, case insensitively;
-unmarked values never cross this boundary automatically. The server clears
-inherited propagated labels before decoding each request and restores them
-when it finishes. Missing, repeated singleton, or invalid values stay unbound.
-Warnings identify the header and error, without including raw input. Logging
-adds no effect to `Listen`.
+Send forwards only ambient declarations marked `propagated("header")`. Bound marked values replace manual headers case insensitively; unmarked values do not automatically cross the boundary. The server clears inherited propagated labels per request, then restores them. Missing, repeated singleton or invalid values stay unbound; warnings identify the header/error without raw input. Logging adds no effect to Listen.
 
 ```bork
 import "bork/http"
@@ -230,34 +309,21 @@ propagated("traceparent") logged ambient trace: http.TraceParent
 propagated("tracestate") ambient vendor: http.TraceState
 ```
 
-`TraceParent` and `TraceState` are checked String aliases. `TraceParentOf(headers)`
-returns `Option[TraceParent] | codec.DecodeError`: missing is None; repeated or invalid
-is an error. `TraceStateOf(headers)` returns `Option[TraceState] | codec.DecodeError`,
-combining repeated fields in order. It returns None without a valid parent;
-invalid state leaves a valid parent usable. Headers with multiple case variants
-of the tracestate key are ambiguous in an unordered Map and return codec.DecodeError;
-incoming HTTP headers already have one canonical key. `use http.TraceCodecs`
-provides ordinary `codec.Decode` instances for both aliases.
+| Signature/type | Meaning |
+| --- | --- |
+| `TraceParent = String where ValidTraceParent` | Checked W3C parent header. |
+| `TraceState = String where ValidTraceState` | Checked W3C vendor state. |
+| `TraceParentOf(headers: Headers): Option[TraceParent] \| codec.DecodeError` | Missing is None; repeated or invalid is an error. |
+| `TraceStateOf(headers: Headers): Option[TraceState] \| codec.DecodeError` | Combine repeated fields in order; None without a valid parent. |
 
-Validation follows [W3C Trace Context](https://www.w3.org/TR/trace-context/).
-Version 00 requires its exact lowercase hexadecimal format and nonzero ids.
-Version ff is rejected; future versions check the known prefix and extension
-boundary while preserving unknown fields. Unknown flag bits are accepted.
-Tracestate limits are 32 members, 256 bytes per key/value, and 512 bytes overall,
-with the standard tenant/system key limits and no duplicate keys. Empty state
-and whitespace-only members are accepted. Forwarding preserves valid values;
-it does not create spans, ids, sampling decisions, or vendor entries.
+`use http.TraceCodecs` selects ordinary codec.Decode instances. Incoming labels supply logs and downstream forwarding; they do not replace a handler's captured typed `needs`. Application code extracts with TraceParentOf and explicitly binds a checked value with `with (trace: value)`.
 
-Selected outgoing W3C fields are validated after marked values replace manual
-ones. An invalid/repeated parent removes both parent and state; invalid state
-removes only state. A marked state may accompany a valid manual parent. State
-alone is dropped. Redirects retain Go's header forwarding rules and revalidate
-selected trace fields; marked fields are not reintroduced on redirects.
+Forwarding preserves valid values and does not create spans, IDs, sampling decisions or vendor entries. Invalid incoming state leaves a valid parent usable. Outgoing validation drops both fields for an invalid/repeated parent, drops only invalid state for a valid parent, and drops state without a parent. Redirects retain Go's header forwarding rules and revalidate selected fields; marked fields are not reintroduced. See [service_context](../../examples/service_context/main.bork) for checked binding and [the propagation design](../design/http-propagation.md) for full validation limits.
 
-Request labels supply logs and downstream forwarding. A handler's typed `needs`
-remain captured where the function was made. To use an incoming trace in typed
-application code, extract it with `TraceParentOf` and explicitly bind it with
-`with (trace: value)`. The [service_context example](../../examples/service_context/main.bork)
-shows this checked binding, automatic forwarding through two services, and
-shrinking deadline budgets with a server policy cap. The `Option.Some` payload
-retains the checked `TraceParent` fact, so this binding needs no additional guard.
+## Larger examples
+
+- [signup_api](../../examples/signup_api/main.bork): request validation and JSON replies.
+- [http_routes](../../examples/http_routes/main.bork): routing and middleware.
+- [http_multi](../../examples/http_multi/main.bork): independent API, metrics and debug listeners.
+- [slow_downstream](../../examples/slow_downstream/main.bork): admission and shared retry budgets.
+- [service_context](../../examples/service_context/main.bork): trace forwarding and deadline budgets.
