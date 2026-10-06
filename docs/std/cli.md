@@ -192,8 +192,16 @@ environment bindings, positionals, and repeated list flags, and collects field
 errors before invoking a handler. See [examples/cli](../../examples/cli/main.bork). Focused examples cover
 [field documentation](../../examples/cli_docs/main.bork),
 [flag mapping](../../examples/cli_mapping/main.bork),
-[environment policies](../../examples/cli_env/main.bork), and
-[custom enrichers](../../examples/cli_enrichers/main.bork).
+[environment policies](../../examples/cli_env/main.bork),
+[custom enrichers](../../examples/cli_enrichers/main.bork), and
+[validation rules](../../examples/cli_validation/main.bork).
+
+Three examples compare naming styles. Each runs with environment variables
+from its `env.txt`:
+[names derived from fields](../../examples/cli_names_auto/main.bork),
+[every name written by hand](../../examples/cli_names_manual/main.bork), and
+[both in one command](../../examples/cli_names_mixed/main.bork), with a
+renamed flag, a flag-only field and a config-only field.
 
 The checked-in example also supports a selectable config file:
 

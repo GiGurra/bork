@@ -1,0 +1,42 @@
+import "bork/codec"
+import "bork/cli"
+import "bork/process"
+use codec.Defaults
+// Every name comes from a field name; there is no Flag metadata. The settings
+// derive --server-host/-s/NAMES_SERVER_HOST, --http-port/NAMES_HTTP_PORT (no
+// short: -h is reserved for help) and --verbose/-v/NAMES_VERBOSE.
+type Options = {
+  // Server to contact.
+  serverHost: String = "localhost"
+  // Port to listen on.
+  httpPort: Int = 8080
+  // Log every request.
+  verbose: Bool = false
+} derive (codec.Decode)
+fn settings(): cli.Settings { .{ autoShort: true, autoEnv: true, envPrefix: "NAMES" } }
+fn main() {
+  match (cli.Run[Options]("names", "Names derived from fields", (options, s) => {
+    println(s"host ${options.serverHost}, port ${options.httpPort}, verbose ${options.verbose}")
+    }, settings: settings())) {
+    error: cli.Error => { println(error); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "help lists the derived flag, short and env names" {
+  match (cli.Parse[Options]("names", "", ["--help"], settings: settings())) {
+    help: cli.Help => {
+      assert(help.text.contains("-s, --server-host"))
+      assert(help.text.contains("(env: NAMES_SERVER_HOST)"))
+      assert(help.text.contains("    --http-port"))
+      assert(help.text.contains("(env: NAMES_HTTP_PORT)"))
+      assert(help.text.contains("-v, --verbose"))
+    }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}
+test "derived short flags parse" {
+  match (cli.Parse[Options]("names", "", ["-s", "api.example", "-v"], settings: settings())) {
+    options: Options => { assertEqual(options.serverHost, "api.example"); assert(options.verbose) }
+    other => { panic(s"Expected options, got ${other}") }
+  }
+}

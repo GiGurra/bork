@@ -1,0 +1,4 @@
+--config
+settings.json
+--server-host
+flag.example

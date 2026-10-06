@@ -1,0 +1,56 @@
+import "bork/codec"
+import "bork/cli"
+import "bork/process"
+use codec.Defaults
+type Options = {
+  // Optional JSON settings file.
+  config: Option[String]
+  // Server to contact.
+  serverHost: String = "localhost"
+  // Port to listen on.
+  port: Int = 8080
+  // Log request details.
+  debug: Bool = false
+  // Token for the upstream API.
+  apiToken: String = ""
+} derive (codec.Decode)
+fn settings(): cli.Settings { .{ autoShort: true, autoEnv: true, envPrefix: "MIXED" } }
+// config and serverHost keep their derived names: --config/-c/MIXED_CONFIG and
+// --server-host/-s/MIXED_SERVER_HOST. port is renamed to --listen/-p, and its
+// env name follows the new flag: MIXED_LISTEN. debug is a flag only, and
+// apiToken can only be set in a config file.
+fn flags(): List[cli.Flag] {
+  [.{ field: "config", configFile: true },
+    .{ field: "port", long: cli.Mapping.Named { name: "listen" }, short: "p" },
+    .{ field: "debug", envName: cli.Mapping.Disabled },
+    .{ field: "apiToken", long: cli.Mapping.Disabled, envName: cli.Mapping.Disabled }]
+}
+fn main() {
+  match (cli.Run[Options]("mixed", "Derived and explicit names in one command", (options, s) => {
+    // env.txt sets MIXED_SERVER_HOST (overridden by the flag), MIXED_LISTEN and MIXED_DEBUG (ignored).
+    println(s"host ${options.serverHost}, port ${options.port}, debug ${options.debug}")
+    println(s"api token from config: ${options.apiToken}")
+    }, flags: flags(), settings: settings())) {
+    error: cli.Error => { println(error); process.Exit(2) }
+    Ok => {}
+  }
+}
+test "help shows derived, renamed and hidden sources side by side" {
+  match (cli.Parse[Options]("mixed", "", ["--help"], flags: flags(), settings: settings())) {
+    help: cli.Help => {
+      assert(help.text.contains("-s, --server-host"))
+      assert(help.text.contains("(env: MIXED_SERVER_HOST)"))
+      assert(help.text.contains("-p, --listen"))
+      assert(help.text.contains("(env: MIXED_LISTEN)"))
+      assert(help.text.contains("-d, --debug                Log request details. (default false)\n"))
+      assert(!help.text.contains("api-token"))
+    }
+    other => { panic(s"Expected help, got ${other}") }
+  }
+}
+test "a config-only field has no flag" {
+  match (cli.Parse[Options]("mixed", "", ["--api-token", "x"], flags: flags(), settings: settings())) {
+    error: cli.Error => { assert(error.errors.filter(item => item.message.contains("unknown flag")).length() == 1) }
+    other => { panic(s"Expected an unknown flag error, got ${other}") }
+  }
+}
