@@ -1074,6 +1074,10 @@ func (c *checker) declareFunc(fd *syntax.FuncDecl, prelude bool) {
 }
 
 func (c *checker) checkFunc(fn *Func) {
+	if fn.TemplateScope != nil {
+		start := c.diags.Len()
+		defer func() { c.diags.DeriveContext(start, fn.TemplateScope.Decl.Pos) }()
+	}
 	c.fn = fn
 	c.inForce = nil
 	c.pkg = fn.Pkg

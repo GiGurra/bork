@@ -1,3 +1,5 @@
+import "bork/shape"
+
 // Format-independent codecs and an ordered value tree.
 
 // Value is a format-independent value tree. A number keeps its text, so that whole numbers
@@ -132,7 +134,7 @@ fn decodeItems [T: Decode](items: List[Value], index: Int, done: List[T]): List[
 instance decodeMap[V: Decode]: Decode[Map[String, V]] {
   fn decode(json: Value): Map[String, V] | DecodeError {
     match (json) {
-      Value.Object { fields } => decodeFields (fields, {:})
+      Value.Object { fields: fields } => decodeFields (fields, {:})
       other => decodeMismatch ("an object", other)
     }
   }
@@ -230,3 +232,46 @@ fn validRuneString (value: String): Bool unsafe go {
 
 // Defaults selects the standard primitive and container codecs.
 instances Defaults { decodeInt8, encodeInt8, decodeInt16, encodeInt16, decodeInt32, encodeInt32, decodeUint8, encodeUint8, decodeUint16, encodeUint16, decodeUint32, encodeUint32, decodeUint64, encodeUint64, decodeFloat32, encodeFloat32, decodeInt, decodeFloat, decodeString, decodeBool, decodeOption, decodeList, decodeMap, decodeValue, encodeInt, encodeFloat, encodeString, encodeBool, encodeOption, encodeList, encodeMap, encodeValue, encodeRune, decodeRune }
+
+// Structural encoding is an ordinary source derivation. Positional payloads
+// preserve slot order; named payloads preserve declaration-order object fields.
+derive instance encodeShape[T]: Encode[T] {
+  fn encode(x: T): Value {
+    comptime match (shape.kind[T]()) {
+      shape.Record => {
+        fields: List[Field] = [comptime for (field in shape.fields[T]())
+          comptime if (!field.computed) {
+            Field { name: field.name, value: encode[field.Type](field.read(x)) }
+          }]
+        Value.Object { fields: fields }
+      }
+      shape.Sealed => {
+        comptime for (variant in shape.variants[T]()) {
+          match (variant.project(x)) {
+            Option.Some(payload) => {
+              _ = payload
+              comptime if (variant.positional) {
+                values: List[Value] = [comptime for (field in variant.fields)
+                  encode[field.Type](field.read(payload))]
+                return Value.Object { fields: [
+                  Field { name: "type", value: Value.String { value: variant.name } },
+                  Field { name: "values", value: Value.Array { items: values } }
+                ] }
+              } else {
+                fields: List[Field] = [comptime for (field in variant.fields)
+                  comptime if (!field.computed) {
+                    Field { name: field.name, value: encode[field.Type](field.read(payload)) }
+                  }]
+                return Value.Object { fields: prepend(
+                  Field { name: "type", value: Value.String { value: variant.name } }, fields) }
+              }
+            }
+            Option.None => {}
+          }
+        }
+        Value.Null
+      }
+      shape.Other => shape.fail("Encode requires a record or sealed target")
+    }
+  }
+}

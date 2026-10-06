@@ -443,7 +443,11 @@ func (c *checker) inferCall(e *syntax.Call, name string, fn *Func, args []syntax
 			var cons []*Constraint
 			for _, con := range c.constraintsOf(ta, t, c.paramScope()) {
 				tuple, isRecord := t.(*Record)
-				if con.Path != "" && (!isRecord || !tuple.Tuple) {
+				// Compiler-resolved field projections may carry nested facts
+				// into a consuming class method: its checked argument keeps
+				// those facts, and no result promises an unvalidated value.
+				projectedConsumer := len(c.info.shapeTypeFacts[ta]) > 0 && fn.Class != nil && !producesParam(fn.Class)
+				if con.Path != "" && (!isRecord || !tuple.Tuple) && !projectedConsumer {
 					c.errorf(ta.Pos, "facts inside a type argument (on the parts of %s) are not supported yet, so they would not be checked; only facts on the whole type argument are", t)
 					break
 				}

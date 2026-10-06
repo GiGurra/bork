@@ -12,8 +12,8 @@ import (
 	"github.com/GiGurra/bork/internal/check"
 )
 
-// Derived instances (`derive (Decode, Encode)`) are written by the
-// compiler, as Go.
+// Structural Decode still uses the compiler backend while its source template
+// and schema companions are being ported. Encode uses the codec source template.
 //
 // JSON objects map to records by field name. A sealed type's value is an
 // object whose "type" field names the variant ({"type": "Circle",
@@ -37,8 +37,6 @@ func (g *gen) derivedFunc(fn *check.Func) string {
 	switch fn.Of.Class.Name {
 	case "Decode":
 		body = g.deriveDecode(fn)
-	case "Encode":
-		body = g.deriveEncode(fn)
 	}
 	return sig.String() + " {\n" + body + "}\n"
 }
@@ -158,54 +156,6 @@ func (g *gen) decodeFields(fields []*check.Field, dicts []*check.Dict, goType st
 	}
 	b.WriteString(g.constructionChecks(fields, owner, invariants, g.codecType("DecodeError")))
 	b.WriteString("return _out\n")
-	return b.String()
-}
-
-func (g *gen) deriveEncode(fn *check.Func) string {
-	var b strings.Builder
-	obj := g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("Object")))
-	str := g.text(g.variantType(g.codecType("Value").(*check.Sealed).Variant("String")))
-	field := g.typeText(g.codecType("Field"))
-	fields := func(x string, fs []*check.Field, dicts []*check.Dict, tag string) string {
-		var parts []string
-		if tag != "" {
-			parts = append(parts, fmt.Sprintf("{name: \"type\", value: %s{value: %q}}", str, tag))
-		}
-		for i, f := range fs {
-			if f.Computed {
-				continue
-			}
-			fun, ds := g.dictMethod(dicts[i], "encode")
-			call := g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent(x), f))})
-			parts = append(parts, fmt.Sprintf("{name: %q, value: %s}", f.Name, call))
-		}
-		return fmt.Sprintf("return %s{fields: []%s{%s}}\n", obj, field, strings.Join(parts, ", "))
-	}
-	switch t := fn.Of.Type.(type) {
-	case *check.Record:
-		b.WriteString(fields("x", t.Fields, fn.Derived.FieldDicts[0], ""))
-	case *check.Sealed:
-		b.WriteString("switch _v := x.(type) {\n")
-		for i, v := range t.Variants {
-			fmt.Fprintf(&b, "case %s:\n", g.text(g.variantType(v)))
-			if len(v.Fields) == 0 {
-				b.WriteString("_ = _v\n")
-			}
-			if v.Positional {
-				var values []string
-				for slot, f := range v.Fields {
-					fun, ds := g.dictMethod(fn.Derived.FieldDicts[i][slot], "encode")
-					values = append(values, g.text(&ast.CallExpr{Fun: fun, Args: append(ds, g.fieldRead(ast.NewIdent("_v"), f))}))
-				}
-				json := g.codecType("Value").(*check.Sealed)
-				array := g.text(g.variantType(json.Variant("Array")))
-				fmt.Fprintf(&b, "return %s{fields: []%s{{name: \"type\", value: %s{value: %q}}, {name: \"values\", value: %s{items: []%s{%s}}}}}\n", obj, field, str, v.Name, array, g.typeText(json), strings.Join(values, ", "))
-			} else {
-				b.WriteString(fields("_v", v.Fields, fn.Derived.FieldDicts[i], v.Name))
-			}
-		}
-		b.WriteString("}\npanic(\"bork: unreachable\")\n")
-	}
 	return b.String()
 }
 

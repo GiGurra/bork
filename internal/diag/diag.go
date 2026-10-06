@@ -82,6 +82,19 @@ type List struct {
 	items []Diagnostic
 }
 
+// DeriveContext anchors target-dependent diagnostics at the request while
+// retaining the template location and source edits already attached to them.
+func (l *List) DeriveContext(start int, request Pos) {
+	for i := start; i < len(l.items); i++ {
+		d := &l.items[i]
+		if d.Pos == request {
+			continue
+		}
+		d.Msg += " (derive template at " + d.Pos.String() + ")"
+		d.Pos, d.End = request, request
+	}
+}
+
 func (l *List) Add(pos Pos, format string, args ...any) {
 	l.AddCode(pos, "compiler.error", format, args...)
 }

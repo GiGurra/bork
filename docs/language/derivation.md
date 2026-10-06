@@ -36,9 +36,11 @@ runtime meaning; the prefix states which stage should select or repeat code.
 A runtime loop over descriptors reports an error offering to add `comptime`.
 
 `shape.fields[T]()` returns record fields in declaration order. A field exposes
-`name`, `index`, `doc`, `computed`, and `hasDefault`. `field.read(value)` expands
+`name`, `positional`, `index`, `doc`, `computed`, and `hasDefault`. `field.read(value)` expands
 into a checked field read; the value must have the descriptor's owner type.
-The projected type retains the field's facts. Descriptor values stay within
+The projected type retains independent field facts. Sibling constraints remain
+on the descriptor and complete owner proof, since their arguments require that
+owner value. Descriptor values stay within
 template expansion and cannot escape into runtime results.
 
 `field.facts`, `variant.facts`, and `shape.facts[T]()` expose ordered obligation
@@ -132,3 +134,9 @@ it belongs to the type's or class's package, and other packages import the
 resulting instance with `use`. The class name itself is not an instance import.
 
 The [derive_labels example](../../examples/derive_labels/README.md) is runnable.
+
+The standard `codec.Encode` derivation for named records and sealed types is a
+source template in `bork/codec`. It omits computed fields, retains named-field
+object order, and uses the tagged `values` array for positional payloads.
+Tuple codecs and `codec.Decode` still use their existing compiler paths during
+the source migration.

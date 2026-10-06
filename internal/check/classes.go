@@ -923,10 +923,14 @@ func matchHead(ci *ClassInstance, t Type) ([]Type, bool) {
 
 // instanceHint suggests instances of other packages that would do.
 func (c *checker) instanceHint(class *Class, t Type) string {
+	from := c.pkg
+	if c.fn != nil && c.fn.TemplateScope != nil {
+		from = c.fn.TemplateScope.Pkg
+	}
 	var found []string
 	// Sets of instances first: they are what packages suggest.
 	for _, pkg := range c.info.Packages {
-		if pkg == c.pkg {
+		if pkg == from {
 			continue
 		}
 		for _, name := range sortedBundleNames(pkg) {
@@ -935,14 +939,14 @@ func (c *checker) instanceHint(class *Class, t Type) string {
 			}
 			for _, ci := range pkg.bundles[name].insts {
 				if _, ok := matchHead(ci, t); ok && ci.Class == class {
-					found = append(found, "use "+qualify(name, pkg, c.pkg))
+					found = append(found, "use "+qualify(name, pkg, from))
 					break
 				}
 			}
 		}
 	}
 	for _, pkg := range c.info.Packages {
-		if pkg == c.pkg {
+		if pkg == from {
 			continue
 		}
 		for _, ci := range pkg.instances {
@@ -950,7 +954,7 @@ func (c *checker) instanceHint(class *Class, t Type) string {
 				continue
 			}
 			if _, ok := matchHead(ci, t); ok {
-				found = append(found, "use "+qualify(ci.Name, ci.Pkg, c.pkg))
+				found = append(found, "use "+qualify(ci.Name, ci.Pkg, from))
 			}
 		}
 	}
@@ -966,11 +970,11 @@ func (c *checker) instanceHint(class *Class, t Type) string {
 		case *Sealed:
 			name, pkg = b.Name, b.Pkg
 		}
-		if name != "" && pkg == c.pkg {
-			return fmt.Sprintf("add `derive (%s)` to type %s, or declare one: instance name: %s[%s] { ... }", qualify(class.Name, class.Pkg, c.pkg), name, qualify(class.Name, class.Pkg, c.pkg), t)
+		if name != "" && pkg == from {
+			return fmt.Sprintf("add `derive (%s)` to type %s, or declare one: instance name: %s[%s] { ... }", qualify(class.Name, class.Pkg, from), name, qualify(class.Name, class.Pkg, from), t)
 		}
 	}
-	return fmt.Sprintf("declare one: instance name: %s[%s] { ... }", qualify(class.Name, class.Pkg, c.pkg), t)
+	return fmt.Sprintf("declare one: instance name: %s[%s] { ... }", qualify(class.Name, class.Pkg, from), t)
 }
 
 // inScopeParam reports whether tp is a type parameter of the code being
@@ -998,7 +1002,7 @@ type Derived struct {
 
 // derivable reports whether instances of class can be derived.
 func derivable(class *Class) bool {
-	return class.Template != nil || IsCodec(class, "Decode") || IsCodec(class, "Encode") || IsGoStruct(class)
+	return class.Template != nil || IsCodec(class, "Decode") || IsGoStruct(class)
 }
 
 // A provisional derivation is available while defaults are checked, but a
@@ -1021,6 +1025,13 @@ func (c *checker) discardDerived(ci *ClassInstance) {
 	for _, method := range ci.Methods {
 		delete(c.info.FuncOf, method.Decl)
 	}
+	kept := c.info.ExpandedFunctions[:0]
+	for _, fn := range c.info.ExpandedFunctions {
+		if fn.Of != ci {
+			kept = append(kept, fn)
+		}
+	}
+	c.info.ExpandedFunctions = kept
 }
 
 // resolveDerived finds the instances the fields of derived instances'
@@ -1033,7 +1044,8 @@ func (c *checker) resolveDerived() {
 		}
 	}()
 	for _, ci := range c.info.ClassInstances {
-		if !IsGoStruct(ci.Class) && (len(ci.Methods) == 0 || ci.Methods[0].Derived == nil) {
+		sourceCodec := ci.Derived != "" && ci.Class.Template != nil && (IsCodec(ci.Class, "Decode") || IsCodec(ci.Class, "Encode"))
+		if !IsGoStruct(ci.Class) && !sourceCodec && (len(ci.Methods) == 0 || ci.Methods[0].Derived == nil) {
 			continue
 		}
 		if IsGoStruct(ci.Class) {
