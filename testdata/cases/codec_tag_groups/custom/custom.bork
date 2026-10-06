@@ -1,0 +1,5 @@
+import "bork/codec"
+type FieldTags = { text: String = "custom" }
+instance FieldTagEncoder: codec.Encode[FieldTags] {
+  fn encode(value: FieldTags): codec.Value { codec.Value.String { value: "encoded:" + value.text } }
+}

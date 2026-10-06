@@ -1,0 +1,34 @@
+import "bork/codec"
+import tags "example.com/codec_tag_groups/tags"
+import renamed "example.com/codec_tag_groups/custom"
+use codec.Defaults
+use renamed.FieldTagEncoder
+use tags.FieldTagsEncode
+use tags.FieldTagsDecode
+type Row = {
+  values: List[String] tags { mode: tags.Mode.Csv } renamed {} codec { name: "items" }
+  plain: Int
+} derive (codec.Decode)
+type Box[A] = { value: A tags { title: "generic" } } derive (codec.Decode)
+fn schema[T: codec.Decode](): codec.RecordSchema { match (codec.Schema[T]()) { Option.Some(value) => value, Option.None => panic("missing schema") } }
+fn groups[T: codec.Decode](): List[codec.TagGroup] { at(schema[T]().fields, 0).tags }
+fn at[T](items: List[T], index: Int): T { match (items.get(index)) { Option.Some(value) => value, Option.None => panic("missing item") } }
+test "foreign package tags keep canonical package paths and defaults" {
+  metadata = groups[Row]()
+  assertEqual(metadata.length(), 2)
+  first = at(metadata, 0)
+  assertEqual(first.package, "example.com/codec_tag_groups/tags")
+  match (codec.decode[tags.FieldTags](first.value)) {
+    value: tags.FieldTags => { assertEqual(value.mode, tags.Mode.Csv); assertEqual(value.title, "default"); assertEqual(value.count, 3) }
+    _: codec.DecodeError => assert(false)
+  }
+  second = at(metadata, 1)
+  assertEqual(second.package, "example.com/codec_tag_groups/custom")
+  assertEqual(second.value, codec.Value.String { value: "encoded:custom" })
+  assertEqual(at(schema[Row]().fields, 1).tags, [])
+}
+test "generic runtime consumers see tags without derive helpers" {
+  first = at(groups[Box[Int]](), 0)
+  match (codec.decode[tags.FieldTags](first.value)) { value: tags.FieldTags => assertEqual(value.title, "generic"), _ => assert(false) }
+}
+fn main() {}

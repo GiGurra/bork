@@ -54,11 +54,15 @@ fn FieldInfo[T: Decode](): FieldSchema {
 // callbacks check an independent field; sibling facts require complete Decode.
 type DefaultSchema = { display: String, configPath: Option[String], choices: List[String] }
 
+// TagGroup carries a foreign package tag encoded by its own Encode instance.
+type TagGroup = { package: String, value: Value }
+
 type RecordField = {
   name: String
   wireName: String = ""
   aliases: List[String] = []
   words: List[String] = []
+  tags: List[TagGroup] = []
   typeName: String
   doc: String
   facts: List[String]
@@ -401,6 +405,8 @@ derive fn RecordInfo[T](): Option[RecordSchema] {
               wireName: FieldWireName[T](field),
               aliases: FieldAliases[T](field),
               words: Words(field.tagged[FieldTags]().getOr(FieldTags {}).name.getOr(field.name)),
+              tags: [comptime for (tag in field.tagGroups) comptime if (tag.package != "bork/codec")
+                TagGroup { package: tag.package, value: encode[tag.Type](tag.value()) }],
               typeName: shape.typeName[field.RawType](),
               doc: field.doc,
               facts: [comptime for (fact in field.facts) fact.text],

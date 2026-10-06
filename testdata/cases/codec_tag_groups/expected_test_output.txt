@@ -1,0 +1,4 @@
+ok    foreign package tags keep canonical package paths and defaults
+ok    generic runtime consumers see tags without derive helpers
+2 passed, 0 failed
+exit code 0

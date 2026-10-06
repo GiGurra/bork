@@ -30,6 +30,7 @@ func (c *checker) checkTagGroups(files []*syntax.File) {
 func (c *checker) checkPackageTags(groups []*syntax.TagGroup, name string, supported bool) {
 	savedScopes := c.scopes
 	defer func() { c.scopes = savedScopes }()
+	seen := map[string]string{}
 	for _, group := range groups {
 		if group.Name == "go" {
 			continue
@@ -49,6 +50,13 @@ func (c *checker) checkPackageTags(groups []*syntax.TagGroup, name string, suppo
 		if pkg != c.pkg {
 			c.pkg.used[group.Name] = true
 		}
+		if previous, exists := seen[pkg.Path]; exists {
+			if previous != group.Name {
+				c.errorf(group.Pos, "tag package %s is declared twice (%s and %s)", pkg.Path, previous, group.Name)
+			}
+			continue
+		}
+		seen[pkg.Path] = group.Name
 		entry := pkg.types[name]
 		if entry == nil {
 			c.errorf(group.Pos, "package %s has no exported %s record for this tag group", group.Name, name)

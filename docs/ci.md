@@ -47,9 +47,22 @@ for existing exceptions and planned refactors.
 The partition assigns the longest measured units first to the least loaded
 shard, breaking ties by name. Placing the first test of a split package in a
 shard adds a five-second overhead for starting that package's test binary, so
-small tests cluster. `scripts/ci-timings.json` holds the weights. A new package
-or test receives a five-second provisional weight and still runs; stale entries
-cannot add or remove coverage. PRs that change only `docs/**`, top-level Markdown files,
+small tests cluster. The setup job fetches the ten shard artifacts
+from the latest successful main CI run through the GitHub REST API, merges their
+measurements, and uploads one small timing snapshot for all shards to share.
+The fetch has a 60-second total timeout and happens once per workflow, before
+shard execution. Missing, expired, invalid or incomplete artifacts, authentication
+failures and network failures fall back to the committed `scripts/ci-timings.json`.
+Reports must show ten successful, disjoint shards and measurements must cover
+every selected unit. Current tests are always discovered from the checkout;
+tests deleted since the measured run cannot add coverage, and new tests still run.
+New split tests use their package's measured upper decile (at least five seconds)
+as a provisional weight. Fixture children use only measurements from the same
+fixture parent, so large fixture sets cannot dilute estimates for new test roots.
+New whole packages receive five seconds. These estimates cannot predict an
+unusually expensive new test; split large units into independent roots.
+
+PRs that change only `docs/**`, top-level Markdown files,
 or `mkdocs.yml` skip the race shards and run `TestDoc*` and `*Documentation` driver and CLI tests instead, including snippet, link and
 structure checks. Other CI jobs still run. Classification uses the PR merge-base
 diff, including both paths of renames; mixed changes get full coverage. Pushes
@@ -75,8 +88,9 @@ no result, since Go exits successfully when a `-run` pattern matches nothing. It
 the output of failing tests. CI uploads a report with the selected tests,
 elapsed seconds and status, and the raw `go test -json` events.
 
-Refresh timing weights after substantial test changes from the events of one
-complete, successful CI run on main, then review the timing diff:
+CI refreshes weights automatically from successful main runs. To update the
+committed fallback explicitly, use events from one complete, successful main run
+and review the timing diff:
 
 ```sh
 gh run download <run-id> --pattern 'ci-*' --dir /tmp/bork-ci
@@ -94,7 +108,7 @@ These conservative workload weights guide balancing; they are not predictions
 of wall time.
 
 Keep the heavy test matrix capped at ten shards and retain the 300-second
-limits. If shards grow beyond the budget, refresh the timings and split large
+limits. If shards grow beyond the budget even with fresh timings, split large
 units into independent test roots. For example, the CLI runtime and comptime
 C-header rebuild scenarios have separate roots so they can land on different
 shards. `test_ci.py` checks the workflow matrix against the runner's shard count.

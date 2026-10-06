@@ -247,7 +247,7 @@ There is no process-global registry.
 Automatic shorts skip occupied letters and `h`; explicit short names on later
 fields are reserved before automatic assignment. Derived environment names use
 the resolved long name (including its prefix), or the field's kebab-case name
-if long flags are disabled. Automatic shorts and environment bindings skip
+if long flags are disabled. Automatic names use the shared [codec words](codec.md): a field override `codec { name: "listen_port" }` produces `--listen-port`, while a type naming policy changes wire keys only. Automatic shorts and environment bindings skip
 positional fields. Explicit environment bindings for positionals are supported.
 An empty environment value is absent, following boa's rules.
 
@@ -319,12 +319,13 @@ Each function in settings.enrichers runs once, in list order, for every field;
 its output feeds the next function. Enrichers may override explicit mappings,
 but must preserve the field identity. Final names are validated after enrichment.
 
-FieldSpec is the immutable metadata passed through the chain:
+FieldSpec is the immutable metadata passed through the chain. `aliases` contains already derived alternative long and env names; enrichers may rename or drop these lists:
 
 | FieldSpec fields | Type/default |
 | --- | --- |
 | `field, description, deprecated` | `String` |
 | `long, short, env` | `cli.Mapping` |
+| `aliases` | `cli.FieldAliases = cli.FieldAliases {}` (`long, env: List[String] = []`) |
 | `positional, configFile, config, hidden` | `Bool` |
 | `position` | `Option[Int] = Option.None` |
 | `choices` | `List[cli.Choice] = []` |
@@ -335,6 +336,15 @@ function may deliberately enable it again. Auto returned by a custom function
 is resolved under settings after the chain. Prefixes apply only to automatic
 names, once. Enrichers cannot change record defaults, requiredness or facts.
 See [the composed enricher example](../../examples/cli_enrichers/main.bork).
+
+Codec field aliases become hidden long flags and env bindings. They receive no
+automatic shorthand or deprecation warning. Auto aliases use the usual prefixes;
+Named keeps the canonical name exact while aliases remain derived with prefixes.
+Disabled disables that source's aliases. Alias env bindings are derived only with
+a nonempty envPrefix. Canonical and alias names share duplicate checks before env
+or config access. Supplying both names for one field in flags, env, or one config
+object is an error; empty env values remain absent. Alias CLI values retain the
+usual precedence over env and config. Persistent root flags follow the same rules.
 
 ## Version output
 
@@ -443,18 +453,21 @@ files or invokes a handler. See [entry points](#entry-points) for result handlin
 
 ## Configuration files
 
-`configFiles` accepts JSON and YAML files using the options record's exact bork
-field names (`httpPort`, not `http-port`). Each file selects its parser by its
-extension: `.yaml` and `.yml`, case-insensitively, select YAML; all other names,
-including extensionless paths, select JSON. The config-file selector follows
-the same rule, so one overlay chain can mix formats.
+`configFiles` accepts JSON and YAML files using canonical codec wire keys
+and field aliases. Without a naming policy or override, keys remain the exact
+bork field names (`httpPort`, not `http-port`). With snake naming, that key is
+`http_port`; an explicit field name overrides the policy. Mapping.Named and
+enrichers rename CLI sources only, leaving config keys unchanged. Each file
+selects its parser by its extension: `.yaml` and `.yml`, case-insensitively,
+select YAML; all other names, including extensionless paths, select JSON. The
+config-file selector follows the same rule, so one overlay chain can mix formats.
 
 Files overlay from left to right; a later field replaces an earlier field
 completely, including lists and nested records. Missing fields keep earlier
 values. Empty file paths are skipped. Each document must decode to an object;
 unknown top-level keys, malformed documents and unreadable files return
 `cli.Error`. YAML parse errors retain line/column diagnostics. Nested records
-follow their derived decoder's usual rules, which ignore unknown nested keys.
+follow each nested decoder's `codec.Unknown` policy.
 See [cli_yaml](../../examples/cli_yaml/main.bork). Compound flag values still use
 JSON syntax, regardless of the config file's format.
 

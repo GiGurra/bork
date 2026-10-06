@@ -6,6 +6,9 @@ use codec.Defaults
 type nativeCommand = resource
 type inputField = {
   field: String
+  wireName: String = ""
+  aliases: List[String] = []
+  words: List[String] = []
   typeName: String
   kind: String
   optional: Bool
@@ -39,7 +42,7 @@ fn inputFieldsWithSchema[T: codec.Decode](recordSchema: Option[codec.RecordSchem
     // CLI switches default to false independently of the record decoder.
     defaultFalse := field.kind == "bool" && !field.optional && !field.hasDefault
     if defaultFalse { text = "false" }
-    fields = append(fields, inputField{field: field.name, typeName: field.typeName, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
+    fields = append(fields, inputField{field: field.name, wireName: field.wireName, aliases: field.aliases, words: field.words, typeName: field.typeName, kind: field.kind, optional: field.optional, hasDefault: field.hasDefault || defaultFalse, defaultFalse: defaultFalse, defaultText: text, configDefault: path, validate: func(value codec.Value) any {
       if err, bad := field.validate(value).(codec.DecodeError); bad { return err }
       return _Ok{}
     }})
@@ -65,6 +68,8 @@ fn buildRootAdapter(name: String, description: String, specs: List[FieldSpec], s
 }
 fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, persistent: Bool, s: Scope): adapter | Error unsafe go {
   import "fmt"
+  import "os"
+  import "github.com/spf13/pflag"
   import "path/filepath"
   import "reflect"
   import "sort"
@@ -75,6 +80,15 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
   mappingName := func(mapping Mapping) string {
     if named, ok := mapping.(Mapping_Named); ok { return named.name }
     return ""
+  }
+  inputKey := func(field inputField) string { if field.wireName != "" { return field.wireName }; return field.field }
+  displayName := func(field inputField) string { if len(field.words) != 0 { return makeName(strings.Join(field.words, "-")) }; return makeName(inputKey(field)) }
+  configOwners := map[string]string{}
+  for _, field := range schema {
+    for _, key := range append([]string{inputKey(field)}, field.aliases...) {
+      if previous, duplicate := configOwners[key]; duplicate { return Error{errors: []codec.DecodeError{{path:key, message:"config key duplicates " + previous}}} }
+      configOwners[key] = field.field
+    }
   }
   configField := ""
   metadata := map[string]FieldSpec{}
@@ -125,7 +139,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
     // Synthetic exported fields retain the original name as an explicit boa tag.
     long := mappingName(flag.long)
     if long == "" {
-      if flag.positional { long = makeName(field.field) } else {
+      if flag.positional { long = displayName(field) } else {
         long = fmt.Sprintf("bork-field-%d", i)
         policies = append(policies, "noflag")
       }
@@ -157,6 +171,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         if path != "" { files = append(files, path) }
       }
       config := map[string]codec.Value{}
+      configNames := map[string]string{}
       var err error
       for _, path := range files {
         extension := strings.ToLower(filepath.Ext(path))
@@ -168,12 +183,15 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
           object, ok := parsed.(codec.Value_Object)
           if !ok { if isYaml { return fmt.Errorf("CLI config must be a YAML object") }; return fmt.Errorf("CLI config must be a JSON object") }
           values := target.(*map[string]codec.Value)
+          seen := map[string]string{}
           for _, entry := range object.fields {
-            known := false
-            for _, field := range schema { if field.field == entry.name { known = true; break } }
+            owner, known := configOwners[entry.name]
             if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
-            if !metadata[entry.name].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
-            (*values)[entry.name] = entry.value
+            if first, duplicate := seen[owner]; duplicate { return fmt.Errorf("CLI config field %q is the same field as %q", entry.name, first) }
+            seen[owner] = entry.name
+            if !metadata[owner].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
+            (*values)[owner] = entry.value
+            configNames[owner] = entry.name
           }
           return nil
         })
@@ -183,12 +201,13 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
       jsonFields := []codec.Field{}
       failures := []codec.DecodeError{}
       for i, field := range schema {
+        key := inputKey(field)
         value := shadow.Elem().Field(i)
         var json codec.Value
         if value.IsNil() {
-          if configured, exists := config[field.field]; exists { json = configured } else if field.defaultFalse && !partial { json = codec.Value_Bool{value: false} } else {
+          if configured, exists := config[field.field]; exists { json = configured; key = configNames[field.field] } else if field.defaultFalse && !partial { json = codec.Value_Bool{value: false} } else {
             if partial || field.hasDefault { continue }
-            if !field.optional { failures = append(failures, codec.DecodeError{path: "." + field.field, message: "is missing"}); continue }
+            if !field.optional { failures = append(failures, codec.DecodeError{path: "." + key, message: "is missing"}); continue }
             json = codec.Value_Null{}
           }
         } else if strings.HasPrefix(field.kind, "list:") {
@@ -197,7 +216,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
           for j, raw := range value.Elem().Interface().([]string) {
             if strings.TrimPrefix(field.kind, "list:") == "string" { values = append(values, codec.Value_String{value: raw}); continue }
             parsed := parse(raw)
-            if err, bad := parsed.(codecs.JsonError); bad { failures = append(failures, codec.DecodeError{path: fmt.Sprintf(".%s[%d]", field.field, j), message: err.message}); invalid = true; continue }
+            if err, bad := parsed.(codecs.JsonError); bad { failures = append(failures, codec.DecodeError{path: fmt.Sprintf(".%s[%d]", key, j), message: err.message}); invalid = true; continue }
             values = append(values, parsed.(codec.Value))
           }
           if invalid { continue }
@@ -206,7 +225,7 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
           raw := value.Elem().String()
           if field.kind == "string" { json = codec.Value_String{value: raw} } else {
             parsed := parse(raw)
-            if err, bad := parsed.(codecs.JsonError); bad { failures = append(failures, codec.DecodeError{path: "." + field.field, message: err.message}); continue }
+            if err, bad := parsed.(codecs.JsonError); bad { failures = append(failures, codec.DecodeError{path: "." + key, message: err.message}); continue }
             json = parsed.(codec.Value)
           }
         }
@@ -218,17 +237,25 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
           checkChoice := func(value codec.Value, path string) {
             if text, ok := value.(codec.Value_String); ok && !allowed[text.value] { failures = append(failures, codec.DecodeError{path: path, message: "must be one of the allowed choices"}); invalid = true }
           }
-          if array, ok := json.(codec.Value_Array); ok { for j, item := range array.items { checkChoice(item, fmt.Sprintf(".%s[%d]", field.field, j)) } } else { checkChoice(json, "."+field.field) }
+          if array, ok := json.(codec.Value_Array); ok { for j, item := range array.items { checkChoice(item, fmt.Sprintf(".%s[%d]", key, j)) } } else { checkChoice(json, "."+key) }
           if invalid { continue }
         }
-        if !partial { if err, bad := field.validate(json).(codec.DecodeError); bad { failures = append(failures, err); continue } }
-        jsonFields = append(jsonFields, codec.Field{name: field.field, value: json})
+        if !partial {
+          if err, bad := field.validate(json).(codec.DecodeError); bad {
+            canonical := "."+inputKey(field)
+            if strings.HasPrefix(err.path, canonical) { err.path = "."+key+strings.TrimPrefix(err.path, canonical) }
+            failures = append(failures, err)
+            continue
+          }
+        }
+        jsonFields = append(jsonFields, codec.Field{name: key, value: json})
       }
       return inputCollection{fields: jsonFields, errors: failures}
   }
+  parameters := map[string]boa.Param{}
   command := boa.Cmd{
     Use: name, Short: description, Params: shadow.Interface(),
-    ParamEnrich: boa.ParamEnricherNone,
+    ParamEnrich: func(_ []boa.Param, param boa.Param, fieldName string) error { parameters[fieldName] = param; return nil },
     RunFunc: func(cmd *cobra.Command, remaining []string) {
       collected := collect(remaining, false)
       if failure, bad := collected.(Error); bad { result = failure; return }
@@ -243,6 +270,53 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
   declaring := cmd
   configuredFlags := cmd.Flags()
   if persistent { configuredFlags = cmd.PersistentFlags() }
+  normalizedAliases := map[string]string{}
+  bindAliases := func(executed *cobra.Command, args []string) error {
+    for index, field := range schema {
+      spec := metadata[field.field]
+      long := mappingName(spec.long)
+      canonical := configuredFlags.Lookup(long)
+      supplied := ""
+      if canonical != nil && canonical.Changed && normalizedAliases[field.field] == "" { supplied = long }
+      for _, alias := range spec.aliases.long {
+        flag := configuredFlags.Lookup(alias)
+        if flag == nil || !flag.Changed { continue }
+        if supplied != "" { return fmt.Errorf("--%s is the same field as --%s", alias, supplied) }
+        supplied = alias
+      }
+      if supplied != "" {
+        if canonical != nil { canonical.Changed = true }
+        if supplied != long { normalizedAliases[field.field] = supplied }
+        continue
+      }
+      env := mappingName(spec.env)
+      if env == "" { continue }
+      selected := ""
+      for _, candidate := range append([]string{env}, spec.aliases.env...) {
+        if os.Getenv(candidate) == "" { continue }
+        if selected != "" { return fmt.Errorf("%s is the same field as %s", candidate, selected) }
+        selected = candidate
+      }
+      if selected == "" { selected = env }
+      if param := parameters[fmt.Sprintf("Field%d", index)]; param != nil { param.SetEnv(selected) }
+    }
+    return nil
+  }
+  for _, spec := range specs {
+    canonical := configuredFlags.Lookup(mappingName(spec.long))
+    if canonical == nil { continue }
+    for _, alias := range spec.aliases.long {
+      configuredFlags.AddFlag(&pflag.Flag{Name:alias, Value:canonical.Value, DefValue:canonical.DefValue, NoOptDefVal:canonical.NoOptDefVal, Usage:canonical.Usage, Hidden:true})
+    }
+  }
+  binding := cmd.PreRunE
+  if persistent { binding = cmd.PersistentPreRunE }
+  withAliases := func(executed *cobra.Command, args []string) error {
+    if err := bindAliases(executed, args); err != nil { return err }
+    if binding != nil { return binding(executed, args) }
+    return nil
+  }
+  if persistent { cmd.PersistentPreRunE = withAliases } else { cmd.PreRunE = withAliases }
   native := nativeCommand{handle: cmd, owner: s.Own(func() {})}
   configureHelp(native, specs, schema, helpType, helpDefault)
   positionalCompletions := map[int]func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective){}
@@ -261,7 +335,10 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         // that parse before boa synchronizes its mirrors into the shadow.
         for _, field := range specs {
           flag := cmd.Flags().Lookup(mappingName(field.long))
-          if flag == nil || !flag.Changed { continue }
+          if flag == nil { continue }
+          changed := flag.Changed
+          for _, alias := range field.aliases.long { if alternate := cmd.Flags().Lookup(alias); alternate != nil && alternate.Changed { changed = true } }
+          if !changed { continue }
           if value, list := flag.Value.(interface { GetSlice() []string; Replace([]string) error }); list {
             values := value.GetSlice()
             if len(values)%2 == 0 { if err := value.Replace(values[:len(values)/2]); err != nil { return fail([]codec.DecodeError{{path: "."+field.field, message: err.Error()}}) } }
@@ -279,12 +356,16 @@ fn buildCommandAdapter(name: String, description: String, specs: List[FieldSpec]
         snapshot := map[string]any{}
         for _, field := range schema { snapshot[field.field] = Missing{field: field.field} }
         for _, entry := range input.fields {
-          for _, field := range schema { if entry.name == field.field { snapshot[entry.name] = partialEntry{value: entry.value, validate: field.validate}; break } }
+          for _, field := range schema { if configOwners[entry.name] == field.field { snapshot[field.field] = partialEntry{value: entry.value, validate: field.validate}; break } }
         }
         for _, failure := range input.errors {
           for _, field := range schema {
-            path := "."+field.field
-            if failure.path == path || strings.HasPrefix(failure.path, path+"[") || strings.HasPrefix(failure.path, path+".") { snapshot[field.field] = failure; break }
+            matched := false
+            for _, key := range append([]string{inputKey(field)}, field.aliases...) {
+              path := "."+key
+              if failure.path == path || strings.HasPrefix(failure.path, path+"[") || strings.HasPrefix(failure.path, path+".") { matched = true; break }
+            }
+            if matched { snapshot[field.field] = failure; break }
           }
         }
         response := invoke(completion, CompletionRequest{field: spec.field, prefix: prefix, arguments: append([]string{}, args...), partial: Partial{read: func(field string) any { value, known := snapshot[field]; if !known { return codec.DecodeError{path: "."+field, message: "unknown CLI field"} }; return value }}})

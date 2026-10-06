@@ -1,0 +1,5 @@
+import "bork/codec"
+import "example.com/codec_tag_groups_fail/tags"
+use codec.Defaults
+type Row = { value: Int tags {} } derive (codec.Decode)
+fn main() {}

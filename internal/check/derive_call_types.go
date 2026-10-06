@@ -123,6 +123,8 @@ func deriveResolvedDescriptor(typ Type) deriveDescriptor {
 		return deriveVariant
 	case "Fact":
 		return deriveFact
+	case "PackageTag":
+		return derivePackageTag
 	}
 	return 0
 }

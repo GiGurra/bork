@@ -208,8 +208,9 @@ Field adapters need more than a value decoder. The selected decoder can publish 
 | `codec.FieldSchema` | `{ kind: String, optional: Bool, variants: List[codec.VariantSchema] = [] }` |
 | `codec.VariantSchema` | `{ name: String, doc: String, aliases: List[String] = [] }` |
 | `codec.Schema[T: codec.Decode](): Option[codec.RecordSchema]` | Read the selected decoder's record metadata, or None. |
+| `codec.TagGroup` | `{ package: String, value: codec.Value }` |
 | `codec.RecordSchema` | `{ fields: List[codec.RecordField] }` |
-| `codec.RecordField` | `name: String`, `wireName: String`, `aliases: List[String]`, `words: List[String]`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `variants: List[codec.VariantSchema] = []`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
+| `codec.RecordField` | `name: String`, `wireName: String`, `aliases: List[String]`, `words: List[String]`, `tags: List[codec.TagGroup]`, `typeName: String`, `doc: String`, `facts: List[String]`, `kind: String`, `optional: Bool`, `variants: List[codec.VariantSchema] = []`, `hasDefault: Bool`, `defaultValue: Option[() => codec.DefaultSchema]`, `validate: (codec.Value) => Ok \| codec.DecodeError` |
 | `codec.DefaultSchema` | `{ display: String, configPath: Option[String], choices: List[String] }` |
 
 Container metadata delegates to its selected element decoder, preserving variant choices through Option and List wrappers. Missing field metadata uses the general `json` kind and a required input. Record schemas describe named fields, typed validation and optional default-display callbacks. Looking up the schema does not evaluate defaults. A field's defaultValue callback returns display text, an optional configuration path and choices from one default evaluation.
@@ -241,3 +242,14 @@ fn main() {
   }
 }
 ```
+
+`RecordField.tags` carries foreign package field tag groups in declaration order.
+Each `TagGroup.package` is the canonical import path (for example, `bork/cli`),
+independent of the local import alias. `value` is produced by the selected
+`codec.Encode` instance for that package's concrete `FieldTags` record, including
+its defaults. That encoder must be in scope when deriving the options record's
+`codec.Decode`; a missing encoder rejects derivation with an Encode diagnostic.
+A consumer can decode `value` as its concrete tag record through its own Decode
+instance. Codec's own naming group already has dedicated schema members and is
+excluded here; `go` tags are also excluded. Untagged fields and handwritten
+schemas that omit `tags` have an empty list.

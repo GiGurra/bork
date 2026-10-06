@@ -1,0 +1,4 @@
+import "bork/codec"
+use codec.Defaults
+type Mode = sealed { Repeat, Csv } derive (codec.Encode, codec.Decode)
+type FieldTags = { mode: Mode = Mode.Repeat, title: String = "default", count: Int = 3 } derive (codec.Encode, codec.Decode)

@@ -17,9 +17,11 @@ const (
 	deriveField deriveDescriptor = iota + 1
 	deriveVariant
 	deriveFact
+	derivePackageTag
 	deriveFields
 	deriveVariants
 	deriveFacts
+	derivePackageTags
 )
 
 type deriveMetadataTypes struct {
@@ -33,7 +35,7 @@ func (m *deriveMetadataTypes) annotation(typ *syntax.TypeExpr) deriveDescriptor 
 		return 0
 	}
 	if typ.Name == "List" && len(typ.Args) == 1 {
-		if element := m.annotation(typ.Args[0]); element >= deriveField && element <= deriveFact {
+		if element := m.annotation(typ.Args[0]); element >= deriveField && element <= derivePackageTag {
 			return element - deriveField + deriveFields
 		}
 		return 0
@@ -50,6 +52,8 @@ func (m *deriveMetadataTypes) annotation(typ *syntax.TypeExpr) deriveDescriptor 
 					return deriveVariant
 				case "Fact":
 					return deriveFact
+				case "PackageTag":
+					return derivePackageTag
 				}
 			}
 		}
@@ -62,6 +66,8 @@ func (m *deriveMetadataTypes) annotation(typ *syntax.TypeExpr) deriveDescriptor 
 		return deriveVariant
 	case "Fact":
 		return deriveFact
+	case "PackageTag":
+		return derivePackageTag
 	}
 	return 0
 }
@@ -96,6 +102,9 @@ func (m *deriveMetadataTypes) kind(expr syntax.Expr) deriveDescriptor {
 			}
 			fallthrough
 		case deriveField:
+			if expr.Name == "tagGroups" {
+				return derivePackageTags
+			}
 			if expr.Name == "facts" {
 				return deriveFacts
 			}
@@ -186,6 +195,10 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 			return Int
 		case "positional":
 			return Bool
+		}
+	case derivePackageTag:
+		if selector.Name == "package" {
+			return String
 		}
 	case deriveFact:
 		switch selector.Name {
@@ -345,7 +358,7 @@ func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
 	switch kind {
 	case deriveField:
 		switch selector.Name {
-		case "name", "doc", "index", "positional", "computed", "hasDefault", "tags", "tagged", "facts", "Type", "RawType", "read", "default", "validate", "check":
+		case "name", "doc", "index", "positional", "computed", "hasDefault", "tags", "tagGroups", "tagged", "facts", "Type", "RawType", "read", "default", "validate", "check":
 			valid = true
 		}
 	case deriveVariant:
@@ -358,7 +371,9 @@ func (m *deriveMetadataTypes) checkMember(selector *syntax.Selector) {
 		case "text", "path", "independent":
 			valid = true
 		}
-	case deriveFields, deriveVariants, deriveFacts:
+	case derivePackageTag:
+		valid = selector.Name == "package" || selector.Name == "Type" || selector.Name == "value"
+	case deriveFields, deriveVariants, deriveFacts, derivePackageTags:
 		valid = selector.Name == "length" || selector.Name == "isEmpty"
 	default:
 		return
@@ -406,6 +421,10 @@ func (m *deriveMetadataTypes) checkCall(call *syntax.Call) {
 		if selector.Name == "default" {
 			arity = 0
 		}
+	case derivePackageTag:
+		if selector.Name == "value" {
+			arity = 0
+		}
 	case deriveVariant:
 		if selector.Name == "project" {
 			arity = 1
@@ -425,7 +444,7 @@ func (m *deriveMetadataTypes) checkCall(call *syntax.Call) {
 		}
 		return
 	}
-	if kind >= deriveField && kind <= deriveFact && (m.scalar(selector) != nil || m.kind(selector) != 0 || (selector.Name == "Type" || selector.Name == "RawType")) {
+	if kind >= deriveField && kind <= derivePackageTag && (m.scalar(selector) != nil || m.kind(selector) != 0 || (selector.Name == "Type" || selector.Name == "RawType")) {
 		m.c.errorf(call.Pos, "shape descriptor member %s is a property, not a callable method", selector.Name)
 	}
 }
