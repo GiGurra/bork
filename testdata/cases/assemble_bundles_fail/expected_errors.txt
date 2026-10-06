@@ -1,60 +1,91 @@
-main.bork:7:30: unused provider #1 Wiring.config (config) produces Config
+main.bork:16:38: unused provider #1 (Wiring.0, fake).0 produces Config
 assembly assemble[Database]:
-  Database <- #2 Wiring.database (fake) (main.bork:16:54)
+  Database <- #2 (Wiring.0, fake).1 (main.bork:16:48)
 supplied:
-  #1 Wiring.config (config) -> Config (unused)
-  #2 Wiring.database (fake) -> Database
-main.bork:7:30: unused provider #1 Wiring.config (config) produces Config
-assembly assemble[Database]:
-  Database <- #2 Wiring.database (fake) (main.bork:18:54)
-supplied:
-  #1 Wiring.config (config) -> Config (unused)
-  #2 Wiring.database (fake) -> Database
-main.bork:7:30: unused provider #1 Wiring.config (config) produces Config
+  #1 (Wiring.0, fake).0 -> Config (unused)
+  #2 (Wiring.0, fake).1 -> Database
+main.bork:17:31: missing provider for Database, needed by target
 assembly assemble[Database]:
   Database ?? missing provider
 supplied:
-  #1 Wiring.config (config) -> Config (unused)
-  #2 Wiring.database (number) -> Int (unused)
-main.bork:7:48: ambiguous Config needed by #2 Wiring.database (database) parameter c: #1 Wiring.config (config), #3 Configs.config (config)
+  #1 Wiring(fake) -> invalid (unused)
+main.bork:17:37: tuple values are not specialized by calls; use test.Swap/SwapAt or an explicit tuple literal. Swap requires the exact element type, unlike changed-signature specialization. See docs/language/packages.md
+main.bork:17:37: provider #1 must be a function with a concrete signature
 assembly assemble[Database]:
-  Database <- #2 Wiring.database (database) (main.bork:7:48)
-    c: Config ?? ambiguous providers
-      candidate <- #1 Wiring.config (config) (main.bork:7:30)
-      candidate <- #3 Configs.config (config) (main.bork:8:31)
+  Database ?? missing provider
 supplied:
-  #1 Wiring.config (config) -> Config
-  #2 Wiring.database (database) -> Database
-  #3 Configs.config (config) -> Config
-main.bork:13:24: dependency cycle: A (#1 Cycle.a (a)) -> B (#2 Cycle.b (b)) -> A (#1 Cycle.a (a))
-assembly assemble[A]:
-  A <- #1 Cycle.a (a) (main.bork:13:24)
-    dependency: B <- #2 Cycle.b (b) (main.bork:13:30)
-      dependency: A <- #1 Cycle.a (a) (main.bork:13:24) [shared or cycle; see above]
+  #1 Wiring(fake) -> invalid (unused)
+main.bork:17:44: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:18:31: missing provider for Database, needed by target
+assembly assemble[Database]:
+  Database ?? missing provider
 supplied:
-  #1 Cycle.a (a) -> A
-  #2 Cycle.b (b) -> B
-main.bork:17:53: provider bundle Wiring has no entry unknown
-main.bork:18:70: provider bundle entry Wiring.database is replaced more than once
-main.bork:19:44: provider bundle Wiring takes only named entry replacements
-main.bork:20:48: provider bundle Wiring does not take type arguments
+  #1 Wiring(fake, database) -> invalid (unused)
+main.bork:18:37: tuple values are not specialized by calls; use test.Swap/SwapAt or an explicit tuple literal. Swap requires the exact element type, unlike changed-signature specialization. See docs/language/packages.md
+main.bork:18:37: provider #1 must be a function with a concrete signature
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring(fake, database) -> invalid (unused)
+main.bork:18:44: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:18:60: named arguments require a direct call to a declared function or method: function types do not carry parameter names; call the declaration directly
+main.bork:19:31: missing provider for Database, needed by target
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring(database) -> invalid (unused)
+main.bork:19:37: tuple values are not specialized by calls; use test.Swap/SwapAt or an explicit tuple literal. Swap requires the exact element type, unlike changed-signature specialization. See docs/language/packages.md
+main.bork:19:37: provider #1 must be a function with a concrete signature
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring(database) -> invalid (unused)
+main.bork:20:31: missing provider for Database, needed by target
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring() -> invalid (unused)
+main.bork:20:37: tuple values are not specialized by calls; use test.Swap/SwapAt or an explicit tuple literal. Swap requires the exact element type, unlike changed-signature specialization. See docs/language/packages.md
+main.bork:20:37: provider #1 must be a function with a concrete signature
+assembly assemble[Database]:
+  Database ?? missing provider
+supplied:
+  #1 Wiring() -> invalid (unused)
+main.bork:20:48: only a declared generic function can be given type arguments
 main.bork:21:31: missing provider for Database, needed by target
 assembly assemble[Database]:
   Database ?? missing provider
 supplied:
-  #1 Wiring.config (config) -> Config (unused)
-  #2 Wiring.database (number) -> Int (unused)
-main.bork:21:54: replacement for Wiring.database must produce Database, found Int
+  #1 (Wiring.0, number).0 -> Config (unused)
+  #2 (Wiring.0, number).1 -> Int (unused)
+main.bork:21:38: unused provider #1 (Wiring.0, number).0 produces Config
 assembly assemble[Database]:
   Database ?? missing provider
 supplied:
-  #1 Wiring.config (config) -> Config (unused)
-  #2 Wiring.database (number) -> Int (unused)
-main.bork:21:54: unused provider #2 Wiring.database (number) produces Int
+  #1 (Wiring.0, number).0 -> Config (unused)
+  #2 (Wiring.0, number).1 -> Int (unused)
+main.bork:21:48: unused provider #2 (Wiring.0, number).1 produces Int
 assembly assemble[Database]:
   Database ?? missing provider
 supplied:
-  #1 Wiring.config (config) -> Config (unused)
-  #2 Wiring.database (number) -> Int (unused)
-main.bork:23:13: provider bundle Wiring can only be used in an assembly provider list
-main.bork:25:5: provider bundle Wiring can only be specialized in an assembly provider list
+  #1 (Wiring.0, number).0 -> Config (unused)
+  #2 (Wiring.0, number).1 -> Int (unused)
+main.bork:22:37: ambiguous Config needed by #2 Wiring.1 parameter c: #1 Wiring.0, #3 Configs.0
+assembly assemble[Database]:
+  Database <- #2 Wiring.1 (main.bork:22:37)
+    c: Config ?? ambiguous providers
+      candidate <- #1 Wiring.0 (main.bork:22:37)
+      candidate <- #3 Configs.0 (main.bork:22:45)
+supplied:
+  #1 Wiring.0 -> Config
+  #2 Wiring.1 -> Database
+  #3 Configs.0 -> Config
+main.bork:25:5: value of type (() => Config, (Config) => Database) is not used
+main.bork:26:30: dependency cycle: A (#1 Cycle.0) -> B (#2 Cycle.1) -> A (#1 Cycle.0)
+assembly assemble[A]:
+  A <- #1 Cycle.0 (main.bork:26:30)
+    dependency: B <- #2 Cycle.1 (main.bork:26:30)
+      dependency: A <- #1 Cycle.0 (main.bork:26:30) [shared or cycle; see above]
+supplied:
+  #1 Cycle.0 -> A
+  #2 Cycle.1 -> B

@@ -14,6 +14,13 @@ func TestNativeDiagnosticParity(t *testing.T) {
 		`fn main() { println("hello") }`,
 		`fn main() { pair = (1, "one"); (n, label) = pair; println(n, label, pair.0) }`,
 		`fn main() { println((1, true).2) }`,
+		`fn config(): Int { 1 }
+fn fake(): Int { 2 }
+Providers=(config,)
+fn main() { scope app { println(assemble[Int](app,Providers)) } }`,
+		`providers Old = { value: config }
+fn config(): Int { 1 }
+fn main() {}`,
 		`fn main() { println(missing) }`,
 		`fn greet() { println("hi") }`,
 		"pred positive(x: Int) { x > 0 }\nfn need(x: Int where positive): Int { x }\nfn safe(x: Int): Int { if (positive(x)) { need(x) } else { 0 } }",

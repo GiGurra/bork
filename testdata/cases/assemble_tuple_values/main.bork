@@ -1,0 +1,40 @@
+import "bork/test"
+type Config = { value: Int }
+type Service = { value: Int }
+fn config(): Config { Config { value: 3 } }
+fn fake(): Config { Config { value: 9 } }
+fn service(c: Config): Service { Service { value: c.value } }
+Providers = (service, config)
+fn providers(): (() => Config,) { (config,) }
+fn computed() uses io: (() => Config,) { println("construct"); providers() }
+pred positive(n: Int) { n > 0 }
+fn positiveNumber(): Int where positive { 5 }
+Numbers = (positiveNumber,)
+fn effectProvider() uses io: Int { println("invoke"); 6 }
+fn tupleRecipe() uses io: (() uses io => Int, String) { println("tuple"); (effectProvider, "label") }
+fn replacementRecipe() uses io: () uses io => Int { println("replacement"); effectProvider }
+Slot = 1
+fn main() uses io {
+  swapped = test.Swap(tupleRecipe(), replacementRecipe())
+  println("ready")
+  println(swapped.0 ())
+  selected = test.SwapAt(tupleRecipe(), 0, replacementRecipe())
+  println("ready")
+  println(selected.0 ())
+  index = 0
+  println(test.SwapAt((1, "a"), index + Slot - 1, 4))
+  println(test.SwapAt((1,), comptime { 0 }, 5))
+  println(test.Swap((1,), 2))
+  println(test.SwapAt((1,), 0, 3))
+  scope app {
+    (positiveProvider,) = Numbers
+    fromAlias: Int where positive = assemble[Int](app, (positiveProvider,))
+    println(fromAlias)
+    positiveValue: Int where positive = assemble[Int](app, Numbers)
+    println(positiveValue)
+    println(assemble[Service](app, Providers).value)
+    println(assemble[Service](app, test.Swap(Providers, fake)).value)
+    println(assemble[Service](app, test.SwapAt(Providers, 1, () => Config { value: 12 })).value)
+    println(assemble[Service](app, service, computed()).value)
+  }
+}

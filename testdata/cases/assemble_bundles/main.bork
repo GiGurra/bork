@@ -17,7 +17,9 @@ fn failedRecipe(label: String) uses io: (() => wiring.Config) | EvaluationFailur
   EvaluationFailure { name: label }
 }
 fn evaluate(s: Scope) uses io: wiring.Worker | EvaluationFailure {
-  assemble[wiring.Worker](s, wiring.Wiring(database: databaseRecipe("before failure"), config: failedRecipe("failure")?))
+  databaseProvider = databaseRecipe("before failure")
+  configurationProvider = failedRecipe("failure")?
+  assemble[wiring.Worker](s, (configurationProvider, databaseProvider, wiring.Wiring.2))
 }
 pred positive(n: Int) { n < 0 }
 type DbAlias = wiring.Database
@@ -26,18 +28,20 @@ fn main() {
   scope app {
     println(assemble[wiring.Secret](app, wiring.Secrets).value)
     println(assemble[wiring.Worker](app, wiring.Wiring))
-    println(assemble[wiring.Worker](app, wiring.Wiring()))
-    println(assembleRecord[wiring.App](app, wiring.Wiring(database: fake)))
     println(assemble[wiring.Worker](app, wiring.Wiring))
-    println(assemble[wiring.Worker](app, wiring.Wiring(database: alias)))
+    println(assembleRecord[wiring.App](app, (wiring.Wiring.0, fake, wiring.Wiring.2)))
+    println(assemble[wiring.Worker](app, wiring.Wiring))
+    println(assemble[wiring.Worker](app, (wiring.Wiring.0, alias, wiring.Wiring.2)))
     println(assemble[wiring.Good](app, wiring.Facts))
     println(assembleAll[wiring.Worker](app, wiring.RepeatedWorkers, wiring.RepeatedWorkers))
     fixture = wiring.Config { name: "fixture" }
-    println(assemble[wiring.Worker](app, wiring.Wiring(config: () => fixture)))
+    println(assemble[wiring.Worker](app, (() => fixture, wiring.Wiring.1, wiring.Wiring.2)))
     provider = fake
-    println(assemble[wiring.Worker](app, wiring.Wiring(database: provider)))
+    println(assemble[wiring.Worker](app, (wiring.Wiring.0, provider, wiring.Wiring.2)))
     println(assembleAll[wiring.Worker](app, wiring.Infrastructure, wiring.Workers, wiring.Extra, extra))
-    println(assemble[wiring.Worker](app, wiring.Wiring(database: databaseRecipe("db"), config: recipe("cfg"))))
+    databaseProvider = databaseRecipe("db")
+    configurationProvider = recipe("cfg")
+    println(assemble[wiring.Worker](app, (configurationProvider, databaseProvider, wiring.Wiring.2)))
     println(evaluate(app))
   }
 }

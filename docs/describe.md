@@ -56,15 +56,12 @@ applicable. Repeated edges share a provider ID and one invocation. The provider
 list retains source order, while `order` records construction order. Describe
 still requires a valid graph; broken graphs appear in compilation diagnostics.
 
-Bundled graph providers add optional `bundle`, `entry`, and `entry_position`
-fields. The tree labels each bundle entry and its actual replacement. Selecting a
-bundle declaration name, bundle reference, or specialization's opening parenthesis
-reports `type: "provider bundle"` and optional `provider_bundle` metadata:
-`name`, `definition`, and ordered `entries`. Entries expose `name`, `function`,
-`position`, `product`, `dependencies`, `effects`, `failures`, and optional
-`replaced`, plus `needs` for declared providers with ambient requirements. This describes static wiring; it has no value facts or root graph.
-Specializations describe the actual replacement contracts. Ordinary assembly
-selection continues to describe the complete flattened graph.
+Tuple graph providers add optional `tuple`, zero-based `index` and
+`element_position` fields. The tree labels each flattened position, such as
+`Services.1`. Literal provider positions identify the element; named/computed
+values identify the assembly use, with the defining element position when known.
+Tuple declarations and references have ordinary value types and package-binding
+metadata; assembly selection describes the complete flattened graph.
 
 Local lazy bindings report `lazy.kind: "binding"`, `initializer_effects` and
 known lexical capture names in JSON. Text output states that first read forces.

@@ -5,5 +5,5 @@ fn connect(s: Scope) uses io: Conn unsafe go {
   fmt.Println("open")
   return Conn{handle: "connection", owner: s.Own(func() { fmt.Println("close") })}
 }
-fn application(conn: Conn in s, s: Scope): App { App { first: conn, second: conn } }
-providers Wiring = { connection: connect, application: application }
+fn Application(conn: Conn in s, s: Scope): App { App { first: conn, second: conn } }
+Wiring = (connect,)

@@ -155,8 +155,8 @@ func TestRenameMultilineContextVariants(t *testing.T) {
 	}
 }
 
-func TestRenameUnusedProviderBundleReference(t *testing.T) {
-	src := "fn logFailures(): ScopePolicy { ScopePolicy.TaskTimeout { ms: 1 } }\nproviders Policies = { policy: logFailures }\n"
+func TestRenameUnusedTupleProviderReference(t *testing.T) {
+	src := "fn logFailures(): ScopePolicy { ScopePolicy.TaskTimeout { ms: 1 } }\nPolicies = (logFailures,)\n"
 	s, path := newTestServer(t, src)
 	result, err := s.feature("textDocument/rename", path, documentParams{Position: position{0, 4}, NewName: "ownPolicy"})
 	if err != nil {

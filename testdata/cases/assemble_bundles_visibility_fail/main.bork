@@ -1,6 +1,6 @@
 import "example.com/assemble-bundles-visibility/wiring"
-providers Invalid = { config: wiring.config }
-providers Number = { number: number }
+Invalid = (wiring.config,)
+Number = (number,)
 fn number(): Int { 1 }
 fn main() {
   scope app {

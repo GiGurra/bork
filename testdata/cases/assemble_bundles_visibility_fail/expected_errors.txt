@@ -1,4 +1,4 @@
-main.bork:2:31: provider bundle entry config: config is not exported by package example.com/assemble-bundles-visibility/wiring (only names starting with an upper-case letter are)
+main.bork:2:12: config is not exported by package example.com/assemble-bundles-visibility/wiring (only names starting with an upper-case letter are)
 main.bork:7:36: missing provider for Config, needed by target
 assembly assemble[wiring.Config]:
   wiring.Config ?? missing provider

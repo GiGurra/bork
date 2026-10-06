@@ -114,17 +114,7 @@ func API(info *Info, files []*syntax.File, path string) *PackageAPI {
 			add("instances", name, "", "instances "+name+" { "+strings.Join(names, ", ")+" }", bundle.decl.Pos)
 		}
 	}
-	for name, bundle := range pkg.providers {
-		if Exported(name) {
-			var entries []string
-			for _, e := range bundle.Entries {
-				signature := apiFunction(e.Func)
-				signature = strings.Replace(signature, "fn "+e.Func.Decl.Name, e.Decl.Name, 1)
-				entries = append(entries, signature)
-			}
-			add("providers", name, "", "providers "+name+" {\n  "+strings.Join(entries, "\n  ")+"\n}", bundle.Decl.Pos)
-		}
-	}
+
 	for name, a := range pkg.ambients {
 		if Exported(name) {
 			sig := "ambient " + name + ": " + writtenTypeText(a.Decl.Type)

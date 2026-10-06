@@ -1,0 +1,2 @@
+main.bork:9:31: assembly result must be positive, but that is not proven for result of test.Swap(Numbers, negative).0 (check it first with if (positive(result of test.Swap(Numbers, negative).0)) { ... })
+main.bork:16:33: assembly result must be positive, but that is not proven for result of providers.0 (check it first with if (positive(result of providers.0)) { ... })

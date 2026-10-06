@@ -1,0 +1,11 @@
+fn number(): Int { 1 }
+fn computed() uses io: (() => Int,) { println("build tuple"); (number,) }
+fn pure(s: Scope): Int { assemble[Int](s, computed()) }
+fn invalid(s: Scope) {
+  println(assemble[Int](s, ((number,),)))
+  println(assemble[Int](s, (1, number)))
+  println(assemble[Int](s, [number]))
+  mixed: (() => Int,) | String = "other"
+  println(assemble[Int](s, mixed))
+}
+fn main() {}

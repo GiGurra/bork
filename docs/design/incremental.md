@@ -305,7 +305,7 @@ Use edit sequences, not just two identical builds. At minimum cover:
 
 - Signature, type/alias/sealed-member, private-constructor and lifetime changes;
   ordinary body edits with unchanged contracts; declaration relocation.
-- Effects, ambient needs/order, provider bundles and higher-order contracts.
+- Effects, ambient needs/order, tuple provider values and higher-order contracts.
 - Fact promises, predicate/helper bodies and arguments, rules/conditions,
   newly added candidate instances and removed/failed lookup targets.
 - Declaring-package defaults in imported user packages (including unused invalid

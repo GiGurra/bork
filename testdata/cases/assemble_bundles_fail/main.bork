@@ -4,25 +4,25 @@ fn config(): Config { Config { name: "real" } }
 fn database(c: Config): Database { Database { name: c.name } }
 fn fake(): Database { Database { name: "fake" } }
 fn number(): Int { 1 }
-providers Wiring = { config: config, database: database }
-providers Configs = { config: config }
+Wiring = (config, database)
+Configs = (config,)
 type A = {}
 type B = {}
 fn a(dependency: B): A { A {} }
 fn b(dependency: A): B { B {} }
-providers Cycle = { a: a, b: b }
+Cycle = (a, b)
 fn main() {
   scope app {
-    println(assemble[Database](app, Wiring(database: fake)))
+    println(assemble[Database](app, (Wiring.0, fake)))
     println(assemble[Database](app, Wiring(unknown: fake)))
     println(assemble[Database](app, Wiring(database: fake, database: database)))
     println(assemble[Database](app, Wiring(database)))
     println(assemble[Database](app, Wiring[Int]()))
-    println(assemble[Database](app, Wiring(database: number)))
+    println(assemble[Database](app, (Wiring.0, number)))
     println(assemble[Database](app, Wiring, Configs))
     value = Wiring
     println(value)
-    Wiring()
+    Wiring
     println(assemble[A](app, Cycle))
   }
 }

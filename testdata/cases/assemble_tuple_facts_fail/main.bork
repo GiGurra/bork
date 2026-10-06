@@ -1,0 +1,19 @@
+import "bork/test"
+pred positive(n: Int) { n > 0 }
+type Positive = Int where positive
+fn number(): Int where positive { 5 }
+fn negative(): Int { -1 }
+Numbers = (number,)
+fn main() {
+  scope s {
+    println(assemble[Positive](s, test.Swap(Numbers, negative)))
+  }
+}
+
+fn changingProviders() uses io {
+  for (providers = (number,); false; providers = (negative,)) {
+    scope s {
+      println(assemble[Positive](s, providers))
+    }
+  }
+}

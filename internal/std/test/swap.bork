@@ -1,0 +1,11 @@
+// Swap replaces the uniquely matching element type in a tuple.
+// The compiler checks tuple shape and exact types at each direct call.
+fn Swap[T, R](tuple: T, replacement: R): T unsafe go {
+    panic("test.Swap requires compiler lowering")
+}
+
+// SwapAt replaces one position with a value of exactly the original type.
+// Index must be a pure compile-time Int constant.
+fn SwapAt[T, R](tuple: T, index: Int, replacement: R): T unsafe go {
+    panic("test.SwapAt requires compiler lowering")
+}

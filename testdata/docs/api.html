@@ -15,7 +15,6 @@
 <li><a href="#api-deff8f2d4b68c741462790fa">NonEmpty</a></li>
 <li><a href="#api-43e9e28367795d572ee5f376">Ordered</a></li>
 <li><a href="#api-aa863ad54ca565d9f0b7451c">Positive</a></li>
-<li><a href="#api-871de18a80b580a144a8e16d">Wiring</a></li>
 <li><a href="#api-078bdd1077b8d1cddd762cd6">Bounded</a></li>
 <li><a href="#api-5afee2a4aaff94e3b3969601">Computed</a></li>
 <li><a href="#api-81e92001c2c27222437bceeb">Count</a></li>
@@ -24,6 +23,7 @@
 <li><a href="#api-caced6860b1431b484b96406">Range</a></li>
 <li><a href="#api-f16d696fc72d432cd482bfb6">State</a></li>
 <li><a href="#api-b7b399bbbeab51692d04c03a">Version</a></li>
+<li><a href="#api-04d45a43f7a0d3856a31bc20">Wiring</a></li>
 </ul></li>
 </ul></nav>
 <main>
@@ -50,7 +50,7 @@
 <p class="source">Source: api.bork:8.</p>
 </article>
 <article id="api-52fc778a95a88ec5b6b93519"><h3>Identity</h3><pre><code>fn Identity[T: Show](value: T): T</code></pre>
-<p class="source">Source: api.bork:51.</p>
+<p class="source">Source: api.bork:52.</p>
 </article>
 <article id="api-e69df2014d84919627bbc710"><h3>Read</h3><pre><code>fn Read(value: Count) where (value &lt; 100) uses io needs Trace?: Count</code></pre>
 <p>Read keeps its positive input and uses the optional trace.<br>
@@ -78,11 +78,6 @@ Its documentation contains &lt;script&gt;literal text&lt;/script&gt;.</p>
 <article id="api-aa863ad54ca565d9f0b7451c"><h3>Positive</h3><pre><code>pred Positive(n: Int)</code></pre>
 <p>Positive is the promise used by Count.</p>
 <p class="source">Source: api.bork:4.</p>
-</article>
-<article id="api-871de18a80b580a144a8e16d"><h3>Wiring</h3><pre><code>providers Wiring {
-  number(n: Int = 7) where (n &gt; 0) uses io needs Trace?: Int
-}</code></pre>
-<p class="source">Source: api.bork:49.</p>
 </article>
 <article id="api-078bdd1077b8d1cddd762cd6"><h3>Bounded</h3><pre><code>type Bounded = Int where Above((1 + 1))</code></pre>
 <p class="source">Source: api.bork:7.</p>
@@ -127,7 +122,10 @@ Its documentation contains &lt;script&gt;literal text&lt;/script&gt;.</p>
 <p class="source">Source: api.bork:26.</p>
 </article>
 <article id="api-b7b399bbbeab51692d04c03a"><h3>Version</h3><pre><code>Version: Int</code></pre>
-<p class="source">Source: api.bork:52.</p>
+<p class="source">Source: api.bork:53.</p>
+</article>
+<article id="api-04d45a43f7a0d3856a31bc20"><h3>Wiring</h3><pre><code>Wiring: (() uses io =&gt; Int,)</code></pre>
+<p class="source">Source: api.bork:50.</p>
 </article>
 </section>
 </main></body></html>

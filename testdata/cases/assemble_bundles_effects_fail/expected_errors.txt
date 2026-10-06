@@ -1,1 +1,1 @@
-main.bork:3:29: pure uses io (it calls label), but its signature allows no effects; declare it: uses io
+main.bork:4:43: pure uses io (it calls __assembly1_provider0), but its signature allows no effects; declare it: uses io

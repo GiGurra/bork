@@ -280,15 +280,6 @@
           "type": "ALIAS",
           "content": {
             "type": "STRING",
-            "value": "providers"
-          },
-          "named": true,
-          "value": "identifier"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "STRING",
             "value": "comptime"
           },
           "named": true,
@@ -395,10 +386,6 @@
           {
             "type": "SYMBOL",
             "name": "instances_declaration"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "providers_declaration"
           },
           {
             "type": "SYMBOL",
@@ -2852,85 +2839,6 @@
                           "type": "BLANK"
                         }
                       ]
-                    }
-                  ]
-                },
-                {
-                  "type": "CHOICE",
-                  "members": [
-                    {
-                      "type": "CHOICE",
-                      "members": [
-                        {
-                          "type": "STRING",
-                          "value": ","
-                        },
-                        {
-                          "type": "STRING",
-                          "value": ";"
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "_newline"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "BLANK"
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "type": "STRING",
-            "value": "}"
-          }
-        ]
-      }
-    },
-    "providers_declaration": {
-      "type": "PREC_DYNAMIC",
-      "value": 10,
-      "content": {
-        "type": "SEQ",
-        "members": [
-          {
-            "type": "STRING",
-            "value": "providers"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "_identifier"
-          },
-          {
-            "type": "STRING",
-            "value": "="
-          },
-          {
-            "type": "STRING",
-            "value": "{"
-          },
-          {
-            "type": "REPEAT",
-            "content": {
-              "type": "SEQ",
-              "members": [
-                {
-                  "type": "SEQ",
-                  "members": [
-                    {
-                      "type": "SYMBOL",
-                      "name": "_identifier"
-                    },
-                    {
-                      "type": "STRING",
-                      "value": ":"
-                    },
-                    {
-                      "type": "SYMBOL",
-                      "name": "qualified_name"
                     }
                   ]
                 },
@@ -6939,10 +6847,6 @@
     [
       "_identifier",
       "comptime_expression"
-    ],
-    [
-      "_identifier",
-      "providers_declaration"
     ],
     [
       "_identifier",

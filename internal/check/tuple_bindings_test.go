@@ -19,6 +19,8 @@ func TestTupleBindingRules(t *testing.T) {
 		{"unread replacement", `fn main() { (a, _) = (1, 2); (a, _) = (3, 4); println(a) }`, "binding.unused", 1},
 		{"unread member", `fn main() { (a, b) = (1, 2); println(a) }`, "binding.unused", 1},
 		{"context variant is refutable", `type Choice = sealed { On, Off }; fn main() { (.On,) = (Choice.On,) }`, "type.error", 1},
+		{"arity metadata recovery", `fn main() { (_, _, _) = (1, 2) }`, "type.error", 1},
+		{"nested arity metadata recovery", `fn main() { (_, (_, _, _)) = (1, (2, 3)) }`, "type.error", 1},
 		{"discard", `fn main() { (_, (_, _)) = (1, (2, 3)) }`, "", 0},
 		{"typed tuple discard match", `fn f(value: (Int,) | String): Int { match (value) { _: (Int,) => 1; String => 0 } }`, "", 0},
 	} {

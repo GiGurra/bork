@@ -3918,25 +3918,6 @@
     }
   },
   {
-    "type": "providers_declaration",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "qualified_name",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "qualified_name",
     "named": true,
     "fields": {},
@@ -5359,10 +5340,6 @@
         },
         {
           "type": "predicate_declaration",
-          "named": true
-        },
-        {
-          "type": "providers_declaration",
           "named": true
         },
         {
@@ -6973,10 +6950,6 @@
   },
   {
     "type": "propagated",
-    "named": false
-  },
-  {
-    "type": "providers",
     "named": false
   },
   {

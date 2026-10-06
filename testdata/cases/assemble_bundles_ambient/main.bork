@@ -2,6 +2,6 @@ import "example.com/assemble_bundles_ambient/wiring"
 ambient Prefix: String
 fn main() {
   with (wiring.Prefix: "library", Prefix: "caller") {
-    scope s { println(assemble[wiring.Label](s, wiring.Wiring)) }
+    scope s { println(assemble[wiring.Label](s, wiring.Providers())) }
   }
 }

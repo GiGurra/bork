@@ -1,4 +1,4 @@
 ambient Prefix: String
 type Label = { name: String }
 fn label() needs Prefix: Label { Label { name: Prefix } }
-providers Wiring = { label: label }
+fn Providers() needs Prefix: (() => Label,) { (label,) }

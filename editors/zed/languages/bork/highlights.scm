@@ -26,7 +26,7 @@
 (interpolated_string prefix: (qualified_name (identifier) @function))
 ["fn" "pred" "type" "sealed" "unsafe" "where" "and" "or" "trust" "rule"
  "generate" "yield" "for" "break" "continue" "if" "else" "return" "match"
- "import" "use" "class" "instance" "instances" "providers" "test" "private"
+ "import" "use" "class" "instance" "instances" "test" "private"
  "derive" "uses" "needs" "ambient" "logged" "propagated" "lazy" "async"
  "scope" "with" "in" "resource" "go" "comptime" "mock" "select"] @keyword
 ["&" "^" "<<" ">>" "+" "-" "*" "/" "%" "!" "&&" "||" "==" "!=" "<" "<=" ">" ">=" "|>" "|" "=>" "=" "?"] @operator

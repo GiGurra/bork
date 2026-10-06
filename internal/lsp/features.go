@@ -187,9 +187,7 @@ func symbols(path, src string) []any {
 	for _, binding := range file.Bindings {
 		add(binding.Name, 13, binding.Pos)
 	}
-	for _, bundle := range file.Providers {
-		add(bundle.Name, 13, bundle.NamePos)
-	}
+
 	return out
 }
 func (s *server) codeActions(path string, p documentParams) []any {

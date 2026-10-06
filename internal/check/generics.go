@@ -749,6 +749,13 @@ func (c *checker) callValue(e *syntax.Call) Type {
 func (c *checker) callFuncValue(e *syntax.Call, t Type) Type {
 	c.rejectNamedArgs(e, "function types do not carry parameter names; call the declaration directly")
 	ft, ok := t.(*FuncType)
+	if tuple, tupleValue := t.(*Record); tupleValue && tuple.Tuple {
+		c.diags.AddCode(e.Fun.Position(), "migration.providers-call", "tuple values are not specialized by calls; use test.Swap/SwapAt or an explicit tuple literal. Swap requires the exact element type, unlike changed-signature specialization. See docs/language/packages.md")
+		for _, arg := range e.Args {
+			c.expr(arg)
+		}
+		return Invalid
+	}
 	if !ok {
 		if t != Invalid {
 			if id, ok := e.Fun.(*syntax.Ident); ok && c.lookup(id.Name) != nil && c.preludePkg.Funcs[id.Name] != nil {

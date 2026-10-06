@@ -1,1 +1,1 @@
-wiring/wiring.bork:4:29: scenario reads wiring.Prefix (it calls label), but its signature does not provide it; declare it: needs wiring.Prefix, or bind it: with (wiring.Prefix: ...) { ... }
+wiring/wiring.bork:4:11: package value Wiring reads Prefix (it calls label), but its signature does not provide it; declare it: needs Prefix, or bind it: with (Prefix: ...) { ... }

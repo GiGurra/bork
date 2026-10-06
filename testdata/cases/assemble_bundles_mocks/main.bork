@@ -7,13 +7,13 @@ fn database(c: Config, s: Scope) uses io: Database | Failure {
   println("real database")
   panic("provider mock did not intercept")
 }
-providers Wiring = { config: config, database: database }
+Wiring = (config, database)
 fn main() {}
 test "bundle providers retain native mock dispatch" {
   calls = mock database(c, s) { Database { name: c.name } }
   scope app {
     assertEqual(assemble[Database](app, Wiring), Database { name: "real" })
-    task = spawn(app, () => assemble[Database](app, Wiring(config: () => Config { name: "task" })))
+    task = spawn(app, () => assemble[Database](app, (() => Config { name: "task" }, Wiring.1)))
     assertEqual(await(task), Database { name: "task" })
     assertEqual(calls.count(), 2)
   }
@@ -23,7 +23,7 @@ test "a bundled mock can fail through the result union" {
   scope app { assertEqual(assemble[Database](app, Wiring), Failure { message: "fake failure" }) }
 }
 
-providers Clock = { now: time.Now }
+Clock = (time.Now,)
 test "an imported bundled provider retains native mock dispatch" {
   mock time.Now() { time.Instant { unixNanos: 42 } }
   scope app { assertEqual(assemble[time.Instant](app, Clock).unixNanos, 42) }

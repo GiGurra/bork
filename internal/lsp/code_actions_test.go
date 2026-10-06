@@ -33,6 +33,7 @@ func parallelProtocolFixture(t *testing.T) *driver.Session {
 
 func TestDiagnosticActionsCheckAndFormat(t *testing.T) {
 	for _, tc := range []struct{ name, source, title, want string }{
+		{"provider migration", "fn first(): Int { 1 }\nfn second(): Int { 2 }\nproviders Wiring = {\n // keep first\n one: first\n // keep second\n two: second\n}\nfn main() {}\n", "replace provider declaration with tuple package value", "Wiring = ("},
 		{"boolean", "fn choose(x: Bool): Int { match (x) { true => 1 } }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
 		{"empty", "fn choose(x: Bool): Int { match (x) {} }\nfn main() {}\n", "Add missing match arms", "false => todo()"},
 		{"union", "fn choose(x: Int | String): Int { match (x) { n: Int => n } }\nfn main() {}\n", "Add missing match arms", "_: String => todo()"},

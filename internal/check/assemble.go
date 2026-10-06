@@ -22,14 +22,14 @@ type Assembly struct {
 }
 
 type AssemblyProvider struct {
-	Bundle        string               `json:"bundle,omitempty"`
-	Entry         string               `json:"entry,omitempty"`
-	EntryPosition *diag.Pos            `json:"entry_position,omitempty"`
-	ID            int                  `json:"id"`
-	Label         string               `json:"label"`
-	Position      diag.Pos             `json:"position"`
-	Product       string               `json:"product"`
-	Dependencies  []AssemblyDependency `json:"dependencies"`
+	Tuple           string               `json:"tuple,omitempty"`
+	Index           *int                 `json:"index,omitempty"`
+	ElementPosition *diag.Pos            `json:"element_position,omitempty"`
+	ID              int                  `json:"id"`
+	Label           string               `json:"label"`
+	Position        diag.Pos             `json:"position"`
+	Product         string               `json:"product"`
+	Dependencies    []AssemblyDependency `json:"dependencies"`
 }
 
 type AssemblyDependency struct {
@@ -46,25 +46,28 @@ type AssemblyRoot struct {
 }
 
 type assemblyProvider struct {
-	bundle, entry string
-	entryPos      diag.Pos
-	expected      Type
-	eval          int
-	x             syntax.Expr
-	fn            *Func
-	typ           *FuncType
-	product       Type
-	errors        []Type
-	deps          []int
-	names         []string
-	state         int
-	used          bool
+	tuple      syntax.Expr
+	tupleIndex int
+	origin     string
+	elementPos diag.Pos
+	eval       int
+	x          syntax.Expr
+	fn         *Func
+	inst       *Instance
+	typ        *FuncType
+	product    Type
+	errors     []Type
+	deps       []int
+	names      []string
+	state      int
+	used       bool
 }
 
 func (p *assemblyProvider) label() string {
-	if p.bundle != "" {
-		return p.bundle + "." + p.entry + " (" + writtenText(p.x) + ")"
+	if p.tuple != nil {
+		return fmt.Sprintf("%s.%d", p.origin, p.tupleIndex)
 	}
+
 	return writtenText(p.x)
 }
 
@@ -126,7 +129,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 	for i, p := range c.providerInputs(call.Args[1:]) {
 		x := p.x
 		// Direct references retain declaration facts and become direct calls.
-		if id, ok := x.(*syntax.Ident); ok && p.fn == nil && c.lookup(id.Name) == nil {
+		if id, ok := x.(*syntax.Ident); ok && p.tuple == nil && p.fn == nil && c.lookup(id.Name) == nil {
 			if fn, ok := c.funcNamed(id.Name); ok {
 				if len(fn.TypeParams) > 0 {
 					g.problem("provider", x.Position(), "provider #%d %s is generic; use a monomorphic adapter", i+1, id.Name)
@@ -136,11 +139,15 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 				p.fn, p.typ = fn, fn.funcType()
 			}
 		}
-		if p.typ == nil {
+		if p.typ == nil && p.tuple == nil {
 			p.typ, _ = c.expr(x).(*FuncType)
 		}
 		if p.typ == nil {
-			g.problem("provider", x.Position(), "provider #%d must be a function with a concrete signature", i+1)
+			label := fmt.Sprintf("provider #%d", i+1)
+			if p.tuple != nil {
+				label += " " + p.label()
+			}
+			g.problem("provider", x.Position(), "%s must be a function with a concrete signature", label)
 			g.providers = append(g.providers, p)
 			continue
 		}
@@ -148,9 +155,7 @@ func (c *checker) assemble(call *syntax.Call, mode string) Type {
 		if u, ok := p.product.(*Union); ok {
 			p.product, p.errors = u.Members[0], u.Members[1:]
 		}
-		if p.expected != nil && !identical(p.product, p.expected) {
-			g.problem("bundle", x.Position(), "replacement for %s.%s must produce %s, found %s", p.bundle, p.entry, TypeText(p.expected, c.pkg), TypeText(p.product, c.pkg))
-		}
+
 		if p.product == Scope || assemblyOwner(p.product) || p.product == Ok || p.product == Never || p.product == Invalid || !isValue(p.product) || c.open(p.typ) || hasTypeParam(p.typ) || hasOpenEffects(p.typ) {
 			g.problem("provider", x.Position(), "provider #%d has unsupported signature %s", i+1, p.typ)
 			p.product = nil
@@ -379,9 +384,13 @@ func (g *assemblyGraph) describe(mode string, result Type) *Assembly {
 			product = TypeText(p.product, g.c.pkg)
 		}
 		out := AssemblyProvider{ID: i + 1, Label: p.label(), Position: p.x.Position(), Product: product, Dependencies: []AssemblyDependency{}}
-		if p.bundle != "" {
-			out.Bundle, out.Entry, out.EntryPosition = p.bundle, p.entry, &p.entryPos
+		if p.tuple != nil {
+			out.Tuple, out.Index = p.origin, &p.tupleIndex
+			if p.elementPos.File != "" {
+				out.ElementPosition = &p.elementPos
+			}
 		}
+
 		if p.typ != nil {
 			for j, t := range p.typ.Params {
 				out.Dependencies = append(out.Dependencies, AssemblyDependency{Name: p.names[j], Type: TypeText(t, g.c.pkg), Provider: p.deps[j] + 1, Scope: t == Scope})
@@ -481,9 +490,19 @@ func (g *assemblyGraph) expand() *syntax.Block {
 		indices[i] = i
 	}
 	slices.SortFunc(indices, func(a, b int) int { return g.providers[a].eval - g.providers[b].eval })
+	tuples := map[int]bool{}
 	for _, i := range indices {
 		p := g.providers[i]
-		if p.fn == nil {
+		if p.tuple != nil {
+			if !tuples[p.eval] {
+				tuples[p.eval] = true
+				binding := &syntax.Binding{Pos: p.tuple.Position(), Name: prefix + fmt.Sprintf("tuple%d", p.eval), Value: p.tuple}
+				c.info.assemblyNames[binding] = p.origin
+				block.Stmts = append(block.Stmts, binding)
+			}
+			field := &syntax.Selector{Pos: p.x.Position(), X: id(fmt.Sprintf("tuple%d", p.eval)), Name: fmt.Sprint(p.tupleIndex)}
+			block.Stmts = append(block.Stmts, &syntax.Binding{Pos: p.x.Position(), Name: prefix + fmt.Sprintf("provider%d", i), Value: field})
+		} else if p.fn == nil {
 			block.Stmts = append(block.Stmts, &syntax.Binding{Pos: p.x.Position(), Name: prefix + fmt.Sprintf("provider%d", i), Value: p.x})
 		}
 	}
@@ -517,19 +536,17 @@ func (g *assemblyGraph) expand() *syntax.Block {
 		i := g.order[n]
 		p := g.providers[i]
 		fun := p.x
-		if p.fn != nil && p.bundle != "" {
-			ref := id(fmt.Sprintf("function%d", i))
-			ref.Pos = p.x.Position()
-			if c.assemblyFuncs == nil {
-				c.assemblyFuncs = map[string]*Func{}
-			}
-			c.assemblyFuncs[ref.Name] = p.fn
-			fun = ref
-		}
-		if p.fn == nil {
+
+		if p.fn == nil || p.tuple != nil {
 			fun = id(fmt.Sprintf("provider%d", i))
 		}
 		call := &syntax.Call{Pos: p.x.Position(), End: g.call.End, Fun: fun}
+		if p.tuple != nil && p.inst != nil {
+			if c.info.assemblyValueCalls == nil {
+				c.info.assemblyValueCalls = map[*syntax.Call]*Instance{}
+			}
+			c.info.assemblyValueCalls[call] = p.inst
+		}
 		for j, t := range p.typ.Params {
 			if t == Scope {
 				call.Args = append(call.Args, id("scope"))
