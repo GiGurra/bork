@@ -37,15 +37,16 @@ type Role = sealed {
 ```
 
 The encoded value as JSON:
-`{"user_name":"ada","login":"a1","role":{"type":"member"}}`.
+`{"user_name":"ada","login":"a1","role":"member"}`. A payload-less sealed type
+encoding as a bare string is pending the `enums` design (#409); today it
+would be `{"type":"member"}`.
 
 The same value as YAML:
 
 ```yaml
 user_name: ada
 login: a1
-role:
-  type: member
+role: member
 ```
 
 ## Today
@@ -209,6 +210,11 @@ nothing format-specific in codec. Points for YAML:
   allowed as wire names. `bork/yaml` reads keys by their text, so decoding
   works. The renderer must quote them; round-trip tests will check that.
 - **`<<`** is rejected as a wire name (see the checks above).
+- **Variant tags that YAML reads as other scalars.** A variant wire name or
+  alias such as `true`, `false`, `null`, `~`, `on` or `off` is a compile
+  error. As a bare-string value, hand-written YAML `role: null` would read as
+  Null, not as the tag. Object keys don't have this problem, because keys are
+  read by their text.
 - **Merge keys and aliases.** In YAML a mapping's own key overrides the same
   key from a merged anchor. Codec only sees the merged `codec.Value`, so if
   an anchor supplies the alias `user` and the mapping writes `login`, decoding
@@ -275,9 +281,8 @@ forward compatibility. To keep the two designs consistent:
   It receives any tag that matches no wire name or alias, and re-encodes that
   tag unchanged. These are compile-time errors: more than one fallback, a
   name or aliases on the fallback, and a fallback whose payload is not a
-  single String (for enum-shaped types) or a single `codec.Value` (for
-  payload-carrying types, pending the human; see
-  [enums.md](https://github.com/GiGurra/bork/pull/409)). The type's invariant
+  single String. A `codec.Value` payload for payload-carrying types is later;
+  see [enums.md](https://github.com/GiGurra/bork/pull/409). The type's invariant
   says that a fallback's String is never a wire name or alias.
 - A sealed type whose variants all have no payload encodes as a bare string
   (`"red"`), not `{"type":"red"}`. That is the `enums` design. Decode already
