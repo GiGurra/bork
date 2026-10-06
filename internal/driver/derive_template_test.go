@@ -2513,3 +2513,111 @@ fn main() {}`,
 		t.Fatalf("expected lexical helper parameter mismatch, got %v", err)
 	}
 }
+
+func TestDeriveTemplateUnrequestedSymbolicBranchContexts(t *testing.T) {
+	checkPreludeSource(t, `derive fn unused[T](value: List[T], flag: Bool): Map[String, T] { if (flag) { value } else { {:} } }
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T], flag: Bool): Map[String, T] { match (flag) { true => value; false => {:} } }
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): String { if (value) { "yes" } else { "no" } }
+fn main() {}`, "derive expression must be Bool, found List[T]")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicLambdaContexts(t *testing.T) {
+	checkPreludeSource(t, `fn consume[A](check: (List[A]) => Map[String, A]): String { "ok" }
+derive fn unused[T](): String { consume[T](value => value) }
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `fn consume[A](check: (List[A]) => Map[String, A]): String { "ok" }
+derive fn unused[T](): String { consume[T]((value: Map[String, T]) => value) }
+fn main() {}`, "derive parameter value must be List[T], found Map[String, T]")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): String {
+ callback: (List[T]) => Map[String, T] = item => item
+ "ok"
+}
+fn main() {}`, "derive expression must be Map[String, T], found List[T]")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): String {
+ callback: (List[T]) => Map[String, T] = item => {:}
+ result: List[T] = callback(value)
+ "ok"
+}
+fn main() {}`, "derive expression must be List[T], found Map[String, T]")
+	checkPreludeSource(t, `derive fn unused[T](): String {
+ callback: (List[T]) => Map[String, T] = (left, right) => {:}
+ "ok"
+}
+fn main() {}`, "expected a function taking 1 argument(s), but this lambda takes 2")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicContextIndependentLeaves(t *testing.T) {
+	checkPreludeSource(t, `derive fn unused[T](): String { callback: (List[T]) => String = item => 1; "ok" }
+fn main() {}`, "derive expression must be String, found Int")
+	checkPreludeSource(t, `derive fn unused[T](): String { callback: (List[T]) => String = item => true; "ok" }
+fn main() {}`, "derive expression must be String, found Bool")
+	checkPreludeSource(t, `derive fn unused[T](): String { callback: (Int, List[T]) => Int = (number, item) => if (number) { 1 } else { 2 }; "ok" }
+fn main() {}`, "derive expression must be Bool, found Int")
+	checkPreludeSource(t, `derive fn text[A](value: A): String { "x" }
+derive fn unused[T](value: T): String { if (text[T](value)) { "yes" } else { "no" } }
+fn main() {}`, "derive expression must be Bool, found String")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): String {
+ callback: (List[T]) => String = item => "ok"
+ if (callback(value)) { "yes" } else { "no" }
+}
+fn main() {}`, "derive expression must be Bool, found String")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicLocalCallSingleDiagnostic(t *testing.T) {
+	dir := validatorFixture(t, `derive fn unused[T](): String {
+ callback: (Map[String, T]) => String = item => "ok"
+ callback(["wrong"])
+}
+fn main() {}`)
+	_, _, err := Check(dir)
+	if err == nil || strings.Count(err.Error(), "derive expression must be Map[String, T], found List[String]") != 1 {
+		t.Fatalf("expected one symbolic local-call diagnostic, got %v", err)
+	}
+}
+
+func TestDeriveTemplateUnrequestedSymbolicLocalCallIndependentArguments(t *testing.T) {
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): String {
+ callback: (Int, List[T]) => String = (number, items) => "ok"
+ callback("wrong", value)
+}
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): String {
+ callback: (Int, List[T]) => String = (number, items) => "ok"
+ bad = "wrong"
+ callback(bad, value)
+}
+fn main() {}`, "derive expression must be Int, found String")
+	checkPreludeSource(t, `derive fn unused[T](value: List[T]): String {
+ callback: (Int, List[T]) => String = (number: String, items) => "ok"
+ "ok"
+}
+fn main() {}`, "parameter number must be Int here, found String")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicOkLambdaContext(t *testing.T) {
+	checkPreludeSource(t, `derive fn unused[T](): String { callback: (List[T]) => Ok = items => true; "ok" }
+fn main() {}`, "")
+	checkPreludeSource(t, `fn consume[A](callback: (List[A]) => Ok): String { "ok" }
+derive fn unused[T](): String { consume[T](items => items) }
+fn main() {}`, "")
+}
+
+func TestDeriveTemplateUnrequestedSymbolicContextDescriptorKinds(t *testing.T) {
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): String { callback: (shape.Field[T]) => String = field => field.nonexistent; "ok" }
+fn main() {}`, "shape descriptor has no member nonexistent")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): String { callback: (shape.Variant[T]) => String = variant => variant.nonexistent; "ok" }
+fn main() {}`, "shape descriptor has no member nonexistent")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): String { callback: (shape.Fact[T]) => String = fact => fact.nonexistent; "ok" }
+fn main() {}`, "shape descriptor has no member nonexistent")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): String { callback: (List[shape.Field[T]]) => String = fields => fields.nonexistent; "ok" }
+fn main() {}`, "shape descriptor has no member nonexistent")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): String { callback: (shape.Field[T]) => String = field => field.name; "ok" }
+fn main() {}`, "")
+}

@@ -342,3 +342,58 @@ func deriveTermArgument(call *syntax.Call, index int, params []*deriveTypeTerm, 
 }
 
 var _ fmt.Stringer = (*deriveTypeTerm)(nil)
+
+// Only closed terms can become ordinary definition-time contexts. Dependent
+// targets/projections never acquire a runtime stand-in or a value proof.
+func deriveConcreteTermType(term *deriveTypeTerm) Type {
+	if term == nil || term.dependent {
+		return nil
+	}
+	if term.native != nil {
+		return term.native
+	}
+	children := make([]Type, len(term.args))
+	for i, arg := range term.args {
+		children[i] = deriveConcreteTermType(arg)
+		if children[i] == nil {
+			return nil
+		}
+	}
+	switch term.head {
+	case "List":
+		if len(children) == 1 {
+			return &List{Elem: children[0]}
+		}
+	case "Map":
+		if len(children) == 2 {
+			return &Map{Key: children[0], Value: children[1]}
+		}
+	case "tuple":
+		return tupleType(children)
+	}
+	return nil
+}
+
+func deriveTermDescriptor(term *deriveTypeTerm) deriveDescriptor {
+	if term == nil {
+		return 0
+	}
+	if term.head == "List" && len(term.args) == 1 {
+		if element := deriveTermDescriptor(term.args[0]); element >= deriveField && element <= deriveFact {
+			return element - deriveField + deriveFields
+		}
+		return 0
+	}
+	if len(term.args) != 1 {
+		return 0
+	}
+	switch term.head {
+	case "bork/shape.Field":
+		return deriveField
+	case "bork/shape.Variant":
+		return deriveVariant
+	case "bork/shape.Fact":
+		return deriveFact
+	}
+	return 0
+}
