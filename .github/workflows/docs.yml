@@ -34,7 +34,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/playground/package-lock.json
       - run: pip install -r scripts/docs-requirements.txt
-      - run: python -m unittest discover -s scripts -p 'test_docs_site.py'
+      - run: python -m unittest discover -s scripts -p 'test_*docs*.py'
       - name: Build documentation
         env:
           BORK_DOCS_REVISION: ${{ github.sha }}
