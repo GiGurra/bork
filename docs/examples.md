@@ -33,6 +33,7 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | [derive_labels](../examples/derive_labels/README.md) | A custom class derived from field metadata, including a generic record | `bork run examples/derive_labels` |
 | [comptime](../examples/comptime/README.md) | A lookup table and a validated configuration file, both computed while compiling | `bork run examples/comptime` |
 | [sql_interpolation](../examples/sql_interpolation/README.md) | Typed SQL literals: bound values, quoted names, and composed fragments | `bork run examples/sql_interpolation` |
+| [record_conversion](../examples/record_conversion/main.bork) | Record conversion with `into`: dropped fields, defaults, overrides, failures, and private targets with invariants | `bork run examples/record_conversion` |
 | [config](../examples/config/README.md) | Field defaults, named arguments, and a record only its own package can construct | `bork run examples/config` |
 | [mocking](../examples/mocking/main.bork) | Tests that replace the network and the clock with mocks | `bork run examples/mocking` |
 | [assemble](../examples/assemble/main.bork) | Wiring a database and an HTTP service together from provider functions | `bork run examples/assemble` |

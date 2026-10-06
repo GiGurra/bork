@@ -1,0 +1,49 @@
+// Run with: bork run examples/record_conversion
+
+pred nonEmpty(text: String) { text.byteLength() > 0 }
+
+type Address = { city: String, country: String }
+type User = {
+  id: Int,
+  name: String where nonEmpty,
+  passwordHash: String,
+  address: Address,
+}
+
+type AddressDto = { city: String }
+
+// Only this package can construct UserDto, including through into.
+// Each conversion must prove the completed record's invariant.
+type UserDto = private {
+  id: Int,
+  displayName: String,
+  address: AddressDto,
+  active: Bool = true,
+} where named
+
+pred named(user: UserDto) { nonEmpty(user.displayName) }
+
+// parseInt returns Int | ParseError. Since id accepts only Int,
+// into returns UserDto | ParseError without needing ? here.
+fn withId(user: User, text: String): UserDto | ParseError {
+  user.into[UserDto](displayName: user.name, id: parseInt(text))
+}
+
+fn main() {
+  user = User {
+    id: 1,
+    name: "Ada",
+    passwordHash: "secret",
+    address: Address { city: "London", country: "UK" },
+  }
+
+  // Rename name explicitly; drop passwordHash and address.country.
+  // The absent active field takes its target default.
+  println("public:", user.into[UserDto](displayName: user.name))
+
+  // Update one nested field while converting its parent record.
+  println("moved:", user.into[UserDto](displayName: user.name, address.city: "Oslo"))
+
+  println("parsed id:", withId(user, "42"))
+  println("invalid id:", withId(user, "oops"))
+}

@@ -108,6 +108,10 @@ fn main() {
 }
 ```
 
+See the runnable [record conversion example](../../examples/record_conversion/main.bork) for defaults,
+renamed and nested overrides, fallible conversions, and a private target with a
+whole-record invariant. Run it with `bork run examples/record_conversion`.
+
 ### Shorthand when the type is known
 
 Where the expected type is already known, `.{ ... }` builds the record without repeating its name:
@@ -373,6 +377,54 @@ fn main() {
 ```
 
 The compiler checks these rules wherever a `Range` is built or copied, so every `Range` in the program satisfies them. Writing `Range { lo: 10, hi: 1 }` does not compile. See [facts](facts.md).
+
+## Typed package tags
+
+A package can define `FieldTags`, `VariantTags`, and `TypeTags` records to
+configure derivation. Write its tag group after a field, variant, or type body.
+The compiler checks the entries as a record literal, including defaults and
+field rules. Values must be closed, like field defaults. Each package can have
+one group at a given declaration; different packages can have separate groups.
+
+```bork
+import "bork/codec"
+import "bork/json"
+use codec.Defaults
+
+type User = {
+  userID: String codec { name: "login", aliases: ["oldLogin"] }
+} codec { unknown: codec.Unknown.Reject } derive (codec.Encode, codec.Decode)
+
+type Role = sealed {
+  SiteAdmin
+  ReadOnly codec { name: "READER" }
+} derive (codec.Encode, codec.Decode)
+
+fn main() {
+  println(json.Render(codec.encode(User { userID: "42" })))
+  println(json.Render(codec.encode(Role.SiteAdmin)))
+  println(json.Render(codec.encode(Role.ReadOnly)))
+}
+```
+
+```text
+{"login":"42"}
+"SITE_ADMIN"
+"READER"
+```
+
+Source field and variant names remain unchanged in the program. Codec tags
+control wire names and decode-only aliases; payload-free enums use UPPER_SNAKE
+names by default. See [codec](../std/codec.md#wire-names) for naming policies,
+omission and unknown keys.
+
+A tag group must start on the same line as its declaration, although its body
+can span lines. The package name resolves through its import alias, or to the
+current package. Resource and alias types do not accept typed tag groups.
+`go { ... }` groups keep their String-valued Go struct-tag syntax. Derive
+templates read checked groups with `field.tagged[M]()`, `variant.tagged[M]()`,
+`shape.tagged[T, M]()`, or the field's `tagGroups` descriptors; see
+[shape](../std/shape.md#fields-facts-and-tags).
 
 ## Controlling construction
 
