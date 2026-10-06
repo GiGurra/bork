@@ -111,15 +111,16 @@ fn main() {
         query(move(own, w), "moved in a lambda")
       }
       println(viaLambda())
-      launch(w, () => {
-        own = connect("task", app)
-        _ = move(own, w)
-      })
       lines = generate[String] {
         own = connect("generator", app)
         yield query(move(own, w), "moved in a generator")
       }
       println(lines.toList())
+      // Launched last, so that its output follows the generator's.
+      launch(w, () => {
+        own = connect("task", app)
+        _ = move(own, w)
+      })
     }
     // A task that ended with its scope block no longer pins.
     scope s {
