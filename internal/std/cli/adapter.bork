@@ -51,6 +51,7 @@ fn parseInput(name: String, description: String, args: List[String], specs: List
 }
 fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schema: List[inputField], configFiles: List[String], parse: (String) => codec.Value | codecs.JsonError, makeName: (String) => String, completions: List[Completion], invoke: (Completion, CompletionRequest) uses io + net + clock + random + state => Suggestions | Error, s: Scope): adapter | Error unsafe go {
   import "fmt"
+  import "path/filepath"
   import "reflect"
   import "sort"
   import "strconv"
@@ -141,21 +142,28 @@ fn buildAdapter(name: String, description: String, specs: List[FieldSpec], schem
         if path != "" { files = append(files, path) }
       }
       config := map[string]codec.Value{}
-      err := boa.LoadConfigFiles(files, &config, func(data []byte, target any) error {
-        parsed := parse(string(data))
-        if err, bad := parsed.(codecs.JsonError); bad { return fmt.Errorf("%s", err.message) }
-        object, ok := parsed.(codec.Value_Object)
-        if !ok { return fmt.Errorf("CLI config must be a JSON object") }
-        values := target.(*map[string]codec.Value)
-        for _, entry := range object.fields {
-          known := false
-          for _, field := range schema { if field.field == entry.name { known = true; break } }
-          if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
-          if !metadata[entry.name].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
-          (*values)[entry.name] = entry.value
-        }
-        return nil
-      })
+      var err error
+      for _, path := range files {
+        extension := strings.ToLower(filepath.Ext(path))
+        isYaml := extension == ".yaml" || extension == ".yml"
+        err = boa.LoadConfigFiles([]string{path}, &config, func(data []byte, target any) error {
+          var parsed any
+          if isYaml { parsed = parseYamlConfig(string(data)) } else { parsed = parse(string(data)) }
+          if err, bad := parsed.(codecs.JsonError); bad { return fmt.Errorf("%s", err.message) }
+          object, ok := parsed.(codec.Value_Object)
+          if !ok { if isYaml { return fmt.Errorf("CLI config must be a YAML object") }; return fmt.Errorf("CLI config must be a JSON object") }
+          values := target.(*map[string]codec.Value)
+          for _, entry := range object.fields {
+            known := false
+            for _, field := range schema { if field.field == entry.name { known = true; break } }
+            if !known { return fmt.Errorf("unknown CLI config field %q", entry.name) }
+            if !metadata[entry.name].config { return fmt.Errorf("CLI config field %q is disabled", entry.name) }
+            (*values)[entry.name] = entry.value
+          }
+          return nil
+        })
+        if err != nil { break }
+      }
       if err != nil { return Error{errors: []codec.DecodeError{{path: name, message: err.Error()}}} }
       jsonFields := []codec.Field{}
       failures := []codec.DecodeError{}
