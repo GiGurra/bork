@@ -2313,3 +2313,16 @@ fn main() {}`
 	}
 	t.Fatalf("missing runtime metadata iteration diagnostic: %v", err)
 }
+
+func TestDeriveTemplateUnrequestedMetadataKindTypes(t *testing.T) {
+	t.Parallel()
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int { if (shape.kind[T]()) { 1 } else { 2 } }
+fn main() {}`, "derive expression must be Bool")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Int { value: String = shape.Record; 0 }
+fn main() {}`, "derive expression must be String")
+	checkPreludeSource(t, `import "bork/shape"
+derive fn unused[T](): Bool { shape.kind[T]() == shape.Record }
+fn main() {}`, "")
+}

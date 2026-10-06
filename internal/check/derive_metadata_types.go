@@ -92,12 +92,21 @@ func (m *deriveMetadataTypes) kind(expr syntax.Expr) deriveDescriptor {
 }
 
 func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
+	if id, ok := expr.(*syntax.Ident); ok {
+		alias, member, qualified := strings.Cut(id.Name, ".")
+		pkg := m.c.pkg.imports[alias]
+		if qualified && pkg != nil && pkg.Path == "bork/shape" && (member == "Record" || member == "Sealed" || member == "Other") {
+			return pkg.TypeNamed("Kind")
+		}
+	}
 	if call, ok := expr.(*syntax.Call); ok {
 		if id, ok := call.Fun.(*syntax.Ident); ok && len(call.TypeArgs) == 1 && len(call.Args) == 0 {
 			alias, member, qualified := strings.Cut(id.Name, ".")
 			pkg := m.c.pkg.imports[alias]
 			if qualified && pkg != nil && pkg.Path == "bork/shape" {
 				switch member {
+				case "kind":
+					return pkg.TypeNamed("Kind")
 				case "name", "owner":
 					return String
 				case "positional":
@@ -117,6 +126,12 @@ func (m *deriveMetadataTypes) scalar(expr syntax.Expr) Type {
 	selector, ok := expr.(*syntax.Selector)
 	if !ok {
 		return nil
+	}
+	if id, ok := selector.X.(*syntax.Ident); ok {
+		pkg := m.c.pkg.imports[id.Name]
+		if pkg != nil && pkg.Path == "bork/shape" && (selector.Name == "Record" || selector.Name == "Sealed" || selector.Name == "Other") {
+			return pkg.TypeNamed("Kind")
+		}
 	}
 	switch m.kind(selector.X) {
 	case deriveField:
