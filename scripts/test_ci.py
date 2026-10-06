@@ -11,6 +11,7 @@ import time
 from types import SimpleNamespace
 import unittest
 import zipfile
+import zlib
 from unittest.mock import patch
 
 import ci
@@ -232,6 +233,20 @@ class FetchTests(unittest.TestCase):
                 data, printed = self.fetch(fail)
                 self.assertEqual(data, ci.TIMINGS.read_bytes())
                 self.assertIn("Using committed CI timings", printed)
+
+    def test_corrupt_compressed_member_falls_back(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zipped:
+            zipped.writestr("report-0.json", "a report to compress")
+        archive = bytearray(buffer.getvalue())
+        # Keep ZIP metadata intact but use DEFLATE's reserved block type.
+        archive[30 + len("report-0.json")] = 0x07
+        with zipfile.ZipFile(io.BytesIO(archive)) as zipped, self.assertRaises(zlib.error):
+            zipped.read("report-0.json")
+        self.archives[0] = bytes(archive)
+        data, printed = self.fetch()
+        self.assertEqual(data, ci.TIMINGS.read_bytes())
+        self.assertIn("Using committed CI timings", printed)
 
     def test_missing_expired_corrupt_failed_or_incomplete_artifacts_fall_back(self):
         for failure in ["missing", "expired", "corrupt", "failed", "incomplete", "overlap", "invalid"]:

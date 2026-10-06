@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 import zipfile
+import zlib
 
 MODULE = "github.com/GiGurra/bork"
 DRIVER = MODULE + "/internal/driver"
@@ -446,7 +447,7 @@ def fetch_weights(destination):
             destination.write_bytes(candidate.read_bytes())
         print(f"Using fresh CI timings from successful main run {run['id']}")
     except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError, RuntimeError,
-            subprocess.SubprocessError, zipfile.BadZipFile) as error:
+            subprocess.SubprocessError, zipfile.BadZipFile, zlib.error) as error:
         # gh errors may contain API details; the exception string includes only
         # its command and exit status, never the token or captured stderr.
         print(f"::warning::Using committed CI timings: {error}")
