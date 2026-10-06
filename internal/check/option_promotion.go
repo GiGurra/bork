@@ -1,8 +1,10 @@
 package check
 
 import (
-	"github.com/GiGurra/bork/internal/syntax"
+	"strconv"
 	"strings"
+
+	"github.com/GiGurra/bork/internal/syntax"
 )
 
 // Only a closed, exact prelude Option supplies promotion context. In
@@ -194,6 +196,17 @@ func (c *checker) peekValueTypeIn(x syntax.Expr, locals map[string]Type) Type {
 			return opt.Args[0]
 		}
 	case *syntax.Call:
+		if head, ok := x.Fun.(*syntax.Selector); ok {
+			if owner, ok := c.peekValueTypeIn(head, locals).(*Sealed); ok {
+				if variant := owner.Variant(head.Name); variant != nil && variant.Positional {
+					literal := &syntax.RecordLit{Type: head, Positional: true}
+					for i, arg := range x.Args {
+						literal.Fields = append(literal.Fields, &syntax.FieldInit{Name: strconv.Itoa(i), Value: arg})
+					}
+					return c.peekValueTypeIn(literal, locals)
+				}
+			}
+		}
 		if id, ok := x.Fun.(*syntax.Ident); ok && c.lookup(id.Name) == nil && locals[id.Name] == nil {
 			if b, ok := builtins[id.Name]; ok && (b == BuiltinPanic || b == BuiltinTodo) {
 				return Never
