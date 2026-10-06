@@ -62,6 +62,7 @@ fn configureHelp(native: nativeCommand, specs: List[FieldSpec], fields: List[inp
     if !enabled { continue }
     doc := spec.description
     if field.hasDefault { doc += " (default " + defaultLabel(field) + ")" } else if !field.optional { doc += " (" + helpRequired(field) + ")" }
+    doc += helpChoices(field)
     envLines = append(envLines, fmt.Sprintf("  %s %s  %s", env.name, label, strings.TrimSpace(doc)))
   }
   for name, label := range labels {
@@ -127,4 +128,12 @@ fn helpRequired(field: inputField): String unsafe go {
   deepest, label := "", "required"
   for _, group := range field.groups { if group.optional && strings.HasPrefix(field.field, group.field+".") && len(group.field) > len(deepest) { deepest, label = group.field, "required when " + group.key + " is set" } }
   return label
+}
+
+fn helpChoices(field: inputField): String unsafe go {
+  import "strings"
+  if len(field.variants) == 0 { return "" }
+  names := []string{}
+  for _, variant := range field.variants { names = append(names, variant.name) }
+  return " (choices " + strings.Join(names, ", ") + ")"
 }

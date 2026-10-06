@@ -135,7 +135,9 @@ fn main() {
 ```
 
 Fields whose selected decoder has string input take literal text; booleans accept `--excited` and `--excited=false`.
-Numbers and compound values use JSON syntax. Lists take repeated flags:
+Enums whose selected decoder advertises known variants accept bare canonical
+names or exact aliases. Matching is case-sensitive. Numbers and compound values
+use JSON syntax. Lists take repeated flags:
 `--tag one --tag two`; Elements with string input are literal; other elements use JSON.
 Nested lists use a JSON array per occurrence. A non-optional Bool without a
 declared default starts as false; `--excited` sets it true. Declared defaults
@@ -668,6 +670,51 @@ must be unique within their parent. Titles must be nonempty and contain no
 newlines. Metadata errors are returned before source reads or handlers. Headings
 change help presentation only; aliases, routing and completion keep their usual
 behavior. See [cli_help_groups](../../examples/cli_help_groups/main.bork).
+
+## Enum inputs
+
+Derived sealed enums with fieldless known alternatives accept bare wire names:
+`--level DEBUG`. The default codec naming policy uses SCREAMING_SNAKE for enum
+names; codec naming overrides and aliases are shared with JSON and YAML.
+Matching is exact and case-sensitive. Aliases decode to their known variant.
+
+```bork
+import "bork/cli"
+import "bork/codec"
+use codec.Defaults
+
+type Level = sealed {
+  Info,
+  Debug codec { aliases: ["verbose"] },
+  Other(String) codec { fallback: true }
+} derive (codec.Decode)
+type Options = { level: Level = Level.Info } derive (codec.Decode)
+
+fn main() {
+  println(cli.Parse[Options]("app", "Logging", ["--level", "verbose"]))
+}
+```
+
+CLI flags, their environment bindings and positionals reject names outside the
+advertised known variants, including when the codec has a fallback. Error
+messages list canonical names. Configuration values and declared defaults keep
+the selected codec's fallback behavior. Enum restrictions cannot be disabled by
+changing `FieldSpec.strictChoices` or completion choices.
+
+`Option` and `List` preserve enum metadata. Repeated flags populate enum lists:
+`--levels INFO --levels DEBUG`. Names within nested JSON lists are also checked;
+their input remains a JSON array per occurrence.
+
+Help lists canonical choices. For scalar enums and lists with literal string
+input, static completion automatically offers canonical names and variant docs;
+input aliases and the fallback do not appear. Explicit choices, enrichers and
+dynamic completers can customize suggestions while enum input validation stays
+strict. Nested JSON-list fields keep their compound format and do not receive
+bare-name suggestions.
+
+The selected decoder's metadata governs this behavior. A custom decoder without
+advertised variants retains its own input kind and validation. See
+[cli_enums](../../examples/cli_enums/main.bork).
 
 ## Shell completion and static choices
 

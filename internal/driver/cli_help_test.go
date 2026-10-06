@@ -95,7 +95,7 @@ fn main() {
 			}
 			for _, want := range []string{
 				"--count int", "--ratio float", "--character rune", "--tags strings", "--ids ints",
-				"--level string", "--db json", "--box json", "--custom string",
+				"--level string", "choices INFO, DEBUG", "--db json", "--box json", "--custom string",
 				`(default ["one", "two words"])`, "(default [1, 2])", "(default Info)",
 				`(default { host: "localhost", port: 5432 })`, "(default { value: 1 })",
 				`(default "missing.json")`, "(default unset)",
