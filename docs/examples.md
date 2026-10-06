@@ -9,6 +9,13 @@ cd examples/wc
 bork run . -- sample.txt missing.txt poem.txt
 ```
 
+An example that reads environment variables also has an `env.txt` with one `KEY=VALUE` per line. The example tests set them; to run such an example by hand, pass them yourself:
+
+```sh
+cd examples/cli_names_auto
+env $(cat env.txt) bork run . -- $(cat args.txt)
+```
+
 Each example's expected output is kept in [testdata/examples](../testdata/examples) and checked on every change, so the examples always work with the current compiler.
 
 ## Start here
@@ -61,6 +68,10 @@ Each example's expected output is kept in [testdata/examples](../testdata/exampl
 | --- | --- |
 | [bytes_encoding](../examples/bytes_encoding/main.bork) | Hex and base64 with [bork/encoding](std/encoding.md) |
 | [cli](../examples/cli/main.bork) | Command-line options decoded into a record with [bork/cli](std/cli.md) |
+| [cli_names_auto](../examples/cli_names_auto/main.bork) | Flag, short and environment names derived from field names |
+| [cli_names_manual](../examples/cli_names_manual/main.bork) | Every flag, short and environment name written by hand |
+| [cli_names_mixed](../examples/cli_names_mixed/main.bork) | Derived and explicit names, flag-only and config-only fields in one command |
+| [cli_validation](../examples/cli_validation/main.bork) | Field, cross-field and whole-record rules on command-line options |
 | [subcommands](../examples/subcommands/main.bork) | Typed subcommands with [bork/cli](std/cli.md) |
 | [compress_archive](../examples/compress_archive/main.bork) | Gzip, ZIP, and TAR with [bork/compress](std/compress.md) and [bork/archive](std/archive.md) |
 | [crypto](../examples/crypto/main.bork) | Hashes and HMAC with [bork/crypto](std/crypto.md) |
