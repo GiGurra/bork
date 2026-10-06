@@ -14,27 +14,77 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  go-switching:
-    name: Go toolchain switching
+  test:
+    # Every Go test runs once, under the race detector; see docs/ci.md.
+    name: Test (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        # scripts/test_ci.py checks this list against scripts/ci.py SHARDS.
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-go
+        id: go-cache
+        with:
+          cache-name: race-${{ matrix.shard }}
+          cache-family: race
+      - name: Run shard
+        env:
+          GOTOOLCHAIN: local
+          SHARD: ${{ matrix.shard }}
+        run: python3 scripts/ci.py run "$SHARD" --report "$RUNNER_TEMP/ci/report-$SHARD.json" --events "$RUNNER_TEMP/ci"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ci
+      - uses: ./.github/actions/save-go-cache
+        with:
+          cache-key: ${{ steps.go-cache.outputs.cache-key }}
+          cache-hit: ${{ steps.go-cache.outputs.cache-hit }}
+          cache-paths: ${{ steps.go-cache.outputs.cache-paths }}
+  lint:
+    name: Lint and CLI examples
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - uses: ./.github/actions/setup-go
+        id: go-cache
         with:
-          go-version: '1.21.x'
-          cache: false
-      - name: Keep the older launcher for regression coverage
-        run: echo "BORK_TEST_GO_LAUNCHER=$(GOTOOLCHAIN=local GO111MODULE=off GOWORK=off go env GOROOT)/bin/go" >> "$GITHUB_ENV"
-      - uses: actions/setup-go@v6
+          cache-name: lint
+      - uses: golangci/golangci-lint-action@v9
         with:
-          go-version-file: go.mod
-          cache: false
-      - name: Cache the minimum SDK for offline analysis
-        run: GOTOOLCHAIN=go1.26.0 go version
-      - name: Verify actual SDK selection, identity and offline editor use
-        run: go test ./internal/driver -run '^TestGoContextActualSwitch$' -count=1
-  grammar:
-    name: TextMate grammar
+          version: latest
+      - name: CI and release script tests
+        if: ${{ !cancelled() }}
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_ci.py'
+          python3 -m unittest discover -s scripts -p 'test_release.py'
+      # Suite tests run examples with args.txt and check output. This checks
+      # the CLI's own check and lint commands on every example.
+      - name: Check and lint the examples with the CLI
+        if: ${{ !cancelled() }}
+        run: |
+          go install ./cmd/bork
+          for d in examples/*/; do bork check "$d"; bork lint "$d"; done
+      # The test shards are all race builds. Build and run a few programs,
+      # including concurrent ones, with the ordinary compiler and runtime.
+      - name: Run examples with the ordinary build
+        if: ${{ !cancelled() }}
+        run: |
+          for name in hello tuples channels fan_in_out task_pool; do
+            (cd "examples/$name" && bork run . 2>&1) | diff -u "testdata/examples/$name.txt" -
+          done
+      - uses: ./.github/actions/save-go-cache
+        with:
+          cache-key: ${{ steps.go-cache.outputs.cache-key }}
+          cache-hit: ${{ steps.go-cache.outputs.cache-hit }}
+          cache-paths: ${{ steps.go-cache.outputs.cache-paths }}
+  grammars:
+    name: TextMate and tree-sitter grammars
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -42,20 +92,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: editors/vscode/package-lock.json
+          cache-dependency-path: |
+            editors/vscode/package-lock.json
+            editors/tree-sitter-bork/package-lock.json
       - run: npm ci --prefix editors/vscode
       - run: npm test --prefix editors/vscode
       - run: npm run package --prefix editors/vscode
-  tree-sitter:
-    name: Tree-sitter grammar
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: editors/tree-sitter-bork/package-lock.json
       - run: npm ci --prefix editors/tree-sitter-bork
       - run: npm run generate --prefix editors/tree-sitter-bork
       - run: git diff --exit-code -- editors/tree-sitter-bork/src
@@ -118,87 +160,28 @@ jobs:
           rustup target add wasm32-wasip1
           cargo fmt --manifest-path editors/zed/Cargo.toml --check
           cargo build --manifest-path editors/zed/Cargo.toml --locked --release --target wasm32-wasip1
-  shards:
-    name: Test shard plan
-    runs-on: ubuntu-latest
-    outputs:
-      groups: ${{ steps.matrix.outputs.groups }}
-    steps:
-      - uses: actions/checkout@v6
-      - run: python3 -m unittest discover -s scripts -p 'test_ci.py'
-      - run: python3 -m unittest discover -s scripts -p 'test_release.py'
-      - id: matrix
-        run: |
-          groups="$(python3 scripts/ci.py matrix)"
-          echo "groups=$groups" >> "$GITHUB_OUTPUT"
-  lint:
-    name: Lint
+  toolchain:
+    name: Go toolchain switching and debugger
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go
-        id: go-cache
+      - uses: actions/setup-go@v6
         with:
-          cache-name: lint
-      - uses: golangci/golangci-lint-action@v9
+          go-version: '1.21.x'
+          cache: false
+      - name: Keep the older launcher for regression coverage
+        run: echo "BORK_TEST_GO_LAUNCHER=$(GOTOOLCHAIN=local GO111MODULE=off GOWORK=off go env GOROOT)/bin/go" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v6
         with:
-          version: latest
-      - uses: actions/cache/save@v4
-        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.go-cache.outputs.cache-paths }}
-          key: ${{ steps.go-cache.outputs.cache-key }}
-  examples:
-    name: CLI examples
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go
-        id: go-cache
-        with:
-          cache-name: examples
-      # Suite tests run examples with args.txt and check output. This checks
-      # the CLI itself on every example in its own parallel job.
-      - run: |
-          go install ./cmd/bork
-          for d in examples/*/; do bork check "$d"; bork lint "$d"; done
-      - uses: actions/cache/save@v4
-        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.go-cache.outputs.cache-paths }}
-          key: ${{ steps.go-cache.outputs.cache-key }}
-  suite:
-    name: ${{ matrix.mode == 'race' && 'Race' || 'Test' }} (${{ matrix.shard }})
-    needs: shards
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    strategy:
-      fail-fast: false
-      matrix:
-        mode: [normal, race]
-        shard: ${{ fromJSON(needs.shards.outputs.groups) }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/test-suite
-        with:
-          mode: ${{ matrix.mode }}
-          shard: ${{ matrix.shard }}
-  replay:
-    name: Captured-input parity
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go
-        id: go-cache
-        with:
-          cache-name: replay
-      - name: Compare clean compilation with captured-input replay
-        run: go test -race ./internal/driver -run '^(TestCompilationReplayMatchesClean|TestSessionMatchesClean|TestWatch)' -count=1
-      - uses: actions/cache/save@v4
-        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
-        with:
-          path: ${{ steps.go-cache.outputs.cache-paths }}
-          key: ${{ steps.go-cache.outputs.cache-key }}
+          go-version-file: go.mod
+          cache: false
+      - name: Cache the minimum SDK for offline analysis
+        run: GOTOOLCHAIN=go1.26.0 go version
+      - name: Verify actual SDK selection, identity and offline editor use
+        run: go test ./internal/driver -run '^TestGoContextActualSwitch$' -count=1
+      - run: go install github.com/go-delve/delve/cmd/dlv@v1.27.2
+      - name: Debug adapter integration
+        run: BORK_TEST_DLV="$(go env GOPATH)/bin/dlv" go test ./internal/driver -run '^TestDebugDAPIntegration$' -count=1
   cache-maintenance:
     name: Cache maintenance (macOS)
     runs-on: macos-latest
@@ -212,25 +195,15 @@ jobs:
         run: go test -race ./internal/driver -run '^(TestCacheTrim|TestCacheResultHourlyUse|TestGoStageHourlyUseSurvivesReplacement|TestCompilerArtifactNamespace|TestDarwinCompiler|TestCacheInstalledSDK|TestGoReceiptRoundtrip|TestGoNameReceiptRoundtrip)' -count=1
       - name: Exercise detached maintenance and its hard timeout
         run: go test -race ./cmd/bork -run '^(TestCacheTrimDetached|TestDiskCacheBackgroundPublication|TestAutomaticCacheCLI)$' -count=1
-      - uses: actions/cache/save@v4
-        if: github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true'
+      - uses: ./.github/actions/save-go-cache
         with:
-          path: ${{ steps.go-cache.outputs.cache-paths }}
-          key: ${{ steps.go-cache.outputs.cache-key }}
-  debug:
-    name: Debug adapter integration
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go
-        with:
-          cache-name: debug
-      - run: go install github.com/go-delve/delve/cmd/dlv@v1.27.2
-      - run: BORK_TEST_DLV="$(go env GOPATH)/bin/dlv" go test ./internal/driver -run '^TestDebugDAPIntegration$' -count=1
+          cache-key: ${{ steps.go-cache.outputs.cache-key }}
+          cache-hit: ${{ steps.go-cache.outputs.cache-hit }}
+          cache-paths: ${{ steps.go-cache.outputs.cache-paths }}
   ci-ok:
     name: CI ok
     if: ${{ !cancelled() }}
-    needs: [grammar, tree-sitter, editors, shards, lint, examples, suite, replay, cache-maintenance, go-switching, debug]
+    needs: [test, lint, grammars, editors, toolchain, cache-maintenance]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed

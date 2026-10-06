@@ -1,0 +1,34 @@
+name: Save trimmed Go cache
+description: Save the build entries this job used, for successful main runs only.
+inputs:
+  cache-key:
+    description: The cache-key output of ../setup-go.
+    required: true
+  cache-hit:
+    description: The cache-hit output of ../setup-go.
+    required: true
+  cache-paths:
+    description: The cache-paths output of ../setup-go.
+    required: true
+runs:
+  using: composite
+  steps:
+    # Go refreshes an entry's mtime when a build uses it and the mtime is
+    # over an hour old, so entries older than an hour before this job began
+    # went unused. Dropping them keeps each snapshot to what its job needs;
+    # restoring a snapshot that grew with every commit took minutes. Entries
+    # sit at depth two; executable entries are directories whose own mtime,
+    # not their file's, records use, so remove whole entries.
+    - name: Trim unused build cache entries
+      if: github.ref == 'refs/heads/main' && inputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        cache="$(go env GOCACHE)"
+        du -sh "$cache"
+        find "$cache" -mindepth 2 -maxdepth 2 -mmin +$(( ( $(date +%s) - BORK_GO_CACHE_STARTED ) / 60 + 61 )) -exec rm -rf {} +
+        du -sh "$cache"
+    - uses: actions/cache/save@v4
+      if: github.ref == 'refs/heads/main' && inputs.cache-hit != 'true'
+      with:
+        path: ${{ inputs.cache-paths }}
+        key: ${{ inputs.cache-key }}

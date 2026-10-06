@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Discover, balance, run and measure complete CI test shards."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import math
 import os
@@ -9,24 +10,44 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 
-DRIVER = "github.com/GiGurra/bork/internal/driver"
-LSP = "github.com/GiGurra/bork/internal/lsp"
-LSP_SHARDS = ("lsp-0", "lsp-1", "lsp-2", "lsp-3")
-PACKAGE_SHARDS = {"cli": "github.com/GiGurra/bork/cmd/bork"}
-DEDICATED = {"driver-examples": "TestExamples"}
-CASE_SHARDS = 3
-INTEGRATION_SHARDS = 6
-SHARDS = ("core", *PACKAGE_SHARDS, *LSP_SHARDS, *(f"driver-cases-{i}" for i in range(CASE_SHARDS)), *DEDICATED,
-          *(f"driver-integration-{i}" for i in range(INTEGRATION_SHARDS)))
+MODULE = "github.com/GiGurra/bork"
+DRIVER = MODULE + "/internal/driver"
+LSP = MODULE + "/internal/lsp"
+CLI = MODULE + "/cmd/bork"
+# Packages too slow to run whole in one shard are split by top-level test.
+SPLIT = (DRIVER, LSP, CLI)
+# Parents whose immediate children are one fixture directory each. They are
+# split per fixture, discovered with the parent's own directory rules.
+FIXTURES = {DRIVER: {"TestCases": Path("testdata/cases"), "TestExamples": Path("examples")}}
+SHARDS = 10
+# Estimated cost of starting a split package's test binary in another shard,
+# so small tests cluster instead of every shard paying every package's setup.
+PACKAGE_OVERHEAD = 5.0
+DEFAULT_SECONDS = 5.0
 TIMINGS = Path(__file__).with_name("ci-timings.json")
 WARN_SECONDS = 120
 FAIL_SECONDS = 180
+GO_TEST = ["go", "test", "-race", "-count=1"]
 
 
-def go_flags(mode):
-    return ["-race"] if mode == "race" else []
+def stop(process):
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+
+def kill(process):
+    # The leader may exit before a descendant that ignores SIGTERM.
+    # Always escalate the group, even if the leader already returned.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait()
 
 
 def execute(command, deadline=None, capture=False):
@@ -36,21 +57,12 @@ def execute(command, deadline=None, capture=False):
         remaining = None if deadline is None else max(0, deadline - time.monotonic())
         stdout, _ = process.communicate(timeout=remaining)
     except subprocess.TimeoutExpired:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        stop(process)
         try:
             process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
             pass
-        # The leader may exit before a descendant that ignores SIGTERM.
-        # Always escalate the group, even if communicate already returned.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        process.communicate()
+        kill(process)
         raise
     if process.returncode:
         if stdout:
@@ -59,222 +71,330 @@ def execute(command, deadline=None, capture=False):
     return stdout
 
 
+def execute_all(commands, outputs, deadline):
+    """Run commands concurrently, each writing stdout to its output file.
+
+    Returns the exit codes, or raises TimeoutExpired after terminating every
+    process group once the shared deadline passes."""
+    processes = []
+    try:
+        for command, path in zip(commands, outputs):
+            with open(path, "w") as stdout:
+                processes.append(subprocess.Popen(command, start_new_session=True, stdout=stdout))
+        for process in processes:
+            process.wait(timeout=max(0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        for process in processes:
+            stop(process)
+        grace = time.monotonic() + 5
+        for process in processes:
+            try:
+                process.wait(timeout=max(0, grace - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                pass
+        raise
+    finally:
+        for process in processes:
+            kill(process)
+    return [process.returncode for process in processes]
+
+
 def output(command, deadline=None):
     return execute(command, deadline, capture=True).splitlines()
 
 
-def case_tests(root=Path("testdata/cases")):
-    # Match TestCases' os.ReadDir selection, including ignoring symlinks and
+def fixture_tests(parent, root):
+    # Match the parent's os.ReadDir selection, including ignoring symlinks and
     # hidden entries. Each directory is exactly one immediate t.Run child.
-    names = [f"TestCases/{entry.name}" for entry in os.scandir(root)
+    names = [f"{parent}/{entry.name}" for entry in os.scandir(root)
              if entry.is_dir(follow_symlinks=False) and not entry.name.startswith(".")]
     if not names:
-        raise RuntimeError("golden case discovery was empty")
-    if any(not re.fullmatch(r"TestCases/[A-Za-z0-9_][A-Za-z0-9_.-]*", name) for name in names):
+        raise RuntimeError(f"{parent} fixture discovery was empty")
+    if any(not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", name.split("/", 1)[1]) for name in names):
         # testing.T.Run sanitizes whitespace/control characters and can then
         # deduplicate collisions with #NN suffixes. Reject such names instead
         # of generating a pattern that might silently skip a fixture.
-        raise RuntimeError("golden fixture names must use ASCII letters, digits, underscores, dots or hyphens")
+        raise RuntimeError("fixture names must use ASCII letters, digits, underscores, dots or hyphens")
     return sorted(names)
 
 
-def discover(mode, deadline=None):
-    flags = go_flags(mode)
-    packages = output(["go", "list", *flags, "./..."], deadline)
+def discover(deadline=None):
+    """Return the whole packages and the {package: [test]} split tests."""
+    packages = output(["go", "list", "-race", "./..."], deadline)
     if DRIVER not in packages or len(packages) != len(set(packages)):
         raise RuntimeError("package discovery was empty or ambiguous")
-    names = [line for line in output(["go", "test", *flags, "./internal/driver", "-list", "^(Test|Example|Fuzz)"], deadline)
-             if re.fullmatch(r"(?:Test|Example|Fuzz)\w*", line)]
-    if not names or len(names) != len(set(names)):
-        raise RuntimeError("driver test discovery was empty or ambiguous")
-    if not {*DEDICATED.values(), "TestCases"}.issubset(names):
-        raise RuntimeError("dedicated driver test parents are missing")
-    return packages, [name for name in names if name != "TestCases"] + case_tests()
+    split = [package for package in SPLIT if package in packages]
+    # Each listing links a race test binary; link them concurrently.
+    with ThreadPoolExecutor(len(split)) as pool:
+        listings = pool.map(lambda package: output(["go", "test", "-race", package, "-list", "^(Test|Example|Fuzz)"], deadline), split)
+    tests = {}
+    for package, listing in zip(split, listings):
+        names = [line for line in listing if re.fullmatch(r"(?:Test|Example|Fuzz)\w*", line)]
+        if not names or len(names) != len(set(names)):
+            raise RuntimeError(f"{package} test discovery was empty or ambiguous")
+        fixtures = FIXTURES.get(package, {})
+        if not set(fixtures).issubset(names):
+            raise RuntimeError(f"{package} fixture parents are missing")
+        tests[package] = [name for name in names if name not in fixtures]
+        for parent, root in fixtures.items():
+            tests[package] += fixture_tests(parent, root)
+    return [package for package in packages if package not in SPLIT], tests
 
 
-def discover_lsp(mode, deadline=None):
-    names = [line for line in output(["go", "test", *go_flags(mode), "./internal/lsp", "-list", "^(Test|Example|Fuzz)"], deadline)
-             if re.fullmatch(r"(?:Test|Example|Fuzz)\w*", line)]
-    if not names or len(names) != len(set(names)):
-        raise RuntimeError("LSP test discovery was empty or ambiguous")
-    return names
+def partition(packages, tests, weights, shards=SHARDS):
+    """Balance whole packages and split tests over shards, longest first."""
+    units = [(None, package) for package in packages]
+    units += [(package, name) for package in sorted(tests) for name in tests[package]]
+    if len(units) != len(set(units)) or set(packages) & set(tests):
+        raise RuntimeError("discovered packages or tests are ambiguous")
 
-
-def partition(packages, names, weights, lsp_names=()):
-    groups = {"core": [package for package in packages if package not in (DRIVER, LSP) and package not in PACKAGE_SHARDS.values()]}
-    groups.update({group: [package] for group, package in PACKAGE_SHARDS.items() if package in packages})
-    covered_packages = [package for group, entries in groups.items() for package in entries]
-    if len(packages) != len(set(packages)) or len(covered_packages) != len(set(covered_packages)) or set(covered_packages) != set(packages) - {DRIVER, LSP}:
-        raise RuntimeError("package partition is not disjoint and complete")
-    if LSP in packages:
-        if not lsp_names or len(lsp_names) != len(set(lsp_names)):
-            raise RuntimeError("LSP partition requires unique discovered tests")
-        groups.update({group: [] for group in LSP_SHARDS})
-        totals = dict.fromkeys(LSP_SHARDS, 0.0)
-        for name in sorted(lsp_names, key=lambda name: (-max(0.01, weights.get("lsp:" + name, 5.0)), name)):
-            group = min(LSP_SHARDS, key=lambda group: (totals[group], group))
-            groups[group].append(name)
-            totals[group] += max(0.01, weights.get("lsp:" + name, 5.0))
-        covered = [name for group in LSP_SHARDS for name in groups[group]]
-        if len(covered) != len(set(covered)) or set(covered) != set(lsp_names):
-            raise RuntimeError("LSP partition is not disjoint and complete")
-    groups.update({group: [name] for group, name in DEDICATED.items()})
-    integration = [group for group in SHARDS if group.startswith("driver-integration-")]
-    cases = [group for group in SHARDS if group.startswith("driver-cases-")]
-    groups.update({group: [] for group in [*integration, *cases]})
-    totals = dict.fromkeys([*integration, *cases], 0.0)
     # Unknown names still run, with a conservative cost, and spread across
     # shards until the next measurement records their real duration.
-    def cost(name):
-        return max(0.01, weights.get(name, 5.0))
-    remaining = set(names) - set(DEDICATED.values())
-    for name in sorted(remaining, key=lambda name: (-cost(name), name)):
-        targets = cases if name.startswith("TestCases/") else integration
-        group = min(targets, key=lambda group: (totals[group], group))
-        groups[group].append(name)
-        totals[group] += cost(name)
-    covered = [name for group, entries in groups.items() if group != "core" and group not in PACKAGE_SHARDS and group not in LSP_SHARDS for name in entries]
-    if len(covered) != len(set(covered)) or set(covered) != set(names):
-        raise RuntimeError("driver partition is not disjoint and complete")
-    return {group: sorted(entries) for group, entries in groups.items()}
+    def cost(unit):
+        package, name = unit
+        known = weights["packages"].get(name) if package is None else weights["tests"].get(package, {}).get(name)
+        return max(0.01, DEFAULT_SECONDS if known is None else known)
+
+    groups = [{"packages": [], "tests": {}} for _ in range(shards)]
+    totals = [0.0] * shards
+    for unit in sorted(units, key=lambda unit: (-cost(unit), unit[0] or "", unit[1])):
+        package, name = unit
+
+        def load(index):
+            started = package is None or package in groups[index]["tests"]
+            return totals[index] + cost(unit) + (0 if started else PACKAGE_OVERHEAD)
+        index = min(range(shards), key=lambda index: (load(index), index))
+        totals[index] = load(index)
+        if package is None:
+            groups[index]["packages"].append(name)
+        else:
+            groups[index]["tests"].setdefault(package, []).append(name)
+    covered = [(None, name) for group in groups for name in group["packages"]]
+    covered += [(package, name) for group in groups for package, names in group["tests"].items() for name in names]
+    if len(covered) != len(set(covered)) or set(covered) != set(units):
+        raise RuntimeError("partition is not disjoint and complete")
+    for group, total in zip(groups, totals):
+        group["packages"].sort()
+        group["tests"] = {package: sorted(names) for package, names in sorted(group["tests"].items())}
+        group["weight"] = round(total, 2)
+    return groups
 
 
-def read_weights(mode, path):
-    data = json.loads(path.read_text())
-    if data.get("version") != 1:
-        raise RuntimeError("unsupported CI timing file version")
-    weights = data[mode]["driver"] | data[mode]["cases"] | {"lsp:" + name: cost for name, cost in data[mode].get("lsp", {}).items()}
-    if any(not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0 for cost in weights.values()):
-        raise RuntimeError("CI timing weights must be finite nonnegative seconds")
-    return weights
+def run_pattern(names):
+    """One -run expression for top-level tests and fixture children.
+
+    Go splits -run at top-level '|' into alternatives. A plain alternative
+    keeps every subtest of its parents, while a fixture alternative selects
+    only the listed children."""
+    plain = [name for name in names if "/" not in name]
+    children = {}
+    for name in names:
+        if "/" in name:
+            parent, child = name.split("/", 1)
+            children.setdefault(parent, []).append(child)
+    alternatives = []
+    if plain:
+        alternatives.append("^(" + "|".join(re.escape(name) for name in plain) + ")$")
+    for parent, names in sorted(children.items()):
+        alternatives.append(f"^{re.escape(parent)}$/^(" + "|".join(re.escape(name) for name in names) + ")$")
+    return "|".join(alternatives)
 
 
-def command(mode, shard, entries):
-    result = ["go", "test", *go_flags(mode), "-count=1"]
-    if shard == "core" or shard in PACKAGE_SHARDS:
-        return [*result, *entries]
-    if shard.startswith("driver-cases-"):
-        expression = "^TestCases$/^(" + "|".join(re.escape(name.split("/", 1)[1]) for name in entries) + ")$"
-        return [*result, "./internal/driver", "-run", expression]
-    expression = "^(" + "|".join(re.escape(name) for name in entries) + ")$"
-    return [*result, "./internal/lsp" if shard in LSP_SHARDS else "./internal/driver", "-run", expression]
+def commands(group):
+    result = []
+    if group["packages"]:
+        result.append([*GO_TEST, "-json", *group["packages"]])
+    for package, names in group["tests"].items():
+        result.append([*GO_TEST, "-json", package, "-run", run_pattern(names)])
+    return result
+
+
+def summarize(paths):
+    """Print package results, failing test output, build output and any
+    test still running, from go test -json event files. Returns the
+    (package, test) keys that finished, with "" as a package's own test."""
+    status = {}
+    lines = {}
+    running = set()
+    for path in paths:
+        try:
+            text = Path(path).read_text()
+        except OSError:
+            continue
+        for line in text.splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                print(line)
+                continue
+            action = event.get("Action")
+            if action in ("build-output", "build-fail"):
+                print(event.get("Output", ""), end="")
+                continue
+            key = (event.get("Package", ""), event.get("Test", ""))
+            if action == "output":
+                lines.setdefault(key, []).append(event.get("Output", ""))
+            elif action == "run":
+                running.add(key)
+            elif action in ("pass", "fail", "skip"):
+                running.discard(key)
+                status[key] = action
+                if not key[1]:
+                    print(f"{'ok  ' if action == 'pass' else action.upper()} {key[0]} {event.get('Elapsed', 0):.2f}s")
+    for key, action in sorted(status.items()):
+        if action == "fail":
+            print("".join(lines.get(key, [])), end="")
+    for package, test in sorted(running):
+        print(f"::error::still running at the deadline: {package} {test}")
+    return set(status)
+
+
+def unrun(group, finished):
+    """Selected units without a pass, fail or skip event. Go exits 0 when a
+    -run pattern matches nothing, so a fixture whose subtest name drifted
+    from its directory would otherwise vanish silently."""
+    units = [(package, "") for package in group["packages"]]
+    units += [(package, name) for package, names in group["tests"].items() for name in names]
+    return [unit for unit in units if unit not in finished]
 
 
 def budget_result(elapsed, status):
+    # Only the test phase's own deadline fails a shard. A cold build cache
+    # (a new go.sum or Go version) can push discovery's compilation past
+    # the budget once without anything being wrong.
     print(f"Shard wall time: {elapsed:.2f}s", flush=True)
     if elapsed > FAIL_SECONDS:
-        print(f"::error::Shard exceeded {FAIL_SECONDS}s; refresh timings and add shards.", flush=True)
-        return status or 1
-    if elapsed > WARN_SECONDS:
+        print(f"::warning::Shard exceeded the {FAIL_SECONDS}s budget; check for a cold build cache, "
+              "then refresh timings or add shards.", flush=True)
+    elif elapsed > WARN_SECONDS:
         print(f"::warning::Shard exceeded {WARN_SECONDS}s; refresh timings or add shards.", flush=True)
     return status
 
 
 def run_shard(args):
     started = time.monotonic()
-    deadline = started + FAIL_SECONDS
-    entries = []
+    tested = None
+    group = {}
     status = 0
+    events = args.events or Path(tempfile.mkdtemp(prefix="bork-ci-"))
+    paths = []
     try:
-        packages, names = discover(args.mode, deadline)
-        groups = partition(packages, names, read_weights(args.mode, args.timings), discover_lsp(args.mode, deadline))
-        entries = groups[args.shard]
-        if not entries:
+        events.mkdir(parents=True, exist_ok=True)
+        # Listing tests links the split packages' race test binaries, so this
+        # deadline also bounds most compilation.
+        packages, tests = discover(started + FAIL_SECONDS)
+        group = partition(packages, tests, read_weights(args.timings))[args.shard]
+        selected = commands(group)
+        if not selected:
             raise RuntimeError("selected shard is empty")
-        print(f"{args.mode}/{args.shard}: {len(entries)} selected", flush=True)
-        execute(command(args.mode, args.shard, entries), deadline)
+        tested = time.monotonic()
+        print(f"shard {args.shard}: {len(group['packages'])} packages, "
+              f"{sum(map(len, group['tests'].values()))} split tests, weight {group['weight']}s, "
+              f"discovered in {tested - started:.2f}s", flush=True)
+        paths = [events / f"shard-{args.shard}-{index}.jsonl" for index in range(len(selected))]
+        if any(execute_all(selected, paths, tested + FAIL_SECONDS)):
+            status = 1
     except subprocess.TimeoutExpired:
-        print(f"::error::Shard reached {FAIL_SECONDS}s wall-time limit.", flush=True)
+        phase = "Discovery" if tested is None else "Test run"
+        print(f"::error::{phase} reached the {FAIL_SECONDS}s wall-time limit.", flush=True)
         status = 1
     except (RuntimeError, subprocess.CalledProcessError, OSError, ValueError, KeyError) as error:
         print(f"::error::{error}", file=sys.stderr)
         status = 1
+    finished = summarize(paths)
+    if not status and group:
+        for package, name in unrun(group, finished):
+            print(f"::error::selected but never ran: {package} {name}".rstrip(), flush=True)
+            status = 1
     elapsed = time.monotonic() - started
     result = budget_result(elapsed, status)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
-        args.report.write_text(json.dumps({"mode": args.mode, "shard": args.shard, "seconds": round(elapsed, 2),
-                                          "result": result, "selected": entries}, indent=2) + "\n")
+        args.report.write_text(json.dumps({"shard": args.shard, "seconds": round(elapsed, 2),
+                                          "test_seconds": None if tested is None else round(time.monotonic() - tested, 2),
+                                          "result": result, "selected": group}, indent=2) + "\n")
     return result
 
 
-def measurements(path):
+def read_weights(path):
+    data = json.loads(path.read_text())
+    if data.get("version") != 2:
+        raise RuntimeError("unsupported CI timing file version")
+    costs = [*data["packages"].values(), *(cost for tests in data["tests"].values() for cost in tests.values())]
+    if any(not isinstance(cost, (int, float)) or not math.isfinite(cost) or cost < 0 for cost in costs):
+        raise RuntimeError("CI timing weights must be finite nonnegative seconds")
+    return data
+
+
+def measurements(paths):
+    """Merge the go test -json files of one complete run, local or sharded."""
     tests = {}
-    lsp_tests = {}
     packages = {}
-    for line in path.read_text().splitlines():
-        event = json.loads(line)
-        if event["Action"] == "fail":
-            raise RuntimeError("refusing timings from a failed test run")
-        if event["Action"] not in ("pass", "skip"):
-            continue
-        package = event["Package"]
-        if "Test" in event:
-            if package in (DRIVER, LSP):
-                target = tests if package == DRIVER else lsp_tests
-                name = event["Test"]
-                if name in target:
-                    raise RuntimeError("timings must come from one -count=1 run")
-                target[name] = event.get("Elapsed", 0.0)
-        else:
-            if package in packages:
-                raise RuntimeError("timings contain duplicate package results")
-            packages[package] = event.get("Elapsed", 0.0)
-    if DRIVER not in packages or not tests:
-        raise RuntimeError("timing input has no completed driver package")
+    for path in paths:
+        for line in Path(path).read_text().splitlines():
+            event = json.loads(line)
+            if event["Action"] in ("fail", "build-fail"):
+                raise RuntimeError("refusing timings from a failed test run")
+            if event["Action"] not in ("pass", "skip") or "Package" not in event:
+                continue
+            package = event["Package"]
+            if "Test" in event:
+                # Fixture parents run in many shards; their children are the units.
+                if package in SPLIT and event["Test"] not in FIXTURES.get(package, {}):
+                    key = (package, event["Test"])
+                    if key in tests:
+                        raise RuntimeError("timings must come from one -count=1 run")
+                    tests[key] = event.get("Elapsed", 0.0)
+            elif package not in SPLIT:
+                if package in packages:
+                    raise RuntimeError("timings contain duplicate package results")
+                packages[package] = event.get("Elapsed", 0.0)
+    if not any(package == DRIVER for package, _ in tests):
+        raise RuntimeError("timing input has no completed driver tests")
     # A serial parent's Elapsed contains child work, while a parallel parent
     # can return before its children execute. max(parent, sum(children))
     # retains that work without counting nested serial time twice.
-    def parent_costs(tests):
-        costs = dict(tests)
-        for name in sorted(tests, key=lambda name: (-name.count("/"), name)):
-            children = [child for child in tests if child.rpartition("/")[0] == name]
-            costs[name] = max(tests[name], sum(costs[child] for child in children))
-        return costs
-    costs = parent_costs(tests)
-    lsp_costs = parent_costs(lsp_tests)
-    return {"packages": dict(sorted(packages.items())),
-            "lsp": {name: round(lsp_costs[name], 2) for name in sorted(lsp_costs) if "/" not in name},
-            "cases": {name: round(costs[name], 2) for name in sorted(costs)
-                      if name.startswith("TestCases/") and name.count("/") == 1},
-            "driver": {name: round(costs[name], 2) for name in sorted(costs) if "/" not in name}}
+    costs = dict(tests)
+    for key in sorted(tests, key=lambda key: (-key[1].count("/"), key)):
+        children = [child for child in tests if child[0] == key[0] and child[1].rpartition("/")[0] == key[1]]
+        costs[key] = max(tests[key], sum(costs[child] for child in children))
+    result = {}
+    for (package, name), cost in sorted(costs.items()):
+        parent = name.split("/", 1)[0]
+        if "/" not in name or (parent in FIXTURES.get(package, {}) and name.count("/") == 1):
+            result.setdefault(package, {})[name] = round(cost, 2)
+    return {"version": 2, "packages": {name: round(cost, 2) for name, cost in sorted(packages.items())}, "tests": result}
 
 
 def refresh(args):
     measurement = measurements(args.input)
-    packages, names = discover(args.mode)
-    measured = (set(measurement["driver"]) - {"TestCases"}) | set(measurement["cases"])
-    if set(measurement["packages"]) != set(packages) or measured != set(names) or set(measurement["lsp"]) != set(discover_lsp(args.mode)):
-        raise RuntimeError("timing input must cover every current package and driver parent")
-    data = json.loads(args.timings.read_text()) if args.timings.exists() else {"version": 1}
-    data[args.mode] = measurement
-    args.timings.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    packages, tests = discover()
+    measured = {(package, name) for package, names in measurement["tests"].items() for name in names}
+    discovered = {(package, name) for package, names in tests.items() for name in names}
+    if set(measurement["packages"]) != set(packages) or measured != discovered:
+        raise RuntimeError("timing input must cover every current package and split test")
+    args.timings.write_text(json.dumps(measurement, indent=2, sort_keys=True) + "\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--timings", type=Path, default=TIMINGS)
-    commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("matrix", help="print the shared workflow shard list")
-    for name in ("run", "plan", "refresh"):
-        sub = commands.add_parser(name)
-        sub.add_argument("--mode", choices=("normal", "race"), required=True)
-        if name == "run":
-            sub.add_argument("shard", choices=SHARDS)
-            sub.add_argument("--report", type=Path)
-        if name == "refresh":
-            sub.add_argument("--input", type=Path, required=True)
+    subcommands = parser.add_subparsers(dest="command", required=True)
+    subcommands.add_parser("plan", help="print every shard's packages and tests")
+    run = subcommands.add_parser("run", help="run one shard")
+    run.add_argument("shard", type=int, choices=range(SHARDS))
+    run.add_argument("--report", type=Path)
+    run.add_argument("--events", type=Path, help="directory for the go test -json event files")
+    update = subcommands.add_parser("refresh", help="rewrite timings from go test -json files")
+    update.add_argument("--input", type=Path, nargs="+", required=True)
     args = parser.parse_args()
-    if args.command == "matrix":
-        print(json.dumps(SHARDS))
-        return 0
     if args.command == "run":
         return run_shard(args)
     if args.command == "refresh":
         refresh(args)
         return 0
-    packages, names = discover(args.mode)
-    print(json.dumps(partition(packages, names, read_weights(args.mode, args.timings), discover_lsp(args.mode)), indent=2))
+    packages, tests = discover()
+    print(json.dumps(partition(packages, tests, read_weights(args.timings)), indent=2))
     return 0
 
 

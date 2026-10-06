@@ -35,20 +35,24 @@ runs:
       run: |
         echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
         echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "BORK_GO_CACHE_STARTED=$(date +%s)" >> "$GITHUB_ENV"
     # Restore everywhere, but callers save only successful main runs after
-    # their tests/builds. PR snapshots would evict the warm main caches.
-    # A commit-specific key retains new builds even when go.sum is unchanged.
-    # Fall back to the same family first: a normal snapshot holds no race
-    # builds, so restoring one leaves a race shard to compile everything.
+    # their tests/builds, through ../save-go-cache. PR snapshots would evict
+    # the warm main caches. A commit-specific key retains new builds even
+    # when go.sum is unchanged. The writer name precedes the go.sum hash so a
+    # job keeps its own snapshot across dependency changes; build entries are
+    # content-addressed, so stale ones only miss. Fall back to the same
+    # family next: other jobs' snapshots hold no race builds, so restoring
+    # one leaves a race shard to compile everything.
     - uses: actions/cache/restore@v4
       id: cache
       with:
         path: |
           ${{ steps.paths.outputs.modules }}
           ${{ steps.paths.outputs.build }}
-        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ inputs.cache-name }}-${{ github.sha }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ inputs.cache-name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
         restore-keys: |
-          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ inputs.cache-name }}-
-          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ inputs.cache-family || inputs.cache-name }}-
-          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ inputs.cache-name }}-${{ hashFiles('go.sum') }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ inputs.cache-name }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ inputs.cache-family || inputs.cache-name }}-
           go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-
