@@ -15,14 +15,14 @@ fn serve(conn: net.Connection, s: Scope, closed: Channel[String]) uses net + sta
       _ = net.WriteLine(conn, "echo " + line, 1000)?
       serve(conn, s, closed)
     }
-    end: net.Eof => {
-      _ = send(closed, "server: a client closed its connection")
+    _: net.Eof => {
+      _ = closed.send(s, "server: a client closed its connection")
       checkpoint(s)
     }
     stopped: Cancelled => stopped
     failure: IoError | ParseError => {
       // Report it too, so the client fails instead of waiting forever.
-      _ = send(closed, "server: " + toString(failure))
+      _ = closed.send(s, "server: " + toString(failure))
       checkpoint(s)
     }
   }
@@ -45,7 +45,7 @@ fn handOff(n: Int, address: String, app: Scope, closed: Channel[String]) uses io
     // conn cannot be used here any more: it was moved to session.
   }
   // The session has ended, and closed the connection with it.
-  println(receive(closed))
+  println(closed.receive(app))
 }
 
 fn run(app: Scope) uses io + net + state + clock: Ok | IoError | Cancelled {
