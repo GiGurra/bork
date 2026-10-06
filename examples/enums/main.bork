@@ -7,14 +7,18 @@ type Color = sealed {
   // Warm color.
   Red
   DarkBlue
-  Teal codec { name: "cyan" }
+  Teal codec { name: "cyan", aliases: ["teal"] }
+  Other(String) codec { fallback: true }
 } derive (enum.Enum, codec.Encode, codec.Decode)
 
 fn main() {
   println(enum.values[Color]())
   println(enum.name(Color.DarkBlue))
   println(enum.byName[Color]("DARK_BLUE"))
+  println(enum.byName[Color]("teal"))
+  println(enum.byName[Color]("purple"))
   println(enum.parse[Color]("purple"))
+  println(enum.Known(Color.Other("purple")))
   println(enum.index(Color.Teal))
   println(json.Encode(Color.DarkBlue))
   println(json.Decode[Color]("\"DARK_BLUE\""))

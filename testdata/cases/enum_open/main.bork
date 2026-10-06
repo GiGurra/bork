@@ -1,0 +1,40 @@
+import "bork/codec"
+import "bork/enum"
+import "bork/json"
+import "bork/shape"
+use codec.Defaults
+
+type Color = sealed {
+  // Unknown documentation stays out of known choices.
+  Other(String) codec { fallback: true }
+  // Warm color.
+  Red codec { aliases: ["red", "legacy"] }
+  DarkBlue
+} derive (enum.Enum, codec.Encode, codec.Decode)
+type KnownColor = Color where enum.Known derive (codec.Decode)
+type Box[T] = sealed {
+  SiteAdmin codec { name: "root", aliases: ["admin"] }
+  Other(String) codec { fallback: true }
+} codec { naming: codec.Naming.Kebab } derive (enum.Enum)
+type Only = sealed { Other(String) codec { fallback: true } } derive (enum.Enum)
+
+fn main() {
+  println(enum.values[Color]())
+  println(enum.index(Color.Red), enum.index(Color.DarkBlue), enum.index(Color.Other("purple")))
+  println(enum.name(Color.Red), enum.name(Color.Other("purple")))
+  println(enum.byName[Color]("RED"), enum.byName[Color]("red"), enum.byName[Color]("legacy"))
+  println(enum.byName[Color]("Red"), enum.byName[Color]("purple"))
+  println(enum.parse[Color]("red"), enum.parse[Color]("purple"), enum.parse[Color](""))
+  println(enum.Known(Color.Red), enum.Known(Color.Other("purple")))
+  println(shape.metadata[Color, enum.Enum, enum.Info]())
+  println(json.Decode[KnownColor]("\"red\""))
+  println(json.Decode[KnownColor]("\"purple\""))
+  println(enum.values[Box[Int]]())
+  println(enum.byName[Box[String]]("admin"))
+  println(enum.parse[Box[Int]]("site-admin"))
+  println(enum.name(Box[Int].Other("site-admin")))
+  println(shape.metadata[Box[Int], enum.Enum, enum.Info]())
+  println(enum.values[Only](), enum.byName[Only]("OTHER"), enum.parse[Only]("OTHER"))
+  println(enum.Known(Only.Other("OTHER")), enum.index(Only.Other("OTHER")))
+  println(shape.metadata[Only, enum.Enum, enum.Info]())
+}

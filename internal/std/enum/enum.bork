@@ -1,7 +1,7 @@
 import "bork/codec"
 import "bork/shape"
 
-// Enum describes a sealed type whose public variants have no payload.
+// Enum describes a sealed type with public fieldless variants and an optional String fallback.
 class Enum[T] {
   fn values(): List[T]
   fn name(value: T): String
@@ -18,17 +18,17 @@ type Info = { names: List[String], docs: List[String], hasFallback: Bool }
 // Known narrows enum values to alternatives declared by their type.
 pred Known[T: Enum](value: T) { index(value).isSome() }
 
-// Keep the tooling shape gate independent from codec's open-enum classification.
+// Tooling supports fieldless known alternatives and a checked String fallback.
 derive fn enumShapeAllowed[T](): Bool {
   comptime match (shape.kind[T]()) {
-    shape.Sealed => [comptime for (variant in shape.variants[T]()) comptime if (!variant.fields.isEmpty()) true].isEmpty()
+    shape.Sealed => [comptime for (variant in shape.variants[T]()) comptime if (!variant.fields.isEmpty() && !codec.VariantFallback[T](variant)) true].isEmpty()
     _ => false
   }
 }
 
 derive fn CheckEnum[T](): Ok {
   comptime if (!enumShapeAllowed[T]()) {
-    shape.fail("enum.Enum requires variants without payloads")
+    shape.fail("enum.Enum requires fieldless variants with an optional String fallback")
   }
   comptime for (variant in shape.variants[T]()) {
     comptime if (variant.name != variant.name.capitalize()) {
@@ -41,14 +41,14 @@ derive fn CheckEnum[T](): Ok {
 
 derive fn EnumInfo[T](): Info {
   comptime if (!enumShapeAllowed[T]()) {
-    shape.fail("enum.Enum requires variants without payloads")
+    shape.fail("enum.Enum requires fieldless variants with an optional String fallback")
     panic("invalid enum derivation")
   } else {
     CheckEnum[T]()
     Info {
-      names: [comptime for (variant in shape.variants[T]()) codec.VariantWireName[T](variant)],
-      docs: [comptime for (variant in shape.variants[T]()) variant.doc],
-      hasFallback: false
+      names: [comptime for (variant in shape.variants[T]()) comptime if (!codec.VariantFallback[T](variant)) codec.VariantWireName[T](variant)],
+      docs: [comptime for (variant in shape.variants[T]()) comptime if (!codec.VariantFallback[T](variant)) variant.doc],
+      hasFallback: ![comptime for (variant in shape.variants[T]()) comptime if (codec.VariantFallback[T](variant)) true].isEmpty()
     }
   }
 }
@@ -61,26 +61,42 @@ derive fn BuildValue[T](variant: shape.Variant[T]): T {
   }
 }
 
+// Checked construction keeps fallback payload and whole-value facts intact.
+derive fn BuildFallback[T](variant: shape.Variant[T], input: String): T {
+  initial = variant.builder()
+  comptime for (field in variant.fields) {
+    return match (initial.set(field, input).finish()) {
+      value: T => value
+      error: shape.ValidationError => panic(toString(error))
+    }
+  }
+}
+
 derive instance enumShape[T]: Enum[T] {
   metadata Info = EnumInfo[T]()
   fn values(): List[T] {
     comptime if (!enumShapeAllowed[T]()) {
-      shape.fail("enum.Enum requires variants without payloads")
+      shape.fail("enum.Enum requires fieldless variants with an optional String fallback")
       panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
-      [comptime for (variant in shape.variants[T]()) BuildValue[T](variant)]
+      [comptime for (variant in shape.variants[T]()) comptime if (!codec.VariantFallback[T](variant)) BuildValue[T](variant)]
     }
   }
   fn name(value: T): String {
     comptime if (!enumShapeAllowed[T]()) {
-      shape.fail("enum.Enum requires variants without payloads")
+      shape.fail("enum.Enum requires fieldless variants with an optional String fallback")
       panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
         match (variant.project(value)) {
-          Option.Some(payload) => { _ = payload; return codec.VariantWireName[T](variant) }
+          Option.Some(payload) => {
+            _ = payload
+            comptime if (codec.VariantFallback[T](variant)) {
+              comptime for (field in variant.fields) { return field.read(payload) }
+            } else { return codec.VariantWireName[T](variant) }
+          }
           Option.None => {}
         }
       }
@@ -89,37 +105,50 @@ derive instance enumShape[T]: Enum[T] {
   }
   fn byName(input: String): Option[T] {
     comptime if (!enumShapeAllowed[T]()) {
-      shape.fail("enum.Enum requires variants without payloads")
+      shape.fail("enum.Enum requires fieldless variants with an optional String fallback")
       panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
-        if (input == codec.VariantWireName[T](variant)) { return Option.Some(BuildValue[T](variant)) }
+        comptime if (!codec.VariantFallback[T](variant)) {
+          if (codec.VariantNames[T](variant).includes(input)) { return Option.Some(BuildValue[T](variant)) }
+        }
       }
       Option.None
     }
   }
   fn parse(input: String): T | UnknownName {
     comptime if (!enumShapeAllowed[T]()) {
-      shape.fail("enum.Enum requires variants without payloads")
+      shape.fail("enum.Enum requires fieldless variants with an optional String fallback")
       panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
-        if (input == codec.VariantWireName[T](variant)) { return BuildValue[T](variant) }
+        comptime if (!codec.VariantFallback[T](variant)) {
+          if (codec.VariantNames[T](variant).includes(input)) { return BuildValue[T](variant) }
+        }
       }
-      UnknownName { name: input, expected: [comptime for (variant in shape.variants[T]()) codec.VariantWireName[T](variant)] }
+      comptime if ([comptime for (variant in shape.variants[T]()) comptime if (codec.VariantFallback[T](variant)) true].isEmpty()) {
+        UnknownName { name: input, expected: [comptime for (variant in shape.variants[T]()) codec.VariantWireName[T](variant)] }
+      } else {
+        comptime for (variant in shape.variants[T]()) {
+          comptime if (codec.VariantFallback[T](variant)) { return BuildFallback[T](variant, input) }
+        }
+      }
     }
   }
   fn index(value: T): Option[Int] {
     comptime if (!enumShapeAllowed[T]()) {
-      shape.fail("enum.Enum requires variants without payloads")
+      shape.fail("enum.Enum requires fieldless variants with an optional String fallback")
       panic("invalid enum derivation")
     } else {
       CheckEnum[T]()
       comptime for (variant in shape.variants[T]()) {
         match (variant.project(value)) {
-          Option.Some(payload) => { _ = payload; return Option.Some(variant.index) }
+          Option.Some(payload) => {
+            _ = payload
+            comptime if (codec.VariantFallback[T](variant)) { return Option.None } else { return Option.Some(variant.index) }
+          }
           Option.None => {}
         }
       }
