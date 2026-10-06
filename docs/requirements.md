@@ -1797,6 +1797,19 @@ main.bork:17:26: field run of Job must be () uses io => Ok, found () => Ok (it u
 - **Effect aliases** (`effects Backend = io + net + state`) for long lists on handlers? Not needed while there are five effects.
 - **Test doubles:** with effects in place of capabilities, a test cannot hand a function a fake clock. [Mocking in tests](#mocking-in-tests-design-bork-53lit4) replaces the function that reads the clock instead. Effect handlers, which let a test say how an effect is answered, may still be worth it later.
 
+## Loops (design: bork-8jiark)
+
+`for` has Go's forms. `for (x in xs)` goes through a `List` or `Seq`. `for { }` loops until `break`, `return`, `?` or a panic. `for (cond) { }` checks a `Bool` before each round. `for (init; cond; post) { }` counts. See [the design](design/loops.md).
+
+- **Header names** are bound by the init bindings, in order, in a scope of the loop's own. They cannot shadow enclosing names, and sibling loops may reuse them. Each round binds fresh values, so closures capture the round's values.
+- **The post clause** runs after each round and on `continue`. Its values are computed together from the round's values (`a = b, b = a` swaps). It can rebind only header names, must keep each name's type (the first binding's, or its annotation), and cannot use `return`, `?`, `break` or `continue`. An empty condition means `true`.
+- **Facts:** a header name's declared facts are its invariant. Its first value and every next value must prove them, and they are known in the body. The condition is known in the body and the post clause.
+- **Lifetimes:** a header name lives as long as its first value; a next value belonging to another scope is an error.
+- **Types:** a loop is an `Ok` expression whose body must be `Ok`. A loop without a condition and without a `break` that leaves it has type `Never`, so code after it is unreachable.
+- **Formatting:** the formatter keeps the clauses as written (it never changes tokens), so `for (;;)` stays, written without spaces between empty clauses; `for` and `for (cond)` are the idiomatic spellings.
+- **Code generation:** header names are Go loop variables of a three-clause `for`, which Go copies per iteration. A condition that needs statements is checked at the top of the body. Next values that need statements are computed in function literals, which the post-clause restrictions keep free of control flow. Loop exits reuse the for-in machinery for returns, scopes and owners.
+- **Carried rebinding** (rebinding names from outside the loop in its body, carried to the next round and after the loop) waits for same-block rebinding (bork-4exlxc).
+
 ## Tail calls (design: bork-8jiark)
 
 Go does not eliminate tail calls, and its goroutine stacks grow until a 1 GB limit kills the process. bork compiles a function's calls of itself in tail position as jumps, so recursion used as a loop runs in constant stack. See [the design](design/loops.md).

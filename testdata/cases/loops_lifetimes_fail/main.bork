@@ -1,0 +1,32 @@
+fn consumes(owner: OwnedScope) uses state: Bool {
+  closeScope(owner)
+  true
+}
+
+fn consumesI(owner: OwnedScope) uses state: Int {
+  closeScope(owner)
+  1
+}
+
+fn inPost() uses io + state {
+  scope s {
+    o = openScope(s)
+    for (i = 0; i < 3; i = consumesI(o)) {
+      println(i)
+    }
+  }
+}
+
+fn inCondition() uses io + state {
+  scope s {
+    o = openScope(s)
+    for (consumes(o)) {
+      println("x")
+    }
+  }
+}
+
+fn main() {
+  inPost()
+  inCondition()
+}

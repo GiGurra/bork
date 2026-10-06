@@ -180,7 +180,12 @@ func SemanticTokens(file *syntax.File, info *Info) []SemanticToken {
 				s.name(param.Pos, param.Name, SemanticToken{Kind: "parameter", Declaration: true, Readonly: true})
 			}
 		case *syntax.For:
-			s.name(expr.NamePos, expr.Name, SemanticToken{Kind: "variable", Declaration: true, Readonly: true})
+			if expr.Items != nil {
+				s.name(expr.NamePos, expr.Name, SemanticToken{Kind: "variable", Declaration: true, Readonly: true})
+			}
+			for _, b := range expr.Init {
+				s.name(b.Pos, b.Name, SemanticToken{Kind: "variable", Declaration: true, Readonly: true})
+			}
 		case *syntax.ScopeExpr:
 			s.declaration(expr.Pos, expr.Name, "variable", false)
 		case *syntax.Selector:

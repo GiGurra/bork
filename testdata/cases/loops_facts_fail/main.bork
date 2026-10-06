@@ -1,0 +1,18 @@
+pred nonNegative(n: Int) { n >= 0 }
+
+fn invariantBroken() uses io {
+  for (i: Int where nonNegative = 0; i < 3; i = i - 1) {
+    println(i)
+  }
+}
+
+fn firstBroken() uses io {
+  for (i: Int where nonNegative = -1; i < 3; i = i + 1) {
+    println(i)
+  }
+}
+
+fn main() {
+  invariantBroken()
+  firstBroken()
+}

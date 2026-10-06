@@ -431,7 +431,12 @@ func (b *sourceIndexBuilder) declarations(file *syntax.File, info *Info) {
 		case *syntax.MockStmt:
 			add(n.Pos, n.Name, "variable", "")
 		case *syntax.For:
-			add(n.NamePos, n.Name, "variable", "")
+			if n.Items != nil {
+				add(n.NamePos, n.Name, "variable", "")
+			}
+			for _, b := range n.Init {
+				add(b.Pos, b.Name, "variable", "")
+			}
 		}
 	})
 	for ident, node := range info.defs {

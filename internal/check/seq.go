@@ -30,6 +30,7 @@ func (c *checker) generate(e *syntax.Generate) Type {
 }
 
 func (c *checker) yieldExpr(e *syntax.Yield) Type {
+	c.inPostClause(e.Pos, "yield")
 	if c.producer == nil || c.producer.depth != c.lambdaDepth {
 		c.expr(e.Value)
 		c.errorf(e.Pos, "yield requires a generator body and cannot cross a lambda boundary")
@@ -42,7 +43,17 @@ func (c *checker) yieldExpr(e *syntax.Yield) Type {
 	return Ok
 }
 
+// loopContext is a loop being checked: the lambda depth of its body,
+// and whether a break leaves it.
+type loopContext struct {
+	depth  int
+	broken bool
+}
+
 func (c *checker) forExpr(e *syntax.For) Type {
+	if e.Items == nil {
+		return c.loopExpr(e)
+	}
 	source := c.expr(e.Items)
 	elem := Type(Invalid)
 	switch t := source.(type) {
@@ -60,12 +71,78 @@ func (c *checker) forExpr(e *syntax.For) Type {
 	if e.Name != "_" {
 		c.bind(e.Name, e.NamePos, elem, e)
 	}
-	c.loops = append(c.loops, c.lambdaDepth)
-	body := c.block(e.Body, Ok)
+	c.loops = append(c.loops, &loopContext{depth: c.lambdaDepth})
+	body := c.loopBody(e.Body)
 	c.loops = c.loops[:len(c.loops)-1]
 	c.popScope()
 	if body != Ok && body != Never && body != Invalid {
 		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
+	}
+	return Ok
+}
+
+// loopBody checks a loop's body, which may leave the loop even when the
+// loop is in another loop's condition or post clause.
+func (c *checker) loopBody(b *syntax.Block) Type {
+	savedPost, savedCond := c.postClause, c.loopCond
+	c.postClause, c.loopCond = 0, 0
+	defer func() { c.postClause, c.loopCond = savedPost, savedCond }()
+	return c.block(b, Ok)
+}
+
+// loopExpr checks `for { }`, `for (cond) { }`, and
+// `for (init; cond; post) { }`. The header names are bound in a scope
+// of the loop's own; each post binding gives one of them its next value.
+func (c *checker) loopExpr(e *syntax.For) Type {
+	c.pushScope()
+	defer c.popScope()
+	header := map[string]*syntax.Binding{}
+	for _, b := range e.Init {
+		if c.stmt(b) == Never {
+			c.errorf(b.Value.Position(), "a loop's header binding cannot leave the function")
+		}
+		header[b.Name] = b
+	}
+	if e.Cond != nil {
+		saved := c.loopCond
+		c.loopCond = c.lambdaDepth + 1
+		if t := c.exprWant(e.Cond, Bool); t != Bool && t != Invalid {
+			c.errorf(e.Cond.Position(), "a loop's condition must be Bool, found %s", t)
+		}
+		c.loopCond = saved
+	}
+	loop := &loopContext{depth: c.lambdaDepth}
+	c.loops = append(c.loops, loop)
+	body := c.loopBody(e.Body)
+	c.loops = c.loops[:len(c.loops)-1]
+	if body != Ok && body != Never && body != Invalid {
+		c.errorf(e.Body.Pos, "a loop body must have type Ok, found %s", body)
+	}
+	seen := map[string]bool{}
+	savedPost := c.postClause
+	c.postClause = c.lambdaDepth + 1
+	c.loops = append(c.loops, &loopContext{depth: -1}) // break and continue cannot leave it either
+	defer func() { c.postClause, c.loops = savedPost, c.loops[:len(c.loops)-1] }()
+	for _, b := range e.Post {
+		init := header[b.Name]
+		if init == nil {
+			c.expr(b.Value)
+			c.errorf(b.Pos, "the post clause can only rebind the loop's own header names, and %s is not one", b.Name)
+			continue
+		}
+		if seen[b.Name] {
+			c.errorf(b.Pos, "%s is rebound twice in the post clause", b.Name)
+		}
+		seen[b.Name] = true
+		want := c.info.bindings[init]
+		t := c.exprWant(b.Value, want)
+		if t, want := c.settle(t, want); t != Invalid && want != Invalid && !assignable(t, want) {
+			c.errorf(b.Value.Position(), "%s is the loop's %s, so its next value must be %s, found %s", b.Name, b.Name, want, t)
+		}
+		c.info.bindings[b] = want
+	}
+	if e.Cond == nil && !loop.broken {
+		return Never
 	}
 	return Ok
 }

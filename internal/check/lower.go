@@ -316,6 +316,9 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	case *syntax.Yield:
 		return &Yield{expr: at, Value: l.expr(x.Value), Elem: l.yieldElem}
 	case *syntax.For:
+		if x.Items == nil {
+			return l.loop(x, at)
+		}
 		items := l.expr(x.Items)
 		var elem Type
 		switch t := items.Type().(type) {
@@ -823,4 +826,31 @@ func (l *lowerer) assertIs(source *syntax.Call, at expr, assertion *assertIsInfo
 	}
 	result.Arms = append(result.Arms, fallback)
 	return result
+}
+
+// loop lowers `for { }`, `for (cond) { }`, and `for (init; cond; post)
+// { }`. A header name is one variable for every iteration, without the
+// initial value's identity: later iterations have other values.
+func (l *lowerer) loop(x *syntax.For, at expr) *For {
+	out := &For{expr: at}
+	index := map[string]int{}
+	for i, b := range x.Init {
+		value := l.expr(b.Value)
+		v := &Var{Name: b.Name, Pos: b.Pos, Type: l.info.bindings[b], Kind: VarLoop, Unused: l.info.unused[b], Invariant: l.info.bindingConstraints[b]}
+		l.vars[b] = v
+		index[b.Name] = i
+		out.Header = append(out.Header, v)
+		out.Init = append(out.Init, value)
+	}
+	if x.Cond != nil {
+		out.Cond = l.expr(x.Cond)
+	}
+	out.Body = l.block(x.Body)
+	out.Post = make([]Expr, len(out.Header))
+	for _, b := range x.Post {
+		if i, ok := index[b.Name]; ok {
+			out.Post[i] = l.expr(b.Value)
+		}
+	}
+	return out
 }

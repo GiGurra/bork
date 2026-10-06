@@ -778,6 +778,10 @@ func (a *executionAuditor) expr(x Expr, depth int, optional bool) {
 	case *Generate, *Yield, *SeqCall:
 		a.reject("unaudited producer execution")
 	case *For:
+		if x.Items == nil {
+			a.reject("unaudited loop")
+			return
+		}
 		walk(x.Items)
 		walk(x.Body)
 	case *LoopControl:

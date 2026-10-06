@@ -640,6 +640,10 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		l.pin(life, x.Pos(), "the generator's yield", nil, true)
 		return nil
 	case *For:
+		if x.Items == nil {
+			l.loopForm(x)
+			return nil
+		}
 		l.env[x.Var] = l.use(x.Items, l.expr(x.Items))
 		l.frame[x.Var] = l.cur
 		before := copyGone(l.gone)
@@ -1305,4 +1309,56 @@ func channelMethod(fn *Func) bool {
 	}
 	r, ok := genericBaseOrSelf(fn.Params[0]).(*Record)
 	return ok && r.Name == "Channel"
+}
+
+// loopForm checks a loop without a source. A header name lives as long as
+// its first value; each next value must live as long (it is a value of
+// the same variable, read where the first one could be).
+func (l *lifeChecker) loopForm(x *For) {
+	for i, init := range x.Init {
+		v := x.Header[i]
+		l.env[v] = l.use(init, l.expr(init))
+		l.frame[v] = l.cur
+	}
+	defined := len(l.defined)
+	for _, v := range x.Header {
+		l.noteVar(v)
+	}
+	// The condition and the post clause run every round, like the body.
+	before := copyGone(l.gone)
+	mark := len(l.bound)
+	outer := l.loop
+	l.loop = x
+	if x.Cond != nil {
+		l.expr(x.Cond)
+	}
+	l.expr(x.Body)
+	var nexts []lifetime
+	for _, post := range x.Post {
+		var life lifetime
+		if post != nil {
+			life = l.use(post, l.expr(post))
+		}
+		nexts = append(nexts, life)
+	}
+	for owner, gone := range l.gone {
+		if _, ok := before[owner]; !ok && l.bound[owner] < mark {
+			l.errorf(gone.pos, "a loop cannot consume owned scope %s from outside its body; borrow its scope instead", owner.Name)
+		}
+	}
+	l.gone = before
+	for i, post := range x.Post {
+		if post == nil {
+			continue
+		}
+		v := x.Header[i]
+		for _, scope := range nexts[i] {
+			if !l.env[v].has(scope) {
+				l.errorf(post.Pos(), "the next value of %s belongs to a scope its first value does not, so it could outlive it; give %s a first value of that scope", v.Name, v.Name)
+				break
+			}
+		}
+	}
+	l.loop = outer
+	l.settle(defined)
 }

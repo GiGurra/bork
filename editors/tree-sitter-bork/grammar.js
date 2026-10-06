@@ -152,7 +152,12 @@ module.exports = grammar({
     with_expression: $ => prec.dynamic(10, seq('with', '(', items(seq($.qualified_name, ':', $._expression), $), ')', $.block)),
     generate_expression: $ => seq('generate', $.type_arguments, $.block),
     yield_expression: $ => prec.right(seq('yield', $._expression)),
-    for_expression: $ => seq('for', '(', field('name', choice($._identifier, '_')), 'in', $._expression, ')', $.block),
+    for_expression: $ => seq('for', optional(seq('(', choice(
+      seq(field('name', choice($._identifier, '_')), 'in', $._expression),
+      field('condition', $._expression),
+      seq(optional(seq(field('init', $.loop_binding), repeat(seq(',', field('init', $.loop_binding))))), ';', optional(field('condition', $._expression)), ';', optional(seq(field('update', $.loop_binding), repeat(seq(',', field('update', $.loop_binding)))))),
+    ), ')')), $.block),
+    loop_binding: $ => seq(field('name', $._identifier), optional(seq(':', $.type)), '=', field('value', $._expression)),
     comptime_expression: $ => prec.dynamic(10, seq('comptime', $.block)),
     mock_expression: $ => prec.dynamic(10, seq('mock', $.qualified_name, $.mock_parameters, $.block)),
     mock_parameters: $ => seq('(', optional(comma(seq(field('name', choice($._identifier, '_'))))), ')'),

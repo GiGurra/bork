@@ -516,3 +516,63 @@ fn f() {
       (binding
         (identifier)
         (number)))))
+
+================================================================================
+Loop forms
+================================================================================
+
+fn main() {
+  for { break }
+  for (n < 3) { n = n + 1 }
+  for (i = 0, j: Int = 1; i < j; i = i + 1) { _ = i }
+  for (;;) { break }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    (identifier)
+    (parameters)
+    (block
+      (for_expression
+        (block))
+      (for_expression
+        (binary_expression
+          (qualified_name
+            (identifier))
+          (number))
+        (block
+          (binding
+            (identifier)
+            (binary_expression
+              (qualified_name
+                (identifier))
+              (number)))))
+      (for_expression
+        (loop_binding
+          (identifier)
+          (number))
+        (loop_binding
+          (identifier)
+          (type
+            (qualified_name
+              (identifier)))
+          (number))
+        (binary_expression
+          (qualified_name
+            (identifier))
+          (qualified_name
+            (identifier)))
+        (loop_binding
+          (identifier)
+          (binary_expression
+            (qualified_name
+              (identifier))
+            (number)))
+        (block
+          (binding
+            (qualified_name
+              (identifier)))))
+      (for_expression
+        (block)))))

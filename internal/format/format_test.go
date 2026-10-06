@@ -246,3 +246,16 @@ func TestComptimeFormatting(t *testing.T) {
 		t.Fatalf("unexpected formatting: %s", got)
 	}
 }
+
+func TestLoopFormatting(t *testing.T) {
+	source := []byte("fn f(){\nfor(i=0;i<3;i=i+1){ break }\nfor(;;){ break }\nfor ( ; i < 2 ; ) { break }\nfor (; true; // why\n) { break }\nfor (i = 0; ; i = i + 1) { break }\nfor (_ in [1, 2, 3]) { break }\n}\n")
+	got, err := Source("test.bork", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stable(t, source, got)
+	want := "fn f() {\n  for (i = 0; i < 3; i = i + 1) { break }\n  for (;;) { break }\n  for (; i < 2;) { break }\n  for (; true; // why\n  ) { break }\n  for (i = 0;; i = i + 1) { break }\n  for (_ in [1, 2, 3]) { break }\n}\n"
+	if string(got) != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

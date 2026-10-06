@@ -114,7 +114,14 @@ func WalkComptime(x Expr, visit func(Expr) bool) {
 		walk(x.Value)
 	case *For:
 		walk(x.Items)
+		for _, init := range x.Init {
+			walk(init)
+		}
+		walk(x.Cond)
 		walk(x.Body)
+		for _, post := range x.Post {
+			walk(post)
+		}
 	}
 }
 
