@@ -113,7 +113,7 @@ import "bork/codec"
 use codec.Defaults
 type Options = { config: Option[String], name: String = "world" } derive (codec.Decode)
 `
-			body := `println(cli.Run[Options]("greet", "Greeting script", (options, s) => { println(s"Hello ${options.name}") }, flags: [.{ field: "config", configFile: true }]))`
+			body := `println(cli.Run[Options]("greet", "Greeting script", (options, s) => { println(s"Hello ${options.name}") }, flags: [.{ field: "config", configFile: true }], settings: .{ version: "1.2.3" }))`
 			if main {
 				body = "fn main() {\n" + body + "\n}"
 			}
@@ -131,7 +131,7 @@ type Options = { config: Option[String], name: String = "world" } derive (codec.
 					t.Fatalf("%v: %s: %v", args, out, err)
 				}
 			}
-			for _, flag := range []string{"--help", "--version", "--fast", "--rebuild"} {
+			for _, flag := range []string{"--help", "--fast", "--rebuild"} {
 				out, err := exec.Command(exe, "script", path, flag).CombinedOutput()
 				if err != nil {
 					t.Fatalf("script flag %s: %s: %v", flag, out, err)
@@ -144,6 +144,10 @@ type Options = { config: Option[String], name: String = "world" } derive (codec.
 					t.Fatalf("compiler consumed script flag %s: %s", flag, out)
 				}
 			}
+			out, err := exec.Command(exe, "script", path, "--config", filepath.Join(root, "missing.json"), "--version").CombinedOutput()
+			if err != nil || string(out) != "greet version 1.2.3\nOk\n" {
+				t.Fatalf("script version must skip config and handler: %s: %v", out, err)
+			}
 			if runtime.GOOS == "windows" {
 				return
 			}
@@ -154,9 +158,15 @@ type Options = { config: Option[String], name: String = "world" } derive (codec.
 			}
 			cmd := exec.Command(path, "--config", config)
 			cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-			out, err := cmd.CombinedOutput()
+			out, err = cmd.CombinedOutput()
 			if err != nil || string(out) != "Hello file\nOk\n" {
 				t.Fatalf("shebang: %s: %v", out, err)
+			}
+			cmd = exec.Command(path, "--version", "--config", filepath.Join(root, "missing.json"))
+			cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			out, err = cmd.CombinedOutput()
+			if err != nil || string(out) != "greet version 1.2.3\nOk\n" {
+				t.Fatalf("shebang version: %s: %v", out, err)
 			}
 		})
 	}

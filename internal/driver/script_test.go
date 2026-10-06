@@ -290,10 +290,10 @@ use codec.Defaults
 type Options = { config: Option[String], name: String = "world" } derive (codec.Decode)
 type Root = { config: Option[String], region: String = "west" } derive (codec.Decode)
 fn commands(): List[cli.Command] {
- [cli.Subcommand[Options]("greet", "Greeting", (options, s) => { println(options.name) }, flags: [.{ field: "config", configFile: true }])]
+ [cli.Subcommand[Options]("greet", "Greeting", (options, s) => { println(options.name) }, flags: [.{ field: "config", configFile: true }], settings: .{ version: "1.2.3" })]
 }
 fn rootCommands(): List[cli.RootCommand[Root]] {
- [cli.RootSubcommand[Root, Options]("greet", "Greeting", (root, options, s) => { println(s"${root.region}/${options.name}") }, flags: [.{ field: "config", long: cli.Mapping.Named { name: "leaf-config" }, configFile: true }])]
+ [cli.RootSubcommand[Root, Options]("greet", "Greeting", (root, options, s) => { println(s"${root.region}/${options.name}") }, flags: [.{ field: "config", long: cli.Mapping.Named { name: "leaf-config" }, configFile: true }], settings: .{ version: "1.2.3" })]
 }
 `
 	for _, main := range []bool{false, true} {
@@ -302,9 +302,9 @@ fn rootCommands(): List[cli.RootCommand[Root]] {
 			args       []string
 			want       string
 		}{
-			{"RunCommands", `println(cli.RunCommands("app", "Commands", commands()))`, []string{"greet", "--config", "leaf.json", "--name", "Ada"}, "Ada\nOk\n"},
-			{"Dispatch", `println(cli.Dispatch("app", "Commands", process.Args(), commands()))`, []string{"greet", "--config", "leaf.json"}, "file\nOk\n"},
-			{"RunRoot", `println(cli.RunRoot[Root]("app", "Root commands", rootCommands(), flags: [.{ field: "config", long: cli.Mapping.Named { name: "root-config" }, configFile: true }]))`, []string{"--root-config", "root.json", "greet", "--leaf-config", "leaf.json", "--region", "east"}, "east/file\nOk\n"},
+			{"RunCommands", `println(cli.RunCommands("app", "Commands", commands(), settings: .{ version: "1.2.3" }))`, []string{"greet", "--config", "leaf.json", "--name", "Ada"}, "Ada\nOk\n"},
+			{"Dispatch", `println(cli.Dispatch("app", "Commands", process.Args(), commands(), settings: .{ version: "1.2.3" }))`, []string{"greet", "--config", "leaf.json"}, "file\nOk\n"},
+			{"RunRoot", `println(cli.RunRoot[Root]("app", "Root commands", rootCommands(), flags: [.{ field: "config", long: cli.Mapping.Named { name: "root-config" }, configFile: true }], settings: .{ version: "1.2.3" }))`, []string{"--root-config", "root.json", "greet", "--leaf-config", "leaf.json", "--region", "east"}, "east/file\nOk\n"},
 		} {
 			name := tc.name + map[bool]string{false: "/top-level", true: "/main"}[main]
 			t.Run(name, func(t *testing.T) {
@@ -336,6 +336,21 @@ fn rootCommands(): List[cli.RootCommand[Root]] {
 				out, err := cmd.CombinedOutput()
 				if err != nil || string(out) != tc.want {
 					t.Fatalf("%s: %v", out, err)
+				}
+				for _, args := range [][]string{{"--version"}, {"greet", "--config", "missing.json", "--version"}} {
+					if tc.name == "RunRoot" && len(args) > 1 {
+						args[1] = "--leaf-config"
+					}
+					cmd = exec.Command(exe, args...)
+					cmd.Dir = root
+					out, err = cmd.CombinedOutput()
+					want := "app version 1.2.3"
+					if len(args) > 1 {
+						want = "app greet version 1.2.3"
+					}
+					if err != nil || !strings.Contains(string(out), want) || strings.Contains(string(out), "Error") || strings.Contains(string(out), "world") || strings.Contains(string(out), "west") {
+						t.Fatalf("version must skip config and handler: %s: %v", out, err)
+					}
 				}
 				cmd = exec.Command(exe, "--help")
 				cmd.Dir = root

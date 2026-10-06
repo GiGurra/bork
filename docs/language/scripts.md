@@ -50,7 +50,7 @@ bork test hello.bork
 
 ## Command-line tools
 
-Scripts can use [bork/cli](../std/cli.md) in either entrypoint form, including typed flags, config files, subcommands and persistent root flags (`RunRoot`). The CLI APIs receive script arguments without the program name. Flags such as `--help` belong to the script, so they work through shebang execution too.
+Scripts can use [bork/cli](../std/cli.md) in either entrypoint form, including typed flags, config files, subcommands and persistent root flags (`RunRoot`). The CLI APIs receive script arguments without the program name. Flags such as `--help` and configured `--version` belong to the script, so they work through shebang execution too.
 
 ```bork
 #!/usr/bin/env -S bork script
