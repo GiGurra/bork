@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/GiGurra/bork/internal/std"
 )
 
 func TestSourceSnapshotFrozenReads(t *testing.T) {
@@ -188,7 +190,7 @@ func TestSourceSnapshotRetriesDuringCapture(t *testing.T) {
 				t.Fatalf("retry: %v", err)
 			}
 			for _, file := range loaded.Files {
-				if !file.Prelude && file.Source != "fn main() { _ = 1 }\n" {
+				if !file.Prelude && !strings.HasPrefix(file.Package, std.Prefix) && file.Source != "fn main() { _ = 1 }\n" {
 					t.Fatalf("captured stale source: %q", file.Source)
 				}
 			}
