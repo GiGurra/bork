@@ -3,6 +3,7 @@
 // notEmpty holds for a list with at least one element.
 pred notEmpty[T](xs: List[T]) { !xs.isEmpty() }
 
+// Builds a nonempty list with x before the elements of xs.
 fn prepend[T](x: T, xs: List[T]): List[T] where notEmpty unsafe go {
   out := make([]T, 0, len(xs)+1)
   return append(append(out, x), xs...)
@@ -20,9 +21,11 @@ fn range(start: Int, end: Int): List[Int] unsafe go {
 // List methods. A list never changes: operations build new lists.
 // Methods chain: xs.filter(f).map(g), m.get(k), s.trim().
 
+// Returns the number of elements.
 fn (xs: List[T]) length[T](): Int unsafe go {
   return int64(len(xs))
 }
+// Reports whether the list has no elements.
 fn (xs: List[T]) isEmpty[T](): Bool unsafe go {
   return len(xs) == 0
 }
@@ -38,18 +41,21 @@ fn (xs: List[T]) get[T](index: Int): Option[T] unsafe go {
   }
   return Option_Some[T]{E0: xs[index]}
 }
+// Returns the first element, or None for an empty list.
 fn (xs: List[T]) head[T](): Option[T] unsafe go {
   if len(xs) == 0 {
     return Option_None[T]{}
   }
   return Option_Some[T]{E0: xs[0]}
 }
+// Returns the last element, or None for an empty list.
 fn (xs: List[T]) last[T](): Option[T] unsafe go {
   if len(xs) == 0 {
     return Option_None[T]{}
   }
   return Option_Some[T]{E0: xs[len(xs)-1]}
 }
+// Applies f to each element, preserving input order.
 fn (xs: List[A]) map[A, B](f: (A) => B): List[B] unsafe go {
   out := make([]B, len(xs))
   for i, x := range xs {
@@ -57,6 +63,7 @@ fn (xs: List[A]) map[A, B](f: (A) => B): List[B] unsafe go {
   }
   return out
 }
+// Applies f to each element and concatenates its lists in input order.
 fn (xs: List[A]) flatMap[A, B](f: (A) => List[B]): List[B] unsafe go {
   var out []B
   for _, x := range xs {
@@ -85,6 +92,7 @@ fn (xs: List[T]) fold[T, A](initial: A, f: (A, T) => A): A unsafe go {
   }
   return acc
 }
+// Returns the first matching element, with its matching fact, or None.
 fn (xs: List[T]) find[T](matches: (T) => Bool): Option[T where matches] unsafe go {
   for _, x := range xs {
     if matches(x) {
@@ -93,6 +101,7 @@ fn (xs: List[T]) find[T](matches: (T) => Bool): Option[T where matches] unsafe g
   }
   return Option_None[T]{}
 }
+// Reports whether any element passes test; an empty list returns false.
 fn (xs: List[T]) any[T](test: (T) => Bool): Bool unsafe go {
   for _, x := range xs {
     if test(x) {
@@ -101,6 +110,7 @@ fn (xs: List[T]) any[T](test: (T) => Bool): Bool unsafe go {
   }
   return false
 }
+// Reports whether every element passes test; an empty list returns true.
 fn (xs: List[T]) all[T](test: (T) => Bool): Bool unsafe go {
   for _, x := range xs {
     if !test(x) {
@@ -109,6 +119,7 @@ fn (xs: List[T]) all[T](test: (T) => Bool): Bool unsafe go {
   }
   return true
 }
+// Counts the elements that pass test.
 fn (xs: List[T]) count[T](test: (T) => Bool): Int unsafe go {
   n := int64(0)
   for _, x := range xs {
@@ -118,6 +129,7 @@ fn (xs: List[T]) count[T](test: (T) => Bool): Int unsafe go {
   }
   return n
 }
+// Calls f for every element in input order.
 fn (xs: List[T]) forEach[T](f: (T) => Ok) unsafe go {
   for _, x := range xs {
     f(x)
@@ -133,6 +145,7 @@ fn (xs: List[T]) drop[T](n: Int): List[T] unsafe go {
   n = max(0, min(n, int64(len(xs))))
   return xs[n:]
 }
+// Builds a list with the elements in reverse order.
 fn (xs: List[T]) reverse[T](): List[T] unsafe go {
   out := make([]T, len(xs))
   for i, x := range xs {
@@ -140,10 +153,12 @@ fn (xs: List[T]) reverse[T](): List[T] unsafe go {
   }
   return out
 }
+// Builds a list containing these elements followed by ys.
 fn (xs: List[T]) concat[T](ys: List[T]): List[T] unsafe go {
   out := make([]T, 0, len(xs)+len(ys))
   return append(append(out, xs...), ys...)
 }
+// Builds a nonempty list with x after the existing elements.
 fn (xs: List[T]) append[T](x: T): List[T] where notEmpty unsafe go {
   out := make([]T, 0, len(xs)+1)
   return append(append(out, xs...), x)
@@ -165,6 +180,7 @@ fn (xs: List[T]) includes[T: Eq](x: T): Bool {
 fn (xs: List[T]) distinct[T: Eq](): List[T] {
   xs.fold([], (seen: List[T], x: T) => if (seen.includes(x)) { seen } else { seen.append(x) })
 }
+// Joins the strings with separator between adjacent elements.
 fn (parts: List[String]) join(separator: String): String unsafe go {
   import "strings"
   return strings.Join(parts, separator)

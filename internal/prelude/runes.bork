@@ -4,32 +4,38 @@ fn (r: Rune) code(): Int32 unsafe go {
   return int32(r)
 }
 
+// Converts a Unicode scalar value to a Rune; invalid code points return None.
 fn (n: Int32) rune(): Option[Rune] unsafe go {
   import "unicode/utf8"
   if utf8.ValidRune(rune(n)) { return Option_Some[_Rune]{E0: _Rune(n)} }
   return Option_None[_Rune]{}
 }
 
+// Reports whether the rune is a Unicode decimal digit.
 fn (r: Rune) isDigit(): Bool unsafe go {
   import "unicode"
   return unicode.IsDigit(rune(r))
 }
 
+// Reports whether the rune is a Unicode letter.
 fn (r: Rune) isLetter(): Bool unsafe go {
   import "unicode"
   return unicode.IsLetter(rune(r))
 }
 
+// Reports whether the rune is Unicode whitespace.
 fn (r: Rune) isSpace(): Bool unsafe go {
   import "unicode"
   return unicode.IsSpace(rune(r))
 }
 
+// Reports whether the rune is a Unicode uppercase letter.
 fn (r: Rune) isUpper(): Bool unsafe go {
   import "unicode"
   return unicode.IsUpper(rune(r))
 }
 
+// Reports whether the rune is a Unicode lowercase letter.
 fn (r: Rune) isLower(): Bool unsafe go {
   import "unicode"
   return unicode.IsLower(rune(r))

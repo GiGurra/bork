@@ -20,50 +20,62 @@ class Ord[T] {
   fn compare(a: T, b: T): Int
 }
 
+// Orders Int values in ascending order.
 instance ordInt: Ord[Int] {
   fn compare(a: Int, b: Int): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Int8 values in ascending order.
 instance ordInt8: Ord[Int8] {
   fn compare(a: Int8, b: Int8): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Int16 values in ascending order.
 instance ordInt16: Ord[Int16] {
   fn compare(a: Int16, b: Int16): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Int32 values in ascending order.
 instance ordInt32: Ord[Int32] {
   fn compare(a: Int32, b: Int32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Uint8 values in ascending order.
 instance ordUint8: Ord[Uint8] {
   fn compare(a: Uint8, b: Uint8): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Uint16 values in ascending order.
 instance ordUint16: Ord[Uint16] {
   fn compare(a: Uint16, b: Uint16): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Uint32 values in ascending order.
 instance ordUint32: Ord[Uint32] {
   fn compare(a: Uint32, b: Uint32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Uint64 values in ascending order.
 instance ordUint64: Ord[Uint64] {
   fn compare(a: Uint64, b: Uint64): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Float values in ascending order.
 instance ordFloat: Ord[Float] {
   fn compare(a: Float, b: Float): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Float32 values in ascending order.
 instance ordFloat32: Ord[Float32] {
   fn compare(a: Float32, b: Float32): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders String values in ascending order.
 instance ordString: Ord[String] {
   fn compare(a: String, b: String): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
 
+// Orders Rune values in ascending order.
 instance ordRune: Ord[Rune] {
   fn compare(a: Rune, b: Rune): Int { if (a < b) { -1 } else if (a > b) { 1 } else { 0 } }
 }
