@@ -1,0 +1,12 @@
+ok    Byte endian IO round trips
+ok    Int8 endian IO round trips
+ok    Uint16 endian IO round trips
+ok    Uint32 endian IO round trips
+ok    Uint64 endian IO round trips
+ok    Int16 endian IO round trips
+ok    Int32 endian IO round trips
+ok    Int64 endian IO round trips
+ok    writer snapshots remain independent
+ok    reader cursors are immutable
+10 passed, 0 failed
+exit code 0

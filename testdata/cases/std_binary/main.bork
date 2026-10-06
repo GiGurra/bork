@@ -1,0 +1,66 @@
+import "bork/binary"
+
+type BytesRead = (Bytes, binary.Reader)
+
+fn build(order: binary.ByteOrder) uses io: Bytes | binary.BinaryError {
+  empty = binary.NewWriter(order)
+  first = empty.WriteByte(255)?
+  second = first.WriteInt8(-128)?
+  third = second.WriteUint16(4660)?
+  fourth = third.WriteUint32(305419896)?
+  fifth = fourth.WriteUint64(18446744073709551615)?
+  sixth = fifth.WriteInt16(-2)?
+  seventh = sixth.WriteInt32(-2)?
+  eighth = seventh.WriteInt64(-2)?
+  all = eighth.WriteBytes([toByte(17), toByte(34)].toBytes())?
+  println(empty.Length(), empty.Bytes(), first.Length(), first.Bytes(), all.Length())
+  all.Bytes()
+}
+
+fn decode(data: Bytes, order: binary.ByteOrder) uses io: Int | binary.BinaryError {
+  reader = binary.NewReader(data, order)
+  (a, first) = reader.ReadByte()?
+  (b, second) = first.ReadInt8()?
+  (c, third) = second.ReadUint16()?
+  (d, fourth) = third.ReadUint32()?
+  (e, fifth) = fourth.ReadUint64()?
+  (f, sixth) = fifth.ReadInt16()?
+  (g, seventh) = sixth.ReadInt32()?
+  (h, eighth) = seventh.ReadInt64()?
+  (tail, ninth) = eighth.ReadBytes(2)?
+  println(a, b, c, d, e, f, g, h, tail)
+  println(reader.Offset(), reader.Remaining(), ninth.Offset(), ninth.Remaining())
+  println(ninth.ReadByte(), ninth.ReadBytes(-1), ninth.Skip(1), ninth.Skip(-1))
+  match (ninth.ReadBytes(0)) {
+    pair: BytesRead => println(pair.0, pair.1.Offset())
+    error: binary.BinaryError => println(error)
+  }
+  skipped = reader.Skip(2)?
+  println(skipped.ReadUint16(), reader.Offset(), skipped.Offset())
+  ninth.Offset()
+}
+
+fn main() {
+  data: List[Byte] = [18, 52, 86, 120, 154, 188, 222, 240]
+  bytes = data.toBytes()
+  big = binary.ByteOrder.BigEndian
+  little = binary.ByteOrder.LittleEndian
+  println(bytes.ReadByte(0), bytes.ReadInt8(4))
+  println(bytes.ReadUint16(0, big), bytes.ReadUint16(0, little))
+  println(bytes.ReadUint32(0, big), bytes.ReadUint32(0, little))
+  println(bytes.ReadUint64(0, big), bytes.ReadUint64(0, little))
+  println(bytes.ReadInt16(4, big), bytes.ReadInt16(4, little))
+  println(bytes.ReadInt32(4, big), bytes.ReadInt32(4, little))
+  println(bytes.ReadInt64(0, big), bytes.ReadInt64(0, little))
+  println(bytes.WriteByte(0, 255), bytes.WriteInt8(0, -128))
+  println(bytes.WriteUint16(1, 4660, big), bytes.WriteUint16(1, 4660, little))
+  println(bytes.WriteUint32(1, 305419896, big), bytes.WriteUint32(1, 305419896, little))
+  println(bytes.WriteUint64(0, 18446744073709551615, big))
+  println(bytes.WriteInt16(1, -2, little), bytes.WriteInt32(1, -2, little), bytes.WriteInt64(0, -2, little))
+  println(bytes)
+  println(bytes.ReadByte(-1), bytes.ReadUint16(7, big), bytes.ReadUint64(9223372036854775807, little))
+  println(bytes.WriteByte(8, 1), bytes.WriteUint64(-1, 1, big), bytes.WriteUint32(9223372036854775807, 1, little))
+  println(build(big), build(little))
+  match (build(big)) { builtBig: Bytes => println(decode(builtBig, big)), error: binary.BinaryError => println(error) }
+  match (build(little)) { builtLittle: Bytes => println(decode(builtLittle, little)), error: binary.BinaryError => println(error) }
+}

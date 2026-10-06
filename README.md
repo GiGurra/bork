@@ -8,6 +8,7 @@
 
 Fixed-width integers support bitwise `&`, `|`, `^`, Go-style complement `^x`, and shifts with checked nonnegative counts; see [numbers](docs/language/basics.md).
 [bork/bits](docs/std/bits.md) adds integer bit counts, rotations, reversal, and checked bit fields.
+[bork/binary](docs/std/binary.md) reads and writes endian integers in immutable Bytes, with reader cursors and persistent writers for binary formats.
 
 ## Install
 

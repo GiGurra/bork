@@ -1,0 +1,81 @@
+// Writer stores immutable chunks, so appending fixed-width values does not
+// repeatedly copy earlier bytes. Bytes() allocates a fresh combined snapshot.
+type Writer = sealed { writer { chunk: Bytes, previous: Option[Writer], order: ByteOrder, length: Int } }
+
+fn NewWriter(order: ByteOrder): Writer unsafe go {
+  return Writer_writer{chunk: _borkBytesFrom(nil), previous: _borkNone[Writer](), order: order, length: 0}
+}
+fn (value: Writer) Length(): Int unsafe go { return value.(Writer_writer).length }
+fn writerOrder(value: Writer): ByteOrder unsafe go { return value.(Writer_writer).order }
+fn appendWriter(value: Writer, chunk: Bytes): Writer | BinaryError unsafe go {
+  if len(chunk) == 0 { return value }
+  node := value.(Writer_writer)
+  limit := int64(int(^uint(0) >> 1))
+  if int64(len(chunk)) > limit - node.length {
+    return BinaryError{offset: node.length, required: int64(len(chunk)), length: limit}
+  }
+  return Writer_writer{chunk: chunk, previous: _borkSome(value), order: node.order, length: node.length + int64(len(chunk))}
+}
+fn (value: Writer) WriteBytes(data: Bytes): Writer | BinaryError { appendWriter(value, data) }
+fn (value: Writer) Bytes(): Bytes unsafe go {
+  node := value.(Writer_writer)
+  // Allocate an owned Bytes value and fill it before exposing the snapshot.
+  result := append(_borkBytesFrom(nil), make([]byte, int(node.length))...)
+  offset := node.length
+  for {
+    offset -= int64(len(node.chunk))
+    copy(result[offset:], node.chunk)
+    previous, ok := _borkOptionGet(node.previous)
+    if !ok { break }
+    node = previous.(Writer_writer)
+  }
+  return result
+}
+fn (value: Writer) WriteByte(number: Byte): Writer | BinaryError unsafe go {
+  return appendWriter(value, _borkBytesFrom([]byte{number}))
+}
+fn (value: Writer) WriteInt8(number: Int8): Writer | BinaryError unsafe go {
+  return appendWriter(value, _borkBytesFrom([]byte{byte(number)}))
+}
+
+fn (value: Writer) WriteUint16(number: Uint16): Writer | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  var data [2]byte
+  if littleEndian(writerOrder(value)) { gobinary.LittleEndian.PutUint16(data[:], uint16(number)) } else { gobinary.BigEndian.PutUint16(data[:], uint16(number)) }
+  return appendWriter(value, _borkBytesFrom(data[:]))
+}
+
+fn (value: Writer) WriteUint32(number: Uint32): Writer | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  var data [4]byte
+  if littleEndian(writerOrder(value)) { gobinary.LittleEndian.PutUint32(data[:], uint32(number)) } else { gobinary.BigEndian.PutUint32(data[:], uint32(number)) }
+  return appendWriter(value, _borkBytesFrom(data[:]))
+}
+
+fn (value: Writer) WriteUint64(number: Uint64): Writer | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  var data [8]byte
+  if littleEndian(writerOrder(value)) { gobinary.LittleEndian.PutUint64(data[:], uint64(number)) } else { gobinary.BigEndian.PutUint64(data[:], uint64(number)) }
+  return appendWriter(value, _borkBytesFrom(data[:]))
+}
+
+fn (value: Writer) WriteInt16(number: Int16): Writer | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  var data [2]byte
+  if littleEndian(writerOrder(value)) { gobinary.LittleEndian.PutUint16(data[:], uint16(number)) } else { gobinary.BigEndian.PutUint16(data[:], uint16(number)) }
+  return appendWriter(value, _borkBytesFrom(data[:]))
+}
+
+fn (value: Writer) WriteInt32(number: Int32): Writer | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  var data [4]byte
+  if littleEndian(writerOrder(value)) { gobinary.LittleEndian.PutUint32(data[:], uint32(number)) } else { gobinary.BigEndian.PutUint32(data[:], uint32(number)) }
+  return appendWriter(value, _borkBytesFrom(data[:]))
+}
+
+fn (value: Writer) WriteInt64(number: Int): Writer | BinaryError unsafe go {
+  import gobinary "encoding/binary"
+  var data [8]byte
+  if littleEndian(writerOrder(value)) { gobinary.LittleEndian.PutUint64(data[:], uint64(number)) } else { gobinary.BigEndian.PutUint64(data[:], uint64(number)) }
+  return appendWriter(value, _borkBytesFrom(data[:]))
+}

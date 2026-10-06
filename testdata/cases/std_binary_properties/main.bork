@@ -1,0 +1,198 @@
+import "bork/binary"
+
+type Uint64Read = (Uint64, binary.Reader)
+type BytesRead = (Bytes, binary.Reader)
+
+test "Byte endian IO round trips" (value: Byte) {
+  padding: List[Byte] = [85, 85, 85]
+  original = padding.toBytes()
+  match (original.WriteByte(1, value)) {
+    written: Bytes => {
+      assert(written.ReadByte(1) == value)
+      assertEqual(written.get(0), original.get(0))
+      assertEqual(written.get(2), original.get(2))
+      assertEqual(original, padding.toBytes())
+    }
+    _: binary.BinaryError => assert(false)
+  }
+}
+
+test "Int8 endian IO round trips" (value: Int8) {
+  padding: List[Byte] = [85, 85, 85]
+  original = padding.toBytes()
+  match (original.WriteInt8(1, value)) {
+    written: Bytes => {
+      assert(written.ReadInt8(1) == value)
+      assertEqual(written.get(0), original.get(0))
+      assertEqual(written.get(2), original.get(2))
+      assertEqual(original, padding.toBytes())
+    }
+    _: binary.BinaryError => assert(false)
+  }
+}
+
+test "Uint16 endian IO round trips" (value: Uint16) {
+  padding: List[Byte] = [85, 85, 85, 85]
+  original = padding.toBytes()
+  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
+    match (original.WriteUint16(1, value, order)) {
+      written: Bytes => {
+        assert(written.ReadUint16(1, order) == value)
+        assertEqual(written.get(0), original.get(0))
+        assertEqual(written.get(3), original.get(3))
+        assertEqual(original, padding.toBytes())
+      }
+      _: binary.BinaryError => assert(false)
+    }
+  }
+}
+
+test "Uint32 endian IO round trips" (value: Uint32) {
+  padding: List[Byte] = [85, 85, 85, 85, 85, 85]
+  original = padding.toBytes()
+  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
+    match (original.WriteUint32(1, value, order)) {
+      written: Bytes => {
+        assert(written.ReadUint32(1, order) == value)
+        assertEqual(written.get(0), original.get(0))
+        assertEqual(written.get(5), original.get(5))
+        assertEqual(original, padding.toBytes())
+      }
+      _: binary.BinaryError => assert(false)
+    }
+  }
+}
+
+test "Uint64 endian IO round trips" (value: Uint64) {
+  padding: List[Byte] = [85, 85, 85, 85, 85, 85, 85, 85, 85, 85]
+  original = padding.toBytes()
+  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
+    match (original.WriteUint64(1, value, order)) {
+      written: Bytes => {
+        assert(written.ReadUint64(1, order) == value)
+        assertEqual(written.get(0), original.get(0))
+        assertEqual(written.get(9), original.get(9))
+        assertEqual(original, padding.toBytes())
+      }
+      _: binary.BinaryError => assert(false)
+    }
+  }
+}
+
+test "Int16 endian IO round trips" (value: Int16) {
+  padding: List[Byte] = [85, 85, 85, 85]
+  original = padding.toBytes()
+  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
+    match (original.WriteInt16(1, value, order)) {
+      written: Bytes => {
+        assert(written.ReadInt16(1, order) == value)
+        assertEqual(written.get(0), original.get(0))
+        assertEqual(written.get(3), original.get(3))
+        assertEqual(original, padding.toBytes())
+      }
+      _: binary.BinaryError => assert(false)
+    }
+  }
+}
+
+test "Int32 endian IO round trips" (value: Int32) {
+  padding: List[Byte] = [85, 85, 85, 85, 85, 85]
+  original = padding.toBytes()
+  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
+    match (original.WriteInt32(1, value, order)) {
+      written: Bytes => {
+        assert(written.ReadInt32(1, order) == value)
+        assertEqual(written.get(0), original.get(0))
+        assertEqual(written.get(5), original.get(5))
+        assertEqual(original, padding.toBytes())
+      }
+      _: binary.BinaryError => assert(false)
+    }
+  }
+}
+
+test "Int64 endian IO round trips" (value: Int64) {
+  padding: List[Byte] = [85, 85, 85, 85, 85, 85, 85, 85, 85, 85]
+  original = padding.toBytes()
+  for (order in [binary.ByteOrder.BigEndian, binary.ByteOrder.LittleEndian]) {
+    match (original.WriteInt64(1, value, order)) {
+      written: Bytes => {
+        assert(written.ReadInt64(1, order) == value)
+        assertEqual(written.get(0), original.get(0))
+        assertEqual(written.get(9), original.get(9))
+        assertEqual(original, padding.toBytes())
+      }
+      _: binary.BinaryError => assert(false)
+    }
+  }
+}
+
+test "writer snapshots remain independent" (value: Uint64) {
+  empty = binary.NewWriter(binary.ByteOrder.LittleEndian)
+  match (empty.WriteUint64(value)) {
+    first: binary.Writer => {
+      snapshot = first.Bytes()
+      match (first.WriteByte(17)) {
+        second: binary.Writer => {
+          assertEqual(empty.Length(), 0)
+          assertEqual(empty.Bytes().length(), 0)
+          assertEqual(first.Length(), 8)
+          assertEqual(first.Bytes(), snapshot)
+          assertEqual(second.Length(), 9)
+          assert(second.Bytes().ReadUint64(0, binary.ByteOrder.LittleEndian) == value)
+          assert(second.Bytes().ReadByte(8) == 17)
+          match (first.WriteByte(34)) {
+            branch: binary.Writer => {
+              assert(branch.Bytes().ReadByte(8) == 34)
+              assert(second.Bytes().ReadByte(8) == 17)
+              assertEqual(first.Bytes(), snapshot)
+            }
+            _: binary.BinaryError => assert(false)
+          }
+          emptyData: List[Byte] = []
+          assert(first.WriteBytes(emptyData.toBytes()) == first)
+        }
+        _: binary.BinaryError => assert(false)
+      }
+    }
+    _: binary.BinaryError => assert(false)
+  }
+}
+
+test "reader cursors are immutable" (value: Uint64) {
+  writer = binary.NewWriter(binary.ByteOrder.LittleEndian)
+  match (writer.WriteUint64(value)) {
+    written: binary.Writer => {
+      reader = binary.NewReader(written.Bytes(), binary.ByteOrder.LittleEndian)
+      match (reader.ReadUint64()) {
+        pair: Uint64Read => {
+          (actual, next) = pair
+          assertEqual(actual, value)
+          assertEqual(reader.Offset(), 0)
+          assertEqual(reader.Remaining(), 8)
+          assertEqual(next.Offset(), 8)
+          assertEqual(next.Remaining(), 0)
+          assert(next.Skip(0) == next)
+          match (next.ReadBytes(9223372036854775807)) {
+            _: BytesRead => assert(false)
+            error: binary.BinaryError => { assertEqual(error.offset, 8); assertEqual(error.length, 8) }
+          }
+          match (next.Skip(9223372036854775807)) {
+            _: binary.Reader => assert(false)
+            error: binary.BinaryError => { assertEqual(error.offset, 8); assertEqual(error.length, 8) }
+          }
+          match (next.ReadUint64()) {
+            _: Uint64Read => assert(false)
+            _: binary.BinaryError => assertEqual(next.Offset(), 8)
+          }
+          match (next.ReadBytes(0)) {
+            bytesResult: BytesRead => { assert(bytesResult.0.isEmpty()); assertEqual(bytesResult.1, next) }
+            _: binary.BinaryError => assert(false)
+          }
+        }
+        _: binary.BinaryError => assert(false)
+      }
+    }
+    _: binary.BinaryError => assert(false)
+  }
+}

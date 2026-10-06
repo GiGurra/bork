@@ -1,0 +1,44 @@
+fn (value: Reader) ReadBytes(count: Int): (Bytes, Reader) | BinaryError {
+  data = readerChunk(value, count)?
+  (data, advanceReader(value, count))
+}
+
+fn (value: Reader) ReadByte(): (Byte, Reader) | BinaryError {
+  number = readerData(value).ReadByte(value.Offset())?
+  (number, advanceReader(value, 1))
+}
+
+fn (value: Reader) ReadInt8(): (Int8, Reader) | BinaryError {
+  number = readerData(value).ReadInt8(value.Offset())?
+  (number, advanceReader(value, 1))
+}
+
+fn (value: Reader) ReadUint16(): (Uint16, Reader) | BinaryError {
+  number = readerData(value).ReadUint16(value.Offset(), readerOrder(value))?
+  (number, advanceReader(value, 2))
+}
+
+fn (value: Reader) ReadUint32(): (Uint32, Reader) | BinaryError {
+  number = readerData(value).ReadUint32(value.Offset(), readerOrder(value))?
+  (number, advanceReader(value, 4))
+}
+
+fn (value: Reader) ReadUint64(): (Uint64, Reader) | BinaryError {
+  number = readerData(value).ReadUint64(value.Offset(), readerOrder(value))?
+  (number, advanceReader(value, 8))
+}
+
+fn (value: Reader) ReadInt16(): (Int16, Reader) | BinaryError {
+  number = readerData(value).ReadInt16(value.Offset(), readerOrder(value))?
+  (number, advanceReader(value, 2))
+}
+
+fn (value: Reader) ReadInt32(): (Int32, Reader) | BinaryError {
+  number = readerData(value).ReadInt32(value.Offset(), readerOrder(value))?
+  (number, advanceReader(value, 4))
+}
+
+fn (value: Reader) ReadInt64(): (Int64, Reader) | BinaryError {
+  number = readerData(value).ReadInt64(value.Offset(), readerOrder(value))?
+  (number, advanceReader(value, 8))
+}
