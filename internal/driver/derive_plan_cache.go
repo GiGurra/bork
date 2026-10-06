@@ -21,12 +21,14 @@ const derivePlanContentLimit = 64 << 20
 const derivePlanEntryLimit = 16 << 20
 
 type derivePlanCache struct {
-	mu        sync.Mutex
-	entries   map[string][]byte
-	order     []string
-	bytes     int
-	root      string
-	namespace [sha256.Size]byte
+	mu          sync.Mutex
+	entries     map[string][]byte
+	order       []string
+	bytes       int
+	root        string
+	namespace   [sha256.Size]byte
+	sources     map[string]string
+	sourceOrder []string
 }
 
 func newDerivePlanCache() *derivePlanCache {
@@ -199,4 +201,34 @@ func (gp goPackages) DerivePlanStore() check.DerivePlanStore {
 		return gp.usage.plans
 	}
 	return sharedDerivePlanCache()
+}
+
+// Bound lexical fingerprint summaries separately from serialized expansion
+// plans. Source text and checker graphs are never retained here.
+const derivePlanSourceLimit = 16384
+
+func (cache *derivePlanCache) DerivePlanSourceGet(key string) string {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	return cache.sources[key]
+}
+
+func (cache *derivePlanCache) DerivePlanSourcePut(key, inventory string) {
+	if !validDerivePlanKey(key) || !validDerivePlanKey(inventory) {
+		return
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if cache.sources == nil {
+		cache.sources = map[string]string{}
+	}
+	if _, present := cache.sources[key]; present {
+		return
+	}
+	cache.sources[key] = inventory
+	cache.sourceOrder = append(cache.sourceOrder, key)
+	if len(cache.sourceOrder) > derivePlanSourceLimit {
+		delete(cache.sources, cache.sourceOrder[0])
+		cache.sourceOrder = cache.sourceOrder[1:]
+	}
 }

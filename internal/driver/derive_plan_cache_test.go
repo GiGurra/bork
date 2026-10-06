@@ -2,6 +2,8 @@ package driver
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,5 +256,70 @@ fn main() { println(1) }`
 	cold, err := (&Session{plans: &derivePlanCache{entries: map[string][]byte{}}}).Emit(dir)
 	if err != nil || !bytes.Equal(warm, cold) {
 		t.Fatalf("source endpoints differ from cold expansion: %v", err)
+	}
+}
+
+func TestDerivePlanCorruptionFallsBackToColdChecking(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.bork")
+	prefix := `import "bork/shape"
+class Labels[T] { fn labels(x: T): List[String] }
+derive instance labels[T]: Labels[T] {
+ fn labels(x: T): List[String] { [comptime for (field in shape.fields[T]()) field.name] }
+}
+type Row = { value: Int } derive(Labels)
+`
+	write := func(value int) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(prefix+fmt.Sprintf("fn main() { println(%d) }", value)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(0)
+	session := &Session{plans: &derivePlanCache{entries: map[string][]byte{}}}
+	if _, err := session.Emit(dir); err != nil {
+		t.Fatal(err)
+	}
+	if len(session.plans.entries) != 1 {
+		t.Fatal("expected one admitted plan")
+	}
+	key := ""
+	var original []byte
+	for present, data := range session.plans.entries {
+		key, original = present, bytes.Clone(data)
+	}
+	for i, damage := range []string{"truncated", "key", "abi", "hash"} {
+		t.Run(damage, func(t *testing.T) {
+			corrupted := original[:len(original)/2]
+			if damage != "truncated" {
+				var document map[string]json.RawMessage
+				if err := json.Unmarshal(original, &document); err != nil {
+					t.Fatal(err)
+				}
+				document[damage] = json.RawMessage(`"invalid"`)
+				var err error
+				corrupted, err = json.Marshal(document)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			session.plans.mu.Lock()
+			session.plans.retain(key, corrupted)
+			session.plans.mu.Unlock()
+			before := session.Stats()
+			write(i + 1)
+			replay, err := session.Emit(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cold, err := (&Session{plans: &derivePlanCache{entries: map[string][]byte{}}}).Emit(dir)
+			if err != nil || !bytes.Equal(replay, cold) {
+				t.Fatalf("corrupt cache changed checking/codegen: %v", err)
+			}
+			after := session.Stats()
+			if after.DerivePlanHits != before.DerivePlanHits || after.DerivePlanMisses <= before.DerivePlanMisses {
+				t.Fatalf("corruption did not use cold path: before=%+v after=%+v", before, after)
+			}
+		})
 	}
 }

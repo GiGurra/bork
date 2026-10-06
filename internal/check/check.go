@@ -251,10 +251,12 @@ type Info struct {
 	// Structural source plans belong to request-wide state, including
 	// specializations discovered while temporary initializer scopes restore
 	// their checker state.
-	deriveTupleEncoders map[string]*ClassInstance
-	DerivePlans         DerivePlanStats
-	derivePlanStore     DerivePlanStore
-	derivePlanPending   []pendingDerivePlan
+	deriveTupleEncoders   map[string]*ClassInstance
+	DerivePlans           DerivePlanStats
+	derivePlanStore       DerivePlanStore
+	derivePlanPending     []pendingDerivePlan
+	derivePlanSource      string
+	derivePlanSourceReady bool
 	// Funcs holds the functions visible to the root package by name: its
 	// own, and the prelude's that it does not replace.
 	Funcs map[string]*Func

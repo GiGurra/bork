@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/GiGurra/bork/internal/diag"
@@ -16,6 +18,13 @@ import (
 type DerivePlanStore interface {
 	DerivePlanGet(key string) []byte
 	DerivePlanPut(key string, plan []byte)
+}
+
+// Source fingerprints are immutable lexical summaries, independent of whether
+// a checked program succeeds. They retain no checked nodes or dictionaries.
+type derivePlanSourceStore interface {
+	DerivePlanSourceGet(key string) string
+	DerivePlanSourcePut(key, inventory string)
 }
 
 type derivePlanProvider interface {
@@ -153,44 +162,92 @@ func (p *deriveExpansion) reusablePlan(body *syntax.Block) bool {
 // helper body. Only the root entry point's runtime body is irrelevant to
 // expansion; editing it must not invalidate unchanged derivations.
 func (p *deriveExpansion) planKey(method *Func) string {
+	info := p.c.info
+	if !info.derivePlanSourceReady {
+		info.derivePlanSourceReady = true
+		info.derivePlanSource = p.planSourceInventory()
+	}
+	if info.derivePlanSource == "" {
+		return ""
+	}
 	head := stableDeriveShape(p.target)
 	if head == "" {
 		return ""
 	}
+	constraints := []string{}
+	for _, constraint := range p.instance.Constraints {
+		constraints = append(constraints, constraint.Text(nil))
+	}
+	data, err := json.Marshal([]any{derivePlanABI, info.derivePlanSource, p.scope.Path, classIdentity(p.instance.Class), p.instance.Name, method.Decl.Name, head, constraints, p.c.deriveBounds})
+	if err != nil || len(data) > derivePlanMaxBytes {
+		return ""
+	}
+	key := sha256.Sum256(data)
+	return hex.EncodeToString(key[:])
+}
+
+func (p *deriveExpansion) planSourceInventory() string {
 	rootFiles := map[string]bool{}
 	for _, file := range p.c.files {
 		if pkg := p.c.pkgs[file.Package]; pkg != nil && pkg.Root && !file.Prelude {
 			rootFiles[file.Path] = true
 		}
 	}
+
+	// Hash the normalized syntax directly. Materializing a tree of maps and
+	// interface slices here roughly doubled allocations on warm body edits.
+	digest := sha256.New()
+	buffer := make([]byte, 0, 64<<10)
+	bytes := 0
+	valid := true
+	token := func(text string) {
+		if !valid {
+			return
+		}
+		bytes += len(text) + 12
+		if bytes > derivePlanMaxBytes {
+			valid = false
+			return
+		}
+		buffer = strconv.AppendInt(buffer, int64(len(text)), 10)
+		buffer = append(buffer, ':')
+		buffer = append(buffer, text...)
+		if len(buffer) >= 64<<10 {
+			_, _ = digest.Write(buffer)
+			buffer = buffer[:0]
+		}
+	}
 	active := map[reflect.Value]bool{}
-	var normalize func(reflect.Value) any
-	normalize = func(value reflect.Value) any {
-		if !value.IsValid() {
-			return nil
+	var normalize func(reflect.Value)
+	normalize = func(value reflect.Value) {
+		if !valid || !value.IsValid() {
+			token("nil")
+			return
 		}
 		if value.Type() == reflect.TypeFor[diag.Pos]() {
-			return nil
+			return
 		}
+		token(value.Type().String())
 		switch value.Kind() {
 		case reflect.Pointer, reflect.Interface:
 			if value.IsNil() {
-				return nil
+				token("nil")
+				return
 			}
 			if value.Kind() == reflect.Pointer {
 				if active[value] {
-					return nil
+					token("cycle")
+					return
 				}
 				active[value] = true
 				defer delete(active, value)
 			}
-			return normalize(value.Elem())
+			normalize(value.Elem())
 		case reflect.Struct:
-			out := map[string]any{"$type": value.Type().String()}
 			fn, isFunction := value.Interface().(syntax.FuncDecl)
 			for i := range value.NumField() {
 				field := value.Type().Field(i)
-				if !field.IsExported() || field.Name == "Instance" && isFunction {
+				if !field.IsExported() || field.Type == reflect.TypeFor[diag.Pos]() || field.Name == "Instance" && isFunction {
 					continue
 				}
 				if value.Type() == reflect.TypeFor[syntax.File]() && (field.Name == "Source" || field.Name == "ExpressionSpans" || field.Name == "PatternTestOperators" || field.Name == "Comments") {
@@ -199,34 +256,67 @@ func (p *deriveExpansion) planKey(method *Func) string {
 				if isFunction && field.Name == "Body" && fn.Name == "main" && !fn.IsPred && fn.Instance == nil && rootFiles[fn.Pos.File] {
 					continue
 				}
-				out[field.Name] = normalize(value.Field(i))
+				token(field.Name)
+				normalize(value.Field(i))
 			}
-			return out
 		case reflect.Slice:
-			out := make([]any, value.Len())
+			token(strconv.Itoa(value.Len()))
 			for i := range value.Len() {
-				out[i] = normalize(value.Index(i))
+				normalize(value.Index(i))
 			}
-			return out
+		case reflect.Map:
+			if value.Type().Key().Kind() != reflect.String {
+				valid = false
+				return
+			}
+			keys := value.MapKeys()
+			sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
+			token(strconv.Itoa(len(keys)))
+			for _, key := range keys {
+				token(key.String())
+				normalize(value.MapIndex(key))
+			}
 		case reflect.String:
-			return value.String()
+			token(value.String())
 		case reflect.Bool:
-			return value.Bool()
+			token(strconv.FormatBool(value.Bool()))
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			return value.Int()
+			token(strconv.FormatInt(value.Int(), 10))
+		default:
+			valid = false
 		}
-		return nil
 	}
-	constraints := []string{}
-	for _, constraint := range p.instance.Constraints {
-		constraints = append(constraints, constraint.Text(nil))
+
+	sourceStore, _ := p.c.info.derivePlanStore.(derivePlanSourceStore)
+	inventories := make([]string, len(p.c.files))
+	for i, file := range p.c.files {
+		sourceHash := sha256.Sum256([]byte(file.Source))
+		lexical := []any{derivePlanABI, file.Path, file.Package, file.Prelude, file.Script, rootFiles[file.Path], hex.EncodeToString(sourceHash[:])}
+		lexicalBytes, _ := json.Marshal(lexical)
+		lexicalHash := sha256.Sum256(lexicalBytes)
+		sourceKey := hex.EncodeToString(lexicalHash[:])
+		if sourceStore != nil && file.Source != "" {
+			inventories[i] = sourceStore.DerivePlanSourceGet(sourceKey)
+			if inventories[i] != "" {
+				continue
+			}
+		}
+		digest.Reset()
+		buffer = buffer[:0]
+		bytes = 0
+		normalize(reflect.ValueOf(file))
+		if !valid {
+			return ""
+		}
+		_, _ = digest.Write(buffer)
+		inventories[i] = hex.EncodeToString(digest.Sum(nil))
+		if sourceStore != nil && file.Source != "" {
+			sourceStore.DerivePlanSourcePut(sourceKey, inventories[i])
+		}
 	}
-	data, err := json.Marshal([]any{derivePlanABI, normalize(reflect.ValueOf(p.c.files)), p.scope.Path, classIdentity(p.instance.Class), p.instance.Name, method.Decl.Name, head, constraints, p.c.deriveBounds})
-	if err != nil || len(data) > derivePlanMaxBytes {
-		return ""
-	}
-	key := sha256.Sum256(data)
-	return hex.EncodeToString(key[:])
+	data, _ := json.Marshal(inventories)
+	total := sha256.Sum256(data)
+	return hex.EncodeToString(total[:])
 }
 
 func (p *deriveExpansion) expandBody(method *Func) *syntax.Block {

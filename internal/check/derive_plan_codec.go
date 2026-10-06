@@ -1,12 +1,10 @@
 package check
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"reflect"
 	"strconv"
 
@@ -306,32 +304,51 @@ func decodeDerivePlan(source *syntax.Block, key string, data []byte) (*syntax.Bl
 	if len(data) == 0 || len(data) > derivePlanMaxBytes {
 		return nil, 0, 0
 	}
-	// Validate JSON nesting before allocating the plan's recursive tree.
-	decoder := json.NewDecoder(bytes.NewReader(data))
+
+	// Bound nesting before unmarshalling the recursive tree. A lexical scan
+	// avoids allocating a token object for every scalar on each warm replay;
+	// Unmarshal below remains the authority for JSON syntax and value types.
 	nesting, tokens := 0, 0
-	for {
-		token, err := decoder.Token()
-		if err == io.EOF {
-			break
+	quoted, escaped := false, false
+	for _, byte := range data {
+		if quoted {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if byte == '\\' {
+				escaped = true
+			} else if byte == '"' {
+				quoted = false
+			}
+			continue
 		}
-		if err != nil {
-			return nil, 0, 0
+		switch byte {
+		case '"':
+			quoted = true
+		case '{', '[':
+			nesting++
+			tokens++
+			if nesting > derivePlanMaxDepth*3 {
+				return nil, 0, 0
+			}
+		case '}', ']':
+			nesting--
+			tokens++
+			if nesting < 0 {
+				return nil, 0, 0
+			}
+		case ',', ':':
+			tokens++
 		}
-		tokens++
 		if tokens > derivePlanMaxNodes*12 {
 			return nil, 0, 0
 		}
-		if delimiter, ok := token.(json.Delim); ok {
-			if delimiter == '{' || delimiter == '[' {
-				nesting++
-				if nesting > derivePlanMaxDepth*3 {
-					return nil, 0, 0
-				}
-			} else {
-				nesting--
-			}
-		}
 	}
+	if nesting != 0 || quoted {
+		return nil, 0, 0
+	}
+
 	var document derivePlanDocument
 	if json.Unmarshal(data, &document) != nil || document.ABI != derivePlanABI || document.Key != key || document.Work < 1 || document.Work >= 100000 || document.Depth < 1 || document.Depth > 256 {
 		return nil, 0, 0

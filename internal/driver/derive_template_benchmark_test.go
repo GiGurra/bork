@@ -24,8 +24,12 @@ type Item = {
 	}
 	source.WriteString("} derive(Labels)\n")
 	prefix := source.String()
-	for _, mode := range []string{"cold", "unchanged", "body-edit"} {
+	for _, mode := range []string{"cold", "unchanged", "body-edit", "body-edit-uncached"} {
 		b.Run(mode, func(b *testing.B) {
+			if mode == "body-edit-uncached" {
+				b.Setenv("BORK_CACHE", "off")
+			}
+			newSession := func() *Session { return &Session{plans: &derivePlanCache{entries: map[string][]byte{}}} }
 			dir := b.TempDir()
 			path := filepath.Join(dir, "main.bork")
 			write := func(n int) {
@@ -34,7 +38,7 @@ type Item = {
 				}
 			}
 			write(-1)
-			session := NewSession()
+			session := newSession()
 			if mode != "cold" {
 				if _, err := session.Check(dir); err != nil {
 					b.Fatal(err)
@@ -44,9 +48,9 @@ type Item = {
 			i := 0
 			for b.Loop() {
 				if mode == "cold" {
-					session = NewSession()
+					session = newSession()
 				}
-				if mode == "body-edit" {
+				if strings.HasPrefix(mode, "body-edit") {
 					write(i)
 					i++
 				}
@@ -54,6 +58,9 @@ type Item = {
 					b.Fatal(err)
 				}
 			}
+			stats := session.Stats()
+			b.ReportMetric(float64(stats.DerivePlanHits), "plan-hits")
+			b.ReportMetric(float64(stats.ProofMisses), "native-batches")
 		})
 	}
 }
