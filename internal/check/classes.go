@@ -38,7 +38,15 @@ func (c *Class) Method(name string) *Func {
 // (`instance showInt: Show[Int] { ... }`). A generic instance
 // (`instance showList[T: Show]: Show[List[T]]`) has type parameters,
 // which may need instances themselves.
+// DeriveCapture is a typed caller parameter retained by a source specialization.
+// It supplies runtime predicate inputs without changing the public class method.
+type DeriveCapture struct {
+	Name string
+	Type Type
+}
+
 type ClassInstance struct {
+	Captures        []DeriveCapture
 	Derived         string // target name requested by derive; empty for written instances
 	GoFieldDecoders []*Dict
 	Name            string
@@ -62,8 +70,11 @@ type ClassInstance struct {
 // the instances its own bounds need), or the instance the enclosing
 // function was given for one of its type parameters.
 type Dict struct {
-	Class *Class
-	Type  Type
+	// CaptureDecls resolve to typed operands during lowering.
+	CaptureDecls []any
+	Captures     []Expr
+	Class        *Class
+	Type         Type
 	// A declared instance:
 	Inst     *ClassInstance
 	TypeArgs []Type
@@ -777,10 +788,11 @@ func (c *checker) dict(class *Class, t Type, pos diag.Pos, depth int) *Dict {
 			}
 			d.Args = append(d.Args, element)
 		}
-		if class.Template != nil && (!IsCodec(class, "Decode") || !tupleRuntimeCaptures(tuple)) {
-			return c.sourceTupleCodec(d, tuple, pos)
+		if class.Template == nil {
+			c.errorf(pos, "%s has no source derivation template for tuples", class.Name)
+			return nil
 		}
-		return d
+		return c.sourceTupleCodec(d, tuple, pos)
 	}
 	var matches []*Dict
 	var candidateBounds map[*Dict][]deriveClause

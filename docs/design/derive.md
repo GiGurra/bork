@@ -352,17 +352,15 @@ field-kind metadata replace hidden decoder members. Schemas contain ordered
 fields, names, docs, fact descriptions, default/optional flags and independent
 validation callbacks `Value => Ok | DecodeError`. Generic field kinds come
 from the actual selected field decoder metadata, preserving custom codecs.
-Default metadata also includes optional lazy providers for display text and
-String/Option[String] config-file selection: `displayDefault: Option[() => String]`
-and `defaultText: Option[() => Option[String]]`. The template uses the typed
-field.default() and the field's static type to build them; Option.None remains
-distinct from the absence of a declared default. Display formatting must match
-the existing CLI help behavior, including nested values. These projections
-avoid exposing arbitrary erased values or adding an Encode requirement to
-Decode. Inspecting schema flags does not run the providers; consumers invoke
-them only for the current help/config-default behavior. The temporary Go
-adapter retains the existing typed-to-Go default provider until those consumers
-switch to the public projections. Builder default evaluation is separately
+Default metadata includes `defaultValue: Option[() => DefaultSchema]`, with
+`display`, `configPath: Option[String]` and `choices: List[String]` projections.
+The template uses the typed field.default() and the field's static type to build
+them; Option.None remains distinct from the absence of a declared default.
+Display formatting matches the existing CLI help behavior, including nested
+values. These projections avoid exposing arbitrary erased values or adding an
+Encode requirement to Decode. Inspecting schema flags does not run the provider;
+consumers invoke it once for the current help/config-default behavior.
+Builder default evaluation is separately
 once per omitted field when constructing the final value.
 
 Schema consumers validate fields, assemble codec.Value, then call the complete

@@ -143,6 +143,14 @@ func (c *checker) lower(files []*syntax.File) {
 }
 
 func (l *lowerer) function(fn *Func) {
+	if fn.TemplateScope != nil {
+		for i := range fn.TemplateScope.Captures {
+			capture := &fn.TemplateScope.Captures[i]
+			variable := &Var{Name: capture.Name, GoName: fmt.Sprintf("_shapeCapture%d", i), Type: capture.Type, Pos: fn.Decl.Pos, Kind: VarParam}
+			l.vars[capture] = variable
+			fn.CaptureVars = append(fn.CaptureVars, variable)
+		}
+	}
 	for i, p := range fn.Decl.Params {
 		v := &Var{Name: p.Name, Pos: p.Pos, Type: fn.Params[i], Kind: VarParam, Index: i}
 		if fn.Decl.Constructor != nil {
@@ -165,6 +173,12 @@ func (l *lowerer) function(fn *Func) {
 	}
 	if fn.Decl.Body != nil {
 		fn.Body = l.block(fn.Decl.Body)
+		WalkComptime(fn.Body, func(expression Expr) bool {
+			if call, ok := expression.(*CallBuiltin); ok && (call.Construction != nil || call.Validation != nil) {
+				call.Captures = l.captureRefs(fn.CaptureVars, call.Pos())
+			}
+			return true
+		})
 		l.roots = append(l.roots, fn.Body)
 	}
 }
@@ -309,7 +323,8 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	at := expr{pos: x.Position(), typ: typ, token: sourceTokenPos(x)}
 	if inst := l.info.funcRefs[x]; inst != nil {
 		at.token = x.Position()
-		return &FuncRef{expr: at, Name: writtenText(x), Inst: inst, Needs: l.needs(x)}
+		inst, captures := l.captureInstance(inst, x.Position())
+		return &FuncRef{expr: at, Name: writtenText(x), Inst: inst, Needs: l.needs(x), Captures: captures}
 	}
 	if v := l.info.constantOf(x); v != nil {
 		var span *SourceSpan
@@ -417,7 +432,8 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 		return &Binary{expr: at, Op: x.Op, X: l.expr(x.X), Y: l.expr(x.Y)}
 	case *syntax.Call:
 		if dictionary := l.info.shapeMetadataCalls[x]; dictionary != nil {
-			return &CallBuiltin{expr: at, Builtin: BuiltinShapeMetadata, Name: "shape.metadata", Dictionary: dictionary}
+			dictionary = l.captureDictionary(dictionary, x.Position())
+			return &CallBuiltin{expr: at, Builtin: BuiltinShapeMetadata, Name: "shape.metadata", Dictionary: dictionary, Captures: dictionaryCaptureOperands(dictionary)}
 		}
 		if literal := l.info.variantCalls[x]; literal != nil {
 			out := l.expr(literal).(*RecordLit)
@@ -462,7 +478,8 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 			return &SeqCall{expr: at, Op: call.op, Args: args, Effects: call.effects}
 		}
 		if fn := l.info.callFuncs[x]; fn != nil {
-			call := &Call{expr: at, Func: fn, Inst: l.info.instances[x], Args: l.exprs(l.info.args(x)), ArgOrder: l.info.callOrder[x], Embedded: l.info.embedCalls[x], BuildRead: l.info.buildCalls[x], Needs: l.needs(x)}
+			instance, captures := l.captureInstance(l.info.instances[x], x.Position())
+			call := &Call{expr: at, Func: fn, Inst: instance, Captures: captures, Args: l.exprs(l.info.args(x)), ArgOrder: l.info.callOrder[x], Embedded: l.info.embedCalls[x], BuildRead: l.info.buildCalls[x], Needs: l.needs(x)}
 			if sel, ok := x.Fun.(*syntax.Selector); ok {
 				args := l.info.args(x)
 				call.ReceiverCall = len(args) > 0 && args[0] == sel.X

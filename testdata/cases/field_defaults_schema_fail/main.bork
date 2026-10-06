@@ -4,13 +4,13 @@ use codec.Defaults
 pred nonempty[T](xs: List[T]) { xs.length() > 0 }
 type Box[T] = { xs: List[T] where nonempty = [] } derive (codec.Decode)
 fn Schema[T: codec.Decode]() {
- match (codec.Schema[T]()) {
-  Option.Some(info) => info.fields.forEach(field => match (field.defaultValue) {
-   Option.Some(provider) => { _ = provider() }
-   Option.None => {}
-  })
-  Option.None => {}
- }
+  match (codec.Schema[T]()) {
+    Option.Some(info) => info.fields.forEach(field => match (field.defaultValue) {
+      Option.Some(provider) => { _ = provider() }
+      Option.None => {}
+    })
+    Option.None => {}
+  }
 }
 fn Wrapper[T: codec.Decode](value: T) { Schema[Box[T]]() }
 fn main() { Wrapper(1) }

@@ -196,7 +196,7 @@ func (l *lifeChecker) function(fn *Func) {
 	l.loop = nil
 	l.enclosing = map[*ScopeBlock][]*ScopeBlock{}
 	mark := len(l.defined)
-	for _, p := range fn.ParamVars {
+	for _, p := range append(append([]*Var(nil), fn.ParamVars...), fn.CaptureVars...) {
 		l.frame[p] = fn
 		l.env[p] = lifetime{p}
 		l.noteVar(p)
@@ -663,7 +663,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		return l.lambda(x)
 	case *FuncRef:
 		l.funcRef(x)
-		return nil
+		return l.captureLife(x.Captures)
 	case *Call:
 		life := l.callLife(x)
 		if x.Type() == OwnedScope {
@@ -671,7 +671,7 @@ func (l *lifeChecker) exprLife(x Expr) lifetime {
 		}
 		return life
 	case *CallBuiltin:
-		return l.call(nil, true, x.Args)
+		return l.call(nil, true, x.Args).union(l.captureLife(x.Captures))
 	case *CallValue:
 		life := l.use(x.Fun, l.expr(x.Fun))
 		args := l.call(nil, false, x.Args)

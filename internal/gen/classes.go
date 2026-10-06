@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"strings"
 
 	"github.com/GiGurra/bork/internal/check"
 )
@@ -138,6 +137,9 @@ func (g *gen) dictParams(tps []*check.TypeParam) []*ast.Field {
 
 // instanceDecl declares the function that builds an instance.
 func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
+	savedScope := g.shapeScope
+	g.shapeScope = ci
+	defer func() { g.shapeScope = savedScope }()
 	lit := &ast.CompositeLit{Type: g.classType(ci.Class, ci.Type)}
 	if check.IsGoStruct(ci.Class) {
 		lit = g.goStructDictionary(ci)
@@ -147,7 +149,7 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 	}
 	for i, m := range ci.Methods {
 		var fn ast.Expr = g.funcName(m)
-		if len(ci.TypeParams) > 0 {
+		if len(ci.TypeParams) > 0 || len(ci.Captures) > 0 {
 			// The method needs the instance's own instances: a closure.
 			idx := &ast.IndexListExpr{X: fn}
 			var args []ast.Expr
@@ -163,7 +165,12 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 				names = append(names, ast.NewIdent("_p"+string(rune('0'+j))))
 				args = append(args, names[j])
 			}
-			call := &ast.CallExpr{Fun: idx, Args: args}
+			callable := fn
+			if len(ci.TypeParams) > 0 {
+				callable = idx
+			}
+			args = append(args, g.shapeCaptureArguments(ci)...)
+			call := &ast.CallExpr{Fun: callable, Args: args}
 			var body []ast.Stmt
 			if m.Result == check.Ok {
 				body = []ast.Stmt{&ast.ExprStmt{X: call}}
@@ -191,7 +198,7 @@ func (g *gen) instanceDecl(ci *check.ClassInstance) ast.Decl {
 		Name: ast.NewIdent(instName(ci)),
 		Type: &ast.FuncType{
 			TypeParams: typeParamList(ci.TypeParams),
-			Params:     &ast.FieldList{List: g.dictParams(ci.TypeParams)},
+			Params:     &ast.FieldList{List: g.shapeDictionaryParameters(ci)},
 			Results:    &ast.FieldList{List: []*ast.Field{{Type: g.classType(ci.Class, ci.Type)}}},
 		},
 		Body: &ast.BlockStmt{List: []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{lit}}}},
@@ -205,11 +212,6 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 		return dictParam(d.Param, d.Class)
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && check.IsCodec(d.Class, "Decode") {
-			method := strings.ToLower(d.Class.Name)
-			fun, _ := g.dictMethod(d, method)
-			return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: []ast.Expr{&ast.KeyValueExpr{Key: ast.NewIdent(method), Value: fun}}}
-		}
 		// Built-in equality and rendering dispatch through universal helpers.
 		method := "equals"
 		if check.IsShow(d.Class) {
@@ -235,8 +237,9 @@ func (g *gen) dict(d *check.Dict) ast.Expr {
 			signature := check.SubstituteType(&check.FuncType{Params: method.Params, Result: method.Result}, []*check.TypeParam{d.Class.Param}, []check.Type{d.Type}).(*check.FuncType)
 			copy := *implementation
 			copy.Class = nil
+			copy.TemplateScope = nil
 			reference := &check.Instance{Func: &copy, TypeArgs: d.TypeArgs, Dicts: d.Args, Params: signature.Params, Result: signature.Result}
-			fields = append(fields, &ast.KeyValueExpr{Key: name(method.Decl.Name), Value: g.funcRef(reference)})
+			fields = append(fields, &ast.KeyValueExpr{Key: name(method.Decl.Name), Value: g.funcRef(reference, g.dictionaryCaptureArguments(d)...)})
 		}
 		return &ast.CompositeLit{Type: g.classType(d.Class, d.Type), Elts: fields}
 	}
@@ -256,6 +259,12 @@ func (g *gen) declaredDictionary(d *check.Dict) ast.Expr {
 	var args []ast.Expr
 	for _, a := range d.Args {
 		args = append(args, g.dict(a))
+	}
+	if len(d.Captures) > 0 {
+		_, captures := g.values(d.Captures)
+		args = append(args, captures...)
+	} else {
+		args = append(args, g.shapeCaptureArguments(d.Inst)...)
 	}
 	return &ast.CallExpr{Fun: fun, Args: args}
 }
@@ -280,9 +289,6 @@ func (g *gen) dictMethod(d *check.Dict, method string) (fun ast.Expr, dicts []as
 		return fun, nil
 	}
 	if d.Builtin {
-		if tuple, ok := d.Type.(*check.Record); ok && tuple.Tuple && check.IsCodec(d.Class, "Decode") {
-			return g.tupleCodec(d, tuple), nil
-		}
 		if check.IsShow(d.Class) {
 			g.usesShow = true
 			return &ast.IndexExpr{X: ast.NewIdent("_strOf"), Index: g.goType(d.Type)}, nil
@@ -319,7 +325,7 @@ func (g *gen) tupleMethod(d *check.Dict, source *check.Func, typeArgs []check.Ty
 	}
 	declared := &check.FuncType{Params: method.Params, Result: method.Result}
 	implementation := &check.FuncType{Params: source.Params, Result: source.Result}
-	if !hasTupleRepresentation(declared) && !hasTupleRepresentation(implementation) {
+	if !hasTupleRepresentation(declared) && !hasTupleRepresentation(implementation) && len(shapeCaptures(source)) == 0 {
 		return fun, dicts
 	}
 	want := check.SubstituteType(declared, []*check.TypeParam{d.Class.Param}, []check.Type{d.Type}).(*check.FuncType)
@@ -332,6 +338,12 @@ func (g *gen) tupleMethod(d *check.Dict, source *check.Func, typeArgs []check.Ty
 		n := ast.NewIdent(fmt.Sprintf("_p%d", i))
 		names = append(names, n)
 		args = append(args, g.instanceArgument(inst, i, n))
+	}
+	if len(d.Captures) > 0 {
+		_, captures := g.values(d.Captures)
+		args = append(args, captures...)
+	} else {
+		args = append(args, g.shapeCaptureArguments(source.TemplateScope)...)
 	}
 	call := &ast.CallExpr{Fun: fun, Args: args}
 	body := []ast.Stmt{&ast.ReturnStmt{Results: []ast.Expr{g.instanceResult(inst, call)}}}
@@ -347,6 +359,9 @@ func (g *gen) tupleMethod(d *check.Dict, source *check.Func, typeArgs []check.Ty
 func (g *gen) funcRef(inst *check.Instance, needs ...ast.Expr) ast.Expr {
 	var fun ast.Expr
 	var dicts []ast.Expr
+	if inst.Func.Class == nil {
+		needs = append(g.shapeCaptureArguments(inst.Func.TemplateScope), needs...)
+	}
 	if inst.Func.Class != nil {
 		fun, dicts = g.methodFunc(inst)
 	} else {

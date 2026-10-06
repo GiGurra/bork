@@ -175,8 +175,12 @@ The standard `codec.Encode` derivation is a source template in `bork/codec`. It 
 object order, and uses the tagged `values` array for positional payloads.
 Tuple encoding uses the same template's array branch; `shape.positional[T]()`
 identifies those ordered slots. Implicit tuple dictionaries retain their normal
-per-slot instance selection. `codec.Decode` and tuple decoding still use their
-existing compiler paths during the source migration.
+per-slot instance selection. `codec.Decode` also uses source templates and
+validated builders for records, variants and tuples. Runtime tuple predicates
+retain caller arguments and predicate callbacks as typed dictionary captures;
+the captures participate in lifetime and compile-time dependency checking.
+Predicate callbacks must be pure: write `(Int) uses nothing => Bool` for a
+callback on an Int slot. Encode does not retain tuple predicate arguments.
 
 `shape.exhausted[T](value)` closes a staged sequence of sealed projections.
 The compiler requires an immutable owner parameter and a preceding unconditional

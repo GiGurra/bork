@@ -471,6 +471,7 @@ func generate(g *gen, files []*syntax.File, roots []*check.Func, main *ast.FuncD
 }
 
 type gen struct {
+	shapeScope     *check.ClassInstance
 	debugSource    string
 	debugFiles     map[string]bool
 	debugTypes     map[check.Type]ast.Expr
@@ -898,6 +899,9 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 			Type:  g.goType(fn.Params[i]),
 		})
 	}
+	for i, capture := range shapeCaptures(fn) {
+		ftype.Params.List = append(ftype.Params.List, &ast.Field{Names: []*ast.Ident{shapeCaptureParameter(i)}, Type: g.goType(capture.Type)})
+	}
 	// The ambient values it needs are hidden parameters, after the
 	// others.
 	for _, v := range fn.NeedVars {
@@ -928,6 +932,9 @@ func (g *gen) signature(fd *syntax.FuncDecl) *ast.FuncDecl {
 
 func (g *gen) funcDecl(fd *syntax.FuncDecl) *ast.FuncDecl {
 	fn := g.info.FuncOf[fd]
+	savedShapeScope := g.shapeScope
+	g.shapeScope = fn.TemplateScope
+	defer func() { g.shapeScope = savedShapeScope }()
 	g.tmp = 0
 	g.fnResult = fn.Result
 	savedCaller := g.callerAt
@@ -1394,6 +1401,7 @@ func (g *gen) call(e check.Expr) ([]ast.Stmt, ast.Expr) {
 		g.genericCall(inst, e.Pos())
 		// The ambient values it needs follow the arguments.
 		needStmts, needs := g.values(e.Needs)
+		needs = append(g.shapeCaptureArguments(inst.Func.TemplateScope), needs...)
 		stmts = append(stmts, needStmts...)
 		if inst.Func.TrackCaller {
 			needs = append(needs, g.callerLocation(e.Pos()))

@@ -21,11 +21,22 @@ func (c *checker) sourceTupleCodec(dictionary *Dict, tuple *Record, at diag.Pos)
 		scope = c.fn.TemplateScope.Pkg
 	}
 	class := dictionary.Class
+	var captures []DeriveCapture
+	if IsCodec(class, "Decode") {
+		var valid bool
+		captures, valid = c.tupleCaptures(tuple)
+		if !valid {
+			return nil
+		}
+	}
 	key := fmt.Sprintf("%s\x00%s\x00%d", scope.Path, classIdentity(class), len(tuple.Fields))
 	if IsCodec(class, "Decode") {
 		// Decoding validates actual slot obligations. An arity-only erased
 		// target cannot certify tuples carrying field facts.
 		key += "\x00" + typeKey(tuple) + "\x00" + deriveObligationsKey(tupleConstraints(tuple))
+	}
+	for _, capture := range captures {
+		key += "\x00capture:" + capture.Name + ":" + typeKey(capture.Type)
 	}
 	if c.info.deriveTupleCodecs == nil {
 		c.info.deriveTupleCodecs = map[string]*ClassInstance{}
@@ -58,6 +69,22 @@ func (c *checker) sourceTupleCodec(dictionary *Dict, tuple *Record, at diag.Pos)
 				elements = append(elements, parameter)
 			}
 			head = tupleType(elements)
+		}
+		instance.Captures = captures
+		if IsCodec(class, "Decode") {
+			seen := map[*TypeParam]bool{}
+			for _, parameter := range instance.TypeParams {
+				seen[parameter] = true
+			}
+			for _, capture := range captures {
+				mentionsWhere(capture.Type, func(parameter *TypeParam) bool {
+					if !seen[parameter] {
+						seen[parameter] = true
+						instance.TypeParams = append(instance.TypeParams, parameter)
+					}
+					return false
+				})
+			}
 		}
 		instance.Type = head
 		plan.target, plan.instance = head, instance
@@ -93,6 +120,27 @@ func (c *checker) sourceTupleCodec(dictionary *Dict, tuple *Record, at diag.Pos)
 	}
 	c.typeParams, c.fn = callerParams, callerFunction
 	result := &Dict{Class: class, Type: tuple, Inst: instance}
+	for _, capture := range instance.Captures {
+		var declaration any
+		if callerFunction != nil && callerFunction.TemplateScope != nil {
+			for i := range callerFunction.TemplateScope.Captures {
+				if callerFunction.TemplateScope.Captures[i].Name == capture.Name {
+					declaration = &callerFunction.TemplateScope.Captures[i]
+					break
+				}
+			}
+		}
+		if declaration == nil {
+			if local := c.lookup(capture.Name); local != nil {
+				declaration = local.decl
+			}
+		}
+		if declaration == nil {
+			c.errorf(at, "cannot retain runtime predicate parameter %s in tuple derivation", capture.Name)
+			return nil
+		}
+		result.CaptureDecls = append(result.CaptureDecls, declaration)
+	}
 	if IsCodec(class, "Decode") {
 		for _, parameter := range instance.TypeParams {
 			result.TypeArgs = append(result.TypeArgs, parameter)
@@ -109,30 +157,66 @@ func (c *checker) sourceTupleCodec(dictionary *Dict, tuple *Record, at diag.Pos)
 	return result
 }
 
-// Runtime obligations still require a local adapter so they retain the caller's
-// values. Keep the existing closure decoder until source captures are lowered.
-func tupleRuntimeCaptures(tuple *Record) bool {
-	var captures func(*Constraint) bool
-	captures = func(constraint *Constraint) bool {
+// Captures retain the resolved types of runtime predicate parameters. Source
+// methods, helpers and metadata receive them as hidden typed parameters.
+func (c *checker) tupleCaptures(tuple *Record) ([]DeriveCapture, bool) {
+	valid := true
+	var result []DeriveCapture
+	seen := map[string]bool{}
+	add := func(name string, typ Type, at diag.Pos) {
+		if seen[name] {
+			return
+		}
+		seen[name] = true
+		if typ == nil && c.fn != nil && c.fn.TemplateScope != nil {
+			for _, capture := range c.fn.TemplateScope.Captures {
+				if capture.Name == name {
+					typ = capture.Type
+					break
+				}
+			}
+		}
+		if typ == nil {
+			if local := c.lookup(name); local != nil {
+				typ = local.typ
+			}
+		}
+		if typ == nil {
+			c.errorf(at, "cannot resolve runtime predicate parameter %s for tuple Decode", name)
+			valid = false
+		} else if containsOwned(typ) {
+			c.errorf(at, "tuple Decode cannot retain owned scope parameter %s", name)
+			valid = false
+		} else {
+			result = append(result, DeriveCapture{Name: name, Type: typ})
+		}
+	}
+	var collect func(*Constraint)
+	collect = func(constraint *Constraint) {
 		if constraint.PredParam != "" {
-			return true
+			add(constraint.PredParam, nil, constraint.Pos)
+			for _, capture := range result {
+				if capture.Name != constraint.PredParam {
+					continue
+				}
+				callback, ok := capture.Type.(*FuncType)
+				if !ok || callback.Effects != 0 {
+					c.errorf(constraint.Pos, "tuple Decode predicate callback %s must be pure; declare its type with uses nothing", capture.Name)
+					valid = false
+				}
+			}
 		}
 		for _, argument := range constraint.Args {
 			if argument.Const == nil && !argument.Sibling {
-				return true
+				add(argument.Param, argument.Type, constraint.Pos)
 			}
 		}
 		for _, alternative := range constraint.Or {
-			if captures(alternative) {
-				return true
-			}
+			collect(alternative)
 		}
-		return false
 	}
 	for _, constraint := range tupleConstraints(tuple) {
-		if captures(constraint) {
-			return true
-		}
+		collect(constraint)
 	}
-	return false
+	return result, valid
 }

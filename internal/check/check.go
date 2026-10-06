@@ -70,6 +70,7 @@ type Func struct {
 	TemplatePkg         *Package
 	TemplateScope       *ClassInstance
 	RuntimePackageReads bool
+	CaptureVars         []*Var
 
 	Decl *syntax.FuncDecl
 	Pkg  *Package
@@ -2286,6 +2287,11 @@ func (c *checker) conversion(e *syntax.Call, fname string) Type {
 func (c *checker) paramScope() map[string]Type {
 	scope := map[string]Type{}
 	if c.fn != nil {
+		if c.fn.TemplateScope != nil {
+			for _, capture := range c.fn.TemplateScope.Captures {
+				scope[capture.Name] = capture.Type
+			}
+		}
 		for i, p := range c.fn.Decl.Params {
 			scope[p.Name] = c.fn.Params[i]
 		}

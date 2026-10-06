@@ -3343,6 +3343,96 @@ fn main() {
 	}
 }
 
+func TestSourceCodecTupleCapturedPredicates(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+pred same[U: Eq](value: U, expected: U) { value == expected }
+pred selected[U: Eq](value: Int, expected: U, wanted: U) { value > 0 && expected == wanted }
+fn callback(keep: (Int) uses nothing => Bool, json: codec.Value): String {
+ match (codec.decode[(Int where keep, Int)](json)) {
+  error: codec.DecodeError => error.path + ":" + error.message
+  value: (Int, Int) => toString(value)
+ }
+}
+fn generic[U: Eq](expected: U, wanted: U, input: codec.Value): String {
+ match (codec.decode[(Int where selected(expected, wanted), Int)](input)) {
+  error: codec.DecodeError => error.path + ":" + error.message
+  value: (Int, Int) => toString(value)
+ }
+}
+fn collision(json: Int, input: codec.Value): String {
+ match (codec.decode[(Int where same(json), Int)](input)) {
+  error: codec.DecodeError => error.path + ":" + error.message
+  value: (Int, Int) => toString(value)
+ }
+}
+fn main() {
+ value = codec.Value.Array { items: [codec.Value.Number { text: "3" }, codec.Value.Number { text: "2" }] }
+ println(callback((x: Int) => x > 1, value))
+ println(callback((x: Int) => x > 4, value))
+ println(generic("same", "same", value))
+ println(generic("same", "other", value))
+ println(collision(3, value))
+ println(collision(4, value))
+}`
+	executable, err := buildFixtureOutput(t, validatorFixture(t, source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(executable).CombinedOutput()
+	if err != nil {
+		t.Fatalf("captured predicates: %s, %v", output, err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) != 6 {
+		t.Fatalf("want six results, got %s", output)
+	}
+	for _, i := range []int{0, 2, 4} {
+		if lines[i] != "(3, 2)" {
+			t.Fatalf("capture success %d: %s", i, output)
+		}
+	}
+	for _, i := range []int{1, 3, 5} {
+		if !strings.HasPrefix(lines[i], "[0]:") {
+			t.Fatalf("capture failure %d: %s", i, output)
+		}
+	}
+}
+
+func TestSourceCodecTupleCapturedDecoderLifetime(t *testing.T) {
+	t.Parallel()
+	source := `import "bork/codec"
+use codec.Defaults
+fn retain(owner: Scope, callback: (codec.Value) => (Int, Int) | codec.DecodeError) unsafe go { _ = callback }
+fn escaped(keep: (Int) uses nothing => Bool, owner: Scope) {
+ retain(owner, (json: codec.Value) => codec.decode[(Int where keep, Int)](json))
+}
+fn main() {}`
+	_, _, err := Check(validatorFixture(t, source))
+	if err == nil || !strings.Contains(err.Error(), "depends on parameter keep") {
+		t.Fatalf("want captured callback lifetime error, got %v", err)
+	}
+}
+
+func TestSourceCodecTupleCapturedPredicateEffects(t *testing.T) {
+	t.Parallel()
+	for _, effects := range []string{"", " uses io", " uses state"} {
+		t.Run(effects, func(t *testing.T) {
+			source := `import "bork/codec"
+use codec.Defaults
+fn checked(keep: (Int)` + effects + ` => Bool, json: codec.Value): (Int, Int) | codec.DecodeError {
+ codec.decode[(Int where keep, Int)](json)
+}
+fn main() {}`
+			_, _, err := Check(validatorFixture(t, source))
+			if err == nil || !strings.Contains(err.Error(), "predicate callback keep must be pure") {
+				t.Fatalf("want pure callback diagnostic, got %v", err)
+			}
+		})
+	}
+}
+
 func TestDeriveTemplateExhaustion(t *testing.T) {
 	t.Parallel()
 	source := `import "bork/shape"
