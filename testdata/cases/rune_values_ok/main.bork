@@ -35,7 +35,7 @@ fn main() {
   println('\xff', '\u00e5', '\U0001f600')
   point: Int32 = 97
   println(r, r.code(), point, point.rune(), render(r), renderBound(r))
-  println([r, 'a'], Box[Rune] { value: r }, Option.Some { value: r })
+  println([r, 'a'], Box[Rune] { value: r }, Option.Some(r))
   both: Rune | Int32 = r
   println(both, Box[Rune | Int32] { value: both })
   println(['z', 'a', '界'].sorted())

@@ -6,4 +6,4 @@ OutOfRange { value: "-5", target: "Uint8" }
 OutOfRange { value: "300", target: "Uint8" } 300
 42 1.5
 127 OutOfRange { value: "128", target: "Int8" }
-1.5! true Option.Some { value: 1 }
+1.5! true Option.Some(1)

@@ -20,19 +20,19 @@ fn main(){println(comptime{flag()})}`, "Flag.On\n"},
 		{"keyword sealed field", `type Value=sealed{N{var:Int}}
 fn make():Value{Value.N{var:42}}
 fn main(){println(comptime{make()})}`, "Value.N { var: 42 }\n"},
-		{"sealed variants", `fn some():Option[Int]{.Some{value:42}}
+		{"sealed variants", `fn some():Option[Int]{.Some(42)}
 fn none():Option[Int]{.None}
-fn main(){println(comptime{some()});println(comptime{none()})}`, "Option.Some { value: 42 }\nOption.None\n"},
+fn main(){println(comptime{some()});println(comptime{none()})}`, "Option.Some(42)\nOption.None\n"},
 		{"nested generic variants", `type Box[T]={value:T}
-fn make():Box[Option[List[Int]]]{Box[Option[List[Int]]]{value:.Some{value:[1,2]}}}
-fn main(){b=comptime{make()};println(b.value)}`, "Option.Some { value: [1, 2] }\n"},
+fn make():Box[Option[List[Int]]]{Box[Option[List[Int]]]{value:.Some([1,2])}}
+fn main(){b=comptime{make()};println(b.value)}`, "Option.Some([1, 2])\n"},
 		{"union integer member", `fn choose():Int|String{n:Int=42;n}
 fn main(){v=comptime{choose()};println(match(v){n:Int=>s"int:$n";s:String=>s})}`, "int:42\n"},
 		{"nested union width", `type Box={value:Int8|Int}
 fn make():Box{n:Int8=7;Box{value:n}}
 fn main(){b=comptime{make()};println(match(b.value){n:Int8=>s"small:$n";n:Int=>s"large:$n"})}`, "small:7\n"},
-		{"sealed union member", `fn choose():Option[Int]|String{Option.Some{value:9}}
-fn main(){println(comptime{choose()})}`, "Option.Some { value: 9 }\n"},
+		{"sealed union member", `fn choose():Option[Int]|String{Option.Some(9)}
+fn main(){println(comptime{choose()})}`, "Option.Some(9)\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -15,7 +15,7 @@ func TestLiteralHeadsRejected(t *testing.T) {
 		{"nominal invariant", "type Range[T] = { label: T, lo: Int = 1, hi: Int = 2 } where ordered\npred ordered[T](r: Range[T]) { r.lo <= r.hi }\nfn main() { println(Range[String] { label: \"bad\", hi: 0 }) }", "is false"},
 		{"sibling fact", "pred atLeast(x: Int, lo: Int) { x>=lo }\ntype Range[T] = { label: T, lo: Int, hi: Int where atLeast(lo) }\nfn main() { println(Range[String] { label: \"bad\", lo: 2, hi: 1 }) }", "is false"},
 
-		{"outer argument obligation", "pred atLeast(value: Int, minimum: Int) { value >= minimum }\nfn make(minimum: Int, value: Int): Option[Int] { Option[Int where atLeast(minimum)].Some { value: value } }\nfn main() { println(make(2,1)) }", "not proven"},
+		{"outer argument obligation", "pred atLeast(value: Int, minimum: Int) { value >= minimum }\nfn make(minimum: Int, value: Int): Option[Int] { Option[Int where atLeast(minimum)].Some(value) }\nfn main() { println(make(2,1)) }", "not proven"},
 
 		{"outer argument field collision", "pred atLeast(value: Int, minimum: Int) { value >= minimum }\ntype Box[T] = { value: T, minimum: Int }\nfn make(minimum: Int): Box[Int] { Box[Int where atLeast(minimum)] { value: 1, minimum: 0 } }\nfn main() { println(make(2)) }", "not proven"},
 
@@ -24,17 +24,17 @@ func TestLiteralHeadsRejected(t *testing.T) {
 		{"alias arguments", "type Box[T] = { value: T }\ntype IntBox = Box[Int]\nfn main() { println(IntBox[Int] { value: 1 }) }", "does not take type arguments"},
 		{"kind", "type Box[T] = { value: T }\nfn main() { println(Box[Ok] { value: 1 }) }", "is not allowed"},
 		{"result context", "fn main() { x: Option[Int] = Option[String].None; println(x) }", "found Option[String]"},
-		{"field context", "fn main() { println(Option[Int].Some { value: \"x\" }) }", "must be Int"},
-		{"missing braces", "fn main() { println(Option[Int].Some) }", "has fields"},
+		{"field context", "fn main() { println(Option[Int].Some(\"x\")) }", "must be Int"},
+		{"missing payload", "fn main() { println(Option[Int].Some) }", "has payloads"},
 		{"record variant", "type Box[T] = { value: T }\nfn main() { println(Box[Int].Missing {}) }", "not a sealed type"},
 		{"sealed owner", "fn main() { println(Option[Int] {}) }", "sealed type"},
 		{"missing variant", "fn main() { println(Option[Int].Missing) }", "has no variant"},
 		{"bare head", "fn main() { println(Option[Int]) }", "expected a call"},
 		{"variant arguments", "fn main() { println(Option.Some[Int] { value: 1 }) }", "expected a call"},
 		{"specialized method owner", "fn main() { println(Option[Int].isSome) }", "has no variant"},
-		{"argument obligation", "pred positive(x: Int) { x > 0 }\nfn main() { println(Option[Int where positive].Some { value: 0 }) }", "is false"},
+		{"argument obligation", "pred positive(x: Int) { x > 0 }\nfn main() { println(Option[Int where positive].Some(0)) }", "is false"},
 		{"nested unsupported facts", "pred positive(x: Int) { x > 0 }\ntype Box[T] = { values: List[T] }\nfn main() { println(Box[Int where positive] { values: [1] }) }", "would not be checked"},
-		{"unvalidated facts", "pred positive(x: Int) { x > 0 }\nfn make(x: Int): Option[Int] { Option[Int where positive].Some { value: x } }\nfn main() { println(make(1)) }", "not proven"},
+		{"unvalidated facts", "pred positive(x: Int) { x > 0 }\nfn make(x: Int): Option[Int] { Option[Int where positive].Some(x) }\nfn main() { println(make(1)) }", "not proven"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

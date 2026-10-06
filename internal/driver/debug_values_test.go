@@ -23,7 +23,8 @@ func presentationFixture() *dapRelay {
 			"main.Record":       {Name: "Record", Kind: "record", Fields: map[string]gen.DebugField{"type_": {Name: "type", Type: "String"}, "data": {Name: "data", Type: "Record"}}},
 			"main.Shape":        {Name: "Shape", Kind: "union"},
 			"main.Shape_Circle": {Name: "Shape.Circle", Kind: "variant", Fields: map[string]gen.DebugField{"radius": {Name: "radius", Type: "Float"}}},
-			"main.Option_Some":  {Name: "Some", Kind: "option", Fields: map[string]gen.DebugField{"value": {Name: "value", Type: "T"}}},
+			"main.Option_Some":  {Name: "Some", Kind: "option", Positional: true, Fields: map[string]gen.DebugField{"E0": {Name: "0", Type: "T"}}},
+			"main.A_Pair":       {Name: "A.Pair", Kind: "variant", Positional: true, Fields: map[string]gen.DebugField{"E0": {Name: "0", Type: "Int"}, "E1": {Name: "1", Type: "Float"}}},
 			"main.Option_None":  {Name: "None", Kind: "option"},
 			"float64":           {Name: "Float", Kind: "scalar"},
 			"int64":             {Name: "Int", Kind: "scalar"},
@@ -34,11 +35,13 @@ func presentationFixture() *dapRelay {
 func TestDebugValuePreviews(t *testing.T) {
 	r := presentationFixture()
 	for _, test := range []struct{ in, want string }{
+		{`main.A_Pair {E0: 3, E1: 2}`, `A.Pair(3, 2.0)`},
+		{`main.A_Pair {E0: 3, E1: ...}`, `A.Pair(3, ...)`},
 		{`main.Shape(main.Shape_Circle) {radius: 2}`, `Shape.Circle { radius: 2.0 }`},
-		{`main.Option[int64](main.Option_Some[int64]) {value: 3}`, `Some(3)`},
+		{`main.Option[int64](main.Option_Some[int64]) {E0: 3}`, `Some(3)`},
 		{`main.Option[int64](main.Option_None[int64]) {}`, `None`},
 		{`main.Record {type_: "main.Shape_Circle {radius: 2}", data: main.Record {type_: "x:y,z"}}`, `Record { type: "main.Shape_Circle {radius: 2}", data: Record { type: "x:y,z" } }`},
-		{`main.Option[int64](main.Option_Some[int64]) {value: ...}`, `Some(...)`},
+		{`main.Option[int64](main.Option_Some[int64]) {E0: ...}`, `Some(...)`},
 		{`main.Shape(main.Shape_Circle) {radius:`, `main.Shape(main.Shape_Circle) {radius:`},
 		{`interface {}(int64) 8`, `8`},
 		{`foreign.Shape {radius: 2}`, `foreign.Shape {radius: 2}`},

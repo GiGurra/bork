@@ -43,7 +43,7 @@ fn main() {
   println(readGo[Config]("{\"Low\":1,\"High\":3,\"Limit\":512}"))
   println(readGo[Sibling]("{\"Low\":5,\"High\":2}"))
   println(readGo[Phantom[String]]("{\"Low\":1,\"High\":3,\"Limit\":512}"))
-  lookup = (key: String) => if (key == "CFG_LIMIT") { Option.Some { value: "512" } } else { Option.None }
+  lookup = (key: String) => if (key == "CFG_LIMIT") { Option.Some("512") } else { Option.None }
   println(env.LoadWith[Config]("CFG", lookup))
   println(cli.Parse[Config]("cfg", "", ["--limit", "512"]))
 }

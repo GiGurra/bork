@@ -528,7 +528,7 @@ func (f *factChecker) stmts(list []Stmt, e env) env {
 			}
 			f.walk(s.Value, e)
 			for _, con := range s.Constraints {
-				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Var.displayName()), con))
+				f.oblige(s.Value, con, f.ownParams(), e, fmt.Sprintf("%s must be %s", pathPhrase(con.Path, s.Var.displayName(), s.Var.Type), con))
 			}
 		case *ExprStmt:
 			f.walk(s.X, e)
@@ -849,7 +849,7 @@ func (f *factChecker) initializerPaths(value Expr, typ Type, facts env) []branch
 
 // pathPhrase describes the part of the value called name that path
 // leads to: "every element of xs", "the value in note".
-func pathPhrase(path, name string) string {
+func pathPhrase(path, name string, typ Type) string {
 	if path == "" {
 		return name
 	}
@@ -859,8 +859,31 @@ func pathPhrase(path, name string) string {
 			name = "every element of " + name
 		case "value":
 			name = "the value in " + name
+		case "0":
+			if IsOption(typ) {
+				name = "the value in " + name
+			} else {
+				name = "the 0 of " + name
+			}
 		default:
 			name = "the " + step + " of " + name
+		}
+		switch t := typ.(type) {
+		case *List:
+			typ = t.Elem
+		case *Seq:
+			typ = t.Elem
+		case *Record:
+			if field := t.Field(step); field != nil {
+				typ = field.Type
+			}
+		case *Sealed:
+			for _, variant := range t.Variants {
+				if field := variant.Field(step); field != nil {
+					typ = field.Type
+					break
+				}
+			}
 		}
 	}
 	return name
@@ -875,7 +898,7 @@ func (f *factChecker) callObligations(call *Call, e env) {
 			break
 		}
 		for _, con := range cons {
-			req := fmt.Sprintf("%s requires %s to be %s", fn.QualifiedName(f.from()), pathPhrase(con.Path, fn.Decl.Params[i].Name), con.Text(f.from()))
+			req := fmt.Sprintf("%s requires %s to be %s", fn.QualifiedName(f.from()), pathPhrase(con.Path, fn.Decl.Params[i].Name, fn.Params[i]), con.Text(f.from()))
 			saveUse, saveDecl := f.defaultUse, f.defaultDecl
 			if fn.Decl.Constructor != nil {
 				if defaultValue := fn.Decl.Params[i].Default; defaultValue != nil && args[i].Pos() == defaultValue.Position() {
@@ -948,7 +971,7 @@ func (f *factChecker) recordObligations(lit *RecordLit, e env) {
 						f.defaultUse, f.defaultDecl = lit.Pos(), fd.Decl.Pos
 					}
 					oblige := func(value Expr, facts env) {
-						f.oblige(value, con, f.recordArgs(lit), facts, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name), con.Text(f.from())))
+						f.oblige(value, con, f.recordArgs(lit), facts, fmt.Sprintf("%s requires %s to be %s", label, pathPhrase(con.Path, fi.Name, fd.Type), con.Text(f.from())))
 					}
 					if fi.Thunk != nil {
 						f.fieldBoundary(fi.Value, fi.Field.Type, e, oblige)
@@ -1084,7 +1107,7 @@ func (f *factChecker) copyObligations(cp *Copy, e env) {
 		for _, con := range fd.Constraints {
 			if constraintChanged(con, fd.Name, cp.Updates) {
 				oblige := func(value Expr, facts env) {
-					f.oblige(value, con, f.recordArgs(cp), facts, fmt.Sprintf("%s requires %s to be %s", qualify(rec.Name, rec.Pkg, f.from()), pathPhrase(con.Path, fd.Name), con.Text(f.from())))
+					f.oblige(value, con, f.recordArgs(cp), facts, fmt.Sprintf("%s requires %s to be %s", qualify(rec.Name, rec.Pkg, f.from()), pathPhrase(con.Path, fd.Name, fd.Type), con.Text(f.from())))
 				}
 				deferred := false
 				for _, update := range cp.Updates {
@@ -1135,7 +1158,7 @@ func (f *factChecker) checkResult(x Expr, e env) {
 		for _, con := range mc.Constraints {
 			req := fmt.Sprintf("%s promises a result that is %s", f.fn.Decl.Name, con)
 			if con.Path != "" {
-				req = fmt.Sprintf("%s promises that %s is %s", f.fn.Decl.Name, pathPhrase(con.Path, "its result"), con)
+				req = fmt.Sprintf("%s promises that %s is %s", f.fn.Decl.Name, pathPhrase(con.Path, "its result", mc.Type), con)
 			}
 			if f.fn.MockOf != nil {
 				req += ", so its mock must keep that promise"
@@ -1784,7 +1807,7 @@ func typeParamPaths(t Type, tp *TypeParam, path string) ([]string, bool) {
 		}
 	case *Sealed:
 		if IsOption(t) {
-			return typeParamPaths(t.Args[0], tp, path+".value")
+			return typeParamPaths(t.Args[0], tp, path+"."+t.Variant("Some").Fields[0].Name)
 		}
 		if mentions(t, tp) {
 			return nil, false // not followed into other generic types yet
@@ -3482,7 +3505,7 @@ func (f *factChecker) loop(x *For, e env) {
 func (f *factChecker) carrySubject(c *Carry, x *For, con *Constraint) string {
 	name := c.Head.displayName()
 	if con != nil {
-		name = pathPhrase(con.Path, name)
+		name = pathPhrase(con.Path, name, c.Head.Type)
 	}
 	if c.Header() {
 		return "loop variable " + name

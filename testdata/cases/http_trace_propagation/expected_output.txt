@@ -1,13 +1,13 @@
 wire true
-marked lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 forwarded=[Option.Some { value: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }, Option.Some { value: "vendor=first" }, Option.Some { value: "3" }, Option.None]
+marked lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 forwarded=[Option.Some("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), Option.Some("vendor=first"), Option.Some("3"), Option.None]
 missing lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=none forwarded=[Option.None, Option.None, Option.None, Option.None]
 invalid lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=none forwarded=[Option.None, Option.None, Option.None, Option.None]
 repeated lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=none forwarded=[Option.None, Option.None, Option.None, Option.None]
-combined lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 forwarded=[Option.Some { value: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }, Option.Some { value: "one=value,two=value" }, Option.Some { value: "2" }, Option.None]
-bad state lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 forwarded=[Option.Some { value: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }, Option.None, Option.None, Option.None]
+combined lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 forwarded=[Option.Some("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), Option.Some("one=value,two=value"), Option.Some("2"), Option.None]
+bad state lexical=00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01 checked=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01 forwarded=[Option.Some("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), Option.None, Option.None, Option.None]
 isolated true
 lexical binding 00-4bf92f3577b34da6a3ce929d0e0e4737-00f067aa0ba902b7-01
-manual [Option.Some { value: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }, Option.Some { value: "vendor=value" }, Option.None, Option.None]
+manual [Option.Some("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), Option.Some("vendor=value"), Option.None, Option.None]
 manual invalid [Option.None, Option.None, Option.None, Option.None]
 state only [Option.None, Option.None, Option.None, Option.None]
-state manual parent [Option.Some { value: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }, Option.Some { value: "vendor=bound" }, Option.None, Option.None]
+state manual parent [Option.Some("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"), Option.Some("vendor=bound"), Option.None, Option.None]

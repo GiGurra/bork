@@ -222,8 +222,15 @@ func (g *gen) atFailurePath(x ast.Expr, t check.Type, steps []string, path ast.E
 
 // Option encodes its payload directly, so value is not a JSON path component.
 func diagnosticFieldPath(path ast.Expr, typ check.Type, field string) ast.Expr {
-	if check.IsOption(typ) && field == "value" {
+	if check.IsOption(typ) && field == "0" {
 		return path
+	}
+	if sealed, ok := typ.(*check.Sealed); ok {
+		for _, variant := range sealed.Variants {
+			if variant.Positional && variant.Field(field) != nil {
+				return &ast.BinaryExpr{X: path, Op: token.ADD, Y: stringLit(".values[" + field + "]")}
+			}
+		}
 	}
 	if tuple, ok := typ.(*check.Record); ok && tuple.Tuple {
 		return &ast.BinaryExpr{X: path, Op: token.ADD, Y: stringLit("[" + field + "]")}

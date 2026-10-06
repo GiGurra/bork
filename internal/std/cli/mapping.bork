@@ -109,7 +109,7 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
     flag, exists := metadata[field.Name]
     if !exists { flag = Flag{field: field.Name, long: Mapping_Auto{}, shortName: Mapping_Auto{}, envName: Mapping_Auto{}, description: Option_None[string]{}, config: true, position: Option_None[int64]{}} }
     doc := field.Doc
-    if description, ok := flag.description.(Option_Some[string]); ok { doc = description.value }
+    if description, ok := flag.description.(Option_Some[string]); ok { doc = description.E0 }
     spec := FieldSpec{field: field.Name, long: flag.long, short: flag.shortName, env: flag.envName, description: doc, positional: flag.positional, position: flag.position, configFile: flag.configFile, config: flag.config, hidden: flag.hidden, deprecated: flag.deprecated, choices: flag.choices, strictChoices: flag.strictChoices, files: flag.files, directories: flag.directories, keepOrder: flag.keepOrder}
     derive := func(spec FieldSpec) FieldSpec {
       if _, auto := spec.long.(Mapping_Auto); auto {
@@ -169,9 +169,9 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
     }
     if position, positioned := spec.position.(Option_Some[int64]); positioned {
       if spec.positional { fail(field.Name, "position and positional cannot both be specified") }
-      if position.value < 0 { fail(field.Name, "position must be nonnegative") }
-      if previous, duplicate := positions[position.value]; duplicate { fail(field.Name, "position duplicates " + previous) }
-      positions[position.value] = field.Name
+      if position.E0 < 0 { fail(field.Name, "position must be nonnegative") }
+      if previous, duplicate := positions[position.E0]; duplicate { fail(field.Name, "position duplicates " + previous) }
+      positions[position.E0] = field.Name
       spec.positional = true
     }
     if spec.configFile {
@@ -193,8 +193,8 @@ fn resolveFields[T: codec.Decode](flags: List[Flag], settings: Settings, name: S
         switch value := field.Default().(type) {
         case string: defaults = []string{value}
         case []string: defaults = value
-        case Option_Some[string]: defaults = []string{value.value}
-        case Option_Some[[]string]: defaults = value.value
+        case Option_Some[string]: defaults = []string{value.E0}
+        case Option_Some[[]string]: defaults = value.E0
         }
         for _, value := range defaults { if !allowed[value] { fail(field.Name, "default is not one of the allowed choices"); break } }
       }

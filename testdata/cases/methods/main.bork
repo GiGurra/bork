@@ -48,7 +48,7 @@ fn more() uses io {
   println(xs.first())
   // Methods and free-function pipelines mix.
   println([1, 2, 3].map(x => x * 10).filter(x => x > 10) |> reverse)
-  println(Option.Some { value: 4 }.map(x => x + 1).getOr(0))
+  println(Option.Some(4).map(x => x + 1).getOr(0))
 }
 
 // Type arguments: those the receiver does not decide, or all of them.

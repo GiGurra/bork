@@ -233,7 +233,7 @@ example, the Encode template's sealed branch has this structure:
 ```text
 comptime for (variant in shape.variants[T]()) {
   match (variant.project(x)) {
-    Option.Some { value: payload } => {
+    Option.Some(payload) => {
       fields: List[codec.Field] = [comptime for (field in variant.fields)
         comptime if (!field.computed)
           codec.Field { name: field.name,

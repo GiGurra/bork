@@ -18,7 +18,7 @@ fn sum(xs: List[Int]): Int {
 
 fn firstSome(xs: List[Option[Int]]): Int {
   match (xs) {
-    [Option.Some { value }, ...] => value
+    [Option.Some(value), ...] => value
     [Option.None, ...rest] => firstSome(rest)
     [] => -1
   }
@@ -31,7 +31,7 @@ fn main() {
   println(describe([1, 2]))
   println(describe([1, 2, 3]))
   println(sum([1, 2, 3, 4]))
-  println(firstSome([Option.None, Option.Some { value: 5 }]))
+  println(firstSome([Option.None, Option.Some(5)]))
   match (process.Args()) {
     [] => println("no args")
     [...all] => println(all)

@@ -139,7 +139,7 @@ fn inputStream(input: Input): stream {
 
 fn source(input: Input): Option[Reader] {
   match (input) {
-    Input.From { reader } => .Some { value: reader }
+    Input.From { reader } => .Some(reader)
     _ => .None
   }
 }
@@ -565,9 +565,9 @@ fn (child: Process) Wait() uses io + state: Result | IoError | Cancelled {
 // TryWait is Wait without blocking: None while the child is running.
 fn (child: Process) TryWait() uses io + state: Option[Result | IoError | Cancelled] {
   match (operate(child, "poll", 0)) {
-    raw: rawResult => .Some { value: finished(raw) }
-    error: IoError => .Some { value: error }
-    stopped: Cancelled => .Some { value: stopped }
+    raw: rawResult => .Some(finished(raw))
+    error: IoError => .Some(error)
+    stopped: Cancelled => .Some(stopped)
     _ => .None
   }
 }

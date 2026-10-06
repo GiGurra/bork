@@ -21,7 +21,7 @@ round 250000: 500000
 round 0: 0
 2
 999991
-Option.Some { value: 99999 }
+Option.Some(99999)
 111
 42
 5 NotFound { key: 9 }

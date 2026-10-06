@@ -14,7 +14,7 @@ fn validName(name: String, directory: Bool): Bool unsafe go {
 fn validate(entries: List[Member]): Ok | IoError {
   invalid = entries.filter(entry => !validName(entry.name, entry.directory) || (entry.directory && entry.data.length() != 0))
   match (invalid.get(0)) {
-    Option.Some { value } => IoError { path: value.name, message: "unsafe archive name or nonempty directory" }
+    Option.Some(value) => IoError { path: value.name, message: "unsafe archive name or nonempty directory" }
     Option.None {} => {}
   }
 }

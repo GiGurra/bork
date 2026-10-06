@@ -190,6 +190,9 @@ func BuildSourceIndex(files []*syntax.File, info *Info) *SymbolIndex {
 				b.contextVariant(head, target)
 			}
 		}
+		if literal.Positional {
+			continue
+		}
 		for _, initializer := range literal.Fields {
 			if field := findField(fields, initializer.Name); field != nil && field.Decl != nil {
 				b.reference(initializer.Pos, field.Decl.Pos, "", "")
@@ -495,9 +498,18 @@ func (b *sourceIndexBuilder) pattern(raw syntax.Pattern, pat *Pat) {
 			if raw.Context {
 				pos = raw.NamePos
 			}
-			b.referenceNamed(pos, strings.Join(raw.Path, "."), v.Parent.Decl.Variants[v.Index].Pos)
+			written := strings.Join(raw.Path, ".")
+			if raw.Owner != nil {
+				pos, written = raw.NamePos, v.Name
+			}
+			b.referenceNamed(pos, written, v.Parent.Decl.Variants[v.Index].Pos)
 		} else if record, ok := target.Type.(*Record); ok {
 			fields = record.Fields
+		}
+		for i, element := range raw.Elems {
+			if i < len(target.Fields) {
+				b.pattern(element, target.Fields[i].Pat)
+			}
 		}
 		for i, field := range raw.Fields {
 			definition := findField(fields, field.Field)

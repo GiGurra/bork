@@ -3,7 +3,7 @@
 1
 exec
 query
-1 Option.Some { value: 1 }
+1 Option.Some(1)
 [Row { id: 1, name: "Ada", note: Option.None, active: true, score: 1.25, data: [97, 98] }]
 []
 [{"exact":9223372036854775807}]

@@ -104,8 +104,8 @@ See [Shared retries](#shared-retries) for the explicit shared-budget API.
 
 ## Bounded admission
 
-Pass `admission: Option.Some { value: http.Admission { maxInFlight: 64,
-maxQueued: 32, queueTimeoutMs: 25, retryAfterMs: 100, status: 503 } }` to
+Pass `admission: Option.Some(http.Admission { maxInFlight: 64,
+maxQueued: 32, queueTimeoutMs: 25, retryAfterMs: 100, status: 503 })` to
 `Listen`, `ListenRoutes`, or `ListenTLS` to bound application work on one
 listener. Omit it to preserve unlimited admission. `maxInFlight` must be
 positive; `maxQueued` defaults to zero. Queue and retry durations use the
@@ -194,7 +194,7 @@ gives `Cancelled`. Tokens spent on failed or cancelled retries are not refunded.
 Negative hints in a manually constructed `Overloaded` are treated as zero.
 The helper charges operation effects plus `clock + random + state`.
 
-For deterministic refill tests, pass `clock: .Some { value: time.FixedClock(...) }`
+For deterministic refill tests, pass `clock: .Some(time.FixedClock(...))`
 or another `time.Clock` to `OpenRetryBudget`. The default `.None` reads monotonic
 system time. Backward injected readings pause refill until the clock catches up;
 fractional intervals retain their phase. Native `mock time.Now()` is another test

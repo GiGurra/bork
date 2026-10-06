@@ -398,6 +398,14 @@ func (p *parser) typeDecl() (td *TypeDecl) {
 			v := &VariantDecl{Pos: vname.Pos, Name: vname.Text}
 			if p.at(LBrace) {
 				v.Fields = p.fieldDecls()
+			} else if p.at(LParen) {
+				v.Positional = true
+				p.next()
+				if p.at(RParen) {
+					p.errorf(p.tok().Pos, "a positional variant needs at least one payload type; write %s without parentheses for a fieldless variant", v.Name)
+					panic(bailout{})
+				}
+				p.list(RParen, "a payload type", func() { v.Slots = append(v.Slots, p.typeExpr()) })
 			}
 			v.Where = p.whereClause()
 			td.Variants = append(td.Variants, v)
@@ -1715,13 +1723,24 @@ func (p *parser) pattern() Pattern {
 			vp.NamePos = name.Pos
 		} else {
 			vp.Path = []string{p.qualify(p.next())}
+			if p.at(LBrack) {
+				vp.Owner = &TypeExpr{Pos: t.Pos, Name: vp.Path[0]}
+				p.next()
+				p.list(RBrack, "a type argument", func() { vp.Owner.Args = append(vp.Owner.Args, p.typeExpr()) })
+				if !p.at(Dot) {
+					p.errorf(p.tok().Pos, "expected a variant after the specialized owner")
+					panic(bailout{})
+				}
+			}
 		}
 		for !vp.Context && p.at(Dot) {
 			p.next()
-			vp.Path = append(vp.Path, p.expect(TIdent, "(variant name)").Text)
+			name := p.expect(TIdent, "(variant name)")
+			vp.NamePos = name.Pos
+			vp.Path = append(vp.Path, name.Text)
 		}
 		if p.at(LBrace) {
-			p.next()
+			vp.PayloadPos = p.next().Pos
 			vp.Braces = true
 			p.list(RBrace, "a field pattern", func() {
 				f := p.expect(TIdent, "(field name)")
@@ -1736,8 +1755,25 @@ func (p *parser) pattern() Pattern {
 				}
 				vp.Fields = append(vp.Fields, fp)
 			})
+			vp.PayloadEnd = p.toks[p.i-1].End
 		}
-		if p.testingPattern && !vp.Context && !vp.Braces && len(vp.Path) == 1 {
+		if p.at(LParen) {
+			if vp.Braces {
+				p.errorf(p.tok().Pos, "a variant pattern cannot mix named fields and positional payloads")
+				panic(bailout{})
+			}
+			vp.Positional = true
+			vp.PayloadPos = p.next().Pos
+			p.list(RParen, "a payload pattern", func() {
+				if p.testingPattern {
+					vp.Elems = append(vp.Elems, p.testPattern())
+				} else {
+					vp.Elems = append(vp.Elems, p.pattern())
+				}
+			})
+			vp.PayloadEnd = p.toks[p.i-1].End
+		}
+		if p.testingPattern && !vp.Context && !vp.Braces && !vp.Positional && len(vp.Path) == 1 {
 			return &TypePat{Pos: vp.Pos, Type: &TypeExpr{Pos: vp.Pos, Name: vp.Path[0]}}
 		}
 		return vp
@@ -2363,6 +2399,21 @@ func (p *parser) testPattern() Pattern {
 			p.expect(TIdent, "after '.'")
 		}
 		typed := p.at(LBrack) || p.at(KwWhere) || p.at(Pipe)
+		if p.at(LBrack) {
+			depth := 0
+			for i := p.i; i < len(p.toks); i++ {
+				if p.toks[i].Kind == LBrack {
+					depth++
+				}
+				if p.toks[i].Kind == RBrack {
+					depth--
+					if depth == 0 {
+						typed = i+1 >= len(p.toks) || p.toks[i+1].Kind != Dot
+						break
+					}
+				}
+			}
+		}
 		p.i = start
 		if typed {
 			t := p.typeExpr()

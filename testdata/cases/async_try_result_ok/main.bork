@@ -2,7 +2,7 @@ type Problem = { code: Int }
 pred Approved(x: Problem) { x.code > 0 }
 pred Allowed(x: Int | Problem) { match (x) { n: Int => n > 0; p: Problem => Approved(p) } }
 fn source(flag: Bool): Int | Problem where Approved { if (flag) { Problem { code: 1 } } else { 1 } }
-pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some { value: _ } => true; Option.None => flag } }
+pred ConditionalOption(x: Option[Int], flag: Bool) { match (x) { Option.Some(_) => true; Option.None => flag } }
 fn asyncForward(flag: Bool): Int | Problem where Approved {
   scope s { async(s) value: Int | Problem = { _ = source(flag)?; 1 }; value? }
 }
@@ -13,7 +13,7 @@ fn asyncInline(flag: Bool): Int | Problem where Approved {
   scope s { async(s) value: (Int | Problem) where Allowed = { operand: Int | Problem = if (flag) { Problem { code: 1 } } else { 1 }; operand? }; value? }
 }
 fn asyncOption(flag: Bool, x: Option[Int] where ConditionalOption(flag)): Option[Int] where ConditionalOption(flag) {
-  scope s { async(s) value: Option[Int] where ConditionalOption(flag) = { n = x?; Option.Some { value: n } }; value }
+  scope s { async(s) value: Option[Int] where ConditionalOption(flag) = { n = x?; Option.Some(n) }; value }
 }
 pred Positive(n: Int) { n > 0 }
 fn needsPositive(n: Int where Positive): Int { n }

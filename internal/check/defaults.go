@@ -48,7 +48,7 @@ func (c *checker) ensureDefaults(fn *Func) {
 		switch {
 		case isLiteral(x):
 			x = copyLiteral(x)
-		case !isClosed(x):
+		case !isClosed(x, c.closedConstructorCandidate):
 			c.errorf(x.Position(), "a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)")
 			continue
 		case hasTypeParam(fn.Params[i]):
@@ -60,8 +60,12 @@ func (c *checker) ensureDefaults(fn *Func) {
 			}
 			c.sharedDefaults[x] = true
 		}
-		if t := c.exprWant(x, fn.Params[i]); t != Invalid && !assignable(t, fn.Params[i]) {
-			c.errorf(p.Default.Position(), "the default of %s must be %s, found %s", p.Name, fn.Params[i], t)
+		if t := c.exprWant(x, fn.Params[i]); t != Invalid {
+			if !c.checkedClosedValue(x) {
+				c.errorf(x.Position(), "a parameter's default must be a closed value: a literal, or a record or variant of them (such as Level.Info)")
+			} else if !assignable(t, fn.Params[i]) {
+				c.errorf(p.Default.Position(), "the default of %s must be %s, found %s", p.Name, fn.Params[i], t)
+			}
 		}
 	}
 }
@@ -93,7 +97,7 @@ func (c *checker) withDefaults(args []syntax.Expr, fn *Func) []syntax.Expr {
 
 // isClosed reports whether x is a closed value: a literal, or a list,
 // map, record, or variant value made of closed values.
-func isClosed(x syntax.Expr) bool {
+func isClosed(x syntax.Expr, callAllowed ...func(*syntax.Call) bool) bool {
 	switch x := x.(type) {
 	case *syntax.ContextName:
 		return x.Name != ""
@@ -104,36 +108,73 @@ func isClosed(x syntax.Expr) bool {
 		return isPath(x.X)
 	case *syntax.RecordLit:
 		for _, f := range x.Fields {
-			if f.Value == nil || !isClosed(f.Value) {
+			if f.Value == nil || !isClosed(f.Value, callAllowed...) {
+				return false
+			}
+		}
+		return true
+	case *syntax.Call:
+		// Before checking, calls are candidates for positional construction.
+		// Afterwards, only calls resolved to actual variants are closed values.
+		if len(callAllowed) > 0 && !callAllowed[0](x) {
+			return false
+		}
+		for _, arg := range x.Args {
+			if !isClosed(arg, callAllowed...) {
 				return false
 			}
 		}
 		return true
 	case *syntax.Unary:
-		return (x.Op == syntax.Minus || x.Op == syntax.Caret) && isClosed(x.X)
+		return (x.Op == syntax.Minus || x.Op == syntax.Caret) && isClosed(x.X, callAllowed...)
 	case *syntax.TupleLit:
 		for _, elem := range x.Elems {
-			if !isClosed(elem) {
+			if !isClosed(elem, callAllowed...) {
 				return false
 			}
 		}
 		return true
 	case *syntax.ListLit:
 		for _, el := range x.Elems {
-			if !isClosed(el) {
+			if !isClosed(el, callAllowed...) {
 				return false
 			}
 		}
 		return true
 	case *syntax.MapLit:
 		for i := range x.Keys {
-			if !isClosed(x.Keys[i]) || !isClosed(x.Values[i]) {
+			if !isClosed(x.Keys[i], callAllowed...) || !isClosed(x.Values[i], callAllowed...) {
 				return false
 			}
 		}
 		return true
 	}
 	return isLiteral(x)
+}
+
+// A closed call must name a positional variant rather than a function or method.
+func (c *checker) closedConstructorCandidate(call *syntax.Call) bool {
+	var owner Type
+	switch head := call.Fun.(type) {
+	case *syntax.ContextName:
+		return head.Name != ""
+	case *syntax.Selector:
+		switch head := head.X.(type) {
+		case *syntax.Ident:
+			owner = c.typeNamed(head.Name)
+		case *syntax.TypeHead:
+			owner = c.resolveType(head.Type)
+		}
+		if sealed, ok := owner.(*Sealed); ok {
+			variant := sealed.Variant(head.Name)
+			return variant != nil && variant.Positional
+		}
+	}
+	return false
+}
+
+func (c *checker) checkedClosedValue(x syntax.Expr) bool {
+	return isClosed(x, func(call *syntax.Call) bool { return c.info.variantCalls[call] != nil })
 }
 
 func isPath(x syntax.Expr) bool {
@@ -274,14 +315,14 @@ func (c *checker) ensureFieldDefault(field *Field) {
 		c.sharedDefaults, c.solved, c.mapKeyChecks = shared, solved, mapKeys
 	}()
 	x := field.Decl.Default
-	if field.Lazy && (!isClosed(x) || closedDefaultUsesSibling(x, field.siblings)) {
+	if field.Lazy && (!isClosed(x, c.closedConstructorCandidate) || closedDefaultUsesSibling(x, field.siblings)) {
 		c.computedFieldDefault(field)
 		return
 	}
 	switch {
 	case isLiteral(x):
 		x = copyLiteral(x)
-	case !isClosed(x):
+	case !isClosed(x, c.closedConstructorCandidate):
 		if field.Lazy {
 			c.errorf(x.Position(), "computed lazy field defaults are not implemented yet; independent lazy fields require closed defaults")
 		} else {
@@ -297,8 +338,12 @@ func (c *checker) ensureFieldDefault(field *Field) {
 		}
 		c.sharedDefaults[x] = true
 	}
-	if t := c.fieldInitializer(x, field); t != Invalid && !assignable(t, field.Type) {
-		c.errorf(field.Decl.Default.Position(), "the default of %s must be %s, found %s", field.Name, field.Type, t)
+	if t := c.fieldInitializer(x, field); t != Invalid {
+		if !c.checkedClosedValue(x) {
+			c.errorf(x.Position(), "a field's default must be a closed value: a literal, or a record or variant of them")
+		} else if !assignable(t, field.Type) {
+			c.errorf(field.Decl.Default.Position(), "the default of %s must be %s, found %s", field.Name, field.Type, t)
+		}
 	}
 	c.info.fieldDefaults[field] = x
 }

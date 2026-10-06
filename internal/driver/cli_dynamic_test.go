@@ -53,7 +53,7 @@ fn complete(request: cli.CompletionRequest, s: Scope) uses io: cli.Suggestions |
    _: codec.DecodeError => "invalid-optional"
    option: Option[String] => match (option) {
     Option.None => "null-optional"
-    Option.Some { value } => s"optional:${value}"
+    Option.Some(value) => s"optional:${value}"
    }
   }
   mismatch = match (request.partial.Get[Int]("namespace")) {

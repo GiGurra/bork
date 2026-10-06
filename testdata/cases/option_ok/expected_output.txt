@@ -1,4 +1,4 @@
-Option.Some { value: "domain of ada@example.com" } Option.None
+Option.Some("domain of ada@example.com") Option.None
 5 99
 User { name: "Bob", email: Option.None }
 true true

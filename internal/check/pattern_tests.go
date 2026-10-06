@@ -25,7 +25,7 @@ func (c *checker) isExpr(x *syntax.Is) Type {
 	pat := x.Pattern
 	// Bare type names also carry their alias's facts. Record/variant
 	// destructuring still goes through the ordinary pattern checker.
-	if p, ok := pat.(*syntax.VariantPat); ok && !p.Context && len(p.Path) == 1 && !p.Braces && c.typeNamed(p.Path[0]) != nil {
+	if p, ok := pat.(*syntax.VariantPat); ok && !p.Context && len(p.Path) == 1 && !p.Braces && !p.Positional && c.typeNamed(p.Path[0]) != nil {
 		pat = &syntax.TypePat{Pos: p.Pos, Type: &syntax.TypeExpr{Pos: p.Pos, Name: p.Path[0]}}
 	}
 	checked := c.pattern(pat, st)
@@ -81,6 +81,9 @@ func (c *checker) bindingFreePattern(p syntax.Pattern) bool {
 			return false
 		}
 	case *syntax.VariantPat:
+		for _, elem := range p.Elems {
+			ok = c.bindingFreePattern(elem) && ok
+		}
 		for _, field := range p.Fields {
 			if field.Pattern == nil {
 				c.errorf(field.Pos, "is patterns cannot bind fields; write %s: _ to ignore the value", field.Field)

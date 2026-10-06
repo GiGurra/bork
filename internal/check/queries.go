@@ -121,6 +121,12 @@ func defaultText(x syntax.Expr) string {
 		return "." + x.Name
 	case *syntax.Selector:
 		return defaultText(x.X) + "." + x.Name
+	case *syntax.Call:
+		var args []string
+		for _, arg := range x.Args {
+			args = append(args, defaultText(arg))
+		}
+		return defaultText(x.Fun) + "(" + strings.Join(args, ", ") + ")"
 	case *syntax.TupleLit:
 		var parts []string
 		for _, e := range x.Elems {
@@ -528,7 +534,7 @@ func EditorVariantFields(info *Info, from *Package, owner *syntax.TypeExpr, name
 		return nil
 	}
 	variant := c.specializedVariant(owner.Pos, sealed, name)
-	if variant == nil || c.diags.Len() != 0 {
+	if variant == nil || variant.Positional || c.diags.Len() != 0 {
 		return nil
 	}
 	return variant.Fields
@@ -638,6 +644,15 @@ func PatternRuntimeTypes(info *Info) []Type {
 	out := make([]Type, 0, len(names))
 	for _, name := range names {
 		out = append(out, byName[name])
+	}
+	return out
+}
+
+// DescribeVariantCallable exposes ordered payload types without source field names.
+func DescribeVariantCallable(variant *Variant, from *Package) *CallableDescription {
+	out := &CallableDescription{Parameters: []ParameterDescription{}}
+	for _, field := range variant.Fields {
+		out.Parameters = append(out.Parameters, ParameterDescription{Type: TypeText(field.Type, from)})
 	}
 	return out
 }

@@ -9,14 +9,14 @@ type Reordered = (String | Int,)
 type Node[T] = { value: T, children: Seq[Node[T]] }
 fn nodes[T](value: T): Seq[Node[(T,)]] { generate[Node[(T,)]] { yield Node { value: (value,), children: generate[Node[(T,)]] {} } } }
 type Chain[T] = { value: T, next: Option[Chain[T]] }
-fn chain[T](value: T): Chain[(T,)] { Chain { value: (value,), next: .Some { value: Chain { value: (value,), next: .None } } } }
-fn chainValue(value: Chain[(Int,)]): Int { match (value.next) { Option.Some { value: inner } => inner.value.0; Option.None => value.value.0 } }
+fn chain[T](value: T): Chain[(T,)] { Chain { value: (value,), next: .Some(Chain { value: (value,), next: .None }) } }
+fn chainValue(value: Chain[(Int,)]): Int { match (value.next) { Option.Some(inner) => inner.value.0; Option.None => value.value.0 } }
 type GenericInner[T] = { value: T }
 type GenericLazyInner[T] = { lazy value: T }
 type GenericLazyOuter[T] = { inner: GenericLazyInner[(T,)] }
 fn genericLazyOuter[T](value: T): GenericLazyOuter[T] { GenericLazyOuter { inner: GenericLazyInner { value: (value,) } } }
 type GenericOuter[T] = { inner: GenericInner[(T,)], option: Option[(T,)] }
-fn genericOuter[T](value: T): GenericOuter[T] { GenericOuter { inner: GenericInner { value: (value,) }, option: Option.Some { value: (value,) } } }
+fn genericOuter[T](value: T): GenericOuter[T] { GenericOuter { inner: GenericInner { value: (value,) }, option: Option.Some((value,)) } }
 fn genericInnerValue(inner: GenericInner[(Int,)]): Int { inner.value.0 }
 type Inner = { value: Int }
 type LazyConfig = { inner: Inner, lazy pair: (Int, Int) = (inner.value, 1) }
@@ -87,7 +87,7 @@ fn main() {
   outer = genericOuter(16)
   println(genericInnerValue(outer.inner))
   println(genericLazyOuter(18).inner.value)
-  println(match (outer.option) { Option.Some { value } => value.0; Option.None => 0 })
+  println(match (outer.option) { Option.Some(value) => value.0; Option.None => 0 })
   println(classifyFunction((pure,)), classifyFunction((loud,)))
   wa: Wrapper[Int | String] = Wrapper { value: number }
   wb: Wrapper[Bool | Int] = Wrapper { value: flag }

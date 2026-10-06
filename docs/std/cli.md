@@ -22,7 +22,7 @@ separated from the field by a blank line are not field documentation. Required
 markers and declared defaults appear in help too.
 
 Override a field comment with `cli.Flag { field: "host", description:
-Option.Some { value: "Server address." } }`. Some with an empty String
+Option.Some("Server address.") }`. Some with an empty String
 suppresses the comment; None inherits it. Required/default markers still appear.
 See [the documentation example](../../examples/cli_docs/main.bork).
 
@@ -70,8 +70,7 @@ and underscores, with no leading digit. Duplicate resulting long/short/env
 names, duplicate Flag metadata, invalid names and unknown fields return errors
 before environment/config access. Unknown fields include a closest-name hint.
 
-Use `positional: true` as the single-field shorthand, or `position: Option.Some
-{ value: 0 }` and subsequent indices for ordered positional fields. A final List
+Use `positional: true` as the single-field shorthand, or `position: Option.Some(0)` and subsequent indices for ordered positional fields. A final List
 collects remaining arguments. Positional fields do not register long or short
 flags; explicit long/short mappings on them are metadata errors. See
 [ordered positionals](#ordered-positional-arguments) for layout rules.

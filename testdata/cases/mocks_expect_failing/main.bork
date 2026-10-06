@@ -118,7 +118,7 @@ test "atMost minus one is a supplied negative bound" {
 
 test "an explicit negative Some is rejected by expectWhere" {
   calls = mock Fetch(url) { url }
-  calls.expectWhere(c => true, times: .Some { value: -1 })
+  calls.expectWhere(c => true, times: .Some(-1))
 }
 
 test "zero times and a range are both supplied" {

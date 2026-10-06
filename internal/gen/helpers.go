@@ -143,10 +143,10 @@ func _borkMapEach[K, V any](m _Map[K, V], visit func(K, V) bool) { m.each(visit)
 
 `
 
-const optionHelpers = `func _borkSome[T any](value T) Option[T] { return Option_Some[T]{value: value} }
+const optionHelpers = `func _borkSome[T any](value T) Option[T] { return Option_Some[T]{E0: value} }
 func _borkNone[T any]() Option[T] { return Option_None[T]{} }
 func _borkOptionGet[T any](option Option[T]) (T, bool) {
-  if some, ok := option.(Option_Some[T]); ok { return some.value, true }
+  if some, ok := option.(Option_Some[T]); ok { return some.E0, true }
   var zero T
   return zero, false
 }

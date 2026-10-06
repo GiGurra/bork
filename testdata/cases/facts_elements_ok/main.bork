@@ -14,7 +14,7 @@ fn total(amounts: List[Int where positive]): Int {
 
 fn noteText(note: Option[String where nonEmpty]): String {
   match (note) {
-    Option.Some { value: text } => text
+    Option.Some(text) => text
     Option.None => "(none)"
   }
 }
@@ -37,7 +37,7 @@ type Batch = { amounts: List[Int where positive] }
 fn firstTransfer(amounts: List[Int where positive]): Int {
   // head can only return elements of amounts.
   match (amounts.head()) {
-    Option.Some { value: a } => transfer(a)
+    Option.Some(a) => transfer(a)
     Option.None => 0
   }
 }
@@ -51,7 +51,7 @@ fn main() {
   // Rules apply to elements too.
   println(sizes(positives))
   // Option values: literals, None, and refining find.
-  println(noteText(Option.Some { value: "hi" }), noteText(Option.None), noteText(["", "b"].find(nonEmpty)))
+  println(noteText(Option.Some("hi")), noteText(Option.None), noteText(["", "b"].find(nonEmpty)))
   // Facts flow through generic functions: the results can only hold
   // values from their arguments.
   println(total(positives.reverse()), total(positives.take(1)), total(positives.concat([5])), total(positives.append(9)))

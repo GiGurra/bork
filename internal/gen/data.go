@@ -149,7 +149,7 @@ func (g *gen) try(e *check.Try) ([]ast.Stmt, ast.Expr) {
 	}
 	ret := func(x ast.Expr) []ast.Stmt { return g.returning(x) }
 	if info.Option != nil {
-		clause([]ast.Expr{g.variantType(info.Option.Variants[0])}, assign(kept, &ast.SelectorExpr{X: v, Sel: ast.NewIdent("value")}))
+		clause([]ast.Expr{g.variantType(info.Option.Variants[0])}, assign(kept, &ast.SelectorExpr{X: v, Sel: name(info.Option.Variants[0].Fields[0].Name)}))
 		clause(nil, ret(&ast.CompositeLit{Type: g.variantType(info.NoneOf.Variants[1])})...)
 	} else {
 		clause([]ast.Expr{g.goType(info.Kept)}, assign(kept, v))

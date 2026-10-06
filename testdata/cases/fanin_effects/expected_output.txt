@@ -3,5 +3,5 @@ callback
 1
 3
 racing callback
-Option.Some { value: 7 }
-Option.Some { value: 8 }
+Option.Some(7)
+Option.Some(8)

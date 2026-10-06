@@ -8,7 +8,7 @@ use codec.Defaults
 type Item = { name: String, count: Int } derive (codec.Encode)
 fn nextText(reader: json.Reader) uses io: String {
   match (json.Next(reader)) {
-    Option.Some { value } => json.Render(value)
+    Option.Some(value) => json.Render(value)
     Option.None => "EOF"
     error: json.LineError => s"bad line ${error.line}"
     _: IoError => "IO error"
@@ -16,7 +16,7 @@ fn nextText(reader: json.Reader) uses io: String {
 }
 fn countLines(reader: json.Reader) uses io: Int {
   match (json.Next(reader)) {
-    Option.Some { value: _ } => 1 + countLines(reader)
+    Option.Some(_) => 1 + countLines(reader)
     Option.None => 0
     _ => -100
   }
@@ -53,7 +53,7 @@ fn exercise(s: Scope) uses io: Ok | IoError | fs.NotFound | fs.PermissionDenied 
   fs.Write(longPath, encoding.Utf8("\"" + "a".repeat(70000) + "\"\n"))?
   longReader = json.OpenLines(longPath, s)?
   match (json.Next(longReader)) {
-    Option.Some { value: codec.Value.String { value } } => println(value.byteLength())
+    Option.Some(codec.Value.String { value }) => println(value.byteLength())
     _ => println("unexpected")
   }
   emptyPath = fs.Join([root, "empty.jsonl"])

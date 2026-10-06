@@ -7,12 +7,12 @@ fn evens(xs: List[Int]): List[Int] {
 fn firstWords(lines: List[String]): List[String] {
   lines.flatMap(line => match (line.fields().head()) {
     Option.None => []
-    Option.Some { value: w } => [w]
+    Option.Some(w) => [w]
   })
 }
 
 fn halve(x: Int): Option[Int] {
-  half = if (x % 2 == 0) { Option.Some { value: x / 2 } } else { Option.None }
+  half = if (x % 2 == 0) { Option.Some(x / 2) } else { Option.None }
   half
 }
 

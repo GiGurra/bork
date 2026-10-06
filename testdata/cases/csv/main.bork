@@ -31,7 +31,7 @@ fn main() {
   println(encoding.DecodeCsv[Int]("a\n1\n"))
   println(encoding.DecodeCsv[Group]("name,tags\na,\"[1,2]\"\n"))
   println(encoding.DecodeCsv[Group]("name,tags\na,\"[1,false]\"\n"))
-  items = [Item { code: "007", count: 2, active: true, note: Option.None }, Item { code: "008", count: 3, active: false, note: Option.Some { value: "" } }]
+  items = [Item { code: "007", count: 2, active: true, note: Option.None }, Item { code: "008", count: 3, active: false, note: Option.Some("") }]
   match (encoding.EncodeCsv(items)) {
     text: String => {
       println(encoding.CsvRows(text))
@@ -45,7 +45,7 @@ fn main() {
     error: encoding.CsvError => println(error)
   }
   println(encoding.DecodeCsv[Optional]("name,count\n007,42\n,\nnull,0\n"))
-  match (encoding.EncodeCsv([OptionalSingle { value: Option.None }, OptionalSingle { value: Option.Some { value: "hello" } }, OptionalSingle { value: Option.Some { value: "" } }])) {
+  match (encoding.EncodeCsv([OptionalSingle { value: Option.None }, OptionalSingle { value: Option.Some("hello") }, OptionalSingle { value: Option.Some("") }])) {
     text: String => println(encoding.DecodeCsv[OptionalSingle](text))
     error: encoding.CsvError => println(error)
   }

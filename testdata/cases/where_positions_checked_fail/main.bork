@@ -29,7 +29,7 @@ fn main() {
   println(param(0))
   println(alias(0))
   println(elements([1, 0]))
-  println(optional(Option.Some { value: 0 }))
+  println(optional(Option.Some(0)))
   println(pair(Pair { a: 0, b: "x" }))
   println(Account { balance: 0 })
   println(Shape.Square { side: 0 })

@@ -18,7 +18,7 @@ test "awaitAll joins every task before propagating a panic" {
 }
 test "race propagates child panic without cancelling parent" {
   scope s {
-    assertEqual(fails(() => assertEqual(race(s, [child => broken()]), Option.Some { value: 1 })), true)
+    assertEqual(fails(() => assertEqual(race(s, [child => broken()]), Option.Some(1))), true)
     assertEqual(cancelled(s), false)
   }
 }

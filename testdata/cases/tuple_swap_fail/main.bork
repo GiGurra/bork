@@ -30,7 +30,7 @@ fn main() {
   println(test.SwapAt((1,), ioValue(), 2))
   println(test.Swap((generic, plain), plain))
 }
-fn optional(): (Option[Int], String) { (Option.Some { value: 1 }, "a") }
+fn optional(): (Option[Int], String) { (Option.Some(1), "a") }
 fn union(): (Int | String, Bool) { (1, false) }
 fn mismatched() {
   println(test.SwapAt(optional(), 0, 2))

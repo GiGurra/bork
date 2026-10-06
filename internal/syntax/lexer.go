@@ -47,13 +47,17 @@ func contextPatternAhead(toks []Token) bool {
 		return false
 	}
 	i := 2
-	if toks[i].Kind == LBrace {
+	if toks[i].Kind == LBrace || toks[i].Kind == LParen {
+		open, close := toks[i].Kind, RBrace
+		if open == LParen {
+			close = RParen
+		}
 		depth := 1
 		for i++; i < len(toks) && depth > 0; i++ {
 			switch toks[i].Kind {
-			case LBrace:
+			case open:
 				depth++
-			case RBrace:
+			case close:
 				depth--
 			}
 		}

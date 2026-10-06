@@ -17,7 +17,7 @@ fn main() {
   _: First | Second = .Reedy
   _: First = .Fields
   _: First = .Auto
-  _: Option[Int] = .Some(1)
+  _: First = .Fields(1)
   _: First = .Fields {}
   _: A = .{ value: 1, value: 2 }
   union(first: .{ value: 1 }, other: B { value: 2 })

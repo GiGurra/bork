@@ -16,7 +16,7 @@ fn main() {
   println(ys)
   zs: List[Option[String]] | json.JsonError | codec.DecodeError = json.Decode("[\"a\", null]")
   println(zs)
-  println(json.Encode([Option.Some { value: 1 }, Option.None]))
+  println(json.Encode([Option.Some(1), Option.None]))
   escapes()
 }
 

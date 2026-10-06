@@ -35,8 +35,8 @@ fn settings(): cli.Settings {
 fn flags(): List[cli.Flag] {
   [.{ field: "config", configFile: true, files: true },
     .{ field: "catalog", shortName: cli.Mapping.Disabled, files: true },
-    .{ field: "action", position: Option.Some { value: 0 }, choices: [.{ value: "apply", description: "Deploy resources" }, .{ value: "inspect", description: "Show deployment options" }], strictChoices: true },
-    .{ field: "resources", position: Option.Some { value: 1 } }]
+    .{ field: "action", position: Option.Some(0), choices: [.{ value: "apply", description: "Deploy resources" }, .{ value: "inspect", description: "Show deployment options" }], strictChoices: true },
+    .{ field: "resources", position: Option.Some(1) }]
 }
 fn partialText(request: cli.CompletionRequest, field: String, fallback: String): String | cli.Error {
   match (request.partial.Get[String](field)) {

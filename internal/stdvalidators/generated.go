@@ -346,7 +346,7 @@ type Option[T any] interface {
 }
 
 type Option_Some[T any] struct {
-	value T
+	E0 T
 }
 
 func (Option_Some[T]) isOption(T) {
@@ -357,9 +357,9 @@ func (Option_Some[T]) isOption(T) {
 func (v Option_Some[T]) String() string {
 	nativeEnter()
 	defer nativeLeave()
-	return "Option.Some { value: " +
-		func() string { nativeStep(); return _show(v.value) }() +
-		" }"
+	return "Option.Some(" +
+		func() string { nativeStep(); return _show(v.E0) }() +
+		")"
 }
 
 func (v Option_Some[T]) _borkEqual(other any) bool {
@@ -375,7 +375,7 @@ func (v Option_Some[T]) _equals(w Option_Some[T]) bool {
 	nativeEnter()
 	defer nativeLeave()
 	return true &&
-		func() bool { nativeStep(); return _equal(v.value, w.value) }()
+		func() bool { nativeStep(); return _equal(v.E0, w.E0) }()
 
 }
 
@@ -385,7 +385,7 @@ func (v Option_Some[T]) _borkHash() uint64 {
 	h := uint64(0)
 	h = func() uint64 {
 		nativeStep()
-		return _hashMix(h, func() uint64 { nativeStep(); return _hash(v.value) }())
+		return _hashMix(h, func() uint64 { nativeStep(); return _hash(v.E0) }())
 	}()
 
 	return h
@@ -1034,7 +1034,7 @@ func _ctEncode3(value Option[int64], depth int) _ctValue {
 			)
 		}()
 
-		return _ctValue{Kind: "Option[Int]", Tag: "Some", Items: []_ctValue{func() _ctValue { nativeStep(); return _ctEncode4(value.value, depth+1) }()}}
+		return _ctValue{Kind: "Option[Int]", Tag: "Some", Items: []_ctValue{func() _ctValue { nativeStep(); return _ctEncode4(value.E0, depth+1) }()}}
 	case Option_None[int64]:
 		_ = value
 		func() {
@@ -1233,7 +1233,7 @@ func artifactCall(index int, request Request) []InterpolationIssue {
 }
 
 func init() {
-	descriptors = []Descriptor{{Package: "bork/sql", Instance: "sqlInterpolationValidator", Builder: "Builder", Signature: "(StaticParts,List[InterpolationHole])->List[InterpolationIssue]", Identity: "e4840bd01a37d8c074b71dcf33c4578974cdd22dfde652fed58c0cd9acbc0eb3", Sources: []Source{{Path: "prelude/classes.bork", Digest: "303b8b27423bddad847f15f6965e6ceb9acf0a8fb5f881b59a92c4f8cd865896"}, {Path: "prelude/interpolation.bork", Digest: "3bcb0d676886a4f05ecb2889ae0883690f3c9e3597e2faf9fac5b7339d88fba5"}, {Path: "prelude/options.bork", Digest: "19d8b82007ae3cab025a7f6e92f28165481d2f10ac1b711bb4faa35e1949f0e1"}, {Path: "bork/sql/interpolation.bork", Digest: "129be28fdfefb980941b9e1f67a1d0f4df1816ece99f6e4dfa5f8b1f92f1c6cc"}, {Path: "bork/sql/sql.bork", Digest: "17ccdca7ca4ee537f536a15519a1cb0b0b7d069ec252aaf0aec16db85558c462"}}, Definitions: []Source{{Path: "bork/sql/interpolation.bork:166:3", Digest: "273acf8a10e01d829d062fa9aa488f329b486db9ff2fffaa6aec746508df5275"}, {Path: "bork/sql/interpolation.bork:170:1", Digest: "1a73c5327d689e7013876ffc55762bcb8e3d4a410df5a4491b5d48100cd7d9bc"}, {Path: "bork/sql/interpolation.bork:34:1", Digest: "dea4ef18c068ecb9b038339c45cb25314d39bdf464cd0552ecbcb0fd8520ffef"}}}}
+	descriptors = []Descriptor{{Package: "bork/sql", Instance: "sqlInterpolationValidator", Builder: "Builder", Signature: "(StaticParts,List[InterpolationHole])->List[InterpolationIssue]", Identity: "cbd6ec662f54d11d3f6e41efbb4a60d88a5b7652bab7ffb1f770a6961c44cd34", Sources: []Source{{Path: "prelude/classes.bork", Digest: "303b8b27423bddad847f15f6965e6ceb9acf0a8fb5f881b59a92c4f8cd865896"}, {Path: "prelude/interpolation.bork", Digest: "3bcb0d676886a4f05ecb2889ae0883690f3c9e3597e2faf9fac5b7339d88fba5"}, {Path: "prelude/options.bork", Digest: "6824cc58cc3a232c3b84c5902e4fcb7a86cc06e68e38feeaa83c407303ca35c6"}, {Path: "bork/sql/interpolation.bork", Digest: "9d0594e29c6785b91da3ee96cf27d0326396ec7bc5432e0a3a63ef34911d9762"}, {Path: "bork/sql/sql.bork", Digest: "17ccdca7ca4ee537f536a15519a1cb0b0b7d069ec252aaf0aec16db85558c462"}}, Definitions: []Source{{Path: "bork/sql/interpolation.bork:166:3", Digest: "273acf8a10e01d829d062fa9aa488f329b486db9ff2fffaa6aec746508df5275"}, {Path: "bork/sql/interpolation.bork:170:1", Digest: "121495d8223db1eebd53a245c030c0d8bbfc54576686912604e841b81b4ee90f"}, {Path: "bork/sql/interpolation.bork:34:1", Digest: "dea4ef18c068ecb9b038339c45cb25314d39bdf464cd0552ecbcb0fd8520ffef"}}}}
 	nativeEvaluation = func(calls []Call) []byte {
 		nativeEnter()
 		defer nativeLeave()
@@ -2254,7 +2254,7 @@ func _sql_validateSQL(parts StaticParts, holes []InterpolationHole) []Interpolat
 	}
 	var hole Option[int64] = Option_None[int64]{}
 	if sqlite.hole >= 0 && sqlite.hole == postgres.hole {
-		hole = Option_Some[int64]{value: sqlite.hole}
+		hole = Option_Some[int64]{E0: sqlite.hole}
 	}
 	return []InterpolationIssue{{hole: hole, message: sqlite.detail.message}}
 }

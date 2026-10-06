@@ -246,6 +246,16 @@ func apiDefaultSupported(expr syntax.Expr) bool {
 		return apiDefaultSupported(x.X)
 	case *syntax.Selector:
 		return apiDefaultSupported(x.X)
+	case *syntax.Call:
+		if !apiDefaultSupported(x.Fun) {
+			return false
+		}
+		for _, arg := range x.Args {
+			if !apiDefaultSupported(arg) {
+				return false
+			}
+		}
+		return true
 	case *syntax.TupleLit:
 		for _, e := range x.Elems {
 			if !apiDefaultSupported(e) {
@@ -318,7 +328,13 @@ func apiType(td *syntax.TypeDecl, sources []*syntax.File) string {
 			if doc := apiComment(sources, v.Pos); doc != "" {
 				value = "// " + strings.ReplaceAll(doc, "\n", "\n  // ") + "\n  " + value
 			}
-			if len(v.Fields) > 0 {
+			if v.Positional {
+				var slots []string
+				for _, slot := range v.Slots {
+					slots = append(slots, writtenTypeText(slot))
+				}
+				value += "(" + strings.Join(slots, ", ") + ")"
+			} else if len(v.Fields) > 0 {
 				value += " " + apiFields(v.Fields, sources)
 			}
 			if len(v.Where) > 0 {

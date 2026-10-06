@@ -38,3 +38,6 @@
 (is_expression "is" @keyword)
 
 (test_field_pattern name: (identifier) @property)
+
+(specialized_variant_pattern name: (identifier) @variant)
+(specialized_variant_pattern (qualified_name (identifier) @type))

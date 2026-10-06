@@ -16,7 +16,7 @@ func TestContextPatternFixes(t *testing.T) {
 	}{
 		{"typo", "type A = sealed { Ready }\nfn f(x:A):Int{match(x){. /* keep */ Reedy=>1}}", false},
 		{"ambiguous", "type A = sealed { Ready }\ntype B = sealed { Ready }\nfn f(x:A|B):Int{match(x){.Ready=>1,_=>0}}", false},
-		{"specializations", "fn f(x:Option[Int]|Option[String]):Int{match(x){.Some{value:_}=>1,_=>0}}", true},
+		{"specializations", "fn f(x:Option[Int]|Option[String]):Int{match(x){.Some(_)=>1,_=>0}}", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			check := func(source string) *diag.List {

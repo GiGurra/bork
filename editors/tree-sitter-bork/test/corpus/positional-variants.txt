@@ -1,0 +1,134 @@
+==================
+Positional payloads and explicit owner patterns
+==================
+type Reply[T] = sealed { Found(T, String), One((T, String)), Missing }
+fn read(x: Reply[Int]): Int {
+  match (x) {
+    .Found(n, _) => n
+    Reply[Int].One((n, _)) => n
+    Reply[Int].Missing => 0
+  }
+}
+fn test(x: Reply[Int]): Bool { x is Reply[Int].Found(Int, String) }
+
+---
+
+(source_file
+  (type_declaration
+    (identifier)
+    (type_parameters
+      (identifier))
+    (variant
+      (identifier)
+      (type
+        (qualified_name
+          (identifier)))
+      (type
+        (qualified_name
+          (identifier))))
+    (variant
+      (identifier)
+      (type
+        (tuple_type
+          (type
+            (qualified_name
+              (identifier)))
+          (type
+            (qualified_name
+              (identifier))))))
+    (variant
+      (identifier)))
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier)))))))
+    (type
+      (qualified_name
+        (identifier)))
+    (block
+      (match_expression
+        (qualified_name
+          (identifier))
+        (match_arm
+          (pattern
+            (context_pattern
+              (identifier))
+            (pattern
+              (qualified_name
+                (identifier)))
+            (pattern))
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern
+            (specialized_variant_pattern
+              (qualified_name
+                (identifier))
+              (type_arguments
+                (type
+                  (qualified_name
+                    (identifier))))
+              (identifier))
+            (pattern
+              (tuple_pattern
+                (pattern
+                  (qualified_name
+                    (identifier)))
+                (pattern))))
+          (qualified_name
+            (identifier)))
+        (match_arm
+          (pattern
+            (specialized_variant_pattern
+              (qualified_name
+                (identifier))
+              (type_arguments
+                (type
+                  (qualified_name
+                    (identifier))))
+              (identifier)))
+          (number)))))
+  (function_declaration
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (type
+          (qualified_name
+            (identifier))
+          (type_arguments
+            (type
+              (qualified_name
+                (identifier)))))))
+    (type
+      (qualified_name
+        (identifier)))
+    (block
+      (is_expression
+        (qualified_name
+          (identifier))
+        (test_pattern
+          (specialized_variant_pattern
+            (qualified_name
+              (identifier))
+            (type_arguments
+              (type
+                (qualified_name
+                  (identifier))))
+            (identifier))
+          (test_pattern
+            (type
+              (qualified_name
+                (identifier))))
+          (test_pattern
+            (type
+              (qualified_name
+                (identifier)))))))))

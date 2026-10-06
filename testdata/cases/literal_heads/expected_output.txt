@@ -1,9 +1,9 @@
 Box { values: [] }
 Option.None
-Option.Some { value: "trace" }
-Box { values: [Option.Some { value: "x" }, Option.None] }
+Option.Some("trace")
+Box { values: [Option.Some("x"), Option.None] }
 State.Defaults { values: [] }
-Option.Some { value: 2 }
+Option.Some(2)
 Pair { first: 3, second: 3 }
 Box { value: 4 }
 State.Empty
@@ -11,5 +11,5 @@ State.Value { value: "imported" }
 secret { values: [] }
 privateConfig { value: 5 }
 Range { label: "ordered", lo: 1, hi: 2 }
-Option.Some { value: 3 }
+Option.Some(3)
 Option.None

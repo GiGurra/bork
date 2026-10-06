@@ -253,7 +253,7 @@ func testDebugDAPSession(t *testing.T, types bool) {
 		name := scope.(map[string]any)["name"].(string)
 		session = append(session, debugSnapshot{Request: "scope " + name, Variables: debugVariables(response)})
 	}
-	for _, expression := range []string{"shape", "some", "none", "nested", "recordUnion", "scalarUnion", "someFloat", "boxed", "listUnion"} {
+	for _, expression := range []string{"payload", "shape", "some", "none", "nested", "recordUnion", "scalarUnion", "someFloat", "boxed", "listUnion"} {
 		seq = d.send(t, "evaluate", map[string]any{"expression": expression, "frameId": frame["id"], "context": "watch"})
 		response = d.until(t, "", seq)
 		value := debugValue(response["body"].(map[string]any), "result")

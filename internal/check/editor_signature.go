@@ -26,6 +26,16 @@ func editorSignature(fn *Func, params []Type, result Type, from *Package, bound 
 func EditorCheckedSignature(info *Info, from *Package, open diag.Pos) *EditorSignature {
 	// Predicate guards synthesized by an assertion share its source position.
 	// Prefer the actual assertion identity over those internal calls.
+	for call, literal := range info.variantCalls {
+		if call.Pos != open {
+			continue
+		}
+		variant, ok := info.recordTargets[literal].(*Variant)
+		if !ok {
+			continue
+		}
+		return editorVariantSignature(variant, from)
+	}
 	for call, assertion := range info.patternAssertions {
 		if call.Pos == open {
 			instance := info.instances[call]
@@ -73,6 +83,11 @@ func EditorNamedSignature(info *Info, from *Package, name string, receiver Type,
 		if body != nil && body.Pos.File == site.File && (body.Pos.Line < site.Line || body.Pos.Line == site.Line && body.Pos.Col <= site.Col) && (site.Line < body.End.Line || site.Line == body.End.Line && site.Col < body.End.Col) {
 			c.useTypeParams(context)
 			break
+		}
+	}
+	if receiver == nil && len(typeArgs) == 0 {
+		if signature := c.editorVariantSignatureNamed(name, from, site); signature != nil {
+			return signature
 		}
 	}
 	var fn *Func
@@ -175,4 +190,46 @@ func EditorActiveParameter(callable *CallableDescription, previous []syntax.Argu
 		return nil
 	}
 	return &index
+}
+
+func editorVariantSignature(variant *Variant, from *Package) *EditorSignature {
+	pos := variant.Parent.Decl.Variants[variant.Index].Pos
+	return &EditorSignature{Name: variant.Parent.Name + "." + variant.Name, Result: TypeText(variant.Parent, from), Effects: "nothing", Callable: DescribeVariantCallable(variant, from), Definition: &pos}
+}
+
+func (c *checker) editorVariantSignatureNamed(name string, from *Package, site diag.Pos) *EditorSignature {
+	if !strings.Contains(name, ".") {
+		return nil
+	}
+	saved := c.diags
+	c.diags = &diag.List{}
+	defer func() { c.diags = saved }()
+	parsed := syntax.Parse("signature-query.bork", []byte("fn SignatureQuery(){"+name+"(0)}"), c.diags)
+	if len(parsed.Funcs) == 0 || parsed.Funcs[0].Body == nil {
+		return nil
+	}
+	call, ok := parsed.Funcs[0].Body.Tail.(*syntax.Call)
+	if !ok {
+		return nil
+	}
+	head, ok := call.Fun.(*syntax.Selector)
+	if !ok {
+		return nil
+	}
+	var owner Type
+	switch head := head.X.(type) {
+	case *syntax.Ident:
+		owner = c.typeNamed(head.Name)
+	case *syntax.TypeHead:
+		owner = c.resolveType(head.Type)
+	}
+	sealed, ok := owner.(*Sealed)
+	if !ok {
+		return nil
+	}
+	variant := c.specializedVariant(site, sealed, head.Name)
+	if variant == nil || !variant.Positional || c.diags.Len() != 0 {
+		return nil
+	}
+	return editorVariantSignature(variant, from)
 }

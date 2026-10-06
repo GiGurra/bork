@@ -269,3 +269,17 @@ func TestInlayHintsConfigurationRefreshProtocol(t *testing.T) {
 		t.Fatalf("refresh=%t disabled response=%t", refresh, disabled)
 	}
 }
+
+func TestInlayHintsPositionalVariantPayloads(t *testing.T) {
+	source := `type Pair = sealed { Both(Int, String), Empty }
+fn main() { pair = Pair.Both(1, "one"); match(pair) { .Both(n, _) => println(n), .Empty => println(0) } }`
+	hints := inlayProtocol(t, source, map[string]bool{"types": true, "parameters": true, "facts": false}, sourceRange{position{}, endPosition(source)}, "")
+	if !containsInlay(hints, ": Pair") {
+		t.Fatalf("missing inferred type: %+v", hints)
+	}
+	for _, hint := range hints {
+		if hint.Label == "0:" || hint.Label == "1:" || hint.Label == "E0:" || hint.Label == "E1:" {
+			t.Fatalf("exposed internal payload name: %+v", hint)
+		}
+	}
+}

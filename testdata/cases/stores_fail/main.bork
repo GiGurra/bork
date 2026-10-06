@@ -28,8 +28,8 @@ fn atomShorter() uses state {
   store: Atom[Option[Conn]] = atom(Option.None)
   scope s {
     c = connect(s)
-    _ = update(store, old => Option.Some { value: c })
-    _ = swap(store, old => Option.Some { value: c })
+    _ = update(store, old => Option.Some(c))
+    _ = swap(store, old => Option.Some(c))
   }
 }
 
@@ -75,12 +75,12 @@ fn fromTask() uses state {
 // A container mixed with shorter values is still the same container.
 fn mixedIf() uses state {
   scope app {
-    a: Atom[Option[Conn]] = atom(Option.Some { value: connect(app) })
+    a: Atom[Option[Conn]] = atom(Option.Some(connect(app)))
     scope inner {
-      b: Atom[Option[Conn]] = atom(Option.Some { value: connect(inner) })
+      b: Atom[Option[Conn]] = atom(Option.Some(connect(inner)))
       x = if (true) { a } else { b }
       c = connect(inner)
-      _ = update(x, old => Option.Some { value: c })
+      _ = update(x, old => Option.Some(c))
     }
   }
 }
@@ -194,7 +194,7 @@ fn emptyAtom() uses state {
   a: Atom[Option[Conn]] = atom(Option.None)
   scope app {
     c = connect(app)
-    _ = update(first(a, c), old => Option.Some { value: c })
+    _ = update(first(a, c), old => Option.Some(c))
   }
 }
 

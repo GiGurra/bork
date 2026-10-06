@@ -1,5 +1,5 @@
 {"and": 2, "bird": 1, "cat": 1, "dog": 1, "the": 3}
-Option.Some { value: 3 }
+Option.Some(3)
 5
 true
 {"bird": 1, "cat": 1, "dog": 1}

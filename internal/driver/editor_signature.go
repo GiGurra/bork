@@ -91,7 +91,9 @@ func (a *EditorAnalysis) SignatureHelp(path, current string, at diag.Pos) *Edito
 						}
 					}
 					if receiver == nil {
-						name = editorSignatureName(prior[start : end+1])
+						lo, _ := editorByteOffset(current, prior[start].Pos)
+						hi, _ := editorByteOffset(current, prior[end].End)
+						name = current[lo:hi]
 					}
 				}
 				var typeArgs []*syntax.TypeExpr
@@ -168,8 +170,27 @@ func editorSignatureHead(tokens []syntax.Token, open int) (start, end int, ok bo
 		return
 	}
 	start = end
-	for start >= 2 && tokens[start-1].Kind == syntax.Dot && tokens[start-2].Kind == syntax.TIdent {
-		start -= 2
+	for start >= 2 && tokens[start-1].Kind == syntax.Dot {
+		owner := start - 2
+		if tokens[owner].Kind == syntax.RBrack {
+			depth := 1
+			for owner--; owner >= 0; owner-- {
+				if tokens[owner].Kind == syntax.RBrack {
+					depth++
+				}
+				if tokens[owner].Kind == syntax.LBrack {
+					depth--
+					if depth == 0 {
+						owner--
+						break
+					}
+				}
+			}
+		}
+		if owner < 0 || tokens[owner].Kind != syntax.TIdent {
+			break
+		}
+		start = owner
 	}
 	if start > 0 && (tokens[start-1].Kind == syntax.KwFn || tokens[start-1].Kind == syntax.KwPred) {
 		return

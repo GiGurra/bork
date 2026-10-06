@@ -16,8 +16,8 @@ fn describe(s: Shape): String {
 
 fn lookup(found: Option[Shape] | NotFound): String {
   match (found) {
-    Option.Some { value: Shape.Line { from: Point { x: 0 } } } => "a line from x = 0"
-    Option.Some { value: other } => s"found ${describe(other)}"
+    Option.Some(Shape.Line { from: Point { x: 0 } }) => "a line from x = 0"
+    Option.Some(other) => s"found ${describe(other)}"
     Option.None => "nothing"
     NotFound { key: "" } => "no key given"
     NotFound { key } => s"no $key"
@@ -33,8 +33,8 @@ fn sign(n: Int): String {
 
 fn flags(a: Bool, b: Option[Bool]): String {
   match (b) {
-    Option.Some { value: true } => if (a) { "both" } else { "b" }
-    Option.Some { value: false } => "not b"
+    Option.Some(true) => if (a) { "both" } else { "b" }
+    Option.Some(false) => "not b"
     Option.None => "unknown"
   }
 }
@@ -45,9 +45,9 @@ fn main() {
   println(describe(Shape.Circle { center: Point { x: 1, y: 2 }, radius: 0 }))
   println(describe(Shape.Circle { center: Point { x: 1, y: 2 }, radius: 3 }))
   println(describe(Shape.Line { from: origin, to: origin }))
-  println(lookup(Option.Some { value: Shape.Line { from: origin, to: Point { x: 5, y: 5 } } }))
-  println(lookup(Option.Some { value: Shape.Line { from: Point { x: 1, y: 0 }, to: origin } }))
+  println(lookup(Option.Some(Shape.Line { from: origin, to: Point { x: 5, y: 5 } })))
+  println(lookup(Option.Some(Shape.Line { from: Point { x: 1, y: 0 }, to: origin })))
   println(lookup(Option.None), lookup(NotFound { key: "" }), lookup(NotFound { key: "k" }))
   println(sign(0), sign(5), sign(-5))
-  println(flags(true, Option.Some { value: true }), flags(false, Option.Some { value: false }), flags(true, Option.None))
+  println(flags(true, Option.Some(true)), flags(false, Option.Some(false)), flags(true, Option.None))
 }

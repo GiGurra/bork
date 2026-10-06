@@ -46,10 +46,10 @@ fn main() {
   println(NilResult())
   println(Failing())
   println(Found(5), Found(-1), Found(1000))
-  println(Name(Option.Some { value: "ada" }), Name(Option.None))
-  println(Count({ "a": [Option.Some { value: 1 }, Option.None], "b": [Option.Some { value: 2 }] }))
+  println(Name(Option.Some("ada")), Name(Option.None))
+  println(Count({ "a": [Option.Some(1), Option.None], "b": [Option.Some(2)] }))
   println(Deref(["x", "y"]))
-  println(Prefixed("#", [Option.Some { value: 1 }, Option.None]))
+  println(Prefixed("#", [Option.Some(1), Option.None]))
   println(NamedNil())
   xs = [1, 2]
   Keep(xs)

@@ -31,7 +31,7 @@ func TestPackageLazyChecks(t *testing.T) {
 		{"typed positive", "pred positive(n:Int){n>0}\nlazy Value:Int where positive=1\nfn main(){println(Value)}", ""},
 		{"invalid promise", "pred positive(n:Int){n>0}\nlazy Value:Int where positive=-1\nfn main(){}", "positive"},
 		{"early return promise", "pred positive(n:Int){n>0}\nlazy Value:Int where positive={if(true){return -1};1}\nfn main(){}", "positive"},
-		{"option failure promise", "pred valid(x:Option[Int]){match(x){Option.Some{value:_}=>true,Option.None=>false}}\nlazy Input:Option[Int]=.None\nlazy Value:Option[Int] where valid={n=Input?;.Some{value:n}}\nfn main(){}", "valid"},
+		{"option failure promise", "pred valid(x:Option[Int]){match(x){Option.Some(_)=>true,Option.None=>false}}\nlazy Input:Option[Int]=.None\nlazy Value:Option[Int] where valid={n=Input?;.Some(n)}\nfn main(){}", "valid"},
 		{"direct comptime", "lazy Value:Int=panic(\"must not run\")\nfn main(){println(comptime{Value})}", "must not run"},
 		{"helper comptime", "lazy Value:Int=panic(\"must not run\")\nfn read():Int{Value}\nfn main(){println(comptime{read()})}", "must not run"},
 		{"computed global comptime", "lazy Value:Int=panic(\"must not run\")\ntype C={n:Int,lazy result:Int=n+Value}\nfn main(){println(comptime{C{n:1}.result})}", "must not run"},

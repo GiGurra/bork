@@ -271,3 +271,28 @@ func replaceRenameSource(t *testing.T, s *server, path, source string) {
 		t.Fatalf("changed fixture did not check: %s", s.out)
 	}
 }
+
+func TestRenamePositionalVariantPatterns(t *testing.T) {
+	src := `type Choice[T] = sealed { Some(T), Empty }
+fn Make(): Choice[Int] { Choice[Int].Some(1) }
+fn Use(x: Choice[Int]): Int { match(x) { Choice[Int].Some(payload) => payload, .Empty => 0 } }
+fn Matches(x: Choice[Int]): Bool { x is .Some(_) }
+`
+	s, path := newTestServer(t, src)
+	for _, tc := range []struct {
+		fragment, name string
+		edits          int
+	}{
+		{"Some(T)", "Present", 4},
+		{"payload)", "item", 2},
+	} {
+		result, err := s.feature("textDocument/rename", path, documentParams{Position: navigationPosition(t, src, tc.fragment), NewName: tc.name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		changes := result.(map[string]any)["changes"].(map[string][]textEdit)[fileURI(path)]
+		if len(changes) != tc.edits {
+			t.Fatalf("%s: %+v", tc.fragment, changes)
+		}
+	}
+}

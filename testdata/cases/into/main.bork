@@ -6,7 +6,7 @@ type Failure = { reason: String }
 fn source() uses io: Source {
   println("receiver")
   a = A { n: 1, extra: "hidden" }
-  Source { item: a, items: [a, A { n: 2, extra: "hidden" }], optional: Option.Some { value: a }, ignored: true }
+  Source { item: a, items: [a, A { n: 2, extra: "hidden" }], optional: Option.Some(a), ignored: true }
 }
 fn text(label: String) uses io: String { println(label); label }
 fn failed() uses io: Int | Failure { println("failure override"); Failure { reason: "stop" } }
@@ -35,7 +35,7 @@ fn main() {
   println(NumberBox { value: 3, hidden: false }.into[Mixed](n: mixed(true)))
   a = A { n: 4, extra: "extra" }
   println(Box { value: a }.into[Box[B]]())
-  println(NestedSource { values: [Option.Some { value: [a] }, Option.None] }.into[NestedTarget]())
+  println(NestedSource { values: [Option.Some([a]), Option.None] }.into[NestedTarget]())
   println(Empty {}.into[Callback](callback: n => n + 1).callback(4))
   println(Empty {}.into[Retained](n: failed(), text: text("retained union override")))
   println(explicitTry())

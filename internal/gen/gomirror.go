@@ -291,14 +291,14 @@ func (w *bindWriter) factAtPath(x string, t check.Type, steps []string, path str
 		w.line("}")
 	case *check.Record:
 		if f := t.Field(step); f != nil {
-			w.factAtPath(x+"."+step, f.Type, rest, path+" + "+strconv.Quote("."+step), con, conversionErrors, written...)
+			w.factAtPath(w.g.text(w.g.fieldRead(ast.NewIdent(x), f)), f.Type, rest, path+" + "+strconv.Quote("."+step), con, conversionErrors, written...)
 		}
 	case *check.Sealed:
 		for _, v := range t.Variants {
 			if f := v.Field(step); f != nil {
 				e, ok := w.newTmp(), w.newTmp()
 				w.line(fmt.Sprintf("if %s,%s:= %s.(%s);%s {", e, ok, x, w.g.text(w.g.variantType(v)), ok))
-				w.factAtPath(e+"."+step, f.Type, rest, w.g.text(diagnosticFieldPath(ast.NewIdent(path), t, step)), con, conversionErrors, written...)
+				w.factAtPath(w.g.text(w.g.fieldRead(ast.NewIdent(e), f)), f.Type, rest, w.g.text(diagnosticFieldPath(ast.NewIdent(path), t, step)), con, conversionErrors, written...)
 				w.line("}")
 			}
 		}

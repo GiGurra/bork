@@ -243,8 +243,8 @@ fn main() {
 ```text
 å true false
 229
-Option.Some { value: B }
-Option.Some { value: ö }
+Option.Some(B)
+Option.Some(ö)
 ```
 
 - `r.code()` gives the code point as an `Int32`.

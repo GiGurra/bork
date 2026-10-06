@@ -57,7 +57,7 @@ func (l *lowerer) needs(x syntax.Expr) []Expr {
 		if s.some {
 			opt := s.need.Type.(*Sealed)
 			some := opt.Variant("Some")
-			value = &RecordLit{expr: at, Variant: some, Fields: []*FieldValue{{Name: "value", Field: some.Fields[0], Value: value}}}
+			value = &RecordLit{expr: at, Variant: some, Fields: []*FieldValue{{Name: some.Fields[0].Name, Field: some.Fields[0], Value: value}}}
 		}
 		out = append(out, value)
 	}
@@ -276,7 +276,7 @@ func (l *lowerer) expr(x syntax.Expr) (result Expr) {
 		value := l.exprRaw(x, payload)
 		opt := l.info.types[x].(*Sealed)
 		some := opt.Variant("Some")
-		return &RecordLit{expr: expr{pos: x.Position(), typ: opt, token: sourceTokenPos(x)}, Variant: some, Promoted: true, Fields: []*FieldValue{{Name: "value", Field: some.Fields[0], Value: value}}}
+		return &RecordLit{expr: expr{pos: x.Position(), typ: opt, token: sourceTokenPos(x)}, Variant: some, Promoted: true, Fields: []*FieldValue{{Name: some.Fields[0].Name, Field: some.Fields[0], Value: value}}}
 	}
 	return l.exprRaw(x, l.info.types[x])
 }
@@ -413,6 +413,11 @@ func (l *lowerer) exprRaw(x syntax.Expr, typ Type) Expr {
 	case *syntax.Binary:
 		return &Binary{expr: at, Op: x.Op, X: l.expr(x.X), Y: l.expr(x.Y)}
 	case *syntax.Call:
+		if literal := l.info.variantCalls[x]; literal != nil {
+			out := l.expr(literal).(*RecordLit)
+			out.SourceCall = x
+			return out
+		}
 		if assertion := l.info.patternAssertions[x]; assertion != nil {
 			return l.assertIs(x, at, assertion)
 		}

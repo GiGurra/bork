@@ -1,7 +1,7 @@
 (7, "hello")
 {"pair":[7,"hello"]}
 [(1, [2]), (3, [4])]
-Option.Some { value: "tuple key" }
+Option.Some("tuple key")
 20
 21
 22

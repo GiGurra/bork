@@ -16,7 +16,7 @@ fn reply(result: http.Result): http.Response {
 }
 fn budget(headers: http.Headers): Int {
   match (http.HeaderOf(headers, "Bork-Timeout-Ns")) {
-    Option.Some { value } => match (parseInt(value)) { n: Int => n, error => panic(toString(error)) }
+    Option.Some(value) => match (parseInt(value)) { n: Int => n, error => panic(toString(error)) }
     Option.None => panic("missing deadline budget")
   }
 }
@@ -25,7 +25,7 @@ fn main() {
     downstream = server(http.Listen("127.0.0.1:0", app, handler: (request, s) => {
       // Boundary labels forward automatically. Typed needs are bound explicitly.
       match (http.TraceParentOf(request.headers)) {
-        Option.Some { value } => {
+        Option.Some(value) => {
           with (trace: value) {
             http.Text(200, traceText()).copy(headers: {
               "seen-budget": [toString(budget(request.headers))]
@@ -41,7 +41,7 @@ fn main() {
       http.Text(200, result.body).copy(headers: {
         "middle-budget": [toString(budget(request.headers))],
         "downstream-budget": [match (http.HeaderOf(result.headers, "seen-budget")) {
-          Option.Some { value } => value
+          Option.Some(value) => value
           Option.None => panic("missing downstream budget")
         }]
       })
@@ -51,11 +51,11 @@ fn main() {
       with (trace: root()) {
         result = reply(http.Get("http://" + http.Address(middle), caller))
         middleBudget = budget({ "Bork-Timeout-Ns": [match (http.HeaderOf(result.headers, "middle-budget")) {
-          Option.Some { value } => value
+          Option.Some(value) => value
           Option.None => panic("missing middle budget")
         }] })
         downstreamBudget = budget({ "Bork-Timeout-Ns": [match (http.HeaderOf(result.headers, "downstream-budget")) {
-          Option.Some { value } => value
+          Option.Some(value) => value
           Option.None => panic("missing downstream budget")
         }] })
         println("trace continuity", result.body == traceText())

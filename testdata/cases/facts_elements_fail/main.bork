@@ -19,6 +19,6 @@ fn mixed(xs: List[Int where positive], ys: List[Int]): Int { total(xs.concat(ys)
 fn promise(xs: List[Int]): List[Int where positive] { xs }
 
 fn main() {
-  println(total([1, 0, 2]), noteText(Option.Some { value: "" }))
+  println(total([1, 0, 2]), noteText(Option.Some("")))
   println(unchecked([1]), wrongFilter([1]), mapped([1]), mixed([1], [2]), promise([1]))
 }

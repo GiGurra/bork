@@ -135,3 +135,17 @@ func TestDocUnsafeAPIAndTestBodies(t *testing.T) {
 		}
 	}
 }
+
+func TestDocPositionalVariants(t *testing.T) {
+	root := t.TempDir()
+	writeFixtureFile(t, root, "main.bork", "type Reply[T] = sealed { Found(T, String), Named { value: T }, Gone }\n")
+	out, err := Doc(root, DocOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Found(T, String)", "Named {", "Gone"} {
+		if !bytes.Contains(out, []byte(want)) {
+			t.Fatalf("missing %q: %s", want, out)
+		}
+	}
+}

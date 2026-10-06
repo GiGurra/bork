@@ -32,7 +32,7 @@ fn main() {
     println(inferred)
     async(s) propagate = { number = bad()?; number + 1 }
     println(propagate)
-    async(s) optional: Option[Int] = { number = Option.Some { value: 8 }?; number + 1 }
+    async(s) optional: Option[Int] = { number = Option.Some(8)?; number + 1 }
     println(optional)
     with (label: "captured") {
       async(s) name = named()

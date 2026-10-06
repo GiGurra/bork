@@ -33,14 +33,6 @@ func instanceIn(t Type, base Type) Type {
 	return found
 }
 
-// article is "a" or "an", for the word w.
-func article(w string) string {
-	if w != "" && strings.ContainsRune("AEIOUaeiou", rune(w[0])) {
-		return "an"
-	}
-	return "a"
-}
-
 // optionIn finds the Option type that t is or contains (see instanceIn).
 func (c *checker) optionIn(t Type) *Sealed {
 	s, _ := instanceIn(t, c.info.Named["Option"]).(*Sealed)
@@ -82,10 +74,7 @@ func (c *checker) variantRef(pos diag.Pos, owner, name string, ctx Type) *Varian
 		return nil
 	}
 	if len(sealed.TypeParams) > 0 {
-		generic := owner + "[" + paramNames(sealed.TypeParams) + "]"
-		report := func() {
-			c.errorf(pos, "cannot tell which %s type %s.%s is here; use it where %s %s is expected", owner, owner, name, article(owner), generic)
-		}
+		report := func() { c.variantExpectedFix(pos, owner, sealed, name) }
 		inst, _ := instanceIn(ctx, sealed).(*Sealed)
 		switch {
 		case c.unbound(ctx):
@@ -139,6 +128,10 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 			return Invalid
 		}
 		if len(v.Fields) > 0 {
+			if v.Positional {
+				c.errorf(e.Pos, "%s.%s has payloads; build it with parentheses", head.Type.Name, e.Name)
+				return Invalid
+			}
 			c.errorf(e.Pos, "%s.%s has fields; build it with braces", head.Type.Name, e.Name)
 			return Invalid
 		}
@@ -160,6 +153,10 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 			return Invalid
 		}
 		if len(v.Fields) > 0 {
+			if v.Positional {
+				c.errorf(e.Pos, "%s.%s has payloads; build it with %s.%s(...)", owner, e.Name, owner, e.Name)
+				return Invalid
+			}
 			c.errorf(e.Pos, "%s.%s has fields; build it with %s.%s { ... }", owner, e.Name, owner, e.Name)
 			return Invalid
 		}
@@ -207,6 +204,9 @@ func (c *checker) selector(e *syntax.Selector, want Type) Type {
 }
 
 func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
+	if !e.Positional && c.rejectPositionalBraces(e, want) {
+		return Invalid
+	}
 	if rec := c.info.conversionRecords[e]; rec != nil {
 		if !c.recordConstruction(e.Position(), rec, "convert into") {
 			c.skipFieldInits(e)
@@ -270,7 +270,7 @@ func (c *checker) recordLit(e *syntax.RecordLit, want Type) Type {
 }
 
 // genericLit checks a literal of a generic record, or of a variant of a
-// generic sealed type (`Option.Some { value: 1 }`). The type arguments
+// generic sealed type (`Option.Some(1)`). The type arguments
 // come from the expected type, or else from the fields.
 func (c *checker) genericLit(e *syntax.RecordLit, base Type, variant, label string, want Type) Type {
 	return c.genericContextLit(e, base, variant, label, want)
@@ -331,7 +331,11 @@ func (c *checker) fieldInitsTyped(e *syntax.RecordLit, fields []*Field, owner st
 		}
 		ft := f.Type
 		if t, ft = c.settle(t, ft); !assignable(t, ft) {
-			c.errorf(fi.Value.Position(), "field %s of %s must be %s, found %s", fi.Name, owner, ft, t)
+			if e.Positional {
+				c.errorf(fi.Value.Position(), "payload %s of %s must be %s, found %s", fi.Name, owner, ft, t)
+			} else {
+				c.errorf(fi.Value.Position(), "field %s of %s must be %s, found %s", fi.Name, owner, ft, t)
+			}
 		}
 	}
 	var missing []string

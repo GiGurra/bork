@@ -86,7 +86,7 @@ fn Segments(path: String): List[String] {
 // compared without regard to case.
 fn HeaderOf(headers: Headers, name: String): Option[String] {
   match ((headers.entries()).find(entry => entry.key.toLower() == name.toLower())) {
-    Option.Some { value } => value.value.get(0)
+    Option.Some(value) => value.value.get(0)
     Option.None => Option.None
   }
 }
@@ -665,6 +665,6 @@ fn RetryAfter(headers: Headers, now: time.Instant): Option[time.Duration] unsafe
   if !current.Add(wait).Equal(date) { return noRetryDelay() }
   return retryDelay(int64(wait))
 }
-fn retryDelay(nanos: Int): Option[time.Duration] { Option.Some { value: time.Nanoseconds(nanos) } }
+fn retryDelay(nanos: Int): Option[time.Duration] { Option.Some(time.Nanoseconds(nanos)) }
 fn noRetryDelay(): Option[time.Duration] { Option.None }
 fn readRetryAfter(headers: Headers) uses clock: Option[time.Duration] { RetryAfter(headers, time.Now()) }

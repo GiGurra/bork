@@ -38,7 +38,7 @@ fn label(s: Scope, numbers: Channel[Int]) uses state: String | Cancelled {
 // Arms take context literals from the expected type.
 fn peek(s: Scope, numbers: Channel[Int]) uses state: Option[Int] | Closed | Cancelled {
   select {
-    n = numbers.receive(s) => .Some { value: n? }
+    n = numbers.receive(s) => .Some(n?)
     _ => .None {}
   }
 }

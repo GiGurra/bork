@@ -355,6 +355,28 @@ func (s *sourceIndex) walk(x check.Expr) {
 	case *check.Select:
 		s.walk(x.X)
 	case *check.RecordLit:
+		if x.SourceCall != nil && x.Variant != nil {
+			pos := x.SourceCall.Fun.Position()
+			switch fun := x.SourceCall.Fun.(type) {
+			case *syntax.ContextName:
+				pos = fun.NamePos
+			case *syntax.Selector:
+				pos = fun.Pos
+			}
+			if s.contains(x.SourceCall.Pos, 1) {
+				s.choose(x, x.Type(), definition(x))
+			}
+			if s.contains(pos, len(x.Variant.Name)) {
+				var params []check.Type
+				for _, field := range x.Variant.Fields {
+					params = append(params, field.Type)
+				}
+				definition := x.Variant.Parent.Decl.Variants[x.Variant.Index].Pos
+				s.choose(x, &check.FuncType{Params: params, Result: x.Type()}, &definition)
+				s.selected.Value = false
+				s.selected.Callable = check.DescribeVariantCallable(x.Variant, s.fn.Pkg)
+			}
+		}
 		for _, field := range x.Fields {
 			s.walk(field.Value)
 		}

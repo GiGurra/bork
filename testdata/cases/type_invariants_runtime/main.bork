@@ -45,7 +45,7 @@ test "generic invariants validate and generate" (b: Box[String]) {
   match (json.Decode[Box[String]]("{\"value\":\"x\",\"n\":0}")) { Box => assert(false), codec.DecodeError => assert(true), json.JsonError => assert(false) }
 }
 test "schema loaders check completed invariants" {
-  lookup = (name: String) => if (name == "CFG_LO") { Option.Some { value: "20" } } else { Option.None }
+  lookup = (name: String) => if (name == "CFG_LO") { Option.Some("20") } else { Option.None }
   match (env.LoadWith[Range]("CFG", lookup)) { Range => assert(false), env.ConfigError => assert(true) }
   match (encoding.DecodeCsv[Range]("lo\n20\n")) { _: List[Range] => assert(false), encoding.CsvErrors => assert(true), encoding.CsvError => assert(false) }
   match (cli.Parse[Range]("range", "", ["--lo", "20"])) { Range => assert(false), cli.Error => assert(true), cli.Help => assert(false) }

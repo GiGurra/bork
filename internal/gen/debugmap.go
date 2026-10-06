@@ -20,9 +20,10 @@ type DebugMap struct {
 }
 
 type DebugType struct {
-	Name   string                `json:"name"`
-	Kind   string                `json:"kind"`
-	Fields map[string]DebugField `json:"fields,omitempty"`
+	Positional bool                  `json:"positional,omitempty"`
+	Name       string                `json:"name"`
+	Kind       string                `json:"kind"`
+	Fields     map[string]DebugField `json:"fields,omitempty"`
 }
 
 type DebugField struct {
@@ -80,7 +81,7 @@ func (g *gen) debugMap(source []byte) *DebugMap {
 				if t.Prelude && t.Name == "Option" {
 					kind, label = "option", v.Name
 				}
-				m.Types[goName+"_"+v.Name] = DebugType{Name: label, Kind: kind, Fields: fields(v.Fields)}
+				m.Types[goName+"_"+v.Name] = DebugType{Name: label, Kind: kind, Fields: fields(v.Fields), Positional: v.Positional}
 			}
 		}
 	}
@@ -102,7 +103,7 @@ func (g *gen) debugMap(source []byte) *DebugMap {
 					label, kind = v.Name, "option"
 				}
 				variantKey := debugGoType(g.variantType(v), m.Types)
-				m.Types[variantKey] = DebugType{Name: label, Kind: kind, Fields: fields(v.Fields)}
+				m.Types[variantKey] = DebugType{Name: label, Kind: kind, Fields: fields(v.Fields), Positional: v.Positional}
 			}
 		case *check.List, *check.Map, *check.Seq:
 			m.Types[key] = DebugType{Name: typ.String(), Kind: "container"}

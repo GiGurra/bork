@@ -19,7 +19,7 @@ start
 []
 [2, 4]
 6
-Option.Some { value: 5 }
+Option.Some(5)
 Option.None
 [1, 2, 2]
 1

@@ -175,11 +175,11 @@ fn parentEnv() uses io unsafe go {
 }
 fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   parentEnv()
-  output = process.Run(s, executable(), ["child"], Option.Some { value: ["BORK_PROCESS_TEST=ok"] }, "", .Data { data: encoding.Utf8("input") })?
+  output = process.Run(s, executable(), ["child"], Option.Some(["BORK_PROCESS_TEST=ok"]), "", .Data { data: encoding.Utf8("input") })?
   println(output.code)
   println(encoding.ParseUtf8(output.stdout))
   println(encoding.ParseUtf8(output.stderr))
-  child = process.Start(s, executable(), ["child"], Option.Some { value: [] })?
+  child = process.Start(s, executable(), ["child"], Option.Some([]))?
   first = child.Wait()?
   second = child.Wait()?
   println(first == second)
@@ -188,7 +188,7 @@ fn exercise(s: Scope) uses io + state + clock: Ok | IoError | Cancelled {
   located = process.Run(s, executable(), ["cwd"], Option.None, directory)?
   println(encoding.ParseUtf8(located.stdout) == directory + "\n")
   inherit = process.Run(s, executable(), ["child"])?
-  println(encoding.ParseUtf8(inherit.stdout) == "Option.Some { value: \"parent\" }\n\n")
+  println(encoding.ParseUtf8(inherit.stdout) == "Option.Some(\"parent\")\n\n")
   println(encoding.ParseUtf8(first.stdout) == "Option.None\n\n")
   abandonedPid = abandoned()?
   println(gone(abandonedPid))

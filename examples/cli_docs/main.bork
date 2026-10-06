@@ -12,13 +12,13 @@ type Options = {
 fn main() {
   match (cli.Run[Options]("docs", "Field comments become help", (options, s) => {
     println(s"Connecting to ${options.host}; keep alive: ${options.keepAlive}")
-    }, flags: [.{ field: "keepAlive", description: Option.Some { value: "Reuse the connection." } }])) {
+    }, flags: [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }])) {
     error: cli.Error => { println(error); process.Exit(2) }
     Ok => {}
   }
 }
 test "comments and overrides reach help" {
-  match (cli.Parse[Options]("docs", "", ["--help"], [.{ field: "keepAlive", description: Option.Some { value: "Reuse the connection." } }])) {
+  match (cli.Parse[Options]("docs", "", ["--help"], [.{ field: "keepAlive", description: Option.Some("Reuse the connection.") }])) {
     help: cli.Help => {
       assert(help.text.contains("Address of the server to contact."))
       assert(help.text.contains("Reuse the connection."))

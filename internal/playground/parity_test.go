@@ -22,6 +22,8 @@ fn main() { scope app { println(assemble[Int](app,Providers)) } }`,
 fn config(): Int { 1 }
 fn main() {}`,
 		`fn main() { println(missing) }`,
+		`type Reply[T] = sealed { Found(T, String), Gone }; fn read(x: Reply[Int]): Int { match(x) { .Found(n, _) => n, .Gone => 0 } }; fn main() { println(read(Reply[Int].Found(1, "one"))) }`,
+		`fn main() { println(Option.Some { value: 1 }) }`,
 		`fn greet() { println("hi") }`,
 		"pred positive(x: Int) { x > 0 }\nfn need(x: Int where positive): Int { x }\nfn safe(x: Int): Int { if (positive(x)) { need(x) } else { 0 } }",
 	} {

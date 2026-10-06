@@ -17,7 +17,7 @@ type DivisionByZero = { expr: Expr }
 
 fn skipSpaces(src: String, i: Int) uses tailrec: Int {
   match (src.runeAt(i)) {
-    Option.Some { value: r } => if (r.isSpace()) { skipSpaces(src, i + 1) } else { i }
+    Option.Some(r) => if (r.isSpace()) { skipSpaces(src, i + 1) } else { i }
     Option.None => i
   }
 }
@@ -31,7 +31,7 @@ fn parseExpr(src: String, i: Int): Parsed | SyntaxError {
 fn parseExprRest(src: String, left: Parsed): Parsed | SyntaxError {
   at = skipSpaces(src, left.next)
   match (src.runeAt(at)) {
-    Option.Some { value: r } => match (r) {
+    Option.Some(r) => match (r) {
       '+' => {
         right = parseTerm(src, at + 1)?
         parseExprRest(src, Parsed { expr: Expr.Add { left: left.expr, right: right.expr }, next: right.next })
@@ -55,7 +55,7 @@ fn parseTerm(src: String, i: Int): Parsed | SyntaxError {
 fn parseTermRest(src: String, left: Parsed): Parsed | SyntaxError {
   at = skipSpaces(src, left.next)
   match (src.runeAt(at)) {
-    Option.Some { value: r } => match (r) {
+    Option.Some(r) => match (r) {
       '*' => {
         right = parseFactor(src, at + 1)?
         parseTermRest(src, Parsed { expr: Expr.Mul { left: left.expr, right: right.expr }, next: right.next })
@@ -74,11 +74,11 @@ fn parseTermRest(src: String, left: Parsed): Parsed | SyntaxError {
 fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
   at = skipSpaces(src, i)
   match (src.runeAt(at)) {
-    Option.Some { value: r } => if (r == '(') {
+    Option.Some(r) => if (r == '(') {
       inner = parseExpr(src, at + 1)?
       close = skipSpaces(src, inner.next)
       match (src.runeAt(close)) {
-        Option.Some { value: ')' } => Parsed { expr: inner.expr, next: close + 1 }
+        Option.Some(')') => Parsed { expr: inner.expr, next: close + 1 }
         _ => SyntaxError { at: close, message: "expected )" }
       }
     } else if (r.isDigit()) {
@@ -92,7 +92,7 @@ fn parseFactor(src: String, i: Int): Parsed | SyntaxError {
 
 fn digitsEnd(src: String, i: Int) uses tailrec: Int {
   match (src.runeAt(i)) {
-    Option.Some { value: r } => if (r.isDigit()) { digitsEnd(src, i + 1) } else { i }
+    Option.Some(r) => if (r.isDigit()) { digitsEnd(src, i + 1) } else { i }
     Option.None => i
   }
 }

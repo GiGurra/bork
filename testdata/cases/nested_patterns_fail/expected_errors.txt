@@ -1,6 +1,6 @@
-main.bork:5:3: match is not exhaustive: missing Option.Some { value: false }
-main.bork:12:3: match is not exhaustive: missing Option.Some { value: _ }, NotFound { key: _ }
+main.bork:5:3: match is not exhaustive: missing Option.Some(false)
+main.bork:12:3: match is not exhaustive: missing Option.Some(_), NotFound { key: _ }
 main.bork:20:3: match is not exhaustive: missing Point { x: _, y: _ }
 main.bork:22:5: unreachable match arm: every value it matches is handled by an earlier arm
 main.bork:30:5: unreachable match arm: every value it matches is handled by an earlier arm
-main.bork:31:19: Option.Some has no field valu
+main.bork:41:59: NamedChoice.Value has no field valu

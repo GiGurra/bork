@@ -2,5 +2,5 @@ pred Valid(s: String) { s.byteLength() > 0 }
 type Text = String where Valid
 type Missing = {}
 fn Source(s: String): Option[Text] | Missing {
-  if (Valid(s)) { Option.Some { value: s } } else { Missing {} }
+  if (Valid(s)) { Option.Some(s) } else { Missing {} }
 }

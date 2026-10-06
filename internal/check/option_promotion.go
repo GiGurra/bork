@@ -1,8 +1,10 @@
 package check
 
 import (
-	"github.com/GiGurra/bork/internal/syntax"
+	"strconv"
 	"strings"
+
+	"github.com/GiGurra/bork/internal/syntax"
 )
 
 // Only a closed, exact prelude Option supplies promotion context. In
@@ -49,6 +51,8 @@ func (c *checker) optionResultWant(want, result Type) Type {
 
 func (c *checker) optionalConstructor(x syntax.Expr) bool {
 	switch x := x.(type) {
+	case *syntax.Call:
+		return c.optionalConstructor(x.Fun)
 	case *syntax.RecordLit:
 		return c.optionalConstructor(x.Type)
 	case *syntax.ContextName:
@@ -192,6 +196,17 @@ func (c *checker) peekValueTypeIn(x syntax.Expr, locals map[string]Type) Type {
 			return opt.Args[0]
 		}
 	case *syntax.Call:
+		if head, ok := x.Fun.(*syntax.Selector); ok {
+			if owner, ok := c.peekValueTypeIn(head, locals).(*Sealed); ok {
+				if variant := owner.Variant(head.Name); variant != nil && variant.Positional {
+					literal := &syntax.RecordLit{Type: head, Positional: true}
+					for i, arg := range x.Args {
+						literal.Fields = append(literal.Fields, &syntax.FieldInit{Name: strconv.Itoa(i), Value: arg})
+					}
+					return c.peekValueTypeIn(literal, locals)
+				}
+			}
+		}
 		if id, ok := x.Fun.(*syntax.Ident); ok && c.lookup(id.Name) == nil && locals[id.Name] == nil {
 			if b, ok := builtins[id.Name]; ok && (b == BuiltinPanic || b == BuiltinTodo) {
 				return Never
@@ -333,7 +348,7 @@ func (c *checker) optionPromotionNote(args []any) string {
 	if IsOption(want) {
 		payload := want.(*Sealed).Args[0]
 		if found != Invalid && found != Never && (c.open(payload) || assignable(found, payload)) {
-			return "; write .Some { value: ... } to make the optional layer or type inference explicit"
+			return "; write .Some(...) to make the optional layer or type inference explicit"
 		}
 	}
 	return ""
@@ -441,6 +456,11 @@ func (c *checker) peekPattern(p syntax.Pattern, t Type, locals map[string]Type) 
 				if r, ok := instanceIn(s, base).(*Record); ok {
 					fields = r.Fields
 				}
+			}
+		}
+		for i, elem := range p.Elems {
+			if i < len(fields) {
+				c.peekPattern(elem, fields[i].Type, locals)
 			}
 		}
 		for _, fp := range p.Fields {

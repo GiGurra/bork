@@ -12,7 +12,7 @@ failure
 Failed {}
 failure
 Failed {}
-Option.Some { value: 9 }
+Option.Some(9)
 captured
 10
 generic

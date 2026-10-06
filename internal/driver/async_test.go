@@ -21,7 +21,7 @@ func TestAsyncBindingChecks(t *testing.T) {
 
 		{"predicate normal failure", "type Failed={}\npred Success(x:Int|Failed){x!=Failed{}}\nfn make():Int|Failed{scope s{async(s) value:(Int|Failed) where Success=Failed{};value}}", "is false"},
 		{"predicate explicit failure", "type Failed={}\npred Success(x:Int|Failed){x!=Failed{}}\nfn make(flag:Bool):Int|Failed{scope s{async(s) value:(Int|Failed) where Success={if(flag){return Failed{}};1};value}}", "is false"},
-		{"predicate option failure", "pred Success(x:Option[Int]){match(x){Option.Some{value:_}=>true,Option.None=>false}}\nfn make(x:Option[Int]):Option[Int]{scope s{async(s) value:Option[Int] where Success={n=x?;Option.Some{value:n}};value}}", "is false"},
+		{"predicate option failure", "pred Success(x:Option[Int]){match(x){Option.Some(_)=>true,Option.None=>false}}\nfn make(x:Option[Int]):Option[Int]{scope s{async(s) value:Option[Int] where Success={n=x?;Option.Some(n)};value}}", "is false"},
 		{"predicate nested lazy failure", "type Failed={}\npred Success(x:Int|Failed){x!=Failed{}}\nfn bad(flag:Bool):Int|Failed{if(flag){Failed{}}else{1}}\nfn make(flag:Bool):Int|Failed{scope s{async(s) value:(Int|Failed) where Success={lazy inner=bad(flag);_=inner?;1};value}}", "is false"},
 		{"predicate nested async failure", "type Failed={}\npred Success(x:Int|Failed){x!=Failed{}}\nfn bad(flag:Bool):Int|Failed{if(flag){Failed{}}else{1}}\nfn make(flag:Bool):Int|Failed{scope s{async(s) value:(Int|Failed) where Success={async(s) inner=bad(flag);_=inner?;1};value}}", "is false"},
 		{"eager union literal type", "type Failed={}\npred Valid(x:Int|Failed){match(x){n:Int=>n>0,_:Failed=>true}}\nfn main(){value:(Int|Failed) where Valid=1;println(value)}", ""},
@@ -36,7 +36,7 @@ func TestAsyncBindingChecks(t *testing.T) {
 		{"package", "async(s) x=1\nfn main(){}", "package async bindings are not supported"},
 		{"cross loop", "fn main(){scope s{for(_ in [1]){async(s) x:Int={break;1};println(x)}}}", "require a loop in the same function"},
 		{"cross yield", "fn main(){scope s{x=generate[Int]{async(s) y:Int={yield 1;2};yield y};println(x.toList())}}", "yield requires a generator"},
-		{"option annotation", "fn main(){scope s{async(s) x={n=Option.Some{value:1}?;n};println(x)}}", "async initializer needs a result type annotation"},
+		{"option annotation", "fn main(){scope s{async(s) x={n=Option.Some(1)?;n};println(x)}}", "async initializer needs a result type annotation"},
 		{"owner result", "fn main(){scope s{async(s) owner=openScope(s);closeScope(owner)}}", "async initializer cannot return an OwnedScope"},
 		{"owner capture", "fn main(){scope s{owner=openScope(s);async(s) x={closeScope(owner);1};closeScope(owner);println(x)}}", "lambda cannot close or pass on"},
 		{"short capture", "fn read(s:Scope) uses state:Int{_ = checkpoint(s);1}\nfn main(){scope outer{scope inner{async(outer) x=read(inner);println(x)}}}", "async initializer may not live as long"},

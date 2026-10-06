@@ -7,10 +7,10 @@ fn pair[T](value: T): Pair[T, T] { Pair[T, T] { first: value, second: value } }
 fn main() {
   println(Box[Int] { values: [] })
   println(Option[String].None)
-  println(Option[String].Some { value: "trace" })
-  println(Box[Option[String]] { values: [.Some { value: "x" }, .None] })
+  println(Option[String].Some("trace"))
+  println(Box[Option[String]] { values: [.Some("x"), .None] })
   println(State[Int].Defaults {})
-  println(Option[Int where Positive].Some { value: 2 })
+  println(Option[Int where Positive].Some(2))
   println(pair(3))
   println(api.Box[Int] { value: 4 })
   println(api.State[String].Empty)
@@ -28,6 +28,6 @@ fn checked[T](label: T): Range[T] { Range[T] { label: label } }
 
 pred AtLeast(value: Int, minimum: Int) { value >= minimum }
 fn constrained(minimum: Int, value: Int where AtLeast(minimum)): Option[Int] {
-  Option[Int where AtLeast(minimum)].Some { value: value }
+  Option[Int where AtLeast(minimum)].Some(value)
 }
 fn constrainedNone(minimum: Int): Option[Int] { Option[Int where AtLeast(minimum)].None }

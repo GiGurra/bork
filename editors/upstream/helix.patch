@@ -29,10 +29,10 @@ index a5403e6..e69a200 100644
 +
 +[[grammar]]
 +name = "bork"
-+source = { git = "https://github.com/GiGurra/bork", rev = "4b45e6b3a5971220225258f41ab7c683b28dddc5", subpath = "editors/tree-sitter-bork" }
++source = { git = "https://github.com/GiGurra/bork", rev = "f20aee8135116731323b658627681be87f499377", subpath = "editors/tree-sitter-bork" }
 diff --git a/runtime/queries/bork/folds.scm b/runtime/queries/bork/folds.scm
 new file mode 100644
-index 0000000..0a1baa8
+index 0000000..4250463
 --- /dev/null
 +++ b/runtime/queries/bork/folds.scm
 @@ -0,0 +1,4 @@
@@ -42,10 +42,10 @@ index 0000000..0a1baa8
 + (go_body) (comment)] @fold
 diff --git a/runtime/queries/bork/highlights.scm b/runtime/queries/bork/highlights.scm
 new file mode 100644
-index 0000000..4b5140a
+index 0000000..729777b
 --- /dev/null
 +++ b/runtime/queries/bork/highlights.scm
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,43 @@
 +(comment) @comment
 +(shebang) @comment
 +[(bare_return) (bare_break) (bare_continue)] @keyword
@@ -86,9 +86,12 @@ index 0000000..4b5140a
 +(is_expression "is" @keyword)
 +
 +(test_field_pattern name: (identifier) @variable.other.member)
++
++(specialized_variant_pattern name: (identifier) @type.enum.variant)
++(specialized_variant_pattern (qualified_name (identifier) @type))
 diff --git a/runtime/queries/bork/indents.scm b/runtime/queries/bork/indents.scm
 new file mode 100644
-index 0000000..e7098f0
+index 0000000..b3a1b5d
 --- /dev/null
 +++ b/runtime/queries/bork/indents.scm
 @@ -0,0 +1,7 @@

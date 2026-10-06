@@ -10,8 +10,8 @@ fn pairUp[A, B](xs: List[A], ys: List[B], combine: (A, B) => String): List[Strin
     []
   } else {
     match (xs.head()) {
-      Option.Some { value: x } => match (ys.head()) {
-        Option.Some { value: y } => prepend(combine(x, y), pairUp(xs.drop(1), ys.drop(1), combine))
+      Option.Some(x) => match (ys.head()) {
+        Option.Some(y) => prepend(combine(x, y), pairUp(xs.drop(1), ys.drop(1), combine))
         Option.None => []
       }
       Option.None => []
@@ -33,7 +33,7 @@ fn lookup(key: String): Int | NotFound {
 
 fn firstOr[T](xs: List[T], fallback: T): T {
   match (xs.head()) {
-    Option.Some { value: v } => v
+    Option.Some(v) => v
     Option.None => fallback
   }
 }

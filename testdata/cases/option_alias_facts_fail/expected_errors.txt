@@ -1,2 +1,2 @@
-main.bork:12:30: returned promises a result that is valid, but that is not proven for value (check it first with if (valid(value)) { ... })
-main.bork:18:42: text must be valid, but that is not proven for value (check it first with if (valid(value)) { ... })
+main.bork:12:27: returned promises a result that is valid, but that is not proven for value (check it first with if (valid(value)) { ... })
+main.bork:18:39: text must be valid, but that is not proven for value (check it first with if (valid(value)) { ... })

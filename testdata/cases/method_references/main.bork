@@ -42,7 +42,7 @@ fn main() {
   includes: (List[String], String) => Bool = List.includes
   println(includes(["a", "b"], "b"))
   some: (Option[Int]) => Bool = Option.isSome
-  println(some(Option.Some { value: 7 }), some(Option.None))
+  println(some(Option.Some(7)), some(Option.None))
   printing = Point.print
   printing(Point { x: 4, y: 5 })
   List.forEach([Point { x: 5, y: 6 }], Point.print)

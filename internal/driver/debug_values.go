@@ -75,6 +75,8 @@ func (r *dapRelay) pretty(text string) string {
 					} else {
 						out.WriteString(typ.Name + " { " + payload + " }")
 					}
+				case typ.Positional && typ.Kind != "option":
+					out.WriteString(typ.Name + "(" + payload + ")")
 				case typ.Kind == "variant" && strings.TrimSpace(payload) == "":
 					out.WriteString(typ.Name)
 				default:
@@ -109,7 +111,11 @@ func (r *dapRelay) prettyFields(text string, typ gen.DebugType) string {
 			if f, ok := typ.Fields[strings.TrimSpace(pair[0])]; ok && (f.Type == "Float" || f.Type == "Float32") {
 				value = floatPreview(value)
 			}
-			parts[i] = field + ": " + value
+			if typ.Positional && typ.Kind != "option" {
+				parts[i] = value
+			} else {
+				parts[i] = field + ": " + value
+			}
 		} else {
 			parts[i] = r.pretty(strings.TrimSpace(part))
 		}

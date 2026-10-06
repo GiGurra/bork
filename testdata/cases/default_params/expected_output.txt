@@ -10,4 +10,4 @@ b {"x": 1}
 Yo, dee!
 a Level.Low Retry { times: 3, backoff: Option.None }
 b Level.High Retry { times: 3, backoff: Option.None }
-c Level.High Retry { times: 1, backoff: Option.Some { value: 50 } }
+c Level.High Retry { times: 1, backoff: Option.Some(50) }

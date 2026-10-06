@@ -25,7 +25,7 @@ fn newService(config: Config, database: Database in s, s: Scope) uses io + net +
   server = http.Listen(config.address, s, (request: http.Request, requestScope: Scope) => {
     match (sql.SQL"SELECT message FROM greetings".Query[Greeting](connection)) {
       rows: List[Greeting] => match (rows.get(0)) {
-        Option.Some { value } => http.Text(200, value.message)
+        Option.Some(value) => http.Text(200, value.message)
         Option.None => http.Text(404, "no greeting")
       }
       _ => http.Text(500, "database unavailable")

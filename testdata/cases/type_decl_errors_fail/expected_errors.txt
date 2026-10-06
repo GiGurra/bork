@@ -4,5 +4,5 @@ main.bork:4:1: Int is a built-in type and cannot be redefined
 main.bork:5:22: unknown type Missing
 main.bork:6:1: sealed type Empty needs at least one variant
 main.bork:8:1: User is already the name of a type
-main.bork:13:14: cannot tell which Option type Option.None is here; use it where an Option[T] is expected
+main.bork:13:14: cannot tell which Option type Option.None is here; give it an expected type or write explicit type arguments on Option
 main.bork:14:3: User is already the name of a type

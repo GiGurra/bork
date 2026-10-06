@@ -193,7 +193,7 @@ fn validateSQL(parts: StaticParts, holes: List[InterpolationHole]): List[Interpo
   postgres, right := scanStatement(statement, Dialect_Postgres{}).(scanError)
   if !left || !right || sqlite.incomplete || postgres.incomplete { return []InterpolationIssue{} }
   var hole Option[int64] = Option_None[int64]{}
-  if sqlite.hole >= 0 && sqlite.hole == postgres.hole { hole = Option_Some[int64]{value: sqlite.hole} }
+  if sqlite.hole >= 0 && sqlite.hole == postgres.hole { hole = Option_Some[int64]{E0: sqlite.hole} }
   return []InterpolationIssue{{hole: hole, message: sqlite.detail.message}}
 }
 

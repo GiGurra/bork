@@ -121,7 +121,7 @@ fn main() {
 		{name: "non-object", base: `[]`, override: `{}`, want: []string{"CLI config must be a JSON object"}, absent: []string{"closed", "Ok"}},
 		{name: "positional-precedence", base: `{"name":"base"}`, override: `{}`, envName: "env", args: []string{"positional"}, want: []string{`name: "positional"`}},
 		{name: "selected-below-env", base: `{"name":"base"}`, override: `{}`, selected: `{"name":"selected","port":84}`, envName: "env", envPort: "85", args: []string{"--config", "selected.json"}, want: []string{`name: "env"`, "port: 85"}},
-		{name: "file-no-recursion", base: `{"name":"base","config":"missing.json"}`, override: `{}`, want: []string{`name: "base"`, `value: "missing.json"`, "closed\nOk"}},
+		{name: "file-no-recursion", base: `{"name":"base","config":"missing.json"}`, override: `{}`, want: []string{`name: "base"`, `Option.Some("missing.json")`, "closed\nOk"}},
 		{name: "null-default", base: `{"name":"base","port":null}`, override: `{}`, want: []string{".port", "Error {"}, absent: []string{"closed", "Ok"}},
 		{name: "nested-unknown", base: `{"name":"base","nested":{"enabled":false,"enabeld":true}}`, override: `{}`, want: []string{"enabled: false", "closed\nOk"}},
 		{name: "missing-selected", base: `{"name":"base"}`, override: `{}`, args: []string{"--config", "missing.json"}, want: []string{"missing.json", "Error {"}, absent: []string{"closed", "Ok"}},
@@ -164,14 +164,14 @@ func TestCLIConfigSelectors(t *testing.T) {
 
 import "bork/cli"
 use codec.Defaults
-pred selected(value: Option[String]) { match (value) { Option.Some { value: _ } => true, Option.None => false } }
+pred selected(value: Option[String]) { match (value) { Option.Some(_) => true, Option.None => false } }
 type Constrained = { config: Option[String] where selected, name: String } derive (codec.Decode)
 type Defaults = { config: String = "chosen.json", name: String } derive (codec.Decode)
-type OptionalDefaults = { config: Option[String] = Option.Some { value: "chosen.json" }, name: String } derive (codec.Decode)
+type OptionalDefaults = { config: Option[String] = Option.Some("chosen.json"), name: String } derive (codec.Decode)
 type Bad = { config: Int = 0, other: String = "" } derive (codec.Decode)
 type RuneSelector = { config: Rune = 'a' } derive (codec.Decode)
-type OptionalRuneSelector = { config: Option[Rune] = Option.Some { value: 'a' } } derive (codec.Decode)
-type NestedOption = { config: Option[Option[String]] = Option.Some { value: Option.Some { value: "chosen.json" } }, name: String = "" } derive (codec.Decode)
+type OptionalRuneSelector = { config: Option[Rune] = Option.Some('a') } derive (codec.Decode)
+type NestedOption = { config: Option[Option[String]] = Option.Some(Option.Some("chosen.json")), name: String = "" } derive (codec.Decode)
 fn main() uses io {
  println(cli.Parse[RuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))
  println(cli.Parse[OptionalRuneSelector]("app", "", [], [cli.Flag { field: "config", configFile: true }]))

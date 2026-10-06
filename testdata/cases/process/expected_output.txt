@@ -1,5 +1,5 @@
 7
-Option.Some { value: "ok" }
+Option.Some("ok")
 input
 
 stderr

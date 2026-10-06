@@ -69,5 +69,5 @@ fn main() {
   println(describe(parse("42")), describe(parse("x")))
   println(pay(Pair { first: "rent", second: 12 }), payIfPositive(Pair { first: "tip", second: -1 }))
   same = Pair { first: 1, second: 2 } == Pair { first: 1, second: 2 }
-  println(same, Option.Some { value: 3 }, toList(t).head())
+  println(same, Option.Some(3), toList(t).head())
 }

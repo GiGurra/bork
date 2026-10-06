@@ -4,5 +4,5 @@ main.bork:6:12: Pair needs 2 type argument(s), as in Pair[A, B]
 main.bork:7:14: Pair needs 2 type argument(s), as in Pair[A, B]
 main.bork:8:18: Int does not take type arguments
 main.bork:11:40: field first of Pair must be Int, found String
-main.bork:12:12: cannot tell which Tree type Tree.Leaf is here; use it where a Tree[T] is expected
+main.bork:12:12: cannot tell which Tree type Tree.Leaf is here; give it an expected type or write explicit type arguments on Tree
 main.bork:13:21: cannot tell the type of an empty list; give it one, as in xs: List[Int] = []

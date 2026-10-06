@@ -4,27 +4,27 @@ type Missing = {}
 ambient text: Text
 fn readText() needs text: String { text }
 fn source(s: String): Option[Text] | Missing {
-  if (valid(s)) { Option.Some { value: s } } else { Missing {} }
+  if (valid(s)) { Option.Some(s) } else { Missing {} }
 }
 fn returned(s: String): Text {
   match (source(s)) {
-    Option.Some { value } => value
+    Option.Some(value) => value
     _ => panic("missing")
   }
 }
 fn bound(s: String): String {
   result = source(s)
   match (result) {
-    Option.Some { value: payload } => with (text: payload) { readText() }
+    Option.Some(payload) => with (text: payload) { readText() }
     _ => "missing"
   }
 }
 // Guard facts on a locally constructed payload survive widening to a union.
 fn constructed(s: String): Text {
   if (valid(s)) {
-    result: Option[String] | Missing = Option.Some { value: s }
+    result: Option[String] | Missing = Option.Some(s)
     match (result) {
-      Option.Some { value } => value
+      Option.Some(value) => value
       _ => panic("missing")
     }
   } else { panic("empty") }

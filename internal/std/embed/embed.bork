@@ -8,7 +8,7 @@ type FS = { files: Map[String, Bytes] }
 
 fn (snapshot: FS) Read(name: String): Bytes | IoError {
   match (snapshot.files.get(name)) {
-    Option.Some { value } => value
+    Option.Some(value) => value
     Option.None {} => IoError { path: name, message: "embedded file not found" }
   }
 }

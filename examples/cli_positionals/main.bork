@@ -12,9 +12,9 @@ type Options = {
   action: String
 } derive (codec.Decode)
 fn flags(): List[cli.Flag] {
-  [.{ field: "action", position: Option.Some { value: 0 }, choices: [.{ value: "copy" }, .{ value: "inspect" }] },
-    .{ field: "workers", position: Option.Some { value: 1 }, choices: [.{ value: "1" }, .{ value: "2" }, .{ value: "4" }] },
-    .{ field: "files", position: Option.Some { value: 2 }, files: true }]
+  [.{ field: "action", position: Option.Some(0), choices: [.{ value: "copy" }, .{ value: "inspect" }] },
+    .{ field: "workers", position: Option.Some(1), choices: [.{ value: "1" }, .{ value: "2" }, .{ value: "4" }] },
+    .{ field: "files", position: Option.Some(2), files: true }]
 }
 fn main() {
   match (cli.Run[Options]("files", "Process files with an ordered positional layout", (options, s) => {

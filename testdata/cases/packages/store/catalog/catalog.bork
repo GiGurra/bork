@@ -5,6 +5,6 @@ type Item = { name: String, price: money.Amount }
 fn Total(items: List[Item]): Option[money.Amount] {
   match (items.head()) {
     Option.None => Option.None
-    Option.Some { value: first } => Option.Some { value: items.drop(1).fold(first.price, (acc, i) => money.Add(acc, i.price)) }
+    Option.Some(first) => Option.Some(items.drop(1).fold(first.price, (acc, i) => money.Add(acc, i.price)))
   }
 }

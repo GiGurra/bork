@@ -462,3 +462,32 @@ fn Example(x: Choice): Bool { x is .Some { value: _ } }
 		t.Fatalf("is classifications: %+v", found)
 	}
 }
+
+func TestSemanticTokensPositionalVariantPatterns(t *testing.T) {
+	src := `type Choice[T] = sealed { Some(T), Empty }
+fn Use(x: Choice[Int]): Int { match(x) { Choice[Int].Some(payload) => payload, .Empty => 0 } }
+`
+	s, path := newTestServer(t, src)
+	result, err := s.semanticTokens(path, src, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	some, payload := 0, 0
+	for _, token := range decodeSemantic(t, src, result) {
+		if token.text == "Some" {
+			some++
+			if token.kind != "enumMember" {
+				t.Fatalf("variant token: %+v", token)
+			}
+		}
+		if token.text == "payload" {
+			payload++
+			if token.kind != "variable" {
+				t.Fatalf("binding token: %+v", token)
+			}
+		}
+	}
+	if some != 2 || payload != 2 {
+		t.Fatalf("tokens: Some=%d payload=%d", some, payload)
+	}
+}

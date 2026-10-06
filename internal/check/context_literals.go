@@ -167,12 +167,6 @@ func (c *checker) explicitContextFix(e *syntax.ContextName, t Type, pattern bool
 		}
 	}
 	name, visible := c.constructorTypeName(t)
-	// Patterns do not accept a specialized constructor head such as
-	// Option[Int].Some. A visible alias works; otherwise ask for one.
-	if pattern && strings.Contains(name, "[") {
-		return &diag.Fix{Message: "name or declare a type alias for " + TypeText(t, c.pkg) + " (replace Type)", RequiresInput: true,
-			Edits: []diag.TextEdit{{Start: e.Pos, End: e.End, Replacement: "Type." + e.Name}}}
-	}
 	if !visible {
 		name = "Type"
 	}
@@ -303,6 +297,15 @@ func (c *checker) contextVariant(e *syntax.ContextName, want Type) Type {
 		return Invalid
 	}
 	if len(v.Fields) > 0 {
+		if v.Positional {
+			c.diags.AddCode(e.Pos, "type.context_variant_fields", "%s.%s has payloads; build it with .%s(...)", s.Name, e.Name, e.Name)
+			var values []string
+			for range v.Fields {
+				values = append(values, "_")
+			}
+			c.diags.Suggest(e.Pos, "type.context_variant_fields", e.End, diag.Fix{Message: "add the payload arguments", RequiresInput: true, Edits: []diag.TextEdit{{Start: e.End, End: e.End, Replacement: "(" + strings.Join(values, ", ") + ")"}}})
+			return Invalid
+		}
 		c.diags.AddCode(e.Pos, "type.context_variant_fields", "%s.%s has fields; build it with .%s { ... }", s.Name, e.Name, e.Name)
 		c.diags.Suggest(e.Pos, "type.context_variant_fields", e.End, diag.Fix{
 			Message: "add the variant field braces", RequiresInput: requiredFields(v.Fields),
@@ -379,29 +382,6 @@ func (c *checker) contextRecord(e *syntax.RecordLit, name *syntax.ContextName, w
 		return t
 	}
 	c.skipFieldInits(e)
-	return Invalid
-}
-
-func (c *checker) contextVariantCall(e *syntax.Call, name *syntax.ContextName, want Type) Type {
-	t := c.contextTarget(name, want, false)
-	c.diags.AddCode(name.Pos, "type.context_variant_call", "variants use named fields, not positional calls; write %s { ... }", contextText(name))
-	var valueWant Type
-	if s, ok := t.(*Sealed); ok && genericBaseOrSelf(s) == c.info.Named["Option"] && name.Name == "Some" && len(e.Args) == 1 && !hasNamedArgs(e) {
-		valueWant = s.Variant("Some").Fields[0].Type
-		end := e.End
-		end.Col--
-		openEnd := e.Pos
-		openEnd.Col++
-		c.diags.Suggest(name.Pos, "type.context_variant_call", e.End, diag.Fix{
-			Message: "use the Some value field", Edits: []diag.TextEdit{
-				{Start: e.Pos, End: openEnd, Replacement: " { value: "},
-				{Start: end, End: e.End, Replacement: " }"},
-			},
-		})
-	}
-	for _, a := range e.Args {
-		c.exprWant(a, valueWant)
-	}
 	return Invalid
 }
 
@@ -734,7 +714,9 @@ func (c *checker) genericContextLit(e *syntax.RecordLit, base Type, variant, lab
 					missing = append(missing, tp.Name)
 				}
 			}
-			c.errorf(e.Type.Position(), "cannot tell what %s is in this %s; use it where its type is known", strings.Join(missing, " and "), label)
+			pos := e.Type.Position()
+			c.diags.AddCode(pos, "type.constructor_inference", "cannot tell what %s is in this %s; use it where its type is known or write explicit owner type arguments", strings.Join(missing, " and "), label)
+			c.constructorArgumentsFix(pos, e.Type, args)
 		}
 		if outer {
 			report()

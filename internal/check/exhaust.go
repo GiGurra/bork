@@ -340,6 +340,13 @@ func (w *witness) describe(top bool) string {
 	} else {
 		fields = c.record.Fields
 	}
+	if c.variant != nil && c.variant.Positional {
+		parts := make([]string, len(w.args))
+		for i, arg := range w.args {
+			parts[i] = arg.describe(false)
+		}
+		return c.label + "(" + strings.Join(parts, ", ") + ")"
+	}
 	if c.record != nil && c.record.Tuple {
 		parts := make([]string, len(w.args))
 		for i, a := range w.args {

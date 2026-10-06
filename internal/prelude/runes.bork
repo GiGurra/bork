@@ -6,7 +6,7 @@ fn (r: Rune) code(): Int32 unsafe go {
 
 fn (n: Int32) rune(): Option[Rune] unsafe go {
   import "unicode/utf8"
-  if utf8.ValidRune(rune(n)) { return Option_Some[_Rune]{value: _Rune(n)} }
+  if utf8.ValidRune(rune(n)) { return Option_Some[_Rune]{E0: _Rune(n)} }
   return Option_None[_Rune]{}
 }
 

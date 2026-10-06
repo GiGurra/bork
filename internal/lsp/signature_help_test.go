@@ -354,3 +354,21 @@ fn main() { println(test.SwapAt((1, "label"), 0, 2)) }
 		t.Fatalf("replacement signature: %+v", help)
 	}
 }
+
+func TestSignatureHelpPositionalVariants(t *testing.T) {
+	src := "type Pair[T]=sealed{Pair(T,String),Empty}\nfn main(){println(Pair[Int].Pair(1,\"x\"));println(Option.Some(2))}\n"
+	s, path := newTestServer(t, src)
+	for _, tc := range []struct {
+		source, label string
+		active        int
+	}{
+		{strings.Replace(src, "Pair(1,\"x\")", "Pair(1,|)", 1), "Pair.Pair(Int, String): Pair[Int]", 1},
+		{strings.Replace(src, "Some(2)", "Some(|)", 1), "Option.Some(Int): Option[Int]", 0},
+		{"type Pair[T]=sealed{Pair(T,String),Empty}\nfn main(){Pair[String].Pair(|)", "Pair.Pair(String, String): Pair[String]", 0},
+	} {
+		help := signatureAt(t, s, path, tc.source)
+		if help == nil || len(help.Signatures) != 1 || help.Signatures[0].Label != tc.label || help.ActiveParameter == nil || *help.ActiveParameter != tc.active {
+			t.Fatalf("%s: %+v", tc.source, help)
+		}
+	}
+}

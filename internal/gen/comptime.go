@@ -221,7 +221,7 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 				if err != nil {
 					return "", fmt.Errorf("variant %s field %s: %w", variant.Name, field.Name, err)
 				}
-				items = append(items, child+"(value."+name(field.Name).Name+",depth+1)")
+				items = append(items, child+"("+e.g.text(e.g.tupleFieldRead(ast.NewIdent("value"), t, field))+",depth+1)")
 			}
 			tag := strconv.Quote(variant.Name)
 			body += "case " + variantType.String() + ":_=value;_ctReserve(6*len(" + tag + "));return _ctValue{Kind:" + kind + ",Tag:" + tag + ",Items:[]_ctValue{" + strings.Join(items, ",") + "}};"
@@ -251,7 +251,7 @@ func (e *comptimeEncoder) function(t check.Type) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("field %s: %w", field.Name, err)
 			}
-			items = append(items, child+"(value."+name(field.Name).Name+",depth+1)")
+			items = append(items, child+"("+e.g.text(e.g.tupleFieldRead(ast.NewIdent("value"), t, field))+",depth+1)")
 		}
 		body = "return _ctValue{Kind:" + kind + ",Items:[]_ctValue{" + strings.Join(items, ",") + "}}"
 	default:

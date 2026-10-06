@@ -1,5 +1,5 @@
 [1, 2]
-Option.Some { value: 7 }
+Option.Some(7)
 [3]
-Option.Some { value: 9 }
+Option.Some(9)
 Cancelled { reason: "deadline exceeded" }

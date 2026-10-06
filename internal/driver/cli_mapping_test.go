@@ -30,7 +30,7 @@ type Options = {
 } derive (codec.Decode)
 fn main() {
  println(cli.Run[Options]("app", "Mapping example", (options, s) => { println(options) }, flags: [
-  .{ field: "serverHost", description: Option.Some { value: "Custom host documentation." } },
+  .{ field: "serverHost", description: Option.Some("Custom host documentation.") },
   .{ field: "secret", long: cli.Mapping.Named { name: "secret" }, shortName: cli.Mapping.Disabled, envName: cli.Mapping.Disabled, hidden: true },
   .{ field: "verbose", envName: cli.Mapping.Disabled },
   .{ field: "oldPort", long: cli.Mapping.Named { name: "legacy" }, deprecated: "use --svc-http-port instead" },
@@ -132,7 +132,7 @@ fn main() {
  println(cli.Parse[Options]("disabled-env", "", [], [.{ field: "alpha", envName: cli.Mapping.Disabled }], settings: .{ autoEnv: true, envPrefix: "BORK_MAPPING_DISABLED" }))
  println(cli.Parse[Options]("custom", "", ["--custom-alpha", "enriched"], settings: .{ enrichers: [prefix, describe] }))
  println(cli.Parse[Options]("custom-help", "", ["--help"], settings: .{ enrichers: [prefix, describe] }))
- println(cli.Parse[Docs]("suppressed-doc", "", ["--help"], [.{ field: "alpha", description: Option.Some { value: "" } }]))
+ println(cli.Parse[Docs]("suppressed-doc", "", ["--help"], [.{ field: "alpha", description: Option.Some("") }]))
  println(cli.Parse[Options]("bad", "", [], [.{ field: "alpha", short: "x", shortName: cli.Mapping.Disabled }], configFiles: ["missing.json"]))
  println(cli.Parse[Options]("bad", "", [], [.{ field: "alpha", env: "EXACT", envName: cli.Mapping.Disabled }]))
  println(cli.Parse[Options]("bad", "", [], [.{ field: "alpha", long: cli.Mapping.Disabled, short: "x" }]))

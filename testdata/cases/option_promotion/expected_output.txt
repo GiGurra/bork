@@ -1,14 +1,14 @@
 second
 first
-C { first: Option.Some { value: 1 }, second: Option.Some { value: 2 } }
+C { first: Option.Some(1), second: Option.Some(2) }
 copy second
 copy first
-C { first: Option.Some { value: 3 }, second: Option.Some { value: 4 } }
-C { first: Option.Some { value: 1 }, second: Option.None }
-Option.Some { value: 5 }
-Option.Some { value: 6 }
-Option.Some { value: 8 }
-[Option.Some { value: 9 }, Option.None]
-Option.Some { value: 10 }
-Option.Some { value: Option.Some { value: 11 } }
-Option.Some { value: [] }
+C { first: Option.Some(3), second: Option.Some(4) }
+C { first: Option.Some(1), second: Option.None }
+Option.Some(5)
+Option.Some(6)
+Option.Some(8)
+[Option.Some(9), Option.None]
+Option.Some(10)
+Option.Some(Option.Some(11))
+Option.Some([])

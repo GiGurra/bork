@@ -35,8 +35,8 @@ fn makeSubcommand[T: codec.Decode](name: String, description: String, run: (T, S
   Command {
     name: name
     description: description
-    factory: Option.Some { value: factory }
-    apply: Option.Some { value: apply }
+    factory: Option.Some(factory)
+    apply: Option.Some(apply)
     execute: (displayName, arguments, s) => match (factory(displayName, s)) {
       error: Error => error
       prepared: adapter => match (evaluate(prepared, arguments, completionEnabled, configureCompletion)) {

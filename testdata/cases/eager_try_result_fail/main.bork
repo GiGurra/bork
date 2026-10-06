@@ -8,11 +8,11 @@ fn block(flag: Bool): (Int | Failed) where Success { value = { bad(flag)? }; val
 fn returned(flag: Bool): (Int | Failed) where Success { return bad(flag)? }
 fn explicitFailure(): (Int | Failed) where Success { Failed {} }
 
-pred Present(x: Option[Int]) { match (x) { Option.Some { value: _ } => true; Option.None => false } }
-fn optional(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some { value: 1 } } }
-fn optionMake(flag: Bool): Option[Int] where Present { value = optional(flag)?; Option.Some { value: value } }
-fn optionArgument(flag: Bool): Option[Int] where Present { Option.Some { value: identity(optional(flag)?) } }
-fn optionBlock(flag: Bool): Option[Int] where Present { value = { optional(flag)? }; Option.Some { value: value } }
+pred Present(x: Option[Int]) { match (x) { Option.Some(_) => true; Option.None => false } }
+fn optional(flag: Bool): Option[Int] { if (flag) { Option.None } else { Option.Some(1) } }
+fn optionMake(flag: Bool): Option[Int] where Present { value = optional(flag)?; Option.Some(value) }
+fn optionArgument(flag: Bool): Option[Int] where Present { Option.Some(identity(optional(flag)?)) }
+fn optionBlock(flag: Bool): Option[Int] where Present { value = { optional(flag)? }; Option.Some(value) }
 
 type First = {}
 type Second = {}
@@ -30,13 +30,13 @@ fn inlineFailure(flag: Bool): Int | Problem where Approved {
 }
 pred AcceptStringNone(x: Option[Int] | Option[String]) {
   match (x) {
-    integers: Option[Int] => match (integers) { Option.Some { value: _ } => true; Option.None => false }
+    integers: Option[Int] => match (integers) { Option.Some(_) => true; Option.None => false }
     _: Option[String] => true
   }
 }
 fn changedOption(x: Option[String] where AcceptStringNone): Option[Int] where AcceptStringNone {
   _ = x?
-  Option.Some { value: 1 }
+  Option.Some(1)
 }
 
 // Unannotated functions must expose implicit failures during body-derived proof.

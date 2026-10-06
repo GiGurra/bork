@@ -523,7 +523,7 @@ fn main() {
   config: Config = .{ port: 80 }
   state: State = .Ready
   value: State = .Value { value: 1 }
-  option: Option[Int] = .Some { value: 2 }
+  option: Option[Int] = .Some(2)
   println(config); println(state); println(value); println(option)
 }
 `
@@ -646,7 +646,7 @@ func TestDescribeSpecializedDefaults(t *testing.T) {
 	t.Parallel()
 	source := `pred positive(x: Int) { x > 0 }
 fn take(x: Option[(Int) uses io => Int] = Option[(Int) uses io => Int].None,
- y: Option[Int] = Option[Int where positive].Some { value: 1 }, z: Option[Seq[Int] uses io] = Option[Seq[Int] uses io].None) uses io { println(x); println(y); println(z) }
+ y: Option[Int] = Option[Int where positive].Some(1), z: Option[Seq[Int] uses io] = Option[Seq[Int] uses io].None) uses io { println(x); println(y); println(z) }
 fn main() { take() }
 `
 	path := filepath.Join(t.TempDir(), "main.bork")
@@ -660,7 +660,7 @@ fn main() { take() }
 	if result.Callable == nil || len(result.Callable.Parameters) != 3 {
 		t.Fatalf("missing callable: %+v", result)
 	}
-	for i, want := range []string{"Option[(Int) uses io => Int].None", "Option[Int where positive].Some { value: 1 }", "Option[Seq[Int] uses io].None"} {
+	for i, want := range []string{"Option[(Int) uses io => Int].None", "Option[Int where positive].Some(1)", "Option[Seq[Int] uses io].None"} {
 		if got := result.Callable.Parameters[i].Default; got != want {
 			t.Fatalf("default %d: got %q, want %q", i, got, want)
 		}
@@ -970,5 +970,45 @@ fn main() {
 	}
 	if result.Definition == nil || result.Definition.Line != 4 || !slices.Contains(facts, "nonNegative") {
 		t.Fatalf("got definition %v with facts %v, want line 4 known nonNegative", result.Definition, facts)
+	}
+}
+
+func TestDescribePositionalVariantConstructors(t *testing.T) {
+	source := `type Pair[T]=sealed{Pair(T,String),Empty}
+fn main(){println(Pair[Int].Pair(1,"x"),Option.Some(3))}`
+	path := filepath.Join(t.TempDir(), "main.bork")
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		fragment, typ string
+		arity         int
+	}{
+		{"Pair(1", "(Int, String) => Pair[Int]", 2},
+		{"Some(3", "(Int) => Option[Int]", 1},
+	} {
+		offset := strings.Index(source, tc.fragment)
+		column := offset - strings.LastIndex(source[:offset], "\n")
+		result, err := Describe(fmt.Sprintf("%s:2:%d", path, column), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Type != tc.typ || result.Callable == nil || len(result.Callable.Parameters) != tc.arity || result.Callable.NamedArguments || result.Callable.ParameterNamesAreAPI {
+			t.Fatalf("%s: %+v", tc.fragment, result)
+		}
+		for _, p := range result.Callable.Parameters {
+			if p.Name != "" {
+				t.Fatalf("exposed internal name: %+v", p)
+			}
+		}
+		resultColumn := column + strings.Index(tc.fragment, "(")
+		value, err := Describe(fmt.Sprintf("%s:2:%d", path, resultColumn), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantResult := strings.Split(tc.typ, " => ")[1]
+		if value.Type != wantResult || value.Callable != nil {
+			t.Fatalf("constructor result: %+v", value)
+		}
 	}
 }

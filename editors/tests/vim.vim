@@ -18,6 +18,12 @@ call assert_equal('// %s', &commentstring)
 call append('$', 'text = s"Hi ${f({"x": "}"}) + 1}!"')
 let number_column = stridx(getline(8), '+ 1') + 3
 call assert_equal('borkNumber', synIDattr(synID(8, number_column, 1), 'name'))
+call append('$', 'type Reply[T] = sealed { Found(T, String), Gone }')
+call append('$', 'match(x) { Reply[Int].Found(n, _) => n, .Gone => 0 }')
+for line in [9, 10]
+  let variant_column = stridx(getline(line), 'Found') + 1
+  call assert_equal('borkType', synIDattr(synID(line, variant_column, 1), 'name'))
+endfor
 for file in split(glob('examples/**/*.bork') . "\n" . glob('testdata/cases/**/*.bork'), "\n")
   execute 'edit! ' . fnameescape(file)
   call assert_equal('bork', &filetype, file)

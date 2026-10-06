@@ -1,6 +1,6 @@
 Bytes(68c3a900)
 4
-Option.Some { value: 104 }
+Option.Some(104)
 Option.None
 Option.None
 [104, 195, 169, 0]
@@ -14,7 +14,7 @@ true
 true
 bytes
 list
-Option.Some { value: "found" }
+Option.Some("found")
 Bytes(0102)
 68c3a900
 Bytes(00ff)
@@ -39,8 +39,8 @@ ParseError { input: "YQ==!!!!", message: "illegal base64 data at input byte 4" }
 Bytes(61)
 Bytes(61)
 2
-Option.Some { value: "bytes" }
-Option.Some { value: "list" }
+Option.Some("bytes")
+Option.Some("list")
 false
 Bytes(fbfffbff)
 Bytes(fbff)

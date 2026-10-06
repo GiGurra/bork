@@ -122,10 +122,12 @@ type GoTag struct {
 }
 
 type VariantDecl struct {
-	Pos    diag.Pos
-	Name   string
-	Fields []*FieldDecl
-	Where  []*PredRef
+	Positional bool
+	Slots      []*TypeExpr
+	Pos        diag.Pos
+	Name       string
+	Fields     []*FieldDecl
+	Where      []*PredRef
 }
 
 // FuncDecl is `fn name(params): Result { body }`. Result is nil when
@@ -693,9 +695,10 @@ type TypeHead struct {
 // RecordLit is `User { name: "Ada", age: 36 }` or
 // `Shape.Circle { radius: 3 }`.
 type RecordLit struct {
-	Type   Expr // *Ident, *TypeHead, *Selector or *ContextName
-	Fields []*FieldInit
-	End    diag.Pos
+	Positional bool // synthetic ordered payload literal of a variant call
+	Type       Expr // *Ident, *TypeHead, *Selector or *ContextName
+	Fields     []*FieldInit
+	End        diag.Pos
 }
 
 type FieldInit struct {
@@ -792,13 +795,18 @@ type ListPat struct {
 }
 
 type VariantPat struct {
-	Pos     diag.Pos
-	NamePos diag.Pos // written context variant identifier, after whitespace/comments
-	End     diag.Pos // end of a context variant name, for diagnostics and fixes
-	Context bool     // owner omitted with .Variant
-	Path    []string
-	Fields  []*FieldPat
-	Braces  bool // written with { ... }, possibly empty
+	PayloadPos diag.Pos
+	PayloadEnd diag.Pos
+	Owner      *TypeExpr // explicit specialized owner, when written
+	Positional bool
+	Elems      []Pattern
+	Pos        diag.Pos
+	NamePos    diag.Pos // written context variant identifier, after whitespace/comments
+	End        diag.Pos // end of a context variant name, for diagnostics and fixes
+	Context    bool     // owner omitted with .Variant
+	Path       []string
+	Fields     []*FieldPat
+	Braces     bool // written with { ... }, possibly empty
 }
 
 // FieldPat is one field of a destructuring pattern: `{ radius }` binds
