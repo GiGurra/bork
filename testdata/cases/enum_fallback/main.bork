@@ -34,7 +34,14 @@ fn guarded(name: String): Color | Ok {
   } else { Ok }
 }
 
+type First = sealed { Other(String) codec { fallback: true }; Red } derive (codec.Encode, codec.Decode)
+type Only = sealed { Other(String) codec { fallback: true } } derive (codec.Encode, codec.Decode)
+
 fn main() {
+  println(json.Decode[First]("\"purple\""))
+  println(json.Decode[First]("\"RED\""))
+  println(json.Decode[Only]("\"RED\""))
+  println(json.Encode(Only.Other("RED")))
   println(json.Encode(Color.Red))
   println(json.Encode(Color.Other("purple")))
   match (yaml.Encode(Color.Other("true"))) {

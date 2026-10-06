@@ -1,3 +1,7 @@
+First.Other("purple")
+First.Red
+Only.Other("RED")
+"RED"
 "RED"
 "purple"
 'true'
